@@ -1,0 +1,29 @@
+/* Regras globais para bloquear seleção de texto e arraste de imagens */
+
+/* Desativa seleção de texto em todo o corpo do aplicativo */
+body {
+  user-select: none;          /* Padrão */
+  -webkit-user-select: none;  /* Safari/Chrome */
+  -moz-user-select: none;     /* Firefox */
+}
+
+/* Permite seleção apenas em campos interativos e tabelas */
+input,
+textarea,
+table,
+th,
+td {
+  user-select: text;
+  -webkit-user-select: text;
+  -moz-user-select: text;
+}
+
+/* Impede que imagens sejam arrastadas ou recebam seleção */
+img {
+  pointer-events: none;    /* Desativa eventos para evitar arraste */
+  user-select: none;       /* Garante que não sejam selecionáveis */
+  -webkit-user-drag: none; /* Chrome/Safari */
+  -khtml-user-drag: none;  /* Konqueror */
+  -moz-user-drag: none;    /* Firefox */
+  -o-user-drag: none;      /* Opera */
+}
