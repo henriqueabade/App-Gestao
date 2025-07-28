@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Produtos - Santíssimo Decor</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="../css/produtos.css">
+</head>
+<body class="text-white p-6">
+    <div class="max-w-7xl mx-auto">
+        <!-- Header -->
+        <div class="mb-8 animate-fade-in-up">
+            <h1 class="text-3xl font-bold mb-2">Produtos</h1>
+            <p style="color: var(--color-violet)">Gerencie seu catálogo de produtos e controle de estoque</p>
+        </div>
+
+        <!-- Filters -->
+        <div class="glass-surface rounded-xl p-6 mb-6 animate-fade-in-up">
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8 gap-4 items-end">
+                <!-- Search -->
+                <div class="xl:col-span-2">
+                    <label class="block text-sm font-medium mb-2 text-white">Buscar</label>
+                    <input type="text" placeholder="Código ou Nome do Produto" class="input-glass text-white rounded-md px-4 py-3 w-full placeholder-white/50">
+                </div>
+
+                <!-- Category -->
+                <div>
+                    <label class="block text-sm font-medium mb-2 text-white">Categoria</label>
+                    <select class="input-glass text-white rounded-md px-4 py-3 w-full">
+                        <option>Todas as Categorias</option>
+                        <option>Móveis</option>
+                        <option>Decoração</option>
+                        <option>Iluminação</option>
+                    </select>
+                </div>
+
+                <!-- Status -->
+                <div>
+                    <label class="block text-sm font-medium mb-2 text-white">Status</label>
+                    <select class="input-glass text-white rounded-md px-4 py-3 w-full">
+                        <option>Todos</option>
+                        <option>Ativo</option>
+                        <option>Inativo</option>
+                    </select>
+                </div>
+
+                <!-- Price Min -->
+                <div>
+                    <label class="block text-sm font-medium mb-2 text-white">Preço Min.</label>
+                    <div class="relative">
+                        <span class="absolute left-3 top-1/2 transform -translate-y-1/2 text-white/70">R$</span>
+                        <input type="number" class="input-glass text-white rounded-md pl-10 pr-4 py-3 w-full placeholder-white/50">
+                    </div>
+                </div>
+
+                <!-- Price Max -->
+                <div>
+                    <label class="block text-sm font-medium mb-2 text-white">Preço Máx.</label>
+                    <div class="relative">
+                        <span class="absolute left-3 top-1/2 transform -translate-y-1/2 text-white/70">R$</span>
+                        <input type="number" class="input-glass text-white rounded-md pl-10 pr-4 py-3 w-full placeholder-white/50">
+                    </div>
+                </div>
+
+                <!-- Zero Stock Checkbox -->
+                <div class="flex items-end">
+                    <div class="flex items-center gap-2 pb-3">
+                        <input type="checkbox" id="zeroStock" class="rounded border-white/30 text-primary focus:ring-primary">
+                        <label for="zeroStock" class="text-sm text-white">0 Estoque</label>
+                    </div>
+                </div>
+
+                <!-- Action Buttons -->
+                <div class="flex gap-2">
+                    <button class="btn-secondary text-white rounded-md px-4 py-3 font-medium whitespace-nowrap">
+                        <i class="fas fa-filter mr-2"></i>Filtrar
+                    </button>
+                    <button class="btn-primary text-white rounded-md px-4 py-3 font-medium whitespace-nowrap">
+                        <i class="fas fa-plus mr-2"></i>Novo
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Products Table -->
+        <div class="glass-surface rounded-xl overflow-hidden shadow-lg animate-fade-in-up">
+            <div class="overflow-x-auto">
+                <table class="w-full">
+                    <thead class="glass-surface sticky top-0">
+                        <tr>
+                            <th class="px-6 py-4 text-left text-xs font-medium uppercase tracking-wider" style="color: var(--color-primary)">Código</th>
+                            <th class="px-6 py-4 text-left text-xs font-medium uppercase tracking-wider" style="color: var(--color-primary)">Nome</th>
+                            <th class="px-6 py-4 text-left text-xs font-medium uppercase tracking-wider" style="color: var(--color-primary)">Categoria</th>
+                            <th class="px-6 py-4 text-left text-xs font-medium uppercase tracking-wider" style="color: var(--color-primary)">Custo Insumos (A)</th>
+                            <th class="px-6 py-4 text-left text-xs font-medium uppercase tracking-wider" style="color: var(--color-primary)">Preço de Venda</th>
+                            <th class="px-6 py-4 text-left text-xs font-medium uppercase tracking-wider" style="color: var(--color-primary)">Margem (%)</th>
+                            <th class="px-6 py-4 text-left text-xs font-medium uppercase tracking-wider" style="color: var(--color-primary)">Estoque Atual</th>
+                            <th class="px-6 py-4 text-left text-xs font-medium uppercase tracking-wider" style="color: var(--color-primary)">Status</th>
+                            <th class="px-6 py-4 text-center text-xs font-medium uppercase tracking-wider" style="color: var(--color-primary)">Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-white/10">
+                        <!-- Normal Product -->
+                        <tr class="transition-colors duration-150" style="cursor: pointer;" onmouseover="this.style.background='rgba(163, 148, 167, 0.05)'" onmouseout="this.style.background='transparent'">
+                            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">PRD001</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-white">Mesa de Jantar Carvalho</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-violet)">Móveis</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-white">R$ 450,00</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-white">R$ 1.200,00</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-green)">166,7%</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-white">25</td>
+                            <td class="px-6 py-4 whitespace-nowrap">
+                                <span class="px-3 py-1 rounded-full text-xs font-medium" style="background: rgba(162, 255, 166, 0.2); color: var(--color-green)">Ativo</span>
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-center">
+                                <div class="flex items-center justify-center space-x-2">
+                                    <i class="fas fa-eye p-2 rounded-lg transition-colors duration-150 hover:bg-white/10 cursor-pointer" style="color: var(--color-primary)" title="Visualizar"></i>
+                                    <i class="fas fa-edit p-2 rounded-lg transition-colors duration-150 hover:bg-white/10 cursor-pointer" style="color: var(--color-primary)" title="Editar"></i>
+                                    <i class="fas fa-trash p-2 rounded-lg transition-colors duration-150 hover:bg-gray-800 hover:text-white cursor-pointer" style="color: var(--neutral-500)" title="Excluir"></i>
+                                </div>
+                            </td>
+                        </tr>
+
+                        <!-- Low Stock Product (Red highlight) -->
+                        <tr class="transition-colors duration-150 bg-red-50 border-l-4" style="cursor: pointer; background: rgba(255, 88, 88, 0.1); border-left-color: var(--color-red);" onmouseover="this.style.background='rgba(255, 88, 88, 0.15)'" onmouseout="this.style.background='rgba(255, 88, 88, 0.1)'">
+                            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium" style="color: var(--color-red)">PRD002</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-red)">Cadeira Estofada Premium</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-violet)">Móveis</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-red)">R$ 180,00</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-red)">R$ 450,00</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-green)">150,0%</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm font-bold" style="color: var(--color-red)">3</td>
+                            <td class="px-6 py-4 whitespace-nowrap">
+                                <span class="px-3 py-1 rounded-full text-xs font-medium" style="background: rgba(162, 255, 166, 0.2); color: var(--color-green)">Ativo</span>
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-center">
+                                <div class="flex items-center justify-center space-x-2">
+                                    <i class="fas fa-eye p-2 rounded-lg transition-colors duration-150 hover:bg-white/10 cursor-pointer" style="color: var(--color-primary)" title="Visualizar"></i>
+                                    <i class="fas fa-edit p-2 rounded-lg transition-colors duration-150 hover:bg-white/10 cursor-pointer" style="color: var(--color-primary)" title="Editar"></i>
+                                    <i class="fas fa-trash p-2 rounded-lg transition-colors duration-150 hover:bg-gray-800 hover:text-white cursor-pointer" style="color: var(--neutral-500)" title="Excluir"></i>
+                                </div>
+                            </td>
+                        </tr>
+
+                        <!-- Normal Product -->
+                        <tr class="transition-colors duration-150" style="cursor: pointer;" onmouseover="this.style.background='rgba(163, 148, 167, 0.05)'" onmouseout="this.style.background='transparent'">
+                            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">PRD003</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-white">Luminária de Mesa LED</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-violet)">Iluminação</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-white">R$ 85,00</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-white">R$ 220,00</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-green)">158,8%</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-white">∞</td>
+                            <td class="px-6 py-4 whitespace-nowrap">
+                                <span class="px-3 py-1 rounded-full text-xs font-medium" style="background: rgba(162, 255, 166, 0.2); color: var(--color-green)">Ativo</span>
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-center">
+                                <div class="flex items-center justify-center space-x-2">
+                                    <i class="fas fa-eye p-2 rounded-lg transition-colors duration-150 hover:bg-white/10 cursor-pointer" style="color: var(--color-primary)" title="Visualizar"></i>
+                                    <i class="fas fa-edit p-2 rounded-lg transition-colors duration-150 hover:bg-white/10 cursor-pointer" style="color: var(--color-primary)" title="Editar"></i>
+                                    <i class="fas fa-trash p-2 rounded-lg transition-colors duration-150 hover:bg-gray-800 hover:text-white cursor-pointer" style="color: var(--neutral-500)" title="Excluir"></i>
+                                </div>
+                            </td>
+                        </tr>
+
+                        <!-- Inactive Product -->
+                        <tr class="transition-colors duration-150" style="cursor: pointer;" onmouseover="this.style.background='rgba(163, 148, 167, 0.05)'" onmouseout="this.style.background='transparent'">
+                            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">PRD004</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-white">Espelho Decorativo Vintage</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-violet)">Decoração</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-white">R$ 120,00</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-white">R$ 350,00</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-green)">191,7%</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-white">15</td>
+                            <td class="px-6 py-4 whitespace-nowrap">
+                                <span class="px-3 py-1 rounded-full text-xs font-medium" style="background: rgba(255, 88, 88, 0.2); color: var(--color-red)">Inativo</span>
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-center">
+                                <div class="flex items-center justify-center space-x-2">
+                                    <i class="fas fa-eye p-2 rounded-lg transition-colors duration-150 hover:bg-white/10 cursor-pointer" style="color: var(--color-primary)" title="Visualizar"></i>
+                                    <i class="fas fa-edit p-2 rounded-lg transition-colors duration-150 hover:bg-white/10 cursor-pointer" style="color: var(--color-primary)" title="Editar"></i>
+                                    <i class="fas fa-trash p-2 rounded-lg transition-colors duration-150 hover:bg-gray-800 hover:text-white cursor-pointer" style="color: var(--neutral-500)" title="Excluir"></i>
+                                </div>
+                            </td>
+                        </tr>
+
+                        <!-- Normal Product -->
+                        <tr class="transition-colors duration-150" style="cursor: pointer;" onmouseover="this.style.background='rgba(163, 148, 167, 0.05)'" onmouseout="this.style.background='transparent'">
+                            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">PRD005</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-white">Sofá 3 Lugares Tecido</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-violet)">Móveis</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-white">R$ 680,00</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-white">R$ 1.800,00</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-green)">164,7%</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-white">12</td>
+                            <td class="px-6 py-4 whitespace-nowrap">
+                                <span class="px-3 py-1 rounded-full text-xs font-medium" style="background: rgba(162, 255, 166, 0.2); color: var(--color-green)">Ativo</span>
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-center">
+                                <div class="flex items-center justify-center space-x-2">
+                                    <i class="fas fa-eye p-2 rounded-lg transition-colors duration-150 hover:bg-white/10 cursor-pointer" style="color: var(--color-primary)" title="Visualizar"></i>
+                                    <i class="fas fa-edit p-2 rounded-lg transition-colors duration-150 hover:bg-white/10 cursor-pointer" style="color: var(--color-primary)" title="Editar"></i>
+                                    <i class="fas fa-trash p-2 rounded-lg transition-colors duration-150 hover:bg-gray-800 hover:text-white cursor-pointer" style="color: var(--neutral-500)" title="Excluir"></i>
+                                </div>
+                            </td>
+                        </tr>
+
+                        <!-- Zero Stock Product (Red highlight) -->
+                        <tr class="transition-colors duration-150 bg-red-50 border-l-4" style="cursor: pointer; background: rgba(255, 88, 88, 0.1); border-left-color: var(--color-red);" onmouseover="this.style.background='rgba(255, 88, 88, 0.15)'" onmouseout="this.style.background='rgba(255, 88, 88, 0.1)'">
+                            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium" style="color: var(--color-red)">PRD006</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-red)">Mesa de Centro Vidro</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-violet)">Móveis</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-red)">R$ 280,00</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-red)">R$ 750,00</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-green)">167,9%</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm font-bold" style="color: var(--color-red)">0</td>
+                            <td class="px-6 py-4 whitespace-nowrap">
+                                <span class="px-3 py-1 rounded-full text-xs font-medium" style="background: rgba(162, 255, 166, 0.2); color: var(--color-green)">Ativo</span>
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-center">
+                                <div class="flex items-center justify-center space-x-2">
+                                    <i class="fas fa-eye p-2 rounded-lg transition-colors duration-150 hover:bg-white/10 cursor-pointer" style="color: var(--color-primary)" title="Visualizar"></i>
+                                    <i class="fas fa-edit p-2 rounded-lg transition-colors duration-150 hover:bg-white/10 cursor-pointer" style="color: var(--color-primary)" title="Editar"></i>
+                                    <i class="fas fa-trash p-2 rounded-lg transition-colors duration-150 hover:bg-gray-800 hover:text-white cursor-pointer" style="color: var(--neutral-500)" title="Excluir"></i>
+                                </div>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

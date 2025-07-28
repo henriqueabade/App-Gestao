@@ -8,6 +8,34 @@ const crmToggle = document.getElementById('crmToggle');
 const crmSubmenu = document.getElementById('crmSubmenu');
 const chevron = crmToggle.querySelector('.chevron');
 
+// Carrega páginas modulares dentro da div#content
+function loadPage(page) {
+    const content = document.getElementById('content');
+    if (!content) return;
+    fetch(`../html/${page}.html`)
+        .then(resp => resp.text())
+        .then(html => {
+            content.innerHTML = html;
+            document.dispatchEvent(new Event('module-change'));
+
+            const oldCss = document.getElementById('page-style');
+            if (oldCss) oldCss.remove();
+            const link = document.createElement('link');
+            link.id = 'page-style';
+            link.rel = 'stylesheet';
+            link.href = `../css/${page}.css`;
+            document.head.appendChild(link);
+
+            const oldScript = document.getElementById('page-script');
+            if (oldScript) oldScript.remove();
+            const script = document.createElement('script');
+            script.id = 'page-script';
+            script.src = `../js/${page}.js`;
+            document.body.appendChild(script);
+        });
+}
+window.loadPage = loadPage;
+
 let sidebarExpanded = false;
 let crmExpanded = false;
 
@@ -89,6 +117,9 @@ document.querySelectorAll('.sidebar-item[data-page], .submenu-item[data-page]').
         this.classList.add('active');
         const page = this.dataset.page;
         document.querySelector('h1').textContent = pageNames[page] || 'Dashboard';
+        if (page === 'produtos') {
+            loadPage('produtos');
+        }
     });
 });
 
