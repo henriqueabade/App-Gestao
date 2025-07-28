@@ -142,14 +142,17 @@ document.querySelectorAll('.sidebar-item[data-page], .submenu-item[data-page]').
         this.classList.add('active');
         const page = this.dataset.page;
         document.querySelector('h1').textContent = pageNames[page] || 'Dashboard';
-        if (page === 'orcamentos'){ 
-          loadPage('orcamentos');
+        if (page === 'orcamentos') {
+            loadPage('orcamentos');
         }
         if (page === 'produtos') {
             loadPage('produtos');
-        }    
+        }
         if (page === 'materia-prima') {
             loadPage('materia-prima');
+        }
+        if (page === 'pedidos') {
+            loadPage('pedidos');
         }
     });
 });
