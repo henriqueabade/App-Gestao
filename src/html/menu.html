@@ -8,6 +8,7 @@
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <!-- Estilos específicos do menu -->
     <link rel="stylesheet" href="../css/menu.css">
+    <link rel="stylesheet" href="../styles/warning.css">
 </head>
 <body class="text-white">
     <!-- Topbar -->
@@ -32,11 +33,22 @@
                     <div class="text-xs" style="color: var(--color-violet)">Administrador</div>
                 </div>
                 
-                <div class="flex items-center space-x-2">
-                    <button class="p-2 rounded-lg transition-colors duration-150 hover:bg-white/10" style="color: var(--color-violet)" onmouseover="this.style.color='var(--color-primary-light)'" onmouseout="this.style.color='var(--color-violet)'">
+                <div class="flex items-center space-x-2 relative">
+                    <button id="user-actions-btn" class="p-2 rounded-lg transition-colors duration-150 hover:bg-white/10" style="color: var(--color-violet)" onmouseover="this.style.color='var(--color-primary-light)'" onmouseout="this.style.color='var(--color-violet)'">
                         <i class="fas fa-cog w-5 h-5"></i>
                     </button>
-                    
+                    <div id="user-actions-menu" class="hidden absolute right-0 mt-2 w-40 bg-white rounded-md shadow-lg z-50 text-sm text-gray-700">
+                        <button data-action="logout" class="flex items-center w-full px-3 py-2 rounded-md hover:bg-[rgba(182,160,62,0.05)] hover:text-[#b6a03e]">
+                            <i class="fas fa-sign-out-alt w-5 h-5 mr-2"></i>Sair
+                        </button>
+                        <button data-action="minimize" class="flex items-center w-full px-3 py-2 hover:bg-[rgba(182,160,62,0.05)] hover:text-[#b6a03e]">
+                            <i class="fas fa-window-minimize w-5 h-5 mr-2"></i>Minimizar
+                        </button>
+                        <button data-action="close" class="flex items-center w-full px-3 py-2 rounded-md hover:bg-[rgba(182,160,62,0.05)] hover:text-[#b6a03e]">
+                            <i class="fas fa-times w-5 h-5 mr-2"></i>Fechar
+                        </button>
+                    </div>
+                
                     <button class="p-2 rounded-lg transition-colors duration-150 hover:bg-white/10" style="color: var(--color-green)">
                         <i class="fas fa-sync-alt w-4 h-4 rotating"></i>
                     </button>
@@ -335,8 +347,10 @@
         </div>
         </div>
     </main>
+    <div id="exitOverlay" class="hidden fixed inset-0 bg-[#3d021f] opacity-0 flex items-center justify-center z-50"></div>
 
     <!-- Script de controle do menu -->
     <script src="../js/menu.js"></script>
+    <script src="../utils/userActions.js"></script>
 </body>
 </html>
