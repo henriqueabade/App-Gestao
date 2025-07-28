@@ -89,6 +89,10 @@ document.querySelectorAll('.sidebar-item[data-page], .submenu-item[data-page]').
         this.classList.add('active');
         const page = this.dataset.page;
         document.querySelector('h1').textContent = pageNames[page] || 'Dashboard';
+        // Se o item clicado for Matéria-Prima, navega para a nova tela
+        if (page === 'materiaprima') {
+            window.location.href = 'materia-prima.html';
+        }
     });
 });
 
