@@ -164,6 +164,9 @@ document.querySelectorAll('.sidebar-item[data-page], .submenu-item[data-page]').
         if (page === 'contatos') {
             loadPage('contatos');
         }
+        if (page === 'tarefas') {
+            loadPage('tarefas');
+        }
         if (page === 'usuarios') {
             loadPage('usuarios');
         }
