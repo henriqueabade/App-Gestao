@@ -154,6 +154,9 @@ document.querySelectorAll('.sidebar-item[data-page], .submenu-item[data-page]').
         if (page === 'pedidos') {
             loadPage('pedidos');
         }
+        if (page === 'tarefas') {
+            loadPage('tarefas');
+        }
     });
 });
 
