@@ -1,0 +1,170 @@
+<div class="font-[Inter] p-6">
+  <div class="mb-8">
+    <h1 class="text-2xl font-bold text-gray-800">Tarefas</h1>
+    <p class="text-sm text-gray-500 mt-1">Gerencie tarefas e acompanhamentos de clientes</p>
+  </div>
+  <div id="content" class="flex-1 overflow-auto">
+    <header class="flex items-center justify-between py-4 px-6 bg-white shadow-sm rounded-t-lg">
+      <div class="flex items-center space-x-4">
+        <div class="relative">
+          <input type="text" class="quick-add-input bg-white border border-gray-300 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-400 w-64" placeholder="+ Nova Tarefa (amanhã às 14h #projeto !1)">
+        </div>
+        <button class="text-gray-600 hover:text-gray-800 p-2" title="Importar Tarefas">
+          <i class="fas fa-file-import"></i>
+        </button>
+      </div>
+    </header>
+
+    <div class="flex flex-1 overflow-hidden bg-white shadow-md rounded-b-lg">
+      <!-- Sidebar -->
+      <aside class="w-60 border-r border-gray-200 p-4 space-y-6">
+        <div>
+          <h3 class="text-xs font-semibold text-gray-500 uppercase mb-2">Listas Inteligentes</h3>
+          <ul class="space-y-1">
+            <li class="flex justify-between items-center sidebar-list-item p-2 rounded hover:bg-gray-100 cursor-pointer">
+              <span class="text-gray-700">Caixa de Entrada</span>
+              <span class="text-gray-500 text-sm">3</span>
+            </li>
+            <li class="flex justify-between items-center sidebar-list-item p-2 rounded bg-gray-100">
+              <span class="text-gray-700 font-medium">Hoje</span>
+              <span class="text-gray-500 text-sm">5</span>
+            </li>
+            <li class="flex justify-between items-center sidebar-list-item p-2 rounded hover:bg-gray-100 cursor-pointer">
+              <span class="text-gray-700">Próximos 7 Dias</span>
+              <span class="text-gray-500 text-sm">12</span>
+            </li>
+          </ul>
+        </div>
+        <div>
+          <h3 class="text-xs font-semibold text-gray-500 uppercase mb-2">Lists</h3>
+          <ul class="space-y-1">
+            <li class="flex justify-between items-center sidebar-list-item p-2 rounded hover:bg-gray-100 cursor-pointer">
+              <div class="flex items-center space-x-2">
+                <span class="w-3 h-3 rounded-full" style="background-color:var(--color-primary)"></span>
+                <span class="text-gray-700">Trabalho</span>
+              </div>
+              <span class="text-gray-500 text-sm">8</span>
+            </li>
+            <li class="flex justify-between items-center sidebar-list-item p-2 rounded hover:bg-gray-100 cursor-pointer">
+              <div class="flex items-center space-x-2">
+                <span class="w-3 h-3 rounded-full" style="background-color:var(--color-negative)"></span>
+                <span class="text-gray-700">Pessoal</span>
+              </div>
+              <span class="text-gray-500 text-sm">4</span>
+            </li>
+          </ul>
+        </div>
+      </aside>
+
+      <!-- Task Panel -->
+      <main class="flex-1 p-4 overflow-y-auto">
+        <h2 class="text-lg font-semibold text-gray-800 mb-4">Hoje</h2>
+        <div class="space-y-2">
+          <div class="task-row bg-white rounded-md p-3 flex justify-between items-start shadow-sm">
+            <div class="flex items-start space-x-3">
+              <div class="task-checkbox mt-1"></div>
+              <div>
+                <div class="text-gray-800 font-medium">Enviar propostas pendentes</div>
+                <div class="text-sm text-gray-500">Trabalho</div>
+              </div>
+            </div>
+            <div class="flex items-center space-x-2">
+              <button class="subtask-toggle text-gray-500" data-task-id="task1">
+                <i class="fas fa-chevron-down"></i>
+              </button>
+              <div class="priority-flag text-red-500"></div>
+              <button class="task-menu-btn text-gray-400 hover:text-gray-600"><i class="fas fa-ellipsis-h"></i></button>
+            </div>
+          </div>
+          <div class="subtasks space-y-1 pl-8" data-parent-id="task1">
+            <div class="task-row bg-white rounded-md p-2 flex justify-between items-start shadow-sm">
+              <div class="flex items-start space-x-3">
+                <div class="task-checkbox mt-1"></div>
+                <div>
+                  <div class="text-gray-800">Preparar resumo</div>
+                </div>
+              </div>
+              <button class="task-menu-btn text-gray-400 hover:text-gray-600"><i class="fas fa-ellipsis-h"></i></button>
+            </div>
+            <div class="task-row bg-white rounded-md p-2 flex justify-between items-start shadow-sm">
+              <div class="flex items-start space-x-3">
+                <div class="task-checkbox mt-1"></div>
+                <div>
+                  <div class="text-gray-800">Enviar por e-mail</div>
+                </div>
+              </div>
+              <button class="task-menu-btn text-gray-400 hover:text-gray-600"><i class="fas fa-ellipsis-h"></i></button>
+            </div>
+          </div>
+          <div class="task-row bg-white rounded-md p-3 flex justify-between items-start shadow-sm">
+            <div class="flex items-start space-x-3">
+              <div class="task-checkbox mt-1"></div>
+              <div>
+                <div class="text-gray-800 font-medium">Reunião com fornecedor</div>
+                <div class="text-sm text-gray-500">Hoje 15:00</div>
+              </div>
+            </div>
+            <div class="flex items-center space-x-2">
+              <div class="priority-flag text-yellow-500"></div>
+              <button class="task-menu-btn text-gray-400 hover:text-gray-600"><i class="fas fa-ellipsis-h"></i></button>
+            </div>
+          </div>
+          <div class="task-row bg-white rounded-md p-3 flex justify-between items-start shadow-sm">
+            <div class="flex items-start space-x-3">
+              <div class="task-checkbox mt-1"></div>
+              <div>
+                <div class="text-gray-800 font-medium">Comprar material para projeto</div>
+                <div class="text-sm text-gray-500">Pessoal</div>
+              </div>
+            </div>
+            <div class="flex items-center space-x-2">
+              <div class="priority-flag text-green-500"></div>
+              <button class="task-menu-btn text-gray-400 hover:text-gray-600"><i class="fas fa-ellipsis-h"></i></button>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+
+    <!-- Detail Drawer -->
+    <div class="drawer" id="taskDrawer">
+      <div class="h-full flex flex-col">
+        <div class="p-4 border-b border-gray-200 flex items-center justify-between">
+          <h2 class="text-lg font-semibold text-gray-800">Detalhes da Tarefa</h2>
+          <button class="text-gray-500 hover:text-gray-700 p-1" id="closeDrawer">
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+        <div class="flex-1 overflow-y-auto p-4">
+          <h3 id="taskTitle">…</h3>
+          <!-- Conteúdo de detalhes -->
+        </div>
+        <div class="p-4 border-t border-gray-200">
+          <div class="flex justify-between">
+            <button class="text-gray-600 hover:text-red-500 flex items-center">
+              <i class="far fa-trash-alt mr-1"></i><span class="text-sm">Excluir</span>
+            </button>
+            <div class="flex space-x-2">
+              <button class="border border-gray-300 text-gray-700 px-4 py-2 rounded-md text-sm font-medium hover:bg-gray-50">Cancelar</button>
+              <button class="bg-purple-400 hover:bg-purple-500 text-white px-4 py-2 rounded-md text-sm font-medium">Salvar</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Overlay -->
+    <div class="overlay" id="overlay"></div>
+
+    <!-- Context Menu -->
+    <div class="context-menu" id="taskContextMenu">
+      <div class="context-menu-item"><i class="fas fa-pencil-alt"></i><span>Editar</span></div>
+      <div class="context-menu-item"><i class="fas fa-trash-alt"></i><span>Excluir</span></div>
+      <div class="context-menu-item"><i class="fas fa-arrow-up"></i><span>Mover para o Topo</span></div>
+      <div class="context-menu-item"><i class="fas fa-copy"></i><span>Duplicar</span></div>
+      <div class="context-menu-item"><i class="fas fa-flag"></i><span>Definir Prioridade</span></div>
+      <div class="context-menu-item"><i class="fas fa-tags"></i><span>Adicionar Tags</span></div>
+      <div class="context-menu-item"><i class="fas fa-sync-alt"></i><span>Tornar Recorrente</span></div>
+    </div>
+  </div>
+</div>

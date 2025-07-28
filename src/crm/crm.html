@@ -1,0 +1,181 @@
+<div class="font-[Inter] p-6">
+  <div class="mb-8">
+        <h1 class="text-2xl font-bold text-gray-800">Clientes</h1>
+        <p class="text-sm text-gray-500 mt-1">Gerencie o relacionamento e as informações de seus clientes</p>
+      </div>
+      <div class="bg-white rounded-lg shadow-sm p-4 mb-6">
+        <div class="flex flex-col md:flex-row gap-4">
+          <div class="flex-grow">
+            <div class="relative">
+              <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-gray-500" viewBox="0 0 20 20" fill="currentColor">
+                  <path fill-rule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1111.196 3.414l4.597 4.597a1 1 0 01-1.414 1.414l-4.597-4.597A6 6 0 012 8z" clip-rule="evenodd" />
+                </svg>
+              </div>
+              <input type="text" class="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md leading-5 bg-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-300 focus:border-purple-300 sm:text-sm" placeholder="Buscar por Nome, CNPJ, Estado...">
+            </div>
+          </div>
+          <div class="flex flex-col sm:flex-row gap-4">
+            <div class="w-full sm:w-40">
+              <select class="block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-purple-300 focus:border-purple-300 sm:text-sm">
+                <option value="">Todos Status</option>
+                <option value="active">Ativo</option>
+                <option value="inactive">Inativo</option>
+                <option value="prospect">Prospecto</option>
+              </select>
+            </div>
+            <div class="w-full sm:w-40">
+              <select id="filter-state" class="block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-purple-300 focus:border-purple-300 sm:text-sm">
+                <option value="">Todos Estados</option>
+                <option value="AC">AC</option>
+                <option value="AL">AL</option>
+                <option value="AP">AP</option>
+                <option value="AM">AM</option>
+                <option value="BA">BA</option>
+                <option value="CE">CE</option>
+                <option value="DF">DF</option>
+                <option value="ES">ES</option>
+                <option value="GO">GO</option>
+                <option value="MA">MA</option>
+                <option value="MT">MT</option>
+                <option value="MS">MS</option>
+                <option value="MG">MG</option>
+                <option value="PA">PA</option>
+                <option value="PB">PB</option>
+                <option value="PR">PR</option>
+                <option value="PE">PE</option>
+                <option value="PI">PI</option>
+                <option value="RJ">RJ</option>
+                <option value="RN">RN</option>
+                <option value="RS">RS</option>
+                <option value="RO">RO</option>
+                <option value="RR">RR</option>
+                <option value="SC">SC</option>
+                <option value="SP">SP</option>
+                <option value="SE">SE</option>
+                <option value="TO">TO</option>
+              </select>
+            </div>
+            <div class="w-full sm:w-40">
+              <select class="block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-purple-300 focus:border-purple-300 sm:text-sm">
+                <option value="">Todos os Donos</option>
+                <option value="john">John Doe</option>
+                <option value="sarah">Sarah Smith</option>
+                <option value="michael">Michael Johnson</option>
+              </select>
+            </div>
+            <button class="inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-purple-300">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
+                <path fill-rule="evenodd" d="M3 4a1 1 0 011-1h12a1 1 0 01.78 1.625L12 11.5V15a1 1 0 01-.553.894l-2 1A1 1 0 018 16v-4.5L3.22 5.625A1 1 0 013 4z" clip-rule="evenodd" />
+              </svg>
+              Filtrar
+            </button>
+            <button class="bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white font-medium py-2 px-4 rounded-md transition duration-150 ease-in-out flex items-center">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
+                <path fill-rule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clip-rule="evenodd" />
+              </svg>
+              Novo Cliente
+            </button>
+          </div>
+        </div>
+      </div>
+      <div id="clientes" class="crm-section">
+        <div class="bg-white rounded-lg shadow-sm overflow-hidden">
+          <div class="table-container overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200">
+              <thead class="bg-gray-50">
+                <tr>
+                  <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nome</th>
+                  <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">CNPJ</th>
+                  <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Estado</th>
+                  <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                  <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Dono</th>
+                  <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Ações</th>
+                </tr>
+              </thead>
+              <tbody class="bg-white divide-y divide-gray-200">
+                <tr class="hover:bg-gray-50">
+                  <td class="px-6 py-4 whitespace-nowrap">
+                    <div class="flex items-center">
+                      <div class="text-sm font-medium text-gray-900">
+                        Empresa Tecnologia Ltda
+                        <span class="ml-1 text-gray-500 cursor-help" title="Clique para mais informações">ℹ️</span>
+                      </div>
+                    </div>
+                  </td>
+                  <td class="px-6 py-4 whitespace-nowrap">
+                    <div class="text-sm text-gray-500">12.345.678/0001-90</div>
+                  </td>
+                  <td class="px-6 py-4 whitespace-nowrap">
+                    <div class="text-sm text-gray-500">São Paulo</div>
+                  </td>
+                  <td class="px-6 py-4 whitespace-nowrap">
+                    <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">Ativo</span>
+                  </td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">Sarah Smith</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                    <button class="text-blue-500 hover:text-blue-700 mx-1" title="Editar">
+                      <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                        <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
+                      </svg>
+                    </button>
+                    <button class="text-red-500 hover:text-red-700 mx-1" title="Excluir">
+                      <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd" />
+                      </svg>
+                    </button>
+                  </td>
+                </tr>
+                <tr class="hover:bg-gray-50">
+                  <td class="px-6 py-4 whitespace-nowrap">
+                    <div class="flex items-center">
+                      <div class="text-sm font-medium text-gray-900">
+                        Comércio Varejo S.A.
+                        <span class="ml-1 text-gray-500 cursor-help" title="Clique para mais informações">ℹ️</span>
+                      </div>
+                    </div>
+                  </td>
+                  <td class="px-6 py-4 whitespace-nowrap">
+                    <div class="text-sm text-gray-500">23.456.789/0001-12</div>
+                  </td>
+                  <td class="px-6 py-4 whitespace-nowrap">
+                    <div class="text-sm text-gray-500">Rio de Janeiro</div>
+                  </td>
+                  <td class="px-6 py-4 whitespace-nowrap">
+                    <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-yellow-100 text-yellow-800">Prospecto</span>
+                  </td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">John Doe</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                    <button class="text-blue-500 hover:text-blue-700 mx-1" title="Editar">
+                      <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                        <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
+                      </svg>
+                    </button>
+                    <button class="text-red-500 hover:text-red-700 mx-1" title="Excluir">
+                      <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd" />
+                      </svg>
+                    </button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+      <div id="prospects" class="crm-section hidden">
+        <div class="text-center text-gray-500 py-20">Módulo de Prospectos em desenvolvimento.</div>
+      </div>
+      <div id="externos" class="crm-section hidden">
+        <div class="text-center text-gray-500 py-20">Módulo de Contatos em desenvolvimento.</div>
+      </div>
+      <div id="calendar" class="crm-section hidden">
+        <div class="mb-8">
+          <h1 class="text-2xl font-bold text-gray-800">Calendário</h1>
+          <p class="text-sm text-gray-500 mt-1">Área de calendário em desenvolvimento.</p>
+        </div>
+      </div>
+      <div id="tarefas" class="crm-section hidden">
+        <div class="text-center text-gray-500 py-20">Módulo de Tarefas em desenvolvimento.</div>
+      </div>
+</div>

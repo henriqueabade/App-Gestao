@@ -1,0 +1,120 @@
+:root {
+  /* Paleta Santíssimo Decor */
+  --color-primary: #b6a03e;
+  --color-primary-hover: #d4c169;
+  --color-primary-opacity: rgba(182,160,62,0.1);
+  --color-border: #e5e7eb;
+
+  /* Ações positivas */
+  --color-positive: #a2ffa6;       /* verde de confirmação/pergunta */
+
+  /* Ações negativas */
+  --color-negative: #ff5858;       /* vermelho de cancelar */
+  --color-negative-hover: #dc2626; /* vermelho escuro no hover */
+
+  /* Azul utilizado em buscas */
+  --color-blue: #8aa7f3;
+}
+
+body {
+  font-family: 'Raleway', sans-serif;
+}
+
+/* Loader */
+.loader {
+  border-top-color: var(--color-primary);
+  -webkit-animation: spinner 1.5s linear infinite;
+          animation: spinner 1.5s linear infinite;
+}
+@-webkit-keyframes spinner {
+  0%   { -webkit-transform: rotate(0deg); transform: rotate(0deg); }
+  100% { -webkit-transform: rotate(360deg); transform: rotate(360deg); }
+}
+@keyframes spinner {
+  0%   { -webkit-transform: rotate(0deg); transform: rotate(0deg); }
+  100% { -webkit-transform: rotate(360deg); transform: rotate(360deg); }
+}
+
+/* Container da tabela */
+.table-container {
+  max-height: calc(100vh - 240px);
+  overflow-y: auto;
+}
+
+/* Indicadores de estoque */
+.low-stock      { color: var(--color-negative); }
+.infinite-stock { color: var(--color-positive); }
+
+/* Fade in/out */
+@keyframes fadeIn  { from { opacity: 0; } to { opacity: 1; } }
+@keyframes fadeOut { from { opacity: 1; } to { opacity: 0; } }
+.fade-in  { animation: fadeIn  0.3s forwards; }
+.fade-out { animation: fadeOut 0.3s forwards; }
+
+/* Estilos da tabela de matérias-primas */
+#tabelaInsumos th,
+#tabelaInsumos td {
+  border: 1px solid var(--color-border);
+  white-space: nowrap;
+  padding: 0.25rem 0.5rem;
+  text-align: left !important;
+}
+#tabelaInsumos th:first-child,
+#tabelaInsumos td:first-child {
+  width: 12rem;
+}
+#tabelaInsumos th:last-child,
+#tabelaInsumos td:last-child {
+  width: 6rem;
+}
+/* Hover suave usando opacidade do amarelo */
+#tabelaInsumos tbody tr:hover {
+  background-color: var(--color-primary-opacity);
+}
+
+/* Ícones de ação */
+.action-icon {
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.action-icon svg {
+  width: 1.25rem;
+  height: 1.25rem;
+}
+/* ícones de informação */
+.info-icon i,
+.info-icon svg {
+  color: var(--color-primary);
+}
+.info-icon:hover i,
+.info-icon:hover svg {
+  color: var(--color-primary-hover);
+}
+/* botões editar/excluir */
+.btn-edit svg,
+.btn-delete svg {
+  fill: var(--color-primary);
+}
+.btn-edit:hover svg,
+.btn-delete:hover svg {
+  fill: var(--color-primary-hover);
+}
+
+/* Empty State */
+#emptyState .rounded-full {
+  background-color: var(--color-primary-opacity);
+}
+#emptyState .rounded-full i {
+  color: var(--color-primary);
+}
+
+/* Responsivo: ajusta padding e fonte da tabela */
+@media (max-width: 768px) {
+  #tabelaInsumos th,
+  #tabelaInsumos td {
+    padding: 0.25rem;
+    font-size: 0.875rem;
+  }
+}

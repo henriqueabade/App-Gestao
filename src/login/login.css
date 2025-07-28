@@ -1,0 +1,278 @@
+:root {
+  --color-primary: #b6a03e;
+  --color-primary-hover: #d4c169;
+  --color-bordeaux: #3d021f;
+}
+
+body {
+  font-family: 'Inter', sans-serif;
+  background-color:  #3d021f;
+}
+.heading {
+  font-family: 'Inter', sans-serif;
+}
+.btn-primary {
+  background-color: var(--color-primary);
+  transition: background-color 0.15s;
+  transition: color 0.5s;
+}
+.btn-primary:hover {
+  background-color: var(--color-primary-hover);
+  color: black;
+}
+.btn-secondary {
+  background-color: var(--color-primary);
+  transition: background-color 0.15s;
+  transition: color 0.5s;
+}
+.btn-secondary:hover {
+  background-color: var(--color-primary-hover);
+  color: black;
+}
+.form-input:focus {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(182, 160, 62, 0.534);
+}
+
+#bg-network {
+  position: fixed;
+  top: -20vh;
+  left: -20vw;
+  width: 140vw;
+  height: 140vh;
+  z-index: -10;
+  background-color: #3d021f;
+  pointer-events: auto;
+  opacity: 1;
+  visibility: visible;
+  
+}
+
+#bg-network.visible {
+  opacity: 1;
+  visibility: visible;
+}
+
+#bg-network.network-fade-out {
+  opacity: 0;
+  transition: opacity 4s ease-in-out;
+  pointer-events: none;
+}
+
+#bg-network canvas {
+  position: absolute;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.login-container {
+  background: rgba(255, 255, 255, 0.0);
+  border: 1px solid rgba(255, 255, 255, 0.466);
+  box-shadow: 0 4px 30px rgba(0, 0, 0, 0.514);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+
+@media (max-width: 480px) {
+  .login-container {
+    padding: 1rem;
+  }
+}
+
+.no-select,
+.heading,
+label,
+.nav-tab,
+.login-container,
+.btn-primary,
+.btn-secondary {
+  user-select: none;         /* Padrão */
+  -webkit-user-select: none; /* Safari/Chrome */
+  -moz-user-select: none;    /* Firefox */
+}
+
+/* Permitir seleção dentro dos inputs, caso deseje */
+input,
+textarea {
+  user-select: text;
+}
+
+/* Bloqueia seleção e arraste */
+.no-drag {
+  user-select: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -webkit-user-drag: none;   /* Chrome/Safari */
+  -khtml-user-drag: none;    /* Konqueror */
+  -moz-user-drag: none;      /* Firefox */
+  -o-user-drag: none;        /* Opera */
+  -user-drag: none;           /* Padrão */
+  pointer-events: auto;      /* mantém cliques */
+}
+
+body.fade-out {
+  opacity: 0;
+  transition: opacity 0.5s ease-in-out;
+}
+
+/* Loading overlay used when exiting the login */
+#loadingOverlay {
+  opacity: 0;
+  transition: opacity 0.3s ease-in-out;
+}
+#loadingOverlay.visible {
+  opacity: 1;
+}
+.login-loader {
+  border: 4px solid rgba(255, 255, 255, 0.3);
+  border-top-color: var(--color-primary);
+  border-radius: 50%;
+  width: 2.5rem;
+  height: 2.5rem;
+  animation: spinner 1s linear infinite;
+}
+@keyframes spinner {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* Overlay used when closing the application */
+#exitOverlay {
+  opacity: 0;
+  background-color: #3d021f;
+  transition: opacity 4s ease-in-out;
+}
+#exitOverlay.visible {
+  opacity: 1;}
+
+/* Intro overlay used when showing the login screen */
+#introOverlay {
+  opacity: 1;
+  transition: opacity 0.5s ease-in-out;
+}
+#introOverlay.fade-out {
+  opacity: 0;
+}
+
+/* Info icon used for PIN fields */
+.info-icon i,
+.info-icon svg {
+  color: var(--color-primary);
+  transition: color 0.2s;
+}
+.info-icon:hover i,
+.info-icon:hover svg {
+  color: var(--color-primary-hover);
+}
+/* Toast notification styles */
+.toast {
+  color: white;
+  padding: 0.5rem 1rem;
+  border-radius: 0.25rem;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  transition: opacity 0.5s ease-in-out;
+}
+.toast-success {
+  background-color: #16a34a; /* green */
+}
+.toast-error {
+  background-color: #dc2626; /* red */
+}
+
+/* Warning overlays for PIN or connection errors */
+.warning-overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: rgba(0, 0, 0, 0.5);
+  z-index: 50;
+}
+.warning-modal {
+  background: linear-gradient(
+    to bottom right,
+    rgba(61, 2, 31, 0.9),
+    rgba(61, 2, 31, 0.7)
+  );
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.25),
+              0 8px 30px rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-radius: 0.75rem;
+  text-align: center;
+  padding: 1.5rem 2rem;
+  max-width: 24rem;
+  font-family: 'Inter', sans-serif;
+  transform: scale(0.95);
+  transition: transform 0.2s;
+}
+.warning-modal.show {
+  transform: scale(1);
+}
+.warning-icon {
+  margin-top: -3rem;
+  display: flex;
+  justify-content: center;
+}
+.warning-icon-circle {
+  width: 3rem;
+  height: 3rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  background: linear-gradient(
+    to bottom right,
+    rgba(61, 2, 31, 0.9),
+    rgba(61, 2, 31, 0.7)
+  );
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+.warning-icon-circle i,
+.warning-icon-circle svg {
+  color: var(--color-primary);
+}
+.warning-title {
+  font-family: 'Inter', sans-serif;
+  font-weight: 600;
+  color: var(--color-primary);
+}
+.warning-text {
+  color: #f5f5f5;
+  font-size: 0.875rem;
+  font-family: 'Inter', sans-serif;
+}
+.warning-text-small {
+  color: #f5f5f5;
+  font-size: 0.75rem;
+  font-family: 'Inter', sans-serif;
+}
+.warning-divider {
+  border-color: rgba(255, 255, 255, 0.4);
+}
+.warning-button {
+  width: 100%;
+  border-radius: 0.375rem;
+  background: linear-gradient(to right, var(--color-primary), var(--color-primary-hover));
+  color: white;
+  padding: 0.5rem 1rem;
+}
+.warning-button:hover {
+  filter: brightness(1.1);
+}
+.warning-button.pulse {
+  animation: pulse 1.5s infinite;
+}
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+/* Skip intro overlay when the page is reloaded */
+html.skip-intro #introOverlay {
+  display: none;
+}

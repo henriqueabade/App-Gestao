@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Santíssimo Decor - Login</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Raleway:wght@500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="login.css" />
+  <link rel="stylesheet" href="../styles/warning.css" />
+  <link rel="stylesheet" href="../icons.css" />
+  <script>
+    (function () {
+      const params = new URLSearchParams(location.search);
+      if (params.get('hidden') === '1') {
+        document.documentElement.classList.add('skip-intro');
+      }
+    })();
+  </script>
+</head>
+<body class="bg-gradient-to-br from-amber-50 to-orange-50 font-[Inter]">
+  <div id="introOverlay" style="position:fixed;inset:0;background:#3d021f;z-index:1000;"></div>
+  <div id="bg-network"></div>
+  <div class="min-h-screen flex items-center justify-center p-4 relative">
+    <div class="absolute inset-0 overflow-hidden z-0 pointer-events-none">
+      <div class="absolute top-0 left-0 w-full h-full opacity-10">
+        <svg width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
+          <pattern id="pattern" x="0" y="0" width="40" height="40" patternUnits="userSpaceOnUse">
+            <path d="M0 20 L20 0 L40 20 L20 40 Z" fill="none" stroke="#b6a03e" stroke-width="1"/>
+          </pattern>
+          <rect x="0" y="0" width="100%" height="100%" fill="url(#pattern)" />
+        </svg>
+      </div>
+    </div>
+    <div class="login-container relative w-full max-w-md sm:max-w-lg md:max-w-xl p-8 rounded-xl z-10">
+      <div class="absolute top-4 right-4">
+        <button id="user-actions-btn" class="text-[#b6a03e] hover:text-[#d4c169]">
+          <i data-feather="settings" class="w-5 h-5"></i>
+        </button>
+        <div id="user-actions-menu" class="hidden absolute right-0 mt-2 w-40 bg-white rounded-md shadow-lg z-50 text-sm text-gray-700">
+          <button data-action="close" class="flex items-center w-full px-3 py-2 rounded-md hover:bg-[rgba(182,160,62,0.05)] hover:text-[#b6a03e]">
+            <i data-feather="x" class="w-5 h-5 mr-2"></i>Fechar
+          </button>
+          <button data-action="minimize" class="flex items-center w-full px-3 py-2 hover:bg-[rgba(182,160,62,0.05)] hover:text-[#b6a03e]">
+            <i data-feather="minimize" class="w-5 h-5 mr-2"></i>Minimizar
+          </button>
+          <button data-action="reload" class="flex items-center w-full px-3 py-2 rounded-md hover:bg-[rgba(182,160,62,0.05)] hover:text-[#b6a03e]">
+            <i data-feather="refresh-cw" class="w-5 h-5 mr-2"></i>Recarregar
+          </button>
+          <button data-action="select-display" class="flex items-center w-full px-3 py-2 rounded-md hover:bg-[rgba(182,160,62,0.05)] hover:text-[#b6a03e]">
+            <i data-feather="monitor" class="w-5 h-5 mr-2"></i>Escolher tela
+          </button>
+        </div>
+      </div>
+      <div class="text-center mb-8">
+        <div class="logo-wrapper mx-auto w-3/5 max-w-[220px]">
+          <img src="../assets/Marca.png" alt="Santíssimo Decor" class="w-full" draggable="false" />
+        </div>
+        <p class="text-[#b6a03e] font-[Raleway] font-medium text-base mt-2">Seja bem-vindo(a)!</p>
+      </div>
+      <div class="flex justify-center space-x-4 mb-6">
+        <button id="loginTab" class="px-4 py-2 font-medium rounded-t-lg border-b-2 border-[#b6a03e] text-[#b6a03e]">Login</button>
+        <button id="registerTab" class="px-4 py-2 font-medium text-white border-b-2 border-transparent hover:text-[#d4c169]">Cadastrar</button>
+      </div>
+      <form id="loginForm" class="space-y-4">
+        <div>
+          <label for="email" class="block text-sm font-medium text-[#b6a03e] mb-1">E-mail ou usuário</label>
+          <input type="text" id="email" class="form-input w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none" required />
+        </div>
+        <div class="relative">
+          <label for="password" class="block text-sm font-medium text-[#b6a03e] mb-1">Senha</label>
+          <input type="password" id="password" class="form-input w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none pr-10" required />
+          <button type="button" class="toggle-password absolute right-2 top-8 text-gray-500 hover:text-gray-700" data-target="password">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+              <path d="M10 12a2 2 0 100-4 2 2 0 000 4z" />
+              <path fill-rule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clip-rule="evenodd" />
+            </svg>
+          </button>
+        </div>
+        <div>
+          <label for="pin" class="block text-sm font-medium text-[#b6a03e] mb-1">PIN</label>
+          <div class="flex items-center">
+            <input
+              type="text"
+              id="pin"
+              placeholder="Informe o PIN"
+              class="form-input w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none text-gray-400"
+              inputmode="numeric"
+              pattern="\d{5}"
+              maxlength="5"
+              required
+            />
+            <span id="pinInfoLogin" class="info-icon ml-2 cursor-pointer"><i data-feather="info"></i></span>
+          </div>
+        </div>
+        <div class="flex items-center justify-between">
+          <div class="flex items-center">
+            <input id="remember" type="checkbox" class="h-4 w-4 text-[#b6a03e] focus:ring-[#b6a03e] border-gray-300 rounded accent-[#b6a03e]" />
+            <label for="remember" class="ml-2 block text-sm text-[#b6a03e]">Lembrar-me</label>
+          </div>
+          <a href="#" id="forgotPassword" class="text-sm text-[#b6a03e] hover:text-[#d4c169]">Esqueceu a senha?</a>
+        </div>
+        <button type="submit" class="btn-primary w-full py-2 px-4 rounded-md text-white font-medium">Entrar</button>
+      </form>
+      <form id="registerForm" class="space-y-4 hidden">
+        <div>
+          <label for="registerName" class="block text-sm font-medium text-[#b6a03e] mb-1">Nome completo</label>
+          <input type="text" id="registerName" class="form-input w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none" required />
+        </div>
+        <div>
+          <label for="registerEmail" class="block text-sm font-medium text-[#b6a03e] mb-1">E-mail</label>
+          <input type="email" id="registerEmail" class="form-input w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none" required />
+        </div>
+        <div class="relative">
+          <label for="registerPassword" class="block text-sm font-medium text-[#b6a03e] mb-1">Senha</label>
+          <input type="password" id="registerPassword" class="form-input w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none pr-10" required />
+          <button type="button" class="toggle-password absolute right-2 top-8 text-gray-500 hover:text-gray-700" data-target="registerPassword">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+              <path d="M10 12a2 2 0 100-4 2 2 0 000 4z" />
+              <path fill-rule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clip-rule="evenodd" />
+            </svg>
+          </button>
+        </div>
+        <div class="relative">
+          <label for="confirmPassword" class="block text-sm font-medium text-[#b6a03e] mb-1">Confirmar senha</label>
+          <input type="password" id="confirmPassword" class="form-input w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none pr-10" required />
+          <button type="button" class="toggle-password absolute right-2 top-8 text-gray-500 hover:text-gray-700" data-target="confirmPassword">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+              <path d="M10 12a2 2 0 100-4 2 2 0 000 4z" />
+              <path fill-rule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clip-rule="evenodd" />
+            </svg>
+          </button>
+        </div>
+        <div>
+          <label for="registerPin" class="block text-sm font-medium text-[#b6a03e] mb-1">PIN</label>
+          <div class="flex items-center">
+            <input
+              type="text"
+              id="registerPin"
+              placeholder="Informe o PIN"
+              class="form-input w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none text-gray-400"
+              inputmode="numeric"
+              pattern="\d{5}"
+              maxlength="5"
+              required
+            />
+            <span id="pinInfoRegister" class="info-icon ml-2 cursor-pointer"><i data-feather="info"></i></span>
+          </div>
+        </div>
+        <button type="submit" class="btn-secondary w-full py-2 px-4 rounded-md text-white font-medium">Cadastrar</button>
+      </form>
+    </div>
+    <div id="forgotPasswordModal" class="fixed inset-0 flex items-center justify-center z-50 hidden">
+      <div class="absolute inset-0 bg-black opacity-50"></div>
+      <div class="bg-white p-6 rounded-lg shadow-lg z-10 w-full max-w-md mx-4">
+        <h3 class="text-xl font-semibold text-[#b6a03e] mb-4">Recuperar senha</h3>
+        <p class="text-gray-600 mb-4">Digite seu e-mail para receber um link de recuperação de senha.</p>
+        <form id="resetPasswordForm" class="space-y-4">
+          <div>
+            <label for="resetEmail" class="block text-sm font-medium text-[#b6a03e] mb-1">E-mail</label>
+            <input type="email" id="resetEmail" class="form-input w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none" required />
+          </div>
+          <div class="flex justify-end space-x-3">
+            <button type="button" id="cancelReset" class="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300">Cancelar</button>
+            <button type="submit" class="btn-primary px-4 py-2 rounded-md text-white">Enviar</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+  <div id="notification" class="fixed top-4 right-4 space-y-2 z-50"></div>
+  <div id="loadingOverlay" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-40">
+    <div class="login-loader"></div>
+  </div>
+  <div id="exitOverlay" class="hidden fixed inset-0 bg-[#3d021f] opacity-0 flex items-center justify-center z-50"></div>
+
+  <!-- tsParticles UMD bundle -->
+  <script src="https://cdn.jsdelivr.net/npm/tsparticles@2.12.0/tsparticles.bundle.min.js"></script>
+  <!-- tsParticles Twinkle plugin -->
+  <script src="https://cdn.jsdelivr.net/npm/tsparticles-plugin-twinkle@2.12.0/tsparticles.twinkle.min.js"></script>
+  <!-- seu código de inicialização -->
+  <script src="loginRenderer.js"></script>
+  <!-- scripts adicionais -->
+  <script src="../utils/userActions.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.js"></script>
+  <script>
+    feather.replace({ class: 'w-5 h-5' });
+  </script>
+</body>
+</html>

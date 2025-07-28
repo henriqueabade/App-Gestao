@@ -1,0 +1,76 @@
+<div id="modal-raw-material-new" data-modal-id="raw-material-new"
+     class="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50">
+  <div class="bg-white p-6 rounded-lg w-full max-w-screen-sm sm:max-w-md md:max-w-lg lg:max-w-xl max-h-[90vh] overflow-y-auto space-y-4">
+    <h2 id="newTitle" class="text-xl font-bold text-[var(--color-primary)]">Novo Insumo</h2>
+    <div class="grid gap-2 grid-cols-1 sm:grid-cols-2">
+      <div class="flex flex-col">
+        <label for="newNome">Nome</label>
+        <input id="newNome" type="text"
+               class="border border-gray-300 p-2 rounded
+                      focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]
+                      focus:border-[var(--color-primary)]" />
+      </div>
+      <div class="flex flex-col">
+        <label for="newCategoria">Categoria</label>
+        <input id="newCategoria" type="text"
+               class="border border-gray-300 p-2 rounded
+                      focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]
+                      focus:border-[var(--color-primary)]" />
+      </div>
+      <div class="flex flex-col">
+        <label for="newQuantidade">Quantidade</label>
+        <input id="newQuantidade" type="number"
+               class="border border-gray-300 p-2 rounded
+                      focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]
+                      focus:border-[var(--color-primary)]" />
+      </div>
+      <div class="flex flex-col">
+        <label for="newUnidade">Unidade</label>
+        <input id="newUnidade" type="text"
+               class="border border-gray-300 p-2 rounded
+                      focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]
+                      focus:border-[var(--color-primary)]" />
+      </div>
+      <div class="flex flex-col">
+        <label for="newPreco">Preço Unitário</label>
+        <input id="newPreco" type="number" step="0.01"
+               class="border border-gray-300 p-2 rounded
+                      focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]
+                      focus:border-[var(--color-primary)]" />
+      </div>
+      <div class="flex flex-col">
+        <label for="newProcesso">Processo</label>
+        <input id="newProcesso" type="text"
+               class="border border-gray-300 p-2 rounded
+                      focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]
+                      focus:border-[var(--color-primary)]" />
+      </div>
+      <div class="flex items-center col-span-2">
+        <input id="newInfinito" type="checkbox"
+               class="mr-2 accent-[var(--color-primary)] focus:ring-2 focus:ring-[var(--color-primary)]" />
+        <label for="newInfinito" class="select-none">Estoque infinito</label>
+      </div>
+      <div class="flex flex-col col-span-2">
+        <label for="newDescricao">Descrição Técnica</label>
+        <textarea id="newDescricao"
+                  class="border border-gray-300 p-2 rounded resize-none overflow-y-auto overflow-x-hidden h-24
+                         focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]
+                         focus:border-[var(--color-primary)]"></textarea>
+      </div>
+    </div>
+    <div class="flex justify-end space-x-2">
+      <!-- Cancelar (vermelho) -->
+      <button id="cancelNew"
+              class="bg-[var(--color-negative)] hover:bg-[var(--color-negative-hover)]
+                     text-white px-4 py-2 rounded transition">
+        Cancelar
+      </button>
+      <!-- Salvar (dourado) -->
+      <button id="saveNew"
+              class="bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)]
+                     text-white px-4 py-2 rounded transition">
+        Salvar
+      </button>
+    </div>
+  </div>
+</div>

@@ -1,0 +1,709 @@
+<div class="font-[Inter] p-6">
+  <header class="flex items-center justify-between mb-6">
+    <div>
+      <h1 class="text-xl font-semibold text-gray-800">CONTATOS</h1>
+    </div>
+    <div class="flex items-center space-x-4 w-full md:w-auto justify-between md:justify-end">
+      <div class="search-input w-full md:w-64">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+          <path fill-rule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clip-rule="evenodd" />
+        </svg>
+        <input type="text" class="form-input focus:ring-[var(--color-primary)] focus:border-[var(--color-primary)]" placeholder="Buscar contatos...">
+      </div>
+      <button class="btn bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white" id="newContactBtn">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
+          <path fill-rule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clip-rule="evenodd" />
+        </svg>
+        Novo Contato
+      </button>
+      <button class="btn bg-[var(--color-negative)] hover:bg-[var(--color-negative-hover)] text-white" id="closeBtn">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" viewBox="0 0 20 20" fill="currentColor">
+          <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" />
+        </svg>
+        Fechar
+      </button>
+    </div>
+  </header>
+
+  <div class="grid grid-cols-12 gap-6 mb-6">
+    <div class="card p-4 col-span-12 md:col-span-3">
+      <h2 class="text-sm font-medium text-gray-700 mb-3">Filtros & Estatísticas</h2>
+      <div class="search-input mb-4">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+          <path fill-rule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clip-rule="evenodd" />
+        </svg>
+        <input type="text" class="form-input focus:ring-[var(--color-primary)] focus:border-[var(--color-primary)]" placeholder="Nome / Empresa">
+      </div>
+      <div class="mb-4">
+        <p class="text-sm font-medium text-gray-700 mb-2">Tipo de Contato</p>
+        <div class="space-y-2">
+          <div class="checkbox-container">
+            <input type="checkbox" id="supplier" checked>
+            <label for="supplier">Fornecedor</label>
+          </div>
+          <div class="checkbox-container">
+            <input type="checkbox" id="partner" checked>
+            <label for="partner">Parceiro</label>
+          </div>
+          <div class="checkbox-container">
+            <input type="checkbox" id="architect" checked>
+            <label for="architect">Arquiteto</label>
+          </div>
+          <div class="checkbox-container">
+            <input type="checkbox" id="representative" checked>
+            <label for="representative">Representante</label>
+          </div>
+          <div class="checkbox-container">
+            <input type="checkbox" id="other" checked>
+            <label for="other">Outro</label>
+          </div>
+        </div>
+      </div>
+      <div>
+        <p class="text-sm font-medium text-gray-700 mb-2">Totais por Tipo</p>
+        <div class="flex flex-wrap gap-2">
+          <span class="badge badge-count">Fornecedores: 12</span>
+          <span class="badge badge-count">Parceiros: 8</span>
+          <span class="badge badge-count">Arquitetos: 5</span>
+          <span class="badge badge-count">Representantes: 7</span>
+          <span class="badge badge-count">Outros: 3</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="card p-4 col-span-12 md:col-span-9">
+      <h2 class="text-sm font-medium text-gray-700 mb-3">Ações Rápidas</h2>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="space-y-2">
+          <button class="btn btn-secondary w-full justify-start" id="exportCsvBtn">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
+              <path fill-rule="evenodd" d="M6 2a2 2 0 00-2 2v12a2 2 0 002 2h8a2 2 0 002-2V7.414A2 2 0 0015.414 6L12 2.586A2 2 0 0010.586 2H6zm5 6a1 1 0 10-2 0v3.586l-1.293-1.293a1 1 0 10-1.414 1.414l3 3a1 1 0 001.414 0l3-3a1 1 0 00-1.414-1.414L11 11.586V8z" clip-rule="evenodd" />
+            </svg>
+            Exportar CSV
+          </button>
+          <button class="btn btn-secondary w-full justify-start" id="importCsvBtn">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
+              <path fill-rule="evenodd" d="M6 2a2 2 0 00-2 2v12a2 2 0 002 2h8a2 2 0 002-2V7.414A2 2 0 0015.414 6L12 2.586A2 2 0 0010.586 2H6zm5 6a1 1 0 10-2 0v3.586l-1.293-1.293a1 1 0 10-1.414 1.414l3 3a1 1 0 001.414 0l3-3a1 1 0 00-1.414-1.414L11 11.586V8z" clip-rule="evenodd" />
+            </svg>
+            Importar CSV
+          </button>
+        </div>
+        <div class="space-y-2">
+          <button class="btn btn-primary w-full justify-start" id="generateReportBtn">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
+              <path fill-rule="evenodd" d="M6 2a2 2 0 00-2 2v12a2 2 0 002 2h8a2 2 0 002-2V7.414A2 2 0 0015.414 6L12 2.586A2 2 0 0010.586 2H6zm2 10a1 1 0 011-1h2a1 1 0 110 2H9a1 1 0 01-1-1zm0-4a1 1 0 011-1h4a1 1 0 110 2H9a1 1 0 01-1-1z" clip-rule="evenodd" />
+            </svg>
+            Gerar Relatório
+          </button>
+          <button class="btn btn-primary w-full justify-start" id="bulkEmailBtn">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
+              <path d="M2.003 5.884L10 9.882l7.997-3.998A2 2 0 0016 4H4a2 2 0 00-1.997 1.884z" />
+              <path d="M18 8.118l-8 4-8-4V14a2 2 0 002 2h12a2 2 0 002-2V8.118z" />
+            </svg>
+            Enviar E-mail em Massa
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card overflow-hidden">
+    <div class="table-container max-h-[70vh]">
+      <table>
+        <thead>
+          <tr>
+            <th width="60"></th>
+            <th>Nome</th>
+            <th>Tipo</th>
+            <th>Empresa</th>
+            <th>Telefone</th>
+            <th width="60">Ações</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>
+              <div class="avatar bg-violet-100 text-violet-600">AS</div>
+            </td>
+            <td>
+              <a href="#" class="font-medium text-violet-600 hover:text-violet-800 contact-link">Ana Silva</a>
+            </td>
+            <td>
+              <span class="badge badge-supplier">Fornecedor</span>
+            </td>
+            <td>Materiais Construção Ltda.</td>
+            <td>(11) 98765-4321</td>
+            <td>
+              <button class="text-gray-500 hover:text-gray-700 edit-contact" title="Editar">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                  <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
+                </svg>
+              </button>
+            </td>
+          </tr>
+          <tr>
+            <td>
+              <div class="avatar bg-blue-100 text-blue-600">CO</div>
+            </td>
+            <td>
+              <a href="#" class="font-medium text-violet-600 hover:text-violet-800 contact-link">Carlos Oliveira</a>
+            </td>
+            <td>
+              <span class="badge badge-partner">Parceiro</span>
+            </td>
+            <td>Arquitetura & Design S.A.</td>
+            <td>(11) 97654-3210</td>
+            <td>
+              <button class="text-gray-500 hover:text-gray-700 edit-contact" title="Editar">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                  <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
+                </svg>
+              </button>
+            </td>
+          </tr>
+          <tr>
+            <td>
+              <div class="avatar bg-yellow-100 text-yellow-600">MS</div>
+            </td>
+            <td>
+              <a href="#" class="font-medium text-violet-600 hover:text-violet-800 contact-link">Mariana Santos</a>
+            </td>
+            <td>
+              <span class="badge badge-architect">Arquiteto</span>
+            </td>
+            <td>Studio MS Arquitetura</td>
+            <td>(11) 96543-2109</td>
+            <td>
+              <button class="text-gray-500 hover:text-gray-700 edit-contact" title="Editar">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                  <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
+                </svg>
+              </button>
+            </td>
+          </tr>
+          <tr>
+            <td>
+              <div class="avatar bg-indigo-100 text-indigo-600">RC</div>
+            </td>
+            <td>
+              <a href="#" class="font-medium text-violet-600 hover:text-violet-800 contact-link">Rafael Costa</a>
+            </td>
+            <td>
+              <span class="badge badge-representative">Representante</span>
+            </td>
+            <td>Vendas Premium Ltda.</td>
+            <td>(11) 95432-1098</td>
+            <td>
+              <button class="text-gray-500 hover:text-gray-700 edit-contact" title="Editar">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                  <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
+                </svg>
+              </button>
+            </td>
+          </tr>
+          <tr>
+            <td>
+              <div class="avatar bg-gray-100 text-gray-600">JL</div>
+            </td>
+            <td>
+              <a href="#" class="font-medium text-violet-600 hover:text-violet-800 contact-link">Juliana Lima</a>
+            </td>
+            <td>
+              <span class="badge badge-other">Outro</span>
+            </td>
+            <td>Consultoria JL</td>
+            <td>(11) 94321-0987</td>
+            <td>
+              <button class="text-gray-500 hover:text-gray-700 edit-contact" title="Editar">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                  <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
+                </svg>
+              </button>
+            </td>
+          </tr>
+          <tr>
+            <td>
+              <div class="avatar bg-violet-100 text-violet-600">PF</div>
+            </td>
+            <td>
+              <a href="#" class="font-medium text-violet-600 hover:text-violet-800 contact-link">Pedro Ferreira</a>
+            </td>
+            <td>
+              <span class="badge badge-supplier">Fornecedor</span>
+            </td>
+            <td>Ferragens & Cia</td>
+            <td>(11) 93210-9876</td>
+            <td>
+              <button class="text-gray-500 hover:text-gray-700 edit-contact" title="Editar">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                  <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
+                </svg>
+              </button>
+            </td>
+          </tr>
+          <tr>
+            <td>
+              <div class="avatar bg-blue-100 text-blue-600">LM</div>
+            </td>
+            <td>
+              <a href="#" class="font-medium text-violet-600 hover:text-violet-800 contact-link">Luciana Mendes</a>
+            </td>
+            <td>
+              <span class="badge badge-partner">Parceiro</span>
+            </td>
+            <td>Decoração Moderna</td>
+            <td>(11) 92109-8765</td>
+            <td>
+              <button class="text-gray-500 hover:text-gray-700 edit-contact" title="Editar">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                  <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
+                </svg>
+              </button>
+            </td>
+          </tr>
+          <tr>
+            <td>
+              <div class="avatar bg-yellow-100 text-yellow-600">RB</div>
+            </td>
+            <td>
+              <a href="#" class="font-medium text-violet-600 hover:text-violet-800 contact-link">Ricardo Barros</a>
+            </td>
+            <td>
+              <span class="badge badge-architect">Arquiteto</span>
+            </td>
+            <td>RB Arquitetura</td>
+            <td>(11) 91098-7654</td>
+            <td>
+              <button class="text-gray-500 hover:text-gray-700 edit-contact" title="Editar">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                  <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
+                </svg>
+              </button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="mobile-cards p-4">
+      <div class="contact-card">
+        <div class="contact-card-header">
+          <div class="flex items-center">
+            <div class="avatar bg-violet-100 text-violet-600 mr-3">AS</div>
+            <span class="font-medium">Ana Silva</span>
+          </div>
+          <span class="badge badge-supplier">Fornecedor</span>
+        </div>
+        <div class="contact-card-body">
+          <div>
+            <div class="contact-card-label">Empresa</div>
+            <div class="contact-card-value">Materiais Construção Ltda.</div>
+          </div>
+          <div>
+            <div class="contact-card-label">Telefone</div>
+            <div class="contact-card-value">(11) 98765-4321</div>
+          </div>
+        </div>
+        <div class="contact-card-footer">
+          <button class="btn btn-secondary edit-contact">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" viewBox="0 0 20 20" fill="currentColor">
+              <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
+            </svg>
+            Editar
+          </button>
+        </div>
+      </div>
+      <div class="contact-card">
+        <div class="contact-card-header">
+          <div class="flex items-center">
+            <div class="avatar bg-blue-100 text-blue-600 mr-3">CO</div>
+            <span class="font-medium">Carlos Oliveira</span>
+          </div>
+          <span class="badge badge-partner">Parceiro</span>
+        </div>
+        <div class="contact-card-body">
+          <div>
+            <div class="contact-card-label">Empresa</div>
+            <div class="contact-card-value">Arquitetura & Design S.A.</div>
+          </div>
+          <div>
+            <div class="contact-card-label">Telefone</div>
+            <div class="contact-card-value">(11) 97654-3210</div>
+          </div>
+        </div>
+        <div class="contact-card-footer">
+          <button class="btn btn-secondary edit-contact">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" viewBox="0 0 20 20" fill="currentColor">
+              <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
+            </svg>
+            Editar
+          </button>
+        </div>
+      </div>
+      <div class="contact-card">
+        <div class="contact-card-header">
+          <div class="flex items-center">
+            <div class="avatar bg-yellow-100 text-yellow-600 mr-3">MS</div>
+            <span class="font-medium">Mariana Santos</span>
+          </div>
+          <span class="badge badge-architect">Arquiteto</span>
+        </div>
+        <div class="contact-card-body">
+          <div>
+            <div class="contact-card-label">Empresa</div>
+            <div class="contact-card-value">Studio MS Arquitetura</div>
+          </div>
+          <div>
+            <div class="contact-card-label">Telefone</div>
+            <div class="contact-card-value">(11) 96543-2109</div>
+          </div>
+        </div>
+        <div class="contact-card-footer">
+          <button class="btn btn-secondary edit-contact">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" viewBox="0 0 20 20" fill="currentColor">
+              <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
+            </svg>
+            Editar
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="p-4 border-t border-gray-200">
+      <div class="pagination">
+        <div class="pagination-item">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+            <path fill-rule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clip-rule="evenodd" />
+          </svg>
+        </div>
+        <div class="pagination-item active">1</div>
+        <div class="pagination-item">2</div>
+        <div class="pagination-item">3</div>
+        <div class="pagination-item">...</div>
+        <div class="pagination-item">10</div>
+        <div class="pagination-item">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+            <path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd" />
+          </svg>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="contact-overlay" id="contactModalOverlay">
+    <div class="contact-modal">
+      <div class="modal-header bg-violet-600 text-white">
+        <div class="flex items-center space-x-4">
+          <button class="btn bg-[var(--color-negative)] hover:bg-[var(--color-negative-hover)] text-white" id="backBtn">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" viewBox="0 0 20 20" fill="currentColor">
+              <path fill-rule="evenodd" d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z" clip-rule="evenodd" />
+            </svg>
+            Voltar
+          </button>
+          <h2 class="text-xl font-semibold">Detalhes – Ana Silva</h2>
+        </div>
+        <div class="flex items-center space-x-2">
+          <button class="btn btn-primary" id="contactModalSaveBtn">
+            <div class="spinner" id="contactModalSaveSpinner"></div>
+            Salvar
+          </button>
+          <button class="btn bg-[var(--color-negative)] hover:bg-[var(--color-negative-hover)] text-white" id="contactModalCloseBtn">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+              <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" />
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <div class="tab-nav">
+        <div class="tab-item active" data-tab="personal">Dados Pessoais</div>
+        <div class="tab-item" data-tab="categories">Categorias</div>
+        <div class="tab-item" data-tab="address">Endereço</div>
+        <div class="tab-item" data-tab="notes">Anotações</div>
+      </div>
+
+      <select class="form-select focus:ring-[var(--color-primary)] focus:border-[var(--color-primary)] mobile-tab-select" id="mobileTabSelect">
+        <option value="personal">Dados Pessoais</option>
+        <option value="categories">Categorias</option>
+        <option value="address">Endereço</option>
+        <option value="notes">Anotações</option>
+      </select>
+
+      <div class="modal-body">
+        <div class="tab-content active" id="personal">
+          <div class="flex flex-col md:flex-row md:space-x-6 mb-6">
+            <div class="mb-4 md:mb-0">
+              <div class="avatar-upload">
+                <div class="text-2xl">AS</div>
+                <div class="avatar-upload-btn">Trocar</div>
+              </div>
+            </div>
+
+            <div class="flex-1">
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="form-group">
+                  <label class="form-label">Nome *</label>
+                  <input type="text" class="form-input focus:ring-[var(--color-primary)] focus:border-[var(--color-primary)]" value="Ana Silva" required>
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Empresa</label>
+                  <input type="text" class="form-input focus:ring-[var(--color-primary)] focus:border-[var(--color-primary)]" value="Materiais Construção Ltda.">
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Cargo/Função</label>
+                  <input type="text" class="form-input focus:ring-[var(--color-primary)] focus:border-[var(--color-primary)]" value="Gerente Comercial">
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Tipo *</label>
+                  <select class="form-select focus:ring-[var(--color-primary)] focus:border-[var(--color-primary)]" required>
+                    <option value="supplier" selected>Fornecedor</option>
+                    <option value="partner">Parceiro</option>
+                    <option value="architect">Arquiteto</option>
+                    <option value="representative">Representante</option>
+                    <option value="other">Outro</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Telefone Principal *</label>
+                  <input type="tel" class="form-input focus:ring-[var(--color-primary)] focus:border-[var(--color-primary)]" value="(11) 98765-4321" required>
+                </div>
+                <div class="form-group">
+                  <label class="form-label">E-mail *</label>
+                  <input type="email" class="form-input focus:ring-[var(--color-primary)] focus:border-[var(--color-primary)]" value="ana.silva@exemplo.com" required>
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Site</label>
+                  <input type="url" class="form-input focus:ring-[var(--color-primary)] focus:border-[var(--color-primary)]" value="https://www.materiaisltda.com.br">
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="tab-content" id="categories">
+          <div class="space-y-3 mt-6">
+            <h3 class="text-sm font-medium text-gray-700 mb-3">Categorias do Contato</h3>
+            <div class="space-y-2">
+              <div class="checkbox-container">
+                <input type="checkbox" id="vip" checked>
+                <label for="vip">VIP</label>
+              </div>
+              <div class="checkbox-container">
+                <input type="checkbox" id="newProjects" checked>
+                <label for="newProjects">Novos Projetos</label>
+              </div>
+              <div class="checkbox-container">
+                <input type="checkbox" id="underContract">
+                <label for="underContract">Sob Contrato</label>
+              </div>
+              <div class="checkbox-container">
+                <input type="checkbox" id="inactive">
+                <label for="inactive">Inativo</label>
+              </div>
+            </div>
+            <div class="mt-6">
+              <h3 class="text-sm font-medium text-gray-700 mb-3">Tags Personalizadas</h3>
+              <div class="flex flex-wrap mb-3">
+                <div class="tag">Fornecedor Principal <span class="tag-remove">×</span></div>
+                <div class="tag">Desconto Especial <span class="tag-remove">×</span></div>
+                <div class="tag">Reunião Mensal <span class="tag-remove">×</span></div>
+              </div>
+              <div class="flex">
+                <input type="text" class="form-input focus:ring-[var(--color-primary)] focus:border-[var(--color-primary)] mr-2" placeholder="Nova categoria...">
+                <button class="btn bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clip-rule="evenodd" />
+                  </svg>
+                  Adicionar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="tab-content" id="address">
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
+            <div class="form-group md:col-span-2">
+              <label class="form-label">Rua *</label>
+              <input type="text" class="form-input focus:ring-[var(--color-primary)] focus:border-[var(--color-primary)]" value="Av. Paulista" required>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Número *</label>
+              <input type="text" class="form-input focus:ring-[var(--color-primary)] focus:border-[var(--color-primary)]" value="1000" required>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Complemento</label>
+              <input type="text" class="form-input focus:ring-[var(--color-primary)] focus:border-[var(--color-primary)]" value="Sala 1010">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Bairro *</label>
+              <input type="text" class="form-input focus:ring-[var(--color-primary)] focus:border-[var(--color-primary)]" value="Bela Vista" required>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Cidade *</label>
+              <input type="text" class="form-input focus:ring-[var(--color-primary)] focus:border-[var(--color-primary)]" value="São Paulo" required>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Estado *</label>
+              <select class="form-select focus:ring-[var(--color-primary)] focus:border-[var(--color-primary)]" required>
+                <option value="AC">Acre</option>
+                <option value="AL">Alagoas</option>
+                <option value="AP">Amapá</option>
+                <option value="AM">Amazonas</option>
+                <option value="BA">Bahia</option>
+                <option value="CE">Ceará</option>
+                <option value="DF">Distrito Federal</option>
+                <option value="ES">Espírito Santo</option>
+                <option value="GO">Goiás</option>
+                <option value="MA">Maranhão</option>
+                <option value="MT">Mato Grosso</option>
+                <option value="MS">Mato Grosso do Sul</option>
+                <option value="MG">Minas Gerais</option>
+                <option value="PA">Pará</option>
+                <option value="PB">Paraíba</option>
+                <option value="PR">Paraná</option>
+                <option value="PE">Pernambuco</option>
+                <option value="PI">Piauí</option>
+                <option value="RJ">Rio de Janeiro</option>
+                <option value="RN">Rio Grande do Norte</option>
+                <option value="RS">Rio Grande do Sul</option>
+                <option value="RO">Rondônia</option>
+                <option value="RR">Roraima</option>
+                <option value="SC">Santa Catarina</option>
+                <option value="SP" selected>São Paulo</option>
+                <option value="SE">Sergipe</option>
+                <option value="TO">Tocantins</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">CEP *</label>
+              <input type="text" class="form-input focus:ring-[var(--color-primary)] focus:border-[var(--color-primary)]" value="01310-100" required>
+            </div>
+          </div>
+        </div>
+
+        <div class="tab-content" id="notes">
+          <div class="space-y-4 mt-6">
+            <div class="form-group">
+              <label class="form-label">Observações</label>
+              <textarea class="form-input focus:ring-[var(--color-primary)] focus:border-[var(--color-primary)]" rows="4">Fornecedor principal de materiais de construção. Oferece descontos para compras em grande quantidade. Contato inicial feito em 15/03/2023 através de indicação do Carlos.</textarea>
+            </div>
+            <div>
+              <h3 class="text-sm font-medium text-gray-700 mb-3">Anexos</h3>
+              <div class="space-y-2 mb-4">
+                <div class="attachment">
+                  <div class="attachment-icon">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                      <path fill-rule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z" clip-rule="evenodd" />
+                    </svg>
+                  </div>
+                  <div class="attachment-name">Contrato_Fornecimento_2023.pdf</div>
+                  <div class="attachment-remove">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                      <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" />
+                    </svg>
+                  </div>
+                </div>
+                <div class="attachment">
+                  <div class="attachment-icon">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                      <path fill-rule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z" clip-rule="evenodd" />
+                    </svg>
+                  </div>
+                  <div class="attachment-name">Tabela_Precos_2023.xlsx</div>
+                  <div class="attachment-remove">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                      <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" />
+                    </svg>
+                  </div>
+                </div>
+              </div>
+              <div class="flex">
+                <button class="btn bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM6.293 6.707a1 1 0 010-1.414l3-3a1 1 0 011.414 0l3 3a1 1 0 01-1.414 1.414L11 5.414V13a1 1 0 11-2 0V5.414L7.707 6.707a1 1 0 01-1.414 0z" clip-rule="evenodd" />
+                  </svg>
+                  Adicionar Anexo
+                </button>
+              </div>
+            </div>
+            <div>
+              <h3 class="text-sm font-medium text-gray-700 mb-3">Histórico de Interações</h3>
+              <div class="timeline">
+                <div class="timeline-item">
+                  <div class="timeline-date">15/06/2023</div>
+                  <div class="timeline-content">
+                    <p class="text-sm">Reunião para discutir novos projetos e possibilidades de parceria.</p>
+                  </div>
+                </div>
+                <div class="timeline-item">
+                  <div class="timeline-date">02/05/2023</div>
+                  <div class="timeline-content">
+                    <p class="text-sm">Contato por telefone para atualização de tabela de preços.</p>
+                  </div>
+                </div>
+                <div class="timeline-item">
+                  <div class="timeline-date">15/03/2023</div>
+                  <div class="timeline-content">
+                    <p class="text-sm">Primeiro contato realizado. Apresentação da empresa e produtos.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="exportCsvToast">
+    <div class="toast-icon bg-green-100 text-green-500 rounded-full p-2">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+        <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
+      </svg>
+    </div>
+    <div class="toast-content">
+      <div class="toast-title">CSV Exportado</div>
+      <div class="toast-message">O arquivo CSV foi exportado com sucesso.</div>
+    </div>
+    <div class="toast-close">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+        <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" />
+      </svg>
+    </div>
+  </div>
+
+  <div class="toast" id="newContactToast">
+    <div class="toast-icon bg-green-100 text-green-500 rounded-full p-2">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+        <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
+      </svg>
+    </div>
+    <div class="toast-content">
+      <div class="toast-title">Contato Criado</div>
+      <div class="toast-message">O contato foi criado com sucesso.</div>
+    </div>
+    <div class="toast-close">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+        <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" />
+      </svg>
+    </div>
+  </div>
+
+  <div class="toast" id="saveContactToast">
+    <div class="toast-icon bg-blue-100 text-blue-500 rounded-full p-2">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+        <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
+      </svg>
+    </div>
+    <div class="toast-content">
+      <div class="toast-title">Contato Atualizado</div>
+      <div class="toast-message">As alterações foram salvas com sucesso.</div>
+    </div>
+    <div class="toast-close">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+        <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" />
+      </svg>
+    </div>
+  </div>
+</div>

@@ -1,0 +1,81 @@
+<div id="modal-raw-material-edit" data-modal-id="raw-material-edit"
+     class="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50">
+  <div class="bg-white p-6 rounded-lg w-full max-w-screen-sm sm:max-w-lg md:max-w-xl lg:max-w-2xl max-h-[90vh] overflow-y-auto space-y-4">
+    <h2 id="editTitle" class="text-xl font-bold text-[var(--color-primary)]">Editar Insumo</h2>
+    <div class="grid gap-2 grid-cols-1 sm:grid-cols-2">
+      <div class="flex flex-col">
+        <label for="editNome">Nome</label>
+        <input id="editNome" type="text"
+               class="border border-gray-300 p-2 rounded
+                      focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]
+                      focus:border-[var(--color-primary)]" />
+      </div>
+      <div class="flex flex-col">
+        <label for="editCategoria">Categoria</label>
+        <input id="editCategoria" type="text"
+               class="border border-gray-300 p-2 rounded
+                      focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]
+                      focus:border-[var(--color-primary)]" />
+      </div>
+      <div class="flex flex-col">
+        <label for="editQuantidade">Quantidade</label>
+        <input id="editQuantidade" type="number"
+               class="border border-gray-300 p-2 rounded
+                      focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]
+                      focus:border-[var(--color-primary)]" />
+      </div>
+      <div class="flex flex-col">
+        <label for="editUnidade">Unidade</label>
+        <input id="editUnidade" type="text"
+               class="border border-gray-300 p-2 rounded
+                      focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]
+                      focus:border-[var(--color-primary)]" />
+      </div>
+      <div class="flex flex-col">
+        <label for="editPreco">Preço Unitário</label>
+        <input id="editPreco" type="number" step="0.01"
+               class="border border-gray-300 p-2 rounded
+                      focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]
+                      focus:border-[var(--color-primary)]" />
+      </div>
+      <div class="flex flex-col">
+        <label for="editProcesso">Processo</label>
+        <input id="editProcesso" type="text"
+               class="border border-gray-300 p-2 rounded
+                      focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]
+                      focus:border-[var(--color-primary)]" />
+      </div>
+      <div class="flex items-center col-span-2">
+        <input id="editInfinito" type="checkbox"
+               class="mr-2 accent-[var(--color-primary)] focus:ring-2 focus:ring-[var(--color-primary)]" />
+        <label for="editInfinito" class="select-none">Estoque infinito</label>
+      </div>
+      <div class="flex flex-col col-span-2">
+        <label for="editDescricao">Descrição Técnica</label>
+        <textarea id="editDescricao"
+                  class="border border-gray-300 p-2 rounded resize-none overflow-y-auto overflow-x-hidden h-24
+                         focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]
+                         focus:border-[var(--color-primary)]"></textarea>
+      </div>
+    </div>
+    <div class="flex justify-end space-x-2">
+      <!-- Excluir (preto) -->
+      <button id="deleteEdit"
+              class="bg-black hover:bg-white hover:text-black text-white px-4 py-2 rounded mr-auto transition">
+        Excluir Insumo
+      </button>
+      <!-- Cancelar (vermelho) -->
+      <button id="cancelEdit"
+              class="bg-[var(--color-negative)] hover:bg-[var(--color-negative-hover)]
+                     text-white px-4 py-2 rounded transition">
+        Cancelar
+      </button>
+      <!-- Salvar (dourado) -->
+      <button id="saveEdit"
+              class="bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)]
+                     text-white px-4 py-2 rounded transition">
+        Salvar
+      </button>
+    </div>
+  </div>
+</div>
