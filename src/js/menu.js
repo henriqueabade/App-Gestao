@@ -66,7 +66,7 @@ crmToggle.addEventListener('click', toggleCrmSubmenu);
 // Atualiza título conforme item clicado
 const pageNames = {
     dashboard: 'Dashboard',
-    materiaprima: 'Matéria-Prima',
+    'materia-prima': 'Matéria Prima',
     produtos: 'Produtos',
     orcamentos: 'Orçamentos',
     pedidos: 'Pedidos',
@@ -81,6 +81,33 @@ const pageNames = {
     configuracoes: 'Configurações'
 };
 
+// Carrega um módulo HTML dentro da div#content e importa seu script e estilos
+async function loadPage(page) {
+    const container = document.getElementById('content');
+    if (!container) return;
+    document.dispatchEvent(new Event('module-change'));
+    // Remove script e estilo anteriores, se existirem
+    document.getElementById('page-script')?.remove();
+    document.getElementById('page-style')?.remove();
+    try {
+        const htmlResp = await fetch(`../html/${page}.html`);
+        const html = await htmlResp.text();
+        container.innerHTML = html;
+        const style = document.createElement('link');
+        style.id = 'page-style';
+        style.rel = 'stylesheet';
+        style.href = `../css/${page}.css`;
+        document.head.appendChild(style);
+        const script = document.createElement('script');
+        script.id = 'page-script';
+        script.type = 'text/javascript';
+        script.src = `../js/${page}.js`;
+        container.appendChild(script);
+    } catch (err) {
+        console.error('Falha ao carregar página', page, err);
+    }
+}
+
 // Navegação interna
 document.querySelectorAll('.sidebar-item[data-page], .submenu-item[data-page]').forEach(item => {
     item.addEventListener('click', function (e) {
@@ -89,6 +116,9 @@ document.querySelectorAll('.sidebar-item[data-page], .submenu-item[data-page]').
         this.classList.add('active');
         const page = this.dataset.page;
         document.querySelector('h1').textContent = pageNames[page] || 'Dashboard';
+        if (page === 'materia-prima') {
+            loadPage('materia-prima');
+        }
     });
 });
 
