@@ -157,6 +157,9 @@ document.querySelectorAll('.sidebar-item[data-page], .submenu-item[data-page]').
         if (page === 'pedidos') {
             loadPage('pedidos');
         }
+        if (page === 'calendario') {
+            loadPage('calendario');
+        }
         // Carrega o módulo de Contatos ao clicar no item correspondente
         if (page === 'contatos') {
             loadPage('contatos');
