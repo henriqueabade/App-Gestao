@@ -3,15 +3,31 @@ window.addEventListener('DOMContentLoaded', () => {
   const menu = document.getElementById('user-actions-menu');
   if (!btn || !menu) return;
 
+  const positionMenu = () => {
+    const margin = 8; // 0.5rem
+    const btnRect = btn.getBoundingClientRect();
+    const parentRect = btn.parentElement.getBoundingClientRect();
+    const menuHeight = menu.offsetHeight;
+    let top = btnRect.bottom - parentRect.top + margin;
+    const maxTop = window.innerHeight - menuHeight - margin - parentRect.top;
+    if (top > maxTop) top = Math.max(margin, maxTop);
+    menu.style.top = `${top}px`;
+  };
+
   btn.addEventListener('click', (e) => {
     e.stopPropagation();
     menu.classList.toggle('hidden');
+    if (!menu.classList.contains('hidden')) positionMenu();
   });
 
   document.addEventListener('click', (e) => {
     if (!btn.contains(e.target) && !menu.contains(e.target)) {
       menu.classList.add('hidden');
     }
+  });
+
+  window.addEventListener('resize', () => {
+    if (!menu.classList.contains('hidden')) positionMenu();
   });
 
   const action = (name, fn) => {
