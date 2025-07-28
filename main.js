@@ -257,7 +257,8 @@ function createDashboardWindow(show = true) {
     dashboardWindow.webContents.send('select-tab', 'dashboard');
   });
 
-  dashboardWindow.loadFile(path.join(__dirname, 'src/dashboard/dashboard.html'));
+  // Carrega a nova tela de menu
+  dashboardWindow.loadFile(path.join(__dirname, 'src/html/menu.html'));
   dashboardWindow.on('closed', () => {
     dashboardWindow = null;
   });
