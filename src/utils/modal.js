@@ -4,22 +4,6 @@ const ModalManager = (() => {
   // Any call to closeAll() increments this token, invalidating in-flight opens.
   let openToken = 0;
   const modalConfigs = {
-    'modal-products-new': {
-      html: '../produtos/novoProduto.html',
-      script: '../produtos/novoProdutoRenderer.js'
-    },
-    'modal-products-process': {
-      html: '../produtos/processModal.html',
-      script: '../produtos/processModalRenderer.js'
-    },
-    'modal-products-details': {
-      html: '../produtos/productDetail.html',
-      script: '../produtos/productDetailRenderer.js'
-    },
-    'modal-products-edit': {
-      html: '../produtos/editProduct.html',
-      script: '../produtos/editProductRenderer.js'
-    }
   };
 
   async function open(htmlPath, scriptPath, overlayId) {
