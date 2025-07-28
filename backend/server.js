@@ -15,6 +15,11 @@ app.use(express.json());
 app.use('/api/clientes', clientesRouter);
 app.use(passwordResetRouter);
 
+// Endpoint simples para verificar a disponibilidade do servidor
+app.get('/status', (_req, res) => {
+  res.json({ status: 'ok' });
+});
+
 app.get('/reset-password', (_req, res) => {
   res.sendFile(path.join(__dirname, '../src/login/reset-password.html'));
 });
