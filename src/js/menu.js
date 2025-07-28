@@ -146,6 +146,7 @@ document.querySelectorAll('.sidebar-item[data-page], .submenu-item[data-page]').
         document.querySelector('h1').textContent = pageNames[page] || 'Dashboard';
         if (page === 'produtos') {
             loadPage('produtos');
+        }    
         if (page === 'materia-prima') {
             loadPage('materia-prima');
         }
