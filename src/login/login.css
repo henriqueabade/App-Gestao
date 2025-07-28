@@ -1,6 +1,12 @@
+:root {
+  --color-primary: #b6a03e;
+  --color-primary-hover: #d4c169;
+  --color-bordeaux: #3d021f;
+}
+
 body {
   font-family: 'Inter', sans-serif;
-  background-color: var(--color-bg-deep);
+  background-color:  #3d021f;
 }
 .heading {
   font-family: 'Inter', sans-serif;
