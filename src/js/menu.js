@@ -151,11 +151,18 @@ document.querySelectorAll('.sidebar-item[data-page], .submenu-item[data-page]').
         if (page === 'materia-prima') {
             loadPage('materia-prima');
         }
+        if (page === 'clientes') {
+            loadPage('clientes');
+        }
         if (page === 'pedidos') {
             loadPage('pedidos');
         }
         if (page === 'calendario') {
             loadPage('calendario');
+        }
+        // Carrega o módulo de Contatos ao clicar no item correspondente
+        if (page === 'contatos') {
+            loadPage('contatos');
         }
     });
 });
