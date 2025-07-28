@@ -109,30 +109,28 @@ const pageNames = {
     configuracoes: 'Configurações'
 };
 
-// Carrega um módulo HTML dentro da div#content e importa seu script e estilos
+// Carrega dinamicamente o conteúdo e scripts de uma página
 async function loadPage(page) {
     const container = document.getElementById('content');
     if (!container) return;
-    document.dispatchEvent(new Event('module-change'));
-    // Remove script e estilo anteriores, se existirem
-    document.getElementById('page-script')?.remove();
-    document.getElementById('page-style')?.remove();
     try {
-        const htmlResp = await fetch(`../html/${page}.html`);
-        const html = await htmlResp.text();
-        container.innerHTML = html;
+        const resp = await fetch(`../html/${page}.html`);
+        container.innerHTML = await resp.text();
+
+        document.getElementById('page-style')?.remove();
+        document.getElementById('page-script')?.remove();
         const style = document.createElement('link');
         style.id = 'page-style';
         style.rel = 'stylesheet';
         style.href = `../css/${page}.css`;
         document.head.appendChild(style);
+      
         const script = document.createElement('script');
         script.id = 'page-script';
-        script.type = 'text/javascript';
         script.src = `../js/${page}.js`;
-        container.appendChild(script);
+        document.body.appendChild(script);
     } catch (err) {
-        console.error('Falha ao carregar página', page, err);
+        console.error('Erro ao carregar página', page, err);
     }
 }
 
@@ -144,6 +142,9 @@ document.querySelectorAll('.sidebar-item[data-page], .submenu-item[data-page]').
         this.classList.add('active');
         const page = this.dataset.page;
         document.querySelector('h1').textContent = pageNames[page] || 'Dashboard';
+        if (page === 'orcamentos'){ 
+          loadPage('orcamentos');
+        }
         if (page === 'produtos') {
             loadPage('produtos');
         }    
