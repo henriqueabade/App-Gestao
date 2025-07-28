@@ -81,6 +81,32 @@ const pageNames = {
     configuracoes: 'Configurações'
 };
 
+// Carrega dinamicamente o conteúdo e scripts de uma página
+async function loadPage(page) {
+    const container = document.getElementById('content');
+    if (!container) return;
+    try {
+        const resp = await fetch(`../html/${page}.html`);
+        container.innerHTML = await resp.text();
+
+        document.getElementById('page-style')?.remove();
+        document.getElementById('page-script')?.remove();
+
+        const style = document.createElement('link');
+        style.id = 'page-style';
+        style.rel = 'stylesheet';
+        style.href = `../css/${page}.css`;
+        document.head.appendChild(style);
+
+        const script = document.createElement('script');
+        script.id = 'page-script';
+        script.src = `../js/${page}.js`;
+        document.body.appendChild(script);
+    } catch (err) {
+        console.error('Erro ao carregar página', page, err);
+    }
+}
+
 // Navegação interna
 document.querySelectorAll('.sidebar-item[data-page], .submenu-item[data-page]').forEach(item => {
     item.addEventListener('click', function (e) {
@@ -89,6 +115,7 @@ document.querySelectorAll('.sidebar-item[data-page], .submenu-item[data-page]').
         this.classList.add('active');
         const page = this.dataset.page;
         document.querySelector('h1').textContent = pageNames[page] || 'Dashboard';
+        if (page === 'orcamentos') loadPage('orcamentos');
     });
 });
 
