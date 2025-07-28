@@ -1,0 +1,9 @@
+/* Estilos exclusivos do módulo Pedidos. Define cores dos status e layout responsivo */
+.badge-success { background: rgba(162, 255, 166, 0.2); color: var(--color-green); }
+.badge-warning { background: rgba(212, 193, 105, 0.2); color: var(--color-primary); }
+.badge-danger { background: rgba(255, 88, 88, 0.2); color: var(--color-red); }
+.glass-surface { background: var(--color-surface); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); }
+.input-glass { background: rgba(255, 255, 255, 0.1); border: 1px solid rgba(255, 255, 255, 0.2); }
+.input-glass:focus { background: rgba(255, 255, 255, 0.2); outline: none; border-color: var(--color-primary); }
+.animate-fade-in-up { animation: fadeInUp 0.6s ease-out forwards; opacity: 0; transform: translateY(20px); }
+@keyframes fadeInUp { to { opacity: 1; transform: translateY(0); } }
