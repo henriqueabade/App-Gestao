@@ -8,251 +8,212 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link rel="stylesheet" href="dashboard.css">
     <link rel="stylesheet" href="../styles/warning.css">
     <link rel="stylesheet" href="../icons.css">
 </head>
-<body class="h-screen flex overflow-hidden font-[Inter]" style="--primary:#A394A7; --primary-light:#CBBBD2; --secondary:#f3f4f6; --accent:#A394A7; --light:#ffffff; --dark:#111111;">
-<nav id="main-sidebar" class="sidebar w-64 bg-white shadow-md flex-shrink-0 flex flex-col p-4">
-    <div class="px-2 py-4 border-b border-gray-200">
-        <div class="flex items-center">
-            <img src="../assets/Logo 40x40px.png" alt="Santíssimo Decor" class="h-10 w-10" />
-            <span class="ml-2 text-base font-bold text-gray-800 whitespace-nowrap">Santíssimo Decor</span>
-        </div>
-    </div>
-    <div class="mt-4 px-2 space-y-2 flex-1">
-        <!-- Painel Geral -->
-        <a href="#" class="sidebar-item active rounded-md" data-section="dashboard">
-            <i data-feather="home"></i>
-            <span class="sidebar-text">Painel</span>
-        </a>
-        <!-- Estoque de Matéria-Prima -->
-        <a href="#" class="sidebar-item rounded-md" data-section="raw-material">
-            <i data-feather="package"></i>
-            <span class="sidebar-text">Matéria-Prima</span>
-        </a>
-        <!-- Produtos / Peças -->
-        <a href="#" class="sidebar-item rounded-md" data-section="products">
-            <i data-feather="box"></i>
-            <span class="sidebar-text">Produtos</span>
-        </a>
-        <!-- Orçamentos -->
-        <a href="#" class="sidebar-item rounded-md" data-section="budgets">
-            <i data-feather="file-text"></i>
-            <span class="sidebar-text">Orçamentos</span>
-        </a>
-        <!-- Pedidos -->
-        <a href="#" class="sidebar-item rounded-md" data-section="orders">
-            <i data-feather="shopping-cart"></i>
-            <span class="sidebar-text">Pedidos</span>
-        </a>
-        <!-- CRM -->
-        <div id="crm-header" class="sidebar-item flex justify-between rounded-md cursor-pointer">
-            <div class="flex items-center">
-                <i data-feather="users"></i>
-                <span class="sidebar-text">CRM</span>
+<body class="text-white font-[Inter]">
+    <!-- Topbar -->
+    <header class="fixed top-0 left-0 right-0 z-50 h-14 glass-surface border-b border-white/10">
+        <div class="flex items-center justify-between h-full px-4">
+            <div class="flex items-center space-x-3">
+                <button id="menu-toggle" class="p-2 rounded-lg transition-colors duration-150 hover:bg-white/10 lg:hidden">
+                    <i class="fas fa-bars w-5 h-5" style="color: var(--color-primary)"></i>
+                </button>
+                <svg class="w-8 h-8" viewBox="0 0 32 32" fill="none">
+                    <path d="M16 2L20 10H28L22 16L24 24L16 20L8 24L10 16L4 10H12L16 2Z" fill="var(--color-primary)"/>
+                    <circle cx="16" cy="16" r="4" fill="var(--color-primary-light)"/>
+                </svg>
+                <span class="text-lg font-semibold" style="color: var(--color-primary)">Santíssimo Decor</span>
+                <span id="section-title" class="text-lg ml-4"></span>
             </div>
-            <i data-feather="chevron-down" class="w-3 h-3"></i>
-        </div>
-        <div id="crm-submenu" class="ml-6 space-y-1 hidden">
-            <a href="#" class="sidebar-item crm-subitem active" data-section="crm" data-crm-section="crm_clients">
-                <i data-feather="user"></i>
-                <span class="sidebar-text">Clientes</span>
-            </a>
-            <a href="#" class="sidebar-item crm-subitem" data-section="crm" data-crm-section="crm_prospects">
-                <i data-feather="target"></i>
-                <span class="sidebar-text">Prospectos</span>
-            </a>
-            <a href="#" class="sidebar-item crm-subitem" data-section="crm" data-crm-section="crm_contacts">
-                <i data-feather="book"></i>
-                <span class="sidebar-text">Contatos</span>
-            </a>
-            <a href="#" class="sidebar-item crm-subitem" data-section="crm" data-crm-section="crm_calendar">
-                <i data-feather="calendar"></i>	
-                <span class="sidebar-text">Calendário</span>
-            </a>
-            <a href="#" class="sidebar-item crm-subitem" data-section="crm" data-crm-section="crm_tasks">
-                <i data-feather="check-square"></i>
-                <span class="sidebar-text">Tarefas</span>
-            </a>
-        </div>
-        <!-- Leitura Inteligente com IA -->
-        <a href="#" class="sidebar-item rounded-md" data-section="ai-reading">
-            <i data-feather="cpu"></i>
-            <span class="sidebar-text">IA</span>
-        </a>
-        <!-- Permissões e Usuários -->
-        <a href="#" class="sidebar-item rounded-md" data-section="permissions">
-            <i data-feather="shield"></i>
-            <span class="sidebar-text">Usuários</span>
-        </a>
-        <!-- Relatórios -->
-        <a href="#" class="sidebar-item rounded-md" data-section="reports">
-            <i data-feather="bar-chart-2"></i>
-            <span class="sidebar-text">Relatórios</span>
-        </a>
-        <!-- Ajustes e Configurações Gerais -->
-        <a href="#" class="sidebar-item rounded-md" data-section="settings">
-            <i data-feather="settings"></i>
-            <span class="sidebar-text">Configurações</span>
-        </a>
-    </div>
-    <div class="pt-4 mt-auto border-t border-gray-200">
-        <div class="flex items-center relative">
-            <div class="h-8 w-8 rounded-full bg-violet-600 flex items-center justify-center text-white font-bold" id="user-initials"><span>HV</span></div>
-            <div class="ml-2">
-                <p class="text-base font-semibold text-gray-800 whitespace-nowrap" id="user-name">Henrique Viana Abade</p>
-                <div class="flex items-center">
-                    <p class="text-sm text-gray-500">Administrador</p>
-                    <span id="server-status" class="ml-1"></span>
-                    <button id="user-actions-btn" class="ml-1 text-gray-800 hover:text-gray-600">
-                        <i data-feather="settings" class="w-6 h-6"></i>
+            <div class="flex items-center space-x-4">
+                <div class="text-right hidden sm:block">
+                    <div class="text-sm font-medium">Henrique Viana Abade</div>
+                    <div class="text-xs" style="color: var(--color-violet)">Administrador</div>
+                </div>
+                <div class="flex items-center space-x-2">
+                    <button class="p-2 rounded-lg transition-colors duration-150 hover:bg-white/10" style="color: var(--color-violet)">
+                        <i class="fas fa-cog w-5 h-5"></i>
+                    </button>
+                    <button class="p-2 rounded-lg transition-colors duration-150 hover:bg-white/10" style="color: var(--color-green)">
+                        <i class="fas fa-sync-alt w-4 h-4 rotating"></i>
+                    </button>
+                    <button class="p-2 rounded-lg transition-colors duration-150 hover:bg-white/10 relative" style="color: var(--color-violet)">
+                        <i class="fas fa-bell w-5 h-5"></i>
+                        <span class="absolute -top-1 -right-1 w-3 h-3 rounded-full" style="background: var(--color-red)"></span>
                     </button>
                 </div>
             </div>
-            <div id="user-actions-menu" class="hidden absolute right-0 bottom-full mb-2 w-40 bg-white rounded-md shadow-lg z-50 text-sm text-gray-700">
-                <button data-action="logout" class="flex items-center w-full px-3 py-2 hover:bg-gray-100 hover:text-[#9C7AEF]">
-                    <i data-feather="log-out" class="w-5 h-5 mr-2"></i>Sair
-                </button>
-                <button data-action="close" class="flex items-center w-full px-3 py-2 hover:bg-gray-100 hover:text-[#9C7AEF]">
-                    <i data-feather="x" class="w-5 h-5 mr-2"></i>Fechar
-                </button>
-                <button data-action="minimize" class="flex items-center w-full px-3 py-2 hover:bg-gray-100 hover:text-[#9C7AEF]">
-                    <i data-feather="minimize" class="w-5 h-5 mr-2"></i>Minimizar
-                </button>
-                <button data-action="reload" class="flex items-center w-full px-3 py-2 hover:bg-gray-100 hover:text-[#9C7AEF]">
-                    <i data-feather="refresh-cw" class="w-5 h-5 mr-2"></i>Recarregar
-                </button>
-            </div>
-        </div>
-    </div>
-</nav>
-<!-- Main Content -->
-<div class="main-content flex-1 flex flex-col overflow-hidden">
-    <!-- Header -->
-    <header class="header flex items-center justify-between p-4">
-        <div class="flex items-center">
-            <button class="text-gray-600 focus:outline-none lg:hidden" id="menu-toggle">
-                <i data-feather="menu"></i>
-            </button>
-            <h2 class="text-xl font-semibold text-gray-800 ml-4" id="section-title">Painel</h2>
-        </div>
-        <div class="flex items-center">
-            <div class="relative">
-                <button class="flex items-center text-gray-600 focus:outline-none">
-                    <i data-feather="bell" class="mr-4" style="color: var(--primary);"></i>
-                </button>
-            </div>
         </div>
     </header>
-    <!-- Content -->
-    <main class="flex-1 overflow-y-auto p-6 lg:p-8 bg-gray-50">
-        <!-- Espaço para mensagens do sistema -->
-        <div id="system-messages" class="mb-4 hidden p-4 bg-gray-100 text-gray-800 rounded-md"></div>
-        <!-- Painel Geral -->
-        <section id="dashboard-section" class="space-y-6">
-            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                <div class="content-card p-6">
-                    <div class="flex items-center">
-                        <div class="p-3 rounded-full bg-gray-200" style="color: var(--primary);">
-                            <i data-feather="shopping-bag"></i>
-                        </div>
-                        <div class="ml-4">
-                            <p class="text-sm text-gray-500">Vendas Totais</p>
-                            <h3 class="text-2xl font-semibold text-gray-800">R$ 24.780</h3>
-                        </div>
-                    </div>
+
+    <!-- Sidebar -->
+    <aside id="sidebar" class="sidebar fixed left-0 top-14 bottom-0 sidebar-collapsed glass-deep border-r border-white/10 z-40 transition-all duration-300">
+        <nav class="p-2 space-y-1">
+            <div class="sidebar-item active flex items-center p-3 rounded-lg" data-section="dashboard">
+                <i class="fas fa-chart-line w-5 h-5 flex-shrink-0"></i>
+                <span class="sidebar-text ml-3 whitespace-nowrap">Dashboard</span>
+            </div>
+            <div class="sidebar-item flex items-center p-3 rounded-lg" data-section="raw-material" style="color: var(--color-violet)">
+                <i class="fas fa-boxes w-5 h-5 flex-shrink-0"></i>
+                <span class="sidebar-text ml-3 whitespace-nowrap">Matéria-Prima</span>
+            </div>
+            <div class="sidebar-item flex items-center p-3 rounded-lg" data-section="products" style="color: var(--color-violet)">
+                <i class="fas fa-cube w-5 h-5 flex-shrink-0"></i>
+                <span class="sidebar-text ml-3 whitespace-nowrap">Produtos</span>
+            </div>
+            <div class="sidebar-item flex items-center p-3 rounded-lg" data-section="budgets" style="color: var(--color-violet)">
+                <i class="fas fa-file-invoice-dollar w-5 h-5 flex-shrink-0"></i>
+                <span class="sidebar-text ml-3 whitespace-nowrap">Orçamentos</span>
+            </div>
+            <div class="sidebar-item flex items-center p-3 rounded-lg" data-section="orders" style="color: var(--color-violet)">
+                <i class="fas fa-shopping-cart w-5 h-5 flex-shrink-0"></i>
+                <span class="sidebar-text ml-3 whitespace-nowrap">Pedidos</span>
+            </div>
+            <div id="crm-header" class="sidebar-item flex items-center justify-between p-3 rounded-lg cursor-pointer" style="color: var(--color-violet)">
+                <div class="flex items-center">
+                    <i class="fas fa-users w-5 h-5 flex-shrink-0"></i>
+                    <span class="sidebar-text ml-3 whitespace-nowrap">CRM</span>
                 </div>
-                <div class="content-card p-6">
-                    <div class="flex items-center">
-                        <div class="p-3 rounded-full bg-gray-200" style="color: var(--primary);">
-                            <i data-feather="users"></i>
-                        </div>
-                        <div class="ml-4">
-                            <p class="text-sm text-gray-500">Clientes</p>
-                            <h3 class="text-2xl font-semibold text-gray-800">142</h3>
-                        </div>
-                    </div>
+                <i class="fas fa-chevron-right w-3 h-3 chevron sidebar-text"></i>
+            </div>
+            <div id="crm-submenu" class="submenu">
+                <div class="submenu-item flex items-center py-2 px-3 rounded-lg" data-section="crm" data-crm-section="crm_clients" style="color: var(--color-violet)">
+                    <i class="fas fa-user-friends w-4 h-4 flex-shrink-0"></i>
+                    <span class="sidebar-text ml-3 whitespace-nowrap">Clientes</span>
                 </div>
-                <div class="content-card p-6">
-                    <div class="flex items-center">
-                        <div class="p-3 rounded-full bg-gray-200" style="color: var(--primary);">
-                            <i data-feather="box"></i>
-                        </div>
-                        <div class="ml-4">
-                            <p class="text-sm text-gray-500">Produtos</p>
-                            <h3 class="text-2xl font-semibold text-gray-800">87</h3>
-                        </div>
-                    </div>
+                <div class="submenu-item flex items-center py-2 px-3 rounded-lg" data-section="crm" data-crm-section="crm_prospects" style="color: var(--color-violet)">
+                    <i class="fas fa-user-plus w-4 h-4 flex-shrink-0"></i>
+                    <span class="sidebar-text ml-3 whitespace-nowrap">Prospectos</span>
                 </div>
-                <div class="content-card p-6">
-                    <div class="flex items-center">
-                        <div class="p-3 rounded-full bg-gray-200" style="color: var(--primary);">
-                            <i data-feather="dollar-sign"></i>
-                        </div>
-                        <div class="ml-4">
-                            <p class="text-sm text-gray-500">Ticket Médio</p>
-                            <h3 class="text-2xl font-semibold text-gray-800">R$ 174,50</h3>
-                        </div>
-                    </div>
+                <div class="submenu-item flex items-center py-2 px-3 rounded-lg" data-section="crm" data-crm-section="crm_contacts" style="color: var(--color-violet)">
+                    <i class="fas fa-address-book w-4 h-4 flex-shrink-0"></i>
+                    <span class="sidebar-text ml-3 whitespace-nowrap">Contatos</span>
+                </div>
+                <div class="submenu-item flex items-center py-2 px-3 rounded-lg" data-section="crm" data-crm-section="crm_calendar" style="color: var(--color-violet)">
+                    <i class="fas fa-calendar-alt w-4 h-4 flex-shrink-0"></i>
+                    <span class="sidebar-text ml-3 whitespace-nowrap">Calendário</span>
+                </div>
+                <div class="submenu-item flex items-center py-2 px-3 rounded-lg" data-section="crm" data-crm-section="crm_tasks" style="color: var(--color-violet)">
+                    <i class="fas fa-tasks w-4 h-4 flex-shrink-0"></i>
+                    <span class="sidebar-text ml-3 whitespace-nowrap">Tarefas</span>
                 </div>
             </div>
-            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <div class="content-card p-6">
-                    <h3 class="text-lg font-semibold text-gray-800 mb-4">Vendas Mensais</h3>
-                    <div class="h-64">
-                        <canvas id="salesChart"></canvas>
-                    </div>
-                </div>
-                <div class="content-card p-6">
-                    <h3 class="text-lg font-semibold text-gray-800 mb-4">Categorias Mais Vendidas</h3>
-                    <div class="h-64">
-                        <canvas id="categoriesChart"></canvas>
-                    </div>
-                </div>
+            <div class="sidebar-item flex items-center p-3 rounded-lg" data-section="ai-reading" style="color: var(--color-violet)">
+                <i class="fas fa-robot w-5 h-5 flex-shrink-0"></i>
+                <span class="sidebar-text ml-3 whitespace-nowrap">IA</span>
             </div>
-        </section>
-        <!-- Seções vazias para futuros módulos -->
-        <section id="raw-material-section" class="space-y-6 hidden">
-            <!-- Conteúdo de Estoque de Matéria-Prima aqui -->
-        </section>
-        <section id="products-section" class="space-y-6 hidden">
-            <!-- Conteúdo de Produtos / Peças aqui -->
-        </section>
-        <section id="budgets-section" class="space-y-6 hidden">
-            <!-- Conteúdo de Orçamentos aqui -->
-        </section>
-        <section id="orders-section" class="space-y-6 hidden">
-            <!-- Conteúdo de Pedidos aqui -->
-        </section>
-        <section id="crm-section" class="space-y-6 hidden">
-            <!-- Conteúdo do CRM aqui -->
-        </section>
-        <section id="ai-reading-section" class="space-y-6 hidden">
-            <!-- Conteúdo de Leitura Inteligente com IA aqui -->
-        </section>
-        <section id="permissions-section" class="space-y-6 hidden">
-            <!-- Conteúdo de Permissões e Usuários aqui -->
-        </section>
-        <section id="reports-section" class="space-y-6 hidden">
-            <!-- Conteúdo de Relatórios aqui -->
-        </section>
-        <section id="settings-section" class="space-y-6 hidden">
-            <!-- Conteúdo de Ajustes e Configurações Gerais aqui -->
-</section>
+            <div class="sidebar-item flex items-center p-3 rounded-lg" data-section="permissions" style="color: var(--color-violet)">
+                <i class="fas fa-user-shield w-5 h-5 flex-shrink-0"></i>
+                <span class="sidebar-text ml-3 whitespace-nowrap">Usuários</span>
+            </div>
+            <div class="sidebar-item flex items-center p-3 rounded-lg" data-section="reports" style="color: var(--color-violet)">
+                <i class="fas fa-chart-bar w-5 h-5 flex-shrink-0"></i>
+                <span class="sidebar-text ml-3 whitespace-nowrap">Relatórios</span>
+            </div>
+            <div class="sidebar-item flex items-center p-3 rounded-lg" data-section="settings" style="color: var(--color-violet)">
+                <i class="fas fa-cogs w-5 h-5 flex-shrink-0"></i>
+                <span class="sidebar-text ml-3 whitespace-nowrap">Configurações</span>
+            </div>
+        </nav>
+    </aside>
+
+    <!-- Main Content -->
+    <main id="mainContent" class="transition-all duration-300 ml-16 mt-14 p-6">
+        <div class="max-w-7xl mx-auto">
+            <div id="system-messages" class="mb-4 hidden p-4 rounded-md"></div>
+            <section id="dashboard-section" class="space-y-6">
+                <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 mb-8">
+                    <div class="glass-surface rounded-xl p-6 animate-fade-in-up shadow-lg">
+                        <div class="flex items-center">
+                            <div class="p-3 rounded-lg mr-4" style="background: rgba(182, 160, 62, 0.2)">
+                                <i class="fas fa-dollar-sign w-6 h-6" style="color: var(--color-primary)"></i>
+                            </div>
+                            <div>
+                                <div class="text-2xl font-bold text-white">R$ 24.780</div>
+                                <div class="text-sm" style="color: var(--neutral-100)">Vendas Totais</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="glass-surface rounded-xl p-6 animate-fade-in-up shadow-lg">
+                        <div class="flex items-center">
+                            <div class="p-3 rounded-lg mr-4" style="background: rgba(163, 148, 167, 0.2)">
+                                <i class="fas fa-users w-6 h-6" style="color: var(--color-violet)"></i>
+                            </div>
+                            <div>
+                                <div class="text-2xl font-bold text-white">142</div>
+                                <div class="text-sm" style="color: var(--neutral-100)">Clientes</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="glass-surface rounded-xl p-6 animate-fade-in-up shadow-lg">
+                        <div class="flex items-center">
+                            <div class="p-3 rounded-lg mr-4" style="background: rgba(106, 21, 44, 0.2)">
+                                <i class="fas fa-cube w-6 h-6" style="color: var(--color-bordeaux)"></i>
+                            </div>
+                            <div>
+                                <div class="text-2xl font-bold text-white">87</div>
+                                <div class="text-sm" style="color: var(--neutral-100)">Produtos</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="glass-surface rounded-xl p-6 animate-fade-in-up shadow-lg">
+                        <div class="flex items-center">
+                            <div class="p-3 rounded-lg mr-4" style="background: rgba(138, 167, 243, 0.2)">
+                                <i class="fas fa-chart-line w-6 h-6" style="color: var(--color-blue)"></i>
+                            </div>
+                            <div>
+                                <div class="text-2xl font-bold text-white">R$ 174,50</div>
+                                <div class="text-sm" style="color: var(--neutral-100)">Ticket Médio</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+                    <div class="glass-surface rounded-xl p-6 shadow-lg">
+                        <h3 class="text-lg font-semibold mb-4" style="color: var(--color-primary)">Vendas Mensais</h3>
+                        <div class="chart-placeholder h-64 rounded-lg flex items-center justify-center">
+                            <div class="text-center">
+                                <i class="fas fa-chart-line text-4xl mb-2" style="color: var(--color-primary)"></i>
+                                <p style="color: var(--color-violet)">Gráfico de Linha - Vendas por Mês</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="glass-surface rounded-xl p-6 shadow-lg">
+                        <h3 class="text-lg font-semibold mb-4" style="color: var(--color-primary)">Categorias Mais Vendidas</h3>
+                        <div class="chart-placeholder h-64 rounded-lg flex items-center justify-center">
+                            <div class="text-center">
+                                <i class="fas fa-chart-pie text-4xl mb-2" style="color: var(--color-primary)"></i>
+                                <p style="color: var(--color-violet)">Gráfico de Pizza - Vendas por Categoria</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+            <section id="raw-material-section" class="space-y-6 hidden"></section>
+            <section id="products-section" class="space-y-6 hidden"></section>
+            <section id="budgets-section" class="space-y-6 hidden"></section>
+            <section id="orders-section" class="space-y-6 hidden"></section>
+            <section id="crm-section" class="space-y-6 hidden"></section>
+            <section id="ai-reading-section" class="space-y-6 hidden"></section>
+            <section id="permissions-section" class="space-y-6 hidden"></section>
+            <section id="reports-section" class="space-y-6 hidden"></section>
+            <section id="settings-section" class="space-y-6 hidden"></section>
+        </div>
     </main>
-</div>
-<div id="logoutOverlay" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-40">
-  <div class="logout-loader"></div>
-</div>
-<div id="exitOverlay" class="hidden fixed inset-0 bg-[#3d021f] opacity-0 flex items-center justify-center z-50"></div>
-<script src="../utils/modal.js"></script>
-<script src="../utils/formPersistence.js"></script>
-<script src="../utils/userActions.js"></script>
-<script src="dashboardRenderer.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.js"></script>
-<script>
-  feather.replace({ class: 'w-5 h-5' });
-</script>
+
+    <div id="logoutOverlay" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-40">
+      <div class="logout-loader"></div>
+    </div>
+    <div id="exitOverlay" class="hidden fixed inset-0 bg-[#3d021f] opacity-0 flex items-center justify-center z-50"></div>
+
+    <script src="../utils/modal.js"></script>
+    <script src="../utils/formPersistence.js"></script>
+    <script src="../utils/userActions.js"></script>
+    <script src="dashboardRenderer.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.js"></script>
+    <script>feather.replace({ class: 'w-5 h-5' });</script>
 </body>
 </html>
