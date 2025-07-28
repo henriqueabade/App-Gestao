@@ -1,141 +1,203 @@
-:root {
-    --color-primary: #b6a03e;
-    --color-primary-light: #d4c169;
-    --color-primary-dark: #7f6a27;
-    --color-violet: #A394A7;
-    --color-bordeaux: #6a152c;
-    --color-bg-deep: #310017;
-    --color-surface: rgba(255,255,255,0.08);
-    --color-green: #a2ffa6;
-    --color-red: #ff5858;
-    --color-blue: #8aa7f3;
-    --neutral-100: #f9fafb;
-    --neutral-500: #6b7280;
-}
-
+/*
+  Estilos principais do Painel.
+  As cores utilizam variáveis declaradas no elemento <body> para fácil ajuste.
+*/
 body {
-    background: linear-gradient(135deg, var(--color-bg-deep) 0%, #1a0009 100%);
-    min-height: 100vh;
+  font-family: 'Inter', sans-serif;
+  background-color: #f7f7f7;
+  color: var(--dark);
 }
-
-.glass-surface {
-    background: var(--color-surface);
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
+#main-sidebar * {
+  font-family: inherit !important;
+  font-size: inherit !important;
 }
-
-.glass-deep {
-    background: rgba(49, 0, 23, 0.7);
-    backdrop-filter: blur(24px);
-    -webkit-backdrop-filter: blur(24px);
+.sidebar {
+  background-color: var(--light);
+  color: var(--dark);
+  border-right: 1px solid #e5e7eb;
+  box-shadow: 2px 0 4px rgba(0, 0, 0, 0.05);
+  transition: all 0.3s;
+  margin-left: -10px;
 }
-
-.animate-fade-in-up {
-    animation: fadeInUp 0.6s ease-out forwards;
-    opacity: 0;
-    transform: translateY(20px);
+.main-content {
+  margin-left: 0;
 }
-
-.animate-fade-in-up:nth-child(1) { animation-delay: 0.1s; }
-.animate-fade-in-up:nth-child(2) { animation-delay: 0.2s; }
-.animate-fade-in-up:nth-child(3) { animation-delay: 0.3s; }
-.animate-fade-in-up:nth-child(4) { animation-delay: 0.4s; }
-
-@keyframes fadeInUp {
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
-}
-
 .sidebar-item {
-    transition: all 150ms ease;
-    cursor: pointer;
+  display: flex;
+  align-items: center;
+  padding: 0.5rem 0.5rem;
+  padding-left: 10 px;
+  margin-bottom: 0.5rem;
+  font-size: 0.92rem;
+  font-weight: 500;
+  color: #6b7280;
+  white-space: nowrap;
+  transition: all 0.2s;
 }
-
-.sidebar-item:hover {
-    background: rgba(182, 160, 62, 0.1);
+.sidebar-item:hover:not(.active) {
+  background-color: rgba(106, 21, 44, 0.05);
 }
-
 .sidebar-item.active {
-    color: var(--color-primary);
-    background: rgba(182, 160, 62, 0.15);
+  background-color: rgba(106, 21, 44, 0.1);
+  border-left: 3px solid #6a152c;
+  color: #6a152c;
+}
+.sidebar-item svg {
+  margin-right: 0.5rem;
+  color: currentColor;
 }
 
-.sidebar-expanded { width: 240px; }
-.sidebar-collapsed { width: 64px; }
-
-.sidebar-text {
-    opacity: 0;
-    transform: translateX(-10px);
-    transition: all 200ms ease;
+.crm-subitem {
+  font-weight: 400;
 }
-.sidebar-expanded .sidebar-text {
-    opacity: 1;
-    transform: translateX(0);
+.sidebar-brand {
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--primary);
+}
+.sidebar-header {
+  background-color: var(--secondary);
+}
+.content-card {
+background-color: white;
+border-radius: 0.5rem;
+box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+}
+.btn-primary {
+background-color: var(--primary);
+color: white;
+transition: all 0.2s;
+}
+.btn-primary:hover {
+background-color: var(--primary-light);
+}
+.btn-outline {
+border: 1px solid var(--primary);
+color: var(--primary);
+transition: all 0.2s;
+}
+.btn-outline:hover {
+background-color: var(--primary);
+color: white;
+}
+.header {
+  background-color: white;
+  border-bottom: 1px solid #e5e7eb;
+}
+.table-header {
+background-color: var(--light);
+color: var(--dark);
+}
+.status-badge {
+padding: 0.25rem 0.5rem;
+border-radius: 9999px;
+font-size: 0.75rem;
+font-weight: 600;
+}
+.status-active {
+background-color: #dcfce7;
+color: #166534;
+}
+.status-pending {
+background-color: #fef9c3;
+color: #854d0e;
+}
+.status-inactive {
+background-color: #fee2e2;
+color: #991b1b;
+}
+@media (max-width: 768px) {
+  .sidebar {
+    width: 4rem;
+  }
+  .sidebar-text {
+    display: none;
+  }
+  .main-content {
+    margin-left: 0;
+  }
 }
 
-.submenu { max-height: 0; overflow: hidden; transition: max-height 300ms ease-in-out; }
-.submenu.open { max-height: 200px; }
-
-.submenu-item { padding-left: 3rem; transition: all 150ms ease; cursor: pointer; }
-.submenu-item:hover { background: rgba(182, 160, 62, 0.05); }
-
-.chevron { transition: transform 200ms ease; }
-.chevron.rotated { transform: rotate(90deg); }
-
-.btn-primary { background: var(--color-primary); transition: all 150ms ease; }
-.btn-primary:hover { background: var(--color-primary-light); transform: scale(1.05); }
-
-.input-glass {
-    background: rgba(255, 255, 255, 0.1);
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    transition: all 150ms ease;
-}
-.input-glass:focus {
-    background: rgba(255, 255, 255, 0.2);
-    outline: none;
-    border-color: var(--color-primary);
+/* Logout button spinner */
+.logout-spinner {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  border: 2px solid #e5e7eb;
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  animation: spinner 1s linear infinite;
 }
 
-.chart-placeholder {
-    background: linear-gradient(45deg, var(--color-surface), rgba(255,255,255,0.05));
-    border: 1px dashed rgba(255,255,255,0.2);
+/* Logout overlay */
+#logoutOverlay {
+  opacity: 0;
+  background-color: #3d021f;
+  transition: opacity 0.3 ease-in-out;
 }
-
-@media (prefers-reduced-motion: reduce) {
-    .animate-fade-in-up,
-    .btn-primary:hover,
-    .sidebar-item,
-    .submenu,
-    .chevron {
-        animation: none;
-        transform: none;
-        transition: none;
-    }
+#logoutOverlay.visible {
+  opacity: 1;
 }
-
-.rotating { animation: rotate 2s linear infinite; }
-@keyframes rotate { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-
-@media (max-width: 767px) { .sidebar-expanded { width: 200px; } }
-
-/* Logout overlay and spinner */
 .logout-loader {
   border: 4px solid rgba(255, 255, 255, 0.3);
-  border-top-color: var(--color-primary);
+  /*
+    Use the same color as the login loader so the transition
+    when leaving the dashboard matches the one used when
+    logging in.
+  */
+  border-top-color: #b6a03e;
   border-radius: 50%;
   width: 2.5rem;
   height: 2.5rem;
-  animation: rotate 1s linear infinite;
+  animation: spinner 1s linear infinite;
 }
-#logoutOverlay { opacity: 0; background-color: #3d021f; transition: opacity 0.3s ease-in-out; }
-#logoutOverlay.visible { opacity: 1; }
-#exitOverlay { opacity: 0; background-color: #3d021f; transition: opacity 4s ease-in-out; }
-#exitOverlay.visible { opacity: 1; }
 
-#server-status { display: inline-block; width: 16px; height: 16px; }
-.server-spin { border: 2px solid var(--color-primary-light); border-top-color: var(--color-primary); border-radius: 50%; width: 100%; height: 100%; animation: rotate 1s linear infinite; }
-.server-ok, .server-error { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; }
-.server-ok { color: #16a34a; }
-.server-error { color: #dc2626; }
+@keyframes spinner {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* Overlay used when closing the application */
+#exitOverlay {
+  opacity: 0;
+  background-color: #3d021f;
+  transition: opacity 4s ease-in-out;
+}
+#exitOverlay.visible {
+  opacity: 1;
+}
+
+/* Server status indicator */
+#server-status {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+}
+
+.server-spin {
+  border: 2px solid var(--primary-light);
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  width: 100%;
+  height: 100%;
+  animation: spinner 1s linear infinite;
+}
+
+.server-ok {
+  width: 100%;
+  height: 100%;
+  color: #16a34a;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.server-error {
+  width: 100%;
+  height: 100%;
+  color: #dc2626;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
