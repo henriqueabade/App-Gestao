@@ -50,20 +50,24 @@ function expandSidebar() {
 }
 
 function collapseSidebar() {
-    if (sidebarExpanded && !crmExpanded) {
+    if (sidebarExpanded) {
         sidebar.classList.remove('sidebar-expanded');
         sidebar.classList.add('sidebar-collapsed');
         mainContent.style.marginLeft = '64px';
         sidebarExpanded = false;
+    }
+    // Close CRM submenu when sidebar collapses
+    if (crmExpanded) {
+        crmSubmenu.classList.remove('open');
+        chevron.classList.remove('rotated');
+        crmExpanded = false;
     }
 }
 
 // Comportamento desktop: expande ao passar o mouse
 if (window.innerWidth >= 1024) {
     sidebar.addEventListener('mouseenter', expandSidebar);
-    sidebar.addEventListener('mouseleave', () => {
-        if (!crmExpanded) collapseSidebar();
-    });
+    sidebar.addEventListener('mouseleave', collapseSidebar);
 }
 
 // Alterna sidebar no mobile
@@ -138,8 +142,24 @@ async function loadPage(page) {
 document.querySelectorAll('.sidebar-item[data-page], .submenu-item[data-page]').forEach(item => {
     item.addEventListener('click', function (e) {
         e.stopPropagation();
+        // Remove destaque de todos os itens antes de aplicar ao clicado
         document.querySelectorAll('.sidebar-item, .submenu-item').forEach(i => i.classList.remove('active'));
         this.classList.add('active');
+
+        // Fecha submenu do CRM ao navegar para outros módulos
+        const insideCrm = this.closest('#crmSubmenu');
+        if (!insideCrm && crmExpanded) {
+            crmSubmenu.classList.remove('open');
+            chevron.classList.remove('rotated');
+            crmExpanded = false;
+        }
+        // Mantém submenu aberto se o clique for em um item do CRM
+        if (insideCrm && !crmExpanded) {
+            crmSubmenu.classList.add('open');
+            chevron.classList.add('rotated');
+            crmExpanded = true;
+        }
+
         const page = this.dataset.page;
         document.querySelector('h1').textContent = pageNames[page] || 'Dashboard';
         if (page === 'orcamentos') {
@@ -193,9 +213,7 @@ window.addEventListener('resize', () => {
         sidebar.removeEventListener('mouseleave', collapseSidebar);
     } else {
         sidebar.addEventListener('mouseenter', expandSidebar);
-        sidebar.addEventListener('mouseleave', () => {
-            if (!crmExpanded) collapseSidebar();
-        });
+        sidebar.addEventListener('mouseleave', collapseSidebar);
     }
     if (sidebarExpanded) {
         mainContent.style.marginLeft = window.innerWidth >= 1024 ? '240px' : '200px';

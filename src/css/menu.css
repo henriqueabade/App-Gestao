@@ -60,9 +60,14 @@ body {
 }
 
 .sidebar-item:hover { background: rgba(182, 160, 62, 0.1); }
-.sidebar-item.active {
-    color: var(--color-primary);
+.sidebar-item.active,
+.submenu-item.active {
     background: rgba(182, 160, 62, 0.15);
+}
+
+.sidebar-item.active span,
+.submenu-item.active span {
+    color: var(--color-primary);
 }
 
 .sidebar-expanded { width: 240px; }
