@@ -1,0 +1,413 @@
+<style>
+    :root {
+        --color-primary: #b6a03e;
+        --color-primary-hover: #d4c169;
+        --color-positive: #a2ffa6;
+        --color-negative: #ff5858;
+        --color-negative-hover: #dc2626;
+        --color-blue: #8aa7f3;
+    }
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #F7F8FA;
+        }
+        .overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(0, 0, 0, 0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 50;
+        }
+        .modal {
+            background-color: white;
+            border-radius: 0.5rem;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+            width: 75%;
+            max-width: 64rem;
+            max-height: 90vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        .modal-header {
+            padding: 1.5rem;
+            border-bottom: 1px solid #E5E7EB;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background-color: white;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+        .modal-body {
+            padding: 1.5rem;
+            overflow-y: auto;
+            flex: 1;
+        }
+        .btn {
+            transition: all 0.2s;
+            border-radius: 0.375rem;
+            font-weight: 500;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .btn-primary {
+            background-color: var(--color-positive);
+            color: white;
+            padding: 0.5rem 1rem;
+        }
+        .btn-primary:hover {
+            background-color: var(--color-positive);
+        }
+        .btn-primary:disabled {
+            background-color: var(--color-positive);
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        .btn-secondary {
+            background-color: var(--color-negative);
+            color: white;
+            padding: 0.375rem 0.75rem;
+        }
+        .btn-secondary:hover {
+            background-color: var(--color-negative-hover);
+        }
+        .btn-destructive {
+            background-color: var(--color-negative);
+            color: white;
+            padding: 0.375rem 0.75rem;
+        }
+        .btn-destructive:hover {
+            background-color: var(--color-negative-hover);
+        }
+        .form-group {
+            margin-bottom: 1rem;
+        }
+        .form-label {
+            display: block;
+            font-size: 0.875rem;
+            font-weight: 500;
+            color: #4B5563;
+            margin-bottom: 0.25rem;
+        }
+        .form-input {
+            width: 100%;
+            border: 1px solid #D1D5DB;
+            border-radius: 0.375rem;
+            padding: 0.5rem 0.75rem;
+            font-size: 0.875rem;
+            color: #374151;
+            transition: all 0.2s;
+        }
+        .form-input:focus {
+            outline: none;
+            border-color: var(--color-primary);
+            box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary) 30%, transparent);
+        }
+        .form-input:disabled {
+            background-color: #F3F4F6;
+            cursor: not-allowed;
+        }
+        .form-select {
+            width: 100%;
+            border: 1px solid #D1D5DB;
+            border-radius: 0.375rem;
+            padding: 0.5rem 0.75rem;
+            font-size: 0.875rem;
+            color: #374151;
+            transition: all 0.2s;
+            background-color: white;
+            appearance: none;
+            background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
+            background-position: right 0.5rem center;
+            background-repeat: no-repeat;
+            background-size: 1.5em 1.5em;
+            padding-right: 2.5rem;
+        }
+        .form-select:focus {
+            outline: none;
+            border-color: var(--color-primary);
+            box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary) 30%, transparent);
+        }
+        .table-container { overflow-x: auto; }
+        table { width: 100%; border-collapse: separate; border-spacing: 0; }
+        th {
+            position: sticky;
+            top: 0;
+            background-color: #F9FAFB;
+            font-weight: 500;
+            color: #4B5563;
+            text-align: left;
+            padding: 0.75rem 1rem;
+            border-bottom: 1px solid #E5E7EB;
+            text-transform: uppercase;
+            font-size: 0.75rem;
+            z-index: 1;
+        }
+        td {
+            padding: 0.75rem 1rem;
+            border-bottom: 1px solid #E5E7EB;
+            color: #374151;
+            font-size: 0.875rem;
+        }
+        tr:hover td { background-color: #F9FAFB; }
+        .process-header {
+            background-color: #F3F4F6;
+            font-weight: 500;
+            color: #4B5563;
+            padding: 0.5rem 1rem;
+            font-size: 0.875rem;
+        }
+        .toast {
+            position: fixed;
+            bottom: 1.5rem;
+            right: 1.5rem;
+            padding: 1rem;
+            background-color: white;
+            border-radius: 0.5rem;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            display: flex;
+            align-items: center;
+            transform: translateY(150%);
+            transition: transform 0.3s ease-out;
+            z-index: 100;
+        }
+        .toast.show { transform: translateY(0); }
+        .toast-icon { margin-right: 0.75rem; width: 1.5rem; height: 1.5rem; flex-shrink: 0; }
+        .toast-content { flex: 1; }
+        .toast-title { font-weight: 600; font-size: 0.875rem; color: #1F2937; }
+        .toast-message { font-size: 0.75rem; color: #6B7280; }
+        .toast-close { margin-left: 0.75rem; color: #9CA3AF; cursor: pointer; }
+        .toast-close:hover { color: #6B7280; }
+        .popup {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: white;
+            border-radius: 0.5rem;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+            padding: 1.5rem;
+            z-index: 100;
+            max-width: 24rem;
+            width: 90%;
+        }
+        .popup-backdrop {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(0, 0, 0, 0.5);
+            z-index: 90;
+        }
+        .spinner {
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top: 2px solid white;
+            width: 1rem;
+            height: 1rem;
+            animation: spin 1s linear infinite;
+            margin-right: 0.5rem;
+            display: none;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        @media (max-width: 1024px) {
+            .modal { width: 100%; max-width: none; height: 100vh; max-height: none; border-radius: 0; }
+            .grid-cols-12 { grid-template-columns: repeat(1, minmax(0, 1fr)); }
+            .col-span-3, .col-span-9 { grid-column: span 1 / span 1; }
+        }
+</style>
+<div class="overlay" id="modal-products-new" data-modal-id="products-new">
+    <div class="modal">
+        <div class="modal-header">
+            <div class="flex items-center space-x-4">
+                <button class="btn btn-secondary" id="backBtn">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z" clip-rule="evenodd" />
+                    </svg>
+                    Voltar
+                </button>
+                <h2 class="text-xl font-semibold text-[var(--color-primary)]">INSERIR NOVO PRODUTO</h2>
+            </div>
+            <button class="btn btn-secondary" id="closeBtn">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" />
+                </svg>
+            </button>
+        </div>
+        <div class="modal-body">
+            <!-- Information Bar -->
+            <div class="grid grid-cols-12 gap-4 mb-6">
+                <div class="col-span-12 md:col-span-3">
+                    <div class="form-group">
+                        <label class="form-label text-sm font-medium text-gray-600">Preço de Venda</label>
+                        <div class="text-2xl font-bold text-gray-800">R$ 2.450,00</div>
+                    </div>
+                </div>
+                <div class="col-span-12 md:col-span-3">
+                    <div class="form-group text-right">
+                        <div class="text-sm text-gray-600" id="currentDate">30/06/2023 às 10:45</div>
+                    </div>
+                </div>
+                <div class="col-span-12 md:col-span-3">
+                    <div class="form-group text-right">
+                        <button class="btn btn-secondary" id="clearAllBtn">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" viewBox="0 0 20 20" fill="currentColor">
+                                <path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd" />
+                            </svg>
+                            Limpar Tudo
+                        </button>
+                    </div>
+                </div>
+                <div class="col-span-12 md:col-span-3"></div>
+            </div>
+            <!-- Product Data -->
+            <div class="grid grid-cols-12 gap-4 mb-6">
+                <div class="col-span-12 md:col-span-6">
+                    <div class="form-group">
+                        <label class="form-label">Nome do Produto*</label>
+                        <input type="text" id="productName" class="form-input" placeholder="Digite o nome do produto">
+                    </div>
+                </div>
+                <div class="col-span-12 md:col-span-3">
+                    <div class="form-group">
+                        <label class="form-label">Código*</label>
+                        <input type="text" id="productCode" class="form-input" maxlength="10">
+                    </div>
+                </div>
+                <div class="col-span-12 md:col-span-3">
+                    <div class="form-group">
+                        <label class="form-label">NCM*</label>
+                        <input type="text" id="ncmCode" class="form-input" placeholder="0000.00.00">
+                    </div>
+                </div>
+            </div>
+            <!-- Main Content -->
+            <div class="grid grid-cols-12 gap-6">
+                <div class="col-span-12 md:col-span-3">
+                    <div class="form-group">
+                        <label class="form-label">Processo</label>
+                        <select class="form-select" id="processSelect">
+                            <option value="">Selecione um processo</option>
+                            <option value="marcenaria">Marcenaria</option>
+                            <option value="acabamento">Acabamento</option>
+                            <option value="montagem">Montagem</option>
+                            <option value="embalagem">Embalagem</option>
+                            <option value="outros">Outros</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <button class="btn w-full bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white rounded-md" id="startProcessBtn">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" viewBox="0 0 20 20" fill="currentColor">
+                                <path fill-rule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clip-rule="evenodd" />
+                            </svg>
+                            Começar
+                        </button>
+                    </div>
+                    <div class="mb-6">
+                        <h3 class="text-sm font-medium text-gray-600 uppercase mb-2">Percentagens</h3>
+                        <div class="bg-white border border-gray-200 rounded-lg overflow-hidden">
+                            <table class="w-full">
+                                <tbody>
+                                    <tr><td class="py-2 px-3 text-sm text-gray-700">Marcenaria</td><td class="py-2 px-3"><input type="number" min="0" max="100" class="form-input text-right percentage-input" value="25"></td></tr>
+                                    <tr><td class="py-2 px-3 text-sm text-gray-700">Acabamento</td><td class="py-2 px-3"><input type="number" min="0" max="100" class="form-input text-right percentage-input" value="20"></td></tr>
+                                    <tr><td class="py-2 px-3 text-sm text-gray-700">Montagem</td><td class="py-2 px-3"><input type="number" min="0" max="100" class="form-input text-right percentage-input" value="15"></td></tr>
+                                    <tr><td class="py-2 px-3 text-sm text-gray-700">Embalagem</td><td class="py-2 px-3"><input type="number" min="0" max="100" class="form-input text-right percentage-input" value="10"></td></tr>
+                                    <tr><td class="py-2 px-3 text-sm text-gray-700">Markup</td><td class="py-2 px-3"><input type="number" min="0" max="100" class="form-input text-right percentage-input" value="40"></td></tr>
+                                    <tr><td class="py-2 px-3 text-sm text-gray-700">Comissão</td><td class="py-2 px-3"><input type="number" min="0" max="100" class="form-input text-right percentage-input" value="5"></td></tr>
+                                    <tr><td class="py-2 px-3 text-sm text-gray-700">Imposto</td><td class="py-2 px-3"><input type="number" min="0" max="100" class="form-input text-right percentage-input" value="12"></td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <div>
+                        <h3 class="text-sm font-medium text-gray-600 uppercase mb-2">Somas</h3>
+                        <div class="bg-white border border-gray-200 rounded-lg overflow-hidden">
+                            <table class="w-full">
+                                <tbody>
+                                    <tr><td class="py-2 px-3 text-sm text-gray-700">Total Insumos</td><td class="py-2 px-3 text-sm text-gray-700 text-right">R$ 1.050,00</td></tr>
+                                    <tr><td class="py-2 px-3 text-sm text-gray-700">Total Mão-de-obra</td><td class="py-2 px-3 text-sm text-gray-700 text-right">R$ 450,00</td></tr>
+                                    <tr><td class="py-2 px-3 text-sm text-gray-700">Sub-Total</td><td class="py-2 px-3 text-sm text-gray-700 text-right">R$ 1.500,00</td></tr>
+                                    <tr><td class="py-2 px-3 text-sm text-gray-700">Markup</td><td class="py-2 px-3 text-sm text-gray-700 text-right">R$ 600,00</td></tr>
+                                    <tr><td class="py-2 px-3 text-sm font-medium text-gray-700">Custo Total</td><td class="py-2 px-3 text-sm font-medium text-gray-700 text-right">R$ 2.100,00</td></tr>
+                                    <tr><td class="py-2 px-3 text-sm text-gray-700">Comissão</td><td class="py-2 px-3 text-sm text-gray-700 text-right">R$ 105,00</td></tr>
+                                    <tr><td class="py-2 px-3 text-sm text-gray-700">Imposto</td><td class="py-2 px-3 text-sm text-gray-700 text-right">R$ 252,00</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-span-12 md:col-span-9">
+                    <div class="bg-white border border-gray-200 rounded-lg overflow-hidden">
+                        <div class="table-container max-h-[50vh]">
+                            <table class="w-full" id="itemsTable">
+                                <thead>
+                                    <tr>
+                                        <th>Nome do Item</th>
+                                        <th width="120">Quantidade</th>
+                                        <th width="150">Valor Total</th>
+                                        <th width="80">Ação</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr class="process-header"><td colspan="4">Marcenaria</td></tr>
+                                    <tr><td>Madeira Maciça Jatobá</td><td>10</td><td>R$ 450,00</td><td><div class="flex space-x-2"><button class="text-gray-500 hover:text-gray-700 edit-quantity" title="Editar quantidade"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" /></svg></button><button class="text-gray-500 hover:text-red-500 delete-item" title="Remover item"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd" /></svg></button></div></td></tr>
+                                    <tr><td>Parafusos 5mm</td><td>50</td><td>R$ 75,00</td><td><div class="flex space-x-2"><button class="text-gray-500 hover:text-gray-700 edit-quantity" title="Editar quantidade"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" /></svg></button><button class="text-gray-500 hover:text-red-500 delete-item" title="Remover item"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd" /></svg></button></div></td></tr>
+                                    <tr class="process-header"><td colspan="4">Acabamento</td></tr>
+                                    <tr><td>Verniz Premium</td><td>3</td><td>R$ 225,00</td><td><div class="flex space-x-2"><button class="text-gray-500 hover:text-gray-700 edit-quantity" title="Editar quantidade"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" /></svg></button><button class="text-gray-500 hover:text-red-500 delete-item" title="Remover item"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd" /></svg></button></div></td></tr>
+                                    <tr><td>Lixa 220</td><td>15</td><td>R$ 45,00</td><td><div class="flex space-x-2"><button class="text-gray-500 hover:text-gray-700 edit-quantity" title="Editar quantidade"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" /></svg></button><button class="text-gray-500 hover:text-red-500 delete-item" title="Remover item"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd" /></svg></button></div></td></tr>
+                                    <tr class="process-header"><td colspan="4">Montagem</td></tr>
+                                    <tr><td>Cola para Madeira</td><td>2</td><td>R$ 60,00</td><td><div class="flex space-x-2"><button class="text-gray-500 hover:text-gray-700 edit-quantity" title="Editar quantidade"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" /></svg></button><button class="text-gray-500 hover:text-red-500 delete-item" title="Remover item"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd" /></svg></button></div></td></tr>
+                                    <tr><td>Ferragens Especiais</td><td>8</td><td>R$ 320,00</td><td><div class="flex space-x-2"><button class="text-gray-500 hover:text-gray-700 edit-quantity" title="Editar quantidade"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" /></svg></button><button class="text-gray-500 hover:text-red-500 delete-item" title="Remover item"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd" /></svg></button></div></td></tr>
+                                    <tr class="process-header"><td colspan="4">Embalagem</td></tr>
+                                    <tr><td>Plástico Bolha</td><td>20</td><td>R$ 100,00</td><td><div class="flex space-x-2"><button class="text-gray-500 hover:text-gray-700 edit-quantity" title="Editar quantidade"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" /></svg></button><button class="text-gray-500 hover:text-red-500 delete-item" title="Remover item"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd" /></svg></button></div></td></tr>
+                                    <tr><td>Caixa de Papelão Reforçada</td><td>5</td><td>R$ 225,00</td><td><div class="flex space-x-2"><button class="text-gray-500 hover:text-gray-700 edit-quantity" title="Editar quantidade"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" /></svg></button><button class="text-gray-500 hover:text-red-500 delete-item" title="Remover item"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd" /></svg></button></div></td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        <div class="p-3 border-t border-gray-200"><p class="text-xs text-gray-500">✏️ edita quantidade; 🗑️ remove o item.</p></div>
+                    </div>
+                    <div class="mt-6 flex justify-end">
+                        <button class="btn btn-primary" id="registerBtn"><div class="spinner" id="registerSpinner"></div>Registrar</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+<div class="popup-backdrop hidden" id="clearPopupBackdrop"></div>
+<div class="popup hidden" id="clearPopup">
+    <h3 class="text-lg font-medium text-gray-900 mb-4">Limpar Tudo</h3>
+    <p class="text-sm text-gray-600 mb-6">Tem certeza que deseja limpar todos os campos? Esta ação não pode ser desfeita.</p>
+    <div class="flex justify-end space-x-3"><button class="btn btn-secondary" id="cancelClearBtn">Não</button><button class="btn btn-destructive" id="confirmClearBtn">Sim</button></div>
+</div>
+<div class="popup-backdrop hidden" id="deletePopupBackdrop"></div>
+<div class="popup hidden" id="deletePopup">
+    <h3 class="text-lg font-medium text-gray-900 mb-4">Remover Item</h3>
+    <p class="text-sm text-gray-600 mb-6">Tem certeza que deseja remover este item? Esta ação não pode ser desfeita.</p>
+    <div class="flex justify-end space-x-3"><button class="btn btn-secondary" id="cancelDeleteBtn">Não</button><button class="btn btn-destructive" id="confirmDeleteBtn">Sim</button></div>
+</div>
+<div class="popup-backdrop hidden" id="editPopupBackdrop"></div>
+<div class="popup hidden" id="editPopup">
+    <h3 class="text-lg font-medium text-gray-900 mb-4">Editar Quantidade</h3>
+    <div class="form-group mb-6"><label class="form-label">Nova Quantidade</label><input type="number" class="form-input" id="newQuantityInput" min="1" value="1"></div>
+    <div class="flex justify-end space-x-3"><button class="btn btn-secondary" id="cancelEditBtn">Cancelar</button><button class="btn btn-primary" id="confirmEditBtn">Salvar</button></div>
+</div>
+<div class="popup-backdrop hidden" id="registerPopupBackdrop"></div>
+<div class="popup hidden" id="registerPopup">
+    <h3 class="text-lg font-medium text-gray-900 mb-4">Confirmar Registro</h3>
+    <p class="text-sm text-gray-600 mb-6">Tem certeza que deseja registrar este novo produto?</p>
+    <div class="flex justify-end space-x-3"><button class="btn btn-secondary" id="cancelRegisterBtn">Não</button><button class="btn btn-primary" id="confirmRegisterBtn">Sim</button></div>
+</div>
+<div class="toast" id="clearToast"><div class="toast-icon bg-blue-100 text-blue-500 rounded-full p-2"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" /></svg></div><div class="toast-content"><div class="toast-title">Campos Limpos</div><div class="toast-message">Todos os campos foram limpos com sucesso.</div></div><div class="toast-close"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" /></svg></div></div>
+<div class="toast" id="quantityToast"><div class="toast-icon bg-green-100 text-green-500 rounded-full p-2"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" /></svg></div><div class="toast-content"><div class="toast-title">Quantidade Atualizada</div><div class="toast-message">A quantidade foi atualizada com sucesso.</div></div><div class="toast-close"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" /></svg></div></div>
+<div class="toast" id="deleteToast"><div class="toast-icon bg-red-100 text-red-500 rounded-full p-2"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" /></svg></div><div class="toast-content"><div class="toast-title">Item Removido</div><div class="toast-message">O item foi removido com sucesso.</div></div><div class="toast-close"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" /></svg></div></div>
+<div class="toast" id="registerToast"><div class="toast-icon bg-green-100 text-green-500 rounded-full p-2"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" /></svg></div><div class="toast-content"><div class="toast-title">Produto Inserido</div><div class="toast-message">O produto foi inserido com sucesso.</div></div><div class="toast-close"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" /></svg></div></div>
