@@ -149,3 +149,13 @@ body {
 @media (max-width: 767px) {
     .sidebar-expanded { width: 200px; }
 }
+
+#exitOverlay {
+    opacity: 0;
+    background-color: #3d021f;
+    transition: opacity 4s ease-in-out;
+}
+
+#exitOverlay.visible {
+    opacity: 1;
+}

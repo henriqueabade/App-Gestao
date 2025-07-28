@@ -8,6 +8,7 @@
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <!-- Estilos específicos do menu -->
     <link rel="stylesheet" href="../css/menu.css">
+    <link rel="stylesheet" href="../styles/warning.css">
 </head>
 <body class="text-white">
     <!-- Topbar -->
@@ -18,10 +19,7 @@
                 <button id="menuToggle" class="p-2 rounded-lg transition-colors duration-150 hover:bg-white/10 lg:hidden">
                     <i class="fas fa-bars w-5 h-5" style="color: var(--color-primary)"></i>
                 </button>
-                <svg class="w-8 h-8" viewBox="0 0 32 32" fill="none">
-                    <path d="M16 2L20 10H28L22 16L24 24L16 20L8 24L10 16L4 10H12L16 2Z" fill="var(--color-primary)"/>
-                    <circle cx="16" cy="16" r="4" fill="var(--color-primary-light)"/>
-                </svg>
+                <img src="../assets/Logo%2040x40px.png" alt="Santíssimo Decor" class="w-10 h-10" />
                 <span class="text-lg font-semibold" style="color: var(--color-primary)">Santíssimo Decor</span>
             </div>
 
@@ -32,11 +30,10 @@
                     <div class="text-xs" style="color: var(--color-violet)">Administrador</div>
                 </div>
                 
-                <div class="flex items-center space-x-2">
-                    <button class="p-2 rounded-lg transition-colors duration-150 hover:bg-white/10" style="color: var(--color-violet)" onmouseover="this.style.color='var(--color-primary-light)'" onmouseout="this.style.color='var(--color-violet)'">
+                <div class="flex items-center space-x-2 relative">
+                    <button id="user-actions-btn" class="p-2 rounded-lg transition-colors duration-150 hover:bg-white/10" style="color: var(--color-violet)" onmouseover="this.style.color='var(--color-primary-light)'" onmouseout="this.style.color='var(--color-violet)'">
                         <i class="fas fa-cog w-5 h-5"></i>
-                    </button>
-                    
+                    </button>      
                     <button id="networkCheck" class="p-2 rounded-lg transition-colors duration-150 hover:bg-white/10" style="color: var(--color-green)">
                         <i class="fas fa-sync-alt w-4 h-4 rotating"></i>
                     </button>
@@ -335,6 +332,7 @@
         </div>
         </div>
     </main>
+    <div id="exitOverlay" class="hidden fixed inset-0 bg-[#3d021f] opacity-0 flex items-center justify-center z-50"></div>
 
     <!-- Script de controle do menu -->
     <script src="../js/menu.js"></script>
