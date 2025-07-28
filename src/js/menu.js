@@ -99,7 +99,7 @@ const pageNames = {
     orcamentos: 'Orçamentos',
     pedidos: 'Pedidos',
     clientes: 'CRM - Clientes',
-    prospectos: 'CRM - Prospectos',
+    prospeccoes: 'CRM - Prospecções',
     contatos: 'CRM - Contatos',
     calendario: 'CRM - Calendário',
     tarefas: 'CRM - Tarefas',
@@ -153,6 +153,9 @@ document.querySelectorAll('.sidebar-item[data-page], .submenu-item[data-page]').
         }
         if (page === 'pedidos') {
             loadPage('pedidos');
+        }
+        if (page === 'prospeccoes') {
+            loadPage('prospeccoes');
         }
     });
 });
