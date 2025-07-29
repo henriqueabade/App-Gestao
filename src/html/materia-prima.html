@@ -8,6 +8,8 @@
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <!-- Estilos específicos do módulo -->
     <link rel="stylesheet" href="../css/materia-prima.css">
+    <!-- Scrollbar global -->
+    <link rel="stylesheet" href="../styles/scroll.css">
 </head>
 <body class="text-white p-6">
     <div class="max-w-7xl mx-auto">
@@ -29,7 +31,8 @@
 
         <!-- Materials Table -->
         <div class="glass-surface rounded-xl overflow-hidden shadow-lg animate-fade-in-up">
-            <div class="overflow-x-auto">
+            <!-- Envoltório para scroll horizontal da tabela -->
+            <div class="tabela-container">
                 <table class="w-full">
                     <thead class="glass-surface sticky top-0">
                         <tr>

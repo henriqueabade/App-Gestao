@@ -9,6 +9,8 @@
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <!-- Estilos específicos do módulo -->
     <link rel="stylesheet" href="../css/usuarios.css">
+    <!-- Scrollbar global -->
+    <link rel="stylesheet" href="../styles/scroll.css">
 </head>
 <body class="text-white p-6">
     <div class="max-w-7xl mx-auto">
@@ -98,7 +100,8 @@
 
         <!-- Users Table -->
         <div class="glass-surface rounded-xl overflow-hidden animate-fade-in-up">
-            <div class="overflow-x-auto">
+            <!-- Envoltório para scroll horizontal da tabela -->
+            <div class="tabela-container">
                 <table class="w-full">
                     <thead class="sticky top-0 bg-gray-50">
                         <tr>
