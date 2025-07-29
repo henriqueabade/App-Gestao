@@ -14,9 +14,10 @@
     --neutral-500: #6b7280;
 }
 
+/* Uso do background global da aplicação */
 body {
-    background: linear-gradient(135deg, var(--color-bg-deep) 0%, #1a0009 100%);
-    min-height: 100vh;
+    background: transparent;
+    min-height: auto;
 }
 
 .glass-surface {
