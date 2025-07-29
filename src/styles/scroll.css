@@ -55,3 +55,38 @@ body::-webkit-scrollbar-thumb:hover,
 #content::-webkit-scrollbar-thumb:hover {
   background-color: var(--color-primary-hover); /* slight highlight */
 }
+
+/*--------------------------------------------------------------
+  Tabela container
+  - Permite scroll horizontal discreto apenas no bloco da tabela
+  - Mantém a largura da página sem estourar o layout
+--------------------------------------------------------------*/
+.tabela-container {
+  overflow-x: auto;             /* habilita rolagem apenas no eixo X */
+  max-width: 100%;              /* garante que respeite o limite visual */
+}
+
+/* Firefox scrollbar para tabelas */
+.tabela-container {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-primary) rgba(255, 255, 255, 0.1);
+}
+
+/* WebKit scrollbar para tabelas */
+.tabela-container::-webkit-scrollbar {
+  height: 6px;                  /* barra horizontal fina */
+}
+
+.tabela-container::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.1);
+  box-shadow: inset 0 0 4px rgba(0, 0, 0, 0.1); /* sombra sutil */
+}
+
+.tabela-container::-webkit-scrollbar-thumb {
+  background-color: var(--color-primary); /* cor amarela do projeto */
+  border-radius: 9999px;
+}
+
+.tabela-container::-webkit-scrollbar-thumb:hover {
+  background-color: var(--color-primary-hover);
+}
