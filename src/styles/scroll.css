@@ -11,35 +11,49 @@ html,
 body,
 #app,
 #mainContent {
-  overflow: hidden;            /* evita scroll duplicado */
+  overflow: hidden; /* evita scroll duplicado */
   overflow-x: hidden;
 }
 
-/* Containers internos podem rolar verticalmente */
+/* Containers internos preparados para rolagem */
 #content,
 .scroll-container {
-  overflow-y: auto;
-  max-height: calc(100vh - 56px); /* 56px = altura do header (h-14) */
-  scrollbar-width: thin;          /* Firefox */
+  overflow-y: hidden;     /* barra apenas após interação */
+  scrollbar-width: thin;  /* Firefox */
   scrollbar-color: #f0c94c transparent;
 }
 
+/* Respeita altura do cabeçalho principal */
+#content {
+  max-height: calc(100vh - 56px); /* 56px = altura aproximada do header */
+}
+
+/* Páginas independentes ocupam toda a viewport */
+.scroll-container {
+  max-height: 100vh;
+}
+
+/* Ativa rolagem somente quando pronto e em foco/hover */
+.scroll-ready:hover,
+.scroll-ready:focus-within {
+  overflow-y: auto;
+}
+
 /* WebKit scrollbar base */
-#content::-webkit-scrollbar,
-.scroll-container::-webkit-scrollbar {
-  width: 8px;      /* barra fina */
-  height: 0;       /* esconde horizontal */
+.scroll-ready::-webkit-scrollbar {
+  width: 8px; /* fino e moderno */
+  height: 0; /* esconde horizontal */
 }
 
 /* Trilha transparente */
-#content::-webkit-scrollbar-track,
-.scroll-container::-webkit-scrollbar-track {
+#content.scroll-ready::-webkit-scrollbar-track,
+.scroll-container.scroll-ready::-webkit-scrollbar-track {
   background: transparent;
 }
 
 /* Thumb amarelo arredondado */
-#content::-webkit-scrollbar-thumb,
-.scroll-container::-webkit-scrollbar-thumb {
+#content.scroll-ready::-webkit-scrollbar-thumb,
+.scroll-container.scroll-ready::-webkit-scrollbar-thumb {
   background-color: #f0c94c; /* amarelo do projeto */
   border-radius: 8px;
 }
