@@ -5,6 +5,13 @@ const icon = checkBtn ? checkBtn.querySelector('i') : null;
 let intervalId;
 let checking = false;
 
+function showLoading() {
+  if (!checkBtn || !icon) return;
+  checkBtn.style.color = 'var(--color-blue)';
+  icon.classList.remove('fa-check');
+  icon.classList.add('fa-sync-alt', 'rotating');
+}
+
 function setStatus(connected) {
   if (!checkBtn || !icon) return;
   if (connected) {
@@ -39,6 +46,7 @@ function handleDisconnect(reason) {
 async function verifyConnection() {
   if (checking || !checkBtn || !icon) return;
   checking = true;
+  showLoading();
   try {
     const result = await window.electronAPI.checkPin();
     if (result && result.success) {
