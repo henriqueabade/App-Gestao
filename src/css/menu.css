@@ -54,20 +54,29 @@ body {
     }
 }
 
-.sidebar-item {
-    transition: all 150ms ease;
+.sidebar-item,
+.submenu-item {
+    /* Default menu color and smooth transition */
+    color: var(--color-violet);
+    transition: color 0.2s ease, background 150ms ease;
     cursor: pointer;
 }
 
+/* Icons and text follow parent color */
+.sidebar-item i, .submenu-item i,
+.sidebar-item span, .submenu-item span {
+    color: inherit;
+    transition: color 0.2s ease;
+}
+/* Highlight item on hover */
 .sidebar-item:hover { background: rgba(182, 160, 62, 0.1); }
+
+/* Active/selected state */
 .sidebar-item.active,
 .submenu-item.active {
     background: rgba(182, 160, 62, 0.15);
-}
-
-.sidebar-item.active span,
-.submenu-item.active span {
-    color: var(--color-primary);
+    color: #ffffff;
+    font-weight: 600;
 }
 
 .sidebar-expanded { width: 240px; }
