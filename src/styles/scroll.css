@@ -18,10 +18,19 @@ body,
 /* Containers internos preparados para rolagem */
 #content,
 .scroll-container {
-  overflow-y: hidden;             /* barra apenas após interação */
-  max-height: calc(100vh - 56px); /* 56px = altura do header (h-14) */
-  scrollbar-width: thin;          /* Firefox */
+  overflow-y: hidden;     /* barra apenas após interação */
+  scrollbar-width: thin;  /* Firefox */
   scrollbar-color: #f0c94c transparent;
+}
+
+/* Respeita altura do cabeçalho principal */
+#content {
+  max-height: calc(100vh - 56px); /* 56px = altura aproximada do header */
+}
+
+/* Páginas independentes ocupam toda a viewport */
+.scroll-container {
+  max-height: 100vh;
 }
 
 /* Ativa rolagem somente quando pronto e em foco/hover */
@@ -31,8 +40,8 @@ body,
 }
 
 /* WebKit scrollbar base */
-.scroll-ready::-webkit-scrollbar {
-  width: 6px; /* mais ao canto e discreta */
+.scroll-ready::-webkit-scrollbar {
+  width: 8px; /* fino e moderno */
   height: 0; /* esconde horizontal */
 }
 
