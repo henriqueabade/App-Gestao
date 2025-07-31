@@ -58,7 +58,6 @@ function expandSidebar() {
         mainContent.style.marginLeft = window.innerWidth >= 1024 ? '240px' : '200px';
         if (companyName) companyName.style.display = 'inline';
         if (logoContainer) {
-            logoContainer.classList.remove('justify-center');
             logoContainer.style.width = '';
         }
         sidebarExpanded = true;
