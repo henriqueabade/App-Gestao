@@ -7,6 +7,17 @@ const menuToggle = document.getElementById('menuToggle');
 const crmToggle = document.getElementById('crmToggle');
 const crmSubmenu = document.getElementById('crmSubmenu');
 const chevron = crmToggle.querySelector('.chevron');
+const logoContainer = document.getElementById('logoContainer');
+const companyName = document.getElementById('companyName');
+
+// Ajusta logo e nome conforme estado inicial da sidebar
+if (sidebar && !sidebar.classList.contains('sidebar-expanded')) {
+    if (companyName) companyName.style.display = 'none';
+    if (logoContainer) {
+        logoContainer.classList.add('justify-center');
+        logoContainer.style.width = '64px';
+    }
+}
 
 // Carrega páginas modulares dentro da div#content
 function loadPage(page) {
@@ -45,6 +56,11 @@ function expandSidebar() {
         sidebar.classList.remove('sidebar-collapsed');
         sidebar.classList.add('sidebar-expanded');
         mainContent.style.marginLeft = window.innerWidth >= 1024 ? '240px' : '200px';
+        if (companyName) companyName.style.display = 'inline';
+        if (logoContainer) {
+            logoContainer.classList.remove('justify-center');
+            logoContainer.style.width = '';
+        }
         sidebarExpanded = true;
     }
 }
@@ -54,6 +70,11 @@ function collapseSidebar() {
         sidebar.classList.remove('sidebar-expanded');
         sidebar.classList.add('sidebar-collapsed');
         mainContent.style.marginLeft = '64px';
+        if (companyName) companyName.style.display = 'none';
+        if (logoContainer) {
+            logoContainer.classList.add('justify-center');
+            logoContainer.style.width = '64px';
+        }
         sidebarExpanded = false;
     }
     // Close CRM submenu when sidebar collapses
