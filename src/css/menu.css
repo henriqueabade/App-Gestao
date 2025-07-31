@@ -184,3 +184,15 @@ header.glass-surface {
 #exitOverlay.visible {
     opacity: 1;
 }
+
+/* Ajuste do tamanho da Logo SideBar */
+#logoContainer {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+#logoContainer img {
+    width: 48px !important;
+    height: auto !important;
+}
