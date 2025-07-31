@@ -93,44 +93,6 @@ header.glass-surface {
 .sidebar-expanded { width: 240px; }
 .sidebar-collapsed { width: 64px; }
 
-/* Container for logo + brand on sidebar */
-.brand {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    height: 64px; /* same as collapsed width for perfect centering */
-    color: #ffffff;
-    font-family: inherit;
-    transition: all 0.2s ease;
-}
-
-.brand__logo {
-    width: 40px;
-    height: 40px;
-    filter: invert(1); /* ensures white logo when using dark asset */
-    transition: all 0.2s ease;
-}
-
-.brand__text {
-    margin-left: 0.75rem; /* similar spacing as menu items */
-    white-space: nowrap;
-    transition: all 0.2s ease;
-}
-
-/* Hide brand text on collapsed sidebar */
-.sidebar-collapsed .brand__text {
-    width: 0;
-    opacity: 0;
-    overflow: hidden;
-    margin-left: 0;
-}
-
-/* Show brand text when expanded */
-.sidebar-expanded .brand__text {
-    width: auto;
-    opacity: 1;
-}
-
 .sidebar-text {
     opacity: 0;
     transform: translateX(-10px);
