@@ -67,6 +67,5 @@ async function verifyConnection() {
 
 // verifica ao iniciar e a cada 10s
 verifyConnection();
-if (checkBtn) checkBtn.addEventListener('click', verifyConnection);
 intervalId = setInterval(verifyConnection, 10000);
 window.stopServerCheck = () => clearInterval(intervalId);
