@@ -34,9 +34,8 @@ body,
   max-height: 100vh;
 }
 
-/* Ativa rolagem somente quando pronto e em foco/hover */
-.scroll-ready:hover,
-.scroll-ready:focus-within {
+/* Ativa rolagem automaticamente quando o módulo estiver pronto */
+.scroll-ready {
   overflow-y: auto;
 }
 
