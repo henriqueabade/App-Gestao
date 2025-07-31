@@ -3,7 +3,7 @@
   ----------------------
   - Impede rolagem em html/body e containers principais
   - Aplica estilo único para cada módulo usando .modulo-container
-  - Scrollbar fina, à esquerda, thumb amarelo e setas discretas
+  - Scrollbar fina e discreta que aparece apenas com hover
 */
 
 html,
@@ -24,22 +24,23 @@ body,
 /* Área com rolagem individual de cada módulo */
 .modulo-container {
   max-height: calc(100vh - var(--header-height));
-  overflow-y: auto;
+  overflow-y: hidden;              /* scroll ativado via classe */
   overflow-x: hidden;
   scrollbar-width: thin;           /* Firefox */
-  scrollbar-color: #f0c94c transparent;
+  scrollbar-color: transparent transparent; /* oculto por padrão */
   scrollbar-gutter: stable;
-  direction: rtl;                  /* scrollbar à esquerda */
 }
 
-/* Conteúdo normalizado para leitura */
-.modulo-container > * {
-  direction: ltr;
+/* Classe aplicada via script quando há overflow */
+.modulo-container.has-scroll {
+  overflow-y: auto;
 }
+
+
 
 /* Base da scrollbar no WebKit */
 .modulo-container::-webkit-scrollbar {
-  width: 8px;
+  width: 6px;                    /* largura fina */
   height: 0;
 }
 
@@ -52,30 +53,16 @@ body,
 .modulo-container::-webkit-scrollbar-thumb {
   background-color: #f0c94c;
   border-radius: 8px;
+  opacity: 0;                     /* invisível até hover */
+  transition: opacity 0.2s ease;
 }
 
-/* Botões de seta para acessibilidade */
+/* Exibe thumb somente durante o hover no container */
+.modulo-container:hover::-webkit-scrollbar-thumb {
+  opacity: 1;
+}
+
+/* Oculta botões de seta da scrollbar */
 .modulo-container::-webkit-scrollbar-button {
-  width: 8px;
-  height: 8px;
-  background: transparent;
-}
-
-.modulo-container::-webkit-scrollbar-button:vertical:start:decrement {
-  border-left: 4px solid transparent;
-  border-right: 4px solid transparent;
-  border-bottom: 6px solid #f0c94c;
-  margin-bottom: 2px;
-}
-
-.modulo-container::-webkit-scrollbar-button:vertical:end:increment {
-  border-left: 4px solid transparent;
-  border-right: 4px solid transparent;
-  border-top: 6px solid #f0c94c;
-  margin-top: 2px;
-}
-
-.modulo-container::-webkit-scrollbar-button:vertical:start:increment,
-.modulo-container::-webkit-scrollbar-button:vertical:end:decrement {
   display: none;
 }
