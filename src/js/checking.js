@@ -1,46 +1,72 @@
-// Verificação periódica de conectividade com o backend
+// Verificação periódica de conectividade com o backend e ao banco de dados
 // Usa o botão de sincronização existente para exibir o status
 const checkBtn = document.getElementById('networkCheck');
 const icon = checkBtn ? checkBtn.querySelector('i') : null;
-let checkTimeout;
+let intervalId;
+let checking = false;
 
-/**
- * Consulta o endpoint /status para verificar se o servidor responde.
- * Altera a cor do ícone conforme o resultado.
- */
+function showSpinner(color = 'var(--color-blue)') {
+  if (!checkBtn || !icon) return;
+  checkBtn.style.color = color;
+  icon.classList.remove('fa-check');
+  icon.classList.add('fa-sync-alt', 'rotating');
+}
+
+function showSuccess() {
+  if (!checkBtn || !icon) return;
+  icon.classList.remove('fa-sync-alt', 'rotating');
+  icon.classList.add('fa-check');
+  checkBtn.style.color = 'var(--color-green)';
+  setTimeout(() => {
+    if (!checking) {
+      showSpinner();
+    }
+  }, 1000);
+}
+
+function showFailure() {
+  showSpinner('var(--color-red)');
+}
+
+function handleDisconnect(reason) {
+  showFailure();
+  if (window.stopServerCheck) window.stopServerCheck();
+  if (reason === 'pin') {
+    localStorage.setItem('pinChanged', '1');
+  } else if (reason === 'offline') {
+    localStorage.setItem('offlineDisconnect', '1');
+  }
+  if (window.collectState && window.electronAPI && window.electronAPI.saveState) {
+    window.electronAPI.saveState(window.collectState());
+  }
+  if (window.electronAPI) {
+    window.electronAPI.openLoginHidden();
+    window.electronAPI.logout();
+  }
+}
+
 async function verifyConnection() {
-    if (!checkBtn || !icon) return;
-    if (!navigator.onLine) {
-        checkBtn.style.color = 'var(--color-red)';
-        icon.classList.remove('rotating');
-        icon.classList.remove('fa-check');
-        icon.classList.add('fa-sync-alt');
-        return;
+  if (checking || !checkBtn || !icon) return;
+  checking = true;
+  showSpinner();
+  try {
+    const result = await window.electronAPI.checkPin();
+    if (result && result.success) {
+      showSuccess();
+    } else if (result && (result.reason === 'pin' || result.reason === 'offline')) {
+      handleDisconnect(result.reason);
+    } else {
+      showFailure();
     }
-    try {
-        const resp = await fetch('http://localhost:3000/status', { cache: 'no-store' });
-        if (resp.ok) {
-            checkBtn.style.color = 'var(--color-green)';
-            icon.classList.remove('rotating');
-            icon.classList.remove('fa-sync-alt');
-            icon.classList.add('fa-check');
-            clearTimeout(checkTimeout);
-            checkTimeout = setTimeout(() => {
-                icon.classList.remove('fa-check');
-                icon.classList.add('fa-sync-alt', 'rotating');
-            }, 2000);
-        } else {
-            throw new Error('Status não OK');
-        }
-    } catch (err) {
-        checkBtn.style.color = 'var(--color-red)';
-        icon.classList.remove('fa-check');
-        icon.classList.remove('rotating');
-        icon.classList.add('fa-sync-alt');
-    }
+  } catch (err) {
+    showFailure();
+  } finally {
+    checking = false;
+  }
 }
 
 // verifica ao iniciar e a cada 10s
 verifyConnection();
 if (checkBtn) checkBtn.addEventListener('click', verifyConnection);
-setInterval(verifyConnection, 10000);
+intervalId = setInterval(verifyConnection, 10000);
+window.stopServerCheck = () => clearInterval(intervalId);
