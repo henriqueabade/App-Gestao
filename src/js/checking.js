@@ -5,29 +5,31 @@ const icon = checkBtn ? checkBtn.querySelector('i') : null;
 let intervalId;
 let checking = false;
 
-function showLoading() {
+function showSpinner(color = 'var(--color-blue)') {
   if (!checkBtn || !icon) return;
-  checkBtn.style.color = 'var(--color-blue)';
+  checkBtn.style.color = color;
   icon.classList.remove('fa-check');
   icon.classList.add('fa-sync-alt', 'rotating');
 }
 
-function setStatus(connected) {
+function showSuccess() {
   if (!checkBtn || !icon) return;
-  if (connected) {
-    checkBtn.style.color = 'var(--color-green)';
-    icon.classList.remove('fa-sync-alt', 'rotating');
-    icon.classList.add('fa-check');
-  } else {
-    checkBtn.style.color = 'var(--color-red)';
-    icon.classList.remove('fa-check');
-    icon.classList.remove('rotating');
-    icon.classList.add('fa-sync-alt');
-  }
+  icon.classList.remove('fa-sync-alt', 'rotating');
+  icon.classList.add('fa-check');
+  checkBtn.style.color = 'var(--color-green)';
+  setTimeout(() => {
+    if (!checking) {
+      showSpinner();
+    }
+  }, 1000);
+}
+
+function showFailure() {
+  showSpinner('var(--color-red)');
 }
 
 function handleDisconnect(reason) {
-  setStatus(false);
+  showFailure();
   if (window.stopServerCheck) window.stopServerCheck();
   if (reason === 'pin') {
     localStorage.setItem('pinChanged', '1');
@@ -46,18 +48,18 @@ function handleDisconnect(reason) {
 async function verifyConnection() {
   if (checking || !checkBtn || !icon) return;
   checking = true;
-  showLoading();
+  showSpinner();
   try {
     const result = await window.electronAPI.checkPin();
     if (result && result.success) {
-      setStatus(true);
+      showSuccess();
     } else if (result && (result.reason === 'pin' || result.reason === 'offline')) {
       handleDisconnect(result.reason);
     } else {
-      setStatus(false);
+      showFailure();
     }
   } catch (err) {
-    setStatus(false);
+    showFailure();
   } finally {
     checking = false;
   }
