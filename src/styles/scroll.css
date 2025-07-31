@@ -40,7 +40,7 @@ body,
 }
 
 /* WebKit scrollbar base */
-.scroll-ready::-webkit-scrollbar {
+.scroll-ready::-webkit-scrollbar {
   width: 8px; /* fino e moderno */
   height: 0; /* esconde horizontal */
 }
