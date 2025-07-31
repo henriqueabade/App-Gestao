@@ -185,7 +185,7 @@ header.glass-surface {
     opacity: 1;
 }
 
-/* Ajuste do tamanho da Logo SideBar */
+/* Ajuste do tamanho da Logo no topo */
 #logoContainer {
     display: flex;
     justify-content: center;
@@ -195,4 +195,24 @@ header.glass-surface {
 #logoContainer img {
     width: 48px !important;
     height: auto !important;
+}
+
+/* Logo dentro da sidebar */
+#sidebarLogo {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+#sidebarLogo img {
+    width: 48px;
+    height: auto;
+}
+
+.sidebar-collapsed #sidebarLogoText {
+    display: none;
+}
+
+.sidebar-expanded #sidebarLogoText {
+    display: inline;
 }
