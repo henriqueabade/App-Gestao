@@ -26,9 +26,9 @@ body,
   max-height: calc(100vh - var(--header-height));
   overflow-y: hidden;              /* scroll ativado via classe */
   overflow-x: hidden;
-  scrollbar-width: thin;           /* Firefox */
-  scrollbar-color: transparent transparent; /* oculto por padrão */
-  scrollbar-gutter: stable;
+  scrollbar-width: none;           /* oculto até hover */
+  scrollbar-color: transparent transparent;
+  scrollbar-gutter: stable;        /* evita salto ao mostrar barra */
 }
 
 /* Classe aplicada via script quando há overflow */
@@ -40,8 +40,13 @@ body,
 
 /* Base da scrollbar no WebKit */
 .modulo-container::-webkit-scrollbar {
-  width: 6px;                    /* largura fina */
+  width: 0;                       /* invisível até hover */
   height: 0;
+}
+
+/* Largura da barra durante hover */
+.modulo-container:hover::-webkit-scrollbar {
+  width: 4px;                     /* ultrafina */
 }
 
 /* Trilha transparente */
@@ -60,6 +65,12 @@ body,
 /* Exibe thumb somente durante o hover no container */
 .modulo-container:hover::-webkit-scrollbar-thumb {
   opacity: 1;
+}
+
+/* Estilo Firefox durante hover */
+.modulo-container:hover {
+  scrollbar-width: thin;
+  scrollbar-color: #f0c94c transparent;
 }
 
 /* Oculta botões de seta da scrollbar */
