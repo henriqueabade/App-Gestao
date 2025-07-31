@@ -90,7 +90,8 @@ function toggleCrmSubmenu() {
     } else {
         crmSubmenu.classList.remove('open');
         chevron.classList.remove('rotated');
-        if (window.innerWidth >= 1024) setTimeout(collapseSidebar, 100);
+        // Do not auto-collapse the sidebar when closing the CRM submenu
+        // Sidebar will collapse naturally on mouse leave if needed
     }
 }
 crmToggle.addEventListener('click', toggleCrmSubmenu);
