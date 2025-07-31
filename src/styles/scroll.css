@@ -1,57 +1,45 @@
 /*
-  Global scrollbar customization
-  - Hides horizontal scrollbars on key containers
-  - Styles vertical scrollbars with the project's yellow color
+  Global scrollbar rules
+  ----------------------
+  - Desativa qualquer scroll na página principal
+  - Permite rolagem apenas dentro de containers modulares
+  - Estiliza as barras de rolagem seguindo a identidade visual
 */
 
-/* Prevent horizontal scrolling */
+/* Desativa scroll geral no corpo da aplicação */
 html,
 body,
-#mainContent,
-#content {
+#app,
+#mainContent {
+  overflow: hidden;            /* evita scroll duplicado */
   overflow-x: hidden;
 }
 
-/* Firefox scrollbar definitions */
-html,
-body,
-#mainContent,
-#content {
-  scrollbar-width: thin; /* slim vertical scrollbar */
-  scrollbar-color: var(--color-primary) rgba(255, 255, 255, 0.1); /* thumb and track colors */
+/* Containers internos podem rolar verticalmente */
+#content,
+.scroll-container {
+  overflow-y: auto;
+  max-height: calc(100vh - 56px); /* 56px = altura do header (h-14) */
+  scrollbar-width: thin;          /* Firefox */
+  scrollbar-color: #f0c94c transparent;
 }
 
-/* WebKit scrollbar styles */
-html::-webkit-scrollbar,
-body::-webkit-scrollbar,
-#mainContent::-webkit-scrollbar,
-#content::-webkit-scrollbar {
-  width: 8px; /* thin width */
-  height: 0; /* hide horizontal scrollbar */
+/* WebKit scrollbar base */
+#content::-webkit-scrollbar,
+.scroll-container::-webkit-scrollbar {
+  width: 8px;      /* barra fina */
+  height: 0;       /* esconde horizontal */
 }
 
-/* Scrollbar track */
-html::-webkit-scrollbar-track,
-body::-webkit-scrollbar-track,
-#mainContent::-webkit-scrollbar-track,
-#content::-webkit-scrollbar-track {
-  background: rgba(255, 255, 255, 0.1); /* neutral background */
+/* Trilha transparente */
+#content::-webkit-scrollbar-track,
+.scroll-container::-webkit-scrollbar-track {
+  background: transparent;
 }
 
-/* Scrollbar thumb */
-html::-webkit-scrollbar-thumb,
-body::-webkit-scrollbar-thumb,
-#mainContent::-webkit-scrollbar-thumb,
-#content::-webkit-scrollbar-thumb {
-  background-color: var(--color-primary); /* project yellow */
-  border-radius: 9999px; /* fully rounded */
-  border: 2px solid transparent;
-  background-clip: content-box;
-}
-
-html::-webkit-scrollbar-thumb:hover,
-body::-webkit-scrollbar-thumb:hover,
-#mainContent::-webkit-scrollbar-thumb:hover,
-#content::-webkit-scrollbar-thumb:hover {
-  background-color: var(--color-primary-hover); /* slight highlight */
+/* Thumb amarelo arredondado */
+#content::-webkit-scrollbar-thumb,
+.scroll-container::-webkit-scrollbar-thumb {
+  background-color: #f0c94c; /* amarelo do projeto */
+  border-radius: 8px;
 }
