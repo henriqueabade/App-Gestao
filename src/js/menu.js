@@ -143,7 +143,10 @@ document.querySelectorAll('.sidebar-item[data-page], .submenu-item[data-page]').
     item.addEventListener('click', function (e) {
         e.stopPropagation();
         // Remove destaque de todos os itens antes de aplicar ao clicado
+
         document.querySelectorAll('.sidebar-item, .submenu-item').forEach(i => i.classList.remove('active'));
+        // Marca item clicado como ativo para aplicar o estilo de destaque
+
         this.classList.add('active');
 
         // Fecha submenu do CRM ao navegar para outros módulos
