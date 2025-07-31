@@ -21,6 +21,7 @@ body,
   overflow-y: hidden;     /* barra apenas após interação */
   scrollbar-width: thin;  /* Firefox */
   scrollbar-color: #f0c94c transparent;
+  scrollbar-gutter: stable; /* evita deslocamento ao mostrar a barra */
 }
 
 /* Respeita altura do cabeçalho principal */
@@ -56,4 +57,30 @@ body,
 .scroll-container.scroll-ready::-webkit-scrollbar-thumb {
   background-color: #f0c94c; /* amarelo do projeto */
   border-radius: 8px;
+}
+
+/* Setas discretas para facilitar uso em touchpads */
+.scroll-ready::-webkit-scrollbar-button {
+  width: 8px;
+  height: 8px;
+  background: transparent;
+}
+
+.scroll-ready::-webkit-scrollbar-button:vertical:start:decrement {
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+  border-bottom: 6px solid #f0c94c;
+  margin-bottom: 2px;
+}
+
+.scroll-ready::-webkit-scrollbar-button:vertical:end:increment {
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+  border-top: 6px solid #f0c94c;
+  margin-top: 2px;
+}
+
+.scroll-ready::-webkit-scrollbar-button:vertical:start:increment,
+.scroll-ready::-webkit-scrollbar-button:vertical:end:decrement {
+  display: none; /* oculta botões extras */
 }
