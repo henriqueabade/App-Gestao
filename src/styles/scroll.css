@@ -34,6 +34,7 @@ body,
 /* Classe aplicada via script quando há overflow */
 .modulo-container.has-scroll {
   overflow-y: auto;
+  padding-right: 5px;              /* offset de 5px para a barra */
 }
 
 
@@ -46,7 +47,7 @@ body,
 
 /* Largura da barra durante hover */
 .modulo-container:hover::-webkit-scrollbar {
-  width: 4px;                     /* ultrafina */
+  width: 3px;                     /* ultrafina de 3px */
 }
 
 /* Trilha transparente */
@@ -73,7 +74,17 @@ body,
   scrollbar-color: #f0c94c transparent;
 }
 
-/* Oculta botões de seta da scrollbar */
+/* Botões de seta visíveis */
 .modulo-container::-webkit-scrollbar-button {
-  display: none;
+  width: 3px;
+  height: 12px;
+  background-color: transparent;
+}
+.modulo-container::-webkit-scrollbar-button:vertical:decrement {
+  background: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMCA2Ij48cG9seWdvbiBwb2ludHM9IjUsMCAxMCw2IDAsNiIgZmlsbD0iI2YwYzk0YyIvPjwvc3ZnPg==') no-repeat center;
+  border-radius: 6px;               /* setas arredondadas */
+}
+.modulo-container::-webkit-scrollbar-button:vertical:increment {
+  background: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMCA2Ij48cG9seWdvbiBwb2ludHM9IjAsMCAxMCwwIDUsNiIgZmlsbD0iI2YwYzk0YyIvPjwvc3ZnPg==') no-repeat center;
+  border-radius: 6px;               /* setas arredondadas */
 }
