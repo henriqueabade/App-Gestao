@@ -219,13 +219,15 @@ header.glass-surface {
     transition: all 0.2s ease;
 }
 
-.sidebar.collapsed .brand__text {
+.sidebar-collapsed .brand__text {
+    /* Esconde texto ao recolher */
     opacity: 0;
     width: 0;
     overflow: hidden;
 }
 
-.sidebar.collapsed .brand {
+.sidebar-collapsed .brand {
+    /* Centraliza a logo na coluna de ícones */
     justify-content: center;
     padding-left: 0;
 }
