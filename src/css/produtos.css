@@ -79,7 +79,7 @@ body {
     display: flex;
     flex-wrap: wrap;
     gap: 1rem;
-    align-items: center;
+    align-items: flex-start;
 }
 .filter-field {
     display: flex;
@@ -89,11 +89,21 @@ body {
 .filter-field select {
     height: 3rem;
 }
-.filter-checkbox {
+.price-group {
     display: flex;
-    align-items: center;
+    flex-direction: column;
     gap: 0.5rem;
-    height: 3rem;
+}
+.price-row {
+    display: flex;
+    gap: 1rem;
+    align-items: flex-start;
+}
+.price-field {
+    width: 180px;
+}
+.filter-toggle {
+    margin-top: 1.75rem;
 }
 .filter-actions {
     display: flex;
@@ -102,6 +112,41 @@ body {
 .filter-actions button {
     height: 3rem;
 }
-.max-price input {
-    min-width: 8rem;
+.toggle {
+    appearance: none;
+    width: 3rem;
+    height: 1.5rem;
+    background: var(--color-bordeaux);
+    border-radius: 9999px;
+    position: relative;
+    cursor: pointer;
+    transition: background 150ms ease;
+}
+.toggle::before {
+    content: "";
+    position: absolute;
+    top: 0.125rem;
+    left: 0.125rem;
+    width: 1.25rem;
+    height: 1.25rem;
+    background: white;
+    border-radius: 9999px;
+    transition: transform 150ms ease;
+}
+.toggle:checked {
+    background: var(--color-primary);
+}
+.toggle:checked::before {
+    transform: translateX(1.5rem);
+}
+@media (max-width: 960px) {
+    .filter-bar {
+        flex-direction: column;
+    }
+    .price-row {
+        flex-direction: column;
+    }
+    .price-field {
+        width: 100%;
+    }
 }
