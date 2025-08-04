@@ -77,25 +77,19 @@ function collapseSidebar() {
         }
         sidebarExpanded = false;
     }
-    // Close CRM submenu when sidebar collapses
-    if (crmExpanded) {
-        crmSubmenu.classList.remove('open');
-        chevron.classList.remove('rotated');
-        crmExpanded = false;
-    }
+    // Submenu CRM permanece aberto; fechamento apenas via clique
 }
 
 // Comportamento desktop: expande ao passar o mouse
+// Mouseleave removido para evitar fechamento automático do submenu
 if (window.innerWidth >= 1024) {
     sidebar.addEventListener('mouseenter', expandSidebar);
-    sidebar.addEventListener('mouseleave', collapseSidebar);
 }
 
 // Alterna sidebar no mobile
 menuToggle?.addEventListener('click', () => {
     if (sidebarExpanded) {
         collapseSidebar();
-        if (crmExpanded) toggleCrmSubmenu();
     } else {
         expandSidebar();
     }
@@ -111,8 +105,7 @@ function toggleCrmSubmenu() {
     } else {
         crmSubmenu.classList.remove('open');
         chevron.classList.remove('rotated');
-        // Do not auto-collapse the sidebar when closing the CRM submenu
-        // Sidebar will collapse naturally on mouse leave if needed
+        // Submenu fecha apenas em ações explícitas
     }
 }
 crmToggle.addEventListener('click', toggleCrmSubmenu);
@@ -237,10 +230,8 @@ window.addEventListener('load', () => {
 window.addEventListener('resize', () => {
     if (window.innerWidth < 1024) {
         sidebar.removeEventListener('mouseenter', expandSidebar);
-        sidebar.removeEventListener('mouseleave', collapseSidebar);
     } else {
         sidebar.addEventListener('mouseenter', expandSidebar);
-        sidebar.addEventListener('mouseleave', collapseSidebar);
     }
     if (sidebarExpanded) {
         mainContent.style.marginLeft = window.innerWidth >= 1024 ? '240px' : '200px';
