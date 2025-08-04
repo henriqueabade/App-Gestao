@@ -197,22 +197,33 @@ header.glass-surface {
     height: auto !important;
 }
 
-/* Logo dentro da sidebar */
-#sidebarLogo {
+/* Logo única da sidebar */
+.brand {
     display: flex;
     justify-content: center;
     align-items: center;
+    transition: all 0.2s ease;
 }
 
-#sidebarLogo img {
+.brand__logo {
     width: 48px;
     height: auto;
+    transition: all 0.2s ease;
 }
 
-.sidebar-collapsed #sidebarLogoText {
-    display: none;
+.brand__text {
+    margin-left: 0.5rem;
+    font-weight: 600;
+    color: #fff;
+    transition: all 0.2s ease;
 }
 
-.sidebar-expanded #sidebarLogoText {
-    display: inline;
+.sidebar.collapsed .brand__text {
+    opacity: 0;
+    width: 0;
+    overflow: hidden;
+}
+
+.sidebar.collapsed .brand {
+    justify-content: center;
 }
