@@ -42,6 +42,7 @@ function loadPage(page) {
             const script = document.createElement('script');
             script.id = 'page-script';
             script.src = `../js/${page}.js`;
+            script.onload = () => document.dispatchEvent(new Event('module-change'));
             document.body.appendChild(script);
         });
 }
@@ -141,6 +142,7 @@ async function loadPage(page) {
     try {
         const resp = await fetch(`../html/${page}.html`);
         container.innerHTML = await resp.text();
+        document.dispatchEvent(new Event('module-change'));
 
         document.getElementById('page-style')?.remove();
         document.getElementById('page-script')?.remove();
@@ -153,6 +155,7 @@ async function loadPage(page) {
         const script = document.createElement('script');
         script.id = 'page-script';
         script.src = `../js/${page}.js`;
+        script.onload = () => document.dispatchEvent(new Event('module-change'));
         document.body.appendChild(script);
     } catch (err) {
         console.error('Erro ao carregar página', page, err);
