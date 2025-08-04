@@ -23,24 +23,19 @@ body,
 
 /* Área com rolagem individual de cada módulo */
 .modulo-container {
-  height: calc(100vh - var(--header-height)); /* corrige altura do container */
+  height: calc(100vh - var(--header-height)); /* altura ajustada até o rodapé */
   overflow-y: hidden;              /* scroll ativado via classe */
   overflow-x: hidden;
   scrollbar-width: none;           /* oculto até hover */
   scrollbar-color: transparent transparent;
   scrollbar-gutter: stable;        /* evita salto ao mostrar barra */
-  direction: rtl;                  /* posiciona barra à esquerda */
   box-sizing: border-box;
-}
-
-.modulo-container > * {
-  direction: ltr;
 }
 
 /* Classe aplicada via script quando há overflow */
 .modulo-container.has-scroll {
   overflow-y: auto;
-  padding-left: 5px;               /* desloca a barra 5px da esquerda */
+  padding-right: 5px;              /* reposiciona barra 5px da direita */
 }
 
 
