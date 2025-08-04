@@ -52,53 +52,42 @@
 
         <!-- Painel de filtros e estatísticas -->
         <div class="glass-surface rounded-xl p-6 mb-6 animate-fade-in-up">
-            <div class="flex flex-wrap gap-6">
+            <!-- Barra de filtros compacta -->
+            <div class="filtro-contatos">
                 <!-- Busca -->
-                <div class="flex-1 min-w-[250px]">
-                    <label class="block text-sm font-medium mb-2 text-white">Buscar Contato</label>
-                    <input type="text" placeholder="Nome / Empresa" class="input-glass text-white rounded-md px-4 py-3 w-full">
+                <div class="flex flex-col flex-1 min-w-[250px]">
+                    <label class="block text-sm font-medium mb-1 text-white">Buscar Contato</label>
+                    <input type="text" placeholder="Nome / Empresa" class="input-glass text-white rounded-md px-4 h-12 w-full">
                 </div>
 
-                <!-- Filtros por tipo de contato -->
-                <div class="flex-1 min-w-[200px]">
-                    <label class="block text-sm font-medium mb-2 text-white">Tipo de Contato</label>
-                    <div class="space-y-2">
-                        <label class="flex items-center text-sm text-white">
-                            <input type="checkbox" class="mr-2 rounded" style="accent-color: var(--color-primary)">
-                            Fornecedor
-                        </label>
-                        <label class="flex items-center text-sm text-white">
-                            <input type="checkbox" class="mr-2 rounded" style="accent-color: var(--color-primary)">
-                            Parceiro
-                        </label>
-                        <label class="flex items-center text-sm text-white">
-                            <input type="checkbox" class="mr-2 rounded" style="accent-color: var(--color-primary)">
-                            Arquiteto
-                        </label>
-                        <label class="flex items-center text-sm text-white">
-                            <input type="checkbox" class="mr-2 rounded" style="accent-color: var(--color-primary)">
-                            Representante
-                        </label>
-                        <label class="flex items-center text-sm text-white">
-                            <input type="checkbox" class="mr-2 rounded" style="accent-color: var(--color-primary)">
-                            Outro
-                        </label>
-                    </div>
+                <!-- Tipo de contato -->
+                <div class="flex flex-col flex-1 min-w-[180px]">
+                    <label class="block text-sm font-medium mb-1 text-white">Tipo de Contato</label>
+                    <select class="input-glass text-white rounded-md px-4 h-12 w-full">
+                        <option>Todos</option>
+                        <option>Fornecedor</option>
+                        <option>Parceiro</option>
+                        <option>Arquiteto</option>
+                        <option>Representante</option>
+                        <option>Outro</option>
+                    </select>
                 </div>
 
-                <!-- Estatísticas e ações -->
-                <div class="flex-1 min-w-[200px]">
-                    <label class="block text-sm font-medium mb-2 text-white">Totais por Tipo</label>
-                    <div class="flex flex-wrap gap-2 mb-4">
+                <!-- Totais por tipo -->
+                <div class="flex flex-col">
+                    <label class="block text-sm font-medium mb-1 text-white">Totais por Tipo</label>
+                    <div class="flex flex-wrap gap-2">
                         <span class="badge-info px-3 py-1 rounded-full text-xs font-medium">Fornecedores: 45</span>
                         <span class="badge-success px-3 py-1 rounded-full text-xs font-medium">Parceiros: 23</span>
                         <span class="badge-warning px-3 py-1 rounded-full text-xs font-medium">Arquitetos: 18</span>
                         <span class="badge-neutral px-3 py-1 rounded-full text-xs font-medium">Representantes: 12</span>
                     </div>
-                    <div class="flex gap-2 justify-end">
-                        <button class="btn-secondary text-white rounded-md px-4 py-2 text-sm font-medium">Filtrar</button>
-                        <button class="btn-warning text-white rounded-md px-4 py-2 text-sm font-medium">Limpar</button>
-                    </div>
+                </div>
+
+                <!-- Ações -->
+                <div class="flex gap-2 flex-shrink-0">
+                    <button class="btn-secondary text-white rounded-md px-4 h-12 text-sm font-medium">Filtrar</button>
+                    <button class="btn-warning text-white rounded-md px-4 h-12 text-sm font-medium">Limpar</button>
                 </div>
             </div>
         </div>
