@@ -8,7 +8,9 @@ function ajustarScroll() {
   });
 }
 
-// Executa ao carregar a pagina e quando modulos sao trocados
+// Executa em eventos que podem alterar a altura
 window.addEventListener('DOMContentLoaded', ajustarScroll);
+window.addEventListener('load', ajustarScroll);
+window.addEventListener('resize', ajustarScroll);
 document.addEventListener('module-change', ajustarScroll);
 
