@@ -23,7 +23,7 @@
                 <button id="menuToggle" class="p-2 rounded-lg transition-colors duration-150 hover:bg-white/10 lg:hidden">
                     <i class="fas fa-bars w-5 h-5" style="color: var(--color-primary)"></i>
                 </button>
-                <img src="../assets/Logo%20SideBar.png" alt="Santíssimo Decor" class="w-10 h-10" />
+                <img src="../assets/Logo SideBar.png" alt="Santíssimo Decor" class="w-10 h-10" />
                 <span id="companyName" class="text-lg font-semibold" style="color: var(--color-primary)">Santíssimo Decor</span>
             </div>
 
@@ -64,12 +64,13 @@
     </header>
 
     <!-- Sidebar -->
-    <aside id="sidebar" class="fixed left-0 top-14 bottom-0 sidebar-collapsed glass-deep border-r border-white/10 z-40 transition-all duration-300">
+    <aside id="sidebar" class="fixed left-0 top-14 bottom-0 sidebar-collapsed glass-deep border-r border-white/10 z-40 transition-all duration-200">
+        <!-- Bloco de marca único -->
+        <div class="brand py-4 mb-2">
+            <img src="../assets/Logo SideBar.png" class="brand__logo" alt="Santíssimo Decor" />
+            <span class="brand__text">Santíssimo Decor</span>
+        </div>
         <nav class="p-2 space-y-1">
-            <div id="sidebarLogo" class="flex justify-center items-center py-4 mb-2">
-                <img src="../assets/Logo%20SideBar.png" alt="Santíssimo Decor" class="w-12 h-auto" />
-                <span id="sidebarLogoText" class="ml-2 font-semibold sidebar-text whitespace-nowrap" style="color: var(--color-primary)">Santíssimo Decor</span>
-            </div>
             <!-- Dashboard -->
             <div class="sidebar-item active flex items-center p-3 rounded-lg" data-page="dashboard">
                 <i class="fas fa-chart-line w-5 h-5 flex-shrink-0"></i>
