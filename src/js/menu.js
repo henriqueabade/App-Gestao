@@ -80,10 +80,10 @@ function collapseSidebar() {
     // Submenu CRM permanece aberto; fechamento apenas via clique
 }
 
-// Comportamento desktop: expande ao passar o mouse
-// Mouseleave removido para evitar fechamento automático do submenu
+// Comportamento desktop: expande ao passar o mouse e recolhe ao sair
 if (window.innerWidth >= 1024) {
     sidebar.addEventListener('mouseenter', expandSidebar);
+    sidebar.addEventListener('mouseleave', collapseSidebar);
 }
 
 // Alterna sidebar no mobile
