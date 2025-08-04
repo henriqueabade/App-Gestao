@@ -105,3 +105,30 @@ body {
         transform: translateY(0);
     }
 }
+
+/* Barra de filtros compacta */
+.filtro-contatos {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+}
+
+@media (min-width: 768px) {
+    .filtro-contatos {
+        flex-direction: row;
+        flex-wrap: wrap;
+        align-items: center;
+    }
+}
+
+@media (min-width: 1280px) {
+    .filtro-contatos {
+        flex-wrap: nowrap;
+    }
+}
+
+.filtro-contatos .input-glass,
+.filtro-contatos select,
+.filtro-contatos button {
+    height: 48px;
+}
