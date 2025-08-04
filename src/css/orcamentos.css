@@ -83,3 +83,31 @@ body {
         transform: translateY(0);
     }
 }
+
+/* Agrupamento vendedor/botão */
+.seller-actions {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+}
+
+.seller-actions select,
+.seller-actions button {
+    height: 48px;
+    box-sizing: border-box;
+}
+
+.seller-actions button {
+    margin-left: auto;
+}
+
+@media (max-width: 600px) {
+    .seller-actions { /* empilhamento mobile */
+        flex-direction: column;
+        align-items: stretch;
+    }
+    .seller-actions button {
+        margin-left: 0;
+        width: 100%;
+    }
+}
