@@ -71,23 +71,26 @@
                         </div>
 
                         <!-- Zero Stock Toggle -->
-                        <div class="filter-toggle">
-                            <label for="zeroStock" class="sr-only">0 Estoque</label>
-                            <input type="checkbox" id="zeroStock" class="toggle">
-                        </div>
+                    <div class="filter-toggle flex flex-col items-center space-y-1">
+                    <label for="zeroStock" class="text-sm font-medium text-white">0 Estoque</label>
+                    <input type="checkbox" id="zeroStock" class="toggle" />
                     </div>
 
                     <!-- Action Buttons -->
-                    <div class="filter-actions">
-                        <button class="btn-secondary text-white rounded-md px-4 font-medium whitespace-nowrap"><i class="fas fa-filter mr-2"></i>Filtrar</button>
-                        <button class="btn-primary text-white rounded-md px-4 font-medium whitespace-nowrap"><i class="fas fa-plus mr-2"></i>Novo</button>
+                    <div class="filter-actions flex flex-col items-center self-center space-y-1">
+                    <button class="btn-secondary text-white rounded-md px-4 h-12 font-medium whitespace-nowrap">
+                        <i class="fas fa-filter mr-2"></i>Filtrar
+                    </button>
+                    <button class="btn-primary text-white rounded-md px-4 h-12 font-medium whitespace-nowrap">
+                        <i class="fas fa-plus mr-2"></i>Novo
+                    </button>
                     </div>
                 </div>
             </div>
         </div>
 
         <!-- Products Table -->
-        <div class="glass-surface rounded-xl overflow-hidden shadow-lg animate-fade-in-up">
+        <div class="glass-surface rounded-xl overflow-hidden shadow-lg animate-fade-in-up mt-6">
             <div class="overflow-x-auto">
                 <table class="w-full">
                     <thead class="glass-surface sticky top-0">

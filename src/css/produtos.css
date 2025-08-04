@@ -84,6 +84,7 @@ body {
 .filter-field {
     display: flex;
     flex-direction: column;
+    max-width: 22rem;
 }
 .filter-field input,
 .filter-field select {
@@ -100,7 +101,7 @@ body {
     align-items: flex-start;
 }
 .price-field {
-    width: 180px;
+    width: 9rem;
 }
 .filter-toggle {
     margin-top: 1.75rem;
