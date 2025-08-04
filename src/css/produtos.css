@@ -73,3 +73,35 @@ body {
         transform: translateY(0);
     }
 }
+
+/* Barra de filtros */
+.filter-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    align-items: center;
+}
+.filter-field {
+    display: flex;
+    flex-direction: column;
+}
+.filter-field input,
+.filter-field select {
+    height: 3rem;
+}
+.filter-checkbox {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    height: 3rem;
+}
+.filter-actions {
+    display: flex;
+    gap: 0.5rem;
+}
+.filter-actions button {
+    height: 3rem;
+}
+.max-price input {
+    min-width: 8rem;
+}

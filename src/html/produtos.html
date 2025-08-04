@@ -21,17 +21,17 @@
 
         <!-- Filters -->
         <div class="glass-surface rounded-xl p-6 mb-6 animate-fade-in-up">
-            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8 gap-4 items-end">
+            <div class="filter-bar">
                 <!-- Search -->
-                <div class="xl:col-span-2">
+                <div class="filter-field flex-1 min-w-[200px]">
                     <label class="block text-sm font-medium mb-2 text-white">Buscar</label>
-                    <input type="text" placeholder="Código ou Nome do Produto" class="input-glass text-white rounded-md px-4 py-3 w-full placeholder-white/50">
+                    <input type="text" placeholder="Código ou Nome do Produto" class="input-glass text-white rounded-md px-4 h-12 w-full placeholder-white/50">
                 </div>
 
                 <!-- Category -->
-                <div>
+                <div class="filter-field">
                     <label class="block text-sm font-medium mb-2 text-white">Categoria</label>
-                    <select class="input-glass text-white rounded-md px-4 py-3 w-full">
+                    <select class="input-glass text-white rounded-md px-4 h-12 w-full">
                         <option>Todas as Categorias</option>
                         <option>Móveis</option>
                         <option>Decoração</option>
@@ -40,9 +40,9 @@
                 </div>
 
                 <!-- Status -->
-                <div>
+                <div class="filter-field">
                     <label class="block text-sm font-medium mb-2 text-white">Status</label>
-                    <select class="input-glass text-white rounded-md px-4 py-3 w-full">
+                    <select class="input-glass text-white rounded-md px-4 h-12 w-full">
                         <option>Todos</option>
                         <option>Ativo</option>
                         <option>Inativo</option>
@@ -50,39 +50,33 @@
                 </div>
 
                 <!-- Price Min -->
-                <div>
+                <div class="filter-field">
                     <label class="block text-sm font-medium mb-2 text-white">Preço Min.</label>
                     <div class="relative">
                         <span class="absolute left-3 top-1/2 transform -translate-y-1/2 text-white/70">R$</span>
-                        <input type="number" class="input-glass text-white rounded-md pl-10 pr-4 py-3 w-full placeholder-white/50">
+                        <input type="number" class="input-glass text-white rounded-md pl-10 pr-4 h-12 w-full placeholder-white/50">
                     </div>
                 </div>
 
                 <!-- Price Max -->
-                <div>
+                <div class="filter-field max-price">
                     <label class="block text-sm font-medium mb-2 text-white">Preço Máx.</label>
                     <div class="relative">
                         <span class="absolute left-3 top-1/2 transform -translate-y-1/2 text-white/70">R$</span>
-                        <input type="number" class="input-glass text-white rounded-md pl-10 pr-4 py-3 w-full placeholder-white/50">
+                        <input type="number" class="input-glass text-white rounded-md pl-10 pr-4 h-12 w-full placeholder-white/50">
                     </div>
                 </div>
 
                 <!-- Zero Stock Checkbox -->
-                <div class="flex items-end">
-                    <div class="flex items-center gap-2 pb-3">
-                        <input type="checkbox" id="zeroStock" class="rounded border-white/30 text-primary focus:ring-primary">
-                        <label for="zeroStock" class="text-sm text-white">0 Estoque</label>
-                    </div>
+                <div class="filter-checkbox">
+                    <input type="checkbox" id="zeroStock" class="rounded border-white/30 text-primary focus:ring-primary">
+                    <label for="zeroStock" class="text-sm text-white">0 Estoque</label>
                 </div>
 
                 <!-- Action Buttons -->
-                <div class="flex gap-2">
-                    <button class="btn-secondary text-white rounded-md px-4 py-3 font-medium whitespace-nowrap">
-                        <i class="fas fa-filter mr-2"></i>Filtrar
-                    </button>
-                    <button class="btn-primary text-white rounded-md px-4 py-3 font-medium whitespace-nowrap">
-                        <i class="fas fa-plus mr-2"></i>Novo
-                    </button>
+                <div class="filter-actions">
+                    <button class="btn-secondary text-white rounded-md px-4 font-medium whitespace-nowrap"><i class="fas fa-filter mr-2"></i>Filtrar</button>
+                    <button class="btn-primary text-white rounded-md px-4 font-medium whitespace-nowrap"><i class="fas fa-plus mr-2"></i>Novo</button>
                 </div>
             </div>
         </div>
