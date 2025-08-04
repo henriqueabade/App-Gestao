@@ -49,34 +49,39 @@
                     </select>
                 </div>
 
-                <!-- Price Min -->
-                <div class="filter-field">
-                    <label class="block text-sm font-medium mb-2 text-white">Preço Min.</label>
-                    <div class="relative">
-                        <span class="absolute left-3 top-1/2 transform -translate-y-1/2 text-white/70">R$</span>
-                        <input type="number" class="input-glass text-white rounded-md pl-10 pr-4 h-12 w-full placeholder-white/50">
+                <!-- Price + Actions -->
+                <div class="price-group">
+                    <div class="price-row">
+                        <!-- Price Min -->
+                        <div class="filter-field price-field">
+                            <label class="block text-sm font-medium mb-2 text-white">Preço Min.</label>
+                            <div class="relative">
+                                <span class="absolute left-3 top-1/2 transform -translate-y-1/2 text-white/70">R$</span>
+                                <input type="number" class="input-glass text-white rounded-md pl-10 pr-4 h-12 w-full placeholder-white/50">
+                            </div>
+                        </div>
+
+                        <!-- Price Max -->
+                        <div class="filter-field price-field">
+                            <label class="block text-sm font-medium mb-2 text-white">Preço Máx.</label>
+                            <div class="relative">
+                                <span class="absolute left-3 top-1/2 transform -translate-y-1/2 text-white/70">R$</span>
+                                <input type="number" class="input-glass text-white rounded-md pl-10 pr-4 h-12 w-full placeholder-white/50">
+                            </div>
+                        </div>
+
+                        <!-- Zero Stock Toggle -->
+                        <div class="filter-toggle">
+                            <label for="zeroStock" class="sr-only">0 Estoque</label>
+                            <input type="checkbox" id="zeroStock" class="toggle">
+                        </div>
                     </div>
-                </div>
 
-                <!-- Price Max -->
-                <div class="filter-field max-price">
-                    <label class="block text-sm font-medium mb-2 text-white">Preço Máx.</label>
-                    <div class="relative">
-                        <span class="absolute left-3 top-1/2 transform -translate-y-1/2 text-white/70">R$</span>
-                        <input type="number" class="input-glass text-white rounded-md pl-10 pr-4 h-12 w-full placeholder-white/50">
+                    <!-- Action Buttons -->
+                    <div class="filter-actions">
+                        <button class="btn-secondary text-white rounded-md px-4 font-medium whitespace-nowrap"><i class="fas fa-filter mr-2"></i>Filtrar</button>
+                        <button class="btn-primary text-white rounded-md px-4 font-medium whitespace-nowrap"><i class="fas fa-plus mr-2"></i>Novo</button>
                     </div>
-                </div>
-
-                <!-- Zero Stock Checkbox -->
-                <div class="filter-checkbox">
-                    <input type="checkbox" id="zeroStock" class="rounded border-white/30 text-primary focus:ring-primary">
-                    <label for="zeroStock" class="text-sm text-white">0 Estoque</label>
-                </div>
-
-                <!-- Action Buttons -->
-                <div class="filter-actions">
-                    <button class="btn-secondary text-white rounded-md px-4 font-medium whitespace-nowrap"><i class="fas fa-filter mr-2"></i>Filtrar</button>
-                    <button class="btn-primary text-white rounded-md px-4 font-medium whitespace-nowrap"><i class="fas fa-plus mr-2"></i>Novo</button>
                 </div>
             </div>
         </div>
