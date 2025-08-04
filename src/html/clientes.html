@@ -54,52 +54,37 @@
 
         <!-- Filters & Statistics Panel -->
         <div class="glass-surface rounded-xl p-6 mb-6 animate-fade-in-up">
-            <div class="flex flex-wrap gap-6">
+            <div class="filter-bar flex flex-col md:flex-row md:flex-wrap xl:flex-nowrap items-center">
                 <!-- Search -->
                 <div class="flex-1 min-w-[250px]">
                     <label class="block text-sm font-medium mb-2 text-white">Buscar Cliente</label>
                     <input type="text" placeholder="Razão ou Fantasia" class="input-glass text-white rounded-md px-4 py-3 w-full">
                 </div>
 
-                <!-- Segment Filters -->
+                <!-- Segment Select -->
                 <div class="flex-1 min-w-[200px]">
                     <label class="block text-sm font-medium mb-2 text-white">Segmento</label>
-                    <div class="space-y-2">
-                        <label class="flex items-center text-sm text-white">
-                            <input type="checkbox" class="mr-2 rounded" style="accent-color: var(--color-primary)">
-                            Decoração
-                        </label>
-                        <label class="flex items-center text-sm text-white">
-                            <input type="checkbox" class="mr-2 rounded" style="accent-color: var(--color-primary)">
-                            Arquitetura
-                        </label>
-                        <label class="flex items-center text-sm text-white">
-                            <input type="checkbox" class="mr-2 rounded" style="accent-color: var(--color-primary)">
-                            Construção
-                        </label>
-                        <label class="flex items-center text-sm text-white">
-                            <input type="checkbox" class="mr-2 rounded" style="accent-color: var(--color-primary)">
-                            Varejo
-                        </label>
-                        <label class="flex items-center text-sm text-white">
-                            <input type="checkbox" class="mr-2 rounded" style="accent-color: var(--color-primary)">
-                            Outros
-                        </label>
-                    </div>
+                    <select name="segmento" class="input-glass text-white rounded-md px-4 py-3 w-full">
+                        <option>Todas</option>
+                        <option>Decoração</option>
+                        <option>Arquitetura</option>
+                        <option>Construção</option>
+                        <option>Varejo</option>
+                        <option>Outros</option>
+                    </select>
                 </div>
 
-                <!-- Statistics & Actions -->
-                <div class="flex-1 min-w-[200px]">
-                    <label class="block text-sm font-medium mb-2 text-white">Totais</label>
-                    <div class="flex flex-wrap gap-2 mb-4">
-                        <span class="badge-neutral px-3 py-1 rounded-full text-xs font-medium">Total: 247</span>
-                        <span class="badge-success px-3 py-1 rounded-full text-xs font-medium">Ativos: 198</span>
-                        <span class="badge-danger px-3 py-1 rounded-full text-xs font-medium">Inativos: 49</span>
-                    </div>
-                    <div class="flex gap-2 justify-end">
-                        <button class="btn-secondary text-white rounded-md px-4 py-2 text-sm font-medium">Filtrar</button>
-                        <button class="btn-warning text-white rounded-md px-4 py-2 text-sm font-medium">Limpar</button>
-                    </div>
+                <!-- Totals -->
+                <div class="flex items-center gap-2">
+                    <span class="badge-neutral px-3 py-1 rounded-full text-xs font-medium">Total: 247</span>
+                    <span class="badge-success px-3 py-1 rounded-full text-xs font-medium">Ativos: 198</span>
+                    <span class="badge-danger px-3 py-1 rounded-full text-xs font-medium">Inativos: 49</span>
+                </div>
+
+                <!-- Actions -->
+                <div class="flex items-center gap-2">
+                    <button class="btn-secondary text-white rounded-md px-4 py-3 text-sm font-medium">Filtrar</button>
+                    <button class="btn-warning text-white rounded-md px-4 py-3 text-sm font-medium">Limpar</button>
                 </div>
             </div>
         </div>
