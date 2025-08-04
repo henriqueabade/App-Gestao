@@ -88,3 +88,9 @@ body,
   background: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMCA2Ij48cG9seWdvbiBwb2ludHM9IjAsMCAxMCwwIDUsNiIgZmlsbD0iI2YwYzk0YyIvPjwvc3ZnPg==') no-repeat center;
   border-radius: 6px;               /* setas arredondadas */
 }
+
+/* Cor do texto das opções dos selects */
+select option {
+  color: #000;
+  background-color: #fff;
+}
