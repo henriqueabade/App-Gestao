@@ -198,12 +198,10 @@ header.glass-surface {
 }
 
 /* Logo única da sidebar */
-/* Alinhamento da marca na sidebar */
 .brand {
     display: flex;
+    justify-content: center;
     align-items: center;
-    gap: 12px;
-    padding-left: 24px;
     transition: all 0.2s ease;
 }
 
@@ -214,6 +212,7 @@ header.glass-surface {
 }
 
 .brand__text {
+    margin-left: 0.5rem;
     font-weight: 600;
     color: #fff;
     transition: all 0.2s ease;
@@ -227,5 +226,4 @@ header.glass-surface {
 
 .sidebar.collapsed .brand {
     justify-content: center;
-    padding-left: 0;
 }
