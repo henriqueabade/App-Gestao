@@ -1,97 +1,88 @@
-/*
-  Global scrollbar rules
-  ----------------------
-  - Impede rolagem em html/body e containers principais
-  - Aplica estilo único para cada módulo usando .modulo-container
-  - Scrollbar fina e discreta que aparece apenas com hover
-*/
-
-html,
-body,
-#app,
-#mainContent,
-#content {
-  /* evita scroll na página principal */
-  overflow: hidden;
-  overflow-x: hidden;
+/* 1) Bloqueia scroll externo e horizontal em todo o app */
+html, body, #app, #mainContent, #content {
+  overflow: hidden !important;
 }
 
+/* 2) Variáveis de configuração */
 :root {
-  /* altura do header fixa em todas as telas */
   --header-height: 56px;
+  --module-height: calc(95vh - var(--header-height));
+  --arrow-size: 16px;
+  --thumb-color: #f0c94c;
 }
 
-/* Área com rolagem individual de cada módulo */
+/* 3) Cada módulo: só scroll vertical e nunca horizontal */
 .modulo-container {
-  height: calc(100vh - var(--header-height)); /* altura ajustada até o rodapé */
-  overflow-y: hidden;              /* scroll ativado via classe */
-  overflow-x: hidden;
-  scrollbar-width: none;           /* oculto até hover */
-  scrollbar-color: transparent transparent;
-  scrollbar-gutter: stable;        /* evita salto ao mostrar barra */
+  position: relative;
+  height: var(--module-height);
+  overflow-y: auto;   /* só vertical */
+  overflow-x: hidden; /* nunca horizontal */
+  padding-right: var(--arrow-size); /* espaço interno para a scrollbar */
   box-sizing: border-box;
+  scroll-behavior: smooth;
 }
 
-/* Classe aplicada via script quando há overflow */
-.modulo-container.has-scroll {
-  overflow-y: auto;
-  padding-right: 5px;              /* reposiciona barra 5px da direita */
-}
-
-
-
-/* Base da scrollbar no WebKit */
+/* 4) Esconde a barra nativa no WebKit (Chrome/Safari) */
 .modulo-container::-webkit-scrollbar {
-  width: 0;                       /* invisível até hover */
-  height: 0;
+  display: none;
 }
 
-/* Largura da barra durante hover */
-.modulo-container:hover::-webkit-scrollbar {
-  width: 3px;                     /* ultrafina de 3px */
+/* 5) Container da scrollbar custom (criado via JS) */
+.scrollbar-container {
+  position: fixed;
+  left: 98%;
+  transform: translateX(-50%);
+  width: var(--arrow-size);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  pointer-events: none;
+  z-index: 10000;
 }
 
-/* Trilha transparente */
-.modulo-container::-webkit-scrollbar-track {
+/* 6) Setas (▲▼) */
+.scrollbar-container .arrow {
+  pointer-events: all;
+  width: var(--arrow-size);
+  height: var(--arrow-size);
+  font-size: var(--arrow-size);
+  color: var(--thumb-color);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  user-select: none;
+}
+
+/* 7) Track (trilha) */
+.scrollbar-container .track {
+  flex: 1;
+  width: calc(var(--arrow-size) / 3);
   background: transparent;
+  position: relative;
+  margin: 2px 0;
+  pointer-events: none;
 }
 
-/* Thumb amarelo arredondado */
-.modulo-container::-webkit-scrollbar-thumb {
-  background-color: #f0c94c;
-  border-radius: 8px;
-  opacity: 0;                     /* invisível até hover */
-  transition: opacity 0.2s ease;
+/* 8) Thumb (polegar) */
+.scrollbar-container .thumb {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  background-color: var(--thumb-color);
+  border-radius: 4px;
+  cursor: grab;
+  pointer-events: all;
 }
 
-/* Exibe thumb somente durante o hover no container */
-.modulo-container:hover::-webkit-scrollbar-thumb {
-  opacity: 1;
+/* 9) Evita seleção de texto ao arrastar */
+.no-select {
+  user-select: none;
 }
 
-/* Estilo Firefox durante hover */
-.modulo-container:hover {
-  scrollbar-width: thin;
-  scrollbar-color: #f0c94c transparent;
-}
-
-/* Botões de seta visíveis */
-.modulo-container::-webkit-scrollbar-button {
-  width: 3px;
-  height: 12px;
-  background-color: transparent;
-}
-.modulo-container::-webkit-scrollbar-button:vertical:decrement {
-  background: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMCA2Ij48cG9seWdvbiBwb2ludHM9IjUsMCAxMCw2IDAsNiIgZmlsbD0iI2YwYzk0YyIvPjwvc3ZnPg==') no-repeat center;
-  border-radius: 6px;               /* setas arredondadas */
-}
-.modulo-container::-webkit-scrollbar-button:vertical:increment {
-  background: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMCA2Ij48cG9seWdvbiBwb2ludHM9IjAsMCAxMCwwIDUsNiIgZmlsbD0iI2YwYzk0YyIvPjwvc3ZnPg==') no-repeat center;
-  border-radius: 6px;               /* setas arredondadas */
-}
-
-/* Cor do texto das opções dos selects */
+/* 10) Mantém cor nos <select> options */
 select option {
   color: #000;
-  background-color: #fff;
+  background: #fff;
 }
