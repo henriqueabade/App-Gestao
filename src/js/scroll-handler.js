@@ -1,15 +1,24 @@
-// quantos pixels rola cada clique de seta
+// js/scroll-handler.js
+
+// Distância de scroll ao clicar nas setas
 const SCROLL_STEP = 40;
 
-// cria/atualiza a scrollbar custom para o módulo atual
-function syncScrollbar(module) {
-  // remove barras antigas
-  document.querySelectorAll('.scrollbar-container').forEach(el => el.remove());
+// Referência à instância atual da scrollbar
+let currentScrollbar = null;
 
-  // só cria se precisar de scroll vertical
-  if (module.scrollHeight <= module.clientHeight) return;
+// Remove a scrollbar custom atual (se houver)
+function removeScrollbar() {
+  if (currentScrollbar) {
+    currentScrollbar.remove();
+    currentScrollbar = null;
+  }
+}
 
-  // monta a barra
+// Cria a scrollbar custom para um determinado módulo
+function createScrollbar(module) {
+  removeScrollbar();  // garante que não haja duplicatas
+
+  // Monta o container
   const sb = document.createElement('div');
   sb.className = 'scrollbar-container';
   sb.innerHTML = `
@@ -18,20 +27,21 @@ function syncScrollbar(module) {
     <div class="arrow down">▼</div>
   `;
   document.body.appendChild(sb);
+  currentScrollbar = sb;
 
   const up    = sb.querySelector('.arrow.up');
   const down  = sb.querySelector('.arrow.down');
   const track = sb.querySelector('.track');
   const thumb = sb.querySelector('.thumb');
 
-  // posiciona verticalmente junto ao módulo
+  // Posiciona verticalmente junto ao módulo
   function positionBar() {
     const r = module.getBoundingClientRect();
     sb.style.top    = `${r.top}px`;
     sb.style.height = `${r.height}px`;
   }
 
-  // ajusta tamanho e posição do thumb
+  // Atualiza thumb (tamanho e posição)
   function updateThumb() {
     const ratio = module.clientHeight / module.scrollHeight;
     const h     = Math.max(track.clientHeight * ratio, 20);
@@ -40,7 +50,7 @@ function syncScrollbar(module) {
     thumb.style.top = `${(module.scrollTop / (module.scrollHeight - module.clientHeight)) * maxTop}px`;
   }
 
-  // drag do thumb
+  // Drag do thumb
   let dragging = false, startY = 0, startTop = 0;
   thumb.addEventListener('mousedown', e => {
     dragging = true;
@@ -61,35 +71,63 @@ function syncScrollbar(module) {
     document.body.classList.remove('no-select');
   });
 
-  // setas clicáveis
+  // Clique nas setas
   up.addEventListener('click',   () => module.scrollBy({ top: -SCROLL_STEP, behavior: 'smooth' }));
   down.addEventListener('click', () => module.scrollBy({ top:  SCROLL_STEP, behavior: 'smooth' }));
 
-  // roda do mouse dentro do módulo
-  module.addEventListener('wheel', e => {
-    e.preventDefault();
-    module.scrollTop += e.deltaY;
-  }, { passive: false });
-
-  // sincroniza ao scroll e resize
+  // Sincroniza thumb ao scroll e resize
   module.addEventListener('scroll', updateThumb);
   window.addEventListener('resize', () => {
     positionBar();
     updateThumb();
   });
 
-  // inicializa
+  // Primeira invocação
   positionBar();
   updateThumb();
 }
 
-// inicializa na carga e em mudanças de módulo
-function init() {
-  const module = document.querySelector('.modulo-container');
-  if (module) syncScrollbar(module);
-  // observe mutações se módulos trocam dinamicamente...
+// Encontra o primeiro módulo “visível” que necessite de scroll e cria/remova scrollbar
+function refreshScrollbar() {
+  // Remove barra antiga
+  removeScrollbar();
+
+  // Busca todos os módulos
+  const modules = Array.from(document.querySelectorAll('.modulo-container'));
+  // Filtra pelos que realmente estão visíveis e precisam de scroll
+  const visible = modules.filter(m => {
+    const rect = m.getBoundingClientRect();
+    return rect.height > 0 && m.scrollHeight > m.clientHeight;
+  });
+
+  if (visible.length > 0) {
+    createScrollbar(visible[0]);
+  }
 }
 
-window.addEventListener('DOMContentLoaded', init);
-window.addEventListener('resize', init);
-document.addEventListener('module-change', init);
+// Observa carregamento dinâmico de novos módulos
+function observeModules() {
+  const main = document.getElementById('mainContent');
+  if (!main) return;
+  new MutationObserver(muts => {
+    muts.forEach(m => {
+      m.addedNodes.forEach(node => {
+        if (node.nodeType === 1 && (
+          node.matches('.modulo-container') ||
+          node.querySelector('.modulo-container')
+        )) {
+          refreshScrollbar();
+        }
+      });
+    });
+  }).observe(main, { childList: true, subtree: true });
+}
+
+// Inicialização
+window.addEventListener('DOMContentLoaded', () => {
+  refreshScrollbar();
+  observeModules();
+});
+window.addEventListener('load', refreshScrollbar);
+window.addEventListener('resize', refreshScrollbar);
+document.addEventListener('module-change', refreshScrollbar);

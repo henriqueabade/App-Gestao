@@ -8,26 +8,27 @@ html, body, #app, #mainContent, #content {
   --header-height: 56px;
   --module-height: calc(95vh - var(--header-height));
   --arrow-size: 16px;
+  --track-width: 4px;
   --thumb-color: #f0c94c;
 }
 
-/* 3) Cada módulo: só scroll vertical e nunca horizontal */
+/* 3) Cada módulo: só scroll vertical, nunca horizontal */
 .modulo-container {
   position: relative;
   height: var(--module-height);
-  overflow-y: auto;   /* só vertical */
-  overflow-x: hidden; /* nunca horizontal */
-  padding-right: var(--arrow-size); /* espaço interno para a scrollbar */
+  overflow-y: auto;     /* só vertical */
+  overflow-x: hidden;   /* nunca horizontal */
+  padding-right: var(--arrow-size); /* espaço interno p/ scrollbar */
   box-sizing: border-box;
-  scroll-behavior: smooth;
+  scroll-behavior: auto;  /* scroll nativo fluído */
 }
 
-/* 4) Esconde a barra nativa no WebKit (Chrome/Safari) */
+/* 4) Remove scrollbar nativa WebKit */
 .modulo-container::-webkit-scrollbar {
   display: none;
 }
 
-/* 5) Container da scrollbar custom (criado via JS) */
+/* 5) Container da scrollbar custom (injetado via JS) */
 .scrollbar-container {
   position: fixed;
   left: 98%;
@@ -40,7 +41,7 @@ html, body, #app, #mainContent, #content {
   z-index: 10000;
 }
 
-/* 6) Setas (▲▼) */
+/* 6) Setas ▲▼ */
 .scrollbar-container .arrow {
   pointer-events: all;
   width: var(--arrow-size);
@@ -57,7 +58,7 @@ html, body, #app, #mainContent, #content {
 /* 7) Track (trilha) */
 .scrollbar-container .track {
   flex: 1;
-  width: calc(var(--arrow-size) / 3);
+  width: var(--track-width);
   background: transparent;
   position: relative;
   margin: 2px 0;
