@@ -89,6 +89,24 @@ body {
     color: #fff;
 }
 
+.badge-success {
+    background: rgba(162, 255, 166, 0.2);
+    color: var(--color-green);
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 500;
+}
+
+.badge-danger {
+    background: rgba(255, 88, 88, 0.2);
+    color: var(--color-red);
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 500;
+}
+
 .resumo-popover {
     position: absolute;
     z-index: 50;

@@ -19,6 +19,12 @@ async function carregarMateriais(filtro = '') {
     }
 }
 
+function formatDate(dateStr) {
+    if (!dateStr) return '-';
+    const date = new Date(dateStr);
+    return date.toLocaleDateString('pt-BR', { timeZone: 'UTC' });
+}
+
 function renderMateriais(lista) {
     const tbody = document.getElementById('materiaPrimaTableBody');
     if (!tbody) return;
@@ -48,10 +54,33 @@ function renderMateriais(lista) {
                 </div>
                 <div id="popover_${index}" class="resumo-popover glass-surface rounded-xl p-4 text-sm text-white">
                     <h3 class="font-medium mb-2">${item.nome}</h3>
+                    <p class="text-xs text-gray-400 mb-1">Categoria:</p>
+                    <p class="text-base font-semibold mb-2 text-white">${item.categoria || '-'}</p>
                     <div class="text-xs text-gray-400 mb-1">Quantidade</div>
                     <div class="mb-2">${item.quantidade} ${item.unidade}</div>
                     <div class="text-xs text-gray-400 mb-1">Preço Unitário</div>
-                    <div>R$ ${preco.toFixed(2).replace('.', ',')}</div>
+                    <div class="mb-4">R$ ${preco.toFixed(2).replace('.', ',')}</div>
+                    <div class="grid grid-cols-2 gap-x-4 gap-y-2 mb-4 text-gray-200">
+                        <div>
+                            <span class="text-xs">Data de Entrada:</span><br>
+                            <span class="font-medium">${formatDate(item.data_estoque)}</span>
+                        </div>
+                        <div>
+                            <span class="text-xs">Última Atualização:</span><br>
+                            <span class="font-medium">${formatDate(item.data_preco)}</span>
+                        </div>
+                        <div class="col-span-1">
+                            <span class="text-xs">Estoque Infinito:</span><br>
+                            ${item.infinito ? '<span class="badge-success">✓ Sim</span>' : '<span class="badge-danger">✕ Não</span>'}
+                        </div>
+                        <div class="col-span-1">
+                            <span class="text-xs">Processo Atual:</span><br>
+                            <span class="font-medium">${item.processo || '-'}</span>
+                        </div>
+                    </div>
+                    <hr class="border-white/10 my-4">
+                    <p class="text-xs text-gray-400 mb-1">Descrição Técnica:</p>
+                    <p class="text-gray-200">${item.descricao || '-'}</p>
                 </div>
             </td>
             <td class="px-6 py-4 whitespace-nowrap text-sm text-white">${item.quantidade}</td>
