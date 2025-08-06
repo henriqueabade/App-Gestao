@@ -58,19 +58,22 @@
                 <!-- Search -->
                 <div class="flex-1 min-w-[250px]">
                     <label class="block text-sm font-medium mb-2 text-white">Buscar Cliente</label>
-                    <input type="text" placeholder="Razão ou Fantasia" class="input-glass text-white rounded-md px-4 py-3 w-full">
+                    <input id="filtroBusca" type="text" placeholder="Estado, CNPJ ou Nome" class="input-glass text-white rounded-md px-4 py-3 w-full">
                 </div>
 
-                <!-- Segment Select -->
+                <!-- Dono Select -->
                 <div class="flex-1 min-w-[200px]">
                     <label class="block text-sm font-medium mb-2 text-white">Dono</label>
-                    <select name="dono" class="input-glass text-white rounded-md px-4 py-3 w-full">
-                        <option>Todas</option>
-                        <option>Decoração</option>
-                        <option>Arquitetura</option>
-                        <option>Construção</option>
-                        <option>Varejo</option>
-                        <option>Outros</option>
+                    <select id="filtroDono" class="input-glass text-white rounded-md px-4 py-3 w-full">
+                        <option value="">Todos</option>
+                    </select>
+                </div>
+
+                <!-- Status Select -->
+                <div class="flex-1 min-w-[200px]">
+                    <label class="block text-sm font-medium mb-2 text-white">Status</label>
+                    <select id="filtroStatus" class="input-glass text-white rounded-md px-4 py-3 w-full">
+                        <option value="">Todos</option>
                     </select>
                 </div>
 
@@ -85,9 +88,9 @@
                 </div>
 
                 <!-- Actions -->
-                <div id= "bt-actions" class="flex items-center gap-2">
-                    <button class="btn-secondary text-white rounded-md px-4 py-3 text-sm font-medium">Filtrar</button>
-                    <button class="btn-warning text-white rounded-md px-4 py-3 text-sm font-medium">Limpar</button>
+                <div id="bt-actions" class="flex items-center gap-2">
+                    <button id="btnFiltrar" class="btn-secondary text-white rounded-md px-4 py-3 text-sm font-medium">Filtrar</button>
+                    <button id="btnLimpar" class="btn-warning text-white rounded-md px-4 py-3 text-sm font-medium">Limpar</button>
                 </div>
             </div>
         </div>
