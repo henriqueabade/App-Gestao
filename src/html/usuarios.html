@@ -17,11 +17,36 @@
     <div class="max-w-7xl mx-auto">
         <!-- Header -->
         <div class="flex items-center justify-between mb-6 animate-fade-in-up">
-            <h1 class="text-2xl font-semibold">Gestão de Usuários</h1>
+            <div class="flex items-center gap-2">
+                <h1 class="text-2xl font-semibold">Gestão de Usuários</h1>
+                <!-- Ícone de informações -->
+                <i class="info-icon"></i>
+            </div>
             <button id="btnNovoUsuario" class="btn-primary px-4 py-2 rounded-md text-white font-medium flex items-center gap-2">
                 <i class="fas fa-plus w-4 h-4"></i>
                 Novo Usuário
             </button>
+        </div>
+
+        <!-- Popover de resumo -->
+        <div id="resumoPopover" class="resumo-popover glass-surface rounded-xl p-6 text-white">
+            <h3 class="font-medium mb-4 text-white">Resumo</h3>
+            <div class="text-3xl font-bold text-white mb-2" id="totalUsuarios">247</div>
+            <div class="text-sm text-gray-400 mb-4">Total de usuários</div>
+
+            <!-- Status Distribution -->
+            <div class="flex flex-wrap gap-2 mb-4" id="distribuicaoStatus">
+                <span class="badge-success px-3 py-1 rounded-full text-xs font-medium">189 Ativos</span>
+                <span class="badge-danger px-3 py-1 rounded-full text-xs font-medium">32 Inativos</span>
+                <span class="badge-warning px-3 py-1 rounded-full text-xs font-medium">26 Aguardando</span>
+            </div>
+
+            <!-- Profile Distribution -->
+            <div class="text-sm text-gray-400 space-y-1" id="distribuicaoPerfis">
+                <div>• 12 Administradores</div>
+                <div>• 89 Operacionais</div>
+                <div>• 146 Clientes</div>
+            </div>
         </div>
 
         <!-- Barra de filtros horizontal -->
@@ -68,27 +93,6 @@
                     <button id="aplicarFiltro" class="btn-secondary text-white rounded-md px-4 h-12 text-sm font-medium">Aplicar Filtros</button>
                     <button id="limparFiltro" class="btn-warning text-white rounded-md px-4 h-12 text-sm font-medium">Limpar</button>
                 </div>
-            </div>
-        </div>
-
-        <!-- Resumo de métricas -->
-        <div class="glass-surface rounded-xl p-6 mb-6 animate-fade-in-up">
-            <h3 class="font-medium mb-4 text-white">Resumo</h3>
-            <div class="text-3xl font-bold text-white mb-2" id="totalUsuarios">247</div>
-            <div class="text-sm text-gray-400 mb-4">Total de usuários</div>
-
-            <!-- Status Distribution -->
-            <div class="flex flex-wrap gap-2 mb-4" id="distribuicaoStatus">
-                <span class="badge-success px-3 py-1 rounded-full text-xs font-medium">189 Ativos</span>
-                <span class="badge-danger px-3 py-1 rounded-full text-xs font-medium">32 Inativos</span>
-                <span class="badge-warning px-3 py-1 rounded-full text-xs font-medium">26 Aguardando</span>
-            </div>
-
-            <!-- Profile Distribution -->
-            <div class="text-sm text-gray-400 space-y-1" id="distribuicaoPerfis">
-                <div>• 12 Administradores</div>
-                <div>• 89 Operacionais</div>
-                <div>• 146 Clientes</div>
             </div>
         </div>
 

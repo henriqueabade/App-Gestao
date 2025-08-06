@@ -46,6 +46,31 @@ function initUsuarios() {
             console.log('Remover usuário');
         });
     });
+
+    // Controle do popover de resumo
+    const infoIcon = document.querySelector('.info-icon');
+    const resumoPopover = document.getElementById('resumoPopover');
+
+    if (infoIcon && resumoPopover) {
+        const mostrarPopover = () => {
+            const rect = infoIcon.getBoundingClientRect();
+            resumoPopover.style.left = `${rect.left + window.scrollX}px`;
+            resumoPopover.style.top = `${rect.bottom + window.scrollY}px`;
+            resumoPopover.classList.add('show');
+        };
+
+        const ocultarPopover = () => {
+            resumoPopover.classList.remove('show');
+        };
+
+        infoIcon.addEventListener('mouseenter', mostrarPopover);
+        infoIcon.addEventListener('mouseleave', () => {
+            setTimeout(() => {
+                if (!resumoPopover.matches(':hover')) ocultarPopover();
+            }, 100);
+        });
+        resumoPopover.addEventListener('mouseleave', ocultarPopover);
+    }
 }
 
 if (document.readyState === 'loading') {
