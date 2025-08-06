@@ -59,6 +59,8 @@ function expandSidebar() {
         mainContent.style.marginLeft = window.innerWidth >= 1024 ? '240px' : '200px';
         if (companyName) companyName.style.display = 'inline';
         if (logoContainer) {
+
+            logoContainer.classList.remove('justify-center');   // novo
             logoContainer.style.width = '';
         }
         sidebarExpanded = true;
@@ -73,7 +75,7 @@ function collapseSidebar() {
         if (companyName) companyName.style.display = 'none';
         if (logoContainer) {
             logoContainer.classList.add('justify-center');
-            logoContainer.style.width = '64px';
+            logoContainer.style.width = '';
         }
         sidebarExpanded = false;
     }

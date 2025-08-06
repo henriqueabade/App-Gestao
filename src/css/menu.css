@@ -225,9 +225,3 @@ header.glass-surface {
     width: 0;
     overflow: hidden;
 }
-
-.sidebar-collapsed .brand {
-    /* Centraliza a logo na coluna de ícones */
-    justify-content: center;
-    padding-left: 0;
-}

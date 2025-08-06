@@ -19,7 +19,14 @@
     <header class="fixed top-0 left-0 right-0 z-50 h-14 glass-surface border-b border-white/10">
         <div class="flex items-center justify-between h-full px-4">
             <!-- Logo & Menu Toggle -->
-            <div id="logoContainer" class="flex items-center space-x-3">
+            <div id="logoContainer" class="flex items-center">
+                 <style>
+                     #logoContainer 
+                      { margin-left: -1vw; /* Exemplo: 5% da largura da tela */ }
+                      #companyName 
+                      { margin-left: 1vw; /* Exemplo: 5% da largura da tela */ }
+
+                    </style>
                 <button id="menuToggle" class="p-2 rounded-lg transition-colors duration-150 hover:bg-white/10 lg:hidden">
                     <i class="fas fa-bars w-5 h-5" style="color: var(--color-primary)"></i>
                 </button>
