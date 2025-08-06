@@ -168,3 +168,28 @@ body {
         transform: translateY(0);
     }
 }
+
+/* Barra de filtros responsiva */
+.filter-bar {
+    gap: 24px;
+    align-items: center;
+}
+
+@media (min-width: 1280px) {
+    .filter-bar {
+        flex-wrap: nowrap;
+    }
+}
+
+@media (max-width: 767px) {
+    .filter-bar {
+        flex-direction: column;
+        align-items: stretch;
+    }
+}
+
+.filter-bar input:not([type="checkbox"]),
+.filter-bar select,
+.filter-bar button {
+    height: 48px;
+}
