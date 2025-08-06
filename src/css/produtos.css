@@ -45,6 +45,17 @@ body {
     background: rgba(138, 167, 243, 0.9);
 }
 
+/* Status badges */
+.badge-success {
+    background: rgba(162, 255, 166, 0.2);
+    color: var(--color-green);
+}
+
+.badge-danger {
+    background: rgba(255, 88, 88, 0.2);
+    color: var(--color-red);
+}
+
 .input-glass {
     background: rgba(255, 255, 255, 0.1);
     border: 1px solid rgba(255, 255, 255, 0.2);
