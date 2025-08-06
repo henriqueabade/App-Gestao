@@ -26,20 +26,13 @@ function createScrollbar(module) {
     <div class="track"><div class="thumb"></div></div>
     <div class="arrow down">▼</div>
   `;
-  document.body.appendChild(sb);
+  module.appendChild(sb);
   currentScrollbar = sb;
 
   const up    = sb.querySelector('.arrow.up');
   const down  = sb.querySelector('.arrow.down');
   const track = sb.querySelector('.track');
   const thumb = sb.querySelector('.thumb');
-
-  // Posiciona verticalmente junto ao módulo
-  function positionBar() {
-    const r = module.getBoundingClientRect();
-    sb.style.top    = `${r.top}px`;
-    sb.style.height = `${r.height}px`;
-  }
 
   // Atualiza thumb (tamanho e posição)
   function updateThumb() {
@@ -77,13 +70,9 @@ function createScrollbar(module) {
 
   // Sincroniza thumb ao scroll e resize
   module.addEventListener('scroll', updateThumb);
-  window.addEventListener('resize', () => {
-    positionBar();
-    updateThumb();
-  });
+  window.addEventListener('resize', updateThumb);
 
   // Primeira invocação
-  positionBar();
   updateThumb();
 }
 
