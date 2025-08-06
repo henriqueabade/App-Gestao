@@ -25,7 +25,7 @@ function renderMateriais(lista) {
             <i class="fas fa-trash w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10 hover:text-white" style="color: var(--color-red)" title="Excluir"></i>
         </div>`;
 
-    lista.forEach(item => {
+    lista.forEach((item, index) => {
         const tr = document.createElement('tr');
         tr.className = 'transition-colors duration-150';
         tr.style.cursor = 'pointer';
@@ -36,10 +36,19 @@ function renderMateriais(lista) {
             tr.style.background = 'transparent';
         });
         tr.innerHTML = `
-            <td class="px-6 py-4 whitespace-nowrap">
+            <td class="px-6 py-4 whitespace-nowrap relative">
                 <div class="flex items-center">
                     <span class="text-sm text-white">${item.nome}</span>
-                    <i class="fas fa-info-circle w-4 h-4 ml-2 cursor-pointer" style="color: var(--color-primary)" title="Informações detalhadas"></i>
+                    <!-- Ícone de informações -->
+                    <i id="infoIcon_${index}" class="info-icon ml-2"></i>
+                </div>
+                <!-- Popover informativo -->
+                <div id="popover_${index}" class="resumo-popover glass-surface rounded-xl p-4 text-sm text-white">
+                    <h3 class="font-medium mb-2">${item.nome}</h3>
+                    <div class="text-xs text-gray-400 mb-1">Quantidade</div>
+                    <div class="mb-2">${item.quantidade} ${item.unidade}</div>
+                    <div class="text-xs text-gray-400 mb-1">Preço Unitário</div>
+                    <div>R$ ${item.preco.toFixed(2).replace('.', ',')}</div>
                 </div>
             </td>
             <td class="px-6 py-4 whitespace-nowrap text-sm text-white">${item.quantidade}</td>
@@ -48,6 +57,31 @@ function renderMateriais(lista) {
             <td class="px-6 py-4 whitespace-nowrap text-center">${acoes}</td>
         `;
         tbody.appendChild(tr);
+
+        // Controle do popover
+        const infoIcon = tr.querySelector(`#infoIcon_${index}`);
+        const popover = tr.querySelector(`#popover_${index}`);
+        if (infoIcon && popover) {
+            const mostrarPopover = () => {
+                const rect = infoIcon.getBoundingClientRect();
+                popover.style.position = 'fixed';
+                popover.style.left = `${rect.left}px`;
+                popover.style.top = `${rect.bottom}px`;
+                popover.classList.add('show');
+            };
+
+            const ocultarPopover = () => {
+                popover.classList.remove('show');
+            };
+
+            infoIcon.addEventListener('mouseenter', mostrarPopover);
+            infoIcon.addEventListener('mouseleave', () => {
+                setTimeout(() => {
+                    if (!popover.matches(':hover')) ocultarPopover();
+                }, 100);
+            });
+            popover.addEventListener('mouseleave', ocultarPopover);
+        }
     });
 }
 
