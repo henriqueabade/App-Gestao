@@ -1,14 +1,73 @@
 // Script principal do módulo Clientes (CRM)
 // Carrega lista de empresas e aplica interações básicas da tela
 
+let clientesCache = [];
+
 async function carregarClientes() {
     try {
         const resp = await fetch('http://localhost:3000/api/clientes/lista');
-        const clientes = await resp.json();
-        renderClientes(clientes);
+        clientesCache = await resp.json();
+        renderClientes(clientesCache);
+        preencherFiltros(clientesCache);
     } catch (err) {
         console.error('Erro ao carregar clientes', err);
     }
+}
+
+function preencherFiltros(clientes) {
+    const donoSel = document.getElementById('donoSelect');
+    const statusSel = document.getElementById('statusSelect');
+    const dataList = document.getElementById('clientesOptions');
+
+    if (donoSel) {
+        const donos = [...new Set(clientes.map(c => c.dono_cliente).filter(Boolean))];
+        donoSel.innerHTML = '<option value="">Todos</option>' +
+            donos.map(d => `<option value="${d}">${d}</option>`).join('');
+    }
+    if (statusSel) {
+        const status = [...new Set(clientes.map(c => c.status_cliente).filter(Boolean))];
+        statusSel.innerHTML = '<option value="">Todos</option>' +
+            status.map(s => `<option value="${s}">${s}</option>`).join('');
+    }
+    if (dataList) {
+        const valores = new Set();
+        clientes.forEach(c => {
+            if (c.nome_fantasia) valores.add(c.nome_fantasia);
+            if (c.cnpj) valores.add(c.cnpj);
+            if (c.estado) valores.add(c.estado);
+        });
+        dataList.innerHTML = Array.from(valores).map(v => `<option value="${v}"></option>`).join('');
+    }
+}
+
+function aplicarFiltro() {
+    const busca = document.getElementById('searchCliente')?.value.trim().toLowerCase() || '';
+    const dono = document.getElementById('donoSelect')?.value || '';
+    const status = document.getElementById('statusSelect')?.value || '';
+
+    const filtrados = clientesCache.filter(c => {
+        const cnpjNum = (c.cnpj || '').replace(/\D/g, '');
+        const buscaNum = busca.replace(/\D/g, '');
+        const matchBusca = !busca ||
+            (c.nome_fantasia && c.nome_fantasia.toLowerCase().includes(busca)) ||
+            (c.estado && c.estado.toLowerCase().includes(busca)) ||
+            (cnpjNum && cnpjNum.includes(buscaNum));
+        const matchDono = !dono || c.dono_cliente === dono;
+        const matchStatus = !status || c.status_cliente === status;
+        return matchBusca && matchDono && matchStatus;
+    });
+
+    renderClientes(filtrados);
+}
+
+function limparFiltros() {
+    const buscaEl = document.getElementById('searchCliente');
+    const donoEl = document.getElementById('donoSelect');
+    const statusEl = document.getElementById('statusSelect');
+    if (buscaEl) buscaEl.value = '';
+    if (donoEl) donoEl.value = '';
+    if (statusEl) statusEl.value = '';
+    renderClientes(clientesCache);
 }
 
 function badgeForStatus(status) {
@@ -62,6 +121,9 @@ function initClientes() {
     });
 
     carregarClientes();
+
+    document.getElementById('filtrarBtn')?.addEventListener('click', aplicarFiltro);
+    document.getElementById('limparBtn')?.addEventListener('click', limparFiltros);
 }
 
 if (document.readyState === 'loading') {
