@@ -93,10 +93,26 @@ function renderMateriais(lista) {
         const popover = tr.querySelector(`#popover_${index}`);
         if (infoIcon && popover) {
             const mostrarPopover = () => {
-                const rect = infoIcon.getBoundingClientRect();
-                popover.style.position = 'fixed';
-                popover.style.left = `${rect.left}px`;
-                popover.style.top = `${rect.bottom}px`;
+                const iconRect = infoIcon.getBoundingClientRect();
+                const popRect = popover.getBoundingClientRect();
+
+                let top = iconRect.bottom + 8;
+                let left = iconRect.left + iconRect.width / 2 - popRect.width / 2;
+
+                if (top + popRect.height > window.innerHeight) {
+                    top = iconRect.top - popRect.height - 8;
+                    if (top < 0) {
+                        top = window.innerHeight / 2 - popRect.height / 2;
+                    }
+                }
+
+                if (left + popRect.width > window.innerWidth) {
+                    left = window.innerWidth - popRect.width - 8;
+                }
+                if (left < 8) left = 8;
+
+                popover.style.left = `${left}px`;
+                popover.style.top = `${top}px`;
                 popover.classList.add('show');
             };
 
