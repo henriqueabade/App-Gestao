@@ -95,25 +95,21 @@ function renderMateriais(lista) {
             const mostrarPopover = () => {
                 const iconRect = infoIcon.getBoundingClientRect();
                 const popRect = popover.getBoundingClientRect();
-                const container = infoIcon.closest('.table-scroll') || infoIcon.closest('.modulo-container') || document.body;
-                const containerRect = container.getBoundingClientRect();
 
-                let left = iconRect.right + 8;
-                let top = iconRect.top + iconRect.height / 2 - popRect.height / 2;
+                let top = iconRect.bottom + 8;
+                let left = iconRect.left + iconRect.width / 2 - popRect.width / 2;
 
-                if (left + popRect.width > containerRect.right) {
-                    left = iconRect.left - popRect.width - 8;
-                }
-                if (left < containerRect.left) {
-                    left = containerRect.left;
+                if (top + popRect.height > window.innerHeight) {
+                    top = iconRect.top - popRect.height - 8;
+                    if (top < 0) {
+                        top = window.innerHeight / 2 - popRect.height / 2;
+                    }
                 }
 
-                if (top < containerRect.top) {
-                    top = containerRect.top;
+                if (left + popRect.width > window.innerWidth) {
+                    left = window.innerWidth - popRect.width - 8;
                 }
-                if (top + popRect.height > containerRect.bottom) {
-                    top = containerRect.bottom - popRect.height;
-                }
+                if (left < 8) left = 8;
 
                 popover.style.left = `${left}px`;
                 popover.style.top = `${top}px`;

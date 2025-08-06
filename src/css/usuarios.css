@@ -221,10 +221,8 @@ body {
 
 /* Popover do resumo */
 .resumo-popover {
-    position: fixed;
-    top: 0;
-    left: 0;
-    z-index: 9999;
+    position: absolute;
+    z-index: 50;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.555);
     opacity: 0;
     visibility: hidden;
