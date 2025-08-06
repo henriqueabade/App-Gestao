@@ -92,8 +92,8 @@ function refreshScrollbar() {
   // Remove barra antiga
   removeScrollbar();
 
-  // Busca todos os módulos
-  const modules = Array.from(document.querySelectorAll('.modulo-container'));
+  // Busca todos os módulos e tabelas com scroll
+  const modules = Array.from(document.querySelectorAll('.modulo-container, .table-scroll'));
   // Filtra pelos que realmente estão visíveis e precisam de scroll
   const visible = modules.filter(m => {
     const rect = m.getBoundingClientRect();
