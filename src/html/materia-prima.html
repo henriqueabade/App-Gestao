@@ -42,43 +42,8 @@
                             <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Ações</th>
                         </tr>
                     </thead>
-                    <tbody class="divide-y divide-white/10">
-                        <!-- Example rows -->
-                        <tr class="transition-colors duration-150" style="cursor: pointer;" onmouseover="this.style.background='rgba(163, 148, 167, 0.05)'" onmouseout="this.style.background='transparent'">
-                            <td class="px-6 py-4 whitespace-nowrap">
-                                <div class="flex items-center">
-                                    <span class="text-sm text-white">Madeira de Carvalho</span>
-                                    <i class="fas fa-info-circle w-4 h-4 ml-2 cursor-pointer" style="color: var(--color-primary)" title="Informações detalhadas"></i>
-                                </div>
-                            </td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-white">150</td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-violet)">m²</td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-white">R$ 85,00</td>
-                            <td class="px-6 py-4 whitespace-nowrap text-center">
-                                <div class="flex items-center justify-center space-x-2">
-                                    <i class="fas fa-edit w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Editar"></i>
-                                    <i class="fas fa-trash w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10 hover:text-white" style="color: var(--neutral-500)" title="Excluir"></i>
-                                </div>
-                            </td>
-                        </tr>
-                        <!-- Out of stock example -->
-                        <tr class="transition-colors duration-150" style="cursor: pointer; background: rgba(255, 88, 88, 0.1);" onmouseover="this.style.background='rgba(255, 88, 88, 0.15)'" onmouseout="this.style.background='rgba(255, 88, 88, 0.1)'">
-                            <td class="px-6 py-4 whitespace-nowrap">
-                                <div class="flex items-center">
-                                    <span class="text-sm" style="color: var(--color-red)">Parafusos Phillips 4x40</span>
-                                    <i class="fas fa-info-circle w-4 h-4 ml-2 cursor-pointer" style="color: var(--color-primary)" title="Informações detalhadas"></i>
-                                </div>
-                            </td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-red)">8</td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-violet)">cx</td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-red)">R$ 15,90</td>
-                            <td class="px-6 py-4 whitespace-nowrap text-center">
-                                <div class="flex items-center justify-center space-x-2">
-                                    <i class="fas fa-edit w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Editar"></i>
-                                    <i class="fas fa-trash w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10 hover:text-white" style="color: var(--neutral-500)" title="Excluir"></i>
-                                </div>
-                            </td>
-                        </tr>
+                    <tbody id="materiaPrimaTableBody" class="divide-y divide-white/10">
+                        <!-- Linhas geradas dinamicamente -->
                     </tbody>
                 </table>
             </div>
