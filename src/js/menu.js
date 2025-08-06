@@ -13,9 +13,6 @@ const companyName = document.getElementById('companyName');
 // Ajusta logo e nome conforme estado inicial da sidebar
 if (sidebar && !sidebar.classList.contains('sidebar-expanded')) {
     if (companyName) companyName.style.display = 'none';
-    if (logoContainer) {
-        logoContainer.style.width = '64px';
-    }
 }
 
 // Carrega páginas modulares dentro da div#content
@@ -57,9 +54,6 @@ function expandSidebar() {
         sidebar.classList.add('sidebar-expanded');
         mainContent.style.marginLeft = window.innerWidth >= 1024 ? '240px' : '200px';
         if (companyName) companyName.style.display = 'inline';
-        if (logoContainer) {
-            logoContainer.style.width = '';
-        }
         sidebarExpanded = true;
     }
 }
@@ -70,9 +64,6 @@ function collapseSidebar() {
         sidebar.classList.add('sidebar-collapsed');
         mainContent.style.marginLeft = '64px';
         if (companyName) companyName.style.display = 'none';
-        if (logoContainer) {
-            logoContainer.style.width = '64px';
-        }
         sidebarExpanded = false;
     }
     // Submenu CRM permanece aberto; fechamento apenas via clique
