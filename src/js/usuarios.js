@@ -54,8 +54,8 @@ function initUsuarios() {
     if (infoIcon && resumoPopover) {
         const mostrarPopover = () => {
             const rect = infoIcon.getBoundingClientRect();
-            resumoPopover.style.left = `${rect.left + window.scrollX}px`;
-            resumoPopover.style.top = `${rect.bottom + window.scrollY}px`;
+            resumoPopover.style.left = '1vw';
+            resumoPopover.style.top = '2.5vw';
             resumoPopover.classList.add('show');
         };
 

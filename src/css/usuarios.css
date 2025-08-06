@@ -223,12 +223,13 @@ body {
 .resumo-popover {
     position: absolute;
     z-index: 50;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.555);
     opacity: 0;
     visibility: hidden;
     transform: translateY(8px);
     transition: opacity 200ms ease, transform 200ms ease;
     pointer-events: none;
+    background: #310017c5;
 }
 
 .resumo-popover.show {
