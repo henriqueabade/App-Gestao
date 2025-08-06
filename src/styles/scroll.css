@@ -28,6 +28,19 @@ html, body, #app, #mainContent, #content {
   display: none;
 }
 
+/* 3a) Scroll personalizado para tabelas */
+.table-scroll {
+  overflow-y: auto;
+  overflow-x: hidden;
+  max-height: calc(var(--module-height) - 200px);
+  padding-right: var(--arrow-size);
+  box-sizing: border-box;
+}
+
+.table-scroll::-webkit-scrollbar {
+  display: none;
+}
+
 /* 5) Container da scrollbar custom (injetado via JS) */
 .scrollbar-container {
   position: fixed;
