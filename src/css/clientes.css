@@ -122,3 +122,6 @@ body {
         align-items: stretch;
     }
 }
+#bt-actions {
+    margin-top: 1vw;
+}

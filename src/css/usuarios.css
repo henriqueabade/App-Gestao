@@ -48,12 +48,12 @@ body {
 }
 
 .btn-warning {
-    background: var(--color-orange);
+    background: var(--color-bordeaux);
     transition: all 150ms ease;
 }
 
 .btn-warning:hover {
-    background: rgba(255, 163, 102, 0.8);
+    background: rgba(106, 21, 44, 0.8);
     transform: scale(1.05);
 }
 
@@ -237,4 +237,8 @@ body {
     visibility: visible;
     transform: translateY(0);
     pointer-events: auto;
+}
+
+#bt-actions {
+    margin-top: 1.5vw;
 }
