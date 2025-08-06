@@ -30,7 +30,6 @@ html, body, #app, #mainContent, #content {
 
 /* 3a) Scroll personalizado para tabelas */
 .table-scroll {
-  position: relative;
   overflow-y: auto;
   overflow-x: hidden;
   max-height: calc(var(--module-height) - 200px);
@@ -44,10 +43,9 @@ html, body, #app, #mainContent, #content {
 
 /* 5) Container da scrollbar custom (injetado via JS) */
 .scrollbar-container {
-  position: absolute;
-  top: 0;
-  right: 0;
-  height: 100%;
+  position: fixed;
+  left: 98%;
+  transform: translateX(-50%);
   width: var(--arrow-size);
   display: flex;
   flex-direction: column;
