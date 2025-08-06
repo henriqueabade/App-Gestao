@@ -75,7 +75,7 @@ function collapseSidebar() {
         if (companyName) companyName.style.display = 'none';
         if (logoContainer) {
             logoContainer.classList.add('justify-center');
-            logoContainer.style.width = '';
+            logoContainer.style.width = '64px';
         }
         sidebarExpanded = false;
     }
