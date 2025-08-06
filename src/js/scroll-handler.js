@@ -92,8 +92,8 @@ function refreshScrollbar() {
   // Remove barra antiga
   removeScrollbar();
 
-  // Busca todos os módulos e tabelas com scroll
-  const modules = Array.from(document.querySelectorAll('.modulo-container, .table-scroll'));
+  // Busca todas as tabelas e módulos com scroll, priorizando tabelas
+  const modules = Array.from(document.querySelectorAll('.table-scroll, .modulo-container'));
   // Filtra pelos que realmente estão visíveis e precisam de scroll
   const visible = modules.filter(m => {
     const rect = m.getBoundingClientRect();
@@ -105,10 +105,16 @@ function refreshScrollbar() {
   }
 }
 
-// Observa carregamento dinâmico de novos módulos
+// Observa carregamento dinâmico de módulos e tabelas
 function observeModules() {
   const main = document.getElementById('mainContent');
   if (!main) return;
+
+  const callback = () => {
+    refreshScrollbar();
+    observeTables();
+  };
+
   new MutationObserver(muts => {
     muts.forEach(m => {
       m.addedNodes.forEach(node => {
@@ -116,17 +122,27 @@ function observeModules() {
           node.matches('.modulo-container') ||
           node.querySelector('.modulo-container')
         )) {
-          refreshScrollbar();
+          callback();
         }
       });
     });
   }).observe(main, { childList: true, subtree: true });
 }
 
+// Observa alterações nas tabelas para garantir barra atualizada
+function observeTables() {
+  document.querySelectorAll('.table-scroll').forEach(table => {
+    if (table.dataset.observed) return;
+    new MutationObserver(refreshScrollbar).observe(table, { childList: true, subtree: true });
+    table.dataset.observed = 'true';
+  });
+}
+
 // Inicialização
 window.addEventListener('DOMContentLoaded', () => {
   refreshScrollbar();
   observeModules();
+  observeTables();
 });
 window.addEventListener('load', refreshScrollbar);
 window.addEventListener('resize', refreshScrollbar);
