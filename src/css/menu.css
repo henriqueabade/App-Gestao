@@ -198,6 +198,11 @@ header.glass-surface {
     align-items: center;
 }
 
+.sidebar-collapsed #logoContainer {
+    width: 64px;
+    justify-content: flex-start;
+}
+
 #logoContainer img {
     width: 48px !important;
     height: auto !important;
