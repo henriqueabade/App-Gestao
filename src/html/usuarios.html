@@ -24,78 +24,71 @@
             </button>
         </div>
 
-        <!-- Filters & Metrics Panel -->
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-            <!-- Filters Column -->
-            <div class="glass-surface rounded-xl p-6 animate-fade-in-up">
-                <h3 class="font-medium mb-4 text-white">Filtros</h3>
-                <div class="space-y-4">
-                    <!-- Search -->
-                    <div>
-                        <label class="block text-sm font-medium text-white mb-2">Buscar</label>
-                        <input id="filtroBusca" type="text" placeholder="Nome ou E-mail" class="input-glass w-full px-3 py-2 rounded-md text-white placeholder-gray-400">
-                    </div>
+        <!-- Barra de filtros horizontal -->
+        <div class="glass-surface rounded-xl p-6 mb-6 animate-fade-in-up">
+            <div class="filter-bar flex flex-col md:flex-row md:flex-wrap xl:flex-nowrap items-center">
+                <!-- Search -->
+                <div class="flex-1 min-w-[220px]">
+                    <label class="block text-sm font-medium mb-2 text-white">Buscar</label>
+                    <input id="filtroBusca" type="text" placeholder="Nome ou E-mail" class="input-glass text-white rounded-md px-4 h-12 w-full placeholder-gray-400">
+                </div>
 
-                    <!-- Profile Filter -->
-                    <div>
-                        <label class="block text-sm font-medium text-white mb-2">Perfil</label>
-                        <select id="filtroPerfil" class="select-glass w-full px-3 py-2 rounded-md text-white">
-                            <option value="">Todos</option>
-                            <option value="admin">Admin</option>
-                            <option value="operacional">Operacional</option>
-                            <option value="cliente">Cliente</option>
-                        </select>
-                    </div>
+                <!-- Profile Filter -->
+                <div class="flex-1 min-w-[160px]">
+                    <label class="block text-sm font-medium mb-2 text-white">Perfil</label>
+                    <select id="filtroPerfil" class="select-glass text-white rounded-md px-4 h-12 w-full">
+                        <option value="">Todos</option>
+                        <option value="admin">Admin</option>
+                        <option value="operacional">Operacional</option>
+                        <option value="cliente">Cliente</option>
+                    </select>
+                </div>
 
-                    <!-- Status Filter -->
-                    <div>
-                        <label class="block text-sm font-medium text-white mb-2">Status</label>
-                        <div class="space-y-2">
-                            <label class="flex items-center">
-                                <input type="checkbox" class="checkbox-custom mr-2" value="ativo" checked>
-                                <span class="text-sm text-white">Ativo</span>
-                            </label>
-                            <label class="flex items-center">
-                                <input type="checkbox" class="checkbox-custom mr-2" value="inativo">
-                                <span class="text-sm text-white">Inativo</span>
-                            </label>
-                            <label class="flex items-center">
-                                <input type="checkbox" class="checkbox-custom mr-2" value="aguardando">
-                                <span class="text-sm text-white">Aguardando</span>
-                            </label>
-                        </div>
+                <!-- Status Filter -->
+                <div class="flex flex-col">
+                    <label class="block text-sm font-medium mb-2 text-white">Status</label>
+                    <div class="flex items-center gap-3 h-12">
+                        <label class="flex items-center gap-2">
+                            <input type="checkbox" class="checkbox-custom" value="ativo" checked>
+                            <span class="text-sm text-white">Ativo</span>
+                        </label>
+                        <label class="flex items-center gap-2">
+                            <input type="checkbox" class="checkbox-custom" value="inativo">
+                            <span class="text-sm text-white">Inativo</span>
+                        </label>
+                        <label class="flex items-center gap-2">
+                            <input type="checkbox" class="checkbox-custom" value="aguardando">
+                            <span class="text-sm text-white">Aguardando</span>
+                        </label>
                     </div>
+                </div>
 
-                    <!-- Action Buttons -->
-                    <div class="flex gap-2 pt-2">
-                        <button id="aplicarFiltro" class="btn-secondary px-4 py-2 rounded-md text-white text-sm font-medium flex-1">Aplicar Filtros</button>
-                        <button id="limparFiltro" class="btn-warning px-4 py-2 rounded-md text-white text-sm font-medium flex-1">Limpar</button>
-                    </div>
+                <!-- Action Buttons -->
+                <div class="flex items-center gap-2">
+                    <button id="aplicarFiltro" class="btn-secondary text-white rounded-md px-4 h-12 text-sm font-medium">Aplicar Filtros</button>
+                    <button id="limparFiltro" class="btn-warning text-white rounded-md px-4 h-12 text-sm font-medium">Limpar</button>
                 </div>
             </div>
+        </div>
 
-            <!-- Metrics Column -->
-            <div class="md:col-span-2 space-y-6 animate-fade-in-up">
-                <!-- Total Users -->
-                <div class="glass-surface rounded-xl p-6">
-                    <h3 class="font-medium mb-4 text-white">Resumo</h3>
-                    <div class="text-3xl font-bold text-white mb-2" id="totalUsuarios">247</div>
-                    <div class="text-sm text-gray-400 mb-4">Total de usuários</div>
+        <!-- Resumo de métricas -->
+        <div class="glass-surface rounded-xl p-6 mb-6 animate-fade-in-up">
+            <h3 class="font-medium mb-4 text-white">Resumo</h3>
+            <div class="text-3xl font-bold text-white mb-2" id="totalUsuarios">247</div>
+            <div class="text-sm text-gray-400 mb-4">Total de usuários</div>
 
-                    <!-- Status Distribution -->
-                    <div class="flex flex-wrap gap-2 mb-4" id="distribuicaoStatus">
-                        <span class="badge-success px-3 py-1 rounded-full text-xs font-medium">189 Ativos</span>
-                        <span class="badge-danger px-3 py-1 rounded-full text-xs font-medium">32 Inativos</span>
-                        <span class="badge-warning px-3 py-1 rounded-full text-xs font-medium">26 Aguardando</span>
-                    </div>
+            <!-- Status Distribution -->
+            <div class="flex flex-wrap gap-2 mb-4" id="distribuicaoStatus">
+                <span class="badge-success px-3 py-1 rounded-full text-xs font-medium">189 Ativos</span>
+                <span class="badge-danger px-3 py-1 rounded-full text-xs font-medium">32 Inativos</span>
+                <span class="badge-warning px-3 py-1 rounded-full text-xs font-medium">26 Aguardando</span>
+            </div>
 
-                    <!-- Profile Distribution -->
-                    <div class="text-sm text-gray-400 space-y-1" id="distribuicaoPerfis">
-                        <div>• 12 Administradores</div>
-                        <div>• 89 Operacionais</div>
-                        <div>• 146 Clientes</div>
-                    </div>
-                </div>
+            <!-- Profile Distribution -->
+            <div class="text-sm text-gray-400 space-y-1" id="distribuicaoPerfis">
+                <div>• 12 Administradores</div>
+                <div>• 89 Operacionais</div>
+                <div>• 146 Clientes</div>
             </div>
         </div>
 
