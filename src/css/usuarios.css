@@ -193,3 +193,47 @@ body {
 .filter-bar button {
     height: 48px;
 }
+
+/* Ícone de informações ao lado do título */
+.info-icon {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    border: 1px solid var(--color-primary);
+    color: var(--color-primary);
+    font-size: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 150ms ease;
+}
+
+.info-icon::before {
+    content: 'i';
+    font-weight: bold;
+}
+
+.info-icon:hover {
+    background: var(--color-primary);
+    color: #fff;
+}
+
+/* Popover do resumo */
+.resumo-popover {
+    position: absolute;
+    z-index: 50;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(8px);
+    transition: opacity 200ms ease, transform 200ms ease;
+    pointer-events: none;
+}
+
+.resumo-popover.show {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
+    pointer-events: auto;
+}
