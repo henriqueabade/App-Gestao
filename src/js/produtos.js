@@ -11,6 +11,14 @@ function initProdutos() {
     });
 
     // TODO: Implementar filtros e manipulação de estoque
+
+    // Insere ícones de ação em todas as linhas da tabela
+    const template = document.getElementById('action-icons-template');
+    if (template) {
+        document.querySelectorAll('.action-cell').forEach(cell => {
+            cell.appendChild(template.content.cloneNode(true));
+        });
+    }
 }
 
 if (document.readyState === 'loading') {
