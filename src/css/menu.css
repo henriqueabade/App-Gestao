@@ -196,11 +196,14 @@ header.glass-surface {
     display: flex;
     justify-content: center;
     align-items: center;
+    width: 64px;
+    position: relative;
 }
 
-.sidebar-collapsed #logoContainer {
-    width: 64px;
-    justify-content: flex-start;
+#companyName {
+    position: absolute;
+    left: 72px;
+    white-space: nowrap;
 }
 
 #logoContainer img {
