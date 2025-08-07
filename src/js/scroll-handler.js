@@ -26,7 +26,7 @@ function createScrollbar(module) {
     <div class="track"><div class="thumb"></div></div>
     <div class="arrow down">▼</div>
   `;
-  document.body.appendChild(sb);
+  module.appendChild(sb);
   currentScrollbar = sb;
 
   const up    = sb.querySelector('.arrow.up');
@@ -36,9 +36,7 @@ function createScrollbar(module) {
 
   // Posiciona verticalmente junto ao módulo
   function positionBar() {
-    const r = module.getBoundingClientRect();
-    sb.style.top    = `${r.top}px`;
-    sb.style.height = `${r.height}px`;
+    sb.style.height = `${module.clientHeight}px`;
   }
 
   // Atualiza thumb (tamanho e posição)

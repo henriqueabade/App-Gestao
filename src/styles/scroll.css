@@ -9,7 +9,7 @@ html, body, #app, #mainContent, #content {
   --module-height: calc(95vh - var(--header-height));
   --arrow-size: 16px;
   --track-width: 4px;
-  --thumb-color: #f0c94c;
+  --thumb-color: var(--color-primary, #b6a03e);
 }
 
 /* 3) Cada módulo: só scroll vertical, nunca horizontal */
@@ -30,6 +30,7 @@ html, body, #app, #mainContent, #content {
 
 /* 3a) Scroll personalizado para tabelas */
 .table-scroll {
+  position: relative;
   overflow-y: auto;
   overflow-x: hidden;
   max-height: calc(var(--module-height) - 200px);
@@ -43,9 +44,10 @@ html, body, #app, #mainContent, #content {
 
 /* 5) Container da scrollbar custom (injetado via JS) */
 .scrollbar-container {
-  position: fixed;
-  left: 98%;
-  transform: translateX(-50%);
+  position: absolute;
+  top: 0;
+  right: 0;
+  height: 100%;
   width: var(--arrow-size);
   display: flex;
   flex-direction: column;
