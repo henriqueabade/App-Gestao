@@ -100,3 +100,14 @@ select option {
   color: #000;
   background: #fff;
 }
+
+/* Correção de sobreposição entre cabeçalho fixo e tabelas */
+header {
+  z-index: 1000;
+}
+
+.table-scroll thead {
+  position: sticky;
+  top: var(--header-height);
+  z-index: 1;
+}
