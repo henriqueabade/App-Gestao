@@ -95,29 +95,21 @@ function renderMateriais(lista) {
             const mostrarPopover = () => {
                 const iconRect = infoIcon.getBoundingClientRect();
                 const popRect = popover.getBoundingClientRect();
-                const viewportWidth = window.innerWidth;
-                const viewportHeight = window.innerHeight;
-                const margin = 8; // margem mínima na viewport
 
-                // Posição padrão: abaixo do ícone
-                let top = iconRect.bottom + margin;
-                // Se não couber abaixo, abre acima
-                if (top + popRect.height > viewportHeight - margin) {
-                    top = iconRect.top - popRect.height - margin;
-                }
-                // Garante que o popup permaneça visível na vertical
-                if (top < margin) top = margin;
-                if (top + popRect.height > viewportHeight - margin) {
-                    top = viewportHeight - popRect.height - margin;
-                }
-
-                // Centraliza horizontalmente relativo ao ícone
+                let top = iconRect.bottom + 8;
                 let left = iconRect.left + iconRect.width / 2 - popRect.width / 2;
-                // Ajusta se ultrapassar as bordas laterais
-                if (left + popRect.width > viewportWidth - margin) {
-                    left = viewportWidth - popRect.width - margin;
+
+                if (top + popRect.height > window.innerHeight) {
+                    top = iconRect.top - popRect.height - 8;
+                    if (top < 0) {
+                        top = window.innerHeight / 2 - popRect.height / 2;
+                    }
                 }
-                if (left < margin) left = margin;
+
+                if (left + popRect.width > window.innerWidth) {
+                    left = window.innerWidth - popRect.width - 8;
+                }
+                if (left < 8) left = 8;
 
                 popover.style.left = `${left}px`;
                 popover.style.top = `${top}px`;
