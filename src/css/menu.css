@@ -79,6 +79,11 @@ header.glass-surface {
     color: inherit;
     transition: color 0.2s ease;
 }
+
+.sidebar-item i, .submenu-item i {
+    width: 1.25rem;
+    text-align: center;
+}
 /* Highlight item on hover */
 .sidebar-item:hover { 
 
@@ -194,16 +199,11 @@ header.glass-surface {
 /* Ajuste do tamanho da Logo no topo */
 #logoContainer {
     display: flex;
-    justify-content: center;
     align-items: center;
-    width: 64px;
-    position: relative;
-    transition: margin-left 0.2s ease;
 }
 
 #companyName {
-    position: absolute;
-    left: 64px;
+    margin-left: 0.5rem;
     white-space: nowrap;
 }
 
