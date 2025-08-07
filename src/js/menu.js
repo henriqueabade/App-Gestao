@@ -7,7 +7,6 @@ const menuToggle = document.getElementById('menuToggle');
 const crmToggle = document.getElementById('crmToggle');
 const crmSubmenu = document.getElementById('crmSubmenu');
 const chevron = crmToggle.querySelector('.chevron');
-const logoContainer = document.getElementById('logoContainer');
 const companyName = document.getElementById('companyName');
 
 // Ajusta logo e nome conforme estado inicial da sidebar
@@ -73,13 +72,7 @@ function collapseSidebar() {
     // Submenu CRM permanece aberto; fechamento apenas via clique
 }
 
-// Comportamento desktop: expande ao passar o mouse e recolhe ao sair
-if (window.innerWidth >= 1024) {
-    sidebar.addEventListener('mouseenter', expandSidebar);
-    sidebar.addEventListener('mouseleave', collapseSidebar);
-}
-
-// Alterna sidebar no mobile
+// Alterna a sidebar através do botão de menu
 menuToggle?.addEventListener('click', () => {
     if (sidebarExpanded) {
         collapseSidebar();
