@@ -86,11 +86,8 @@ menuToggle?.addEventListener('click', () => {
     }
 });
 
-// Recolhe a sidebar ao interagir com o conteúdo principal
-mainContent?.addEventListener('click', collapseSidebar);
-
-// Recolhe automaticamente ao carregar módulos
-document.addEventListener('module-change', () => collapseSidebar());
+// Recolhe a sidebar apenas quando o usuário entra no conteúdo principal
+mainContent?.addEventListener('mouseenter', collapseSidebar);
 
 // Mostra ou esconde submenu do CRM
 function toggleCrmSubmenu() {
