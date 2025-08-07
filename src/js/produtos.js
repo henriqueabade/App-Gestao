@@ -19,6 +19,30 @@ function initProdutos() {
             cell.appendChild(template.content.cloneNode(true));
         });
     }
+
+    // Ajusta os botões de ação conforme o estado da sidebar
+    ajustarBotoes();
+
+    const sidebar = document.getElementById('sidebar');
+    if (sidebar) {
+        const observer = new MutationObserver(ajustarBotoes);
+        observer.observe(sidebar, { attributes: true, attributeFilter: ['class'] });
+    }
+}
+
+// Reduz ou amplia o padding dos botões "Filtrar" e "Novo"
+function ajustarBotoes() {
+    const sidebar = document.getElementById('sidebar');
+    const expandida = sidebar?.classList.contains('sidebar-expanded');
+    document.querySelectorAll('#bt-actions button').forEach(btn => {
+        if (expandida) {
+            btn.classList.remove('px-4');
+            btn.classList.add('px-2');
+        } else {
+            btn.classList.remove('px-2');
+            btn.classList.add('px-4');
+        }
+    });
 }
 
 if (document.readyState === 'loading') {

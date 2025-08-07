@@ -3,21 +3,21 @@ const pool = require('./db');
 async function listarMaterias(filtro = '') {
   // Busca por nome, categoria, processo ou estado infinito
   const params = [];
-  const conditions = [];
+  let whereClause = '';
 
   if (filtro) {
-    params.push(`%${filtro}%`);
-    conditions.push(`(nome ILIKE $1 OR categoria ILIKE $1 OR processo ILIKE $1)`);
-
     const normalized = filtro.trim().toLowerCase();
-    if (['sim', 's', 'true', 'infinito', 'infinita'].includes(normalized)) {
-      conditions.push('infinito = true');
+
+    if (['sim', 's', 'true', 'infinito', 'infinita', '∞'].includes(normalized)) {
+      whereClause = 'WHERE infinito = true';
     } else if (['nao', 'não', 'n', 'false', 'finito', 'finita'].includes(normalized)) {
-      conditions.push('infinito = false');
+      whereClause = 'WHERE infinito = false';
+    } else {
+      params.push(`%${filtro}%`);
+      whereClause = 'WHERE (nome ILIKE $1 OR categoria ILIKE $1 OR processo ILIKE $1)';
     }
   }
 
-  const whereClause = conditions.length ? `WHERE ${conditions.join(' OR ')}` : '';
   const query = `SELECT * FROM materia_prima ${whereClause} ORDER BY nome`;
   const res = await pool.query(query, params);
   return res.rows;
