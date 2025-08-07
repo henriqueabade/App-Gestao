@@ -39,12 +39,36 @@ function renderMateriais(lista) {
         const tr = document.createElement('tr');
         tr.className = 'transition-colors duration-150';
         tr.style.cursor = 'pointer';
+
+        // Determina exibição da quantidade e estilo da linha
+        const isInfinite = !!item.infinito;
+        const quantidadeValor = isInfinite ? '∞' : (item.quantidade ?? 0);
+        const quantidadeNumero = Number(item.quantidade);
+
+        // Cor base da linha conforme regras de estoque
+        let baseColor = 'transparent';
+        if (isInfinite) {
+            baseColor = 'rgba(162, 255, 166, 0.1)';
+            tr.style.borderLeft = `4px solid var(--color-green)`;
+        } else if (!isNaN(quantidadeNumero) && quantidadeNumero < 10) {
+            baseColor = 'rgba(255, 88, 88, 0.1)';
+            tr.style.borderLeft = `4px solid var(--color-red)`;
+        }
+        tr.style.background = baseColor;
+
         tr.addEventListener('mouseover', () => {
-            tr.style.background = 'rgba(163, 148, 167, 0.05)';
+            if (isInfinite) {
+                tr.style.background = 'rgba(162, 255, 166, 0.15)';
+            } else if (!isNaN(quantidadeNumero) && quantidadeNumero < 10) {
+                tr.style.background = 'rgba(255, 88, 88, 0.15)';
+            } else {
+                tr.style.background = 'rgba(163, 148, 167, 0.05)';
+            }
         });
         tr.addEventListener('mouseout', () => {
-            tr.style.background = 'transparent';
+            tr.style.background = baseColor;
         });
+
         const preco = Number(item.preco_unitario || 0);
         tr.innerHTML = `
             <td class="px-6 py-4 whitespace-nowrap relative">
@@ -57,7 +81,7 @@ function renderMateriais(lista) {
                     <p class="text-xs text-gray-400 mb-1">Categoria:</p>
                     <p class="text-base font-semibold mb-2 text-white">${item.categoria || '-'}</p>
                     <div class="text-xs text-gray-400 mb-1">Quantidade</div>
-                    <div class="mb-2">${item.quantidade} ${item.unidade}</div>
+                    <div class="mb-2">${quantidadeValor} ${item.unidade || ''}</div>
                     <div class="text-xs text-gray-400 mb-1">Preço Unitário</div>
                     <div class="mb-4">R$ ${preco.toFixed(2).replace('.', ',')}</div>
                     <div class="grid grid-cols-2 gap-x-4 gap-y-2 mb-4 text-gray-200">
@@ -83,8 +107,8 @@ function renderMateriais(lista) {
                     <p class="text-gray-200">${item.descricao || '-'}</p>
                 </div>
             </td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-white">${item.quantidade}</td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-violet)">${item.unidade}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-white">${quantidadeValor}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-violet)">${item.unidade || ''}</td>
             <td class="px-6 py-4 whitespace-nowrap text-sm text-white">R$ ${preco.toFixed(2).replace('.', ',')}</td>
             <td class="px-6 py-4 whitespace-nowrap text-center">${acoes}</td>`;
         tbody.appendChild(tr);
