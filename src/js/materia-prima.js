@@ -7,6 +7,12 @@ function initMateriaPrima() {
             el.style.transform = 'translateY(0)';
         }, index * 100);
     });
+    const searchInput = document.getElementById('materiaPrimaSearch');
+    if (searchInput) {
+        searchInput.addEventListener('input', (e) => {
+            carregarMateriais(e.target.value.trim());
+        });
+    }
     carregarMateriais();
 }
 
