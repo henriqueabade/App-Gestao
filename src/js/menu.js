@@ -16,31 +16,35 @@ if (sidebar && !sidebar.classList.contains('sidebar-expanded')) {
 }
 
 // Carrega páginas modulares dentro da div#content
-function loadPage(page) {
+// Remove estilos e scripts antigos e executa o novo script em escopo isolado
+async function loadPage(page) {
     const content = document.getElementById('content');
     if (!content) return;
-    fetch(`../html/${page}.html`)
-        .then(resp => resp.text())
-        .then(html => {
-            content.innerHTML = html;
-            document.dispatchEvent(new Event('module-change'));
 
-            const oldCss = document.getElementById('page-style');
-            if (oldCss) oldCss.remove();
-            const link = document.createElement('link');
-            link.id = 'page-style';
-            link.rel = 'stylesheet';
-            link.href = `../css/${page}.css`;
-            document.head.appendChild(link);
+    try {
+        const resp = await fetch(`../html/${page}.html`);
+        content.innerHTML = await resp.text();
+        document.dispatchEvent(new Event('module-change'));
 
-            const oldScript = document.getElementById('page-script');
-            if (oldScript) oldScript.remove();
-            const script = document.createElement('script');
-            script.id = 'page-script';
-            script.src = `../js/${page}.js`;
-            script.onload = () => document.dispatchEvent(new Event('module-change'));
-            document.body.appendChild(script);
-        });
+        document.getElementById('page-style')?.remove();
+        document.getElementById('page-script')?.remove();
+
+        const style = document.createElement('link');
+        style.id = 'page-style';
+        style.rel = 'stylesheet';
+        style.href = `../css/${page}.css`;
+        document.head.appendChild(style);
+
+        const script = document.createElement('script');
+        script.id = 'page-script';
+        const jsResp = await fetch(`../js/${page}.js`);
+        const jsText = await jsResp.text();
+        script.textContent = `(function(){\n${jsText}\n})();`;
+        document.body.appendChild(script);
+        document.dispatchEvent(new Event('module-change'));
+    } catch (err) {
+        console.error('Erro ao carregar página', page, err);
+    }
 }
 window.loadPage = loadPage;
 
@@ -116,33 +120,6 @@ const pageNames = {
     relatorios: 'Relatórios',
     configuracoes: 'Configurações'
 };
-
-// Carrega dinamicamente o conteúdo e scripts de uma página
-async function loadPage(page) {
-    const container = document.getElementById('content');
-    if (!container) return;
-    try {
-        const resp = await fetch(`../html/${page}.html`);
-        container.innerHTML = await resp.text();
-        document.dispatchEvent(new Event('module-change'));
-
-        document.getElementById('page-style')?.remove();
-        document.getElementById('page-script')?.remove();
-        const style = document.createElement('link');
-        style.id = 'page-style';
-        style.rel = 'stylesheet';
-        style.href = `../css/${page}.css`;
-        document.head.appendChild(style);
-      
-        const script = document.createElement('script');
-        script.id = 'page-script';
-        script.src = `../js/${page}.js`;
-        script.onload = () => document.dispatchEvent(new Event('module-change'));
-        document.body.appendChild(script);
-    } catch (err) {
-        console.error('Erro ao carregar página', page, err);
-    }
-}
 
 // Navegação interna
 document.querySelectorAll('.sidebar-item[data-page], .submenu-item[data-page]').forEach(item => {
