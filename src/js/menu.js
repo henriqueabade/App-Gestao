@@ -8,8 +8,6 @@ const crmToggle = document.getElementById('crmToggle');
 const crmSubmenu = document.getElementById('crmSubmenu');
 const chevron = crmToggle.querySelector('.chevron');
 const companyName = document.getElementById('companyName');
-const logoContainer = document.getElementById('logoContainer');
-const initialLogoMarginLeft = logoContainer ? getComputedStyle(logoContainer).marginLeft : '0';
 
 // Ajusta logo e nome conforme estado inicial da sidebar
 if (sidebar && !sidebar.classList.contains('sidebar-expanded')) {
@@ -59,7 +57,6 @@ function expandSidebar() {
         sidebar.classList.add('sidebar-expanded');
         const offset = window.innerWidth >= 1024 ? '240px' : '200px';
         mainContent.style.marginLeft = offset;
-        if (logoContainer) logoContainer.style.marginLeft = offset;
         if (companyName) companyName.style.display = 'inline';
         sidebarExpanded = true;
     }
@@ -70,7 +67,6 @@ function collapseSidebar() {
         sidebar.classList.remove('sidebar-expanded');
         sidebar.classList.add('sidebar-collapsed');
         mainContent.style.marginLeft = '64px';
-        if (logoContainer) logoContainer.style.marginLeft = initialLogoMarginLeft;
         if (companyName) companyName.style.display = 'none';
         sidebarExpanded = false;
     }
