@@ -18,16 +18,13 @@
     <!-- Topbar -->
     <header class="fixed top-0 left-0 right-0 z-50 h-14 glass-surface border-b border-white/10">
         <div class="flex items-center justify-between h-full px-4">
-            <!-- Logo & Menu Toggle -->
+            <!-- Logo -->
             <div id="logoContainer" class="flex items-center">
                  <style>
                      #logoContainer
                       { margin-left: -1vw; /* Exemplo: 5% da largura da tela */ }
 
                     </style>
-                <button id="menuToggle" class="p-2 rounded-lg transition-colors duration-150 hover:bg-white/10">
-                    <i class="fas fa-bars w-5 h-5" style="color: var(--color-primary)"></i>
-                </button>
                 <img src="../assets/Logo SideBar.png" alt="Santíssimo Decor" class="w-10 h-10" />
                 <span id="companyName" class="text-lg font-semibold" style="color: var(--color-primary)">Santíssimo Decor</span>
             </div>
@@ -38,7 +35,7 @@
                     <div class="text-sm font-medium">Henrique Viana Abade</div>
                     <div class="text-xs" style="color: var(--color-violet)">Administrador</div>
                 </div>
-                
+
                 <div class="flex items-center space-x-2 relative">
                     <button id="user-actions-btn" class="p-2 rounded-lg transition-colors duration-150 hover:bg-white/10" style="color: var(--color-violet)" onmouseover="this.style.color='var(--color-primary-light)'" onmouseout="this.style.color='var(--color-violet)'">
                         <i class="fas fa-cog w-5 h-5"></i>
@@ -58,10 +55,13 @@
                     <button id="networkCheck" class="p-2 rounded-lg transition-colors duration-150 hover:bg-white/10" style="color: var(--color-blue)">
                         <i class="fas fa-sync-alt w-4 h-4 rotating"></i>
                     </button>
-                    
-                    <button class="p-2 rounded-lg transition-colors duration-150 hover:bg-white/10 relative" style="color: var(--color-violet)" onmouseover="this.style.color='var(--color-primary-light)'" onmouseout="this.style.color='var(--color-violet)'">
+
+                    <button class="p-2 rounded-lg transition-colors duration-150 hover:bg-white/10 relative" style="color: var(--color-violet)" onmouseover="this.style.color='var(--color-primary-light)'" onmouseout="this.style.color='var(--color-violet)'>
                         <i class="fas fa-bell w-5 h-5"></i>
                         <span class="absolute -top-1 -right-1 w-3 h-3 rounded-full" style="background: var(--color-red)"></span>
+                    </button>
+                    <button id="menuToggle" class="p-2 rounded-lg transition-colors duration-150 hover:bg-white/10">
+                        <i class="fas fa-bars w-5 h-5" style="color: var(--color-primary)"></i>
                     </button>
                 </div>
             </div>
