@@ -163,6 +163,7 @@ body {
     }
 }
 
-#bt-actions {
-    margin-top: 2vw;
+/* Ajusta altura máxima da tabela para compensar filtros altos e evitar scroll desnecessário */
+.table-scroll {
+    max-height: calc(var(--module-height) - 260px) !important;
 }
