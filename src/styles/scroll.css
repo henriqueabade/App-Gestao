@@ -1,5 +1,5 @@
 /* 1) Bloqueia scroll externo e horizontal em todo o app */
-html, body, #app, #mainContent, #content {
+html, body, #app, #mainContent  {
   overflow: hidden !important;
 }
 
@@ -13,19 +13,36 @@ html, body, #app, #mainContent, #content {
 }
 
 /* 3) Cada módulo: só scroll vertical, nunca horizontal */
-.modulo-container {
+#content {
   position: relative;
   height: var(--module-height);
   overflow-y: auto;     /* só vertical */
   overflow-x: hidden;   /* nunca horizontal */
-  padding-right: var(--arrow-size); /* espaço interno p/ scrollbar */
   box-sizing: border-box;
   scroll-behavior: auto;  /* scroll nativo fluído */
+  scrollbar-width: thin;
 }
 
-/* 4) Remove scrollbar nativa WebKit */
-.modulo-container::-webkit-scrollbar {
-  display: none;
+/* Scrollbar discreta e minimalista */
+#content::-webkit-scrollbar {
+    width: 6px;
+}
+
+#content::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+#content::-webkit-scrollbar-thumb {
+    background-color: rgba(255, 215, 0, 0.4);
+    border-radius: 3px;
+}
+
+#content::-webkit-scrollbar-thumb:hover {
+    background-color: rgba(255, 215, 0, 0.6);
+}
+
+.modulo-container {
+    padding-right: 3vw;
 }
 
 /* 3a) Scroll personalizado para tabelas */
@@ -33,61 +50,22 @@ html, body, #app, #mainContent, #content {
   overflow-y: auto;
   overflow-x: hidden;
   max-height: calc(var(--module-height) - 200px);
-  padding-right: var(--arrow-size);
   box-sizing: border-box;
 }
 
+/* personalização do scrollbar (WebKit/Blink) */
 .table-scroll::-webkit-scrollbar {
-  display: none;
+  width: 6px;
 }
-
-/* 5) Container da scrollbar custom (injetado via JS) */
-.scrollbar-container {
-  position: fixed;
-  left: 98%;
-  transform: translateX(-50%);
-  width: var(--arrow-size);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  pointer-events: none;
-  z-index: 10000;
+.table-scroll::-webkit-scrollbar-track {
+  background: #1e1e1e00;
 }
-
-/* 6) Setas ▲▼ */
-.scrollbar-container .arrow {
-  pointer-events: all;
-  width: var(--arrow-size);
-  height: var(--arrow-size);
-  font-size: var(--arrow-size);
-  color: var(--thumb-color);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  user-select: none;
-}
-
-/* 7) Track (trilha) */
-.scrollbar-container .track {
-  flex: 1;
-  width: var(--track-width);
-  background: transparent;
-  position: relative;
-  margin: 2px 0;
-  pointer-events: none;
-}
-
-/* 8) Thumb (polegar) */
-.scrollbar-container .thumb {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  background-color: var(--thumb-color);
+.table-scroll::-webkit-scrollbar-thumb {
+  background: #f0c94c;
   border-radius: 4px;
-  cursor: grab;
-  pointer-events: all;
+}
+.table-scroll::-webkit-scrollbar-thumb:hover {
+  background: #d0a42e;
 }
 
 /* 9) Evita seleção de texto ao arrastar */

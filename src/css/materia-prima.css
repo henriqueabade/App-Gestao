@@ -69,24 +69,119 @@ body {
     width: 20px;
     height: 20px;
     border-radius: 50%;
-    border: 1px solid var(--color-primary);
-    color: var(--color-primary);
-    font-size: 12px;
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
     display: flex;
     align-items: center;
     justify-content: center;
+    font-size: 12px;
+    color: #fff;
     cursor: pointer;
     transition: all 150ms ease;
 }
 
-.info-icon::before {
+.info-icon::after {
     content: 'i';
+    font-style: italic;
     font-weight: bold;
 }
 
 .info-icon:hover {
-    background: var(--color-primary);
-    color: #fff;
+    background: rgba(255, 255, 255, 0.445);
+    transform: scale(1.1);
 }
 
+/* Card principal do popup */
+.popup-card {
+  /* Altera para o padrão de glass-surface do primeiro CSS */
+  background: #310017c5;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  color: white; /* Cor do texto padrão */
+  border-radius: 0.5rem; /* 8px */
+  overflow: hidden;
+  width: 16rem; /* 256px */
+}
 
+/* Cabeçalho do popup */
+.popup-header {
+  padding: 0.75rem 1.25rem; /* py-3 px-5 */
+  /* Altera a cor de fundo para ser mais escura ou transparente */
+  background-color: rgba(0, 0, 0, 0.1);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+/* Título e subtítulo do cabeçalho */
+.popup-header-subtitle {
+  font-size: 0.75rem; /* 12px */
+  /* Mantém um tom de cinza, mas com mais clareza */
+  color: #c9c9c9;
+  margin-bottom: 0.25rem; /* mb-1 */
+}
+
+.popup-header-title {
+  font-size: 1rem; /* 16px */
+  font-weight: 500;
+  color: white; /* Altera a cor do título para branco */
+}
+
+/* Corpo principal do popup */
+.popup-body {
+  padding: 1rem 1.25rem; /* py-4 px-5 */
+}
+
+/* Seções de informações do corpo */
+.popup-info-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem; /* 16px */
+  margin-bottom: 1rem; /* mb-4 */
+}
+
+/* Texto das informações */
+.popup-info-label {
+  font-size: 0.75rem; /* 12px */
+  /* Mantém um tom de cinza claro */
+  color: #c9c9c9;
+  margin-bottom: 0.25rem; /* mb-1 */
+}
+
+.popup-info-value {
+  font-size: 0.875rem; /* 14px */
+  font-weight: 500;
+  color: white; /* Altera a cor do valor para branco */
+}
+
+/* Badge de "Sim" ou "Não" */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.125rem 0.625rem; /* py-0.5 px-2.5 */
+  border-radius: 0.375rem; /* 6px */
+  font-size: 0.75rem; /* 12px */
+  font-weight: 500;
+}
+
+.badge-sim {
+  background: rgba(0, 255, 13, 0.212);
+  color: rgb(255, 255, 255);
+}
+
+.badge-nao {
+  background: rgba(255, 0, 0, 0.459);
+  color: white;
+}
+
+/* Seção de descrição técnica */
+.popup-description-section {
+  padding-top: 0.75rem; /* pt-3 */
+  border-top: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.popup-description-text {
+  font-size: 0.875rem; /* 14px */
+  color: #e5e5e5; /* Um cinza mais claro */
+  line-height: 1.5; /* leading-relaxed */
+}

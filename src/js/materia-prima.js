@@ -33,38 +33,39 @@ let infoMouseLeave;
 
 function createPopupContent(item) {
     const infinitoBadge = item.infinito
-        ? `<span class="inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-medium bg-[var(--color-green)] text-black">✔ Sim</span>`
-        : `<span class="inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-medium bg-[var(--color-red)] text-white">❌ Não</span>`;
+        ? `<span class="badge badge-sim">✔ Sim</span>`
+        : `<span class="badge badge-nao">✖ Não</span>`;
+
     return `
-    <div class="bg-white rounded-lg shadow-md border border-gray-100 overflow-hidden w-64">
-      <div class="px-5 py-3 bg-gray-50 border-b border-gray-100">
-        <p class="text-xs text-gray-500 mb-1">Categoria:</p>
-        <h3 class="text-base font-medium text-gray-900">${item.categoria || ''}</h3>
+    <div class="popup-card">
+      <div class="popup-header">
+        <p class="popup-header-subtitle">Categoria:</p>
+        <h3 class="popup-header-title">${item.categoria || ''}</h3>
       </div>
-      <div class="px-5 py-4">
-        <div class="grid grid-cols-2 gap-4 mb-4">
+      <div class="popup-body">
+        <div class="popup-info-grid">
           <div>
-            <p class="text-xs text-gray-500 mb-1">Data de Entrada:</p>
-            <p class="text-sm font-medium text-gray-800">${formatDate(item.data_estoque)}</p>
+            <p class="popup-info-label">Data de Entrada:</p>
+            <p class="popup-info-value">${formatDate(item.data_estoque)}</p>
           </div>
           <div>
-            <p class="text-xs text-gray-500 mb-1">Última Atualização:</p>
-            <p class="text-sm font-medium text-gray-800">${formatDate(item.data_preco)}</p>
+            <p class="popup-info-label">Última Atualização:</p>
+            <p class="popup-info-value">${formatDate(item.data_preco)}</p>
           </div>
         </div>
-        <div class="grid grid-cols-2 gap-4 mb-4">
+        <div class="popup-info-grid">
           <div>
-            <p class="text-xs text-gray-500 mb-1">Estoque Infinito:</p>
+            <p class="popup-info-label">Estoque Infinito:</p>
             ${infinitoBadge}
           </div>
           <div>
-            <p class="text-xs text-gray-500 mb-1">Processo Atual:</p>
-            <p class="text-sm font-medium text-gray-800">${item.processo || ''}</p>
+            <p class="popup-info-label">Processo Atual:</p>
+            <p class="popup-info-value">${item.processo || ''}</p>
           </div>
         </div>
-        <div class="pt-3 border-t border-gray-100">
-          <p class="text-xs text-gray-500 mb-1">Descrição Técnica:</p>
-          <p class="text-sm text-gray-700 leading-relaxed">${item.descricao || ''}</p>
+        <div class="popup-description-section">
+          <p class="popup-info-label">Descrição Técnica:</p>
+          <p class="popup-description-text">${item.descricao || ''}</p>
         </div>
       </div>
     </div>`;

@@ -1,3 +1,4 @@
+/*
 // js/scroll-handler.js
 
 // Distância de scroll ao clicar nas setas
