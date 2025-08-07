@@ -176,7 +176,7 @@ body {
 }
 
 .filter-actions button {
-  flex: 1; /* Faz cada botão crescer igualmente para preencher o espaço */
+  flex: 0 1 auto; /* Permite que os botões encolham conforme necessário */
   /* Outros estilos dos botões... */
 }
 #bt-actions {
