@@ -200,6 +200,7 @@ header.glass-surface {
 #logoContainer {
     display: flex;
     align-items: center;
+    margin-left: -0.5vw;
 }
 
 #companyName {
