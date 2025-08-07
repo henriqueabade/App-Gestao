@@ -3,17 +3,22 @@
 // Distância de scroll ao clicar nas setas
 const SCROLL_STEP = 40;
 
-// Conjunto das barras de rolagem ativas
-let currentScrollbars = [];
+// Referência à instância atual da scrollbar
+let currentScrollbar = null;
 
-// Remove todas as barras atuais
-function removeScrollbars() {
-  currentScrollbars.forEach(sb => sb.remove());
-  currentScrollbars = [];
+// Remove a scrollbar custom atual (se houver)
+function removeScrollbar() {
+  if (currentScrollbar) {
+    currentScrollbar.remove();
+    currentScrollbar = null;
+  }
 }
 
 // Cria a scrollbar custom para um determinado módulo
 function createScrollbar(module) {
+  removeScrollbar();  // garante que não haja duplicatas
+
+  // Monta o container
   const sb = document.createElement('div');
   sb.className = 'scrollbar-container';
   sb.innerHTML = `
@@ -21,13 +26,20 @@ function createScrollbar(module) {
     <div class="track"><div class="thumb"></div></div>
     <div class="arrow down">▼</div>
   `;
-  module.appendChild(sb);
-  currentScrollbars.push(sb);
+  document.body.appendChild(sb);
+  currentScrollbar = sb;
 
   const up    = sb.querySelector('.arrow.up');
   const down  = sb.querySelector('.arrow.down');
   const track = sb.querySelector('.track');
   const thumb = sb.querySelector('.thumb');
+
+  // Posiciona verticalmente junto ao módulo
+  function positionBar() {
+    const r = module.getBoundingClientRect();
+    sb.style.top    = `${r.top}px`;
+    sb.style.height = `${r.height}px`;
+  }
 
   // Atualiza thumb (tamanho e posição)
   function updateThumb() {
@@ -65,24 +77,32 @@ function createScrollbar(module) {
 
   // Sincroniza thumb ao scroll e resize
   module.addEventListener('scroll', updateThumb);
-  window.addEventListener('resize', updateThumb);
+  window.addEventListener('resize', () => {
+    positionBar();
+    updateThumb();
+  });
 
   // Primeira invocação
+  positionBar();
   updateThumb();
 }
 
-// Cria barras de rolagem para todos os módulos/tabelas visíveis que precisem de scroll
-function refreshScrollbars() {
-  removeScrollbars();
+// Encontra o primeiro módulo “visível” que necessite de scroll e cria/remova scrollbar
+function refreshScrollbar() {
+  // Remove barra antiga
+  removeScrollbar();
 
+  // Busca todos os módulos e tabelas com scroll
   const modules = Array.from(document.querySelectorAll('.modulo-container, .table-scroll'));
-
-  modules.forEach(module => {
-    const rect = module.getBoundingClientRect();
-    if (rect.height > 0 && module.scrollHeight > module.clientHeight) {
-      createScrollbar(module);
-    }
+  // Filtra pelos que realmente estão visíveis e precisam de scroll
+  const visible = modules.filter(m => {
+    const rect = m.getBoundingClientRect();
+    return rect.height > 0 && m.scrollHeight > m.clientHeight;
   });
+
+  if (visible.length > 0) {
+    createScrollbar(visible[0]);
+  }
 }
 
 // Observa carregamento dinâmico de novos módulos
@@ -93,10 +113,10 @@ function observeModules() {
     muts.forEach(m => {
       m.addedNodes.forEach(node => {
         if (node.nodeType === 1 && (
-          node.matches('.modulo-container, .table-scroll') ||
-          node.querySelector('.modulo-container, .table-scroll')
+          node.matches('.modulo-container') ||
+          node.querySelector('.modulo-container')
         )) {
-          refreshScrollbars();
+          refreshScrollbar();
         }
       });
     });
@@ -105,9 +125,9 @@ function observeModules() {
 
 // Inicialização
 window.addEventListener('DOMContentLoaded', () => {
-  refreshScrollbars();
+  refreshScrollbar();
   observeModules();
 });
-window.addEventListener('load', refreshScrollbars);
-window.addEventListener('resize', refreshScrollbars);
-document.addEventListener('module-change', refreshScrollbars);
+window.addEventListener('load', refreshScrollbar);
+window.addEventListener('resize', refreshScrollbar);
+document.addEventListener('module-change', refreshScrollbar);
