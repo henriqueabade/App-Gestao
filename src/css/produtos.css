@@ -163,22 +163,6 @@ body {
     }
 }
 
-.filter-bar {
-  display: flex;
-  align-items: center; /* Alinha os itens verticalmente */
-  gap: 1rem; /* Espaçamento entre os elementos */
-}
-
-.filter-actions {
-  display: flex;
-  flex: 1; /* Faz o contêiner dos botões ocupar todo o espaço restante */
-  gap: 0.5rem;
-}
-
-.filter-actions button {
-  flex: 0 1 auto; /* Permite que os botões encolham conforme necessário */
-  /* Outros estilos dos botões... */
-}
 #bt-actions {
     margin-top: 2vw;
 }
