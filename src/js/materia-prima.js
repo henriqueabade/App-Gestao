@@ -12,8 +12,8 @@ function initMateriaPrima() {
 
 async function carregarMateriais(filtro = '') {
     try {
-        const materiais = await window.electronAPI.listarMateriaPrima(filtro);
-        renderMateriais(materiais);
+        const lista = await window.electronAPI.listarMateriaPrima(filtro);
+        renderMateriais(lista);
     } catch (err) {
         console.error('Erro ao carregar materiais', err);
     }
@@ -25,7 +25,118 @@ function formatDate(dateStr) {
     return date.toLocaleDateString('pt-BR', { timeZone: 'UTC' });
 }
 
-function renderMateriais(lista) {
+// Controle de popup de informações da matéria prima
+let materiais = [];
+let currentPopup = null;
+let infoMouseEnter;
+let infoMouseLeave;
+
+function createPopupContent(item) {
+    const infinitoBadge = item.infinito
+        ? `<span class="inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-medium bg-[var(--color-green)] text-black">✔ Sim</span>`
+        : `<span class="inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-medium bg-[var(--color-red)] text-white">❌ Não</span>`;
+    return `
+    <div class="bg-white rounded-lg shadow-md border border-gray-100 overflow-hidden w-64">
+      <div class="px-5 py-3 bg-gray-50 border-b border-gray-100">
+        <p class="text-xs text-gray-500 mb-1">Categoria:</p>
+        <h3 class="text-base font-medium text-gray-900">${item.categoria || ''}</h3>
+      </div>
+      <div class="px-5 py-4">
+        <div class="grid grid-cols-2 gap-4 mb-4">
+          <div>
+            <p class="text-xs text-gray-500 mb-1">Data de Entrada:</p>
+            <p class="text-sm font-medium text-gray-800">${formatDate(item.data_estoque)}</p>
+          </div>
+          <div>
+            <p class="text-xs text-gray-500 mb-1">Última Atualização:</p>
+            <p class="text-sm font-medium text-gray-800">${formatDate(item.data_preco)}</p>
+          </div>
+        </div>
+        <div class="grid grid-cols-2 gap-4 mb-4">
+          <div>
+            <p class="text-xs text-gray-500 mb-1">Estoque Infinito:</p>
+            ${infinitoBadge}
+          </div>
+          <div>
+            <p class="text-xs text-gray-500 mb-1">Processo Atual:</p>
+            <p class="text-sm font-medium text-gray-800">${item.processo || ''}</p>
+          </div>
+        </div>
+        <div class="pt-3 border-t border-gray-100">
+          <p class="text-xs text-gray-500 mb-1">Descrição Técnica:</p>
+          <p class="text-sm text-gray-700 leading-relaxed">${item.descricao || ''}</p>
+        </div>
+      </div>
+    </div>`;
+}
+
+function showInfoPopup(target, item) {
+    hideInfoPopup();
+    const popup = document.createElement('div');
+    popup.className = 'absolute z-50';
+    popup.innerHTML = createPopupContent(item);
+    document.body.appendChild(popup);
+    const rect = target.getBoundingClientRect();
+    const margin = 8;
+    const popupRect = popup.getBoundingClientRect();
+
+    let top = rect.bottom + margin;
+    if (top + popupRect.height > window.innerHeight) {
+        if (rect.top - margin - popupRect.height >= 0) {
+            top = rect.top - popupRect.height - margin;
+        } else {
+            top = Math.max(margin, window.innerHeight - popupRect.height - margin);
+        }
+    }
+
+    let left = rect.right + margin;
+    if (left + popupRect.width > window.innerWidth) {
+        if (rect.left - margin - popupRect.width >= 0) {
+            left = rect.left - popupRect.width - margin;
+        } else {
+            left = Math.max(margin, window.innerWidth - popupRect.width - margin);
+        }
+    }
+
+    popup.style.left = `${left + window.scrollX}px`;
+    popup.style.top = `${top + window.scrollY}px`;
+    currentPopup = popup;
+}
+
+function hideInfoPopup() {
+    if (currentPopup) {
+        currentPopup.remove();
+        currentPopup = null;
+    }
+}
+
+function attachInfoEvents() {
+    const lista = document.getElementById('materiaPrimaTableBody');
+    if (!lista) return;
+
+    lista.removeEventListener('mouseover', infoMouseEnter);
+    lista.removeEventListener('mouseout', infoMouseLeave);
+
+    infoMouseEnter = e => {
+        const icon = e.target.closest('.info-icon');
+        if (!icon) return;
+        const id = parseInt(icon.dataset.id);
+        const item = materiais.find(m => m.id === id);
+        if (item) showInfoPopup(icon, item);
+    };
+
+    infoMouseLeave = e => {
+        if (e.target.closest('.info-icon')) hideInfoPopup();
+    };
+
+    lista.addEventListener('mouseover', infoMouseEnter);
+    lista.addEventListener('mouseout', infoMouseLeave);
+
+    if (window.feather) feather.replace();
+}
+
+function renderMateriais(listaMateriais) {
+    materiais = listaMateriais;
     const tbody = document.getElementById('materiaPrimaTableBody');
     if (!tbody) return;
     tbody.innerHTML = '';
@@ -35,17 +146,15 @@ function renderMateriais(lista) {
             <i class="fas fa-trash w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10 hover:text-white" style="color: var(--color-red)" title="Excluir"></i>
         </div>`;
 
-    lista.forEach((item, index) => {
+    materiais.forEach((item) => {
         const tr = document.createElement('tr');
         tr.className = 'transition-colors duration-150';
         tr.style.cursor = 'pointer';
 
-        // Determina exibição da quantidade e estilo da linha
         const isInfinite = !!item.infinito;
         const quantidadeValor = isInfinite ? '∞' : (item.quantidade ?? 0);
         const quantidadeNumero = Number(item.quantidade);
 
-        // Cor base da linha conforme regras de estoque
         let baseColor = 'transparent';
         if (isInfinite) {
             baseColor = 'rgba(162, 255, 166, 0.1)';
@@ -74,37 +183,7 @@ function renderMateriais(lista) {
             <td class="px-6 py-4 whitespace-nowrap relative">
                 <div class="flex items-center">
                     <span class="text-sm text-white">${item.nome}</span>
-                    <i id="infoIcon_${index}" class="info-icon ml-2"></i>
-                </div>
-                <div id="popover_${index}" class="resumo-popover glass-surface rounded-xl p-4 text-sm text-white">
-                    <h3 class="font-medium mb-2">${item.nome}</h3>
-                    <p class="text-xs text-gray-400 mb-1">Categoria:</p>
-                    <p class="text-base font-semibold mb-2 text-white">${item.categoria || '-'}</p>
-                    <div class="text-xs text-gray-400 mb-1">Quantidade</div>
-                    <div class="mb-2">${quantidadeValor} ${item.unidade || ''}</div>
-                    <div class="text-xs text-gray-400 mb-1">Preço Unitário</div>
-                    <div class="mb-4">R$ ${preco.toFixed(2).replace('.', ',')}</div>
-                    <div class="grid grid-cols-2 gap-x-4 gap-y-2 mb-4 text-gray-200">
-                        <div>
-                            <span class="text-xs">Data de Entrada:</span><br>
-                            <span class="font-medium">${formatDate(item.data_estoque)}</span>
-                        </div>
-                        <div>
-                            <span class="text-xs">Última Atualização:</span><br>
-                            <span class="font-medium">${formatDate(item.data_preco)}</span>
-                        </div>
-                        <div class="col-span-1">
-                            <span class="text-xs">Estoque Infinito:</span><br>
-                            ${item.infinito ? '<span class="badge-success">✓ Sim</span>' : '<span class="badge-danger">✕ Não</span>'}
-                        </div>
-                        <div class="col-span-1">
-                            <span class="text-xs">Processo Atual:</span><br>
-                            <span class="font-medium">${item.processo || '-'}</span>
-                        </div>
-                    </div>
-                    <hr class="border-white/10 my-4">
-                    <p class="text-xs text-gray-400 mb-1">Descrição Técnica:</p>
-                    <p class="text-gray-200">${item.descricao || '-'}</p>
+                    <i class="info-icon ml-2" data-id="${item.id}"></i>
                 </div>
             </td>
             <td class="px-6 py-4 whitespace-nowrap text-sm text-white">${quantidadeValor}</td>
@@ -112,47 +191,9 @@ function renderMateriais(lista) {
             <td class="px-6 py-4 whitespace-nowrap text-sm text-white">R$ ${preco.toFixed(2).replace('.', ',')}</td>
             <td class="px-6 py-4 whitespace-nowrap text-center">${acoes}</td>`;
         tbody.appendChild(tr);
-
-        const infoIcon = tr.querySelector(`#infoIcon_${index}`);
-        const popover = tr.querySelector(`#popover_${index}`);
-        if (infoIcon && popover) {
-            const mostrarPopover = () => {
-                const iconRect = infoIcon.getBoundingClientRect();
-                const popRect = popover.getBoundingClientRect();
-
-                let top = iconRect.bottom + 8;
-                let left = iconRect.left + iconRect.width / 2 - popRect.width / 2;
-
-                if (top + popRect.height > window.innerHeight) {
-                    top = iconRect.top - popRect.height - 8;
-                    if (top < 0) {
-                        top = window.innerHeight / 2 - popRect.height / 2;
-                    }
-                }
-
-                if (left + popRect.width > window.innerWidth) {
-                    left = window.innerWidth - popRect.width - 8;
-                }
-                if (left < 8) left = 8;
-
-                popover.style.left = `${left}px`;
-                popover.style.top = `${top}px`;
-                popover.classList.add('show');
-            };
-
-            const ocultarPopover = () => {
-                popover.classList.remove('show');
-            };
-
-            infoIcon.addEventListener('mouseenter', mostrarPopover);
-            infoIcon.addEventListener('mouseleave', () => {
-                setTimeout(() => {
-                    if (!popover.matches(':hover')) ocultarPopover();
-                }, 100);
-            });
-            popover.addEventListener('mouseleave', ocultarPopover);
-        }
     });
+
+    attachInfoEvents();
 }
 
 if (document.readyState === 'loading') {
