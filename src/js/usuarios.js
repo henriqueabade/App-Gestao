@@ -1,6 +1,10 @@
 // Script principal do módulo de Usuários
 // Controla carregamento da lista, edições e filtros
 
+// Endereço base da API. Como o frontend é servido via protocolo `file://`,
+// precisamos apontar explicitamente para o servidor HTTP.
+const API_URL = 'http://localhost:3000';
+
 function coletarFiltros() {
     const status = [];
     document.querySelectorAll('.checkbox-custom:checked').forEach(cb => status.push(cb.value));
@@ -77,7 +81,7 @@ function initUsuarios() {
 
 async function carregarUsuarios() {
     try {
-        const resp = await fetch('/api/usuarios/lista');
+        const resp = await fetch(`${API_URL}/api/usuarios/lista`);
         const usuarios = await resp.json();
         const tbody = document.getElementById('listaUsuarios');
         if (!tbody) return;
