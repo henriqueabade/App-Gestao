@@ -7,12 +7,14 @@ const cors                  = require('cors');
 const path                  = require('path');
 const clientesRouter        = require('./clientesController');
 const passwordResetRouter   = require('./passwordResetRoutes');
+const usuariosRouter        = require('./usuariosController');
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
 app.use('/api/clientes', clientesRouter);
+app.use('/api/usuarios', usuariosRouter);
 app.use(passwordResetRouter);
 
 // Endpoint simples para verificar a disponibilidade do servidor
