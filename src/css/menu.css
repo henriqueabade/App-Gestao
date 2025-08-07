@@ -198,6 +198,7 @@ header.glass-surface {
     align-items: center;
     width: 64px;
     position: relative;
+    transition: margin-left 0.2s ease;
 }
 
 #companyName {
