@@ -30,11 +30,18 @@ html, body, #app, #mainContent, #content {
 
 /* 3a) Scroll personalizado para tabelas */
 .table-scroll {
+  position: relative;
   overflow-y: auto;
   overflow-x: hidden;
   max-height: calc(var(--module-height) - 200px);
   padding-right: var(--arrow-size);
   box-sizing: border-box;
+}
+
+.table-scroll thead {
+  position: sticky;
+  top: 0;
+  z-index: 2;
 }
 
 .table-scroll::-webkit-scrollbar {
@@ -43,15 +50,16 @@ html, body, #app, #mainContent, #content {
 
 /* 5) Container da scrollbar custom (injetado via JS) */
 .scrollbar-container {
-  position: fixed;
-  left: 98%;
-  transform: translateX(-50%);
+  position: absolute;
+  top: 0;
+  right: 0;
   width: var(--arrow-size);
+  height: 100%;
   display: flex;
   flex-direction: column;
   align-items: center;
   pointer-events: none;
-  z-index: 10000;
+  z-index: 10;
 }
 
 /* 6) Setas ▲▼ */
