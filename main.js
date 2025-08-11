@@ -359,7 +359,12 @@ ipcMain.handle('listar-produtos', async () => {
   return listarProdutos();
 });
 ipcMain.handle('obter-produto', async (_e, id) => {
-  return obterProduto(id);
+  try {
+    return await obterProduto(id);
+  } catch (err) {
+    console.error('Erro ao obter produto:', err);
+    throw err;
+  }
 });
 ipcMain.handle('adicionar-produto', async (_e, dados) => {
   return adicionarProduto(dados);
@@ -372,7 +377,12 @@ ipcMain.handle('excluir-produto', async (_e, id) => {
   return true;
 });
 ipcMain.handle('listar-detalhes-produto', async (_e, id) => {
-  return listarDetalhesProduto(id);
+  try {
+    return await listarDetalhesProduto(id);
+  } catch (err) {
+    console.error('Erro ao listar detalhes do produto:', err);
+    throw err;
+  }
 });
 ipcMain.handle('listar-insumos-produto', async (_e, codigo) => {
   return listarInsumosProduto(codigo);
