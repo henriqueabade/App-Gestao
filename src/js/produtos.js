@@ -17,12 +17,11 @@ async function carregarProdutos() {
 
             tr.innerHTML = `
                 <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">${p.codigo || ''}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-white">${p.nome || ''}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-white">${reduzirNome(p.nome) || ''}</td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-violet)">${p.categoria || ''}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-white">${formatCurrency(p.custo_insumos)}</td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm text-white">${formatCurrency(p.preco_venda)}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-green)">${formatPercent(p.margem)}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-white">${p.estoque_atual ?? ''}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-green)">${formatPercent(p.pct_markup)}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-white">${p.quantidade_total ?? 0}</td>
                 <td class="px-6 py-4 whitespace-nowrap">
                     <span class="${p.status === 'ativo' ? 'badge-success' : 'badge-danger'} px-3 py-1 rounded-full text-xs font-medium">
                         ${p.status === 'ativo' ? 'Ativo' : 'Inativo'}
@@ -52,6 +51,14 @@ function formatCurrency(value) {
 function formatPercent(value) {
     if (value == null) return '';
     return `${Number(value).toFixed(1)}%`;
+}
+
+function reduzirNome(nome) {
+    if (!nome) return '';
+    const partes = nome.split(' - ');
+    if (partes.length < 2) return partes[0];
+    const medida = partes[1].split(' (')[0].trim();
+    return `${partes[0]} - ${medida}`;
 }
 
 function initProdutos() {
