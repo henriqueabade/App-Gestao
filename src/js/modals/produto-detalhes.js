@@ -81,16 +81,9 @@
     cancelBtn.addEventListener('click', () => carregarDetalhes(item.id));
   }
 
-  async function excluirLote(id) {
-    if (!confirm('Deseja excluir este lote?')) return;
-    try {
-      await window.electronAPI.excluirLoteProduto(id);
-      showToast('Lote excluído', 'success');
-      carregarDetalhes(item.id);
-    } catch (err) {
-      console.error(err);
-      showToast('Erro ao excluir lote', 'error');
-    }
+  function excluirLote(id) {
+    window.loteExcluir = { id, reload: () => carregarDetalhes(item.id) };
+    Modal.open('modals/produtos/excluir-lote.html', '../js/modals/produto-lote-excluir.js', 'excluirLote');
   }
 
   function formatDateTime(value){
