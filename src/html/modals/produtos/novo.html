@@ -82,87 +82,87 @@
         </div>
         <div class="space-y-6">
           <div class="bg-surface/40 rounded-xl p-6 border border-white/10">
-            <h3 class="text-lg font-semibold mb-4 text-white">ITENS</h3>
-            <div class="overflow-x-auto">
-              <div class="max-h-64 overflow-y-auto">
-                <table class="w-full text-sm">
-                  <thead class="sticky top-0 bg-surface/60 backdrop-blur-sm">
-                    <tr class="border-b border-white/10">
-                      <th class="text-left py-3 px-2 text-gray-300 font-medium">NOME DO ITEM</th>
-                      <th class="text-center py-3 px-2 text-gray-300 font-medium">QUANTIDADE</th>
-                      <th class="text-right py-3 px-2 text-gray-300 font-medium">VALOR TOTAL</th>
-                      <th class="text-center py-3 px-2 text-gray-300 font-medium">AÇÃO</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr class="border-b border-white/5">
-                      <td class="py-3 px-2 text-white">Batente de Silicone 8mm</td>
-                      <td class="py-3 px-2 text-center text-gray-300">12</td>
-                      <td class="py-3 px-2 text-right text-white">R$ 30,00</td>
-                      <td class="py-3 px-2 text-center">
-                        <div class="flex justify-center gap-2">
-                          <button class="icon-only bg-blue-600/20 text-blue-400 hover:bg-blue-600/30">✎</button>
-                          <button class="icon-only bg-red-600/20 text-red-400 hover:bg-red-600/30">🗑</button>
-                        </div>
-                      </td>
-                    </tr>
-                    <tr class="border-b border-white/5">
-                      <td class="py-3 px-2 text-white">Parafuso Phillips 4x20</td>
-                      <td class="py-3 px-2 text-center text-gray-300">24</td>
-                      <td class="py-3 px-2 text-right text-white">R$ 12,00</td>
-                      <td class="py-3 px-2 text-center">
-                        <div class="flex justify-center gap-2">
-                          <button class="icon-only bg-blue-600/20 text-blue-400 hover:bg-blue-600/30">✎</button>
-                          <button class="icon-only bg-red-600/20 text-red-400 hover:bg-red-600/30">🗑</button>
-                        </div>
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
+            <h3 class="text-lg font-semibold mb-4 text-white">SOMAS</h3>
+            <div class="space-y-3 text-sm">
+              <div class="flex justify-between">
+                <span class="text-gray-300">Total Insumos</span>
+                <span class="text-white font-medium">R$ 42,00</span>
+              </div>
+              <div class="flex justify-between">
+                <span class="text-gray-300">Total Mão-de-obra</span>
+                <span class="text-white font-medium">R$ 0,00</span>
+              </div>
+              <div class="flex justify-between">
+                <span class="text-gray-300">Sub-Total</span>
+                <span class="text-white font-medium">R$ 42,00</span>
+              </div>
+              <div class="flex justify-between">
+                <span class="text-gray-300">Markup</span>
+                <span class="text-white font-medium">R$ 0,00</span>
+              </div>
+              <div class="flex justify-between border-t border-white/10 pt-3">
+                <span class="text-gray-300">Custo Total</span>
+                <span class="text-white font-semibold">R$ 42,00</span>
+              </div>
+              <div class="flex justify-between">
+                <span class="text-gray-300">Comissão</span>
+                <span class="text-white font-medium">R$ 0,00</span>
+              </div>
+              <div class="flex justify-between">
+                <span class="text-gray-300">Imposto</span>
+                <span class="text-white font-medium">R$ 0,00</span>
               </div>
             </div>
-            <p class="text-xs text-gray-400 mt-4">✎ edita quantidade; 🗑 remove o item.</p>
+          </div>
+          <div class="flex items-end justify-end">
+            <button id="registrarNovoProduto" class="btn-success px-8 py-4 rounded-xl font-semibold text-lg">
+              Registrar
+            </button>
           </div>
         </div>
       </div>
-      <div class="px-8 py-6 border-t border-white/10 grid grid-cols-1 xl:grid-cols-2 gap-8">
+      <div class="px-8 py-6 border-t border-white/10">
         <div class="bg-surface/40 rounded-xl p-6 border border-white/10">
-          <h3 class="text-lg font-semibold mb-4 text-white">SOMAS</h3>
-          <div class="space-y-3 text-sm">
-            <div class="flex justify-between">
-              <span class="text-gray-300">Total Insumos</span>
-              <span class="text-white font-medium">R$ 42,00</span>
-            </div>
-            <div class="flex justify-between">
-              <span class="text-gray-300">Total Mão-de-obra</span>
-              <span class="text-white font-medium">R$ 0,00</span>
-            </div>
-            <div class="flex justify-between">
-              <span class="text-gray-300">Sub-Total</span>
-              <span class="text-white font-medium">R$ 42,00</span>
-            </div>
-            <div class="flex justify-between">
-              <span class="text-gray-300">Markup</span>
-              <span class="text-white font-medium">R$ 0,00</span>
-            </div>
-            <div class="flex justify-between border-t border-white/10 pt-3">
-              <span class="text-gray-300">Custo Total</span>
-              <span class="text-white font-semibold">R$ 42,00</span>
-            </div>
-            <div class="flex justify-between">
-              <span class="text-gray-300">Comissão</span>
-              <span class="text-white font-medium">R$ 0,00</span>
-            </div>
-            <div class="flex justify-between">
-              <span class="text-gray-300">Imposto</span>
-              <span class="text-white font-medium">R$ 0,00</span>
+          <h3 class="text-lg font-semibold mb-4 text-white">ITENS</h3>
+          <div class="overflow-x-auto">
+            <div class="max-h-64 overflow-y-auto">
+              <table class="w-full text-sm">
+                <thead class="sticky top-0 bg-surface/60 backdrop-blur-sm">
+                  <tr class="border-b border-white/10">
+                    <th class="text-left py-3 px-2 text-gray-300 font-medium">NOME DO ITEM</th>
+                    <th class="text-center py-3 px-2 text-gray-300 font-medium">QUANTIDADE</th>
+                    <th class="text-right py-3 px-2 text-gray-300 font-medium">VALOR TOTAL</th>
+                    <th class="text-center py-3 px-2 text-gray-300 font-medium">AÇÃO</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr class="border-b border-white/5">
+                    <td class="py-3 px-2 text-white">Batente de Silicone 8mm</td>
+                    <td class="py-3 px-2 text-center text-gray-300">12</td>
+                    <td class="py-3 px-2 text-right text-white">R$ 30,00</td>
+                    <td class="py-3 px-2 text-center">
+                      <div class="flex justify-center gap-2">
+                        <button class="icon-only bg-blue-600/20 text-blue-400 hover:bg-blue-600/30">✎</button>
+                        <button class="icon-only bg-red-600/20 text-red-400 hover:bg-red-600/30">🗑</button>
+                      </div>
+                    </td>
+                  </tr>
+                  <tr class="border-b border-white/5">
+                    <td class="py-3 px-2 text-white">Parafuso Phillips 4x20</td>
+                    <td class="py-3 px-2 text-center text-gray-300">24</td>
+                    <td class="py-3 px-2 text-right text-white">R$ 12,00</td>
+                    <td class="py-3 px-2 text-center">
+                      <div class="flex justify-center gap-2">
+                        <button class="icon-only bg-blue-600/20 text-blue-400 hover:bg-blue-600/30">✎</button>
+                        <button class="icon-only bg-red-600/20 text-red-400 hover:bg-red-600/30">🗑</button>
+                      </div>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
           </div>
-        </div>
-        <div class="flex items-end justify-end">
-          <button id="registrarNovoProduto" class="btn-success px-8 py-4 rounded-xl font-semibold text-lg">
-            Registrar
-          </button>
+          <p class="text-xs text-gray-400 mt-4">✎ edita quantidade; 🗑 remove o item.</p>
         </div>
       </div>
     </div>
