@@ -1,5 +1,7 @@
 // Lógica principal do módulo Matéria Prima
-// Carrega dados e inicializa animações da tela
+let todosMateriais = [];
+
+// Inicializa animações e eventos
 function initMateriaPrima() {
     document.querySelectorAll('.animate-fade-in-up').forEach((el, index) => {
         setTimeout(() => {
@@ -7,22 +9,95 @@ function initMateriaPrima() {
             el.style.transform = 'translateY(0)';
         }, index * 100);
     });
-    const searchInput = document.getElementById('materiaPrimaSearch');
-    if (searchInput) {
-        searchInput.addEventListener('input', (e) => {
-            carregarMateriais(e.target.value.trim());
-        });
-    }
+
+    document.getElementById('materiaPrimaSearch')?.addEventListener('input', aplicarFiltros);
+    document.getElementById('filtroProcesso')?.addEventListener('change', aplicarFiltros);
+    document.getElementById('filtroCategoria')?.addEventListener('change', aplicarFiltros);
+    document.getElementById('btnFiltrar')?.addEventListener('click', aplicarFiltros);
+    document.getElementById('btnLimpar')?.addEventListener('click', limparFiltros);
+
     carregarMateriais();
 }
 
-async function carregarMateriais(filtro = '') {
+async function carregarMateriais() {
     try {
-        const lista = await window.electronAPI.listarMateriaPrima(filtro);
-        renderMateriais(lista);
+        const lista = await window.electronAPI.listarMateriaPrima('');
+        todosMateriais = lista;
+        popularFiltros(lista);
+        aplicarFiltros();
     } catch (err) {
         console.error('Erro ao carregar materiais', err);
     }
+}
+
+function popularFiltros(lista) {
+    const procSel = document.getElementById('filtroProcesso');
+    const catSel = document.getElementById('filtroCategoria');
+
+    if (procSel) {
+        const processos = [...new Set(lista.map(m => m.processo).filter(Boolean))].sort();
+        procSel.innerHTML = '<option value="">Todos</option>' +
+            processos.map(p => `<option value="${p}">${p}</option>`).join('');
+    }
+
+    if (catSel) {
+        const categorias = [...new Set(lista.map(m => m.categoria).filter(Boolean))].sort();
+        catSel.innerHTML = '<option value="">Todas</option>' +
+            categorias.map(c => `<option value="${c}">${c}</option>`).join('');
+    }
+}
+
+function aplicarFiltros() {
+    const termo = (document.getElementById('materiaPrimaSearch')?.value || '').toLowerCase();
+    const processo = document.getElementById('filtroProcesso')?.value || '';
+    const categoria = document.getElementById('filtroCategoria')?.value || '';
+
+    const filtrados = todosMateriais.filter(m => {
+        const matchTermo = !termo ||
+            (m.nome || '').toLowerCase().includes(termo) ||
+            (m.categoria || '').toLowerCase().includes(termo) ||
+            (m.processo || '').toLowerCase().includes(termo) ||
+            (m.infinito ? 'infinito'.includes(termo) : false);
+        const matchProc = !processo || m.processo === processo;
+        const matchCat = !categoria || m.categoria === categoria;
+        return matchTermo && matchProc && matchCat;
+    });
+
+    renderMateriais(filtrados);
+    renderTotais(filtrados);
+}
+
+function limparFiltros() {
+    const busca = document.getElementById('materiaPrimaSearch');
+    const proc = document.getElementById('filtroProcesso');
+    const cat = document.getElementById('filtroCategoria');
+    if (busca) busca.value = '';
+    if (proc) proc.value = '';
+    if (cat) cat.value = '';
+    aplicarFiltros();
+}
+
+function renderTotais(lista) {
+    const container = document.getElementById('totaisTags');
+    if (!container) return;
+
+    const infinitos = lista.filter(m => m.infinito).length;
+    const acabando = lista.filter(m => !m.infinito && Number(m.quantidade) < 10).length;
+    const processos = {};
+    lista.forEach(m => {
+        if (m.processo) {
+            processos[m.processo] = (processos[m.processo] || 0) + 1;
+        }
+    });
+
+    const tags = [];
+    tags.push(`<span class="badge-success px-3 py-1 rounded-full text-xs font-medium">Infinitos: ${infinitos}</span>`);
+    tags.push(`<span class="badge-danger px-3 py-1 rounded-full text-xs font-medium">Acabando (&lt;10): ${acabando}</span>`);
+    Object.keys(processos).sort().forEach(p => {
+        tags.push(`<span class="badge-neutral px-3 py-1 rounded-full text-xs font-medium">${p}: ${processos[p]}</span>`);
+    });
+
+    container.innerHTML = tags.join('');
 }
 
 function formatDate(dateStr) {
