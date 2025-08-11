@@ -18,6 +18,7 @@ const {
   registrarSaida,
   atualizarPreco
 } = require('./backend/materiaPrima');
+const { listarProdutos } = require('./backend/produtos');
 const apiServer = require('./backend/server');
 // Impede que múltiplas instâncias do aplicativo sejam abertas
 const gotTheLock = app.requestSingleInstanceLock();
@@ -344,6 +345,9 @@ ipcMain.handle('registrar-saida-materia-prima', async (_e, { id, quantidade }) =
 });
 ipcMain.handle('atualizar-preco-materia-prima', async (_e, { id, preco }) => {
   return atualizarPreco(id, preco);
+});
+ipcMain.handle('listar-produtos', async () => {
+  return listarProdutos();
 });
 
 ipcMain.handle('auto-login', async (_event, pin) => {

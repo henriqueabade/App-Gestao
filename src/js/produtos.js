@@ -1,8 +1,60 @@
 // Script principal do módulo de Produtos
 // Responsável por carregar os dados e controlar filtros e ações de estoque.
 
+async function carregarProdutos() {
+    try {
+        const produtos = await window.electronAPI.listarProdutos();
+        const tbody = document.getElementById('produtosTableBody');
+        if (!tbody) return;
+        tbody.innerHTML = '';
+
+        produtos.forEach(p => {
+            const tr = document.createElement('tr');
+            tr.className = 'transition-colors duration-150';
+            tr.style.cursor = 'pointer';
+            tr.onmouseover = () => tr.style.background = 'rgba(163, 148, 167, 0.05)';
+            tr.onmouseout = () => tr.style.background = 'transparent';
+
+            tr.innerHTML = `
+                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">${p.codigo || ''}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-white">${p.nome || ''}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-violet)">${p.categoria || ''}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-white">${formatCurrency(p.custo_insumos)}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-white">${formatCurrency(p.preco_venda)}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-green)">${formatPercent(p.margem)}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-white">${p.estoque_atual ?? ''}</td>
+                <td class="px-6 py-4 whitespace-nowrap">
+                    <span class="${p.status === 'ativo' ? 'badge-success' : 'badge-danger'} px-3 py-1 rounded-full text-xs font-medium">
+                        ${p.status === 'ativo' ? 'Ativo' : 'Inativo'}
+                    </span>
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap text-center action-cell"></td>
+            `;
+            tbody.appendChild(tr);
+        });
+
+        const template = document.getElementById('action-icons-template');
+        if (template) {
+            document.querySelectorAll('.action-cell').forEach(cell => {
+                cell.appendChild(template.content.cloneNode(true));
+            });
+        }
+    } catch (err) {
+        console.error('Erro ao carregar produtos', err);
+    }
+}
+
+function formatCurrency(value) {
+    if (value == null) return '';
+    return Number(value).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+}
+
+function formatPercent(value) {
+    if (value == null) return '';
+    return `${Number(value).toFixed(1)}%`;
+}
+
 function initProdutos() {
-    // Animação de entrada dos elementos
     document.querySelectorAll('.animate-fade-in-up').forEach((el, index) => {
         setTimeout(() => {
             el.style.opacity = '1';
@@ -12,15 +64,8 @@ function initProdutos() {
 
     // TODO: Implementar filtros e manipulação de estoque
 
-    // Insere ícones de ação em todas as linhas da tabela
-    const template = document.getElementById('action-icons-template');
-    if (template) {
-        document.querySelectorAll('.action-cell').forEach(cell => {
-            cell.appendChild(template.content.cloneNode(true));
-        });
-    }
+    carregarProdutos();
 
-    // Ajusta os botões de ação conforme o estado da sidebar
     ajustarBotoes();
 
     const sidebar = document.getElementById('sidebar');
