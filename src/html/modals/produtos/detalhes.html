@@ -17,75 +17,14 @@
               <table class="w-full text-sm">
                 <thead class="sticky top-0 bg-surface/80 backdrop-blur-sm">
                   <tr class="border-b border-white/10">
-                    <th class="text-left py-4 px-4 text-gray-300 font-medium">LOTE / ITEM</th>
                     <th class="text-left py-4 px-4 text-gray-300 font-medium">PROCESSO ATUAL</th>
+                    <th class="text-left py-4 px-4 text-gray-300 font-medium">ULTIMO ITEM</th>
                     <th class="text-center py-4 px-4 text-gray-300 font-medium">QUANTIDADE EM ESTOQUE</th>
                     <th class="text-left py-4 px-4 text-gray-300 font-medium">ÚLTIMA ALTERAÇÃO</th>
                     <th class="text-center py-4 px-4 text-gray-300 font-medium">AÇÕES</th>
                   </tr>
                 </thead>
-                <tbody>
-                  <tr class="border-b border-white/5 hover:bg-white/5 transition">
-                    <td class="py-4 px-4 text-white font-medium">#12345</td>
-                    <td class="py-4 px-4 text-gray-300">Acabamento</td>
-                    <td class="py-4 px-4 text-center text-white font-medium">15</td>
-                    <td class="py-4 px-4 text-gray-300">26/06/2025 14:30</td>
-                    <td class="py-4 px-4 text-center">
-                      <div class="flex justify-center gap-2">
-                        <button class="icon-only bg-blue-600/20 text-blue-400 hover:bg-blue-600/30 transition">✎</button>
-                        <button class="icon-only bg-red-600/20 text-red-400 hover:bg-red-600/30 transition">🗑</button>
-                      </div>
-                    </td>
-                  </tr>
-                  <tr class="border-b border-white/5 hover:bg-white/5 transition">
-                    <td class="py-4 px-4 text-white font-medium">#12344</td>
-                    <td class="py-4 px-4 text-gray-300">Montagem</td>
-                    <td class="py-4 px-4 text-center text-white font-medium">8</td>
-                    <td class="py-4 px-4 text-gray-300">24/06/2025 09:15</td>
-                    <td class="py-4 px-4 text-center">
-                      <div class="flex justify-center gap-2">
-                        <button class="icon-only bg-blue-600/20 text-blue-400 hover:bg-blue-600/30 transition">✎</button>
-                        <button class="icon-only bg-red-600/20 text-red-400 hover:bg-red-600/30 transition">🗑</button>
-                      </div>
-                    </td>
-                  </tr>
-                  <tr class="border-b border-white/5 hover:bg-white/5 transition">
-                    <td class="py-4 px-4 text-white font-medium">#12343</td>
-                    <td class="py-4 px-4 text-gray-300">Embalagem</td>
-                    <td class="py-4 px-4 text-center text-white font-medium">22</td>
-                    <td class="py-4 px-4 text-gray-300">20/06/2025 16:45</td>
-                    <td class="py-4 px-4 text-center">
-                      <div class="flex justify-center gap-2">
-                        <button class="icon-only bg-blue-600/20 text-blue-400 hover:bg-blue-600/30 transition">✎</button>
-                        <button class="icon-only bg-red-600/20 text-red-400 hover:bg-red-600/30 transition">🗑</button>
-                      </div>
-                    </td>
-                  </tr>
-                  <tr class="border-b border-white/5 hover:bg-white/5 transition">
-                    <td class="py-4 px-4 text-white font-medium">#12342</td>
-                    <td class="py-4 px-4 text-gray-300">Acabamento</td>
-                    <td class="py-4 px-4 text-center text-white font-medium">12</td>
-                    <td class="py-4 px-4 text-gray-300">18/06/2025 11:20</td>
-                    <td class="py-4 px-4 text-center">
-                      <div class="flex justify-center gap-2">
-                        <button class="icon-only bg-blue-600/20 text-blue-400 hover:bg-blue-600/30 transition">✎</button>
-                        <button class="icon-only bg-red-600/20 text-red-400 hover:bg-red-600/30 transition">🗑</button>
-                      </div>
-                    </td>
-                  </tr>
-                  <tr class="hover:bg-white/5 transition">
-                    <td class="py-4 px-4 text-white font-medium">#12341</td>
-                    <td class="py-4 px-4 text-gray-300">Montagem</td>
-                    <td class="py-4 px-4 text-center text-white font-medium">6</td>
-                    <td class="py-4 px-4 text-gray-300">15/06/2025 13:10</td>
-                    <td class="py-4 px-4 text-center">
-                      <div class="flex justify-center gap-2">
-                        <button class="icon-only bg-blue-600/20 text-blue-400 hover:bg-blue-600/30 transition">✎</button>
-                        <button class="icon-only bg-red-600/20 text-red-400 hover:bg-red-600/30 transition">🗑</button>
-                      </div>
-                    </td>
-                  </tr>
-                </tbody>
+                <tbody id="detalhesTableBody"></tbody>
               </table>
             </div>
           </div>
