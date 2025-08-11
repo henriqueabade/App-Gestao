@@ -7,6 +7,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Módulo de Matéria-Prima
   listarMateriaPrima: (filtro) => ipcRenderer.invoke('listar-materia-prima', { filtro }),
   listarProdutos: () => ipcRenderer.invoke('listar-produtos'),
+  obterProduto: (id) => ipcRenderer.invoke('obter-produto', id),
+  adicionarProduto: (dados) => ipcRenderer.invoke('adicionar-produto', dados),
+  atualizarProduto: (id, dados) => ipcRenderer.invoke('atualizar-produto', { id, dados }),
+  excluirProduto: (id) => ipcRenderer.invoke('excluir-produto', id),
   adicionarMateriaPrima: (dados) => ipcRenderer.invoke('adicionar-materia-prima', dados),
   atualizarMateriaPrima: (id, dados) => ipcRenderer.invoke('atualizar-materia-prima', { id, dados }),
   excluirMateriaPrima: (id) => ipcRenderer.invoke('excluir-materia-prima', id),
