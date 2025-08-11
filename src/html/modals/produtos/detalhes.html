@@ -1,17 +1,121 @@
-<div id="detalhesProdutoOverlay" class="fixed inset-0 bg-black/50 flex items-center justify-center p-6">
-  <div class="w-full max-w-md glass-surface backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade slide-in overflow-y-auto">
-    <header class="relative px-8 py-5 border-b border-white/10">
-      <h2 class="text-lg font-semibold text-center text-white">Detalhes do Produto</h2>
-      <button id="fecharDetalhesProduto" class="btn-danger icon-only absolute right-4 top-4 text-white">✕</button>
+<div id="detalhesProdutoOverlay" class="fixed inset-0 bg-black/50 flex items-center justify-center p-4">
+  <div class="w-full max-w-6xl max-h-[90vh] glass-surface backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade slide-in overflow-hidden flex flex-col">
+    <header class="px-8 py-5 border-b border-white/10 flex-shrink-0">
+      <div class="flex items-center justify-between mb-3">
+        <button id="voltarDetalhesProduto" class="btn-neutral px-4 py-2 rounded-lg text-white font-medium flex items-center gap-2">← Voltar</button>
+        <h2 id="detalheTitulo" class="text-lg font-semibold text-white text-center flex-1 mx-4">DETALHE DE ESTOQUE – Produto</h2>
+        <button id="fecharDetalhesProduto" class="btn-danger icon-only text-white">✕</button>
+      </div>
+      <p class="text-sm text-gray-400 text-center">Último Lote Adicionado #12345 — Data: 26/06/2025</p>
     </header>
-    <div class="p-8 space-y-3 text-sm text-white">
-      <p><span class="text-gray-300">Código:</span> <span id="detCodigo"></span></p>
-      <p><span class="text-gray-300">Nome:</span> <span id="detNome"></span></p>
-      <p><span class="text-gray-300">Categoria:</span> <span id="detCategoria"></span></p>
-      <p><span class="text-gray-300">Preço de Venda:</span> <span id="detPreco"></span></p>
-      <p><span class="text-gray-300">Markup %:</span> <span id="detMarkup"></span></p>
-      <p><span class="text-gray-300">Status:</span> <span id="detStatus"></span></p>
-      <p><span class="text-gray-300">Quantidade:</span> <span id="detQuantidade"></span></p>
+
+    <div class="flex-1 overflow-y-auto">
+      <div class="px-8 py-6">
+        <div class="bg-surface/40 rounded-xl border border-white/10 overflow-hidden">
+          <div class="overflow-x-auto">
+            <div class="max-h-96 overflow-y-auto">
+              <table class="w-full text-sm">
+                <thead class="sticky top-0 bg-surface/80 backdrop-blur-sm">
+                  <tr class="border-b border-white/10">
+                    <th class="text-left py-4 px-4 text-gray-300 font-medium">LOTE / ITEM</th>
+                    <th class="text-left py-4 px-4 text-gray-300 font-medium">PROCESSO ATUAL</th>
+                    <th class="text-center py-4 px-4 text-gray-300 font-medium">QUANTIDADE EM ESTOQUE</th>
+                    <th class="text-left py-4 px-4 text-gray-300 font-medium">ÚLTIMA ALTERAÇÃO</th>
+                    <th class="text-center py-4 px-4 text-gray-300 font-medium">AÇÕES</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr class="border-b border-white/5 hover:bg-white/5 transition">
+                    <td class="py-4 px-4 text-white font-medium">#12345</td>
+                    <td class="py-4 px-4 text-gray-300">Acabamento</td>
+                    <td class="py-4 px-4 text-center text-white font-medium">15</td>
+                    <td class="py-4 px-4 text-gray-300">26/06/2025 14:30</td>
+                    <td class="py-4 px-4 text-center">
+                      <div class="flex justify-center gap-2">
+                        <button class="icon-only bg-blue-600/20 text-blue-400 hover:bg-blue-600/30 transition">✎</button>
+                        <button class="icon-only bg-red-600/20 text-red-400 hover:bg-red-600/30 transition">🗑</button>
+                      </div>
+                    </td>
+                  </tr>
+                  <tr class="border-b border-white/5 hover:bg-white/5 transition">
+                    <td class="py-4 px-4 text-white font-medium">#12344</td>
+                    <td class="py-4 px-4 text-gray-300">Montagem</td>
+                    <td class="py-4 px-4 text-center text-white font-medium">8</td>
+                    <td class="py-4 px-4 text-gray-300">24/06/2025 09:15</td>
+                    <td class="py-4 px-4 text-center">
+                      <div class="flex justify-center gap-2">
+                        <button class="icon-only bg-blue-600/20 text-blue-400 hover:bg-blue-600/30 transition">✎</button>
+                        <button class="icon-only bg-red-600/20 text-red-400 hover:bg-red-600/30 transition">🗑</button>
+                      </div>
+                    </td>
+                  </tr>
+                  <tr class="border-b border-white/5 hover:bg-white/5 transition">
+                    <td class="py-4 px-4 text-white font-medium">#12343</td>
+                    <td class="py-4 px-4 text-gray-300">Embalagem</td>
+                    <td class="py-4 px-4 text-center text-white font-medium">22</td>
+                    <td class="py-4 px-4 text-gray-300">20/06/2025 16:45</td>
+                    <td class="py-4 px-4 text-center">
+                      <div class="flex justify-center gap-2">
+                        <button class="icon-only bg-blue-600/20 text-blue-400 hover:bg-blue-600/30 transition">✎</button>
+                        <button class="icon-only bg-red-600/20 text-red-400 hover:bg-red-600/30 transition">🗑</button>
+                      </div>
+                    </td>
+                  </tr>
+                  <tr class="border-b border-white/5 hover:bg-white/5 transition">
+                    <td class="py-4 px-4 text-white font-medium">#12342</td>
+                    <td class="py-4 px-4 text-gray-300">Acabamento</td>
+                    <td class="py-4 px-4 text-center text-white font-medium">12</td>
+                    <td class="py-4 px-4 text-gray-300">18/06/2025 11:20</td>
+                    <td class="py-4 px-4 text-center">
+                      <div class="flex justify-center gap-2">
+                        <button class="icon-only bg-blue-600/20 text-blue-400 hover:bg-blue-600/30 transition">✎</button>
+                        <button class="icon-only bg-red-600/20 text-red-400 hover:bg-red-600/30 transition">🗑</button>
+                      </div>
+                    </td>
+                  </tr>
+                  <tr class="hover:bg-white/5 transition">
+                    <td class="py-4 px-4 text-white font-medium">#12341</td>
+                    <td class="py-4 px-4 text-gray-300">Montagem</td>
+                    <td class="py-4 px-4 text-center text-white font-medium">6</td>
+                    <td class="py-4 px-4 text-gray-300">15/06/2025 13:10</td>
+                    <td class="py-4 px-4 text-center">
+                      <div class="flex justify-center gap-2">
+                        <button class="icon-only bg-blue-600/20 text-blue-400 hover:bg-blue-600/30 transition">✎</button>
+                        <button class="icon-only bg-red-600/20 text-red-400 hover:bg-red-600/30 transition">🗑</button>
+                      </div>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+          <div class="px-4 py-3 border-t border-white/10 bg-surface/20">
+            <p class="text-xs text-gray-400">✎ edita quantidade; 🗑 remove o lote.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="px-8 pb-8">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div class="bg-surface/40 rounded-xl p-6 border border-white/10 text-center">
+            <p class="text-sm text-gray-400 mb-2">Total em Estoque</p>
+            <p class="text-3xl font-bold text-white">63</p>
+            <p class="text-xs text-gray-500 mt-1">unidades</p>
+          </div>
+
+          <div class="bg-surface/40 rounded-xl p-6 border border-white/10 text-center">
+            <p class="text-sm text-gray-400 mb-2">Valor Estimado</p>
+            <p class="text-3xl font-bold text-white">R$ 94.500</p>
+            <p class="text-xs text-gray-500 mt-1">valor total</p>
+          </div>
+
+          <div class="bg-surface/40 rounded-xl p-6 border border-white/10 text-center">
+            <p class="text-sm text-gray-400 mb-2">Lotes Ativos</p>
+            <p class="text-3xl font-bold text-white">5</p>
+            <p class="text-xs text-gray-500 mt-1">lotes</p>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 </div>
