@@ -92,7 +92,7 @@ function renderTotais(lista) {
 
     const tags = [];
     tags.push(`<span class="badge-success px-3 py-1 rounded-full text-xs font-medium">Infinitos: ${infinitos}</span>`);
-    tags.push(`<span class="badge-danger px-3 py-1 rounded-full text-xs font-medium">Acabando (&lt;10): ${acabando}</span>`);
+    tags.push(`<span class="badge-danger px-3 py-1 rounded-full text-xs font-medium">Acabando: ${acabando}</span>`);
     Object.keys(processos).sort().forEach(p => {
         tags.push(`<span class="badge-neutral px-3 py-1 rounded-full text-xs font-medium">${p}: ${processos[p]}</span>`);
     });
