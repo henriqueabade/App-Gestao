@@ -6,6 +6,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('registrar-usuario', { name, email, password, pin }),
   // Módulo de Matéria-Prima
   listarMateriaPrima: (filtro) => ipcRenderer.invoke('listar-materia-prima', { filtro }),
+  listarProdutos: () => ipcRenderer.invoke('listar-produtos'),
   adicionarMateriaPrima: (dados) => ipcRenderer.invoke('adicionar-materia-prima', dados),
   atualizarMateriaPrima: (id, dados) => ipcRenderer.invoke('atualizar-materia-prima', { id, dados }),
   excluirMateriaPrima: (id) => ipcRenderer.invoke('excluir-materia-prima', id),
