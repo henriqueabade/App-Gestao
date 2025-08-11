@@ -23,7 +23,8 @@ const {
   obterProduto,
   adicionarProduto,
   atualizarProduto,
-  excluirProduto
+  excluirProduto,
+  listarDetalhesProduto
 } = require('./backend/produtos');
 const apiServer = require('./backend/server');
 // Impede que múltiplas instâncias do aplicativo sejam abertas
@@ -367,6 +368,9 @@ ipcMain.handle('atualizar-produto', async (_e, { id, dados }) => {
 ipcMain.handle('excluir-produto', async (_e, id) => {
   await excluirProduto(id);
   return true;
+});
+ipcMain.handle('listar-detalhes-produto', async (_e, id) => {
+  return listarDetalhesProduto(id);
 });
 
 ipcMain.handle('auto-login', async (_event, pin) => {
