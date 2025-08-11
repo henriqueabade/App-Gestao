@@ -1,5 +1,28 @@
 // Lógica principal do módulo Matéria Prima
 let todosMateriais = [];
+let notificationContainer;
+
+function showToast(message, type = 'success') {
+    if (!notificationContainer) {
+        notificationContainer = document.getElementById('notification');
+        if (!notificationContainer) {
+            notificationContainer = document.createElement('div');
+            notificationContainer.id = 'notification';
+            notificationContainer.className = 'fixed top-4 right-4 space-y-2 z-[10000]';
+            document.body.appendChild(notificationContainer);
+        }
+    }
+    const div = document.createElement('div');
+    div.className = `toast ${type === 'success' ? 'toast-success' : 'toast-error'}`;
+    div.textContent = message;
+    notificationContainer.appendChild(div);
+    setTimeout(() => {
+        div.classList.add('opacity-0');
+        setTimeout(() => div.remove(), 500);
+    }, 3000);
+}
+
+window.showToast = showToast;
 
 // Inicializa animações e eventos
 function initMateriaPrima() {
@@ -15,6 +38,7 @@ function initMateriaPrima() {
     document.getElementById('filtroCategoria')?.addEventListener('change', aplicarFiltros);
     document.getElementById('btnFiltrar')?.addEventListener('click', aplicarFiltros);
     document.getElementById('btnLimpar')?.addEventListener('click', limparFiltros);
+    document.getElementById('btnNovoInsumo')?.addEventListener('click', abrirNovoInsumo);
 
     carregarMateriais();
 }
@@ -273,9 +297,27 @@ function renderMateriais(listaMateriais) {
             <td class="px-6 py-4 whitespace-nowrap text-sm text-white">R$ ${preco.toFixed(2).replace('.', ',')}</td>
             <td class="px-6 py-4 whitespace-nowrap text-center">${acoes}</td>`;
         tbody.appendChild(tr);
+        const editBtn = tr.querySelector('.fa-edit');
+        const delBtn = tr.querySelector('.fa-trash');
+        if (editBtn) editBtn.addEventListener('click', e => { e.stopPropagation(); abrirEditarInsumo(item); });
+        if (delBtn) delBtn.addEventListener('click', e => { e.stopPropagation(); abrirExcluirInsumo(item); });
     });
 
     attachInfoEvents();
+}
+
+function abrirNovoInsumo() {
+    Modal.open('modals/materia-prima/novo.html', '../js/modals/materia-prima-novo.js', 'novoInsumo');
+}
+
+function abrirEditarInsumo(item) {
+    window.materiaSelecionada = item;
+    Modal.open('modals/materia-prima/editar.html', '../js/modals/materia-prima-editar.js', 'editarInsumo');
+}
+
+function abrirExcluirInsumo(item) {
+    window.materiaExcluir = item;
+    Modal.open('modals/materia-prima/excluir.html', '../js/modals/materia-prima-excluir.js', 'excluirInsumo');
 }
 
 if (document.readyState === 'loading') {

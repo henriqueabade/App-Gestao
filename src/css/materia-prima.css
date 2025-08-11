@@ -242,3 +242,34 @@ body {
   color: #e5e5e5; /* Um cinza mais claro */
   line-height: 1.5; /* leading-relaxed */
 }
+
+/* Modals and form elements */
+.bg-input { background: var(--color-input); }
+.border-inputBorder { border-color: var(--color-inputBorder); }
+.focus\:border-primary:focus { border-color: var(--color-primary); }
+.focus\:ring-primary\/50:focus { box-shadow: 0 0 0 2px rgba(182,160,62,0.5); }
+.peer-focus\:text-primary { transition: color 150ms ease; }
+.peer:focus ~ .peer-focus\:text-primary { color: var(--color-primary); }
+.btn-danger { background: var(--color-red); transition: all 150ms ease; }
+.btn-danger:hover { background: rgba(255,88,88,0.8); transform: scale(1.1); }
+.btn-danger:active { transform: scale(0.95); }
+.btn-neutral { background: rgba(255,255,255,0.1); transition: all 150ms ease; }
+.btn-neutral:hover { background: rgba(255,255,255,0.15); transform: scale(1.05); }
+.btn-neutral:active { transform: scale(0.95); }
+.btn-success { background: var(--color-green); color:#000; transition: all 150ms ease; }
+.btn-success:hover { background: rgba(162,255,166,0.8); transform: scale(1.05); }
+.btn-success:active { transform: scale(0.95); }
+.component-toggle { appearance: none; width:48px; height:24px; background: rgba(255,255,255,0.2); border-radius:12px; position:relative; cursor:pointer; transition: all 150ms ease; }
+.component-toggle::after { content:''; position:absolute; top:2px; left:2px; width:20px; height:20px; background:white; border-radius:50%; transition: all 150ms ease; }
+.component-toggle:checked { background: var(--color-primary); }
+.component-toggle:checked::after { transform: translateX(24px); }
+.icon-only { width:32px; height:32px; display:flex; align-items:center; justify-content:center; border-radius:8px; font-size:16px; }
+.animate-modalFade { animation: modalFade 0.3s ease-out forwards; }
+.slide-in { animation: slideIn 0.3s ease-out forwards; }
+@keyframes modalFade { from { opacity:0; } to { opacity:1; } }
+@keyframes slideIn { from { transform: translateY(16px); opacity:0; } to { transform: translateY(0); opacity:1; } }
+
+/* Toast notifications */
+.toast { color: white; padding: 0.5rem 1rem; border-radius: 0.25rem; box-shadow: 0 2px 4px rgba(0,0,0,0.1); transition: opacity 0.5s ease-in-out; }
+.toast-success { background-color: #16a34a; }
+.toast-error { background-color: #dc2626; }
