@@ -6,19 +6,35 @@
   document.getElementById('cancelarNovoInsumo').addEventListener('click', close);
   document.addEventListener('keydown', function esc(e){ if(e.key==='Escape'){ close(); document.removeEventListener('keydown', esc); } });
   const form = document.getElementById('novoInsumoForm');
+  const quantidadeInput = form.quantidade;
+  const infinitoCheckbox = form.infinito;
+
+  const toggleInfinito = () => {
+    if (infinitoCheckbox.checked) {
+      quantidadeInput.value = '∞';
+      quantidadeInput.disabled = true;
+    } else {
+      quantidadeInput.disabled = false;
+      quantidadeInput.value = '';
+    }
+  };
+
+  infinitoCheckbox.addEventListener('change', toggleInfinito);
+
   form.addEventListener('submit', async e => {
     e.preventDefault();
+    const quantidade = infinitoCheckbox.checked ? null : parseFloat(form.quantidade.value);
     const dados = {
       nome: form.nome.value.trim(),
       categoria: form.categoria.value.trim(),
-      quantidade: parseFloat(form.quantidade.value),
+      quantidade,
       unidade: form.unidade.value.trim(),
       preco_unitario: parseFloat(form.preco.value),
       processo: form.processo.value.trim(),
-      infinito: form.infinito.checked,
+      infinito: infinitoCheckbox.checked,
       descricao: form.descricao.value.trim()
     };
-    if(!dados.nome || !dados.categoria || !dados.unidade || !dados.processo || isNaN(dados.quantidade) || dados.quantidade < 0 || isNaN(dados.preco_unitario) || dados.preco_unitario < 0){
+    if(!dados.nome || !dados.categoria || !dados.unidade || !dados.processo || (!infinitoCheckbox.checked && (isNaN(quantidade) || quantidade < 0)) || isNaN(dados.preco_unitario) || dados.preco_unitario < 0){
       showToast('Verifique os campos obrigatórios.', 'error');
       return;
     }
@@ -32,4 +48,6 @@
       showToast('Erro ao criar insumo', 'error');
     }
   });
+
+  toggleInfinito();
 })();
