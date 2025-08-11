@@ -9,6 +9,7 @@
   const markupInput = document.getElementById('markupInput');
   const commissionInput = document.getElementById('commissionInput');
   const taxInput = document.getElementById('taxInput');
+  const etapaSelect = document.getElementById('etapaSelect');
 
   const totalInsumosEl = document.getElementById('totalInsumos');
   const totalMaoObraEl = document.getElementById('totalMaoObra');
@@ -50,7 +51,7 @@
 
   function updateTotals(){
     let totalInsumos = 0;
-    tableBody.querySelectorAll('tr').forEach(tr => {
+    tableBody.querySelectorAll('tr.item-row').forEach(tr => {
       totalInsumos += parseCurrency(tr.querySelector('.item-total').textContent);
     });
     const totalMaoObra = totalInsumos * 0.5;
@@ -72,7 +73,35 @@
     impostoValorEl.textContent = formatCurrency(taxVal);
   }
 
-  tableBody.querySelectorAll('tr').forEach(attachRowEvents);
+  function renderItens(itens){
+    tableBody.innerHTML = '';
+    let currentProcess = null;
+    itens.forEach(item => {
+      if(item.processo !== currentProcess){
+        const procRow = document.createElement('tr');
+        procRow.className = 'process-row';
+        procRow.innerHTML = `<td colspan="4" class="pt-4 pb-2 text-left text-gray-300 font-semibold">${item.processo}</td>`;
+        tableBody.appendChild(procRow);
+        currentProcess = item.processo;
+      }
+      const tr = document.createElement('tr');
+      tr.className = 'border-b border-white/5 item-row';
+      tr.innerHTML = `
+        <td class="py-3 px-2 text-white">${item.nome}</td>
+        <td class="py-3 px-2 text-center text-gray-300 item-qty">${item.quantidade}</td>
+        <td class="py-3 px-2 text-right text-white item-total">${formatCurrency(item.total)}</td>
+        <td class="py-3 px-2 text-center">
+          <div class="flex justify-center gap-2">
+            <button class="edit-item icon-only bg-blue-600/20 text-blue-400 hover:bg-blue-600/30">✎</button>
+            <button class="remove-item icon-only bg-red-600/20 text-red-400 hover:bg-red-600/30">🗑</button>
+          </div>
+        </td>`;
+      tableBody.appendChild(tr);
+      attachRowEvents(tr);
+    });
+    updateTotals();
+  }
+
   markupInput.addEventListener('input', updateTotals);
   commissionInput.addEventListener('input', updateTotals);
   taxInput.addEventListener('input', updateTotals);
@@ -84,6 +113,23 @@
 
   document.getElementById('salvarEditarProduto').addEventListener('click', close);
 
-  updateTotals();
+  const produto = window.produtoSelecionado;
+  (async () => {
+    try{
+      const dados = await window.electronAPI.obterProduto(produto.id);
+      if(dados){
+        if(dados.pct_markup != null) markupInput.value = dados.pct_markup;
+        if(dados.pct_comissao != null) commissionInput.value = dados.pct_comissao;
+        if(dados.pct_imposto != null) taxInput.value = dados.pct_imposto;
+      }
+      const etapas = await window.electronAPI.listarEtapasProducao();
+      etapaSelect.innerHTML = etapas.map(e => `<option value="${e.id}">${e.nome}</option>`).join('');
+      const itens = await window.electronAPI.listarInsumosProduto(produto.codigo);
+      renderItens(itens);
+    } catch(err){
+      console.error('Erro ao carregar dados do produto', err);
+    }
+  })();
+
 })();
 

@@ -24,7 +24,9 @@ const {
   adicionarProduto,
   atualizarProduto,
   excluirProduto,
-  listarDetalhesProduto
+  listarDetalhesProduto,
+  listarInsumosProduto,
+  listarEtapasProducao
 } = require('./backend/produtos');
 const apiServer = require('./backend/server');
 // Impede que múltiplas instâncias do aplicativo sejam abertas
@@ -371,6 +373,12 @@ ipcMain.handle('excluir-produto', async (_e, id) => {
 });
 ipcMain.handle('listar-detalhes-produto', async (_e, id) => {
   return listarDetalhesProduto(id);
+});
+ipcMain.handle('listar-insumos-produto', async (_e, codigo) => {
+  return listarInsumosProduto(codigo);
+});
+ipcMain.handle('listar-etapas-producao', async () => {
+  return listarEtapasProducao();
 });
 
 ipcMain.handle('auto-login', async (_event, pin) => {
