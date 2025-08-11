@@ -31,14 +31,18 @@ function initUsuarios() {
     });
 
     document.getElementById('aplicarFiltro')?.addEventListener('click', () => {
-        console.log('Aplicar filtros', coletarFiltros());
+        carregarUsuarios(coletarFiltros());
     });
 
     document.getElementById('limparFiltro')?.addEventListener('click', () => {
         document.getElementById('filtroBusca').value = '';
         document.getElementById('filtroPerfil').value = '';
         document.querySelectorAll('.checkbox-custom').forEach(cb => cb.checked = false);
-        console.log('Filtros limpos');
+        carregarUsuarios();
+    });
+
+    document.getElementById('filtroBusca')?.addEventListener('keydown', e => {
+        if (e.key === 'Enter') carregarUsuarios(coletarFiltros());
     });
 
     document.querySelectorAll('[data-acao="editar"]').forEach(btn => {
@@ -79,9 +83,14 @@ function initUsuarios() {
     }
 }
 
-async function carregarUsuarios() {
+async function carregarUsuarios(filtros = {}) {
     try {
-        const resp = await fetch(`${API_URL}/api/usuarios/lista`);
+        const params = new URLSearchParams();
+        if (filtros.busca) params.append('busca', filtros.busca);
+        if (filtros.perfil) params.append('perfil', filtros.perfil);
+        if (filtros.status && filtros.status.length) params.append('status', filtros.status.join(','));
+
+        const resp = await fetch(`${API_URL}/api/usuarios/lista${params.toString() ? `?${params.toString()}` : ''}`);
         const usuarios = await resp.json();
         const tbody = document.getElementById('listaUsuarios');
         if (!tbody) return;
@@ -103,9 +112,9 @@ async function carregarUsuarios() {
                     <div class="text-sm font-medium text-white">${u.nome}</div>
                 </td>
                 <td class="px-6 py-4 text-sm text-white">${u.email}</td>
-                <td class="px-6 py-4"></td>
+                <td class="px-6 py-4 text-sm text-white">${u.perfil || ''}</td>
                 <td class="px-6 py-4">
-                    <span class="${u.status === 'Ativo' ? 'badge-success' : 'badge-danger'} px-2 py-1 rounded-full text-xs font-medium">${u.status}</span>
+                    <span class="${u.status === 'Ativo' ? 'badge-success' : u.status === 'Inativo' ? 'badge-danger' : 'badge-warning'} px-2 py-1 rounded-full text-xs font-medium">${u.status}</span>
                 </td>
                 <td class="px-6 py-4">
                     <div class="flex items-center gap-2">
