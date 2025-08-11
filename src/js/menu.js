@@ -49,25 +49,35 @@ window.loadPage = loadPage;
 
 let sidebarExpanded = false;
 let crmExpanded = false;
+let expandTimeout;
+let collapseTimeout;
 
 // Expande a sidebar quando necessário
 function expandSidebar() {
     if (!sidebarExpanded) {
+        clearTimeout(collapseTimeout);
         sidebar.classList.remove('sidebar-collapsed');
         sidebar.classList.add('sidebar-expanded');
         const offset = window.innerWidth >= 1024 ? '240px' : '200px';
         mainContent.style.marginLeft = offset;
-        if (companyName) companyName.style.display = 'inline';
+        expandTimeout = setTimeout(() => {
+            sidebar.classList.add('sidebar-text-visible');
+            if (companyName) companyName.style.display = 'inline';
+        }, 200);
         sidebarExpanded = true;
     }
 }
 
 function collapseSidebar() {
     if (sidebarExpanded) {
-        sidebar.classList.remove('sidebar-expanded');
-        sidebar.classList.add('sidebar-collapsed');
-        mainContent.style.marginLeft = '64px';
+        clearTimeout(expandTimeout);
+        sidebar.classList.remove('sidebar-text-visible');
         if (companyName) companyName.style.display = 'none';
+        collapseTimeout = setTimeout(() => {
+            sidebar.classList.remove('sidebar-expanded');
+            sidebar.classList.add('sidebar-collapsed');
+            mainContent.style.marginLeft = '64px';
+        }, 200);
         sidebarExpanded = false;
     }
     // Submenu CRM permanece aberto; fechamento apenas via clique

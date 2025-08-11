@@ -110,7 +110,7 @@ header.glass-surface {
     transition: all 200ms ease;
 }
 
-.sidebar-expanded .sidebar-text {
+.sidebar-text-visible .sidebar-text {
     opacity: 1;
     transform: translateX(0);
 }
