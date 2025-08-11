@@ -19,14 +19,52 @@
             <p style="color: var(--color-violet)">Controle e gerenciamento de insumos para produção</p>
         </div>
 
-        <!-- Search and Actions -->
-        <div class="mb-6 flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between animate-fade-in-up">
-            <div class="flex-1 max-w-md">
-                <input id="materiaPrimaSearch" type="text" placeholder="Buscar por Nome, Infinito, Categoria ou Processo..." class="input-glass text-white rounded-md px-4 py-3 w-full placeholder-white/50">
-            </div>
+        <!-- Actions -->
+        <div class="mb-6 flex justify-end animate-fade-in-up">
             <button class="btn-primary text-white rounded-md px-4 py-3 font-medium whitespace-nowrap">
                 <i class="fas fa-plus mr-2"></i>Novo Insumo
             </button>
+        </div>
+
+        <!-- Filters & Totals -->
+        <div class="glass-surface rounded-xl p-6 mb-6 animate-fade-in-up">
+            <div class="filter-bar flex flex-col md:flex-row md:flex-wrap xl:flex-nowrap items-center">
+                <!-- Search -->
+                <div class="flex-1 min-w-[250px]">
+                    <label class="block text-sm font-medium mb-2 text-white">Buscar Insumo</label>
+                    <input id="materiaPrimaSearch" type="text" placeholder="Nome, Categoria ou Processo" class="input-glass text-white rounded-md px-4 py-3 w-full placeholder-white/50">
+                </div>
+
+                <!-- Processo -->
+                <div class="flex-1 min-w-[200px]">
+                    <label class="block text-sm font-medium mb-2 text-white">Processo</label>
+                    <select id="filtroProcesso" class="input-glass text-white rounded-md px-4 py-3 w-full">
+                        <option value="">Todos</option>
+                    </select>
+                </div>
+
+                <!-- Categoria -->
+                <div class="flex-1 min-w-[200px]">
+                    <label class="block text-sm font-medium mb-2 text-white">Categoria</label>
+                    <select id="filtroCategoria" class="input-glass text-white rounded-md px-4 py-3 w-full">
+                        <option value="">Todas</option>
+                    </select>
+                </div>
+
+                <!-- Totais -->
+                <div class="flex flex-col">
+                    <label class="block text-sm font-medium mb-1 text-white">Totais por Tipo</label>
+                    <div id="totaisTags" class="flex flex-wrap gap-2">
+                        <!-- Tags geradas dinamicamente -->
+                    </div>
+                </div>
+
+                <!-- Actions -->
+                <div id="bt-actions" class="flex items-center gap-2">
+                    <button id="btnFiltrar" class="btn-secondary text-white rounded-md px-4 py-3 text-sm font-medium">Filtrar</button>
+                    <button id="btnLimpar" class="btn-warning text-white rounded-md px-4 py-3 text-sm font-medium">Limpar</button>
+                </div>
+            </div>
         </div>
 
         <!-- Materials Table -->
