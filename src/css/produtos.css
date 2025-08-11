@@ -167,3 +167,7 @@ body {
 .table-scroll {
     max-height: calc(var(--module-height) - 260px) !important;
 }
+
+#bt-actions {
+    margin-top: 1.5vw;
+}
