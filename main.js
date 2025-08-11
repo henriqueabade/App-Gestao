@@ -26,7 +26,9 @@ const {
   excluirProduto,
   listarDetalhesProduto,
   listarInsumosProduto,
-  listarEtapasProducao
+  listarEtapasProducao,
+  atualizarLoteProduto,
+  excluirLoteProduto
 } = require('./backend/produtos');
 const apiServer = require('./backend/server');
 // Impede que múltiplas instâncias do aplicativo sejam abertas
@@ -383,6 +385,13 @@ ipcMain.handle('listar-detalhes-produto', async (_e, id) => {
     console.error('Erro ao listar detalhes do produto:', err);
     throw err;
   }
+});
+ipcMain.handle('atualizar-lote-produto', async (_e, { id, quantidade }) => {
+  return atualizarLoteProduto(id, quantidade);
+});
+ipcMain.handle('excluir-lote-produto', async (_e, id) => {
+  await excluirLoteProduto(id);
+  return true;
 });
 ipcMain.handle('listar-insumos-produto', async (_e, codigo) => {
   return listarInsumosProduto(codigo);
