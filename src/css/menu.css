@@ -206,6 +206,16 @@ header.glass-surface {
 #companyName {
     margin-left: 0.5rem;
     white-space: nowrap;
+    overflow: hidden;
+    max-width: 200px;
+    opacity: 1;
+    transition: all 200ms ease;
+}
+
+#companyName.collapsed {
+    opacity: 0;
+    max-width: 0;
+    margin-left: 0;
 }
 
 #logoContainer img {

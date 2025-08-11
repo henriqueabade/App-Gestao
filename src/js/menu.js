@@ -9,11 +9,6 @@ const crmSubmenu = document.getElementById('crmSubmenu');
 const chevron = crmToggle.querySelector('.chevron');
 const companyName = document.getElementById('companyName');
 
-// Ajusta logo e nome conforme estado inicial da sidebar
-if (sidebar && !sidebar.classList.contains('sidebar-expanded')) {
-    if (companyName) companyName.style.display = 'none';
-}
-
 // Carrega páginas modulares dentro da div#content
 // Remove estilos e scripts antigos e executa o novo script em escopo isolado
 async function loadPage(page) {
@@ -49,35 +44,25 @@ window.loadPage = loadPage;
 
 let sidebarExpanded = false;
 let crmExpanded = false;
-let expandTimeout;
-let collapseTimeout;
 
 // Expande a sidebar quando necessário
 function expandSidebar() {
     if (!sidebarExpanded) {
-        clearTimeout(collapseTimeout);
         sidebar.classList.remove('sidebar-collapsed');
-        sidebar.classList.add('sidebar-expanded');
+        sidebar.classList.add('sidebar-expanded', 'sidebar-text-visible');
         const offset = window.innerWidth >= 1024 ? '240px' : '200px';
         mainContent.style.marginLeft = offset;
-        expandTimeout = setTimeout(() => {
-            sidebar.classList.add('sidebar-text-visible');
-            if (companyName) companyName.style.display = 'inline';
-        }, 200);
+        if (companyName) companyName.classList.remove('collapsed');
         sidebarExpanded = true;
     }
 }
 
 function collapseSidebar() {
     if (sidebarExpanded) {
-        clearTimeout(expandTimeout);
-        sidebar.classList.remove('sidebar-text-visible');
-        if (companyName) companyName.style.display = 'none';
-        collapseTimeout = setTimeout(() => {
-            sidebar.classList.remove('sidebar-expanded');
-            sidebar.classList.add('sidebar-collapsed');
-            mainContent.style.marginLeft = '64px';
-        }, 200);
+        sidebar.classList.remove('sidebar-expanded', 'sidebar-text-visible');
+        sidebar.classList.add('sidebar-collapsed');
+        mainContent.style.marginLeft = '64px';
+        if (companyName) companyName.classList.add('collapsed');
         sidebarExpanded = false;
     }
     // Submenu CRM permanece aberto; fechamento apenas via clique
