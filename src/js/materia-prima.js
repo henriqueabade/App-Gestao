@@ -54,6 +54,8 @@ async function carregarMateriais() {
     }
 }
 
+window.carregarMateriais = carregarMateriais;
+
 function popularFiltros(lista) {
     const procSel = document.getElementById('filtroProcesso');
     const catSel = document.getElementById('filtroCategoria');
@@ -215,6 +217,8 @@ function hideInfoPopup() {
         currentPopup = null;
     }
 }
+
+window.hideRawMaterialInfoPopup = hideInfoPopup;
 
 function attachInfoEvents() {
     const lista = document.getElementById('materiaPrimaTableBody');
