@@ -12,7 +12,7 @@ async function listarProdutos() {
               p.status,
               COALESCE(SUM(pe.quantidade), 0) AS quantidade_total
          FROM produtos p
-    LEFT JOIN produtos_em_cada_ponto pe ON pe.id_produto = p.id
+    LEFT JOIN produtos_em_cada_ponto pe ON pe.produto_id = p.id
      GROUP BY p.id, p.codigo, p.nome, p.categoria, p.preco_venda, p.pct_markup, p.status
      ORDER BY p.nome`
     );

@@ -15,6 +15,9 @@ async function carregarProdutos() {
             tr.onmouseover = () => tr.style.background = 'rgba(163, 148, 167, 0.05)';
             tr.onmouseout = () => tr.style.background = 'transparent';
 
+            const statusText = p.status || '';
+            const badgeClass = statusText.toLowerCase() === 'em linha' ? 'badge-success' : 'badge-danger';
+
             tr.innerHTML = `
                 <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">${p.codigo || ''}</td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm text-white">${reduzirNome(p.nome) || ''}</td>
@@ -23,8 +26,8 @@ async function carregarProdutos() {
                 <td class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-green)">${formatPercent(p.pct_markup)}</td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm text-white">${p.quantidade_total ?? 0}</td>
                 <td class="px-6 py-4 whitespace-nowrap">
-                    <span class="${p.status === 'ativo' ? 'badge-success' : 'badge-danger'} px-3 py-1 rounded-full text-xs font-medium">
-                        ${p.status === 'ativo' ? 'Ativo' : 'Inativo'}
+                    <span class="${badgeClass} px-3 py-1 rounded-full text-xs font-medium">
+                        ${statusText}
                     </span>
                 </td>
                 <td class="px-6 py-4 whitespace-nowrap text-center action-cell"></td>
