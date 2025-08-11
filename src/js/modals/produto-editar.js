@@ -11,6 +11,13 @@
   const taxInput = document.getElementById('taxInput');
   const etapaSelect = document.getElementById('etapaSelect');
 
+  const nomeInput = document.getElementById('nomeInput');
+  const codigoInput = document.getElementById('codigoInput');
+  const ncmInput = document.getElementById('ncmInput');
+  const precoVendaEl = document.getElementById('precoVenda');
+  const ultimaDataEl = document.getElementById('ultimaModificacaoData');
+  const ultimaHoraEl = document.getElementById('ultimaModificacaoHora');
+
   const totalInsumosEl = document.getElementById('totalInsumos');
   const totalMaoObraEl = document.getElementById('totalMaoObra');
   const subTotalEl = document.getElementById('subTotal');
@@ -78,6 +85,11 @@
     let currentProcess = null;
     itens.forEach(item => {
       if(item.processo !== currentProcess){
+        if(currentProcess !== null){
+          const sep = document.createElement('tr');
+          sep.innerHTML = '<td colspan="4" class="py-2"><div class="h-px bg-white/10"></div></td>';
+          tableBody.appendChild(sep);
+        }
         const procRow = document.createElement('tr');
         procRow.className = 'process-row';
         procRow.innerHTML = `<td colspan="4" class="pt-4 pb-2 text-left text-gray-300 font-semibold">${item.processo}</td>`;
@@ -118,6 +130,16 @@
     try{
       const dados = await window.electronAPI.obterProduto(produto.id);
       if(dados){
+        if(dados.nome) nomeInput.value = dados.nome;
+        if(dados.codigo) codigoInput.value = dados.codigo;
+        if(dados.ncm != null) ncmInput.value = String(dados.ncm);
+        if(dados.preco_venda != null) precoVendaEl.textContent = formatCurrency(dados.preco_venda);
+        const mod = dados.ultima_modificacao || dados.updated_at;
+        if(mod){
+          const d = new Date(mod);
+          ultimaDataEl.textContent = d.toLocaleDateString('pt-BR');
+          ultimaHoraEl.textContent = d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+        }
         if(dados.pct_markup != null) markupInput.value = dados.pct_markup;
         if(dados.pct_comissao != null) commissionInput.value = dados.pct_comissao;
         if(dados.pct_imposto != null) taxInput.value = dados.pct_imposto;
