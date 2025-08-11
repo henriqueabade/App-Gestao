@@ -10,6 +10,7 @@ async function carregarClientes() {
         todosClientes = clientes;
         popularFiltros(clientes);
         renderClientes(clientes);
+        renderTotais(clientes);
     } catch (err) {
         console.error('Erro ao carregar clientes', err);
     }
@@ -48,6 +49,7 @@ function aplicarFiltros() {
     });
 
     renderClientes(filtrados);
+    renderTotais(filtrados);
 }
 
 function limparFiltros() {
@@ -58,6 +60,7 @@ function limparFiltros() {
     if (dono) dono.value = '';
     if (status) status.value = '';
     renderClientes(todosClientes);
+    renderTotais(todosClientes);
 }
 
 function badgeForStatus(status) {
@@ -99,6 +102,41 @@ function renderClientes(clientes) {
             </td>`;
         tbody.appendChild(tr);
     });
+}
+
+function renderTotais(clientes) {
+    const container = document.getElementById('totaisBadges');
+    if (!container) return;
+
+    const total = clientes.length;
+    const counts = {};
+    clientes.forEach(c => {
+        const status = c.status_cliente || 'Sem Status';
+        counts[status] = (counts[status] || 0) + 1;
+    });
+
+    const labelMap = {
+        'Ativo': 'Ativos',
+        'Inativo': 'Inativos',
+        'Pendente': 'Pendentes',
+        'Suspenso': 'Suspensos',
+        'Sem Status': 'Sem Status'
+    };
+    const classMap = {
+        'Ativo': 'badge-success',
+        'Inativo': 'badge-danger',
+        'Pendente': 'badge-warning',
+        'Suspenso': 'badge-neutral',
+        'Sem Status': 'badge-neutral'
+    };
+
+    const badges = [`<span class="badge-neutral px-3 py-1 rounded-full text-xs font-medium">Total: ${total}</span>`];
+    for (const [status, count] of Object.entries(counts)) {
+        const label = labelMap[status] || status;
+        const cls = classMap[status] || 'badge-neutral';
+        badges.push(`<span class="${cls} px-3 py-1 rounded-full text-xs font-medium">${label}: ${count}</span>`);
+    }
+    container.innerHTML = badges.join('');
 }
 
 function initClientes() {
