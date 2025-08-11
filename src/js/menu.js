@@ -140,36 +140,8 @@ document.querySelectorAll('.sidebar-item[data-page], .submenu-item[data-page]').
 
         const page = this.dataset.page;
         document.querySelector('h1').textContent = pageNames[page] || 'Dashboard';
-        if (page === 'orcamentos') {
-            loadPage('orcamentos');
-        }
-        if (page === 'produtos') {
-            loadPage('produtos');
-        }
-        if (page === 'materia-prima') {
-            loadPage('materia-prima');
-        }
-        if (page === 'clientes') {
-            loadPage('clientes');
-        }
-        if (page === 'prospeccoes') {
-            loadPage('prospeccoes');
-        }
-        if (page === 'pedidos') {
-            loadPage('pedidos');
-        }
-        if (page === 'calendario') {
-            loadPage('calendario');
-        }
-        // Carrega o módulo de Contatos ao clicar no item correspondente
-        if (page === 'contatos') {
-            loadPage('contatos');
-        }
-        if (page === 'tarefas') {
-            loadPage('tarefas');
-        }
-        if (page === 'usuarios') {
-            loadPage('usuarios');
+        if (page && page !== 'dashboard') {
+            loadPage(page);
         }
     });
 });
