@@ -248,6 +248,9 @@ function renderMateriais(listaMateriais) {
     tbody.innerHTML = '';
     const acoes = `
         <div class="flex items-center justify-center space-x-2">
+            <i class="fas fa-arrow-up w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-green)" title="Registrar Entrada"></i>
+            <i class="fas fa-arrow-down w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-red)" title="Registrar Saída"></i>
+            <i class="fas fa-dollar-sign w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-blue)" title="Atualizar Preço"></i>
             <i class="fas fa-edit w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Editar"></i>
             <i class="fas fa-trash w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10 hover:text-white" style="color: var(--color-red)" title="Excluir"></i>
         </div>`;
@@ -297,8 +300,14 @@ function renderMateriais(listaMateriais) {
             <td class="px-6 py-4 whitespace-nowrap text-sm text-white">R$ ${preco.toFixed(2).replace('.', ',')}</td>
             <td class="px-6 py-4 whitespace-nowrap text-center">${acoes}</td>`;
         tbody.appendChild(tr);
+        const entradaBtn = tr.querySelector('.fa-arrow-up');
+        const saidaBtn = tr.querySelector('.fa-arrow-down');
+        const precoBtn = tr.querySelector('.fa-dollar-sign');
         const editBtn = tr.querySelector('.fa-edit');
         const delBtn = tr.querySelector('.fa-trash');
+        if (entradaBtn) entradaBtn.addEventListener('click', e => { e.stopPropagation(); abrirEntradaInsumo(item); });
+        if (saidaBtn) saidaBtn.addEventListener('click', e => { e.stopPropagation(); abrirSaidaInsumo(item); });
+        if (precoBtn) precoBtn.addEventListener('click', e => { e.stopPropagation(); abrirAtualizarPreco(item); });
         if (editBtn) editBtn.addEventListener('click', e => { e.stopPropagation(); abrirEditarInsumo(item); });
         if (delBtn) delBtn.addEventListener('click', e => { e.stopPropagation(); abrirExcluirInsumo(item); });
     });
@@ -318,6 +327,21 @@ function abrirEditarInsumo(item) {
 function abrirExcluirInsumo(item) {
     window.materiaExcluir = item;
     Modal.open('modals/materia-prima/excluir.html', '../js/modals/materia-prima-excluir.js', 'excluirInsumo');
+}
+
+function abrirEntradaInsumo(item) {
+    window.materiaSelecionada = item;
+    Modal.open('modals/materia-prima/entrada.html', '../js/modals/materia-prima-entrada.js', 'entradaInsumo');
+}
+
+function abrirSaidaInsumo(item) {
+    window.materiaSelecionada = item;
+    Modal.open('modals/materia-prima/saida.html', '../js/modals/materia-prima-saida.js', 'saidaInsumo');
+}
+
+function abrirAtualizarPreco(item) {
+    window.materiaSelecionada = item;
+    Modal.open('modals/materia-prima/preco.html', '../js/modals/materia-prima-preco.js', 'precoInsumo');
 }
 
 if (document.readyState === 'loading') {
