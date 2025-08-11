@@ -7,12 +7,13 @@ const router = express.Router();
 router.get('/lista', async (_req, res) => {
   try {
     const result = await pool.query(
-      'SELECT id, nome, email, verificado FROM usuarios ORDER BY nome'
+      'SELECT id, nome, email, verificado, perfil FROM usuarios ORDER BY nome'
     );
     const usuarios = result.rows.map(u => ({
       id: u.id,
       nome: u.nome,
       email: u.email,
+      perfil: u.perfil,
       status: u.verificado ? 'Ativo' : 'Inativo'
     }));
     res.json(usuarios);
