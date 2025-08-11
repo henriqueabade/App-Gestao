@@ -70,7 +70,7 @@
     confirmBtn.addEventListener('click', async () => {
       const novaQtd = Number(input.value);
       try {
-        await window.electronAPI.atualizarLoteProduto(dados.id, novaQtd);
+        await window.electronAPI.atualizarLoteProduto({ id: dados.id, quantidade: novaQtd });
         showToast('Quantidade atualizada', 'success');
         carregarDetalhes(item.id);
       } catch (err) {
