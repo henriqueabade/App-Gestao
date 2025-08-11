@@ -103,7 +103,7 @@ async function carregarUsuarios() {
                     <div class="text-sm font-medium text-white">${u.nome}</div>
                 </td>
                 <td class="px-6 py-4 text-sm text-white">${u.email}</td>
-                <td class="px-6 py-4"></td>
+                <td class="px-6 py-4 text-sm text-white">${u.perfil || ''}</td>
                 <td class="px-6 py-4">
                     <span class="${u.status === 'Ativo' ? 'badge-success' : 'badge-danger'} px-2 py-1 rounded-full text-xs font-medium">${u.status}</span>
                 </td>
