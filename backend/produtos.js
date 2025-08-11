@@ -23,4 +23,45 @@ async function listarProdutos() {
   }
 }
 
-module.exports = { listarProdutos };
+async function obterProduto(id) {
+  const res = await pool.query('SELECT * FROM produtos WHERE id=$1', [id]);
+  return res.rows[0];
+}
+
+async function adicionarProduto(dados) {
+  const { codigo, nome, categoria, preco_venda, pct_markup, status } = dados;
+  const res = await pool.query(
+    `INSERT INTO produtos (codigo, nome, categoria, preco_venda, pct_markup, status)
+     VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
+    [codigo, nome, categoria, preco_venda, pct_markup, status]
+  );
+  return res.rows[0];
+}
+
+async function atualizarProduto(id, dados) {
+  const { codigo, nome, categoria, preco_venda, pct_markup, status } = dados;
+  const res = await pool.query(
+    `UPDATE produtos
+        SET codigo=$1,
+            nome=$2,
+            categoria=$3,
+            preco_venda=$4,
+            pct_markup=$5,
+            status=$6
+     WHERE id=$7 RETURNING *`,
+    [codigo, nome, categoria, preco_venda, pct_markup, status, id]
+  );
+  return res.rows[0];
+}
+
+async function excluirProduto(id) {
+  await pool.query('DELETE FROM produtos WHERE id=$1', [id]);
+}
+
+module.exports = {
+  listarProdutos,
+  obterProduto,
+  adicionarProduto,
+  atualizarProduto,
+  excluirProduto
+};

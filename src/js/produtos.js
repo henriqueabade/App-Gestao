@@ -1,14 +1,39 @@
 // Script principal do módulo de Produtos
 // Responsável por carregar os dados e controlar filtros e ações de estoque.
 
+let listaProdutos = [];
+let notificationContainer;
+
+function showToast(message, type = 'success') {
+    if (!notificationContainer) {
+        notificationContainer = document.getElementById('notification');
+        if (!notificationContainer) {
+            notificationContainer = document.createElement('div');
+            notificationContainer.id = 'notification';
+            notificationContainer.className = 'fixed top-4 right-4 space-y-2 z-[10000]';
+            document.body.appendChild(notificationContainer);
+        }
+    }
+    const div = document.createElement('div');
+    div.className = `toast ${type === 'success' ? 'toast-success' : 'toast-error'}`;
+    div.textContent = message;
+    notificationContainer.appendChild(div);
+    setTimeout(() => {
+        div.classList.add('opacity-0');
+        setTimeout(() => div.remove(), 500);
+    }, 3000);
+}
+
+window.showToast = window.showToast || showToast;
+
 async function carregarProdutos() {
     try {
-        const produtos = await window.electronAPI.listarProdutos();
+        listaProdutos = await window.electronAPI.listarProdutos();
         const tbody = document.getElementById('produtosTableBody');
         if (!tbody) return;
         tbody.innerHTML = '';
 
-        produtos.forEach(p => {
+        listaProdutos.forEach(p => {
             const tr = document.createElement('tr');
             tr.className = 'transition-colors duration-150';
             tr.style.cursor = 'pointer';
@@ -37,12 +62,21 @@ async function carregarProdutos() {
 
         const template = document.getElementById('action-icons-template');
         if (template) {
-            document.querySelectorAll('.action-cell').forEach(cell => {
+            document.querySelectorAll('.action-cell').forEach((cell, index) => {
                 cell.appendChild(template.content.cloneNode(true));
+                const icons = cell.querySelectorAll('i');
+                const prod = listaProdutos[index];
+                const ver = icons[0];
+                const editar = icons[1];
+                const excluir = icons[2];
+                if (ver) ver.addEventListener('click', e => { e.stopPropagation(); abrirDetalhesProduto(prod); });
+                if (editar) editar.addEventListener('click', e => { e.stopPropagation(); abrirEditarProduto(prod); });
+                if (excluir) excluir.addEventListener('click', e => { e.stopPropagation(); abrirExcluirProduto(prod); });
             });
         }
     } catch (err) {
         console.error('Erro ao carregar produtos', err);
+        showToast('Erro ao carregar produtos', 'error');
     }
 }
 
@@ -74,6 +108,8 @@ function initProdutos() {
 
     // TODO: Implementar filtros e manipulação de estoque
 
+    document.getElementById('btnNovoProduto')?.addEventListener('click', abrirNovoProduto);
+
     carregarProdutos();
 
     ajustarBotoes();
@@ -98,6 +134,25 @@ function ajustarBotoes() {
             btn.classList.add('px-4');
         }
     });
+}
+
+function abrirNovoProduto() {
+    Modal.open('modals/produtos/novo.html', '../js/modals/produto-novo.js', 'novoProduto');
+}
+
+function abrirEditarProduto(prod) {
+    window.produtoSelecionado = prod;
+    Modal.open('modals/produtos/editar.html', '../js/modals/produto-editar.js', 'editarProduto');
+}
+
+function abrirExcluirProduto(prod) {
+    window.produtoExcluir = prod;
+    Modal.open('modals/produtos/excluir.html', '../js/modals/produto-excluir.js', 'excluirProduto');
+}
+
+function abrirDetalhesProduto(prod) {
+    window.produtoDetalhes = prod;
+    Modal.open('modals/produtos/detalhes.html', '../js/modals/produto-detalhes.js', 'detalhesProduto');
 }
 
 if (document.readyState === 'loading') {
