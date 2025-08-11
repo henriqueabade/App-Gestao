@@ -23,6 +23,22 @@ async function listarProdutos() {
   }
 }
 
+async function listarDetalhesProduto(produtoId) {
+  const query = `
+    SELECT pe.id,
+           e.nome AS etapa_nome,
+           mp.nome AS ultimo_item,
+           pe.quantidade,
+           pe.data_hora_completa
+      FROM produtos_em_cada_ponto pe
+      LEFT JOIN etapas e ON e.id = pe.etapa_id
+      LEFT JOIN materia_prima mp ON mp.id = pe.ultimo_insumo_id
+     WHERE pe.produto_id = $1
+     ORDER BY pe.data_hora_completa DESC`;
+  const res = await pool.query(query, [produtoId]);
+  return res.rows;
+}
+
 async function obterProduto(id) {
   const res = await pool.query('SELECT * FROM produtos WHERE id=$1', [id]);
   return res.rows[0];
@@ -60,6 +76,7 @@ async function excluirProduto(id) {
 
 module.exports = {
   listarProdutos,
+  listarDetalhesProduto,
   obterProduto,
   adicionarProduto,
   atualizarProduto,
