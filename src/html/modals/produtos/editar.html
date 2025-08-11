@@ -57,11 +57,7 @@
         </div>
 
         <div class="flex gap-4">
-          <select class="flex-1 bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition">
-            <option>Marcenaria</option>
-            <option>Montagem</option>
-            <option>Acabamento</option>
-          </select>
+          <select id="etapaSelect" class="flex-1 bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></select>
           <button class="btn-primary px-6 py-3 rounded-lg text-white font-medium">+ Começar</button>
         </div>
       </div>
@@ -105,98 +101,63 @@
 
         <div class="space-y-6">
           <div class="glass-surface rounded-xl p-6 border border-white/10">
-            <h3 class="text-lg font-semibold mb-4 text-white">ITENS</h3>
-            <div class="overflow-x-auto">
-              <div class="max-h-64 overflow-y-auto">
-                <table id="itensTabela" class="w-full text-sm">
-                  <thead class="sticky top-0 glass-surface">
-                    <tr class="border-b border-white/10">
-                      <th class="text-left py-3 px-2 text-gray-300 font-medium">NOME DO ITEM</th>
-                      <th class="text-center py-3 px-2 text-gray-300 font-medium">QUANTIDADE</th>
-                      <th class="text-right py-3 px-2 text-gray-300 font-medium">VALOR TOTAL</th>
-                      <th class="text-center py-3 px-2 text-gray-300 font-medium">AÇÃO</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr class="border-b border-white/5">
-                      <td class="py-3 px-2 text-white">Tampo de Madeira 180x90</td>
-                      <td class="py-3 px-2 text-center text-gray-300 item-qty">1</td>
-                      <td class="py-3 px-2 text-right text-white item-total">R$ 450,00</td>
-                      <td class="py-3 px-2 text-center">
-                        <div class="flex justify-center gap-2">
-                          <button class="edit-item icon-only bg-blue-600/20 text-blue-400 hover:bg-blue-600/30">✎</button>
-                          <button class="remove-item icon-only bg-red-600/20 text-red-400 hover:bg-red-600/30">🗑</button>
-                        </div>
-                      </td>
-                    </tr>
-                    <tr class="border-b border-white/5">
-                      <td class="py-3 px-2 text-white">Pé de Mesa Torneado</td>
-                      <td class="py-3 px-2 text-center text-gray-300 item-qty">4</td>
-                      <td class="py-3 px-2 text-right text-white item-total">R$ 320,00</td>
-                      <td class="py-3 px-2 text-center">
-                        <div class="flex justify-center gap-2">
-                          <button class="edit-item icon-only bg-blue-600/20 text-blue-400 hover:bg-blue-600/30">✎</button>
-                          <button class="remove-item icon-only bg-red-600/20 text-red-400 hover:bg-red-600/30">🗑</button>
-                        </div>
-                      </td>
-                    </tr>
-                    <tr class="border-b border-white/5">
-                      <td class="py-3 px-2 text-white">Parafuso Phillips 6x40</td>
-                      <td class="py-3 px-2 text-center text-gray-300 item-qty">16</td>
-                      <td class="py-3 px-2 text-right text-white item-total">R$ 24,00</td>
-                      <td class="py-3 px-2 text-center">
-                        <div class="flex justify-center gap-2">
-                          <button class="edit-item icon-only bg-blue-600/20 text-blue-400 hover:bg-blue-600/30">✎</button>
-                          <button class="remove-item icon-only bg-red-600/20 text-red-400 hover:bg-red-600/30">🗑</button>
-                        </div>
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
+            <h3 class="text-lg font-semibold mb-4 text-white">SOMAS</h3>
+            <div class="space-y-3 text-sm">
+              <div class="flex justify-between">
+                <span class="text-gray-300">Total Insumos</span>
+                <span id="totalInsumos" class="text-white font-medium">R$ 0,00</span>
+              </div>
+              <div class="flex justify-between">
+                <span class="text-gray-300">Total Mão-de-obra</span>
+                <span id="totalMaoObra" class="text-white font-medium">R$ 0,00</span>
+              </div>
+              <div class="flex justify-between">
+                <span class="text-gray-300">Sub-Total</span>
+                <span id="subTotal" class="text-white font-medium">R$ 0,00</span>
+              </div>
+              <div class="flex justify-between">
+                <span class="text-gray-300">Markup</span>
+                <span id="markupValor" class="text-white font-medium">R$ 0,00</span>
+              </div>
+              <div class="flex justify-between border-t border-white/10 pt-3">
+                <span class="text-gray-300">Custo Total</span>
+                <span id="custoTotal" class="text-white font-semibold">R$ 0,00</span>
+              </div>
+              <div class="flex justify-between">
+                <span class="text-gray-300">Comissão</span>
+                <span id="comissaoValor" class="text-white font-medium">R$ 0,00</span>
+              </div>
+              <div class="flex justify-between">
+                <span class="text-gray-300">Imposto</span>
+                <span id="impostoValor" class="text-white font-medium">R$ 0,00</span>
               </div>
             </div>
-            <p class="text-xs text-gray-400 mt-4">✎ edita quantidade; 🗑 remove o item.</p>
+          </div>
+          <div class="flex items-end justify-end">
+            <button id="salvarEditarProduto" class="btn-success px-8 py-4 rounded-xl font-semibold text-lg">Salvar</button>
           </div>
         </div>
       </div>
 
-      <div class="px-8 py-6 border-t border-white/10 grid grid-cols-1 xl:grid-cols-2 gap-8">
+      <div class="px-8 py-6 border-t border-white/10">
         <div class="glass-surface rounded-xl p-6 border border-white/10">
-          <h3 class="text-lg font-semibold mb-4 text-white">SOMAS</h3>
-          <div class="space-y-3 text-sm">
-            <div class="flex justify-between">
-              <span class="text-gray-300">Total Insumos</span>
-              <span id="totalInsumos" class="text-white font-medium">R$ 794,00</span>
-            </div>
-            <div class="flex justify-between">
-              <span class="text-gray-300">Total Mão-de-obra</span>
-              <span id="totalMaoObra" class="text-white font-medium">R$ 397,00</span>
-            </div>
-            <div class="flex justify-between">
-              <span class="text-gray-300">Sub-Total</span>
-              <span id="subTotal" class="text-white font-medium">R$ 1.191,00</span>
-            </div>
-            <div class="flex justify-between">
-              <span class="text-gray-300">Markup</span>
-              <span id="markupValor" class="text-white font-medium">R$ 357,30</span>
-            </div>
-            <div class="flex justify-between border-t border-white/10 pt-3">
-              <span class="text-gray-300">Custo Total</span>
-              <span id="custoTotal" class="text-white font-semibold">R$ 1.548,30</span>
-            </div>
-            <div class="flex justify-between">
-              <span class="text-gray-300">Comissão</span>
-              <span id="comissaoValor" class="text-white font-medium">R$ 123,86</span>
-            </div>
-            <div class="flex justify-between">
-              <span class="text-gray-300">Imposto</span>
-              <span id="impostoValor" class="text-white font-medium">R$ 185,80</span>
+          <h3 class="text-lg font-semibold mb-4 text-white">ITENS</h3>
+          <div class="overflow-x-auto">
+            <div class="max-h-64 overflow-y-auto">
+              <table id="itensTabela" class="w-full text-sm">
+                <thead class="sticky top-0 glass-surface">
+                  <tr class="border-b border-white/10">
+                    <th class="text-left py-3 px-2 text-gray-300 font-medium">NOME DO ITEM</th>
+                    <th class="text-center py-3 px-2 text-gray-300 font-medium">QUANTIDADE</th>
+                    <th class="text-right py-3 px-2 text-gray-300 font-medium">VALOR TOTAL</th>
+                    <th class="text-center py-3 px-2 text-gray-300 font-medium">AÇÃO</th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
             </div>
           </div>
-        </div>
-
-        <div class="flex items-end justify-end">
-          <button id="salvarEditarProduto" class="btn-success px-8 py-4 rounded-xl font-semibold text-lg">Salvar</button>
+          <p class="text-xs text-gray-400 mt-4">✎ edita quantidade; 🗑 remove o item.</p>
         </div>
       </div>
     </div>
