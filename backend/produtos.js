@@ -95,6 +95,21 @@ async function excluirProduto(id) {
   await pool.query('DELETE FROM produtos WHERE id=$1', [id]);
 }
 
+async function atualizarLoteProduto(id, quantidade) {
+  const res = await pool.query(
+    `UPDATE produtos_em_cada_ponto
+        SET quantidade = $1,
+            data_hora_completa = NOW()
+     WHERE id = $2 RETURNING *`,
+    [quantidade, id]
+  );
+  return res.rows[0];
+}
+
+async function excluirLoteProduto(id) {
+  await pool.query('DELETE FROM produtos_em_cada_ponto WHERE id=$1', [id]);
+}
+
 module.exports = {
   listarProdutos,
   listarDetalhesProduto,
@@ -103,5 +118,7 @@ module.exports = {
   listarEtapasProducao,
   adicionarProduto,
   atualizarProduto,
-  excluirProduto
+  excluirProduto,
+  atualizarLoteProduto,
+  excluirLoteProduto
 };

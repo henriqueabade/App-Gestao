@@ -12,6 +12,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   atualizarProduto: (id, dados) => ipcRenderer.invoke('atualizar-produto', { id, dados }),
   excluirProduto: (id) => ipcRenderer.invoke('excluir-produto', id),
   listarDetalhesProduto: (id) => ipcRenderer.invoke('listar-detalhes-produto', id),
+  atualizarLoteProduto: (id, quantidade) => ipcRenderer.invoke('atualizar-lote-produto', { id, quantidade }),
+  excluirLoteProduto: (id) => ipcRenderer.invoke('excluir-lote-produto', id),
   listarInsumosProduto: (codigo) => ipcRenderer.invoke('listar-insumos-produto', codigo),
   listarEtapasProducao: () => ipcRenderer.invoke('listar-etapas-producao'),
   adicionarMateriaPrima: (dados) => ipcRenderer.invoke('adicionar-materia-prima', dados),
