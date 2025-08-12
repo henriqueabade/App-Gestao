@@ -247,6 +247,12 @@ body {
 .btn-success:hover { background: rgba(162,255,166,0.8); transform: scale(1.05); }
 .btn-success:active { transform: scale(0.95); }
 
+/* toggle on/off */
+.component-toggle { appearance: none; width:48px; height:24px; background: rgba(255,255,255,0.2); border-radius:12px; position:relative; cursor:pointer; transition: all 150ms ease; }
+.component-toggle::after { content:''; position:absolute; top:2px; left:2px; width:20px; height:20px; background:white; border-radius:50%; transition: all 150ms ease; }
+.component-toggle:checked { background: var(--color-primary); }
+.component-toggle:checked::after { transform: translateX(24px); }
+
 .icon-only { width:32px; height:32px; display:flex; align-items:center; justify-content:center; border-radius:8px; font-size:16px; }
 
 .animate-modalFade { animation: modalFade 0.3s ease-out forwards; }

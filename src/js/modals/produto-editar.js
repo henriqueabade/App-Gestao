@@ -13,6 +13,7 @@
   const commissionInput = document.getElementById('commissionInput');
   const taxInput = document.getElementById('taxInput');
   const etapaSelect = document.getElementById('etapaSelect');
+  const editarRegistroToggle = document.getElementById('editarRegistroToggle');
 
   const nomeInput = document.getElementById('nomeInput');
   const codigoInput = document.getElementById('codigoInput');
@@ -22,6 +23,7 @@
   const ultimaHoraEl = document.getElementById('ultimaModificacaoHora');
 
   const totalInsumosEl = document.getElementById('totalInsumos');
+  const totalInsumosTituloEl = document.getElementById('totalInsumosTitulo');
   const totalMaoObraEl = document.getElementById('totalMaoObra');
   const subTotalEl = document.getElementById('subTotal');
   const markupValorEl = document.getElementById('markupValor');
@@ -29,19 +31,39 @@
   const comissaoValorEl = document.getElementById('comissaoValor');
   const impostoValorEl = document.getElementById('impostoValor');
   const valorVendaEl = document.getElementById('valorVenda');
+  let registroOriginal = {};
+
+  // toggle on/off
+  function updateRegistroEditState(){
+    const editable = editarRegistroToggle.checked;
+    [nomeInput, codigoInput, ncmInput].forEach(el => el.disabled = !editable);
+    if(!editable){
+      nomeInput.value = registroOriginal.nome;
+      codigoInput.value = registroOriginal.codigo;
+      ncmInput.value = registroOriginal.ncm;
+    }
+  }
+  editarRegistroToggle.addEventListener('change', updateRegistroEditState);
+  updateRegistroEditState();
 
   function parseCurrency(str){
     return parseFloat(str.replace(/[^0-9,-]+/g, '').replace('.', '').replace(',', '.')) || 0;
   }
 
+  // formatação numérica
   function formatCurrency(val){
-    return val.toLocaleString('pt-BR', { style:'currency', currency:'BRL' });
+    const frac = Number.isInteger(val) ? 0 : 2;
+    return val.toLocaleString('pt-BR', { style:'currency', currency:'BRL', minimumFractionDigits: frac, maximumFractionDigits: frac });
+  }
+  function formatNumber(val){
+    return Number.isInteger(val) ? String(val) : val.toFixed(2);
   }
 
   let itens = [];
   const processos = {};
   const totals = {};
 
+  // cálculo dos processos
   function updateProcessTotal(proc){
     const grupo = processos[proc];
     if(!grupo) return;
@@ -50,6 +72,7 @@
     grupo.totalEl.textContent = formatCurrency(soma);
   }
 
+  // cálculo dos totais
   function updateTotals(){
     let totalInsumos = 0;
     itens.forEach(it => {
@@ -77,6 +100,7 @@
     totals.valorVenda = valorVenda;
 
     totalInsumosEl.textContent = formatCurrency(totalInsumos);
+    totalInsumosTituloEl.textContent = formatCurrency(totalInsumos);
     totalMaoObraEl.textContent = formatCurrency(totalMaoObra);
     subTotalEl.textContent = formatCurrency(subTotal);
     markupValorEl.textContent = formatCurrency(markupVal);
@@ -87,20 +111,59 @@
     precoVendaEl.textContent = formatCurrency(valorVenda);
   }
 
-  function attachRowEvents(item){
-    item.qtyInput.addEventListener('input', () => {
-      item.quantidade = parseFloat(item.qtyInput.value) || 0;
+  // ações com confirmação
+  function renderActionButtons(item){
+    const actionCell = item.row.querySelector('.action-cell');
+    actionCell.innerHTML = `
+      <div class="flex items-center justify-center space-x-2">
+        <i class="fas fa-edit w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10 edit-item" style="color: var(--color-primary)" title="Editar"></i>
+        <i class="fas fa-trash w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10 hover:text-white delete-item" style="color: var(--color-red)" title="Excluir"></i>
+      </div>`;
+    actionCell.querySelector('.edit-item').addEventListener('click', () => startEdit(item));
+    actionCell.querySelector('.delete-item').addEventListener('click', () => startDelete(item));
+  }
+
+  function startEdit(item){
+    const cell = item.row.querySelector('.quantidade-cell');
+    const original = item.quantidade;
+    cell.innerHTML = `
+      <div class="flex items-center justify-center space-x-1">
+        <input type="number" step="0.01" class="w-20 bg-input border border-inputBorder rounded text-white text-sm text-center" value="${item.quantidade}">
+        <i class="fas fa-check w-5 h-5 cursor-pointer p-1 rounded text-green-400 confirm-edit"></i>
+        <i class="fas fa-times w-5 h-5 cursor-pointer p-1 rounded text-red-400 cancel-edit"></i>
+      </div>`;
+    const input = cell.querySelector('input');
+    cell.querySelector('.confirm-edit').addEventListener('click', () => {
+      item.quantidade = parseFloat(input.value) || 0;
       item.total = item.quantidade * item.preco_unitario;
+      cell.innerHTML = `<span class="quantidade-text">${formatNumber(item.quantidade)}</span>`;
       item.totalEl.textContent = formatCurrency(item.total);
       if(item.id) item.status = 'updated';
+      renderActionButtons(item);
       updateProcessTotal(item.processo);
       updateTotals();
     });
-    item.row.querySelector('.remove-item').addEventListener('click', () => {
+    cell.querySelector('.cancel-edit').addEventListener('click', () => {
+      cell.innerHTML = `<span class="quantidade-text">${formatNumber(original)}</span>`;
+      renderActionButtons(item);
+    });
+  }
+
+  function startDelete(item){
+    const actionCell = item.row.querySelector('.action-cell');
+    actionCell.innerHTML = `
+      <div class="flex items-center justify-center space-x-2">
+        <i class="fas fa-check w-5 h-5 cursor-pointer p-1 rounded text-green-400 confirm-del"></i>
+        <i class="fas fa-times w-5 h-5 cursor-pointer p-1 rounded text-red-400 cancel-del"></i>
+      </div>`;
+    actionCell.querySelector('.confirm-del').addEventListener('click', () => {
       item.status = 'deleted';
       item.row.remove();
       updateProcessTotal(item.processo);
       updateTotals();
+    });
+    actionCell.querySelector('.cancel-del').addEventListener('click', () => {
+      renderActionButtons(item);
     });
   }
 
@@ -117,8 +180,11 @@
     Object.entries(grupos).forEach(([proc, arr]) => {
       const header = document.createElement('tr');
       header.className = 'process-row';
-      header.innerHTML = `<td colspan="2" class="pt-4 pb-2 text-left text-gray-300 font-semibold">${proc}</td>`+
-        `<td colspan="2" class="pt-4 pb-2 text-right text-white font-semibold process-total"></td>`;
+      header.innerHTML = `<td colspan="4" class="pt-4 pb-2 border-t border-white/10">
+        <div class="flex items-center justify-center space-x-2 text-gray-300 font-semibold">
+          <span>${proc}</span>
+          <span class="process-total text-white font-semibold"></span>
+        </div></td>`;
       tableBody.appendChild(header);
       processos[proc] = { itens: arr, totalEl: header.querySelector('.process-total') };
 
@@ -127,14 +193,13 @@
         tr.className = 'border-b border-white/5 item-row';
         tr.innerHTML = `
           <td class="py-3 px-2 text-white">${item.nome}</td>
-          <td class="py-3 px-2 text-center"><input type="number" class="item-qty w-20 bg-input border border-inputBorder rounded text-white text-sm text-center" value="${item.quantidade}"></td>
+          <td class="py-3 px-2 text-center quantidade-cell"><span class="quantidade-text">${formatNumber(item.quantidade)}</span></td>
           <td class="py-3 px-2 text-right text-white item-total">${formatCurrency(item.preco_unitario * item.quantidade)}</td>
-          <td class="py-3 px-2 text-center"><button class="remove-item icon-only bg-red-600/20 text-red-400 hover:bg-red-600/30">🗑</button></td>`;
+          <td class="py-3 px-2 text-center action-cell"></td>`;
         tableBody.appendChild(tr);
         item.row = tr;
-        item.qtyInput = tr.querySelector('.item-qty');
         item.totalEl = tr.querySelector('.item-total');
-        attachRowEvents(item);
+        renderActionButtons(item);
       });
 
       updateProcessTotal(proc);
@@ -153,6 +218,7 @@
   });
 
   document.getElementById('salvarEditarProduto').addEventListener('click', async () => {
+    // cálculo e salvamento
     const produto = {
       pct_fabricacao: parseFloat(fabricacaoInput.value) || 0,
       pct_acabamento: parseFloat(acabamentoInput.value) || 0,
@@ -162,8 +228,14 @@
       pct_comissao: parseFloat(commissionInput.value) || 0,
       pct_imposto: parseFloat(taxInput.value) || 0,
       preco_base: totals.totalInsumos || 0,
-      preco_venda: totals.valorVenda || 0
+      preco_venda: totals.valorVenda || 0,
+      data: new Date().toISOString()
     };
+    if(editarRegistroToggle.checked){
+      produto.nome = nomeInput.value;
+      produto.codigo = codigoInput.value;
+      produto.ncm = ncmInput.value;
+    }
     const itensPayload = {
       inseridos: [],
       atualizados: itens.filter(i => i.status === 'updated').map(i => ({ id: i.id, quantidade: i.quantidade })),
@@ -171,6 +243,10 @@
     };
     try{
       await window.electronAPI.salvarProdutoDetalhado(produtoSelecionado.codigo, produto, itensPayload);
+      const now = new Date();
+      ultimaDataEl.textContent = now.toLocaleDateString('pt-BR');
+      ultimaHoraEl.textContent = now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+      registroOriginal = { nome: nomeInput.value, codigo: codigoInput.value, ncm: ncmInput.value };
       if(typeof carregarProdutos === 'function') await carregarProdutos();
       close();
     }catch(err){
@@ -187,7 +263,7 @@
         if(dados.codigo) codigoInput.value = dados.codigo;
         if(dados.ncm != null) ncmInput.value = String(dados.ncm);
         if(dados.preco_venda != null) precoVendaEl.textContent = formatCurrency(dados.preco_venda);
-        const mod = dados.ultima_modificacao || dados.updated_at;
+        const mod = dados.data || dados.ultima_modificacao || dados.updated_at;
         if(mod){
           const d = new Date(mod);
           ultimaDataEl.textContent = d.toLocaleDateString('pt-BR');
@@ -200,6 +276,12 @@
         if(dados.pct_markup != null) markupInput.value = dados.pct_markup;
         if(dados.pct_comissao != null) commissionInput.value = dados.pct_comissao;
         if(dados.pct_imposto != null) taxInput.value = dados.pct_imposto;
+        registroOriginal = {
+          nome: nomeInput.value,
+          codigo: codigoInput.value,
+          ncm: ncmInput.value
+        };
+        updateRegistroEditState();
       }
       const etapas = await window.electronAPI.listarEtapasProducao();
       etapaSelect.innerHTML = etapas.map(e => `<option value="${e.id}">${e.nome}</option>`).join('');
