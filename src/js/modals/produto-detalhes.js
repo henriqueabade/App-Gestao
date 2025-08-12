@@ -10,6 +10,8 @@
   if(item){
     const titulo = document.getElementById('detalheTitulo');
     if(titulo) titulo.textContent = `DETALHE DE ESTOQUE – ${item.nome || ''}`;
+    const codigoEl = document.getElementById('codigoPeca');
+    if(codigoEl) codigoEl.textContent = `Código da Peça: ${item.codigo || ''}`; // subtítulo mostra código da peça
     carregarDetalhes(item.id);
   }
 
