@@ -149,7 +149,6 @@ function aplicarFiltro(aplicarNovos = false) {
     }
 
     renderProdutos(filtrados);
-    atualizarEstadoBotao();
 }
 
 function limparFiltros() {
@@ -169,26 +168,8 @@ function limparFiltros() {
     filtrosPendentes = false;
     aplicarFiltro(false);
 }
-
-function atualizarEstadoBotao() {
-    const btn = document.getElementById('btnFiltrar');
-    if (!btn) return;
-    const buscaAtiva = document.getElementById('filterSearch')?.value || '';
-    const ativo = buscaAtiva || filtrosAplicados.categoria || filtrosAplicados.status || filtrosAplicados.precoMin || filtrosAplicados.precoMax || filtrosAplicados.zeroEstoque;
-    if (ativo && !filtrosPendentes) {
-        btn.classList.remove('btn-secondary');
-        btn.classList.add('btn-warning');
-        btn.innerHTML = 'Limpar';
-    } else {
-        btn.classList.remove('btn-warning');
-        btn.classList.add('btn-secondary');
-        btn.innerHTML = '<i class="fas fa-filter mr-2"></i>Filtrar';
-    }
-}
-
 function marcarFiltrosPendentes() {
     filtrosPendentes = true;
-    atualizarEstadoBotao();
 }
 
 function formatCurrency(value) {
@@ -219,14 +200,8 @@ function initProdutos() {
 
     document.getElementById('btnNovoProduto')?.addEventListener('click', abrirNovoProduto);
 
-    const btnFiltro = document.getElementById('btnFiltrar');
-    btnFiltro?.addEventListener('click', () => {
-        if (btnFiltro.classList.contains('btn-warning')) {
-            limparFiltros();
-        } else {
-            aplicarFiltro(true);
-        }
-    });
+    document.getElementById('btnFiltrar')?.addEventListener('click', () => aplicarFiltro(true));
+    document.getElementById('btnLimpar')?.addEventListener('click', limparFiltros);
 
     document.getElementById('filterSearch')?.addEventListener('input', () => aplicarFiltro(false));
     document.getElementById('filterCategory')?.addEventListener('change', marcarFiltrosPendentes);
