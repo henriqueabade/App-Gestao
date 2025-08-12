@@ -394,14 +394,14 @@ ipcMain.handle('excluir-lote-produto', async (_e, id) => {
   await excluirLoteProduto(id);
   return true;
 });
-ipcMain.handle('listar-insumos-produto', async (_e, codigo) => {
-  return listarInsumosProduto(codigo);
+ipcMain.handle('listar-insumos-produto', async (_e, id) => {
+  return listarInsumosProduto(id);
 });
 ipcMain.handle('listar-etapas-producao', async () => {
   return listarEtapasProducao();
 });
-ipcMain.handle('salvar-produto-detalhado', async (_e, { codigo, produto, itens }) => {
-  return salvarProdutoDetalhado(codigo, produto, itens);
+ipcMain.handle('salvar-produto-detalhado', async (_e, { id, produto, itens }) => {
+  return salvarProdutoDetalhado(id, produto, itens);
 });
 
 ipcMain.handle('auto-login', async (_event, pin) => {

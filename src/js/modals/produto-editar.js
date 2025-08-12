@@ -262,7 +262,7 @@
       deletados: itens.filter(i => i.status === 'deleted').map(i => ({ id: i.id }))
     };
     try{
-      await window.electronAPI.salvarProdutoDetalhado(produtoSelecionado.codigo, produto, itensPayload);
+      await window.electronAPI.salvarProdutoDetalhado(produtoSelecionado.id, produto, itensPayload);
       const now = new Date();
       ultimaDataEl.textContent = now.toLocaleDateString('pt-BR');
       ultimaHoraEl.textContent = now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
@@ -305,10 +305,10 @@
       }
       const etapas = await window.electronAPI.listarEtapasProducao();
       etapaSelect.innerHTML = etapas.map(e => `<option value="${e.id}">${e.nome}</option>`).join('');
-      const codigoProduto = (dados && dados.codigo) || produto.codigo;
+      const produtoId = (dados && dados.id) || produto.id;
       let itensData = [];
       try {
-        itensData = await window.electronAPI.listarInsumosProduto(codigoProduto);
+        itensData = await window.electronAPI.listarInsumosProduto(produtoId);
       } catch(err) {
         console.error('Erro ao listar insumos do produto', err);
       }
