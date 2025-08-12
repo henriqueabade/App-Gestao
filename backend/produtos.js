@@ -26,11 +26,12 @@ async function listarProdutos() {
 async function listarDetalhesProduto(produtoId) {
   const query = `
     SELECT pe.id,
-           pe.etapa_id AS etapa_nome,
+           ep.nome AS etapa_nome,
            mp.nome AS ultimo_item,
            pe.quantidade,
            pe.data_hora_completa
       FROM produtos_em_cada_ponto pe
+      JOIN etapas_producao ep ON ep.id = pe.etapa_id
       LEFT JOIN materia_prima mp ON mp.id = pe.ultimo_insumo_id
      WHERE pe.produto_id = $1
      ORDER BY pe.data_hora_completa DESC`;
