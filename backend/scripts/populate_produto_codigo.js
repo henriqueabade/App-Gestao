@@ -7,9 +7,15 @@ async function run() {
           SET produto_codigo = p.codigo
          FROM produtos p
         WHERE pi.produto_codigo IS NULL
-          AND pi.produto_id = p.id`
+          AND p.codigo = pi.produto_codigo`
     );
-    console.log(`Atualizados ${result.rowCount} registros de produtos_insumos.`);
+    if (result.rowCount === 0) {
+      console.log('Nenhum registro de produtos_insumos necessitava atualização.');
+    } else {
+      console.log(
+        `Atualizados ${result.rowCount} registros de produtos_insumos.`
+      );
+    }
   } catch (err) {
     console.error('Erro ao atualizar produtos_insumos:', err);
   } finally {
