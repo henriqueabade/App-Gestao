@@ -1,38 +1,46 @@
 (function(){
-  const overlay = document.getElementById('editarProdutoOverlay');
-  const close = () => Modal.close('editarProduto');
-  overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
-  document.getElementById('voltarEditarProduto').addEventListener('click', close);
+  function init(){
+    // Garante que elementos da DOM existam antes de manipulá-los
+    const overlay = document.getElementById('editarProdutoOverlay');
+    if(!overlay) return;
 
-  const tableBody = document.querySelector('#itensTabela tbody');
-  const fabricacaoInput = document.getElementById('fabricacaoInput');
-  const acabamentoInput = document.getElementById('acabamentoInput');
-  const montagemInput = document.getElementById('montagemInput');
-  const embalagemInput = document.getElementById('embalagemInput');
-  const markupInput = document.getElementById('markupInput');
-  const commissionInput = document.getElementById('commissionInput');
-  const taxInput = document.getElementById('taxInput');
-  const etapaSelect = document.getElementById('etapaSelect');
-  const editarRegistroToggle = document.getElementById('editarRegistroToggle');
-  const comecarBtn = document.getElementById('comecarEditarProduto');
+    const close = () => Modal.close('editarProduto');
+    overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+    document.getElementById('voltarEditarProduto').addEventListener('click', close);
 
-  const nomeInput = document.getElementById('nomeInput');
-  const codigoInput = document.getElementById('codigoInput');
-  const ncmInput = document.getElementById('ncmInput');
-  const precoVendaEl = document.getElementById('precoVenda');
-  const ultimaDataEl = document.getElementById('ultimaModificacaoData');
-  const ultimaHoraEl = document.getElementById('ultimaModificacaoHora');
+    const tableBody = document.querySelector('#itensTabela tbody');
+    const fabricacaoInput = document.getElementById('fabricacaoInput');
+    const acabamentoInput = document.getElementById('acabamentoInput');
+    const montagemInput = document.getElementById('montagemInput');
+    const embalagemInput = document.getElementById('embalagemInput');
+    const markupInput = document.getElementById('markupInput');
+    const commissionInput = document.getElementById('commissionInput');
+    const taxInput = document.getElementById('taxInput');
+    const etapaSelect = document.getElementById('etapaSelect');
+    const editarRegistroToggle = document.getElementById('editarRegistroToggle');
+    const comecarBtn = document.getElementById('comecarEditarProduto');
 
-  const totalInsumosEl = document.getElementById('totalInsumos');
-  const totalInsumosTituloEl = document.getElementById('totalInsumosTitulo');
-  const totalMaoObraEl = document.getElementById('totalMaoObra');
-  const subTotalEl = document.getElementById('subTotal');
-  const markupValorEl = document.getElementById('markupValor');
-  const custoTotalEl = document.getElementById('custoTotal');
-  const comissaoValorEl = document.getElementById('comissaoValor');
-  const impostoValorEl = document.getElementById('impostoValor');
-  const valorVendaEl = document.getElementById('valorVenda');
-  let registroOriginal = {};
+    const nomeInput = document.getElementById('nomeInput');
+    const codigoInput = document.getElementById('codigoInput');
+    const ncmInput = document.getElementById('ncmInput');
+    const precoVendaEl = document.getElementById('precoVenda');
+    const ultimaDataEl = document.getElementById('ultimaModificacaoData');
+    const ultimaHoraEl = document.getElementById('ultimaModificacaoHora');
+
+    const totalInsumosEl = document.getElementById('totalInsumos');
+    const totalInsumosTituloEl = document.getElementById('totalInsumosTitulo');
+    const totalMaoObraEl = document.getElementById('totalMaoObra');
+    const subTotalEl = document.getElementById('subTotal');
+    const markupValorEl = document.getElementById('markupValor');
+    const custoTotalEl = document.getElementById('custoTotal');
+    const comissaoValorEl = document.getElementById('comissaoValor');
+    const impostoValorEl = document.getElementById('impostoValor');
+    const valorVendaEl = document.getElementById('valorVenda');
+    let registroOriginal = {};
+
+    function showError(msg){
+      tableBody.innerHTML = `<tr><td colspan="4" class="py-4 text-center text-red-400">${msg}</td></tr>`;
+    }
 
   // Abre a etapa seguinte em um novo modal sobreposto,
   // mantendo o modal atual aberto porém inativo ao fundo.
@@ -277,6 +285,7 @@
   const produto = window.produtoSelecionado;
   (async () => {
     try{
+      // Carga inicial: produto, etapas e insumos
       const dados = await window.electronAPI.obterProduto(produto.codigo);
       if(dados){
         if(dados.nome) nomeInput.value = dados.nome;
@@ -311,13 +320,22 @@
         itensData = await window.electronAPI.listarInsumosProduto(produtoCodigo);
       } catch(err) {
         console.error('Erro ao listar insumos do produto', err);
+        showError('Erro ao carregar itens');
       }
       renderItens(itensData);
-      updateTotals();
     } catch(err){
       console.error('Erro ao carregar dados do produto', err);
+      showError('Erro ao carregar dados');
     }
   })();
+
+  }
+
+  if(document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', init);
+  }else{
+    init();
+  }
 
 })();
 
