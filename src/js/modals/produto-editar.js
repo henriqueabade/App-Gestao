@@ -179,9 +179,18 @@
 
   function renderItens(data){
     tableBody.innerHTML = '';
-    itens = data.map(d => ({ ...d, status: 'unchanged' }));
-    const grupos = {};
+    itens = (data || []).map(d => ({ ...d, status: 'unchanged' }));
 
+    // Exibe mensagem caso não haja itens
+    if(itens.length === 0){
+      const tr = document.createElement('tr');
+      tr.innerHTML = '<td colspan="4" class="py-4 text-center text-gray-400">Nenhum item encontrado</td>';
+      tableBody.appendChild(tr);
+      updateTotals();
+      return;
+    }
+
+    const grupos = {};
     itens.forEach(it => {
       if(!grupos[it.processo]) grupos[it.processo] = [];
       grupos[it.processo].push(it);
@@ -216,6 +225,7 @@
     });
     updateTotals();
   }
+
 
   [fabricacaoInput, acabamentoInput, montagemInput, embalagemInput, markupInput, commissionInput, taxInput].forEach(inp => {
     inp.addEventListener('input', updateTotals);
@@ -295,7 +305,8 @@
       }
       const etapas = await window.electronAPI.listarEtapasProducao();
       etapaSelect.innerHTML = etapas.map(e => `<option value="${e.id}">${e.nome}</option>`).join('');
-      const itens = await window.electronAPI.listarInsumosProduto(produto.codigo);
+      const codigoProduto = (dados && dados.codigo) || produto.codigo;
+      const itens = await window.electronAPI.listarInsumosProduto(codigoProduto);
       renderItens(itens);
       updateTotals();
     } catch(err){
