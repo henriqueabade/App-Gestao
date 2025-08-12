@@ -50,7 +50,7 @@
           </div>
           <div class="md:col-span-2">
             <label class="flex items-center gap-3 mb-4">
-              <input type="checkbox" class="rounded border-inputBorder bg-input text-primary focus:ring-primary/50" />
+              <input id="editarRegistroToggle" type="checkbox" class="component-toggle" />
               <span class="text-gray-300">Editar Dados de Registro</span>
             </label>
           </div>
@@ -142,11 +142,15 @@
 
       <div class="px-8 py-6 border-t border-white/10">
         <div class="glass-surface rounded-xl p-6 border border-white/10">
-          <h3 class="text-lg font-semibold mb-4 text-white">ITENS</h3>
+          <div class="flex items-center justify-between mb-4">
+            <h3 class="text-lg font-semibold text-white">ITENS</h3>
+            <span id="totalInsumosTitulo" class="text-sm text-gray-300"></span>
+          </div>
           <div class="overflow-x-auto">
             <div class="max-h-64 overflow-y-auto">
               <table id="itensTabela" class="w-full text-sm">
-                <thead class="sticky top-0 glass-surface">
+                <!-- cabeçalho sticky opaco -->
+                <thead class="sticky top-0 bg-[#310017]">
                   <tr class="border-b border-white/10">
                     <th class="text-left py-3 px-2 text-gray-300 font-medium">NOME DO ITEM</th>
                     <th class="text-center py-3 px-2 text-gray-300 font-medium">QUANTIDADE</th>
