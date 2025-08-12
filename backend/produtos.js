@@ -48,6 +48,7 @@ async function listarInsumosProduto(codigo) {
     SELECT pi.id,
            mp.nome,
            pi.quantidade,
+           mp.preco_unitario,
            mp.preco_unitario * pi.quantidade AS total,
            mp.processo
       FROM produtos_insumos pi
@@ -110,6 +111,76 @@ async function excluirLoteProduto(id) {
   await pool.query('DELETE FROM produtos_em_cada_ponto WHERE id=$1', [id]);
 }
 
+// Atualiza percentuais e insumos do produto em uma única transação
+async function salvarProdutoDetalhado(codigo, produto, itens) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const {
+      pct_fabricacao,
+      pct_acabamento,
+      pct_montagem,
+      pct_embalagem,
+      pct_markup,
+      pct_comissao,
+      pct_imposto,
+      preco_base,
+      preco_venda
+    } = produto;
+
+    await client.query(
+      `UPDATE produtos
+          SET pct_fabricacao=$1,
+              pct_acabamento=$2,
+              pct_montagem=$3,
+              pct_embalagem=$4,
+              pct_markup=$5,
+              pct_comissao=$6,
+              pct_imposto=$7,
+              preco_base=$8,
+              preco_venda=$9,
+              data=NOW()
+       WHERE codigo=$10`,
+      [
+        pct_fabricacao,
+        pct_acabamento,
+        pct_montagem,
+        pct_embalagem,
+        pct_markup,
+        pct_comissao,
+        pct_imposto,
+        preco_base,
+        preco_venda,
+        codigo
+      ]
+    );
+
+    // Processa exclusões
+    for (const del of itens.deletados || []) {
+      await client.query('DELETE FROM produtos_insumos WHERE id=$1', [del.id]);
+    }
+    // Processa atualizações
+    for (const up of itens.atualizados || []) {
+      await client.query('UPDATE produtos_insumos SET quantidade=$1 WHERE id=$2', [up.quantidade, up.id]);
+    }
+    // Processa inserções
+    for (const ins of itens.inseridos || []) {
+      await client.query(
+        'INSERT INTO produtos_insumos (produto_codigo, insumo_id, quantidade) VALUES ($1,$2,$3)',
+        [codigo, ins.insumo_id, ins.quantidade]
+      );
+    }
+
+    await client.query('COMMIT');
+    return true;
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
 module.exports = {
   listarProdutos,
   listarDetalhesProduto,
@@ -120,5 +191,6 @@ module.exports = {
   atualizarProduto,
   excluirProduto,
   atualizarLoteProduto,
-  excluirLoteProduto
+  excluirLoteProduto,
+  salvarProdutoDetalhado
 };

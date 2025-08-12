@@ -6,6 +6,10 @@
   document.getElementById('voltarEditarProduto').addEventListener('click', close);
 
   const tableBody = document.querySelector('#itensTabela tbody');
+  const fabricacaoInput = document.getElementById('fabricacaoInput');
+  const acabamentoInput = document.getElementById('acabamentoInput');
+  const montagemInput = document.getElementById('montagemInput');
+  const embalagemInput = document.getElementById('embalagemInput');
   const markupInput = document.getElementById('markupInput');
   const commissionInput = document.getElementById('commissionInput');
   const taxInput = document.getElementById('taxInput');
@@ -25,6 +29,7 @@
   const custoTotalEl = document.getElementById('custoTotal');
   const comissaoValorEl = document.getElementById('comissaoValor');
   const impostoValorEl = document.getElementById('impostoValor');
+  const valorVendaEl = document.getElementById('valorVenda');
 
   function parseCurrency(str){
     return parseFloat(str.replace(/[^0-9,-]+/g, '').replace('.', '').replace(',', '.')) || 0;
@@ -34,96 +39,145 @@
     return val.toLocaleString('pt-BR', { style:'currency', currency:'BRL' });
   }
 
-  function attachRowEvents(row){
-    const qtyCell = row.querySelector('.item-qty');
-    const totalCell = row.querySelector('.item-total');
-    const unit = parseCurrency(totalCell.textContent) / parseFloat(qtyCell.textContent);
-    row.dataset.unit = unit;
+  let itens = [];
+  const processos = {};
+  const totals = {};
 
-    row.querySelector('.edit-item').addEventListener('click', () => {
-      const current = parseInt(qtyCell.textContent.trim(), 10);
-      const newQty = parseInt(prompt('Nova quantidade', current), 10);
-      if(!isNaN(newQty) && newQty > 0){
-        qtyCell.textContent = newQty;
-        totalCell.textContent = formatCurrency(unit * newQty);
-        updateTotals();
-      }
-    });
-
-    row.querySelector('.remove-item').addEventListener('click', () => {
-      row.remove();
-      updateTotals();
-    });
+  function updateProcessTotal(proc){
+    const grupo = processos[proc];
+    if(!grupo) return;
+    let soma = 0;
+    grupo.itens.forEach(it => { if(it.status !== 'deleted') soma += it.quantidade * it.preco_unitario; });
+    grupo.totalEl.textContent = formatCurrency(soma);
   }
 
   function updateTotals(){
     let totalInsumos = 0;
-    tableBody.querySelectorAll('tr.item-row').forEach(tr => {
-      totalInsumos += parseCurrency(tr.querySelector('.item-total').textContent);
+    itens.forEach(it => {
+      if(it.status !== 'deleted') totalInsumos += it.quantidade * it.preco_unitario;
     });
-    const totalMaoObra = totalInsumos * 0.5;
+
+    const pctFab = parseFloat(fabricacaoInput.value) || 0;
+    const pctAcab = parseFloat(acabamentoInput.value) || 0;
+    const pctMont = parseFloat(montagemInput.value) || 0;
+    const pctEmb = parseFloat(embalagemInput.value) || 0;
+    const pctMarkup = parseFloat(markupInput.value) || 0;
+    const pctComissao = parseFloat(commissionInput.value) || 0;
+    const pctImposto = parseFloat(taxInput.value) || 0;
+
+    const totalMaoObra = totalInsumos * (pctFab + pctAcab + pctMont + pctEmb) / 100;
     const subTotal = totalInsumos + totalMaoObra;
-    const markupPct = parseFloat(markupInput.value) || 0;
-    const markupVal = subTotal * (markupPct/100);
+    const markupVal = totalInsumos * (pctMarkup / 100);
     const custoTotal = subTotal + markupVal;
-    const commissionPct = parseFloat(commissionInput.value) || 0;
-    const commissionVal = custoTotal * (commissionPct/100);
-    const taxPct = parseFloat(taxInput.value) || 0;
-    const taxVal = custoTotal * (taxPct/100);
+    const denom = 1 - (pctImposto + pctComissao) / 100;
+    const comissaoVal = denom ? (pctComissao / 100) * (custoTotal / denom) : 0;
+    const impostoVal = denom ? (pctImposto / 100) * (custoTotal / denom) : 0;
+    const valorVenda = custoTotal + comissaoVal + impostoVal;
+
+    totals.totalInsumos = totalInsumos;
+    totals.valorVenda = valorVenda;
 
     totalInsumosEl.textContent = formatCurrency(totalInsumos);
     totalMaoObraEl.textContent = formatCurrency(totalMaoObra);
     subTotalEl.textContent = formatCurrency(subTotal);
     markupValorEl.textContent = formatCurrency(markupVal);
     custoTotalEl.textContent = formatCurrency(custoTotal);
-    comissaoValorEl.textContent = formatCurrency(commissionVal);
-    impostoValorEl.textContent = formatCurrency(taxVal);
+    comissaoValorEl.textContent = formatCurrency(comissaoVal);
+    impostoValorEl.textContent = formatCurrency(impostoVal);
+    valorVendaEl.textContent = formatCurrency(valorVenda);
+    precoVendaEl.textContent = formatCurrency(valorVenda);
   }
 
-  function renderItens(itens){
+  function attachRowEvents(item){
+    item.qtyInput.addEventListener('input', () => {
+      item.quantidade = parseFloat(item.qtyInput.value) || 0;
+      item.total = item.quantidade * item.preco_unitario;
+      item.totalEl.textContent = formatCurrency(item.total);
+      if(item.id) item.status = 'updated';
+      updateProcessTotal(item.processo);
+      updateTotals();
+    });
+    item.row.querySelector('.remove-item').addEventListener('click', () => {
+      item.status = 'deleted';
+      item.row.remove();
+      updateProcessTotal(item.processo);
+      updateTotals();
+    });
+  }
+
+  function renderItens(data){
     tableBody.innerHTML = '';
-    let currentProcess = null;
-    itens.forEach(item => {
-      if(item.processo !== currentProcess){
-        if(currentProcess !== null){
-          const sep = document.createElement('tr');
-          sep.innerHTML = '<td colspan="4" class="py-2"><div class="h-px bg-white/10"></div></td>';
-          tableBody.appendChild(sep);
-        }
-        const procRow = document.createElement('tr');
-        procRow.className = 'process-row';
-        procRow.innerHTML = `<td colspan="4" class="pt-4 pb-2 text-left text-gray-300 font-semibold">${item.processo}</td>`;
-        tableBody.appendChild(procRow);
-        currentProcess = item.processo;
-      }
-      const tr = document.createElement('tr');
-      tr.className = 'border-b border-white/5 item-row';
-      tr.innerHTML = `
-        <td class="py-3 px-2 text-white">${item.nome}</td>
-        <td class="py-3 px-2 text-center text-gray-300 item-qty">${item.quantidade}</td>
-        <td class="py-3 px-2 text-right text-white item-total">${formatCurrency(item.total)}</td>
-        <td class="py-3 px-2 text-center">
-          <div class="flex justify-center gap-2">
-            <button class="edit-item icon-only bg-blue-600/20 text-blue-400 hover:bg-blue-600/30">✎</button>
-            <button class="remove-item icon-only bg-red-600/20 text-red-400 hover:bg-red-600/30">🗑</button>
-          </div>
-        </td>`;
-      tableBody.appendChild(tr);
-      attachRowEvents(tr);
+    itens = data.map(d => ({ ...d, status: 'unchanged' }));
+    const grupos = {};
+
+    itens.forEach(it => {
+      if(!grupos[it.processo]) grupos[it.processo] = [];
+      grupos[it.processo].push(it);
+    });
+
+    Object.entries(grupos).forEach(([proc, arr]) => {
+      const header = document.createElement('tr');
+      header.className = 'process-row';
+      header.innerHTML = `<td colspan="2" class="pt-4 pb-2 text-left text-gray-300 font-semibold">${proc}</td>`+
+        `<td colspan="2" class="pt-4 pb-2 text-right text-white font-semibold process-total"></td>`;
+      tableBody.appendChild(header);
+      processos[proc] = { itens: arr, totalEl: header.querySelector('.process-total') };
+
+      arr.forEach(item => {
+        const tr = document.createElement('tr');
+        tr.className = 'border-b border-white/5 item-row';
+        tr.innerHTML = `
+          <td class="py-3 px-2 text-white">${item.nome}</td>
+          <td class="py-3 px-2 text-center"><input type="number" class="item-qty w-20 bg-input border border-inputBorder rounded text-white text-sm text-center" value="${item.quantidade}"></td>
+          <td class="py-3 px-2 text-right text-white item-total">${formatCurrency(item.preco_unitario * item.quantidade)}</td>
+          <td class="py-3 px-2 text-center"><button class="remove-item icon-only bg-red-600/20 text-red-400 hover:bg-red-600/30">🗑</button></td>`;
+        tableBody.appendChild(tr);
+        item.row = tr;
+        item.qtyInput = tr.querySelector('.item-qty');
+        item.totalEl = tr.querySelector('.item-total');
+        attachRowEvents(item);
+      });
+
+      updateProcessTotal(proc);
     });
     updateTotals();
   }
 
-  markupInput.addEventListener('input', updateTotals);
-  commissionInput.addEventListener('input', updateTotals);
-  taxInput.addEventListener('input', updateTotals);
+  [fabricacaoInput, acabamentoInput, montagemInput, embalagemInput, markupInput, commissionInput, taxInput].forEach(inp => {
+    inp.addEventListener('input', updateTotals);
+  });
 
   document.getElementById('limparTudo').addEventListener('click', () => {
+    itens = [];
     tableBody.innerHTML = '';
     updateTotals();
   });
 
-  document.getElementById('salvarEditarProduto').addEventListener('click', close);
+  document.getElementById('salvarEditarProduto').addEventListener('click', async () => {
+    const produto = {
+      pct_fabricacao: parseFloat(fabricacaoInput.value) || 0,
+      pct_acabamento: parseFloat(acabamentoInput.value) || 0,
+      pct_montagem: parseFloat(montagemInput.value) || 0,
+      pct_embalagem: parseFloat(embalagemInput.value) || 0,
+      pct_markup: parseFloat(markupInput.value) || 0,
+      pct_comissao: parseFloat(commissionInput.value) || 0,
+      pct_imposto: parseFloat(taxInput.value) || 0,
+      preco_base: totals.totalInsumos || 0,
+      preco_venda: totals.valorVenda || 0
+    };
+    const itensPayload = {
+      inseridos: [],
+      atualizados: itens.filter(i => i.status === 'updated').map(i => ({ id: i.id, quantidade: i.quantidade })),
+      deletados: itens.filter(i => i.status === 'deleted').map(i => ({ id: i.id }))
+    };
+    try{
+      await window.electronAPI.salvarProdutoDetalhado(produtoSelecionado.codigo, produto, itensPayload);
+      if(typeof carregarProdutos === 'function') await carregarProdutos();
+      close();
+    }catch(err){
+      console.error('Erro ao salvar produto', err);
+    }
+  });
 
   const produto = window.produtoSelecionado;
   (async () => {
@@ -140,6 +194,10 @@
           ultimaDataEl.textContent = d.toLocaleDateString('pt-BR');
           ultimaHoraEl.textContent = d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
         }
+        if(dados.pct_fabricacao != null) fabricacaoInput.value = dados.pct_fabricacao;
+        if(dados.pct_acabamento != null) acabamentoInput.value = dados.pct_acabamento;
+        if(dados.pct_montagem != null) montagemInput.value = dados.pct_montagem;
+        if(dados.pct_embalagem != null) embalagemInput.value = dados.pct_embalagem;
         if(dados.pct_markup != null) markupInput.value = dados.pct_markup;
         if(dados.pct_comissao != null) commissionInput.value = dados.pct_comissao;
         if(dados.pct_imposto != null) taxInput.value = dados.pct_imposto;
@@ -148,6 +206,7 @@
       etapaSelect.innerHTML = etapas.map(e => `<option value="${e.id}">${e.nome}</option>`).join('');
       const itens = await window.electronAPI.listarInsumosProduto(produto.codigo);
       renderItens(itens);
+      updateTotals();
     } catch(err){
       console.error('Erro ao carregar dados do produto', err);
     }
