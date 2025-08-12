@@ -73,6 +73,7 @@
         await window.electronAPI.atualizarLoteProduto({ id: dados.id, quantidade: novaQtd });
         showToast('Quantidade atualizada', 'success');
         carregarDetalhes(item.id);
+        carregarProdutos();
       } catch (err) {
         console.error(err);
         showToast('Erro ao atualizar quantidade', 'error');
@@ -82,8 +83,14 @@
   }
 
   function excluirLote(id) {
-    window.loteExcluir = { id, reload: () => carregarDetalhes(item.id) };
-    Modal.open('modals/produtos/excluir-lote.html', '../js/modals/produto-lote-excluir.js', 'excluirLote');
+    window.loteExcluir = {
+      id,
+      reload: () => {
+        carregarDetalhes(item.id);
+        carregarProdutos();
+      }
+    };
+    Modal.open('modals/produtos/excluir-lote.html', '../js/modals/produto-lote-excluir.js', 'excluirLote', true);
   }
 
   function formatDateTime(value){
