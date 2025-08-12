@@ -76,7 +76,7 @@ async function listarItensProcessoProduto(codigo, etapaId, busca = '') {
        JOIN produtos_insumos pi ON pi.insumo_id = mp.id
        JOIN etapas_producao ep ON ep.id = $2
       WHERE pi.produto_codigo = $1
-        AND (mp.etapa_id = $2 OR (mp.etapa_id IS NULL AND mp.processo = ep.nome))
+        AND mp.processo = ep.nome
         AND mp.nome ILIKE $3
       ORDER BY mp.nome ASC`,
     [codigo, etapaId, '%' + busca + '%']
