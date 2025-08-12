@@ -306,8 +306,13 @@
       const etapas = await window.electronAPI.listarEtapasProducao();
       etapaSelect.innerHTML = etapas.map(e => `<option value="${e.id}">${e.nome}</option>`).join('');
       const codigoProduto = (dados && dados.codigo) || produto.codigo;
-      const itens = await window.electronAPI.listarInsumosProduto(codigoProduto);
-      renderItens(itens);
+      let itensData = [];
+      try {
+        itensData = await window.electronAPI.listarInsumosProduto(codigoProduto);
+      } catch(err) {
+        console.error('Erro ao listar insumos do produto', err);
+      }
+      renderItens(itensData);
       updateTotals();
     } catch(err){
       console.error('Erro ao carregar dados do produto', err);
