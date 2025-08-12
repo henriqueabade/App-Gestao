@@ -2,7 +2,6 @@
   const overlay = document.getElementById('editarProdutoOverlay');
   const close = () => Modal.close('editarProduto');
   overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
-  document.getElementById('fecharEditarProduto').addEventListener('click', close);
   document.getElementById('voltarEditarProduto').addEventListener('click', close);
 
   const tableBody = document.querySelector('#itensTabela tbody');
