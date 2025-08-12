@@ -6,13 +6,15 @@
   "scripts": {
     "start": "electron .",
     "dist": "electron-builder --config electron-builder.config.js",
-    "verify-smtp": "node backend/verifyTransporter.js"
+    "verify-smtp": "node backend/verifyTransporter.js",
+    "test": "node --test backend"
   },
   "author": "Henrique Viana Abade",
   "license": "MIT",
   "devDependencies": {
     "electron": "^28.3.3",
-    "electron-builder": "^26.0.12"
+    "electron-builder": "^26.0.12",
+    "pg-mem": "^3.0.5"
   },
   "dependencies": {
     "bcrypt": "^6.0.0",
