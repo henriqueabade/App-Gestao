@@ -13,9 +13,14 @@
   <div class="modulo-container">
     <div>
         <!-- Header -->
-        <div class="mb-8 animate-fade-in-up">
-            <h1 class="text-3xl font-bold mb-2">Produtos</h1>
-            <p style="color: var(--color-violet)">Gerencie seu catálogo de produtos e controle de estoque</p>
+        <div class="flex justify-between items-center mb-8 animate-fade-in-up">
+            <div>
+                <h1 class="text-2xl font-semibold mb-2">Produtos</h1>
+                <p style="color: var(--color-violet)">Gerencie seu catálogo de produtos e controle de estoque</p>
+            </div>
+            <button id="btnNovoProduto" class="btn-primary text-white rounded-md px-6 py-3 font-medium">
+                <i class="fas fa-plus mr-2"></i>Novo Produto
+            </button>
         </div>
 
         <!-- Filters -->
@@ -75,8 +80,8 @@
                         <button id="btnFiltrar" class="btn-secondary flex-1 text-white rounded-md h-12 font-medium whitespace-nowrap">
                             <i class="fas fa-filter mr-2"></i>Filtrar
                         </button>
-                        <button id="btnNovoProduto" class="btn-primary flex-1 text-white rounded-md h-12 font-medium whitespace-nowrap">
-                            <i class="fas fa-plus mr-2"></i>Novo
+                        <button id="btnLimpar" class="btn-warning flex-1 text-white rounded-md h-12 font-medium whitespace-nowrap">
+                            Limpar
                         </button>
                     </div>
                 </div>
