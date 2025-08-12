@@ -6,7 +6,7 @@ const ModalManager = (() => {
   const modalConfigs = {
   };
 
-  async function open(htmlPath, scriptPath, overlayId) {
+  async function open(htmlPath, scriptPath, overlayId, keepExisting = false) {
     if (arguments.length === 1) {
       const cfg = modalConfigs[htmlPath];
       if (!cfg) return;
@@ -16,7 +16,7 @@ const ModalManager = (() => {
     }
 
     // Closing existing modals invalidates older open() calls via openToken.
-    closeAll();
+    if (!keepExisting) closeAll();
     // Increment and store token so async steps know if they should continue.
     const token = ++openToken;
 
