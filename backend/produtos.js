@@ -50,7 +50,7 @@ async function listarInsumosProduto(codigo) {
            pi.quantidade,
            mp.preco_unitario * pi.quantidade AS total,
            mp.processo
-      FROM produtos_insumo pi
+      FROM produtos_insumos pi
       JOIN materia_prima mp ON mp.id = pi.insumo_id
      WHERE pi.produto_codigo = $1
      ORDER BY mp.processo, mp.nome`;
