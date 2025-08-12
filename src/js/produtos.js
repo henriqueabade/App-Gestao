@@ -29,55 +29,112 @@ window.showToast = window.showToast || showToast;
 async function carregarProdutos() {
     try {
         listaProdutos = await window.electronAPI.listarProdutos();
-        const tbody = document.getElementById('produtosTableBody');
-        if (!tbody) return;
-        tbody.innerHTML = '';
-
-        listaProdutos.forEach(p => {
-            const tr = document.createElement('tr');
-            tr.className = 'transition-colors duration-150';
-            tr.style.cursor = 'pointer';
-            tr.onmouseover = () => tr.style.background = 'rgba(163, 148, 167, 0.05)';
-            tr.onmouseout = () => tr.style.background = 'transparent';
-
-            const statusText = p.status || '';
-            const badgeClass = statusText.toLowerCase() === 'em linha' ? 'badge-success' : 'badge-danger';
-
-            tr.innerHTML = `
-                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">${p.codigo || ''}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-white">${reduzirNome(p.nome) || ''}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-violet)">${p.categoria || ''}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-white">${formatCurrency(p.preco_venda)}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-green)">${formatPercent(p.pct_markup)}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-white">${p.quantidade_total ?? 0}</td>
-                <td class="px-6 py-4 whitespace-nowrap">
-                    <span class="${badgeClass} px-3 py-1 rounded-full text-xs font-medium">
-                        ${statusText}
-                    </span>
-                </td>
-                <td class="px-6 py-4 whitespace-nowrap text-center action-cell"></td>
-            `;
-            tbody.appendChild(tr);
-        });
-
-        const template = document.getElementById('action-icons-template');
-        if (template) {
-            document.querySelectorAll('.action-cell').forEach((cell, index) => {
-                cell.appendChild(template.content.cloneNode(true));
-                const icons = cell.querySelectorAll('i');
-                const prod = listaProdutos[index];
-                const ver = icons[0];
-                const editar = icons[1];
-                const excluir = icons[2];
-                if (ver) ver.addEventListener('click', e => { e.stopPropagation(); abrirDetalhesProduto(prod); });
-                if (editar) editar.addEventListener('click', e => { e.stopPropagation(); abrirEditarProduto(prod); });
-                if (excluir) excluir.addEventListener('click', e => { e.stopPropagation(); abrirExcluirProduto(prod); });
-            });
-        }
+        popularFiltros();
+        aplicarFiltro();
     } catch (err) {
         console.error('Erro ao carregar produtos', err);
         showToast('Erro ao carregar produtos', 'error');
     }
+}
+
+function renderProdutos(produtos) {
+    const tbody = document.getElementById('produtosTableBody');
+    if (!tbody) return;
+    tbody.innerHTML = '';
+
+    produtos.forEach(p => {
+        const tr = document.createElement('tr');
+        tr.className = 'transition-colors duration-150';
+        tr.style.cursor = 'pointer';
+        tr.onmouseover = () => tr.style.background = 'rgba(163, 148, 167, 0.05)';
+        tr.onmouseout = () => tr.style.background = 'transparent';
+
+        const statusText = p.status || '';
+        const badgeClass = statusText.toLowerCase() === 'em linha' ? 'badge-success' : 'badge-danger';
+
+        tr.innerHTML = `
+            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">${p.codigo || ''}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-white">${reduzirNome(p.nome) || ''}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-violet)">${p.categoria || ''}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-white">${formatCurrency(p.preco_venda)}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-green)">${formatPercent(p.pct_markup)}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-white">${p.quantidade_total ?? 0}</td>
+            <td class="px-6 py-4 whitespace-nowrap">
+                <span class="${badgeClass} px-3 py-1 rounded-full text-xs font-medium">
+                    ${statusText}
+                </span>
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap text-center action-cell"></td>
+        `;
+        tbody.appendChild(tr);
+    });
+
+    const template = document.getElementById('action-icons-template');
+    if (template) {
+        document.querySelectorAll('.action-cell').forEach((cell, index) => {
+            cell.appendChild(template.content.cloneNode(true));
+            const icons = cell.querySelectorAll('i');
+            const prod = produtos[index];
+            const ver = icons[0];
+            const editar = icons[1];
+            const excluir = icons[2];
+            if (ver) ver.addEventListener('click', e => { e.stopPropagation(); abrirDetalhesProduto(prod); });
+            if (editar) editar.addEventListener('click', e => { e.stopPropagation(); abrirEditarProduto(prod); });
+            if (excluir) excluir.addEventListener('click', e => { e.stopPropagation(); abrirExcluirProduto(prod); });
+        });
+    }
+}
+
+function popularFiltros() {
+    const categoriaSelect = document.getElementById('filterCategory');
+    const statusSelect = document.getElementById('filterStatus');
+    if (categoriaSelect) {
+        const categorias = [...new Set(listaProdutos.map(p => p.categoria).filter(Boolean))];
+        categoriaSelect.innerHTML = '<option value="">Todas as Categorias</option>' +
+            categorias.map(c => `<option value="${c}">${c}</option>`).join('');
+    }
+    if (statusSelect) {
+        const status = [...new Set(listaProdutos.map(p => p.status).filter(Boolean))];
+        statusSelect.innerHTML = '<option value="">Todos</option>' +
+            status.map(s => `<option value="${s}">${s}</option>`).join('');
+    }
+}
+
+function aplicarFiltro() {
+    let filtrados = [...listaProdutos];
+    const busca = document.getElementById('filterSearch')?.value.toLowerCase() || '';
+    const categoria = document.getElementById('filterCategory')?.value || '';
+    const status = document.getElementById('filterStatus')?.value || '';
+    const precoMinStr = document.getElementById('filterPriceMin')?.value;
+    const precoMaxStr = document.getElementById('filterPriceMax')?.value;
+    const zeroEstoque = document.getElementById('zeroStock')?.checked;
+
+    if (busca) {
+        filtrados = filtrados.filter(p => {
+            const codigo = (p.codigo || '').toString().toLowerCase();
+            const nome = (p.nome || '').toLowerCase();
+            return codigo.includes(busca) || nome.includes(busca);
+        });
+    }
+    if (categoria) {
+        filtrados = filtrados.filter(p => p.categoria === categoria);
+    }
+    if (status) {
+        filtrados = filtrados.filter(p => p.status === status);
+    }
+    const precoMin = parseFloat(precoMinStr);
+    if (!isNaN(precoMin)) {
+        filtrados = filtrados.filter(p => Number(p.preco_venda) >= precoMin);
+    }
+    const precoMax = parseFloat(precoMaxStr);
+    if (!isNaN(precoMax)) {
+        filtrados = filtrados.filter(p => Number(p.preco_venda) <= precoMax);
+    }
+    if (zeroEstoque) {
+        filtrados = filtrados.filter(p => Number(p.quantidade_total) === 0);
+    }
+
+    renderProdutos(filtrados);
 }
 
 function formatCurrency(value) {
@@ -106,9 +163,9 @@ function initProdutos() {
         }, index * 100);
     });
 
-    // TODO: Implementar filtros e manipulação de estoque
-
     document.getElementById('btnNovoProduto')?.addEventListener('click', abrirNovoProduto);
+    document.getElementById('btnFiltrar')?.addEventListener('click', aplicarFiltro);
+    document.getElementById('zeroStock')?.addEventListener('change', aplicarFiltro);
 
     carregarProdutos();
 
