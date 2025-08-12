@@ -361,9 +361,9 @@ ipcMain.handle('atualizar-preco-materia-prima', async (_e, { id, preco }) => {
 ipcMain.handle('listar-produtos', async () => {
   return listarProdutos();
 });
-ipcMain.handle('obter-produto', async (_e, id) => {
+ipcMain.handle('obter-produto', async (_e, codigo) => {
   try {
-    return await obterProduto(id);
+    return await obterProduto(codigo);
   } catch (err) {
     console.error('Erro ao obter produto:', err);
     throw err;
@@ -394,14 +394,14 @@ ipcMain.handle('excluir-lote-produto', async (_e, id) => {
   await excluirLoteProduto(id);
   return true;
 });
-ipcMain.handle('listar-insumos-produto', async (_e, id) => {
-  return listarInsumosProduto(id);
+ipcMain.handle('listar-insumos-produto', async (_e, codigo) => {
+  return listarInsumosProduto(codigo);
 });
 ipcMain.handle('listar-etapas-producao', async () => {
   return listarEtapasProducao();
 });
-ipcMain.handle('salvar-produto-detalhado', async (_e, { id, produto, itens }) => {
-  return salvarProdutoDetalhado(id, produto, itens);
+ipcMain.handle('salvar-produto-detalhado', async (_e, { codigo, produto, itens }) => {
+  return salvarProdutoDetalhado(codigo, produto, itens);
 });
 
 ipcMain.handle('auto-login', async (_event, pin) => {
