@@ -6,6 +6,12 @@
   if (voltar) voltar.addEventListener('click', close);
   document.addEventListener('keydown', function esc(e){ if(e.key==='Escape'){ close(); document.removeEventListener('keydown', esc); } });
 
+  const inserirBtn = document.getElementById('abrirInserirEstoque');
+  if (inserirBtn) inserirBtn.addEventListener('click', () => {
+    overlay.classList.add('pointer-events-none', 'blur-sm');
+    Modal.open('modals/produtos/estoque-inserir.html', '../js/modals/produto-estoque-inserir.js', 'inserirEstoque', true);
+  });
+
   const item = window.produtoDetalhes;
   if(item){
     const titulo = document.getElementById('detalheTitulo');
