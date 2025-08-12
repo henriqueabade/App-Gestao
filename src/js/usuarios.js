@@ -134,11 +134,59 @@ function renderUsuarios(lista) {
     });
 }
 
+function atualizarResumo() {
+    const totalEl = document.getElementById('totalUsuarios');
+    const statusEl = document.getElementById('distribuicaoStatus');
+    const perfisEl = document.getElementById('distribuicaoPerfis');
+    if (!totalEl || !statusEl || !perfisEl) return;
+
+    totalEl.textContent = usuariosCache.length;
+
+    const statusCounts = usuariosCache.reduce((acc, u) => {
+        const key = (u.status || 'Aguardando').toLowerCase();
+        acc[key] = (acc[key] || 0) + 1;
+        return acc;
+    }, {});
+    statusEl.innerHTML = '';
+    const statusConfig = {
+        ativo: { class: 'badge-success', label: 'Ativos' },
+        inativo: { class: 'badge-danger', label: 'Inativos' },
+        aguardando: { class: 'badge-warning', label: 'Aguardando' }
+    };
+    Object.entries(statusCounts).forEach(([status, count]) => {
+        const cfg = statusConfig[status] || { class: 'badge-secondary', label: status };
+        const span = document.createElement('span');
+        span.className = `${cfg.class} px-3 py-1 rounded-full text-xs font-medium`;
+        span.textContent = `${count} ${cfg.label}`;
+        statusEl.appendChild(span);
+    });
+
+    const perfilCounts = usuariosCache.reduce((acc, u) => {
+        const perfil = u.perfil || 'Sem Perfil';
+        acc[perfil] = (acc[perfil] || 0) + 1;
+        return acc;
+    }, {});
+    perfisEl.innerHTML = '';
+    const perfilLabels = {
+        admin: 'Administradores',
+        operacional: 'Operacionais',
+        cliente: 'Clientes',
+        'Sem Perfil': 'Sem Perfil'
+    };
+    Object.entries(perfilCounts).forEach(([perfil, count]) => {
+        const div = document.createElement('div');
+        const label = perfilLabels[perfil] || perfil;
+        div.textContent = `• ${count} ${label}`;
+        perfisEl.appendChild(div);
+    });
+}
+
 async function carregarUsuarios() {
     try {
         const resp = await fetch(`${API_URL}/api/usuarios/lista`);
         usuariosCache = await resp.json();
         renderUsuarios(usuariosCache);
+        atualizarResumo();
     } catch (err) {
         console.error('Erro ao carregar usuários:', err);
     }
