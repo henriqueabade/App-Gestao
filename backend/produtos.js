@@ -57,7 +57,6 @@ async function listarInsumosProduto(codigo) {
       JOIN materia_prima mp ON mp.id = pi.insumo_id
       JOIN produtos p ON p.codigo = $1
      WHERE pi.produto_codigo = $1
-        OR (pi.produto_codigo IS NULL AND pi.produto_id = p.id)
      ORDER BY mp.processo, mp.nome`;
   const res = await pool.query(query, [codigo]);
   return res.rows;
