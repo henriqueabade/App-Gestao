@@ -4,6 +4,7 @@
       <button id="voltarEditarProduto" class="btn-neutral px-4 py-2 rounded-lg text-white font-medium flex items-center gap-2">← Voltar</button>
       <h2 class="text-lg font-semibold text-white">EDITAR PRODUTO</h2>
       <div class="flex items-center gap-3">
+        <button id="salvarEditarProduto" class="btn-success px-4 py-2 rounded-lg text-white font-medium flex items-center gap-2">Salvar</button>
         <button id="limparTudo" class="btn-danger px-4 py-2 rounded-lg text-white font-medium flex items-center gap-2">🗑️ Limpar Tudo</button>
         <button id="fecharEditarProduto" class="btn-danger icon-only text-white">✕</button>
       </div>
@@ -63,25 +64,25 @@
       </div>
 
       <div class="px-8 py-6 grid grid-cols-1 xl:grid-cols-2 gap-8">
-        <div class="space-y-6">
-          <div class="glass-surface rounded-xl p-6 border border-white/10">
+        <div class="space-y-6 h-full flex flex-col">
+          <div class="glass-surface rounded-xl p-6 border border-white/10 h-full">
             <h3 class="text-lg font-semibold mb-4 text-white">PERCENTAGENS</h3>
             <div class="space-y-4">
               <div class="flex justify-between items-center">
                 <span class="text-gray-300">Marcenaria</span>
-                <input type="number" value="25" class="w-20 bg-input border border-inputBorder rounded px-3 py-1 text-white text-sm focus:border-primary focus:ring-1 focus:ring-primary/50 transition" />
+                <input id="fabricacaoInput" type="number" value="25" class="w-20 bg-input border border-inputBorder rounded px-3 py-1 text-white text-sm focus:border-primary focus:ring-1 focus:ring-primary/50 transition" />
               </div>
               <div class="flex justify-between items-center">
                 <span class="text-gray-300">Acabamento</span>
-                <input type="number" value="15" class="w-20 bg-input border border-inputBorder rounded px-3 py-1 text-white text-sm focus:border-primary focus:ring-1 focus:ring-primary/50 transition" />
+                <input id="acabamentoInput" type="number" value="15" class="w-20 bg-input border border-inputBorder rounded px-3 py-1 text-white text-sm focus:border-primary focus:ring-1 focus:ring-primary/50 transition" />
               </div>
               <div class="flex justify-between items-center">
                 <span class="text-gray-300">Montagem</span>
-                <input type="number" value="10" class="w-20 bg-input border border-inputBorder rounded px-3 py-1 text-white text-sm focus:border-primary focus:ring-1 focus:ring-primary/50 transition" />
+                <input id="montagemInput" type="number" value="10" class="w-20 bg-input border border-inputBorder rounded px-3 py-1 text-white text-sm focus:border-primary focus:ring-1 focus:ring-primary/50 transition" />
               </div>
               <div class="flex justify-between items-center">
                 <span class="text-gray-300">Embalagem</span>
-                <input type="number" value="5" class="w-20 bg-input border border-inputBorder rounded px-3 py-1 text-white text-sm focus:border-primary focus:ring-1 focus:ring-primary/50 transition" />
+                <input id="embalagemInput" type="number" value="5" class="w-20 bg-input border border-inputBorder rounded px-3 py-1 text-white text-sm focus:border-primary focus:ring-1 focus:ring-primary/50 transition" />
               </div>
               <div class="flex justify-between items-center">
                 <span class="text-gray-300">Markup</span>
@@ -99,8 +100,8 @@
           </div>
         </div>
 
-        <div class="space-y-6">
-          <div class="glass-surface rounded-xl p-6 border border-white/10">
+        <div class="space-y-6 h-full flex flex-col">
+          <div class="glass-surface rounded-xl p-6 border border-white/10 h-full">
             <h3 class="text-lg font-semibold mb-4 text-white">SOMAS</h3>
             <div class="space-y-3 text-sm">
               <div class="flex justify-between">
@@ -131,10 +132,11 @@
                 <span class="text-gray-300">Imposto</span>
                 <span id="impostoValor" class="text-white font-medium">R$ 0,00</span>
               </div>
+              <div class="flex justify-between border-t border-white/10 pt-3">
+                <span class="text-gray-300">Valor de Venda da Peça</span>
+                <span id="valorVenda" class="text-white font-semibold">R$ 0,00</span>
+              </div>
             </div>
-          </div>
-          <div class="flex items-end justify-end">
-            <button id="salvarEditarProduto" class="btn-success px-8 py-4 rounded-xl font-semibold text-lg">Salvar</button>
           </div>
         </div>
       </div>
