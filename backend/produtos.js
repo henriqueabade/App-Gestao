@@ -43,7 +43,7 @@ async function obterProduto(id) {
   return res.rows[0];
 }
 
-async function listarInsumosProduto(codigo) {
+async function listarInsumosProduto(id) {
   const query = `
     SELECT pi.id,
            mp.nome,
@@ -53,9 +53,9 @@ async function listarInsumosProduto(codigo) {
            mp.processo
       FROM produtos_insumos pi
       JOIN materia_prima mp ON mp.id = pi.insumo_id
-     WHERE pi.produto_codigo = $1
+     WHERE pi.produto_id = $1
      ORDER BY mp.processo, mp.nome`;
-  const res = await pool.query(query, [codigo]);
+  const res = await pool.query(query, [id]);
   return res.rows;
 }
 
@@ -112,7 +112,7 @@ async function excluirLoteProduto(id) {
 }
 
 // Atualiza percentuais e insumos do produto em uma única transação
-async function salvarProdutoDetalhado(codigo, produto, itens) {
+async function salvarProdutoDetalhado(id, produto, itens) {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -140,7 +140,7 @@ async function salvarProdutoDetalhado(codigo, produto, itens) {
               preco_base=$8,
               preco_venda=$9,
               data=NOW()
-       WHERE codigo=$10`,
+       WHERE id=$10`,
       [
         pct_fabricacao,
         pct_acabamento,
@@ -151,7 +151,7 @@ async function salvarProdutoDetalhado(codigo, produto, itens) {
         pct_imposto,
         preco_base,
         preco_venda,
-        codigo
+        id
       ]
     );
 
@@ -166,8 +166,8 @@ async function salvarProdutoDetalhado(codigo, produto, itens) {
     // Processa inserções
     for (const ins of itens.inseridos || []) {
       await client.query(
-        'INSERT INTO produtos_insumos (produto_codigo, insumo_id, quantidade) VALUES ($1,$2,$3)',
-        [codigo, ins.insumo_id, ins.quantidade]
+        'INSERT INTO produtos_insumos (produto_id, insumo_id, quantidade) VALUES ($1,$2,$3)',
+        [id, ins.insumo_id, ins.quantidade]
       );
     }
 
