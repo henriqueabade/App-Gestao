@@ -200,8 +200,14 @@ function initProdutos() {
 
     document.getElementById('btnNovoProduto')?.addEventListener('click', abrirNovoProduto);
 
-    document.getElementById('btnFiltrar')?.addEventListener('click', () => aplicarFiltro(true));
-    document.getElementById('btnLimpar')?.addEventListener('click', limparFiltros);
+    document.getElementById('btnFiltrar')?.addEventListener('click', () => {
+        aplicarFiltro(true);
+        if (typeof collapseSidebar === 'function') collapseSidebar();
+    });
+    document.getElementById('btnLimpar')?.addEventListener('click', () => {
+        limparFiltros();
+        if (typeof collapseSidebar === 'function') collapseSidebar();
+    });
 
     document.getElementById('filterSearch')?.addEventListener('input', () => aplicarFiltro(false));
     document.getElementById('filterCategory')?.addEventListener('change', marcarFiltrosPendentes);
