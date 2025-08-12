@@ -241,6 +241,10 @@ function abrirNovoProduto() {
 }
 
 function abrirEditarProduto(prod) {
+    if (!prod || !prod.codigo) {
+        showToast('Produto inválido', 'error');
+        return;
+    }
     window.produtoSelecionado = prod;
     Modal.open('modals/produtos/editar.html', '../js/modals/produto-editar.js', 'editarProduto');
 }
