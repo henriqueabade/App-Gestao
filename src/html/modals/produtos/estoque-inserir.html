@@ -10,32 +10,15 @@
         <form class="space-y-6">
           <div>
             <label class="block text-sm font-medium text-gray-300 mb-2">Processos</label>
-            <select class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition select-arrow appearance-none" autofocus>
+            <select id="processoSelect" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition select-arrow appearance-none" autofocus>
               <option value="">Selecione um processo…</option>
-              <option value="marcenaria">Marcenaria</option>
-              <option value="acabamento">Acabamento</option>
-              <option value="montagem">Montagem</option>
-              <option value="embalagem">Embalagem</option>
-              <option value="pintura">Pintura</option>
-              <option value="verniz">Verniz</option>
-              <option value="estofamento">Estofamento</option>
             </select>
           </div>
           <div>
             <label class="block text-sm font-medium text-gray-300 mb-2">Último Item</label>
-            <select class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition select-arrow appearance-none">
-              <option value="">Selecione ou busque um produto…</option>
-              <option value="mesa-paris">Mesa de Jantar Modelo Paris</option>
-              <option value="cadeira-colonial">Cadeira Colonial Estofada</option>
-              <option value="armario-rustico">Armário Rústico 6 Portas</option>
-              <option value="mesa-centro">Mesa de Centro Redonda</option>
-              <option value="estante-livros">Estante para Livros 5 Prateleiras</option>
-              <option value="cama-casal">Cama de Casal com Cabeceira</option>
-              <option value="comoda-vintage">Cômoda Vintage 4 Gavetas</option>
-              <option value="banco-madeira">Banco de Madeira Maciça</option>
-              <option value="mesa-escritorio">Mesa de Escritório L</option>
-              <option value="poltrona-couro">Poltrona de Couro Marrom</option>
-            </select>
+            <input id="itemInput" type="text" list="itensList" disabled placeholder="Selecione ou busque um item…" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+            <datalist id="itensList"></datalist>
+            <p id="itemMessage" class="text-sm text-gray-400 mt-2"></p>
           </div>
           <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
             <div>

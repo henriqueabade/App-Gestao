@@ -61,8 +61,34 @@ async function listarInsumosProduto(id) {
 
 async function listarEtapasProducao() {
   const res = await pool.query(
-    'SELECT id, nome FROM etapas_producao ORDER BY ordem'
+    'SELECT id, nome FROM etapas_producao ORDER BY nome'
   );
+  return res.rows;
+}
+
+async function listarItensProcessoProduto(produtoCodigo, etapaId) {
+  const baseParams = [produtoCodigo, etapaId];
+  let res = await pool.query(
+    `SELECT mp.id, mp.nome
+       FROM materia_prima mp
+       JOIN produtos_insumos pi ON pi.insumo_id = mp.id
+      WHERE pi.produto_codigo = $1
+        AND mp.etapa_id = $2
+      ORDER BY mp.nome ASC`,
+    baseParams
+  );
+  if (res.rows.length === 0) {
+    res = await pool.query(
+      `SELECT mp.id, mp.nome
+         FROM materia_prima mp
+         JOIN produtos_insumos pi ON pi.insumo_id = mp.id
+         JOIN etapas_producao ep ON ep.id = $2
+        WHERE pi.produto_codigo = $1
+          AND mp.processo = ep.nome
+        ORDER BY mp.nome ASC`,
+      baseParams
+    );
+  }
   return res.rows;
 }
 
@@ -187,6 +213,7 @@ module.exports = {
   obterProduto,
   listarInsumosProduto,
   listarEtapasProducao,
+  listarItensProcessoProduto,
   adicionarProduto,
   atualizarProduto,
   excluirProduto,
