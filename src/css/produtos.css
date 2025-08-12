@@ -50,6 +50,16 @@ body {
     background: rgba(138, 167, 243, 0.9);
 }
 
+.btn-warning {
+    background: var(--color-bordeaux);
+    transition: all 150ms ease;
+}
+
+.btn-warning:hover {
+    background: rgba(106, 21, 44, 0.8);
+    transform: scale(1.05);
+}
+
 .btn-danger {
     background: var(--color-red);
     transition: all 150ms ease;

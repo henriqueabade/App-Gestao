@@ -3,6 +3,14 @@
 
 let listaProdutos = [];
 let notificationContainer;
+let filtrosAplicados = {
+    categoria: '',
+    status: '',
+    precoMin: '',
+    precoMax: '',
+    zeroEstoque: false
+};
+let filtrosPendentes = false;
 
 function showToast(message, type = 'success') {
     if (!notificationContainer) {
@@ -30,7 +38,7 @@ async function carregarProdutos() {
     try {
         listaProdutos = await window.electronAPI.listarProdutos();
         popularFiltros();
-        aplicarFiltro();
+        aplicarFiltro(true);
     } catch (err) {
         console.error('Erro ao carregar produtos', err);
         showToast('Erro ao carregar produtos', 'error');
@@ -100,14 +108,15 @@ function popularFiltros() {
     }
 }
 
-function aplicarFiltro() {
-    let filtrados = [...listaProdutos];
+function aplicarFiltro(aplicarNovos = false) {
     const busca = document.getElementById('filterSearch')?.value.toLowerCase() || '';
-    const categoria = document.getElementById('filterCategory')?.value || '';
-    const status = document.getElementById('filterStatus')?.value || '';
-    const precoMinStr = document.getElementById('filterPriceMin')?.value;
-    const precoMaxStr = document.getElementById('filterPriceMax')?.value;
-    const zeroEstoque = document.getElementById('zeroStock')?.checked;
+    const categoria = aplicarNovos ? (document.getElementById('filterCategory')?.value || '') : filtrosAplicados.categoria;
+    const status = aplicarNovos ? (document.getElementById('filterStatus')?.value || '') : filtrosAplicados.status;
+    const precoMinStr = aplicarNovos ? document.getElementById('filterPriceMin')?.value : filtrosAplicados.precoMin;
+    const precoMaxStr = aplicarNovos ? document.getElementById('filterPriceMax')?.value : filtrosAplicados.precoMax;
+    const zeroEstoque = aplicarNovos ? document.getElementById('zeroStock')?.checked : filtrosAplicados.zeroEstoque;
+
+    let filtrados = [...listaProdutos];
 
     if (busca) {
         filtrados = filtrados.filter(p => {
@@ -134,7 +143,52 @@ function aplicarFiltro() {
         filtrados = filtrados.filter(p => Number(p.quantidade_total) === 0);
     }
 
+    if (aplicarNovos) {
+        filtrosAplicados = { categoria, status, precoMin: precoMinStr || '', precoMax: precoMaxStr || '', zeroEstoque: !!zeroEstoque };
+        filtrosPendentes = false;
+    }
+
     renderProdutos(filtrados);
+    atualizarEstadoBotao();
+}
+
+function limparFiltros() {
+    const busca = document.getElementById('filterSearch');
+    const categoria = document.getElementById('filterCategory');
+    const status = document.getElementById('filterStatus');
+    const precoMin = document.getElementById('filterPriceMin');
+    const precoMax = document.getElementById('filterPriceMax');
+    const zero = document.getElementById('zeroStock');
+    if (busca) busca.value = '';
+    if (categoria) categoria.value = '';
+    if (status) status.value = '';
+    if (precoMin) precoMin.value = '';
+    if (precoMax) precoMax.value = '';
+    if (zero) zero.checked = false;
+    filtrosAplicados = { categoria: '', status: '', precoMin: '', precoMax: '', zeroEstoque: false };
+    filtrosPendentes = false;
+    aplicarFiltro(false);
+}
+
+function atualizarEstadoBotao() {
+    const btn = document.getElementById('btnFiltrar');
+    if (!btn) return;
+    const buscaAtiva = document.getElementById('filterSearch')?.value || '';
+    const ativo = buscaAtiva || filtrosAplicados.categoria || filtrosAplicados.status || filtrosAplicados.precoMin || filtrosAplicados.precoMax || filtrosAplicados.zeroEstoque;
+    if (ativo && !filtrosPendentes) {
+        btn.classList.remove('btn-secondary');
+        btn.classList.add('btn-warning');
+        btn.innerHTML = 'Limpar';
+    } else {
+        btn.classList.remove('btn-warning');
+        btn.classList.add('btn-secondary');
+        btn.innerHTML = '<i class="fas fa-filter mr-2"></i>Filtrar';
+    }
+}
+
+function marcarFiltrosPendentes() {
+    filtrosPendentes = true;
+    atualizarEstadoBotao();
 }
 
 function formatCurrency(value) {
@@ -164,8 +218,22 @@ function initProdutos() {
     });
 
     document.getElementById('btnNovoProduto')?.addEventListener('click', abrirNovoProduto);
-    document.getElementById('btnFiltrar')?.addEventListener('click', aplicarFiltro);
-    document.getElementById('zeroStock')?.addEventListener('change', aplicarFiltro);
+
+    const btnFiltro = document.getElementById('btnFiltrar');
+    btnFiltro?.addEventListener('click', () => {
+        if (btnFiltro.classList.contains('btn-warning')) {
+            limparFiltros();
+        } else {
+            aplicarFiltro(true);
+        }
+    });
+
+    document.getElementById('filterSearch')?.addEventListener('input', () => aplicarFiltro(false));
+    document.getElementById('filterCategory')?.addEventListener('change', marcarFiltrosPendentes);
+    document.getElementById('filterStatus')?.addEventListener('change', marcarFiltrosPendentes);
+    document.getElementById('filterPriceMin')?.addEventListener('input', marcarFiltrosPendentes);
+    document.getElementById('filterPriceMax')?.addEventListener('input', marcarFiltrosPendentes);
+    document.getElementById('zeroStock')?.addEventListener('change', () => aplicarFiltro(true));
 
     carregarProdutos();
 
