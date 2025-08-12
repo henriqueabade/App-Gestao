@@ -14,6 +14,7 @@
   const taxInput = document.getElementById('taxInput');
   const etapaSelect = document.getElementById('etapaSelect');
   const editarRegistroToggle = document.getElementById('editarRegistroToggle');
+  const comecarBtn = document.getElementById('comecarEditarProduto');
 
   const nomeInput = document.getElementById('nomeInput');
   const codigoInput = document.getElementById('codigoInput');
@@ -32,6 +33,15 @@
   const impostoValorEl = document.getElementById('impostoValor');
   const valorVendaEl = document.getElementById('valorVenda');
   let registroOriginal = {};
+
+  // Abre a etapa seguinte em um novo modal sobreposto,
+  // mantendo o modal atual aberto porém inativo ao fundo.
+  comecarBtn.addEventListener('click', () => {
+    // Bloqueia interação com o modal base e aplica leve desfoque
+    overlay.classList.add('pointer-events-none', 'blur-sm');
+    // keepExisting=true mantém o modal original aberto
+    Modal.open('modals/produtos/proxima-etapa.html', '../js/modals/produto-proxima-etapa.js', 'proximaEtapa', true);
+  });
 
   // toggle on/off
   function updateRegistroEditState(){
