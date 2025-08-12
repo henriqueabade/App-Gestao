@@ -187,6 +187,7 @@
 
   function renderItens(data){
     tableBody.innerHTML = '';
+    Object.keys(processos).forEach(k => delete processos[k]);
     itens = (data || []).map(d => ({ ...d, status: 'unchanged' }));
 
     // Exibe mensagem caso não haja itens
