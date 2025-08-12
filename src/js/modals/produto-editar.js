@@ -38,9 +38,15 @@
     const valorVendaEl = document.getElementById('valorVenda');
     let registroOriginal = {};
 
-    function showError(msg){
-      tableBody.innerHTML = `<tr><td colspan="4" class="py-4 text-center text-red-400">${msg}</td></tr>`;
-    }
+      function showError(msg){
+        tableBody.innerHTML = `<tr><td colspan="4" class="py-4 text-center text-red-400">${msg}</td></tr>`;
+      }
+
+      const produtoSelecionado = window.produtoSelecionado;
+      if(!produtoSelecionado || !produtoSelecionado.codigo){
+        showError('Produto não selecionado');
+        return;
+      }
 
   // Abre a etapa seguinte em um novo modal sobreposto,
   // mantendo o modal atual aberto porém inativo ao fundo.
@@ -282,12 +288,11 @@
     }
   });
 
-  const produto = window.produtoSelecionado;
-  (async () => {
-    try{
-      // Carga inicial: produto, etapas e insumos
-      const { produto: dados, itens: itensData } = await window.electronAPI.listarDetalhesProduto({ produtoCodigo: produto.codigo, produtoId: produto.id });
-      if(dados){
+    (async () => {
+      try{
+        // Carga inicial: produto, etapas e insumos
+        const { produto: dados, itens: itensData } = await window.electronAPI.listarDetalhesProduto({ produtoCodigo: produtoSelecionado.codigo, produtoId: produtoSelecionado.id });
+        if(dados){
         if(dados.nome) nomeInput.value = dados.nome;
         if(dados.codigo) codigoInput.value = dados.codigo;
         if(dados.ncm != null) ncmInput.value = String(dados.ncm);
