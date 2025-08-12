@@ -23,30 +23,80 @@ async function listarProdutos() {
   }
 }
 
-async function listarDetalhesProduto(produtoId) {
-  const query = `
-    SELECT pe.id,
-           ep.nome AS etapa_nome,
-           mp.nome AS ultimo_item,
-           pe.quantidade,
-           pe.data_hora_completa
-      FROM produtos_em_cada_ponto pe
-      JOIN etapas_producao ep ON ep.id = pe.etapa_id
-      LEFT JOIN materia_prima mp ON mp.id = pe.ultimo_insumo_id
-     WHERE pe.produto_id = $1
-     ORDER BY pe.data_hora_completa DESC`;
-  const res = await pool.query(query, [produtoId]);
-  return res.rows;
+// Ajuste: separação de params (produtoCodigo text, produtoId integer) e casts explícitos
+async function listarDetalhesProduto(produtoCodigo, produtoId) {
+  try {
+    if (!produtoCodigo && !produtoId) {
+      throw new Error('Produto não informado');
+    }
+
+    // Se vier apenas o código, busca o ID correspondente
+    if (produtoCodigo && !produtoId) {
+      const idRes = await pool.query(
+        'SELECT id FROM produtos WHERE codigo = $1::text',
+        [produtoCodigo]
+      );
+      produtoId = idRes.rows[0]?.id;
+    }
+
+    const produtoQuery = `
+      SELECT id, codigo, nome, descricao, categoria, preco_base, criado_em,
+             pct_fabricacao, pct_acabamento, pct_montagem, pct_embalagem,
+             pct_markup, pct_comissao, pct_imposto, preco_venda, status, ncm, data
+        FROM produtos
+       WHERE codigo = $1::text`;
+    const produtoRes = await pool.query(produtoQuery, [produtoCodigo]);
+
+    const itensQuery = `
+      SELECT pi.id,
+             pi.insumo_id,
+             pi.quantidade,
+             mp.nome,
+             mp.preco_unitario,
+             mp.processo
+        FROM produtos_insumos pi
+        JOIN materia_prima mp ON mp.id = pi.insumo_id
+       WHERE pi.produto_codigo = $1::text
+       ORDER BY mp.processo, mp.nome`;
+    const itensRes = await pool.query(itensQuery, [produtoCodigo]);
+
+    let lotesRes = { rows: [] };
+    if (produtoId) {
+      const lotesQuery = `
+        SELECT pecp.id,
+               pecp.quantidade,
+               pecp.ultimo_insumo_id,
+               pecp.tempo_estimado_minutos,
+               pecp.data_hora_completa,
+               ep.nome AS etapa
+          FROM produtos_em_cada_ponto pecp
+          JOIN etapas_producao ep ON ep.id = pecp.etapa_id
+         WHERE pecp.produto_id = $2::int
+         ORDER BY pecp.data_hora_completa DESC`;
+      lotesRes = await pool.query(lotesQuery, [produtoCodigo, produtoId]);
+    }
+
+    return {
+      produto: produtoRes.rows[0] || null,
+      itens: itensRes.rows,
+      lotes: lotesRes.rows,
+    };
+  } catch (err) {
+    console.error('Erro ao listar detalhes do produto:', err.message);
+    throw new Error('Erro ao listar detalhes do produto');
+  }
 }
 
 // Busca produto pelo código
 async function obterProduto(codigo) {
-  const res = await pool.query('SELECT * FROM produtos WHERE codigo=$1', [codigo]);
+  // Cast explícito para evitar problemas de tipo
+  const res = await pool.query('SELECT * FROM produtos WHERE codigo = $1::text', [codigo]);
   return res.rows[0];
 }
 
 // Lista insumos vinculados a um produto usando o código
 async function listarInsumosProduto(codigo) {
+  // Cast explícito para o parâmetro de código
   const query = `
     SELECT pi.id,
            mp.nome,
@@ -56,8 +106,7 @@ async function listarInsumosProduto(codigo) {
            mp.processo
       FROM produtos_insumos pi
       JOIN materia_prima mp ON mp.id = pi.insumo_id
-      JOIN produtos p ON p.codigo = $1
-     WHERE pi.produto_codigo = $1
+     WHERE pi.produto_codigo = $1::text
      ORDER BY mp.processo, mp.nome`;
   const res = await pool.query(query, [codigo]);
   return res.rows;
@@ -76,7 +125,7 @@ async function listarItensProcessoProduto(codigo, etapaId, busca = '') {
        FROM materia_prima mp
        JOIN produtos_insumos pi ON pi.insumo_id = mp.id
        JOIN etapas_producao ep ON ep.id = $2
-      WHERE pi.produto_codigo = $1
+      WHERE pi.produto_codigo = $1::text
         AND mp.processo = ep.nome
         AND mp.nome ILIKE $3
       ORDER BY mp.nome ASC`,

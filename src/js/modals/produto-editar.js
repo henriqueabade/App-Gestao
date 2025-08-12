@@ -286,7 +286,7 @@
   (async () => {
     try{
       // Carga inicial: produto, etapas e insumos
-      const dados = await window.electronAPI.obterProduto(produto.codigo);
+      const { produto: dados, itens: itensData } = await window.electronAPI.listarDetalhesProduto({ produtoCodigo: produto.codigo, produtoId: produto.id });
       if(dados){
         if(dados.nome) nomeInput.value = dados.nome;
         if(dados.codigo) codigoInput.value = dados.codigo;
@@ -314,14 +314,6 @@
       }
       const etapas = await window.electronAPI.listarEtapasProducao();
       etapaSelect.innerHTML = etapas.map(e => `<option value="${e.id}">${e.nome}</option>`).join('');
-      const produtoCodigo = (dados && dados.codigo) || produto.codigo;
-      let itensData = [];
-      try {
-        itensData = await window.electronAPI.listarInsumosProduto(produtoCodigo);
-      } catch(err) {
-        console.error('Erro ao listar insumos do produto', err);
-        showError('Erro ao carregar itens');
-      }
       renderItens(itensData);
     } catch(err){
       console.error('Erro ao carregar dados do produto', err);

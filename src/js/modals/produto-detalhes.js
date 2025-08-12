@@ -18,12 +18,13 @@
     if(titulo) titulo.textContent = `DETALHE DE ESTOQUE – ${item.nome || ''}`;
     const codigoEl = document.getElementById('codigoPeca');
     if(codigoEl) codigoEl.textContent = `Código da Peça: ${item.codigo || ''}`; // subtítulo mostra código da peça
-    carregarDetalhes(item.id);
+    carregarDetalhes(item.codigo, item.id);
   }
 
-  async function carregarDetalhes(id){
+  async function carregarDetalhes(codigo, id){
     try {
-      const dados = await window.electronAPI.listarDetalhesProduto(id);
+      // Ajuste: envia produtoCodigo (string) e produtoId (int)
+      const { lotes: dados } = await window.electronAPI.listarDetalhesProduto({ produtoCodigo: codigo, produtoId: id });
       const tbody = document.getElementById('detalhesTableBody');
       if(!tbody) return;
       tbody.innerHTML = '';
@@ -79,21 +80,21 @@
       try {
         await window.electronAPI.atualizarLoteProduto({ id: dados.id, quantidade: novaQtd });
         showToast('Quantidade atualizada', 'success');
-        carregarDetalhes(item.id);
+        carregarDetalhes(item.codigo, item.id);
         carregarProdutos();
       } catch (err) {
         console.error(err);
         showToast('Erro ao atualizar quantidade', 'error');
       }
     });
-    cancelBtn.addEventListener('click', () => carregarDetalhes(item.id));
+    cancelBtn.addEventListener('click', () => carregarDetalhes(item.codigo, item.id));
   }
 
   function excluirLote(id) {
     window.loteExcluir = {
       id,
       reload: () => {
-        carregarDetalhes(item.id);
+        carregarDetalhes(item.codigo, item.id);
         carregarProdutos();
       }
     };
