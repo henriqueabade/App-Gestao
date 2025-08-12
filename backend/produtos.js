@@ -38,12 +38,14 @@ async function listarDetalhesProduto(produtoId) {
   return res.rows;
 }
 
-async function obterProduto(id) {
-  const res = await pool.query('SELECT * FROM produtos WHERE id=$1', [id]);
+// Busca produto pelo código
+async function obterProduto(codigo) {
+  const res = await pool.query('SELECT * FROM produtos WHERE codigo=$1', [codigo]);
   return res.rows[0];
 }
 
-async function listarInsumosProduto(id) {
+// Lista insumos vinculados a um produto usando o código
+async function listarInsumosProduto(codigo) {
   const query = `
     SELECT pi.id,
            mp.nome,
@@ -53,9 +55,9 @@ async function listarInsumosProduto(id) {
            mp.processo
       FROM produtos_insumos pi
       JOIN materia_prima mp ON mp.id = pi.insumo_id
-     WHERE pi.produto_id = $1
+     WHERE pi.produto_codigo = $1
      ORDER BY mp.processo, mp.nome`;
-  const res = await pool.query(query, [id]);
+  const res = await pool.query(query, [codigo]);
   return res.rows;
 }
 
@@ -112,7 +114,7 @@ async function excluirLoteProduto(id) {
 }
 
 // Atualiza percentuais e insumos do produto em uma única transação
-async function salvarProdutoDetalhado(id, produto, itens) {
+async function salvarProdutoDetalhado(codigoOriginal, produto, itens) {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -125,11 +127,14 @@ async function salvarProdutoDetalhado(id, produto, itens) {
       pct_comissao,
       pct_imposto,
       preco_base,
-      preco_venda
+      preco_venda,
+      nome,
+      codigo,
+      ncm
     } = produto;
 
-    await client.query(
-      `UPDATE produtos
+    // Monta consulta dinâmica para atualizar campos obrigatórios e opcionais
+    let query = `UPDATE produtos
           SET pct_fabricacao=$1,
               pct_acabamento=$2,
               pct_montagem=$3,
@@ -139,21 +144,43 @@ async function salvarProdutoDetalhado(id, produto, itens) {
               pct_imposto=$7,
               preco_base=$8,
               preco_venda=$9,
-              data=NOW()
-       WHERE id=$10`,
-      [
-        pct_fabricacao,
-        pct_acabamento,
-        pct_montagem,
-        pct_embalagem,
-        pct_markup,
-        pct_comissao,
-        pct_imposto,
-        preco_base,
-        preco_venda,
-        id
-      ]
-    );
+              data=NOW()`;
+    const params = [
+      pct_fabricacao,
+      pct_acabamento,
+      pct_montagem,
+      pct_embalagem,
+      pct_markup,
+      pct_comissao,
+      pct_imposto,
+      preco_base,
+      preco_venda
+    ];
+    if (nome !== undefined) {
+      query += `, nome=$${params.length + 1}`;
+      params.push(nome);
+    }
+    if (codigo !== undefined) {
+      query += `, codigo=$${params.length + 1}`;
+      params.push(codigo);
+    }
+    if (ncm !== undefined) {
+      query += `, ncm=$${params.length + 1}`;
+      params.push(ncm);
+    }
+    query += ` WHERE codigo=$${params.length + 1}`;
+    params.push(codigoOriginal);
+
+    await client.query(query, params);
+
+    // Se o código foi alterado, atualiza relacionamentos
+    const codigoDestino = codigo !== undefined ? codigo : codigoOriginal;
+    if (codigo !== undefined && codigo !== codigoOriginal) {
+      await client.query(
+        'UPDATE produtos_insumos SET produto_codigo=$1 WHERE produto_codigo=$2',
+        [codigo, codigoOriginal]
+      );
+    }
 
     // Processa exclusões
     for (const del of itens.deletados || []) {
@@ -166,8 +193,8 @@ async function salvarProdutoDetalhado(id, produto, itens) {
     // Processa inserções
     for (const ins of itens.inseridos || []) {
       await client.query(
-        'INSERT INTO produtos_insumos (produto_id, insumo_id, quantidade) VALUES ($1,$2,$3)',
-        [id, ins.insumo_id, ins.quantidade]
+        'INSERT INTO produtos_insumos (produto_codigo, insumo_id, quantidade) VALUES ($1,$2,$3)',
+        [codigoDestino, ins.insumo_id, ins.quantidade]
       );
     }
 

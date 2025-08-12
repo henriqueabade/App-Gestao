@@ -7,17 +7,17 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Módulo de Matéria-Prima
   listarMateriaPrima: (filtro) => ipcRenderer.invoke('listar-materia-prima', { filtro }),
   listarProdutos: () => ipcRenderer.invoke('listar-produtos'),
-  obterProduto: (id) => ipcRenderer.invoke('obter-produto', id),
+  obterProduto: (codigo) => ipcRenderer.invoke('obter-produto', codigo),
   adicionarProduto: (dados) => ipcRenderer.invoke('adicionar-produto', dados),
   atualizarProduto: (id, dados) => ipcRenderer.invoke('atualizar-produto', { id, dados }),
   excluirProduto: (id) => ipcRenderer.invoke('excluir-produto', id),
   listarDetalhesProduto: (id) => ipcRenderer.invoke('listar-detalhes-produto', id),
   atualizarLoteProduto: (dados) => ipcRenderer.invoke('atualizar-lote-produto', dados),
   excluirLoteProduto: (id) => ipcRenderer.invoke('excluir-lote-produto', id),
-  listarInsumosProduto: (id) => ipcRenderer.invoke('listar-insumos-produto', id),
+  listarInsumosProduto: (codigo) => ipcRenderer.invoke('listar-insumos-produto', codigo),
   listarEtapasProducao: () => ipcRenderer.invoke('listar-etapas-producao'),
-  salvarProdutoDetalhado: (id, produto, itens) =>
-    ipcRenderer.invoke('salvar-produto-detalhado', { id, produto, itens }),
+  salvarProdutoDetalhado: (codigo, produto, itens) =>
+    ipcRenderer.invoke('salvar-produto-detalhado', { codigo, produto, itens }),
   adicionarMateriaPrima: (dados) => ipcRenderer.invoke('adicionar-materia-prima', dados),
   atualizarMateriaPrima: (id, dados) => ipcRenderer.invoke('atualizar-materia-prima', { id, dados }),
   excluirMateriaPrima: (id) => ipcRenderer.invoke('excluir-materia-prima', id),
