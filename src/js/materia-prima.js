@@ -146,10 +146,27 @@ let currentPopup = null;
 let infoMouseEnter;
 let infoMouseLeave;
 
+function extractCor(nome, cor) {
+    return (cor || (nome && nome.split('/')[1]) || '').trim();
+}
+
 function createPopupContent(item) {
+    const cor = extractCor(item.nome, item.cor);
+    const corCss = window.resolveColorCss ? window.resolveColorCss(cor) : cor;
     const infinitoBadge = item.infinito
         ? `<span class="badge badge-sim">✔ Sim</span>`
         : `<span class="badge badge-nao">✖ Não</span>`;
+    const corSection = cor ? `
+        <div class="popup-info-grid">
+          <div>
+            <p class="popup-info-label">Cor:</p>
+            <div class="popup-color-wrapper">
+              <p class="popup-info-value">${cor}</p>
+              <div class="popup-color-bar" style="background-color: ${corCss};"></div>
+            </div>
+          </div>
+          <div></div>
+        </div>` : '';
 
     return `
     <div class="popup-card">
@@ -178,6 +195,7 @@ function createPopupContent(item) {
             <p class="popup-info-value">${item.processo || ''}</p>
           </div>
         </div>
+        ${corSection}
         <div class="popup-description-section">
           <p class="popup-info-label">Descrição Técnica:</p>
           <p class="popup-description-text">${item.descricao || ''}</p>
