@@ -41,6 +41,25 @@ function initMateriaPrima() {
     document.getElementById('zeroStock')?.addEventListener('change', aplicarFiltros);
     document.getElementById('btnNovoInsumo')?.addEventListener('click', abrirNovoInsumo);
 
+    const infoIcon = document.getElementById('totaisInfoIcon');
+    const popover = document.getElementById('totaisPopover');
+    if (infoIcon && popover) {
+        const mostrar = () => {
+            const rect = infoIcon.getBoundingClientRect();
+            popover.style.left = `${rect.left}px`;
+            popover.style.top = `${rect.bottom + 8}px`;
+            popover.classList.add('show');
+        };
+        const ocultar = () => popover.classList.remove('show');
+        infoIcon.addEventListener('mouseenter', mostrar);
+        infoIcon.addEventListener('mouseleave', () => {
+            setTimeout(() => {
+                if (!popover.matches(':hover')) ocultar();
+            }, 100);
+        });
+        popover.addEventListener('mouseleave', ocultar);
+    }
+
     carregarMateriais();
 }
 
@@ -81,11 +100,13 @@ function aplicarFiltros() {
     const zeroEstoque = document.getElementById('zeroStock')?.checked;
 
     let filtrados = todosMateriais.filter(m => {
+        const isCritical = !m.infinito && Number(m.quantidade) < 10;
         const matchTermo = !termo ||
             (m.nome || '').toLowerCase().includes(termo) ||
             (m.categoria || '').toLowerCase().includes(termo) ||
             (m.processo || '').toLowerCase().includes(termo) ||
-            (m.infinito ? 'infinito'.includes(termo) : false);
+            (m.infinito ? 'infinito'.includes(termo) : false) ||
+            (isCritical && ['acabando', 'critico', 'crítico'].some(k => k.includes(termo)));
         const matchProc = !processo || m.processo === processo;
         const matchCat = !categoria || m.categoria === categoria;
         return matchTermo && matchProc && matchCat;
@@ -117,21 +138,39 @@ function renderTotais(lista) {
 
     const infinitos = lista.filter(m => m.infinito).length;
     const acabando = lista.filter(m => !m.infinito && Number(m.quantidade) < 10).length;
-    const processos = {};
+
+    const processos = { 'Acabamento': 0, 'Embalagem': 0, 'Marcenaria': 0, 'Montagem': 0 };
     lista.forEach(m => {
-        if (m.processo) {
-            processos[m.processo] = (processos[m.processo] || 0) + 1;
-        }
+        const p = (m.processo || '').toLowerCase();
+        if (p === 'acabamento') processos.Acabamento++;
+        if (p === 'embalagem') processos.Embalagem++;
+        if (p === 'marcenaria') processos.Marcenaria++;
+        if (p === 'montagem') processos.Montagem++;
     });
 
-    const tags = [];
-    tags.push(`<span class="badge-success px-3 py-1 rounded-full text-xs font-medium">Infinitos: ${infinitos}</span>`);
-    tags.push(`<span class="badge-danger px-3 py-1 rounded-full text-xs font-medium">Acabando: ${acabando}</span>`);
-    Object.keys(processos).sort().forEach(p => {
-        tags.push(`<span class="badge-neutral px-3 py-1 rounded-full text-xs font-medium">${p}: ${processos[p]}</span>`);
-    });
+    container.innerHTML = `
+        <span class="badge-success px-3 py-1 rounded-full text-xs font-medium">Infinitos: ${infinitos}</span>
+        <span class="badge-danger px-3 py-1 rounded-full text-xs font-medium">Acabando: ${acabando}</span>`;
 
-    container.innerHTML = tags.join('');
+    updateProcessPopover(processos);
+}
+
+function getProcessBadgeClass(proc) {
+    switch ((proc || '').toLowerCase()) {
+        case 'acabamento': return 'badge-acabamento';
+        case 'embalagem': return 'badge-embalagem';
+        case 'marcenaria': return 'badge-marcenaria';
+        case 'montagem': return 'badge-montagem';
+        default: return 'badge-neutral';
+    }
+}
+
+function updateProcessPopover(processos) {
+    const container = document.getElementById('processTags');
+    if (!container) return;
+    container.innerHTML = Object.entries(processos)
+        .map(([proc, qtd]) => `<span class="badge ${getProcessBadgeClass(proc)}">${proc}: ${qtd}</span>`)
+        .join('');
 }
 
 function formatDate(dateStr) {
@@ -150,6 +189,10 @@ function createPopupContent(item) {
     const infinitoBadge = item.infinito
         ? `<span class="badge badge-sim">✔ Sim</span>`
         : `<span class="badge badge-nao">✖ Não</span>`;
+
+    const processoBadge = item.processo
+        ? `<span class="badge ${getProcessBadgeClass(item.processo)}">${item.processo}</span>`
+        : '<span class="popup-info-value">-</span>';
 
     return `
     <div class="popup-card">
@@ -175,7 +218,7 @@ function createPopupContent(item) {
           </div>
           <div>
             <p class="popup-info-label">Processo Atual:</p>
-            <p class="popup-info-value">${item.processo || ''}</p>
+            ${processoBadge}
           </div>
         </div>
         <div class="popup-description-section">
