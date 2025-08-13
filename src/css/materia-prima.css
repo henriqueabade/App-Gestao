@@ -135,6 +135,7 @@ body {
     margin-top: 1vw;
     width: 100%;
     justify-content: flex-start;
+    flex-wrap: wrap; /* Permite contração para evitar sobreposição */
 }
 
 @media (min-width: 768px) {
@@ -364,5 +365,6 @@ body {
 .toast-error { background-color: #dc2626; }
 
 #onoff {
-    margin-left: -6vw;
+    margin-left: 0; /* Evita sobreposição do toggle com a barra lateral */
+    flex-shrink: 1;
 }
