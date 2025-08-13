@@ -151,6 +151,11 @@ body {
     height: 48px;
 }
 
+/* Permite que a barra de busca encolha para evitar sobreposição quando a sidebar estiver ativa */
+#materiaPrimaSearch {
+    min-width: 1vw;
+}
+
 /* Ícone de informações e popover */
 .info-icon {
     width: 20px;
