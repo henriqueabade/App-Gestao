@@ -81,6 +81,26 @@ body {
     color: var(--color-violet);
 }
 
+.badge-acabamento {
+    background: rgba(182, 160, 62, 0.2);
+    color: var(--color-primary);
+}
+
+.badge-embalagem {
+    background: rgba(138, 167, 243, 0.2);
+    color: var(--color-blue);
+}
+
+.badge-marcenaria {
+    background: rgba(162, 255, 166, 0.2);
+    color: var(--color-green);
+}
+
+.badge-montagem {
+    background: rgba(106, 21, 44, 0.2);
+    color: var(--color-bordeaux);
+}
+
 .animate-fade-in-up {
     animation: fadeInUp 0.6s ease-out forwards;
     opacity: 0;
@@ -145,6 +165,25 @@ body {
 .info-icon:hover {
     background: rgba(255, 255, 255, 0.445);
     transform: scale(1.1);
+}
+
+.resumo-popover {
+    position: absolute;
+    z-index: 50;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.555);
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(8px);
+    transition: opacity 200ms ease, transform 200ms ease;
+    pointer-events: none;
+    background: #310017c5;
+}
+
+.resumo-popover.show {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
+    pointer-events: auto;
 }
 
 /* Card principal do popup */
@@ -270,10 +309,33 @@ body {
 .btn-success { background: var(--color-green); color:#000; transition: all 150ms ease; }
 .btn-success:hover { background: rgba(162,255,166,0.8); transform: scale(1.05); }
 .btn-success:active { transform: scale(0.95); }
-.component-toggle { appearance: none; width:48px; height:24px; background: rgba(255,255,255,0.2); border-radius:12px; position:relative; cursor:pointer; transition: all 150ms ease; }
-.component-toggle::after { content:''; position:absolute; top:2px; left:2px; width:20px; height:20px; background:white; border-radius:50%; transition: all 150ms ease; }
-.component-toggle:checked { background: var(--color-primary); }
-.component-toggle:checked::after { transform: translateX(24px); }
+.toggle {
+    appearance: none;
+    width: 3rem;
+    height: 1.5rem;
+    background: var(--color-bordeaux);
+    border-radius: 9999px;
+    position: relative;
+    cursor: pointer;
+    transition: background 150ms ease;
+}
+.toggle::before {
+    content: "";
+    position: absolute;
+    top: 0.125rem;
+    left: 0.125rem;
+    width: 1.25rem;
+    height: 1.25rem;
+    background: white;
+    border-radius: 9999px;
+    transition: transform 150ms ease;
+}
+.toggle:checked {
+    background: var(--color-primary);
+}
+.toggle:checked::before {
+    transform: translateX(1.5rem);
+}
 .icon-only { width:32px; height:32px; display:flex; align-items:center; justify-content:center; border-radius:8px; font-size:16px; }
 .animate-modalFade { animation: modalFade 0.3s ease-out forwards; }
 .slide-in { animation: slideIn 0.3s ease-out forwards; }
