@@ -27,7 +27,7 @@
 
         <!-- Filters & Totals -->
         <div class="glass-surface rounded-xl p-6 mb-6 animate-fade-in-up">
-            <div class="filter-bar flex flex-col md:flex-row md:flex-wrap xl:flex-nowrap items-center">
+            <div class="filter-bar flex flex-col md:flex-row md:flex-wrap items-center w-full">
                 <!-- Search -->
                 <div class="flex-1 min-w-[250px]">
                     <label class="block text-sm font-medium mb-2 text-white">Buscar Insumo</label>
@@ -51,7 +51,7 @@
                 </div>
 
                 <!-- Totais -->
-                <div class="flex flex-col">
+                <div class="flex flex-col flex-1 min-w-[200px]">
                     <label class="block text-sm font-medium mb-1 text-white flex items-center gap-2">Totais por Tipo <i id="totaisInfoIcon" class="info-icon"></i></label>
                     <div id="totaisTags" class="flex flex-wrap gap-2">
                         <!-- Tags geradas dinamicamente -->
@@ -59,7 +59,7 @@
                 </div>
 
                 <!-- Actions -->
-                <div id="bt-actions" class="flex items-center gap-2">
+                <div id="bt-actions" class="flex items-center gap-2 w-full justify-center md:w-auto md:justify-end">
                     <div class="filter-toggle flex flex-col items-center space-y-1">
                         <label for="zeroStock" class="text-sm font-medium text-white">0 Estoque</label>
                         <input type="checkbox" id="zeroStock" class="toggle" />
