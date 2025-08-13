@@ -25,65 +25,61 @@
 
         <!-- Filters -->
         <div class="glass-surface rounded-xl p-6 mb-6 animate-fade-in-up">
-            <div class="filter-bar">
+            <div class="filter-bar flex flex-col md:flex-row md:flex-wrap xl:flex-nowrap items-center">
                 <!-- Search -->
-                <div class="filter-field flex-1 min-w-[200px]">
+                <div class="flex-1 min-w-[250px]">
                     <label class="block text-sm font-medium mb-2 text-white">Buscar</label>
-                    <input id="filterSearch" type="text" placeholder="Código ou Nome do Produto" class="input-glass text-white rounded-md px-4 h-12 w-full placeholder-white/50">
+                    <input id="filterSearch" type="text" placeholder="Código ou Nome do Produto" class="input-glass text-white rounded-md px-4 py-3 w-full placeholder-white/50">
                 </div>
 
                 <!-- Category -->
-                <div class="filter-field">
+                <div class="flex-1 min-w-[200px]">
                     <label class="block text-sm font-medium mb-2 text-white">Categoria</label>
-                    <select id="filterCategory" class="input-glass text-white rounded-md px-4 h-12 w-full">
+                    <select id="filterCategory" class="input-glass text-white rounded-md px-4 py-3 w-full">
                         <option value="">Todas as Categorias</option>
                     </select>
                 </div>
 
                 <!-- Status -->
-                <div class="filter-field">
+                <div class="flex-1 min-w-[200px]">
                     <label class="block text-sm font-medium mb-2 text-white">Status</label>
-                    <select id="filterStatus" class="input-glass text-white rounded-md px-4 h-12 w-full">
+                    <select id="filterStatus" class="input-glass text-white rounded-md px-4 py-3 w-full">
                         <option value="">Todos</option>
                     </select>
                 </div>
 
-                <!-- Price + Actions -->
-                <div class="price-group">
-                    <div class="price-row">
-                        <!-- Price Min -->
-                        <div class="filter-field price-field">
-                            <label class="block text-sm font-medium mb-2 text-white">Preço Min.</label>
-                            <div class="relative">
-                                <span class="absolute left-3 top-1/2 transform -translate-y-1/2 text-white/70">R$</span>
-                                <input id="filterPriceMin" type="number" class="input-glass text-white rounded-md pl-10 pr-4 h-12 w-full placeholder-white/50">
-                            </div>
-                        </div>
+                <!-- Price Min -->
+                <div class="flex-1 min-w-[150px]">
+                    <label class="block text-sm font-medium mb-2 text-white">Preço Min.</label>
+                    <div class="relative">
+                        <span class="absolute left-3 top-1/2 transform -translate-y-1/2 text-white/70">R$</span>
+                        <input id="filterPriceMin" type="number" class="input-glass text-white rounded-md pl-10 pr-4 py-3 w-full placeholder-white/50">
+                    </div>
+                </div>
 
-                        <!-- Price Max -->
-                        <div class="filter-field price-field">
-                            <label class="block text-sm font-medium mb-2 text-white">Preço Máx.</label>
-                            <div class="relative">
-                                <span class="absolute left-3 top-1/2 transform -translate-y-1/2 text-white/70">R$</span>
-                                <input id="filterPriceMax" type="number" class="input-glass text-white rounded-md pl-10 pr-4 h-12 w-full placeholder-white/50">
-                            </div>
-                        </div>
+                <!-- Price Max -->
+                <div class="flex-1 min-w-[150px]">
+                    <label class="block text-sm font-medium mb-2 text-white">Preço Máx.</label>
+                    <div class="relative">
+                        <span class="absolute left-3 top-1/2 transform -translate-y-1/2 text-white/70">R$</span>
+                        <input id="filterPriceMax" type="number" class="input-glass text-white rounded-md pl-10 pr-4 py-3 w-full placeholder-white/50">
+                    </div>
+                </div>
 
-                        <!-- Zero Stock Toggle -->
-                    <div class="filter-toggle flex flex-col items-center space-y-1">
+                <!-- Zero Stock Toggle -->
+                <div class="filter-toggle flex flex-col items-center space-y-1">
                     <label for="zeroStock" class="text-sm font-medium text-white">0 Estoque</label>
                     <input type="checkbox" id="zeroStock" class="toggle" />
-                    </div>
+                </div>
 
-                    <!-- Action Buttons -->
-                    <div id="bt-actions" class="flex items-center gap-2">
-                        <button id="btnFiltrar" class="btn-secondary text-white rounded-md px-4 py-3 text-sm font-medium">
-                            Filtrar
-                        </button>
-                        <button id="btnLimpar" class="btn-warning text-white rounded-md px-4 py-3 text-sm font-medium">
-                            Limpar
-                        </button>
-                    </div>
+                <!-- Action Buttons -->
+                <div id="bt-actions" class="flex items-center gap-2">
+                    <button id="btnFiltrar" class="btn-secondary text-white rounded-md px-4 py-3 text-sm font-medium">
+                        Filtrar
+                    </button>
+                    <button id="btnLimpar" class="btn-warning text-white rounded-md px-4 py-3 text-sm font-medium">
+                        Limpar
+                    </button>
                 </div>
             </div>
         </div>

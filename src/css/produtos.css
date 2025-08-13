@@ -180,44 +180,22 @@ body {
     }
 }
 
-/* Barra de filtros */
+/* Barra de filtros responsiva */
 .filter-bar {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 1rem;
-    align-items: flex-start;
+    gap: 24px;
 }
-.filter-field {
-    display: flex;
-    flex-direction: column;
-    max-width: 22rem;
+
+@media (min-width: 1280px) {
+    .filter-bar {
+        flex-wrap: nowrap;
+    }
 }
-.filter-field input,
-.filter-field select {
-    height: 3rem;
-}
-.price-group {
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-}
-.price-row {
-    display: flex;
-    gap: 1rem;
-    align-items: flex-start;
-}
-.price-field {
-    width: 9rem;
-}
-.filter-toggle {
-    margin-top: 1.75rem;
-}
-.filter-actions {
-    display: flex;
-    gap: 0.5rem;
-}
-.filter-actions button {
-    height: 3rem;
+
+@media (max-width: 767px) {
+    .filter-bar {
+        flex-direction: column;
+        align-items: stretch;
+    }
 }
 .toggle {
     appearance: none;
@@ -246,17 +224,6 @@ body {
 .toggle:checked::before {
     transform: translateX(1.5rem);
 }
-@media (max-width: 960px) {
-    .filter-bar {
-        flex-direction: column;
-    }
-    .price-row {
-        flex-direction: column;
-    }
-    .price-field {
-        width: 100%;
-    }
-}
 
 /* Ajusta altura máxima da tabela para compensar filtros altos e evitar scroll desnecessário */
 .table-scroll {
@@ -264,7 +231,7 @@ body {
 }
 
 #bt-actions {
-    margin-top: 1.5vw;
+    margin-top: 1vw;
 }
 
 /* Ícone de informações e popover */
