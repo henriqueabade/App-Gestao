@@ -197,6 +197,18 @@ async function excluirProduto(id) {
 }
 
 /**
+ * Insere um novo lote para o produto
+ */
+async function inserirLoteProduto({ produtoId, etapaId, ultimoInsumoId, quantidade }) {
+  const res = await pool.query(
+    `INSERT INTO produtos_em_cada_ponto (produto_id, etapa_id, ultimo_insumo_id, quantidade, data_hora_completa)
+     VALUES ($1::int, $2::int, $3::int, $4::int, NOW()) RETURNING *`,
+    [produtoId, etapaId, ultimoInsumoId, quantidade]
+  );
+  return res.rows[0];
+}
+
+/**
  * Atualiza um lote (quantidade + data)
  */
 async function atualizarLoteProduto(id, quantidade) {
@@ -325,6 +337,7 @@ module.exports = {
   adicionarProduto,
   atualizarProduto,
   excluirProduto,
+  inserirLoteProduto,
   atualizarLoteProduto,
   excluirLoteProduto,
   salvarProdutoDetalhado
