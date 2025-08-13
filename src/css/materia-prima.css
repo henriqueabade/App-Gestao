@@ -97,8 +97,8 @@ body {
 }
 
 .badge-montagem {
-    background: rgba(106, 21, 44, 0.2);
-    color: var(--color-bordeaux);
+    background: rgba(245, 158, 11, 0.2);
+    color: #F59E0B;
 }
 
 .animate-fade-in-up {
@@ -140,6 +140,12 @@ body {
     margin-top: 1vw;
 }
 
+.filter-bar input:not([type="checkbox"]),
+.filter-bar select,
+.filter-bar button {
+    height: 48px;
+}
+
 /* Ícone de informações e popover */
 .info-icon {
     width: 20px;
@@ -173,7 +179,7 @@ body {
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.555);
     opacity: 0;
     visibility: hidden;
-    transform: translateY(8px);
+    transform: translateY(-8px);
     transition: opacity 200ms ease, transform 200ms ease;
     pointer-events: none;
     background: #310017c5;
