@@ -7,7 +7,7 @@ function setup() {
   db.public.none(`CREATE TABLE produtos_em_cada_ponto (
     id serial primary key,
     produto_id int,
-    etapa_id int,
+    etapa_id text,
     ultimo_insumo_id int,
     quantidade int,
     data_hora_completa timestamp
@@ -30,12 +30,12 @@ test('inserirLoteProduto insere e retorna o lote criado', async () => {
   const { inserirLoteProduto, pool } = setup();
   const lote = await inserirLoteProduto({
     produtoId: 1,
-    etapaId: 2,
+    etapaId: 'Corte',
     ultimoInsumoId: 3,
     quantidade: 5
   });
   assert.strictEqual(lote.produto_id, 1);
-  assert.strictEqual(lote.etapa_id, 2);
+  assert.strictEqual(lote.etapa_id, 'Corte');
   assert.strictEqual(lote.ultimo_insumo_id, 3);
   assert.strictEqual(lote.quantidade, 5);
   assert(lote.data_hora_completa instanceof Date);
@@ -45,8 +45,8 @@ test('inserirLoteProduto insere e retorna o lote criado', async () => {
 
 test('inserirLoteProduto permite múltiplas inserções', async () => {
   const { inserirLoteProduto, pool } = setup();
-  await inserirLoteProduto({ produtoId: 1, etapaId: 1, ultimoInsumoId: 1, quantidade: 1 });
-  await inserirLoteProduto({ produtoId: 2, etapaId: 2, ultimoInsumoId: 2, quantidade: 2 });
+  await inserirLoteProduto({ produtoId: 1, etapaId: 'Corte', ultimoInsumoId: 1, quantidade: 1 });
+  await inserirLoteProduto({ produtoId: 2, etapaId: 'Costura', ultimoInsumoId: 2, quantidade: 2 });
   const rows = await pool.query('SELECT quantidade FROM produtos_em_cada_ponto ORDER BY id');
   assert.deepStrictEqual(rows.rows.map(r => r.quantidade), [1, 2]);
 });

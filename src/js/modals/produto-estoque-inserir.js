@@ -23,7 +23,7 @@
     try{
       const processos = await window.electronAPI.listarEtapasProducao();
       processoSelect.innerHTML = '<option value="">Selecione um processo…</option>' +
-        processos.map(p => `<option value="${p.id}">${p.nome}</option>`).join('');
+        processos.map(p => `<option value="${p.nome}" data-id="${p.id}">${p.nome}</option>`).join('');
     }catch(err){
       console.error('Erro ao listar processos', err);
     }
@@ -33,11 +33,11 @@
     itemInput.disabled = true;
     itemMensagem.textContent = '';
     itemOptions.innerHTML = '';
-    const etapaId = processoSelect.value;
+    const etapa = processoSelect.value;
     const codigo = window.produtoDetalhes?.codigo;
-    if(!etapaId || !codigo){ itemInput.disabled = true; return; }
+    if(!etapa || !codigo){ itemInput.disabled = true; return; }
     try{
-      const itens = await window.electronAPI.listarItensProcessoProduto(codigo, etapaId, termo);
+      const itens = await window.electronAPI.listarItensProcessoProduto(codigo, etapa, termo);
       if(itens.length){
         itemOptions.innerHTML = itens.map(i => `<option value="${i.nome}" data-id="${i.id}"></option>`).join('');
       }else{
@@ -65,18 +65,18 @@
   if(form){
     form.addEventListener('submit', async e => {
       e.preventDefault();
-      const etapaId = processoSelect.value;
+      const etapa = processoSelect.value;
       const itemNome = itemInput.value.trim();
       const option = Array.from(itemOptions.querySelectorAll('option')).find(o => o.value === itemNome);
       const itemId = option?.dataset.id;
       const quantidade = Number(quantidadeInput.value);
-      if(!etapaId || !itemId || !quantidade){
+      if(!etapa || !itemId || !quantidade){
         showToast('Preencha todos os campos', 'error');
         return;
       }
       const produto = window.produtoDetalhes;
       if(!produto) return;
-      const existente = produto.lotes?.find(l => String(l.etapa) === String(etapaId) && String(l.ultimo_insumo_id) === String(itemId));
+      const existente = produto.lotes?.find(l => String(l.etapa) === String(etapa) && String(l.ultimo_insumo_id) === String(itemId));
       if(existente){
         window.somarEstoqueInfo = {
           existing: existente,
@@ -97,7 +97,7 @@
       try{
         await window.electronAPI.inserirLoteProduto({
           produtoId: produto.id,
-          etapaId,
+          etapaId: etapa,
           ultimoInsumoId: itemId,
           quantidade
         });
