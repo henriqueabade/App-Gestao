@@ -60,3 +60,14 @@ Ao rodar o instalador, ele verifica se o aplicativo já está presente no sistem
 Se a versão instalada for igual ou mais recente, a instalação é cancelada e
 é exibida uma notificação. Se a versão nova for superior, o instalador
 continua e realiza a atualização automaticamente.
+
+## Personalizando cores
+
+O arquivo `src/utils/colors.js` contém um mapa com cerca de 140 nomes de cores CSS.
+Para utilizar uma cor adicional ou substituir um valor existente, edite esse arquivo e adicione a entrada desejada ao objeto `colorMap`:
+
+```js
+colorMap.meucustom = '#123abc';
+```
+
+As chaves são normalizadas em minúsculas e sem espaços ou hifens, portanto use esse formato ao adicionar novas cores.
