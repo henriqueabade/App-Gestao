@@ -238,12 +238,13 @@ const colorMap = {
     prata: '#c0c0c0',
     dourado: '#ffd700',
     magenta: '#ff00ff',
-    ciano: '#00ffff'
+    ciano: '#00ffff',
+    offwhite: '#f5f5f5'
 };
 
 function resolveColorCss(cor) {
     const corSample = (cor.split('/')[1] || cor).trim();
-    const key = corSample.toLowerCase().replace(/\s+/g, '');
+    const key = corSample.toLowerCase().replace(/[\s-]+/g, '');
     return colorMap[key] || corSample;
 }
 
