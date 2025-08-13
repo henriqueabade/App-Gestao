@@ -165,10 +165,26 @@ const colorMap = {
   offwhite: '#f5f5f5',
 };
 
-function resolveColorCss(cor = "") {
-  const corSample = (cor.split("/")[1] || cor).trim();
-  const normalizedKey = corSample.toLowerCase().replace(/[\s-]+/g, "");
-  return colorMap[normalizedKey] || corSample;
+const nearest = require('nearest-color').from(colorMap);
+
+/**
+ * Resolve a cor para um valor CSS hexadecimal.
+ * Entradas desconhecidas resultam na cor mais próxima disponível.
+ */
+function resolveColorCss(cor = '') {
+  const corSample = (cor.split('/')[1] || cor).trim();
+  const key = corSample.toLowerCase().replace(/[\s-]+/g, '');
+  const mapped = colorMap[key];
+  if (mapped) return mapped;
+  try {
+    return nearest(corSample).value;
+  } catch (err) {
+    return corSample;
+  }
 }
 
-window.resolveColorCss = resolveColorCss;
+if (typeof window !== 'undefined') {
+  window.resolveColorCss = resolveColorCss;
+}
+
+module.exports = { resolveColorCss };
