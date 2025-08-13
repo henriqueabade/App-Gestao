@@ -28,6 +28,7 @@ const {
   listarInsumosProduto,
   listarEtapasProducao,
   listarItensProcessoProduto,
+  inserirLoteProduto,
   atualizarLoteProduto,
   excluirLoteProduto,
   salvarProdutoDetalhado
@@ -388,6 +389,9 @@ ipcMain.handle('listar-detalhes-produto', async (_e, { produtoCodigo, produtoId 
     console.error('Erro ao listar detalhes do produto:', err);
     throw err;
   }
+});
+ipcMain.handle('inserir-lote-produto', async (_e, dados) => {
+  return inserirLoteProduto(dados);
 });
 ipcMain.handle('atualizar-lote-produto', async (_e, { id, quantidade }) => {
   return atualizarLoteProduto(id, quantidade);
