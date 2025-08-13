@@ -38,6 +38,7 @@ function initMateriaPrima() {
     document.getElementById('filtroCategoria')?.addEventListener('change', aplicarFiltros);
     document.getElementById('btnFiltrar')?.addEventListener('click', aplicarFiltros);
     document.getElementById('btnLimpar')?.addEventListener('click', limparFiltros);
+    document.getElementById('zeroStock')?.addEventListener('change', aplicarFiltros);
     document.getElementById('btnNovoInsumo')?.addEventListener('click', abrirNovoInsumo);
 
     carregarMateriais();
@@ -77,8 +78,9 @@ function aplicarFiltros() {
     const termo = (document.getElementById('materiaPrimaSearch')?.value || '').toLowerCase();
     const processo = document.getElementById('filtroProcesso')?.value || '';
     const categoria = document.getElementById('filtroCategoria')?.value || '';
+    const zeroEstoque = document.getElementById('zeroStock')?.checked;
 
-    const filtrados = todosMateriais.filter(m => {
+    let filtrados = todosMateriais.filter(m => {
         const matchTermo = !termo ||
             (m.nome || '').toLowerCase().includes(termo) ||
             (m.categoria || '').toLowerCase().includes(termo) ||
@@ -89,6 +91,10 @@ function aplicarFiltros() {
         return matchTermo && matchProc && matchCat;
     });
 
+    if (zeroEstoque) {
+        filtrados = filtrados.filter(m => !m.infinito && Number(m.quantidade) === 0);
+    }
+
     renderMateriais(filtrados);
     renderTotais(filtrados);
 }
@@ -97,9 +103,11 @@ function limparFiltros() {
     const busca = document.getElementById('materiaPrimaSearch');
     const proc = document.getElementById('filtroProcesso');
     const cat = document.getElementById('filtroCategoria');
+    const zero = document.getElementById('zeroStock');
     if (busca) busca.value = '';
     if (proc) proc.value = '';
     if (cat) cat.value = '';
+    if (zero) zero.checked = false;
     aplicarFiltros();
 }
 
