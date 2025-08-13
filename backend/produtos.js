@@ -66,6 +66,7 @@ async function listarDetalhesProduto(produtoCodigo, produtoId) {
              pi.quantidade,
              mp.nome,
              mp.preco_unitario,
+             mp.unidade,
              mp.processo
         FROM produtos_insumos pi
         JOIN materia_prima mp ON mp.id = pi.insumo_id
@@ -123,6 +124,7 @@ async function listarInsumosProduto(codigo) {
            mp.nome,
            pi.quantidade,
            mp.preco_unitario,
+           mp.unidade,
            mp.preco_unitario * pi.quantidade AS total,
            mp.processo
       FROM produtos_insumos pi
