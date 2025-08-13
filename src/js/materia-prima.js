@@ -45,10 +45,11 @@ function initMateriaPrima() {
     const popover = document.getElementById('totaisPopover');
     if (infoIcon && popover) {
         const mostrar = () => {
-            const rect = infoIcon.getBoundingClientRect();
-            popover.style.left = `${rect.left}px`;
-            popover.style.top = `${rect.bottom + 8}px`;
             popover.classList.add('show');
+            const rect = infoIcon.getBoundingClientRect();
+            const popRect = popover.getBoundingClientRect();
+            popover.style.left = `${rect.left + rect.width / 2 - popRect.width / 2}px`;
+            popover.style.top = `${rect.top - popRect.height - 4}px`;
         };
         const ocultar = () => popover.classList.remove('show');
         infoIcon.addEventListener('mouseenter', mostrar);
