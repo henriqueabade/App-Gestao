@@ -97,7 +97,7 @@
       try{
         await window.electronAPI.inserirLoteProduto({
           produtoId: produto.id,
-          etapa,
+          etapaId: etapa,
           ultimoInsumoId: itemId,
           quantidade
         });

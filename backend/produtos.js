@@ -149,7 +149,7 @@ async function listarEtapasProducao() {
  * Lista itens de um processo para um produto (dependente de etapa)
  * Aceita etapa por id (int) OU por nome (text).
  */
-async function listarItensProcessoProduto(codigo, etapa, busca = '') {
+async function listarItensProcessoProduto(codigo, etapaIdOuNome, busca = '') {
   const sql = `
     SELECT DISTINCT mp.id, mp.nome
       FROM materia_prima mp
@@ -159,7 +159,7 @@ async function listarItensProcessoProduto(codigo, etapa, busca = '') {
        AND mp.processo = ep.nome
        AND mp.nome ILIKE $3
      ORDER BY mp.nome ASC`;
-  const res = await pool.query(sql, [codigo, etapa, '%' + busca + '%']);
+  const res = await pool.query(sql, [codigo, etapaIdOuNome, '%' + busca + '%']);
   return res.rows;
 }
 
@@ -201,16 +201,16 @@ async function excluirProduto(id) {
  *
  * @param {Object} params                Dados do lote a ser criado.
  * @param {number} params.produtoId      Identificador do produto.
- * @param {string} params.etapa          Etapa da produção em que o lote se encontra.
+ * @param {string} params.etapaId        Etapa da produção em que o lote se encontra.
  * @param {number} params.ultimoInsumoId Último insumo utilizado na produção.
  * @param {number} params.quantidade     Quantidade de itens produzidos no lote.
  * @returns {Promise<Object>}            Registro completo do lote recém inserido.
  */
-async function inserirLoteProduto({ produtoId, etapa, ultimoInsumoId, quantidade }) {
+async function inserirLoteProduto({ produtoId, etapaId, ultimoInsumoId, quantidade }) {
   const res = await pool.query(
     `INSERT INTO produtos_em_cada_ponto (produto_id, etapa_id, ultimo_insumo_id, quantidade, data_hora_completa)
      VALUES ($1::int, $2::text, $3::int, $4::int, NOW()) RETURNING *`,
-    [produtoId, etapa, ultimoInsumoId, quantidade]
+    [produtoId, etapaId, ultimoInsumoId, quantidade]
   );
   return res.rows[0];
 }
