@@ -197,7 +197,14 @@ async function excluirProduto(id) {
 }
 
 /**
- * Insere um novo lote para o produto
+ * Insere um novo lote de produção para o produto informado.
+ *
+ * @param {Object} params                Dados do lote a ser criado.
+ * @param {number} params.produtoId      Identificador do produto.
+ * @param {number} params.etapaId        Etapa da produção em que o lote se encontra.
+ * @param {number} params.ultimoInsumoId Último insumo utilizado na produção.
+ * @param {number} params.quantidade     Quantidade de itens produzidos no lote.
+ * @returns {Promise<Object>}            Registro completo do lote recém inserido.
  */
 async function inserirLoteProduto({ produtoId, etapaId, ultimoInsumoId, quantidade }) {
   const res = await pool.query(
