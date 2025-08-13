@@ -355,7 +355,8 @@ body {
 }
 
 .popup-color-wrapper {
-  display: inline-block;
+  display: block;
+  width: 100%;
 }
 
 .popup-color-bar {
