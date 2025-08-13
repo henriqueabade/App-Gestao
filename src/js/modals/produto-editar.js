@@ -110,6 +110,10 @@
     // Abre etapa seguinte sobrepondo o modal atual
     if (comecarBtn) {
       comecarBtn.addEventListener('click', () => {
+        if (etapaSelect) {
+          const opt = etapaSelect.options[etapaSelect.selectedIndex];
+          window.proximaEtapaTitulo = opt ? opt.textContent : '';
+        }
         overlay.classList.add('pointer-events-none', 'blur-sm');
         Modal.open('modals/produtos/proxima-etapa.html', '../js/modals/produto-proxima-etapa.js', 'proximaEtapa', true);
       });

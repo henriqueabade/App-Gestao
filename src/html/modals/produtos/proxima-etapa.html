@@ -1,13 +1,12 @@
 <div id="proximaEtapaOverlay" class="fixed inset-0 bg-black/50 flex items-center justify-center p-4">
   <div role="dialog" aria-modal="true" tabindex="0" class="w-full max-w-4xl max-h-[90vh] bg-surface/60 backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade slide-in overflow-hidden flex flex-col">
-    <header class="flex items-center justify-between px-8 py-5 border-b border-white/10 flex-shrink-0">
-      <button id="voltarProximaEtapa" class="btn-neutral px-4 py-2 rounded-lg text-white font-medium flex items-center gap-2">← Voltar</button>
-      <h2 class="text-lg font-semibold text-white">MARCENARIA</h2>
-      <div class="flex items-center gap-3">
-        <button id="registrarProximaEtapa" class="btn-primary px-6 py-2 rounded-lg text-white font-medium">Registrar</button>
-        <button id="fecharProximaEtapa" class="btn-danger icon-only text-white">✕</button>
-      </div>
-    </header>
+      <header class="flex items-center justify-between px-8 py-5 border-b border-white/10 flex-shrink-0">
+        <button id="voltarProximaEtapa" class="btn-neutral px-4 py-2 rounded-lg text-white font-medium flex items-center gap-2">← Voltar</button>
+        <h2 id="proximaEtapaTitulo" class="text-lg font-semibold text-white"></h2>
+        <div class="flex items-center gap-3">
+          <button id="registrarProximaEtapa" class="btn-primary px-6 py-2 rounded-lg text-white font-medium">Registrar</button>
+        </div>
+      </header>
     <div class="flex-1 overflow-y-auto">
       <div class="px-8 py-6 border-b border-white/10">
         <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">

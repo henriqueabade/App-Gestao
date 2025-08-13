@@ -1,7 +1,8 @@
 (function(){
   const overlay = document.getElementById('proximaEtapaOverlay');
-  const fecharBtn = document.getElementById('fecharProximaEtapa');
   const voltarBtn = document.getElementById('voltarProximaEtapa');
+  const tituloEl = document.getElementById('proximaEtapaTitulo');
+  if (tituloEl) tituloEl.textContent = window.proximaEtapaTitulo || '';
 
   // Helper function to close this overlay and restore the underlying modal
   function closeOverlay(){
@@ -13,6 +14,5 @@
 
   // Fecha ao clicar fora do conteúdo
   overlay.addEventListener('click', (e) => { if(e.target === overlay) closeOverlay(); });
-  fecharBtn.addEventListener('click', closeOverlay);
-  voltarBtn.addEventListener('click', closeOverlay);
+  if (voltarBtn) voltarBtn.addEventListener('click', closeOverlay);
 })();
