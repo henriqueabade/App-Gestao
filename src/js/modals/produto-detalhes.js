@@ -28,23 +28,16 @@
       const tbody = document.getElementById('detalhesTableBody');
       if(!tbody) return;
       tbody.innerHTML = '';
-      const preco = Number(item?.preco_venda || 0);
       let total = 0;
-      let totalValor = 0;
-      const valoresProcessos = [];
       dados.forEach(d => {
-        const qtd = Number(d.quantidade || 0);
-        total += qtd;
-        const valorProc = qtd * preco;
-        totalValor += valorProc;
-        valoresProcessos.push({ etapa: d.etapa || '', valor: valorProc });
+        total += Number(d.quantidade || 0);
         const tr = document.createElement('tr');
-        tr.className = 'border-b border-white/5 hover:bg-white/5 transition text-sm';
+        tr.className = 'border-b border-white/5 hover:bg-white/5 transition';
         tr.innerHTML = `
-          <td class="py-4 px-4 text-gray-300 text-xs font-medium uppercase tracking-wider">${d.etapa || ''}</td>
-          <td class="py-4 px-4 text-white font-medium text-sm">${d.ultimo_item || ''}</td>
-          <td class="py-4 px-4 text-center text-white font-medium text-sm">${formatQuantity(qtd)}</td>
-          <td class="py-4 px-4 text-gray-300 text-sm">${formatDateTime(d.data_hora_completa)}</td>
+          <td class="py-4 px-4 text-gray-300">${d.etapa || ''}</td>
+          <td class="py-4 px-4 text-white font-medium">${d.ultimo_item || ''}</td>
+          <td class="py-4 px-4 text-center text-white font-medium">${d.quantidade ?? ''}</td>
+          <td class="py-4 px-4 text-gray-300">${formatDateTime(d.data_hora_completa)}</td>
           <td class="py-4 px-4 text-center">
             <div class="flex items-center justify-center space-x-2">
               <i class="fas fa-edit w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Editar"></i>
@@ -59,25 +52,12 @@
         tbody.appendChild(tr);
       });
       const totalEl = document.getElementById('totalEstoque');
-      if (totalEl) totalEl.textContent = formatQuantity(total);
+      if (totalEl) totalEl.textContent = total;
       const lotesEl = document.getElementById('lotesAtivos');
       if (lotesEl) lotesEl.textContent = dados.length;
       const valorEl = document.getElementById('valorEstimado');
-      if (valorEl) valorEl.textContent = formatCurrency(totalValor);
-      const valoresEl = document.getElementById('processValues');
-      if (valoresEl) {
-        valoresEl.innerHTML = '';
-        valoresProcessos.forEach(v => {
-          const span = document.createElement('span');
-          span.className = 'badge-navy px-3 py-1 rounded-full text-xs font-medium';
-          span.textContent = `${v.etapa}: ${formatCurrency(v.valor)}`;
-          valoresEl.appendChild(span);
-        });
-        const totalSpan = document.createElement('span');
-        totalSpan.className = 'badge-success px-3 py-1 rounded-full text-xs font-medium';
-        totalSpan.textContent = `Valor Total: ${formatCurrency(totalValor)}`;
-        valoresEl.appendChild(totalSpan);
-      }
+      const preco = Number(item?.preco_venda || 0);
+      if (valorEl) valorEl.textContent = (total * preco).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
     } catch(err) {
       console.error('Erro ao carregar detalhes do produto', err);
     }
@@ -119,18 +99,6 @@
       }
     };
     Modal.open('modals/produtos/excluir-lote.html', '../js/modals/produto-lote-excluir.js', 'excluirLote', true);
-  }
-
-  function formatQuantity(qtd){
-    const num = Number(qtd);
-    if(isNaN(num)) return '';
-    if(Number.isInteger(num)) return num.toString();
-    return (Math.ceil(num * 100) / 100).toFixed(2);
-  }
-
-  function formatCurrency(val){
-    const rounded = Math.ceil(Number(val) * 100) / 100;
-    return rounded.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
   }
 
   function formatDateTime(value){
