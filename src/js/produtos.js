@@ -222,8 +222,32 @@ function extrairCorDimensoes(nome) {
     return { cor, dimensoes };
 }
 
+function getColorCss(name) {
+    if (!name) return 'transparent';
+    const key = name.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const map = {
+        offwhite: '#f8f8f8',
+        branco: '#ffffff',
+        preto: '#000000',
+        vermelho: '#ff0000',
+        azul: '#0000ff',
+        amarelo: '#ffff00',
+        verde: '#008000',
+        cinza: '#808080',
+        marrom: '#8b4513',
+        bege: '#f5f5dc',
+        rosa: '#ffc0cb',
+        laranja: '#ffa500',
+        roxo: '#800080',
+        violeta: '#ee82ee'
+    };
+    return map[key] || name;
+}
+
 function createPopupContent(item) {
     const { cor, dimensoes } = extrairCorDimensoes(item.nome);
+    const corSample = (cor.split('/')[1] || cor).trim();
+    const corCss = getColorCss(corSample);
     return `
     <div class="popup-card">
       <div class="popup-header">
@@ -233,7 +257,7 @@ function createPopupContent(item) {
       <div class="popup-body">
         <div class="popup-info-grid">
           <div>
-            <p class="popup-info-label">Data de Entrada:</p>
+            <p class="popup-info-label">Data de Criação:</p>
             <p class="popup-info-value">${formatDate(item.criado_em)}</p>
           </div>
           <div>
@@ -244,7 +268,10 @@ function createPopupContent(item) {
         <div class="popup-info-grid">
           <div>
             <p class="popup-info-label">Cor:</p>
-            <p class="popup-info-value">${cor}</p>
+            <div class="popup-color-wrapper">
+              <p class="popup-info-value">${cor}</p>
+              <div class="popup-color-bar" style="background-color: ${corCss};"></div>
+            </div>
           </div>
           <div>
             <p class="popup-info-label">Dimensões:</p>
@@ -252,7 +279,7 @@ function createPopupContent(item) {
           </div>
         </div>
         <div class="popup-description-section">
-          <p class="popup-info-label">Descrição Técnica:</p>
+          <p class="popup-info-label">Descrição:</p>
           <p class="popup-description-text">${item.descricao || ''}</p>
         </div>
       </div>
