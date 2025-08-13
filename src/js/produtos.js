@@ -224,6 +224,8 @@ function extrairCorDimensoes(nome) {
 
 function createPopupContent(item) {
     const { cor, dimensoes } = extrairCorDimensoes(item.nome);
+    const corSample = (cor.split('/')[1] || cor).trim();
+    const corCss = corSample.replace(/\s+/g, '').toLowerCase();
     return `
     <div class="popup-card">
       <div class="popup-header">
@@ -233,7 +235,7 @@ function createPopupContent(item) {
       <div class="popup-body">
         <div class="popup-info-grid">
           <div>
-            <p class="popup-info-label">Data de Entrada:</p>
+            <p class="popup-info-label">Data de Criação:</p>
             <p class="popup-info-value">${formatDate(item.criado_em)}</p>
           </div>
           <div>
@@ -244,7 +246,10 @@ function createPopupContent(item) {
         <div class="popup-info-grid">
           <div>
             <p class="popup-info-label">Cor:</p>
-            <p class="popup-info-value">${cor}</p>
+            <div class="popup-color-wrapper">
+              <p class="popup-info-value">${cor}</p>
+              <div class="popup-color-bar" style="background-color: ${corCss};"></div>
+            </div>
           </div>
           <div>
             <p class="popup-info-label">Dimensões:</p>
@@ -252,7 +257,7 @@ function createPopupContent(item) {
           </div>
         </div>
         <div class="popup-description-section">
-          <p class="popup-info-label">Descrição Técnica:</p>
+          <p class="popup-info-label">Descrição:</p>
           <p class="popup-description-text">${item.descricao || ''}</p>
         </div>
       </div>
