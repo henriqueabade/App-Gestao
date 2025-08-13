@@ -25,15 +25,15 @@
 
         <!-- Filters -->
         <div class="glass-surface rounded-xl p-6 mb-6 animate-fade-in-up">
-            <div class="filter-bar flex flex-col md:flex-row md:flex-wrap xl:flex-nowrap items-center">
+            <div class="filter-bar flex flex-col md:flex-row md:flex-nowrap items-center">
                 <!-- Search -->
-                <div class="flex-1 min-w-[250px]">
+                <div class="flex-1 min-w-0">
                     <label class="block text-sm font-medium mb-2 text-white">Buscar</label>
                     <input id="filterSearch" type="text" placeholder="Código ou Nome do Produto" class="input-glass text-white rounded-md px-4 py-3 w-full placeholder-white/50">
                 </div>
 
                 <!-- Category -->
-                <div class="flex-1 min-w-[200px]">
+                <div class="flex-1 min-w-0">
                     <label class="block text-sm font-medium mb-2 text-white">Categoria</label>
                     <select id="filterCategory" class="input-glass text-white rounded-md px-4 py-3 w-full">
                         <option value="">Todas as Categorias</option>
@@ -41,7 +41,7 @@
                 </div>
 
                 <!-- Status -->
-                <div class="flex-1 min-w-[200px]">
+                <div class="flex-1 min-w-0">
                     <label class="block text-sm font-medium mb-2 text-white">Status</label>
                     <select id="filterStatus" class="input-glass text-white rounded-md px-4 py-3 w-full">
                         <option value="">Todos</option>
@@ -49,7 +49,7 @@
                 </div>
 
                 <!-- Price Min -->
-                <div class="flex-1 min-w-[150px]">
+                <div class="flex-1 min-w-0">
                     <label class="block text-sm font-medium mb-2 text-white">Preço Min.</label>
                     <div class="relative">
                         <span class="absolute left-3 top-1/2 transform -translate-y-1/2 text-white/70">R$</span>
@@ -58,7 +58,7 @@
                 </div>
 
                 <!-- Price Max -->
-                <div class="flex-1 min-w-[150px]">
+                <div class="flex-1 min-w-0">
                     <label class="block text-sm font-medium mb-2 text-white">Preço Máx.</label>
                     <div class="relative">
                         <span class="absolute left-3 top-1/2 transform -translate-y-1/2 text-white/70">R$</span>
@@ -67,13 +67,13 @@
                 </div>
 
                 <!-- Zero Stock Toggle -->
-                <div class="filter-toggle flex flex-col items-center space-y-1">
-                    <label for="zeroStock" class="text-sm font-medium text-white">0 Estoque</label>
+                <div class="filter-toggle flex flex-col items-center space-y-1 flex-shrink-0">
+                    <label for="zeroStock" class="text-sm font-medium text-white whitespace-nowrap">0 Estoque</label>
                     <input type="checkbox" id="zeroStock" class="toggle" />
                 </div>
 
                 <!-- Action Buttons -->
-                <div id="bt-actions" class="flex items-center gap-2">
+                <div id="bt-actions" class="flex items-center gap-2 flex-shrink-0">
                     <button id="btnFiltrar" class="btn-secondary text-white rounded-md px-4 py-3 text-sm font-medium">
                         Filtrar
                     </button>
