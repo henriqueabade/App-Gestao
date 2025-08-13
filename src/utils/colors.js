@@ -158,6 +158,7 @@ const colorMap = {
   rosa: '#ffc0cb',
   marrom: '#a52a2a',
   cinza: '#808080',
+  grafite: '#484848',
   bege: '#f5f5dc',
   prata: '#c0c0c0',
   dourado: '#ffd700',
@@ -173,13 +174,21 @@ const nearest = require('nearest-color').from(colorMap);
  */
 function resolveColorCss(cor = '') {
   const corSample = (cor.split('/')[1] || cor).trim();
-  const key = corSample.toLowerCase().replace(/[\s-]+/g, '');
+  const key = corSample
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[\s-]+/g, '');
   const mapped = colorMap[key];
   if (mapped) return mapped;
   try {
     return nearest(corSample).value;
-  } catch (err) {
-    return corSample;
+  } catch {
+    let hash = 0;
+    for (let i = 0; i < key.length; i++) {
+      hash = key.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    return `#${(hash >>> 0).toString(16).padStart(6, '0').slice(0, 6)}`;
   }
 }
 
