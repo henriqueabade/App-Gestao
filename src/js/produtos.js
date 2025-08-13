@@ -15,8 +15,6 @@ let filtrosPendentes = false;
 // Controle de popup de informações do produto
 let produtosRenderizados = [];
 let currentPopup = null;
-let infoMouseEnter;
-let infoMouseLeave;
 
 function showToast(message, type = 'success') {
     if (!notificationContainer) {
@@ -50,6 +48,7 @@ async function carregarProdutos() {
         showToast('Erro ao carregar produtos', 'error');
     }
 }
+window.carregarProdutos = carregarProdutos;
 
 function renderProdutos(produtos) {
     const tbody = document.getElementById('produtosTableBody');
@@ -283,6 +282,7 @@ function showInfoPopup(target, item) {
     hideInfoPopup();
     const popup = document.createElement('div');
     popup.className = 'absolute z-50';
+    popup.style.zIndex = '10000';
     popup.innerHTML = createPopupContent(item);
     document.body.appendChild(popup);
     const rect = target.getBoundingClientRect();
@@ -322,27 +322,14 @@ function hideInfoPopup() {
 window.hideProductInfoPopup = hideInfoPopup;
 
 function attachInfoEvents() {
-    const lista = document.getElementById('produtosTableBody');
-    if (!lista) return;
-
-    lista.removeEventListener('mouseover', infoMouseEnter);
-    lista.removeEventListener('mouseout', infoMouseLeave);
-
-    infoMouseEnter = e => {
-        const icon = e.target.closest('.info-icon');
-        if (!icon) return;
+    document.querySelectorAll('#produtosTableBody .info-icon').forEach(icon => {
         const id = parseInt(icon.dataset.id);
-        const item = produtosRenderizados.find(p => p.id === id);
-        if (item) showInfoPopup(icon, item);
-    };
-
-    infoMouseLeave = e => {
-        if (e.target.closest('.info-icon')) hideInfoPopup();
-    };
-
-    lista.addEventListener('mouseover', infoMouseEnter);
-    lista.addEventListener('mouseout', infoMouseLeave);
-
+        icon.addEventListener('mouseenter', () => {
+            const item = produtosRenderizados.find(p => p.id === id);
+            if (item) showInfoPopup(icon, item);
+        });
+        icon.addEventListener('mouseleave', hideInfoPopup);
+    });
     if (window.feather) feather.replace();
 }
 

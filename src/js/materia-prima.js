@@ -183,8 +183,6 @@ function formatDate(dateStr) {
 // Controle de popup de informações da matéria prima
 let materiais = [];
 let currentPopup = null;
-let infoMouseEnter;
-let infoMouseLeave;
 
 function extractCor(nome, cor) {
     return (cor || (nome && nome.split('/')[1]) || '').trim();
@@ -252,6 +250,7 @@ function showInfoPopup(target, item) {
     hideInfoPopup();
     const popup = document.createElement('div');
     popup.className = 'absolute z-50';
+    popup.style.zIndex = '10000';
     popup.innerHTML = createPopupContent(item);
     document.body.appendChild(popup);
     const rect = target.getBoundingClientRect();
@@ -291,27 +290,14 @@ function hideInfoPopup() {
 window.hideRawMaterialInfoPopup = hideInfoPopup;
 
 function attachInfoEvents() {
-    const lista = document.getElementById('materiaPrimaTableBody');
-    if (!lista) return;
-
-    lista.removeEventListener('mouseover', infoMouseEnter);
-    lista.removeEventListener('mouseout', infoMouseLeave);
-
-    infoMouseEnter = e => {
-        const icon = e.target.closest('.info-icon');
-        if (!icon) return;
+    document.querySelectorAll('#materiaPrimaTableBody .info-icon').forEach(icon => {
         const id = parseInt(icon.dataset.id);
-        const item = materiais.find(m => m.id === id);
-        if (item) showInfoPopup(icon, item);
-    };
-
-    infoMouseLeave = e => {
-        if (e.target.closest('.info-icon')) hideInfoPopup();
-    };
-
-    lista.addEventListener('mouseover', infoMouseEnter);
-    lista.addEventListener('mouseout', infoMouseLeave);
-
+        icon.addEventListener('mouseenter', () => {
+            const item = materiais.find(m => m.id === id);
+            if (item) showInfoPopup(icon, item);
+        });
+        icon.addEventListener('mouseleave', hideInfoPopup);
+    });
     if (window.feather) feather.replace();
 }
 
