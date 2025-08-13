@@ -135,12 +135,15 @@
       return (val || 0).toLocaleString('pt-BR', { style:'currency', currency:'BRL', minimumFractionDigits: frac, maximumFractionDigits: frac });
     }
     function formatNumber(val){
-      return Number.isInteger(val) ? String(val) : (parseFloat(val)||0).toFixed(2);
+      const num = parseFloat(val) || 0;
+      if (Number.isInteger(num)) return String(num);
+      return (Math.ceil(num * 100) / 100).toFixed(2);
     }
 
     let itens = [];
     const processos = {};
     const totals = {};
+    const processOrder = [];
 
     // cálculo por processo
     function updateProcessTotal(proc){
@@ -148,7 +151,7 @@
       if(!grupo) return;
       let soma = 0;
       grupo.itens.forEach(it => { if(it.status !== 'deleted') soma += (it.quantidade || 0) * (it.preco_unitario || 0); });
-      grupo.totalEl.textContent = formatCurrency(soma);
+      grupo.total = soma;
     }
 
     // totais gerais
@@ -179,7 +182,6 @@
       totals.valorVenda   = valorVenda;
 
       if (totalInsumosEl)        totalInsumosEl.textContent       = formatCurrency(totalInsumos);
-      if (totalInsumosTituloEl)  totalInsumosTituloEl.textContent = formatCurrency(totalInsumos);
       if (totalMaoObraEl)        totalMaoObraEl.textContent       = formatCurrency(totalMaoObra);
       if (subTotalEl)            subTotalEl.textContent           = formatCurrency(subTotal);
       if (markupValorEl)         markupValorEl.textContent        = formatCurrency(markupVal);
@@ -188,6 +190,19 @@
       if (impostoValorEl)        impostoValorEl.textContent       = formatCurrency(impostoVal);
       if (valorVendaEl)          valorVendaEl.textContent         = formatCurrency(valorVenda);
       if (precoVendaEl)          precoVendaEl.textContent         = formatCurrency(valorVenda);
+      renderTotalBadges();
+    }
+
+    function renderTotalBadges(){
+      if (!totalInsumosTituloEl) return;
+      const parts = [];
+      processOrder.forEach(proc => {
+        const g = processos[proc];
+        if (!g) return;
+        parts.push(`<span class="badge-process px-3 py-1 rounded-full text-xs font-medium">${proc}: ${formatCurrency(g.total || 0)}</span>`);
+      });
+      parts.push(`<span class="badge-success px-3 py-1 rounded-full text-xs font-medium">Valor Total: ${formatCurrency(totals.totalInsumos || 0)}</span>`);
+      totalInsumosTituloEl.innerHTML = parts.join(' ');
     }
 
     // ações
@@ -256,6 +271,7 @@
 
       tableBody.innerHTML = '';
       Object.keys(processos).forEach(k => delete processos[k]);
+      processOrder.length = 0;
       itens = (data || []).map(d => ({ ...d, status: 'unchanged' }));
 
       if(itens.length === 0){
@@ -276,22 +292,19 @@
       Object.entries(grupos).forEach(([proc, arr]) => {
         const header = document.createElement('tr');
         header.className = 'process-row';
-        header.innerHTML = `<td colspan="4" class="pt-4 pb-2 border-t border-white/10">
-          <div class="flex items-center justify-center space-x-2 text-gray-300 font-semibold">
-            <span>${proc}</span>
-            <span class="process-total text-white font-semibold"></span>
-          </div></td>`;
+        header.innerHTML = `<td colspan="4" class="px-6 py-2 bg-gray-50 border-t border-gray-200 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">${proc}</td>`;
         tableBody.appendChild(header);
-        processos[proc] = { itens: arr, totalEl: header.querySelector('.process-total') };
+        processOrder.push(proc);
+        processos[proc] = { itens: arr, total: 0 };
 
         arr.forEach(item => {
           const tr = document.createElement('tr');
           tr.className = 'border-b border-white/5 item-row';
           tr.innerHTML = `
-            <td class="py-3 px-2 text-white">${item.nome ?? '—'}</td>
-            <td class="py-3 px-2 text-center quantidade-cell"><span class="quantidade-text">${formatNumber(item.quantidade)}</span></td>
-            <td class="py-3 px-2 text-right text-white item-total">${formatCurrency((item.preco_unitario || 0) * (item.quantidade || 0))}</td>
-            <td class="py-3 px-2 text-center action-cell"></td>`;
+            <td class="py-3 px-2 text-sm text-white">${item.nome ?? '—'}</td>
+            <td class="py-3 px-2 text-sm text-center quantidade-cell"><span class="quantidade-text">${formatNumber(item.quantidade)}</span></td>
+            <td class="py-3 px-2 text-sm text-right text-white item-total">${formatCurrency((item.preco_unitario || 0) * (item.quantidade || 0))}</td>
+            <td class="py-3 px-2 text-sm text-center action-cell"></td>`;
           tableBody.appendChild(tr);
           item.row = tr;
           item.totalEl = tr.querySelector('.item-total');
