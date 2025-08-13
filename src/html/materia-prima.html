@@ -57,13 +57,15 @@
                         <!-- Tags geradas dinamicamente -->
                     </div>
                 </div>
+                
+                <!-- Zero Stock Toggle -->
+                <div class="filter-toggle flex flex-col items-center space-y-1 flex-shrink-0">
+                    <label for="zeroStock" class="text-sm font-medium text-white whitespace-nowrap">0 Estoque</label>
+                    <input type="checkbox" id="zeroStock" class="toggle" />
+                </div>
 
                 <!-- Actions -->
                 <div id="bt-actions" class="flex items-center gap-2 w-full justify-center md:w-auto md:justify-end">
-                    <div class="filter-toggle flex flex-col items-center space-y-1" id="onoff">
-                        <label for="zeroStock" class="text-sm font-medium text-white">0 Estoque</label>
-                        <input type="checkbox" id="zeroStock" class="toggle" />
-                    </div>
                     <button id="btnFiltrar" class="btn-secondary text-white rounded-md px-4 h-12 text-sm font-medium">Filtrar</button>
                     <button id="btnLimpar" class="btn-warning text-white rounded-md px-4 h-12 text-sm font-medium">Limpar</button>
                 </div>
