@@ -12,6 +12,12 @@ let filtrosAplicados = {
 };
 let filtrosPendentes = false;
 
+// Controle de popup de informações do produto
+let produtosRenderizados = [];
+let currentPopup = null;
+let infoMouseEnter;
+let infoMouseLeave;
+
 function showToast(message, type = 'success') {
     if (!notificationContainer) {
         notificationContainer = document.getElementById('notification');
@@ -49,6 +55,7 @@ function renderProdutos(produtos) {
     const tbody = document.getElementById('produtosTableBody');
     if (!tbody) return;
     tbody.innerHTML = '';
+    produtosRenderizados = produtos;
 
     produtos.forEach(p => {
         const tr = document.createElement('tr');
@@ -61,7 +68,12 @@ function renderProdutos(produtos) {
         const badgeClass = statusText.toLowerCase() === 'em linha' ? 'badge-success' : 'badge-danger';
 
         tr.innerHTML = `
-            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">${p.codigo || ''}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-white relative">
+                <div class="flex items-center">
+                    <span>${p.codigo || ''}</span>
+                    <i class="info-icon ml-2" data-id="${p.id}"></i>
+                </div>
+            </td>
             <td class="px-6 py-4 whitespace-nowrap text-sm text-white">${reduzirNome(p.nome) || ''}</td>
             <td class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-violet)">${p.categoria || ''}</td>
             <td class="px-6 py-4 whitespace-nowrap text-sm text-white">${formatCurrency(p.preco_venda)}</td>
@@ -91,6 +103,8 @@ function renderProdutos(produtos) {
             if (excluir) excluir.addEventListener('click', e => { e.stopPropagation(); abrirExcluirProduto(prod); });
         });
     }
+
+    attachInfoEvents();
 }
 
 function popularFiltros() {
@@ -188,6 +202,128 @@ function reduzirNome(nome) {
     if (partes.length < 2) return partes[0];
     const medida = partes[1].split(' (')[0].trim();
     return `${partes[0]} - ${medida}`;
+}
+
+function formatDate(dateStr) {
+    if (!dateStr) return '-';
+    const date = new Date(dateStr);
+    return date.toLocaleDateString('pt-BR', { timeZone: 'UTC' });
+}
+
+function extrairCorDimensoes(nome) {
+    if (!nome) return { cor: '', dimensoes: '' };
+    const partes = nome.split(' - ');
+    const cor = partes[2] ? partes[2].trim() : '';
+    let dimensoes = '';
+    if (partes[1]) {
+        const match = partes[1].match(/\(([^)]+)\)/);
+        if (match) dimensoes = `(${match[1]}) cm`;
+    }
+    return { cor, dimensoes };
+}
+
+function createPopupContent(item) {
+    const { cor, dimensoes } = extrairCorDimensoes(item.nome);
+    return `
+    <div class="popup-card">
+      <div class="popup-header">
+        <p class="popup-header-subtitle">Categoria:</p>
+        <h3 class="popup-header-title">${item.categoria || ''}</h3>
+      </div>
+      <div class="popup-body">
+        <div class="popup-info-grid">
+          <div>
+            <p class="popup-info-label">Data de Entrada:</p>
+            <p class="popup-info-value">${formatDate(item.criado_em)}</p>
+          </div>
+          <div>
+            <p class="popup-info-label">Última Atualização:</p>
+            <p class="popup-info-value">${formatDate(item.data)}</p>
+          </div>
+        </div>
+        <div class="popup-info-grid">
+          <div>
+            <p class="popup-info-label">Cor:</p>
+            <p class="popup-info-value">${cor}</p>
+          </div>
+          <div>
+            <p class="popup-info-label">Dimensões:</p>
+            <p class="popup-info-value">${dimensoes}</p>
+          </div>
+        </div>
+        <div class="popup-description-section">
+          <p class="popup-info-label">Descrição Técnica:</p>
+          <p class="popup-description-text">${item.descricao || ''}</p>
+        </div>
+      </div>
+    </div>`;
+}
+
+function showInfoPopup(target, item) {
+    hideInfoPopup();
+    const popup = document.createElement('div');
+    popup.className = 'absolute z-50';
+    popup.innerHTML = createPopupContent(item);
+    document.body.appendChild(popup);
+    const rect = target.getBoundingClientRect();
+    const margin = 8;
+    const popupRect = popup.getBoundingClientRect();
+
+    let top = rect.bottom + margin;
+    if (top + popupRect.height > window.innerHeight) {
+        if (rect.top - margin - popupRect.height >= 0) {
+            top = rect.top - popupRect.height - margin;
+        } else {
+            top = Math.max(margin, window.innerHeight - popupRect.height - margin);
+        }
+    }
+
+    let left = rect.right + margin;
+    if (left + popupRect.width > window.innerWidth) {
+        if (rect.left - margin - popupRect.width >= 0) {
+            left = rect.left - popupRect.width - margin;
+        } else {
+            left = Math.max(margin, window.innerWidth - popupRect.width - margin);
+        }
+    }
+
+    popup.style.left = `${left + window.scrollX}px`;
+    popup.style.top = `${top + window.scrollY}px`;
+    currentPopup = popup;
+}
+
+function hideInfoPopup() {
+    if (currentPopup) {
+        currentPopup.remove();
+        currentPopup = null;
+    }
+}
+
+window.hideProductInfoPopup = hideInfoPopup;
+
+function attachInfoEvents() {
+    const lista = document.getElementById('produtosTableBody');
+    if (!lista) return;
+
+    lista.removeEventListener('mouseover', infoMouseEnter);
+    lista.removeEventListener('mouseout', infoMouseLeave);
+
+    infoMouseEnter = e => {
+        const icon = e.target.closest('.info-icon');
+        if (!icon) return;
+        const id = parseInt(icon.dataset.id);
+        const item = produtosRenderizados.find(p => p.id === id);
+        if (item) showInfoPopup(icon, item);
+    };
+
+    infoMouseLeave = e => {
+        if (e.target.closest('.info-icon')) hideInfoPopup();
+    };
+
+    lista.addEventListener('mouseover', infoMouseEnter);
+    lista.addEventListener('mouseout', infoMouseLeave);
+
+    if (window.feather) feather.replace();
 }
 
 function initProdutos() {
