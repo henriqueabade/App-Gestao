@@ -34,7 +34,7 @@
         const tr = document.createElement('tr');
         tr.className = 'border-b border-white/5 hover:bg-white/5 transition';
         tr.innerHTML = `
-          <td class="py-4 px-4 text-gray-300">${d.etapa_nome || ''}</td>
+          <td class="py-4 px-4 text-gray-300">${d.etapa || ''}</td>
           <td class="py-4 px-4 text-white font-medium">${d.ultimo_item || ''}</td>
           <td class="py-4 px-4 text-center text-white font-medium">${d.quantidade ?? ''}</td>
           <td class="py-4 px-4 text-gray-300">${formatDateTime(d.data_hora_completa)}</td>

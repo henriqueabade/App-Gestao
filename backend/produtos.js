@@ -1,21 +1,32 @@
 const pool = require('./db');
 
+/* Utilitário simples de log de tipos para debug */
+function tipo(v) {
+  const t = typeof v;
+  if (v === null) return 'null';
+  if (t !== 'object') return t;
+  return Object.prototype.toString.call(v);
+}
+
+/**
+ * Lista todos os produtos (resumo)
+ */
 async function listarProdutos() {
   try {
-    const res = await pool.query(
-      `SELECT p.id,
-              p.codigo,
-              p.nome,
-              p.categoria,
-              p.preco_venda,
-              p.pct_markup,
-              p.status,
-              COALESCE(SUM(pe.quantidade), 0) AS quantidade_total
-         FROM produtos p
-    LEFT JOIN produtos_em_cada_ponto pe ON pe.produto_id = p.id
-     GROUP BY p.id, p.codigo, p.nome, p.categoria, p.preco_venda, p.pct_markup, p.status
-     ORDER BY p.nome`
-    );
+    const sql = `
+      SELECT p.id,
+             p.codigo,
+             p.nome,
+             p.categoria,
+             p.preco_venda,
+             p.pct_markup,
+             p.status,
+             COALESCE(SUM(pe.quantidade), 0) AS quantidade_total
+        FROM produtos p
+   LEFT JOIN produtos_em_cada_ponto pe ON pe.produto_id = p.id
+    GROUP BY p.id, p.codigo, p.nome, p.categoria, p.preco_venda, p.pct_markup, p.status
+    ORDER BY p.nome`;
+    const res = await pool.query(sql);
     return res.rows;
   } catch (err) {
     console.error('Erro ao listar produtos:', err.message);
@@ -23,20 +34,18 @@ async function listarProdutos() {
   }
 }
 
-// Ajuste: separação de params (produtoCodigo text, produtoId integer) e casts explícitos
 async function listarDetalhesProduto(produtoCodigo, produtoId) {
   try {
     if (!produtoCodigo && !produtoId) {
       throw new Error('Produto não informado');
     }
 
-    // Se vier apenas o código, busca o ID correspondente
     if (produtoCodigo && !produtoId) {
       const idRes = await pool.query(
         'SELECT id FROM produtos WHERE codigo = $1::text',
         [produtoCodigo]
       );
-      produtoId = idRes.rows[0]?.id;
+      produtoId = idRes.rows[0]?.id ?? null;
     }
 
     const produtoQuery = `
@@ -60,21 +69,25 @@ async function listarDetalhesProduto(produtoCodigo, produtoId) {
        ORDER BY mp.processo, mp.nome`;
     const itensRes = await pool.query(itensQuery, [produtoCodigo]);
 
-    let lotesRes = { rows: [] };
-    if (produtoId) {
-      const lotesQuery = `
-        SELECT pecp.id,
-               pecp.quantidade,
-               pecp.ultimo_insumo_id,
-               pecp.tempo_estimado_minutos,
-               pecp.data_hora_completa,
-               ep.nome AS etapa
-          FROM produtos_em_cada_ponto pecp
-          JOIN etapas_producao ep ON ep.id = pecp.etapa_id
-         WHERE pecp.produto_id = $2::int
-         ORDER BY pecp.data_hora_completa DESC`;
-      lotesRes = await pool.query(lotesQuery, [produtoCodigo, produtoId]);
-    }
+    // Ajuste: alias que o front costuma usar é "etapa".
+    // Também normalizamos espaços e evitamos string vazia.
+    const lotesQuery = `
+      SELECT
+        pecp.id,
+        pecp.quantidade,
+        pecp.ultimo_insumo_id,
+        mp.nome AS ultimo_item,
+        pecp.tempo_estimado_minutos,
+        pecp.data_hora_completa,
+        COALESCE(NULLIF(TRIM(pecp.etapa_id::text), ''), '—') AS etapa
+      FROM produtos_em_cada_ponto pecp
+      LEFT JOIN materia_prima mp
+        ON mp.id = pecp.ultimo_insumo_id
+      JOIN produtos p
+        ON p.id = pecp.produto_id
+      WHERE p.codigo = $1::text
+      ORDER BY pecp.data_hora_completa DESC`;
+    const lotesRes = await pool.query(lotesQuery, [produtoCodigo]);
 
     return {
       produto: produtoRes.rows[0] || null,
@@ -87,16 +100,20 @@ async function listarDetalhesProduto(produtoCodigo, produtoId) {
   }
 }
 
-// Busca produto pelo código
+
+/**
+ * Busca 1 produto pelo codigo (text)
+ */
 async function obterProduto(codigo) {
-  // Cast explícito para evitar problemas de tipo
-  const res = await pool.query('SELECT * FROM produtos WHERE codigo = $1::text', [codigo]);
+  const sql = 'SELECT * FROM produtos WHERE codigo = $1::text';
+  const res = await pool.query(sql, [codigo]);
   return res.rows[0];
 }
 
-// Lista insumos vinculados a um produto usando o código
+/**
+ * Lista insumos (produtos_insumos + materia_prima) por codigo de produto (text)
+ */
 async function listarInsumosProduto(codigo) {
-  // Cast explícito para o parâmetro de código
   const query = `
     SELECT pi.id,
            mp.nome,
@@ -112,6 +129,9 @@ async function listarInsumosProduto(codigo) {
   return res.rows;
 }
 
+/**
+ * Lista etapas (id + nome)
+ */
 async function listarEtapasProducao() {
   const res = await pool.query(
     'SELECT id, nome FROM etapas_producao ORDER BY nome ASC'
@@ -119,21 +139,27 @@ async function listarEtapasProducao() {
   return res.rows;
 }
 
-async function listarItensProcessoProduto(codigo, etapaId, busca = '') {
-  const res = await pool.query(
-    `SELECT DISTINCT mp.id, mp.nome
-       FROM materia_prima mp
-       JOIN produtos_insumos pi ON pi.insumo_id = mp.id
-       JOIN etapas_producao ep ON ep.id = $2
-      WHERE pi.produto_codigo = $1::text
-        AND mp.processo = ep.nome
-        AND mp.nome ILIKE $3
-      ORDER BY mp.nome ASC`,
-    [codigo, etapaId, '%' + busca + '%']
-  );
+/**
+ * Lista itens de um processo para um produto (dependente de etapa)
+ * Aceita etapa por id (int) OU por nome (text).
+ */
+async function listarItensProcessoProduto(codigo, etapaIdOuNome, busca = '') {
+  const sql = `
+    SELECT DISTINCT mp.id, mp.nome
+      FROM materia_prima mp
+      JOIN produtos_insumos pi ON pi.insumo_id = mp.id
+      JOIN etapas_producao ep ON (ep.id::text = $2::text OR ep.nome = $2::text)
+     WHERE pi.produto_codigo = $1::text
+       AND mp.processo = ep.nome
+       AND mp.nome ILIKE $3
+     ORDER BY mp.nome ASC`;
+  const res = await pool.query(sql, [codigo, etapaIdOuNome, '%' + busca + '%']);
   return res.rows;
 }
 
+/**
+ * CRUD básico de produtos
+ */
 async function adicionarProduto(dados) {
   const { codigo, nome, categoria, preco_venda, pct_markup, status } = dados;
   const res = await pool.query(
@@ -154,36 +180,42 @@ async function atualizarProduto(id, dados) {
             preco_venda=$4,
             pct_markup=$5,
             status=$6
-     WHERE id=$7 RETURNING *`,
+     WHERE id=$7::int RETURNING *`,
     [codigo, nome, categoria, preco_venda, pct_markup, status, id]
   );
   return res.rows[0];
 }
 
 async function excluirProduto(id) {
-  await pool.query('DELETE FROM produtos WHERE id=$1', [id]);
+  await pool.query('DELETE FROM produtos WHERE id=$1::int', [id]);
 }
 
+/**
+ * Atualiza um lote (quantidade + data)
+ */
 async function atualizarLoteProduto(id, quantidade) {
   const res = await pool.query(
     `UPDATE produtos_em_cada_ponto
         SET quantidade = $1,
             data_hora_completa = NOW()
-     WHERE id = $2 RETURNING *`,
+     WHERE id = $2::int RETURNING *`,
     [quantidade, id]
   );
   return res.rows[0];
 }
 
 async function excluirLoteProduto(id) {
-  await pool.query('DELETE FROM produtos_em_cada_ponto WHERE id=$1', [id]);
+  await pool.query('DELETE FROM produtos_em_cada_ponto WHERE id=$1::int', [id]);
 }
 
-// Atualiza percentuais e insumos do produto em uma única transação
+/**
+ * Salva detalhes do produto (percentuais + itens) em transação
+ */
 async function salvarProdutoDetalhado(codigoOriginal, produto, itens) {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+
     const {
       pct_fabricacao,
       pct_acabamento,
@@ -199,7 +231,7 @@ async function salvarProdutoDetalhado(codigoOriginal, produto, itens) {
       ncm
     } = produto;
 
-    // Monta consulta dinâmica para atualizar campos obrigatórios e opcionais
+    // Monta consulta dinâmica
     let query = `UPDATE produtos
           SET pct_fabricacao=$1,
               pct_acabamento=$2,
@@ -234,7 +266,7 @@ async function salvarProdutoDetalhado(codigoOriginal, produto, itens) {
       query += `, ncm=$${params.length + 1}`;
       params.push(ncm);
     }
-    query += ` WHERE codigo=$${params.length + 1}`;
+    query += ` WHERE codigo=$${params.length + 1}::text`;
     params.push(codigoOriginal);
 
     await client.query(query, params);
@@ -249,15 +281,18 @@ async function salvarProdutoDetalhado(codigoOriginal, produto, itens) {
     }
 
     // Processa exclusões
-    for (const del of itens.deletados || []) {
-      await client.query('DELETE FROM produtos_insumos WHERE id=$1', [del.id]);
+    for (const del of (itens.deletados || [])) {
+      await client.query('DELETE FROM produtos_insumos WHERE id=$1::int', [del.id]);
     }
     // Processa atualizações
-    for (const up of itens.atualizados || []) {
-      await client.query('UPDATE produtos_insumos SET quantidade=$1 WHERE id=$2', [up.quantidade, up.id]);
+    for (const up of (itens.atualizados || [])) {
+      await client.query(
+        'UPDATE produtos_insumos SET quantidade=$1 WHERE id=$2::int',
+        [up.quantidade, up.id]
+      );
     }
     // Processa inserções
-    for (const ins of itens.inseridos || []) {
+    for (const ins of (itens.inseridos || [])) {
       await client.query(
         'INSERT INTO produtos_insumos (produto_codigo, insumo_id, quantidade) VALUES ($1,$2,$3)',
         [codigoDestino, ins.insumo_id, ins.quantidade]
