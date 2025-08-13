@@ -121,7 +121,7 @@ body {
 /* Barra de filtros responsiva */
 .filter-bar {
     gap: 24px;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
 }
 
 @media (max-width: 767px) {
