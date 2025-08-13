@@ -36,13 +36,12 @@ body {
 }
 
 .btn-secondary {
-    background: var(--color-violet);
+    background: var(--color-blue);
     transition: all 150ms ease;
 }
 
 .btn-secondary:hover {
-    background: rgba(163, 148, 167, 0.8);
-    transform: scale(1.05);
+    background: rgba(138, 167, 243, 0.9);
 }
 
 .btn-warning {
