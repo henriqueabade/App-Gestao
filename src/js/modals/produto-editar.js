@@ -276,7 +276,7 @@
       tableBody.innerHTML = '';
       Object.keys(processos).forEach(k => delete processos[k]);
       processOrder.length = 0;
-      itens = (data || []).map(d => ({ ...d, status: 'unchanged' }));
+      itens = (data || []).map(d => ({ ...d, status: d.status || 'unchanged' }));
 
       if(itens.length === 0){
         const tr = document.createElement('tr');
@@ -321,6 +321,15 @@
       updateTotals();
       console.debug('[editar-produto] renderItens ok:', { grupos: Object.keys(grupos).length, total: itens.length });
     }
+
+    // API para receber itens de outros modais
+    window.produtoEditarAPI = {
+      adicionarProcessoItens(arr){
+        if(!Array.isArray(arr) || arr.length === 0) return;
+        arr.forEach(it => itens.push({ ...it, status: 'new' }));
+        renderItens(itens);
+      }
+    };
 
     // inputs que recalculam totais
     [fabricacaoInput, acabamentoInput, montagemInput, embalagemInput, markupInput, commissionInput, taxInput]
