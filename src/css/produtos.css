@@ -329,6 +329,10 @@ body {
   border-radius: 0.125rem;
 }
 
+.popup-color-bar-outline {
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.6);
+}
+
 /* Seção de descrição técnica */
 .popup-description-section {
   padding-top: 0.75rem;

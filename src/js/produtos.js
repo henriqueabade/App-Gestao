@@ -224,9 +224,23 @@ function extrairCorDimensoes(nome) {
 
 const resolveColorCss = window.resolveColorCss || (c => c);
 
+function isDarkColor(hex) {
+    const sanitized = hex.replace('#', '');
+    const full = sanitized.length === 3
+        ? sanitized.replace(/(.)/g, '$1$1')
+        : sanitized;
+    const bigint = parseInt(full, 16);
+    const r = (bigint >> 16) & 255;
+    const g = (bigint >> 8) & 255;
+    const b = bigint & 255;
+    const brightness = (r * 299 + g * 587 + b * 114) / 1000;
+    return brightness < 128;
+}
+
 function createPopupContent(item) {
     const { cor, dimensoes } = extrairCorDimensoes(item.nome);
     const corCss = resolveColorCss(cor);
+    const outlineClass = isDarkColor(corCss) ? ' popup-color-bar-outline' : '';
     return `
     <div class="popup-card">
       <div class="popup-header">
@@ -249,7 +263,7 @@ function createPopupContent(item) {
             <p class="popup-info-label">Cor:</p>
             <div class="popup-color-wrapper">
               <p class="popup-info-value">${cor}</p>
-              <div class="popup-color-bar" style="background-color: ${corCss};"></div>
+              <div class="popup-color-bar${outlineClass}" style="background-color: ${corCss};"></div>
             </div>
           </div>
           <div>
