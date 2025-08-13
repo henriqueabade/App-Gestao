@@ -366,7 +366,7 @@ function renderMateriais(listaMateriais) {
                     <i class="info-icon ml-2" data-id="${item.id}"></i>
                 </div>
             </td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-white">${quantidadeValor}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-white text-center">${quantidadeValor}</td>
             <td class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-violet)">${item.unidade || ''}</td>
             <td class="px-6 py-4 whitespace-nowrap text-sm text-white">R$ ${preco.toFixed(2).replace('.', ',')}</td>
             <td class="px-6 py-4 whitespace-nowrap text-center">${acoes}</td>`;
