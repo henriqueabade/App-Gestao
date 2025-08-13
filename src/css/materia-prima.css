@@ -121,12 +121,7 @@ body {
 /* Barra de filtros responsiva */
 .filter-bar {
     gap: 24px;
-}
-
-@media (min-width: 1280px) {
-    .filter-bar {
-        flex-wrap: nowrap;
-    }
+    flex-wrap: wrap;
 }
 
 @media (max-width: 767px) {
@@ -138,6 +133,16 @@ body {
 
 #bt-actions {
     margin-top: 1vw;
+    width: 100%;
+    justify-content: flex-start;
+}
+
+@media (min-width: 768px) {
+    #bt-actions {
+        width: auto;
+        margin-top: 0;
+        justify-content: flex-end;
+    }
 }
 
 .filter-bar input:not([type="checkbox"]),
