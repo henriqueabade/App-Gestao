@@ -30,7 +30,7 @@ test('inserirLoteProduto insere e retorna o lote criado', async () => {
   const { inserirLoteProduto, pool } = setup();
   const lote = await inserirLoteProduto({
     produtoId: 1,
-    etapaId: 'Corte',
+    etapa: 'Corte',
     ultimoInsumoId: 3,
     quantidade: 5
   });
@@ -45,8 +45,8 @@ test('inserirLoteProduto insere e retorna o lote criado', async () => {
 
 test('inserirLoteProduto permite múltiplas inserções', async () => {
   const { inserirLoteProduto, pool } = setup();
-  await inserirLoteProduto({ produtoId: 1, etapaId: 'Corte', ultimoInsumoId: 1, quantidade: 1 });
-  await inserirLoteProduto({ produtoId: 2, etapaId: 'Costura', ultimoInsumoId: 2, quantidade: 2 });
+await inserirLoteProduto({ produtoId: 1, etapa: 'Corte', ultimoInsumoId: 1, quantidade: 1 });
+await inserirLoteProduto({ produtoId: 2, etapa: 'Costura', ultimoInsumoId: 2, quantidade: 2 });
   const rows = await pool.query('SELECT quantidade FROM produtos_em_cada_ponto ORDER BY id');
   assert.deepStrictEqual(rows.rows.map(r => r.quantidade), [1, 2]);
 });

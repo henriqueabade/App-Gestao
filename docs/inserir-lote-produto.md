@@ -7,7 +7,7 @@ Esta função grava um registro na tabela `produtos_em_cada_ponto` contendo o pr
 
 ## Parâmetros
 - `produtoId` – identificador do produto.
-- `etapaId` – nome da etapa do processo onde o lote foi adicionado.
+- `etapa` – nome da etapa do processo onde o lote foi adicionado.
 - `ultimoInsumoId` – último insumo utilizado na produção.
 - `quantidade` – quantidade produzida neste lote.
 
@@ -15,7 +15,7 @@ Esta função grava um registro na tabela `produtos_em_cada_ponto` contendo o pr
 ```js
 await window.electronAPI.inserirLoteProduto({
   produtoId: 7,
-  etapaId: 'Corte',
+  etapa: 'Corte',
   ultimoInsumoId: 12,
   quantidade: 50
 });
