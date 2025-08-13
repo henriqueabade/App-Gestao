@@ -11,86 +11,42 @@
       <div class="px-8 py-6 border-b border-white/10">
         <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
           <div class="md:col-span-2">
-            <select class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition select-arrow appearance-none">
+            <!-- carga filtrada conforme título -->
+            <select id="proximaEtapaItem" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition select-arrow appearance-none">
               <option value="">Nome do Item</option>
-              <option value="madeira-pinus">Madeira Pinus 2x4x3m</option>
-              <option value="madeira-eucalipto">Madeira Eucalipto 1x6x2.5m</option>
-              <option value="compensado">Compensado Naval 15mm</option>
-              <option value="mdf">MDF 18mm 2.75x1.83m</option>
-              <option value="cola-madeira">Cola para Madeira 1kg</option>
-              <option value="lixa-120">Lixa Grão 120</option>
-              <option value="verniz">Verniz Marítimo 900ml</option>
             </select>
           </div>
           <div>
-            <input type="number" placeholder="Quantidade" min="1" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+            <input id="proximaEtapaQuantidade" type="number" placeholder="Quantidade" min="1" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
           </div>
         </div>
         <div class="flex gap-4">
-          <button class="btn-primary px-6 py-3 rounded-lg text-white font-medium">+ Inserir</button>
+          <button id="inserirProximaEtapa" class="btn-primary px-6 py-3 rounded-lg text-white font-medium">+ Inserir</button>
           <button id="limparProximaEtapa" class="btn-danger-light px-6 py-3 rounded-lg font-medium">🗑️ Limpar Tudo</button>
         </div>
       </div>
       <div class="px-8 py-6">
         <div class="bg-surface/40 rounded-xl border border-white/10 overflow-hidden">
           <div class="overflow-x-auto">
-            <table class="w-full text-sm">
+            <table id="proximaEtapaTabela" class="w-full text-sm">
               <thead class="bg-surface/60 backdrop-blur-sm">
                 <tr class="border-b border-white/10">
-                  <th class="text-left py-4 px-4 text-gray-300 font-medium">NOME DO ITEM</th>
-                  <th class="text-center py-4 px-4 text-gray-300 font-medium">QUANTIDADE</th>
-                  <th class="text-right py-4 px-4 text-gray-300 font-medium">VALOR TOTAL (R$)</th>
-                  <th class="text-center py-4 px-4 text-gray-300 font-medium">AÇÃO</th>
+                  <th class="text-left py-4 px-4 text-gray-300 font-medium">Item</th>
+                  <th class="text-center py-4 px-4 text-gray-300 font-medium">Quantidade</th>
+                  <th class="text-right py-4 px-4 text-gray-300 font-medium">Valor unitário (R$)</th>
+                  <th class="text-right py-4 px-4 text-gray-300 font-medium">Valor total (R$)</th>
+                  <th class="text-center py-4 px-4 text-gray-300 font-medium">Ações</th>
                 </tr>
               </thead>
               <tbody>
-                <tr class="border-b border-white/5 hover:bg-white/5 transition">
-                  <td class="py-4 px-4 text-white">Madeira Pinus 2x4x3m</td>
-                  <td class="py-4 px-4 text-center text-gray-300">8</td>
-                  <td class="py-4 px-4 text-right text-white font-medium">R$ 240,00</td>
-                  <td class="py-4 px-4 text-center">
-                    <button class="icon-only bg-red-600/20 text-red-400 hover:bg-red-600/30 transition">🗑</button>
-                  </td>
-                </tr>
-                <tr class="border-b border-white/5 hover:bg-white/5 transition">
-                  <td class="py-4 px-4 text-white">MDF 18mm 2.75x1.83m</td>
-                  <td class="py-4 px-4 text-center text-gray-300">2</td>
-                  <td class="py-4 px-4 text-right text-white font-medium">R$ 180,00</td>
-                  <td class="py-4 px-4 text-center">
-                    <button class="icon-only bg-red-600/20 text-red-400 hover:bg-red-600/30 transition">🗑</button>
-                  </td>
-                </tr>
-                <tr class="border-b border-white/5 hover:bg-white/5 transition">
-                  <td class="py-4 px-4 text-white">Cola para Madeira 1kg</td>
-                  <td class="py-4 px-4 text-center text-gray-300">1</td>
-                  <td class="py-4 px-4 text-right text-white font-medium">R$ 35,00</td>
-                  <td class="py-4 px-4 text-center">
-                    <button class="icon-only bg-red-600/20 text-red-400 hover:bg-red-600/30 transition">🗑</button>
-                  </td>
-                </tr>
-                <tr class="border-b border-white/5 hover:bg-white/5 transition">
-                  <td class="py-4 px-4 text-white">Lixa Grão 120</td>
-                  <td class="py-4 px-4 text-center text-gray-300">5</td>
-                  <td class="py-4 px-4 text-right text-white font-medium">R$ 25,00</td>
-                  <td class="py-4 px-4 text-center">
-                    <button class="icon-only bg-red-600/20 text-red-400 hover:bg-red-600/30 transition">🗑</button>
-                  </td>
-                </tr>
-                <tr class="hover:bg-white/5 transition">
-                  <td class="py-4 px-4 text-white">Verniz Marítimo 900ml</td>
-                  <td class="py-4 px-4 text-center text-gray-300">1</td>
-                  <td class="py-4 px-4 text-right text-white font-medium">R$ 45,00</td>
-                  <td class="py-4 px-4 text-center">
-                    <button class="icon-only bg-red-600/20 text-red-400 hover:bg-red-600/30 transition">🗑</button>
-                  </td>
-                </tr>
               </tbody>
             </table>
           </div>
           <div class="px-4 py-4 border-t border-white/10 bg-surface/20">
             <div class="flex justify-between items-center">
               <span class="text-gray-400 text-sm">Total do Processo:</span>
-              <span class="text-white font-semibold text-lg">R$ 525,00</span>
+              <!-- totais -->
+              <span id="proximaEtapaTotal" class="text-white font-semibold text-lg">R$ 0,00</span>
             </div>
           </div>
         </div>
