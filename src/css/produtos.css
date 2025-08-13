@@ -183,12 +183,7 @@ body {
 /* Barra de filtros responsiva */
 .filter-bar {
     gap: 24px;
-}
-
-@media (min-width: 1280px) {
-    .filter-bar {
-        flex-wrap: nowrap;
-    }
+    flex-wrap: nowrap;
 }
 
 @media (max-width: 767px) {
