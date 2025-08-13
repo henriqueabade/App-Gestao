@@ -260,6 +260,103 @@ body {
     margin-top: 1.5vw;
 }
 
+/* Ícone de informações e popover */
+.info-icon {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    color: #fff;
+    cursor: pointer;
+    transition: all 150ms ease;
+}
+
+.info-icon::after {
+    content: 'i';
+    font-style: italic;
+    font-weight: bold;
+}
+
+.info-icon:hover {
+    background: rgba(255, 255, 255, 0.445);
+    transform: scale(1.1);
+}
+
+/* Card principal do popup */
+.popup-card {
+  background: #310017c5;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  color: white;
+  border-radius: 0.5rem;
+  overflow: hidden;
+  width: 16rem;
+}
+
+/* Cabeçalho do popup */
+.popup-header {
+  padding: 0.75rem 1.25rem;
+  background-color: rgba(0, 0, 0, 0.1);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.popup-header-subtitle {
+  font-size: 0.75rem;
+  color: #c9c9c9;
+  margin-bottom: 0.25rem;
+}
+
+.popup-header-title {
+  font-size: 1rem;
+  font-weight: 500;
+  color: white;
+}
+
+/* Corpo principal do popup */
+.popup-body {
+  padding: 1rem 1.25rem;
+}
+
+/* Seções de informações do corpo */
+.popup-info-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+/* Texto das informações */
+.popup-info-label {
+  font-size: 0.75rem;
+  color: #c9c9c9;
+  margin-bottom: 0.25rem;
+}
+
+.popup-info-value {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: white;
+}
+
+/* Seção de descrição técnica */
+.popup-description-section {
+  padding-top: 0.75rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.popup-description-text {
+  font-size: 0.875rem;
+  color: #e5e5e5;
+  line-height: 1.5;
+}
+
 /* Modal and form helpers */
 .bg-input { background: var(--color-input); }
 .border-inputBorder { border-color: var(--color-inputBorder); }
