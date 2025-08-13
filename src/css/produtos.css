@@ -13,6 +13,7 @@
     --color-green: #a2ffa6;
     --color-red: #ff5858;
     --color-blue: #8aa7f3;
+    --color-navy: #001f3f;
     --neutral-100: #f9fafb;
     --neutral-500: #6b7280;
     --color-input: rgba(0,0,0,0.3);
@@ -142,6 +143,11 @@ body {
 .badge-danger {
     background: rgba(255, 88, 88, 0.2);
     color: var(--color-red);
+}
+
+.badge-process {
+    background: rgba(0, 31, 63, 0.2);
+    color: var(--color-navy);
 }
 
 .input-glass {
