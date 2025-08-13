@@ -83,7 +83,7 @@
         await window.electronAPI.atualizarLoteProduto({ id: dados.id, quantidade: novaQtd });
         showToast('Quantidade atualizada', 'success');
         carregarDetalhes(item.codigo, item.id);
-        carregarProdutos();
+        if (typeof carregarProdutos === 'function') carregarProdutos();
       } catch (err) {
         console.error(err);
         showToast('Erro ao atualizar quantidade', 'error');
@@ -97,7 +97,7 @@
       id,
       reload: () => {
         carregarDetalhes(item.codigo, item.id);
-        carregarProdutos();
+        if (typeof carregarProdutos === 'function') carregarProdutos();
       }
     };
     Modal.open('modals/produtos/excluir-lote.html', '../js/modals/produto-lote-excluir.js', 'excluirLote', true);
