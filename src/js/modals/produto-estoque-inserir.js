@@ -1,6 +1,5 @@
 (function(){
   const overlay = document.getElementById('inserirEstoqueOverlay');
-  const fecharBtn = document.getElementById('fecharInserirEstoque');
   const voltarBtn = document.getElementById('voltarInserirEstoque');
 
   function closeOverlay(){
@@ -10,7 +9,6 @@
   }
 
   overlay.addEventListener('click', e => { if(e.target === overlay) closeOverlay(); });
-  fecharBtn.addEventListener('click', closeOverlay);
   voltarBtn.addEventListener('click', closeOverlay);
   document.addEventListener('keydown', function esc(e){ if(e.key==='Escape'){ closeOverlay(); document.removeEventListener('keydown', esc); } });
 
@@ -18,6 +16,7 @@
   const itemInput = document.getElementById('itemInput');
   const itemOptions = document.getElementById('itemOptions');
   const itemMensagem = document.getElementById('itemMensagem');
+  const quantidadeInput = overlay.querySelector('input[type="number"]');
   let debounce;
 
   async function carregarProcessos(){ // carga de processos
@@ -64,9 +63,56 @@
 
   const form = overlay.querySelector('form');
   if(form){
-    form.addEventListener('submit', e => {
+    form.addEventListener('submit', async e => {
       e.preventDefault();
-      showToast('Funcionalidade em desenvolvimento', 'info');
+      const etapaId = processoSelect.value;
+      const itemNome = itemInput.value.trim();
+      const option = Array.from(itemOptions.querySelectorAll('option')).find(o => o.value === itemNome);
+      const itemId = option?.dataset.id;
+      const quantidade = Number(quantidadeInput.value);
+      if(!etapaId || !itemId || !quantidade){
+        showToast('Preencha todos os campos', 'error');
+        return;
+      }
+      const produto = window.produtoDetalhes;
+      if(!produto) return;
+      const existente = produto.lotes?.find(l => String(l.etapa) === String(etapaId) && String(l.ultimo_insumo_id) === String(itemId));
+      if(existente){
+        window.somarEstoqueInfo = {
+          existing: existente,
+          adicionar: quantidade,
+          reload: () => {
+            processoSelect.value = '';
+            itemInput.value = '';
+            itemOptions.innerHTML = '';
+            itemInput.disabled = true;
+            quantidadeInput.value = '';
+            window.reloadDetalhesProduto?.();
+            if(typeof carregarProdutos === 'function') carregarProdutos();
+          }
+        };
+        Modal.open('modals/produtos/estoque-somar.html', '../js/modals/produto-estoque-somar.js', 'somarEstoque', true);
+        return;
+      }
+      try{
+        await window.electronAPI.inserirLoteProduto({
+          produtoId: produto.id,
+          etapaId,
+          ultimoInsumoId: itemId,
+          quantidade
+        });
+        showToast('Produto inserido', 'success');
+        processoSelect.value = '';
+        itemInput.value = '';
+        itemOptions.innerHTML = '';
+        itemInput.disabled = true;
+        quantidadeInput.value = '';
+        window.reloadDetalhesProduto?.();
+        if(typeof carregarProdutos === 'function') carregarProdutos();
+      }catch(err){
+        console.error(err);
+        showToast('Erro ao inserir produto', 'error');
+      }
     });
   }
 })();

@@ -1,0 +1,12 @@
+<div id="somarEstoqueOverlay" class="fixed inset-0 bg-black/50 flex items-center justify-center p-4">
+  <div class="max-w-sm w-full glass-surface backdrop-blur-xl rounded-2xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade">
+    <div class="p-6 text-center">
+      <h3 class="text-lg font-semibold mb-4 text-yellow-400">Item já registrado</h3>
+      <p class="text-sm text-gray-300">Já existe um lote com este processo e item. Deseja somar a quantidade?</p>
+      <div class="flex justify-center gap-6 mt-8">
+        <button id="cancelarSomarEstoque" class="btn-neutral px-6 py-2 rounded-lg text-white font-medium active:scale-95">Não</button>
+        <button id="confirmarSomarEstoque" class="px-6 py-2 rounded-lg font-medium active:scale-95" style="background: var(--color-orange); color: #000;">Somar</button>
+      </div>
+    </div>
+  </div>
+</div>
