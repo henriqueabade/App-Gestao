@@ -32,7 +32,11 @@
         }).join('');
       ['categoria','unidade'].forEach(id=>{
         const el=form[id];
-        if(el) el.setAttribute('data-filled', el.value !== '');
+        if(!el) return;
+        const sync = () => el.setAttribute('data-filled', el.value !== '');
+        sync();
+        el.addEventListener('change', sync);
+        el.addEventListener('blur', sync);
       });
     }catch(err){
       console.error('Erro ao carregar opções', err);
