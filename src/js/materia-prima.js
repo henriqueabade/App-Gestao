@@ -298,10 +298,10 @@ window.hideRawMaterialInfoPopup = hideInfoPopup;
 
 function attachInfoEvents() {
     document.querySelectorAll('#materiaPrimaTableBody .info-icon').forEach(icon => {
-        const id = parseInt(icon.dataset.id);
+        const id = icon.dataset.id;
         window.electronAPI?.log?.(`attachInfoEvents icon=${id}`);
         icon.addEventListener('mouseenter', () => {
-            const item = materiais.find(m => m.id === id);
+            const item = materiais.find(m => String(m.id) === id);
             if (item) showInfoPopup(icon, item);
         });
         icon.addEventListener('mouseleave', () => {
