@@ -265,6 +265,30 @@
       });
     }
 
+    function showDuplicateDialog(nome){
+      return new Promise(resolve => {
+        const overlay = document.createElement('div');
+        overlay.className = 'fixed inset-0 bg-black/50 flex items-center justify-center p-4';
+        overlay.innerHTML = `
+          <div class="max-w-sm w-full glass-surface backdrop-blur-xl rounded-2xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade">
+            <div class="p-6 text-center">
+              <h3 class="text-lg font-semibold mb-4 text-yellow-300">Item Duplicado</h3>
+              <p class="text-sm text-gray-300 mb-6">O item "<span class="text-white">${nome}</span>" já está na lista. O que deseja fazer?</p>
+              <div class="flex justify-center gap-4">
+                <button id="duplicadoSomar" class="btn-success px-4 py-2 rounded-lg font-medium">Somar</button>
+                <button id="duplicadoSubstituir" class="btn-warning px-4 py-2 rounded-lg text-white font-medium">Substituir</button>
+                <button id="duplicadoManter" class="btn-neutral px-4 py-2 rounded-lg text-white font-medium">Manter</button>
+              </div>
+            </div>
+          </div>`;
+        document.body.appendChild(overlay);
+        const close = (choice) => { overlay.remove(); resolve(choice); };
+        overlay.querySelector('#duplicadoSomar').addEventListener('click', () => close('somar'));
+        overlay.querySelector('#duplicadoSubstituir').addEventListener('click', () => close('substituir'));
+        overlay.querySelector('#duplicadoManter').addEventListener('click', () => close('manter'));
+      });
+    }
+
     function renderItens(data){
       // garante tbody
       if (!tableBody) tableBody = resolveItensTbody();
@@ -288,6 +312,7 @@
 
       const grupos = {};
       itens.forEach(it => {
+        if(it.status === 'deleted') return;
         const procKey = it.processo || '—';
         if(!grupos[procKey]) grupos[procKey] = [];
         grupos[procKey].push(it);
@@ -324,9 +349,30 @@
 
     // API para receber itens de outros modais
     window.produtoEditarAPI = {
-      adicionarProcessoItens(arr){
+      async adicionarProcessoItens(arr){
         if(!Array.isArray(arr) || arr.length === 0) return;
-        arr.forEach(it => itens.push({ ...it, status: 'new' }));
+        for(const novo of arr){
+          const existente = itens.find(i => i.id === novo.id && i.status !== 'deleted');
+          if(existente){
+            const acao = await showDuplicateDialog(existente.nome || '');
+            if(acao === 'somar'){
+              existente.quantidade += novo.quantidade;
+              existente.total = existente.quantidade * (existente.preco_unitario || 0);
+              if(existente.status !== 'new') existente.status = 'updated';
+            }else if(acao === 'substituir'){
+              if(existente.status === 'new'){
+                itens = itens.filter(it => it !== existente);
+              }else{
+                existente.status = 'deleted';
+              }
+              itens.push({ ...novo, status: 'new' });
+            }else{ // manter
+              // nada a fazer
+            }
+          }else{
+            itens.push({ ...novo, status: 'new' });
+          }
+        }
         renderItens(itens);
       }
     };
