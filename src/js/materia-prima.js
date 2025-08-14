@@ -38,6 +38,9 @@ function initMateriaPrima() {
         popover.addEventListener('mouseleave', ocultar);
     }
 
+    materiaInfoPopover = document.getElementById('materiaInfoPopover');
+    materiaInfoPopover?.addEventListener('mouseleave', hideRawMaterialInfoPopup);
+
     carregarMateriais();
 }
 
@@ -161,7 +164,7 @@ function formatDate(dateStr) {
 let materiais = [];
 // Mapa auxiliar para lookup rápido pelo id
 let materiaisMap = new Map();
-let currentRawMaterialPopup = null;
+let materiaInfoPopover = null;
 
 function extractCor(nome, cor) {
     return (cor || (nome && nome.split('/')[1]) || '').trim();
@@ -226,16 +229,19 @@ function createPopupContent(item) {
 }
 
 function showRawMaterialInfoPopup(target, item) {
-    hideRawMaterialInfoPopup();
-    const { popup, left, top } = createPopup(target, createPopupContent(item), { onHide: hideRawMaterialInfoPopup });
-    window.electronAPI?.log?.(`showRawMaterialInfoPopup left=${left} top=${top} id=${item.id}`);
-    currentRawMaterialPopup = popup;
+    if (!materiaInfoPopover) return;
+    materiaInfoPopover.innerHTML = createPopupContent(item);
+    materiaInfoPopover.classList.add('show');
+    const rect = target.getBoundingClientRect();
+    const popRect = materiaInfoPopover.getBoundingClientRect();
+    materiaInfoPopover.style.left = `${rect.left + rect.width / 2 - popRect.width / 2}px`;
+    materiaInfoPopover.style.top = `${rect.top - popRect.height - 4}px`;
+    window.electronAPI?.log?.(`showRawMaterialInfoPopup left=${materiaInfoPopover.style.left} top=${materiaInfoPopover.style.top} id=${item.id}`);
 }
 
 function hideRawMaterialInfoPopup() {
-    if (currentRawMaterialPopup) {
-        currentRawMaterialPopup.remove();
-        currentRawMaterialPopup = null;
+    if (materiaInfoPopover) {
+        materiaInfoPopover.classList.remove('show');
     }
     window.electronAPI?.log?.('hideRawMaterialInfoPopup');
 }
@@ -265,7 +271,7 @@ function attachRawMaterialInfoEvents() {
 
         icon.addEventListener('mouseleave', () => {
             setTimeout(() => {
-                if (!currentRawMaterialPopup?.matches(':hover')) hideRawMaterialInfoPopup();
+                if (!materiaInfoPopover?.matches(':hover')) hideRawMaterialInfoPopup();
             }, 100);
         });
     });
