@@ -106,7 +106,7 @@ function renderProdutos(produtos) {
         });
     }
 
-    attachInfoEvents();
+    attachProductInfoEvents();
 }
 
 function popularFiltros() {
@@ -281,8 +281,8 @@ function createPopupContent(item) {
     </div>`;
 }
 
-function showInfoPopup(target, item) {
-    hideInfoPopup();
+function showProductInfoPopup(target, item) {
+    hideProductInfoPopup();
     const popup = document.createElement('div');
     popup.className = 'absolute z-50';
     popup.style.position = 'absolute';
@@ -313,32 +313,34 @@ function showInfoPopup(target, item) {
 
     popup.style.left = `${left + window.scrollX}px`;
     popup.style.top = `${top + window.scrollY}px`;
-    window.electronAPI?.log?.(`showInfoPopup left=${left} top=${top} id=${item.id}`);
-    popup.addEventListener('mouseleave', hideInfoPopup);
+    window.electronAPI?.log?.(`showProductInfoPopup left=${left} top=${top} id=${item.id}`);
+    popup.addEventListener('mouseleave', hideProductInfoPopup);
     currentProductPopup = popup;
 }
 
-function hideInfoPopup() {
+function hideProductInfoPopup() {
     if (currentProductPopup) {
         currentProductPopup.remove();
         currentProductPopup = null;
     }
-    window.electronAPI?.log?.('hideInfoPopup');
+    window.electronAPI?.log?.('hideProductInfoPopup');
 }
 
-window.hideProductInfoPopup = hideInfoPopup;
+window.showProductInfoPopup = showProductInfoPopup;
+window.hideProductInfoPopup = hideProductInfoPopup;
+window.attachProductInfoEvents = attachProductInfoEvents;
 
-function attachInfoEvents() {
+function attachProductInfoEvents() {
     document.querySelectorAll('#produtosTableBody .info-icon').forEach(icon => {
         const id = parseInt(icon.dataset.id);
-        window.electronAPI?.log?.(`attachInfoEvents icon=${id}`);
+        window.electronAPI?.log?.(`attachProductInfoEvents icon=${id}`);
         icon.addEventListener('mouseenter', () => {
             const item = produtosRenderizados.find(p => p.id === id);
-            if (item) showInfoPopup(icon, item);
+            if (item) showProductInfoPopup(icon, item);
         });
         icon.addEventListener('mouseleave', () => {
             setTimeout(() => {
-                if (!currentProductPopup?.matches(':hover')) hideInfoPopup();
+                if (!currentProductPopup?.matches(':hover')) hideProductInfoPopup();
             }, 100);
         });
     });

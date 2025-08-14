@@ -25,7 +25,7 @@ function showToast(message, type = 'info') {
     }, 3000);
 }
 
-window.showToast = showToast;
+window.showToast = window.showToast || showToast;
 
 // Inicializa animações e eventos
 function initMateriaPrima() {
@@ -249,8 +249,8 @@ function createPopupContent(item) {
     </div>`;
 }
 
-function showInfoPopup(target, item) {
-    hideInfoPopup();
+function showRawMaterialInfoPopup(target, item) {
+    hideRawMaterialInfoPopup();
     const popup = document.createElement('div');
     popup.className = 'absolute z-50';
     popup.style.position = 'absolute';
@@ -281,32 +281,34 @@ function showInfoPopup(target, item) {
 
     popup.style.left = `${left + window.scrollX}px`;
     popup.style.top = `${top + window.scrollY}px`;
-    window.electronAPI?.log?.(`showInfoPopup left=${left} top=${top} id=${item.id}`);
-    popup.addEventListener('mouseleave', hideInfoPopup);
+    window.electronAPI?.log?.(`showRawMaterialInfoPopup left=${left} top=${top} id=${item.id}`);
+    popup.addEventListener('mouseleave', hideRawMaterialInfoPopup);
     currentRawMaterialPopup = popup;
 }
 
-function hideInfoPopup() {
+function hideRawMaterialInfoPopup() {
     if (currentRawMaterialPopup) {
         currentRawMaterialPopup.remove();
         currentRawMaterialPopup = null;
     }
-    window.electronAPI?.log?.('hideInfoPopup');
+    window.electronAPI?.log?.('hideRawMaterialInfoPopup');
 }
 
-window.hideRawMaterialInfoPopup = hideInfoPopup;
+window.showRawMaterialInfoPopup = showRawMaterialInfoPopup;
+window.hideRawMaterialInfoPopup = hideRawMaterialInfoPopup;
+window.attachRawMaterialInfoEvents = attachRawMaterialInfoEvents;
 
-function attachInfoEvents() {
+function attachRawMaterialInfoEvents() {
     document.querySelectorAll('#materiaPrimaTableBody .info-icon').forEach(icon => {
         const id = parseInt(icon.dataset.id);
-        window.electronAPI?.log?.(`attachInfoEvents icon=${id}`);
+        window.electronAPI?.log?.(`attachRawMaterialInfoEvents icon=${id}`);
         icon.addEventListener('mouseenter', () => {
             const item = materiais.find(m => m.id === id);
-            if (item) showInfoPopup(icon, item);
+            if (item) showRawMaterialInfoPopup(icon, item);
         });
         icon.addEventListener('mouseleave', () => {
             setTimeout(() => {
-                if (!currentRawMaterialPopup?.matches(':hover')) hideInfoPopup();
+                if (!currentRawMaterialPopup?.matches(':hover')) hideRawMaterialInfoPopup();
             }, 100);
         });
     });
@@ -375,7 +377,7 @@ function renderMateriais(listaMateriais) {
         if (delBtn) delBtn.addEventListener('click', e => { e.stopPropagation(); abrirExcluirInsumo(item); });
     });
 
-    attachInfoEvents();
+    attachRawMaterialInfoEvents();
 }
 
 function abrirNovoInsumo() {
