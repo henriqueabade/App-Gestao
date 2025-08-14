@@ -2,18 +2,21 @@
 let todosMateriais = [];
 let notificationContainer;
 
-function showToast(message, type = 'success') {
+function showToast(message, type = 'info') {
     if (!notificationContainer) {
         notificationContainer = document.getElementById('notification');
         if (!notificationContainer) {
             notificationContainer = document.createElement('div');
             notificationContainer.id = 'notification';
-            notificationContainer.className = 'fixed top-4 right-4 space-y-2 z-[10000]';
+            notificationContainer.className = 'fixed left-1/2 top-1/2 transform -translate-x-1/2 -translate-y-1/2 mt-20 space-y-2 z-[10000]';
             document.body.appendChild(notificationContainer);
         }
     }
     const div = document.createElement('div');
-    div.className = `toast ${type === 'success' ? 'toast-success' : 'toast-error'}`;
+    let toastClass = 'toast-info';
+    if (type === 'success') toastClass = 'toast-success';
+    else if (type === 'error') toastClass = 'toast-error';
+    div.className = `toast ${toastClass}`;
     div.textContent = message;
     notificationContainer.appendChild(div);
     setTimeout(() => {

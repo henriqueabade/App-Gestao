@@ -171,12 +171,16 @@ body.fade-out {
   border-radius: 0.25rem;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
   transition: opacity 0.5s ease-in-out;
+  background-color: #374151; /* fallback gray */
 }
 .toast-success {
   background-color: #16a34a; /* green */
 }
 .toast-error {
   background-color: #dc2626; /* red */
+}
+.toast-info {
+  background-color: #2563eb; /* blue */
 }
 
 /* Warning overlays for PIN or connection errors */

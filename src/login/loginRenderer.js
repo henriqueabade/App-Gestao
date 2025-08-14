@@ -1,8 +1,11 @@
 // Toast helper
 const notificationContainer = document.getElementById("notification");
-function showToast(message, type = "error") {
+function showToast(message, type = "info") {
   const div = document.createElement("div");
-  div.className = `toast ${type === "success" ? "toast-success" : "toast-error"}`;
+  let toastClass = "toast-info";
+  if (type === "success") toastClass = "toast-success";
+  else if (type === "error") toastClass = "toast-error";
+  div.className = `toast ${toastClass}`;
   div.textContent = message;
   notificationContainer.appendChild(div);
   setTimeout(() => {
