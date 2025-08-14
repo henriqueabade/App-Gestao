@@ -1,8 +1,9 @@
 // Script principal do módulo de Produtos
 // Responsável por carregar os dados e controlar filtros e ações de estoque.
 
+import { showToast, createPopup, positionPopup } from './utils/notifications.js';
+
 let listaProdutos = [];
-let notificationContainer;
 let filtrosAplicados = {
     categoria: '',
     status: '',
@@ -15,31 +16,6 @@ let filtrosPendentes = false;
 // Controle de popup de informações do produto
 let produtosRenderizados = [];
 let currentProductPopup = null;
-
-function showToast(message, type = 'info') {
-    if (!notificationContainer) {
-        notificationContainer = document.getElementById('notification');
-        if (!notificationContainer) {
-            notificationContainer = document.createElement('div');
-            notificationContainer.id = 'notification';
-            notificationContainer.className = 'fixed left-1/2 top-1/2 transform -translate-x-1/2 -translate-y-1/2 mt-20 space-y-2 z-[10000]';
-            document.body.appendChild(notificationContainer);
-        }
-    }
-    const div = document.createElement('div');
-    let toastClass = 'toast-info';
-    if (type === 'success') toastClass = 'toast-success';
-    else if (type === 'error') toastClass = 'toast-error';
-    div.className = `toast ${toastClass}`;
-    div.textContent = message;
-    notificationContainer.appendChild(div);
-    setTimeout(() => {
-        div.classList.add('opacity-0');
-        setTimeout(() => div.remove(), 500);
-    }, 3000);
-}
-
-window.showToast = window.showToast || showToast;
 
 async function carregarProdutos() {
     try {
@@ -283,37 +259,10 @@ function createPopupContent(item) {
 
 function showProductInfoPopup(target, item) {
     hideProductInfoPopup();
-    const popup = document.createElement('div');
-    popup.className = 'absolute z-50';
-    popup.style.position = 'absolute';
-    popup.style.zIndex = '10000';
-    popup.innerHTML = createPopupContent(item);
-    document.body.appendChild(popup);
-    const rect = target.getBoundingClientRect();
-    const margin = 8;
+    const popup = createPopup(createPopupContent(item));
+    positionPopup(target, popup);
     const popupRect = popup.getBoundingClientRect();
-
-    let top = rect.bottom + margin;
-    if (top + popupRect.height > window.innerHeight) {
-        if (rect.top - margin - popupRect.height >= 0) {
-            top = rect.top - popupRect.height - margin;
-        } else {
-            top = Math.max(margin, window.innerHeight - popupRect.height - margin);
-        }
-    }
-
-    let left = rect.right + margin;
-    if (left + popupRect.width > window.innerWidth) {
-        if (rect.left - margin - popupRect.width >= 0) {
-            left = rect.left - popupRect.width - margin;
-        } else {
-            left = Math.max(margin, window.innerWidth - popupRect.width - margin);
-        }
-    }
-
-    popup.style.left = `${left + window.scrollX}px`;
-    popup.style.top = `${top + window.scrollY}px`;
-    window.electronAPI?.log?.(`showProductInfoPopup left=${left} top=${top} id=${item.id}`);
+    window.electronAPI?.log?.(`showProductInfoPopup left=${popupRect.left} top=${popupRect.top} id=${item.id}`);
     popup.addEventListener('mouseleave', hideProductInfoPopup);
     currentProductPopup = popup;
 }

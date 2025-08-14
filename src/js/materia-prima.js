@@ -1,31 +1,6 @@
 // Lógica principal do módulo Matéria Prima
+import { showToast, positionPopupAboveCenter } from './utils/notifications.js';
 let todosMateriais = [];
-let notificationContainer;
-
-function showToast(message, type = 'info') {
-    if (!notificationContainer) {
-        notificationContainer = document.getElementById('notification');
-        if (!notificationContainer) {
-            notificationContainer = document.createElement('div');
-            notificationContainer.id = 'notification';
-            notificationContainer.className = 'fixed left-1/2 top-1/2 transform -translate-x-1/2 -translate-y-1/2 mt-20 space-y-2 z-[10000]';
-            document.body.appendChild(notificationContainer);
-        }
-    }
-    const div = document.createElement('div');
-    let toastClass = 'toast-info';
-    if (type === 'success') toastClass = 'toast-success';
-    else if (type === 'error') toastClass = 'toast-error';
-    div.className = `toast ${toastClass}`;
-    div.textContent = message;
-    notificationContainer.appendChild(div);
-    setTimeout(() => {
-        div.classList.add('opacity-0');
-        setTimeout(() => div.remove(), 500);
-    }, 3000);
-}
-
-window.showToast = window.showToast || showToast;
 
 // Inicializa animações e eventos
 function initMateriaPrima() {
@@ -49,10 +24,7 @@ function initMateriaPrima() {
     if (infoIcon && popover) {
         const mostrar = () => {
             popover.classList.add('show');
-            const rect = infoIcon.getBoundingClientRect();
-            const popRect = popover.getBoundingClientRect();
-            popover.style.left = `${rect.left + rect.width / 2 - popRect.width / 2}px`;
-            popover.style.top = `${rect.top - popRect.height - 4}px`;
+            positionPopupAboveCenter(infoIcon, popover, 4);
         };
         const ocultar = () => popover.classList.remove('show');
         infoIcon.addEventListener('mouseenter', mostrar);
