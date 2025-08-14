@@ -45,7 +45,7 @@ async function carregarMateriais() {
     try {
         const lista = await (window.electronAPI?.listarMateriaPrima?.('') ?? []);
         todosMateriais = lista;
-        popularFiltros(lista);
+        await popularFiltros(lista);
         aplicarFiltros();
     } catch (err) {
         console.error('Erro ao carregar materiais', err);
@@ -54,7 +54,7 @@ async function carregarMateriais() {
 
 window.carregarMateriais = carregarMateriais;
 
-function popularFiltros(lista) {
+async function popularFiltros(lista) {
     const procSel = document.getElementById('filtroProcesso');
     const catSel = document.getElementById('filtroCategoria');
 
@@ -65,9 +65,16 @@ function popularFiltros(lista) {
     }
 
     if (catSel) {
-        const categorias = [...new Set(lista.map(m => m.categoria).filter(Boolean))].sort();
-        catSel.innerHTML = '<option value="">Todas</option>' +
-            categorias.map(c => `<option value="${c}">${c}</option>`).join('');
+        try {
+            const categorias = await (window.electronAPI?.listarCategorias?.() ?? []);
+            catSel.innerHTML = '<option value="">Todas</option>' +
+                categorias.map(c => {
+                    const nome = c?.nome_categoria ?? c;
+                    return `<option value="${nome}">${nome}</option>`;
+                }).join('');
+        } catch (err) {
+            console.error('Erro ao listar categorias', err);
+        }
     }
 }
 

@@ -19,7 +19,7 @@ let productInfoEventsBound = false;
 async function carregarProdutos() {
     try {
         listaProdutos = await (window.electronAPI?.listarProdutos?.() ?? []);
-        popularFiltros();
+        await popularFiltros();
         aplicarFiltro(true);
     } catch (err) {
         console.error('Erro ao carregar produtos', err);
@@ -85,14 +85,23 @@ function renderProdutos(produtos) {
     attachProductInfoEvents();
 }
 
-function popularFiltros() {
+async function popularFiltros() {
     const categoriaSelect = document.getElementById('filterCategory');
     const statusSelect = document.getElementById('filterStatus');
+
     if (categoriaSelect) {
-        const categorias = [...new Set(listaProdutos.map(p => p.categoria).filter(Boolean))];
-        categoriaSelect.innerHTML = '<option value="">Todas as Categorias</option>' +
-            categorias.map(c => `<option value="${c}">${c}</option>`).join('');
+        try {
+            const categorias = await (window.electronAPI?.listarCategorias?.() ?? []);
+            categoriaSelect.innerHTML = '<option value="">Todas as Categorias</option>' +
+                categorias.map(c => {
+                    const nome = c?.nome_categoria ?? c;
+                    return `<option value="${nome}">${nome}</option>`;
+                }).join('');
+        } catch (err) {
+            console.error('Erro ao listar categorias', err);
+        }
     }
+
     if (statusSelect) {
         const status = [...new Set(listaProdutos.map(p => p.status).filter(Boolean))];
         statusSelect.innerHTML = '<option value="">Todos</option>' +
