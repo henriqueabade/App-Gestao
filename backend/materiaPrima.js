@@ -127,6 +127,22 @@ async function listarUnidades() {
   return res.rows.map(r => r.tipo);
 }
 
+async function adicionarCategoria(nome) {
+  const res = await pool.query(
+    'INSERT INTO categoria (nome_categoria) VALUES ($1) RETURNING nome_categoria',
+    [nome]
+  );
+  return res.rows[0]?.nome_categoria;
+}
+
+async function adicionarUnidade(tipo) {
+  const res = await pool.query(
+    'INSERT INTO unidades (tipo) VALUES ($1) RETURNING tipo',
+    [tipo]
+  );
+  return res.rows[0]?.tipo;
+}
+
 module.exports = {
   listarMaterias,
   adicionarMateria,
@@ -136,5 +152,7 @@ module.exports = {
   registrarSaida,
   atualizarPreco,
   listarCategorias,
-  listarUnidades
+  listarUnidades,
+  adicionarCategoria,
+  adicionarUnidade
 };
