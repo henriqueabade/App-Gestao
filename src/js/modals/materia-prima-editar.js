@@ -11,13 +11,26 @@
   const item = window.materiaSelecionada;
   if(item){
     form.nome.value = item.nome || '';
-    form.categoria.value = item.categoria || '';
     quantidadeInput.value = item.quantidade || '';
-    form.unidade.value = item.unidade || '';
     form.preco.value = item.preco_unitario || '';
     form.processo.value = item.processo || '';
     infinitoCheckbox.checked = !!item.infinito;
     form.descricao.value = item.descricao || '';
+  }
+
+  async function carregarOpcoes(){
+    try{
+      const categorias = await window.electronAPI.listarCategorias();
+      form.categoria.innerHTML = '<option value="">Selecione</option>' + categorias.map(c => `<option value="${c}">${c}</option>`).join('');
+      const unidades = await window.electronAPI.listarUnidades();
+      form.unidade.innerHTML = '<option value="">Selecione</option>' + unidades.map(u => `<option value="${u}">${u}</option>`).join('');
+      if(item){
+        form.categoria.value = item.categoria || '';
+        form.unidade.value = item.unidade || '';
+      }
+    }catch(err){
+      console.error('Erro ao carregar opções', err);
+    }
   }
 
   const toggleInfinito = () => {
@@ -31,6 +44,7 @@
   };
 
   infinitoCheckbox.addEventListener('change', toggleInfinito);
+  carregarOpcoes();
   toggleInfinito();
 
   document.getElementById('abrirExcluirInsumo').addEventListener('click', () => {

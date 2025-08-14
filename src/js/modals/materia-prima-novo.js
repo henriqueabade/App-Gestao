@@ -9,6 +9,17 @@
   const quantidadeInput = form.quantidade;
   const infinitoCheckbox = form.infinito;
 
+  async function carregarOpcoes(){
+    try{
+      const categorias = await window.electronAPI.listarCategorias();
+      form.categoria.innerHTML = '<option value="">Selecione</option>' + categorias.map(c => `<option value="${c}">${c}</option>`).join('');
+      const unidades = await window.electronAPI.listarUnidades();
+      form.unidade.innerHTML = '<option value="">Selecione</option>' + unidades.map(u => `<option value="${u}">${u}</option>`).join('');
+    }catch(err){
+      console.error('Erro ao carregar opções', err);
+    }
+  }
+
   const toggleInfinito = () => {
     if (infinitoCheckbox.checked) {
       quantidadeInput.value = '∞';
@@ -49,5 +60,6 @@
     }
   });
 
+  carregarOpcoes();
   toggleInfinito();
 })();
