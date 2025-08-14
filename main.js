@@ -363,10 +363,20 @@ ipcMain.handle('atualizar-preco-materia-prima', async (_e, { id, preco }) => {
   return atualizarPreco(id, preco);
 });
 ipcMain.handle('listar-categorias', async () => {
-  return listarCategorias();
+  try {
+    return await listarCategorias();
+  } catch (err) {
+    console.error('Erro ao listar categorias:', err);
+    throw err;
+  }
 });
 ipcMain.handle('listar-unidades', async () => {
-  return listarUnidades();
+  try {
+    return await listarUnidades();
+  } catch (err) {
+    console.error('Erro ao listar unidades:', err);
+    throw err;
+  }
 });
 ipcMain.handle('listar-produtos', async () => {
   return listarProdutos();

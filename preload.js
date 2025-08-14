@@ -7,8 +7,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('registrar-usuario', { name, email, password, pin }),
   // Módulo de Matéria-Prima
   listarMateriaPrima: (filtro) => ipcRenderer.invoke('listar-materia-prima', { filtro }),
-  listarCategorias: () => ipcRenderer.invoke('listar-categorias'),
-  listarUnidades: () => ipcRenderer.invoke('listar-unidades'),
+  listarCategorias: () =>
+    ipcRenderer.invoke('listar-categorias').catch((err) => {
+      console.error('listar-categorias error', err);
+      return [];
+    }),
+  listarUnidades: () =>
+    ipcRenderer.invoke('listar-unidades').catch((err) => {
+      console.error('listar-unidades error', err);
+      return [];
+    }),
   listarProdutos: () => ipcRenderer.invoke('listar-produtos'),
   obterProduto: (codigo) => ipcRenderer.invoke('obter-produto', codigo),
   adicionarProduto: (dados) => ipcRenderer.invoke('adicionar-produto', dados),
