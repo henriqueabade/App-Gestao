@@ -162,7 +162,6 @@ let materiais = [];
 // Mapa auxiliar para lookup rápido pelo id
 let materiaisMap = new Map();
 let currentRawMaterialPopup = null;
-let rawMaterialInfoEventsBound = false;
 
 function extractCor(nome, cor) {
     return (cor || (nome && nome.split('/')[1]) || '').trim();
@@ -246,30 +245,29 @@ window.hideRawMaterialInfoPopup = hideRawMaterialInfoPopup;
 window.attachRawMaterialInfoEvents = attachRawMaterialInfoEvents;
 
 function attachRawMaterialInfoEvents() {
-    if (rawMaterialInfoEventsBound) return;
     const tbody = document.getElementById('materiaPrimaTableBody');
     if (!tbody) return;
-    rawMaterialInfoEventsBound = true;
 
-    tbody.addEventListener('mouseover', e => {
-        const icon = e.target.closest('.info-icon');
-        if (!icon || !tbody.contains(icon)) return;
-        const id = icon.dataset.id;
-        if (!id) {
-            window.electronAPI?.log?.('attachRawMaterialInfoEvents invalid id');
-            return;
-        }
-        window.electronAPI?.log?.(`attachRawMaterialInfoEvents icon=${id}`);
-        const item = materiaisMap.get(id);
-        if (item) showRawMaterialInfoPopup(icon, item);
-    });
+    tbody.querySelectorAll('.info-icon').forEach(icon => {
+        if (icon.dataset.bound) return;
+        icon.dataset.bound = 'true';
 
-    tbody.addEventListener('mouseout', e => {
-        const icon = e.target.closest('.info-icon');
-        if (!icon || !tbody.contains(icon)) return;
-        setTimeout(() => {
-            if (!currentRawMaterialPopup?.matches(':hover')) hideRawMaterialInfoPopup();
-        }, 100);
+        icon.addEventListener('mouseenter', () => {
+            const id = icon.dataset.id;
+            if (!id) {
+                window.electronAPI?.log?.('attachRawMaterialInfoEvents invalid id');
+                return;
+            }
+            window.electronAPI?.log?.(`attachRawMaterialInfoEvents icon=${id}`);
+            const item = materiaisMap.get(id) || materiais.find(m => String(m.id) === id);
+            if (item) showRawMaterialInfoPopup(icon, item);
+        });
+
+        icon.addEventListener('mouseleave', () => {
+            setTimeout(() => {
+                if (!currentRawMaterialPopup?.matches(':hover')) hideRawMaterialInfoPopup();
+            }, 100);
+        });
     });
 }
 
