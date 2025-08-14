@@ -183,6 +183,7 @@
     }
     const item = {
       id: materia.id,
+      insumo_id: materia.id,
       nome: materia.nome,
       unidade: materia.unidade,
       preco_unitario: materia.preco_unitario || 0,
@@ -240,13 +241,13 @@
       : [];
     const novos = [];
     for(const item of itens){
-      const duplicado = existentes.find(it=>it.id === item.id);
+      const duplicado = existentes.find(it => String(it.insumo_id ?? it.id) === String(item.id));
       if(duplicado){
         const acao = await showDuplicateDecision(item);
         if(acao === 'somar' && typeof api.somarItem === 'function'){
           api.somarItem(duplicado.id, item.quantidade);
         }else if(acao === 'substituir' && typeof api.substituirItem === 'function'){
-          api.substituirItem(item);
+          api.substituirItem({ ...item, id: duplicado.id });
         } // manter: não faz nada
       }else{
         novos.push(item);
