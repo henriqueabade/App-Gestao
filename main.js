@@ -642,3 +642,5 @@ ipcMain.handle('get-saved-display', () => {
   }
   return currentDisplayId || null;
 });
+
+ipcMain.on('debug-log', (_, m) => console.log('[popup]', m));
