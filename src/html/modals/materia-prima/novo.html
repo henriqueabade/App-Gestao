@@ -4,43 +4,49 @@
       <h2 class="text-lg font-semibold text-center text-white">Novo Insumo</h2>
       <button id="fecharNovoInsumo" class="btn-danger icon-only absolute right-4 top-4 text-white">✕</button>
     </header>
-    <form id="novoInsumoForm" class="p-8 grid md:grid-cols-2 gap-6">
-      <div class="relative">
-        <input id="nome" name="nome" type="text" placeholder=" " required class="peer w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-transparent focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
-        <label for="nome" class="absolute left-4 top-1/2 -translate-y-1/2 text-base text-gray-300 pointer-events-none transition-all duration-150 peer-placeholder-shown:top-1/2 peer-placeholder-shown:-translate-y-1/2 peer-placeholder-shown:text-base peer-focus:top-0 peer-focus:-translate-y-full peer-focus:text-xs peer-focus:text-primary peer-valid:top-0 peer-valid:-translate-y-full peer-valid:text-xs peer-disabled:top-0 peer-disabled:-translate-y-full peer-disabled:text-xs">Nome</label>
+    <form id="novoInsumoForm" class="p-8 form-grid">
+      <div class="form-field">
+        <input id="nome" name="nome" type="text" placeholder=" " required class="bg-input border border-inputBorder rounded-lg px-4 h-11 text-white placeholder-transparent focus:border-primary focus:ring-2 focus:ring-primary transition" />
+        <label for="nome">Nome</label>
       </div>
-      <div>
-        <label for="categoria" class="block text-sm font-medium text-gray-300 mb-2">Categoria</label>
-        <div class="flex items-center gap-2">
-          <select id="categoria" name="categoria" required class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></select>
-          <button type="button" id="addCategoriaNovo" class="btn-neutral icon-only text-gray-300 hover:text-white"><i class="fas fa-plus"></i></button>
+      <div class="input-group-select">
+        <div class="form-field flex-1">
+          <select id="categoria" name="categoria" required class="bg-input border border-inputBorder rounded-lg px-4 h-11 text-white focus:border-primary focus:ring-2 focus:ring-primary transition">
+            <option value="" disabled selected hidden></option>
+          </select>
+          <label for="categoria">Categoria</label>
         </div>
+        <button type="button" id="addCategoriaNovo" class="btn-neutral w-11 h-11 flex items-center justify-center rounded-lg text-gray-300 hover:text-white"><i class="fas fa-plus"></i></button>
       </div>
-      <div class="relative">
-        <input id="quantidade" name="quantidade" type="number" min="0" step="0.01" placeholder=" " required class="peer w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-transparent focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
-        <label for="quantidade" class="absolute left-4 top-1/2 -translate-y-1/2 text-base text-gray-300 pointer-events-none transition-all duration-150 peer-placeholder-shown:top-1/2 peer-placeholder-shown:-translate-y-1/2 peer-placeholder-shown:text-base peer-focus:top-0 peer-focus:-translate-y-full peer-focus:text-xs peer-focus:text-primary peer-valid:top-0 peer-valid:-translate-y-full peer-valid:text-xs peer-disabled:top-0 peer-disabled:-translate-y-full peer-disabled:text-xs">Quantidade</label>
+      <div class="form-field">
+        <input id="quantidade" name="quantidade" type="number" min="0" step="0.01" placeholder=" " required class="bg-input border border-inputBorder rounded-lg px-4 h-11 text-white placeholder-transparent focus:border-primary focus:ring-2 focus:ring-primary transition" />
+        <label for="quantidade">Quantidade</label>
       </div>
-      <div>
-        <label for="unidade" class="block text-sm font-medium text-gray-300 mb-2">Unidade</label>
-        <div class="flex items-center gap-2">
-          <select id="unidade" name="unidade" required class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></select>
-          <button type="button" id="addUnidadeNovo" class="btn-neutral icon-only text-gray-300 hover:text-white"><i class="fas fa-plus"></i></button>
+      <div class="input-group-select">
+        <div class="form-field flex-1">
+          <select id="unidade" name="unidade" required class="bg-input border border-inputBorder rounded-lg px-4 h-11 text-white focus:border-primary focus:ring-2 focus:ring-primary transition">
+            <option value="" disabled selected hidden></option>
+          </select>
+          <label for="unidade">Unidade</label>
         </div>
+        <button type="button" id="addUnidadeNovo" class="btn-neutral w-11 h-11 flex items-center justify-center rounded-lg text-gray-300 hover:text-white"><i class="fas fa-plus"></i></button>
       </div>
-      <div class="relative">
-        <input id="preco" name="preco" type="number" min="0" step="0.01" placeholder=" " required class="peer w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-transparent focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
-        <label for="preco" class="absolute left-4 top-1/2 -translate-y-1/2 text-base text-gray-300 pointer-events-none transition-all duration-150 peer-placeholder-shown:top-1/2 peer-placeholder-shown:-translate-y-1/2 peer-placeholder-shown:text-base peer-focus:top-0 peer-focus:-translate-y-full peer-focus:text-xs peer-focus:text-primary peer-valid:top-0 peer-valid:-translate-y-full peer-valid:text-xs peer-disabled:top-0 peer-disabled:-translate-y-full peer-disabled:text-xs">Preço Unitário</label>
+      <div class="form-field">
+        <input id="preco" name="preco" type="number" min="0" step="0.01" placeholder=" " required class="bg-input border border-inputBorder rounded-lg px-4 h-11 text-white placeholder-transparent focus:border-primary focus:ring-2 focus:ring-primary transition" />
+        <label for="preco">Preço Unitário</label>
       </div>
-      <div class="relative">
-        <input id="processo" name="processo" type="text" placeholder=" " required class="peer w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-transparent focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
-        <label for="processo" class="absolute left-4 top-1/2 -translate-y-1/2 text-base text-gray-300 pointer-events-none transition-all duration-150 peer-placeholder-shown:top-1/2 peer-placeholder-shown:-translate-y-1/2 peer-placeholder-shown:text-base peer-focus:top-0 peer-focus:-translate-y-full peer-focus:text-xs peer-focus:text-primary peer-valid:top-0 peer-valid:-translate-y-full peer-valid:text-xs peer-disabled:top-0 peer-disabled:-translate-y-full peer-disabled:text-xs">Processo</label>
+      <div class="form-field">
+        <input id="processo" name="processo" type="text" placeholder=" " required class="bg-input border border-inputBorder rounded-lg px-4 h-11 text-white placeholder-transparent focus:border-primary focus:ring-2 focus:ring-primary transition" />
+        <label for="processo">Processo</label>
       </div>
-      <label class="flex items-center gap-3 md:col-span-2">
-        <input id="infinito" type="checkbox" class="component-toggle" />
-        <span class="text-gray-200">Estoque infinito</span>
-      </label>
-      <div class="md:col-span-2">
-        <textarea id="descricao" name="descricao" placeholder="Descreva as especificações técnicas do insumo…" class="w-full h-28 bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 resize-none focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></textarea>
+      <div class="switch-inline">
+        <input id="infinito" type="checkbox" class="component-toggle" role="switch" aria-checked="false" onchange="this.setAttribute('aria-checked', this.checked)" />
+        <label for="infinito" class="text-gray-200">Estoque infinito</label>
+      </div>
+      <div class="form-field textarea-field">
+        <textarea id="descricao" name="descricao" placeholder=" " aria-describedby="descricaoHelp" class="bg-input border border-inputBorder rounded-lg px-4 py-3 h-28 text-white placeholder-transparent resize-none focus:border-primary focus:ring-2 focus:ring-primary transition"></textarea>
+        <label for="descricao">Descrição</label>
+        <p id="descricaoHelp" class="mt-1 text-sm text-gray-400">Descreva as especificações técnicas do insumo…</p>
       </div>
     </form>
     <footer class="flex justify-end gap-4 px-8 py-6 border-t border-white/10">
