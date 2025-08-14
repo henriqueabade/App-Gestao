@@ -131,7 +131,10 @@
   if (inserirBtn) inserirBtn.addEventListener('click',()=>{
     const id = itemSelect ? itemSelect.value : '';
     const quantidade = parseFloat(qtdInput && qtdInput.value);
-    if(!id || !quantidade || quantidade <= 0) return;
+    if(!id || !quantidade || quantidade <= 0){
+      showToast('Nada para inserir', 'error');
+      return;
+    }
     const materia = materiais.find(m=>String(m.id)===String(id));
     if(!materia) return;
     const existente = itens.find(it=>it.id===materia.id);
@@ -159,16 +162,45 @@
     resetFields();
   });
 
+  function showClearConfirm(onConfirm){
+    const warn = document.createElement('div');
+    warn.id = 'limparTudoOverlay';
+    warn.className = 'fixed inset-0 bg-black/50 flex items-center justify-center p-4';
+    warn.innerHTML = `
+      <div class="max-w-sm w-full glass-surface backdrop-blur-xl rounded-2xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade">
+        <div class="p-6 text-center">
+          <h3 class="text-lg font-semibold mb-4 text-red-300">Limpar Tudo</h3>
+          <p class="text-sm text-gray-300">Deseja remover todos os itens?</p>
+          <div class="flex justify-center gap-6 mt-8">
+            <button id="confirmarLimpar" class="btn-danger px-6 py-2 rounded-lg text-white font-medium">Sim</button>
+            <button id="cancelarLimpar" class="btn-neutral px-6 py-2 rounded-lg text-white font-medium">Não</button>
+          </div>
+        </div>
+      </div>`;
+    document.body.appendChild(warn);
+    warn.querySelector('#confirmarLimpar').addEventListener('click',()=>{
+      onConfirm();
+      warn.remove();
+    });
+    warn.querySelector('#cancelarLimpar').addEventListener('click',()=>warn.remove());
+  }
+
   if (limparBtn) limparBtn.addEventListener('click',()=>{
-    itens = [];
-    if(tabelaBody) tabelaBody.innerHTML='';
-    updateTotal();
-    resetFields();
+    showClearConfirm(()=>{
+      itens = [];
+      if(tabelaBody) tabelaBody.innerHTML='';
+      updateTotal();
+      resetFields();
+    });
   });
 
   // registrar/transferir
   if (registrarBtn) registrarBtn.addEventListener('click',()=>{
-    if(window.produtoEditarAPI && typeof window.produtoEditarAPI.adicionarProcessoItens==='function' && itens.length){
+    if(!itens.length){
+      showToast('Nada para registrar', 'error');
+      return;
+    }
+    if(window.produtoEditarAPI && typeof window.produtoEditarAPI.adicionarProcessoItens==='function'){
       const novos = itens.map(it=>({ ...it }));
       window.produtoEditarAPI.adicionarProcessoItens(novos);
     }
@@ -194,7 +226,7 @@
   (async ()=>{
     try{
       materiais = await window.electronAPI.listarMateriaPrima('');
-      materiais = (materiais||[]).filter(m=> (m.categoria||'').toLowerCase() === titulo.toLowerCase());
+      materiais = (materiais||[]).filter(m=> (m.processo||'').toLowerCase() === titulo.toLowerCase());
       if(itemSelect){
         itemSelect.innerHTML = '<option value="">Nome do Item</option>' +
           materiais.map(m=>`<option value="${m.id}">${m.nome}</option>`).join('');
