@@ -12,9 +12,17 @@
   async function carregarOpcoes(){
     try{
       const categorias = await window.electronAPI.listarCategorias();
-      form.categoria.innerHTML = '<option value="">Selecione</option>' + categorias.map(c => `<option value="${c}">${c}</option>`).join('');
+      form.categoria.innerHTML = '<option value="">Selecione</option>' +
+        categorias.map(c => {
+          const nome = c?.nome_categoria ?? c;
+          return `<option value="${nome}">${nome}</option>`;
+        }).join('');
       const unidades = await window.electronAPI.listarUnidades();
-      form.unidade.innerHTML = '<option value="">Selecione</option>' + unidades.map(u => `<option value="${u}">${u}</option>`).join('');
+      form.unidade.innerHTML = '<option value="">Selecione</option>' +
+        unidades.map(u => {
+          const tipo = u?.tipo ?? u;
+          return `<option value="${tipo}">${tipo}</option>`;
+        }).join('');
     }catch(err){
       console.error('Erro ao carregar opções', err);
     }
