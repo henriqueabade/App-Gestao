@@ -14,7 +14,7 @@ let filtrosPendentes = false;
 
 // Controle de popup de informações do produto
 let produtosRenderizados = [];
-let currentPopup = null;
+let currentProductPopup = null;
 
 function showToast(message, type = 'success') {
     if (!notificationContainer) {
@@ -309,13 +309,13 @@ function showInfoPopup(target, item) {
 
     popup.style.left = `${left + window.scrollX}px`;
     popup.style.top = `${top + window.scrollY}px`;
-    currentPopup = popup;
+    currentProductPopup = popup;
 }
 
 function hideInfoPopup() {
-    if (currentPopup) {
-        currentPopup.remove();
-        currentPopup = null;
+    if (currentProductPopup) {
+        currentProductPopup.remove();
+        currentProductPopup = null;
     }
 }
 
