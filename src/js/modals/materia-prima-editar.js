@@ -11,10 +11,10 @@
   const item = window.materiaSelecionada;
 
   document.getElementById('addCategoriaEditar').addEventListener('click', () => {
-    Modal.open('modals/materia-prima/categoria-novo.html', '../js/modals/materia-prima-categoria-novo.js', 'novaCategoria');
+    Modal.open('modals/materia-prima/categoria-novo.html', '../js/modals/materia-prima-categoria-novo.js', 'novaCategoria', true);
   });
   document.getElementById('addUnidadeEditar').addEventListener('click', () => {
-    Modal.open('modals/materia-prima/unidade-novo.html', '../js/modals/materia-prima-unidade-novo.js', 'novaUnidade');
+    Modal.open('modals/materia-prima/unidade-novo.html', '../js/modals/materia-prima-unidade-novo.js', 'novaUnidade', true);
   });
   if(item){
     form.nome.value = item.nome || '';

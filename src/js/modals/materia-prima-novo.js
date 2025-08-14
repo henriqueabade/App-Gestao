@@ -10,10 +10,10 @@
   const infinitoCheckbox = form.infinito;
 
   document.getElementById('addCategoriaNovo').addEventListener('click', () => {
-    Modal.open('modals/materia-prima/categoria-novo.html', '../js/modals/materia-prima-categoria-novo.js', 'novaCategoria');
+    Modal.open('modals/materia-prima/categoria-novo.html', '../js/modals/materia-prima-categoria-novo.js', 'novaCategoria', true);
   });
   document.getElementById('addUnidadeNovo').addEventListener('click', () => {
-    Modal.open('modals/materia-prima/unidade-novo.html', '../js/modals/materia-prima-unidade-novo.js', 'novaUnidade');
+    Modal.open('modals/materia-prima/unidade-novo.html', '../js/modals/materia-prima-unidade-novo.js', 'novaUnidade', true);
   });
 
   async function carregarOpcoes(){
