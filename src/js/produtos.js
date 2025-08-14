@@ -332,10 +332,14 @@ window.attachProductInfoEvents = attachProductInfoEvents;
 
 function attachProductInfoEvents() {
     document.querySelectorAll('#produtosTableBody .info-icon').forEach(icon => {
-        const id = parseInt(icon.dataset.id);
+        const id = icon.dataset.id;
+        if (!id) {
+            window.electronAPI?.log?.('attachProductInfoEvents invalid id');
+            return;
+        }
         window.electronAPI?.log?.(`attachProductInfoEvents icon=${id}`);
         icon.addEventListener('mouseenter', () => {
-            const item = produtosRenderizados.find(p => p.id === id);
+            const item = produtosRenderizados.find(p => String(p.id) === id);
             if (item) showProductInfoPopup(icon, item);
         });
         icon.addEventListener('mouseleave', () => {
