@@ -17,6 +17,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
       console.error('listar-unidades error', err);
       return [];
     }),
+  adicionarCategoria: (nome) => ipcRenderer.invoke('adicionar-categoria', nome),
+  adicionarUnidade: (nome) => ipcRenderer.invoke('adicionar-unidade', nome),
   listarProdutos: () => ipcRenderer.invoke('listar-produtos'),
   obterProduto: (codigo) => ipcRenderer.invoke('obter-produto', codigo),
   adicionarProduto: (dados) => ipcRenderer.invoke('adicionar-produto', dados),

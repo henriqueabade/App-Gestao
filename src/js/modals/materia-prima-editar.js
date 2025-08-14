@@ -9,6 +9,13 @@
   const quantidadeInput = form.quantidade;
   const infinitoCheckbox = form.infinito;
   const item = window.materiaSelecionada;
+
+  document.getElementById('addCategoriaEditar').addEventListener('click', () => {
+    Modal.open('modals/materia-prima/categoria-novo.html', '../js/modals/materia-prima-categoria-novo.js', 'novaCategoria');
+  });
+  document.getElementById('addUnidadeEditar').addEventListener('click', () => {
+    Modal.open('modals/materia-prima/unidade-novo.html', '../js/modals/materia-prima-unidade-novo.js', 'novaUnidade');
+  });
   if(item){
     form.nome.value = item.nome || '';
     quantidadeInput.value = item.quantidade || '';

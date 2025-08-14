@@ -9,6 +9,13 @@
   const quantidadeInput = form.quantidade;
   const infinitoCheckbox = form.infinito;
 
+  document.getElementById('addCategoriaNovo').addEventListener('click', () => {
+    Modal.open('modals/materia-prima/categoria-novo.html', '../js/modals/materia-prima-categoria-novo.js', 'novaCategoria');
+  });
+  document.getElementById('addUnidadeNovo').addEventListener('click', () => {
+    Modal.open('modals/materia-prima/unidade-novo.html', '../js/modals/materia-prima-unidade-novo.js', 'novaUnidade');
+  });
+
   async function carregarOpcoes(){
     try{
       const categorias = await window.electronAPI.listarCategorias();

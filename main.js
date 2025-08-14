@@ -18,7 +18,9 @@ const {
   registrarSaida,
   atualizarPreco,
   listarCategorias,
-  listarUnidades
+  listarUnidades,
+  adicionarCategoria,
+  adicionarUnidade
 } = require('./backend/materiaPrima');
 const {
   listarProdutos,
@@ -375,6 +377,22 @@ ipcMain.handle('listar-unidades', async () => {
     return await listarUnidades();
   } catch (err) {
     console.error('Erro ao listar unidades:', err);
+    throw err;
+  }
+});
+ipcMain.handle('adicionar-categoria', async (_e, nome) => {
+  try {
+    return await adicionarCategoria(nome);
+  } catch (err) {
+    console.error('Erro ao adicionar categoria:', err);
+    throw err;
+  }
+});
+ipcMain.handle('adicionar-unidade', async (_e, nome) => {
+  try {
+    return await adicionarUnidade(nome);
+  } catch (err) {
+    console.error('Erro ao adicionar unidade:', err);
     throw err;
   }
 });
