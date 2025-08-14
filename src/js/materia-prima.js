@@ -277,6 +277,7 @@ function showInfoPopup(target, item) {
 
     popup.style.left = `${left + window.scrollX}px`;
     popup.style.top = `${top + window.scrollY}px`;
+    popup.addEventListener('mouseleave', hideInfoPopup);
     currentRawMaterialPopup = popup;
 }
 
@@ -296,7 +297,11 @@ function attachInfoEvents() {
             const item = materiais.find(m => m.id === id);
             if (item) showInfoPopup(icon, item);
         });
-        icon.addEventListener('mouseleave', hideInfoPopup);
+        icon.addEventListener('mouseleave', () => {
+            setTimeout(() => {
+                if (!currentRawMaterialPopup?.matches(':hover')) hideInfoPopup();
+            }, 100);
+        });
     });
     if (window.feather) feather.replace();
 }
