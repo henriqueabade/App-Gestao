@@ -363,6 +363,20 @@ body {
 .btn-success:hover { background: rgba(162,255,166,0.8); transform: scale(1.05); }
 .btn-success:active { transform: scale(0.95); }
 
+/* Toast notifications */
+.toast {
+  color: white;
+  padding: 0.5rem 1rem;
+  border-radius: 0.25rem;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  transition: opacity 0.5s ease-in-out;
+  background-color: #374151;
+}
+
+.toast-success { background-color: #16a34a; }
+.toast-error { background-color: #dc2626; }
+.toast-info { background-color: #2563eb; }
+
 /* toggle on/off */
 .component-toggle { appearance: none; width:48px; height:24px; background: rgba(255,255,255,0.2); border-radius:12px; position:relative; cursor:pointer; transition: all 150ms ease; }
 .component-toggle::after { content:''; position:absolute; top:2px; left:2px; width:20px; height:20px; background:white; border-radius:50%; transition: all 150ms ease; }
