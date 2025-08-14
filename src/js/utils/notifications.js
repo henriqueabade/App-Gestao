@@ -45,8 +45,8 @@ function showToast(message, type = 'info') {
  */
 function createPopup(target, html, { margin = 8, onHide } = {}) {
   const popup = document.createElement('div');
-  popup.className = 'absolute z-50';
-  popup.style.position = 'absolute';
+  popup.className = 'fixed z-50';
+  popup.style.position = 'fixed';
   popup.style.zIndex = '10000';
   popup.innerHTML = html;
   document.body.appendChild(popup);
@@ -72,8 +72,8 @@ function createPopup(target, html, { margin = 8, onHide } = {}) {
     }
   }
 
-  popup.style.left = `${left + window.scrollX}px`;
-  popup.style.top = `${top + window.scrollY}px`;
+  popup.style.left = `${left}px`;
+  popup.style.top = `${top}px`;
 
   if (typeof onHide === 'function') {
     popup.addEventListener('mouseleave', onHide);
