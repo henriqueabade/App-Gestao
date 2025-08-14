@@ -124,22 +124,3 @@
     </footer>
   </div>
 </div>
-
-<!-- Script: controla o "data-filled" dos selects para o floating label -->
-<script>
-  (function setupFloatingForNovoInsumo() {
-    const form = document.getElementById('novoInsumoForm');
-    if (!form) return;
-
-    function bindFilledAttr(id) {
-      const el = form.querySelector('#' + id);
-      if (!el) return;
-      const sync = () => el.setAttribute('data-filled', el.value !== '');
-      sync();
-      el.addEventListener('change', sync);
-      el.addEventListener('blur', sync);
-    }
-
-    ['categoria', 'unidade'].forEach(bindFilledAttr);
-  })();
-</script>
