@@ -73,6 +73,9 @@ const ModalManager = (() => {
     if (window.hideRawMaterialInfoPopup) {
       window.hideRawMaterialInfoPopup();
     }
+    if (window.hideProductInfoPopup) {
+      window.hideProductInfoPopup();
+    }
   }
 
   return { open, close, closeAll };
@@ -97,6 +100,9 @@ function closeAllModals() {
   document.body.classList.remove('overflow-hidden');
   if (window.hideRawMaterialInfoPopup) {
     window.hideRawMaterialInfoPopup();
+  }
+  if (window.hideProductInfoPopup) {
+    window.hideProductInfoPopup();
   }
 }
 
