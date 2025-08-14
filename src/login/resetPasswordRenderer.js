@@ -5,9 +5,12 @@ document.addEventListener('DOMContentLoaded', () => {
   const msg = document.getElementById('message');
   const notificationContainer = document.getElementById('notification');
 
-  function showToast(message, type = 'success') {
+  function showToast(message, type = 'info') {
     const div = document.createElement('div');
-    div.className = `${type === 'success' ? 'bg-green-500' : 'bg-red-500'} text-white px-4 py-2 rounded shadow transition-opacity duration-500`;
+    let toastClass = 'toast-info';
+    if (type === 'success') toastClass = 'toast-success';
+    else if (type === 'error') toastClass = 'toast-error';
+    div.className = `toast ${toastClass}`;
     div.textContent = message;
     notificationContainer.appendChild(div);
     setTimeout(() => {
