@@ -5,6 +5,7 @@
   const tituloEl = document.getElementById('proximaEtapaTitulo');
   const itemSelect = document.getElementById('proximaEtapaItem');
   const qtdInput   = document.getElementById('proximaEtapaQuantidade');
+  const unidadeSpan = document.getElementById('proximaEtapaUnidade');
   const inserirBtn = document.getElementById('inserirProximaEtapa');
   const limparBtn  = document.getElementById('limparProximaEtapa');
   const registrarBtn = document.getElementById('registrarProximaEtapa');
@@ -16,6 +17,11 @@
 
   let materiais = [];
   let itens = [];
+
+  if(itemSelect) itemSelect.addEventListener('change',()=>{
+    const materia = materiais.find(m=>String(m.id)===String(itemSelect.value));
+    if(unidadeSpan) unidadeSpan.textContent = materia ? (materia.unidade || '') : '';
+  });
 
   function formatCurrency(val){
     return (val || 0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
@@ -89,6 +95,7 @@
     tr.innerHTML = `
       <td class="py-4 px-4 text-white">${item.nome}</td>
       <td class="py-4 px-4 text-center quantidade-cell"><span class="quantidade-text">${formatNumber(item.quantidade)}</span></td>
+      <td class="py-4 px-4 text-center text-gray-300">${item.unidade || ''}</td>
       <td class="py-4 px-4 text-right text-white">${formatCurrency(item.preco_unitario)}</td>
       <td class="py-4 px-4 text-right text-white item-total">${formatCurrency(item.quantidade * item.preco_unitario)}</td>
       <td class="py-4 px-4 text-center action-cell"></td>`;
@@ -125,6 +132,7 @@
   function resetFields(){
     if(itemSelect) itemSelect.value = '';
     if(qtdInput) qtdInput.value = '';
+    if(unidadeSpan) unidadeSpan.textContent = '';
   }
 
   // inserção/duplicidade

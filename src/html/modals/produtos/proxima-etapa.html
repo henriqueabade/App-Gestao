@@ -16,8 +16,9 @@
               <option value="">Nome do Item</option>
             </select>
           </div>
-          <div>
-            <input id="proximaEtapaQuantidade" type="number" placeholder="Quantidade" min="1" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+          <div class="relative">
+            <input id="proximaEtapaQuantidade" type="number" placeholder="Quantidade" min="1" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 pr-16 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+            <span id="proximaEtapaUnidade" class="absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-300 pointer-events-none"></span>
           </div>
         </div>
         <div class="flex gap-4">
@@ -33,6 +34,7 @@
                 <tr class="border-b border-white/10">
                   <th class="text-left py-4 px-4 text-gray-300 font-medium">Item</th>
                   <th class="text-center py-4 px-4 text-gray-300 font-medium">Quantidade</th>
+                  <th class="text-center py-4 px-4 text-gray-300 font-medium">Unidade</th>
                   <th class="text-right py-4 px-4 text-gray-300 font-medium">Valor unitário (R$)</th>
                   <th class="text-right py-4 px-4 text-gray-300 font-medium">Valor total (R$)</th>
                   <th class="text-center py-4 px-4 text-gray-300 font-medium">Ações</th>
