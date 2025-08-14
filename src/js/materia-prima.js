@@ -160,6 +160,7 @@ function formatDate(dateStr) {
 // Controle de popup de informações da matéria prima
 let materiais = [];
 let currentRawMaterialPopup = null;
+let rawMaterialInfoEventsBound = false;
 
 function extractCor(nome, cor) {
     return (cor || (nome && nome.split('/')[1]) || '').trim();
@@ -243,24 +244,30 @@ window.hideRawMaterialInfoPopup = hideRawMaterialInfoPopup;
 window.attachRawMaterialInfoEvents = attachRawMaterialInfoEvents;
 
 function attachRawMaterialInfoEvents() {
-    if (window.feather) feather.replace();
+    if (rawMaterialInfoEventsBound) return;
+    const tbody = document.getElementById('materiaPrimaTableBody');
+    if (!tbody) return;
+    rawMaterialInfoEventsBound = true;
 
-    document.querySelectorAll('#materiaPrimaTableBody .info-icon').forEach(icon => {
+    tbody.addEventListener('mouseover', e => {
+        const icon = e.target.closest('.info-icon');
+        if (!icon || !tbody.contains(icon)) return;
         const id = icon.dataset.id;
         if (!id) {
             window.electronAPI?.log?.('attachRawMaterialInfoEvents invalid id');
             return;
         }
         window.electronAPI?.log?.(`attachRawMaterialInfoEvents icon=${id}`);
-        icon.addEventListener('mouseenter', () => {
-            const item = materiais.find(m => String(m.id) === id);
-            if (item) showRawMaterialInfoPopup(icon, item);
-        });
-        icon.addEventListener('mouseleave', () => {
-            setTimeout(() => {
-                if (!currentRawMaterialPopup?.matches(':hover')) hideRawMaterialInfoPopup();
-            }, 100);
-        });
+        const item = materiais.find(m => String(m.id) === id);
+        if (item) showRawMaterialInfoPopup(icon, item);
+    });
+
+    tbody.addEventListener('mouseout', e => {
+        const icon = e.target.closest('.info-icon');
+        if (!icon || !tbody.contains(icon)) return;
+        setTimeout(() => {
+            if (!currentRawMaterialPopup?.matches(':hover')) hideRawMaterialInfoPopup();
+        }, 100);
     });
 }
 
@@ -326,6 +333,7 @@ function renderMateriais(listaMateriais) {
         if (delBtn) delBtn.addEventListener('click', e => { e.stopPropagation(); abrirExcluirInsumo(item); });
     });
 
+    if (window.feather) feather.replace();
     attachRawMaterialInfoEvents();
 }
 

@@ -14,6 +14,7 @@ let filtrosPendentes = false;
 // Controle de popup de informações do produto
 let produtosRenderizados = [];
 let currentProductPopup = null;
+let productInfoEventsBound = false;
 
 async function carregarProdutos() {
     try {
@@ -80,6 +81,7 @@ function renderProdutos(produtos) {
         });
     }
 
+    if (window.feather) feather.replace();
     attachProductInfoEvents();
 }
 
@@ -275,24 +277,30 @@ window.hideProductInfoPopup = hideProductInfoPopup;
 window.attachProductInfoEvents = attachProductInfoEvents;
 
 function attachProductInfoEvents() {
-    if (window.feather) feather.replace();
+    if (productInfoEventsBound) return;
+    const tbody = document.getElementById('produtosTableBody');
+    if (!tbody) return;
+    productInfoEventsBound = true;
 
-    document.querySelectorAll('#produtosTableBody .info-icon').forEach(icon => {
+    tbody.addEventListener('mouseover', e => {
+        const icon = e.target.closest('.info-icon');
+        if (!icon || !tbody.contains(icon)) return;
         const id = icon.dataset.id;
         if (!id) {
             window.electronAPI?.log?.('attachProductInfoEvents invalid id');
             return;
         }
         window.electronAPI?.log?.(`attachProductInfoEvents icon=${id}`);
-        icon.addEventListener('mouseenter', () => {
-            const item = produtosRenderizados.find(p => String(p.id) === id);
-            if (item) showProductInfoPopup(icon, item);
-        });
-        icon.addEventListener('mouseleave', () => {
-            setTimeout(() => {
-                if (!currentProductPopup?.matches(':hover')) hideProductInfoPopup();
-            }, 100);
-        });
+        const item = produtosRenderizados.find(p => String(p.id) === id);
+        if (item) showProductInfoPopup(icon, item);
+    });
+
+    tbody.addEventListener('mouseout', e => {
+        const icon = e.target.closest('.info-icon');
+        if (!icon || !tbody.contains(icon)) return;
+        setTimeout(() => {
+            if (!currentProductPopup?.matches(':hover')) hideProductInfoPopup();
+        }, 100);
     });
 }
 
