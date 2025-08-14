@@ -69,7 +69,7 @@ function initMateriaPrima() {
 
 async function carregarMateriais() {
     try {
-        const lista = await window.electronAPI.listarMateriaPrima('');
+        const lista = await (window.electronAPI?.listarMateriaPrima?.('') ?? []);
         todosMateriais = lista;
         popularFiltros(lista);
         aplicarFiltros();
@@ -281,7 +281,7 @@ function showInfoPopup(target, item) {
 
     popup.style.left = `${left + window.scrollX}px`;
     popup.style.top = `${top + window.scrollY}px`;
-    window.electronAPI.log(`showInfoPopup left=${left} top=${top} id=${item.id}`);
+    window.electronAPI?.log?.(`showInfoPopup left=${left} top=${top} id=${item.id}`);
     popup.addEventListener('mouseleave', hideInfoPopup);
     currentRawMaterialPopup = popup;
 }
@@ -291,7 +291,7 @@ function hideInfoPopup() {
         currentRawMaterialPopup.remove();
         currentRawMaterialPopup = null;
     }
-    window.electronAPI.log('hideInfoPopup');
+    window.electronAPI?.log?.('hideInfoPopup');
 }
 
 window.hideRawMaterialInfoPopup = hideInfoPopup;
@@ -299,7 +299,7 @@ window.hideRawMaterialInfoPopup = hideInfoPopup;
 function attachInfoEvents() {
     document.querySelectorAll('#materiaPrimaTableBody .info-icon').forEach(icon => {
         const id = parseInt(icon.dataset.id);
-        window.electronAPI.log(`attachInfoEvents icon=${id}`);
+        window.electronAPI?.log?.(`attachInfoEvents icon=${id}`);
         icon.addEventListener('mouseenter', () => {
             const item = materiais.find(m => m.id === id);
             if (item) showInfoPopup(icon, item);
