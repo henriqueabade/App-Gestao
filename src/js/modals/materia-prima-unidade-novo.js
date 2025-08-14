@@ -10,6 +10,12 @@
     const nome = form.nome.value.trim();
     if(!nome) return;
     try{
+      const existentes = await window.electronAPI.listarUnidades();
+      if(existentes.map(u => u.toLowerCase()).includes(nome.toLowerCase())){
+        showToast('Unidade já cadastrada!', 'warning');
+        close();
+        return;
+      }
       await window.electronAPI.adicionarUnidade(nome);
       showToast('Unidade adicionada com sucesso!', 'success');
       close();

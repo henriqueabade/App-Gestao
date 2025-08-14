@@ -10,6 +10,12 @@
     const nome = form.nome.value.trim();
     if(!nome) return;
     try{
+      const existentes = await window.electronAPI.listarCategorias();
+      if(existentes.map(c => (c.nome_categoria ?? c).toLowerCase()).includes(nome.toLowerCase())){
+        showToast('Categoria já cadastrada!', 'warning');
+        close();
+        return;
+      }
       await window.electronAPI.adicionarCategoria(nome);
       showToast('Categoria adicionada com sucesso!', 'success');
       close();
