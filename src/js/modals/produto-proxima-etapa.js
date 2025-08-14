@@ -234,7 +234,10 @@
       return;
     }
     const api = window.produtoEditarAPI || {};
-    const existentes = typeof api.obterItens === 'function' ? api.obterItens() : [];
+    // considera apenas itens do processo atual
+    const existentes = typeof api.obterItens === 'function'
+      ? api.obterItens().filter(it => (it.processo || '').toLowerCase() === titulo.toLowerCase())
+      : [];
     const novos = [];
     for(const item of itens){
       const duplicado = existentes.find(it=>it.id === item.id);
