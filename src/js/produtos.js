@@ -15,6 +15,7 @@ let filtrosPendentes = false;
 // Controle de popup de informações do produto
 let produtosRenderizados = [];
 let currentProductPopup = null;
+let produtosTableBody;
 
 function showToast(message, type = 'info') {
     if (!notificationContainer) {
@@ -106,7 +107,7 @@ function renderProdutos(produtos) {
         });
     }
 
-    attachInfoEvents();
+    if (window.feather) feather.replace();
 }
 
 function popularFiltros() {
@@ -328,21 +329,22 @@ function hideInfoPopup() {
 
 window.hideProductInfoPopup = hideInfoPopup;
 
-function attachInfoEvents() {
-    document.querySelectorAll('#produtosTableBody .info-icon').forEach(icon => {
-        const id = parseInt(icon.dataset.id);
-        window.electronAPI?.log?.(`attachInfoEvents icon=${id}`);
-        icon.addEventListener('mouseenter', () => {
-            const item = produtosRenderizados.find(p => p.id === id);
-            if (item) showInfoPopup(icon, item);
-        });
-        icon.addEventListener('mouseleave', () => {
-            setTimeout(() => {
-                if (!currentProductPopup?.matches(':hover')) hideInfoPopup();
-            }, 100);
-        });
-    });
-    if (window.feather) feather.replace();
+function handleInfoMouseOver(e) {
+    const icon = e.target.closest('.info-icon');
+    if (!icon || !produtosTableBody?.contains(icon)) return;
+    if (e.relatedTarget && icon.contains(e.relatedTarget)) return;
+    const id = parseInt(icon.dataset.id);
+    const item = produtosRenderizados.find(p => p.id === id);
+    if (item) showInfoPopup(icon, item);
+}
+
+function handleInfoMouseOut(e) {
+    const icon = e.target.closest('.info-icon');
+    if (!icon || !produtosTableBody?.contains(icon)) return;
+    if (e.relatedTarget && icon.contains(e.relatedTarget)) return;
+    setTimeout(() => {
+        if (!currentProductPopup?.matches(':hover')) hideInfoPopup();
+    }, 100);
 }
 
 function initProdutos() {
@@ -370,6 +372,10 @@ function initProdutos() {
     document.getElementById('filterPriceMin')?.addEventListener('input', marcarFiltrosPendentes);
     document.getElementById('filterPriceMax')?.addEventListener('input', marcarFiltrosPendentes);
     document.getElementById('zeroStock')?.addEventListener('change', () => aplicarFiltro(true));
+
+    produtosTableBody = document.getElementById('produtosTableBody');
+    produtosTableBody?.addEventListener('mouseover', handleInfoMouseOver);
+    produtosTableBody?.addEventListener('mouseout', handleInfoMouseOut);
 
     carregarProdutos();
 

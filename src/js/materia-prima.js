@@ -44,6 +44,10 @@ function initMateriaPrima() {
     document.getElementById('zeroStock')?.addEventListener('change', aplicarFiltros);
     document.getElementById('btnNovoInsumo')?.addEventListener('click', abrirNovoInsumo);
 
+    materiaPrimaTableBody = document.getElementById('materiaPrimaTableBody');
+    materiaPrimaTableBody?.addEventListener('mouseover', handleInfoMouseOver);
+    materiaPrimaTableBody?.addEventListener('mouseout', handleInfoMouseOut);
+
     const infoIcon = document.getElementById('totaisInfoIcon');
     const popover = document.getElementById('totaisPopover');
     if (infoIcon && popover) {
@@ -186,6 +190,7 @@ function formatDate(dateStr) {
 // Controle de popup de informações da matéria prima
 let materiais = [];
 let currentRawMaterialPopup = null;
+let materiaPrimaTableBody;
 
 function extractCor(nome, cor) {
     return (cor || (nome && nome.split('/')[1]) || '').trim();
@@ -296,21 +301,22 @@ function hideInfoPopup() {
 
 window.hideRawMaterialInfoPopup = hideInfoPopup;
 
-function attachInfoEvents() {
-    document.querySelectorAll('#materiaPrimaTableBody .info-icon').forEach(icon => {
-        const id = parseInt(icon.dataset.id);
-        window.electronAPI?.log?.(`attachInfoEvents icon=${id}`);
-        icon.addEventListener('mouseenter', () => {
-            const item = materiais.find(m => m.id === id);
-            if (item) showInfoPopup(icon, item);
-        });
-        icon.addEventListener('mouseleave', () => {
-            setTimeout(() => {
-                if (!currentRawMaterialPopup?.matches(':hover')) hideInfoPopup();
-            }, 100);
-        });
-    });
-    if (window.feather) feather.replace();
+function handleInfoMouseOver(e) {
+    const icon = e.target.closest('.info-icon');
+    if (!icon || !materiaPrimaTableBody?.contains(icon)) return;
+    if (e.relatedTarget && icon.contains(e.relatedTarget)) return;
+    const id = parseInt(icon.dataset.id);
+    const item = materiais.find(m => m.id === id);
+    if (item) showInfoPopup(icon, item);
+}
+
+function handleInfoMouseOut(e) {
+    const icon = e.target.closest('.info-icon');
+    if (!icon || !materiaPrimaTableBody?.contains(icon)) return;
+    if (e.relatedTarget && icon.contains(e.relatedTarget)) return;
+    setTimeout(() => {
+        if (!currentRawMaterialPopup?.matches(':hover')) hideInfoPopup();
+    }, 100);
 }
 
 function renderMateriais(listaMateriais) {
@@ -375,7 +381,7 @@ function renderMateriais(listaMateriais) {
         if (delBtn) delBtn.addEventListener('click', e => { e.stopPropagation(); abrirExcluirInsumo(item); });
     });
 
-    attachInfoEvents();
+    if (window.feather) feather.replace();
 }
 
 function abrirNovoInsumo() {
