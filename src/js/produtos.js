@@ -282,6 +282,7 @@ function showInfoPopup(target, item) {
     hideInfoPopup();
     const popup = document.createElement('div');
     popup.className = 'absolute z-50';
+    popup.style.position = 'absolute';
     popup.style.zIndex = '10000';
     popup.innerHTML = createPopupContent(item);
     document.body.appendChild(popup);
