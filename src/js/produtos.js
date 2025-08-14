@@ -43,7 +43,7 @@ window.showToast = window.showToast || showToast;
 
 async function carregarProdutos() {
     try {
-        listaProdutos = await window.electronAPI.listarProdutos();
+        listaProdutos = await (window.electronAPI?.listarProdutos?.() ?? []);
         popularFiltros();
         aplicarFiltro(true);
     } catch (err) {
@@ -313,7 +313,7 @@ function showInfoPopup(target, item) {
 
     popup.style.left = `${left + window.scrollX}px`;
     popup.style.top = `${top + window.scrollY}px`;
-    window.electronAPI.log(`showInfoPopup left=${left} top=${top} id=${item.id}`);
+    window.electronAPI?.log?.(`showInfoPopup left=${left} top=${top} id=${item.id}`);
     popup.addEventListener('mouseleave', hideInfoPopup);
     currentProductPopup = popup;
 }
@@ -323,7 +323,7 @@ function hideInfoPopup() {
         currentProductPopup.remove();
         currentProductPopup = null;
     }
-    window.electronAPI.log('hideInfoPopup');
+    window.electronAPI?.log?.('hideInfoPopup');
 }
 
 window.hideProductInfoPopup = hideInfoPopup;
@@ -331,7 +331,7 @@ window.hideProductInfoPopup = hideInfoPopup;
 function attachInfoEvents() {
     document.querySelectorAll('#produtosTableBody .info-icon').forEach(icon => {
         const id = parseInt(icon.dataset.id);
-        window.electronAPI.log(`attachInfoEvents icon=${id}`);
+        window.electronAPI?.log?.(`attachInfoEvents icon=${id}`);
         icon.addEventListener('mouseenter', () => {
             const item = produtosRenderizados.find(p => p.id === id);
             if (item) showInfoPopup(icon, item);
