@@ -300,10 +300,14 @@ window.attachRawMaterialInfoEvents = attachRawMaterialInfoEvents;
 
 function attachRawMaterialInfoEvents() {
     document.querySelectorAll('#materiaPrimaTableBody .info-icon').forEach(icon => {
-        const id = parseInt(icon.dataset.id);
+        const id = icon.dataset.id;
+        if (!id) {
+            window.electronAPI?.log?.('attachRawMaterialInfoEvents invalid id');
+            return;
+        }
         window.electronAPI?.log?.(`attachRawMaterialInfoEvents icon=${id}`);
         icon.addEventListener('mouseenter', () => {
-            const item = materiais.find(m => m.id === id);
+            const item = materiais.find(m => String(m.id) === id);
             if (item) showRawMaterialInfoPopup(icon, item);
         });
         icon.addEventListener('mouseleave', () => {
