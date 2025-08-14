@@ -243,6 +243,8 @@ window.hideRawMaterialInfoPopup = hideRawMaterialInfoPopup;
 window.attachRawMaterialInfoEvents = attachRawMaterialInfoEvents;
 
 function attachRawMaterialInfoEvents() {
+    if (window.feather) feather.replace();
+
     document.querySelectorAll('#materiaPrimaTableBody .info-icon').forEach(icon => {
         const id = icon.dataset.id;
         if (!id) {
@@ -260,7 +262,6 @@ function attachRawMaterialInfoEvents() {
             }, 100);
         });
     });
-    if (window.feather) feather.replace();
 }
 
 function renderMateriais(listaMateriais) {

@@ -275,6 +275,8 @@ window.hideProductInfoPopup = hideProductInfoPopup;
 window.attachProductInfoEvents = attachProductInfoEvents;
 
 function attachProductInfoEvents() {
+    if (window.feather) feather.replace();
+
     document.querySelectorAll('#produtosTableBody .info-icon').forEach(icon => {
         const id = icon.dataset.id;
         if (!id) {
@@ -292,7 +294,6 @@ function attachProductInfoEvents() {
             }, 100);
         });
     });
-    if (window.feather) feather.replace();
 }
 
 function initProdutos() {
