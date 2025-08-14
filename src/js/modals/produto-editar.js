@@ -209,6 +209,30 @@
       totalInsumosTituloEl.innerHTML = parts.join(' ');
     }
 
+    // diálogo para item duplicado
+    function showDuplicateDialog(nome){
+      return new Promise(resolve => {
+        const overlay = document.createElement('div');
+        overlay.className = 'fixed inset-0 bg-black/50 flex items-center justify-center p-4';
+        overlay.innerHTML = `
+          <div class="max-w-sm w-full glass-surface backdrop-blur-xl rounded-2xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade">
+            <div class="p-6 text-center">
+              <h3 class="text-lg font-semibold mb-4 text-yellow-300">Item Repetido</h3>
+              <p class="text-sm text-gray-300">O item <strong>${nome}</strong> já está na lista. O que deseja fazer?</p>
+              <div class="flex justify-center gap-4 mt-8 flex-wrap">
+                <button id="dupSomar" class="btn-warning px-6 py-2 rounded-lg text-white font-medium">Somar</button>
+                <button id="dupSubstituir" class="btn-warning px-6 py-2 rounded-lg text-white font-medium">Substituir</button>
+                <button id="dupManter" class="btn-neutral px-6 py-2 rounded-lg text-white font-medium">Manter</button>
+              </div>
+            </div>
+          </div>`;
+        document.body.appendChild(overlay);
+        overlay.querySelector('#dupSomar').addEventListener('click',()=>{ overlay.remove(); resolve('sum'); });
+        overlay.querySelector('#dupSubstituir').addEventListener('click',()=>{ overlay.remove(); resolve('replace'); });
+        overlay.querySelector('#dupManter').addEventListener('click',()=>{ overlay.remove(); resolve('keep'); });
+      });
+    }
+
     // ações
     function renderActionButtons(item){
       const actionCell = item.row.querySelector('.action-cell');
@@ -324,10 +348,33 @@
 
     // API para receber itens de outros modais
     window.produtoEditarAPI = {
-      adicionarProcessoItens(arr){
+      async adicionarProcessoItens(arr){
         if(!Array.isArray(arr) || arr.length === 0) return;
-        arr.forEach(it => itens.push({ ...it, status: 'new' }));
-        renderItens(itens);
+        for(const novo of arr){
+          const existente = itens.find(it=>it.id===novo.id && it.status !== 'deleted');
+          if(!existente){
+            itens.push({ ...novo, status:'new' });
+            continue;
+          }
+          const acao = await showDuplicateDialog(novo.nome);
+          if(acao === 'sum'){
+            existente.quantidade += novo.quantidade;
+            if(existente.status !== 'new') existente.status = 'updated';
+          }else if(acao === 'replace'){
+            if(existente.status === 'new'){
+              itens = itens.filter(i => i !== existente);
+            }else{
+              existente.status = 'deleted';
+            }
+            itens.push({ ...novo, status:'new' });
+          }else{
+            // manter: nada a fazer
+          }
+        }
+        const deletados = itens.filter(i => i.status === 'deleted');
+        const ativos = itens.filter(i => i.status !== 'deleted');
+        renderItens(ativos);
+        itens.push(...deletados);
       }
     };
 

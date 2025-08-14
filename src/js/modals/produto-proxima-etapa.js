@@ -203,14 +203,14 @@
   });
 
   // registrar/transferir
-  if (registrarBtn) registrarBtn.addEventListener('click',()=>{
+  if (registrarBtn) registrarBtn.addEventListener('click', async ()=>{
     if(!itens.length){
       showToast('Nada para registrar', 'error');
       return;
     }
     if(window.produtoEditarAPI && typeof window.produtoEditarAPI.adicionarProcessoItens==='function'){
       const novos = itens.map(it=>({ ...it }));
-      window.produtoEditarAPI.adicionarProcessoItens(novos);
+      await window.produtoEditarAPI.adicionarProcessoItens(novos);
     }
     closeOverlay();
   });
