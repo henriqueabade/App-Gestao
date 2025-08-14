@@ -182,7 +182,7 @@ function formatDate(dateStr) {
 
 // Controle de popup de informações da matéria prima
 let materiais = [];
-let currentPopup = null;
+let currentRawMaterialPopup = null;
 
 function extractCor(nome, cor) {
     return (cor || (nome && nome.split('/')[1]) || '').trim();
@@ -277,13 +277,13 @@ function showInfoPopup(target, item) {
 
     popup.style.left = `${left + window.scrollX}px`;
     popup.style.top = `${top + window.scrollY}px`;
-    currentPopup = popup;
+    currentRawMaterialPopup = popup;
 }
 
 function hideInfoPopup() {
-    if (currentPopup) {
-        currentPopup.remove();
-        currentPopup = null;
+    if (currentRawMaterialPopup) {
+        currentRawMaterialPopup.remove();
+        currentRawMaterialPopup = null;
     }
 }
 
