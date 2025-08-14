@@ -279,7 +279,7 @@ function attachRawMaterialInfoEvents() {
 
 function showRawMaterialTestPopup(target) {
     hideRawMaterialTestPopup();
-    const { popup } = createPopup(target, `<div class="resumo-popover bg-gray-800 text-white text-xs rounded-lg p-2 shadow-lg">teste</div>`, { onHide: hideRawMaterialTestPopup });
+    const { popup } = createPopup(target, `<div class="resumo-popover show bg-gray-800 text-white text-xs rounded-lg p-2 shadow-lg">teste</div>`, { onHide: hideRawMaterialTestPopup });
     currentRawMaterialTestPopup = popup;
 }
 
