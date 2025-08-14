@@ -129,6 +129,31 @@
     warn.querySelector('#cancelarSomar').addEventListener('click',()=>warn.remove());
   }
 
+  // diálogo de decisão para duplicados ao registrar
+  function showDuplicateDecision(item){
+    return new Promise(resolve=>{
+      const warn = document.createElement('div');
+      warn.id = 'duplicadoRegistrarOverlay';
+      warn.className = 'fixed inset-0 bg-black/50 flex items-center justify-center p-4';
+      warn.innerHTML = `
+        <div class="max-w-sm w-full glass-surface backdrop-blur-xl rounded-2xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade">
+          <div class="p-6 text-center">
+            <h3 class="text-lg font-semibold mb-4 text-yellow-300">Item Duplicado</h3>
+            <p class="text-sm text-gray-300 mb-4">O item <span class="text-white font-medium">${item.nome}</span> já está na lista. O que deseja fazer?</p>
+            <div class="flex justify-center gap-4 mt-6">
+              <button id="dupSomar" class="btn-warning px-4 py-2 rounded-lg text-white font-medium">Somar</button>
+              <button id="dupSubstituir" class="btn-danger px-4 py-2 rounded-lg text-white font-medium">Substituir</button>
+              <button id="dupManter" class="btn-neutral px-4 py-2 rounded-lg text-white font-medium">Manter</button>
+            </div>
+          </div>
+        </div>`;
+      document.body.appendChild(warn);
+      warn.querySelector('#dupSomar').addEventListener('click',()=>{warn.remove();resolve('somar');});
+      warn.querySelector('#dupSubstituir').addEventListener('click',()=>{warn.remove();resolve('substituir');});
+      warn.querySelector('#dupManter').addEventListener('click',()=>{warn.remove();resolve('manter');});
+    });
+  }
+
   function resetFields(){
     if(itemSelect) itemSelect.value = '';
     if(qtdInput) qtdInput.value = '';
@@ -203,14 +228,30 @@
   });
 
   // registrar/transferir
-  if (registrarBtn) registrarBtn.addEventListener('click',()=>{
+  if (registrarBtn) registrarBtn.addEventListener('click', async ()=>{
     if(!itens.length){
       showToast('Nada para registrar', 'error');
       return;
     }
-    if(window.produtoEditarAPI && typeof window.produtoEditarAPI.adicionarProcessoItens==='function'){
-      const novos = itens.map(it=>({ ...it }));
-      window.produtoEditarAPI.adicionarProcessoItens(novos);
+    const api = window.produtoEditarAPI || {};
+    const existentes = typeof api.obterItens === 'function' ? api.obterItens() : [];
+    const novos = [];
+    for(const item of itens){
+      const duplicado = existentes.find(it=>it.id === item.id);
+      if(duplicado){
+        const acao = await showDuplicateDecision(item);
+        if(acao === 'somar' && typeof api.somarItem === 'function'){
+          api.somarItem(duplicado.id, item.quantidade);
+        }else if(acao === 'substituir' && typeof api.substituirItem === 'function'){
+          api.substituirItem(item);
+        } // manter: não faz nada
+      }else{
+        novos.push(item);
+        existentes.push(item);
+      }
+    }
+    if(novos.length && typeof api.adicionarProcessoItens === 'function'){
+      api.adicionarProcessoItens(novos);
     }
     closeOverlay();
   });

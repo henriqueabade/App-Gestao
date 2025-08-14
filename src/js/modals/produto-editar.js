@@ -322,12 +322,44 @@
       console.debug('[editar-produto] renderItens ok:', { grupos: Object.keys(grupos).length, total: itens.length });
     }
 
-    // API para receber itens de outros modais
+    // API para comunicação com outros modais
     window.produtoEditarAPI = {
       adicionarProcessoItens(arr){
         if(!Array.isArray(arr) || arr.length === 0) return;
         arr.forEach(it => itens.push({ ...it, status: 'new' }));
         renderItens(itens);
+      },
+      obterItens(){
+        return itens.map(i => ({ ...i }));
+      },
+      somarItem(id, quantidade){
+        const item = itens.find(i => i.id === id);
+        if(!item) return;
+        item.quantidade += quantidade;
+        item.total = item.quantidade * (item.preco_unitario || 0);
+        if(item.id) item.status = 'updated';
+        if(item.row) item.row.querySelector('.quantidade-text').textContent = formatNumber(item.quantidade);
+        if(item.totalEl) item.totalEl.textContent = formatCurrency(item.total);
+        updateProcessTotal(item.processo);
+        updateTotals();
+      },
+      substituirItem(novo){
+        const item = itens.find(i => i.id === novo.id);
+        if(item){
+          item.quantidade = novo.quantidade;
+          item.unidade = novo.unidade;
+          item.preco_unitario = novo.preco_unitario;
+          item.processo = novo.processo;
+          item.total = item.quantidade * (item.preco_unitario || 0);
+          if(item.id) item.status = 'updated';
+          if(item.row) item.row.querySelector('.quantidade-text').textContent = formatNumber(item.quantidade);
+          if(item.totalEl) item.totalEl.textContent = formatCurrency(item.total);
+          updateProcessTotal(item.processo);
+          updateTotals();
+        } else {
+          itens.push({ ...novo, status: 'new' });
+          renderItens(itens);
+        }
       }
     };
 
