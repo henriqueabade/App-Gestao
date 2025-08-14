@@ -27,6 +27,7 @@ function showPinPopup(target) {
   hidePinPopup();
   const popup = document.createElement('div');
   popup.className = 'fixed z-50';
+  popup.style.position = 'fixed';
   popup.innerHTML = createPinPopupContent();
   document.body.appendChild(popup);
   const rect = target.getBoundingClientRect();
