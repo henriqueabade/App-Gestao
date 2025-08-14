@@ -16,7 +16,9 @@ const {
   excluirMateria,
   registrarEntrada,
   registrarSaida,
-  atualizarPreco
+  atualizarPreco,
+  listarCategorias,
+  listarUnidades
 } = require('./backend/materiaPrima');
 const {
   listarProdutos,
@@ -359,6 +361,12 @@ ipcMain.handle('registrar-saida-materia-prima', async (_e, { id, quantidade }) =
 });
 ipcMain.handle('atualizar-preco-materia-prima', async (_e, { id, preco }) => {
   return atualizarPreco(id, preco);
+});
+ipcMain.handle('listar-categorias', async () => {
+  return listarCategorias();
+});
+ipcMain.handle('listar-unidades', async () => {
+  return listarUnidades();
 });
 ipcMain.handle('listar-produtos', async () => {
   return listarProdutos();

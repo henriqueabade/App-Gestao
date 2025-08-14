@@ -115,6 +115,18 @@ async function atualizarPreco(id, preco) {
   return res.rows[0];
 }
 
+async function listarCategorias() {
+  const res = await pool.query(
+    'SELECT nome_categoria FROM categoria ORDER BY nome_categoria'
+  );
+  return res.rows.map(r => r.nome_categoria);
+}
+
+async function listarUnidades() {
+  const res = await pool.query('SELECT tipo FROM unidades ORDER BY tipo');
+  return res.rows.map(r => r.tipo);
+}
+
 module.exports = {
   listarMaterias,
   adicionarMateria,
@@ -122,5 +134,7 @@ module.exports = {
   excluirMateria,
   registrarEntrada,
   registrarSaida,
-  atualizarPreco
+  atualizarPreco,
+  listarCategorias,
+  listarUnidades
 };
