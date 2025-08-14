@@ -43,6 +43,10 @@
         form.categoria.value = item.categoria || '';
         form.unidade.value = item.unidade || '';
       }
+      ['categoria','unidade'].forEach(id=>{
+        const el=form[id];
+        if(el) el.setAttribute('data-filled', el.value !== '');
+      });
     }catch(err){
       console.error('Erro ao carregar opções', err);
     }
