@@ -310,7 +310,6 @@ function attachInfoEvents() {
             }, 100);
         });
     });
-    if (window.feather) feather.replace();
 }
 
 function renderMateriais(listaMateriais) {
@@ -375,7 +374,12 @@ function renderMateriais(listaMateriais) {
         if (delBtn) delBtn.addEventListener('click', e => { e.stopPropagation(); abrirExcluirInsumo(item); });
     });
 
-    attachInfoEvents();
+    if (window.feather) {
+        window.feather.replace();
+        requestAnimationFrame(attachInfoEvents);
+    } else {
+        attachInfoEvents();
+    }
 }
 
 function abrirNovoInsumo() {

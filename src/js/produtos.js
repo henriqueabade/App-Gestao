@@ -106,7 +106,12 @@ function renderProdutos(produtos) {
         });
     }
 
-    attachInfoEvents();
+    if (window.feather) {
+        window.feather.replace();
+        requestAnimationFrame(attachInfoEvents);
+    } else {
+        attachInfoEvents();
+    }
 }
 
 function popularFiltros() {
@@ -342,7 +347,6 @@ function attachInfoEvents() {
             }, 100);
         });
     });
-    if (window.feather) feather.replace();
 }
 
 function initProdutos() {
