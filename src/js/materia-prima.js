@@ -159,6 +159,8 @@ function formatDate(dateStr) {
 
 // Controle de popup de informações da matéria prima
 let materiais = [];
+// Mapa auxiliar para lookup rápido pelo id
+let materiaisMap = new Map();
 let currentRawMaterialPopup = null;
 let rawMaterialInfoEventsBound = false;
 
@@ -258,7 +260,7 @@ function attachRawMaterialInfoEvents() {
             return;
         }
         window.electronAPI?.log?.(`attachRawMaterialInfoEvents icon=${id}`);
-        const item = materiais.find(m => String(m.id) === id);
+        const item = materiaisMap.get(id);
         if (item) showRawMaterialInfoPopup(icon, item);
     });
 
@@ -273,6 +275,7 @@ function attachRawMaterialInfoEvents() {
 
 function renderMateriais(listaMateriais) {
     materiais = listaMateriais;
+    materiaisMap = new Map(listaMateriais.map(m => [String(m.id), m]));
     const tbody = document.getElementById('materiaPrimaTableBody');
     if (!tbody) return;
     tbody.innerHTML = '';
