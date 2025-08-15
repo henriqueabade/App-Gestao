@@ -266,18 +266,6 @@ body {
   color: white; /* Altera a cor do valor para branco */
 }
 
-.popup-color-wrapper {
-  display: block;
-  width: 100%;
-}
-
-.popup-color-bar {
-  width: 100%;
-  height: 0.25rem;
-  margin-top: 0.125rem;
-  border-radius: 0.125rem;
-}
-
 /* Badge de "Sim" ou "Não" */
 .badge {
   display: inline-flex;
