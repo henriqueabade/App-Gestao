@@ -17,6 +17,8 @@
   const markupInput     = document.getElementById('markupInput');
   const commissionInput = document.getElementById('commissionInput');
   const taxInput        = document.getElementById('taxInput');
+  const etapaSelect     = document.getElementById('etapaSelect');
+  const comecarBtn      = document.getElementById('comecarNovoProduto');
 
   const precoVendaEl    = document.getElementById('precoVenda');
   const totalInsumosEl  = document.getElementById('totalInsumos');
@@ -68,7 +70,87 @@
     .filter(Boolean)
     .forEach(inp => inp.addEventListener('input', updateTotals));
 
+  if(etapaSelect){
+    window.electronAPI.listarEtapasProducao().then(procs => {
+      procs.sort((a,b)=> (a.ordem ?? 0) - (b.ordem ?? 0));
+      etapaSelect.innerHTML = '<option value="">Selecionar Processo</option>' +
+        procs.map(p => `<option value="${p.id}">${p.nome ?? p}</option>`).join('');
+    }).catch(err => console.error('Erro ao carregar processos', err));
+  }
+
+  const tableBody = document.querySelector('#itensTabela tbody');
+  let itens = [];
+
+  function formatNumber(val){
+    const n = parseFloat(val) || 0;
+    return Number.isInteger(n) ? String(n) : n.toFixed(2);
+  }
+
+  function renderItem(item){
+    if(!tableBody) return;
+    const tr = document.createElement('tr');
+    tr.className = 'border-b border-white/10';
+    tr.innerHTML = `
+      <td class="py-3 px-2 text-white">${item.nome}</td>
+      <td class="py-3 px-2 text-center">${formatNumber(item.quantidade)}</td>
+      <td class="py-3 px-2 text-right text-white">${formatCurrency(item.quantidade * item.preco_unitario)}</td>
+      <td class="py-3 px-2 text-center"><i class="fas fa-trash cursor-pointer text-red-400 delete-item"></i></td>`;
+    tr.querySelector('.delete-item').addEventListener('click', () => {
+      itens = itens.filter(i => i !== item);
+      tr.remove();
+      atualizaTotal();
+    });
+    tableBody.appendChild(tr);
+    item.row = tr;
+  }
+
+  function atualizaTotal(){
+    totals.totalInsumos = itens.reduce((s,it)=> s + (it.quantidade * it.preco_unitario),0);
+    updateTotals();
+  }
+
+  window.produtoNovoAPI = {
+    obterItens: () => itens.slice(),
+    somarItem(id, quantidade){
+      const it = itens.find(i => String(i.insumo_id ?? i.id) === String(id));
+      if(it){
+        it.quantidade += quantidade;
+        if(it.row){
+          it.row.querySelector('td:nth-child(2)').textContent = formatNumber(it.quantidade);
+          it.row.querySelector('td:nth-child(3)').textContent = formatCurrency(it.quantidade * it.preco_unitario);
+        }
+        atualizaTotal();
+      }
+    },
+    substituirItem(novo){
+      const it = itens.find(i => String(i.insumo_id ?? i.id) === String(novo.id));
+      if(it){
+        it.quantidade = novo.quantidade;
+        it.preco_unitario = novo.preco_unitario;
+        if(it.row){
+          it.row.querySelector('td:nth-child(2)').textContent = formatNumber(it.quantidade);
+          it.row.querySelector('td:nth-child(3)').textContent = formatCurrency(it.quantidade * it.preco_unitario);
+        }
+        atualizaTotal();
+      }
+    },
+    adicionarProcessoItens(novos){
+      novos.forEach(n => { itens.push(n); renderItem(n); });
+      atualizaTotal();
+    }
+  };
+
   // ------- Ações -------
+  if(comecarBtn){
+    comecarBtn.addEventListener('click', () => {
+      if(etapaSelect){
+        const opt = etapaSelect.options[etapaSelect.selectedIndex];
+        window.proximaEtapaTitulo = opt ? opt.textContent : '';
+      }
+      overlay.classList.add('pointer-events-none','blur-sm');
+      Modal.open('modals/produtos/proxima-etapa.html', '../js/modals/produto-proxima-etapa-novo.js', 'proximaEtapa', true);
+    });
+  }
   const limparBtn = document.getElementById('limparNovoProduto');
   if(limparBtn){
     limparBtn.addEventListener('click', () => {
