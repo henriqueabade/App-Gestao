@@ -21,7 +21,7 @@ function createMockDb() {
   );`);
   db.public.none(`CREATE TABLE produtos_insumos (
     id serial primary key,
-    produto_codigo text,
+    produto_codigo text references produtos(codigo),
     insumo_id integer,
     quantidade numeric
   );`);
@@ -37,7 +37,7 @@ test('salvarProdutoDetalhado preenche produto_codigo ao inserir insumo', async (
 
   const dbModulePath = require.resolve('./db');
   require.cache[dbModulePath] = { exports: { query: (text, params) => pool.query(text, params), connect: () => pool.connect() } };
-
+  delete require.cache[require.resolve('./produtos')];
   const { salvarProdutoDetalhado } = require('./produtos');
 
   await salvarProdutoDetalhado('P001', {
@@ -57,4 +57,35 @@ test('salvarProdutoDetalhado preenche produto_codigo ao inserir insumo', async (
   const res = await pool.query('SELECT produto_codigo FROM produtos_insumos');
   assert.strictEqual(res.rows.length, 1);
   assert.strictEqual(res.rows[0].produto_codigo, 'P001');
+});
+
+test('salvarProdutoDetalhado atualiza codigo e mantém vínculos', async () => {
+  const mem = createMockDb();
+  const { Pool } = mem.adapters.createPg();
+  const pool = new Pool();
+
+  const dbModulePath = require.resolve('./db');
+  require.cache[dbModulePath] = { exports: { query: (text, params) => pool.query(text, params), connect: () => pool.connect() } };
+  delete require.cache[require.resolve('./produtos')];
+  const { salvarProdutoDetalhado } = require('./produtos');
+
+  await pool.query('INSERT INTO produtos_insumos (produto_codigo, insumo_id, quantidade) VALUES ($1,$2,$3)', ['P001', 1, 1]);
+
+  await salvarProdutoDetalhado('P001', {
+    pct_fabricacao: 0,
+    pct_acabamento: 0,
+    pct_montagem: 0,
+    pct_embalagem: 0,
+    pct_markup: 0,
+    pct_comissao: 0,
+    pct_imposto: 0,
+    preco_base: 0,
+    preco_venda: 0,
+    codigo: 'P002'
+  }, {});
+
+  const resProdutos = await pool.query('SELECT codigo FROM produtos ORDER BY codigo');
+  assert.deepStrictEqual(resProdutos.rows.map(r => r.codigo), ['P002']);
+  const resInsumos = await pool.query('SELECT produto_codigo FROM produtos_insumos');
+  assert.strictEqual(resInsumos.rows[0].produto_codigo, 'P002');
 });
