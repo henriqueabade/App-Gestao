@@ -170,7 +170,7 @@ let currentRawMaterialPopup = null;
 
 function extractCor(nome, cor) {
     const base = cor || nome || '';
-    return base.split('/')[0].trim();
+    return base.split('/').pop().trim();
 }
 
 function createPopupContent(item) {

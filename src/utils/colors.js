@@ -15,7 +15,7 @@ function resolveColorCss(cor = '') {
   if (!getColorFromText) {
     throw new Error('colorParser not available');
   }
-  return getColorFromText((cor.split('/')[1] || cor).trim());
+  return getColorFromText(cor.trim());
 }
 
 if (typeof window !== 'undefined') {

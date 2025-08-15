@@ -202,7 +202,7 @@ function extrairCorDimensoes(item) {
     let corAmostra = corNome;
     if (corNome.includes('/')) {
         const partesCor = corNome.split('/');
-        corAmostra = partesCor[1] ? partesCor[1].trim() : partesCor[0].trim();
+        corAmostra = partesCor[partesCor.length - 1].trim();
     }
 
     let dimensoes = '';
