@@ -1,5 +1,3 @@
-const { getColorFromText } = require('./colorParser');
-
 /**
  * Resolve uma cor textual para seu equivalente hexadecimal.
  * Mantém assinatura pública utilizada pela UI.
@@ -7,6 +5,7 @@ const { getColorFromText } = require('./colorParser');
  * @returns {string}
  */
 function resolveColorCss(cor = '') {
+  const { getColorFromText } = require('./colorParser');
   return getColorFromText((cor.split('/')[1] || cor).trim());
 }
 
