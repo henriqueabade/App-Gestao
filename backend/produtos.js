@@ -136,19 +136,41 @@ async function listarInsumosProduto(codigo) {
 }
 
 /**
- * Lista etapas (id + nome)
+ * Lista etapas de produção ordenadas pela coluna "ordem".
  */
 async function listarEtapasProducao() {
   const res = await pool.query(
-    'SELECT id, nome FROM etapas_producao ORDER BY id'
+    'SELECT id, nome, ordem FROM etapas_producao ORDER BY ordem ASC'
   );
   return res.rows;
 }
 
-async function adicionarEtapaProducao(nome) {
+/**
+ * Insere uma nova etapa de produção em uma ordem específica.
+ * Caso a ordem seja informada, todos os registros com ordem igual ou
+ * superior são incrementados.
+ * Se nenhuma ordem for informada, a etapa é adicionada ao final.
+ */
+async function adicionarEtapaProducao(nome, ordem) {
+  // Se ordem não for fornecida, calcula a próxima ordem disponível
+  if (ordem === undefined || ordem === null || isNaN(ordem)) {
+    const { rows } = await pool.query(
+      'SELECT COALESCE(MAX(ordem), 0) + 1 AS prox'
+    );
+    ordem = rows[0].prox;
+  }
+
   const res = await pool.query(
-    'INSERT INTO etapas_producao (nome) VALUES ($1) RETURNING id, nome',
-    [nome]
+    `WITH moved AS (
+       UPDATE etapas_producao
+          SET ordem = ordem + 1
+        WHERE ordem >= $2
+        RETURNING id
+     )
+     INSERT INTO etapas_producao (nome, ordem)
+     VALUES ($1, $2)
+     RETURNING id, nome, ordem`,
+    [nome, ordem]
   );
   return res.rows[0];
 }
