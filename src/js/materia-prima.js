@@ -169,7 +169,8 @@ let materiaisMap = new Map();
 let currentRawMaterialPopup = null;
 
 function extractCor(nome, cor) {
-    return (cor || (nome && nome.split('/')[1]) || '').trim();
+    const base = cor || nome || '';
+    return base.split('/')[0].trim();
 }
 
 function createPopupContent(item) {
