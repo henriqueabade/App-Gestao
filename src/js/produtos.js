@@ -188,10 +188,17 @@ function formatDate(dateStr) {
     return date.toLocaleDateString('pt-BR', { timeZone: 'UTC' });
 }
 
-function extrairCorDimensoes(nome) {
-    if (!nome) return { cor: '', dimensoes: '' };
+function extrairCorDimensoes(item) {
+    if (!item) return { cor: '', dimensoes: '' };
+    const nome = item.nome || '';
     const partes = nome.split(' - ');
-    const cor = partes[2] ? partes[2].trim() : '';
+    let cor = '';
+    if (item.cor) {
+        cor = item.cor.trim();
+    } else if (partes[2]) {
+        cor = partes[2].trim();
+    }
+
     let dimensoes = '';
     if (partes[1]) {
         const match = partes[1].match(/\(([^)]+)\)/);
@@ -216,9 +223,17 @@ function isDarkColor(hex) {
 }
 
 function createPopupContent(item) {
-    const { cor, dimensoes } = extrairCorDimensoes(item.nome);
+    const { cor, dimensoes } = extrairCorDimensoes(item);
     const corCss = resolveColorCss(cor);
     const outlineClass = isDarkColor(corCss) ? ' popup-color-bar-outline' : '';
+    const corSection = cor
+        ? `
+            <div class="popup-color-wrapper">
+              <p class="popup-info-value">${cor}</p>
+              <div class="popup-color-bar${outlineClass}" style="background-color: ${corCss};"></div>
+            </div>
+          `
+        : '<p class="popup-info-value">-</p>';
     return `
     <div class="popup-card">
       <div class="popup-header">
@@ -239,10 +254,7 @@ function createPopupContent(item) {
         <div class="popup-info-grid">
           <div>
             <p class="popup-info-label">Cor:</p>
-            <div class="popup-color-wrapper">
-              <p class="popup-info-value">${cor}</p>
-              <div class="popup-color-bar${outlineClass}" style="background-color: ${corCss};"></div>
-            </div>
+            ${corSection}
           </div>
           <div>
             <p class="popup-info-label">Dimensões:</p>
