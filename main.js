@@ -43,6 +43,16 @@ const {
   salvarProdutoDetalhado
 } = require('./backend/produtos');
 const apiServer = require('./backend/server');
+
+function showStartupBanner() {
+  const banner = `\n\u001b[32m
+╔══════════════════════════════════════════╗
+║ 🚀  Aplicativo iniciado com sucesso!    ║
+╚══════════════════════════════════════════╝
+\u001b[0m\n`;
+  console.log(banner);
+}
+
 // Impede que múltiplas instâncias do aplicativo sejam abertas
 const gotTheLock = app.requestSingleInstanceLock();
 if (!gotTheLock) {
@@ -324,6 +334,8 @@ app.whenReady().then(() => {
       createLoginWindow(false, true);
     }
   });
+
+  showStartupBanner();
 });
 
 app.on('window-all-closed', () => {
