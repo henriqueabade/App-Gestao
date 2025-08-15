@@ -1,51 +1,70 @@
 <!-- Página de orçamentos: lista e filtros -->
 <div>
     <!-- Header -->
-    <div class="mb-8 animate-fade-in-up">
-        <h1 class="text-2xl font-semibold mb-2">Orçamentos</h1>
-        <p style="color: var(--color-violet)">Gerencie propostas comerciais e acompanhe negociações</p>
+    <div class="flex justify-between items-center mb-8 animate-fade-in-up">
+        <div>
+            <h1 class="text-2xl font-semibold mb-2">Orçamentos</h1>
+            <p style="color: var(--color-violet)">Gerencie propostas comerciais e acompanhe negociações</p>
+        </div>
+        <button id="novoOrcamentoBtn" class="btn-primary text-white rounded-md px-6 py-3 font-medium">
+            <i class="fas fa-plus mr-2"></i>Novo Orçamento
+        </button>
     </div>
 
     <!-- Filters -->
     <div class="glass-surface rounded-xl p-6 mb-6 animate-fade-in-up">
-        <div class="flex flex-wrap xl:flex-nowrap items-center gap-4">
+        <div class="filter-bar flex flex-col md:flex-row md:flex-nowrap items-center">
             <!-- Status Filter -->
-            <div class="flex-1 min-w-[180px]">
+            <div class="flex-1 min-w-0">
                 <label class="block text-sm font-medium mb-2 text-white">Status</label>
-                <select class="input-glass text-white rounded-md px-4 py-3 w-full">
-                    <option>Todos os Status</option>
-                    <option>Pendente</option>
-                    <option>Aprovado</option>
-                    <option>Rejeitado</option>
-                    <option>Expirado</option>
+                <select id="filterStatus" class="input-glass text-white rounded-md px-4 py-3 w-full">
+                    <option value="">Todos os Status</option>
+                    <option value="Pendente">Pendente</option>
+                    <option value="Aprovado">Aprovado</option>
+                    <option value="Rejeitado">Rejeitado</option>
+                    <option value="Expirado">Expirado</option>
                 </select>
             </div>
 
             <!-- Period Filter -->
-            <div class="flex-1 min-w-[150px]">
+            <div class="flex-1 min-w-0">
                 <label class="block text-sm font-medium mb-2 text-white">Período</label>
-                <select class="input-glass text-white rounded-md px-4 py-3 w-full">
-                    <option>Mês</option>
-                    <option>Semana</option>
-                    <option>Trimestre</option>
-                    <option>Ano</option>
+                <select id="filterPeriod" class="input-glass text-white rounded-md px-4 py-3 w-full">
+                    <option value="">Todos os Períodos</option>
+                    <option value="Semana">Semana</option>
+                    <option value="Mês">Mês</option>
+                    <option value="Trimestre">Trimestre</option>
+                    <option value="Ano">Ano</option>
                 </select>
             </div>
 
-            <!-- Salesperson Filter + New Quote -->
-            <div class="flex-1 min-w-[200px] seller-actions"><!-- agrupamento vendedor/botão -->
-                <div class="flex-1 min-w-[200px]">
-                    <label class="block text-sm font-medium mb-2 text-white">Vendedor</label>
-                    <select class="input-glass text-white rounded-md px-4 py-3 w-full">
-                        <option>Todos os Vendedores</option>
-                        <option>João Silva</option>
-                        <option>Maria Santos</option>
-                        <option>Pedro Costa</option>
-                    </select>
-                </div>
-                    <button id="novoOrcamentoBtn" class="self-end btn-primary text-white rounded-md px-3 py-3 font-medium whitespace-nowrap">
-                        <i class="fas fa-plus mr-2"></i>Novo Orçamento
-                    </button>
+            <!-- Salesperson Filter -->
+            <div class="flex-1 min-w-0">
+                <label class="block text-sm font-medium mb-2 text-white">Vendedor</label>
+                <select id="filterSeller" class="input-glass text-white rounded-md px-4 py-3 w-full">
+                    <option value="">Todos os Vendedores</option>
+                    <option value="João Silva">João Silva</option>
+                    <option value="Maria Santos">Maria Santos</option>
+                    <option value="Pedro Costa">Pedro Costa</option>
+                </select>
+            </div>
+
+            <!-- Client Filter -->
+            <div class="flex-1 min-w-0">
+                <label class="block text-sm font-medium mb-2 text-white">Cliente</label>
+                <select id="filterClient" class="input-glass text-white rounded-md px-4 py-3 w-full">
+                    <option value="">Todos os Clientes</option>
+                </select>
+            </div>
+
+            <!-- Action Buttons -->
+            <div id="bt-actions" class="flex items-center gap-2 flex-shrink-0">
+                <button id="btnFiltrar" class="btn-secondary text-white rounded-md px-4 py-3 text-sm font-medium">
+                    Filtrar
+                </button>
+                <button id="btnLimpar" class="btn-warning text-white rounded-md px-4 py-3 text-sm font-medium">
+                    Limpar
+                </button>
             </div>
         </div>
     </div>
@@ -66,7 +85,7 @@
             </thead>
             <tbody id="orcamentosTabela" class="divide-y divide-white/10">
                     <!-- Quote 1 -->
-                    <tr class="transition-colors duration-150" style="cursor: pointer;" onmouseover="this.style.background='rgba(163, 148, 167, 0.05)'" onmouseout="this.style.background='transparent'">
+                    <tr data-vendedor="João Silva" class="transition-colors duration-150" style="cursor: pointer;" onmouseover="this.style.background='rgba(163, 148, 167, 0.05)'" onmouseout="this.style.background='transparent'">
                         <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">ORC001</td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-white">Ana Carolina Mendes</td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-violet)">15/03/2024</td>
@@ -84,7 +103,7 @@
                         </td>
                     </tr>
                     <!-- Quote 2 -->
-                    <tr class="transition-colors duration-150" style="cursor: pointer;" onmouseover="this.style.background='rgba(163, 148, 167, 0.05)'" onmouseout="this.style.background='transparent'">
+                    <tr data-vendedor="Maria Santos" class="transition-colors duration-150" style="cursor: pointer;" onmouseover="this.style.background='rgba(163, 148, 167, 0.05)'" onmouseout="this.style.background='transparent'">
                         <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">ORC002</td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-white">Roberto Silva Santos</td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-violet)">14/03/2024</td>
@@ -102,7 +121,7 @@
                         </td>
                     </tr>
                     <!-- Quote 3 -->
-                    <tr class="transition-colors duration-150" style="cursor: pointer;" onmouseover="this.style.background='rgba(163, 148, 167, 0.05)'" onmouseout="this.style.background='transparent'">
+                    <tr data-vendedor="Pedro Costa" class="transition-colors duration-150" style="cursor: pointer;" onmouseover="this.style.background='rgba(163, 148, 167, 0.05)'" onmouseout="this.style.background='transparent'">
                         <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">ORC003</td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-white">Empresa ABC Ltda</td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-violet)">13/03/2024</td>
@@ -120,7 +139,7 @@
                         </td>
                     </tr>
                     <!-- Quote 4 -->
-                    <tr class="transition-colors duration-150" style="cursor: pointer;" onmouseover="this.style.background='rgba(163, 148, 167, 0.05)'" onmouseout="this.style.background='transparent'">
+                    <tr data-vendedor="João Silva" class="transition-colors duration-150" style="cursor: pointer;" onmouseover="this.style.background='rgba(163, 148, 167, 0.05)'" onmouseout="this.style.background='transparent'">
                         <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">ORC004</td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-white">Mariana Costa Lima</td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-violet)">12/03/2024</td>
@@ -138,7 +157,7 @@
                         </td>
                     </tr>
                     <!-- Quote 5 -->
-                    <tr class="transition-colors duration-150" style="cursor: pointer;" onmouseover="this.style.background='rgba(163, 148, 167, 0.05)'" onmouseout="this.style.background='transparent'">
+                    <tr data-vendedor="Maria Santos" class="transition-colors duration-150" style="cursor: pointer;" onmouseover="this.style.background='rgba(163, 148, 167, 0.05)'" onmouseout="this.style.background='transparent'">
                         <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">ORC005</td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-white">Carlos Eduardo Rocha</td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-violet)">11/03/2024</td>
@@ -156,7 +175,7 @@
                         </td>
                     </tr>
                     <!-- Quote 6 -->
-                    <tr class="transition-colors duration-150" style="cursor: pointer;" onmouseover="this.style.background='rgba(163, 148, 167, 0.05)'" onmouseout="this.style.background='transparent'">
+                    <tr data-vendedor="Pedro Costa" class="transition-colors duration-150" style="cursor: pointer;" onmouseover="this.style.background='rgba(163, 148, 167, 0.05)'" onmouseout="this.style.background='transparent'">
                         <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">ORC006</td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-white">Fernanda Oliveira</td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-violet)">10/03/2024</td>
@@ -174,7 +193,7 @@
                         </td>
                     </tr>
                     <!-- Quote 7 -->
-                    <tr class="transition-colors duration-150" style="cursor: pointer;" onmouseover="this.style.background='rgba(163, 148, 167, 0.05)'" onmouseout="this.style.background='transparent'">
+                    <tr data-vendedor="João Silva" class="transition-colors duration-150" style="cursor: pointer;" onmouseover="this.style.background='rgba(163, 148, 167, 0.05)'" onmouseout="this.style.background='transparent'">
                         <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">ORC007</td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-white">Paulo Henrique Alves</td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-violet)">09/03/2024</td>
@@ -192,7 +211,7 @@
                         </td>
                     </tr>
                     <!-- Quote 8 -->
-                    <tr class="transition-colors duration-150" style="cursor: pointer;" onmouseover="this.style.background='rgba(163, 148, 167, 0.05)'" onmouseout="this.style.background='transparent'">
+                    <tr data-vendedor="Maria Santos" class="transition-colors duration-150" style="cursor: pointer;" onmouseover="this.style.background='rgba(163, 148, 167, 0.05)'" onmouseout="this.style.background='transparent'">
                         <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">ORC008</td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-white">Juliana Martins</td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-violet)">08/03/2024</td>

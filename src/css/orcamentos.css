@@ -35,6 +35,25 @@ body {
     transform: scale(1.05);
 }
 
+.btn-secondary {
+    background: var(--color-blue);
+    transition: all 150ms ease;
+}
+
+.btn-secondary:hover {
+    background: rgba(138, 167, 243, 0.9);
+}
+
+.btn-warning {
+    background: var(--color-bordeaux);
+    transition: all 150ms ease;
+}
+
+.btn-warning:hover {
+    background: rgba(106, 21, 44, 0.8);
+    transform: scale(1.05);
+}
+
 .badge-success {
     background: rgba(162, 255, 166, 0.2);
     color: var(--color-green);
@@ -84,30 +103,25 @@ body {
     }
 }
 
-/* Agrupamento vendedor/botão */
-.seller-actions {
-    display: flex;
-    align-items: center;
+/* Barra de filtros responsiva */
+.filter-bar {
     gap: 24px;
+    flex-wrap: nowrap;
 }
 
-.seller-actions select,
-.seller-actions button {
-    height: 48px;
-    box-sizing: border-box;
-}
-
-.seller-actions button {
-    margin-left: auto;
-}
-
-@media (max-width: 600px) {
-    .seller-actions { /* empilhamento mobile */
+@media (max-width: 767px) {
+    .filter-bar {
         flex-direction: column;
         align-items: stretch;
     }
-    .seller-actions button {
-        margin-left: 0;
-        width: 100%;
-    }
 }
+
+/* Ajusta altura da tabela e ações de filtro */
+.table-scroll {
+    max-height: calc(var(--module-height) - 260px) !important;
+}
+
+#bt-actions {
+    margin-top: 1vw;
+}
+
