@@ -418,9 +418,15 @@
           if (ncmInput)    produto.ncm    = ncmInput.value;
         }
         const itensPayload = {
-          inseridos: [],
-          atualizados: itens.filter(i => i.status === 'updated').map(i => ({ id: i.id, quantidade: i.quantidade })),
-          deletados: itens.filter(i => i.status === 'deleted').map(i => ({ id: i.id }))
+          inseridos: itens
+            .filter(i => i.status === 'new')
+            .map(i => ({ insumo_id: i.insumo_id ?? i.id, quantidade: i.quantidade })),
+          atualizados: itens
+            .filter(i => i.status === 'updated')
+            .map(i => ({ id: i.id, quantidade: i.quantidade })),
+          deletados: itens
+            .filter(i => i.status === 'deleted')
+            .map(i => ({ id: i.id }))
         };
         try{
           await window.electronAPI.salvarProdutoDetalhado(produtoSelecionado.codigo, produto, itensPayload);
