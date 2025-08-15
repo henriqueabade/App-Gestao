@@ -247,6 +247,12 @@ function createPopupContent(item) {
       <div class="popup-body">
         <div class="popup-info-grid">
           <div>
+            <p class="popup-info-label">NCM:</p>
+            <p class="popup-info-value">${item.ncm || ''}</p>
+          </div>
+        </div>
+        <div class="popup-info-grid">
+          <div>
             <p class="popup-info-label">Data de Criação:</p>
             <p class="popup-info-value">${formatDate(item.criado_em)}</p>
           </div>
