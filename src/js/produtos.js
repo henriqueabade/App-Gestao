@@ -213,7 +213,9 @@ function extrairCorDimensoes(item) {
     return { corNome, corAmostra, dimensoes };
 }
 
-const resolveColorCss = window.resolveColorCss || (c => c);
+const resolveColorCss = (cor) => {
+    return window.resolveColorCss ? window.resolveColorCss(cor) : cor;
+};
 
 function isDarkColor(hex) {
     const sanitized = hex.replace('#', '');
