@@ -28,6 +28,8 @@
   const custoTotalEl    = document.getElementById('custoTotal');
   const comissaoValorEl = document.getElementById('comissaoValor');
   const impostoValorEl  = document.getElementById('impostoValor');
+  const valorVendaEl    = document.getElementById('valorVenda');
+  const totalInsumosTituloEl = document.getElementById('totalInsumosTitulo');
 
   const totals = { totalInsumos: 0, valorVenda: 0 };
 
@@ -64,6 +66,8 @@
     if(comissaoValorEl)comissaoValorEl.textContent= formatCurrency(comissaoVal);
     if(impostoValorEl) impostoValorEl.textContent = formatCurrency(impostoVal);
     if(precoVendaEl)   precoVendaEl.textContent   = formatCurrency(valorVenda);
+    if(valorVendaEl)   valorVendaEl.textContent   = formatCurrency(valorVenda);
+    renderTotalBadges();
   }
 
   [fabricacaoInput, acabamentoInput, montagemInput, embalagemInput, markupInput, commissionInput, taxInput]
@@ -73,8 +77,8 @@
   if(etapaSelect){
     window.electronAPI.listarEtapasProducao().then(procs => {
       procs.sort((a,b)=> (a.ordem ?? 0) - (b.ordem ?? 0));
-      etapaSelect.innerHTML = '<option value="">Selecionar Processo</option>' +
-        procs.map(p => `<option value="${p.id}">${p.nome ?? p}</option>`).join('');
+      etapaSelect.innerHTML = procs.map(p => `<option value="${p.id}">${p.nome ?? p}</option>`).join('');
+      etapaSelect.selectedIndex = 0;
     }).catch(err => console.error('Erro ao carregar processos', err));
   }
 
@@ -93,6 +97,7 @@
     tr.innerHTML = `
       <td class="py-3 px-2 text-white">${item.nome}</td>
       <td class="py-3 px-2 text-center">${formatNumber(item.quantidade)}</td>
+      <td class="py-3 px-2 text-center">${item.unidade || ''}</td>
       <td class="py-3 px-2 text-right text-white">${formatCurrency(item.quantidade * item.preco_unitario)}</td>
       <td class="py-3 px-2 text-center"><i class="fas fa-trash cursor-pointer text-red-400 delete-item"></i></td>`;
     tr.querySelector('.delete-item').addEventListener('click', () => {
@@ -117,7 +122,7 @@
         it.quantidade += quantidade;
         if(it.row){
           it.row.querySelector('td:nth-child(2)').textContent = formatNumber(it.quantidade);
-          it.row.querySelector('td:nth-child(3)').textContent = formatCurrency(it.quantidade * it.preco_unitario);
+          it.row.querySelector('td:nth-child(4)').textContent = formatCurrency(it.quantidade * it.preco_unitario);
         }
         atualizaTotal();
       }
@@ -129,7 +134,7 @@
         it.preco_unitario = novo.preco_unitario;
         if(it.row){
           it.row.querySelector('td:nth-child(2)').textContent = formatNumber(it.quantidade);
-          it.row.querySelector('td:nth-child(3)').textContent = formatCurrency(it.quantidade * it.preco_unitario);
+          it.row.querySelector('td:nth-child(4)').textContent = formatCurrency(it.quantidade * it.preco_unitario);
         }
         atualizaTotal();
       }
@@ -139,6 +144,19 @@
       atualizaTotal();
     }
   };
+
+  function renderTotalBadges(){
+    if(!totalInsumosTituloEl) return;
+    const processos = {};
+    itens.forEach(it => {
+      const proc = (it.processo || '').trim();
+      if(!proc) return;
+      processos[proc] = (processos[proc] || 0) + (it.quantidade * it.preco_unitario);
+    });
+    const parts = Object.keys(processos).map(p => `<span class="badge-process px-3 py-1 rounded-full text-xs font-medium">${p}: ${formatCurrency(processos[p] || 0)}</span>`);
+    parts.push(`<span class="badge-success px-3 py-1 rounded-full text-xs font-medium">Valor Total: ${formatCurrency(totals.totalInsumos || 0)}</span>`);
+    totalInsumosTituloEl.innerHTML = parts.join(' ');
+  }
 
   // ------- Ações -------
   if(comecarBtn){
