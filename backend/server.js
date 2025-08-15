@@ -1,5 +1,5 @@
-// carrega variáveis do .env
-require('dotenv').config();
+// carrega variáveis do .env sem mensagens informativas
+require('dotenv').config({ quiet: true });
 
 // importa libs só uma vez
 const express               = require('express');
@@ -32,7 +32,10 @@ app.get('/resetPasswordRenderer.js', (_req, res) => {
 if (require.main === module) {
   const PORT = process.env.PORT || 3000;
   if (!process.env.PORT) console.warn('PORT not set, defaulting to 3000');
-  app.listen(PORT, () => console.log(`API server running on port ${PORT}`));
+  const DEBUG = process.env.DEBUG === 'true';
+  app.listen(PORT, () => {
+    if (DEBUG) console.log(`API server running on port ${PORT}`);
+  });
 }
 
 module.exports = app;
