@@ -428,6 +428,8 @@
           }
           if (codigoInput) produto.codigo = codigoInput.value;
           if (ncmInput)    produto.ncm    = ncmInput.value.slice(0,8);
+          const statusSelecionado = statusRadios.find(r => r.checked);
+          if (statusSelecionado) produto.status = statusSelecionado.value;
         }
         const itensPayload = {
           inseridos: itens
