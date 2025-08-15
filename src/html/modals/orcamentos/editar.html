@@ -1,0 +1,98 @@
+<div id="editarOrcamentoOverlay" class="fixed inset-0 bg-black/50 flex items-center justify-center p-4">
+  <div role="dialog" aria-modal="true" tabindex="0" class="w-full max-w-5xl max-h-[90vh] bg-surface/60 backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade slide-in overflow-hidden flex flex-col">
+    <header class="flex items-center justify-between px-8 py-5 border-b border-white/10 flex-shrink-0">
+      <h2 id="tituloEditarOrcamento" class="text-lg font-semibold text-white">Editar Orçamento</h2>
+      <button id="fecharEditarOrcamento" class="btn-danger icon-only text-white">✕</button>
+    </header>
+    <div class="flex-1 overflow-y-auto p-8 space-y-6">
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-300 mb-2">Cliente</label>
+          <input id="editarCliente" type="text" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-300 mb-2">Contato</label>
+          <input id="editarContato" type="text" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-300 mb-2">Validade</label>
+          <input id="editarValidade" type="date" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-300 mb-2">Condição de pagamento</label>
+          <select id="editarCondicao" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition select-arrow appearance-none">
+            <option value="vista">À vista</option>
+            <option value="prazo">À prazo</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-300 mb-2">Status</label>
+          <select id="editarStatus" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition select-arrow appearance-none">
+            <option value="rascunho">Rascunho</option>
+            <option value="aberto">Aberto</option>
+            <option value="enviado">Enviado</option>
+            <option value="aprovado">Aprovado</option>
+            <option value="recusado">Recusado</option>
+          </select>
+        </div>
+        <div class="md:col-span-2">
+          <label class="block text-sm font-medium text-gray-300 mb-2">Observações</label>
+          <textarea id="editarObservacoes" rows="2" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></textarea>
+        </div>
+      </div>
+
+      <div>
+        <h3 class="text-lg font-semibold mb-4 text-white">Itens</h3>
+        <!-- manipulação de itens -->
+        <div class="grid grid-cols-1 md:grid-cols-5 gap-4 mb-4 items-end">
+          <div class="md:col-span-2">
+            <input id="novoItemNome" type="text" placeholder="Produto" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+          </div>
+          <div>
+            <input id="novoItemQtd" type="number" min="1" value="1" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+          </div>
+          <div>
+            <input id="novoItemValor" type="number" min="0" step="0.01" placeholder="0,00" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+          </div>
+          <div>
+            <input id="novoItemDesc" type="number" min="0" value="0" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+          </div>
+          <div>
+            <button id="adicionarItem" class="w-full btn-success px-4 py-3 rounded-lg font-medium">+ Inserir</button>
+          </div>
+        </div>
+
+        <div class="bg-surface/40 rounded-xl border border-white/10 overflow-hidden">
+          <table id="orcamentoItens" class="w-full text-sm">
+            <thead class="bg-surface/60">
+              <tr class="border-b border-white/10">
+                <th class="text-left py-3 px-4 text-gray-300 font-medium">Item</th>
+                <th class="text-center py-3 px-4 text-gray-300 font-medium">Qtd</th>
+                <th class="text-right py-3 px-4 text-gray-300 font-medium">Valor Unit. (R$)</th>
+                <th class="text-center py-3 px-4 text-gray-300 font-medium">Desc. %</th>
+                <th class="text-right py-3 px-4 text-gray-300 font-medium">Total (R$)</th>
+                <th class="text-center py-3 px-4 text-gray-300 font-medium">Ações</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+
+        <!-- recálculo de totais -->
+        <div class="flex justify-end gap-8 mt-4 text-sm">
+          <div class="text-gray-300">Subtotal: <span id="subtotalOrcamento">R$ 0,00</span></div>
+          <div class="text-gray-300">Desconto: <span id="descontoOrcamento">R$ 0,00</span></div>
+          <div class="text-white font-semibold">Total: <span id="totalOrcamento">R$ 0,00</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- salvar/fechar e converter -->
+    <footer class="flex justify-end gap-3 px-8 py-6 border-t border-white/10 flex-shrink-0">
+      <button id="salvarOrcamento" class="btn-primary px-6 py-3 rounded-lg text-white font-medium">Salvar</button>
+      <button id="salvarFecharOrcamento" class="btn-secondary px-6 py-3 rounded-lg text-white font-medium">Salvar e Fechar</button>
+      <button id="converterOrcamento" class="btn-success px-6 py-3 rounded-lg font-medium">Converter em Pedido</button>
+      <button id="cancelarOrcamento" class="btn-neutral px-6 py-3 rounded-lg text-white font-medium">Cancelar</button>
+    </footer>
+  </div>
+</div>
