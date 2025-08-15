@@ -1,6 +1,7 @@
 
 const { app, BrowserWindow, ipcMain, screen } = require('electron');
 const path = require('path');
+const DEBUG = process.env.DEBUG === 'true';
 const {
   registrarUsuario,
   loginUsuario,
@@ -91,6 +92,7 @@ let displayFile;
 let currentDisplayId;
 
 function logDisplayInfo(context, selected) {
+  if (!DEBUG) return;
   try {
     const displays = screen.getAllDisplays().map(d => ({ id: d.id, bounds: d.bounds }));
     console.log(`[${context}] available displays:`, JSON.stringify(displays));
@@ -300,7 +302,7 @@ app.whenReady().then(() => {
     console.warn('API_PORT not set, defaulting to 3000');
   }
   apiServer.listen(apiPort, () => {
-    console.log(`API server running on port ${apiPort}`);
+    if (DEBUG) console.log(`API server running on port ${apiPort}`);
   });
 
   // Cria a janela de login sem exibí-la imediatamente.
@@ -683,4 +685,6 @@ ipcMain.handle('get-saved-display', () => {
   return currentDisplayId || null;
 });
 
-ipcMain.on('debug-log', (_, m) => console.log('[popup]', m));
+if (DEBUG) {
+  ipcMain.on('debug-log', (_, m) => console.log('[popup]', m));
+}
