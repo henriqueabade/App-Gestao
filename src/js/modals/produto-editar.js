@@ -127,7 +127,6 @@
       const editable = editarRegistroToggle && editarRegistroToggle.checked;
       [nomeInput, codigoInput, ncmInput].forEach(el => { if (el) el.disabled = !editable; });
       statusRadios.forEach(r => r.disabled = !editable);
-      updateRadios.forEach(r => r.disabled = !editable);
       if(!editable){
         if (nomeInput)   nomeInput.value   = registroOriginal.nome;
         if (codigoInput) codigoInput.value = registroOriginal.codigo;
