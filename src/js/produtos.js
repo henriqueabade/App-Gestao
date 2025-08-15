@@ -189,18 +189,20 @@ function formatDate(dateStr) {
 }
 
 function extrairCorDimensoes(item) {
-    if (!item) return { cor: '', dimensoes: '' };
+    if (!item) return { corNome: '', corAmostra: '', dimensoes: '' };
     const nome = item.nome || '';
     const partes = nome.split(' - ');
-    let cor = '';
+    let corNome = '';
     if (item.cor) {
-        cor = item.cor.trim();
+        corNome = item.cor.trim();
     } else if (partes[2]) {
-        cor = partes[2].trim();
+        corNome = partes[2].trim();
     }
 
-    if (cor.includes('/')) {
-        cor = cor.split('/')[0].trim();
+    let corAmostra = corNome;
+    if (corNome.includes('/')) {
+        const partesCor = corNome.split('/');
+        corAmostra = partesCor[1] ? partesCor[1].trim() : partesCor[0].trim();
     }
 
     let dimensoes = '';
@@ -208,7 +210,7 @@ function extrairCorDimensoes(item) {
         const match = partes[1].match(/\(([^)]+)\)/);
         if (match) dimensoes = `(${match[1]}) cm`;
     }
-    return { cor, dimensoes };
+    return { corNome, corAmostra, dimensoes };
 }
 
 const resolveColorCss = window.resolveColorCss || (c => c);
@@ -227,13 +229,13 @@ function isDarkColor(hex) {
 }
 
 function createPopupContent(item) {
-    const { cor, dimensoes } = extrairCorDimensoes(item);
-    const corCss = resolveColorCss(cor);
+    const { corNome, corAmostra, dimensoes } = extrairCorDimensoes(item);
+    const corCss = resolveColorCss(corAmostra);
     const outlineClass = isDarkColor(corCss) ? ' popup-color-bar-outline' : '';
-    const corSection = cor
+    const corSection = corNome
         ? `
             <div class="popup-color-wrapper">
-              <p class="popup-info-value">${cor}</p>
+              <p class="popup-info-value">${corNome}</p>
               <div class="popup-color-bar${outlineClass}" style="background-color: ${corCss};"></div>
             </div>
           `
