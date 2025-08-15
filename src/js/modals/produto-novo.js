@@ -163,13 +163,28 @@
   const registrarBtn = document.getElementById('registrarNovoProduto');
   if(registrarBtn){
     registrarBtn.addEventListener('click', async () => {
-      const nome = nomeInput?.value.trim();
-      const codigo = codigoInput?.value.trim();
-      const ncm = ncmInput?.value.trim().slice(0,8);
-      if(!nome || !codigo){
-        showToast('Nome e código são obrigatórios', 'error');
-        return;
+      const campos = [
+        { el: nomeInput, nome: 'Nome' },
+        { el: codigoInput, nome: 'Código' },
+        { el: ncmInput, nome: 'NCM' },
+        { el: fabricacaoInput, nome: 'Marcenaria' },
+        { el: acabamentoInput, nome: 'Acabamento' },
+        { el: montagemInput, nome: 'Montagem' },
+        { el: embalagemInput, nome: 'Embalagem' },
+        { el: markupInput, nome: 'Markup' },
+        { el: commissionInput, nome: 'Comissão' },
+        { el: taxInput, nome: 'Imposto' }
+      ];
+      for(const campo of campos){
+        if(campo.el && String(campo.el.value).trim() === ''){
+          showToast(`${campo.nome} é obrigatório`, 'error');
+          campo.el.focus();
+          return;
+        }
       }
+      const nome = nomeInput.value.trim();
+      const codigo = codigoInput.value.trim();
+      const ncm = ncmInput.value.trim().slice(0,8);
       try{
         const existentes = await window.electronAPI.listarProdutos();
         if(existentes.some(p => p.codigo === codigo)){

@@ -231,6 +231,22 @@ async function listarItensProcessoProduto(codigo, etapa, busca = '') {
 async function adicionarProduto(dados) {
   const { codigo, nome, preco_venda, pct_markup, status } = dados;
   const categoria = dados.categoria || (nome ? String(nome).trim().split(' ')[0] : null);
+  const required = {
+    codigo: 'Código',
+    nome: 'Nome',
+    preco_venda: 'Preço de venda',
+    pct_markup: 'Markup',
+    status: 'Status'
+  };
+  for (const [key, label] of Object.entries(required)) {
+    const val = dados[key];
+    if (val === undefined || val === null || String(val).trim() === '') {
+      const err = new Error(`${label} é obrigatório`);
+      err.code = 'CAMPO_OBRIGATORIO';
+      err.field = key;
+      throw err;
+    }
+  }
   const codigoDup = await pool.query('SELECT 1 FROM produtos WHERE codigo=$1', [codigo]);
   if (codigoDup.rowCount > 0) {
     const err = new Error('Código já existe');

@@ -43,6 +43,30 @@ function setup() {
   return { adicionarProduto, atualizarProduto, salvarProdutoDetalhado, pool };
 }
 
+test('adicionarProduto exige todos os campos', async () => {
+  const { adicionarProduto } = setup();
+  await assert.rejects(
+    adicionarProduto({ nome: 'Prod1', preco_venda: 0, pct_markup: 0, status: 'ativo' }),
+    /Código é obrigatório/
+  );
+  await assert.rejects(
+    adicionarProduto({ codigo: 'P1', preco_venda: 0, pct_markup: 0, status: 'ativo' }),
+    /Nome é obrigatório/
+  );
+  await assert.rejects(
+    adicionarProduto({ codigo: 'P1', nome: 'Prod1', pct_markup: 0, status: 'ativo' }),
+    /Preço de venda é obrigatório/
+  );
+  await assert.rejects(
+    adicionarProduto({ codigo: 'P1', nome: 'Prod1', preco_venda: 0, status: 'ativo' }),
+    /Markup é obrigatório/
+  );
+  await assert.rejects(
+    adicionarProduto({ codigo: 'P1', nome: 'Prod1', preco_venda: 0, pct_markup: 0 }),
+    /Status é obrigatório/
+  );
+});
+
 test('atualizarProduto atualiza produtos_insumos ao mudar codigo', async () => {
   const { adicionarProduto, atualizarProduto, pool } = setup();
   const { id } = await adicionarProduto({
