@@ -163,7 +163,7 @@ async function adicionarEtapaProducao(nome, ordem) {
   // Se ordem não for fornecida ou inválida, calcula a próxima ordem disponível
   if (!Number.isInteger(ordem) || ordem <= 0) {
     const { rows } = await pool.query(
-      'SELECT COALESCE(MAX(ordem), 0) + 1 AS prox'
+      'SELECT COALESCE(MAX(ordem), 0) + 1 AS prox FROM etapas_producao'
     );
     ordem = rows[0].prox;
   }
