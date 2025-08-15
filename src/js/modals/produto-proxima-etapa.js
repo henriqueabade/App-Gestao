@@ -136,7 +136,7 @@
       warn.id = 'duplicadoRegistrarOverlay';
       warn.className = 'fixed inset-0 bg-black/50 flex items-center justify-center p-4';
       warn.innerHTML = `
-        <div class="max-w-sm w-full glass-surface backdrop-blur-xl rounded-2xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade">
+        <div class="max-w-md w-full glass-surface backdrop-blur-xl rounded-2xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade">
           <div class="p-6 text-center">
             <h3 class="text-lg font-semibold mb-4 text-yellow-300">Item Duplicado</h3>
             <p class="text-sm text-gray-300 mb-4">O item <span class="text-white font-medium">${item.nome}</span> já está na lista. O que deseja fazer?</p>
