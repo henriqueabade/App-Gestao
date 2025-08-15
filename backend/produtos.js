@@ -152,8 +152,16 @@ async function listarEtapasProducao() {
  * Se nenhuma ordem for informada, a etapa é adicionada ao final.
  */
 async function adicionarEtapaProducao(nome, ordem) {
-  // Se ordem não for fornecida, calcula a próxima ordem disponível
-  if (ordem === undefined || ordem === null || isNaN(ordem)) {
+  // Permite chamada com um único objeto: adicionarEtapaProducao({ nome, ordem })
+  if (typeof nome === 'object' && nome !== null) {
+    ({ nome, ordem } = nome);
+  }
+
+  // Garante que 'ordem' seja um número válido
+  ordem = Number(ordem);
+
+  // Se ordem não for fornecida ou inválida, calcula a próxima ordem disponível
+  if (!Number.isInteger(ordem) || ordem <= 0) {
     const { rows } = await pool.query(
       'SELECT COALESCE(MAX(ordem), 0) + 1 AS prox'
     );
