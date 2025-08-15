@@ -19,13 +19,13 @@
   async function carregarOpcoes(){
     try{
       const categorias = await window.electronAPI.listarCategorias();
-      form.categoria.innerHTML = '<option value="">Selecione</option>' +
+      form.categoria.innerHTML = '<option value=""></option>' +
         categorias.map(c => {
           const nome = c?.nome_categoria ?? c;
           return `<option value="${nome}">${nome}</option>`;
         }).join('');
       const unidades = await window.electronAPI.listarUnidades();
-      form.unidade.innerHTML = '<option value="">Selecione</option>' +
+      form.unidade.innerHTML = '<option value=""></option>' +
         unidades.map(u => {
           const tipo = u?.tipo ?? u;
           return `<option value="${tipo}">${tipo}</option>`;
