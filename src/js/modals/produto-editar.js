@@ -70,6 +70,7 @@
     const nomeInput = document.getElementById('nomeInput');
     const codigoInput = document.getElementById('codigoInput');
     const ncmInput = document.getElementById('ncmInput');
+    const statusRadios = Array.from(document.querySelectorAll('input[name="statusOption"]'));
     const precoVendaEl = document.getElementById('precoVenda');
     const ultimaDataEl = document.getElementById('ultimaModificacaoData');
     const ultimaHoraEl = document.getElementById('ultimaModificacaoHora');
@@ -124,10 +125,12 @@
     function updateRegistroEditState(){
       const editable = editarRegistroToggle && editarRegistroToggle.checked;
       [nomeInput, codigoInput, ncmInput].forEach(el => { if (el) el.disabled = !editable; });
+      statusRadios.forEach(r => r.disabled = !editable);
       if(!editable){
         if (nomeInput)   nomeInput.value   = registroOriginal.nome;
         if (codigoInput) codigoInput.value = registroOriginal.codigo;
         if (ncmInput)    ncmInput.value    = registroOriginal.ncm;
+        statusRadios.forEach(r => { r.checked = (r.value.toLowerCase() === (registroOriginal.status || '').toLowerCase()); });
       }
     }
     if (editarRegistroToggle) {
@@ -413,9 +416,14 @@
           data: new Date().toISOString()
         };
         if(editarRegistroToggle && editarRegistroToggle.checked){
-          if (nomeInput)   produto.nome   = nomeInput.value;
+          if (nomeInput){
+            produto.nome = nomeInput.value;
+            produto.categoria = nomeInput.value.trim().split(' ')[0] || '';
+          }
           if (codigoInput) produto.codigo = codigoInput.value;
           if (ncmInput)    produto.ncm    = ncmInput.value.slice(0,8);
+          const st = statusRadios.find(r => r.checked);
+          if(st) produto.status = st.value;
         }
         const itensPayload = {
           inseridos: itens
@@ -436,7 +444,8 @@
           registroOriginal = {
             nome:   nomeInput ? nomeInput.value   : '',
             codigo: codigoInput ? codigoInput.value : '',
-            ncm:    ncmInput ? ncmInput.value    : ''
+            ncm:    ncmInput ? ncmInput.value    : '',
+            status: (statusRadios.find(r => r.checked)?.value) || ''
           };
           if(typeof carregarProdutos === 'function') await carregarProdutos();
           close();
@@ -487,11 +496,15 @@
           if(markupInput && dados.pct_markup != null) markupInput.value = dados.pct_markup;
           if(commissionInput && dados.pct_comissao != null) commissionInput.value = dados.pct_comissao;
           if(taxInput && dados.pct_imposto != null) taxInput.value = dados.pct_imposto;
+          if(dados.status && statusRadios.length){
+            statusRadios.forEach(r => { r.checked = r.value.toLowerCase() === String(dados.status).toLowerCase(); });
+          }
 
           registroOriginal = {
             nome:   nomeInput ? nomeInput.value   : '',
             codigo: codigoInput ? codigoInput.value : '',
-            ncm:    ncmInput ? ncmInput.value    : ''
+            ncm:    ncmInput ? ncmInput.value    : '',
+            status: dados.status || ''
           };
           updateRegistroEditState();
         }

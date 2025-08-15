@@ -229,7 +229,8 @@ async function listarItensProcessoProduto(codigo, etapa, busca = '') {
  * CRUD básico de produtos
  */
 async function adicionarProduto(dados) {
-  const { codigo, nome, categoria, preco_venda, pct_markup, status } = dados;
+  const { codigo, nome, preco_venda, pct_markup, status } = dados;
+  const categoria = dados.categoria || (nome ? String(nome).trim().split(' ')[0] : null);
   const res = await pool.query(
     `INSERT INTO produtos (codigo, nome, categoria, preco_venda, pct_markup, status)
      VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
@@ -239,7 +240,8 @@ async function adicionarProduto(dados) {
 }
 
 async function atualizarProduto(id, dados) {
-  const { codigo, nome, categoria, preco_venda, pct_markup, status } = dados;
+  const { codigo, nome, preco_venda, pct_markup, status } = dados;
+  const categoria = dados.categoria || (nome ? String(nome).trim().split(' ')[0] : null);
   const res = await pool.query(
     `UPDATE produtos
         SET codigo=$1,
@@ -315,7 +317,9 @@ async function salvarProdutoDetalhado(codigoOriginal, produto, itens) {
       preco_venda,
       nome,
       codigo,
-      ncm
+      ncm,
+      categoria,
+      status
     } = produto;
 
     // Garante que o NCM não exceda 8 caracteres (limite do banco)
@@ -325,34 +329,69 @@ async function salvarProdutoDetalhado(codigoOriginal, produto, itens) {
     const codigoDestino = codigo !== undefined ? codigo : codigoOriginal;
 
     if (codigo !== undefined && codigo !== codigoOriginal) {
-      // Obtém dados atuais para preservar campos não informados
-      const { rows } = await client.query('SELECT nome, ncm FROM produtos WHERE codigo=$1', [codigoOriginal]);
-      const atuais = rows[0] || {};
-
-      // Insere novo registro com o código atualizado
-      await client.query(
-        `INSERT INTO produtos (codigo, pct_fabricacao, pct_acabamento, pct_montagem, pct_embalagem, pct_markup, pct_comissao, pct_imposto, preco_base, preco_venda, nome, ncm, data)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,NOW())`,
-        [
-          codigo,
-          pct_fabricacao,
-          pct_acabamento,
-          pct_montagem,
-          pct_embalagem,
-          pct_markup,
-          pct_comissao,
-          pct_imposto,
-          preco_base,
-          preco_venda,
-          nome !== undefined ? nome : atuais.nome,
-          ncmSanitizado !== undefined ? ncmSanitizado : atuais.ncm
-        ]
+      const { rows } = await client.query(
+        'SELECT * FROM produtos WHERE codigo=$1',
+        [codigoOriginal]
       );
+      const atuais = rows[0] || {};
+      const temId = Object.prototype.hasOwnProperty.call(atuais, 'id');
+
+      const cols = [
+        'codigo',
+        'pct_fabricacao',
+        'pct_acabamento',
+        'pct_montagem',
+        'pct_embalagem',
+        'pct_markup',
+        'pct_comissao',
+        'pct_imposto',
+        'preco_base',
+        'preco_venda',
+        'nome',
+        'ncm'
+      ];
+      const vals = [
+        codigo,
+        pct_fabricacao,
+        pct_acabamento,
+        pct_montagem,
+        pct_embalagem,
+        pct_markup,
+        pct_comissao,
+        pct_imposto,
+        preco_base,
+        preco_venda,
+        nome !== undefined ? nome : atuais.nome,
+        ncmSanitizado !== undefined ? ncmSanitizado : atuais.ncm
+      ];
+      if (Object.prototype.hasOwnProperty.call(atuais, 'categoria') || categoria !== undefined) {
+        cols.push('categoria');
+        vals.push(categoria !== undefined ? categoria : atuais.categoria);
+      }
+      if (Object.prototype.hasOwnProperty.call(atuais, 'status') || status !== undefined) {
+        cols.push('status');
+        vals.push(status !== undefined ? status : atuais.status);
+      }
+      const placeholders = cols.map((_, i) => `$${i + 1}`).join(',');
+      const insertSql = `INSERT INTO produtos (${cols.join(',')}, data) VALUES (${placeholders}, NOW())${temId ? ' RETURNING id' : ''}`;
+      let novoId;
+      if (temId) {
+        const ins = await client.query(insertSql, vals);
+        novoId = ins.rows[0].id;
+      } else {
+        await client.query(insertSql, vals);
+      }
       await client.query(
         'UPDATE produtos_insumos SET produto_codigo=$1 WHERE produto_codigo=$2',
         [codigo, codigoOriginal]
       );
       await client.query('DELETE FROM produtos WHERE codigo=$1', [codigoOriginal]);
+      if (temId && novoId !== undefined) {
+        await client.query('UPDATE produtos SET id=$1 WHERE id=$2', [atuais.id, novoId]);
+        await client.query(
+          "SELECT setval('produtos_id_seq', (SELECT GREATEST(MAX(id),1) FROM produtos))"
+        );
+      }
     } else {
       // Monta consulta dinâmica para atualização sem mudança de código
       let query = `UPDATE produtos
@@ -385,6 +424,14 @@ async function salvarProdutoDetalhado(codigoOriginal, produto, itens) {
         query += `, ncm=$${params.length + 1}`;
         params.push(ncmSanitizado);
       }
+      if (categoria !== undefined) {
+        query += `, categoria=$${params.length + 1}`;
+        params.push(categoria);
+      }
+      if (status !== undefined) {
+        query += `, status=$${params.length + 1}`;
+        params.push(status);
+      }
       query += ` WHERE codigo=$${params.length + 1}::text`;
       params.push(codigoOriginal);
 
@@ -392,8 +439,29 @@ async function salvarProdutoDetalhado(codigoOriginal, produto, itens) {
     }
 
     // Processa exclusões
+    const { rows: tableCheck } = await client.query(
+      "SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='produtos_em_cada_ponto') AS exists"
+    );
+    const hasPecp = tableCheck[0] && tableCheck[0].exists;
+    let produtoId = null;
+    if (hasPecp) {
+      const idRes = await client
+        .query('SELECT id FROM produtos WHERE codigo=$1', [codigoDestino])
+        .catch(() => null);
+      produtoId = idRes && idRes.rows[0] ? idRes.rows[0].id : null;
+    }
     for (const del of (itens.deletados || [])) {
-      await client.query('DELETE FROM produtos_insumos WHERE id=$1::int', [del.id]);
+      const resDel = await client.query(
+        'DELETE FROM produtos_insumos WHERE id=$1::int RETURNING insumo_id',
+        [del.id]
+      );
+      const insId = resDel.rows[0]?.insumo_id;
+      if (hasPecp && produtoId && insId != null) {
+        await client.query(
+          'DELETE FROM produtos_em_cada_ponto WHERE produto_id=$1 AND ultimo_insumo_id=$2',
+          [produtoId, insId]
+        );
+      }
     }
     // Processa atualizações
     for (const up of (itens.atualizados || [])) {
