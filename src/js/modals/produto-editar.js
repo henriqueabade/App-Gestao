@@ -70,6 +70,7 @@
     const nomeInput = document.getElementById('nomeInput');
     const codigoInput = document.getElementById('codigoInput');
     const ncmInput = document.getElementById('ncmInput');
+    const updateRadios = Array.from(document.querySelectorAll('input[name="updateOption"]'));
     const statusRadios = Array.from(document.querySelectorAll('input[name="statusOption"]'));
     const precoVendaEl = document.getElementById('precoVenda');
     const ultimaDataEl = document.getElementById('ultimaModificacaoData');
@@ -126,6 +127,7 @@
       const editable = editarRegistroToggle && editarRegistroToggle.checked;
       [nomeInput, codigoInput, ncmInput].forEach(el => { if (el) el.disabled = !editable; });
       statusRadios.forEach(r => r.disabled = !editable);
+      updateRadios.forEach(r => r.disabled = !editable);
       if(!editable){
         if (nomeInput)   nomeInput.value   = registroOriginal.nome;
         if (codigoInput) codigoInput.value = registroOriginal.codigo;
