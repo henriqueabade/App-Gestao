@@ -141,9 +141,9 @@
             <h3 class="text-lg font-semibold mb-4 text-yellow-300">Item Duplicado</h3>
             <p class="text-sm text-gray-300 mb-4">O item <span class="text-white font-medium">${item.nome}</span> já está na lista. O que deseja fazer?</p>
             <div class="flex justify-center gap-4 mt-6">
-              <button id="dupSomar" class="btn-warning px-4 py-2 rounded-lg text-white font-medium">Somar</button>
-              <button id="dupSubstituir" class="btn-danger px-4 py-2 rounded-lg text-white font-medium">Substituir</button>
-              <button id="dupManter" class="btn-neutral px-4 py-2 rounded-lg text-white font-medium">Manter</button>
+              <button id="dupSomar" class="btn-warning px-4 py-2 rounded-lg text-white font-medium flex items-center gap-2" title="Somar à quantidade existente">Somar <span class="info-icon"></span></button>
+              <button id="dupSubstituir" class="btn-danger px-4 py-2 rounded-lg text-white font-medium flex items-center gap-2" title="Substituir o item existente">Substituir <span class="info-icon"></span></button>
+              <button id="dupManter" class="btn-neutral px-4 py-2 rounded-lg text-white font-medium flex items-center gap-2" title="Manter o item atual">Manter <span class="info-icon"></span></button>
             </div>
           </div>
         </div>`;
