@@ -415,7 +415,7 @@
         if(editarRegistroToggle && editarRegistroToggle.checked){
           if (nomeInput)   produto.nome   = nomeInput.value;
           if (codigoInput) produto.codigo = codigoInput.value;
-          if (ncmInput)    produto.ncm    = ncmInput.value;
+          if (ncmInput)    produto.ncm    = ncmInput.value.slice(0,8);
         }
         const itensPayload = {
           inseridos: itens

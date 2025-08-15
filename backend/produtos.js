@@ -317,6 +317,10 @@ async function salvarProdutoDetalhado(codigoOriginal, produto, itens) {
       ncm
     } = produto;
 
+    // Garante que o NCM não exceda 8 caracteres (limite do banco)
+    const ncmSanitizado =
+      ncm !== undefined && ncm !== null ? String(ncm).slice(0, 8) : undefined;
+
     // Monta consulta dinâmica
     let query = `UPDATE produtos
           SET pct_fabricacao=$1,
@@ -348,9 +352,9 @@ async function salvarProdutoDetalhado(codigoOriginal, produto, itens) {
       query += `, codigo=$${params.length + 1}`;
       params.push(codigo);
     }
-    if (ncm !== undefined) {
+    if (ncmSanitizado !== undefined) {
       query += `, ncm=$${params.length + 1}`;
-      params.push(ncm);
+      params.push(ncmSanitizado);
     }
     query += ` WHERE codigo=$${params.length + 1}::text`;
     params.push(codigoOriginal);
