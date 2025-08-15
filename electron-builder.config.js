@@ -6,7 +6,17 @@ module.exports = {
   productName: 'Santíssimo Decor',
   copyright: '© 2025 Santíssimo',
   directories: {
-  output: 'C:/Users/henri/Desktop/TestesApp/Instalador'
+  output: path.join(
+    'C:',
+    'Users',
+    'henri',
+    'OneDrive',
+    'Work',
+    'Santissimo Decor',
+    'Novo Programa de Gestão',
+    'TestesApp',
+    'Instalador'
+  )
 },
   files: [
     "**/*",
