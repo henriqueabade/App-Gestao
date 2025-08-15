@@ -48,11 +48,7 @@ const {
 const apiServer = require('./backend/server');
 
 function showStartupBanner() {
-  const banner = `\n\u001b[32m
-╔══════════════════════════════════════════╗
-║ 🚀  Aplicativo iniciado com sucesso!    ║
-╚══════════════════════════════════════════╝
-\u001b[0m\n`;
+  const banner = `\n==============================\n Aplicativo iniciado com sucesso! \n==============================\n`;
   console.log(banner);
 }
 
