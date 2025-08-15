@@ -167,7 +167,6 @@ let materiais = [];
 // Mapa auxiliar para lookup rápido pelo id
 let materiaisMap = new Map();
 let currentRawMaterialPopup = null;
-let currentRawMaterialTestPopup = null;
 
 function extractCor(nome, cor) {
     return (cor || (nome && nome.split('/')[1]) || '').trim();
@@ -258,7 +257,7 @@ function attachRawMaterialInfoEvents() {
         if (icon.dataset.bound) return;
         icon.dataset.bound = 'true';
 
-        icon.addEventListener('click', () => {
+        icon.addEventListener('mouseenter', () => {
             const id = icon.dataset.id;
             if (!id) {
                 window.electronAPI?.log?.('attachRawMaterialInfoEvents invalid id');
@@ -277,42 +276,6 @@ function attachRawMaterialInfoEvents() {
     });
 }
 
-function showRawMaterialTestPopup(target) {
-    hideRawMaterialTestPopup();
-    const { popup } = createPopup(target, `<div class="resumo-popover show bg-gray-800 text-white text-xs rounded-lg p-2 shadow-lg">teste</div>`, { onHide: hideRawMaterialTestPopup });
-    currentRawMaterialTestPopup = popup;
-}
-
-function hideRawMaterialTestPopup() {
-    if (currentRawMaterialTestPopup) {
-        currentRawMaterialTestPopup.remove();
-        currentRawMaterialTestPopup = null;
-    }
-}
-
-function attachRawMaterialTestEvents() {
-    const tbody = document.getElementById('materiaPrimaTableBody');
-    if (!tbody) return;
-
-    tbody.querySelectorAll('.test-icon').forEach(icon => {
-        if (icon.dataset.bound) return;
-        icon.dataset.bound = 'true';
-
-        icon.addEventListener('click', () => {
-            showRawMaterialTestPopup(icon);
-        });
-
-        icon.addEventListener('mouseleave', () => {
-            setTimeout(() => {
-                if (!currentRawMaterialTestPopup?.matches(':hover')) hideRawMaterialTestPopup();
-            }, 100);
-        });
-    });
-}
-
-window.showRawMaterialTestPopup = showRawMaterialTestPopup;
-window.hideRawMaterialTestPopup = hideRawMaterialTestPopup;
-window.attachRawMaterialTestEvents = attachRawMaterialTestEvents;
 
 function renderMateriais(listaMateriais) {
     materiais = listaMateriais;
@@ -364,7 +327,6 @@ function renderMateriais(listaMateriais) {
                 <div class="flex items-center">
                     <span class="text-sm text-white">${item.nome}</span>
                     <i class="info-icon ml-2" data-id="${item.id}"></i>
-                    <i class="test-icon ml-2" data-id="${item.id}"></i>
                 </div>
             </td>
             <td class="px-6 py-4 whitespace-nowrap text-sm text-white">${quantidadeValor}</td>
@@ -380,7 +342,6 @@ function renderMateriais(listaMateriais) {
 
     if (window.feather) feather.replace();
     attachRawMaterialInfoEvents();
-    attachRawMaterialTestEvents();
 }
 
 function abrirNovoInsumo() {
