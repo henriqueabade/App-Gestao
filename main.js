@@ -53,16 +53,12 @@ if (!gotTheLock) {
   });
 }
 
-// Garante que qualquer janela criada permaneça em tela cheia
+// Configura janelas recém-criadas sem forçar tela cheia
 app.on('browser-window-created', (_event, win) => {
-  win.setFullScreen(true);
   win.setResizable(false);
   win.setMaximizable(false);
   win.setMinimizable(false);
   win.setFullScreenable(false);
-  win.on('leave-full-screen', () => {
-    win.setFullScreen(true);
-  });
   win.webContents.on('before-input-event', (event, input) => {
     const key = input.key.toLowerCase();
     if (input.control && key === 'w') {
@@ -155,11 +151,9 @@ function handleDisplaysChanged() {
   const bounds = getBoundsForDisplay(target);
   if (loginWindow) {
     loginWindow.setBounds(bounds);
-    loginWindow.setFullScreen(true);
   }
   if (dashboardWindow) {
     dashboardWindow.setBounds(bounds);
-    dashboardWindow.setFullScreen(true);
   }
 }
 
@@ -176,7 +170,6 @@ function createLoginWindow(show = true, showOnLoad = true) {
     y,
     width,
     height,
-    fullscreen: true,
     frame: false,
     fullscreenable: false,
     resizable: false,
@@ -202,7 +195,6 @@ function createLoginWindow(show = true, showOnLoad = true) {
   // Espera o conteúdo estar pronto para posicionar e exibir
   loginWindow.once('ready-to-show', () => {
     loginWindow.setBounds(getBoundsForDisplay(savedDisplay));
-    loginWindow.setFullScreen(true);
     if (show && showOnLoad) {
       loginWindow.show();
       loginWindow.focus();
@@ -212,11 +204,6 @@ function createLoginWindow(show = true, showOnLoad = true) {
       loginWindow.focus();
       loginWindow.webContents.send('activate-tab', 'login');
     }
-  });
-
-  // Garante full-screen contínuo
-  loginWindow.on('leave-full-screen', () => {
-    loginWindow.setFullScreen(true);
   });
 
   // Carrega o HTML, passando hidden=0/1 via query (como você já fazia)
@@ -242,7 +229,6 @@ function createDashboardWindow(show = true) {
     y,
     width,
     height,
-    fullscreen: true,
     resizable: false,
     maximizable: false,
     minimizable: false,
@@ -262,15 +248,10 @@ function createDashboardWindow(show = true) {
   dashboardWindow.once('ready-to-show', () => {
     dashboardWindow.webContents.send('select-tab', 'dashboard');
     dashboardWindow.setBounds(getBoundsForDisplay(savedDisplay));
-    dashboardWindow.setFullScreen(true);
     if (show) {
       dashboardWindow.show();
       dashboardWindow.focus();
     }
-  });
-
-  dashboardWindow.on('leave-full-screen', () => {
-    dashboardWindow.setFullScreen(true);
   });
 
   dashboardWindow.webContents.on('did-finish-load', () => {
@@ -651,7 +632,6 @@ ipcMain.handle('set-display', (_e, id) => {
   if (loginWindow) {
     const wasVisible = loginWindow.isVisible();
     loginWindow.setBounds(bounds);
-    loginWindow.setFullScreen(true);
     if (wasVisible) {
       loginWindow.show();
       loginWindow.focus();
@@ -661,7 +641,6 @@ ipcMain.handle('set-display', (_e, id) => {
   if (dashboardWindow) {
     const wasVisible = dashboardWindow.isVisible();
     dashboardWindow.setBounds(bounds);
-    dashboardWindow.setFullScreen(true);
     if (wasVisible) {
       dashboardWindow.show();
       dashboardWindow.focus();
