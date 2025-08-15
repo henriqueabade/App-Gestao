@@ -1,10 +1,14 @@
 <div id="editarOrcamentoOverlay" class="fixed inset-0 bg-black/50 flex items-center justify-center p-4">
-  <div role="dialog" aria-modal="true" tabindex="0" class="w-full max-w-5xl max-h-[90vh] bg-surface/60 backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade slide-in overflow-hidden flex flex-col">
-    <header class="flex items-center px-8 py-5 border-b border-white/10">
-      <button id="voltarEditarOrcamento" class="btn-neutral px-4 py-2 rounded-lg text-white font-medium flex items-center gap-2">
-        ← Voltar
-      </button>
-      <h2 id="tituloEditarOrcamento" class="flex-1 text-lg font-semibold text-white text-center">EDITAR ORÇAMENTO</h2>
+  <div role="dialog" aria-modal="true" tabindex="0" class="w-full max-w-5xl max-h-[90vh] glass-surface backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade slide-in overflow-hidden flex flex-col">
+    <header class="flex items-center justify-between px-8 py-5 border-b border-white/10 flex-shrink-0">
+      <button id="voltarEditarOrcamento" class="btn-neutral px-4 py-2 rounded-lg text-white font-medium flex items-center gap-2">← Voltar</button>
+      <h2 id="tituloEditarOrcamento" class="text-lg font-semibold text-white">EDITAR ORÇAMENTO</h2>
+      <div class="flex items-center gap-3">
+        <button id="salvarOrcamento" class="btn-success px-4 py-2 rounded-lg text-white font-medium">Salvar</button>
+        <button id="salvarFecharOrcamento" class="btn-secondary px-4 py-2 rounded-lg text-white font-medium">Salvar e Fechar</button>
+        <button id="converterOrcamento" class="btn-success px-4 py-2 rounded-lg font-medium">Converter em Pedido</button>
+        <button id="cancelarOrcamento" class="btn-neutral px-4 py-2 rounded-lg text-white font-medium">Cancelar</button>
+      </div>
     </header>
     <div class="flex-1 overflow-y-auto p-8 space-y-6">
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -64,41 +68,31 @@
           </div>
         </div>
 
-        <div class="bg-surface/40 rounded-xl border border-white/10 overflow-hidden">
-          <div class="overflow-x-auto">
-            <div class="max-h-64 overflow-y-auto">
-              <table id="orcamentoItens" class="w-full text-sm">
-                <thead class="sticky top-0 bg-surface/60 backdrop-blur-sm">
-                  <tr class="border-b border-white/10">
-                    <th class="text-left py-3 px-4 text-gray-300 font-medium uppercase text-xs">ITEM</th>
-                    <th class="text-center py-3 px-4 text-gray-300 font-medium uppercase text-xs">QTD</th>
-                    <th class="text-right py-3 px-4 text-gray-300 font-medium uppercase text-xs">VALOR UNIT. (R$)</th>
-                    <th class="text-center py-3 px-4 text-gray-300 font-medium uppercase text-xs">DESC. %</th>
-                    <th class="text-right py-3 px-4 text-gray-300 font-medium uppercase text-xs">TOTAL (R$)</th>
-                    <th class="text-center py-3 px-4 text-gray-300 font-medium uppercase text-xs">AÇÕES</th>
-                  </tr>
-                </thead>
-                <tbody></tbody>
-              </table>
+          <div class="glass-surface rounded-xl shadow-lg animate-fade-in-up overflow-hidden">
+            <div class="overflow-x-auto">
+              <div class="max-h-64 overflow-y-auto">
+                <table id="orcamentoItens" class="w-full text-sm">
+                  <thead class="bg-gray-50 sticky top-0">
+                    <tr class="border-b border-gray-200">
+                      <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ITEM</th>
+                      <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">QTD</th>
+                      <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">VALOR UNIT. (R$)</th>
+                      <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">DESC. %</th>
+                      <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">TOTAL (R$)</th>
+                      <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">AÇÕES</th>
+                    </tr>
+                  </thead>
+                  <tbody></tbody>
+                </table>
+              </div>
+            </div>
+            <div class="flex justify-end gap-8 mt-4 text-sm p-4">
+              <div class="text-gray-300">Subtotal: <span id="subtotalOrcamento">R$ 0,00</span></div>
+              <div class="text-gray-300">Desconto: <span id="descontoOrcamento">R$ 0,00</span></div>
+              <div class="text-white font-semibold">Total: <span id="totalOrcamento">R$ 0,00</span></div>
             </div>
           </div>
-        </div>
-
-        <!-- recálculo de totais -->
-        <div class="flex justify-end gap-8 mt-4 text-sm">
-          <div class="text-gray-300">Subtotal: <span id="subtotalOrcamento">R$ 0,00</span></div>
-          <div class="text-gray-300">Desconto: <span id="descontoOrcamento">R$ 0,00</span></div>
-          <div class="text-white font-semibold">Total: <span id="totalOrcamento">R$ 0,00</span></div>
-        </div>
       </div>
     </div>
-
-    <!-- salvar/fechar e converter -->
-    <footer class="flex justify-end gap-3 px-8 py-6 border-t border-white/10 flex-shrink-0">
-      <button id="salvarOrcamento" class="btn-primary px-6 py-3 rounded-lg text-white font-medium">Salvar</button>
-      <button id="salvarFecharOrcamento" class="btn-secondary px-6 py-3 rounded-lg text-white font-medium">Salvar e Fechar</button>
-      <button id="converterOrcamento" class="btn-success px-6 py-3 rounded-lg font-medium">Converter em Pedido</button>
-      <button id="cancelarOrcamento" class="btn-neutral px-6 py-3 rounded-lg text-white font-medium">Cancelar</button>
-    </footer>
   </div>
 </div>
