@@ -199,6 +199,10 @@ function extrairCorDimensoes(item) {
         cor = partes[2].trim();
     }
 
+    if (cor.includes('/')) {
+        cor = cor.split('/')[0].trim();
+    }
+
     let dimensoes = '';
     if (partes[1]) {
         const match = partes[1].match(/\(([^)]+)\)/);
