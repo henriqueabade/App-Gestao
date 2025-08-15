@@ -231,6 +231,18 @@ async function listarItensProcessoProduto(codigo, etapa, busca = '') {
 async function adicionarProduto(dados) {
   const { codigo, nome, preco_venda, pct_markup, status } = dados;
   const categoria = dados.categoria || (nome ? String(nome).trim().split(' ')[0] : null);
+  const codigoDup = await pool.query('SELECT 1 FROM produtos WHERE codigo=$1', [codigo]);
+  if (codigoDup.rowCount > 0) {
+    const err = new Error('Código já existe');
+    err.code = 'CODIGO_EXISTE';
+    throw err;
+  }
+  const nomeDup = await pool.query('SELECT 1 FROM produtos WHERE nome=$1', [nome]);
+  if (nomeDup.rowCount > 0) {
+    const err = new Error('Nome já existe');
+    err.code = 'NOME_EXISTE';
+    throw err;
+  }
   const res = await pool.query(
     `INSERT INTO produtos (codigo, nome, categoria, preco_venda, pct_markup, status)
      VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
@@ -242,6 +254,30 @@ async function adicionarProduto(dados) {
 async function atualizarProduto(id, dados) {
   const { codigo, nome, preco_venda, pct_markup, status } = dados;
   const categoria = dados.categoria || (nome ? String(nome).trim().split(' ')[0] : null);
+  const { rows: atuaisRows } = await pool.query(
+    'SELECT codigo, nome FROM produtos WHERE id=$1::int',
+    [id]
+  );
+  const atuais = atuaisRows[0];
+  if (!atuais) {
+    throw new Error('Produto não encontrado');
+  }
+  if (codigo !== undefined && codigo !== atuais.codigo) {
+    const dup = await pool.query('SELECT 1 FROM produtos WHERE codigo=$1', [codigo]);
+    if (dup.rowCount > 0) {
+      const err = new Error('Código já existe');
+      err.code = 'CODIGO_EXISTE';
+      throw err;
+    }
+  }
+  if (nome !== undefined && nome !== atuais.nome) {
+    const dup = await pool.query('SELECT 1 FROM produtos WHERE nome=$1', [nome]);
+    if (dup.rowCount > 0) {
+      const err = new Error('Nome já existe');
+      err.code = 'NOME_EXISTE';
+      throw err;
+    }
+  }
   const res = await pool.query(
     `UPDATE produtos
         SET codigo=$1,
@@ -253,6 +289,12 @@ async function atualizarProduto(id, dados) {
      WHERE id=$7::int RETURNING *`,
     [codigo, nome, categoria, preco_venda, pct_markup, status, id]
   );
+  if (codigo !== undefined && codigo !== atuais.codigo) {
+    await pool.query(
+      'UPDATE produtos_insumos SET produto_codigo=$1 WHERE produto_codigo=$2',
+      [codigo, atuais.codigo]
+    );
+  }
   return res.rows[0];
 }
 
@@ -327,6 +369,23 @@ async function salvarProdutoDetalhado(codigoOriginal, produto, itens) {
       ncm !== undefined && ncm !== null ? String(ncm).slice(0, 8) : undefined;
 
     const codigoDestino = codigo !== undefined ? codigo : codigoOriginal;
+
+    if (codigo !== undefined && codigo !== codigoOriginal) {
+      const dup = await client.query('SELECT 1 FROM produtos WHERE codigo=$1', [codigo]);
+      if (dup.rowCount > 0) {
+        const err = new Error('Código já existe');
+        err.code = 'CODIGO_EXISTE';
+        throw err;
+      }
+    }
+    if (nome !== undefined) {
+      const dup = await client.query('SELECT codigo FROM produtos WHERE nome=$1', [nome]);
+      if (dup.rowCount > 0 && dup.rows[0].codigo !== codigoOriginal) {
+        const err = new Error('Nome já existe');
+        err.code = 'NOME_EXISTE';
+        throw err;
+      }
+    }
 
     if (codigo !== undefined && codigo !== codigoOriginal) {
       const { rows } = await client.query(
