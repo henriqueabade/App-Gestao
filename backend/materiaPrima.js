@@ -81,6 +81,9 @@ async function atualizarMateria(id, dados) {
       id
     ]
   );
+  if (preco_unitario !== undefined) {
+    await atualizarProdutosComInsumo(id);
+  }
   return res.rows[0];
 }
 
