@@ -299,7 +299,53 @@ async function atualizarProduto(id, dados) {
 }
 
 async function excluirProduto(id) {
-  await pool.query('DELETE FROM produtos WHERE id=$1::int', [id]);
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const { rows } = await client.query(
+      'SELECT codigo FROM produtos WHERE id=$1::int',
+      [id]
+    );
+    const codigo = rows[0]?.codigo;
+    if (!codigo) {
+      throw new Error('Produto não encontrado');
+    }
+
+    const { rowCount: orcamentoCount } = await client.query(
+      'SELECT 1 FROM orcamento WHERE produto_id=$1::int LIMIT 1',
+      [id]
+    );
+    if (orcamentoCount > 0) {
+      throw new Error('Produto existe em orçamento, não é possível realizar a ação');
+    }
+
+    const { rowCount: pedidoCount } = await client.query(
+      'SELECT 1 FROM pedido WHERE produto_id=$1::int LIMIT 1',
+      [id]
+    );
+    if (pedidoCount > 0) {
+      throw new Error('Produto existe em pedido, não é possível realizar a ação');
+    }
+
+    await client.query(
+      'DELETE FROM produtos_insumos WHERE produto_codigo=$1::text',
+      [codigo]
+    );
+    await client.query(
+      'DELETE FROM produtos_em_cada_ponto WHERE produto_id=$1::int',
+      [id]
+    );
+    await client.query('DELETE FROM produtos WHERE id=$1::int', [id]);
+
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+  return true;
 }
 
 /**
