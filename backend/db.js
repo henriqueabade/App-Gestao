@@ -39,7 +39,12 @@ function query(text, params) {
   return pool.query(text, params);
 }
 
+function connect() {
+  if (!pool) init();
+  return pool.connect();
+}
+
 // inicializa com variáveis de ambiente por padrão
 init();
 
-module.exports = { init, query };
+module.exports = { init, query, connect };
