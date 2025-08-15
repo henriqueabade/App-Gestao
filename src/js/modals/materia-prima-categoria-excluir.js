@@ -34,6 +34,13 @@
       document.querySelectorAll('select#categoria').forEach(sel => {
         sel.innerHTML = '<option value=""></option>' + categorias.map(c => `<option value="${c}">${c}</option>`).join('');
       });
+      const filtro = document.getElementById('filtroCategoria');
+      if (filtro) {
+        const selecionada = filtro.value;
+        filtro.innerHTML = '<option value="">Todas</option>' + categorias.map(c => `<option value="${c}">${c}</option>`).join("");
+        if (!categorias.includes(selecionada)) filtro.value = '';
+        filtro.dispatchEvent(new Event('change'));
+      }
       showToast('Categoria excluída', 'success');
       close();
     } catch (err) {
