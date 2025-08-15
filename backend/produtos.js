@@ -532,7 +532,10 @@ async function salvarProdutoDetalhado(codigoOriginal, produto, itens) {
     // Processa inserções
     for (const ins of (itens.inseridos || [])) {
       await client.query(
-        'INSERT INTO produtos_insumos (produto_codigo, insumo_id, quantidade) VALUES ($1,$2,$3)',
+        `INSERT INTO produtos_insumos (produto_codigo, insumo_id, quantidade)
+         VALUES ($1,$2,$3)
+         ON CONFLICT (produto_codigo, insumo_id)
+         DO UPDATE SET quantidade = EXCLUDED.quantidade`,
         [codigoDestino, ins.insumo_id, ins.quantidade]
       );
     }
