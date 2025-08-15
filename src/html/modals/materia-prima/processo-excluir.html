@@ -1,0 +1,21 @@
+<div id="excluirProcessoOverlay" class="fixed inset-0 bg-black/50 flex items-center justify-center p-4">
+  <div class="max-w-sm w-full glass-surface backdrop-blur-xl rounded-2xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade">
+    <header class="relative px-6 py-4 border-b border-white/10">
+      <h2 class="text-lg font-semibold text-center text-white">EXCLUIR</h2>
+      <button id="fecharExcluirProcesso" class="btn-danger icon-only absolute right-4 top-4 text-white">✕</button>
+    </header>
+    <form id="excluirProcessoForm" class="p-6">
+      <div class="relative">
+        <select id="processoExcluir" name="nome" required class="peer w-full appearance-none bg-input border border-inputBorder rounded-lg px-4 py-3 pr-8 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" data-filled="false">
+          <option value="" disabled selected hidden></option>
+        </select>
+        <label for="processoExcluir" class="absolute left-4 top-1/2 -translate-y-1/2 text-base text-gray-300 pointer-events-none transition-all duration-150 peer-focus:top-0 peer-focus:-translate-y-full peer-focus:text-xs peer-focus:text-primary peer-data-[filled=true]:top-0 peer-data-[filled=true]:-translate-y-full peer-data-[filled=true]:text-xs">Nome</label>
+      </div>
+      <p id="confirmExcluirProcesso" class="mt-4 text-sm text-red-400 hidden">Esta ação é irreversível. Clique em excluir novamente para confirmar.</p>
+    </form>
+    <footer class="flex justify-end gap-2 px-6 py-4 border-t border-white/10">
+      <button type="button" id="cancelarExcluirProcesso" class="btn-danger px-6 py-2 rounded-lg text-white font-medium active:scale-95">Cancelar</button>
+      <button type="button" id="excluirProcesso" class="btn-danger px-6 py-2 rounded-lg text-white font-medium active:scale-95">Excluir</button>
+    </footer>
+  </div>
+</div>

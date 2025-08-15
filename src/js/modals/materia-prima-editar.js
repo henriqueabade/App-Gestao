@@ -13,11 +13,20 @@
   document.getElementById('addCategoriaEditar').addEventListener('click', () => {
     Modal.open('modals/materia-prima/categoria-novo.html', '../js/modals/materia-prima-categoria-novo.js', 'novaCategoria', true);
   });
+  document.getElementById('delCategoriaEditar').addEventListener('click', () => {
+    Modal.open('modals/materia-prima/categoria-excluir.html', '../js/modals/materia-prima-categoria-excluir.js', 'excluirCategoria', true);
+  });
   document.getElementById('addUnidadeEditar').addEventListener('click', () => {
     Modal.open('modals/materia-prima/unidade-novo.html', '../js/modals/materia-prima-unidade-novo.js', 'novaUnidade', true);
   });
+  document.getElementById('delUnidadeEditar').addEventListener('click', () => {
+    Modal.open('modals/materia-prima/unidade-excluir.html', '../js/modals/materia-prima-unidade-excluir.js', 'excluirUnidade', true);
+  });
   document.getElementById('addProcessoEditar').addEventListener('click', () => {
     Modal.open('modals/materia-prima/processo-novo.html', '../js/modals/materia-prima-processo-novo.js', 'novoProcesso', true);
+  });
+  document.getElementById('delProcessoEditar').addEventListener('click', () => {
+    Modal.open('modals/materia-prima/processo-excluir.html', '../js/modals/materia-prima-processo-excluir.js', 'excluirProcesso', true);
   });
   if(item){
     form.nome.value = item.nome || '';

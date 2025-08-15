@@ -12,11 +12,20 @@
   document.getElementById('addCategoriaNovo').addEventListener('click', () => {
     Modal.open('modals/materia-prima/categoria-novo.html', '../js/modals/materia-prima-categoria-novo.js', 'novaCategoria', true);
   });
+  document.getElementById('delCategoriaNovo').addEventListener('click', () => {
+    Modal.open('modals/materia-prima/categoria-excluir.html', '../js/modals/materia-prima-categoria-excluir.js', 'excluirCategoria', true);
+  });
   document.getElementById('addUnidadeNovo').addEventListener('click', () => {
     Modal.open('modals/materia-prima/unidade-novo.html', '../js/modals/materia-prima-unidade-novo.js', 'novaUnidade', true);
   });
+  document.getElementById('delUnidadeNovo').addEventListener('click', () => {
+    Modal.open('modals/materia-prima/unidade-excluir.html', '../js/modals/materia-prima-unidade-excluir.js', 'excluirUnidade', true);
+  });
   document.getElementById('addProcessoNovo').addEventListener('click', () => {
     Modal.open('modals/materia-prima/processo-novo.html', '../js/modals/materia-prima-processo-novo.js', 'novoProcesso', true);
+  });
+  document.getElementById('delProcessoNovo').addEventListener('click', () => {
+    Modal.open('modals/materia-prima/processo-excluir.html', '../js/modals/materia-prima-processo-excluir.js', 'excluirProcesso', true);
   });
 
   async function carregarOpcoes(){
