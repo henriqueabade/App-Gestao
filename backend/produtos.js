@@ -24,12 +24,11 @@ async function listarProdutos() {
              p.status,
              p.criado_em,
              p.data,
-             p.cor,
              COALESCE(SUM(pe.quantidade), 0) AS quantidade_total
         FROM produtos p
    LEFT JOIN produtos_em_cada_ponto pe ON pe.produto_id = p.id
-   GROUP BY p.id, p.codigo, p.nome, p.descricao, p.categoria, p.preco_venda,
-            p.pct_markup, p.status, p.criado_em, p.data, p.cor
+    GROUP BY p.id, p.codigo, p.nome, p.descricao, p.categoria, p.preco_venda,
+             p.pct_markup, p.status, p.criado_em, p.data
     ORDER BY p.nome`;
     const res = await pool.query(sql);
     return res.rows;
