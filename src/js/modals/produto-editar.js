@@ -448,10 +448,11 @@
             status: (statusRadios.find(r => r.checked)?.value) || ''
           };
           if(typeof carregarProdutos === 'function') await carregarProdutos();
+          showToast('Peça alterada com sucesso!', 'success');
           close();
         }catch(err){
           console.error('Erro ao salvar produto', err);
-          showToast('Erro ao salvar produto', 'error');
+          showToast('Erro ao salvar peça', 'error');
         }
       });
     }
