@@ -1,5 +1,9 @@
 (() => {
   const overlayId = 'novoOrcamento';
+  const overlay = document.getElementById('novoOrcamentoOverlay');
+  const close = () => Modal.close(overlayId);
+  overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+  document.addEventListener('keydown', function esc(e){ if(e.key === 'Escape'){ close(); document.removeEventListener('keydown', esc); } });
 
   const clients = {
     'joao-silva': { nome: 'João Silva', contatos: ['João Contato'] },
@@ -167,6 +171,16 @@
 
   document.getElementById('salvarNovoOrcamento').addEventListener('click', () => saveQuote('Rascunho'));
   document.getElementById('enviarNovoOrcamento').addEventListener('click', () => saveQuote('Enviado'));
-  document.getElementById('cancelarNovoOrcamento').addEventListener('click', () => Modal.close(overlayId));
-  document.getElementById('fecharNovoOrcamento').addEventListener('click', () => Modal.close(overlayId));
+  document.getElementById('cancelarNovoOrcamento').addEventListener('click', close);
+  document.getElementById('voltarNovoOrcamento').addEventListener('click', close);
+
+  const limparBtn = document.getElementById('limparNovoOrcamento');
+  if (limparBtn) {
+    limparBtn.addEventListener('click', () => {
+      overlay.querySelectorAll('input').forEach(i => i.value = '');
+      overlay.querySelectorAll('select').forEach(s => s.selectedIndex = 0);
+      itensTbody.innerHTML = '';
+      recalcTotals();
+    });
+  }
 })();

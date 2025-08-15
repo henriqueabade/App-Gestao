@@ -1,11 +1,15 @@
 (() => {
   const overlayId = 'editarOrcamento';
+  const overlay = document.getElementById('editarOrcamentoOverlay');
+  const close = () => Modal.close(overlayId);
+  overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+  document.addEventListener('keydown', function esc(e){ if(e.key === 'Escape'){ close(); document.removeEventListener('keydown', esc); } });
 
   // carga de dados
   const data = window.selectedQuoteData || {};
   const titulo = document.getElementById('tituloEditarOrcamento');
   if (data.id && data.cliente) {
-    titulo.textContent = `Editar Orçamento #${data.id} – ${data.cliente}`;
+    titulo.textContent = `EDITAR ORÇAMENTO #${data.id} – ${data.cliente}`;
   }
   document.getElementById('editarCliente').value = data.cliente || '';
   document.getElementById('editarCondicao').value = data.condicao || 'vista';
@@ -103,8 +107,8 @@
 
   document.getElementById('salvarOrcamento').addEventListener('click', () => saveChanges(false));
   document.getElementById('salvarFecharOrcamento').addEventListener('click', () => saveChanges(true));
-  document.getElementById('cancelarOrcamento').addEventListener('click', () => Modal.close(overlayId));
-  document.getElementById('fecharEditarOrcamento').addEventListener('click', () => Modal.close(overlayId));
+  document.getElementById('cancelarOrcamento').addEventListener('click', close);
+  document.getElementById('voltarEditarOrcamento').addEventListener('click', close);
   document.getElementById('converterOrcamento').addEventListener('click', () => {
     saveChanges(true);
     alert('Orçamento convertido em pedido!');
