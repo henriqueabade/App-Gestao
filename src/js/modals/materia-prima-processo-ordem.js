@@ -1,8 +1,24 @@
 (function(){
   const overlay = document.getElementById('ordemDuplicadaOverlay');
-  const close = () => Modal.close('ordemDuplicada');
-  overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
-  document.getElementById('cancelarOrdem').addEventListener('click', close);
+  const trocarBtn = document.getElementById('trocarOrdem');
+  const ultimaBtn = document.getElementById('ultimaOrdem');
+  const cancelarBtn = document.getElementById('cancelarOrdem');
+
+  function cleanup(){
+    trocarBtn.removeEventListener('click', onTrocar);
+    ultimaBtn.removeEventListener('click', onUltima);
+    cancelarBtn.removeEventListener('click', close);
+    overlay.removeEventListener('click', onOverlay);
+  }
+
+  const close = () => {
+    cleanup();
+    Modal.close('ordemDuplicada');
+  };
+
+  function onOverlay(e){ if(e.target === overlay) close(); }
+  overlay.addEventListener('click', onOverlay);
+  cancelarBtn.addEventListener('click', close);
 
   async function atualizarSelects(nome){
     const processos = await window.electronAPI.listarEtapasProducao();
@@ -19,7 +35,7 @@
     });
   }
 
-  document.getElementById('trocarOrdem').addEventListener('click', async () => {
+  async function onTrocar(){
     const { nome, ordem } = window.novoProcessoDados;
     try {
       await window.electronAPI.adicionarEtapaProducao({ nome, ordem });
@@ -31,9 +47,9 @@
       console.error(err);
       showToast('Erro ao adicionar processo', 'error');
     }
-  });
+  }
 
-  document.getElementById('ultimaOrdem').addEventListener('click', async () => {
+  async function onUltima(){
     const { nome } = window.novoProcessoDados;
     try {
       await window.electronAPI.adicionarEtapaProducao({ nome });
@@ -45,5 +61,8 @@
       console.error(err);
       showToast('Erro ao adicionar processo', 'error');
     }
-  });
+  }
+
+  trocarBtn.addEventListener('click', onTrocar, { once: true });
+  ultimaBtn.addEventListener('click', onUltima, { once: true });
 })();
