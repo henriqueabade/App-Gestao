@@ -171,6 +171,30 @@ async function removerUnidade(tipo) {
   return true;
 }
 
+async function categoriaTemDependencias(nome) {
+  const dep = await pool.query(
+    'SELECT 1 FROM materia_prima WHERE categoria=$1 LIMIT 1',
+    [nome]
+  );
+  return dep.rowCount > 0;
+}
+
+async function unidadeTemDependencias(tipo) {
+  const dep = await pool.query(
+    'SELECT 1 FROM materia_prima WHERE unidade=$1 LIMIT 1',
+    [tipo]
+  );
+  return dep.rowCount > 0;
+}
+
+async function processoTemDependencias(nome) {
+  const dep = await pool.query(
+    'SELECT 1 FROM materia_prima WHERE processo=$1 LIMIT 1',
+    [nome]
+  );
+  return dep.rowCount > 0;
+}
+
 module.exports = {
   listarMaterias,
   adicionarMateria,
@@ -184,5 +208,8 @@ module.exports = {
   adicionarCategoria,
   adicionarUnidade,
   removerCategoria,
-  removerUnidade
+  removerUnidade,
+  categoriaTemDependencias,
+  unidadeTemDependencias,
+  processoTemDependencias
 };
