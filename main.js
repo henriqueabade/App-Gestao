@@ -424,8 +424,9 @@ ipcMain.handle('listar-insumos-produto', async (_e, codigo) => {
 ipcMain.handle('listar-etapas-producao', async () => {
   return listarEtapasProducao();
 });
-ipcMain.handle('adicionar-etapa-producao', async (_e, nome) => {
-  return adicionarEtapaProducao(nome);
+ipcMain.handle('adicionar-etapa-producao', async (_e, dados) => {
+  const { nome, ordem } = dados || {};
+  return adicionarEtapaProducao(nome, ordem);
 });
 ipcMain.handle('listar-itens-processo-produto', async (_e, { codigo, etapa, busca }) => {
   return listarItensProcessoProduto(codigo, etapa, busca);

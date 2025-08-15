@@ -8,7 +8,8 @@
   form.addEventListener('submit', async e => {
     e.preventDefault();
     const nome = form.nome.value.trim();
-    if(!nome) return;
+    const ordem = parseInt(form.ordem.value, 10);
+    if(!nome || isNaN(ordem)) return;
     try{
       const existentes = await window.electronAPI.listarEtapasProducao();
       if(existentes.map(p => (p.nome ?? p).toLowerCase()).includes(nome.toLowerCase())){
@@ -16,7 +17,12 @@
         close();
         return;
       }
-      await window.electronAPI.adicionarEtapaProducao(nome);
+      if(existentes.some(p => Number(p.ordem) === ordem)){
+        window.novoProcessoDados = { nome, ordem };
+        Modal.open('modals/materia-prima/processo-ordem.html', '../js/modals/materia-prima-processo-ordem.js', 'ordemDuplicada', true);
+        return;
+      }
+      await window.electronAPI.adicionarEtapaProducao({ nome, ordem });
       showToast('Processo adicionado com sucesso!', 'success');
       close();
       const processos = await window.electronAPI.listarEtapasProducao();
