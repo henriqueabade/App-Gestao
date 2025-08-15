@@ -143,6 +143,34 @@ async function adicionarUnidade(tipo) {
   return res.rows[0]?.tipo;
 }
 
+async function removerCategoria(nome) {
+  const dep = await pool.query(
+    'SELECT 1 FROM materia_prima WHERE categoria=$1 LIMIT 1',
+    [nome]
+  );
+  if (dep.rowCount > 0) {
+    const err = new Error('DEPENDENTE');
+    err.code = 'DEPENDENTE';
+    throw err;
+  }
+  await pool.query('DELETE FROM categoria WHERE nome_categoria=$1', [nome]);
+  return true;
+}
+
+async function removerUnidade(tipo) {
+  const dep = await pool.query(
+    'SELECT 1 FROM materia_prima WHERE unidade=$1 LIMIT 1',
+    [tipo]
+  );
+  if (dep.rowCount > 0) {
+    const err = new Error('DEPENDENTE');
+    err.code = 'DEPENDENTE';
+    throw err;
+  }
+  await pool.query('DELETE FROM unidades WHERE tipo=$1', [tipo]);
+  return true;
+}
+
 module.exports = {
   listarMaterias,
   adicionarMateria,
@@ -154,5 +182,7 @@ module.exports = {
   listarCategorias,
   listarUnidades,
   adicionarCategoria,
-  adicionarUnidade
+  adicionarUnidade,
+  removerCategoria,
+  removerUnidade
 };

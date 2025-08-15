@@ -22,6 +22,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     }),
   adicionarCategoria: (nome) => ipcRenderer.invoke('adicionar-categoria', nome),
   adicionarUnidade: (nome) => ipcRenderer.invoke('adicionar-unidade', nome),
+  removerCategoria: (nome) => ipcRenderer.invoke('remover-categoria', nome),
+  removerUnidade: (nome) => ipcRenderer.invoke('remover-unidade', nome),
   listarProdutos: () => ipcRenderer.invoke('listar-produtos'),
   obterProduto: (codigo) => ipcRenderer.invoke('obter-produto', codigo),
   adicionarProduto: (dados) => ipcRenderer.invoke('adicionar-produto', dados),
@@ -34,6 +36,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   listarInsumosProduto: (codigo) => ipcRenderer.invoke('listar-insumos-produto', codigo),
   listarEtapasProducao: () => ipcRenderer.invoke('listar-etapas-producao'),
   adicionarEtapaProducao: (dados) => ipcRenderer.invoke('adicionar-etapa-producao', dados),
+  removerEtapaProducao: (nome) => ipcRenderer.invoke('remover-etapa-producao', nome),
   listarItensProcessoProduto: (codigo, etapa, busca) =>
     ipcRenderer.invoke('listar-itens-processo-produto', { codigo, etapa, busca }),
   salvarProdutoDetalhado: (codigo, produto, itens) =>

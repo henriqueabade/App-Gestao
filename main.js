@@ -21,7 +21,9 @@ const {
   listarCategorias,
   listarUnidades,
   adicionarCategoria,
-  adicionarUnidade
+  adicionarUnidade,
+  removerCategoria,
+  removerUnidade
 } = require('./backend/materiaPrima');
 const {
   listarProdutos,
@@ -33,6 +35,7 @@ const {
   listarInsumosProduto,
   listarEtapasProducao,
   adicionarEtapaProducao,
+  removerEtapaProducao,
   listarItensProcessoProduto,
   inserirLoteProduto,
   atualizarLoteProduto,
@@ -399,6 +402,22 @@ ipcMain.handle('adicionar-unidade', async (_e, nome) => {
     throw err;
   }
 });
+ipcMain.handle('remover-categoria', async (_e, nome) => {
+  try {
+    return await removerCategoria(nome);
+  } catch (err) {
+    console.error('Erro ao remover categoria:', err);
+    throw err;
+  }
+});
+ipcMain.handle('remover-unidade', async (_e, nome) => {
+  try {
+    return await removerUnidade(nome);
+  } catch (err) {
+    console.error('Erro ao remover unidade:', err);
+    throw err;
+  }
+});
 ipcMain.handle('listar-produtos', async () => {
   return listarProdutos();
 });
@@ -447,6 +466,14 @@ ipcMain.handle('listar-etapas-producao', async () => {
 });
 ipcMain.handle('adicionar-etapa-producao', async (_e, dados) => {
   return adicionarEtapaProducao(dados);
+});
+ipcMain.handle('remover-etapa-producao', async (_e, nome) => {
+  try {
+    return await removerEtapaProducao(nome);
+  } catch (err) {
+    console.error('Erro ao remover etapa de produção:', err);
+    throw err;
+  }
 });
 ipcMain.handle('listar-itens-processo-produto', async (_e, { codigo, etapa, busca }) => {
   return listarItensProcessoProduto(codigo, etapa, busca);

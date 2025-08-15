@@ -183,6 +183,29 @@ async function adicionarEtapaProducao(nome, ordem) {
   return res.rows[0];
 }
 
+async function removerEtapaProducao(nome) {
+  const dep = await pool.query(
+    'SELECT 1 FROM materia_prima WHERE processo=$1 LIMIT 1',
+    [nome]
+  );
+  if (dep.rowCount > 0) {
+    const err = new Error('DEPENDENTE');
+    err.code = 'DEPENDENTE';
+    throw err;
+  }
+  const { rows } = await pool.query(
+    'DELETE FROM etapas_producao WHERE nome=$1 RETURNING ordem',
+    [nome]
+  );
+  if (rows[0]) {
+    await pool.query(
+      'UPDATE etapas_producao SET ordem=ordem-1 WHERE ordem>$1',
+      [rows[0].ordem]
+    );
+  }
+  return true;
+}
+
 /**
  * Lista itens de um processo para um produto (dependente de etapa)
  * Aceita etapa por id (int) OU por nome (text).
@@ -380,6 +403,7 @@ module.exports = {
   listarEtapasProducao,
   listarItensProcessoProduto,
   adicionarEtapaProducao,
+  removerEtapaProducao,
   adicionarProduto,
   atualizarProduto,
   excluirProduto,
