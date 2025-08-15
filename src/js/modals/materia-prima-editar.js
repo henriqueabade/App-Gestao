@@ -43,6 +43,7 @@
           return `<option value="${tipo}">${tipo}</option>`;
         }).join('');
       const processos = await window.electronAPI.listarEtapasProducao();
+      processos.sort((a,b) => (a.ordem ?? 0) - (b.ordem ?? 0));
       form.processo.innerHTML = '<option value=""></option>' +
         processos.map(p => {
           const nome = p?.nome ?? p;

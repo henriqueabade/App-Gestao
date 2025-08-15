@@ -26,6 +26,7 @@
       showToast('Processo adicionado com sucesso!', 'success');
       close();
       const processos = await window.electronAPI.listarEtapasProducao();
+      processos.sort((a,b) => (a.ordem ?? 0) - (b.ordem ?? 0));
       document.querySelectorAll('select#processo').forEach(sel => {
         const options = processos
           .map(p => {
