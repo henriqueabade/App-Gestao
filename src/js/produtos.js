@@ -243,16 +243,16 @@ function createPopupContent(item) {
     return `
     <div class="popup-card">
       <div class="popup-header">
-        <p class="popup-header-subtitle">Categoria:</p>
-        <h3 class="popup-header-title">${item.categoria || ''}</h3>
+        <div class="popup-header-item">
+          <p class="popup-header-subtitle">Categoria:</p>
+          <h3 class="popup-header-title">${item.categoria || ''}</h3>
+        </div>
+        <div class="popup-header-item">
+          <p class="popup-header-subtitle">NCM:</p>
+          <h3 class="popup-header-title">${item.ncm || ''}</h3>
+        </div>
       </div>
       <div class="popup-body">
-        <div class="popup-info-grid">
-          <div>
-            <p class="popup-info-label">NCM:</p>
-            <p class="popup-info-value">${item.ncm || ''}</p>
-          </div>
-        </div>
         <div class="popup-info-grid">
           <div>
             <p class="popup-info-label">Data de Criação:</p>
