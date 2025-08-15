@@ -321,53 +321,73 @@ async function salvarProdutoDetalhado(codigoOriginal, produto, itens) {
     const ncmSanitizado =
       ncm !== undefined && ncm !== null ? String(ncm).slice(0, 8) : undefined;
 
-    // Monta consulta dinâmica
-    let query = `UPDATE produtos
-          SET pct_fabricacao=$1,
-              pct_acabamento=$2,
-              pct_montagem=$3,
-              pct_embalagem=$4,
-              pct_markup=$5,
-              pct_comissao=$6,
-              pct_imposto=$7,
-              preco_base=$8,
-              preco_venda=$9,
-              data=NOW()`;
-    const params = [
-      pct_fabricacao,
-      pct_acabamento,
-      pct_montagem,
-      pct_embalagem,
-      pct_markup,
-      pct_comissao,
-      pct_imposto,
-      preco_base,
-      preco_venda
-    ];
-    if (nome !== undefined) {
-      query += `, nome=$${params.length + 1}`;
-      params.push(nome);
-    }
-    if (codigo !== undefined) {
-      query += `, codigo=$${params.length + 1}`;
-      params.push(codigo);
-    }
-    if (ncmSanitizado !== undefined) {
-      query += `, ncm=$${params.length + 1}`;
-      params.push(ncmSanitizado);
-    }
-    query += ` WHERE codigo=$${params.length + 1}::text`;
-    params.push(codigoOriginal);
-
-    await client.query(query, params);
-
-    // Se o código foi alterado, atualiza relacionamentos
     const codigoDestino = codigo !== undefined ? codigo : codigoOriginal;
+
     if (codigo !== undefined && codigo !== codigoOriginal) {
+      // Obtém dados atuais para preservar campos não informados
+      const { rows } = await client.query('SELECT nome, ncm FROM produtos WHERE codigo=$1', [codigoOriginal]);
+      const atuais = rows[0] || {};
+
+      // Insere novo registro com o código atualizado
+      await client.query(
+        `INSERT INTO produtos (codigo, pct_fabricacao, pct_acabamento, pct_montagem, pct_embalagem, pct_markup, pct_comissao, pct_imposto, preco_base, preco_venda, nome, ncm, data)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,NOW())`,
+        [
+          codigo,
+          pct_fabricacao,
+          pct_acabamento,
+          pct_montagem,
+          pct_embalagem,
+          pct_markup,
+          pct_comissao,
+          pct_imposto,
+          preco_base,
+          preco_venda,
+          nome !== undefined ? nome : atuais.nome,
+          ncmSanitizado !== undefined ? ncmSanitizado : atuais.ncm
+        ]
+      );
       await client.query(
         'UPDATE produtos_insumos SET produto_codigo=$1 WHERE produto_codigo=$2',
         [codigo, codigoOriginal]
       );
+      await client.query('DELETE FROM produtos WHERE codigo=$1', [codigoOriginal]);
+    } else {
+      // Monta consulta dinâmica para atualização sem mudança de código
+      let query = `UPDATE produtos
+            SET pct_fabricacao=$1,
+                pct_acabamento=$2,
+                pct_montagem=$3,
+                pct_embalagem=$4,
+                pct_markup=$5,
+                pct_comissao=$6,
+                pct_imposto=$7,
+                preco_base=$8,
+                preco_venda=$9,
+                data=NOW()`;
+      const params = [
+        pct_fabricacao,
+        pct_acabamento,
+        pct_montagem,
+        pct_embalagem,
+        pct_markup,
+        pct_comissao,
+        pct_imposto,
+        preco_base,
+        preco_venda
+      ];
+      if (nome !== undefined) {
+        query += `, nome=$${params.length + 1}`;
+        params.push(nome);
+      }
+      if (ncmSanitizado !== undefined) {
+        query += `, ncm=$${params.length + 1}`;
+        params.push(ncmSanitizado);
+      }
+      query += ` WHERE codigo=$${params.length + 1}::text`;
+      params.push(codigoOriginal);
+
+      await client.query(query, params);
     }
 
     // Processa exclusões

@@ -442,6 +442,7 @@
           close();
         }catch(err){
           console.error('Erro ao salvar produto', err);
+          showToast('Erro ao salvar produto', 'error');
         }
       });
     }
