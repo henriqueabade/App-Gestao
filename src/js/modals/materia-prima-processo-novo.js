@@ -21,7 +21,13 @@
       close();
       const processos = await window.electronAPI.listarEtapasProducao();
       document.querySelectorAll('select#processo').forEach(sel => {
-        sel.innerHTML = '<option value=""></option>' + processos.map(p => `<option value="${p.nome}">${p.nome}</option>`).join('');
+        const options = processos
+          .map(p => {
+            const nomeProc = p?.nome ?? p;
+            return `<option value="${nomeProc}">${nomeProc}</option>`;
+          })
+          .join('');
+        sel.innerHTML = '<option value=""></option>' + options;
         sel.value = nome;
         sel.setAttribute('data-filled', 'true');
       });
