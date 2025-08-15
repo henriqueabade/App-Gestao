@@ -235,25 +235,36 @@
       return;
     }
     const api = window.produtoEditarAPI || {};
-    // considera apenas itens do processo atual
-    const existentes = typeof api.obterItens === 'function'
+    // itens existentes (apenas do processo atual) mapeados por insumo
+    const existentesArr = typeof api.obterItens === 'function'
       ? api.obterItens().filter(it => (it.processo || '').toLowerCase() === titulo.toLowerCase())
       : [];
-    const novos = [];
+    const existentesMap = {};
+    existentesArr.forEach(it => {
+      existentesMap[String(it.insumo_id ?? it.id)] = it;
+    });
+    const novosMap = {};
     for(const item of itens){
-      const duplicado = existentes.find(it => String(it.insumo_id ?? it.id) === String(item.id));
-      if(duplicado){
+      const key = String(item.id);
+      if(existentesMap[key]){
         const acao = await showDuplicateDecision(item);
         if(acao === 'somar' && typeof api.somarItem === 'function'){
-          api.somarItem(duplicado.id, item.quantidade);
+          api.somarItem(existentesMap[key].id, item.quantidade);
         }else if(acao === 'substituir' && typeof api.substituirItem === 'function'){
-          api.substituirItem({ ...item, id: duplicado.id });
+          api.substituirItem({ ...item, id: existentesMap[key].id });
+        } // manter: não faz nada
+      }else if(novosMap[key]){
+        const acao = await showDuplicateDecision(item);
+        if(acao === 'somar'){
+          novosMap[key].quantidade += item.quantidade;
+        }else if(acao === 'substituir'){
+          novosMap[key] = item;
         } // manter: não faz nada
       }else{
-        novos.push(item);
-        existentes.push(item);
+        novosMap[key] = item;
       }
     }
+    const novos = Object.values(novosMap);
     if(novos.length && typeof api.adicionarProcessoItens === 'function'){
       api.adicionarProcessoItens(novos);
     }
