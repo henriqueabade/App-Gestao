@@ -97,6 +97,45 @@ async function registrarEntrada(id, quantidade) {
   return res.rows[0];
 }
 
+async function atualizarProdutosComInsumo(insumoId) {
+  const { rows: produtos } = await pool.query('SELECT DISTINCT produto_codigo FROM produtos_insumos WHERE insumo_id=$1', [insumoId]);
+  for (const { produto_codigo } of produtos) {
+    const { rows } = await pool.query(
+      `SELECT p.pct_fabricacao, p.pct_acabamento, p.pct_montagem, p.pct_embalagem,
+              p.pct_markup, p.pct_comissao, p.pct_imposto,
+              SUM(pi.quantidade * mp.preco_unitario) AS base
+         FROM produtos p
+         JOIN produtos_insumos pi ON pi.produto_codigo = p.codigo
+         JOIN materia_prima mp ON mp.id = pi.insumo_id
+        WHERE p.codigo=$1
+        GROUP BY p.pct_fabricacao, p.pct_acabamento, p.pct_montagem, p.pct_embalagem,
+                 p.pct_markup, p.pct_comissao, p.pct_imposto`,
+      [produto_codigo]
+    );
+    const info = rows[0];
+    if (!info) continue;
+    const base = Number(info.base) || 0;
+    const pctFab = Number(info.pct_fabricacao) || 0;
+    const pctAcab = Number(info.pct_acabamento) || 0;
+    const pctMont = Number(info.pct_montagem) || 0;
+    const pctEmb = Number(info.pct_embalagem) || 0;
+    const pctMarkup = Number(info.pct_markup) || 0;
+    const pctCom = Number(info.pct_comissao) || 0;
+    const pctImp = Number(info.pct_imposto) || 0;
+
+    const totalMaoObra = base * (pctFab + pctAcab + pctMont + pctEmb) / 100;
+    const subTotal = base + totalMaoObra;
+    const markupVal = base * (pctMarkup / 100);
+    const custoTotal = subTotal + markupVal;
+    const denom = 1 - (pctImp + pctCom) / 100;
+    const comissaoVal = denom !== 0 ? (pctCom / 100) * (custoTotal / denom) : 0;
+    const impostoVal = denom !== 0 ? (pctImp / 100) * (custoTotal / denom) : 0;
+    const valorVenda = custoTotal + comissaoVal + impostoVal;
+
+    await pool.query('UPDATE produtos SET preco_base=$1, preco_venda=$2, data=NOW() WHERE codigo=$3', [base, valorVenda, produto_codigo]);
+  }
+}
+
 async function registrarSaida(id, quantidade) {
   const res = await pool.query(
     `UPDATE materia_prima SET quantidade = quantidade - $1, data_estoque = NOW()
@@ -112,6 +151,7 @@ async function atualizarPreco(id, preco) {
      WHERE id=$2 RETURNING *`,
     [preco, id]
   );
+  await atualizarProdutosComInsumo(id);
   return res.rows[0];
 }
 
