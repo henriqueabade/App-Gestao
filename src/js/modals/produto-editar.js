@@ -417,6 +417,7 @@
           pct_imposto:    parseFloat(taxInput && taxInput.value) || 0,
           preco_base:     totals.totalInsumos || 0,
           preco_venda:    totals.valorVenda   || 0,
+          status: produtoSelecionado.status,
           data: new Date().toISOString()
         };
         if(editarRegistroToggle && editarRegistroToggle.checked){
@@ -426,8 +427,6 @@
           }
           if (codigoInput) produto.codigo = codigoInput.value;
           if (ncmInput)    produto.ncm    = ncmInput.value.slice(0,8);
-          const st = statusRadios.find(r => r.checked);
-          if(st) produto.status = st.value;
         }
         const itensPayload = {
           inseridos: itens
@@ -453,7 +452,7 @@
             nome:   nomeInput ? nomeInput.value   : '',
             codigo: codigoInput ? codigoInput.value : '',
             ncm:    ncmInput ? ncmInput.value    : '',
-            status: (statusRadios.find(r => r.checked)?.value) || ''
+            status: produto.status
           };
           if(typeof carregarProdutos === 'function') await carregarProdutos();
           showToast('Peça alterada com sucesso!', 'success');
