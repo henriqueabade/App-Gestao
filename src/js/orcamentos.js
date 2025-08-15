@@ -20,6 +20,13 @@ function initOrcamentos() {
             Modal.open('modals/orcamentos/editar.html', '../js/modals/orcamento-editar.js', 'editarOrcamento');
         });
     });
+
+    const novoBtn = document.getElementById('novoOrcamentoBtn');
+    if (novoBtn) {
+        novoBtn.addEventListener('click', () => {
+            Modal.open('modals/orcamentos/novo.html', '../js/modals/orcamento-novo.js', 'novoOrcamento');
+        });
+    }
 }
 
 if (document.readyState === 'loading') {
