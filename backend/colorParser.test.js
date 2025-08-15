@@ -26,3 +26,7 @@ test('variações de acento', () => {
   assert.strictEqual(getColorFromText('salmão'), '#FA8072');
   assert.strictEqual(getColorFromText('salmao'), '#FA8072');
 });
+
+test('texto com barra', () => {
+  assert.strictEqual(getColorFromText('Peroba/Grafite'), '#2F2F2F');
+});

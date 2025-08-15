@@ -180,6 +180,9 @@ function extractModifiers(text) {
  */
 function resolveBaseColor(base) {
   const normalized = normalize(base);
+  for (const entry of colorDictionary) {
+    if (normalize(entry.name) === normalized) return entry.hex;
+  }
   for (const entry of keywordIndex) {
     if (normalized === entry.keyword) return entry.hex;
   }
@@ -298,7 +301,8 @@ const FALLBACK_HEX = resolveBaseColor('cinza') || '#808080';
  * getColorFromText('rosa choque'); // '#FF1493'
  */
 function getColorFromText(text = '') {
-  const normalized = normalize(text);
+  const segment = text.split('/').pop();
+  const normalized = normalize(segment);
   const direct = resolveBaseColor(normalized);
   if (direct) return direct;
   const { base, mods } = extractModifiers(normalized);
