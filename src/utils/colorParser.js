@@ -308,7 +308,7 @@ function getColorFromText(text = '') {
   return hex;
 }
 
-module.exports = {
+const colorParser = {
   normalize,
   extractModifiers,
   resolveBaseColor,
@@ -316,4 +316,10 @@ module.exports = {
   getColorFromText,
   colorDictionary,
 };
+
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = colorParser;
+} else if (typeof window !== 'undefined') {
+  window.colorParser = colorParser;
+}
 
