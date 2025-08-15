@@ -63,11 +63,15 @@ continua e realiza a atualização automaticamente.
 
 ## Personalizando cores
 
-O arquivo `src/utils/colors.js` contém um mapa com cerca de 140 nomes de cores CSS.
-Para utilizar uma cor adicional ou substituir um valor existente, edite esse arquivo e adicione a entrada desejada ao objeto `colorMap`:
+O arquivo `src/utils/colorParser.js` possui a constante `colorDictionary`, um array com os nomes de cores reconhecidos.
+Para adicionar uma nova cor ou sobrescrever um valor existente, edite essa constante inserindo um objeto com as propriedades `name`, `hex` e `keywords`:
 
 ```js
-colorMap.meucustom = '#123abc';
+colorDictionary.push({
+  name: 'meu custom',
+  hex: '#123abc',
+  keywords: ['meu custom']
+});
 ```
 
-As chaves são normalizadas em minúsculas e sem espaços ou hifens, portanto use esse formato ao adicionar novas cores.
+As entradas em `keywords` são normalizadas em minúsculas e sem acentos ou hifens, portanto use esse formato ao adicionar novas cores.
