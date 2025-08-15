@@ -21,7 +21,7 @@
       close();
       const unidades = await window.electronAPI.listarUnidades();
       document.querySelectorAll('select#unidade').forEach(sel => {
-        sel.innerHTML = '<option value="">Selecione</option>' + unidades.map(u => `<option value="${u}">${u}</option>`).join('');
+        sel.innerHTML = '<option value=""></option>' + unidades.map(u => `<option value="${u}">${u}</option>`).join('');
         sel.value = nome;
       });
     }catch(err){

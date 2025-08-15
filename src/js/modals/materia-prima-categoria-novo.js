@@ -21,7 +21,7 @@
       close();
       const categorias = await window.electronAPI.listarCategorias();
       document.querySelectorAll('select#categoria').forEach(sel => {
-        sel.innerHTML = '<option value="">Selecione</option>' + categorias.map(c => `<option value="${c}">${c}</option>`).join('');
+        sel.innerHTML = '<option value=""></option>' + categorias.map(c => `<option value="${c}">${c}</option>`).join('');
         sel.value = nome;
       });
     }catch(err){
