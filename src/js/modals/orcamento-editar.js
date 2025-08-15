@@ -13,7 +13,34 @@
   }
   document.getElementById('editarCliente').value = data.cliente || '';
   document.getElementById('editarCondicao').value = data.condicao || 'vista';
-  document.getElementById('editarStatus').value = (data.status || 'rascunho').toLowerCase();
+
+  const statusMap = {
+    'Rascunho': 'badge-neutral',
+    'Pendente': 'badge-warning',
+    'Aprovado': 'badge-success',
+    'Rejeitado': 'badge-danger',
+    'Expirado': 'badge-neutral'
+  };
+  let currentStatus = data.status || 'Rascunho';
+  const statusTag = document.getElementById('statusTag');
+  const statusOptions = document.getElementById('statusOptions');
+
+  function updateStatusTag() {
+    statusTag.className = `${statusMap[currentStatus] || 'badge-neutral'} px-3 py-1 rounded-full text-xs font-medium cursor-pointer`;
+    statusTag.textContent = currentStatus;
+  }
+  updateStatusTag();
+
+  statusTag.addEventListener('click', () => {
+    statusOptions.classList.toggle('hidden');
+  });
+  statusOptions.querySelectorAll('button').forEach(btn => {
+    btn.addEventListener('click', () => {
+      currentStatus = btn.dataset.status;
+      updateStatusTag();
+      statusOptions.classList.add('hidden');
+    });
+  });
 
   const itensTbody = document.querySelector('#orcamentoItens tbody');
 
@@ -95,11 +122,10 @@
       data.row.cells[3].textContent = document.getElementById('totalOrcamento').textContent;
       const statusCell = data.row.cells[5];
       statusCell.innerHTML = '';
-      const statusValue = document.getElementById('editarStatus').value;
-      const statusText = document.getElementById('editarStatus').options[document.getElementById('editarStatus').selectedIndex].textContent;
       const statusSpan = document.createElement('span');
-      statusSpan.className = `badge-${statusValue} px-3 py-1 rounded-full text-xs font-medium`;
-      statusSpan.textContent = statusText;
+      const cls = statusMap[currentStatus] || 'badge-neutral';
+      statusSpan.className = `${cls} px-3 py-1 rounded-full text-xs font-medium`;
+      statusSpan.textContent = currentStatus;
       statusCell.appendChild(statusSpan);
     }
     if (closeAfter) Modal.close(overlayId);

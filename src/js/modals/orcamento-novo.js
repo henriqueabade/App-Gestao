@@ -141,7 +141,14 @@
     tr.style.cursor = 'pointer';
     tr.setAttribute('onmouseover', "this.style.background='rgba(163, 148, 167, 0.05)'");
     tr.setAttribute('onmouseout', "this.style.background='transparent'");
-    const badgeClass = status === 'Rascunho' ? 'badge-warning' : 'badge-success';
+    const statusClasses = {
+      'Rascunho': 'badge-neutral',
+      'Pendente': 'badge-warning',
+      'Aprovado': 'badge-success',
+      'Rejeitado': 'badge-danger',
+      'Expirado': 'badge-neutral'
+    };
+    const badgeClass = statusClasses[status] || 'badge-neutral';
     tr.innerHTML = `
       <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">${newId}</td>
       <td class="px-6 py-4 whitespace-nowrap text-sm text-white">${clienteText}</td>
@@ -170,7 +177,7 @@
   }
 
   document.getElementById('salvarNovoOrcamento').addEventListener('click', () => saveQuote('Rascunho'));
-  document.getElementById('enviarNovoOrcamento').addEventListener('click', () => saveQuote('Enviado'));
+  document.getElementById('enviarNovoOrcamento').addEventListener('click', () => saveQuote('Pendente'));
   document.getElementById('cancelarNovoOrcamento').addEventListener('click', close);
   document.getElementById('voltarNovoOrcamento').addEventListener('click', close);
 
