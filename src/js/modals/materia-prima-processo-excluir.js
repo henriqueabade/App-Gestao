@@ -28,6 +28,22 @@
     const nome = select.value;
     if (!nome) return;
     if (!confirm) {
+      try {
+        const dependente = await window.electronAPI.verificarDependenciaProcesso(nome);
+        if (dependente) {
+          confirmTxt.textContent = 'Não é possível excluir este processo pois existem itens registrados.';
+          confirmTxt.classList.remove('text-red-400');
+          confirmTxt.classList.add('text-yellow-400');
+          confirmTxt.classList.remove('hidden');
+          return;
+        }
+      } catch (err) {
+        console.error(err);
+        return;
+      }
+      confirmTxt.textContent = 'Esta ação é irreversível. Clique em excluir novamente para confirmar.';
+      confirmTxt.classList.remove('text-yellow-400');
+      confirmTxt.classList.add('text-red-400');
       confirmTxt.classList.remove('hidden');
       confirm = true;
       return;

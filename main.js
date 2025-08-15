@@ -23,7 +23,10 @@ const {
   adicionarCategoria,
   adicionarUnidade,
   removerCategoria,
-  removerUnidade
+  removerUnidade,
+  categoriaTemDependencias,
+  unidadeTemDependencias,
+  processoTemDependencias
 } = require('./backend/materiaPrima');
 const {
   listarProdutos,
@@ -427,6 +430,30 @@ ipcMain.handle('remover-unidade', async (_e, nome) => {
     return await removerUnidade(nome);
   } catch (err) {
     console.error('Erro ao remover unidade:', err);
+    throw err;
+  }
+});
+ipcMain.handle('verificar-dependencia-categoria', async (_e, nome) => {
+  try {
+    return await categoriaTemDependencias(nome);
+  } catch (err) {
+    console.error('Erro ao verificar dependência de categoria:', err);
+    throw err;
+  }
+});
+ipcMain.handle('verificar-dependencia-unidade', async (_e, nome) => {
+  try {
+    return await unidadeTemDependencias(nome);
+  } catch (err) {
+    console.error('Erro ao verificar dependência de unidade:', err);
+    throw err;
+  }
+});
+ipcMain.handle('verificar-dependencia-processo', async (_e, nome) => {
+  try {
+    return await processoTemDependencias(nome);
+  } catch (err) {
+    console.error('Erro ao verificar dependência de processo:', err);
     throw err;
   }
 });
