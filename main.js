@@ -31,6 +31,7 @@ const {
   listarDetalhesProduto,
   listarInsumosProduto,
   listarEtapasProducao,
+  adicionarEtapaProducao,
   listarItensProcessoProduto,
   inserirLoteProduto,
   atualizarLoteProduto,
@@ -441,6 +442,9 @@ ipcMain.handle('listar-insumos-produto', async (_e, codigo) => {
 });
 ipcMain.handle('listar-etapas-producao', async () => {
   return listarEtapasProducao();
+});
+ipcMain.handle('adicionar-etapa-producao', async (_e, nome) => {
+  return adicionarEtapaProducao(nome);
 });
 ipcMain.handle('listar-itens-processo-produto', async (_e, { codigo, etapa, busca }) => {
   return listarItensProcessoProduto(codigo, etapa, busca);
