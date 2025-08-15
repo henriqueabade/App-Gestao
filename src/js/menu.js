@@ -109,6 +109,7 @@ const pageNames = {
     tarefas: 'CRM - Tarefas',
     ia: 'Inteligência Artificial',
     usuarios: 'Usuários',
+    financeiro: 'Financeiro',
     relatorios: 'Relatórios',
     configuracoes: 'Configurações'
 };
