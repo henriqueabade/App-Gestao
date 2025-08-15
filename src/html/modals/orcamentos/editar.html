@@ -65,19 +65,23 @@
         </div>
 
         <div class="bg-surface/40 rounded-xl border border-white/10 overflow-hidden">
-          <table id="orcamentoItens" class="w-full text-sm">
-            <thead class="bg-surface/60">
-              <tr class="border-b border-white/10">
-                <th class="text-left py-3 px-4 text-gray-300 font-medium">Item</th>
-                <th class="text-center py-3 px-4 text-gray-300 font-medium">Qtd</th>
-                <th class="text-right py-3 px-4 text-gray-300 font-medium">Valor Unit. (R$)</th>
-                <th class="text-center py-3 px-4 text-gray-300 font-medium">Desc. %</th>
-                <th class="text-right py-3 px-4 text-gray-300 font-medium">Total (R$)</th>
-                <th class="text-center py-3 px-4 text-gray-300 font-medium">Ações</th>
-              </tr>
-            </thead>
-            <tbody></tbody>
-          </table>
+          <div class="overflow-x-auto">
+            <div class="max-h-64 overflow-y-auto">
+              <table id="orcamentoItens" class="w-full text-sm">
+                <thead class="sticky top-0 bg-surface/60 backdrop-blur-sm">
+                  <tr class="border-b border-white/10">
+                    <th class="text-left py-3 px-4 text-gray-300 font-medium uppercase text-xs">ITEM</th>
+                    <th class="text-center py-3 px-4 text-gray-300 font-medium uppercase text-xs">QTD</th>
+                    <th class="text-right py-3 px-4 text-gray-300 font-medium uppercase text-xs">VALOR UNIT. (R$)</th>
+                    <th class="text-center py-3 px-4 text-gray-300 font-medium uppercase text-xs">DESC. %</th>
+                    <th class="text-right py-3 px-4 text-gray-300 font-medium uppercase text-xs">TOTAL (R$)</th>
+                    <th class="text-center py-3 px-4 text-gray-300 font-medium uppercase text-xs">AÇÕES</th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
         </div>
 
         <!-- recálculo de totais -->
