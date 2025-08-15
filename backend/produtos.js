@@ -140,9 +140,17 @@ async function listarInsumosProduto(codigo) {
  */
 async function listarEtapasProducao() {
   const res = await pool.query(
-    'SELECT id, nome FROM etapas_producao ORDER BY nome ASC'
+    'SELECT id, nome FROM etapas_producao ORDER BY id'
   );
   return res.rows;
+}
+
+async function adicionarEtapaProducao(nome) {
+  const res = await pool.query(
+    'INSERT INTO etapas_producao (nome) VALUES ($1) RETURNING id, nome',
+    [nome]
+  );
+  return res.rows[0];
 }
 
 /**
@@ -341,6 +349,7 @@ module.exports = {
   listarInsumosProduto,
   listarEtapasProducao,
   listarItensProcessoProduto,
+  adicionarEtapaProducao,
   adicionarProduto,
   atualizarProduto,
   excluirProduto,

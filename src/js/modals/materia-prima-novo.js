@@ -15,6 +15,9 @@
   document.getElementById('addUnidadeNovo').addEventListener('click', () => {
     Modal.open('modals/materia-prima/unidade-novo.html', '../js/modals/materia-prima-unidade-novo.js', 'novaUnidade', true);
   });
+  document.getElementById('addProcessoNovo').addEventListener('click', () => {
+    Modal.open('modals/materia-prima/processo-novo.html', '../js/modals/materia-prima-processo-novo.js', 'novoProcesso', true);
+  });
 
   async function carregarOpcoes(){
     try{
@@ -30,7 +33,13 @@
           const tipo = u?.tipo ?? u;
           return `<option value="${tipo}">${tipo}</option>`;
         }).join('');
-      ['categoria','unidade'].forEach(id=>{
+      const processos = await window.electronAPI.listarEtapasProducao();
+      form.processo.innerHTML = '<option value=""></option>' +
+        processos.map(p => {
+          const nome = p?.nome ?? p;
+          return `<option value="${nome}">${nome}</option>`;
+        }).join('');
+      ['categoria','unidade','processo'].forEach(id=>{
         const el=form[id];
         if(!el) return;
         const sync = () => el.setAttribute('data-filled', el.value !== '');

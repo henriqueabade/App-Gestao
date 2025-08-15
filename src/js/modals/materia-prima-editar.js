@@ -16,6 +16,9 @@
   document.getElementById('addUnidadeEditar').addEventListener('click', () => {
     Modal.open('modals/materia-prima/unidade-novo.html', '../js/modals/materia-prima-unidade-novo.js', 'novaUnidade', true);
   });
+  document.getElementById('addProcessoEditar').addEventListener('click', () => {
+    Modal.open('modals/materia-prima/processo-novo.html', '../js/modals/materia-prima-processo-novo.js', 'novoProcesso', true);
+  });
   if(item){
     form.nome.value = item.nome || '';
     quantidadeInput.value = item.quantidade || '';
@@ -39,11 +42,18 @@
           const tipo = u?.tipo ?? u;
           return `<option value="${tipo}">${tipo}</option>`;
         }).join('');
+      const processos = await window.electronAPI.listarEtapasProducao();
+      form.processo.innerHTML = '<option value=""></option>' +
+        processos.map(p => {
+          const nome = p?.nome ?? p;
+          return `<option value="${nome}">${nome}</option>`;
+        }).join('');
       if(item){
         form.categoria.value = item.categoria || '';
         form.unidade.value = item.unidade || '';
+        form.processo.value = item.processo || '';
       }
-      ['categoria','unidade'].forEach(id=>{
+      ['categoria','unidade','processo'].forEach(id=>{
         const el=form[id];
         if(el) el.setAttribute('data-filled', el.value !== '');
       });
