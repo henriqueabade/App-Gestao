@@ -148,6 +148,7 @@
     }
 
     let itens = [];
+    let deletedItens = [];
     const processos = {};
     const totals = {};
     const processOrder = [];
@@ -389,6 +390,9 @@
     const limparTudoBtn = document.getElementById('limparTudo');
     if (limparTudoBtn) {
       limparTudoBtn.addEventListener('click', () => {
+        deletedItens.push(
+          ...itens.filter(i => i.id).map(i => ({ id: i.id, status: 'deleted' }))
+        );
         itens = [];
         if (tableBody) tableBody.innerHTML = '';
         processOrder.length = 0;
@@ -432,12 +436,16 @@
           atualizados: itens
             .filter(i => i.status === 'updated')
             .map(i => ({ id: i.id, quantidade: i.quantidade })),
-          deletados: itens
-            .filter(i => i.status === 'deleted')
-            .map(i => ({ id: i.id }))
+          deletados: [
+            ...deletedItens.map(i => ({ id: i.id })),
+            ...itens
+              .filter(i => i.status === 'deleted')
+              .map(i => ({ id: i.id }))
+          ]
         };
         try{
           await window.electronAPI.salvarProdutoDetalhado(produtoSelecionado.codigo, produto, itensPayload);
+          deletedItens = [];
           const now = new Date();
           if (ultimaDataEl) ultimaDataEl.textContent = now.toLocaleDateString('pt-BR');
           if (ultimaHoraEl) ultimaHoraEl.textContent = now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
