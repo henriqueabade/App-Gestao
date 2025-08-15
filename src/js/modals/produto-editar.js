@@ -148,6 +148,7 @@
     const processos = {};
     const totals = {};
     const processOrder = [];
+    let etapasOrdem = [];
 
     // cálculo por processo
     function updateProcessTotal(proc){
@@ -297,7 +298,16 @@
         grupos[procKey].push(it);
       });
 
-      Object.entries(grupos).forEach(([proc, arr]) => {
+      const ordenados = Object.entries(grupos).sort(([a], [b]) => {
+        const ia = etapasOrdem.indexOf(a);
+        const ib = etapasOrdem.indexOf(b);
+        if (ia === -1 && ib === -1) return a.localeCompare(b);
+        if (ia === -1) return 1;
+        if (ib === -1) return -1;
+        return ia - ib;
+      });
+
+      ordenados.forEach(([proc, arr]) => {
         const header = document.createElement('tr');
         header.className = 'process-row';
         header.innerHTML = `<td colspan="5" class="px-6 py-2 bg-gray-50 border-t border-gray-200 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">${proc}</td>`;
@@ -483,8 +493,10 @@
         l('>> listarEtapasProducao: start');
         const etapas = await window.electronAPI.listarEtapasProducao();
         l('<< listarEtapasProducao: ok', { etapasCount: Array.isArray(etapas) ? etapas.length : 'N/A' });
+        const etapasOrdenadas = (etapas || []).sort((a,b) => (a.ordem ?? 0) - (b.ordem ?? 0));
+        etapasOrdem = etapasOrdenadas.map(e => e.nome);
         if (etapaSelect) {
-          etapaSelect.innerHTML = (etapas || []).map(e => `<option value="${e.id}">${e.nome}</option>`).join('');
+          etapaSelect.innerHTML = etapasOrdenadas.map(e => `<option value="${e.id}">${e.nome}</option>`).join('');
         }
 
         // Render itens

@@ -22,6 +22,7 @@
   async function carregarProcessos(){ // carga de processos
     try{
       const processos = await window.electronAPI.listarEtapasProducao();
+      processos.sort((a,b) => (a.ordem ?? 0) - (b.ordem ?? 0));
       processoSelect.innerHTML = '<option value="">Selecione um processo…</option>' +
         processos.map(p => `<option value="${p.nome}" data-id="${p.id}">${p.nome}</option>`).join('');
     }catch(err){
