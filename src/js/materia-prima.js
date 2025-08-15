@@ -258,7 +258,7 @@ function attachRawMaterialInfoEvents() {
         if (icon.dataset.bound) return;
         icon.dataset.bound = 'true';
 
-        icon.addEventListener('mouseenter', () => {
+        icon.addEventListener('click', () => {
             const id = icon.dataset.id;
             if (!id) {
                 window.electronAPI?.log?.('attachRawMaterialInfoEvents invalid id');
