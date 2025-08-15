@@ -14,7 +14,7 @@
       carregarProdutos();
     }catch(err){
       console.error(err);
-      showToast('Erro ao excluir produto', 'error');
+      showToast(err.message || 'Erro ao excluir produto', 'error');
     }
   });
 })();
