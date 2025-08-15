@@ -276,7 +276,11 @@
       tableBody.innerHTML = '';
       Object.keys(processos).forEach(k => delete processos[k]);
       processOrder.length = 0;
-      itens = (data || []).map(d => ({ ...d, status: d.status || 'unchanged' }));
+      itens = (data || []).map(d => ({
+        ...d,
+        quantidade: parseFloat(d.quantidade) || 0,
+        status: d.status || 'unchanged'
+      }));
 
       if(itens.length === 0){
         const tr = document.createElement('tr');
@@ -335,7 +339,8 @@
       somarItem(id, quantidade){
         const item = itens.find(i => i.id === id);
         if(!item) return;
-        item.quantidade += quantidade;
+        const atual = parseFloat(item.quantidade) || 0;
+        item.quantidade = atual + quantidade;
         item.total = item.quantidade * (item.preco_unitario || 0);
         if(item.id) item.status = 'updated';
         if(item.row) item.row.querySelector('.quantidade-text').textContent = formatNumber(item.quantidade);
