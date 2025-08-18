@@ -141,7 +141,8 @@ if (intro) {
 
   const storedPin = localStorage.getItem('pin');
   const storedUser = localStorage.getItem('user');
-  if (storedUser) {
+  const rememberUser = localStorage.getItem('rememberUser') === '1';
+  if (storedUser && rememberUser) {
     let saved = await window.electronAPI.loadState();
     if (saved) {
       try {
@@ -174,6 +175,7 @@ if (intro) {
       return;
     }
     localStorage.removeItem('user');
+    localStorage.removeItem('rememberUser');
     localStorage.removeItem('pin');
     if (result && result.reason === 'offline') {
       showOfflineError();
@@ -182,6 +184,9 @@ if (intro) {
     }
     localStorage.removeItem('pinChanged');
     localStorage.removeItem('offlineDisconnect');
+  } else if (storedUser && !rememberUser) {
+    localStorage.removeItem('user');
+    localStorage.removeItem('rememberUser');
   }
   if (localStorage.getItem('pinChanged')) {
     localStorage.removeItem('pinChanged');
@@ -350,8 +355,8 @@ if (intro) {
     else {
       showToast('Login realizado com sucesso!', 'success');
       const remember = document.getElementById('remember').checked;
-      if (remember && result.user) localStorage.setItem('user', JSON.stringify(result.user));
-      else                         localStorage.removeItem('user');
+      if (result.user) localStorage.setItem('user', JSON.stringify(result.user));
+      localStorage.setItem('rememberUser', remember ? '1' : '0');
       localStorage.setItem('pin', pin);
       sessionStorage.setItem('currentUser', JSON.stringify(result.user));
 

@@ -2,7 +2,15 @@ window.addEventListener('DOMContentLoaded', () => {
   const nameEl = document.getElementById('userName');
   const profileEl = document.getElementById('userProfile');
   try {
-    const stored = sessionStorage.getItem('currentUser') || localStorage.getItem('user');
+    const storedSession = sessionStorage.getItem('currentUser');
+    let stored = storedSession || localStorage.getItem('user');
+    if (!storedSession && stored) {
+      sessionStorage.setItem('currentUser', stored);
+      if (localStorage.getItem('rememberUser') !== '1') {
+        localStorage.removeItem('user');
+        localStorage.removeItem('rememberUser');
+      }
+    }
     const user = stored ? JSON.parse(stored) : {};
     if (nameEl) nameEl.textContent = user.nome || '';
     if (profileEl) profileEl.textContent = user.perfil || 'Sem Perfil';
@@ -65,6 +73,7 @@ action('logout', () => {
     // Se existir, remove
     localStorage.removeItem('user');
   }
+  localStorage.removeItem('rememberUser');
 
   // 1) pré-carrega o login por trás
   setTimeout(() => {
