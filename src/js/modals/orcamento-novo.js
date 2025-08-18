@@ -14,7 +14,9 @@
   const itensTbody = document.querySelector('#novoItensTabela tbody');
   const condicaoSelect = document.getElementById('novoCondicao');
   const pagamentoBox = document.getElementById('novoPagamento');
+  const condicaoWrapper = condicaoSelect.parentElement;
   let parcelamentoLoaded = false;
+  let condicaoDefinida = false;
   function loadParcelamento(){
     return new Promise(res=>{
       if(parcelamentoLoaded){res();return;}
@@ -22,6 +24,29 @@
       s.src='../js/utils/parcelamento.js';
       s.onload=()=>{parcelamentoLoaded=true;res();};
       document.head.appendChild(s);
+    });
+  }
+  function resetCondicao(){
+    condicaoSelect.value = 'vista';
+    condicaoSelect.setAttribute('data-filled','true');
+    pagamentoBox.classList.add('hidden');
+    pagamentoBox.innerHTML='';
+    condicaoDefinida = false;
+  }
+  function showResetDialog(cb){
+    const overlay=document.createElement('div');
+    overlay.className='fixed inset-0 bg-black/50 flex items-center justify-center p-4';
+    overlay.innerHTML=`<div class="max-w-md w-full glass-surface backdrop-blur-xl rounded-2xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade"><div class="p-6 text-center"><h3 class="text-lg font-semibold mb-4 text-yellow-300">Atenção</h3><p class="text-sm text-gray-300 mb-6">Esta ação irá reiniciar a condição de pagamento. Deseja continuar?</p><div class="flex justify-center gap-4"><button id="resetYes" class="btn-warning px-4 py-2 rounded-lg text-white font-medium">Sim</button><button id="resetNo" class="btn-neutral px-4 py-2 rounded-lg text-white font-medium">Não</button></div></div></div>`;
+    document.body.appendChild(overlay);
+    overlay.querySelector('#resetYes').addEventListener('click',()=>{overlay.remove();cb(true);});
+    overlay.querySelector('#resetNo').addEventListener('click',()=>{overlay.remove();cb(false);});
+  }
+  function confirmResetIfNeeded(action){
+    if(!condicaoDefinida){action();return;}
+    showResetDialog(ok=>{
+      if(!ok) return;
+      resetCondicao();
+      action();
     });
   }
   function updateCondicao(){
@@ -41,7 +66,9 @@
       pagamentoBox.innerHTML='';
     }
   }
-  condicaoSelect.addEventListener('change', updateCondicao);
+  condicaoSelect.addEventListener('change', ()=>{condicaoDefinida=true;updateCondicao();});
+  condicaoWrapper.addEventListener('click',e=>{if(condicaoSelect.disabled){e.preventDefault();alert('Condição de pagamento bloqueada. Digite itens do orçamento antes.');}});
+  condicaoSelect.disabled = true;
   updateCondicao();
 
   async function carregarClientes(){
@@ -122,8 +149,11 @@
     });
     document.getElementById('novoSubtotal').textContent = formatCurrency(subtotal);
     document.getElementById('novoDesconto').textContent = formatCurrency(desconto);
-    document.getElementById('novoTotal').textContent = formatCurrency(subtotal - desconto);
+    const total = subtotal - desconto;
+    document.getElementById('novoTotal').textContent = formatCurrency(total);
     itensTbody.querySelectorAll('tr').forEach(updateLineTotal);
+    condicaoSelect.disabled = total === 0;
+    if(total === 0) resetCondicao();
     if(condicaoSelect.value==='prazo' && window.Parcelamento){
       Parcelamento.updateTotal('novoParcelamento', parseCurrencyToCents(document.getElementById('novoTotal').textContent));
     }
@@ -140,7 +170,7 @@
       `;
       const confirmBtn = actionsCell.querySelector('.fa-check');
       const cancelBtn = actionsCell.querySelector('.fa-times');
-      confirmBtn.addEventListener('click', () => { tr.remove(); recalcTotals(); });
+      confirmBtn.addEventListener('click', () => { confirmResetIfNeeded(() => { tr.remove(); recalcTotals(); }); });
       cancelBtn.addEventListener('click', () => {
         actionsCell.innerHTML = `
           <i class="fas fa-edit w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)"></i>
@@ -177,16 +207,18 @@
     const descInput = descCell.querySelector('input');
 
     confirmBtn.addEventListener('click', () => {
-      qtyCell.textContent = qtyInput.value;
-      valCell.textContent = parseFloat(valInput.value).toFixed(2);
-      descCell.textContent = descInput.value;
-      actionsCell.innerHTML = `
-        <i class="fas fa-edit w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)"></i>
-        <i class="fas fa-trash w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10 text-red-400"></i>
-      `;
-      updateLineTotal(tr);
-      attachRowEvents(tr);
-      recalcTotals();
+      confirmResetIfNeeded(() => {
+        qtyCell.textContent = qtyInput.value;
+        valCell.textContent = parseFloat(valInput.value).toFixed(2);
+        descCell.textContent = descInput.value;
+        actionsCell.innerHTML = `
+          <i class="fas fa-edit w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)"></i>
+          <i class="fas fa-trash w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10 text-red-400"></i>
+        `;
+        updateLineTotal(tr);
+        attachRowEvents(tr);
+        recalcTotals();
+      });
     });
 
     cancelBtn.addEventListener('click', () => {
@@ -265,10 +297,12 @@
     const prodId = produtoSelect.value;
     const qtd = parseFloat(document.getElementById('itemQtd').value) || 1;
     if (!prodId || qtd <= 0) return;
-    addItem(prodId, qtd);
-    produtoSelect.value = '';
-    produtoSelect.setAttribute('data-filled', 'false');
-    document.getElementById('itemQtd').value = 1;
+    confirmResetIfNeeded(() => {
+      addItem(prodId, qtd);
+      produtoSelect.value = '';
+      produtoSelect.setAttribute('data-filled', 'false');
+      document.getElementById('itemQtd').value = 1;
+    });
   });
 
   function saveQuote(status) {
@@ -348,10 +382,12 @@
   const limparBtn = document.getElementById('limparNovoOrcamento');
   if (limparBtn) {
     limparBtn.addEventListener('click', () => {
-      overlay.querySelectorAll('input').forEach(i => i.value = '');
-      overlay.querySelectorAll('select').forEach(s => { s.selectedIndex = 0; s.setAttribute('data-filled', 'false'); });
-      itensTbody.innerHTML = '';
-      recalcTotals();
+      confirmResetIfNeeded(() => {
+        overlay.querySelectorAll('input').forEach(i => i.value = '');
+        overlay.querySelectorAll('select').forEach(s => { s.selectedIndex = 0; s.setAttribute('data-filled', 'false'); });
+        itensTbody.innerHTML = '';
+        recalcTotals();
+      });
     });
   }
 })();
