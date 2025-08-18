@@ -44,24 +44,26 @@ window.addEventListener('DOMContentLoaded', () => {
 
   window.updateNotificationColor = updateIcon;
 
-  btn.addEventListener('click', () => {
-    const items = notifications
-      .map(
-        n => `
-        <div class="px-4 py-2 border-b last:border-0 border-gray-100">
-          <div class="font-semibold">${n.user}</div>
-          <div class="text-xs text-gray-500">${formatDate(n.date)}</div>
-          <div class="text-sm">${n.message}</div>
-        </div>`
-      )
-      .join('');
-    const content = `<div class="w-72 bg-white rounded-md shadow-lg text-gray-800">${
-      items || '<div class="p-4 text-sm text-gray-600">Sem notificações</div>'
-    }</div>`;
-    const { popup } = createPopup(btn, content, {
-      onHide: () => popup.remove()
+    btn.addEventListener('click', () => {
+      const items = notifications
+        .map(
+          n => `
+          <div class="px-4 py-2 border-b last:border-0 border-gray-100">
+            <div class="font-semibold">${n.user}</div>
+            <div class="text-xs text-gray-500">${formatDate(n.date)}</div>
+            <div class="text-sm">${n.message}</div>
+          </div>`
+        )
+        .join('');
+      const content = `<div class="w-72 bg-white rounded-md shadow-lg text-gray-800">${
+        items || '<div class="p-4 text-sm text-gray-600">Sem notificações</div>'
+      }</div>`;
+      const { popup } = createPopup(btn, content, {
+        onHide: () => popup.remove()
+      });
+      notifications.length = 0;
+      updateIcon();
     });
-  });
 
-  updateIcon();
-});
+    updateIcon();
+  });
