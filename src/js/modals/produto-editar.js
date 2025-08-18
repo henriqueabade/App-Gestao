@@ -409,6 +409,60 @@
       });
     }
 
+    const clonarBtn = document.getElementById('clonarProduto');
+    if (clonarBtn) {
+      clonarBtn.addEventListener('click', async () => {
+        try {
+          const nomeBase = (nomeInput?.value || '').trim();
+          const codigoBase = (codigoInput?.value || '').trim();
+          const cloneNome = `${nomeBase} - Copiado`;
+          const cloneCodigo = `${codigoBase}COPIA`;
+
+          const existentes = await window.electronAPI.listarProdutos();
+          if (existentes.some(p => p.nome === cloneNome || p.codigo === cloneCodigo)) {
+            showToast('Já existe uma cópia idêntica desta peça', 'error');
+            return;
+          }
+
+          await window.electronAPI.adicionarProduto({
+            codigo: cloneCodigo,
+            nome: cloneNome,
+            preco_venda: totals.valorVenda || 0,
+            pct_markup: parseFloat(markupInput?.value) || 0,
+            status: 'Em linha'
+          });
+
+          const itensPayload = itens
+            .filter(i => i.status !== 'deleted')
+            .map(i => ({ insumo_id: i.insumo_id ?? i.id, quantidade: i.quantidade }));
+
+          await window.electronAPI.salvarProdutoDetalhado(cloneCodigo, {
+            pct_fabricacao: parseFloat(fabricacaoInput?.value) || 0,
+            pct_acabamento: parseFloat(acabamentoInput?.value) || 0,
+            pct_montagem:   parseFloat(montagemInput?.value) || 0,
+            pct_embalagem:  parseFloat(embalagemInput?.value) || 0,
+            pct_markup:     parseFloat(markupInput?.value) || 0,
+            pct_comissao:   parseFloat(commissionInput?.value) || 0,
+            pct_imposto:    parseFloat(taxInput?.value) || 0,
+            preco_base:     totals.totalInsumos || 0,
+            preco_venda:    totals.valorVenda || 0,
+            nome: cloneNome,
+            codigo: cloneCodigo,
+            ncm: ncmInput?.value?.slice(0,8) || '',
+            categoria: cloneNome.split(' ')[0] || '',
+            status: 'Em linha'
+          }, { inseridos: itensPayload, atualizados: [], deletados: [] });
+
+          if (typeof carregarProdutos === 'function') await carregarProdutos();
+          showToast('Peça clonada com sucesso!', 'success');
+          close();
+        } catch (err) {
+          console.error('Erro ao clonar produto', err);
+          showToast('Erro ao clonar peça', 'error');
+        }
+      });
+    }
+
     const salvarBtn = document.getElementById('salvarEditarProduto');
     if (salvarBtn) {
       salvarBtn.addEventListener('click', async () => {
