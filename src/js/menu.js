@@ -18,6 +18,13 @@ async function loadPage(page) {
     try {
         const resp = await fetch(`../html/${page}.html`);
         content.innerHTML = await resp.text();
+        const module = content.querySelector('.modulo-container');
+        if (module) {
+            module.classList.add('module-enter');
+            module.addEventListener('animationend', () => {
+                module.classList.remove('module-enter');
+            }, { once: true });
+        }
         document.dispatchEvent(new Event('module-change'));
 
         document.getElementById('page-style')?.remove();
