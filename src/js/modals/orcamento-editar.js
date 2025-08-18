@@ -15,6 +15,35 @@
   const editarContato = document.getElementById('editarContato');
   const editarCondicao = document.getElementById('editarCondicao');
   const produtoSelect = document.getElementById('novoItemProduto');
+  const pagamentoBox = document.getElementById('editarPagamento');
+  let parcelamentoLoaded = false;
+  function loadParcelamento(){
+    return new Promise(res=>{
+      if(parcelamentoLoaded){res();return;}
+      const s=document.createElement('script');
+      s.src='../js/utils/parcelamento.js';
+      s.onload=()=>{parcelamentoLoaded=true;res();};
+      document.head.appendChild(s);
+    });
+  }
+  function updateCondicao(){
+    if(editarCondicao.value==='vista'){
+      pagamentoBox.innerHTML=`
+        <div class="relative w-40">
+          <input id="editarPrazoVista" type="number" min="0" placeholder=" " class="peer w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-transparent focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+          <label for="editarPrazoVista" class="absolute left-4 top-1/2 -translate-y-1/2 text-base text-gray-300 pointer-events-none transition-all duration-150 peer-placeholder-shown:top-1/2 peer-placeholder-shown:-translate-y-1/2 peer-placeholder-shown:text-base peer-focus:top-0 peer-focus:-translate-y-full peer-focus:text-xs peer-focus:text-primary peer-valid:top-0 peer-valid:-translate-y-full peer-valid:text-xs">Prazo (dias)</label>
+        </div>`;
+      pagamentoBox.classList.remove('hidden');
+    } else if(editarCondicao.value==='prazo'){
+      pagamentoBox.classList.remove('hidden');
+      pagamentoBox.innerHTML='<div id="editarParcelamento"></div>';
+      loadParcelamento().then(()=>Parcelamento.init('editarParcelamento',{getTotal:()=>parseCurrencyToCents(document.getElementById('totalOrcamento').textContent)}));
+    } else {
+      pagamentoBox.classList.add('hidden');
+      pagamentoBox.innerHTML='';
+    }
+  }
+  editarCondicao.addEventListener('change', updateCondicao);
 
   const clients = {};
   const products = {};
@@ -76,6 +105,7 @@
     }
   }
   editarCondicao.value = data.condicao || 'vista';
+  updateCondicao();
   await carregarProdutos();
   [editarCliente, editarContato, editarCondicao, produtoSelect].forEach(sel => {
     const sync = () => sel.setAttribute('data-filled', sel.value !== '');
@@ -287,6 +317,9 @@
     document.getElementById('subtotalOrcamento').textContent = formatCurrency(subtotal);
     document.getElementById('descontoOrcamento').textContent = formatCurrency(desconto);
     document.getElementById('totalOrcamento').textContent = formatCurrency(total);
+    if(editarCondicao.value==='prazo' && window.Parcelamento){
+      Parcelamento.updateTotal('editarParcelamento', parseCurrencyToCents(document.getElementById('totalOrcamento').textContent));
+    }
   }
 
   function saveChanges(closeAfter) {

@@ -12,6 +12,37 @@
   const contatoSelect = document.getElementById('novoContato');
   const produtoSelect = document.getElementById('itemProduto');
   const itensTbody = document.querySelector('#novoItensTabela tbody');
+  const condicaoSelect = document.getElementById('novoCondicao');
+  const pagamentoBox = document.getElementById('novoPagamento');
+  let parcelamentoLoaded = false;
+  function loadParcelamento(){
+    return new Promise(res=>{
+      if(parcelamentoLoaded){res();return;}
+      const s=document.createElement('script');
+      s.src='../js/utils/parcelamento.js';
+      s.onload=()=>{parcelamentoLoaded=true;res();};
+      document.head.appendChild(s);
+    });
+  }
+  function updateCondicao(){
+    if(condicaoSelect.value==='vista'){
+      pagamentoBox.innerHTML=`
+        <div class="relative w-40">
+          <input id="novoPrazoVista" type="number" min="0" placeholder=" " class="peer w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-transparent focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+          <label for="novoPrazoVista" class="absolute left-4 top-1/2 -translate-y-1/2 text-base text-gray-300 pointer-events-none transition-all duration-150 peer-placeholder-shown:top-1/2 peer-placeholder-shown:-translate-y-1/2 peer-placeholder-shown:text-base peer-focus:top-0 peer-focus:-translate-y-full peer-focus:text-xs peer-focus:text-primary peer-valid:top-0 peer-valid:-translate-y-full peer-valid:text-xs">Prazo (dias)</label>
+        </div>`;
+      pagamentoBox.classList.remove('hidden');
+    } else if(condicaoSelect.value==='prazo'){
+      pagamentoBox.classList.remove('hidden');
+      pagamentoBox.innerHTML='<div id="novoParcelamento"></div>';
+      loadParcelamento().then(()=>Parcelamento.init('novoParcelamento',{getTotal:()=>parseCurrencyToCents(document.getElementById('novoTotal').textContent)}));
+    } else {
+      pagamentoBox.classList.add('hidden');
+      pagamentoBox.innerHTML='';
+    }
+  }
+  condicaoSelect.addEventListener('change', updateCondicao);
+  updateCondicao();
 
   async function carregarClientes(){
     try {
@@ -93,6 +124,9 @@
     document.getElementById('novoDesconto').textContent = formatCurrency(desconto);
     document.getElementById('novoTotal').textContent = formatCurrency(subtotal - desconto);
     itensTbody.querySelectorAll('tr').forEach(updateLineTotal);
+    if(condicaoSelect.value==='prazo' && window.Parcelamento){
+      Parcelamento.updateTotal('novoParcelamento', parseCurrencyToCents(document.getElementById('novoTotal').textContent));
+    }
   }
 
   function attachRowEvents(tr){
@@ -244,7 +278,6 @@
     const clienteText = clienteSelect.options[clienteSelect.selectedIndex].textContent;
     const contatoVal = contatoSelect.value;
     const contatoText = contatoSelect.options[contatoSelect.selectedIndex]?.textContent || '';
-    const condicaoSelect = document.getElementById('novoCondicao');
     const condicaoVal = condicaoSelect.value;
     const condicaoText = condicaoSelect.options[condicaoSelect.selectedIndex].textContent;
     const total = document.getElementById('novoTotal').textContent;

@@ -39,14 +39,16 @@
             <label for="novoCondicao" class="absolute left-4 top-1/2 -translate-y-1/2 text-base text-gray-300 pointer-events-none transition-all duration-150 peer-focus:top-0 peer-focus:-translate-y-full peer-focus:text-xs peer-focus:text-primary peer-data-[filled=true]:top-0 peer-data-[filled=true]:-translate-y-full peer-data-[filled=true]:text-xs">Condição de pagamento</label>
             <i class="fas fa-chevron-down absolute right-4 top-1/2 -translate-y-1/2 text-gray-300 pointer-events-none"></i>
           </div>
-          <div class="relative lg:col-span-2">
+        <div class="relative lg:col-span-2">
             <textarea id="novoObservacoes" rows="2" placeholder=" " class="peer w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-transparent focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></textarea>
             <label for="novoObservacoes" class="absolute left-4 top-3 text-base text-gray-300 pointer-events-none transition-all duration-150 peer-placeholder-shown:top-3 peer-placeholder-shown:text-base peer-focus:-top-2 peer-focus:text-xs peer-focus:text-primary peer-valid:-top-2 peer-valid:text-xs">Observações</label>
-          </div>
         </div>
+      </div>
 
-        <div>
-          <div class="flex items-center justify-between mb-6">
+      <div id="novoPagamento" class="glass-surface rounded-xl p-6 hidden"></div>
+
+      <div>
+        <div class="flex items-center justify-between mb-6">
             <h3 class="text-lg font-semibold text-white">Itens</h3>
             <div class="flex flex-wrap gap-2 text-sm ml-4">
               <span class="badge-neutral px-3 py-1 rounded-full font-medium">Subtotal: <span id="novoSubtotal">R$ 0,00</span></span>
