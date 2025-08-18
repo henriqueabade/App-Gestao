@@ -1,20 +1,18 @@
 window.addEventListener('DOMContentLoaded', () => {
-  const btn = document.getElementById('user-actions-btn');
-  const menu = document.getElementById('user-actions-menu');
-  if (!btn || !menu) return;
-
   const nameEl = document.getElementById('userName');
   const profileEl = document.getElementById('userProfile');
   try {
     const stored = sessionStorage.getItem('currentUser') || localStorage.getItem('user');
-    if (stored) {
-      const user = JSON.parse(stored);
-      if (nameEl) nameEl.textContent = user.nome || '';
-      if (profileEl) profileEl.textContent = user.perfil || '';
-    }
+    const user = stored ? JSON.parse(stored) : {};
+    if (nameEl) nameEl.textContent = user.nome || '';
+    if (profileEl) profileEl.textContent = user.perfil || 'Sem Perfil';
   } catch (e) {
     /* ignore */
   }
+
+  const btn = document.getElementById('user-actions-btn');
+  const menu = document.getElementById('user-actions-menu');
+  if (!btn || !menu) return;
 
   const positionMenu = () => {
     const margin = 8; // 0.5rem
