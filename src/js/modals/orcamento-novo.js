@@ -24,6 +24,16 @@
   const produtoSelect = document.getElementById('itemProduto');
   const itensTbody = document.querySelector('#novoItensTabela tbody');
 
+  // sincroniza labels flutuantes
+  ['novoCliente','novoContato','novoCondicao','itemProduto'].forEach(id => {
+    const el = document.getElementById(id);
+    if(!el) return;
+    const sync = () => el.setAttribute('data-filled', el.value !== '' ? 'true' : 'false');
+    sync();
+    el.addEventListener('change', sync);
+    el.addEventListener('blur', sync);
+  });
+
   clienteSelect.addEventListener('change', () => {
     contatoSelect.innerHTML = '<option value="">Selecione um contato</option>';
     const c = clients[clienteSelect.value];
@@ -35,28 +45,91 @@
         contatoSelect.appendChild(opt);
       });
     }
+    contatoSelect.setAttribute('data-filled', 'false');
   });
 
   function formatCurrency(v) {
     return v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
   }
 
+  function updateLineTotal(tr){
+    const qty = parseFloat(tr.children[1].textContent) || 0;
+    const val = parseFloat(tr.children[2].textContent) || 0;
+    const desc = parseFloat(tr.children[3].textContent) || 0;
+    const line = qty * val * (1 - desc / 100);
+    tr.querySelector('.total-cell').textContent = formatCurrency(line);
+  }
+
   function recalcTotals() {
     let subtotal = 0;
     let desconto = 0;
     itensTbody.querySelectorAll('tr').forEach(tr => {
-      const id = tr.dataset.id;
-      const qty = parseFloat(tr.querySelector('.qty').value) || 0;
-      const desc = parseFloat(tr.querySelector('.desc').value) || 0;
-      const unit = products[id].valor;
-      subtotal += qty * unit;
-      desconto += qty * unit * (desc / 100);
-      const line = qty * unit * (1 - desc / 100);
-      tr.querySelector('.total').textContent = formatCurrency(line);
+      const qty = parseFloat(tr.children[1].textContent) || 0;
+      const val = parseFloat(tr.children[2].textContent) || 0;
+      const desc = parseFloat(tr.children[3].textContent) || 0;
+      subtotal += qty * val;
+      desconto += qty * val * (desc / 100);
     });
     document.getElementById('novoSubtotal').textContent = formatCurrency(subtotal);
     document.getElementById('novoDesconto').textContent = formatCurrency(desconto);
     document.getElementById('novoTotal').textContent = formatCurrency(subtotal - desconto);
+    itensTbody.querySelectorAll('tr').forEach(updateLineTotal);
+  }
+
+  function attachRowEvents(tr){
+    const editBtn = tr.querySelector('.fa-edit');
+    const delBtn = tr.querySelector('.fa-trash');
+    delBtn.addEventListener('click', () => { tr.remove(); recalcTotals(); });
+    editBtn.addEventListener('click', () => startEdit(tr));
+  }
+
+  function startEdit(tr){
+    const qtyCell = tr.children[1];
+    const valCell = tr.children[2];
+    const descCell = tr.children[3];
+    const actionsCell = tr.children[5];
+
+    const qtyVal = qtyCell.textContent.trim();
+    const valVal = valCell.textContent.trim();
+    const descVal = descCell.textContent.trim();
+
+    qtyCell.innerHTML = `<input type="number" class="w-16 bg-input border border-inputBorder rounded px-2 py-1 text-white text-xs text-center focus:border-primary focus:ring-1 focus:ring-primary/50 transition" value="${qtyVal}" min="1">`;
+    valCell.innerHTML = `<input type="number" class="w-24 bg-input border border-inputBorder rounded px-2 py-1 text-white text-xs text-right focus:border-primary focus:ring-1 focus:ring-primary/50 transition" value="${valVal}" min="0" step="0.01">`;
+    descCell.innerHTML = `<input type="number" class="w-16 bg-input border border-inputBorder rounded px-2 py-1 text-white text-xs text-center focus:border-primary focus:ring-1 focus:ring-primary/50 transition" value="${descVal}" min="0" max="100">`;
+
+    actionsCell.innerHTML = `
+      <i class="fas fa-check w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10 text-green-400"></i>
+      <i class="fas fa-times w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10 text-red-400"></i>
+    `;
+    const confirmBtn = actionsCell.querySelector('.fa-check');
+    const cancelBtn = actionsCell.querySelector('.fa-times');
+    const qtyInput = qtyCell.querySelector('input');
+    const valInput = valCell.querySelector('input');
+    const descInput = descCell.querySelector('input');
+
+    confirmBtn.addEventListener('click', () => {
+      qtyCell.textContent = qtyInput.value;
+      valCell.textContent = parseFloat(valInput.value).toFixed(2);
+      descCell.textContent = descInput.value;
+      actionsCell.innerHTML = `
+        <i class="fas fa-edit w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)"></i>
+        <i class="fas fa-trash w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10 text-red-400"></i>
+      `;
+      updateLineTotal(tr);
+      attachRowEvents(tr);
+      recalcTotals();
+    });
+
+    cancelBtn.addEventListener('click', () => {
+      qtyCell.textContent = qtyVal;
+      valCell.textContent = valVal;
+      descCell.textContent = descVal;
+      actionsCell.innerHTML = `
+        <i class="fas fa-edit w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)"></i>
+        <i class="fas fa-trash w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10 text-red-400"></i>
+      `;
+      attachRowEvents(tr);
+    });
   }
 
   function showDuplicateDialog(callback) {
@@ -80,51 +153,52 @@
     overlay.querySelector('#dupManter').addEventListener('click', () => { overlay.remove(); callback('manter'); });
   }
 
-  function addItem(prodId, qtd, desc) {
+  function addItem(prodId, qtd){
     const product = products[prodId];
     if (!product) return;
     const existing = Array.from(itensTbody.children).find(tr => tr.dataset.id === prodId);
     if (existing) {
       showDuplicateDialog(choice => {
         if (choice === 'somar') {
-          const qtyInput = existing.querySelector('.qty');
-          qtyInput.value = (parseFloat(qtyInput.value) || 0) + qtd;
+          const qtyCell = existing.children[1];
+          qtyCell.textContent = (parseFloat(qtyCell.textContent) || 0) + qtd;
         } else if (choice === 'substituir') {
-          existing.querySelector('.qty').value = qtd;
-          existing.querySelector('.desc').value = desc;
+          existing.children[1].textContent = qtd;
+          existing.children[2].textContent = product.valor.toFixed(2);
+          existing.children[3].textContent = '0';
         }
+        updateLineTotal(existing);
         recalcTotals();
       });
       return;
     }
+
     const tr = document.createElement('tr');
     tr.dataset.id = prodId;
     tr.innerHTML = `
-      <td class="py-2 px-4 text-white">${product.nome}</td>
-      <td class="py-2 px-4 text-right text-white unit">${formatCurrency(product.valor)}</td>
-      <td class="py-2 px-4 text-center"><input type="number" class="qty w-16 bg-input border border-inputBorder rounded px-2 py-1 text-white text-xs focus:border-primary focus:ring-1 focus:ring-primary/50 transition" value="${qtd}" min="1"></td>
-      <td class="py-2 px-4 text-center"><input type="number" class="desc w-16 bg-input border border-inputBorder rounded px-2 py-1 text-white text-xs focus:border-primary focus:ring-1 focus:ring-primary/50 transition" value="${desc}" min="0" max="100"></td>
-      <td class="py-2 px-4 text-right text-white total"></td>
-      <td class="py-2 px-4 text-center"><button class="icon-only bg-red-600/20 text-red-400 hover:bg-red-600/30 transition">🗑</button></td>`;
+      <td class="px-6 py-4 text-sm text-white">${product.nome}</td>
+      <td class="px-6 py-4 text-center text-sm text-white">${qtd}</td>
+      <td class="px-6 py-4 text-right text-sm text-white">${product.valor.toFixed(2)}</td>
+      <td class="px-6 py-4 text-center text-sm text-white">0</td>
+      <td class="px-6 py-4 text-right text-sm text-white total-cell"></td>
+      <td class="px-6 py-4 text-center">
+        <i class="fas fa-edit w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)"></i>
+        <i class="fas fa-trash w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10 text-red-400"></i>
+      </td>`;
     itensTbody.appendChild(tr);
-    const qtyInput = tr.querySelector('.qty');
-    const descInput = tr.querySelector('.desc');
-    const removeBtn = tr.querySelector('button');
-    qtyInput.addEventListener('input', () => { if (qtyInput.value <= 0) qtyInput.value = 1; recalcTotals(); });
-    descInput.addEventListener('input', recalcTotals);
-    removeBtn.addEventListener('click', () => { tr.remove(); recalcTotals(); });
+    updateLineTotal(tr);
+    attachRowEvents(tr);
     recalcTotals();
   }
 
   document.getElementById('adicionarItemNovo').addEventListener('click', () => {
     const prodId = produtoSelect.value;
     const qtd = parseFloat(document.getElementById('itemQtd').value) || 1;
-    const desc = parseFloat(document.getElementById('itemDesc').value) || 0;
     if (!prodId || qtd <= 0) return;
-    addItem(prodId, qtd, desc);
+    addItem(prodId, qtd);
     produtoSelect.value = '';
+    produtoSelect.setAttribute('data-filled', 'false');
     document.getElementById('itemQtd').value = 1;
-    document.getElementById('itemDesc').value = 0;
   });
 
   function saveQuote(status) {
@@ -157,7 +231,7 @@
       <td class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-violet)">${condicaoText}</td>
       <td class="px-6 py-4 whitespace-nowrap"><span class="${badgeClass} px-3 py-1 rounded-full text-xs font-medium">${status}</span></td>
       <td class="px-6 py-4 whitespace-nowrap text-center"><div class="flex items-center justify-center space-x-2">
-        <i class="fas fa-eye w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Visualizar"></i>
+        <i class="fas fa-eye w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color:var(--color-primary)" title="Visualizar"></i>
         <i class="fas fa-edit w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Editar"></i>
         <i class="fas fa-download w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Baixar PDF"></i>
       </div></td>`;
@@ -185,9 +259,10 @@
   if (limparBtn) {
     limparBtn.addEventListener('click', () => {
       overlay.querySelectorAll('input').forEach(i => i.value = '');
-      overlay.querySelectorAll('select').forEach(s => s.selectedIndex = 0);
+      overlay.querySelectorAll('select').forEach(s => { s.selectedIndex = 0; s.setAttribute('data-filled', 'false'); });
       itensTbody.innerHTML = '';
       recalcTotals();
     });
   }
 })();
+
