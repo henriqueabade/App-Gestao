@@ -8,6 +8,7 @@
     --color-bg-deep: #310017;
     --color-surface: rgba(255,255,255,0.08);
     --color-green: #a2ffa6;
+    --color-green-dark: #065f46;
     --color-red: #ff5858;
     --color-blue: #8aa7f3;
     --color-input: rgba(0,0,0,0.3);
@@ -95,6 +96,27 @@ body {
 
 .btn-success:hover {
     background: rgba(162,255,166,0.8);
+    transform: scale(1.05);
+}
+
+.btn-purple {
+    background: var(--color-violet);
+    color: #fff;
+    transition: all 150ms ease;
+}
+
+.btn-purple:hover {
+    background: rgba(163,148,167,0.9);
+}
+
+.btn-dark-green {
+    background: var(--color-green-dark);
+    color: #fff;
+    transition: all 150ms ease;
+}
+
+.btn-dark-green:hover {
+    background: rgba(6,95,70,0.9);
     transform: scale(1.05);
 }
 
