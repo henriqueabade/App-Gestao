@@ -1,5 +1,3 @@
-const API_URL = 'http://localhost:3000';
-
 window.addEventListener('DOMContentLoaded', () => {
   const nameEl = document.getElementById('userName');
   const profileEl = document.getElementById('userProfile');
@@ -8,16 +6,6 @@ window.addEventListener('DOMContentLoaded', () => {
     const user = stored ? JSON.parse(stored) : {};
     if (nameEl) nameEl.textContent = user.nome || '';
     if (profileEl) profileEl.textContent = user.perfil || 'Sem Perfil';
-    if (user.id) {
-      fetch(`${API_URL}/api/usuarios/${user.id}`)
-        .then((r) => (r.ok ? r.json() : null))
-        .then((data) => {
-          if (profileEl) profileEl.textContent = data?.perfil || user.perfil || 'Sem Perfil';
-        })
-        .catch(() => {
-          if (profileEl) profileEl.textContent = user.perfil || 'Sem Perfil';
-        });
-    }
   } catch (e) {
     /* ignore */
   }
