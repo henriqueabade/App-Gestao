@@ -20,12 +20,26 @@
       <div class="px-8 py-6 space-y-6">
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <div class="relative">
-            <input id="editarCliente" type="text" placeholder=" " class="peer w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-transparent focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
-            <label for="editarCliente" class="absolute left-4 top-1/2 -translate-y-1/2 text-base text-gray-300 pointer-events-none transition-all duration-150 peer-placeholder-shown:top-1/2 peer-placeholder-shown:-translate-y-1/2 peer-placeholder-shown:text-base peer-focus:top-0 peer-focus:-translate-y-full peer-focus:text-xs peer-focus:text-primary peer-valid:top-0 peer-valid:-translate-y-full peer-valid:text-xs">Cliente</label>
+            <select id="editarCliente" class="peer w-full appearance-none bg-input border border-inputBorder rounded-lg px-4 pr-12 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" data-filled="false">
+              <option value="" disabled selected hidden></option>
+              <option value="João Silva">João Silva</option>
+              <option value="Maria Santos">Maria Santos</option>
+              <option value="Pedro Oliveira">Pedro Oliveira</option>
+              <option value="Ana Costa">Ana Costa</option>
+            </select>
+            <label for="editarCliente" class="absolute left-4 top-1/2 -translate-y-1/2 text-base text-gray-300 pointer-events-none transition-all duration-150 peer-focus:top-0 peer-focus:-translate-y-full peer-focus:text-xs peer-focus:text-primary peer-data-[filled=true]:top-0 peer-data-[filled=true]:-translate-y-full peer-data-[filled=true]:text-xs">Cliente</label>
+            <i class="fas fa-chevron-down absolute right-4 top-1/2 -translate-y-1/2 text-gray-300 pointer-events-none"></i>
           </div>
           <div class="relative">
-            <input id="editarContato" type="text" placeholder=" " class="peer w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-transparent focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
-            <label for="editarContato" class="absolute left-4 top-1/2 -translate-y-1/2 text-base text-gray-300 pointer-events-none transition-all duration-150 peer-placeholder-shown:top-1/2 peer-placeholder-shown:-translate-y-1/2 peer-placeholder-shown:text-base peer-focus:top-0 peer-focus:-translate-y-full peer-focus:text-xs peer-focus:text-primary peer-valid:top-0 peer-valid:-translate-y-full peer-valid:text-xs">Contato</label>
+            <select id="editarContato" class="peer w-full appearance-none bg-input border border-inputBorder rounded-lg px-4 pr-12 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" data-filled="false">
+              <option value="" disabled selected hidden></option>
+              <option value="João Contato">João Contato</option>
+              <option value="Maria Contato">Maria Contato</option>
+              <option value="Pedro Contato">Pedro Contato</option>
+              <option value="Ana Contato">Ana Contato</option>
+            </select>
+            <label for="editarContato" class="absolute left-4 top-1/2 -translate-y-1/2 text-base text-gray-300 pointer-events-none transition-all duration-150 peer-focus:top-0 peer-focus:-translate-y-full peer-focus:text-xs peer-focus:text-primary peer-data-[filled=true]:top-0 peer-data-[filled=true]:-translate-y-full peer-data-[filled=true]:text-xs">Contato</label>
+            <i class="fas fa-chevron-down absolute right-4 top-1/2 -translate-y-1/2 text-gray-300 pointer-events-none"></i>
           </div>
           <div class="relative">
             <input id="editarValidade" type="date" placeholder=" " class="peer w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
@@ -56,10 +70,6 @@
             <div class="relative">
               <input id="novoItemQtd" type="number" min="1" value="1" placeholder=" " class="peer w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-transparent focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
               <label for="novoItemQtd" class="absolute left-4 top-1/2 -translate-y-1/2 text-base text-gray-300 pointer-events-none transition-all duration-150 peer-placeholder-shown:top-1/2 peer-placeholder-shown:-translate-y-1/2 peer-placeholder-shown:text-base peer-focus:top-0 peer-focus:-translate-y-full peer-focus:text-xs peer-focus:text-primary peer-valid:top-0 peer-valid:-translate-y-full peer-valid:text-xs">Quantidade</label>
-            </div>
-            <div class="relative">
-              <input id="novoItemDesc" type="number" min="0" value="0" placeholder=" " class="peer w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-transparent text-right focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
-              <label for="novoItemDesc" class="absolute left-4 top-1/2 -translate-y-1/2 text-base text-gray-300 pointer-events-none transition-all duration-150 peer-placeholder-shown:top-1/2 peer-placeholder-shown:-translate-y-1/2 peer-placeholder-shown:text-base peer-focus:top-0 peer-focus:-translate-y-full peer-focus:text-xs peer-focus:text-primary peer-valid:top-0 peer-valid:-translate-y-full peer-valid:text-xs">Desc. %</label>
             </div>
             <div>
               <button id="adicionarItem" class="w-full btn-primary px-4 py-3 rounded-lg font-medium">+ Inserir</button>
