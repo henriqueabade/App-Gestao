@@ -1,7 +1,11 @@
 (function(){
   function parseCurrencyToCents(input){
     if(!input) return 0;
-    const normalized = input.replace(/\s/g,'').replace(/\./g,'').replace(',', '.');
+    const normalized = input.toString()
+      .replace(/\s/g,'')
+      .replace(/[A-Za-z\$]/g,'')
+      .replace(/\./g,'')
+      .replace(',', '.');
     const value = Number(normalized);
     return isNaN(value)?0:Math.round(value*100);
   }

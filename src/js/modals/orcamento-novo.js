@@ -27,8 +27,8 @@
     });
   }
   function resetCondicao(){
-    condicaoSelect.value = 'vista';
-    condicaoSelect.setAttribute('data-filled','true');
+    condicaoSelect.value = '';
+    condicaoSelect.setAttribute('data-filled','false');
     pagamentoBox.classList.add('hidden');
     pagamentoBox.innerHTML='';
     condicaoDefinida = false;
@@ -66,9 +66,10 @@
       pagamentoBox.innerHTML='';
     }
   }
-  condicaoSelect.addEventListener('change', ()=>{condicaoDefinida=true;updateCondicao();});
+  condicaoSelect.addEventListener('change', ()=>{condicaoDefinida=true;condicaoSelect.setAttribute('data-filled','true');updateCondicao();});
   condicaoWrapper.addEventListener('click',e=>{if(condicaoSelect.disabled){e.preventDefault();alert('Condição de pagamento bloqueada. Digite itens do orçamento antes.');}});
   condicaoSelect.disabled = true;
+  condicaoSelect.style.pointerEvents='none';
   updateCondicao();
 
   async function carregarClientes(){
@@ -153,6 +154,7 @@
     document.getElementById('novoTotal').textContent = formatCurrency(total);
     itensTbody.querySelectorAll('tr').forEach(updateLineTotal);
     condicaoSelect.disabled = total === 0;
+    condicaoSelect.style.pointerEvents = condicaoSelect.disabled ? 'none' : 'auto';
     if(total === 0) resetCondicao();
     if(condicaoSelect.value==='prazo' && window.Parcelamento){
       Parcelamento.updateTotal('novoParcelamento', parseCurrencyToCents(document.getElementById('novoTotal').textContent));
@@ -163,20 +165,9 @@
     const editBtn = tr.querySelector('.fa-edit');
     const delBtn = tr.querySelector('.fa-trash');
     delBtn.addEventListener('click', () => {
-      const actionsCell = tr.children[5];
-      actionsCell.innerHTML = `
-        <i class="fas fa-check w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10 text-green-400"></i>
-        <i class="fas fa-times w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10 text-red-400"></i>
-      `;
-      const confirmBtn = actionsCell.querySelector('.fa-check');
-      const cancelBtn = actionsCell.querySelector('.fa-times');
-      confirmBtn.addEventListener('click', () => { confirmResetIfNeeded(() => { tr.remove(); recalcTotals(); }); });
-      cancelBtn.addEventListener('click', () => {
-        actionsCell.innerHTML = `
-          <i class="fas fa-edit w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)"></i>
-          <i class="fas fa-trash w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10 text-red-400"></i>
-        `;
-        attachRowEvents(tr);
+      showActionDialog('Deseja remover este item?', ok => {
+        if(!ok) return;
+        confirmResetIfNeeded(() => { tr.remove(); recalcTotals(); });
       });
     });
     editBtn.addEventListener('click', () => startEdit(tr));
@@ -207,17 +198,20 @@
     const descInput = descCell.querySelector('input');
 
     confirmBtn.addEventListener('click', () => {
-      confirmResetIfNeeded(() => {
-        qtyCell.textContent = qtyInput.value;
-        valCell.textContent = parseFloat(valInput.value).toFixed(2);
-        descCell.textContent = descInput.value;
-        actionsCell.innerHTML = `
-          <i class="fas fa-edit w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)"></i>
-          <i class="fas fa-trash w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10 text-red-400"></i>
-        `;
-        updateLineTotal(tr);
-        attachRowEvents(tr);
-        recalcTotals();
+      showActionDialog('Deseja salvar as alterações deste item?', ok => {
+        if(!ok) return;
+        confirmResetIfNeeded(() => {
+          qtyCell.textContent = qtyInput.value;
+          valCell.textContent = parseFloat(valInput.value).toFixed(2);
+          descCell.textContent = descInput.value;
+          actionsCell.innerHTML = `
+            <i class="fas fa-edit w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)"></i>
+            <i class="fas fa-trash w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10 text-red-400"></i>
+          `;
+          updateLineTotal(tr);
+          attachRowEvents(tr);
+          recalcTotals();
+        });
       });
     });
 
@@ -252,6 +246,15 @@
     overlay.querySelector('#dupSomar').addEventListener('click', () => { overlay.remove(); callback('somar'); });
     overlay.querySelector('#dupSubstituir').addEventListener('click', () => { overlay.remove(); callback('substituir'); });
     overlay.querySelector('#dupManter').addEventListener('click', () => { overlay.remove(); callback('manter'); });
+  }
+
+  function showActionDialog(message, cb){
+    const overlay=document.createElement('div');
+    overlay.className='fixed inset-0 bg-black/50 flex items-center justify-center p-4';
+    overlay.innerHTML=`<div class="max-w-md w-full glass-surface backdrop-blur-xl rounded-2xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade"><div class="p-6 text-center"><h3 class="text-lg font-semibold mb-4 text-yellow-300">Atenção</h3><p class="text-sm text-gray-300 mb-6">${message}</p><div class="flex justify-center gap-4"><button id="actYes" class="btn-warning px-4 py-2 rounded-lg text-white font-medium">Sim</button><button id="actNo" class="btn-neutral px-4 py-2 rounded-lg text-white font-medium">Não</button></div></div></div>`;
+    document.body.appendChild(overlay);
+    overlay.querySelector('#actYes').addEventListener('click',()=>{overlay.remove();cb(true);});
+    overlay.querySelector('#actNo').addEventListener('click',()=>{overlay.remove();cb(false);});
   }
 
   function addItem(prodId, qtd){
