@@ -100,7 +100,7 @@
         console.error('[editar-produto] Sem tbody para renderizar erro:', msg);
         return;
       }
-      tableBody.innerHTML = `<tr><td colspan="5" class="py-4 text-center text-red-400">${msg}</td></tr>`;
+      tableBody.innerHTML = `<tr><td colspan="6" class="py-4 text-center text-red-400">${msg}</td></tr>`;
     }
 
     const produtoSelecionado = window.produtoSelecionado;
@@ -290,7 +290,7 @@
 
       if(itens.length === 0){
         const tr = document.createElement('tr');
-        tr.innerHTML = '<td colspan="5" class="py-4 text-center text-gray-400">Nenhum item encontrado</td>';
+        tr.innerHTML = '<td colspan="6" class="py-4 text-center text-gray-400">Nenhum item encontrado</td>';
         tableBody.appendChild(tr);
         updateTotals();
         return;
@@ -315,7 +315,7 @@
       ordenados.forEach(([proc, arr]) => {
         const header = document.createElement('tr');
         header.className = 'process-row';
-        header.innerHTML = `<td colspan="5" class="px-6 py-2 bg-gray-50 border-t border-gray-200 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">${proc}</td>`;
+        header.innerHTML = `<td colspan="6" class="px-6 py-2 bg-gray-50 border-t border-gray-200 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">${proc}</td>`;
         tableBody.appendChild(header);
         processOrder.push(proc);
         processos[proc] = { itens: arr, total: 0 };
@@ -327,10 +327,12 @@
             <td class="py-3 px-2 text-sm text-white">${item.nome ?? '—'}</td>
             <td class="py-3 px-2 text-sm text-center quantidade-cell"><span class="quantidade-text">${formatNumber(item.quantidade)}</span></td>
             <td class="py-3 px-2 text-sm text-center unidade-cell">${item.unidade ?? '—'}</td>
+            <td class="py-3 px-2 text-sm text-right text-white item-unit">${formatCurrency(item.preco_unitario || 0)}</td>
             <td class="py-3 px-2 text-sm text-right text-white item-total">${formatCurrency((item.preco_unitario || 0) * (item.quantidade || 0))}</td>
             <td class="py-3 px-2 text-sm text-center action-cell"></td>`;
           tableBody.appendChild(tr);
           item.row = tr;
+          item.unitEl = tr.querySelector('.item-unit');
           item.totalEl = tr.querySelector('.item-total');
           renderActionButtons(item);
         });
@@ -359,6 +361,7 @@
         item.total = item.quantidade * (item.preco_unitario || 0);
         if(item.id) item.status = 'updated';
         if(item.row) item.row.querySelector('.quantidade-text').textContent = formatNumber(item.quantidade);
+        if(item.unitEl) item.unitEl.textContent = formatCurrency(item.preco_unitario || 0);
         if(item.totalEl) item.totalEl.textContent = formatCurrency(item.total);
         updateProcessTotal(item.processo);
         updateTotals();
@@ -373,6 +376,7 @@
           item.total = item.quantidade * (item.preco_unitario || 0);
           if(item.id) item.status = 'updated';
           if(item.row) item.row.querySelector('.quantidade-text').textContent = formatNumber(item.quantidade);
+          if(item.unitEl) item.unitEl.textContent = formatCurrency(item.preco_unitario || 0);
           if(item.totalEl) item.totalEl.textContent = formatCurrency(item.total);
           updateProcessTotal(item.processo);
           updateTotals();
@@ -549,13 +553,16 @@
             if (!tableBody) {
               showError('Estrutura da tabela não encontrada (itens)');
             } else if (itensData.length === 0) {
-              tableBody.innerHTML = '<tr><td colspan="5" class="py-4 text-center text-gray-400">Nenhum item encontrado</td></tr>';
+              tableBody.innerHTML = '<tr><td colspan="6" class="py-4 text-center text-gray-400">Nenhum item encontrado</td></tr>';
             } else {
               tableBody.innerHTML = itensData.map(it => `
                 <tr class="border-b border-white/5">
                   <td class="py-3 px-2 text-white">${it.nome ?? '—'}</td>
                   <td class="py-3 px-2 text-center">${(Number.isInteger(it.quantidade)? it.quantidade : (parseFloat(it.quantidade)||0).toFixed(2))}</td>
                   <td class="py-3 px-2 text-center">${it.unidade ?? '—'}</td>
+                  <td class="py-3 px-2 text-right text-white">
+                    ${(it.preco_unitario||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'})}
+                  </td>
                   <td class="py-3 px-2 text-right text-white">
                     ${(((it.preco_unitario||0)*(it.quantidade||0))).toLocaleString('pt-BR',{style:'currency',currency:'BRL'})}
                   </td>
@@ -575,7 +582,7 @@
         const msg = err && err.message ? err.message : 'Erro ao carregar dados';
         if (!tableBody) tableBody = resolveItensTbody();
         if (tableBody) {
-          tableBody.innerHTML = `<tr><td colspan="5" class="py-4 text-center text-red-400">${msg}</td></tr>`;
+          tableBody.innerHTML = `<tr><td colspan="6" class="py-4 text-center text-red-400">${msg}</td></tr>`;
         }
       }
     })();
