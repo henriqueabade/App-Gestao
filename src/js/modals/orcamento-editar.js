@@ -14,10 +14,18 @@
   const editarCliente = document.getElementById('editarCliente');
   const editarContato = document.getElementById('editarContato');
   const editarCondicao = document.getElementById('editarCondicao');
+  const produtoSelect = document.getElementById('novoItemProduto');
+
+  const products = {
+    'mesa-paris': { nome: 'Mesa de Jantar Modelo Paris', valor: 1500 },
+    'cadeira-colonial': { nome: 'Cadeira Colonial Estofada', valor: 300 },
+    'armario-rustico': { nome: 'Armário Rústico 6 Portas', valor: 2400 },
+    'mesa-centro': { nome: 'Mesa de Centro Redonda', valor: 700 }
+  };
   editarCliente.value = data.cliente || '';
   if (data.contato) editarContato.value = data.contato;
   editarCondicao.value = data.condicao || 'vista';
-  [editarCliente, editarContato, editarCondicao].forEach(sel => {
+  [editarCliente, editarContato, editarCondicao, produtoSelect].forEach(sel => {
     const sync = () => sel.setAttribute('data-filled', sel.value !== '');
     sync();
     sel.addEventListener('change', sync);
@@ -144,6 +152,8 @@
 
   function addItem(item) {
     const tr = document.createElement('tr');
+    tr.className = 'border-b border-white/10';
+    if (item.id) tr.dataset.id = item.id;
     tr.innerHTML = `
       <td class="px-6 py-4 text-sm text-white">${item.nome}</td>
       <td class="px-6 py-4 text-center text-sm text-white">${item.qtd}</td>
@@ -161,16 +171,16 @@
     recalcTotals();
   }
 
-  (data.items || [{ nome: 'Item Exemplo', qtd: 1, valor: 100, desc: 0 }]).forEach(addItem);
+  (data.items || [{ id: 'mesa-paris', nome: 'Mesa de Jantar Modelo Paris', qtd: 1, valor: 1500, desc: 0 }]).forEach(addItem);
 
   document.getElementById('adicionarItem').addEventListener('click', () => {
-    const nome = document.getElementById('novoItemNome').value.trim();
+    const prodId = produtoSelect.value;
     const qtd = parseFloat(document.getElementById('novoItemQtd').value) || 1;
-    const valor = 0;
-    const desc = 0;
-    if (!nome) return;
-    addItem({ nome, qtd, valor, desc });
-    document.getElementById('novoItemNome').value = '';
+    if (!prodId) return;
+    const prod = products[prodId];
+    addItem({ id: prodId, nome: prod.nome, qtd, valor: prod.valor, desc: 0 });
+    produtoSelect.value = '';
+    produtoSelect.setAttribute('data-filled', 'false');
     document.getElementById('novoItemQtd').value = 1;
   });
 

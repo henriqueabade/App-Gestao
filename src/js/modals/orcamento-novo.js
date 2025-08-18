@@ -79,7 +79,23 @@
   function attachRowEvents(tr){
     const editBtn = tr.querySelector('.fa-edit');
     const delBtn = tr.querySelector('.fa-trash');
-    delBtn.addEventListener('click', () => { tr.remove(); recalcTotals(); });
+    delBtn.addEventListener('click', () => {
+      const actionsCell = tr.children[5];
+      actionsCell.innerHTML = `
+        <i class="fas fa-check w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10 text-green-400"></i>
+        <i class="fas fa-times w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10 text-red-400"></i>
+      `;
+      const confirmBtn = actionsCell.querySelector('.fa-check');
+      const cancelBtn = actionsCell.querySelector('.fa-times');
+      confirmBtn.addEventListener('click', () => { tr.remove(); recalcTotals(); });
+      cancelBtn.addEventListener('click', () => {
+        actionsCell.innerHTML = `
+          <i class="fas fa-edit w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)"></i>
+          <i class="fas fa-trash w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10 text-red-400"></i>
+        `;
+        attachRowEvents(tr);
+      });
+    });
     editBtn.addEventListener('click', () => startEdit(tr));
   }
 
@@ -175,6 +191,7 @@
 
     const tr = document.createElement('tr');
     tr.dataset.id = prodId;
+    tr.className = 'border-b border-white/10';
     tr.innerHTML = `
       <td class="px-6 py-4 text-sm text-white">${product.nome}</td>
       <td class="px-6 py-4 text-center text-sm text-white">${qtd}</td>

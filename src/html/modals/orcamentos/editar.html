@@ -61,11 +61,25 @@
         </div>
 
         <div>
-          <h3 class="text-lg font-semibold mb-4 text-white">Itens</h3>
+          <div class="flex items-center justify-between mb-4">
+            <h3 class="text-lg font-semibold text-white">Itens</h3>
+            <div class="flex flex-wrap justify-end gap-2 text-sm">
+              <span class="badge-neutral px-3 py-1 rounded-full font-medium">Subtotal: <span id="subtotalOrcamento">R$ 0,00</span></span>
+              <span class="badge-danger px-3 py-1 rounded-full font-medium">Desconto: <span id="descontoOrcamento">R$ 0,00</span></span>
+              <span class="badge-success px-3 py-1 rounded-full font-medium">Total: <span id="totalOrcamento">R$ 0,00</span></span>
+            </div>
+          </div>
           <div class="grid grid-cols-1 lg:grid-cols-4 gap-4 mb-4 items-end">
             <div class="lg:col-span-2 relative">
-              <input id="novoItemNome" type="text" placeholder=" " class="peer w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-transparent focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
-              <label for="novoItemNome" class="absolute left-4 top-1/2 -translate-y-1/2 text-base text-gray-300 pointer-events-none transition-all duration-150 peer-placeholder-shown:top-1/2 peer-placeholder-shown:-translate-y-1/2 peer-placeholder-shown:text-base peer-focus:top-0 peer-focus:-translate-y-full peer-focus:text-xs peer-focus:text-primary peer-valid:top-0 peer-valid:-translate-y-full peer-valid:text-xs">Produto</label>
+              <select id="novoItemProduto" class="peer w-full appearance-none bg-input border border-inputBorder rounded-lg px-4 pr-12 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" data-filled="false">
+                <option value="" disabled selected hidden></option>
+                <option value="mesa-paris">Mesa de Jantar Modelo Paris</option>
+                <option value="cadeira-colonial">Cadeira Colonial Estofada</option>
+                <option value="armario-rustico">Armário Rústico 6 Portas</option>
+                <option value="mesa-centro">Mesa de Centro Redonda</option>
+              </select>
+              <label for="novoItemProduto" class="absolute left-4 top-1/2 -translate-y-1/2 text-base text-gray-300 pointer-events-none transition-all duration-150 peer-focus:top-0 peer-focus:-translate-y-full peer-focus:text-xs peer-focus:text-primary peer-data-[filled=true]:top-0 peer-data-[filled=true]:-translate-y-full peer-data-[filled=true]:text-xs">Produto</label>
+              <i class="fas fa-chevron-down absolute right-4 top-1/2 -translate-y-1/2 text-gray-300 pointer-events-none"></i>
             </div>
             <div class="relative">
               <input id="novoItemQtd" type="number" min="1" value="1" placeholder=" " class="peer w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-transparent focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
@@ -93,11 +107,6 @@
                   <tbody></tbody>
                 </table>
               </div>
-            </div>
-            <div class="flex flex-wrap justify-end gap-2 mt-4 p-4 text-sm">
-              <span class="badge-neutral px-3 py-1 rounded-full font-medium">Subtotal: <span id="subtotalOrcamento">R$ 0,00</span></span>
-              <span class="badge-danger px-3 py-1 rounded-full font-medium">Desconto: <span id="descontoOrcamento">R$ 0,00</span></span>
-              <span class="badge-success px-3 py-1 rounded-full font-medium">Total: <span id="totalOrcamento">R$ 0,00</span></span>
             </div>
           </div>
         </div>
