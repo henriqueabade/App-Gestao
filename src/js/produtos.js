@@ -15,6 +15,7 @@ let filtrosPendentes = false;
 let produtosRenderizados = [];
 let currentProductPopup = null;
 let productInfoEventsBound = false;
+let emptyStateCtrl;
 
 async function carregarProdutos() {
     try {
@@ -83,6 +84,7 @@ function renderProdutos(produtos) {
 
     if (window.feather) feather.replace();
     attachProductInfoEvents();
+    emptyStateCtrl?.toggle();
 }
 
 function popularFiltros() {
@@ -339,6 +341,8 @@ function initProdutos() {
     });
 
     document.getElementById('btnNovoProduto')?.addEventListener('click', abrirNovoProduto);
+
+    emptyStateCtrl = setupEmptyState('produtosTableBody', 'emptyState', abrirNovoProduto);
 
     document.getElementById('btnFiltrar')?.addEventListener('click', () => {
         aplicarFiltro(true);
