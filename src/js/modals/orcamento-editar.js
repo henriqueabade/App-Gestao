@@ -67,13 +67,34 @@
   }
 
   // manipulação de itens
-  function updateLineTotal(tr){
-    const qty = parseFloat(tr.children[1].textContent) || 0;
-    const val = parseFloat(tr.children[2].textContent) || 0;
-    const desc = parseFloat(tr.children[3].textContent) || 0;
-    const line = qty * val * (1 - desc / 100);
-    tr.querySelector('.total-cell').textContent = formatCurrency(line);
-  }
+    function updateLineTotal(tr){
+      const qty = parseFloat(tr.children[1].textContent) || 0;
+      const val = parseFloat(tr.children[2].textContent) || 0;
+      const desc = parseFloat(tr.children[3].textContent) || 0;
+      const line = qty * val * (1 - desc / 100);
+      tr.querySelector('.total-cell').textContent = formatCurrency(line);
+    }
+
+    function showDuplicateDialog(callback) {
+      const overlay = document.createElement('div');
+      overlay.className = 'fixed inset-0 bg-black/50 flex items-center justify-center p-4';
+      overlay.innerHTML = `
+        <div class="max-w-sm w-full glass-surface backdrop-blur-xl rounded-2xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade">
+          <div class="p-6 text-center">
+            <h3 class="text-lg font-semibold mb-4 text-white">Item já adicionado</h3>
+            <p class="text-sm text-gray-300 mb-6">O item selecionado já está na lista. O que deseja fazer?</p>
+            <div class="flex justify-center gap-4">
+              <button id="dupSomar" class="btn-warning px-4 py-2 rounded-lg text-white font-medium flex items-center gap-2" title="Somar à quantidade existente">Somar <span class="info-icon"></span></button>
+              <button id="dupSubstituir" class="btn-danger px-4 py-2 rounded-lg text-white font-medium flex items-center gap-2" title="Substituir o item existente">Substituir <span class="info-icon"></span></button>
+              <button id="dupManter" class="btn-neutral px-4 py-2 rounded-lg text-white font-medium flex items-center gap-2" title="Manter o item atual">Manter <span class="info-icon"></span></button>
+            </div>
+          </div>
+        </div>`;
+      document.body.appendChild(overlay);
+      overlay.querySelector('#dupSomar').addEventListener('click', () => { overlay.remove(); callback('somar'); });
+      overlay.querySelector('#dupSubstituir').addEventListener('click', () => { overlay.remove(); callback('substituir'); });
+      overlay.querySelector('#dupManter').addEventListener('click', () => { overlay.remove(); callback('manter'); });
+    }
 
   function attachRowEvents(tr){
     const editBtn = tr.querySelector('.fa-edit');
@@ -150,39 +171,57 @@
     });
   }
 
-  function addItem(item) {
-    const tr = document.createElement('tr');
-    tr.className = 'border-b border-white/10';
-    if (item.id) tr.dataset.id = item.id;
-    tr.innerHTML = `
-      <td class="px-6 py-4 text-sm text-white">${item.nome}</td>
-      <td class="px-6 py-4 text-center text-sm text-white">${item.qtd}</td>
-      <td class="px-6 py-4 text-right text-sm text-white">${item.valor.toFixed(2)}</td>
-      <td class="px-6 py-4 text-center text-sm text-white">${item.desc}</td>
-      <td class="px-6 py-4 text-right text-sm text-white total-cell"></td>
-      <td class="px-6 py-4 text-center">
-        <i class="fas fa-edit w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)"></i>
-        <i class="fas fa-trash w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10 text-red-400"></i>
-      </td>
-    `;
-    itensTbody.appendChild(tr);
-    updateLineTotal(tr);
-    attachRowEvents(tr);
-    recalcTotals();
-  }
+    function addItem(item) {
+      const existing = Array.from(itensTbody.children).find(tr => tr.dataset.id === item.id);
+      if (existing) {
+        showDuplicateDialog(choice => {
+          if (choice === 'somar') {
+            const qtyCell = existing.children[1];
+            qtyCell.textContent = (parseFloat(qtyCell.textContent) || 0) + item.qtd;
+          } else if (choice === 'substituir') {
+            existing.children[1].textContent = item.qtd;
+            existing.children[2].textContent = item.valor.toFixed(2);
+            existing.children[3].textContent = item.desc;
+          }
+          updateLineTotal(existing);
+          recalcTotals();
+        });
+        return;
+      }
+      const tr = document.createElement('tr');
+      tr.className = 'border-b border-white/10';
+      if (item.id) tr.dataset.id = item.id;
+      tr.innerHTML = `
+        <td class="px-6 py-4 text-sm text-white">${item.nome}<i class="info-icon ml-2" data-id="${item.id}"></i></td>
+        <td class="px-6 py-4 text-center text-sm text-white">${item.qtd}</td>
+        <td class="px-6 py-4 text-right text-sm text-white">${item.valor.toFixed(2)}</td>
+        <td class="px-6 py-4 text-center text-sm text-white">${item.desc}</td>
+        <td class="px-6 py-4 text-right text-sm text-white total-cell"></td>
+        <td class="px-6 py-4 text-center">
+          <i class="fas fa-edit w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)"></i>
+          <i class="fas fa-trash w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10 text-red-400"></i>
+        </td>
+      `;
+      itensTbody.appendChild(tr);
+      updateLineTotal(tr);
+      attachRowEvents(tr);
+      recalcTotals();
+      attachProductInfoEvents();
+    }
 
-  (data.items || [{ id: 'mesa-paris', nome: 'Mesa de Jantar Modelo Paris', qtd: 1, valor: 1500, desc: 0 }]).forEach(addItem);
+    (data.items || [{ id: 'mesa-paris', nome: 'Mesa de Jantar Modelo Paris', qtd: 1, valor: 1500, desc: 0 }]).forEach(addItem);
+    attachProductInfoEvents();
 
-  document.getElementById('adicionarItem').addEventListener('click', () => {
-    const prodId = produtoSelect.value;
-    const qtd = parseFloat(document.getElementById('novoItemQtd').value) || 1;
-    if (!prodId) return;
-    const prod = products[prodId];
-    addItem({ id: prodId, nome: prod.nome, qtd, valor: prod.valor, desc: 0 });
-    produtoSelect.value = '';
-    produtoSelect.setAttribute('data-filled', 'false');
-    document.getElementById('novoItemQtd').value = 1;
-  });
+    document.getElementById('adicionarItem').addEventListener('click', () => {
+      const prodId = produtoSelect.value;
+      const qtd = parseFloat(document.getElementById('novoItemQtd').value) || 1;
+      if (!prodId) return;
+      const prod = products[prodId];
+      addItem({ id: prodId, nome: prod.nome, qtd, valor: prod.valor, desc: 0 });
+      produtoSelect.value = '';
+      produtoSelect.setAttribute('data-filled', 'false');
+      document.getElementById('novoItemQtd').value = 1;
+    });
 
   function recalcTotals() {
     let subtotal = 0;

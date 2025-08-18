@@ -1,8 +1,8 @@
 <div id="editarOrcamentoOverlay" class="fixed inset-0 bg-black/50 flex items-center justify-center p-4">
   <div role="dialog" aria-modal="true" tabindex="0" class="w-full max-w-5xl max-h-[90vh] glass-surface backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade slide-in overflow-hidden flex flex-col">
-    <header class="flex items-center justify-between px-8 py-5 border-b border-white/10 flex-shrink-0">
+    <header class="relative flex items-center justify-between px-8 py-5 border-b border-white/10 flex-shrink-0">
       <button id="voltarEditarOrcamento" class="btn-neutral px-4 py-2 rounded-lg text-white font-medium flex items-center gap-2">← Voltar</button>
-      <h2 id="tituloEditarOrcamento" class="text-lg font-semibold text-white">EDITAR ORÇAMENTO</h2>
+      <h2 id="tituloEditarOrcamento" class="absolute left-1/2 -translate-x-1/2 text-lg font-semibold text-white">EDITAR ORÇAMENTO</h2>
       <div class="flex items-center gap-3">
         <div class="relative">
           <button id="statusTag" class="badge-warning px-3 py-1 rounded-full text-xs font-medium cursor-pointer">Pendente</button>
@@ -63,7 +63,7 @@
         <div>
           <div class="flex items-center justify-between mb-4">
             <h3 class="text-lg font-semibold text-white">Itens</h3>
-            <div class="flex flex-wrap justify-end gap-2 text-sm">
+            <div class="flex flex-1 flex-wrap justify-between gap-2 text-sm ml-4">
               <span class="badge-neutral px-3 py-1 rounded-full font-medium">Subtotal: <span id="subtotalOrcamento">R$ 0,00</span></span>
               <span class="badge-danger px-3 py-1 rounded-full font-medium">Desconto: <span id="descontoOrcamento">R$ 0,00</span></span>
               <span class="badge-success px-3 py-1 rounded-full font-medium">Total: <span id="totalOrcamento">R$ 0,00</span></span>
