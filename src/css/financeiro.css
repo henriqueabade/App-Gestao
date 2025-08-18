@@ -1,20 +1,2 @@
 /* Estilos do módulo Financeiro */
 
-.animate-fade-in-up {
-    animation: fadeInUp 0.6s ease-out forwards;
-    opacity: 0;
-    transform: translateY(20px);
-}
-
-.animate-fade-in-up:nth-child(1) { animation-delay: 0.1s; }
-.animate-fade-in-up:nth-child(2) { animation-delay: 0.2s; }
-.animate-fade-in-up:nth-child(3) { animation-delay: 0.3s; }
-.animate-fade-in-up:nth-child(4) { animation-delay: 0.4s; }
-
-@keyframes fadeInUp {
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
-}
-
