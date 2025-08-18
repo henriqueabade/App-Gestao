@@ -51,7 +51,7 @@
                             <i class="fas fa-sync-alt w-5 h-5 mr-2"></i>Recarregar
                         </button>
                         <button data-action="select-display" class="flex items-center w-full px-3 py-2 hover:bg-[rgba(182,160,62,0.05)] hover:text-[#b6a03e]">
-                            <i class="fas fa-desktop w-5 h-5 mr-2"></i>Mudar de Tela
+                            <i data-feather="monitor" class="w-5 h-5 mr-2"></i>Mudar de Tela
                         </button>
                         <button data-action="close" class="flex items-center w-full px-3 py-2 rounded-md hover:bg-[rgba(182,160,62,0.05)] hover:text-[#b6a03e]">
                             <i class="fas fa-times w-5 h-5 mr-2"></i>Fechar
@@ -375,6 +375,10 @@
     <script src="../js/menu.js"></script>
     <script src="../js/scroll-handler.js"></script>
     <script src="../utils/userActions.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.js"></script>
+    <script>
+      feather.replace({ class: 'w-5 h-5' });
+    </script>
     <script src="../js/checking.js"></script>
 </body>
 </html>
