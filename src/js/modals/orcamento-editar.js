@@ -11,8 +11,18 @@
   if (data.id && data.cliente) {
     titulo.textContent = `EDITAR ORÇAMENTO #${data.id} – ${data.cliente}`;
   }
-  document.getElementById('editarCliente').value = data.cliente || '';
-  document.getElementById('editarCondicao').value = data.condicao || 'vista';
+  const editarCliente = document.getElementById('editarCliente');
+  const editarContato = document.getElementById('editarContato');
+  const editarCondicao = document.getElementById('editarCondicao');
+  editarCliente.value = data.cliente || '';
+  if (data.contato) editarContato.value = data.contato;
+  editarCondicao.value = data.condicao || 'vista';
+  [editarCliente, editarContato, editarCondicao].forEach(sel => {
+    const sync = () => sel.setAttribute('data-filled', sel.value !== '');
+    sync();
+    sel.addEventListener('change', sync);
+    sel.addEventListener('blur', sync);
+  });
 
   const statusMap = {
     'Rascunho': 'badge-neutral',
@@ -61,8 +71,24 @@
     const editBtn = tr.querySelector('.fa-edit');
     const delBtn = tr.querySelector('.fa-trash');
     delBtn.addEventListener('click', () => {
-      tr.remove();
-      recalcTotals();
+      const actionsCell = tr.children[5];
+      actionsCell.innerHTML = `
+        <i class="fas fa-check w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10 text-green-400"></i>
+        <i class="fas fa-times w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10 text-red-400"></i>
+      `;
+      const confirmBtn = actionsCell.querySelector('.fa-check');
+      const cancelBtn = actionsCell.querySelector('.fa-times');
+      confirmBtn.addEventListener('click', () => {
+        tr.remove();
+        recalcTotals();
+      });
+      cancelBtn.addEventListener('click', () => {
+        actionsCell.innerHTML = `
+          <i class="fas fa-edit w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)"></i>
+          <i class="fas fa-trash w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10 text-red-400"></i>
+        `;
+        attachRowEvents(tr);
+      });
     });
     editBtn.addEventListener('click', () => startEdit(tr));
   }
@@ -141,12 +167,11 @@
     const nome = document.getElementById('novoItemNome').value.trim();
     const qtd = parseFloat(document.getElementById('novoItemQtd').value) || 1;
     const valor = 0;
-    const desc = parseFloat(document.getElementById('novoItemDesc').value) || 0;
+    const desc = 0;
     if (!nome) return;
     addItem({ nome, qtd, valor, desc });
     document.getElementById('novoItemNome').value = '';
     document.getElementById('novoItemQtd').value = 1;
-    document.getElementById('novoItemDesc').value = 0;
   });
 
   function recalcTotals() {
