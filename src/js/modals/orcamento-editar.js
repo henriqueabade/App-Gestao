@@ -49,39 +49,90 @@
   }
 
   // manipulação de itens
-  function addItem(item) {
-    const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td class="py-2 px-4 text-white">${item.nome}</td>
-      <td class="py-2 px-4 text-center"><input type="number" class="w-16 bg-input border border-inputBorder rounded px-2 py-1 text-white text-xs focus:border-primary focus:ring-1 focus:ring-primary/50 transition" value="${item.qtd}" min="1"></td>
-      <td class="py-2 px-4 text-right"><input type="number" class="w-24 bg-input border border-inputBorder rounded px-2 py-1 text-white text-xs text-right focus:border-primary focus:ring-1 focus:ring-primary/50 transition" value="${item.valor.toFixed(2)}" min="0" step="0.01"></td>
-      <td class="py-2 px-4 text-center"><input type="number" class="w-16 bg-input border border-inputBorder rounded px-2 py-1 text-white text-xs focus:border-primary focus:ring-1 focus:ring-primary/50 transition" value="${item.desc}" min="0" max="100"></td>
-      <td class="py-2 px-4 text-right text-white total-cell"></td>
-      <td class="py-2 px-4 text-center"><button class="icon-only bg-red-600/20 text-red-400 hover:bg-red-600/30 transition">🗑</button></td>
-    `;
-    itensTbody.appendChild(tr);
+  function updateLineTotal(tr){
+    const qty = parseFloat(tr.children[1].textContent) || 0;
+    const val = parseFloat(tr.children[2].textContent) || 0;
+    const desc = parseFloat(tr.children[3].textContent) || 0;
+    const line = qty * val * (1 - desc / 100);
+    tr.querySelector('.total-cell').textContent = formatCurrency(line);
+  }
 
-    const qtyInput = tr.children[1].querySelector('input');
-    const valInput = tr.children[2].querySelector('input');
-    const descInput = tr.children[3].querySelector('input');
-    const totalCell = tr.querySelector('.total-cell');
-
-    function recalc() {
-      const q = parseFloat(qtyInput.value) || 0;
-      const v = parseFloat(valInput.value) || 0;
-      const d = parseFloat(descInput.value) || 0;
-      const line = q * v * (1 - d / 100);
-      totalCell.textContent = formatCurrency(line);
-      recalcTotals();
-    }
-    qtyInput.addEventListener('input', recalc);
-    valInput.addEventListener('input', recalc);
-    descInput.addEventListener('input', recalc);
-    tr.querySelector('button').addEventListener('click', () => {
+  function attachRowEvents(tr){
+    const editBtn = tr.querySelector('.fa-edit');
+    const delBtn = tr.querySelector('.fa-trash');
+    delBtn.addEventListener('click', () => {
       tr.remove();
       recalcTotals();
     });
-    recalc();
+    editBtn.addEventListener('click', () => startEdit(tr));
+  }
+
+  function startEdit(tr){
+    const qtyCell = tr.children[1];
+    const valCell = tr.children[2];
+    const descCell = tr.children[3];
+    const actionsCell = tr.children[5];
+
+    const qtyVal = qtyCell.textContent.trim();
+    const valVal = valCell.textContent.trim();
+    const descVal = descCell.textContent.trim();
+
+    qtyCell.innerHTML = `<input type="number" class="w-16 bg-input border border-inputBorder rounded px-2 py-1 text-white text-xs text-center focus:border-primary focus:ring-1 focus:ring-primary/50 transition" value="${qtyVal}" min="1">`;
+    valCell.innerHTML = `<input type="number" class="w-24 bg-input border border-inputBorder rounded px-2 py-1 text-white text-xs text-right focus:border-primary focus:ring-1 focus:ring-primary/50 transition" value="${valVal}" min="0" step="0.01">`;
+    descCell.innerHTML = `<input type="number" class="w-16 bg-input border border-inputBorder rounded px-2 py-1 text-white text-xs text-center focus:border-primary focus:ring-1 focus:ring-primary/50 transition" value="${descVal}" min="0" max="100">`;
+
+    actionsCell.innerHTML = `
+      <i class="fas fa-check w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10 text-green-400"></i>
+      <i class="fas fa-times w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10 text-red-400"></i>
+    `;
+    const confirmBtn = actionsCell.querySelector('.fa-check');
+    const cancelBtn = actionsCell.querySelector('.fa-times');
+    const qtyInput = qtyCell.querySelector('input');
+    const valInput = valCell.querySelector('input');
+    const descInput = descCell.querySelector('input');
+
+    confirmBtn.addEventListener('click', () => {
+      qtyCell.textContent = qtyInput.value;
+      valCell.textContent = parseFloat(valInput.value).toFixed(2);
+      descCell.textContent = descInput.value;
+      actionsCell.innerHTML = `
+        <i class="fas fa-edit w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)"></i>
+        <i class="fas fa-trash w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10 text-red-400"></i>
+      `;
+      updateLineTotal(tr);
+      attachRowEvents(tr);
+      recalcTotals();
+    });
+
+    cancelBtn.addEventListener('click', () => {
+      qtyCell.textContent = qtyVal;
+      valCell.textContent = valVal;
+      descCell.textContent = descVal;
+      actionsCell.innerHTML = `
+        <i class="fas fa-edit w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)"></i>
+        <i class="fas fa-trash w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10 text-red-400"></i>
+      `;
+      attachRowEvents(tr);
+    });
+  }
+
+  function addItem(item) {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td class="px-6 py-4 text-sm text-white">${item.nome}</td>
+      <td class="px-6 py-4 text-center text-sm text-white">${item.qtd}</td>
+      <td class="px-6 py-4 text-right text-sm text-white">${item.valor.toFixed(2)}</td>
+      <td class="px-6 py-4 text-center text-sm text-white">${item.desc}</td>
+      <td class="px-6 py-4 text-right text-sm text-white total-cell"></td>
+      <td class="px-6 py-4 text-center">
+        <i class="fas fa-edit w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)"></i>
+        <i class="fas fa-trash w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10 text-red-400"></i>
+      </td>
+    `;
+    itensTbody.appendChild(tr);
+    updateLineTotal(tr);
+    attachRowEvents(tr);
+    recalcTotals();
   }
 
   (data.items || [{ nome: 'Item Exemplo', qtd: 1, valor: 100, desc: 0 }]).forEach(addItem);
@@ -89,24 +140,22 @@
   document.getElementById('adicionarItem').addEventListener('click', () => {
     const nome = document.getElementById('novoItemNome').value.trim();
     const qtd = parseFloat(document.getElementById('novoItemQtd').value) || 1;
-    const valor = parseFloat(document.getElementById('novoItemValor').value) || 0;
+    const valor = 0;
     const desc = parseFloat(document.getElementById('novoItemDesc').value) || 0;
     if (!nome) return;
     addItem({ nome, qtd, valor, desc });
     document.getElementById('novoItemNome').value = '';
     document.getElementById('novoItemQtd').value = 1;
-    document.getElementById('novoItemValor').value = '';
     document.getElementById('novoItemDesc').value = 0;
   });
 
   function recalcTotals() {
-    // recálculo de totais
     let subtotal = 0;
     let desconto = 0;
     document.querySelectorAll('#orcamentoItens tbody tr').forEach(tr => {
-      const qty = parseFloat(tr.children[1].querySelector('input').value) || 0;
-      const val = parseFloat(tr.children[2].querySelector('input').value) || 0;
-      const desc = parseFloat(tr.children[3].querySelector('input').value) || 0;
+      const qty = parseFloat(tr.children[1].textContent) || 0;
+      const val = parseFloat(tr.children[2].textContent) || 0;
+      const desc = parseFloat(tr.children[3].textContent) || 0;
       subtotal += qty * val;
       desconto += qty * val * (desc / 100);
     });
