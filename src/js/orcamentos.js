@@ -64,7 +64,11 @@ function initOrcamentos() {
             const cliente = row.cells[1].textContent.trim();
             const condicao = row.cells[4]?.textContent.trim();
             const status = row.cells[5]?.innerText.trim();
-            window.selectedQuoteData = { id, cliente, condicao, status, row };
+            const clienteId = row.dataset.clienteId;
+            const contato = row.dataset.contato;
+            const contatoId = row.dataset.contatoId;
+            const items = JSON.parse(row.dataset.items || '[]');
+            window.selectedQuoteData = { id, cliente, clienteId, condicao, status, contato, contatoId, items, row };
             Modal.open('modals/orcamentos/editar.html', '../js/modals/orcamento-editar.js', 'editarOrcamento');
         });
     });

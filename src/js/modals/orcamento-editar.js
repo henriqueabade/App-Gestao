@@ -1,4 +1,4 @@
-(() => {
+ (async () => {
   const overlayId = 'editarOrcamento';
   const overlay = document.getElementById('editarOrcamentoOverlay');
   const close = () => Modal.close(overlayId);
@@ -16,15 +16,67 @@
   const editarCondicao = document.getElementById('editarCondicao');
   const produtoSelect = document.getElementById('novoItemProduto');
 
-  const products = {
-    'mesa-paris': { nome: 'Mesa de Jantar Modelo Paris', valor: 1500 },
-    'cadeira-colonial': { nome: 'Cadeira Colonial Estofada', valor: 300 },
-    'armario-rustico': { nome: 'Armário Rústico 6 Portas', valor: 2400 },
-    'mesa-centro': { nome: 'Mesa de Centro Redonda', valor: 700 }
-  };
-  editarCliente.value = data.cliente || '';
-  if (data.contato) editarContato.value = data.contato;
+  const clients = {};
+  const products = {};
+
+  async function carregarClientes(){
+    try {
+      const resp = await fetch('http://localhost:3000/api/clientes/lista');
+      const data = await resp.json();
+      editarCliente.innerHTML = '<option value="" disabled selected hidden></option>' +
+        data.map(c => `<option value="${c.id}">${c.nome_fantasia}</option>`).join('');
+      data.forEach(c => { clients[c.id] = c; });
+    } catch(err){ console.error('Erro ao carregar clientes', err); }
+  }
+
+  async function carregarContatos(clienteId){
+    editarContato.innerHTML = '<option value="" disabled selected hidden></option>';
+    editarContato.setAttribute('data-filled','false');
+    if(!clienteId) return;
+    try {
+      const resp = await fetch(`http://localhost:3000/api/clientes/${clienteId}`);
+      const data = await resp.json();
+      (data.contatos || []).forEach(ct => {
+        const opt = document.createElement('option');
+        opt.value = ct.id;
+        opt.textContent = ct.nome;
+        editarContato.appendChild(opt);
+      });
+    } catch(err){ console.error('Erro ao carregar contatos', err); }
+  }
+
+  async function carregarProdutos(){
+    try {
+      const lista = await (window.electronAPI?.listarProdutos?.() ?? []);
+      produtoSelect.innerHTML = '<option value="" disabled selected hidden></option>' +
+        lista.map(p => `<option value="${p.id}">${p.nome}</option>`).join('');
+      lista.forEach(p => { products[p.id] = { nome: p.nome, valor: Number(p.preco_venda) || 0 }; });
+    } catch(err){ console.error('Erro ao carregar produtos', err); }
+  }
+
+  editarCliente.addEventListener('change', () => {
+    carregarContatos(editarCliente.value);
+  });
+
+  await carregarClientes();
+  if (data.clienteId) {
+    editarCliente.value = data.clienteId;
+    editarCliente.setAttribute('data-filled', 'true');
+    await carregarContatos(data.clienteId);
+    if (data.contatoId) {
+      editarContato.value = data.contatoId;
+      editarContato.setAttribute('data-filled', 'true');
+    }
+  } else if (data.cliente) {
+    const opt = Array.from(editarCliente.options).find(o => o.textContent === data.cliente);
+    if (opt) {
+      editarCliente.value = opt.value;
+      editarCliente.setAttribute('data-filled', 'true');
+      await carregarContatos(opt.value);
+    }
+  }
   editarCondicao.value = data.condicao || 'vista';
+  await carregarProdutos();
   [editarCliente, editarContato, editarCondicao, produtoSelect].forEach(sel => {
     const sync = () => sel.setAttribute('data-filled', sel.value !== '');
     sync();
@@ -208,7 +260,7 @@
       recalcTotals();
     }
 
-    (data.items || [{ id: 'mesa-paris', nome: 'Mesa de Jantar Modelo Paris', qtd: 1, valor: 1500, desc: 0 }]).forEach(addItem);
+    (data.items || []).forEach(addItem);
 
     document.getElementById('adicionarItem').addEventListener('click', () => {
       const prodId = produtoSelect.value;
@@ -238,9 +290,24 @@
   }
 
   function saveChanges(closeAfter) {
-    // salvar/fechar e converter
+    const clienteVal = editarCliente.value;
+    const clienteText = editarCliente.options[editarCliente.selectedIndex]?.textContent || '';
+    const contatoVal = editarContato.value;
+    const contatoText = editarContato.options[editarContato.selectedIndex]?.textContent || '';
+    const condicaoVal = editarCondicao.value;
+    const condicaoText = editarCondicao.options[editarCondicao.selectedIndex]?.textContent || '';
+    const totalTxt = document.getElementById('totalOrcamento').textContent;
+    const itens = Array.from(itensTbody.children).map(tr => ({
+      id: tr.dataset.id,
+      nome: tr.children[0].textContent.trim(),
+      qtd: parseFloat(tr.children[1].textContent) || 0,
+      valor: parseFloat(tr.children[2].textContent) || 0,
+      desc: parseFloat(tr.children[3].textContent) || 0
+    }));
     if (data.row) {
-      data.row.cells[3].textContent = document.getElementById('totalOrcamento').textContent;
+      data.row.cells[1].textContent = clienteText;
+      data.row.cells[3].textContent = totalTxt;
+      data.row.cells[4].textContent = condicaoText;
       const statusCell = data.row.cells[5];
       statusCell.innerHTML = '';
       const statusSpan = document.createElement('span');
@@ -248,6 +315,12 @@
       statusSpan.className = `${cls} px-3 py-1 rounded-full text-xs font-medium`;
       statusSpan.textContent = currentStatus;
       statusCell.appendChild(statusSpan);
+      data.row.dataset.clienteId = clienteVal;
+      data.row.dataset.cliente = clienteText;
+      data.row.dataset.contatoId = contatoVal;
+      data.row.dataset.contato = contatoText;
+      data.row.dataset.items = JSON.stringify(itens);
+      data.row.dataset.condicao = condicaoVal;
     }
     if (closeAfter) Modal.close(overlayId);
   }
