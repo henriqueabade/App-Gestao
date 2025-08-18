@@ -94,7 +94,7 @@ async function loginUsuario(email, senha, pin) {
     if (!senhaCorreta) throw new Error('Senha incorreta');
 
     pinErrorAttempts = 0; // reset after successful login
-    return { id: usuario.id, nome: usuario.nome };
+    return { id: usuario.id, nome: usuario.nome, perfil: usuario.perfil };
   } catch (err) {
     if (isNetworkError(err)) {
       throw new Error('Sem conexão com internet');

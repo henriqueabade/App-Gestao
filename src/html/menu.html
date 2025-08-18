@@ -32,8 +32,8 @@
             <!-- User Info & Actions -->
             <div class="flex items-center space-x-4">
                 <div class="text-right hidden sm:block">
-                    <div class="text-sm font-medium">Henrique Viana Abade</div>
-                    <div class="text-xs" style="color: var(--color-violet)">Administrador</div>
+                    <div id="userName" class="text-sm font-medium"></div>
+                    <div id="userProfile" class="text-xs" style="color: var(--color-violet)"></div>
                 </div>
 
                 <div class="flex items-center space-x-2 relative">
@@ -62,9 +62,9 @@
                         <i class="fas fa-sync-alt w-4 h-4 rotating"></i>
                     </button>
 
-                    <button class="p-2 rounded-lg transition-colors duration-150 hover:bg-white/10 relative" style="color: var(--color-violet)" onmouseover="this.style.color='var(--color-primary-light)'" onmouseout="this.style.color='var(--color-violet)'>
+                    <button id="notificationBtn" class="p-2 rounded-lg transition-colors duration-150 hover:bg-white/10 relative" style="color: white" onmouseover="this.style.color='var(--color-primary-light)'" onmouseout="updateNotificationColor()">
                         <i class="fas fa-bell w-5 h-5"></i>
-                        <span class="absolute -top-1 -right-1 w-3 h-3 rounded-full" style="background: var(--color-red)"></span>
+                        <span id="notificationBadge" class="hidden absolute -top-1 -right-1 w-3 h-3 rounded-full" style="background: var(--color-red)"></span>
                     </button>
                 </div>
             </div>
@@ -372,6 +372,7 @@
     <script src="../utils/colorParser.js"></script>
     <script src="../utils/colors.js"></script>
     <script src="../js/utils/notifications.js"></script>
+    <script src="../js/notifications.js"></script>
     <script src="../js/menu.js"></script>
     <script src="../js/scroll-handler.js"></script>
     <script src="../utils/userActions.js"></script>
