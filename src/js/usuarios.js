@@ -7,7 +7,6 @@ const API_URL = 'http://localhost:3000';
 
 // Cache local dos usuários carregados
 let usuariosCache = [];
-let emptyStateCtrl;
 
 function coletarFiltros() {
     const status = [];
@@ -28,7 +27,6 @@ function initUsuarios() {
         }, index * 100);
     });
 
-    emptyStateCtrl = setupEmptyState('listaUsuarios', 'emptyState');
     carregarUsuarios();
 
     document.getElementById('btnNovoUsuario')?.addEventListener('click', () => {
@@ -134,8 +132,6 @@ function renderUsuarios(lista) {
             console.log('Remover usuário');
         });
     });
-
-    emptyStateCtrl?.toggle();
 }
 
 function atualizarResumo() {

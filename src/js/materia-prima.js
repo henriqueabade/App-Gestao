@@ -1,6 +1,5 @@
 // Lógica principal do módulo Matéria Prima
 let todosMateriais = [];
-let emptyStateCtrl;
 
 // Inicializa animações e eventos
 function initMateriaPrima() {
@@ -18,8 +17,6 @@ function initMateriaPrima() {
     document.getElementById('btnLimpar')?.addEventListener('click', limparFiltros);
     document.getElementById('zeroStock')?.addEventListener('change', aplicarFiltros);
     document.getElementById('btnNovoInsumo')?.addEventListener('click', abrirNovoInsumo);
-
-    emptyStateCtrl = setupEmptyState('materiaPrimaTableBody', 'emptyState', abrirNovoInsumo);
 
     const infoIcon = document.getElementById('totaisInfoIcon');
     const popover = document.getElementById('totaisPopover');
@@ -327,7 +324,6 @@ function renderMateriais(listaMateriais) {
 
     if (window.feather) feather.replace();
     attachRawMaterialInfoEvents();
-    emptyStateCtrl?.toggle();
 }
 
 function abrirNovoInsumo() {
