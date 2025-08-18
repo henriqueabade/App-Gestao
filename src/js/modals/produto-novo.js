@@ -90,23 +90,73 @@
     return Number.isInteger(n) ? String(n) : n.toFixed(2);
   }
 
-  function renderItem(item){
-    if(!tableBody) return;
-    const tr = document.createElement('tr');
-    tr.className = 'border-b border-white/10';
-    tr.innerHTML = `
-      <td class="py-3 px-2 text-white">${item.nome}</td>
-      <td class="py-3 px-2 text-center">${formatNumber(item.quantidade)}</td>
-      <td class="py-3 px-2 text-center">${item.unidade || ''}</td>
-      <td class="py-3 px-2 text-right text-white">${formatCurrency(item.quantidade * item.preco_unitario)}</td>
-      <td class="py-3 px-2 text-center"><i class="fas fa-trash cursor-pointer text-red-400 delete-item"></i></td>`;
-    tr.querySelector('.delete-item').addEventListener('click', () => {
-      itens = itens.filter(i => i !== item);
-      tr.remove();
-      atualizaTotal();
+  function renderActionButtons(item){
+    const cell = item.row.querySelector('.action-cell');
+    cell.innerHTML = `
+      <div class="flex items-center justify-center space-x-2">
+        <i class="fas fa-edit w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10 edit-item" style="color: var(--color-primary)" title="Editar"></i>
+        <i class="fas fa-trash w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10 hover:text-white delete-item" style="color: var(--color-red)" title="Excluir"></i>
+      </div>`;
+    cell.querySelector('.edit-item').addEventListener('click', () => startEdit(item));
+    cell.querySelector('.delete-item').addEventListener('click', () => startDelete(item));
+  }
+
+  function startEdit(item){
+    const cell = item.row.querySelector('.quantidade-cell');
+    const original = item.quantidade;
+    cell.innerHTML = `
+      <div class="flex items-center justify-center space-x-1">
+        <input type="number" step="0.01" class="w-20 bg-input border border-inputBorder rounded text-white text-sm text-center" value="${item.quantidade}">
+        <i class="fas fa-check w-5 h-5 cursor-pointer p-1 rounded text-green-400 confirm-edit"></i>
+        <i class="fas fa-times w-5 h-5 cursor-pointer p-1 rounded text-red-400 cancel-edit"></i>
+      </div>`;
+    const input = cell.querySelector('input');
+    cell.querySelector('.confirm-edit').addEventListener('click', () => {
+      item.quantidade = parseFloat(input.value) || 0;
+      renderItens();
     });
-    tableBody.appendChild(tr);
-    item.row = tr;
+    cell.querySelector('.cancel-edit').addEventListener('click', () => {
+      item.quantidade = original;
+      renderItens();
+    });
+  }
+
+  function startDelete(item){
+    itens = itens.filter(i => i !== item);
+    renderItens();
+  }
+
+  function renderItens(){
+    if(!tableBody) return;
+    tableBody.innerHTML = '';
+    const grupos = {};
+    itens.forEach(it => {
+      const proc = it.processo || '—';
+      if(!grupos[proc]) grupos[proc] = [];
+      grupos[proc].push(it);
+    });
+    Object.entries(grupos).forEach(([proc, arr]) => {
+      const header = document.createElement('tr');
+      header.className = 'process-row';
+      header.innerHTML = `<td colspan="6" class="px-6 py-2 bg-gray-50 border-t border-gray-200 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">${proc}</td>`;
+      tableBody.appendChild(header);
+      arr.forEach(item => {
+        const tr = document.createElement('tr');
+        tr.className = 'border-b border-white/10';
+        tr.innerHTML = `
+          <td class="py-3 px-2 text-white">${item.nome}</td>
+          <td class="py-3 px-2 text-center quantidade-cell"><span class="quantidade-text">${formatNumber(item.quantidade)}</span></td>
+          <td class="py-3 px-2 text-center">${item.unidade || ''}</td>
+          <td class="py-3 px-2 text-right text-white">${formatCurrency(item.preco_unitario)}</td>
+          <td class="py-3 px-2 text-right text-white item-total">${formatCurrency(item.quantidade * item.preco_unitario)}</td>
+          <td class="py-3 px-2 text-center action-cell"></td>`;
+        tableBody.appendChild(tr);
+        item.row = tr;
+        item.totalEl = tr.querySelector('.item-total');
+        renderActionButtons(item);
+      });
+    });
+    atualizaTotal();
   }
 
   function atualizaTotal(){
@@ -120,11 +170,7 @@
       const it = itens.find(i => String(i.insumo_id ?? i.id) === String(id));
       if(it){
         it.quantidade += quantidade;
-        if(it.row){
-          it.row.querySelector('td:nth-child(2)').textContent = formatNumber(it.quantidade);
-          it.row.querySelector('td:nth-child(4)').textContent = formatCurrency(it.quantidade * it.preco_unitario);
-        }
-        atualizaTotal();
+        renderItens();
       }
     },
     substituirItem(novo){
@@ -132,16 +178,13 @@
       if(it){
         it.quantidade = novo.quantidade;
         it.preco_unitario = novo.preco_unitario;
-        if(it.row){
-          it.row.querySelector('td:nth-child(2)').textContent = formatNumber(it.quantidade);
-          it.row.querySelector('td:nth-child(4)').textContent = formatCurrency(it.quantidade * it.preco_unitario);
-        }
-        atualizaTotal();
+        it.processo = novo.processo;
+        renderItens();
       }
     },
     adicionarProcessoItens(novos){
-      novos.forEach(n => { itens.push(n); renderItem(n); });
-      atualizaTotal();
+      novos.forEach(n => itens.push(n));
+      renderItens();
     }
   };
 
@@ -219,7 +262,7 @@
           nome,
           preco_venda: totals.valorVenda || 0,
           pct_markup: parseFloat(markupInput?.value) || 0,
-          status: 'ativo'
+          status: 'Em linha'
         });
 
         await window.electronAPI.salvarProdutoDetalhado(codigo, {
@@ -236,7 +279,7 @@
           codigo,
           ncm,
           categoria: nome.split(' ')[0] || '',
-          status: 'ativo'
+          status: 'Em linha'
         }, { inseridos: [], atualizados: [], deletados: [] });
 
         showToast('Peça criada com sucesso!', 'success');
