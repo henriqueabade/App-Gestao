@@ -170,6 +170,7 @@ if (intro) {
 
     const result = await window.electronAPI.autoLogin(storedPin);
     if (result && result.success) {
+      if (storedUser) sessionStorage.setItem('currentUser', storedUser);
       return;
     }
     localStorage.removeItem('user');
@@ -352,6 +353,7 @@ if (intro) {
       if (remember && result.user) localStorage.setItem('user', JSON.stringify(result.user));
       else                         localStorage.removeItem('user');
       localStorage.setItem('pin', pin);
+      sessionStorage.setItem('currentUser', JSON.stringify(result.user));
 
       if (pinInput) {
         pinInput.value = pin;

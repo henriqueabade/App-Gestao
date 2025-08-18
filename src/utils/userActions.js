@@ -3,6 +3,19 @@ window.addEventListener('DOMContentLoaded', () => {
   const menu = document.getElementById('user-actions-menu');
   if (!btn || !menu) return;
 
+  const nameEl = document.getElementById('userName');
+  const profileEl = document.getElementById('userProfile');
+  try {
+    const stored = sessionStorage.getItem('currentUser') || localStorage.getItem('user');
+    if (stored) {
+      const user = JSON.parse(stored);
+      if (nameEl) nameEl.textContent = user.nome || '';
+      if (profileEl) profileEl.textContent = user.perfil || '';
+    }
+  } catch (e) {
+    /* ignore */
+  }
+
   const positionMenu = () => {
     const margin = 8; // 0.5rem
     const btnRect = btn.getBoundingClientRect();
