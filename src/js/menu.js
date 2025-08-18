@@ -79,6 +79,7 @@ menuToggle?.addEventListener('click', () => {
 
 // Recolhe a sidebar apenas quando o usuário entra no conteúdo principal
 mainContent?.addEventListener('mouseenter', collapseSidebar);
+mainContent?.addEventListener('click', collapseSidebar);
 
 // Mostra ou esconde submenu do CRM
 function toggleCrmSubmenu() {
@@ -144,6 +145,7 @@ document.querySelectorAll('.sidebar-item[data-page], .submenu-item[data-page]').
         if (page && page !== 'dashboard') {
             loadPage(page);
         }
+        collapseSidebar();
     });
 });
 
@@ -159,11 +161,6 @@ window.addEventListener('load', () => {
 
 // Ajustes responsivos ao redimensionar
 window.addEventListener('resize', () => {
-    if (window.innerWidth < 1024) {
-        sidebar.removeEventListener('mouseenter', expandSidebar);
-    } else {
-        sidebar.addEventListener('mouseenter', expandSidebar);
-    }
     if (sidebarExpanded) {
         mainContent.style.marginLeft = window.innerWidth >= 1024 ? '240px' : '200px';
     }
