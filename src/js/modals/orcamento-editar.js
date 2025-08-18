@@ -79,14 +79,14 @@
       const overlay = document.createElement('div');
       overlay.className = 'fixed inset-0 bg-black/50 flex items-center justify-center p-4';
       overlay.innerHTML = `
-        <div class="max-w-sm w-full glass-surface backdrop-blur-xl rounded-2xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade">
+        <div class="max-w-lg w-full glass-surface backdrop-blur-xl rounded-2xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade">
           <div class="p-6 text-center">
             <h3 class="text-lg font-semibold mb-4 text-white">Item já adicionado</h3>
             <p class="text-sm text-gray-300 mb-6">O item selecionado já está na lista. O que deseja fazer?</p>
             <div class="flex justify-center gap-4">
-              <button id="dupSomar" class="btn-warning px-4 py-2 rounded-lg text-white font-medium flex items-center gap-2" title="Somar à quantidade existente">Somar <span class="info-icon"></span></button>
-              <button id="dupSubstituir" class="btn-danger px-4 py-2 rounded-lg text-white font-medium flex items-center gap-2" title="Substituir o item existente">Substituir <span class="info-icon"></span></button>
-              <button id="dupManter" class="btn-neutral px-4 py-2 rounded-lg text-white font-medium flex items-center gap-2" title="Manter o item atual">Manter <span class="info-icon"></span></button>
+              <button id="dupSomar" class="btn-warning px-4 py-2 rounded-lg text-white font-medium">Somar</button>
+              <button id="dupSubstituir" class="btn-danger px-4 py-2 rounded-lg text-white font-medium">Substituir</button>
+              <button id="dupManter" class="btn-neutral px-4 py-2 rounded-lg text-white font-medium">Manter</button>
             </div>
           </div>
         </div>`;
@@ -192,7 +192,7 @@
       tr.className = 'border-b border-white/10';
       if (item.id) tr.dataset.id = item.id;
       tr.innerHTML = `
-        <td class="px-6 py-4 text-sm text-white">${item.nome}<i class="info-icon ml-2" data-id="${item.id}"></i></td>
+        <td class="px-6 py-4 text-sm text-white">${item.nome}</td>
         <td class="px-6 py-4 text-center text-sm text-white">${item.qtd}</td>
         <td class="px-6 py-4 text-right text-sm text-white">${item.valor.toFixed(2)}</td>
         <td class="px-6 py-4 text-center text-sm text-white">${item.desc}</td>
@@ -206,11 +206,9 @@
       updateLineTotal(tr);
       attachRowEvents(tr);
       recalcTotals();
-      attachProductInfoEvents();
     }
 
     (data.items || [{ id: 'mesa-paris', nome: 'Mesa de Jantar Modelo Paris', qtd: 1, valor: 1500, desc: 0 }]).forEach(addItem);
-    attachProductInfoEvents();
 
     document.getElementById('adicionarItem').addEventListener('click', () => {
       const prodId = produtoSelect.value;
