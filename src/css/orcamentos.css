@@ -100,13 +100,13 @@ body {
 }
 
 .btn-purple {
-    background: var(--color-violet);
+    background: #310017;
     color: #fff;
     transition: all 150ms ease;
 }
 
 .btn-purple:hover {
-    background: rgba(163,148,167,0.9);
+    background: #910144;
 }
 
 .btn-dark-green {
