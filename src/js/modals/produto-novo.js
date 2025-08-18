@@ -122,8 +122,19 @@
   }
 
   function startDelete(item){
-    itens = itens.filter(i => i !== item);
-    renderItens();
+    const cell = item.row.querySelector('.action-cell');
+    cell.innerHTML = `
+      <div class="flex items-center justify-center space-x-2">
+        <i class="fas fa-check w-5 h-5 cursor-pointer p-1 rounded text-green-400 confirm-delete"></i>
+        <i class="fas fa-times w-5 h-5 cursor-pointer p-1 rounded text-red-400 cancel-delete"></i>
+      </div>`;
+    cell.querySelector('.confirm-delete').addEventListener('click', () => {
+      itens = itens.filter(i => i !== item);
+      renderItens();
+    });
+    cell.querySelector('.cancel-delete').addEventListener('click', () => {
+      renderItens();
+    });
   }
 
   function renderItens(){
@@ -183,7 +194,14 @@
       }
     },
     adicionarProcessoItens(novos){
-      novos.forEach(n => itens.push(n));
+      novos.forEach(n => {
+        const exists = itens.some(it => String(it.nome).trim().toLowerCase() === String(n.nome).trim().toLowerCase());
+        if(exists){
+          if(typeof showToast === 'function') showToast('Item já adicionado', 'error');
+        } else {
+          itens.push(n);
+        }
+      });
       renderItens();
     }
   };
@@ -265,6 +283,11 @@
           status: 'Em linha'
         });
 
+        const itensPayload = itens.map(i => ({
+          insumo_id: i.insumo_id ?? i.id,
+          quantidade: i.quantidade
+        }));
+
         await window.electronAPI.salvarProdutoDetalhado(codigo, {
           pct_fabricacao: parseFloat(fabricacaoInput?.value) || 0,
           pct_acabamento: parseFloat(acabamentoInput?.value) || 0,
@@ -280,7 +303,7 @@
           ncm,
           categoria: nome.split(' ')[0] || '',
           status: 'Em linha'
-        }, { inseridos: [], atualizados: [], deletados: [] });
+        }, { inseridos: itensPayload, atualizados: [], deletados: [] });
 
         showToast('Peça criada com sucesso!', 'success');
         close();

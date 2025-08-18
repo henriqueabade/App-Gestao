@@ -449,6 +449,18 @@ async function salvarProdutoDetalhado(codigoOriginal, produto, itens) {
       }
     }
 
+    // Verifica se há insumos duplicados no payload
+    const insumosInseridos = itens?.inseridos || [];
+    const insumoIds = new Set();
+    for (const ins of insumosInseridos) {
+      if (insumoIds.has(ins.insumo_id)) {
+        const err = new Error('Insumo duplicado');
+        err.code = 'INSUMO_DUPLICADO';
+        throw err;
+      }
+      insumoIds.add(ins.insumo_id);
+    }
+
     if (codigo !== undefined && codigo !== codigoOriginal) {
       const { rows } = await client.query(
         'SELECT * FROM produtos WHERE codigo=$1',

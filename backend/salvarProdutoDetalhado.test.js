@@ -134,3 +134,38 @@ test('salvarProdutoDetalhado substitui insumo existente sem erro de duplicidade'
   assert.strictEqual(rows.length, 1);
   assert.strictEqual(Number(rows[0].quantidade), 5);
 });
+
+test('salvarProdutoDetalhado rejeita insumos duplicados', async () => {
+  const mem = createMockDb();
+  const { Pool } = mem.adapters.createPg();
+  const pool = new Pool();
+
+  const dbModulePath = require.resolve('./db');
+  require.cache[dbModulePath] = {
+    exports: { query: (text, params) => pool.query(text, params), connect: () => pool.connect() }
+  };
+  delete require.cache[require.resolve('./produtos')];
+  const { salvarProdutoDetalhado } = require('./produtos');
+
+  await assert.rejects(
+    salvarProdutoDetalhado(
+      'P001',
+      {
+        pct_fabricacao: 0,
+        pct_acabamento: 0,
+        pct_montagem: 0,
+        pct_embalagem: 0,
+        pct_markup: 0,
+        pct_comissao: 0,
+        pct_imposto: 0,
+        preco_base: 0,
+        preco_venda: 0
+      },
+      { inseridos: [
+        { insumo_id: 3, quantidade: 1 },
+        { insumo_id: 3, quantidade: 2 }
+      ] }
+    ),
+    /Insumo duplicado/
+  );
+});
