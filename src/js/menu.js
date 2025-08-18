@@ -103,25 +103,6 @@ function toggleCrmSubmenu() {
 }
 crmToggle.addEventListener('click', toggleCrmSubmenu);
 
-// Atualiza título conforme item clicado
-const pageNames = {
-    dashboard: 'Dashboard',
-    'materia-prima': 'Matéria Prima',
-    produtos: 'Produtos',
-    orcamentos: 'Orçamentos',
-    pedidos: 'Pedidos',
-    clientes: 'CRM - Clientes',
-    prospeccoes: 'CRM - Prospecções',
-    contatos: 'CRM - Contatos',
-    calendario: 'CRM - Calendário',
-    tarefas: 'CRM - Tarefas',
-    ia: 'Inteligência Artificial',
-    usuarios: 'Usuários',
-    financeiro: 'Financeiro',
-    relatorios: 'Relatórios',
-    configuracoes: 'Configurações'
-};
-
 // Navegação interna
 document.querySelectorAll('.sidebar-item[data-page], .submenu-item[data-page]').forEach(item => {
     item.addEventListener('click', function (e) {
@@ -148,8 +129,9 @@ document.querySelectorAll('.sidebar-item[data-page], .submenu-item[data-page]').
         }
 
         const page = this.dataset.page;
-        document.querySelector('h1').textContent = pageNames[page] || 'Dashboard';
-        if (page && page !== 'dashboard') {
+        if (page === 'dashboard') {
+            window.location.reload();
+        } else if (page) {
             loadPage(page);
         }
         collapseSidebar();
