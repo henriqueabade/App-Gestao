@@ -2,6 +2,7 @@
 // Carrega lista de empresas e aplica interações básicas da tela
 
 let todosClientes = [];
+let emptyStateCtrl;
 
 async function carregarClientes() {
     try {
@@ -102,6 +103,8 @@ function renderClientes(clientes) {
             </td>`;
         tbody.appendChild(tr);
     });
+
+    emptyStateCtrl?.toggle();
 }
 
 function renderTotais(clientes) {
@@ -150,6 +153,8 @@ function initClientes() {
 
     document.getElementById('btnFiltrar')?.addEventListener('click', aplicarFiltros);
     document.getElementById('btnLimpar')?.addEventListener('click', limparFiltros);
+
+    emptyStateCtrl = setupEmptyState('clientesTableBody', 'emptyState');
 
     carregarClientes();
 }
