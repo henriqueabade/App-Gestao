@@ -4,16 +4,16 @@
       <button id="voltarEditarOrcamento" class="btn-neutral px-4 py-2 rounded-lg text-white font-medium flex items-center gap-2">← Voltar</button>
       <h2 id="tituloEditarOrcamento" class="text-lg font-semibold text-white">EDITAR ORÇAMENTO</h2>
       <div class="flex items-center gap-3">
-        <button id="salvarOrcamento" class="btn-success px-4 py-2 rounded-lg text-white font-medium">Salvar</button>
         <div class="relative">
           <button id="statusTag" class="badge-warning px-3 py-1 rounded-full text-xs font-medium cursor-pointer">Pendente</button>
-          <div id="statusOptions" class="hidden absolute right-0 mt-2 w-32 glass-surface rounded-xl border border-white/10 shadow-lg">
-            <button data-status="Pendente" class="block w-full text-left px-4 py-2 hover:bg-white/10">Pendente</button>
-            <button data-status="Aprovado" class="block w-full text-left px-4 py-2 hover:bg-white/10">Aprovado</button>
-            <button data-status="Rejeitado" class="block w-full text-left px-4 py-2 hover:bg-white/10">Rejeitado</button>
-            <button data-status="Expirado" class="block w-full text-left px-4 py-2 hover:bg-white/10">Expirado</button>
+          <div id="statusOptions" class="hidden absolute left-0 mt-2 w-32 bg-gray-800 z-50 rounded-xl border border-white/10 shadow-lg">
+            <button data-status="Pendente" class="block w-full text-left px-4 py-2 text-white hover:bg-gray-700">Pendente</button>
+            <button data-status="Aprovado" class="block w-full text-left px-4 py-2 text-white hover:bg-gray-700">Aprovado</button>
+            <button data-status="Rejeitado" class="block w-full text-left px-4 py-2 text-white hover:bg-gray-700">Rejeitado</button>
+            <button data-status="Expirado" class="block w-full text-left px-4 py-2 text-white hover:bg-gray-700">Expirado</button>
           </div>
         </div>
+        <button id="salvarOrcamento" class="btn-success px-4 py-2 rounded-lg text-white font-medium">Salvar</button>
       </div>
     </header>
     <div class="flex-1 overflow-y-auto">
@@ -48,7 +48,7 @@
 
         <div>
           <h3 class="text-lg font-semibold mb-4 text-white">Itens</h3>
-          <div class="grid grid-cols-1 lg:grid-cols-5 gap-4 mb-4 items-end">
+          <div class="grid grid-cols-1 lg:grid-cols-4 gap-4 mb-4 items-end">
             <div class="lg:col-span-2 relative">
               <input id="novoItemNome" type="text" placeholder=" " class="peer w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-transparent focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
               <label for="novoItemNome" class="absolute left-4 top-1/2 -translate-y-1/2 text-base text-gray-300 pointer-events-none transition-all duration-150 peer-placeholder-shown:top-1/2 peer-placeholder-shown:-translate-y-1/2 peer-placeholder-shown:text-base peer-focus:top-0 peer-focus:-translate-y-full peer-focus:text-xs peer-focus:text-primary peer-valid:top-0 peer-valid:-translate-y-full peer-valid:text-xs">Produto</label>
@@ -56,10 +56,6 @@
             <div class="relative">
               <input id="novoItemQtd" type="number" min="1" value="1" placeholder=" " class="peer w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-transparent focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
               <label for="novoItemQtd" class="absolute left-4 top-1/2 -translate-y-1/2 text-base text-gray-300 pointer-events-none transition-all duration-150 peer-placeholder-shown:top-1/2 peer-placeholder-shown:-translate-y-1/2 peer-placeholder-shown:text-base peer-focus:top-0 peer-focus:-translate-y-full peer-focus:text-xs peer-focus:text-primary peer-valid:top-0 peer-valid:-translate-y-full peer-valid:text-xs">Quantidade</label>
-            </div>
-            <div class="relative">
-              <input id="novoItemValor" type="number" min="0" step="0.01" placeholder=" " class="peer w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-transparent text-right focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
-              <label for="novoItemValor" class="absolute left-4 top-1/2 -translate-y-1/2 text-base text-gray-300 pointer-events-none transition-all duration-150 peer-placeholder-shown:top-1/2 peer-placeholder-shown:-translate-y-1/2 peer-placeholder-shown:text-base peer-focus:top-0 peer-focus:-translate-y-full peer-focus:text-xs peer-focus:text-primary peer-valid:top-0 peer-valid:-translate-y-full peer-valid:text-xs">Valor Unit. (R$)</label>
             </div>
             <div class="relative">
               <input id="novoItemDesc" type="number" min="0" value="0" placeholder=" " class="peer w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-transparent text-right focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
