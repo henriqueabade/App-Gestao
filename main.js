@@ -1,6 +1,7 @@
 
-const { app, BrowserWindow, ipcMain, screen } = require('electron');
+const { app, BrowserWindow, ipcMain, screen, shell } = require('electron');
 const path = require('path');
+const { pathToFileURL } = require('url');
 const DEBUG = process.env.DEBUG === 'true';
 const {
   registrarUsuario,
@@ -748,16 +749,9 @@ ipcMain.handle('get-saved-display', () => {
 });
 
 ipcMain.handle('open-pdf', (_event, id) => {
-  const pdfWindow = new BrowserWindow({ width: 900, height: 700, show: false });
-  pdfWindow.loadFile(path.join(__dirname, 'src/pdf/index.html'), {
-    query: { id }
-  });
-  pdfWindow.once('ready-to-show', () => {
-    pdfWindow.show();
-  });
-  pdfWindow.webContents.once('did-finish-load', () => {
-    pdfWindow.webContents.print({ silent: false, printBackground: true });
-  });
+  const pdfUrl = pathToFileURL(path.join(__dirname, 'src/pdf/index.html'));
+  pdfUrl.searchParams.set('id', id);
+  shell.openExternal(pdfUrl.toString());
   return true;
 });
 
