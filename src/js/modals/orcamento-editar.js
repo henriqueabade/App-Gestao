@@ -240,7 +240,6 @@
   });
 
   recalcTotals();
-  document.dispatchEvent(new Event('orcamentoEditarCarregado'));
 
   const statusMap = {
     'Rascunho': 'badge-info',
