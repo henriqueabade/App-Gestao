@@ -66,7 +66,7 @@
       pagamentoBox.innerHTML='';
     }
   }
-  condicaoSelect.addEventListener('change', ()=>{condicaoDefinida=true;condicaoSelect.setAttribute('data-filled','true');updateCondicao();});
+  condicaoSelect.addEventListener('change', ()=>{condicaoDefinida=true;condicaoSelect.setAttribute('data-filled','true');updateCondicao();recalcTotals();});
   condicaoWrapper.addEventListener('click',e=>{if(condicaoSelect.disabled){e.preventDefault();alert('Condição de pagamento bloqueada. Digite itens do orçamento antes.');}});
   condicaoSelect.disabled = true;
   condicaoSelect.style.pointerEvents='none';
@@ -133,9 +133,11 @@
   function updateLineTotal(tr){
     const qty = parseFloat(tr.children[1].textContent) || 0;
     const val = parseFloat(tr.children[2].textContent) || 0;
-    const desc = parseFloat(tr.children[3].textContent) || 0;
-    const line = qty * val * (1 - desc / 100);
-    tr.querySelector('.total-cell').textContent = formatCurrency(line);
+    const desc = (qty > 1 ? 5 : 0) + (condicaoSelect.value === 'vista' ? 5 : 0);
+    tr.children[4].textContent = desc;
+    const valDesc = val * (1 - desc / 100);
+    tr.children[3].textContent = valDesc.toFixed(2);
+    tr.querySelector('.total-cell').textContent = formatCurrency(qty * valDesc);
   }
 
   function recalcTotals() {
@@ -144,9 +146,12 @@
     itensTbody.querySelectorAll('tr').forEach(tr => {
       const qty = parseFloat(tr.children[1].textContent) || 0;
       const val = parseFloat(tr.children[2].textContent) || 0;
-      const desc = parseFloat(tr.children[3].textContent) || 0;
-      subtotal += qty * val;
-      desconto += qty * val * (desc / 100);
+      const desc = (qty > 1 ? 5 : 0) + (condicaoSelect.value === 'vista' ? 5 : 0);
+      tr.children[4].textContent = desc;
+      const line = qty * val;
+      const lineDesc = line * (desc / 100);
+      subtotal += line;
+      desconto += lineDesc;
     });
     document.getElementById('novoSubtotal').textContent = formatCurrency(subtotal);
     document.getElementById('novoDesconto').textContent = formatCurrency(desconto);
@@ -176,16 +181,13 @@
   function startEdit(tr){
     const qtyCell = tr.children[1];
     const valCell = tr.children[2];
-    const descCell = tr.children[3];
-    const actionsCell = tr.children[5];
+    const actionsCell = tr.children[6];
 
     const qtyVal = qtyCell.textContent.trim();
     const valVal = valCell.textContent.trim();
-    const descVal = descCell.textContent.trim();
 
     qtyCell.innerHTML = `<input type="number" class="w-16 bg-input border border-inputBorder rounded px-2 py-1 text-white text-xs text-center focus:border-primary focus:ring-1 focus:ring-primary/50 transition" value="${qtyVal}" min="1">`;
     valCell.innerHTML = `<input type="number" class="w-24 bg-input border border-inputBorder rounded px-2 py-1 text-white text-xs text-right focus:border-primary focus:ring-1 focus:ring-primary/50 transition" value="${valVal}" min="0" step="0.01">`;
-    descCell.innerHTML = `<input type="number" class="w-16 bg-input border border-inputBorder rounded px-2 py-1 text-white text-xs text-center focus:border-primary focus:ring-1 focus:ring-primary/50 transition" value="${descVal}" min="0" max="100">`;
 
     actionsCell.innerHTML = `
       <i class="fas fa-check w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10 text-green-400"></i>
@@ -195,7 +197,6 @@
     const cancelBtn = actionsCell.querySelector('.fa-times');
     const qtyInput = qtyCell.querySelector('input');
     const valInput = valCell.querySelector('input');
-    const descInput = descCell.querySelector('input');
 
     confirmBtn.addEventListener('click', () => {
       showActionDialog('Deseja salvar as alterações deste item?', ok => {
@@ -203,7 +204,6 @@
         confirmResetIfNeeded(() => {
           qtyCell.textContent = qtyInput.value;
           valCell.textContent = parseFloat(valInput.value).toFixed(2);
-          descCell.textContent = descInput.value;
           actionsCell.innerHTML = `
             <i class="fas fa-edit w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)"></i>
             <i class="fas fa-trash w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10 text-red-400"></i>
@@ -218,12 +218,12 @@
     cancelBtn.addEventListener('click', () => {
       qtyCell.textContent = qtyVal;
       valCell.textContent = valVal;
-      descCell.textContent = descVal;
       actionsCell.innerHTML = `
         <i class="fas fa-edit w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)"></i>
         <i class="fas fa-trash w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10 text-red-400"></i>
       `;
       attachRowEvents(tr);
+      recalcTotals();
     });
   }
 
@@ -269,7 +269,8 @@
         } else if (choice === 'substituir') {
           existing.children[1].textContent = qtd;
           existing.children[2].textContent = product.valor.toFixed(2);
-          existing.children[3].textContent = '0';
+          existing.children[3].textContent = '0.00';
+          existing.children[4].textContent = '0';
         }
         updateLineTotal(existing);
         recalcTotals();
@@ -284,6 +285,7 @@
         <td class="px-6 py-4 text-sm text-white">${product.nome}</td>
         <td class="px-6 py-4 text-center text-sm text-white">${qtd}</td>
         <td class="px-6 py-4 text-right text-sm text-white">${product.valor.toFixed(2)}</td>
+        <td class="px-6 py-4 text-right text-sm text-white">0.00</td>
         <td class="px-6 py-4 text-center text-sm text-white">0</td>
         <td class="px-6 py-4 text-right text-sm text-white total-cell"></td>
         <td class="px-6 py-4 text-center">
@@ -323,7 +325,7 @@
       nome: tr.children[0].textContent.trim(),
       qtd: parseFloat(tr.children[1].textContent) || 0,
       valor: parseFloat(tr.children[2].textContent) || 0,
-      desc: parseFloat(tr.children[3].textContent) || 0
+      desc: parseFloat(tr.children[4].textContent) || 0
     }));
     const tabela = document.getElementById('orcamentosTabela');
     const newId = `ORC${String(tabela.children.length + 1).padStart(3, '0')}`;
