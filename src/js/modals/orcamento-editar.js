@@ -229,6 +229,9 @@
     sel.addEventListener('blur', sync);
   });
 
+  recalcTotals();
+  document.dispatchEvent(new Event('orcamentoEditarCarregado'));
+
   const statusMap = {
     'Rascunho': 'badge-info',
     'Pendente': 'badge-warning',
