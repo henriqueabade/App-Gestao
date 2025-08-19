@@ -9,6 +9,7 @@ const clientesRouter        = require('./clientesController');
 const passwordResetRouter   = require('./passwordResetRoutes');
 const usuariosRouter        = require('./usuariosController');
 const transportadorasRouter = require('./transportadorasController');
+const orcamentosRouter      = require('./orcamentosController');
 
 const app = express();
 app.use(cors());
@@ -17,6 +18,7 @@ app.use(express.json());
 app.use('/api/clientes', clientesRouter);
 app.use('/api/usuarios', usuariosRouter);
 app.use('/api/transportadoras', transportadorasRouter);
+app.use('/api/orcamentos', orcamentosRouter);
 app.use(passwordResetRouter);
 
 // Endpoint simples para verificar a disponibilidade do servidor

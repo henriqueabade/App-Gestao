@@ -8,6 +8,17 @@
   const clients = {};
   const products = {};
 
+  const parseCurrencyToCents = window.parseCurrencyToCents || (v => {
+    if (!v) return 0;
+    const normalized = v.toString()
+      .replace(/\s/g,'')
+      .replace(/[A-Za-z\$]/g,'')
+      .replace(/\./g,'')
+      .replace(',', '.');
+    const value = Number(normalized);
+    return isNaN(value) ? 0 : Math.round(value * 100);
+  });
+
   const clienteSelect = document.getElementById('novoCliente');
   const contatoSelect = document.getElementById('novoContato');
   const produtoSelect = document.getElementById('itemProduto');
@@ -129,7 +140,14 @@
       const lista = await (window.electronAPI?.listarProdutos?.() ?? []);
       produtoSelect.innerHTML = '<option value="" disabled selected hidden></option>' +
         lista.map(p => `<option value="${p.id}">${p.nome}</option>`).join('');
-      lista.forEach(p => { products[p.id] = { nome: p.nome, valor: Number(p.preco_venda) || 0 }; });
+      lista.forEach(p => {
+        products[p.id] = {
+          nome: p.nome,
+          valor: Number(p.preco_venda) || 0,
+          codigo: p.codigo,
+          ncm: p.ncm
+        };
+      });
       produtoSelect.setAttribute('data-filled', 'false');
     } catch(err){ console.error('Erro ao carregar produtos', err); }
   }
@@ -337,81 +355,168 @@
   });
 
   function saveQuote(status) {
+    const missing = [];
     const clienteVal = clienteSelect.value;
-    if (!clienteVal) { alert('Cliente é obrigatório'); return; }
-    if (itensTbody.children.length === 0) { alert('Adicione pelo menos um item'); return; }
-    const clienteText = clienteSelect.options[clienteSelect.selectedIndex].textContent;
+    if (!clienteVal) missing.push('Cliente');
     const contatoVal = contatoSelect.value;
-    const contatoText = contatoSelect.options[contatoSelect.selectedIndex]?.textContent || '';
+    if (!contatoVal) missing.push('Contato');
+    const validadeVal = document.getElementById('novoValidade').value;
+    if (!validadeVal) missing.push('Validade');
     const condicaoVal = condicaoSelect.value;
-    const condicaoText = condicaoSelect.options[condicaoSelect.selectedIndex].textContent;
+    if (!condicaoVal) missing.push('Condição de pagamento');
     const transportadoraVal = transportadoraSelect.value;
-    const transportadoraText = transportadoraSelect.options[transportadoraSelect.selectedIndex]?.textContent || '';
+    if (!transportadoraVal) missing.push('Transportadora');
     const formaPagamentoVal = formaPagamentoSelect.value;
-    const total = document.getElementById('novoTotal').textContent;
-    const itens = Array.from(itensTbody.children).map(tr => ({
-      id: tr.dataset.id,
-      nome: tr.children[0].textContent.trim(),
-      qtd: parseFloat(tr.children[1].textContent) || 0,
-      valor: parseFloat(tr.children[2].textContent) || 0,
-      desc: parseFloat(tr.children[4].textContent) || 0
-    }));
-    const tabela = document.getElementById('orcamentosTabela');
-    const newId = `ORC${String(tabela.children.length + 1).padStart(3, '0')}`;
-    const tr = document.createElement('tr');
-    tr.className = 'transition-colors duration-150';
-    tr.style.cursor = 'pointer';
-    tr.setAttribute('onmouseover', "this.style.background='rgba(163, 148, 167, 0.05)'");
-    tr.setAttribute('onmouseout', "this.style.background='transparent'");
-    const statusClasses = {
-      'Rascunho': 'badge-neutral',
-      'Pendente': 'badge-warning',
-      'Aprovado': 'badge-success',
-      'Rejeitado': 'badge-danger',
-      'Expirado': 'badge-neutral'
-    };
-    const badgeClass = statusClasses[status] || 'badge-neutral';
-    tr.innerHTML = `
-      <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">${newId}</td>
-      <td class="px-6 py-4 whitespace-nowrap text-sm text-white">${clienteText}</td>
-      <td class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-violet)">${new Date().toLocaleDateString('pt-BR')}</td>
-      <td class="px-6 py-4 whitespace-nowrap text-sm text-white">${total}</td>
-      <td class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-violet)">${condicaoText}</td>
-      <td class="px-6 py-4 whitespace-nowrap"><span class="${badgeClass} px-3 py-1 rounded-full text-xs font-medium">${status}</span></td>
-      <td class="px-6 py-4 whitespace-nowrap text-center"><div class="flex items-center justify-center space-x-2">
-        <i class="fas fa-eye w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color:var(--color-primary)" title="Visualizar"></i>
-        <i class="fas fa-edit w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Editar"></i>
-        <i class="fas fa-download w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Baixar PDF"></i>
-      </div></td>`;
-    tabela.appendChild(tr);
-    const editIcon = tr.querySelector('.fa-edit');
-    editIcon.addEventListener('click', e => {
-      e.stopPropagation();
-      const row = e.currentTarget.closest('tr');
-      const id = row.cells[0].textContent.trim();
-      const cliente = row.cells[1].textContent.trim();
-      const condicao = row.cells[4]?.textContent.trim();
-      const statusTxt = row.cells[5]?.innerText.trim();
-      const clienteId = row.dataset.clienteId;
-      const contato = row.dataset.contato;
-      const contatoId = row.dataset.contatoId;
-      const transportadora = row.dataset.transportadora;
-      const transportadoraId = row.dataset.transportadoraId;
-      const formaPagamento = row.dataset.formaPagamento;
-      const itemsData = JSON.parse(row.dataset.items || '[]');
-      window.selectedQuoteData = { id, cliente, clienteId, condicao, status: statusTxt, contato, contatoId, transportadora, transportadoraId, formaPagamento, items: itemsData, row };
-      Modal.open('modals/orcamentos/editar.html', '../js/modals/orcamento-editar.js', 'editarOrcamento');
+    if (!formaPagamentoVal) missing.push('Forma de Pagamento');
+    if (itensTbody.children.length === 0) missing.push('Itens');
+
+    const dataEmissao = new Date();
+    let parcelas = 1;
+    let prazo = '';
+    let parcelasDetalhes = [];
+    if (condicaoVal === 'vista') {
+      const prazoVista = document.getElementById('novoPrazoVista')?.value;
+      if (!prazoVista) missing.push('Prazo (dias)');
+      else {
+        prazo = prazoVista;
+        const totalCents = parseCurrencyToCents(document.getElementById('novoTotal').textContent);
+        parcelasDetalhes.push({
+          valor: totalCents / 100,
+          data_vencimento: new Date(dataEmissao.getTime() + parseInt(prazoVista, 10) * 86400000).toISOString().split('T')[0]
+        });
+      }
+    } else if (condicaoVal === 'prazo') {
+      const pdata = Parcelamento.getData('novoParcelamento');
+      if (!pdata || !pdata.canRegister) missing.push('Parcelamento');
+      else {
+        parcelas = pdata.count;
+        prazo = pdata.items.map(it => it.dueInDays).join('/');
+        parcelasDetalhes = pdata.items.map(it => ({
+          valor: it.amount / 100,
+          data_vencimento: new Date(dataEmissao.getTime() + (it.dueInDays || 0) * 86400000).toISOString().split('T')[0]
+        }));
+      }
+    }
+
+    if (missing.length) {
+      showToast('Preencha os campos: ' + missing.join(', '), 'error');
+      return;
+    }
+
+    const confirmMsg = status === 'Rascunho' ? 'Deseja salvar este orçamento?' : 'Deseja salvar e enviar este orçamento?';
+    showActionDialog(confirmMsg, async ok => {
+      if (!ok) return;
+      try {
+        const subtotal = parseCurrencyToCents(document.getElementById('novoSubtotal').textContent) / 100;
+        const descontoTotal = parseCurrencyToCents(document.getElementById('novoDesconto').textContent) / 100;
+        const total = parseCurrencyToCents(document.getElementById('novoTotal').textContent) / 100;
+        const itens = Array.from(itensTbody.children).map(tr => {
+          const prodId = tr.dataset.id;
+          const qty = parseFloat(tr.children[1].textContent) || 0;
+          const val = parseFloat(tr.children[2].textContent) || 0;
+          const valDesc = parseFloat(tr.children[3].textContent) || 0;
+          return {
+            produto_id: prodId,
+            codigo: products[prodId]?.codigo || '',
+            nome: tr.children[0].textContent.trim(),
+            ncm: products[prodId]?.ncm || '',
+            quantidade: qty,
+            valor_unitario: val,
+            valor_unitario_desc: valDesc,
+            valor_desc: val - valDesc,
+            desconto_total: (val - valDesc) * qty,
+            valor_total: parseCurrencyToCents(tr.querySelector('.total-cell').textContent) / 100
+          };
+        });
+        const body = {
+          cliente_id: clienteVal,
+          contato_id: contatoVal,
+          situacao: status,
+          parcelas,
+          forma_pagamento: formaPagamentoVal,
+          transportadora: transportadoraSelect.options[transportadoraSelect.selectedIndex]?.textContent || '',
+          desconto_pagamento: descontoTotal,
+          desconto_especial: 0,
+          desconto_total: descontoTotal,
+          valor_final: total,
+          observacoes: document.getElementById('novoObservacoes').value || '',
+          validade: validadeVal,
+          prazo,
+          itens,
+          parcelas_detalhes: parcelasDetalhes
+        };
+        const resp = await fetch('http://localhost:3000/api/orcamentos', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body)
+        });
+        if (!resp.ok) throw new Error('Erro ao salvar');
+        const data = await resp.json();
+        const numero = data.numero;
+
+        const tabela = document.getElementById('orcamentosTabela');
+        const tr = document.createElement('tr');
+        tr.className = 'transition-colors duration-150';
+        tr.style.cursor = 'pointer';
+        tr.setAttribute('onmouseover', "this.style.background='rgba(163, 148, 167, 0.05)'");
+        tr.setAttribute('onmouseout', "this.style.background='transparent'");
+        const statusClasses = {
+          'Rascunho': 'badge-neutral',
+          'Pendente': 'badge-warning',
+          'Aprovado': 'badge-success',
+          'Rejeitado': 'badge-danger',
+          'Expirado': 'badge-neutral'
+        };
+        const badgeClass = statusClasses[status] || 'badge-neutral';
+        const clienteText = clienteSelect.options[clienteSelect.selectedIndex].textContent;
+        const condicaoText = condicaoSelect.options[condicaoSelect.selectedIndex].textContent;
+        tr.innerHTML = `
+          <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">${numero}</td>
+          <td class="px-6 py-4 whitespace-nowrap text-sm text-white">${clienteText}</td>
+          <td class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-violet)">${dataEmissao.toLocaleDateString('pt-BR')}</td>
+          <td class="px-6 py-4 whitespace-nowrap text-sm text-white">${formatCurrency(total)}</td>
+          <td class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-violet)">${condicaoText}</td>
+          <td class="px-6 py-4 whitespace-nowrap"><span class="${badgeClass} px-3 py-1 rounded-full text-xs font-medium">${status}</span></td>
+          <td class="px-6 py-4 whitespace-nowrap text-center"><div class="flex items-center justify-center space-x-2">
+            <i class="fas fa-eye w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color:var(--color-primary)" title="Visualizar"></i>
+            <i class="fas fa-edit w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Editar"></i>
+            <i class="fas fa-download w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Baixar PDF"></i>
+          </div></td>`;
+        tabela.appendChild(tr);
+        const editIcon = tr.querySelector('.fa-edit');
+        editIcon.addEventListener('click', e => {
+          e.stopPropagation();
+          const row = e.currentTarget.closest('tr');
+          const id = row.cells[0].textContent.trim();
+          const cliente = row.cells[1].textContent.trim();
+          const condicao = row.cells[4]?.textContent.trim();
+          const statusTxt = row.cells[5]?.innerText.trim();
+          const clienteId = row.dataset.clienteId;
+          const contato = row.dataset.contato;
+          const contatoId = row.dataset.contatoId;
+          const transportadora = row.dataset.transportadora;
+          const transportadoraId = row.dataset.transportadoraId;
+          const formaPagamento = row.dataset.formaPagamento;
+          const itemsData = JSON.parse(row.dataset.items || '[]');
+          window.selectedQuoteData = { id, cliente, clienteId, condicao, status: statusTxt, contato, contatoId, transportadora, transportadoraId, formaPagamento, items: itemsData, row };
+          Modal.open('modals/orcamentos/editar.html', '../js/modals/orcamento-editar.js', 'editarOrcamento');
+        });
+        tr.dataset.clienteId = clienteVal;
+        tr.dataset.cliente = clienteText;
+        tr.dataset.contatoId = contatoVal;
+        tr.dataset.contato = contatoSelect.options[contatoSelect.selectedIndex]?.textContent || '';
+        tr.dataset.transportadoraId = transportadoraVal;
+        tr.dataset.transportadora = transportadoraSelect.options[transportadoraSelect.selectedIndex]?.textContent || '';
+        tr.dataset.formaPagamento = formaPagamentoVal;
+        tr.dataset.items = JSON.stringify(itens);
+        tr.dataset.condicao = condicaoVal;
+        Modal.close(overlayId);
+        showToast(status === 'Rascunho' ? 'Orçamento salvo com sucesso!' : 'Orçamento salvo e enviado com sucesso!', 'success');
+      } catch (err) {
+        console.error(err);
+        showToast('Erro ao salvar orçamento', 'error');
+      }
     });
-    tr.dataset.clienteId = clienteVal;
-    tr.dataset.cliente = clienteText;
-    tr.dataset.contatoId = contatoVal;
-    tr.dataset.contato = contatoText;
-    tr.dataset.transportadoraId = transportadoraVal;
-    tr.dataset.transportadora = transportadoraText;
-    tr.dataset.formaPagamento = formaPagamentoVal;
-    tr.dataset.items = JSON.stringify(itens);
-    tr.dataset.condicao = condicaoVal;
-    Modal.close(overlayId);
   }
 
   document.getElementById('salvarNovoOrcamento').addEventListener('click', () => saveQuote('Rascunho'));
