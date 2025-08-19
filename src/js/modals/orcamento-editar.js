@@ -7,8 +7,8 @@
 
   // carga de dados
   const id = window.selectedQuoteId;
-  let data = {};
-  if (id) {
+  let data = window.quoteData || {};
+  if (!data.id && id) {
     try {
       const resp = await fetch(`http://localhost:3000/api/orcamentos/${id}`);
       data = await resp.json();
@@ -16,6 +16,7 @@
       console.error('Erro ao carregar orçamento', err);
     }
   }
+  window.quoteData = undefined;
   const titulo = document.getElementById('tituloEditarOrcamento');
   if (data.numero) {
     titulo.textContent = `EDITAR ORÇAMENTO ${data.numero}`;
@@ -166,6 +167,13 @@
     if (data.contato_id) {
       editarContato.value = data.contato_id;
       editarContato.setAttribute('data-filled', 'true');
+    }
+    if (data.transportadora) {
+      const opt = Array.from(editarTransportadora.options).find(o => o.textContent === data.transportadora);
+      if (opt) {
+        editarTransportadora.value = opt.value;
+        editarTransportadora.setAttribute('data-filled','true');
+      }
     }
   }
   editarFormaPagamento.value = data.forma_pagamento || '';
