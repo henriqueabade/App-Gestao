@@ -43,6 +43,7 @@ async function carregarOrcamentos() {
             'Rejeitado': 'badge-danger',
             'Expirado': 'badge-neutral'
         };
+        const owners = new Set();
         data.forEach(o => {
             const tr = document.createElement('tr');
             tr.className = 'transition-colors duration-150';
@@ -51,6 +52,7 @@ async function carregarOrcamentos() {
             tr.setAttribute('onmouseout', "this.style.background='transparent'");
             tr.dataset.id = o.id;
             tr.dataset.dono = o.dono || o.vendedor || '';
+            if (o.dono) owners.add(o.dono);
             const condicao = o.parcelas > 1 ? `${o.parcelas}x` : 'À vista';
             const badgeClass = statusClasses[o.situacao] || 'badge-neutral';
             const valor = Number(o.valor_final || 0).toLocaleString('pt-BR', {style:'currency', currency:'BRL'});
@@ -70,6 +72,11 @@ async function carregarOrcamentos() {
                 </td>`;
             tbody.appendChild(tr);
         });
+        const ownerSelect = document.getElementById('filterOwner');
+        if (ownerSelect) {
+            ownerSelect.innerHTML = '<option value="">Todos os Donos</option>' +
+                [...owners].map(d => `<option value="${d}">${d}</option>`).join('');
+        }
         tbody.querySelectorAll('.fa-edit').forEach(icon => {
             icon.addEventListener('click', async e => {
                 e.stopPropagation();
@@ -136,7 +143,10 @@ function aplicarFiltro() {
 
 function limparFiltros() {
     document.getElementById('filterStatus').value = '';
-    document.getElementById('filterPeriod').value = '';
+    const periodSel = document.getElementById('filterPeriod');
+    periodSel.value = '';
+    const customOpt = periodSel.querySelector('option[value="Personalizado"]');
+    if (customOpt) customOpt.textContent = 'Personalizado';
     document.getElementById('filterOwner').value = '';
     document.getElementById('filterClient').value = '';
     window.customStartDate = null;
@@ -171,12 +181,22 @@ function initOrcamentos() {
     periodSelect?.addEventListener('change', () => {
         if (periodSelect.value === 'Personalizado') {
             periodModal.classList.remove('hidden');
+        } else {
+            const customOpt = periodSelect.querySelector('option[value="Personalizado"]');
+            if (customOpt) customOpt.textContent = 'Personalizado';
+            window.customStartDate = null;
+            window.customEndDate = null;
         }
     });
     periodConfirm?.addEventListener('click', () => {
         window.customStartDate = document.getElementById('startDate').value;
         window.customEndDate = document.getElementById('endDate').value;
         periodModal.classList.add('hidden');
+        const customOpt = periodSelect.querySelector('option[value="Personalizado"]');
+        if (customOpt && window.customStartDate && window.customEndDate) {
+            const fmt = d => d.split('-').reverse().join('/');
+            customOpt.textContent = `${fmt(window.customStartDate)} - ${fmt(window.customEndDate)}`;
+        }
         periodSelect.value = 'Personalizado';
         aplicarFiltro();
     });
