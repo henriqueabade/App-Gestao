@@ -46,7 +46,7 @@
   function showBlockedDialog(){
     const overlay=document.createElement('div');
     overlay.className='fixed inset-0 bg-black/50 flex items-center justify-center p-4';
-    overlay.innerHTML=`<div class="max-w-sm w-full glass-surface backdrop-blur-xl rounded-2xl border border-yellow-500/20 ring-1 ring-yellow-500/30 shadow-2xl/40 animate-modalFade"><div class="p-6 text-center"><h3 class="text-lg font-semibold mb-4 text-yellow-400">Atenção</h3><p class="text-sm text-gray-300 mb-6">Você não pode escolher uma condição de pagamento bloqueada. Se desejar manter esta condição de pagamento, desbloqueie-a antes de continuar.</p><div class="flex justify-center"><button id="blockedOk" class="btn-warning px-6 py-2 rounded-lg text-white font-medium active:scale-95">OK</button></div></div></div>`;
+    overlay.innerHTML=`<div class="max-w-sm w-full glass-surface backdrop-blur-xl rounded-2xl border border-yellow-500/20 ring-1 ring-yellow-500/30 shadow-2xl/40 animate-modalFade"><div class="p-6 text-center"><h3 class="text-lg font-semibold mb-4 text-yellow-400">Condição de Pagamento Bloqueada</h3><p class="text-sm text-gray-300 mb-6">Para definir condição de pagamento é necessario adicionar itens ao orçamento primeiro!</p><div class="flex justify-center"><button id="blockedOk" class="btn-warning px-6 py-2 rounded-lg text-white font-medium active:scale-95">OK</button></div></div></div>`;
     document.body.appendChild(overlay);
     overlay.querySelector('#blockedOk').addEventListener('click',()=>overlay.remove());
   }
