@@ -306,6 +306,7 @@ router.post('/:id/clone', async (req, res) => {
           ]
         );
       }
+    }
 
     const { rows: parcelas } = await client.query(
       'SELECT numero_parcela, valor, data_vencimento FROM orcamento_parcelas WHERE orcamento_id=$1',
