@@ -95,6 +95,14 @@ async function carregarOrcamentos() {
             ownerSelect.innerHTML = '<option value="">Todos os Donos</option>' +
                 [...owners].map(d => `<option value="${d}">${d}</option>`).join('');
         }
+        tbody.querySelectorAll('.fa-edit').forEach(icon => {
+            icon.addEventListener('click', async e => {
+                e.stopPropagation();
+                const id = e.currentTarget.closest('tr').dataset.id;
+                window.selectedQuoteId = id;
+                await Modal.open('modals/orcamentos/editar.html', '../js/modals/orcamento-editar.js', 'editarOrcamento');
+            });
+        });
         tbody.querySelectorAll('.fa-download').forEach(icon => {
             icon.addEventListener('click', e => {
                 e.stopPropagation();
@@ -177,20 +185,6 @@ function initOrcamentos() {
     if (novoBtn) {
         novoBtn.addEventListener('click', () => {
             Modal.open('modals/orcamentos/novo.html', '../js/modals/orcamento-novo.js', 'novoOrcamento');
-        });
-    }
-
-    const tbody = document.getElementById('orcamentosTabela');
-    if (tbody) {
-        tbody.addEventListener('click', async e => {
-            const editIcon = e.target.closest('.fa-edit');
-            if (editIcon) {
-                e.stopPropagation();
-                const id = editIcon.closest('tr').dataset.id;
-                window.selectedQuoteId = id;
-                await Modal.open('modals/orcamentos/editar.html', '../js/modals/orcamento-editar.js', 'editarOrcamento');
-                return;
-            }
         });
     }
 
