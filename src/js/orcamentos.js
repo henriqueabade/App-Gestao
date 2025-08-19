@@ -90,12 +90,20 @@ async function carregarOrcamentos() {
                 } catch (err) {
                     console.error('Erro ao carregar orçamento', err);
                 }
-                const elapsed = Date.now() - start;
-                const delay = elapsed < 3000 ? Math.max(2000 - elapsed, 0) : 0;
-                setTimeout(() => {
-                    hideLoadingSpinner();
-                    Modal.open('modals/orcamentos/editar.html', '../js/modals/orcamento-editar.js', 'editarOrcamento');
-                }, delay);
+
+                const handleLoaded = () => {
+                    const elapsed = Date.now() - start;
+                    const delay = elapsed < 3000 ? Math.max(2000 - elapsed, 0) : 0;
+                    setTimeout(() => {
+                        hideLoadingSpinner();
+                        document.getElementById('editarOrcamentoOverlay')?.classList.remove('hidden');
+                    }, delay);
+                    document.removeEventListener('orcamentoEditarCarregado', handleLoaded);
+                };
+                document.addEventListener('orcamentoEditarCarregado', handleLoaded);
+
+                await Modal.open('modals/orcamentos/editar.html', '../js/modals/orcamento-editar.js', 'editarOrcamento');
+                document.getElementById('editarOrcamentoOverlay')?.classList.add('hidden');
             });
         });
         await popularClientes();
