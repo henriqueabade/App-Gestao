@@ -538,6 +538,7 @@
     let prazo = '';
     let tipoParcela = 'igual';
     let parcelasDetalhes = [];
+    let tipoParcela = 'a vista';
     if(condicaoVal === 'vista'){
       const prazoVista = document.getElementById('editarPrazoVista')?.value;
       if(!prazoVista) missing.push('Prazo (dias)');
@@ -560,6 +561,7 @@
           valor: it.amount / 100,
           data_vencimento: new Date(dataEmissao.getTime() + (it.dueInDays || 0) * 86400000).toISOString().split('T')[0]
         }));
+        tipoParcela = pdata.mode === 'equal' ? 'igual' : 'diferente';
       }
     }
 
@@ -621,6 +623,7 @@
       validade: editarValidade.value || null,
       prazo,
       dono: donoVal,
+      tipo_parcela: tipoParcela,
       itens,
       parcelas_detalhes: parcelasDetalhes
     };

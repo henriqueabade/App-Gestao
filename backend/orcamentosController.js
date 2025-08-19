@@ -61,6 +61,7 @@ router.post('/', async (req, res) => {
     validade,
     prazo,
     dono,
+    tipo_parcela,
     itens = [],
     parcelas_detalhes = []
   } = req.body;
@@ -95,7 +96,8 @@ router.post('/', async (req, res) => {
         observacoes,
         validade,
         prazo,
-        dono
+        dono,
+        tipo_parcela
       ]
     );
     const orcamentoId = insertOrc.rows[0].id;
@@ -163,6 +165,7 @@ router.put('/:id', async (req, res) => {
     validade,
     prazo,
     dono,
+    tipo_parcela,
     itens = [],
     parcelas_detalhes = []
   } = req.body;
@@ -190,6 +193,7 @@ router.put('/:id', async (req, res) => {
         validade,
         prazo,
         dono,
+        tipo_parcela,
         id
       ]
     );
@@ -292,7 +296,8 @@ router.post('/:id/clone', async (req, res) => {
         orc.observacoes,
         orc.validade,
         orc.prazo,
-        orc.dono
+        orc.dono,
+        orc.tipo_parcela
       ]
     );
     const newId = insert.rows[0].id;
