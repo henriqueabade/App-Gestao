@@ -6,21 +6,31 @@
   document.addEventListener('keydown', function esc(e){ if(e.key === 'Escape'){ close(); document.removeEventListener('keydown', esc); } });
 
   // carga de dados
-  const data = window.selectedQuoteData || {};
+  const id = window.selectedQuoteId;
+  let data = {};
+  if (id) {
+    try {
+      const resp = await fetch(`http://localhost:3000/api/orcamentos/${id}`);
+      data = await resp.json();
+    } catch (err) {
+      console.error('Erro ao carregar orçamento', err);
+    }
+  }
   const titulo = document.getElementById('tituloEditarOrcamento');
-  if (data.id && data.cliente) {
-    titulo.textContent = `EDITAR ORÇAMENTO #${data.id} – ${data.cliente}`;
+  if (data.numero) {
+    titulo.textContent = `EDITAR ORÇAMENTO ${data.numero}`;
   }
   const editarCliente = document.getElementById('editarCliente');
   const editarContato = document.getElementById('editarContato');
   const editarCondicao = document.getElementById('editarCondicao');
   const editarTransportadora = document.getElementById('editarTransportadora');
   const editarFormaPagamento = document.getElementById('editarFormaPagamento');
+  const editarValidade = document.getElementById('editarValidade');
   const produtoSelect = document.getElementById('novoItemProduto');
   const pagamentoBox = document.getElementById('editarPagamento');
   const condicaoWrapper = editarCondicao.parentElement;
   let parcelamentoLoaded = false;
-  let condicaoDefinida = Boolean(data.condicao);
+  let condicaoDefinida = Boolean(data.parcelas);
   function loadParcelamento(){
     return new Promise(res=>{
       if(parcelamentoLoaded){res();return;}
@@ -138,7 +148,7 @@
       const lista = await (window.electronAPI?.listarProdutos?.() ?? []);
       produtoSelect.innerHTML = '<option value="" disabled selected hidden></option>' +
         lista.map(p => `<option value="${p.id}">${p.nome}</option>`).join('');
-      lista.forEach(p => { products[p.id] = { nome: p.nome, valor: Number(p.preco_venda) || 0 }; });
+      lista.forEach(p => { products[p.id] = { nome: p.nome, valor: Number(p.preco_venda) || 0, codigo: p.codigo || '', ncm: p.ncm || '' }; });
     } catch(err){ console.error('Erro ao carregar produtos', err); }
   }
 
@@ -148,33 +158,32 @@
   });
 
   await carregarClientes();
-  if (data.clienteId) {
-    editarCliente.value = data.clienteId;
+  if (data.cliente_id) {
+    editarCliente.value = data.cliente_id;
     editarCliente.setAttribute('data-filled', 'true');
-    await carregarContatos(data.clienteId);
-    await carregarTransportadoras(data.clienteId);
-    if (data.contatoId) {
-      editarContato.value = data.contatoId;
+    await carregarContatos(data.cliente_id);
+    await carregarTransportadoras(data.cliente_id);
+    if (data.contato_id) {
+      editarContato.value = data.contato_id;
       editarContato.setAttribute('data-filled', 'true');
     }
-    if (data.transportadoraId) {
-      editarTransportadora.value = data.transportadoraId;
-      editarTransportadora.setAttribute('data-filled','true');
-    }
-  } else if (data.cliente) {
-    const opt = Array.from(editarCliente.options).find(o => o.textContent === data.cliente);
-    if (opt) {
-      editarCliente.value = opt.value;
-      editarCliente.setAttribute('data-filled', 'true');
-      await carregarContatos(opt.value);
-      await carregarTransportadoras(opt.value);
-    }
   }
-  editarCondicao.value = data.condicao || 'vista';
-  updateCondicao();
-  editarFormaPagamento.value = data.formaPagamento || '';
-  if(editarFormaPagamento.value){ editarFormaPagamento.setAttribute('data-filled','true'); }
+  editarFormaPagamento.value = data.forma_pagamento || '';
+  if (editarFormaPagamento.value) editarFormaPagamento.setAttribute('data-filled','true');
+  editarValidade.value = data.validade ? data.validade.split('T')[0] : '';
+  document.getElementById('editarObservacoes').value = data.observacoes || '';
   await carregarProdutos();
+  if (data.itens) {
+    data.itens.forEach(it => {
+      addItem({ id: it.produto_id, nome: it.nome, qtd: it.quantidade, valor: Number(it.valor_unitario), desc: it.valor_unitario ? (1 - it.valor_unitario_desc / it.valor_unitario) * 100 : 0 });
+    });
+  }
+  editarCondicao.value = data.parcelas > 1 ? 'prazo' : 'vista';
+  updateCondicao();
+  if (editarCondicao.value === 'vista') {
+    const prazoInput = document.getElementById('editarPrazoVista');
+    if (prazoInput) prazoInput.value = data.prazo || '';
+  }
   [editarCliente, editarContato, editarCondicao, editarTransportadora, editarFormaPagamento, produtoSelect].forEach(sel => {
     const sync = () => sel.setAttribute('data-filled', sel.value !== '');
     sync();
@@ -189,7 +198,7 @@
     'Rejeitado': 'badge-danger',
     'Expirado': 'badge-neutral'
   };
-  let currentStatus = data.status || 'Rascunho';
+  let currentStatus = data.situacao || 'Rascunho';
   const statusTag = document.getElementById('statusTag');
   const statusOptions = document.getElementById('statusOptions');
 
@@ -397,54 +406,99 @@
     }
   }
 
-  function saveChanges(closeAfter) {
+  async function saveChanges(closeAfter) {
     const clienteVal = editarCliente.value;
-    const clienteText = editarCliente.options[editarCliente.selectedIndex]?.textContent || '';
     const contatoVal = editarContato.value;
-    const contatoText = editarContato.options[editarContato.selectedIndex]?.textContent || '';
     const condicaoVal = editarCondicao.value;
-    const condicaoText = editarCondicao.options[editarCondicao.selectedIndex]?.textContent || '';
-    const transportadoraVal = editarTransportadora.value;
     const transportadoraText = editarTransportadora.options[editarTransportadora.selectedIndex]?.textContent || '';
     const formaPagamentoVal = editarFormaPagamento.value;
-    const totalTxt = document.getElementById('totalOrcamento').textContent;
-    const itens = Array.from(itensTbody.children).map(tr => ({
-      id: tr.dataset.id,
-      nome: tr.children[0].textContent.trim(),
-      qtd: parseFloat(tr.children[1].textContent) || 0,
-      valor: parseFloat(tr.children[2].textContent) || 0,
-      desc: parseFloat(tr.children[4].textContent) || 0
-    }));
-    if (data.row) {
-      data.row.cells[1].textContent = clienteText;
-      data.row.cells[3].textContent = totalTxt;
-      data.row.cells[4].textContent = condicaoText;
-      const statusCell = data.row.cells[5];
-      statusCell.innerHTML = '';
-      const statusSpan = document.createElement('span');
-      const cls = statusMap[currentStatus] || 'badge-neutral';
-      statusSpan.className = `${cls} px-3 py-1 rounded-full text-xs font-medium`;
-      statusSpan.textContent = currentStatus;
-      statusCell.appendChild(statusSpan);
-      data.row.dataset.clienteId = clienteVal;
-      data.row.dataset.cliente = clienteText;
-      data.row.dataset.contatoId = contatoVal;
-      data.row.dataset.contato = contatoText;
-      data.row.dataset.transportadoraId = transportadoraVal;
-      data.row.dataset.transportadora = transportadoraText;
-      data.row.dataset.formaPagamento = formaPagamentoVal;
-      data.row.dataset.items = JSON.stringify(itens);
-      data.row.dataset.condicao = condicaoVal;
+    let parcelas = 0;
+    let prazo = '';
+    let parcelasDetalhes = [];
+    if (condicaoVal === 'vista') {
+      prazo = document.getElementById('editarPrazoVista')?.value || '';
+    } else if (condicaoVal === 'prazo') {
+      const pdata = Parcelamento.getData('editarParcelamento');
+      if (pdata && pdata.canRegister) {
+        parcelas = pdata.count;
+        prazo = pdata.items.map(it => it.dueInDays).join('/');
+        parcelasDetalhes = pdata.items.map(it => ({
+          valor: it.amount / 100,
+          data_vencimento: new Date(Date.now() + (it.dueInDays || 0) * 86400000).toISOString().split('T')[0]
+        }));
+      }
     }
-    if (closeAfter) Modal.close(overlayId);
+    const itens = Array.from(itensTbody.children).map(tr => {
+      const prodId = tr.dataset.id;
+      const qty = parseFloat(tr.children[1].textContent) || 0;
+      const val = parseFloat(tr.children[2].textContent) || 0;
+      const desc = parseFloat(tr.children[4].textContent) || 0;
+      const valDesc = val * (1 - desc / 100);
+      return {
+        produto_id: prodId,
+        codigo: products[prodId]?.codigo || '',
+        nome: tr.children[0].textContent.trim(),
+        ncm: products[prodId]?.ncm || '',
+        quantidade: qty,
+        valor_unitario: val,
+        valor_unitario_desc: valDesc,
+        valor_desc: val - valDesc,
+        desconto_total: (val - valDesc) * qty,
+        valor_total: parseCurrencyToCents(tr.querySelector('.total-cell').textContent) / 100
+      };
+    });
+    const descontoTotal = parseCurrencyToCents(document.getElementById('descontoOrcamento').textContent) / 100;
+    const total = parseCurrencyToCents(document.getElementById('totalOrcamento').textContent) / 100;
+    const body = {
+      cliente_id: clienteVal,
+      contato_id: contatoVal,
+      situacao: currentStatus,
+      parcelas,
+      forma_pagamento: formaPagamentoVal,
+      transportadora: transportadoraText,
+      desconto_pagamento: descontoTotal,
+      desconto_especial: 0,
+      desconto_total: descontoTotal,
+      valor_final: total,
+      observacoes: document.getElementById('editarObservacoes').value || '',
+      validade: editarValidade.value || null,
+      prazo,
+      itens,
+      parcelas_detalhes: parcelasDetalhes
+    };
+    try {
+      const resp = await fetch(`http://localhost:3000/api/orcamentos/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      if (!resp.ok) throw new Error('Erro');
+      if (window.reloadOrcamentos) await window.reloadOrcamentos();
+      showToast('Orçamento atualizado com sucesso!', 'success');
+      if (closeAfter) close();
+    } catch (err) {
+      console.error(err);
+      showToast('Erro ao atualizar orçamento', 'error');
+    }
   }
 
   document.getElementById('salvarOrcamento').addEventListener('click', () => saveChanges(false));
   document.getElementById('salvarFecharOrcamento').addEventListener('click', () => saveChanges(true));
   document.getElementById('cancelarOrcamento').addEventListener('click', close);
   document.getElementById('voltarEditarOrcamento').addEventListener('click', close);
-  document.getElementById('converterOrcamento').addEventListener('click', () => {
-    saveChanges(true);
-    alert('Orçamento convertido em pedido!');
+  document.getElementById('clonarOrcamento').addEventListener('click', async () => {
+    try {
+      const resp = await fetch(`http://localhost:3000/api/orcamentos/${id}/clone`, { method: 'POST' });
+      if (!resp.ok) throw new Error('Erro');
+      const clone = await resp.json();
+      if (window.reloadOrcamentos) await window.reloadOrcamentos();
+      close();
+      window.selectedQuoteId = clone.id;
+      showToast('Orçamento clonado salvo e aberto para edição', 'info');
+      Modal.open('modals/orcamentos/editar.html', '../js/modals/orcamento-editar.js', 'editarOrcamento');
+    } catch (err) {
+      console.error(err);
+      showToast('Erro ao clonar orçamento', 'error');
+    }
   });
 })();
