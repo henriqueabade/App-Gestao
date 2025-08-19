@@ -27,6 +27,7 @@
   const editarTransportadora = document.getElementById('editarTransportadora');
   const editarFormaPagamento = document.getElementById('editarFormaPagamento');
   const editarValidade = document.getElementById('editarValidade');
+  const donoSelect = document.getElementById('editarDono');
   const produtoSelect = document.getElementById('novoItemProduto');
   const pagamentoBox = document.getElementById('editarPagamento');
   const condicaoWrapper = editarCondicao.parentElement;
@@ -73,6 +74,13 @@
     overlay.querySelector('#actYes').addEventListener('click',()=>{overlay.remove();cb(true);});
     overlay.querySelector('#actNo').addEventListener('click',()=>{overlay.remove();cb(false);});
   }
+  function showMissingDialog(fields){
+    const overlay=document.createElement('div');
+    overlay.className='fixed inset-0 bg-black/50 flex items-center justify-center p-4';
+    overlay.innerHTML=`<div class="max-w-sm w-full glass-surface backdrop-blur-xl rounded-2xl border border-yellow-500/20 ring-1 ring-yellow-500/30 shadow-2xl/40 animate-modalFade"><div class="p-6 text-center"><h3 class="text-lg font-semibold mb-4 text-yellow-400">Dados Incompletos</h3><p class="text-sm text-gray-300 mb-6">Preencha os campos: ${fields.join(', ')}</p><div class="flex justify-center"><button id="missingOk" class="btn-warning px-6 py-2 rounded-lg text-white font-medium active:scale-95">OK</button></div></div></div>`;
+    document.body.appendChild(overlay);
+    overlay.querySelector('#missingOk').addEventListener('click',()=>overlay.remove());
+  }
   function confirmResetIfNeeded(action){
     if(!condicaoDefinida){action();return;}
     showResetDialog(ok=>{if(!ok) return;resetCondicao();action();});
@@ -110,6 +118,16 @@
         data.map(c => `<option value="${c.id}">${c.nome_fantasia}</option>`).join('');
       data.forEach(c => { clients[c.id] = c; });
     } catch(err){ console.error('Erro ao carregar clientes', err); }
+  }
+
+  async function carregarUsuarios(){
+    try {
+      const resp = await fetch('http://localhost:3000/api/usuarios/lista');
+      const data = await resp.json();
+      donoSelect.innerHTML = '<option value="" disabled selected hidden></option>' +
+        data.map(u => `<option value="${u.nome}">${u.nome}</option>`).join('');
+      donoSelect.setAttribute('data-filled','false');
+    } catch(err){ console.error('Erro ao carregar usuários', err); }
   }
 
   async function carregarContatos(clienteId){
@@ -156,8 +174,16 @@
   editarCliente.addEventListener('change', () => {
     carregarContatos(editarCliente.value);
     carregarTransportadoras(editarCliente.value);
+    if(!donoSelect.value){
+      const donoCli = clients[editarCliente.value]?.dono_cliente;
+      if(donoCli){
+        donoSelect.value = donoCli;
+        donoSelect.setAttribute('data-filled','true');
+      }
+    }
   });
 
+  await carregarUsuarios();
   await carregarClientes();
   if (data.cliente_id) {
     editarCliente.value = data.cliente_id;
@@ -180,6 +206,10 @@
   if (editarFormaPagamento.value) editarFormaPagamento.setAttribute('data-filled','true');
   editarValidade.value = data.validade ? data.validade.split('T')[0] : '';
   document.getElementById('editarObservacoes').value = data.observacoes || '';
+  if(data.dono){
+    donoSelect.value = data.dono;
+    donoSelect.setAttribute('data-filled','true');
+  }
   await carregarProdutos();
   if (data.itens) {
     data.itens.forEach(it => {
@@ -192,7 +222,7 @@
     const prazoInput = document.getElementById('editarPrazoVista');
     if (prazoInput) prazoInput.value = data.prazo || '';
   }
-  [editarCliente, editarContato, editarCondicao, editarTransportadora, editarFormaPagamento, produtoSelect].forEach(sel => {
+  [editarCliente, editarContato, editarCondicao, editarTransportadora, editarFormaPagamento, produtoSelect, donoSelect].forEach(sel => {
     const sync = () => sel.setAttribute('data-filled', sel.value !== '');
     sync();
     sel.addEventListener('change', sync);
@@ -415,27 +445,54 @@
   }
 
   async function saveChanges(closeAfter) {
+    const missing = [];
     const clienteVal = editarCliente.value;
+    if(!clienteVal) missing.push('Cliente');
     const contatoVal = editarContato.value;
+    if(!contatoVal) missing.push('Contato');
     const condicaoVal = editarCondicao.value;
-    const transportadoraText = editarTransportadora.options[editarTransportadora.selectedIndex]?.textContent || '';
+    if(!condicaoVal) missing.push('Condição de pagamento');
+    const transportadoraVal = editarTransportadora.value;
+    if(!transportadoraVal) missing.push('Transportadora');
     const formaPagamentoVal = editarFormaPagamento.value;
-    let parcelas = 0;
+    if(!formaPagamentoVal) missing.push('Forma de Pagamento');
+    const donoVal = donoSelect.value;
+    if(!donoVal) missing.push('Dono');
+    if(itensTbody.children.length === 0) missing.push('Itens');
+
+    const dataEmissao = new Date();
+    let parcelas = 1;
     let prazo = '';
     let parcelasDetalhes = [];
-    if (condicaoVal === 'vista') {
-      prazo = document.getElementById('editarPrazoVista')?.value || '';
-    } else if (condicaoVal === 'prazo') {
+    if(condicaoVal === 'vista'){
+      const prazoVista = document.getElementById('editarPrazoVista')?.value;
+      if(!prazoVista) missing.push('Prazo (dias)');
+      else{
+        prazo = prazoVista;
+        const totalCents = parseCurrencyToCents(document.getElementById('totalOrcamento').textContent);
+        parcelasDetalhes.push({
+          valor: totalCents / 100,
+          data_vencimento: new Date(dataEmissao.getTime() + parseInt(prazoVista,10) * 86400000).toISOString().split('T')[0]
+        });
+      }
+    } else if(condicaoVal === 'prazo') {
       const pdata = Parcelamento.getData('editarParcelamento');
-      if (pdata && pdata.canRegister) {
+      if(!pdata || !pdata.canRegister) missing.push('Parcelamento');
+      else {
         parcelas = pdata.count;
         prazo = pdata.items.map(it => it.dueInDays).join('/');
         parcelasDetalhes = pdata.items.map(it => ({
           valor: it.amount / 100,
-          data_vencimento: new Date(Date.now() + (it.dueInDays || 0) * 86400000).toISOString().split('T')[0]
+          data_vencimento: new Date(dataEmissao.getTime() + (it.dueInDays || 0) * 86400000).toISOString().split('T')[0]
         }));
       }
     }
+
+    if(missing.length){
+      showMissingDialog(missing);
+      return;
+    }
+
     const itens = Array.from(itensTbody.children).map(tr => {
       const prodId = tr.dataset.id;
       const qty = parseFloat(tr.children[1].textContent) || 0;
@@ -457,6 +514,7 @@
     });
     const descontoTotal = parseCurrencyToCents(document.getElementById('descontoOrcamento').textContent) / 100;
     const total = parseCurrencyToCents(document.getElementById('totalOrcamento').textContent) / 100;
+    const transportadoraText = editarTransportadora.options[editarTransportadora.selectedIndex]?.textContent || '';
     const body = {
       cliente_id: clienteVal,
       contato_id: contatoVal,
@@ -471,6 +529,7 @@
       observacoes: document.getElementById('editarObservacoes').value || '',
       validade: editarValidade.value || null,
       prazo,
+      dono: donoVal,
       itens,
       parcelas_detalhes: parcelasDetalhes
     };

@@ -26,6 +26,7 @@
   const condicaoSelect = document.getElementById('novoCondicao');
   const transportadoraSelect = document.getElementById('novoTransportadora');
   const formaPagamentoSelect = document.getElementById('novoFormaPagamento');
+  const donoSelect = document.getElementById('novoDono');
   const pagamentoBox = document.getElementById('novoPagamento');
   const condicaoWrapper = condicaoSelect.parentElement;
   let parcelamentoLoaded = false;
@@ -111,6 +112,16 @@
     } catch(err){ console.error('Erro ao carregar clientes', err); }
   }
 
+  async function carregarUsuarios(){
+    try {
+      const resp = await fetch('http://localhost:3000/api/usuarios/lista');
+      const data = await resp.json();
+      donoSelect.innerHTML = '<option value="" disabled selected hidden></option>' +
+        data.map(u => `<option value="${u.nome}">${u.nome}</option>`).join('');
+      donoSelect.setAttribute('data-filled','false');
+    } catch(err){ console.error('Erro ao carregar usuários', err); }
+  }
+
   async function carregarContatos(clienteId){
     contatoSelect.innerHTML = '<option value="" disabled selected hidden></option>';
     contatoSelect.setAttribute('data-filled', 'false');
@@ -161,7 +172,7 @@
   }
 
   // sincroniza labels flutuantes
-  ['novoCliente','novoContato','novoCondicao','novoTransportadora','novoFormaPagamento','itemProduto'].forEach(id => {
+  ['novoCliente','novoContato','novoCondicao','novoTransportadora','novoFormaPagamento','itemProduto','novoDono'].forEach(id => {
     const el = document.getElementById(id);
     if(!el) return;
     const sync = () => el.setAttribute('data-filled', el.value !== '' ? 'true' : 'false');
@@ -173,9 +184,17 @@
   clienteSelect.addEventListener('change', () => {
     carregarContatos(clienteSelect.value);
     carregarTransportadoras(clienteSelect.value);
+    if(!donoSelect.value){
+      const donoCli = clients[clienteSelect.value]?.dono_cliente;
+      if(donoCli){
+        donoSelect.value = donoCli;
+        donoSelect.setAttribute('data-filled','true');
+      }
+    }
   });
 
   carregarClientes();
+  carregarUsuarios();
   carregarProdutos();
 
   function formatCurrency(v) {
@@ -381,6 +400,8 @@
     if (!transportadoraVal) missing.push('Transportadora');
     const formaPagamentoVal = formaPagamentoSelect.value;
     if (!formaPagamentoVal) missing.push('Forma de Pagamento');
+    const donoVal = donoSelect.value;
+    if (!donoVal) missing.push('Dono');
     if (itensTbody.children.length === 0) missing.push('Itens');
 
     const dataEmissao = new Date();
@@ -455,6 +476,7 @@
           observacoes: document.getElementById('novoObservacoes').value || '',
           validade: validadeVal,
           prazo,
+          dono: donoVal,
           itens,
           parcelas_detalhes: parcelasDetalhes
         };
