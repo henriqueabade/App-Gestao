@@ -2,7 +2,9 @@
   const overlayId = 'editarOrcamento';
   const overlay = document.getElementById('editarOrcamentoOverlay');
   const close = () => Modal.close(overlayId);
-  overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+  if (overlay) {
+    overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+  }
   document.addEventListener('keydown', function esc(e){ if(e.key === 'Escape'){ close(); document.removeEventListener('keydown', esc); } });
 
   // carga de dados
