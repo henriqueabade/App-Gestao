@@ -464,65 +464,8 @@
           body: JSON.stringify(body)
         });
         if (!resp.ok) throw new Error('Erro ao salvar');
-        const data = await resp.json();
-        const numero = data.numero;
-
-        const tabela = document.getElementById('orcamentosTabela');
-        const tr = document.createElement('tr');
-        tr.className = 'transition-colors duration-150';
-        tr.style.cursor = 'pointer';
-        tr.setAttribute('onmouseover', "this.style.background='rgba(163, 148, 167, 0.05)'");
-        tr.setAttribute('onmouseout', "this.style.background='transparent'");
-        const statusClasses = {
-          'Rascunho': 'badge-neutral',
-          'Pendente': 'badge-warning',
-          'Aprovado': 'badge-success',
-          'Rejeitado': 'badge-danger',
-          'Expirado': 'badge-neutral'
-        };
-        const badgeClass = statusClasses[status] || 'badge-neutral';
-        const clienteText = clienteSelect.options[clienteSelect.selectedIndex].textContent;
-        const condicaoText = condicaoSelect.options[condicaoSelect.selectedIndex].textContent;
-        tr.innerHTML = `
-          <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">${numero}</td>
-          <td class="px-6 py-4 whitespace-nowrap text-sm text-white">${clienteText}</td>
-          <td class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-violet)">${dataEmissao.toLocaleDateString('pt-BR')}</td>
-          <td class="px-6 py-4 whitespace-nowrap text-sm text-white">${formatCurrency(total)}</td>
-          <td class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-violet)">${condicaoText}</td>
-          <td class="px-6 py-4 whitespace-nowrap"><span class="${badgeClass} px-3 py-1 rounded-full text-xs font-medium">${status}</span></td>
-          <td class="px-6 py-4 whitespace-nowrap text-center"><div class="flex items-center justify-center space-x-2">
-            <i class="fas fa-eye w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color:var(--color-primary)" title="Visualizar"></i>
-            <i class="fas fa-edit w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Editar"></i>
-            <i class="fas fa-download w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Baixar PDF"></i>
-          </div></td>`;
-        tabela.appendChild(tr);
-        const editIcon = tr.querySelector('.fa-edit');
-        editIcon.addEventListener('click', e => {
-          e.stopPropagation();
-          const row = e.currentTarget.closest('tr');
-          const id = row.cells[0].textContent.trim();
-          const cliente = row.cells[1].textContent.trim();
-          const condicao = row.cells[4]?.textContent.trim();
-          const statusTxt = row.cells[5]?.innerText.trim();
-          const clienteId = row.dataset.clienteId;
-          const contato = row.dataset.contato;
-          const contatoId = row.dataset.contatoId;
-          const transportadora = row.dataset.transportadora;
-          const transportadoraId = row.dataset.transportadoraId;
-          const formaPagamento = row.dataset.formaPagamento;
-          const itemsData = JSON.parse(row.dataset.items || '[]');
-          window.selectedQuoteData = { id, cliente, clienteId, condicao, status: statusTxt, contato, contatoId, transportadora, transportadoraId, formaPagamento, items: itemsData, row };
-          Modal.open('modals/orcamentos/editar.html', '../js/modals/orcamento-editar.js', 'editarOrcamento');
-        });
-        tr.dataset.clienteId = clienteVal;
-        tr.dataset.cliente = clienteText;
-        tr.dataset.contatoId = contatoVal;
-        tr.dataset.contato = contatoSelect.options[contatoSelect.selectedIndex]?.textContent || '';
-        tr.dataset.transportadoraId = transportadoraVal;
-        tr.dataset.transportadora = transportadoraSelect.options[transportadoraSelect.selectedIndex]?.textContent || '';
-        tr.dataset.formaPagamento = formaPagamentoVal;
-        tr.dataset.items = JSON.stringify(itens);
-        tr.dataset.condicao = condicaoVal;
+        await resp.json();
+        if (window.reloadOrcamentos) await window.reloadOrcamentos();
         Modal.close(overlayId);
         showToast(status === 'Rascunho' ? 'Orçamento salvo com sucesso!' : 'Orçamento salvo e enviado com sucesso!', 'success');
       } catch (err) {
