@@ -104,7 +104,10 @@ async function carregarOrcamentos() {
                 if (status === 'Rascunho') {
                     showPdfUnavailableDialog(id);
                 } else {
-                    window.open(`http://localhost:3000/api/orcamentos/${id}/pdf`, '_blank');
+                    const pdfWindow = window.open('../pdf/index.html', '_blank');
+                    if (pdfWindow) {
+                        pdfWindow.addEventListener('load', () => pdfWindow.print());
+                    }
                 }
             });
         });

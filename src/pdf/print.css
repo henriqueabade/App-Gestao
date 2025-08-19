@@ -1,0 +1,81 @@
+/* print.css */
+
+@page {
+  size: A4 portrait;
+  margin: 5mm;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+}
+
+/* Container principal */
+#doc-container {
+  width: 100%;
+}
+
+/* Cada página */
+.page {
+  position: relative;
+  width: 100%;
+  box-sizing: border-box;
+  page-break-after: always;
+}
+
+/* Anula quebra após a última página gerada */
+.page:last-of-type {
+  page-break-after: auto;
+}
+
+/* Área de conteúdo: 5mm de padding + 30mm de margem inferior para não colar no footer */
+.page-content {
+  padding: 5mm;
+  margin-bottom: 30mm;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+/* Footer fixo na borda inferior de cada página */
+.footer {
+  position: fixed;
+  bottom: 5mm;
+  left: 5mm;
+  right: 5mm;
+  border-top: 1px solid #d1d5db;
+  padding-top: 2px;
+  text-align: center;
+  font-size: 0.6rem;
+  background: white;
+  box-sizing: border-box;
+}
+
+/* Tabela ocupa 100%, colunas fixas e fonte reduzida */
+table {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+  font-size: 0.75rem;
+}
+
+th, td {
+  border: 1px solid #d1d5db;
+  padding: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+thead {
+  background-color: #f3f4f6;
+}
+
+h3 {
+  color: #da0c1d;
+  font-size: 1rem;
+  margin: 0 0 4px 0;
+}
+
+.text-accent-red {
+  color: #da0c1d;
+}
