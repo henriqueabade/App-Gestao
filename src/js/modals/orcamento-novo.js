@@ -517,6 +517,7 @@
     limparBtn.addEventListener('click', () => {
       confirmResetIfNeeded(() => {
         overlay.querySelectorAll('input').forEach(i => i.value = '');
+        overlay.querySelectorAll('textarea').forEach(t => t.value = '');
         overlay.querySelectorAll('select').forEach(s => { s.selectedIndex = 0; s.setAttribute('data-filled', 'false'); });
         itensTbody.innerHTML = '';
         recalcTotals();
