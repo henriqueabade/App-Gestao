@@ -8,7 +8,7 @@ router.get('/', async (_req, res) => {
   try {
     const { rows } = await db.query(
       `SELECT o.id, o.numero, c.nome_fantasia AS cliente, to_char(o.data_emissao,'DD/MM/YYYY') AS data_emissao,
-              o.valor_final, o.parcelas, o.situacao
+              o.valor_final, o.parcelas, o.situacao, o.dono
          FROM orcamentos o
          LEFT JOIN clientes c ON c.id = o.cliente_id
         ORDER BY o.id DESC`
