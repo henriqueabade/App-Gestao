@@ -8,7 +8,7 @@
   // carga de dados
   const id = window.selectedQuoteId;
   let data = window.quoteData || {};
-  if (!data.id && id) {
+  if (id && (!data.itens || !data.itens.length)) {
     try {
       const resp = await fetch(`http://localhost:3000/api/orcamentos/${id}`);
       data = await resp.json();
@@ -223,7 +223,15 @@
   await carregarProdutos();
   if (data.itens) {
     data.itens.forEach(it => {
-      addItem({ id: it.produto_id, nome: it.nome, qtd: it.quantidade, valor: Number(it.valor_unitario), desc: it.valor_unitario ? (1 - it.valor_unitario_desc / it.valor_unitario) * 100 : 0 });
+      const descPag = Number(it.desconto_pagamento_prc) || 0;
+      const descEsp = Number(it.desconto_especial_prc) || 0;
+      addItem({
+        id: it.produto_id,
+        nome: it.nome,
+        qtd: Number(it.quantidade),
+        valor: Number(it.valor_unitario),
+        desc: descPag + descEsp
+      });
     });
   }
   editarCondicao.value = data.parcelas > 1 ? 'prazo' : 'vista';
