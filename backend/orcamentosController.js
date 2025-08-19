@@ -34,7 +34,7 @@ router.get('/:id', async (req, res) => {
       [id]
     );
     orcamento.itens = itens;
-    orcamento.parcelas = parcelas;
+    orcamento.parcelas_detalhes = parcelas;
     res.json(orcamento);
   } catch (err) {
     console.error('Erro ao buscar orçamento:', err);
@@ -50,6 +50,7 @@ router.post('/', async (req, res) => {
     contato_id,
     situacao,
     parcelas,
+    tipo_parcela,
     forma_pagamento,
     transportadora,
     desconto_pagamento,
@@ -75,8 +76,8 @@ router.post('/', async (req, res) => {
     }
     const now = new Date();
     const insertOrc = await client.query(
-      `INSERT INTO orcamentos (numero, cliente_id, contato_id, data_emissao, situacao, parcelas, forma_pagamento, transportadora, desconto_pagamento, desconto_especial, desconto_total, valor_final, observacoes, validade, prazo, dono)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING id`,
+      `INSERT INTO orcamentos (numero, cliente_id, contato_id, data_emissao, situacao, parcelas, tipo_parcela, forma_pagamento, transportadora, desconto_pagamento, desconto_especial, desconto_total, valor_final, observacoes, validade, prazo, dono)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17) RETURNING id`,
       [
         numero,
         cliente_id,
@@ -84,6 +85,7 @@ router.post('/', async (req, res) => {
         now,
         situacao,
         parcelas,
+        tipo_parcela,
         forma_pagamento,
         transportadora,
         desconto_pagamento,
@@ -150,6 +152,7 @@ router.put('/:id', async (req, res) => {
     contato_id,
     situacao,
     parcelas,
+    tipo_parcela,
     forma_pagamento,
     transportadora,
     desconto_pagamento,
@@ -168,14 +171,15 @@ router.put('/:id', async (req, res) => {
   try {
     await client.query('BEGIN');
     await client.query(
-      `UPDATE orcamentos SET cliente_id=$1, contato_id=$2, situacao=$3, parcelas=$4, forma_pagamento=$5,
-       transportadora=$6, desconto_pagamento=$7, desconto_especial=$8, desconto_total=$9, valor_final=$10,
-       observacoes=$11, validade=$12, prazo=$13, dono=$14 WHERE id=$15`,
+      `UPDATE orcamentos SET cliente_id=$1, contato_id=$2, situacao=$3, parcelas=$4, tipo_parcela=$5, forma_pagamento=$6,
+       transportadora=$7, desconto_pagamento=$8, desconto_especial=$9, desconto_total=$10, valor_final=$11,
+       observacoes=$12, validade=$13, prazo=$14, dono=$15 WHERE id=$16`,
       [
         cliente_id,
         contato_id,
         situacao,
         parcelas,
+        tipo_parcela,
         forma_pagamento,
         transportadora,
         desconto_pagamento,
@@ -270,14 +274,15 @@ router.post('/:id/clone', async (req, res) => {
     }
 
     const insert = await client.query(
-      `INSERT INTO orcamentos (numero, cliente_id, contato_id, data_emissao, situacao, parcelas, forma_pagamento, transportadora,
+      `INSERT INTO orcamentos (numero, cliente_id, contato_id, data_emissao, situacao, parcelas, tipo_parcela, forma_pagamento, transportadora,
        desconto_pagamento, desconto_especial, desconto_total, valor_final, observacoes, validade, prazo, dono)
-       VALUES ($1,$2,$3,NOW(),'Rascunho',$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING id`,
+       VALUES ($1,$2,$3,NOW(),'Rascunho',$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING id`,
       [
         numero,
         orc.cliente_id,
         orc.contato_id,
         orc.parcelas,
+        orc.tipo_parcela,
         orc.forma_pagamento,
         orc.transportadora,
         orc.desconto_pagamento,

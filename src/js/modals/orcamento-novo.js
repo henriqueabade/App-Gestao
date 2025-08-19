@@ -440,6 +440,7 @@
     const dataEmissao = new Date();
     let parcelas = 1;
     let prazo = '';
+    let tipoParcela = 'igual';
     let parcelasDetalhes = [];
     if (condicaoVal === 'vista') {
       const prazoVista = document.getElementById('novoPrazoVista')?.value;
@@ -457,6 +458,7 @@
       if (!pdata || !pdata.canRegister) missing.push('Parcelamento');
       else {
         parcelas = pdata.count;
+        tipoParcela = pdata.mode === 'equal' ? 'igual' : 'diferente';
         prazo = pdata.items.map(it => it.dueInDays).join('/');
         parcelasDetalhes = pdata.items.map(it => ({
           valor: it.amount / 100,
@@ -515,6 +517,7 @@
           contato_id: contatoVal,
           situacao: status,
           parcelas,
+          tipo_parcela: tipoParcela,
           forma_pagamento: formaPagamentoVal,
           transportadora: transportadoraSelect.options[transportadoraSelect.selectedIndex]?.textContent || '',
           desconto_pagamento: descPagTot,
