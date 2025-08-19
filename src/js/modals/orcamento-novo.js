@@ -13,6 +13,8 @@
   const produtoSelect = document.getElementById('itemProduto');
   const itensTbody = document.querySelector('#novoItensTabela tbody');
   const condicaoSelect = document.getElementById('novoCondicao');
+  const transportadoraSelect = document.getElementById('novoTransportadora');
+  const formaPagamentoSelect = document.getElementById('novoFormaPagamento');
   const pagamentoBox = document.getElementById('novoPagamento');
   const condicaoWrapper = condicaoSelect.parentElement;
   let parcelamentoLoaded = false;
@@ -99,6 +101,22 @@
     } catch(err){ console.error('Erro ao carregar contatos', err); }
   }
 
+  async function carregarTransportadoras(clienteId){
+    transportadoraSelect.innerHTML = '<option value="" disabled selected hidden></option>';
+    transportadoraSelect.setAttribute('data-filled', 'false');
+    if(!clienteId) return;
+    try {
+      const resp = await fetch(`http://localhost:3000/api/transportadoras/${clienteId}`);
+      const data = await resp.json();
+      data.forEach(tp => {
+        const opt = document.createElement('option');
+        opt.value = tp.id;
+        opt.textContent = tp.nome;
+        transportadoraSelect.appendChild(opt);
+      });
+    } catch(err){ console.error('Erro ao carregar transportadoras', err); }
+  }
+
   async function carregarProdutos(){
     try {
       const lista = await (window.electronAPI?.listarProdutos?.() ?? []);
@@ -110,7 +128,7 @@
   }
 
   // sincroniza labels flutuantes
-  ['novoCliente','novoContato','novoCondicao','itemProduto'].forEach(id => {
+  ['novoCliente','novoContato','novoCondicao','novoTransportadora','novoFormaPagamento','itemProduto'].forEach(id => {
     const el = document.getElementById(id);
     if(!el) return;
     const sync = () => el.setAttribute('data-filled', el.value !== '' ? 'true' : 'false');
@@ -121,6 +139,7 @@
 
   clienteSelect.addEventListener('change', () => {
     carregarContatos(clienteSelect.value);
+    carregarTransportadoras(clienteSelect.value);
   });
 
   carregarClientes();
@@ -319,6 +338,9 @@
     const contatoText = contatoSelect.options[contatoSelect.selectedIndex]?.textContent || '';
     const condicaoVal = condicaoSelect.value;
     const condicaoText = condicaoSelect.options[condicaoSelect.selectedIndex].textContent;
+    const transportadoraVal = transportadoraSelect.value;
+    const transportadoraText = transportadoraSelect.options[transportadoraSelect.selectedIndex]?.textContent || '';
+    const formaPagamentoVal = formaPagamentoSelect.value;
     const total = document.getElementById('novoTotal').textContent;
     const itens = Array.from(itensTbody.children).map(tr => ({
       id: tr.dataset.id,
@@ -366,14 +388,20 @@
       const clienteId = row.dataset.clienteId;
       const contato = row.dataset.contato;
       const contatoId = row.dataset.contatoId;
+      const transportadora = row.dataset.transportadora;
+      const transportadoraId = row.dataset.transportadoraId;
+      const formaPagamento = row.dataset.formaPagamento;
       const itemsData = JSON.parse(row.dataset.items || '[]');
-      window.selectedQuoteData = { id, cliente, clienteId, condicao, status: statusTxt, contato, contatoId, items: itemsData, row };
+      window.selectedQuoteData = { id, cliente, clienteId, condicao, status: statusTxt, contato, contatoId, transportadora, transportadoraId, formaPagamento, items: itemsData, row };
       Modal.open('modals/orcamentos/editar.html', '../js/modals/orcamento-editar.js', 'editarOrcamento');
     });
     tr.dataset.clienteId = clienteVal;
     tr.dataset.cliente = clienteText;
     tr.dataset.contatoId = contatoVal;
     tr.dataset.contato = contatoText;
+    tr.dataset.transportadoraId = transportadoraVal;
+    tr.dataset.transportadora = transportadoraText;
+    tr.dataset.formaPagamento = formaPagamentoVal;
     tr.dataset.items = JSON.stringify(itens);
     tr.dataset.condicao = condicaoVal;
     Modal.close(overlayId);
