@@ -340,10 +340,17 @@
       <i class="fas fa-times w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10 text-red-400"></i>
     `;
     const confirmBtn = actionsCell.querySelector('.fa-check');
-    const cancelBtn = actionsCell.querySelector('.fa-times');
-    const qtyInput = qtyCell.querySelector('input');
-    const valInput = valCell.querySelector('input');
-    const descInput = descCell.querySelector('input');
+   const cancelBtn = actionsCell.querySelector('.fa-times');
+   const qtyInput = qtyCell.querySelector('input');
+   const valInput = valCell.querySelector('input');
+   const descInput = descCell.querySelector('input');
+
+    qtyInput.addEventListener('input', () => {
+      const q = parseFloat(qtyInput.value) || 0;
+      const condDesc = (editarCondicao.value === 'vista' ? 5 : 0);
+      const qtyDesc = q > 1 ? 5 : 0;
+      descInput.value = (condDesc + qtyDesc).toFixed(2);
+    });
 
     confirmBtn.addEventListener('click', () => {
       showActionDialog('Deseja salvar as alterações deste item?', ok => {
@@ -382,7 +389,10 @@
         showDuplicateDialog(choice => {
           if (choice === 'somar') {
             const qtyCell = existing.children[1];
-            qtyCell.textContent = (parseFloat(qtyCell.textContent) || 0) + item.qtd;
+            const newQty = (parseFloat(qtyCell.textContent) || 0) + item.qtd;
+            qtyCell.textContent = newQty;
+            const defaultDesc = (newQty > 1 ? 5 : 0) + (editarCondicao.value === 'vista' ? 5 : 0);
+            existing.children[4].textContent = defaultDesc.toFixed(2);
           } else if (choice === 'substituir') {
             existing.children[1].textContent = item.qtd;
             existing.children[2].textContent = item.valor.toFixed(2);

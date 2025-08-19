@@ -271,6 +271,13 @@
     const valInput = valCell.querySelector('input');
     const descInput = descCell.querySelector('input');
 
+    qtyInput.addEventListener('input', () => {
+      const q = parseFloat(qtyInput.value) || 0;
+      const condDesc = (condicaoSelect.value === 'vista' ? 5 : 0);
+      const qtyDesc = q > 1 ? 5 : 0;
+      descInput.value = (condDesc + qtyDesc).toFixed(2);
+    });
+
     confirmBtn.addEventListener('click', () => {
       showActionDialog('Deseja salvar as alterações deste item?', ok => {
         if(!ok) return;
@@ -340,7 +347,10 @@
       showDuplicateDialog(choice => {
         if (choice === 'somar') {
           const qtyCell = existing.children[1];
-          qtyCell.textContent = (parseFloat(qtyCell.textContent) || 0) + qtd;
+          const newQty = (parseFloat(qtyCell.textContent) || 0) + qtd;
+          qtyCell.textContent = newQty;
+          const defaultDesc = (newQty > 1 ? 5 : 0) + (condicaoSelect.value === 'vista' ? 5 : 0);
+          existing.children[4].textContent = defaultDesc.toFixed(2);
         } else if (choice === 'substituir') {
           existing.children[1].textContent = qtd;
           existing.children[2].textContent = product.valor.toFixed(2);

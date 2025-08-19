@@ -45,7 +45,7 @@
       </div>
       <div id="${containerId}_rows" class="space-y-2"></div>
       <div class="mt-4 text-right">
-        <span id="${containerId}_summary" class="badge-warning px-3 py-1 rounded-full text-xs font-medium">Faltante: R$ 0,00</span>
+        <span id="${containerId}_summary" class="badge-danger px-3 py-1 rounded-full text-xs font-medium">Faltante: R$ 0,00</span>
       </div>`;
     const elements = {
       count: container.querySelector(`#${containerId}_count`),
@@ -123,7 +123,7 @@
     const allFilled = s.count && s.items.length===s.count && s.items.every(it=>it.amount>0 && it.dueInDays!==null);
     s.canRegister=Boolean(allFilled && s.remaining===0);
     inst.elements.summary.textContent = s.remaining===0 ? 'Total ok' : `Faltante: ${formatCentsBRL(s.remaining)}`;
-    inst.elements.summary.className = s.remaining===0 ? 'badge-success px-3 py-1 rounded-full text-xs font-medium' : 'badge-warning px-3 py-1 rounded-full text-xs font-medium';
+    inst.elements.summary.className = s.remaining===0 ? 'badge-success px-3 py-1 rounded-full text-xs font-medium' : 'badge-danger px-3 py-1 rounded-full text-xs font-medium';
   }
   function updateTotal(id,total){
     const inst=instances.get(id); if(!inst) return;
