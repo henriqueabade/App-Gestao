@@ -9,6 +9,22 @@ function popularClientes() {
     }
 }
 
+function showLoadingSpinner() {
+    const overlay = document.createElement('div');
+    overlay.id = 'orcamentoLoading';
+    overlay.className = 'fixed inset-0 bg-black/50 flex items-center justify-center z-50';
+    overlay.innerHTML = `
+        <div class="spinner"></div>
+        <style>
+            #orcamentoLoading .spinner{border:4px solid rgba(255,255,255,0.3);border-top-color:var(--color-primary);border-radius:50%;width:3rem;height:3rem;animation:spin 1s linear infinite;}
+            @keyframes spin{to{transform:rotate(360deg);}}
+        </style>`;
+    document.body.appendChild(overlay);
+}
+function hideLoadingSpinner() {
+    document.getElementById('orcamentoLoading')?.remove();
+}
+
 async function carregarOrcamentos() {
     try {
         const resp = await fetch('http://localhost:3000/api/orcamentos');
@@ -49,11 +65,24 @@ async function carregarOrcamentos() {
             tbody.appendChild(tr);
         });
         tbody.querySelectorAll('.fa-edit').forEach(icon => {
-            icon.addEventListener('click', e => {
+            icon.addEventListener('click', async e => {
                 e.stopPropagation();
                 const id = e.currentTarget.closest('tr').dataset.id;
                 window.selectedQuoteId = id;
-                Modal.open('modals/orcamentos/editar.html', '../js/modals/orcamento-editar.js', 'editarOrcamento');
+                showLoadingSpinner();
+                const start = Date.now();
+                try {
+                    const resp = await fetch(`http://localhost:3000/api/orcamentos/${id}`);
+                    window.quoteData = await resp.json();
+                } catch (err) {
+                    console.error('Erro ao carregar orçamento', err);
+                }
+                const elapsed = Date.now() - start;
+                const delay = elapsed < 3000 ? Math.max(2000 - elapsed, 0) : 0;
+                setTimeout(() => {
+                    hideLoadingSpinner();
+                    Modal.open('modals/orcamentos/editar.html', '../js/modals/orcamento-editar.js', 'editarOrcamento');
+                }, delay);
             });
         });
         popularClientes();
