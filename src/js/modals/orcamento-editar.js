@@ -29,6 +29,7 @@
   const editarValidade = document.getElementById('editarValidade');
   const donoSelect = document.getElementById('editarDono');
   const produtoSelect = document.getElementById('novoItemProduto');
+  const itensTbody = document.querySelector('#orcamentoItens tbody');
   const pagamentoBox = document.getElementById('editarPagamento');
   const condicaoWrapper = editarCondicao.parentElement;
   let parcelamentoLoaded = false;
@@ -287,8 +288,6 @@
     });
   }
 
-  const itensTbody = document.querySelector('#orcamentoItens tbody');
-
   function formatCurrency(v) {
     return v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
   }
@@ -458,8 +457,6 @@
       attachRowEvents(tr);
       recalcTotals();
     }
-
-    (data.items || []).forEach(addItem);
 
     document.getElementById('adicionarItem').addEventListener('click', () => {
       const prodId = produtoSelect.value;
