@@ -69,7 +69,7 @@
     }
   }
   condicaoSelect.addEventListener('change', ()=>{condicaoDefinida=true;condicaoSelect.setAttribute('data-filled','true');updateCondicao();recalcTotals();});
-  condicaoWrapper.addEventListener('click',e=>{if(condicaoSelect.disabled){e.preventDefault();alert('Condição de pagamento bloqueada. Digite itens do orçamento antes.');}});
+  condicaoWrapper.addEventListener('click',e=>{if(condicaoSelect.disabled){e.preventDefault();alert('Você não pode escolher uma condição de pagamento bloqueada. Se desejar manter esta condição de pagamento, desbloqueie-a antes de continuar.');}});
   condicaoSelect.disabled = true;
   condicaoSelect.style.pointerEvents='none';
   updateCondicao();
