@@ -109,6 +109,16 @@
 
   const clients = {};
   const products = {};
+  const parseCurrencyToCents = window.parseCurrencyToCents || (v => {
+    if (!v) return 0;
+    const normalized = v.toString()
+      .replace(/\s/g,'')
+      .replace(/[A-Za-z\$]/g,'')
+      .replace(/\./g,'')
+      .replace(',', '.');
+    const value = Number(normalized);
+    return isNaN(value) ? 0 : Math.round(value * 100);
+  });
 
   async function carregarClientes(){
     try {
