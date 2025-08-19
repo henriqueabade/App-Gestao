@@ -154,6 +154,11 @@ body {
     color: var(--color-blue);
 }
 
+.badge-orange {
+    background: rgba(255, 165, 0, 0.2);
+    color: #ff8c00;
+}
+
 .badge-warning {
     background: rgba(212, 193, 105, 0.2);
     color: var(--color-primary);
