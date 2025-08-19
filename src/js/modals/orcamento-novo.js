@@ -441,9 +441,8 @@
     const dataEmissao = new Date();
     let parcelas = 1;
     let prazo = '';
-    let tipoParcela = 'igual';
-    let parcelasDetalhes = [];
     let tipoParcela = 'a vista';
+    let parcelasDetalhes = [];
     if (condicaoVal === 'vista') {
       const prazoVista = document.getElementById('novoPrazoVista')?.value;
       if (!prazoVista) missing.push('Prazo (dias)');
@@ -460,7 +459,6 @@
       if (!pdata || !pdata.canRegister) missing.push('Parcelamento');
       else {
         parcelas = pdata.count;
-        tipoParcela = pdata.mode === 'equal' ? 'igual' : 'diferente';
         prazo = pdata.items.map(it => it.dueInDays).join('/');
         parcelasDetalhes = pdata.items.map(it => ({
           valor: it.amount / 100,
