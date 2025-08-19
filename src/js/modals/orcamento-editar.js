@@ -263,21 +263,29 @@
   const statusOptions = document.getElementById('statusOptions');
 
   function updateStatusTag() {
+    if (!statusTag) return;
     statusTag.className = `${statusMap[currentStatus] || 'badge-neutral'} px-3 py-1 rounded-full text-xs font-medium cursor-pointer`;
     statusTag.textContent = currentStatus;
   }
   updateStatusTag();
 
-  statusTag.addEventListener('click', () => {
-    statusOptions.classList.toggle('hidden');
-  });
-  statusOptions.querySelectorAll('button').forEach(btn => {
-    btn.addEventListener('click', () => {
-      currentStatus = btn.dataset.status;
-      updateStatusTag();
-      statusOptions.classList.add('hidden');
+  if (statusTag && statusOptions) {
+    statusTag.addEventListener('click', () => {
+      statusOptions.classList.toggle('hidden');
     });
-  });
+    statusOptions.querySelectorAll('button').forEach(btn => {
+      btn.addEventListener('click', () => {
+        currentStatus = btn.dataset.status;
+        updateStatusTag();
+        statusOptions.classList.add('hidden');
+      });
+    });
+    document.addEventListener('click', e => {
+      if (!statusTag.contains(e.target) && !statusOptions.contains(e.target)) {
+        statusOptions.classList.add('hidden');
+      }
+    });
+  }
 
   const itensTbody = document.querySelector('#orcamentoItens tbody');
 
