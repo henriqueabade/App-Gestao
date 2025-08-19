@@ -468,19 +468,26 @@
 
   function recalcTotals() {
     let subtotal = 0;
-    let desconto = 0;
+    let descPagTot = 0;
+    let descEspTot = 0;
     document.querySelectorAll('#orcamentoItens tbody tr').forEach(tr => {
       const qty = parseFloat(tr.children[1].textContent) || 0;
       const val = parseFloat(tr.children[2].textContent) || 0;
-      const desc = parseFloat(tr.children[4].textContent) || 0;
+      const descTotal = parseFloat(tr.children[4].textContent) || 0;
+      const defaultDesc = (qty > 1 ? 5 : 0) + (editarCondicao.value === 'vista' ? 5 : 0);
+      const descPagPrc = Math.min(defaultDesc, descTotal);
+      const descEspPrc = Math.max(descTotal - descPagPrc, 0);
       const line = qty * val;
-      const lineDesc = line * (desc / 100);
       subtotal += line;
-      desconto += lineDesc;
+      descPagTot += (val * (descPagPrc / 100)) * qty;
+      descEspTot += (val * (descEspPrc / 100)) * qty;
     });
-    const total = subtotal - desconto;
+    const desconto = descPagTot + descEspTot;
     document.getElementById('subtotalOrcamento').textContent = formatCurrency(subtotal);
+    document.getElementById('descontoPagOrcamento').textContent = formatCurrency(descPagTot);
+    document.getElementById('descontoEspOrcamento').textContent = formatCurrency(descEspTot);
     document.getElementById('descontoOrcamento').textContent = formatCurrency(desconto);
+    const total = subtotal - desconto;
     document.getElementById('totalOrcamento').textContent = formatCurrency(total);
     document.querySelectorAll('#orcamentoItens tbody tr').forEach(updateLineTotal);
     editarCondicao.disabled = total === 0;

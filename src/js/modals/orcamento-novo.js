@@ -228,17 +228,24 @@
 
   function recalcTotals() {
     let subtotal = 0;
-    let desconto = 0;
+    let descPagTot = 0;
+    let descEspTot = 0;
     itensTbody.querySelectorAll('tr').forEach(tr => {
       const qty = parseFloat(tr.children[1].textContent) || 0;
       const val = parseFloat(tr.children[2].textContent) || 0;
-      const desc = parseFloat(tr.children[4].textContent) || 0;
+      const descTotal = parseFloat(tr.children[4].textContent) || 0;
+      const defaultDesc = (qty > 1 ? 5 : 0) + (condicaoSelect.value === 'vista' ? 5 : 0);
+      const descPagPrc = Math.min(defaultDesc, descTotal);
+      const descEspPrc = Math.max(descTotal - descPagPrc, 0);
       const line = qty * val;
-      const lineDesc = line * (desc / 100);
       subtotal += line;
-      desconto += lineDesc;
+      descPagTot += (val * (descPagPrc / 100)) * qty;
+      descEspTot += (val * (descEspPrc / 100)) * qty;
     });
+    const desconto = descPagTot + descEspTot;
     document.getElementById('novoSubtotal').textContent = formatCurrency(subtotal);
+    document.getElementById('novoDescPag').textContent = formatCurrency(descPagTot);
+    document.getElementById('novoDescEsp').textContent = formatCurrency(descEspTot);
     document.getElementById('novoDesconto').textContent = formatCurrency(desconto);
     const total = subtotal - desconto;
     document.getElementById('novoTotal').textContent = formatCurrency(total);
