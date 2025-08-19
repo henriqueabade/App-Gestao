@@ -112,9 +112,8 @@ async function carregarOrcamentos() {
                 if (status === 'Rascunho') {
                     showPdfUnavailableDialog(id);
                 } else {
-                    const pdfWindow = window.open('../pdf/index.html', '_blank');
-                    if (pdfWindow) {
-                        pdfWindow.addEventListener('load', () => pdfWindow.print());
+                    if (window.electronAPI?.openPdf) {
+                        window.electronAPI.openPdf(id);
                     }
                 }
             });

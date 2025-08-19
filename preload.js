@@ -65,6 +65,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   reloadWindow: () => ipcRenderer.invoke('reload-window'),
   getDisplays: () => ipcRenderer.invoke('get-displays'),
   setDisplay: (id) => ipcRenderer.invoke('set-display', id),
+  openPdf: (id) => ipcRenderer.invoke('open-pdf', id),
     getSavedDisplay: () => ipcRenderer.invoke('get-saved-display'),
     onActivateTab: (callback) =>
       ipcRenderer.on('activate-tab', (_event, tab) => callback(tab)),
