@@ -135,7 +135,11 @@
     }
     recompute(id);
   }
-  window.Parcelamento={init,updateTotal};
+  function getData(id){
+    const inst=instances.get(id); if(!inst) return null;
+    return JSON.parse(JSON.stringify(inst.state));
+  }
+  window.Parcelamento={init,updateTotal,getData};
   window.parseCurrencyToCents=parseCurrencyToCents;
   window.formatCentsBRL=formatCentsBRL;
   window.parseIntOnly=parseIntOnly;
