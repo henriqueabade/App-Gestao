@@ -1,7 +1,16 @@
 <div id="novoOrcamentoOverlay" class="fixed inset-0 bg-black/50 flex items-center justify-center p-4">
   <div role="dialog" aria-modal="true" tabindex="0" class="w-full max-w-5xl max-h-[90vh] glass-surface backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade slide-in overflow-hidden flex flex-col">
     <header class="relative flex items-center justify-between px-8 py-5 border-b border-white/10 flex-shrink-0">
-      <button id="voltarNovoOrcamento" class="btn-neutral px-4 py-2 rounded-lg text-white font-medium flex items-center gap-2">← Voltar</button>
+      <div class="flex items-center gap-3">
+        <button id="voltarNovoOrcamento" class="btn-neutral px-4 py-2 rounded-lg text-white font-medium flex items-center gap-2">← Voltar</button>
+        <div class="relative">
+          <select id="novoDono" class="peer w-48 appearance-none bg-input border border-inputBorder rounded-lg px-4 pr-12 py-2 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" data-filled="false">
+            <option value="" disabled selected hidden></option>
+          </select>
+          <label for="novoDono" class="absolute left-4 top-1/2 -translate-y-1/2 text-base text-gray-300 pointer-events-none transition-all duration-150 peer-focus:top-0 peer-focus:-translate-y-full peer-focus:text-xs peer-focus:text-primary peer-data-[filled=true]:top-0 peer-data-[filled=true]:-translate-y-full peer-data-[filled=true]:text-xs">Dono</label>
+          <i class="fas fa-chevron-down absolute right-4 top-1/2 -translate-y-1/2 text-gray-300 pointer-events-none"></i>
+        </div>
+      </div>
       <h2 class="absolute left-1/2 -translate-x-1/2 text-lg font-semibold text-white">NOVO ORÇAMENTO</h2>
       <div class="flex items-center gap-3">
         <button id="salvarNovoOrcamento" class="btn-success px-4 py-2 rounded-lg text-white font-medium">Salvar</button>
@@ -55,13 +64,6 @@
               <option value="cartao">Cartão de Crédito</option>
             </select>
             <label for="novoFormaPagamento" class="absolute left-4 top-1/2 -translate-y-1/2 text-base text-gray-300 pointer-events-none transition-all duration-150 peer-focus:top-0 peer-focus:-translate-y-full peer-focus:text-xs peer-focus:text-primary peer-data-[filled=true]:top-0 peer-data-[filled=true]:-translate-y-full peer-data-[filled=true]:text-xs">Forma de Pagamento</label>
-            <i class="fas fa-chevron-down absolute right-4 top-1/2 -translate-y-1/2 text-gray-300 pointer-events-none"></i>
-          </div>
-          <div class="relative">
-            <select id="novoDono" class="peer w-full appearance-none bg-input border border-inputBorder rounded-lg px-4 pr-12 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" data-filled="false">
-              <option value="" disabled selected hidden></option>
-            </select>
-            <label for="novoDono" class="absolute left-4 top-1/2 -translate-y-1/2 text-base text-gray-300 pointer-events-none transition-all duration-150 peer-focus:top-0 peer-focus:-translate-y-full peer-focus:text-xs peer-focus:text-primary peer-data-[filled=true]:top-0 peer-data-[filled=true]:-translate-y-full peer-data-[filled=true]:text-xs">Dono</label>
             <i class="fas fa-chevron-down absolute right-4 top-1/2 -translate-y-1/2 text-gray-300 pointer-events-none"></i>
           </div>
         <div class="relative lg:col-span-2">
