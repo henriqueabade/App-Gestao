@@ -76,7 +76,7 @@
     }
   }
   editarCondicao.addEventListener('change',()=>{condicaoDefinida=true;editarCondicao.setAttribute('data-filled','true');updateCondicao();recalcTotals();});
-  condicaoWrapper.addEventListener('click',e=>{if(editarCondicao.disabled){e.preventDefault();alert('Condição de pagamento bloqueada. Digite itens do orçamento antes.');}});
+  condicaoWrapper.addEventListener('click',e=>{if(editarCondicao.disabled){e.preventDefault();alert('Você não pode escolher uma condição de pagamento bloqueada. Se desejar manter esta condição de pagamento, desbloqueie-a antes de continuar.');}});
   editarCondicao.disabled=true;
   editarCondicao.style.pointerEvents='none';
 
