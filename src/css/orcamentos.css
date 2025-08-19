@@ -149,6 +149,11 @@ body {
     color: var(--color-green);
 }
 
+.badge-info {
+    background: rgba(138, 167, 243, 0.2);
+    color: var(--color-blue);
+}
+
 .badge-warning {
     background: rgba(212, 193, 105, 0.2);
     color: var(--color-primary);

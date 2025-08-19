@@ -19,6 +19,7 @@
                 <label class="block text-sm font-medium mb-2 text-white">Status</label>
                 <select id="filterStatus" class="input-glass text-white rounded-md px-4 py-3 w-full">
                     <option value="">Todos os Status</option>
+                    <option value="Rascunho">Rascunho</option>
                     <option value="Pendente">Pendente</option>
                     <option value="Aprovado">Aprovado</option>
                     <option value="Rejeitado">Rejeitado</option>
@@ -35,14 +36,15 @@
                     <option value="Mês">Mês</option>
                     <option value="Trimestre">Trimestre</option>
                     <option value="Ano">Ano</option>
+                    <option value="Personalizado">Personalizado</option>
                 </select>
             </div>
 
             <!-- Salesperson Filter -->
             <div class="flex-1 min-w-0">
-                <label class="block text-sm font-medium mb-2 text-white">Vendedor</label>
-                <select id="filterSeller" class="input-glass text-white rounded-md px-4 py-3 w-full">
-                    <option value="">Todos os Vendedores</option>
+                <label class="block text-sm font-medium mb-2 text-white">Dono</label>
+                <select id="filterOwner" class="input-glass text-white rounded-md px-4 py-3 w-full">
+                    <option value="">Todos os Donos</option>
                     <option value="João Silva">João Silva</option>
                     <option value="Maria Santos">Maria Santos</option>
                     <option value="Pedro Costa">Pedro Costa</option>
@@ -66,8 +68,8 @@
                     Limpar
                 </button>
             </div>
-        </div>
-    </div>
+</div>
+</div>
 
     <!-- Quotes Table -->
     <div class="glass-surface rounded-xl shadow-lg animate-fade-in-up table-scroll">
@@ -85,5 +87,24 @@
             </thead>
             <tbody id="orcamentosTabela" class="divide-y divide-white/10"></tbody>
             </table>
+    </div>
+</div>
+
+<!-- Modal de período personalizado -->
+<div id="periodModal" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+    <div class="bg-white rounded-lg p-6 text-gray-800">
+        <div class="flex gap-4 mb-4">
+            <div>
+                <label for="startDate" class="block text-sm mb-1">De</label>
+                <input type="date" id="startDate" class="border rounded px-2 py-1" />
+            </div>
+            <div>
+                <label for="endDate" class="block text-sm mb-1">Até</label>
+                <input type="date" id="endDate" class="border rounded px-2 py-1" />
+            </div>
+        </div>
+        <div class="text-right">
+            <button id="periodConfirm" class="btn-primary text-white px-4 py-2 rounded">Confirmar</button>
+        </div>
     </div>
 </div>
