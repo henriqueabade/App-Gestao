@@ -534,37 +534,35 @@
     if(!donoVal) missing.push('Dono');
     if(itensTbody.children.length === 0) missing.push('Itens');
 
-    const dataEmissao = new Date();
-    let parcelas = 1;
-    let prazo = '';
-    let tipoParcela = 'igual';
-    let parcelasDetalhes = [];
-    let tipoParcela = 'a vista';
-    if(condicaoVal === 'vista'){
-      const prazoVista = document.getElementById('editarPrazoVista')?.value;
-      if(!prazoVista) missing.push('Prazo (dias)');
-      else{
-        prazo = prazoVista;
-        const totalCents = parseCurrencyToCents(document.getElementById('totalOrcamento').textContent);
-        parcelasDetalhes.push({
-          valor: totalCents / 100,
-          data_vencimento: new Date(dataEmissao.getTime() + parseInt(prazoVista,10) * 86400000).toISOString().split('T')[0]
-        });
-      }
-    } else if(condicaoVal === 'prazo') {
-      const pdata = Parcelamento.getData('editarParcelamento');
-      if(!pdata || !pdata.canRegister) missing.push('Parcelamento');
-      else {
-        parcelas = pdata.count;
-        tipoParcela = pdata.mode === 'equal' ? 'igual' : 'diferente';
-        prazo = pdata.items.map(it => it.dueInDays).join('/');
-        parcelasDetalhes = pdata.items.map(it => ({
-          valor: it.amount / 100,
-          data_vencimento: new Date(dataEmissao.getTime() + (it.dueInDays || 0) * 86400000).toISOString().split('T')[0]
-        }));
-        tipoParcela = pdata.mode === 'equal' ? 'igual' : 'diferente';
-      }
-    }
+      const dataEmissao = new Date();
+      let parcelas = 1;
+      let prazo = '';
+      let tipoParcela = 'a vista';
+      let parcelasDetalhes = [];
+      if(condicaoVal === 'vista'){
+        const prazoVista = document.getElementById('editarPrazoVista')?.value;
+        if(!prazoVista) missing.push('Prazo (dias)');
+        else{
+          prazo = prazoVista;
+          const totalCents = parseCurrencyToCents(document.getElementById('totalOrcamento').textContent);
+          parcelasDetalhes.push({
+            valor: totalCents / 100,
+            data_vencimento: new Date(dataEmissao.getTime() + parseInt(prazoVista,10) * 86400000).toISOString().split('T')[0]
+          });
+        }
+        } else if(condicaoVal === 'prazo') {
+          const pdata = Parcelamento.getData('editarParcelamento');
+          if(!pdata || !pdata.canRegister) missing.push('Parcelamento');
+          else {
+            parcelas = pdata.count;
+            prazo = pdata.items.map(it => it.dueInDays).join('/');
+            parcelasDetalhes = pdata.items.map(it => ({
+              valor: it.amount / 100,
+              data_vencimento: new Date(dataEmissao.getTime() + (it.dueInDays || 0) * 86400000).toISOString().split('T')[0]
+            }));
+            tipoParcela = pdata.mode === 'equal' ? 'igual' : 'diferente';
+          }
+        }
 
     if(missing.length){
       showMissingDialog(missing);
