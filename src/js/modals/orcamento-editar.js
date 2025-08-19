@@ -14,6 +14,8 @@
   const editarCliente = document.getElementById('editarCliente');
   const editarContato = document.getElementById('editarContato');
   const editarCondicao = document.getElementById('editarCondicao');
+  const editarTransportadora = document.getElementById('editarTransportadora');
+  const editarFormaPagamento = document.getElementById('editarFormaPagamento');
   const produtoSelect = document.getElementById('novoItemProduto');
   const pagamentoBox = document.getElementById('editarPagamento');
   const condicaoWrapper = editarCondicao.parentElement;
@@ -107,6 +109,22 @@
     } catch(err){ console.error('Erro ao carregar contatos', err); }
   }
 
+  async function carregarTransportadoras(clienteId){
+    editarTransportadora.innerHTML = '<option value="" disabled selected hidden></option>';
+    editarTransportadora.setAttribute('data-filled','false');
+    if(!clienteId) return;
+    try {
+      const resp = await fetch(`http://localhost:3000/api/transportadoras/${clienteId}`);
+      const data = await resp.json();
+      data.forEach(tp => {
+        const opt = document.createElement('option');
+        opt.value = tp.id;
+        opt.textContent = tp.nome;
+        editarTransportadora.appendChild(opt);
+      });
+    } catch(err){ console.error('Erro ao carregar transportadoras', err); }
+  }
+
   async function carregarProdutos(){
     try {
       const lista = await (window.electronAPI?.listarProdutos?.() ?? []);
@@ -118,6 +136,7 @@
 
   editarCliente.addEventListener('change', () => {
     carregarContatos(editarCliente.value);
+    carregarTransportadoras(editarCliente.value);
   });
 
   await carregarClientes();
@@ -125,9 +144,14 @@
     editarCliente.value = data.clienteId;
     editarCliente.setAttribute('data-filled', 'true');
     await carregarContatos(data.clienteId);
+    await carregarTransportadoras(data.clienteId);
     if (data.contatoId) {
       editarContato.value = data.contatoId;
       editarContato.setAttribute('data-filled', 'true');
+    }
+    if (data.transportadoraId) {
+      editarTransportadora.value = data.transportadoraId;
+      editarTransportadora.setAttribute('data-filled','true');
     }
   } else if (data.cliente) {
     const opt = Array.from(editarCliente.options).find(o => o.textContent === data.cliente);
@@ -135,12 +159,15 @@
       editarCliente.value = opt.value;
       editarCliente.setAttribute('data-filled', 'true');
       await carregarContatos(opt.value);
+      await carregarTransportadoras(opt.value);
     }
   }
   editarCondicao.value = data.condicao || 'vista';
   updateCondicao();
+  editarFormaPagamento.value = data.formaPagamento || '';
+  if(editarFormaPagamento.value){ editarFormaPagamento.setAttribute('data-filled','true'); }
   await carregarProdutos();
-  [editarCliente, editarContato, editarCondicao, produtoSelect].forEach(sel => {
+  [editarCliente, editarContato, editarCondicao, editarTransportadora, editarFormaPagamento, produtoSelect].forEach(sel => {
     const sync = () => sel.setAttribute('data-filled', sel.value !== '');
     sync();
     sel.addEventListener('change', sync);
@@ -364,6 +391,9 @@
     const contatoText = editarContato.options[editarContato.selectedIndex]?.textContent || '';
     const condicaoVal = editarCondicao.value;
     const condicaoText = editarCondicao.options[editarCondicao.selectedIndex]?.textContent || '';
+    const transportadoraVal = editarTransportadora.value;
+    const transportadoraText = editarTransportadora.options[editarTransportadora.selectedIndex]?.textContent || '';
+    const formaPagamentoVal = editarFormaPagamento.value;
     const totalTxt = document.getElementById('totalOrcamento').textContent;
     const itens = Array.from(itensTbody.children).map(tr => ({
       id: tr.dataset.id,
@@ -387,6 +417,9 @@
       data.row.dataset.cliente = clienteText;
       data.row.dataset.contatoId = contatoVal;
       data.row.dataset.contato = contatoText;
+      data.row.dataset.transportadoraId = transportadoraVal;
+      data.row.dataset.transportadora = transportadoraText;
+      data.row.dataset.formaPagamento = formaPagamentoVal;
       data.row.dataset.items = JSON.stringify(itens);
       data.row.dataset.condicao = condicaoVal;
     }
