@@ -192,7 +192,7 @@
   });
 
   const statusMap = {
-    'Rascunho': 'badge-neutral',
+    'Rascunho': 'badge-info',
     'Pendente': 'badge-warning',
     'Aprovado': 'badge-success',
     'Rejeitado': 'badge-danger',
