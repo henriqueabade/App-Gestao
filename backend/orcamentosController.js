@@ -100,8 +100,8 @@ router.post('/', async (req, res) => {
 
     for (const item of itens) {
       await client.query(
-        `INSERT INTO orcamentos_itens (orcamento_id, produto_id, codigo, nome, ncm, quantidade, valor_unitario, valor_unitario_desc, desconto_pagamento, desconto_pagamento_prc, desconto_especial, desconto_especial_prc, valor_desc, desconto_total, valor_total)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
+        `INSERT INTO orcamentos_itens (orcamento_id, produto_id, codigo, nome, ncm, quantidade, valor_unitario, valor_unitario_desc, valor_desc, desconto_total, valor_total)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
         [
           orcamentoId,
           item.produto_id,
@@ -111,10 +111,6 @@ router.post('/', async (req, res) => {
           item.quantidade,
           item.valor_unitario,
           item.valor_unitario_desc,
-          item.desconto_pagamento,
-          item.desconto_pagamento_prc,
-          item.desconto_especial,
-          item.desconto_especial_prc,
           item.valor_desc,
           item.desconto_total,
           item.valor_total
@@ -191,29 +187,25 @@ router.put('/:id', async (req, res) => {
     );
 
     await client.query('DELETE FROM orcamentos_itens WHERE orcamento_id=$1', [id]);
-      for (const item of itens) {
-        await client.query(
-          `INSERT INTO orcamentos_itens (orcamento_id, produto_id, codigo, nome, ncm, quantidade, valor_unitario, valor_unitario_desc, desconto_pagamento, desconto_pagamento_prc, desconto_especial, desconto_especial_prc, valor_desc, desconto_total, valor_total)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
-          [
-            id,
-            item.produto_id,
-            item.codigo,
-            item.nome,
-            item.ncm,
-            item.quantidade,
-            item.valor_unitario,
-            item.valor_unitario_desc,
-            item.desconto_pagamento,
-            item.desconto_pagamento_prc,
-            item.desconto_especial,
-            item.desconto_especial_prc,
-            item.valor_desc,
-            item.desconto_total,
-            item.valor_total
-          ]
-        );
-      }
+    for (const item of itens) {
+      await client.query(
+        `INSERT INTO orcamentos_itens (orcamento_id, produto_id, codigo, nome, ncm, quantidade, valor_unitario, valor_unitario_desc, valor_desc, desconto_total, valor_total)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+        [
+          id,
+          item.produto_id,
+          item.codigo,
+          item.nome,
+          item.ncm,
+          item.quantidade,
+          item.valor_unitario,
+          item.valor_unitario_desc,
+          item.valor_desc,
+          item.desconto_total,
+          item.valor_total
+        ]
+      );
+    }
 
     await client.query('DELETE FROM orcamento_parcelas WHERE orcamento_id=$1', [id]);
     for (let i = 0; i < parcelas_detalhes.length; i++) {
@@ -279,33 +271,28 @@ router.post('/:id/clone', async (req, res) => {
     );
     const newId = insert.rows[0].id;
 
-      const { rows: itens } = await client.query(
-        'SELECT produto_id, codigo, nome, ncm, quantidade, valor_unitario, valor_unitario_desc, desconto_pagamento, desconto_pagamento_prc, desconto_especial, desconto_especial_prc, valor_desc, desconto_total, valor_total FROM orcamentos_itens WHERE orcamento_id=$1',
-        [id]
+    const { rows: itens } = await client.query(
+      'SELECT produto_id, codigo, nome, ncm, quantidade, valor_unitario, valor_unitario_desc, valor_desc, desconto_total, valor_total FROM orcamentos_itens WHERE orcamento_id=$1',
+      [id]
+    );
+    for (const item of itens) {
+      await client.query(
+        `INSERT INTO orcamentos_itens (orcamento_id, produto_id, codigo, nome, ncm, quantidade, valor_unitario, valor_unitario_desc, valor_desc, desconto_total, valor_total)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+        [
+          newId,
+          item.produto_id,
+          item.codigo,
+          item.nome,
+          item.ncm,
+          item.quantidade,
+          item.valor_unitario,
+          item.valor_unitario_desc,
+          item.valor_desc,
+          item.desconto_total,
+          item.valor_total
+        ]
       );
-      for (const item of itens) {
-        await client.query(
-          `INSERT INTO orcamentos_itens (orcamento_id, produto_id, codigo, nome, ncm, quantidade, valor_unitario, valor_unitario_desc, desconto_pagamento, desconto_pagamento_prc, desconto_especial, desconto_especial_prc, valor_desc, desconto_total, valor_total)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
-          [
-            newId,
-            item.produto_id,
-            item.codigo,
-            item.nome,
-            item.ncm,
-            item.quantidade,
-            item.valor_unitario,
-            item.valor_unitario_desc,
-            item.desconto_pagamento,
-            item.desconto_pagamento_prc,
-            item.desconto_especial,
-            item.desconto_especial_prc,
-            item.valor_desc,
-            item.desconto_total,
-            item.valor_total
-          ]
-        );
-      }
     }
 
     const { rows: parcelas } = await client.query(
