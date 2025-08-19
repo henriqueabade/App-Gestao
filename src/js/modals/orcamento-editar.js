@@ -33,6 +33,7 @@
   const condicaoWrapper = editarCondicao.parentElement;
   let parcelamentoLoaded = false;
   let condicaoDefinida = Boolean(data.parcelas);
+  let prevCondicao = editarCondicao.value;
   function loadParcelamento(){
     return new Promise(res=>{
       if(parcelamentoLoaded){res();return;}
@@ -102,7 +103,7 @@
       pagamentoBox.innerHTML='';
     }
   }
-  editarCondicao.addEventListener('change',()=>{condicaoDefinida=true;editarCondicao.setAttribute('data-filled','true');updateCondicao();recalcTotals();});
+  editarCondicao.addEventListener('change',()=>{condicaoDefinida=true;editarCondicao.setAttribute('data-filled','true');updateCondicao();applyDefaultDiscounts();recalcTotals();});
   condicaoWrapper.addEventListener('click',e=>{if(editarCondicao.disabled){e.preventDefault();showBlockedDialog();}});
   editarCondicao.disabled=true;
   editarCondicao.style.pointerEvents='none';
@@ -235,6 +236,7 @@
     });
   }
   editarCondicao.value = data.parcelas > 1 ? 'prazo' : 'vista';
+  prevCondicao = editarCondicao.value;
   updateCondicao();
   if (editarCondicao.value === 'vista') {
     const prazoInput = document.getElementById('editarPrazoVista');
@@ -291,6 +293,21 @@
       const valDesc = val * (1 - desc / 100);
       tr.children[3].textContent = valDesc.toFixed(2);
       tr.querySelector('.total-cell').textContent = formatCurrency(qty * valDesc);
+    }
+
+    function applyDefaultDiscounts(){
+      const newCond = editarCondicao.value;
+      document.querySelectorAll('#orcamentoItens tbody tr').forEach(tr => {
+        const qty = parseFloat(tr.children[1].textContent) || 0;
+        const currentDesc = parseFloat(tr.children[4].textContent) || 0;
+        const oldDefault = (qty > 1 ? 5 : 0) + (prevCondicao === 'vista' ? 5 : 0);
+        const special = Math.max(currentDesc - oldDefault, 0);
+        const newDefault = (qty > 1 ? 5 : 0) + (newCond === 'vista' ? 5 : 0);
+        const newDesc = special + newDefault;
+        tr.children[4].textContent = newDesc.toFixed(2);
+        updateLineTotal(tr);
+      });
+      prevCondicao = newCond;
     }
 
     function showDuplicateDialog(callback) {
@@ -523,12 +540,22 @@
       return;
     }
 
+    let descPagTot = 0;
+    let descEspTot = 0;
     const itens = Array.from(itensTbody.children).map(tr => {
       const prodId = tr.dataset.id;
       const qty = parseFloat(tr.children[1].textContent) || 0;
       const val = parseFloat(tr.children[2].textContent) || 0;
-      const desc = parseFloat(tr.children[4].textContent) || 0;
-      const valDesc = val * (1 - desc / 100);
+      const descTotal = parseFloat(tr.children[4].textContent) || 0;
+      const defaultDesc = (qty > 1 ? 5 : 0) + (condicaoVal === 'vista' ? 5 : 0);
+      const descPagPrc = Math.min(defaultDesc, descTotal);
+      const descEspPrc = Math.max(descTotal - descPagPrc, 0);
+      const descPagVal = val * (descPagPrc / 100);
+      const descEspVal = val * (descEspPrc / 100);
+      const valorDesc = descPagVal + descEspVal;
+      const valDesc = val - valorDesc;
+      descPagTot += descPagVal * qty;
+      descEspTot += descEspVal * qty;
       return {
         produto_id: prodId,
         codigo: products[prodId]?.codigo || '',
@@ -537,13 +564,18 @@
         quantidade: qty,
         valor_unitario: val,
         valor_unitario_desc: valDesc,
-        valor_desc: val - valDesc,
-        desconto_total: (val - valDesc) * qty,
-        valor_total: parseCurrencyToCents(tr.querySelector('.total-cell').textContent) / 100
+        desconto_pagamento: descPagVal,
+        desconto_pagamento_prc: descPagPrc,
+        desconto_especial: descEspVal,
+        desconto_especial_prc: descEspPrc,
+        valor_desc: valorDesc,
+        desconto_total: valorDesc * qty,
+        valor_total: valDesc * qty
       };
     });
-    const descontoTotal = parseCurrencyToCents(document.getElementById('descontoOrcamento').textContent) / 100;
-    const total = parseCurrencyToCents(document.getElementById('totalOrcamento').textContent) / 100;
+    const descontoTotal = descPagTot + descEspTot;
+    const subtotal = parseCurrencyToCents(document.getElementById('subtotalOrcamento').textContent) / 100;
+    const total = subtotal - descontoTotal;
     const transportadoraText = editarTransportadora.options[editarTransportadora.selectedIndex]?.textContent || '';
     const body = {
       cliente_id: clienteVal,
@@ -552,8 +584,8 @@
       parcelas,
       forma_pagamento: formaPagamentoVal,
       transportadora: transportadoraText,
-      desconto_pagamento: descontoTotal,
-      desconto_especial: 0,
+      desconto_pagamento: descPagTot,
+      desconto_especial: descEspTot,
       desconto_total: descontoTotal,
       valor_final: total,
       observacoes: document.getElementById('editarObservacoes').value || '',
