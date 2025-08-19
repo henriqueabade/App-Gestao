@@ -747,6 +747,20 @@ ipcMain.handle('get-saved-display', () => {
   return currentDisplayId || null;
 });
 
+ipcMain.handle('open-pdf', (_event, id) => {
+  const pdfWindow = new BrowserWindow({ width: 900, height: 700, show: false });
+  pdfWindow.loadFile(path.join(__dirname, 'src/pdf/index.html'), {
+    query: { id }
+  });
+  pdfWindow.once('ready-to-show', () => {
+    pdfWindow.show();
+  });
+  pdfWindow.webContents.once('did-finish-load', () => {
+    pdfWindow.webContents.print({ silent: false, printBackground: true });
+  });
+  return true;
+});
+
 if (DEBUG) {
   ipcMain.on('debug-log', (_, m) => console.log('[popup]', m));
 }
