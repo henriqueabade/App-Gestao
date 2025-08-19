@@ -1,6 +1,7 @@
 (() => {
   const overlayId = 'novoOrcamento';
   const overlay = document.getElementById('novoOrcamentoOverlay');
+  if (!overlay) return;
   const close = () => Modal.close(overlayId);
   overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
   document.addEventListener('keydown', function esc(e){ if(e.key === 'Escape'){ close(); document.removeEventListener('keydown', esc); } });
