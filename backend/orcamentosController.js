@@ -59,6 +59,7 @@ router.post('/', async (req, res) => {
     observacoes,
     validade,
     prazo,
+    dono,
     itens = [],
     parcelas_detalhes = []
   } = req.body;
@@ -74,8 +75,8 @@ router.post('/', async (req, res) => {
     }
     const now = new Date();
     const insertOrc = await client.query(
-      `INSERT INTO orcamentos (numero, cliente_id, contato_id, data_emissao, situacao, parcelas, forma_pagamento, transportadora, desconto_pagamento, desconto_especial, desconto_total, valor_final, observacoes, validade, prazo)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING id`,
+      `INSERT INTO orcamentos (numero, cliente_id, contato_id, data_emissao, situacao, parcelas, forma_pagamento, transportadora, desconto_pagamento, desconto_especial, desconto_total, valor_final, observacoes, validade, prazo, dono)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING id`,
       [
         numero,
         cliente_id,
@@ -91,7 +92,8 @@ router.post('/', async (req, res) => {
         valor_final,
         observacoes,
         validade,
-        prazo
+        prazo,
+        dono
       ]
     );
     const orcamentoId = insertOrc.rows[0].id;
@@ -153,6 +155,7 @@ router.put('/:id', async (req, res) => {
     observacoes,
     validade,
     prazo,
+    dono,
     itens = [],
     parcelas_detalhes = []
   } = req.body;
@@ -163,7 +166,7 @@ router.put('/:id', async (req, res) => {
     await client.query(
       `UPDATE orcamentos SET cliente_id=$1, contato_id=$2, situacao=$3, parcelas=$4, forma_pagamento=$5,
        transportadora=$6, desconto_pagamento=$7, desconto_especial=$8, desconto_total=$9, valor_final=$10,
-       observacoes=$11, validade=$12, prazo=$13 WHERE id=$14`,
+       observacoes=$11, validade=$12, prazo=$13, dono=$14 WHERE id=$15`,
       [
         cliente_id,
         contato_id,
@@ -178,6 +181,7 @@ router.put('/:id', async (req, res) => {
         observacoes,
         validade,
         prazo,
+        dono,
         id
       ]
     );
@@ -246,8 +250,8 @@ router.post('/:id/clone', async (req, res) => {
 
     const insert = await client.query(
       `INSERT INTO orcamentos (numero, cliente_id, contato_id, data_emissao, situacao, parcelas, forma_pagamento, transportadora,
-       desconto_pagamento, desconto_especial, desconto_total, valor_final, observacoes, validade, prazo)
-       VALUES ($1,$2,$3,NOW(),'Rascunho',$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING id`,
+       desconto_pagamento, desconto_especial, desconto_total, valor_final, observacoes, validade, prazo, dono)
+       VALUES ($1,$2,$3,NOW(),'Rascunho',$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING id`,
       [
         numero,
         orc.cliente_id,
@@ -261,7 +265,8 @@ router.post('/:id/clone', async (req, res) => {
         orc.valor_final,
         orc.observacoes,
         orc.validade,
-        orc.prazo
+        orc.prazo,
+        orc.dono
       ]
     );
     const newId = insert.rows[0].id;
