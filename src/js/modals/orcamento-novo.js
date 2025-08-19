@@ -31,6 +31,7 @@
   const condicaoWrapper = condicaoSelect.parentElement;
   let parcelamentoLoaded = false;
   let condicaoDefinida = false;
+  let prevCondicao = condicaoSelect.value;
   function loadParcelamento(){
     return new Promise(res=>{
       if(parcelamentoLoaded){res();return;}
@@ -95,7 +96,7 @@
       pagamentoBox.innerHTML='';
     }
   }
-  condicaoSelect.addEventListener('change', ()=>{condicaoDefinida=true;condicaoSelect.setAttribute('data-filled','true');updateCondicao();recalcTotals();});
+  condicaoSelect.addEventListener('change', ()=>{condicaoDefinida=true;condicaoSelect.setAttribute('data-filled','true');updateCondicao();applyDefaultDiscounts();recalcTotals();});
   condicaoWrapper.addEventListener('click',e=>{if(condicaoSelect.disabled){e.preventDefault();showBlockedDialog();}});
   condicaoSelect.disabled = true;
   condicaoSelect.style.pointerEvents='none';
@@ -208,6 +209,21 @@
     const valDesc = val * (1 - desc / 100);
     tr.children[3].textContent = valDesc.toFixed(2);
     tr.querySelector('.total-cell').textContent = formatCurrency(qty * valDesc);
+  }
+
+  function applyDefaultDiscounts(){
+    const newCond = condicaoSelect.value;
+    itensTbody.querySelectorAll('tr').forEach(tr => {
+      const qty = parseFloat(tr.children[1].textContent) || 0;
+      const currentDesc = parseFloat(tr.children[4].textContent) || 0;
+      const oldDefault = (qty > 1 ? 5 : 0) + (prevCondicao === 'vista' ? 5 : 0);
+      const special = Math.max(currentDesc - oldDefault, 0);
+      const newDefault = (qty > 1 ? 5 : 0) + (newCond === 'vista' ? 5 : 0);
+      const newDesc = special + newDefault;
+      tr.children[4].textContent = newDesc.toFixed(2);
+      updateLineTotal(tr);
+    });
+    prevCondicao = newCond;
   }
 
   function recalcTotals() {
@@ -452,13 +468,22 @@
       if (!ok) return;
       try {
         const subtotal = parseCurrencyToCents(document.getElementById('novoSubtotal').textContent) / 100;
-        const descontoTotal = parseCurrencyToCents(document.getElementById('novoDesconto').textContent) / 100;
-        const total = parseCurrencyToCents(document.getElementById('novoTotal').textContent) / 100;
+        let descPagTot = 0;
+        let descEspTot = 0;
         const itens = Array.from(itensTbody.children).map(tr => {
           const prodId = tr.dataset.id;
           const qty = parseFloat(tr.children[1].textContent) || 0;
           const val = parseFloat(tr.children[2].textContent) || 0;
-          const valDesc = parseFloat(tr.children[3].textContent) || 0;
+          const descTotal = parseFloat(tr.children[4].textContent) || 0;
+          const defaultDesc = (qty > 1 ? 5 : 0) + (condicaoVal === 'vista' ? 5 : 0);
+          const descPagPrc = Math.min(defaultDesc, descTotal);
+          const descEspPrc = Math.max(descTotal - descPagPrc, 0);
+          const descPagVal = val * (descPagPrc / 100);
+          const descEspVal = val * (descEspPrc / 100);
+          const valorDesc = descPagVal + descEspVal;
+          const valDesc = val - valorDesc;
+          descPagTot += descPagVal * qty;
+          descEspTot += descEspVal * qty;
           return {
             produto_id: prodId,
             codigo: products[prodId]?.codigo || '',
@@ -467,11 +492,17 @@
             quantidade: qty,
             valor_unitario: val,
             valor_unitario_desc: valDesc,
-            valor_desc: val - valDesc,
-            desconto_total: (val - valDesc) * qty,
-            valor_total: parseCurrencyToCents(tr.querySelector('.total-cell').textContent) / 100
+            desconto_pagamento: descPagVal,
+            desconto_pagamento_prc: descPagPrc,
+            desconto_especial: descEspVal,
+            desconto_especial_prc: descEspPrc,
+            valor_desc: valorDesc,
+            desconto_total: valorDesc * qty,
+            valor_total: valDesc * qty
           };
         });
+        const descontoTotal = descPagTot + descEspTot;
+        const total = subtotal - descontoTotal;
         const body = {
           cliente_id: clienteVal,
           contato_id: contatoVal,
@@ -479,8 +510,8 @@
           parcelas,
           forma_pagamento: formaPagamentoVal,
           transportadora: transportadoraSelect.options[transportadoraSelect.selectedIndex]?.textContent || '',
-          desconto_pagamento: descontoTotal,
-          desconto_especial: 0,
+          desconto_pagamento: descPagTot,
+          desconto_especial: descEspTot,
           desconto_total: descontoTotal,
           valor_final: total,
           observacoes: document.getElementById('novoObservacoes').value || '',
