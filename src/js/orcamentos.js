@@ -30,6 +30,38 @@ function hideLoadingSpinner() {
     document.getElementById('orcamentoLoading')?.remove();
 }
 
+function showPdfUnavailableDialog(id) {
+    const overlay = document.createElement('div');
+    overlay.className = 'fixed inset-0 bg-black/50 flex items-center justify-center p-4';
+    overlay.innerHTML = `<div class="max-w-sm w-full glass-surface backdrop-blur-xl rounded-2xl border border-red-500/20 ring-1 ring-red-500/30 shadow-2xl/40 animate-modalFade">
+        <div class="p-6 text-center">
+            <h3 class="text-lg font-semibold mb-4 text-red-400">Função Indisponível</h3>
+            <p class="text-sm text-gray-300 mb-6">Não é possivel gerar PDF para Orçamentos em RASCUNHO!</p>
+            <div class="flex justify-center gap-4">
+                <button id="pdfConvert" class="btn-warning px-4 py-2 rounded-lg text-white font-medium flex items-center gap-2">
+                    Converter <span class="info-icon" title="muda status para pendente"></span>
+                </button>
+                <button id="pdfOk" class="btn-neutral px-4 py-2 rounded-lg text-white font-medium">OK</button>
+            </div>
+        </div>
+    </div>`;
+    document.body.appendChild(overlay);
+    overlay.querySelector('#pdfOk').addEventListener('click', () => overlay.remove());
+    overlay.querySelector('#pdfConvert').addEventListener('click', async () => {
+        try {
+            await fetch(`http://localhost:3000/api/orcamentos/${id}/status`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ situacao: 'Pendente' })
+            });
+            overlay.remove();
+            carregarOrcamentos();
+        } catch (err) {
+            console.error('Erro ao atualizar status', err);
+        }
+    });
+}
+
 async function carregarOrcamentos() {
     try {
         const resp = await fetch('http://localhost:3000/api/orcamentos');
@@ -56,6 +88,9 @@ async function carregarOrcamentos() {
             const condicao = o.parcelas > 1 ? `${o.parcelas}x` : 'À vista';
             const badgeClass = statusClasses[o.situacao] || 'badge-neutral';
             const valor = Number(o.valor_final || 0).toLocaleString('pt-BR', {style:'currency', currency:'BRL'});
+            const isDraft = o.situacao === 'Rascunho';
+            const downloadClass = isDraft ? 'pdf-disabled relative' : '';
+            const downloadTitle = isDraft ? 'PDF indisponível' : 'Baixar PDF';
             tr.innerHTML = `
                 <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">${o.numero}</td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm text-white">${o.cliente || ''}</td>
@@ -67,7 +102,7 @@ async function carregarOrcamentos() {
                     <div class="flex items-center justify-center space-x-2">
                         <i class="fas fa-eye w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Visualizar"></i>
                         <i class="fas fa-edit w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Editar"></i>
-                        <i class="fas fa-download w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Baixar PDF"></i>
+                        <i class="fas fa-download w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10 ${downloadClass}" style="color: var(--color-primary)" title="${downloadTitle}"></i>
                     </div>
                 </td>`;
             tbody.appendChild(tr);
@@ -104,6 +139,19 @@ async function carregarOrcamentos() {
 
                 await Modal.open('modals/orcamentos/editar.html', '../js/modals/orcamento-editar.js', 'editarOrcamento');
                 document.getElementById('editarOrcamentoOverlay')?.classList.add('hidden');
+            });
+        });
+        tbody.querySelectorAll('.fa-download').forEach(icon => {
+            icon.addEventListener('click', e => {
+                e.stopPropagation();
+                const tr = e.currentTarget.closest('tr');
+                const id = tr.dataset.id;
+                const status = tr.cells[5]?.innerText.trim();
+                if (status === 'Rascunho') {
+                    showPdfUnavailableDialog(id);
+                } else {
+                    window.open(`http://localhost:3000/api/orcamentos/${id}/pdf`, '_blank');
+                }
             });
         });
         await popularClientes();

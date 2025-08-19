@@ -228,6 +228,19 @@ router.put('/:id', async (req, res) => {
   }
 });
 
+// Atualiza apenas o status de um orçamento
+router.patch('/:id/status', async (req, res) => {
+  const { id } = req.params;
+  const { situacao } = req.body;
+  try {
+    await db.query('UPDATE orcamentos SET situacao=$1 WHERE id=$2', [situacao, id]);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Erro ao atualizar status do orçamento:', err);
+    res.status(500).json({ error: 'Erro ao atualizar status do orçamento' });
+  }
+});
+
 // Clona um orçamento existente
 router.post('/:id/clone', async (req, res) => {
   const { id } = req.params;
