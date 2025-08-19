@@ -1,10 +1,9 @@
  (async () => {
   const overlayId = 'editarOrcamento';
   const overlay = document.getElementById('editarOrcamentoOverlay');
+  if (!overlay) return;
   const close = () => Modal.close(overlayId);
-  if (overlay) {
-    overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
-  }
+  overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
   document.addEventListener('keydown', function esc(e){ if(e.key === 'Escape'){ close(); document.removeEventListener('keydown', esc); } });
 
   // carga de dados
