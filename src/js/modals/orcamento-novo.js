@@ -177,8 +177,7 @@
   function updateLineTotal(tr){
     const qty = parseFloat(tr.children[1].textContent) || 0;
     const val = parseFloat(tr.children[2].textContent) || 0;
-    const desc = (qty > 1 ? 5 : 0) + (condicaoSelect.value === 'vista' ? 5 : 0);
-    tr.children[4].textContent = desc;
+    const desc = parseFloat(tr.children[4].textContent) || 0;
     const valDesc = val * (1 - desc / 100);
     tr.children[3].textContent = valDesc.toFixed(2);
     tr.querySelector('.total-cell').textContent = formatCurrency(qty * valDesc);
@@ -190,8 +189,7 @@
     itensTbody.querySelectorAll('tr').forEach(tr => {
       const qty = parseFloat(tr.children[1].textContent) || 0;
       const val = parseFloat(tr.children[2].textContent) || 0;
-      const desc = (qty > 1 ? 5 : 0) + (condicaoSelect.value === 'vista' ? 5 : 0);
-      tr.children[4].textContent = desc;
+      const desc = parseFloat(tr.children[4].textContent) || 0;
       const line = qty * val;
       const lineDesc = line * (desc / 100);
       subtotal += line;
@@ -225,13 +223,16 @@
   function startEdit(tr){
     const qtyCell = tr.children[1];
     const valCell = tr.children[2];
+    const descCell = tr.children[4];
     const actionsCell = tr.children[6];
 
     const qtyVal = qtyCell.textContent.trim();
     const valVal = valCell.textContent.trim();
+    const descVal = descCell.textContent.trim();
 
     qtyCell.innerHTML = `<input type="number" class="w-16 bg-input border border-inputBorder rounded px-2 py-1 text-white text-xs text-center focus:border-primary focus:ring-1 focus:ring-primary/50 transition" value="${qtyVal}" min="1">`;
     valCell.innerHTML = `<input type="number" class="w-24 bg-input border border-inputBorder rounded px-2 py-1 text-white text-xs text-right focus:border-primary focus:ring-1 focus:ring-primary/50 transition" value="${valVal}" min="0" step="0.01">`;
+    descCell.innerHTML = `<input type="number" class="w-16 bg-input border border-inputBorder rounded px-2 py-1 text-white text-xs text-center focus:border-primary focus:ring-1 focus:ring-primary/50 transition" value="${descVal}" min="0" step="0.01">`;
 
     actionsCell.innerHTML = `
       <i class="fas fa-check w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10 text-green-400"></i>
@@ -241,6 +242,7 @@
     const cancelBtn = actionsCell.querySelector('.fa-times');
     const qtyInput = qtyCell.querySelector('input');
     const valInput = valCell.querySelector('input');
+    const descInput = descCell.querySelector('input');
 
     confirmBtn.addEventListener('click', () => {
       showActionDialog('Deseja salvar as alterações deste item?', ok => {
@@ -248,6 +250,7 @@
         confirmResetIfNeeded(() => {
           qtyCell.textContent = qtyInput.value;
           valCell.textContent = parseFloat(valInput.value).toFixed(2);
+          descCell.textContent = parseFloat(descInput.value).toFixed(2);
           actionsCell.innerHTML = `
             <i class="fas fa-edit w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)"></i>
             <i class="fas fa-trash w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10 text-red-400"></i>
@@ -262,6 +265,7 @@
     cancelBtn.addEventListener('click', () => {
       qtyCell.textContent = qtyVal;
       valCell.textContent = valVal;
+      descCell.textContent = descVal;
       actionsCell.innerHTML = `
         <i class="fas fa-edit w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)"></i>
         <i class="fas fa-trash w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10 text-red-400"></i>
@@ -313,8 +317,8 @@
         } else if (choice === 'substituir') {
           existing.children[1].textContent = qtd;
           existing.children[2].textContent = product.valor.toFixed(2);
-          existing.children[3].textContent = '0.00';
-          existing.children[4].textContent = '0';
+          const defaultDesc = (qtd > 1 ? 5 : 0) + (condicaoSelect.value === 'vista' ? 5 : 0);
+          existing.children[4].textContent = defaultDesc.toFixed(2);
         }
         updateLineTotal(existing);
         recalcTotals();
@@ -322,25 +326,26 @@
       return;
     }
 
+    const defaultDesc = (qtd > 1 ? 5 : 0) + (condicaoSelect.value === 'vista' ? 5 : 0);
     const tr = document.createElement('tr');
     tr.dataset.id = prodId;
     tr.className = 'border-b border-white/10';
-      tr.innerHTML = `
+    tr.innerHTML = `
         <td class="px-6 py-4 text-sm text-white">${product.nome}</td>
         <td class="px-6 py-4 text-center text-sm text-white">${qtd}</td>
         <td class="px-6 py-4 text-right text-sm text-white">${product.valor.toFixed(2)}</td>
         <td class="px-6 py-4 text-right text-sm text-white">0.00</td>
-        <td class="px-6 py-4 text-center text-sm text-white">0</td>
+        <td class="px-6 py-4 text-center text-sm text-white">${defaultDesc.toFixed(2)}</td>
         <td class="px-6 py-4 text-right text-sm text-white total-cell"></td>
         <td class="px-6 py-4 text-center">
           <i class="fas fa-edit w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)"></i>
           <i class="fas fa-trash w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10 text-red-400"></i>
         </td>`;
-      itensTbody.appendChild(tr);
-      updateLineTotal(tr);
-      attachRowEvents(tr);
-      recalcTotals();
-    }
+    itensTbody.appendChild(tr);
+    updateLineTotal(tr);
+    attachRowEvents(tr);
+    recalcTotals();
+  }
 
   document.getElementById('adicionarItemNovo').addEventListener('click', () => {
     const prodId = produtoSelect.value;
