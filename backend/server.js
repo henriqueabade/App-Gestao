@@ -20,6 +20,7 @@ app.use('/api/usuarios', usuariosRouter);
 app.use('/api/transportadoras', transportadorasRouter);
 app.use('/api/orcamentos', orcamentosRouter);
 app.use(passwordResetRouter);
+app.use('/pdf', express.static(path.join(__dirname, '../src/pdf')));
 
 // Endpoint simples para verificar a disponibilidade do servidor
 app.get('/status', (_req, res) => {
