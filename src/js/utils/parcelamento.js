@@ -56,6 +56,23 @@
     elements.count.addEventListener('change', ()=>onCountChange(containerId));
     elements.modeRadios.forEach(r=>r.addEventListener('change',()=>onModeChange(containerId)));
     instances.set(containerId,{state,getTotal,elements});
+
+    if(opts.prefill){
+      const pre = opts.prefill;
+      if(pre.count){
+        elements.count.value = pre.count;
+        onCountChange(containerId);
+      }
+      if(pre.mode){
+        Array.from(elements.modeRadios).forEach(r=>{r.disabled=false; if(r.value===pre.mode) r.checked=true;});
+        const inst=instances.get(containerId); if(inst) inst.state.mode=pre.mode;
+      }
+      if(pre.items){
+        const inst=instances.get(containerId); if(inst) inst.state.items = pre.items.map(it=>({amount:it.amount,dueInDays:it.dueInDays}));
+        renderRows(containerId);
+      }
+      recompute(containerId);
+    }
   }
   function onCountChange(id){
     const inst = instances.get(id); if(!inst) return;

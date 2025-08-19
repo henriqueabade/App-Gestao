@@ -33,7 +33,7 @@
   const pagamentoBox = document.getElementById('editarPagamento');
   const condicaoWrapper = editarCondicao.parentElement;
   let parcelamentoLoaded = false;
-  let condicaoDefinida = Boolean(data.parcelas);
+  let condicaoDefinida = Boolean(data.parcelas && Number(data.parcelas));
   let prevCondicao = editarCondicao.value;
   function loadParcelamento(){
     return new Promise(res=>{
@@ -87,7 +87,7 @@
     if(!condicaoDefinida){action();return;}
     showResetDialog(ok=>{if(!ok) return;resetCondicao();action();});
   }
-  function updateCondicao(){
+  function updateCondicao(prefill){
     if(editarCondicao.value==='vista'){
       pagamentoBox.innerHTML=`
         <div class="relative w-40">
@@ -98,7 +98,7 @@
     } else if(editarCondicao.value==='prazo'){
       pagamentoBox.classList.remove('hidden');
       pagamentoBox.innerHTML='<div id="editarParcelamento"></div>';
-      loadParcelamento().then(()=>Parcelamento.init('editarParcelamento',{getTotal:()=>parseCurrencyToCents(document.getElementById('totalOrcamento').textContent)}));
+      loadParcelamento().then(()=>Parcelamento.init('editarParcelamento',{getTotal:()=>parseCurrencyToCents(document.getElementById('totalOrcamento').textContent), prefill}));
     } else {
       pagamentoBox.classList.add('hidden');
       pagamentoBox.innerHTML='';
@@ -236,12 +236,26 @@
       });
     });
   }
+  const prefillParcelas = data.parcelas > 1 ? {
+    count: data.parcelas,
+    mode: data.tipo_parcela === 'igual' ? 'equal' : 'custom',
+    items: (data.parcelas_detalhes || []).map(p => ({
+      amount: Math.round((Number(p.valor) || 0) * 100),
+      dueInDays: data.validade ? Math.round((new Date(data.validade) - new Date(p.data_vencimento)) / 86400000) : null
+    }))
+  } : null;
   editarCondicao.value = data.parcelas > 1 ? 'prazo' : 'vista';
   prevCondicao = editarCondicao.value;
-  updateCondicao();
+  updateCondicao(prefillParcelas);
   if (editarCondicao.value === 'vista') {
     const prazoInput = document.getElementById('editarPrazoVista');
-    if (prazoInput) prazoInput.value = data.prazo || '';
+    if (prazoInput) {
+      if (data.parcelas_detalhes && data.parcelas_detalhes[0] && data.validade) {
+        prazoInput.value = Math.round((new Date(data.validade) - new Date(data.parcelas_detalhes[0].data_vencimento)) / 86400000);
+      } else {
+        prazoInput.value = data.prazo || '';
+      }
+    }
   }
   [editarCliente, editarContato, editarCondicao, editarTransportadora, editarFormaPagamento, produtoSelect, donoSelect].forEach(sel => {
     const sync = () => sel.setAttribute('data-filled', sel.value !== '');
@@ -522,6 +536,7 @@
     const dataEmissao = new Date();
     let parcelas = 1;
     let prazo = '';
+    let tipoParcela = 'igual';
     let parcelasDetalhes = [];
     let tipoParcela = 'a vista';
     if(condicaoVal === 'vista'){
@@ -540,6 +555,7 @@
       if(!pdata || !pdata.canRegister) missing.push('Parcelamento');
       else {
         parcelas = pdata.count;
+        tipoParcela = pdata.mode === 'equal' ? 'igual' : 'diferente';
         prazo = pdata.items.map(it => it.dueInDays).join('/');
         parcelasDetalhes = pdata.items.map(it => ({
           valor: it.amount / 100,
@@ -596,6 +612,7 @@
       contato_id: contatoVal,
       situacao: currentStatus,
       parcelas,
+      tipo_parcela: tipoParcela,
       forma_pagamento: formaPagamentoVal,
       transportadora: transportadoraText,
       desconto_pagamento: descPagTot,
