@@ -45,6 +45,22 @@ function showPdfUnavailableDialog(id) {
     });
 }
 
+function showFunctionUnavailableDialog(message) {
+    const overlay = document.createElement('div');
+    overlay.className = 'fixed inset-0 bg-black/50 flex items-center justify-center p-4';
+    overlay.innerHTML = `<div class="max-w-sm w-full glass-surface backdrop-blur-xl rounded-2xl border border-yellow-500/20 ring-1 ring-yellow-500/30 shadow-2xl/40 animate-modalFade">
+        <div class="p-6 text-center">
+            <h3 class="text-lg font-semibold mb-4 text-yellow-400">Função Indisponível</h3>
+            <p class="text-sm text-gray-300 mb-6">${message}</p>
+            <div class="flex justify-center">
+                <button id="funcUnavailableOk" class="btn-neutral px-4 py-2 rounded-lg text-white font-medium">OK</button>
+            </div>
+        </div>
+    </div>`;
+    document.body.appendChild(overlay);
+    overlay.querySelector('#funcUnavailableOk').addEventListener('click', () => overlay.remove());
+}
+
 async function carregarOrcamentos() {
     try {
         const resp = await fetch('http://localhost:3000/api/orcamentos');
@@ -74,6 +90,8 @@ async function carregarOrcamentos() {
             const isDraft = o.situacao === 'Rascunho';
             const downloadClass = isDraft ? 'pdf-disabled relative' : '';
             const downloadTitle = isDraft ? 'PDF indisponível' : 'Baixar PDF';
+            const editBlocked = ['Aprovado','Expirado','Rejeitado'].includes(o.situacao);
+            const editClass = editBlocked ? 'action-disabled' : '';
             tr.innerHTML = `
                 <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">${o.numero}</td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm text-white">${o.cliente || ''}</td>
@@ -84,7 +102,7 @@ async function carregarOrcamentos() {
                 <td class="px-6 py-4 whitespace-nowrap text-center">
                     <div class="flex items-center justify-center space-x-2">
                         <i class="fas fa-eye w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Visualizar"></i>
-                        <i class="fas fa-edit w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Editar"></i>
+                        <i class="fas fa-edit w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10 ${editClass}" style="color: var(--color-primary)" title="Editar"></i>
                         <i class="fas fa-download w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10 ${downloadClass}" style="color: var(--color-primary)" title="${downloadTitle}"></i>
                     </div>
                 </td>`;
@@ -98,6 +116,10 @@ async function carregarOrcamentos() {
         tbody.querySelectorAll('.fa-edit').forEach(icon => {
             icon.addEventListener('click', async e => {
                 e.stopPropagation();
+                if (icon.classList.contains('action-disabled')) {
+                    showFunctionUnavailableDialog('Orçamentos aprovados, expirados ou rejeitados não podem ser editados.');
+                    return;
+                }
                 const id = e.currentTarget.closest('tr').dataset.id;
                 window.selectedQuoteId = id;
                 await Modal.open('modals/orcamentos/editar.html', '../js/modals/orcamento-editar.js', 'editarOrcamento');
