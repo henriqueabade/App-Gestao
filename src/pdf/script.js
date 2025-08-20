@@ -141,14 +141,12 @@ async function buildDocument() {
         <p>${orc.observacoes || '- Nenhuma observação.'}</p>
         <div class="mt-2">
           <p><strong>AUTORIZAÇÃO DO PEDIDO:</strong></p>
-          <p>Nome do Responsável: ____________________________</p>
-          <p>Assinatura: ____________________________</p>
+          <p>Nome do Responsável: _______________________________         Assinatura:</strong> _______________________________</p>
         </div>
       </div>`;
       } else {
         html += `
-      <p class="mt-2"><strong>Nome do Responsável:</strong> ____________________________</p>
-      <p><strong>Assinatura:</strong> ____________________________</p>`;
+      <p class="mt-2"><strong>Nome do Responsável:</strong> _______________________________         Assinatura:</strong> _______________________________</p>`;
       }
 
       createPage(html);

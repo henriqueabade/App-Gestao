@@ -223,9 +223,9 @@ router.put('/:id', async (req, res) => {
     for (let i = 0; i < parcelas_detalhes.length; i++) {
       const p = parcelas_detalhes[i];
       await client.query(
-        `INSERT INTO orcamento_parcelas (orcamento_id, numero_parcela, valor, data_vencimento, status)
-         VALUES ($1,$2,$3,$4,$5)`,
-        [id, i + 1, p.valor, p.data_vencimento, 'Pendente']
+        `INSERT INTO orcamento_parcelas (orcamento_id, numero_parcela, valor, data_vencimento)
+         VALUES ($1,$2,$3,$4)`,
+        [id, i + 1, p.valor, p.data_vencimento]
       );
     }
 
@@ -330,8 +330,8 @@ router.post('/:id/clone', async (req, res) => {
     );
     for (const p of parcelas) {
       await client.query(
-        `INSERT INTO orcamento_parcelas (orcamento_id, numero_parcela, valor, data_vencimento, status)
-         VALUES ($1,$2,$3,$4,'Pendente')`,
+        `INSERT INTO orcamento_parcelas (orcamento_id, numero_parcela, valor, data_vencimento)
+         VALUES ($1,$2,$3,$4)`,
         [newId, p.numero_parcela, p.valor, p.data_vencimento]
       );
     }
