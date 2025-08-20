@@ -1,7 +1,7 @@
 (() => {
   const overlayId = 'novoOrcamento';
   const overlay = document.getElementById('novoOrcamentoOverlay');
-  // Scroll restrito ao corpo do modal Novo Orçamento (entre header e footer)
+  // Scroll do Novo Orçamento restrito ao corpo (entre header e footer), igual Editar Orçamento.
   if (!overlay) return;
   const close = () => Modal.close(overlayId);
   overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
