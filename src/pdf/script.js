@@ -26,6 +26,12 @@ function formatEndereco(end) {
   return `${rua}, ${numero} – ${bairro} – ${cidade}/${estado}`;
 }
 
+function enderecosIguais(a, b) {
+  if (!a || !b) return false;
+  const keys = ['rua', 'numero', 'bairro', 'cidade', 'estado'];
+  return keys.every(k => (a[k] || '') === (b[k] || ''));
+}
+
 async function buildDocument() {
   const params = new URLSearchParams(window.location.search);
   const id = params.get('id');
@@ -36,6 +42,20 @@ async function buildDocument() {
     const cliente = clienteResp.cliente || clienteResp;
     const contatos = clienteResp.contatos || [];
     const contato = contatos.find(c => c.id === orc.contato_id) || contatos[0] || {};
+
+    const endEntrega = cliente.endereco_entrega;
+    const endCobranca = cliente.endereco_cobranca;
+    const endRegistro = cliente.endereco_registro;
+
+    const endEntregaStr = formatEndereco(endEntrega);
+    const endCobrancaStr = enderecosIguais(endCobranca, endEntrega)
+      ? 'Igual Endereço de Entrega'
+      : formatEndereco(endCobranca);
+    const endRegistroStr = enderecosIguais(endRegistro, endEntrega)
+      ? 'Igual Endereço de Entrega'
+      : enderecosIguais(endRegistro, endCobranca)
+        ? 'Igual Endereço de Faturamento'
+        : formatEndereco(endRegistro);
 
     const items = orc.itens.map(it => [
       it.codigo,
@@ -103,11 +123,11 @@ async function buildDocument() {
           <p><strong>E-mail:</strong> ${contato.email || cliente.email || ''}</p>
         </div>
         <div>
-          <p><strong>Endereço de Entrega:</strong> ${formatEndereco(cliente.endereco_entrega)}</p>
+          <p><strong>Endereço de Entrega:</strong> ${endEntregaStr}</p>
         </div>
         <div>
-          <p><strong>Endereço de Faturamento:</strong> ${formatEndereco(cliente.endereco_cobranca)}</p>
-          <p><strong>Endereço de Registro:</strong> ${formatEndereco(cliente.endereco_registro)}</p>
+          <p><strong>Endereço de Faturamento:</strong> ${endCobrancaStr}</p>
+          <p><strong>Endereço de Registro:</strong> ${endRegistroStr}</p>
           <p><strong>Transportadora:</strong> ${orc.transportadora || cliente.transportadora || ''}</p>
         </div>
       </div>`;
