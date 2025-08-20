@@ -44,8 +44,11 @@
     const transpResp = await fetch(`http://localhost:3000/api/transportadoras/${data.cliente_id}`);
     const transportadoras = await transpResp.json();
     transportadoraSel.innerHTML = transportadoras.map(tp => `<option value="${tp.id}">${tp.nome}</option>`).join('');
-    transportadoraSel.value = data.transportadora;
-    transportadoraSel.setAttribute('data-filled', 'true');
+    const tpOpt = Array.from(transportadoraSel.options).find(o => o.textContent === data.transportadora);
+    if (tpOpt) {
+      transportadoraSel.value = tpOpt.value;
+      transportadoraSel.setAttribute('data-filled', 'true');
+    }
 
     formaSel.value = data.forma_pagamento || '';
     if (formaSel.value) formaSel.setAttribute('data-filled', 'true');
@@ -111,8 +114,25 @@
     if (data.parcelas_detalhes && data.parcelas_detalhes.length) {
       const pgBox = document.getElementById('visualizarPagamento');
       pgBox.classList.remove('hidden');
-      pgBox.innerHTML = '<h4 class="text-white font-medium mb-4">Parcelas</h4>' +
-        data.parcelas_detalhes.map(p => `<div class="flex justify-between text-sm text-white mb-2"><span>${p.numero_parcela}ª parcela</span><span>${Number(p.valor).toFixed(2)} - ${new Date(p.data_vencimento).toLocaleDateString('pt-BR')}</span></div>`).join('');
+      const dataEmissao = new Date(data.data_emissao);
+      const rows = data.parcelas_detalhes.map(p => {
+        const prazo = Math.ceil((new Date(p.data_vencimento) - dataEmissao) / 86400000);
+        return `<tr class="border-b border-white/10"><td class="px-6 py-4 text-left text-sm text-white">${p.numero_parcela}ª</td><td class="px-6 py-4 text-right text-sm text-white">${fmt(p.valor)}</td><td class="px-6 py-4 text-center text-sm text-white">${prazo} dias</td></tr>`;
+      }).join('');
+      pgBox.innerHTML = `
+        <h4 class="text-white font-medium mb-4">Parcelas</h4>
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead class="bg-gray-50 sticky top-0">
+              <tr class="border-b border-gray-200">
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">PARCELA</th>
+                <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">VALOR</th>
+                <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">PRAZO</th>
+              </tr>
+            </thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>`;
     }
 
   } catch (err) {
