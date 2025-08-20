@@ -681,7 +681,7 @@
       });
       if (!resp.ok) throw new Error('Erro');
       if (window.reloadOrcamentos) await window.reloadOrcamentos();
-      showToast('Orçamento atualizado com sucesso!', 'success');
+      showToast(`ORÇAMENTO ${data.numero} ATUALIZADO COM SUCESSO!`, 'success');
       if (closeAfter) close();
     } catch (err) {
       console.error(err);
@@ -701,7 +701,7 @@
       if (window.reloadOrcamentos) await window.reloadOrcamentos();
       close();
       window.selectedQuoteId = clone.id;
-      showToast('Orçamento clonado salvo e aberto para edição', 'info');
+      showToast(`ORÇAMENTO ${clone.numero} CLONADO, SALVO E ABERTO PARA EDIÇÃO`, 'info');
       Modal.open('modals/orcamentos/editar.html', '../js/modals/orcamento-editar.js', 'editarOrcamento');
     } catch (err) {
       console.error(err);
