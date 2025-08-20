@@ -543,10 +543,14 @@
           body: JSON.stringify(body)
         });
         if (!resp.ok) throw new Error('Erro ao salvar');
-        await resp.json();
+        const result = await resp.json();
         if (window.reloadOrcamentos) await window.reloadOrcamentos();
         Modal.close(overlayId);
-        showToast(status === 'Rascunho' ? 'Orçamento salvo com sucesso!' : 'Orçamento salvo e enviado com sucesso!', 'success');
+        const message =
+          status === 'Rascunho'
+            ? `ORÇAMENTO ${result.numero} SALVO COM SUCESSO!`
+            : `ORÇAMENTO ${result.numero} SALVO E ENVIADO COM SUCESSO!`;
+        showToast(message, 'success');
       } catch (err) {
         console.error(err);
         showToast('Erro ao salvar orçamento', 'error');
