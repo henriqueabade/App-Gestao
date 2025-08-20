@@ -91,7 +91,7 @@ async function carregarOrcamentos() {
             const downloadClass = isDraft ? 'pdf-disabled relative' : '';
             const downloadTitle = isDraft ? 'PDF indisponível' : 'Baixar PDF';
             const editBlocked = ['Aprovado','Expirado','Rejeitado'].includes(o.situacao);
-            const editClass = editBlocked ? 'action-disabled' : '';
+            const editClass = editBlocked ? 'icon-disabled' : '';
             tr.innerHTML = `
                 <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">${o.numero}</td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm text-white">${o.cliente || ''}</td>
@@ -116,7 +116,7 @@ async function carregarOrcamentos() {
         tbody.querySelectorAll('.fa-edit').forEach(icon => {
             icon.addEventListener('click', async e => {
                 e.stopPropagation();
-                if (icon.classList.contains('action-disabled')) {
+                if (icon.classList.contains('icon-disabled')) {
                     showFunctionUnavailableDialog('Orçamentos aprovados, expirados ou rejeitados não podem ser editados.');
                     return;
                 }

@@ -308,7 +308,7 @@
     });
     statusOptions.querySelectorAll('button').forEach(btn => {
       if(btn.dataset.status==='Rascunho' && statusLocked){
-        btn.classList.add('action-disabled');
+        btn.classList.add('icon-disabled');
       }
       btn.addEventListener('click', () => {
         const next = btn.dataset.status;
