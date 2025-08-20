@@ -387,7 +387,6 @@
     const descVal = descCell.textContent.trim();
 
     qtyCell.innerHTML = `<input type="number" class="w-16 bg-input border border-inputBorder rounded px-2 py-1 text-white text-xs text-center focus:border-primary focus:ring-1 focus:ring-primary/50 transition" value="${qtyVal}" min="1">`;
-    valCell.innerHTML = `<input type="number" class="w-24 bg-input border border-inputBorder rounded px-2 py-1 text-white text-xs text-right focus:border-primary focus:ring-1 focus:ring-primary/50 transition" value="${valVal}" min="0" step="0.01">`;
     descCell.innerHTML = `<input type="number" class="w-16 bg-input border border-inputBorder rounded px-2 py-1 text-white text-xs text-center focus:border-primary focus:ring-1 focus:ring-primary/50 transition" value="${descVal}" min="0" step="0.01">`;
 
     actionsCell.innerHTML = `
@@ -395,10 +394,9 @@
       <i class="fas fa-times w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10 text-red-400"></i>
     `;
     const confirmBtn = actionsCell.querySelector('.fa-check');
-   const cancelBtn = actionsCell.querySelector('.fa-times');
-   const qtyInput = qtyCell.querySelector('input');
-   const valInput = valCell.querySelector('input');
-   const descInput = descCell.querySelector('input');
+    const cancelBtn = actionsCell.querySelector('.fa-times');
+    const qtyInput = qtyCell.querySelector('input');
+    const descInput = descCell.querySelector('input');
 
     qtyInput.addEventListener('input', () => {
       const q = parseFloat(qtyInput.value) || 0;
@@ -412,7 +410,7 @@
         if(!ok) return;
         confirmResetIfNeeded(() => {
           qtyCell.textContent = qtyInput.value;
-          valCell.textContent = parseFloat(valInput.value).toFixed(2);
+          valCell.textContent = valVal;
           descCell.textContent = parseFloat(descInput.value).toFixed(2);
           actionsCell.innerHTML = `
             <i class="fas fa-edit w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)"></i>
