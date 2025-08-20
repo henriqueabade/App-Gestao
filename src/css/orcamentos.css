@@ -185,11 +185,11 @@ body {
     content: '';
     position: absolute;
     top: 50%;
-    left: -10%;
-    width: 120%;
+    left: 0;
+    width: 100%;
     height: 2px;
     background: var(--color-red);
-    transform: rotate(45deg);
+    transform: translateY(-50%);
 }
 
 .icon-disabled {
@@ -300,6 +300,10 @@ body {
 /* Ajusta altura da tabela e ações de filtro */
 .table-scroll {
     max-height: calc(var(--module-height) - 260px) !important;
+}
+
+.table-scroll thead {
+    z-index: 1;
 }
 
 #bt-actions {
