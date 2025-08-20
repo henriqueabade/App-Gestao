@@ -203,11 +203,11 @@ body {
     content: '';
     position: absolute;
     top: 50%;
-    left: -10%;
-    width: 120%;
+    left: 0;
+    width: 100%;
     height: 2px;
     background: var(--color-red);
-    transform: rotate(45deg);
+    transform: translateY(-50%);
 }
 
 .info-icon {

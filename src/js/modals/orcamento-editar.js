@@ -293,6 +293,7 @@
   let currentStatus = data.situacao || 'Rascunho';
   const statusTag = document.getElementById('statusTag');
   const statusOptions = document.getElementById('statusOptions');
+  const UNAVAILABLE_MSG = 'Função indisponível: o orçamento não é mais RASCUNHO.';
 
   function updateStatusTag() {
     if (!statusTag) return;
@@ -313,7 +314,7 @@
       btn.addEventListener('click', () => {
         const next = btn.dataset.status;
         if(next==='Rascunho' && statusLocked){
-          showFunctionUnavailableDialog('Não é possível retornar o orçamento para rascunho.');
+          showFunctionUnavailableDialog(UNAVAILABLE_MSG);
           statusOptions.classList.add('hidden');
           return;
         }
@@ -332,8 +333,13 @@
   if(statusLocked){
     [editarCliente, editarValidade, donoSelect].forEach(el=>{if(el) el.disabled=true;});
     [editarCliente.parentElement, editarValidade.parentElement, donoSelect.parentElement].forEach(wrapper=>{
-      wrapper.addEventListener('click',e=>{e.preventDefault();showFunctionUnavailableDialog('O orçamento não é mais um rascunho e não pode ser alterado.');});
+      wrapper.addEventListener('click',e=>{e.preventDefault();showFunctionUnavailableDialog(UNAVAILABLE_MSG);});
     });
+    const validadeLabel = document.querySelector('label[for="editarValidade"]');
+    if(validadeLabel && editarValidade.value){
+      validadeLabel.classList.remove('top-1/2','-translate-y-1/2','text-base');
+      validadeLabel.classList.add('top-0','-translate-y-full','text-xs');
+    }
   }
 
   function formatCurrency(v) {
