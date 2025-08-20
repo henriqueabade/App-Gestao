@@ -1,11 +1,11 @@
 const docContainer = document.getElementById('doc-container');
 const template = document.getElementById('page-template');
 
-const thresholdSingle = 13;
-const maxFirst = 20;
-const maxFullNext = 30;
-const maxLastNext = 23;
-const minLastItems = 4;
+const thresholdSingle = 9;
+const maxFirst = 14;
+const maxFullNext = 21;
+const maxLastNext = 16;
+const minLastItems = 3;
 
 function createPage(html) {
   const clone = template.content.cloneNode(true);
@@ -152,7 +152,7 @@ async function buildDocument() {
       createPage(html);
     });
 
-    window.print();
+    // Printing is now user-initiated; remove automatic print dialog
   } catch (err) {
     console.error('Erro ao gerar documento', err);
   }
