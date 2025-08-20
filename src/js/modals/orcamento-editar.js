@@ -293,7 +293,7 @@
   let currentStatus = data.situacao || 'Rascunho';
   const statusTag = document.getElementById('statusTag');
   const statusOptions = document.getElementById('statusOptions');
-  const UNAVAILABLE_MSG = 'Função indisponível: o orçamento não é mais RASCUNHO.';
+  const UNAVAILABLE_MSG = 'Função indisponível: só pode ser editado se o pedido estiver como RASCUNHO.';
 
   function updateStatusTag() {
     if (!statusTag) return;
@@ -308,12 +308,13 @@
       statusOptions.classList.toggle('hidden');
     });
     statusOptions.querySelectorAll('button').forEach(btn => {
-      if(btn.dataset.status==='Rascunho' && statusLocked){
-        btn.classList.add('icon-disabled');
+      if (btn.dataset.status === 'Rascunho' && statusLocked) {
+        btn.classList.add('status-disabled');
+        btn.classList.remove('hover:bg-gray-700');
       }
       btn.addEventListener('click', () => {
         const next = btn.dataset.status;
-        if(next==='Rascunho' && statusLocked){
+        if (next === 'Rascunho' && statusLocked) {
           showFunctionUnavailableDialog(UNAVAILABLE_MSG);
           statusOptions.classList.add('hidden');
           return;
