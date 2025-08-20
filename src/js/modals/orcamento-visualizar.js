@@ -117,7 +117,7 @@
       const dataEmissao = new Date(data.data_emissao);
       const rows = data.parcelas_detalhes.map(p => {
         const prazo = Math.ceil((new Date(p.data_vencimento) - dataEmissao) / 86400000);
-        return `<tr class="border-b border-white/10"><td class="px-6 py-4 text-left text-sm text-white">${p.numero_parcela}ª</td><td class="px-6 py-4 text-right text-sm text-white">${fmt(p.valor)}</td><td class="px-6 py-4 text-center text-sm text-white">${prazo} dias</td></tr>`;
+        return `<tr class="border-b border-white/10"><td class="px-6 py-4 text-left text-sm text-white">${p.numero_parcela}ª</td><td class="px-6 py-4 text-left text-sm text-white">${fmt(p.valor)}</td><td class="px-6 py-4 text-left text-sm text-white">${prazo} dias</td></tr>`;
       }).join('');
       pgBox.innerHTML = `
         <h4 class="text-white font-medium mb-4">Parcelas</h4>
@@ -126,8 +126,8 @@
             <thead class="bg-gray-50 sticky top-0">
               <tr class="border-b border-gray-200">
                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">PARCELA</th>
-                <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">VALOR</th>
-                <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">PRAZO</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">VALOR</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">PRAZO</th>
               </tr>
             </thead>
             <tbody>${rows}</tbody>
