@@ -72,23 +72,32 @@
 
     let subtotal = 0, descPag = 0, descEsp = 0;
     data.itens.forEach(it => {
+      const qtd = Number(it.quantidade) || 0;
+      const valorUnit = Number(it.valor_unitario) || 0;
+      const valorUnitDesc = Number(it.valor_unitario_desc) || 0;
+      const descPagPrc = Number(it.desconto_pagamento_prc) || 0;
+      const descEspPrc = Number(it.desconto_especial_prc) || 0;
+      const valorTotal = Number(it.valor_total) || 0;
+      const descPagUnit = Number(it.desconto_pagamento) || 0;
+      const descEspUnit = Number(it.desconto_especial) || 0;
+
       const tr = document.createElement('tr');
       tr.className = 'border-b border-white/10';
       tr.innerHTML = `
         <td class="px-6 py-4 text-sm text-white">${it.nome}</td>
-        <td class="px-6 py-4 text-center text-sm text-white">${it.quantidade}</td>
-        <td class="px-6 py-4 text-right text-sm text-white">${it.valor_unitario.toFixed(2)}</td>
-        <td class="px-6 py-4 text-right text-sm text-white">${it.valor_unitario_desc.toFixed(2)}</td>
-        <td class="px-6 py-4 text-center text-sm text-white">${(it.desconto_pagamento_prc + it.desconto_especial_prc).toFixed(2)}</td>
-        <td class="px-6 py-4 text-right text-sm text-white">${it.valor_total.toFixed(2)}</td>
+        <td class="px-6 py-4 text-center text-sm text-white">${qtd}</td>
+        <td class="px-6 py-4 text-right text-sm text-white">${valorUnit.toFixed(2)}</td>
+        <td class="px-6 py-4 text-right text-sm text-white">${valorUnitDesc.toFixed(2)}</td>
+        <td class="px-6 py-4 text-center text-sm text-white">${(descPagPrc + descEspPrc).toFixed(2)}</td>
+        <td class="px-6 py-4 text-right text-sm text-white">${valorTotal.toFixed(2)}</td>
         <td class="px-6 py-4 text-center">
           <i class="fas fa-edit w-5 h-5 p-1 rounded icon-disabled" style="color: var(--color-primary)"></i>
           <i class="fas fa-trash w-5 h-5 p-1 rounded text-red-400 icon-disabled"></i>
         </td>`;
       itensTbody.appendChild(tr);
-      subtotal += it.valor_unitario * it.quantidade;
-      descPag += it.desconto_pagamento * it.quantidade;
-      descEsp += it.desconto_especial * it.quantidade;
+      subtotal += valorUnit * qtd;
+      descPag += descPagUnit * qtd;
+      descEsp += descEspUnit * qtd;
     });
     const desconto = descPag + descEsp;
     const total = subtotal - desconto;
@@ -103,7 +112,7 @@
       const pgBox = document.getElementById('visualizarPagamento');
       pgBox.classList.remove('hidden');
       pgBox.innerHTML = '<h4 class="text-white font-medium mb-4">Parcelas</h4>' +
-        data.parcelas_detalhes.map(p => `<div class="flex justify-between text-sm text-white mb-2"><span>${p.numero_parcela}ª parcela</span><span>${p.valor.toFixed(2)} - ${new Date(p.data_vencimento).toLocaleDateString('pt-BR')}</span></div>`).join('');
+        data.parcelas_detalhes.map(p => `<div class="flex justify-between text-sm text-white mb-2"><span>${p.numero_parcela}ª parcela</span><span>${Number(p.valor).toFixed(2)} - ${new Date(p.data_vencimento).toLocaleDateString('pt-BR')}</span></div>`).join('');
     }
 
   } catch (err) {
