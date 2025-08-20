@@ -257,7 +257,9 @@
     mode: data.tipo_parcela === 'igual' ? 'equal' : 'custom',
     items: (data.parcelas_detalhes || []).map(p => ({
       amount: Math.round((Number(p.valor) || 0) * 100),
-      dueInDays: data.validade ? Math.round((new Date(data.validade) - new Date(p.data_vencimento)) / 86400000) : null
+      dueInDays: (data.data_emissao && p.data_vencimento)
+        ? Math.round((new Date(p.data_vencimento) - new Date(data.data_emissao)) / 86400000)
+        : null
     }))
   } : null;
   editarCondicao.value = data.parcelas > 1 ? 'prazo' : 'vista';
@@ -266,8 +268,8 @@
   if (editarCondicao.value === 'vista') {
     const prazoInput = document.getElementById('editarPrazoVista');
     if (prazoInput) {
-      if (data.parcelas_detalhes && data.parcelas_detalhes[0] && data.validade) {
-        prazoInput.value = Math.round((new Date(data.validade) - new Date(data.parcelas_detalhes[0].data_vencimento)) / 86400000);
+      if (data.parcelas_detalhes && data.parcelas_detalhes[0] && data.data_emissao) {
+        prazoInput.value = Math.round((new Date(data.parcelas_detalhes[0].data_vencimento) - new Date(data.data_emissao)) / 86400000);
       } else {
         prazoInput.value = data.prazo || '';
       }
@@ -572,7 +574,7 @@
     if(!donoVal) missing.push('Dono');
     if(itensTbody.children.length === 0) missing.push('Itens');
 
-      const dataEmissao = new Date();
+      const dataEmissao = new Date(data.data_emissao || Date.now());
       let parcelas = 1;
       let prazo = '';
       let tipoParcela = 'a vista';
