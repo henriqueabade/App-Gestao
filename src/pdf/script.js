@@ -34,6 +34,8 @@ async function buildDocument() {
     const orc = await fetch(`http://localhost:3000/api/orcamentos/${id}`).then(r => r.json());
     const clienteResp = await fetch(`http://localhost:3000/api/clientes/${orc.cliente_id}`).then(r => r.json());
     const cliente = clienteResp.cliente || clienteResp;
+    const contatos = clienteResp.contatos || [];
+    const contato = contatos.find(c => c.id === orc.contato_id) || contatos[0] || {};
 
     const items = orc.itens.map(it => [
       it.codigo,
@@ -95,10 +97,10 @@ async function buildDocument() {
       </div>
       <div class="grid grid-cols-3 gap-2 mb-2">
         <div>
-          <p><strong>Contato:</strong> ${cliente.comprador_nome || ''}</p>
-          <p><strong>Telefone Fixo:</strong> ${cliente.telefone_fixo || ''}</p>
-          <p><strong>Telefone Celular:</strong> ${cliente.telefone_celular || ''}</p>
-          <p><strong>E-mail:</strong> ${cliente.email || ''}</p>
+          <p><strong>Contato:</strong> ${contato.nome || cliente.comprador_nome || ''}</p>
+          <p><strong>Telefone Fixo:</strong> ${contato.telefone_fixo || cliente.telefone_fixo || ''}</p>
+          <p><strong>Telefone Celular:</strong> ${contato.telefone_celular || cliente.telefone_celular || ''}</p>
+          <p><strong>E-mail:</strong> ${contato.email || cliente.email || ''}</p>
         </div>
         <div>
           <p><strong>Endereço de Entrega:</strong> ${formatEndereco(cliente.endereco_entrega)}</p>
