@@ -1,4 +1,4 @@
-<div id="novoOrcamentoOverlay" class="fixed inset-x-0 bottom-0 top-14 z-[1002] bg-black/50 flex items-start justify-center p-4 overflow-hidden">
+<div id="novoOrcamentoOverlay" class="fixed inset-x-0 bottom-0 top-14 z-[1002] bg-black/50 flex items-start justify-center p-4 overflow-y-auto">
   <div role="dialog" aria-modal="true" tabindex="0" class="w-full max-w-5xl h-full max-h-full glass-surface backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade slide-in overflow-hidden flex flex-col relative">
     <header class="relative flex items-center justify-between px-8 py-5 border-b border-white/10 flex-shrink-0">
       <div class="flex items-center gap-3">
@@ -17,7 +17,7 @@
         <button id="limparNovoOrcamento" class="btn-danger px-4 py-2 rounded-lg text-white font-medium">Limpar Tudo</button>
       </div>
     </header>
-    <div class="modal-body flex-1 overflow-y-auto pb-6"><!-- Scroll do Novo Orçamento restrito ao corpo (entre header e footer), igual Editar Orçamento -->
+    <div class="flex-1 overflow-y-auto"><!-- Scroll do Novo Orçamento restrito ao corpo (entre header e footer), igual Editar Orçamento -->
       <div class="px-8 py-6 space-y-6">
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <div class="relative">
@@ -125,7 +125,7 @@
         </div>
       </div>
     </div>
-    <footer class="flex justify-end gap-3 px-8 py-4 border-t border-white/10 flex-shrink-0">
+    <footer class="flex justify-end gap-3 px-8 py-6 border-t border-white/10 flex-shrink-0">
       <button id="enviarNovoOrcamento" class="btn-secondary px-4 py-2 rounded-lg text-white font-medium">Salvar e Enviar</button>
       <button id="cancelarNovoOrcamento" class="btn-danger-light px-4 py-2 rounded-lg font-medium">Cancelar</button>
     </footer>
