@@ -51,7 +51,7 @@
   }
   function showResetDialog(cb){
     const overlay=document.createElement('div');
-    overlay.className='fixed inset-0 bg-black/50 flex items-center justify-center p-4';
+    overlay.className='fixed inset-0 z-[2000] bg-black/50 flex items-center justify-center p-4';
     overlay.innerHTML=`<div class="max-w-md w-full glass-surface backdrop-blur-xl rounded-2xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade"><div class="p-6 text-center"><h3 class="text-lg font-semibold mb-4 text-yellow-300">Atenção</h3><p class="text-sm text-gray-300 mb-6">Esta ação irá reiniciar a condição de pagamento. Deseja continuar?</p><div class="flex justify-center gap-4"><button id="resetYes" class="btn-warning px-4 py-2 rounded-lg text-white font-medium">Sim</button><button id="resetNo" class="btn-neutral px-4 py-2 rounded-lg text-white font-medium">Não</button></div></div></div>`;
     document.body.appendChild(overlay);
     overlay.querySelector('#resetYes').addEventListener('click',()=>{overlay.remove();cb(true);});
@@ -59,7 +59,7 @@
   }
   function showBlockedDialog(){
     const overlay=document.createElement('div');
-    overlay.className='fixed inset-0 bg-black/50 flex items-center justify-center p-4';
+    overlay.className='fixed inset-0 z-[2000] bg-black/50 flex items-center justify-center p-4';
     overlay.innerHTML=`<div class="max-w-sm w-full glass-surface backdrop-blur-xl rounded-2xl border border-yellow-500/20 ring-1 ring-yellow-500/30 shadow-2xl/40 animate-modalFade"><div class="p-6 text-center"><h3 class="text-lg font-semibold mb-4 text-yellow-400">Condição de Pagamento Bloqueada</h3><p class="text-sm text-gray-300 mb-6">Para definir condição de pagamento é necessario adicionar itens ao orçamento primeiro!</p><div class="flex justify-center"><button id="blockedOk" class="btn-warning px-6 py-2 rounded-lg text-white font-medium active:scale-95">OK</button></div></div></div>`;
     document.body.appendChild(overlay);
     overlay.querySelector('#blockedOk').addEventListener('click',()=>overlay.remove());
@@ -67,7 +67,7 @@
 
   function showMissingDialog(fields){
     const overlay=document.createElement('div');
-    overlay.className='fixed inset-0 bg-black/50 flex items-center justify-center p-4';
+    overlay.className='fixed inset-0 z-[2000] bg-black/50 flex items-center justify-center p-4';
     overlay.innerHTML=`<div class="max-w-sm w-full glass-surface backdrop-blur-xl rounded-2xl border border-yellow-500/20 ring-1 ring-yellow-500/30 shadow-2xl/40 animate-modalFade"><div class="p-6 text-center"><h3 class="text-lg font-semibold mb-4 text-yellow-400">Dados Incompletos</h3><p class="text-sm text-gray-300 mb-6">Preencha os campos: ${fields.join(', ')}</p><div class="flex justify-center"><button id="missingOk" class="btn-warning px-6 py-2 rounded-lg text-white font-medium active:scale-95">OK</button></div></div></div>`;
     document.body.appendChild(overlay);
     overlay.querySelector('#missingOk').addEventListener('click',()=>overlay.remove());
@@ -84,10 +84,14 @@
     if(condicaoSelect.value==='vista'){
       pagamentoBox.innerHTML=`
         <div class="relative w-40">
-          <input id="novoPrazoVista" type="number" min="0" placeholder=" " class="peer w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-transparent focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
-          <label for="novoPrazoVista" class="absolute left-4 top-1/2 -translate-y-1/2 text-base text-gray-300 pointer-events-none transition-all duration-150 peer-placeholder-shown:top-1/2 peer-placeholder-shown:-translate-y-1/2 peer-placeholder-shown:text-base peer-focus:top-0 peer-focus:-translate-y-full peer-focus:text-xs peer-focus:text-primary peer-valid:top-0 peer-valid:-translate-y-full peer-valid:text-xs">Prazo (dias)</label>
+          <input id="novoPrazoVista" type="number" min="0" placeholder=" " class="peer w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-transparent focus:border-primary focus:ring-2 focus:ring-primary/50 transition" data-filled="false" />
+          <label for="novoPrazoVista" class="absolute left-4 top-1/2 -translate-y-1/2 text-base text-gray-300 pointer-events-none transition-all duration-150 peer-placeholder-shown:top-1/2 peer-placeholder-shown:-translate-y-1/2 peer-placeholder-shown:text-base peer-focus:top-0 peer-focus:-translate-y-full peer-focus:text-xs peer-focus:text-primary peer-valid:top-0 peer-valid:-translate-y-full peer-valid:text-xs peer-data-[filled=true]:top-0 peer-data-[filled=true]:-translate-y-full peer-data-[filled=true]:text-xs">Prazo (dias)</label>
         </div>`;
       pagamentoBox.classList.remove('hidden');
+      const prazoInput=document.getElementById('novoPrazoVista');
+      const syncPrazo=()=>prazoInput.setAttribute('data-filled',prazoInput.value? 'true':'false');
+      prazoInput.addEventListener('input',syncPrazo);
+      syncPrazo();
     } else if(condicaoSelect.value==='prazo'){
       pagamentoBox.classList.remove('hidden');
       pagamentoBox.innerHTML='<div id="novoParcelamento"></div>';
@@ -335,7 +339,7 @@
 
   function showDuplicateDialog(callback) {
     const overlay = document.createElement('div');
-    overlay.className = 'fixed inset-0 bg-black/50 flex items-center justify-center p-4';
+    overlay.className = 'fixed inset-0 z-[2000] bg-black/50 flex items-center justify-center p-4';
     overlay.innerHTML = `
       <div class="max-w-lg w-full glass-surface backdrop-blur-xl rounded-2xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade">
         <div class="p-6 text-center">
@@ -356,7 +360,7 @@
 
   function showActionDialog(message, cb){
     const overlay=document.createElement('div');
-    overlay.className='fixed inset-0 bg-black/50 flex items-center justify-center p-4';
+    overlay.className='fixed inset-0 z-[2000] bg-black/50 flex items-center justify-center p-4';
     overlay.innerHTML=`<div class="max-w-md w-full glass-surface backdrop-blur-xl rounded-2xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade"><div class="p-6 text-center"><h3 class="text-lg font-semibold mb-4 text-yellow-300">Atenção</h3><p class="text-sm text-gray-300 mb-6">${message}</p><div class="flex justify-center gap-4"><button id="actYes" class="btn-warning px-4 py-2 rounded-lg text-white font-medium">Sim</button><button id="actNo" class="btn-neutral px-4 py-2 rounded-lg text-white font-medium">Não</button></div></div></div>`;
     document.body.appendChild(overlay);
     overlay.querySelector('#actYes').addEventListener('click',()=>{overlay.remove();cb(true);});
