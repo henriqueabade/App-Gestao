@@ -32,7 +32,8 @@ async function buildDocument() {
   if (!id) return;
   try {
     const orc = await fetch(`http://localhost:3000/api/orcamentos/${id}`).then(r => r.json());
-    const cliente = await fetch(`http://localhost:3000/api/clientes/${orc.cliente_id}`).then(r => r.json());
+    const clienteResp = await fetch(`http://localhost:3000/api/clientes/${orc.cliente_id}`).then(r => r.json());
+    const cliente = clienteResp.cliente || clienteResp;
 
     const items = orc.itens.map(it => [
       it.codigo,
