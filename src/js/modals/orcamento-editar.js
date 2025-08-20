@@ -332,14 +332,21 @@
   }
 
   if(statusLocked){
-    [editarCliente, editarValidade, donoSelect].forEach(el=>{if(el) el.disabled=true;});
+    [editarCliente, editarValidade, donoSelect].forEach(el=>{
+      if(el){
+        el.disabled = true;
+        el.style.pointerEvents = 'none';
+        el.classList.remove('text-white');
+        el.classList.add('text-gray-400','cursor-not-allowed');
+      }
+    });
     [editarCliente.parentElement, editarValidade.parentElement, donoSelect.parentElement].forEach(wrapper=>{
       wrapper.addEventListener('click',e=>{e.preventDefault();showFunctionUnavailableDialog(UNAVAILABLE_MSG);});
     });
     const validadeLabel = document.querySelector('label[for="editarValidade"]');
     if(validadeLabel && editarValidade.value){
       validadeLabel.classList.remove('top-1/2','-translate-y-1/2','text-base');
-      validadeLabel.classList.add('top-0','-translate-y-full','text-xs');
+      validadeLabel.classList.add('top-0','-translate-y-full','text-xs','text-gray-400');
     }
   }
 
