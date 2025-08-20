@@ -192,6 +192,23 @@ body {
     transform: rotate(45deg);
 }
 
+.icon-disabled {
+    position: relative;
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+
+.icon-disabled::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: -10%;
+    width: 120%;
+    height: 2px;
+    background: var(--color-red);
+    transform: rotate(45deg);
+}
+
 .info-icon {
     width: 20px;
     height: 20px;
