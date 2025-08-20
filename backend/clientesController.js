@@ -129,4 +129,60 @@ router.get('/:id', async (req, res) => {
   }
 });
 
+// GET /api/clientes/:id/resumo
+router.get('/:id/resumo', async (req, res) => {
+  const { id } = req.params;
+  try {
+    const clienteRes = await pool.query('SELECT * FROM clientes WHERE id = $1', [id]);
+    if (clienteRes.rows.length === 0) {
+      return res.status(404).json({ error: 'Cliente não encontrado' });
+    }
+
+    const row = clienteRes.rows[0];
+
+    function formatEndereco(prefix) {
+      const logradouro = row[`${prefix}_logradouro`] || '';
+      const numero = row[`${prefix}_numero`] || '';
+      const complemento = row[`${prefix}_complemento`];
+      const bairro = row[`${prefix}_bairro`] || '';
+      const cidade = row[`${prefix}_cidade`] || '';
+      const uf = row[`${prefix}_uf`] || '';
+      const cep = row[`${prefix}_cep`] || '';
+
+      return (
+        `${logradouro}, ${numero}` +
+        (complemento ? ` - ${complemento}` : '') +
+        `, ${bairro} - ${cidade}/${uf} - ${cep}`
+      );
+    }
+
+    function enderecoIgual(aPrefix, bPrefix) {
+      const fields = ['logradouro', 'numero', 'complemento', 'bairro', 'cidade', 'uf', 'cep'];
+      return fields.every((f) => row[`${aPrefix}_${f}`] === row[`${bPrefix}_${f}`]);
+    }
+
+    const entrega = formatEndereco('ent');
+    const cobranca = enderecoIgual('cob', 'ent') ? 'Igual Entrega' : formatEndereco('cob');
+    const registro = enderecoIgual('reg', 'ent') ? 'Igual Entrega' : formatEndereco('reg');
+
+    const contatosRes = await pool.query(
+      'SELECT id_cliente, nome, telefone_fixo, telefone_celular, email FROM contatos_cliente WHERE id_cliente = $1 ORDER BY nome',
+      [id]
+    );
+
+    res.json({
+      nome_fantasia: row.nome_fantasia,
+      razao_social: row.razao_social,
+      cnpj: row.cnpj,
+      inscricao_estadual: row.inscricao_estadual,
+      endereco_entrega: entrega,
+      endereco_faturamento: cobranca,
+      endereco_registro: registro,
+      contatos: contatosRes.rows
+    });
+  } catch (err) {
+    console.error('Erro ao buscar resumo do cliente:', err);
+    res.status(500).json({ error: 'Erro ao buscar resumo do cliente' });
+  }
+});
 module.exports = router;
