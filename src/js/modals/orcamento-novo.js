@@ -77,6 +77,7 @@
     showResetDialog(ok=>{
       if(!ok) return;
       resetCondicao();
+      applyDefaultDiscounts();
       action();
     });
   }
@@ -257,7 +258,7 @@
     itensTbody.querySelectorAll('tr').forEach(updateLineTotal);
     condicaoSelect.disabled = total === 0;
     condicaoSelect.style.pointerEvents = condicaoSelect.disabled ? 'none' : 'auto';
-    if(total === 0) resetCondicao();
+    if(total === 0){ resetCondicao(); prevCondicao=''; }
     if(condicaoSelect.value==='prazo' && window.Parcelamento){
       Parcelamento.updateTotal('novoParcelamento', parseCurrencyToCents(document.getElementById('novoTotal').textContent));
     }

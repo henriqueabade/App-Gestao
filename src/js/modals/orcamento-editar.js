@@ -46,8 +46,8 @@
     });
   }
   function resetCondicao(){
-    editarCondicao.value='vista';
-    editarCondicao.setAttribute('data-filled','true');
+    editarCondicao.value='';
+    editarCondicao.setAttribute('data-filled','false');
     pagamentoBox.classList.add('hidden');
     pagamentoBox.innerHTML='';
     condicaoDefinida=false;
@@ -86,7 +86,7 @@
   }
   function confirmResetIfNeeded(action){
     if(!condicaoDefinida){action();return;}
-    showResetDialog(ok=>{if(!ok) return;resetCondicao();action();});
+    showResetDialog(ok=>{if(!ok) return;resetCondicao();applyDefaultDiscounts();action();});
   }
   function updateCondicao(prefill){
     if(editarCondicao.value==='vista'){
@@ -518,7 +518,7 @@
     document.querySelectorAll('#orcamentoItens tbody tr').forEach(updateLineTotal);
     editarCondicao.disabled = total === 0;
     editarCondicao.style.pointerEvents = editarCondicao.disabled ? 'none' : 'auto';
-    if(total === 0) resetCondicao();
+    if(total === 0){ resetCondicao(); prevCondicao=''; }
     if(editarCondicao.value==='prazo' && window.Parcelamento){
       Parcelamento.updateTotal('editarParcelamento', parseCurrencyToCents(document.getElementById('totalOrcamento').textContent));
     }
