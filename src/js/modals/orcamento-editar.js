@@ -84,6 +84,14 @@
     document.body.appendChild(overlay);
     overlay.querySelector('#missingOk').addEventListener('click',()=>overlay.remove());
   }
+
+  function showFunctionUnavailableDialog(message){
+    const overlay=document.createElement('div');
+    overlay.className='fixed inset-0 z-[2000] bg-black/50 flex items-center justify-center p-4';
+    overlay.innerHTML=`<div class="max-w-sm w-full glass-surface backdrop-blur-xl rounded-2xl border border-yellow-500/20 ring-1 ring-yellow-500/30 shadow-2xl/40 animate-modalFade"><div class="p-6 text-center"><h3 class="text-lg font-semibold mb-4 text-yellow-400">Função Indisponível</h3><p class="text-sm text-gray-300 mb-6">${message}</p><div class="flex justify-center"><button id="funcUnavailableOk" class="btn-neutral px-6 py-2 rounded-lg text-white font-medium">OK</button></div></div></div>`;
+    document.body.appendChild(overlay);
+    overlay.querySelector('#funcUnavailableOk').addEventListener('click',()=>overlay.remove());
+  }
   function confirmResetIfNeeded(action){
     if(!condicaoDefinida){action();return;}
     showResetDialog(ok=>{if(!ok) return;resetCondicao();applyDefaultDiscounts();action();});
@@ -293,13 +301,23 @@
   }
   updateStatusTag();
 
+  const statusLocked = currentStatus !== 'Rascunho';
   if (statusTag && statusOptions) {
     statusTag.addEventListener('click', () => {
       statusOptions.classList.toggle('hidden');
     });
     statusOptions.querySelectorAll('button').forEach(btn => {
+      if(btn.dataset.status==='Rascunho' && statusLocked){
+        btn.classList.add('action-disabled');
+      }
       btn.addEventListener('click', () => {
-        currentStatus = btn.dataset.status;
+        const next = btn.dataset.status;
+        if(next==='Rascunho' && statusLocked){
+          showFunctionUnavailableDialog('Não é possível retornar o orçamento para rascunho.');
+          statusOptions.classList.add('hidden');
+          return;
+        }
+        currentStatus = next;
         updateStatusTag();
         statusOptions.classList.add('hidden');
       });
@@ -308,6 +326,13 @@
       if (!statusTag.contains(e.target) && !statusOptions.contains(e.target)) {
         statusOptions.classList.add('hidden');
       }
+    });
+  }
+
+  if(statusLocked){
+    [editarCliente, editarValidade, donoSelect].forEach(el=>{if(el) el.disabled=true;});
+    [editarCliente.parentElement, editarValidade.parentElement, donoSelect.parentElement].forEach(wrapper=>{
+      wrapper.addEventListener('click',e=>{e.preventDefault();showFunctionUnavailableDialog('O orçamento não é mais um rascunho e não pode ser alterado.');});
     });
   }
 
