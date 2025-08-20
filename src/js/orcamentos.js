@@ -125,6 +125,14 @@ async function carregarOrcamentos() {
                 await Modal.open('modals/orcamentos/editar.html', '../js/modals/orcamento-editar.js', 'editarOrcamento');
             });
         });
+        tbody.querySelectorAll('.fa-eye').forEach(icon => {
+            icon.addEventListener('click', async e => {
+                e.stopPropagation();
+                const id = e.currentTarget.closest('tr').dataset.id;
+                window.selectedQuoteId = id;
+                await Modal.open('modals/orcamentos/visualizar.html', '../js/modals/orcamento-visualizar.js', 'visualizarOrcamento');
+            });
+        });
         tbody.querySelectorAll('.fa-download').forEach(icon => {
             icon.addEventListener('click', e => {
                 e.stopPropagation();

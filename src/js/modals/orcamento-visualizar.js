@@ -1,0 +1,129 @@
+(async () => {
+  const overlayId = 'visualizarOrcamento';
+  const overlay = document.getElementById('visualizarOrcamentoOverlay');
+  if (!overlay) return;
+  const close = () => Modal.close(overlayId);
+  const esc = e => { if (e.key === 'Escape') { close(); document.removeEventListener('keydown', esc); } };
+  overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+  document.addEventListener('keydown', esc);
+  document.getElementById('voltarVisualizarOrcamento').addEventListener('click', close);
+  document.getElementById('voltarVisualizarOrcamentoFooter').addEventListener('click', close);
+
+  const id = window.selectedQuoteId;
+  if (!id) return;
+  try {
+    const resp = await fetch(`http://localhost:3000/api/orcamentos/${id}`);
+    const data = await resp.json();
+
+    document.getElementById('tituloVisualizarOrcamento').textContent = `VISUALIZAR ORÇAMENTO ${data.numero}`;
+
+    const clienteSel = document.getElementById('visualizarCliente');
+    const contatoSel = document.getElementById('visualizarContato');
+    const condicaoSel = document.getElementById('visualizarCondicao');
+    const transportadoraSel = document.getElementById('visualizarTransportadora');
+    const formaSel = document.getElementById('visualizarFormaPagamento');
+    const validadeInput = document.getElementById('visualizarValidade');
+    const donoSel = document.getElementById('visualizarDono');
+    const obs = document.getElementById('visualizarObservacoes');
+    const itensTbody = document.querySelector('#orcamentoItens tbody');
+
+    // carregar nomes de cliente e contatos
+    const clientesResp = await fetch('http://localhost:3000/api/clientes/lista');
+    const clientes = await clientesResp.json();
+    clienteSel.innerHTML = clientes.map(c => `<option value="${c.id}">${c.nome_fantasia}</option>`).join('');
+    clienteSel.value = data.cliente_id;
+    clienteSel.setAttribute('data-filled', 'true');
+
+    const contatosResp = await fetch(`http://localhost:3000/api/clientes/${data.cliente_id}`);
+    const clienteData = await contatosResp.json();
+    const contatos = clienteData.contatos || [];
+    contatoSel.innerHTML = contatos.map(ct => `<option value="${ct.id}">${ct.nome}</option>`).join('');
+    contatoSel.value = data.contato_id;
+    contatoSel.setAttribute('data-filled', 'true');
+
+    const transpResp = await fetch(`http://localhost:3000/api/transportadoras/${data.cliente_id}`);
+    const transportadoras = await transpResp.json();
+    transportadoraSel.innerHTML = transportadoras.map(tp => `<option value="${tp.id}">${tp.nome}</option>`).join('');
+    transportadoraSel.value = data.transportadora;
+    transportadoraSel.setAttribute('data-filled', 'true');
+
+    formaSel.value = data.forma_pagamento || '';
+    if (formaSel.value) formaSel.setAttribute('data-filled', 'true');
+    condicaoSel.value = data.parcelas > 1 ? 'prazo' : 'vista';
+    condicaoSel.setAttribute('data-filled', 'true');
+    validadeInput.value = data.validade ? data.validade.split('T')[0] : '';
+    if (validadeInput.value) validadeInput.setAttribute('data-filled', 'true');
+    obs.value = data.observacoes || '';
+    if (obs.value) obs.setAttribute('data-filled', 'true');
+    donoSel.innerHTML = `<option>${data.dono || ''}</option>`;
+    donoSel.value = data.dono || '';
+    donoSel.setAttribute('data-filled', 'true');
+
+    const statusClasses = {
+      'Rascunho': 'badge-info',
+      'Pendente': 'badge-warning',
+      'Aprovado': 'badge-success',
+      'Rejeitado': 'badge-danger',
+      'Expirado': 'badge-neutral'
+    };
+    const tag = document.getElementById('statusTag');
+    tag.textContent = data.situacao;
+    tag.className = `${statusClasses[data.situacao] || 'badge-neutral'} px-3 py-1 rounded-full text-xs font-medium`;
+
+    let subtotal = 0, descPag = 0, descEsp = 0;
+    data.itens.forEach(it => {
+      const tr = document.createElement('tr');
+      tr.className = 'border-b border-white/10';
+      tr.innerHTML = `
+        <td class="px-6 py-4 text-sm text-white">${it.nome}</td>
+        <td class="px-6 py-4 text-center text-sm text-white">${it.quantidade}</td>
+        <td class="px-6 py-4 text-right text-sm text-white">${it.valor_unitario.toFixed(2)}</td>
+        <td class="px-6 py-4 text-right text-sm text-white">${it.valor_unitario_desc.toFixed(2)}</td>
+        <td class="px-6 py-4 text-center text-sm text-white">${(it.desconto_pagamento_prc + it.desconto_especial_prc).toFixed(2)}</td>
+        <td class="px-6 py-4 text-right text-sm text-white">${it.valor_total.toFixed(2)}</td>
+        <td class="px-6 py-4 text-center">
+          <i class="fas fa-edit w-5 h-5 p-1 rounded icon-disabled" style="color: var(--color-primary)"></i>
+          <i class="fas fa-trash w-5 h-5 p-1 rounded text-red-400 icon-disabled"></i>
+        </td>`;
+      itensTbody.appendChild(tr);
+      subtotal += it.valor_unitario * it.quantidade;
+      descPag += it.desconto_pagamento * it.quantidade;
+      descEsp += it.desconto_especial * it.quantidade;
+    });
+    const desconto = descPag + descEsp;
+    const total = subtotal - desconto;
+    const fmt = v => Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    document.getElementById('subtotalOrcamento').textContent = fmt(subtotal);
+    document.getElementById('descontoPagOrcamento').textContent = fmt(descPag);
+    document.getElementById('descontoEspOrcamento').textContent = fmt(descEsp);
+    document.getElementById('descontoOrcamento').textContent = fmt(desconto);
+    document.getElementById('totalOrcamento').textContent = fmt(total);
+
+    if (data.parcelas_detalhes && data.parcelas_detalhes.length) {
+      const pgBox = document.getElementById('visualizarPagamento');
+      pgBox.classList.remove('hidden');
+      pgBox.innerHTML = '<h4 class="text-white font-medium mb-4">Parcelas</h4>' +
+        data.parcelas_detalhes.map(p => `<div class="flex justify-between text-sm text-white mb-2"><span>${p.numero_parcela}ª parcela</span><span>${p.valor.toFixed(2)} - ${new Date(p.data_vencimento).toLocaleDateString('pt-BR')}</span></div>`).join('');
+    }
+
+  } catch (err) {
+    console.error('Erro ao carregar orçamento', err);
+  }
+
+  document.getElementById('clonarOrcamento').addEventListener('click', async () => {
+    try {
+      const resp = await fetch(`http://localhost:3000/api/orcamentos/${id}/clone`, { method: 'POST' });
+      if (!resp.ok) throw new Error('Erro');
+      const clone = await resp.json();
+      if (window.reloadOrcamentos) await window.reloadOrcamentos();
+      close();
+      window.selectedQuoteId = clone.id;
+      showToast('Orçamento clonado salvo e aberto para edição', 'info');
+      Modal.open('modals/orcamentos/editar.html', '../js/modals/orcamento-editar.js', 'editarOrcamento');
+    } catch (err) {
+      console.error(err);
+      showToast('Erro ao clonar orçamento', 'error');
+    }
+  });
+})();
+
