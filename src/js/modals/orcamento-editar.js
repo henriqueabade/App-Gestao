@@ -700,6 +700,11 @@
   document.getElementById('cancelarOrcamento').addEventListener('click', close);
   document.getElementById('voltarEditarOrcamento').addEventListener('click', close);
   document.getElementById('clonarOrcamento').addEventListener('click', async () => {
+    const spinner = document.createElement('div');
+    spinner.id = 'modalLoading';
+    spinner.className = 'fixed inset-0 z-[2000] bg-black/50 flex items-center justify-center';
+    spinner.innerHTML = '<div class="w-16 h-16 border-4 border-[#b6a03e] border-t-transparent rounded-full animate-spin"></div>';
+    document.body.appendChild(spinner);
     try {
       const resp = await fetch(`http://localhost:3000/api/orcamentos/${id}/clone`, { method: 'POST' });
       if (!resp.ok) throw new Error('Erro');
@@ -707,9 +712,18 @@
       if (window.reloadOrcamentos) await window.reloadOrcamentos();
       close();
       window.selectedQuoteId = clone.id;
-      showToast(`ORÇAMENTO ${clone.numero} CLONADO, SALVO E ABERTO PARA EDIÇÃO`, 'info');
+      function handleLoaded(e) {
+        if (e.detail !== 'editarOrcamento') return;
+        spinner.remove();
+        const overlay = document.getElementById('editarOrcamentoOverlay');
+        overlay?.classList.remove('hidden');
+        showToast(`ORÇAMENTO ${clone.numero} CLONADO, SALVO E ABERTO PARA EDIÇÃO`, 'info');
+        window.removeEventListener('orcamentoModalLoaded', handleLoaded);
+      }
+      window.addEventListener('orcamentoModalLoaded', handleLoaded);
       Modal.open('modals/orcamentos/editar.html', '../js/modals/orcamento-editar.js', 'editarOrcamento');
     } catch (err) {
+      spinner.remove();
       console.error(err);
       showToast('Erro ao clonar orçamento', 'error');
     }
