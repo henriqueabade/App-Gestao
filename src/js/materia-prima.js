@@ -326,13 +326,40 @@ function renderMateriais(listaMateriais) {
     attachRawMaterialInfoEvents();
 }
 
+function openModalWithSpinner(htmlPath, scriptPath, overlayId) {
+    Modal.closeAll();
+    const spinner = document.createElement('div');
+    spinner.id = 'modalLoading';
+    spinner.className = 'fixed inset-0 z-[2000] bg-black/50 flex items-center justify-center';
+    spinner.innerHTML = '<div class="w-16 h-16 border-4 border-[#b6a03e] border-t-transparent rounded-full animate-spin"></div>';
+    document.body.appendChild(spinner);
+    const start = Date.now();
+    function handleLoaded(e) {
+        if (e.detail !== overlayId) return;
+        const overlay = document.getElementById(`${overlayId}Overlay`);
+        const elapsed = Date.now() - start;
+        const show = () => {
+            spinner.remove();
+            overlay.classList.remove('hidden');
+        };
+        if (elapsed < 3000) {
+            setTimeout(show, Math.max(0, 2000 - elapsed));
+        } else {
+            show();
+        }
+        window.removeEventListener('modalSpinnerLoaded', handleLoaded);
+    }
+    window.addEventListener('modalSpinnerLoaded', handleLoaded);
+    Modal.open(htmlPath, scriptPath, overlayId, true);
+}
+
 function abrirNovoInsumo() {
     Modal.open('modals/materia-prima/novo.html', '../js/modals/materia-prima-novo.js', 'novoInsumo');
 }
 
 function abrirEditarInsumo(item) {
     window.materiaSelecionada = item;
-    Modal.open('modals/materia-prima/editar.html', '../js/modals/materia-prima-editar.js', 'editarInsumo');
+    openModalWithSpinner('modals/materia-prima/editar.html', '../js/modals/materia-prima-editar.js', 'editarInsumo');
 }
 
 function abrirExcluirInsumo(item) {

@@ -18,8 +18,12 @@
     if(titulo) titulo.textContent = `DETALHE DE ESTOQUE – ${item.nome || ''}`;
     const codigoEl = document.getElementById('codigoPeca');
     if(codigoEl) codigoEl.textContent = `Código da Peça: ${item.codigo || ''}`; // subtítulo mostra código da peça
-    carregarDetalhes(item.codigo, item.id);
+    carregarDetalhes(item.codigo, item.id).finally(() => {
+      window.dispatchEvent(new CustomEvent('modalSpinnerLoaded', { detail: 'detalhesProduto' }));
+    });
     window.reloadDetalhesProduto = () => carregarDetalhes(item.codigo, item.id);
+  } else {
+    window.dispatchEvent(new CustomEvent('modalSpinnerLoaded', { detail: 'detalhesProduto' }));
   }
 
   async function carregarDetalhes(codigo, id){
