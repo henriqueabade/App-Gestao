@@ -87,7 +87,7 @@
       if (err.message === 'DUPLICADO' || err.code === 'DUPLICADO') {
         Modal.open('modals/materia-prima/duplicado.html', '../js/modals/materia-prima-duplicado.js', 'duplicado', true);
       } else {
-        showToast('Erro ao registrar insumo', 'error');
+        showToast('Erro ao registrar, insumo já existe', 'error');
       }
     }
   });

@@ -119,7 +119,7 @@
       if (err.message === 'DUPLICADO' || err.code === 'DUPLICADO') {
         Modal.open('modals/materia-prima/duplicado.html', '../js/modals/materia-prima-duplicado.js', 'duplicado', true);
       } else {
-        showToast('Erro ao atualizar insumo', 'error');
+        showToast('Erro ao atualizar, insumo já existe', 'error');
       }
     }
   });
