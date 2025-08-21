@@ -43,7 +43,11 @@ const {
   inserirLoteProduto,
   atualizarLoteProduto,
   excluirLoteProduto,
-  salvarProdutoDetalhado
+  salvarProdutoDetalhado,
+  listarColecoes,
+  adicionarColecao,
+  removerColecao,
+  colecaoTemDependencias
 } = require('./backend/produtos');
 const apiServer = require('./backend/server');
 
@@ -397,6 +401,14 @@ ipcMain.handle('listar-unidades', async () => {
     throw err;
   }
 });
+ipcMain.handle('listar-colecoes', async () => {
+  try {
+    return await listarColecoes();
+  } catch (err) {
+    console.error('Erro ao listar coleções:', err);
+    throw err;
+  }
+});
 ipcMain.handle('adicionar-categoria', async (_e, nome) => {
   try {
     return await adicionarCategoria(nome);
@@ -410,6 +422,14 @@ ipcMain.handle('adicionar-unidade', async (_e, nome) => {
     return await adicionarUnidade(nome);
   } catch (err) {
     console.error('Erro ao adicionar unidade:', err);
+    throw err;
+  }
+});
+ipcMain.handle('adicionar-colecao', async (_e, nome) => {
+  try {
+    return await adicionarColecao(nome);
+  } catch (err) {
+    console.error('Erro ao adicionar coleção:', err);
     throw err;
   }
 });
@@ -429,6 +449,14 @@ ipcMain.handle('remover-unidade', async (_e, nome) => {
     throw err;
   }
 });
+ipcMain.handle('remover-colecao', async (_e, nome) => {
+  try {
+    return await removerColecao(nome);
+  } catch (err) {
+    console.error('Erro ao remover coleção:', err);
+    throw err;
+  }
+});
 ipcMain.handle('verificar-dependencia-categoria', async (_e, nome) => {
   try {
     return await categoriaTemDependencias(nome);
@@ -442,6 +470,14 @@ ipcMain.handle('verificar-dependencia-unidade', async (_e, nome) => {
     return await unidadeTemDependencias(nome);
   } catch (err) {
     console.error('Erro ao verificar dependência de unidade:', err);
+    throw err;
+  }
+});
+ipcMain.handle('verificar-dependencia-colecao', async (_e, nome) => {
+  try {
+    return await colecaoTemDependencias(nome);
+  } catch (err) {
+    console.error('Erro ao verificar dependência de coleção:', err);
     throw err;
   }
 });

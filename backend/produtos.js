@@ -624,6 +624,42 @@ async function salvarProdutoDetalhado(codigoOriginal, produto, itens) {
   }
 }
 
+async function listarColecoes() {
+  await pool.query('CREATE TABLE IF NOT EXISTS colecao (nome TEXT PRIMARY KEY)');
+  const { rows } = await pool.query(
+    'SELECT nome FROM colecao UNION SELECT DISTINCT categoria AS nome FROM produtos WHERE categoria IS NOT NULL ORDER BY nome'
+  );
+  return rows.map(r => r.nome);
+}
+
+async function adicionarColecao(nome) {
+  await pool.query('CREATE TABLE IF NOT EXISTS colecao (nome TEXT PRIMARY KEY)');
+  const res = await pool.query(
+    'INSERT INTO colecao (nome) VALUES ($1) ON CONFLICT (nome) DO NOTHING RETURNING nome',
+    [nome]
+  );
+  return res.rows[0]?.nome || nome;
+}
+
+async function colecaoTemDependencias(nome) {
+  const { rowCount } = await pool.query(
+    'SELECT 1 FROM produtos WHERE categoria=$1 LIMIT 1',
+    [nome]
+  );
+  return rowCount > 0;
+}
+
+async function removerColecao(nome) {
+  await pool.query('CREATE TABLE IF NOT EXISTS colecao (nome TEXT PRIMARY KEY)');
+  const dependente = await colecaoTemDependencias(nome);
+  if (dependente) {
+    const err = new Error('DEPENDENTE');
+    err.code = 'DEPENDENTE';
+    throw err;
+  }
+  await pool.query('DELETE FROM colecao WHERE nome=$1', [nome]);
+}
+
 module.exports = {
   listarProdutos,
   listarDetalhesProduto,
@@ -639,5 +675,9 @@ module.exports = {
   inserirLoteProduto,
   atualizarLoteProduto,
   excluirLoteProduto,
-  salvarProdutoDetalhado
+  salvarProdutoDetalhado,
+  listarColecoes,
+  adicionarColecao,
+  removerColecao,
+  colecaoTemDependencias
 };
