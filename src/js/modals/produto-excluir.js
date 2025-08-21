@@ -20,7 +20,6 @@
       close();
       carregarProdutos();
     }catch(err){
-      console.error(err);
       close();
       showErrorDialog(err.message || 'Erro ao excluir produto');
     }
