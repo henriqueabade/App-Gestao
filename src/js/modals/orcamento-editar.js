@@ -300,6 +300,7 @@
   let currentStatus = data.situacao || 'Rascunho';
   const statusTag = document.getElementById('statusTag');
   const statusOptions = document.getElementById('statusOptions');
+  const converterBtn = document.getElementById('converterOrcamento');
   const UNAVAILABLE_MSG = 'Função indisponível: só pode ser editado se o pedido estiver como RASCUNHO.';
 
   function updateStatusTag() {
@@ -307,7 +308,16 @@
     statusTag.className = `${statusMap[currentStatus] || 'badge-neutral'} px-3 py-1 rounded-full text-xs font-medium cursor-pointer`;
     statusTag.textContent = currentStatus;
   }
+  function updateConverterBtn() {
+    if (!converterBtn) return;
+    if (currentStatus === 'Pendente') {
+      converterBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+    } else {
+      converterBtn.classList.add('opacity-50', 'cursor-not-allowed');
+    }
+  }
   updateStatusTag();
+  updateConverterBtn();
 
   const statusLocked = currentStatus !== 'Rascunho';
   if (statusTag && statusOptions) {
@@ -328,6 +338,7 @@
         }
         currentStatus = next;
         updateStatusTag();
+        updateConverterBtn();
         statusOptions.classList.add('hidden');
       });
     });
@@ -700,7 +711,29 @@
     form.addEventListener('submit', e => {
       e.preventDefault();
       const closeAfter = e.submitter?.id === 'salvarFecharOrcamento';
-      saveChanges(closeAfter);
+      const proceed = () => saveChanges(closeAfter);
+      if (currentStatus === 'Aprovado') {
+        showActionDialog('Tem certeza que deseja converter este orçamento em pedido?', ok => {
+          if (ok) proceed();
+        });
+      } else {
+        proceed();
+      }
+    });
+  }
+  if (converterBtn) {
+    converterBtn.addEventListener('click', () => {
+      if (currentStatus !== 'Pendente') {
+        showFunctionUnavailableDialog('Apenas orçamentos com status Pendente podem ser convertidos em pedido.');
+        return;
+      }
+      showActionDialog('Tem certeza que deseja converter este orçamento em pedido?', ok => {
+        if (!ok) return;
+        currentStatus = 'Aprovado';
+        updateStatusTag();
+        updateConverterBtn();
+        saveChanges(true);
+      });
     });
   }
   document.getElementById('cancelarOrcamento').addEventListener('click', close);
