@@ -8,6 +8,14 @@ async function converterParaPedido(orcamentoId) {
     const { rows } = await db.query('SELECT * FROM orcamentos WHERE id=$1', [orcamentoId]);
     if (!rows.length) return;
     const o = rows[0];
+
+    // Crie uma variável para a data atual
+    const dataAtual = new Date();
+    
+    // Data de validade com 30 dias de acréscimo
+    const dataValidade = new Date();
+    dataValidade.setDate(dataValidade.getDate() + 30);
+
     const insertPedido = await db.query(
       `INSERT INTO pedidos (id, numero, cliente_id, contato_id, data_emissao, situacao, parcelas, tipo_parcela, forma_pagamento, transportadora, desconto_pagamento, desconto_especial, desconto_total, valor_final, observacoes, validade, prazo, dono, data_aprovacao)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19) RETURNING id`,
@@ -16,8 +24,8 @@ async function converterParaPedido(orcamentoId) {
         o.numero,
         o.cliente_id,
         o.contato_id,
-        o.data_emissao,
-        'Rascunho',
+        dataAtual,
+        'Em Produção',
         o.parcelas,
         o.tipo_parcela,
         o.forma_pagamento,
@@ -27,10 +35,10 @@ async function converterParaPedido(orcamentoId) {
         o.desconto_total,
         o.valor_final,
         o.observacoes,
-        o.validade,
+        dataValidade,
         o.prazo,
         o.dono,
-        o.data_aprovacao
+        dataAtual
       ]
     );
     const pedidoId = insertPedido.rows[0].id;
