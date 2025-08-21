@@ -10,6 +10,7 @@
   const nomeInput       = document.getElementById('nomeInput');
   const codigoInput     = document.getElementById('codigoInput');
   const ncmInput        = document.getElementById('ncmInput');
+  const colecaoSelect   = document.getElementById('colecaoSelect');
   const fabricacaoInput = document.getElementById('fabricacaoInput');
   const acabamentoInput = document.getElementById('acabamentoInput');
   const montagemInput   = document.getElementById('montagemInput');
@@ -80,6 +81,25 @@
       etapaSelect.innerHTML = procs.map(p => `<option value="${p.id}">${p.nome ?? p}</option>`).join('');
       etapaSelect.selectedIndex = 0;
     }).catch(err => console.error('Erro ao carregar processos', err));
+  }
+
+  if(colecaoSelect){
+    async function carregarColecoes(){
+      try{
+        const colecoes = await window.electronAPI.listarColecoes();
+        colecaoSelect.innerHTML = '<option value="">Selecionar Coleção</option>' +
+          colecoes.map(c => `<option value="${c}">${c}</option>`).join('');
+      }catch(err){
+        console.error('Erro ao carregar coleções', err);
+      }
+    }
+    carregarColecoes();
+    document.getElementById('addColecaoNovo')?.addEventListener('click', () => {
+      Modal.open('modals/produtos/colecao-novo.html', '../js/modals/produto-colecao-novo.js', 'novaColecao', true);
+    });
+    document.getElementById('delColecaoNovo')?.addEventListener('click', () => {
+      Modal.open('modals/produtos/colecao-excluir.html', '../js/modals/produto-colecao-excluir.js', 'excluirColecao', true);
+    });
   }
 
   const tableBody = document.querySelector('#itensTabela tbody');
@@ -246,6 +266,7 @@
         { el: nomeInput, nome: 'Nome' },
         { el: codigoInput, nome: 'Código' },
         { el: ncmInput, nome: 'NCM' },
+        { el: colecaoSelect, nome: 'Coleção' },
         { el: fabricacaoInput, nome: 'Marcenaria' },
         { el: acabamentoInput, nome: 'Acabamento' },
         { el: montagemInput, nome: 'Montagem' },
@@ -278,6 +299,7 @@
         await window.electronAPI.adicionarProduto({
           codigo,
           nome,
+          categoria: colecaoSelect.value.trim(),
           preco_venda: totals.valorVenda || 0,
           pct_markup: parseFloat(markupInput?.value) || 0,
           status: 'Em linha'
@@ -301,7 +323,7 @@
           nome,
           codigo,
           ncm,
-          categoria: nome.split(' ')[0] || '',
+          categoria: colecaoSelect.value.trim(),
           status: 'Em linha'
         }, { inseridos: itensPayload, atualizados: [], deletados: [] });
 

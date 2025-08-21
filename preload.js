@@ -20,12 +20,20 @@ contextBridge.exposeInMainWorld('electronAPI', {
       console.error('listar-unidades error', err);
       return [];
     }),
+  listarColecoes: () =>
+    ipcRenderer.invoke('listar-colecoes').catch((err) => {
+      console.error('listar-colecoes error', err);
+      return [];
+    }),
   adicionarCategoria: (nome) => ipcRenderer.invoke('adicionar-categoria', nome),
   adicionarUnidade: (nome) => ipcRenderer.invoke('adicionar-unidade', nome),
+  adicionarColecao: (nome) => ipcRenderer.invoke('adicionar-colecao', nome),
   removerCategoria: (nome) => ipcRenderer.invoke('remover-categoria', nome),
   removerUnidade: (nome) => ipcRenderer.invoke('remover-unidade', nome),
+  removerColecao: (nome) => ipcRenderer.invoke('remover-colecao', nome),
   verificarDependenciaCategoria: (nome) => ipcRenderer.invoke('verificar-dependencia-categoria', nome),
   verificarDependenciaUnidade: (nome) => ipcRenderer.invoke('verificar-dependencia-unidade', nome),
+  verificarDependenciaColecao: (nome) => ipcRenderer.invoke('verificar-dependencia-colecao', nome),
   verificarDependenciaProcesso: (nome) => ipcRenderer.invoke('verificar-dependencia-processo', nome),
   listarProdutos: () => ipcRenderer.invoke('listar-produtos'),
   obterProduto: (codigo) => ipcRenderer.invoke('obter-produto', codigo),
