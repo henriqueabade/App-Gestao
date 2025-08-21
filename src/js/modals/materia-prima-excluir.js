@@ -15,7 +15,7 @@
       carregarMateriais();
     }catch(err){
       console.error(err);
-      showToast('Erro ao excluir insumo', 'error');
+      showToast('Erro ao excluir, insumo existe em um produto', 'error');
     }
   });
 })();
