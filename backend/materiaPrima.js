@@ -35,6 +35,12 @@ async function listarMaterias(filtro = '') {
 
 async function adicionarMateria(dados) {
   const { nome, quantidade, preco_unitario, categoria, unidade, infinito, processo, descricao } = dados;
+  const dup = await pool.query('SELECT 1 FROM materia_prima WHERE lower(nome)=lower($1) LIMIT 1', [nome]);
+  if (dup.rowCount > 0) {
+    const err = new Error('DUPLICADO');
+    err.code = 'DUPLICADO';
+    throw err;
+  }
   const res = await pool.query(
     `INSERT INTO materia_prima
       (nome, quantidade, preco_unitario, data_estoque, data_preco, categoria, unidade, infinito, processo, descricao)
@@ -56,6 +62,12 @@ async function atualizarMateria(id, dados) {
     infinito,
     descricao
   } = dados;
+  const dup = await pool.query('SELECT 1 FROM materia_prima WHERE lower(nome)=lower($1) AND id<>$2 LIMIT 1', [nome, id]);
+  if (dup.rowCount > 0) {
+    const err = new Error('DUPLICADO');
+    err.code = 'DUPLICADO';
+    throw err;
+  }
   const res = await pool.query(
     `UPDATE materia_prima
         SET nome=$1,

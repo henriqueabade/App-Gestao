@@ -81,9 +81,14 @@
       await window.electronAPI.adicionarMateriaPrima(dados);
       showToast('Insumo registrado com sucesso!', 'success');
       close();
+      carregarMateriais();
     }catch(err){
       console.error(err);
-      showToast('Erro ao registrar insumo', 'error');
+      if (err.message === 'DUPLICADO' || err.code === 'DUPLICADO') {
+        Modal.open('modals/materia-prima/duplicado.html', '../js/modals/materia-prima-duplicado.js', 'duplicado', true);
+      } else {
+        showToast('Erro ao registrar insumo', 'error');
+      }
     }
   });
 
