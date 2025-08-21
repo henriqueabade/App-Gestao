@@ -367,10 +367,20 @@ ipcMain.handle('listar-materia-prima', async (_e, { filtro }) => {
   return listarMaterias(filtro);
 });
 ipcMain.handle('adicionar-materia-prima', async (_e, dados) => {
-  return adicionarMateria(dados);
+  try {
+    const materia = await adicionarMateria(dados);
+    return { success: true, materia };
+  } catch (err) {
+    return { success: false, message: err.message, code: err.code };
+  }
 });
 ipcMain.handle('atualizar-materia-prima', async (_e, { id, dados }) => {
-  return atualizarMateria(id, dados);
+  try {
+    const materia = await atualizarMateria(id, dados);
+    return { success: true, materia };
+  } catch (err) {
+    return { success: false, message: err.message, code: err.code };
+  }
 });
 ipcMain.handle('excluir-materia-prima', async (_e, id) => {
   await excluirMateria(id);
