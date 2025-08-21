@@ -329,7 +329,7 @@ async function excluirProduto(id) {
     }
 
     const { rowCount: orcamentoCount } = await client.query(
-      'SELECT 1 FROM orcamento WHERE produto_id=$1::int LIMIT 1',
+      'SELECT 1 FROM orcamentos_itens WHERE produto_id=$1::int LIMIT 1',
       [id]
     );
     if (orcamentoCount > 0) {

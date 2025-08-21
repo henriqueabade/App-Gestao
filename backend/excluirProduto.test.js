@@ -16,7 +16,7 @@ function setup() {
     id serial primary key,
     produto_id int
   );`);
-  db.public.none(`CREATE TABLE orcamento (
+  db.public.none(`CREATE TABLE orcamentos_itens (
     id serial primary key,
     produto_id int
   );`);
@@ -52,7 +52,7 @@ test('excluirProduto remove dependências', async () => {
 
 test('excluirProduto bloqueia se estiver em orçamento', async () => {
   const { excluirProduto, pool } = setup();
-  await pool.query('INSERT INTO orcamento (produto_id) VALUES (1);');
+  await pool.query('INSERT INTO orcamentos_itens (produto_id) VALUES (1);');
   await assert.rejects(() => excluirProduto(1), /orçamento/i);
 });
 
