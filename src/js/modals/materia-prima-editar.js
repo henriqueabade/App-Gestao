@@ -83,7 +83,9 @@
   };
 
   infinitoCheckbox.addEventListener('change', toggleInfinito);
-  carregarOpcoes();
+  carregarOpcoes().finally(() => {
+    window.dispatchEvent(new CustomEvent('modalSpinnerLoaded', { detail: 'editarInsumo' }));
+  });
   toggleInfinito();
 
   document.getElementById('abrirExcluirInsumo').addEventListener('click', () => {

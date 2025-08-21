@@ -638,6 +638,8 @@
         if (tableBody) {
           tableBody.innerHTML = `<tr><td colspan="6" class="py-4 text-center text-red-400">${msg}</td></tr>`;
         }
+      } finally {
+        window.dispatchEvent(new CustomEvent('modalSpinnerLoaded', { detail: 'editarProduto' }));
       }
     })();
   }
