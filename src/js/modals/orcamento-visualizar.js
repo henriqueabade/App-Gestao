@@ -110,6 +110,8 @@
     document.getElementById('descontoEspOrcamento').textContent = fmt(descEsp);
     document.getElementById('descontoOrcamento').textContent = fmt(desconto);
     document.getElementById('totalOrcamento').textContent = fmt(total);
+    const footerTotal = document.getElementById('totalOrcamentoFooter');
+    if (footerTotal) footerTotal.textContent = fmt(total);
 
     if (data.parcelas_detalhes && data.parcelas_detalhes.length) {
       const pgBox = document.getElementById('visualizarPagamento');

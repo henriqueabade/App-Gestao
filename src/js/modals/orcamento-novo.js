@@ -256,6 +256,8 @@
     document.getElementById('novoDesconto').textContent = formatCurrency(desconto);
     const total = subtotal - desconto;
     document.getElementById('novoTotal').textContent = formatCurrency(total);
+    const footerTotal = document.getElementById('novoTotalFooter');
+    if (footerTotal) footerTotal.textContent = formatCurrency(total);
     itensTbody.querySelectorAll('tr').forEach(updateLineTotal);
     condicaoSelect.disabled = total === 0;
     condicaoSelect.style.pointerEvents = condicaoSelect.disabled ? 'none' : 'auto';

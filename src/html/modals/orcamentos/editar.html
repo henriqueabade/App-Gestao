@@ -135,11 +135,14 @@
         </div>
       </div>
     </div>
-    <footer class="flex justify-end gap-3 px-8 py-6 border-t border-white/10 flex-shrink-0">
-      <button id="clonarOrcamento" class="btn-secondary px-4 py-2 rounded-lg text-white font-medium">Clonar</button>
-      <button id="salvarFecharOrcamento" class="btn-dark-green px-4 py-2 rounded-lg text-white font-medium">Salvar e Fechar</button>
-      <button id="converterOrcamento" class="btn-purple px-4 py-2 rounded-lg text-white font-medium">Converter em Pedido</button>
-      <button id="cancelarOrcamento" class="btn-danger-light px-4 py-2 rounded-lg font-medium">Cancelar</button>
+    <footer class="flex items-center justify-between gap-3 px-8 py-6 border-t border-white/10 flex-shrink-0">
+      <span class="badge-success px-6 py-3 rounded-full text-lg font-semibold">Valor Total: <span id="totalOrcamentoFooter">R$ 0,00</span></span>
+      <div class="flex gap-3">
+        <button id="clonarOrcamento" class="btn-secondary px-4 py-2 rounded-lg text-white font-medium">Clonar</button>
+        <button id="salvarFecharOrcamento" class="btn-dark-green px-4 py-2 rounded-lg text-white font-medium">Salvar e Fechar</button>
+        <button id="converterOrcamento" class="btn-purple px-4 py-2 rounded-lg text-white font-medium">Converter em Pedido</button>
+        <button id="cancelarOrcamento" class="btn-danger-light px-4 py-2 rounded-lg font-medium">Cancelar</button>
+      </div>
     </footer>
   </div>
 </div>
