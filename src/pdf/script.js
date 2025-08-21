@@ -22,13 +22,13 @@ function formatCurrency(v) {
 
 function formatEndereco(end) {
   if (!end) return '';
-  const { rua = '', numero = '', bairro = '', cidade = '', estado = '' } = end;
-  return `${rua}, ${numero} – ${bairro} – ${cidade}/${estado}`;
+  const { rua = '', numero = '', bairro = '', cidade = '', estado = '', cep = '' } = end;
+  return `${rua}, ${numero} – ${bairro} – ${cidade}/${estado}\nCEP: ${cep}`;
 }
 
 function enderecosIguais(a, b) {
   if (!a || !b) return false;
-  const keys = ['rua', 'numero', 'bairro', 'cidade', 'estado'];
+  const keys = ['rua', 'numero', 'bairro', 'cidade', 'estado', 'cep'];
   return keys.every(k => (a[k] || '') === (b[k] || ''));
 }
 
