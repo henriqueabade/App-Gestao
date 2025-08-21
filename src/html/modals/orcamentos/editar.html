@@ -2,9 +2,9 @@
   <div role="dialog" aria-modal="true" tabindex="0" class="w-full max-w-5xl h-full max-h-full glass-surface backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade slide-in overflow-hidden flex flex-col">
     <header class="relative flex items-center justify-between px-8 py-5 border-b border-white/10 flex-shrink-0">
       <div class="flex items-center gap-3">
-        <button id="voltarEditarOrcamento" class="btn-neutral px-4 py-2 rounded-lg text-white font-medium flex items-center gap-2">← Voltar</button>
+        <button id="voltarEditarOrcamento" type="button" class="btn-neutral px-4 py-2 rounded-lg text-white font-medium flex items-center gap-2">← Voltar</button>
         <div class="relative">
-          <select id="editarDono" class="peer w-48 appearance-none bg-input border border-inputBorder rounded-lg px-4 pr-12 py-2 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" data-filled="false">
+          <select id="editarDono" name="dono" form="editarOrcamentoForm" required class="peer w-48 appearance-none bg-input border border-inputBorder rounded-lg px-4 pr-12 py-2 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" data-filled="false">
             <option value="" disabled selected hidden></option>
           </select>
           <label for="editarDono" class="absolute left-4 top-1/2 -translate-y-1/2 text-base text-gray-300 pointer-events-none transition-all duration-150 peer-focus:top-0 peer-focus:-translate-y-full peer-focus:text-xs peer-focus:text-primary peer-data-[filled=true]:top-0 peer-data-[filled=true]:-translate-y-full peer-data-[filled=true]:text-xs">Dono</label>
@@ -23,14 +23,14 @@
             <button data-status="Expirado" class="block w-full text-left px-4 py-2 text-white hover:bg-gray-700">Expirado</button>
           </div>
         </div>
-        <button id="salvarOrcamento" class="btn-success px-4 py-2 rounded-lg text-white font-medium">Salvar</button>
+        <button id="salvarOrcamento" type="submit" form="editarOrcamentoForm" class="btn-success px-4 py-2 rounded-lg text-white font-medium">Salvar</button>
       </div>
     </header>
-    <div class="flex-1 overflow-y-auto modal-scroll">
+    <form id="editarOrcamentoForm" class="flex-1 overflow-y-auto modal-scroll">
       <div class="px-8 py-6 space-y-6">
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <div class="relative">
-            <select id="editarCliente" class="peer w-full appearance-none bg-input border border-inputBorder rounded-lg px-4 pr-12 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" data-filled="false">
+            <select id="editarCliente" name="cliente" required class="peer w-full appearance-none bg-input border border-inputBorder rounded-lg px-4 pr-12 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" data-filled="false">
               <option value="" disabled selected hidden></option>
               <!-- Options preenchidas dinamicamente -->
             </select>
@@ -38,7 +38,7 @@
             <i class="fas fa-chevron-down absolute right-4 top-1/2 -translate-y-1/2 text-gray-300 pointer-events-none"></i>
           </div>
           <div class="relative">
-            <select id="editarContato" class="peer w-full appearance-none bg-input border border-inputBorder rounded-lg px-4 pr-12 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" data-filled="false">
+            <select id="editarContato" name="contato" required class="peer w-full appearance-none bg-input border border-inputBorder rounded-lg px-4 pr-12 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" data-filled="false">
               <option value="" disabled selected hidden></option>
               <!-- Contatos carregados dinamicamente -->
             </select>
@@ -46,12 +46,12 @@
             <i class="fas fa-chevron-down absolute right-4 top-1/2 -translate-y-1/2 text-gray-300 pointer-events-none"></i>
           </div>
           <div class="relative">
-            <input id="editarValidade" type="date" placeholder=" " class="peer w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+            <input id="editarValidade" name="validade" type="date" placeholder=" " required class="peer w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
             <label for="editarValidade" class="absolute left-4 top-1/2 -translate-y-1/2 text-base text-gray-300 pointer-events-none transition-all duration-150 peer-focus:top-0 peer-focus:-translate-y-full peer-focus:text-xs peer-focus:text-primary peer-valid:top-0 peer-valid:-translate-y-full peer-valid:text-xs">Validade</label>
             <i class="fas fa-calendar-alt absolute right-4 top-1/2 -translate-y-1/2 text-gray-300 pointer-events-none"></i>
           </div>
           <div class="relative">
-            <select id="editarCondicao" class="peer w-full appearance-none bg-input border border-inputBorder rounded-lg px-4 pr-12 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" data-filled="false">
+            <select id="editarCondicao" name="condicao" required class="peer w-full appearance-none bg-input border border-inputBorder rounded-lg px-4 pr-12 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" data-filled="false">
               <option value="vista">À vista</option>
               <option value="prazo">À prazo</option>
             </select>
@@ -59,14 +59,14 @@
             <i class="fas fa-chevron-down absolute right-4 top-1/2 -translate-y-1/2 text-gray-300 pointer-events-none"></i>
           </div>
           <div class="relative">
-            <select id="editarTransportadora" class="peer w-full appearance-none bg-input border border-inputBorder rounded-lg px-4 pr-12 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" data-filled="false">
+            <select id="editarTransportadora" name="transportadora" required class="peer w-full appearance-none bg-input border border-inputBorder rounded-lg px-4 pr-12 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" data-filled="false">
               <option value="" disabled selected hidden></option>
             </select>
             <label for="editarTransportadora" class="absolute left-4 top-1/2 -translate-y-1/2 text-base text-gray-300 pointer-events-none transition-all duration-150 peer-focus:top-0 peer-focus:-translate-y-full peer-focus:text-xs peer-focus:text-primary peer-data-[filled=true]:top-0 peer-data-[filled=true]:-translate-y-full peer-data-[filled=true]:text-xs">Transportadora</label>
             <i class="fas fa-chevron-down absolute right-4 top-1/2 -translate-y-1/2 text-gray-300 pointer-events-none"></i>
           </div>
           <div class="relative">
-            <select id="editarFormaPagamento" class="peer w-full appearance-none bg-input border border-inputBorder rounded-lg px-4 pr-12 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" data-filled="false">
+            <select id="editarFormaPagamento" name="formaPagamento" required class="peer w-full appearance-none bg-input border border-inputBorder rounded-lg px-4 pr-12 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" data-filled="false">
               <option value="" disabled selected hidden></option>
               <option value="boleto">Boleto</option>
               <option value="pix">Pix</option>
@@ -108,7 +108,7 @@
               <label for="novoItemQtd" class="absolute left-4 top-1/2 -translate-y-1/2 text-base text-gray-300 pointer-events-none transition-all duration-150 peer-placeholder-shown:top-1/2 peer-placeholder-shown:-translate-y-1/2 peer-placeholder-shown:text-base peer-focus:top-0 peer-focus:-translate-y-full peer-focus:text-xs peer-focus:text-primary peer-valid:top-0 peer-valid:-translate-y-full peer-valid:text-xs">Quantidade</label>
             </div>
             <div>
-              <button id="adicionarItem" class="w-full btn-primary px-4 py-3 rounded-lg font-medium">+ Inserir</button>
+              <button id="adicionarItem" type="button" class="w-full btn-primary px-4 py-3 rounded-lg font-medium">+ Inserir</button>
             </div>
           </div>
 
@@ -130,14 +130,14 @@
           </div>
         </div>
       </div>
-    </div>
+    </form>
     <footer class="flex items-center justify-between gap-3 px-8 py-6 border-t border-white/10 flex-shrink-0">
       <span class="badge-success px-6 py-3 rounded-full text-lg font-semibold">Valor Total: <span id="totalOrcamentoFooter">R$ 0,00</span></span>
       <div class="flex gap-3">
-        <button id="clonarOrcamento" class="btn-secondary px-4 py-2 rounded-lg text-white font-medium">Clonar</button>
-        <button id="salvarFecharOrcamento" class="btn-dark-green px-4 py-2 rounded-lg text-white font-medium">Salvar e Fechar</button>
-        <button id="converterOrcamento" class="btn-purple px-4 py-2 rounded-lg text-white font-medium">Converter em Pedido</button>
-        <button id="cancelarOrcamento" class="btn-danger-light px-4 py-2 rounded-lg font-medium">Cancelar</button>
+        <button id="clonarOrcamento" type="button" class="btn-secondary px-4 py-2 rounded-lg text-white font-medium">Clonar</button>
+        <button id="salvarFecharOrcamento" type="submit" form="editarOrcamentoForm" class="btn-dark-green px-4 py-2 rounded-lg text-white font-medium">Salvar e Fechar</button>
+        <button id="converterOrcamento" type="button" class="btn-purple px-4 py-2 rounded-lg text-white font-medium">Converter em Pedido</button>
+        <button id="cancelarOrcamento" type="button" class="btn-danger-light px-4 py-2 rounded-lg font-medium">Cancelar</button>
       </div>
     </footer>
   </div>

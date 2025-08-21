@@ -6,6 +6,8 @@
   document.getElementById('voltarNovoProduto').addEventListener('click', close);
   document.addEventListener('keydown', function esc(e){ if(e.key==='Escape'){ close(); document.removeEventListener('keydown', esc); } });
 
+  const form = document.getElementById('novoProdutoForm');
+
   // ------- Campos -------
   const nomeInput       = document.getElementById('nomeInput');
   const codigoInput     = document.getElementById('codigoInput');
@@ -255,97 +257,75 @@
   const limparBtn = document.getElementById('limparNovoProduto');
   if(limparBtn){
     limparBtn.addEventListener('click', () => {
-      overlay.querySelectorAll('input').forEach(i => { if(i.type==='number') i.value='0'; else i.value=''; });
-      overlay.querySelectorAll('select').forEach(s => s.selectedIndex = 0);
+      form.reset();
       itens = [];
       renderItens();
+      updateTotals();
     });
   }
 
-  const registrarBtn = document.getElementById('registrarNovoProduto');
-  if(registrarBtn){
-    registrarBtn.addEventListener('click', async () => {
-      const campos = [
-        { el: nomeInput, nome: 'Nome' },
-        { el: codigoInput, nome: 'Código' },
-        { el: ncmInput, nome: 'NCM' },
-        { el: colecaoSelect, nome: 'Coleção' },
-        { el: fabricacaoInput, nome: 'Marcenaria' },
-        { el: acabamentoInput, nome: 'Acabamento' },
-        { el: montagemInput, nome: 'Montagem' },
-        { el: embalagemInput, nome: 'Embalagem' },
-        { el: markupInput, nome: 'Markup' },
-        { el: commissionInput, nome: 'Comissão' },
-        { el: taxInput, nome: 'Imposto' }
-      ];
-      for(const campo of campos){
-        if(campo.el && String(campo.el.value).trim() === ''){
-          showToast(`${campo.nome} é obrigatório`, 'error');
-          campo.el.focus();
-          return;
-        }
+  form.addEventListener('submit', async e => {
+    e.preventDefault();
+    const nome = nomeInput.value.trim();
+    const codigo = codigoInput.value.trim();
+    const ncm = ncmInput.value.trim().slice(0,8);
+    try{
+      const existentes = await window.electronAPI.listarProdutos();
+      if(existentes.some(p => p.codigo === codigo)){
+        showToast('Código já existe', 'error');
+        return;
       }
-      const nome = nomeInput.value.trim();
-      const codigo = codigoInput.value.trim();
-      const ncm = ncmInput.value.trim().slice(0,8);
-      try{
-        const existentes = await window.electronAPI.listarProdutos();
-        if(existentes.some(p => p.codigo === codigo)){
-          showToast('Código já existe', 'error');
-          return;
-        }
-        if(existentes.some(p => p.nome === nome)){
-          showToast('Nome já existe', 'error');
-          return;
-        }
-
-        await window.electronAPI.adicionarProduto({
-          codigo,
-          nome,
-          categoria: colecaoSelect.value.trim(),
-          preco_venda: totals.valorVenda || 0,
-          pct_markup: parseFloat(markupInput?.value) || 0,
-          status: 'Em linha'
-        });
-
-        const itensPayload = itens.map(i => ({
-          insumo_id: i.insumo_id ?? i.id,
-          quantidade: i.quantidade
-        }));
-
-        await window.electronAPI.salvarProdutoDetalhado(codigo, {
-          pct_fabricacao: parseFloat(fabricacaoInput?.value) || 0,
-          pct_acabamento: parseFloat(acabamentoInput?.value) || 0,
-          pct_montagem:   parseFloat(montagemInput?.value) || 0,
-          pct_embalagem:  parseFloat(embalagemInput?.value) || 0,
-          pct_markup:     parseFloat(markupInput?.value) || 0,
-          pct_comissao:   parseFloat(commissionInput?.value) || 0,
-          pct_imposto:    parseFloat(taxInput?.value) || 0,
-          preco_base:     totals.totalInsumos || 0,
-          preco_venda:    totals.valorVenda || 0,
-          nome,
-          codigo,
-          ncm,
-          categoria: colecaoSelect.value.trim(),
-          status: 'Em linha'
-        }, { inseridos: itensPayload, atualizados: [], deletados: [] });
-
-        showToast('Peça criada com sucesso!', 'success');
-        close();
-        if(typeof carregarProdutos === 'function') await carregarProdutos();
-      }catch(err){
-        console.error('Erro ao criar produto', err);
-        if(err?.code === 'CODIGO_EXISTE'){
-          showToast('Código já existe', 'error');
-        }else if(err?.code === 'NOME_EXISTE'){
-          showToast('Nome já existe', 'error');
-        }else{
-          const msg = err?.message || 'Erro ao criar peça';
-          showToast(msg, 'error');
-        }
+      if(existentes.some(p => p.nome === nome)){
+        showToast('Nome já existe', 'error');
+        return;
       }
-    });
-  }
+
+      await window.electronAPI.adicionarProduto({
+        codigo,
+        nome,
+        categoria: colecaoSelect.value.trim(),
+        preco_venda: totals.valorVenda || 0,
+        pct_markup: parseFloat(markupInput?.value) || 0,
+        status: 'Em linha'
+      });
+
+      const itensPayload = itens.map(i => ({
+        insumo_id: i.insumo_id ?? i.id,
+        quantidade: i.quantidade
+      }));
+
+      await window.electronAPI.salvarProdutoDetalhado(codigo, {
+        pct_fabricacao: parseFloat(fabricacaoInput?.value) || 0,
+        pct_acabamento: parseFloat(acabamentoInput?.value) || 0,
+        pct_montagem:   parseFloat(montagemInput?.value) || 0,
+        pct_embalagem:  parseFloat(embalagemInput?.value) || 0,
+        pct_markup:     parseFloat(markupInput?.value) || 0,
+        pct_comissao:   parseFloat(commissionInput?.value) || 0,
+        pct_imposto:    parseFloat(taxInput?.value) || 0,
+        preco_base:     totals.totalInsumos || 0,
+        preco_venda:    totals.valorVenda || 0,
+        nome,
+        codigo,
+        ncm,
+        categoria: colecaoSelect.value.trim(),
+        status: 'Em linha'
+      }, { inseridos: itensPayload, atualizados: [], deletados: [] });
+
+      showToast('Peça criada com sucesso!', 'success');
+      close();
+      if(typeof carregarProdutos === 'function') await carregarProdutos();
+    }catch(err){
+      console.error('Erro ao criar produto', err);
+      if(err?.code === 'CODIGO_EXISTE'){
+        showToast('Código já existe', 'error');
+      }else if(err?.code === 'NOME_EXISTE'){
+        showToast('Nome já existe', 'error');
+      }else{
+        const msg = err?.message || 'Erro ao criar peça';
+        showToast(msg, 'error');
+      }
+    }
+  });
 
   const dataHoraEl = document.getElementById('dataHoraProduto');
   if(dataHoraEl){

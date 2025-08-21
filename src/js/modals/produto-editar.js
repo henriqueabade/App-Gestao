@@ -51,6 +51,7 @@
     overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
     const voltarBtn = document.getElementById('voltarEditarProduto');
     if (voltarBtn) voltarBtn.addEventListener('click', close);
+    const form = document.getElementById('editarProdutoForm');
 
     // ------- Campos e referências -------
     let tableBody = resolveItensTbody();
@@ -482,6 +483,7 @@
         if (tableBody) tableBody.innerHTML = '';
         processOrder.length = 0;
         Object.keys(processos).forEach(k => delete processos[k]);
+        if (form) form.reset();
         [fabricacaoInput, acabamentoInput, montagemInput, embalagemInput, markupInput, commissionInput, taxInput]
           .filter(Boolean)
           .forEach(inp => inp.value = '');
@@ -543,13 +545,9 @@
       });
     }
 
-    const salvarBtn = document.getElementById('salvarEditarProduto');
-    if (salvarBtn) {
-      salvarBtn.addEventListener('click', async () => {
-        if (!colecaoSelect || !colecaoSelect.value.trim()) {
-          showToast('Selecione uma coleção!', 'warning');
-          return;
-        }
+    if (form) {
+      form.addEventListener('submit', async e => {
+        e.preventDefault();
         const produto = {
           pct_fabricacao: parseFloat(fabricacaoInput && fabricacaoInput.value) || 0,
           pct_acabamento: parseFloat(acabamentoInput && acabamentoInput.value) || 0,

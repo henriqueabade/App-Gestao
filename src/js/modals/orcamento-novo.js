@@ -7,6 +7,8 @@
   overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
   document.addEventListener('keydown', function esc(e){ if(e.key === 'Escape'){ close(); document.removeEventListener('keydown', esc); } });
 
+  const form = document.getElementById('novoOrcamentoForm');
+
   const clients = {};
   const products = {};
 
@@ -86,7 +88,7 @@
     if(condicaoSelect.value==='vista'){
       pagamentoBox.innerHTML=`
         <div class="relative w-40">
-          <input id="novoPrazoVista" type="number" min="0" placeholder=" " class="peer w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-transparent focus:border-primary focus:ring-2 focus:ring-primary/50 transition" data-filled="false" />
+          <input id="novoPrazoVista" name="prazo" type="number" min="0" placeholder=" " required class="peer w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-transparent focus:border-primary focus:ring-2 focus:ring-primary/50 transition" data-filled="false" />
           <label for="novoPrazoVista" class="absolute left-4 top-1/2 -translate-y-1/2 text-base text-gray-300 pointer-events-none transition-all duration-150 peer-placeholder-shown:top-1/2 peer-placeholder-shown:-translate-y-1/2 peer-placeholder-shown:text-base peer-focus:top-0 peer-focus:-translate-y-full peer-focus:text-xs peer-focus:text-primary peer-valid:top-0 peer-valid:-translate-y-full peer-valid:text-xs peer-data-[filled=true]:top-0 peer-data-[filled=true]:-translate-y-full peer-data-[filled=true]:text-xs">Prazo (dias)</label>
         </div>`;
       pagamentoBox.classList.remove('hidden');
@@ -426,44 +428,39 @@
     });
   });
 
-  function saveQuote(status) {
-    const missing = [];
-    const clienteVal = clienteSelect.value;
-    if (!clienteVal) missing.push('Cliente');
-    const contatoVal = contatoSelect.value;
-    if (!contatoVal) missing.push('Contato');
-    const validadeVal = document.getElementById('novoValidade').value;
-    if (!validadeVal) missing.push('Validade');
-    const condicaoVal = condicaoSelect.value;
-    if (!condicaoVal) missing.push('Condição de pagamento');
-    const transportadoraVal = transportadoraSelect.value;
-    if (!transportadoraVal) missing.push('Transportadora');
-    const formaPagamentoVal = formaPagamentoSelect.value;
-    if (!formaPagamentoVal) missing.push('Forma de Pagamento');
-    const donoVal = donoSelect.value;
-    if (!donoVal) missing.push('Dono');
-    if (itensTbody.children.length === 0) missing.push('Itens');
+    function saveQuote(status) {
+      if (itensTbody.children.length === 0) {
+        showMissingDialog(['Itens']);
+        return;
+      }
 
-    const dataEmissao = new Date();
-    let parcelas = 1;
-    let prazo = '';
-    let tipoParcela = 'a vista';
-    let parcelasDetalhes = [];
-    if (condicaoVal === 'vista') {
-      const prazoVista = document.getElementById('novoPrazoVista')?.value;
-      if (!prazoVista) missing.push('Prazo (dias)');
-      else {
+      const clienteVal = clienteSelect.value;
+      const contatoVal = contatoSelect.value;
+      const validadeVal = document.getElementById('novoValidade').value;
+      const condicaoVal = condicaoSelect.value;
+      const transportadoraVal = transportadoraSelect.value;
+      const formaPagamentoVal = formaPagamentoSelect.value;
+      const donoVal = donoSelect.value;
+
+      const dataEmissao = new Date();
+      let parcelas = 1;
+      let prazo = '';
+      let tipoParcela = 'a vista';
+      let parcelasDetalhes = [];
+      if (condicaoVal === 'vista') {
+        const prazoVista = document.getElementById('novoPrazoVista')?.value;
         prazo = prazoVista;
         const totalCents = parseCurrencyToCents(document.getElementById('novoTotal').textContent);
         parcelasDetalhes.push({
           valor: totalCents / 100,
           data_vencimento: new Date(dataEmissao.getTime() + parseInt(prazoVista, 10) * 86400000).toISOString().split('T')[0]
         });
-      }
-    } else if (condicaoVal === 'prazo') {
-      const pdata = Parcelamento.getData('novoParcelamento');
-      if (!pdata || !pdata.canRegister) missing.push('Parcelamento');
-      else {
+      } else if (condicaoVal === 'prazo') {
+        const pdata = Parcelamento.getData('novoParcelamento');
+        if (!pdata || !pdata.canRegister) {
+          showMissingDialog(['Parcelamento']);
+          return;
+        }
         parcelas = pdata.count;
         prazo = pdata.items.map(it => it.dueInDays).join('/');
         parcelasDetalhes = pdata.items.map(it => ({
@@ -472,14 +469,8 @@
         }));
         tipoParcela = pdata.mode === 'equal' ? 'igual' : 'diferente';
       }
-    }
 
-    if (missing.length) {
-      showMissingDialog(missing);
-      return;
-    }
-
-    const confirmMsg = status === 'Rascunho' ? 'Deseja salvar este orçamento?' : 'Deseja salvar e enviar este orçamento?';
+      const confirmMsg = status === 'Rascunho' ? 'Deseja salvar este orçamento?' : 'Deseja salvar e enviar este orçamento?';
     showActionDialog(confirmMsg, async ok => {
       if (!ok) return;
       try {
@@ -560,8 +551,11 @@
     });
   }
 
-  document.getElementById('salvarNovoOrcamento').addEventListener('click', () => saveQuote('Rascunho'));
-  document.getElementById('enviarNovoOrcamento').addEventListener('click', () => saveQuote('Pendente'));
+  form.addEventListener('submit', e => {
+    e.preventDefault();
+    const status = e.submitter?.dataset.status || 'Rascunho';
+    saveQuote(status);
+  });
   document.getElementById('cancelarNovoOrcamento').addEventListener('click', close);
   document.getElementById('voltarNovoOrcamento').addEventListener('click', close);
 
@@ -569,9 +563,8 @@
   if (limparBtn) {
     limparBtn.addEventListener('click', () => {
       confirmResetIfNeeded(() => {
-        overlay.querySelectorAll('input').forEach(i => i.value = '');
-        overlay.querySelectorAll('textarea').forEach(t => t.value = '');
-        overlay.querySelectorAll('select').forEach(s => { s.selectedIndex = 0; s.setAttribute('data-filled', 'false'); });
+        form.reset();
+        overlay.querySelectorAll('select').forEach(s => s.setAttribute('data-filled', 'false'));
         itensTbody.innerHTML = '';
         recalcTotals();
       });

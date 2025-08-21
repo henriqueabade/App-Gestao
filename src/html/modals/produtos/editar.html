@@ -7,12 +7,12 @@
       </div>
       <h2 class="text-lg font-semibold text-white flex-1 text-center" id="tituloeditar">EDITAR PRODUTO</h2>
       <div class="flex-1 flex items-center justify-end gap-3">
-        <button id="salvarEditarProduto" class="btn-success px-4 py-2 rounded-lg text-white font-medium flex items-center gap-2">Salvar</button>
-        <button id="clonarProduto" class="btn-secondary px-4 py-2 rounded-lg text-white font-medium">Clonar</button>
-        <button id="limparTudo" class="btn-danger px-4 py-2 rounded-lg text-white font-medium">Limpar Tudo</button>
+        <button id="salvarEditarProduto" type="submit" form="editarProdutoForm" class="btn-success px-4 py-2 rounded-lg text-white font-medium flex items-center gap-2">Salvar</button>
+        <button id="clonarProduto" type="button" class="btn-secondary px-4 py-2 rounded-lg text-white font-medium">Clonar</button>
+        <button id="limparTudo" type="button" class="btn-danger px-4 py-2 rounded-lg text-white font-medium">Limpar Tudo</button>
       </div>
     </header>
-    <div class="flex-1 overflow-y-auto modal-scroll">
+    <form id="editarProdutoForm" class="flex-1 overflow-y-auto modal-scroll">
       <div class="px-8 py-6 border-b border-white/10">
         <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
           <div>
@@ -54,16 +54,16 @@
 
         <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
           <div class="md:col-span-2">
-            <input id="nomeInput" type="text" placeholder="Nome do Produto" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+            <input id="nomeInput" name="nome" type="text" required placeholder="Nome do Produto" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
           </div>
           <div>
-            <input id="codigoInput" type="text" placeholder="Código" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+            <input id="codigoInput" name="codigo" type="text" required placeholder="Código" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
           </div>
           <div>
-            <input id="ncmInput" type="text" placeholder="00000000" maxlength="8" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+            <input id="ncmInput" name="ncm" type="text" placeholder="00000000" maxlength="8" required class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
           </div>
           <div class="relative">
-            <select id="colecaoSelect" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 pr-12 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" disabled>
+            <select id="colecaoSelect" name="categoria" required class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 pr-12 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" disabled>
               <option value="">Selecionar Coleção</option>
             </select>
             <button type="button" id="delColecaoEditar" class="absolute right-10 top-1/2 -translate-y-1/2 btn-neutral icon-only text-gray-300 hover:text-white" aria-label="Excluir coleção" disabled>
@@ -94,31 +94,31 @@
             <div class="space-y-4">
               <div class="flex justify-between items-center">
                 <span class="text-gray-300">Marcenaria</span>
-                <input id="fabricacaoInput" type="number" value="25" class="w-20 bg-input border border-inputBorder rounded px-3 py-1 text-white text-sm focus:border-primary focus:ring-1 focus:ring-primary/50 transition" />
+                <input id="fabricacaoInput" name="fabricacao" type="number" value="25" required class="w-20 bg-input border border-inputBorder rounded px-3 py-1 text-white text-sm focus:border-primary focus:ring-1 focus:ring-primary/50 transition" />
               </div>
               <div class="flex justify-between items-center">
                 <span class="text-gray-300">Acabamento</span>
-                <input id="acabamentoInput" type="number" value="15" class="w-20 bg-input border border-inputBorder rounded px-3 py-1 text-white text-sm focus:border-primary focus:ring-1 focus:ring-primary/50 transition" />
+                <input id="acabamentoInput" name="acabamento" type="number" value="15" required class="w-20 bg-input border border-inputBorder rounded px-3 py-1 text-white text-sm focus:border-primary focus:ring-1 focus:ring-primary/50 transition" />
               </div>
               <div class="flex justify-between items-center">
                 <span class="text-gray-300">Montagem</span>
-                <input id="montagemInput" type="number" value="10" class="w-20 bg-input border border-inputBorder rounded px-3 py-1 text-white text-sm focus:border-primary focus:ring-1 focus:ring-primary/50 transition" />
+                <input id="montagemInput" name="montagem" type="number" value="10" required class="w-20 bg-input border border-inputBorder rounded px-3 py-1 text-white text-sm focus:border-primary focus:ring-1 focus:ring-primary/50 transition" />
               </div>
               <div class="flex justify-between items-center">
                 <span class="text-gray-300">Embalagem</span>
-                <input id="embalagemInput" type="number" value="5" class="w-20 bg-input border border-inputBorder rounded px-3 py-1 text-white text-sm focus:border-primary focus:ring-1 focus:ring-primary/50 transition" />
+                <input id="embalagemInput" name="embalagem" type="number" value="5" required class="w-20 bg-input border border-inputBorder rounded px-3 py-1 text-white text-sm focus:border-primary focus:ring-1 focus:ring-primary/50 transition" />
               </div>
               <div class="flex justify-between items-center">
                 <span class="text-gray-300">Markup</span>
-                <input id="markupInput" type="number" value="30" class="w-20 bg-input border border-inputBorder rounded px-3 py-1 text-white text-sm focus:border-primary focus:ring-1 focus:ring-primary/50 transition" />
+                <input id="markupInput" name="markup" type="number" value="30" required class="w-20 bg-input border border-inputBorder rounded px-3 py-1 text-white text-sm focus:border-primary focus:ring-1 focus:ring-primary/50 transition" />
               </div>
               <div class="flex justify-between items-center">
                 <span class="text-gray-300">Comissão</span>
-                <input id="commissionInput" type="number" value="8" class="w-20 bg-input border border-inputBorder rounded px-3 py-1 text-white text-sm focus:border-primary focus:ring-1 focus:ring-primary/50 transition" />
+                <input id="commissionInput" name="commission" type="number" value="8" required class="w-20 bg-input border border-inputBorder rounded px-3 py-1 text-white text-sm focus:border-primary focus:ring-1 focus:ring-primary/50 transition" />
               </div>
               <div class="flex justify-between items-center">
                 <span class="text-gray-300">Imposto</span>
-                <input id="taxInput" type="number" value="12" class="w-20 bg-input border border-inputBorder rounded px-3 py-1 text-white text-sm focus:border-primary focus:ring-1 focus:ring-primary/50 transition" />
+                <input id="taxInput" name="tax" type="number" value="12" required class="w-20 bg-input border border-inputBorder rounded px-3 py-1 text-white text-sm focus:border-primary focus:ring-1 focus:ring-primary/50 transition" />
               </div>
             </div>
           </div>
@@ -190,7 +190,7 @@
           <!-- Observações removidas -->
         </div>
       </div>
-    </div>
+    </form>
   </div>
 </div>
 
