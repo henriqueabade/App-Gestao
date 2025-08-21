@@ -66,7 +66,7 @@ function openQuoteModal(htmlPath, scriptPath, overlayId) {
     const spinner = document.createElement('div');
     spinner.id = 'modalLoading';
     spinner.className = 'fixed inset-0 z-[2000] bg-black/50 flex items-center justify-center';
-    spinner.innerHTML = '<div class="w-16 h-16 border-4 border-white border-t-transparent rounded-full animate-spin"></div>';
+    spinner.innerHTML = '<div class="w-16 h-16 border-4 border-[#b6a03e] border-t-transparent rounded-full animate-spin"></div>';
     document.body.appendChild(spinner);
     const start = Date.now();
     function handleLoaded(e) {
