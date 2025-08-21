@@ -257,7 +257,8 @@
     limparBtn.addEventListener('click', () => {
       overlay.querySelectorAll('input').forEach(i => { if(i.type==='number') i.value='0'; else i.value=''; });
       overlay.querySelectorAll('select').forEach(s => s.selectedIndex = 0);
-      updateTotals();
+      itens = [];
+      renderItens();
     });
   }
 
