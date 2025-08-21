@@ -3,6 +3,51 @@ const db = require('./db');
 
 const router = express.Router();
 
+async function converterParaPedido(orcamentoId) {
+  try {
+    const { rows } = await db.query('SELECT * FROM orcamentos WHERE id=$1', [orcamentoId]);
+    if (!rows.length) return;
+    const o = rows[0];
+    const insertPedido = await db.query(
+      `INSERT INTO pedidos (numero, cliente_id, contato_id, data_emissao, situacao, parcelas, tipo_parcela, forma_pagamento, transportadora, desconto_pagamento, desconto_especial, desconto_total, valor_final, observacoes, validade, prazo, dono, data_aprovacao)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18) RETURNING id`,
+      [
+        o.numero,
+        o.cliente_id,
+        o.contato_id,
+        o.data_emissao,
+        'Rascunho',
+        o.parcelas,
+        o.tipo_parcela,
+        o.forma_pagamento,
+        o.transportadora,
+        o.desconto_pagamento,
+        o.desconto_especial,
+        o.desconto_total,
+        o.valor_final,
+        o.observacoes,
+        o.validade,
+        o.prazo,
+        o.dono,
+        o.data_aprovacao
+      ]
+    );
+    const pedidoId = insertPedido.rows[0].id;
+    await db.query(
+      `INSERT INTO pedidos_itens (pedido_id, produto_id, codigo, nome, ncm, quantidade, valor_unitario, valor_unitario_desc, desconto_pagamento, desconto_pagamento_prc, desconto_especial, desconto_especial_prc, valor_desc, desconto_total, valor_total)
+       SELECT $1, produto_id, codigo, nome, ncm, quantidade, valor_unitario, valor_unitario_desc, desconto_pagamento, desconto_pagamento_prc, desconto_especial, desconto_especial_prc, valor_desc, desconto_total, valor_total FROM orcamentos_itens WHERE orcamento_id=$2`,
+      [pedidoId, orcamentoId]
+    );
+    await db.query(
+      `INSERT INTO pedido_parcelas (pedido_id, numero_parcela, valor, data_vencimento)
+       SELECT $1, numero_parcela, valor, data_vencimento FROM orcamento_parcelas WHERE orcamento_id=$2`,
+      [pedidoId, orcamentoId]
+    );
+  } catch (err) {
+    console.error('Erro ao converter orçamento para pedido:', err);
+  }
+}
+
 // Lista todos os orçamentos
 router.get('/', async (_req, res) => {
   try {
@@ -238,6 +283,7 @@ router.put('/:id', async (req, res) => {
     }
 
     await client.query('COMMIT');
+    if (situacao === 'Aprovado') await converterParaPedido(id);
     res.json({ success: true });
   } catch (err) {
     await client.query('ROLLBACK');
@@ -257,6 +303,7 @@ router.patch('/:id/status', async (req, res) => {
       `UPDATE orcamentos SET situacao=$1, data_aprovacao = CASE WHEN $1 IN ('Aprovado','Rejeitado','Expirado') THEN NOW() ELSE NULL END WHERE id=$2`,
       [situacao, id]
     );
+    if (situacao === 'Aprovado') await converterParaPedido(id);
     res.json({ success: true });
   } catch (err) {
     console.error('Erro ao atualizar status do orçamento:', err);
