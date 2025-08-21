@@ -106,6 +106,14 @@
       tableBody.innerHTML = `<tr><td colspan="6" class="py-4 text-center text-red-400">${msg}</td></tr>`;
     }
 
+    function showFunctionUnavailableDialog(message){
+      const overlay=document.createElement('div');
+      overlay.className='fixed inset-0 z-[2000] bg-black/50 flex items-center justify-center p-4';
+      overlay.innerHTML=`<div class="max-w-sm w-full glass-surface backdrop-blur-xl rounded-2xl border border-yellow-500/20 ring-1 ring-yellow-500/30 shadow-2xl/40 animate-modalFade"><div class="p-6 text-center"><h3 class="text-lg font-semibold mb-4 text-yellow-400">Função Indisponível</h3><p class="text-sm text-gray-300 mb-6">${message}</p><div class="flex justify-center"><button id="funcUnavailableOk" class="btn-neutral px-6 py-2 rounded-lg text-white font-medium">OK</button></div></div></div>`;
+      document.body.appendChild(overlay);
+      overlay.querySelector('#funcUnavailableOk').addEventListener('click',()=>overlay.remove());
+    }
+
     const produtoSelecionado = window.produtoSelecionado;
     if(!produtoSelecionado || !produtoSelecionado.codigo){
       showError('Produto não selecionado');
@@ -128,8 +136,16 @@
 
     function updateRegistroEditState(){
       const editable = editarRegistroToggle && editarRegistroToggle.checked;
-      [nomeInput, codigoInput, ncmInput, colecaoSelect, addColecaoBtn, delColecaoBtn].forEach(el => { if (el) el.disabled = !editable; });
-      statusRadios.forEach(r => r.disabled = !editable);
+      [nomeInput, codigoInput, ncmInput, colecaoSelect, addColecaoBtn, delColecaoBtn].forEach(el => {
+        if (el){
+          el.disabled = !editable;
+          el.style.pointerEvents = el.disabled ? 'none' : 'auto';
+        }
+      });
+      statusRadios.forEach(r => {
+        r.disabled = !editable;
+        r.style.pointerEvents = r.disabled ? 'none' : 'auto';
+      });
       if(!editable){
         if (nomeInput)   nomeInput.value   = registroOriginal.nome;
         if (codigoInput) codigoInput.value = registroOriginal.codigo;
@@ -141,6 +157,42 @@
     if (editarRegistroToggle) {
       editarRegistroToggle.addEventListener('change', updateRegistroEditState);
     }
+
+    const blockedWrappers = [nomeInput, codigoInput, ncmInput, colecaoSelect]
+      .map(el => el ? el.parentElement : null)
+      .filter(Boolean);
+    blockedWrappers.forEach(wrapper => {
+      wrapper.addEventListener('click', e => {
+        const field = wrapper.querySelector('input, select');
+        if(field && field.disabled){
+          e.preventDefault();
+          showFunctionUnavailableDialog('Para editar os dados o botão deve ser ativado.');
+        }
+      });
+    });
+
+    [addColecaoBtn, delColecaoBtn].forEach(btn => {
+      if(btn){
+        btn.addEventListener('click', e => {
+          if(btn.disabled){
+            e.preventDefault();
+            showFunctionUnavailableDialog('Para editar os dados o botão deve ser ativado.');
+          }
+        });
+      }
+    });
+
+    statusRadios.forEach(r => {
+      const wrapper = r.parentElement;
+      if(wrapper){
+        wrapper.addEventListener('click', e => {
+          if(r.disabled){
+            e.preventDefault();
+            showFunctionUnavailableDialog('Para editar os dados o botão deve ser ativado.');
+          }
+        });
+      }
+    });
 
     async function carregarColecoes(selecionada){
       if (!colecaoSelect) return;
