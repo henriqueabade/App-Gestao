@@ -708,7 +708,13 @@
       close();
       window.selectedQuoteId = clone.id;
       showToast(`ORÇAMENTO ${clone.numero} CLONADO, SALVO E ABERTO PARA EDIÇÃO`, 'info');
-      Modal.open('modals/orcamentos/editar.html', '../js/modals/orcamento-editar.js', 'editarOrcamento');
+      if (typeof openQuoteModal === 'function') {
+        openQuoteModal('modals/orcamentos/editar.html', '../js/modals/orcamento-editar.js', 'editarOrcamento');
+      } else {
+        Modal.open('modals/orcamentos/editar.html', '../js/modals/orcamento-editar.js', 'editarOrcamento');
+        const overlay = document.getElementById('editarOrcamentoOverlay');
+        overlay?.classList.remove('hidden');
+      }
     } catch (err) {
       console.error(err);
       showToast('Erro ao clonar orçamento', 'error');
