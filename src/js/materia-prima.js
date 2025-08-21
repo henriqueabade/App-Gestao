@@ -38,7 +38,7 @@ function initMateriaPrima() {
         popover.addEventListener('mouseleave', ocultar);
     }
 
-    carregarMateriais();
+    requestAnimationFrame(() => requestAnimationFrame(carregarMateriais));
 }
 
 async function carregarMateriais() {
