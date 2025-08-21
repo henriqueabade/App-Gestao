@@ -76,7 +76,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
     }
     return result.materia;
   },
-  excluirMateriaPrima: (id) => ipcRenderer.invoke('excluir-materia-prima', id),
+  excluirMateriaPrima: async (id) => {
+    const result = await ipcRenderer.invoke('excluir-materia-prima', id);
+    if (result && result.success === false) {
+      const err = new Error(result.message);
+      if (result.code) err.code = result.code;
+      throw err;
+    }
+    return result;
+  },
   registrarEntrada: (id, quantidade) => ipcRenderer.invoke('registrar-entrada-materia-prima', { id, quantidade }),
   registrarSaida: (id, quantidade) => ipcRenderer.invoke('registrar-saida-materia-prima', { id, quantidade }),
   atualizarPreco: (id, preco) => ipcRenderer.invoke('atualizar-preco-materia-prima', { id, preco }),
