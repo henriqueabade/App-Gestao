@@ -72,6 +72,15 @@
     const tag = document.getElementById('statusTag');
     tag.textContent = data.situacao;
     tag.className = `${statusClasses[data.situacao] || 'badge-neutral'} px-3 py-1 rounded-full text-xs font-medium`;
+    const dataTag = document.getElementById('dataAprovacaoTag');
+    if (['Aprovado', 'Rejeitado', 'Expirado'].includes(data.situacao) && data.data_aprovacao) {
+      const dt = new Date(data.data_aprovacao);
+      dataTag.textContent = dt.toLocaleDateString('pt-BR');
+      dataTag.classList.remove('hidden');
+    } else {
+      dataTag.textContent = '';
+      dataTag.classList.add('hidden');
+    }
 
     let subtotal = 0, descPag = 0, descEsp = 0;
     data.itens.forEach(it => {
