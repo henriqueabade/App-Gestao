@@ -556,6 +556,8 @@
     document.getElementById('descontoOrcamento').textContent = formatCurrency(desconto);
     const total = subtotal - desconto;
     document.getElementById('totalOrcamento').textContent = formatCurrency(total);
+    const footerTotal = document.getElementById('totalOrcamentoFooter');
+    if (footerTotal) footerTotal.textContent = formatCurrency(total);
     document.querySelectorAll('#orcamentoItens tbody tr').forEach(updateLineTotal);
     editarCondicao.disabled = total === 0;
     editarCondicao.style.pointerEvents = editarCondicao.disabled ? 'none' : 'auto';
