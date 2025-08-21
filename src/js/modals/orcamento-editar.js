@@ -5,6 +5,7 @@
   const close = () => Modal.close(overlayId);
   overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
   document.addEventListener('keydown', function esc(e){ if(e.key === 'Escape'){ close(); document.removeEventListener('keydown', esc); } });
+  const form = document.getElementById('editarOrcamentoForm');
 
   // carga de dados
   const id = window.selectedQuoteId;
@@ -695,8 +696,13 @@
     }
   }
 
-  document.getElementById('salvarOrcamento').addEventListener('click', () => saveChanges(false));
-  document.getElementById('salvarFecharOrcamento').addEventListener('click', () => saveChanges(true));
+  if (form) {
+    form.addEventListener('submit', e => {
+      e.preventDefault();
+      const closeAfter = e.submitter?.id === 'salvarFecharOrcamento';
+      saveChanges(closeAfter);
+    });
+  }
   document.getElementById('cancelarOrcamento').addEventListener('click', close);
   document.getElementById('voltarEditarOrcamento').addEventListener('click', close);
   document.getElementById('clonarOrcamento').addEventListener('click', async () => {
