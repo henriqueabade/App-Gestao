@@ -383,8 +383,12 @@ ipcMain.handle('atualizar-materia-prima', async (_e, { id, dados }) => {
   }
 });
 ipcMain.handle('excluir-materia-prima', async (_e, id) => {
-  await excluirMateria(id);
-  return true;
+  try {
+    await excluirMateria(id);
+    return { success: true };
+  } catch (err) {
+    return { success: false, message: err.message, code: err.code };
+  }
 });
 ipcMain.handle('registrar-entrada-materia-prima', async (_e, { id, quantidade }) => {
   return registrarEntrada(id, quantidade);
