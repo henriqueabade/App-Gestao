@@ -7,7 +7,7 @@
           <button id="registrarProximaEtapa" class="btn-primary px-6 py-2 rounded-lg text-white font-medium">Registrar</button>
         </div>
       </header>
-    <div class="flex-1 overflow-y-auto">
+    <div class="flex-1 overflow-y-auto modal-scroll">
       <div class="px-8 py-6 border-b border-white/10">
         <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
           <div class="md:col-span-2">
@@ -26,29 +26,30 @@
           <button id="limparProximaEtapa" class="btn-danger-light px-6 py-3 rounded-lg font-medium">Limpar Tudo</button>
         </div>
       </div>
-      <div class="px-8 py-6">
-        <div class="bg-surface/40 rounded-xl border border-white/10 overflow-hidden">
-          <div class="overflow-x-auto">
-            <table id="proximaEtapaTabela" class="w-full text-sm">
-              <thead class="bg-surface/60 backdrop-blur-sm">
-                <tr class="border-b border-white/10">
-                  <th class="text-left py-4 px-4 text-gray-300 font-medium">Item</th>
-                  <th class="text-center py-4 px-4 text-gray-300 font-medium">Quantidade</th>
-                  <th class="text-center py-4 px-4 text-gray-300 font-medium">Unidade</th>
-                  <th class="text-right py-4 px-4 text-gray-300 font-medium">Valor unitário (R$)</th>
-                  <th class="text-right py-4 px-4 text-gray-300 font-medium">Valor total (R$)</th>
-                  <th class="text-center py-4 px-4 text-gray-300 font-medium">Ações</th>
-                </tr>
-              </thead>
-              <tbody>
-              </tbody>
-            </table>
-          </div>
-          <div class="px-4 py-4 border-t border-white/10 bg-surface/20">
-            <div class="flex justify-between items-center">
-              <span class="text-gray-400 text-sm">Total do Processo:</span>
-              <!-- totais -->
-              <span id="proximaEtapaTotal" class="text-white font-semibold text-lg">R$ 0,00</span>
+        <div class="px-8 py-6">
+          <div class="bg-surface/40 rounded-xl border border-white/10">
+            <div class="table-scroll">
+              <table id="proximaEtapaTabela" class="w-full text-sm">
+                <thead class="bg-surface/60 backdrop-blur-sm">
+                  <tr class="border-b border-white/10">
+                    <th class="text-left py-4 px-4 text-gray-300 font-medium">Item</th>
+                    <th class="text-center py-4 px-4 text-gray-300 font-medium">Quantidade</th>
+                    <th class="text-center py-4 px-4 text-gray-300 font-medium">Unidade</th>
+                    <th class="text-right py-4 px-4 text-gray-300 font-medium">Valor unitário (R$)</th>
+                    <th class="text-right py-4 px-4 text-gray-300 font-medium">Valor total (R$)</th>
+                    <th class="text-center py-4 px-4 text-gray-300 font-medium">Ações</th>
+                  </tr>
+                </thead>
+                <tbody>
+                </tbody>
+              </table>
+            </div>
+            <div class="px-4 py-4 border-t border-white/10 bg-surface/20">
+              <div class="flex justify-between items-center">
+                <span class="text-gray-400 text-sm">Total do Processo:</span>
+                <!-- totais -->
+                <span id="proximaEtapaTotal" class="text-white font-semibold text-lg">R$ 0,00</span>
+              </div>
             </div>
           </div>
         </div>
