@@ -10,6 +10,7 @@ const passwordResetRouter   = require('./passwordResetRoutes');
 const usuariosRouter        = require('./usuariosController');
 const transportadorasRouter = require('./transportadorasController');
 const orcamentosRouter      = require('./orcamentosController');
+const pedidosRouter         = require('./pedidosController');
 
 const app = express();
 app.use(cors());
@@ -19,6 +20,7 @@ app.use('/api/clientes', clientesRouter);
 app.use('/api/usuarios', usuariosRouter);
 app.use('/api/transportadoras', transportadorasRouter);
 app.use('/api/orcamentos', orcamentosRouter);
+app.use('/api/pedidos', pedidosRouter);
 app.use(passwordResetRouter);
 app.use('/pdf', express.static(path.join(__dirname, '../src/pdf')));
 
