@@ -60,8 +60,19 @@
           </div>
           <div>
             <input id="ncmInput" type="text" placeholder="00000000" maxlength="8" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
-            </div>
-          <div class="md:col-span-2">
+          </div>
+          <div class="relative">
+            <select id="colecaoSelect" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 pr-12 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" disabled>
+              <option value="">Selecionar Coleção</option>
+            </select>
+            <button type="button" id="delColecaoEditar" class="absolute right-10 top-1/2 -translate-y-1/2 btn-neutral icon-only text-gray-300 hover:text-white" aria-label="Excluir coleção" disabled>
+              <i class="fas fa-minus"></i>
+            </button>
+            <button type="button" id="addColecaoEditar" class="absolute right-2 top-1/2 -translate-y-1/2 btn-neutral icon-only text-gray-300 hover:text-white" aria-label="Adicionar coleção" disabled>
+              <i class="fas fa-plus"></i>
+            </button>
+          </div>
+          <div>
             <label class="flex items-center gap-3 mb-4">
               <input id="editarRegistroToggle" type="checkbox" class="component-toggle" />
               <span class="text-gray-300">Editar Dados de Registro</span>
