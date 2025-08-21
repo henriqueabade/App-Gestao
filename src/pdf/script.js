@@ -107,6 +107,7 @@ async function buildDocument() {
           <p><strong>Situação do Orçamento:</strong> ${orc.situacao}</p>
           <p><strong>Quantidade de Parcelas:</strong> ${orc.parcelas}</p>
           <p><strong>Forma de Pagamento:</strong> ${orc.forma_pagamento || ''}</p>
+          <p><strong>Prazo:</strong> ${orc.prazo || ''}</p>
         </div>
         <div class="text-right">
           <p><strong>Nome Fantasia:</strong> ${cliente.nome_fantasia || ''}</p>
