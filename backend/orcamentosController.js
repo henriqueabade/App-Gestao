@@ -169,13 +169,19 @@ router.put('/:id', async (req, res) => {
 
   const client = await db.connect();
   try {
+    // Calcule o valor de data_aprovacao
+    let data_aprovacao_valor = null;
+    const situacoesComData = ['Aprovado', 'Rejeitado', 'Expirado'];
+    if (situacoesComData.includes(situacao)) {
+      data_aprovacao_valor = new Date(); // ou outra forma de pegar a data atual
+    }
+
     await client.query('BEGIN');
     await client.query(
       `UPDATE orcamentos SET cliente_id=$1, contato_id=$2, situacao=$3, parcelas=$4, tipo_parcela=$5, forma_pagamento=$6,
-       transportadora=$7, desconto_pagamento=$8, desconto_especial=$9, desconto_total=$10, valor_final=$11,
-       observacoes=$12, validade=$13, prazo=$14, dono=$15,
-       data_aprovacao = CASE WHEN $3 IN ('Aprovado','Rejeitado','Expirado') THEN NOW() ELSE NULL END
-       WHERE id=$16`,
+      transportadora=$7, desconto_pagamento=$8, desconto_especial=$9, desconto_total=$10, valor_final=$11,
+      observacoes=$12, validade=$13, prazo=$14, dono=$15, data_aprovacao=$16
+      WHERE id=$17`,
       [
         cliente_id,
         contato_id,
@@ -192,10 +198,10 @@ router.put('/:id', async (req, res) => {
         validade,
         prazo,
         dono,
+        data_aprovacao_valor,
         id
       ]
     );
-
       await client.query('DELETE FROM orcamentos_itens WHERE orcamento_id=$1', [id]);
       for (const item of itens) {
         await client.query(
