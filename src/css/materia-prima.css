@@ -386,3 +386,9 @@ body {
     margin-left: -4.5vw; /* Evita sobreposição do toggle com a barra lateral */
     flex-shrink: 1; /* Permite que o toggle encolha se necessário */
 }
+/* Limit table height to avoid page scroll */
+.table-scroll {
+    max-height: calc(var(--module-height) - 260px) !important;
+    overflow-y: auto;
+    overflow-x: hidden;
+}
