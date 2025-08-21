@@ -58,8 +58,24 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('listar-itens-processo-produto', { codigo, etapa, busca }),
   salvarProdutoDetalhado: (codigo, produto, itens) =>
     ipcRenderer.invoke('salvar-produto-detalhado', { codigo, produto, itens }),
-  adicionarMateriaPrima: (dados) => ipcRenderer.invoke('adicionar-materia-prima', dados),
-  atualizarMateriaPrima: (id, dados) => ipcRenderer.invoke('atualizar-materia-prima', { id, dados }),
+  adicionarMateriaPrima: async (dados) => {
+    const result = await ipcRenderer.invoke('adicionar-materia-prima', dados);
+    if (result && result.success === false) {
+      const err = new Error(result.message);
+      if (result.code) err.code = result.code;
+      throw err;
+    }
+    return result.materia;
+  },
+  atualizarMateriaPrima: async (id, dados) => {
+    const result = await ipcRenderer.invoke('atualizar-materia-prima', { id, dados });
+    if (result && result.success === false) {
+      const err = new Error(result.message);
+      if (result.code) err.code = result.code;
+      throw err;
+    }
+    return result.materia;
+  },
   excluirMateriaPrima: (id) => ipcRenderer.invoke('excluir-materia-prima', id),
   registrarEntrada: (id, quantidade) => ipcRenderer.invoke('registrar-entrada-materia-prima', { id, quantidade }),
   registrarSaida: (id, quantidade) => ipcRenderer.invoke('registrar-saida-materia-prima', { id, quantidade }),
