@@ -33,11 +33,8 @@ function showFunctionUnavailableDialog(message) {
 
 async function carregarPedidos() {
     try {
-        const data = [
-            { id: 1, numero: 'PED001', cliente: 'Ana Carolina Mendes', data_emissao: '15/03/2024', valor_final: 3450, parcelas: 1, situacao: 'Em Produção', dono: 'Carlos' },
-            { id: 2, numero: 'PED002', cliente: 'Roberto Silva Santos', data_emissao: '14/03/2024', valor_final: 1890, parcelas: 3, situacao: 'Concluído', dono: 'Mariana' },
-            { id: 3, numero: 'PED003', cliente: 'Mariana Costa Lima', data_emissao: '13/03/2024', valor_final: 2340, parcelas: 1, situacao: 'Rascunho', dono: 'João' }
-        ];
+        const resp = await fetch('http://localhost:3000/api/pedidos');
+        const data = await resp.json();
         const tbody = document.getElementById('pedidosTabela');
         tbody.innerHTML = '';
         const statusClasses = {
@@ -60,8 +57,8 @@ async function carregarPedidos() {
             const valor = Number(p.valor_final || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
             tr.innerHTML = `
                 <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">${p.numero}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-white">${p.cliente}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-violet)">${p.data_emissao}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-white">${p.cliente || ''}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-violet)">${p.data_emissao || ''}</td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm text-white">${valor}</td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-violet)">${condicao}</td>
                 <td class="px-6 py-4 whitespace-nowrap"><span class="${badgeClass} px-3 py-1 rounded-full text-xs font-medium">${p.situacao}</span></td>
