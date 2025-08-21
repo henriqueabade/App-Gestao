@@ -173,7 +173,9 @@ router.put('/:id', async (req, res) => {
     await client.query(
       `UPDATE orcamentos SET cliente_id=$1, contato_id=$2, situacao=$3, parcelas=$4, tipo_parcela=$5, forma_pagamento=$6,
        transportadora=$7, desconto_pagamento=$8, desconto_especial=$9, desconto_total=$10, valor_final=$11,
-       observacoes=$12, validade=$13, prazo=$14, dono=$15 WHERE id=$16`,
+       observacoes=$12, validade=$13, prazo=$14, dono=$15,
+       data_aprovacao = CASE WHEN $3 IN ('Aprovado','Rejeitado','Expirado') THEN NOW() ELSE NULL END
+       WHERE id=$16`,
       [
         cliente_id,
         contato_id,
@@ -245,7 +247,10 @@ router.patch('/:id/status', async (req, res) => {
   const { id } = req.params;
   const { situacao } = req.body;
   try {
-    await db.query('UPDATE orcamentos SET situacao=$1 WHERE id=$2', [situacao, id]);
+    await db.query(
+      `UPDATE orcamentos SET situacao=$1, data_aprovacao = CASE WHEN $1 IN ('Aprovado','Rejeitado','Expirado') THEN NOW() ELSE NULL END WHERE id=$2`,
+      [situacao, id]
+    );
     res.json({ success: true });
   } catch (err) {
     console.error('Erro ao atualizar status do orçamento:', err);
