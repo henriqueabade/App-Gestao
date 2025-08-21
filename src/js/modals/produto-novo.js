@@ -17,11 +17,9 @@
   const embalagemInput  = document.getElementById('embalagemInput');
   const markupInput     = document.getElementById('markupInput');
   const commissionInput = document.getElementById('commissionInput');
-  const taxInput        = document.getElementById('taxInput');
-  const etapaSelect     = document.getElementById('etapaSelect');
-  const comecarBtn      = document.getElementById('comecarNovoProduto');
-
-  const precoVendaEl    = document.getElementById('precoVenda');
+    const precoVendaEl    = document.getElementById('precoVenda');
+  
+  const precoVendaTagEl = document.getElementById('precoVendaTag');
   const totalInsumosEl  = document.getElementById('totalInsumos');
   const totalMaoObraEl  = document.getElementById('totalMaoObra');
   const subTotalEl      = document.getElementById('subTotal');
@@ -68,6 +66,7 @@
     if(impostoValorEl) impostoValorEl.textContent = formatCurrency(impostoVal);
     if(precoVendaEl)   precoVendaEl.textContent   = formatCurrency(valorVenda);
     if(valorVendaEl)   valorVendaEl.textContent   = formatCurrency(valorVenda);
+    if(precoVendaTagEl) precoVendaTagEl.textContent = formatCurrency(valorVenda);
     renderTotalBadges();
   }
 

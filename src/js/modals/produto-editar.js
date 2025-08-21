@@ -76,6 +76,7 @@
     const updateRadios = Array.from(document.querySelectorAll('input[name="updateOption"]'));
     const statusRadios = Array.from(document.querySelectorAll('input[name="statusOption"]'));
     const precoVendaEl = document.getElementById('precoVenda');
+    const precoVendaTagEl = document.getElementById('precoVendaTag');
     const ultimaDataEl = document.getElementById('ultimaModificacaoData');
     const ultimaHoraEl = document.getElementById('ultimaModificacaoHora');
 
@@ -278,6 +279,7 @@
       if (impostoValorEl)        impostoValorEl.textContent       = formatCurrency(impostoVal);
       if (valorVendaEl)          valorVendaEl.textContent         = formatCurrency(valorVenda);
       if (precoVendaEl)          precoVendaEl.textContent         = formatCurrency(valorVenda);
+      if (precoVendaTagEl)       precoVendaTagEl.textContent      = formatCurrency(valorVenda);
       renderTotalBadges();
     }
 
@@ -636,6 +638,7 @@
             const pv = dados.preco_venda;
             const frac = Number.isInteger(pv) ? 0 : 2;
             precoVendaEl.textContent = pv.toLocaleString('pt-BR', { style:'currency', currency:'BRL', minimumFractionDigits: frac, maximumFractionDigits: frac });
+            if(precoVendaTagEl) precoVendaTagEl.textContent = pv.toLocaleString('pt-BR', { style:'currency', currency:'BRL', minimumFractionDigits: frac, maximumFractionDigits: frac });
           }
           const mod = dados.data || dados.ultima_modificacao || dados.updated_at;
           if(mod){
