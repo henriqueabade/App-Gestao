@@ -333,7 +333,7 @@ async function excluirProduto(id) {
       [id]
     );
     if (orcamentoCount > 0) {
-      throw new Error('Produto existe em orçamento, não é possível realizar a ação');
+      throw new Error('Produto existe em Orçamentos, não é possível realizar a ação!');
     }
 
     await client.query(

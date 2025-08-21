@@ -507,8 +507,12 @@ ipcMain.handle('atualizar-produto', async (_e, { id, dados }) => {
   return atualizarProduto(id, dados);
 });
 ipcMain.handle('excluir-produto', async (_e, id) => {
-  await excluirProduto(id);
-  return true;
+  try {
+    await excluirProduto(id);
+    return true;
+  } catch (err) {
+    return { error: err.message };
+  }
 });
 ipcMain.handle('listar-detalhes-produto', async (_e, { produtoCodigo, produtoId }) => {
   try {
