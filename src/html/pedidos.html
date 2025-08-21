@@ -1,109 +1,106 @@
-<!-- Tela de Pedidos: lista e controle de pedidos -->
-<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Pedidos - Santíssimo Decor</title>
-    <!-- Tailwind e ícones carregados no documento principal -->
-    <link rel="stylesheet" href="../styles/scroll.css">
-</head>
-<body class="text-white">
-  <div class="modulo-container">
-    <div>
-        <div class="mb-8 animate-fade-in-up">
+<!-- Página de pedidos: lista e filtros -->
+<div class="modulo-container">
+    <!-- Header -->
+    <div class="flex justify-between items-center mb-8 animate-fade-in-up">
+        <div>
             <h1 class="text-2xl font-semibold mb-2">Pedidos</h1>
             <p style="color: var(--color-violet)">Acompanhe o status de produção e entrega dos pedidos</p>
         </div>
-        <div class="glass-surface rounded-xl p-6 mb-6 animate-fade-in-up">
-            <div class="flex flex-wrap xl:flex-nowrap items-center gap-4">
-                <div class="flex-1 min-w-[180px]">
-                    <label class="block text-sm font-medium mb-2 text-white">Status</label>
-                    <select class="input-glass text-white rounded-md px-4 py-3 w-full">
-                        <option>Todos os Status</option>
-                        <option>Rascunho</option>
-                        <option>Em Produção</option>
-                        <option>Concluído</option>
-                        <option>Cancelado</option>
-                    </select>
-                </div>
-                <div class="flex-1 min-w-[150px]">
-                    <label class="block text-sm font-medium mb-2 text-white">Período</label>
-                    <select class="input-glass text-white rounded-md px-4 py-3 w-full">
-                        <option>Mês</option>
-                        <option>Semana</option>
-                        <option>Trimestre</option>
-                        <option>Ano</option>
-                    </select>
-                </div>
+        <button id="converterOrcamentoBtn" class="btn-primary text-white rounded-md px-6 py-3 font-medium">
+            <i class="fas fa-plus mr-2"></i>Converter Orçamento
+        </button>
+    </div>
+
+    <!-- Filters -->
+    <div class="glass-surface rounded-xl p-6 mb-6 animate-fade-in-up">
+        <div class="filter-bar flex flex-col md:flex-row md:flex-nowrap items-center">
+            <!-- Status Filter -->
+            <div class="flex-1 min-w-0">
+                <label class="block text-sm font-medium mb-2 text-white">Status</label>
+                <select id="filterStatus" class="input-glass text-white rounded-md px-4 py-3 w-full">
+                    <option value="">Todos os Status</option>
+                    <option value="Rascunho">Rascunho</option>
+                    <option value="Em Produção">Em Produção</option>
+                    <option value="Concluído">Concluído</option>
+                    <option value="Cancelado">Cancelado</option>
+                </select>
+            </div>
+
+            <!-- Period Filter -->
+            <div class="flex-1 min-w-0">
+                <label class="block text-sm font-medium mb-2 text-white">Período</label>
+                <select id="filterPeriod" class="input-glass text-white rounded-md px-4 py-3 w-full">
+                    <option value="">Todos os Períodos</option>
+                    <option value="Semana">Semana</option>
+                    <option value="Mês">Mês</option>
+                    <option value="Trimestre">Trimestre</option>
+                    <option value="Ano">Ano</option>
+                    <option value="Personalizado">Personalizado</option>
+                </select>
+            </div>
+
+            <!-- Salesperson Filter -->
+            <div class="flex-1 min-w-0">
+                <label class="block text-sm font-medium mb-2 text-white">Dono</label>
+                <select id="filterOwner" class="input-glass text-white rounded-md px-4 py-3 w-full">
+                    <option value="">Todos os Donos</option>
+                </select>
+            </div>
+
+            <!-- Client Filter -->
+            <div class="flex-1 min-w-0">
+                <label class="block text-sm font-medium mb-2 text-white">Cliente</label>
+                <select id="filterClient" class="input-glass text-white rounded-md px-4 py-3 w-full">
+                    <option value="">Todos os Clientes</option>
+                </select>
+            </div>
+
+            <!-- Action Buttons -->
+            <div id="bt-actions" class="flex items-center gap-2 flex-shrink-0">
+                <button id="btnFiltrar" class="btn-secondary text-white rounded-md px-4 py-3 text-sm font-medium">
+                    Filtrar
+                </button>
+                <button id="btnLimpar" class="btn-warning text-white rounded-md px-4 py-3 text-sm font-medium">
+                    Limpar
+                </button>
             </div>
         </div>
-        <div class="glass-surface rounded-xl shadow-lg animate-fade-in-up table-scroll">
-            <table class="w-full">
-                <thead class="bg-gray-50 sticky top-0">
-                        <tr>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Codigo</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cliente</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Data</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Valor Total</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                            <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Ações</th>
-                        </tr>
-                </thead>
-                <tbody class="divide-y divide-white/10">
-                        <tr class="transition-colors duration-150" style="cursor: pointer;" onmouseover="this.style.background='rgba(163, 148, 167, 0.05)'" onmouseout="this.style.background='transparent'">
-                            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">PED001</td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-white">Ana Carolina Mendes</td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-violet)">15/03/2024</td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-white">R$ 3.450,00</td>
-                            <td class="px-6 py-4 whitespace-nowrap">
-                                <span class="badge-warning px-3 py-1 rounded-full text-xs font-medium">Em Produção</span>
-                            </td>
-                            <td class="px-6 py-4 whitespace-nowrap text-center">
-                                <div class="flex items-center justify-center space-x-2">
-                                    <i class="fas fa-eye w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Visualizar"></i>
-                                    <i class="fas fa-edit w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Editar"></i>
-                                    <i class="fas fa-download w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Download"></i>
-                                </div>
-                            </td>
-                        </tr>
-                        <tr class="transition-colors duration-150" style="cursor: pointer;" onmouseover="this.style.background='rgba(163, 148, 167, 0.05)'" onmouseout="this.style.background='transparent'">
-                            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">PED002</td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-white">Roberto Silva Santos</td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-violet)">14/03/2024</td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-white">R$ 1.890,00</td>
-                            <td class="px-6 py-4 whitespace-nowrap">
-                                <span class="badge-success px-3 py-1 rounded-full text-xs font-medium">Concluído</span>
-                            </td>
-                            <td class="px-6 py-4 whitespace-nowrap text-center">
-                                <div class="flex items-center justify-center space-x-2">
-                                    <i class="fas fa-eye w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Visualizar"></i>
-                                    <i class="fas fa-edit w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Editar"></i>
-                                    <i class="fas fa-download w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Download"></i>
-                                </div>
-                            </td>
-                        </tr>
-                        <tr class="transition-colors duration-150" style="cursor: pointer;" onmouseover="this.style.background='rgba(163, 148, 167, 0.05)'" onmouseout="this.style.background='transparent'">
-                            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">PED003</td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-white">Mariana Costa Lima</td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-violet)">13/03/2024</td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-white">R$ 2.340,00</td>
-                            <td class="px-6 py-4 whitespace-nowrap">
-                                <span class="badge-danger px-3 py-1 rounded-full text-xs font-medium">Rascunho</span>
-                            </td>
-                            <td class="px-6 py-4 whitespace-nowrap text-center">
-                                <div class="flex items-center justify-center space-x-2">
-                                    <i class="fas fa-eye w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Visualizar"></i>
-                                    <i class="fas fa-edit w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Editar"></i>
-                                    <i class="fas fa-download w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Download"></i>
-                                </div>
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
-        </div>
     </div>
+
+    <!-- Orders Table -->
+    <div class="glass-surface rounded-xl shadow-lg animate-fade-in-up table-scroll">
+        <table class="w-full">
+            <thead class="bg-gray-50 sticky top-0">
+                <tr>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Codigo</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cliente</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Data</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Valor Total</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Condição</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                        <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Ações</th>
+                    </tr>
+            </thead>
+            <tbody id="pedidosTabela" class="divide-y divide-white/10"></tbody>
+            </table>
     </div>
 </div>
-</body>
-</html>
+
+<!-- Modal de período personalizado -->
+<div id="periodModal" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+    <div class="glass-surface backdrop-blur-xl rounded-xl p-6 text-white w-full max-w-md">
+        <div class="flex gap-4 mb-4">
+            <div>
+                <label for="startDate" class="block text-sm mb-1">De</label>
+                <input type="date" id="startDate" class="input-glass text-white rounded px-2 py-1" />
+            </div>
+            <div>
+                <label for="endDate" class="block text-sm mb-1">Até</label>
+                <input type="date" id="endDate" class="input-glass text-white rounded px-2 py-1" />
+            </div>
+        </div>
+        <div class="text-right">
+            <button id="periodConfirm" class="btn-primary text-white px-4 py-2 rounded">Confirmar</button>
+        </div>
+    </div>
+</div>
