@@ -135,6 +135,18 @@ body {
 @keyframes modalFade { from { opacity:0; } to { opacity:1; } }
 @keyframes slideIn { from { transform: translateY(16px); opacity:0; } to { transform: translateY(0); opacity:1; } }
 
+input:disabled,
+select:disabled,
+textarea:disabled {
+  color: rgba(255,255,255,0.5);
+  cursor: not-allowed;
+}
+
+input:disabled::placeholder,
+textarea:disabled::placeholder {
+  color: rgba(255,255,255,0.3);
+}
+
 /* Status badges */
 .badge-success {
     background: rgba(162, 255, 166, 0.2);
