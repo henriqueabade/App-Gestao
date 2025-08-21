@@ -20,10 +20,6 @@ function setup() {
     id serial primary key,
     produto_id int
   );`);
-  db.public.none(`CREATE TABLE pedido (
-    id serial primary key,
-    produto_id int
-  );`);
   db.public.none("INSERT INTO produtos (id, codigo) VALUES (1, 'P001');");
   db.public.none("INSERT INTO produtos_insumos (produto_codigo) VALUES ('P001');");
   db.public.none('INSERT INTO produtos_em_cada_ponto (produto_id) VALUES (1);');
@@ -56,8 +52,3 @@ test('excluirProduto bloqueia se estiver em orçamento', async () => {
   await assert.rejects(() => excluirProduto(1), /orçamento/i);
 });
 
-test('excluirProduto bloqueia se estiver em pedido', async () => {
-  const { excluirProduto, pool } = setup();
-  await pool.query('INSERT INTO pedido (produto_id) VALUES (1);');
-  await assert.rejects(() => excluirProduto(1), /pedido/i);
-});

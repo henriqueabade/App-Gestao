@@ -336,14 +336,6 @@ async function excluirProduto(id) {
       throw new Error('Produto existe em orçamento, não é possível realizar a ação');
     }
 
-    const { rowCount: pedidoCount } = await client.query(
-      'SELECT 1 FROM pedido WHERE produto_id=$1::int LIMIT 1',
-      [id]
-    );
-    if (pedidoCount > 0) {
-      throw new Error('Produto existe em pedido, não é possível realizar a ação');
-    }
-
     await client.query(
       'DELETE FROM produtos_insumos WHERE produto_codigo=$1::text',
       [codigo]
