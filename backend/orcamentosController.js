@@ -9,9 +9,10 @@ async function converterParaPedido(orcamentoId) {
     if (!rows.length) return;
     const o = rows[0];
     const insertPedido = await db.query(
-      `INSERT INTO pedidos (numero, cliente_id, contato_id, data_emissao, situacao, parcelas, tipo_parcela, forma_pagamento, transportadora, desconto_pagamento, desconto_especial, desconto_total, valor_final, observacoes, validade, prazo, dono, data_aprovacao)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18) RETURNING id`,
+      `INSERT INTO pedidos (id, numero, cliente_id, contato_id, data_emissao, situacao, parcelas, tipo_parcela, forma_pagamento, transportadora, desconto_pagamento, desconto_especial, desconto_total, valor_final, observacoes, validade, prazo, dono, data_aprovacao)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19) RETURNING id`,
       [
+        o.id,
         o.numero,
         o.cliente_id,
         o.contato_id,
@@ -34,13 +35,13 @@ async function converterParaPedido(orcamentoId) {
     );
     const pedidoId = insertPedido.rows[0].id;
     await db.query(
-      `INSERT INTO pedidos_itens (pedido_id, produto_id, codigo, nome, ncm, quantidade, valor_unitario, valor_unitario_desc, desconto_pagamento, desconto_pagamento_prc, desconto_especial, desconto_especial_prc, valor_desc, desconto_total, valor_total)
-       SELECT $1, produto_id, codigo, nome, ncm, quantidade, valor_unitario, valor_unitario_desc, desconto_pagamento, desconto_pagamento_prc, desconto_especial, desconto_especial_prc, valor_desc, desconto_total, valor_total FROM orcamentos_itens WHERE orcamento_id=$2`,
+      `INSERT INTO pedidos_itens (id, pedido_id, produto_id, codigo, nome, ncm, quantidade, valor_unitario, valor_unitario_desc, desconto_pagamento, desconto_pagamento_prc, desconto_especial, desconto_especial_prc, valor_desc, desconto_total, valor_total)
+       SELECT id, $1, produto_id, codigo, nome, ncm, quantidade, valor_unitario, valor_unitario_desc, desconto_pagamento, desconto_pagamento_prc, desconto_especial, desconto_especial_prc, valor_desc, desconto_total, valor_total FROM orcamentos_itens WHERE orcamento_id=$2`,
       [pedidoId, orcamentoId]
     );
     await db.query(
-      `INSERT INTO pedido_parcelas (pedido_id, numero_parcela, valor, data_vencimento)
-       SELECT $1, numero_parcela, valor, data_vencimento FROM orcamento_parcelas WHERE orcamento_id=$2`,
+      `INSERT INTO pedido_parcelas (id, pedido_id, numero_parcela, valor, data_vencimento)
+       SELECT id, $1, numero_parcela, valor, data_vencimento FROM orcamento_parcelas WHERE orcamento_id=$2`,
       [pedidoId, orcamentoId]
     );
   } catch (err) {
