@@ -1,15 +1,16 @@
 <div id="editarProdutoOverlay" class="fixed inset-0 bg-black/50 flex items-center justify-center p-4">
   <div role="dialog" aria-modal="true" tabindex="0" class="w-full max-w-7xl max-h-[90vh] glass-surface backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade slide-in overflow-hidden flex flex-col">
     <header class="flex flex-wrap items-center justify-between gap-4 px-8 py-5 border-b border-white/10 flex-shrink-0">
-      <button id="voltarEditarProduto" class="btn-neutral px-4 py-2 rounded-lg text-white font-medium flex items-center gap-2">← Voltar</button>
-      <h2 class="text-lg font-semibold text-white flex-1 text-center">EDITAR PRODUTO</h2>
-      <div class="flex items-center gap-3">
+      <div class="flex-1">
+        <button id="voltarEditarProduto" class="btn-neutral px-4 py-2 rounded-lg text-white font-medium flex items-center gap-2">← Voltar</button>
+      </div>
+      <h2 class="text-lg font-semibold text-white flex-1 text-center" id="tituloeditar">EDITAR PRODUTO</h2>
+      <div class="flex-1 flex items-center justify-end gap-3">
         <button id="salvarEditarProduto" class="btn-success px-4 py-2 rounded-lg text-white font-medium flex items-center gap-2">Salvar</button>
-          <button id="clonarProduto" class="btn-secondary px-4 py-2 rounded-lg text-white font-medium">Clonar</button>
-          <button id="limparTudo" class="btn-danger px-4 py-2 rounded-lg text-white font-medium">Limpar Tudo</button>
+        <button id="clonarProduto" class="btn-secondary px-4 py-2 rounded-lg text-white font-medium">Clonar</button>
+        <button id="limparTudo" class="btn-danger px-4 py-2 rounded-lg text-white font-medium">Limpar Tudo</button>
       </div>
     </header>
-
     <div class="flex-1 overflow-y-auto">
       <div class="px-8 py-6 border-b border-white/10">
         <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
