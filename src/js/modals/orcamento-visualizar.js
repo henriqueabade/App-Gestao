@@ -165,5 +165,6 @@
       showToast('Erro ao clonar orçamento', 'error');
     }
   });
+  window.dispatchEvent(new CustomEvent('orcamentoModalLoaded', { detail: overlayId }));
 })();
 

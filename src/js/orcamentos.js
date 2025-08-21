@@ -61,6 +61,33 @@ function showFunctionUnavailableDialog(message) {
     overlay.querySelector('#funcUnavailableOk').addEventListener('click', () => overlay.remove());
 }
 
+function openQuoteModal(htmlPath, scriptPath, overlayId) {
+    Modal.closeAll();
+    const spinner = document.createElement('div');
+    spinner.id = 'modalLoading';
+    spinner.className = 'fixed inset-0 z-[2000] bg-black/50 flex items-center justify-center';
+    spinner.innerHTML = '<div class="w-16 h-16 border-4 border-white border-t-transparent rounded-full animate-spin"></div>';
+    document.body.appendChild(spinner);
+    const start = Date.now();
+    function handleLoaded(e) {
+        if (e.detail !== overlayId) return;
+        const overlay = document.getElementById(`${overlayId}Overlay`);
+        const elapsed = Date.now() - start;
+        const show = () => {
+            spinner.remove();
+            overlay.classList.remove('hidden');
+        };
+        if (elapsed < 3000) {
+            setTimeout(show, Math.max(0, 2000 - elapsed));
+        } else {
+            show();
+        }
+        window.removeEventListener('orcamentoModalLoaded', handleLoaded);
+    }
+    window.addEventListener('orcamentoModalLoaded', handleLoaded);
+    Modal.open(htmlPath, scriptPath, overlayId, true);
+}
+
 async function carregarOrcamentos() {
     try {
         const resp = await fetch('http://localhost:3000/api/orcamentos');
@@ -122,7 +149,7 @@ async function carregarOrcamentos() {
                 }
                 const id = e.currentTarget.closest('tr').dataset.id;
                 window.selectedQuoteId = id;
-                await Modal.open('modals/orcamentos/editar.html', '../js/modals/orcamento-editar.js', 'editarOrcamento');
+                openQuoteModal('modals/orcamentos/editar.html', '../js/modals/orcamento-editar.js', 'editarOrcamento');
             });
         });
         tbody.querySelectorAll('.fa-eye').forEach(icon => {
@@ -130,7 +157,7 @@ async function carregarOrcamentos() {
                 e.stopPropagation();
                 const id = e.currentTarget.closest('tr').dataset.id;
                 window.selectedQuoteId = id;
-                await Modal.open('modals/orcamentos/visualizar.html', '../js/modals/orcamento-visualizar.js', 'visualizarOrcamento');
+                openQuoteModal('modals/orcamentos/visualizar.html', '../js/modals/orcamento-visualizar.js', 'visualizarOrcamento');
             });
         });
         tbody.querySelectorAll('.fa-download').forEach(icon => {
