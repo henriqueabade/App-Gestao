@@ -70,6 +70,9 @@
     const nomeInput = document.getElementById('nomeInput');
     const codigoInput = document.getElementById('codigoInput');
     const ncmInput = document.getElementById('ncmInput');
+    const colecaoSelect = document.getElementById('colecaoSelect');
+    const addColecaoBtn = document.getElementById('addColecaoEditar');
+    const delColecaoBtn = document.getElementById('delColecaoEditar');
     const updateRadios = Array.from(document.querySelectorAll('input[name="updateOption"]'));
     const statusRadios = Array.from(document.querySelectorAll('input[name="statusOption"]'));
     const precoVendaEl = document.getElementById('precoVenda');
@@ -125,17 +128,40 @@
 
     function updateRegistroEditState(){
       const editable = editarRegistroToggle && editarRegistroToggle.checked;
-      [nomeInput, codigoInput, ncmInput].forEach(el => { if (el) el.disabled = !editable; });
+      [nomeInput, codigoInput, ncmInput, colecaoSelect, addColecaoBtn, delColecaoBtn].forEach(el => { if (el) el.disabled = !editable; });
       statusRadios.forEach(r => r.disabled = !editable);
       if(!editable){
         if (nomeInput)   nomeInput.value   = registroOriginal.nome;
         if (codigoInput) codigoInput.value = registroOriginal.codigo;
         if (ncmInput)    ncmInput.value    = registroOriginal.ncm;
+        if (colecaoSelect) colecaoSelect.value = registroOriginal.categoria || '';
         statusRadios.forEach(r => { r.checked = (r.value.toLowerCase() === (registroOriginal.status || '').toLowerCase()); });
       }
     }
     if (editarRegistroToggle) {
       editarRegistroToggle.addEventListener('change', updateRegistroEditState);
+    }
+
+    async function carregarColecoes(selecionada){
+      if (!colecaoSelect) return;
+      try {
+        const colecoes = await window.electronAPI.listarColecoes();
+        colecaoSelect.innerHTML = '<option value="">Selecionar Coleção</option>' +
+          colecoes.map(c => `<option value="${c}">${c}</option>`).join('');
+        if (selecionada) colecaoSelect.value = selecionada;
+      } catch(err) {
+        console.error('Erro ao carregar coleções', err);
+      }
+    }
+    if (addColecaoBtn) {
+      addColecaoBtn.addEventListener('click', () => {
+        Modal.open('modals/produtos/colecao-novo.html', '../js/modals/produto-colecao-novo.js', 'novaColecao', true);
+      });
+    }
+    if (delColecaoBtn) {
+      delColecaoBtn.addEventListener('click', () => {
+        Modal.open('modals/produtos/colecao-excluir.html', '../js/modals/produto-colecao-excluir.js', 'excluirColecao', true);
+      });
     }
 
     function formatCurrency(val){
@@ -449,7 +475,7 @@
             nome: cloneNome,
             codigo: cloneCodigo,
             ncm: ncmInput?.value?.slice(0,8) || '',
-            categoria: cloneNome.split(' ')[0] || '',
+            categoria: colecaoSelect ? colecaoSelect.value.trim() : '',
             status: 'Em linha'
           }, { inseridos: itensPayload, atualizados: [], deletados: [] });
 
@@ -466,6 +492,10 @@
     const salvarBtn = document.getElementById('salvarEditarProduto');
     if (salvarBtn) {
       salvarBtn.addEventListener('click', async () => {
+        if (!colecaoSelect || !colecaoSelect.value.trim()) {
+          showToast('Selecione uma coleção!', 'warning');
+          return;
+        }
         const produto = {
           pct_fabricacao: parseFloat(fabricacaoInput && fabricacaoInput.value) || 0,
           pct_acabamento: parseFloat(acabamentoInput && acabamentoInput.value) || 0,
@@ -477,12 +507,12 @@
           preco_base:     totals.totalInsumos || 0,
           preco_venda:    totals.valorVenda   || 0,
           status: produtoSelecionado.status,
-          data: new Date().toISOString()
+          data: new Date().toISOString(),
+          categoria: colecaoSelect.value.trim()
         };
         if(editarRegistroToggle && editarRegistroToggle.checked){
           if (nomeInput){
             produto.nome = nomeInput.value;
-            produto.categoria = nomeInput.value.trim().split(' ')[0] || '';
           }
           if (codigoInput) produto.codigo = codigoInput.value;
           if (ncmInput)    produto.ncm    = ncmInput.value.slice(0,8);
@@ -513,7 +543,8 @@
             nome:   nomeInput ? nomeInput.value   : '',
             codigo: codigoInput ? codigoInput.value : '',
             ncm:    ncmInput ? ncmInput.value    : '',
-            status: produto.status
+            status: produto.status,
+            categoria: colecaoSelect ? colecaoSelect.value : ''
           };
           if(typeof carregarProdutos === 'function') await carregarProdutos();
           showToast('Peça alterada com sucesso!', 'success');
@@ -541,6 +572,8 @@
           itensCount: Array.isArray(itensData) ? itensData.length : 'N/A',
           lotesCount: Array.isArray(lotes) ? lotes.length : 'N/A'
         });
+
+        await carregarColecoes(dados && dados.categoria);
 
         // Preenche cabeçalho/percentuais
         if(dados){
@@ -573,7 +606,8 @@
             nome:   nomeInput ? nomeInput.value   : '',
             codigo: codigoInput ? codigoInput.value : '',
             ncm:    ncmInput ? ncmInput.value    : '',
-            status: dados.status || ''
+            status: dados.status || '',
+            categoria: colecaoSelect ? colecaoSelect.value : ''
           };
           updateRegistroEditState();
         }
