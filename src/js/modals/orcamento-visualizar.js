@@ -126,8 +126,12 @@
       const pgBox = document.getElementById('visualizarPagamento');
       pgBox.classList.remove('hidden');
       const dataEmissao = new Date(data.data_emissao);
-      const rows = data.parcelas_detalhes.map(p => {
-        const prazo = Math.ceil((new Date(p.data_vencimento) - dataEmissao) / 86400000);
+      const prazos = (data.prazo || '').split('/').map(p => p.trim()).filter(Boolean);
+      const rows = data.parcelas_detalhes.map((p, i) => {
+        const prazo =
+          prazos[i] !== undefined
+            ? prazos[i]
+            : Math.ceil((new Date(p.data_vencimento) - dataEmissao) / 86400000);
         return `<tr class="border-b border-white/10"><td class="px-6 py-4 text-left text-sm text-white">${p.numero_parcela}ª</td><td class="px-6 py-4 text-left text-sm text-white">${fmt(p.valor)}</td><td class="px-6 py-4 text-left text-sm text-white">${prazo} dias</td></tr>`;
       }).join('');
       pgBox.innerHTML = `

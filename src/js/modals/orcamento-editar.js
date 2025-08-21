@@ -252,14 +252,17 @@
       });
     });
   }
+  const prazos = (data.prazo || '').split('/').map(p => parseInt(p, 10)).filter(n => !isNaN(n));
   const prefillParcelas = data.parcelas > 1 ? {
     count: data.parcelas,
     mode: data.tipo_parcela === 'igual' ? 'equal' : 'custom',
-    items: (data.parcelas_detalhes || []).map(p => ({
+    items: (data.parcelas_detalhes || []).map((p, i) => ({
       amount: Math.round((Number(p.valor) || 0) * 100),
-      dueInDays: (data.data_emissao && p.data_vencimento)
-        ? Math.round((new Date(p.data_vencimento) - new Date(data.data_emissao)) / 86400000)
-        : null
+      dueInDays: prazos[i] ?? (
+        data.data_emissao && p.data_vencimento
+          ? Math.round((new Date(p.data_vencimento) - new Date(data.data_emissao)) / 86400000)
+          : null
+      )
     }))
   } : null;
   editarCondicao.value = data.parcelas > 1 ? 'prazo' : 'vista';
@@ -268,11 +271,12 @@
   if (editarCondicao.value === 'vista') {
     const prazoInput = document.getElementById('editarPrazoVista');
     if (prazoInput) {
-      if (data.parcelas_detalhes && data.parcelas_detalhes[0] && data.data_emissao) {
-        prazoInput.value = Math.round((new Date(data.parcelas_detalhes[0].data_vencimento) - new Date(data.data_emissao)) / 86400000);
-      } else {
-        prazoInput.value = data.prazo || '';
-      }
+      prazoInput.value =
+        prazos[0] ?? (
+          data.parcelas_detalhes && data.parcelas_detalhes[0] && data.data_emissao
+            ? Math.round((new Date(data.parcelas_detalhes[0].data_vencimento) - new Date(data.data_emissao)) / 86400000)
+            : ''
+        );
       prazoInput.setAttribute('data-filled', prazoInput.value ? 'true' : 'false');
     }
   }
