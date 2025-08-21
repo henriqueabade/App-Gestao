@@ -154,7 +154,7 @@
     console.error('Erro ao carregar orçamento', err);
   }
 
-  document.getElementById('clonarOrcamento').addEventListener('click', async () => {
+  overlay.querySelector('#clonarVisualizarOrcamento').addEventListener('click', async () => {
     try {
       const resp = await fetch(`http://localhost:3000/api/orcamentos/${id}/clone`, { method: 'POST' });
       if (!resp.ok) throw new Error('Erro');
