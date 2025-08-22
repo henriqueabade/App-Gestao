@@ -20,4 +20,33 @@ router.get('/', async (_req, res) => {
   }
 });
 
+// Obtém um pedido específico com itens e parcelas
+router.get('/:id', async (req, res) => {
+  const { id } = req.params;
+  const client = await db.connect();
+  try {
+    const { rows } = await client.query('SELECT * FROM pedidos WHERE id=$1', [id]);
+    if (!rows.length) {
+      return res.status(404).json({ error: 'Pedido não encontrado' });
+    }
+    const pedido = rows[0];
+    const { rows: itens } = await client.query(
+      'SELECT * FROM pedidos_itens WHERE pedido_id=$1',
+      [id]
+    );
+    const { rows: parcelas } = await client.query(
+      'SELECT * FROM pedido_parcelas WHERE pedido_id=$1 ORDER BY numero_parcela',
+      [id]
+    );
+    pedido.itens = itens;
+    pedido.parcelas_detalhes = parcelas;
+    res.json(pedido);
+  } catch (err) {
+    console.error('Erro ao buscar pedido:', err);
+    res.status(500).json({ error: 'Erro ao buscar pedido' });
+  } finally {
+    client.release();
+  }
+});
+
 module.exports = router;

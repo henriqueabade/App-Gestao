@@ -170,7 +170,7 @@ async function carregarOrcamentos() {
                     showPdfUnavailableDialog(id);
                 } else {
                     if (window.electronAPI?.openPdf) {
-                        window.electronAPI.openPdf(id);
+                        window.electronAPI.openPdf(id, 'orcamento');
                     }
                 }
             });
