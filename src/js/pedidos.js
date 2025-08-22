@@ -70,10 +70,14 @@ async function carregarPedidos() {
             tr.setAttribute('onmouseover', "this.style.background='rgba(163, 148, 167, 0.05)'");
             tr.setAttribute('onmouseout', "this.style.background='transparent'");
             tr.dataset.dono = p.dono || '';
+            tr.dataset.id = p.id;
             owners.add(p.dono);
             const condicao = p.parcelas > 1 ? `${p.parcelas}x` : 'À vista';
             const badgeClass = statusClasses[p.situacao] || 'badge-neutral';
             const valor = Number(p.valor_final || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+            const isDraft = p.situacao === 'Rascunho';
+            const downloadClass = isDraft ? 'pdf-disabled relative' : '';
+            const downloadTitle = isDraft ? 'PDF indisponível' : 'Baixar PDF';
             tr.innerHTML = `
                 <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">${p.numero}</td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm text-white">${p.cliente || ''}</td>
@@ -86,7 +90,7 @@ async function carregarPedidos() {
                         <i class="fas fa-eye w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Visualizar"></i>
                         <i class="fas fa-check w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Concluir"></i>
                         <i class="fas fa-clipboard w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Relatório"></i>
-                        <i class="fas fa-download w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Download"></i>
+                        <i class="fas fa-download w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10 ${downloadClass}" style="color: var(--color-primary)" title="${downloadTitle}"></i>
                     </div>
                 </td>`;
             const checkIcon = tr.querySelector('.fa-check');
@@ -119,10 +123,24 @@ async function carregarPedidos() {
             ownerSelect.innerHTML = '<option value="">Todos os Donos</option>' +
                 [...owners].map(d => `<option value="${d}">${d}</option>`).join('');
         }
-        tbody.querySelectorAll('.fa-eye, .fa-clipboard, .fa-download').forEach(icon => {
+        tbody.querySelectorAll('.fa-eye, .fa-check, .fa-clipboard').forEach(icon => {
             icon.addEventListener('click', e => {
                 e.stopPropagation();
                 showFunctionUnavailableDialog('Função em desenvolvimento.');
+            });
+        });
+
+        tbody.querySelectorAll('.fa-download').forEach(icon => {
+            icon.addEventListener('click', e => {
+                e.stopPropagation();
+                const tr = e.currentTarget.closest('tr');
+                const id = tr.dataset.id;
+                const status = tr.cells[5]?.innerText.trim();
+                if (status === 'Rascunho') {
+                    showPdfUnavailableDialog();
+                } else if (window.electronAPI?.openPdf) {
+                    window.electronAPI.openPdf(id, 'pedido');
+                }
             });
         });
         await popularClientes();
