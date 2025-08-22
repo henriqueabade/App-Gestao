@@ -31,20 +31,22 @@ function showFunctionUnavailableDialog(message) {
     overlay.querySelector('#funcUnavailableOk').addEventListener('click', () => overlay.remove());
 }
 
-function showPdfUnavailableDialog() {
+function showStatusConfirmDialog(message, cb) {
     const overlay = document.createElement('div');
     overlay.className = 'fixed inset-0 bg-black/50 flex items-center justify-center p-4';
-    overlay.innerHTML = `<div class="max-w-sm w-full glass-surface backdrop-blur-xl rounded-2xl border border-red-500/20 ring-1 ring-red-500/30 shadow-2xl/40 animate-modalFade">
+    overlay.innerHTML = `<div class="max-w-md w-full glass-surface backdrop-blur-xl rounded-2xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade">
         <div class="p-6 text-center">
-            <h3 class="text-lg font-semibold mb-4 text-red-400">Função Indisponível</h3>
-            <p class="text-sm text-gray-300 mb-6">Não é possivel gerar PDF para Pedidos em RASCUNHO!</p>
+            <h3 class="text-lg font-semibold mb-4 text-yellow-300">Atenção</h3>
+            <p class="text-sm text-gray-300 mb-6">${message}</p>
             <div class="flex justify-center gap-4">
-                <button id="pdfOk" class="btn-neutral px-4 py-2 rounded-lg text-white font-medium">OK</button>
+                <button id="statusYes" class="btn-warning px-4 py-2 rounded-lg text-white font-medium">Sim</button>
+                <button id="statusNo" class="btn-neutral px-4 py-2 rounded-lg text-white font-medium">Não</button>
             </div>
         </div>
     </div>`;
     document.body.appendChild(overlay);
-    overlay.querySelector('#pdfOk').addEventListener('click', () => overlay.remove());
+    overlay.querySelector('#statusYes').addEventListener('click', () => { overlay.remove(); cb(true); });
+    overlay.querySelector('#statusNo').addEventListener('click', () => { overlay.remove(); cb(false); });
 }
 
 async function carregarPedidos() {
@@ -56,7 +58,8 @@ async function carregarPedidos() {
         const statusClasses = {
             'Rascunho': 'badge-info',
             'Em Produção': 'badge-warning',
-            'Concluído': 'badge-success',
+            'Enviado': 'badge-orange',
+            'Entregue': 'badge-success',
             'Cancelado': 'badge-danger'
         };
         const owners = new Set();
@@ -90,6 +93,29 @@ async function carregarPedidos() {
                         <i class="fas fa-download w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10 ${downloadClass}" style="color: var(--color-primary)" title="${downloadTitle}"></i>
                     </div>
                 </td>`;
+            const checkIcon = tr.querySelector('.fa-check');
+            const nextStatusMap = { 'Em Produção': 'Enviado', 'Enviado': 'Entregue' };
+            const nextStatus = nextStatusMap[p.situacao];
+            if (!nextStatus) {
+                checkIcon.classList.add('icon-disabled');
+            } else {
+                checkIcon.addEventListener('click', e => {
+                    e.stopPropagation();
+                    showStatusConfirmDialog(`Deseja alterar o status para "${nextStatus}"?`, async ok => {
+                        if (!ok) return;
+                        try {
+                            await fetch(`http://localhost:3000/api/pedidos/${p.id}/status`, {
+                                method: 'PUT',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ status: nextStatus })
+                            });
+                            carregarPedidos();
+                        } catch (err) {
+                            console.error('Erro ao atualizar status', err);
+                        }
+                    });
+                });
+            }
             tbody.appendChild(tr);
         });
         const ownerSelect = document.getElementById('filterOwner');

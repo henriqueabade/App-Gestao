@@ -20,6 +20,16 @@ router.get('/', async (_req, res) => {
   }
 });
 
+// Atualiza o status de um pedido
+router.put('/:id/status', async (req, res) => {
+  const { status } = req.body;
+  const { id } = req.params;
+  try {
+    await db.query('UPDATE pedidos SET situacao = $1 WHERE id = $2', [status, id]);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Erro ao atualizar status do pedido:', err);
+    res.status(500).json({ error: 'Erro ao atualizar status do pedido' });
 // Obtém um pedido específico com itens e parcelas
 router.get('/:id', async (req, res) => {
   const { id } = req.params;
