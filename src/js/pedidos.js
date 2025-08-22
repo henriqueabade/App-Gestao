@@ -38,9 +38,9 @@ async function carregarPedidos() {
         const tbody = document.getElementById('pedidosTabela');
         tbody.innerHTML = '';
         const statusClasses = {
-            'Rascunho': 'badge-info',
             'Em Produção': 'badge-warning',
-            'Concluído': 'badge-success',
+            'Enviado': 'badge-info',
+            'Entregue': 'badge-success',
             'Cancelado': 'badge-danger'
         };
         const owners = new Set();
