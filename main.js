@@ -801,9 +801,10 @@ ipcMain.handle('get-saved-display', () => {
   return currentDisplayId || null;
 });
 
-ipcMain.handle('open-pdf', (_event, id) => {
+ipcMain.handle('open-pdf', (_event, { id, tipo }) => {
   const url = new URL('http://localhost:3000/pdf');
   url.searchParams.set('id', id);
+  if (tipo) url.searchParams.set('tipo', tipo);
   shell.openExternal(url.toString());
   return true;
 });

@@ -31,6 +31,24 @@ function showFunctionUnavailableDialog(message) {
     overlay.querySelector('#funcUnavailableOk').addEventListener('click', () => overlay.remove());
 }
 
+function showStatusConfirmDialog(message, cb) {
+    const overlay = document.createElement('div');
+    overlay.className = 'fixed inset-0 bg-black/50 flex items-center justify-center p-4';
+    overlay.innerHTML = `<div class="max-w-md w-full glass-surface backdrop-blur-xl rounded-2xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade">
+        <div class="p-6 text-center">
+            <h3 class="text-lg font-semibold mb-4 text-yellow-300">Atenção</h3>
+            <p class="text-sm text-gray-300 mb-6">${message}</p>
+            <div class="flex justify-center gap-4">
+                <button id="statusYes" class="btn-warning px-4 py-2 rounded-lg text-white font-medium">Sim</button>
+                <button id="statusNo" class="btn-neutral px-4 py-2 rounded-lg text-white font-medium">Não</button>
+            </div>
+        </div>
+    </div>`;
+    document.body.appendChild(overlay);
+    overlay.querySelector('#statusYes').addEventListener('click', () => { overlay.remove(); cb(true); });
+    overlay.querySelector('#statusNo').addEventListener('click', () => { overlay.remove(); cb(false); });
+}
+
 async function carregarPedidos() {
     try {
         const resp = await fetch('http://localhost:3000/api/pedidos');
@@ -51,10 +69,14 @@ async function carregarPedidos() {
             tr.setAttribute('onmouseover', "this.style.background='rgba(163, 148, 167, 0.05)'");
             tr.setAttribute('onmouseout', "this.style.background='transparent'");
             tr.dataset.dono = p.dono || '';
+            tr.dataset.id = p.id;
             owners.add(p.dono);
             const condicao = p.parcelas > 1 ? `${p.parcelas}x` : 'À vista';
             const badgeClass = statusClasses[p.situacao] || 'badge-neutral';
             const valor = Number(p.valor_final || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+            const isDraft = p.situacao === 'Rascunho';
+            const downloadClass = isDraft ? 'pdf-disabled relative' : '';
+            const downloadTitle = isDraft ? 'PDF indisponível' : 'Baixar PDF';
             tr.innerHTML = `
                 <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">${p.numero}</td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm text-white">${p.cliente || ''}</td>
@@ -67,9 +89,32 @@ async function carregarPedidos() {
                         <i class="fas fa-eye w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Visualizar"></i>
                         <i class="fas fa-check w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Concluir"></i>
                         <i class="fas fa-clipboard w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Relatório"></i>
-                        <i class="fas fa-download w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Download"></i>
+                        <i class="fas fa-download w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10 ${downloadClass}" style="color: var(--color-primary)" title="${downloadTitle}"></i>
                     </div>
                 </td>`;
+            const checkIcon = tr.querySelector('.fa-check');
+            const nextStatusMap = { 'Em Produção': 'Enviado', 'Enviado': 'Entregue' };
+            const nextStatus = nextStatusMap[p.situacao];
+            if (!nextStatus) {
+                checkIcon.classList.add('icon-disabled');
+            } else {
+                checkIcon.addEventListener('click', e => {
+                    e.stopPropagation();
+                    showStatusConfirmDialog(`Deseja alterar o status para "${nextStatus}"?`, async ok => {
+                        if (!ok) return;
+                        try {
+                            await fetch(`http://localhost:3000/api/pedidos/${p.id}/status`, {
+                                method: 'PUT',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ status: nextStatus })
+                            });
+                            carregarPedidos();
+                        } catch (err) {
+                            console.error('Erro ao atualizar status', err);
+                        }
+                    });
+                });
+            }
             tbody.appendChild(tr);
         });
         const ownerSelect = document.getElementById('filterOwner');
@@ -77,10 +122,24 @@ async function carregarPedidos() {
             ownerSelect.innerHTML = '<option value="">Todos os Donos</option>' +
                 [...owners].map(d => `<option value="${d}">${d}</option>`).join('');
         }
-        tbody.querySelectorAll('.fa-eye, .fa-check, .fa-clipboard, .fa-download').forEach(icon => {
+        tbody.querySelectorAll('.fa-eye, .fa-check, .fa-clipboard').forEach(icon => {
             icon.addEventListener('click', e => {
                 e.stopPropagation();
                 showFunctionUnavailableDialog('Função em desenvolvimento.');
+            });
+        });
+
+        tbody.querySelectorAll('.fa-download').forEach(icon => {
+            icon.addEventListener('click', e => {
+                e.stopPropagation();
+                const tr = e.currentTarget.closest('tr');
+                const id = tr.dataset.id;
+                const status = tr.cells[5]?.innerText.trim();
+                if (status === 'Rascunho') {
+                    showPdfUnavailableDialog();
+                } else if (window.electronAPI?.openPdf) {
+                    window.electronAPI.openPdf(id, 'pedido');
+                }
             });
         });
         await popularClientes();
