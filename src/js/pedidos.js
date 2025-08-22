@@ -81,7 +81,7 @@ async function carregarPedidos() {
         const tbody = document.getElementById('pedidosTabela');
         tbody.innerHTML = '';
         const statusClasses = {
-            'Em Produção': 'badge-warning',
+            'Produção': 'badge-warning',
             'Enviado': 'badge-info',
             'Entregue': 'badge-success',
             'Cancelado': 'badge-danger'
@@ -118,7 +118,7 @@ async function carregarPedidos() {
                     </div>
                 </td>`;
             const checkIcon = tr.querySelector('.fa-check');
-            const nextStatusMap = { 'Em Produção': 'Enviado', 'Enviado': 'Entregue' };
+            const nextStatusMap = { 'Produção': 'Enviado', 'Enviado': 'Entregue' };
             const nextStatus = nextStatusMap[p.situacao];
             if (!nextStatus) {
                 checkIcon.classList.add('icon-disabled');
