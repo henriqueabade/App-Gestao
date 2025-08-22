@@ -27,7 +27,7 @@ async function converterParaPedido(orcamentoId) {
     // 3. Aplica o número ao formato desejado (ex: 'PED(x)')
     let numeroFormatado = null;
     if (numero !== null) {
-      numeroFormatado = `PED(${numero})`;
+      numeroFormatado = `PED${numero}`;
     }
 
     const insertPedido = await db.query(
