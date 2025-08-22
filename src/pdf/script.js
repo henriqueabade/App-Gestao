@@ -35,9 +35,12 @@ function enderecosIguais(a, b) {
 async function buildDocument() {
   const params = new URLSearchParams(window.location.search);
   const id = params.get('id');
+  const tipo = params.get('tipo') || 'orcamento';
   if (!id) return;
   try {
-    const orc = await fetch(`http://localhost:3000/api/orcamentos/${id}`).then(r => r.json());
+    const endpoint = tipo === 'pedido' ? 'pedidos' : 'orcamentos';
+    const orc = await fetch(`http://localhost:3000/api/${endpoint}/${id}`).then(r => r.json());
+    document.title = `${tipo === 'pedido' ? 'Pedido' : 'Orçamento'} – Barral & Santíssimo`;
     const clienteResp = await fetch(`http://localhost:3000/api/clientes/${orc.cliente_id}`).then(r => r.json());
     const cliente = clienteResp.cliente || clienteResp;
     const contatos = clienteResp.contatos || [];
@@ -99,12 +102,14 @@ async function buildDocument() {
 
       let header = '';
       if (isFirst) {
+        const numLabel = tipo === 'pedido' ? 'Número do Pedido' : 'Número do Orçamento';
+        const sitLabel = tipo === 'pedido' ? 'Situação do Pedido' : 'Situação do Orçamento';
         header = `
       <div class="grid grid-cols-2 gap-2 mb-2">
         <div>
-          <p><strong>Número do Orçamento:</strong> ${orc.numero}</p>
+          <p><strong>${numLabel}:</strong> ${orc.numero}</p>
           <p><strong>Data de Emissão:</strong> ${new Date(orc.data_emissao).toLocaleDateString('pt-BR')}</p>
-          <p><strong>Situação do Orçamento:</strong> ${orc.situacao}</p>
+          <p><strong>${sitLabel}:</strong> ${orc.situacao}</p>
           <p><strong>Quantidade de Parcelas:</strong> ${orc.parcelas}</p>
           <p><strong>Forma de Pagamento:</strong> ${orc.forma_pagamento || ''}</p>
           <p><strong>Prazo:</strong> ${orc.prazo || ''}</p>
@@ -134,9 +139,10 @@ async function buildDocument() {
       </div>`;
       }
 
+      const docTitle = tipo === 'pedido' ? 'PEDIDO' : 'ORÇAMENTO';
       const title = isFirst
-        ? `ITENS DO ORÇAMENTO (N° ${orc.numero})`
-        : `ITENS DO ORÇAMENTO (N° ${orc.numero}) - Continuação`;
+        ? `ITENS DO ${docTitle} (N° ${orc.numero})`
+        : `ITENS DO ${docTitle} (N° ${orc.numero}) - Continuação`;
 
       const cols = ['Código','Nome do Produto','NCM','Quantidade','Valor Unitário','Total Desconto','Valor Total'];
       const widths = ['10%','30%','12%','10%','12%','13%','13%'];
@@ -160,14 +166,21 @@ async function buildDocument() {
         </table>
         <p class="font-semibold text-accent-red mb-1">OBSERVAÇÕES:</p>
         <p>${orc.observacoes || '- Nenhuma observação.'}</p>
-        <div class="mt-2">
-          <p><strong>AUTORIZAÇÃO DO PEDIDO:</strong></p>
-          <p>Nome do Responsável: _______________________________         Assinatura:</strong> _______________________________</p>
+        <div class="mt-2">`;
+        if (tipo === 'pedido') {
+          html += `<p><strong>PEDIDO AUTORIZADO</strong></p>`;
+        } else {
+          html += `<p><strong>AUTORIZAÇÃO DO PEDIDO:</strong></p>
+          <p>Nome do Responsável: _______________________________         Assinatura:</strong> _______________________________</p>`;
+        }
+        html += `
         </div>
       </div>`;
       } else {
-        html += `
+        if (tipo !== 'pedido') {
+          html += `
       <p class="mt-2"><strong>Nome do Responsável:</strong> _______________________________         Assinatura:</strong> _______________________________</p>`;
+        }
       }
 
       createPage(html);
