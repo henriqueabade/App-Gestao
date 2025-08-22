@@ -358,7 +358,7 @@
         ordered.forEach((r,idx)=>{
           const it = itens.find(i=>i.row===r);
           it.ordem = idx+1;
-          if(it.id) it.status = 'updated';
+          if(it.id && it.status !== 'new') it.status = 'updated';
         });
         updateProcessTotal(item.processo);
         updateTotals();
@@ -382,7 +382,7 @@
       itens = (data || []).map(d => ({
         ...d,
         quantidade: parseFloat(d.quantidade) || 0,
-        ordem: parseInt(d.ordem_insumo,10) || 0,
+        ordem: d.ordem !== undefined ? d.ordem : parseInt(d.ordem_insumo,10) || 0,
         status: d.status || 'unchanged'
       }));
 
@@ -474,7 +474,7 @@
           ordered.forEach((r,idx)=>{
             const it = itens.find(i=>i.row===r);
             it.ordem = idx+1;
-            if(it.id) it.status = 'updated';
+            if(it.id && it.status !== 'new') it.status = 'updated';
           });
           dragging = null;
         });
