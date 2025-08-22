@@ -234,6 +234,8 @@
     const totals = {};
     const processOrder = [];
     let etapasOrdem = [];
+    const ordemToggle = document.getElementById('confirmarOrdemToggle');
+    let dragging = null;
 
     // cálculo por processo
     function updateProcessTotal(proc){
@@ -301,6 +303,7 @@
       const actionCell = item.row.querySelector('.action-cell');
       actionCell.innerHTML = `
         <div class="flex items-center justify-center space-x-2">
+          <i class="fas fa-bars w-5 h-5 cursor-move p-1 rounded drag-handle" style="color: var(--color-primary)" title="Reordenar"></i>
           <i class="fas fa-edit w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10 edit-item" style="color: var(--color-primary)" title="Editar"></i>
           <i class="fas fa-trash w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10 hover:text-white delete-item" style="color: var(--color-red)" title="Excluir"></i>
         </div>`;
@@ -344,6 +347,12 @@
       actionCell.querySelector('.confirm-del').addEventListener('click', () => {
         item.status = 'deleted';
         item.row.remove();
+        const ordered = Array.from(tableBody.querySelectorAll('tr.item-row'));
+        ordered.forEach((r,idx)=>{
+          const it = itens.find(i=>i.row===r);
+          it.ordem = idx+1;
+          if(it.id) it.status = 'updated';
+        });
         updateProcessTotal(item.processo);
         updateTotals();
       });
@@ -366,6 +375,7 @@
       itens = (data || []).map(d => ({
         ...d,
         quantidade: parseFloat(d.quantidade) || 0,
+        ordem: parseInt(d.ordem_insumo,10) || 0,
         status: d.status || 'unchanged'
       }));
 
@@ -378,6 +388,7 @@
       }
 
       const grupos = {};
+      itens.sort((a,b)=> (a.ordem||0)-(b.ordem||0));
       itens.forEach(it => {
         const procKey = it.processo || '—';
         if(!grupos[procKey]) grupos[procKey] = [];
@@ -401,9 +412,12 @@
         processOrder.push(proc);
         processos[proc] = { itens: arr, total: 0 };
 
+        arr.sort((a,b)=> (a.ordem||0)-(b.ordem||0));
         arr.forEach(item => {
           const tr = document.createElement('tr');
           tr.className = 'border-b border-white/5 item-row';
+          tr.dataset.processo = proc;
+          tr.setAttribute('draggable','true');
           tr.innerHTML = `
             <td class="py-3 px-2 text-sm text-white">${item.nome ?? '—'}</td>
             <td class="py-3 px-2 text-sm text-center quantidade-cell"><span class="quantidade-text">${formatNumber(item.quantidade)}</span></td>
@@ -420,15 +434,51 @@
 
         updateProcessTotal(proc);
       });
+      setupDragAndDrop();
       updateTotals();
       console.debug('[editar-produto] renderItens ok:', { grupos: Object.keys(grupos).length, total: itens.length });
+    }
+
+    function setupDragAndDrop(){
+      const rows = tableBody.querySelectorAll('tr.item-row');
+      rows.forEach(row => {
+        const handle = row.querySelector('.drag-handle');
+        handle.addEventListener('mousedown', () => row.setAttribute('data-allow-drag','true'));
+        row.addEventListener('dragstart', e => {
+          if(row.getAttribute('data-allow-drag') !== 'true'){ e.preventDefault(); return; }
+          dragging = itens.find(i => i.row === row);
+          e.dataTransfer.effectAllowed = 'move';
+        });
+        row.addEventListener('dragover', e => {
+          e.preventDefault();
+          if(!dragging) return;
+          const target = row;
+          const targetItem = itens.find(i => i.row === target);
+          if(targetItem.processo !== dragging.processo) return;
+          const rect = target.getBoundingClientRect();
+          const before = e.clientY < rect.top + rect.height/2;
+          if(before) tableBody.insertBefore(dragging.row, target);
+          else tableBody.insertBefore(dragging.row, target.nextSibling);
+        });
+        row.addEventListener('drop', e => e.preventDefault());
+        row.addEventListener('dragend', () => {
+          row.removeAttribute('data-allow-drag');
+          const ordered = Array.from(tableBody.querySelectorAll('tr.item-row'));
+          ordered.forEach((r,idx)=>{
+            const it = itens.find(i=>i.row===r);
+            it.ordem = idx+1;
+            if(it.id) it.status = 'updated';
+          });
+          dragging = null;
+        });
+      });
     }
 
     // API para comunicação com outros modais
     window.produtoEditarAPI = {
       adicionarProcessoItens(arr){
         if(!Array.isArray(arr) || arr.length === 0) return;
-        arr.forEach(it => itens.push({ ...it, status: 'new' }));
+        arr.forEach(it => itens.push({ ...it, status: 'new', ordem: itens.length + 1 }));
         renderItens(itens);
       },
       obterItens(){
@@ -495,6 +545,10 @@
     if (clonarBtn) {
       clonarBtn.addEventListener('click', async () => {
         try {
+          if(!ordemToggle || !ordemToggle.checked){
+            if(typeof showToast === 'function') showToast('Confirme a posição produtiva de insumos', 'error');
+            return;
+          }
           const nomeBase = (nomeInput?.value || '').trim();
           const codigoBase = (codigoInput?.value || '').trim();
           const cloneNome = `${nomeBase} - Copiado`;
@@ -516,7 +570,7 @@
 
           const itensPayload = itens
             .filter(i => i.status !== 'deleted')
-            .map(i => ({ insumo_id: i.insumo_id ?? i.id, quantidade: i.quantidade }));
+            .map(i => ({ insumo_id: i.insumo_id ?? i.id, quantidade: i.quantidade, ordem_insumo: i.ordem }));
 
           await window.electronAPI.salvarProdutoDetalhado(cloneCodigo, {
             pct_fabricacao: parseFloat(fabricacaoInput?.value) || 0,
@@ -548,6 +602,10 @@
     if (form) {
       form.addEventListener('submit', async e => {
         e.preventDefault();
+        if(!ordemToggle || !ordemToggle.checked){
+          if(typeof showToast === 'function') showToast('Confirme a posição produtiva de insumos', 'error');
+          return;
+        }
         const produto = {
           pct_fabricacao: parseFloat(fabricacaoInput && fabricacaoInput.value) || 0,
           pct_acabamento: parseFloat(acabamentoInput && acabamentoInput.value) || 0,
@@ -574,10 +632,10 @@
         const itensPayload = {
           inseridos: itens
             .filter(i => i.status === 'new')
-            .map(i => ({ insumo_id: i.insumo_id ?? i.id, quantidade: i.quantidade })),
+            .map(i => ({ insumo_id: i.insumo_id ?? i.id, quantidade: i.quantidade, ordem_insumo: i.ordem })),
           atualizados: itens
             .filter(i => i.status === 'updated')
-            .map(i => ({ id: i.id, quantidade: i.quantidade })),
+            .map(i => ({ id: i.id, quantidade: i.quantidade, ordem_insumo: i.ordem })),
           deletados: [
             ...deletedItens.map(i => ({ id: i.id })),
             ...itens

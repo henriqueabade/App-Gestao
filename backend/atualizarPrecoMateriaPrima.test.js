@@ -26,7 +26,8 @@ function setupDb() {
   db.public.none(`CREATE TABLE produtos_insumos (
     produto_codigo text,
     insumo_id int,
-    quantidade numeric
+    quantidade numeric,
+    ordem_insumo integer
   );`);
   return db;
 }
@@ -51,7 +52,7 @@ test('atualizarPreco atualiza precos de produtos relacionados', async () => {
   await pool.query('INSERT INTO materia_prima (id, nome, preco_unitario, data_preco) VALUES (1, $1, 10, NOW())', ['Insumo A']);
   await pool.query(`INSERT INTO produtos (codigo, pct_fabricacao, pct_acabamento, pct_montagem, pct_embalagem, pct_markup, pct_comissao, pct_imposto, preco_base, preco_venda, data)
                     VALUES ('P1',10,5,0,0,20,5,10,0,0,NOW())`);
-  await pool.query(`INSERT INTO produtos_insumos (produto_codigo, insumo_id, quantidade) VALUES ('P1',1,2)`);
+  await pool.query(`INSERT INTO produtos_insumos (produto_codigo, insumo_id, quantidade, ordem_insumo) VALUES ('P1',1,2,1)`);
 
   await atualizarPreco(1, 15);
 

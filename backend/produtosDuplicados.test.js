@@ -26,7 +26,8 @@ function setup() {
     id serial primary key,
     produto_codigo text,
     insumo_id int,
-    quantidade numeric
+    quantidade numeric,
+    ordem_insumo integer
   );`);
   const { Pool } = db.adapters.createPg();
   const pool = new Pool();
@@ -77,7 +78,7 @@ test('atualizarProduto atualiza produtos_insumos ao mudar codigo', async () => {
     status: 'ativo'
   });
   await pool.query(
-    "INSERT INTO produtos_insumos (produto_codigo, insumo_id, quantidade) VALUES ('P1',1,1)"
+    "INSERT INTO produtos_insumos (produto_codigo, insumo_id, quantidade, ordem_insumo) VALUES ('P1',1,1,1)"
   );
   await atualizarProduto(id, {
     codigo: 'P2',

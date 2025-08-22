@@ -107,7 +107,9 @@
   }
 
   const tableBody = document.querySelector('#itensTabela tbody');
+  const ordemToggle = document.getElementById('confirmarOrdemToggle');
   let itens = [];
+  let dragging = null;
 
   function formatNumber(val){
     const n = parseFloat(val) || 0;
@@ -118,6 +120,7 @@
     const cell = item.row.querySelector('.action-cell');
     cell.innerHTML = `
       <div class="flex items-center justify-center space-x-2">
+        <i class="fas fa-bars w-5 h-5 cursor-move p-1 rounded drag-handle" style="color: var(--color-primary)" title="Reordenar"></i>
         <i class="fas fa-edit w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10 edit-item" style="color: var(--color-primary)" title="Editar"></i>
         <i class="fas fa-trash w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10 hover:text-white delete-item" style="color: var(--color-red)" title="Excluir"></i>
       </div>`;
@@ -161,8 +164,14 @@
     });
   }
 
+  function normalizeOrder(){
+    itens.sort((a,b)=> (a.ordem||0) - (b.ordem||0));
+    itens.forEach((it,idx)=> it.ordem = idx+1);
+  }
+
   function renderItens(){
     if(!tableBody) return;
+    normalizeOrder();
     tableBody.innerHTML = '';
     const grupos = {};
     itens.forEach(it => {
@@ -175,9 +184,12 @@
       header.className = 'process-row';
       header.innerHTML = `<td colspan="6" class="px-6 py-2 bg-gray-50 border-t border-gray-200 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">${proc}</td>`;
       tableBody.appendChild(header);
+      arr.sort((a,b)=> (a.ordem||0)-(b.ordem||0));
       arr.forEach(item => {
         const tr = document.createElement('tr');
-        tr.className = 'border-b border-white/10';
+        tr.className = 'border-b border-white/10 item-row';
+        tr.dataset.processo = proc;
+        tr.setAttribute('draggable','true');
         tr.innerHTML = `
           <td class="py-3 px-2 text-white">${item.nome}</td>
           <td class="py-3 px-2 text-center quantidade-cell"><span class="quantidade-text">${formatNumber(item.quantidade)}</span></td>
@@ -191,7 +203,42 @@
         renderActionButtons(item);
       });
     });
+    setupDragAndDrop();
     atualizaTotal();
+  }
+
+  function setupDragAndDrop(){
+    const rows = tableBody.querySelectorAll('tr.item-row');
+    rows.forEach(row => {
+      const handle = row.querySelector('.drag-handle');
+      handle.addEventListener('mousedown', () => row.setAttribute('data-allow-drag','true'));
+      row.addEventListener('dragstart', e => {
+        if(row.getAttribute('data-allow-drag') !== 'true'){ e.preventDefault(); return; }
+        dragging = itens.find(i => i.row === row);
+        e.dataTransfer.effectAllowed = 'move';
+      });
+      row.addEventListener('dragover', e => {
+        e.preventDefault();
+        if(!dragging) return;
+        const target = row;
+        const targetItem = itens.find(i => i.row === target);
+        if(targetItem.processo !== dragging.processo) return;
+        const rect = target.getBoundingClientRect();
+        const before = e.clientY < rect.top + rect.height/2;
+        if(before) tableBody.insertBefore(dragging.row, target);
+        else tableBody.insertBefore(dragging.row, target.nextSibling);
+      });
+      row.addEventListener('drop', e => e.preventDefault());
+      row.addEventListener('dragend', () => {
+        row.removeAttribute('data-allow-drag');
+        const ordered = Array.from(tableBody.querySelectorAll('tr.item-row'));
+        ordered.forEach((r,idx)=>{
+          const it = itens.find(i=>i.row===r);
+          it.ordem = idx+1;
+        });
+        dragging = null;
+      });
+    });
   }
 
   function atualizaTotal(){
@@ -223,6 +270,7 @@
         if(exists){
           if(typeof showToast === 'function') showToast('Item já adicionado', 'error');
         } else {
+          n.ordem = itens.length + 1;
           itens.push(n);
         }
       });
@@ -266,6 +314,10 @@
 
   form.addEventListener('submit', async e => {
     e.preventDefault();
+    if(!ordemToggle || !ordemToggle.checked){
+      if(typeof showToast === 'function') showToast('Confirme a posição produtiva de insumos', 'error');
+      return;
+    }
     const nome = nomeInput.value.trim();
     const codigo = codigoInput.value.trim();
     const ncm = ncmInput.value.trim().slice(0,8);
@@ -291,7 +343,8 @@
 
       const itensPayload = itens.map(i => ({
         insumo_id: i.insumo_id ?? i.id,
-        quantidade: i.quantidade
+        quantidade: i.quantidade,
+        ordem_insumo: i.ordem
       }));
 
       await window.electronAPI.salvarProdutoDetalhado(codigo, {

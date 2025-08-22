@@ -65,6 +65,7 @@ async function listarDetalhesProduto(produtoCodigo, produtoId) {
       SELECT pi.id,
              pi.insumo_id,
              pi.quantidade,
+             pi.ordem_insumo,
              mp.nome,
              mp.preco_unitario,
              mp.unidade,
@@ -72,7 +73,7 @@ async function listarDetalhesProduto(produtoCodigo, produtoId) {
         FROM produtos_insumos pi
         JOIN materia_prima mp ON mp.id = pi.insumo_id
        WHERE pi.produto_codigo = $1::text
-       ORDER BY mp.processo, mp.nome`;
+       ORDER BY mp.processo, pi.ordem_insumo`;
     const itensRes = await pool.query(itensQuery, [produtoCodigo]);
 
     // Ajuste: alias que o front costuma usar é "etapa".
@@ -124,6 +125,7 @@ async function listarInsumosProduto(codigo) {
     SELECT pi.id,
            mp.nome,
            pi.quantidade,
+           pi.ordem_insumo,
            mp.preco_unitario,
            mp.unidade,
            mp.preco_unitario * pi.quantidade AS total,
@@ -131,7 +133,7 @@ async function listarInsumosProduto(codigo) {
       FROM produtos_insumos pi
       JOIN materia_prima mp ON mp.id = pi.insumo_id
      WHERE pi.produto_codigo = $1::text
-     ORDER BY mp.processo, mp.nome`;
+     ORDER BY mp.processo, pi.ordem_insumo`;
   const res = await pool.query(query, [codigo]);
   return res.rows;
 }
@@ -591,18 +593,18 @@ async function salvarProdutoDetalhado(codigoOriginal, produto, itens) {
     // Processa atualizações
     for (const up of (itens.atualizados || [])) {
       await client.query(
-        'UPDATE produtos_insumos SET quantidade=$1 WHERE id=$2::int',
-        [up.quantidade, up.id]
+        'UPDATE produtos_insumos SET quantidade=$1, ordem_insumo=$2 WHERE id=$3::int',
+        [up.quantidade, up.ordem_insumo, up.id]
       );
     }
     // Processa inserções
     for (const ins of (itens.inseridos || [])) {
       await client.query(
-        `INSERT INTO produtos_insumos (produto_codigo, insumo_id, quantidade)
-         VALUES ($1,$2,$3)
+        `INSERT INTO produtos_insumos (produto_codigo, insumo_id, quantidade, ordem_insumo)
+         VALUES ($1,$2,$3,$4)
          ON CONFLICT (produto_codigo, insumo_id)
-         DO UPDATE SET quantidade = EXCLUDED.quantidade`,
-        [codigoDestino, ins.insumo_id, ins.quantidade]
+         DO UPDATE SET quantidade = EXCLUDED.quantidade, ordem_insumo = EXCLUDED.ordem_insumo`,
+        [codigoDestino, ins.insumo_id, ins.quantidade, ins.ordem_insumo]
       );
     }
 

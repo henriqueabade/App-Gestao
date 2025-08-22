@@ -10,7 +10,8 @@ function setup() {
   );`);
   db.public.none(`CREATE TABLE produtos_insumos (
     id serial primary key,
-    produto_codigo text
+    produto_codigo text,
+    ordem_insumo integer
   );`);
   db.public.none(`CREATE TABLE produtos_em_cada_ponto (
     id serial primary key,
@@ -21,7 +22,7 @@ function setup() {
     produto_id int
   );`);
   db.public.none("INSERT INTO produtos (id, codigo) VALUES (1, 'P001');");
-  db.public.none("INSERT INTO produtos_insumos (produto_codigo) VALUES ('P001');");
+  db.public.none("INSERT INTO produtos_insumos (produto_codigo, ordem_insumo) VALUES ('P001',1);");
   db.public.none('INSERT INTO produtos_em_cada_ponto (produto_id) VALUES (1);');
   const { Pool } = db.adapters.createPg();
   const pool = new Pool();
