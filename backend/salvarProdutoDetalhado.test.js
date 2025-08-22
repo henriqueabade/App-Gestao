@@ -24,6 +24,7 @@ function createMockDb() {
     produto_codigo text references produtos(codigo),
     insumo_id integer,
     quantidade numeric,
+    ordem_insumo integer,
     UNIQUE (produto_codigo, insumo_id)
   );`);
   db.public.none(`INSERT INTO produtos (codigo, pct_fabricacao, pct_acabamento, pct_montagem, pct_embalagem, pct_markup, pct_comissao, pct_imposto, preco_base, preco_venda)
@@ -52,7 +53,7 @@ test('salvarProdutoDetalhado preenche produto_codigo ao inserir insumo', async (
     preco_base: 10,
     preco_venda: 20
   }, {
-    inseridos: [{ insumo_id: 5, quantidade: 2 }]
+    inseridos: [{ insumo_id: 5, quantidade: 2, ordem_insumo: 1 }]
   });
 
   const res = await pool.query('SELECT produto_codigo FROM produtos_insumos');
@@ -70,7 +71,7 @@ test('salvarProdutoDetalhado atualiza codigo e mantém vínculos', async () => {
   delete require.cache[require.resolve('./produtos')];
   const { salvarProdutoDetalhado } = require('./produtos');
 
-  await pool.query('INSERT INTO produtos_insumos (produto_codigo, insumo_id, quantidade) VALUES ($1,$2,$3)', ['P001', 1, 1]);
+  await pool.query('INSERT INTO produtos_insumos (produto_codigo, insumo_id, quantidade, ordem_insumo) VALUES ($1,$2,$3,$4)', ['P001', 1, 1, 1]);
 
   await salvarProdutoDetalhado('P001', {
     pct_fabricacao: 0,
@@ -107,8 +108,8 @@ test('salvarProdutoDetalhado substitui insumo existente sem erro de duplicidade'
   const { salvarProdutoDetalhado } = require('./produtos');
 
   await pool.query(
-    'INSERT INTO produtos_insumos (produto_codigo, insumo_id, quantidade) VALUES ($1,$2,$3)',
-    ['P001', 7, 1]
+    'INSERT INTO produtos_insumos (produto_codigo, insumo_id, quantidade, ordem_insumo) VALUES ($1,$2,$3,$4)',
+    ['P001', 7, 1, 1]
   );
 
   await salvarProdutoDetalhado(
@@ -124,7 +125,7 @@ test('salvarProdutoDetalhado substitui insumo existente sem erro de duplicidade'
       preco_base: 0,
       preco_venda: 0
     },
-    { inseridos: [{ insumo_id: 7, quantidade: 5 }] }
+    { inseridos: [{ insumo_id: 7, quantidade: 5, ordem_insumo: 1 }] }
   );
 
   const { rows } = await pool.query(
