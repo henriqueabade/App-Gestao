@@ -332,3 +332,13 @@ input[type="date"]:valid::-webkit-datetime-edit {
 .toast-error { background-color: #dc2626; }
 .toast-info { background-color: #2563eb; }
 
+/* Tooltip de status */
+.status-tooltip {
+    position: absolute;
+    z-index: 50;
+    pointer-events: none;
+}
+.status-tooltip div + div {
+    margin-top: 0.25rem;
+}
+

@@ -10,7 +10,9 @@ function setupDb() {
       id integer primary key,
       situacao text,
       data_envio timestamp,
-      data_entrega timestamp
+      data_entrega timestamp,
+      data_aprovacao timestamp,
+      data_cancelamento timestamp
     );
   `);
   return db;
