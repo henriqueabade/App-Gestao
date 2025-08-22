@@ -39,7 +39,7 @@ async function converterParaPedido(orcamentoId) {
         o.cliente_id,
         o.contato_id,
         dataAtual,
-        'Em Produção',
+        'Produção',
         o.parcelas,
         o.tipo_parcela,
         o.forma_pagamento,
