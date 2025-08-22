@@ -15,6 +15,7 @@
     --color-blue: #8aa7f3;
     --color-sky: #87ceeb;
     --color-navy: #001f3f;
+    --color-pen: #0000ff;
     --neutral-100: #f9fafb;
     --neutral-500: #6b7280;
     --color-input: rgba(0,0,0,0.3);
@@ -70,6 +71,20 @@ body {
 .btn-danger:hover {
     background: rgba(255,88,88,0.8);
     transform: scale(1.1);
+}
+
+.confirmar-ordem-btn {
+    border: 2px solid var(--color-red);
+    color: #fff;
+    font-weight: 700;
+    padding: 0.75rem 1rem;
+    border-radius: 0.5rem;
+    background: transparent;
+    transition: background 150ms ease;
+}
+
+.confirmar-ordem-btn.active {
+    background: var(--color-red);
 }
 
 .btn-danger-light {
