@@ -16,12 +16,26 @@ async function converterParaPedido(orcamentoId) {
     const dataValidade = new Date();
     dataValidade.setDate(dataValidade.getDate() + 30);
 
+    const numeroOriginal = o.numero;
+
+    // 1. Usa uma expressão regular para encontrar o(s) dígito(s)
+    const match = numeroOriginal.match(/\d+/);
+
+    // 2. Extrai o número se ele existir (a expressão regular retornou uma correspondência)
+    const numero = match ? match[0] : null;
+
+    // 3. Aplica o número ao formato desejado (ex: 'PED(x)')
+    let numeroFormatado = null;
+    if (numero !== null) {
+      numeroFormatado = `PED(${numero})`;
+    }
+
     const insertPedido = await db.query(
       `INSERT INTO pedidos (id, numero, cliente_id, contato_id, data_emissao, situacao, parcelas, tipo_parcela, forma_pagamento, transportadora, desconto_pagamento, desconto_especial, desconto_total, valor_final, observacoes, validade, prazo, dono, data_aprovacao)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19) RETURNING id`,
       [
         o.id,
-        o.numero,
+        numeroFormatado,
         o.cliente_id,
         o.contato_id,
         dataAtual,
