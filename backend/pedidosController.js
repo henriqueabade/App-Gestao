@@ -30,6 +30,9 @@ router.put('/:id/status', async (req, res) => {
   } catch (err) {
     console.error('Erro ao atualizar status do pedido:', err);
     res.status(500).json({ error: 'Erro ao atualizar status do pedido' });
+  }
+}); // <--- Faltava este '});' para fechar a rota e a função async
+
 // Obtém um pedido específico com itens e parcelas
 router.get('/:id', async (req, res) => {
   const { id } = req.params;
@@ -58,5 +61,4 @@ router.get('/:id', async (req, res) => {
     client.release();
   }
 });
-
 module.exports = router;
