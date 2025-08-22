@@ -122,7 +122,7 @@ async function carregarPedidos() {
             ownerSelect.innerHTML = '<option value="">Todos os Donos</option>' +
                 [...owners].map(d => `<option value="${d}">${d}</option>`).join('');
         }
-        tbody.querySelectorAll('.fa-eye, .fa-check, .fa-clipboard').forEach(icon => {
+        tbody.querySelectorAll('.fa-eye,.fa-clipboard').forEach(icon => {
             icon.addEventListener('click', e => {
                 e.stopPropagation();
                 showFunctionUnavailableDialog('Função em desenvolvimento.');
