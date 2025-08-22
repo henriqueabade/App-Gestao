@@ -25,7 +25,15 @@ router.put('/:id/status', async (req, res) => {
   const { status } = req.body;
   const { id } = req.params;
   try {
-    await db.query('UPDATE pedidos SET situacao = $1 WHERE id = $2', [status, id]);
+    const baseQuery = 'UPDATE pedidos SET situacao = $1';
+    let query = baseQuery;
+    if (status === 'Enviado') {
+      query += ', data_envio = NOW()';
+    } else if (status === 'Entregue') {
+      query += ', data_entrega = NOW()';
+    }
+    query += ' WHERE id = $2';
+    await db.query(query, [status, id]);
     res.json({ success: true });
   } catch (err) {
     console.error('Erro ao atualizar status do pedido:', err);
