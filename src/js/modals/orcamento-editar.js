@@ -298,6 +298,7 @@
     'Expirado': 'badge-neutral'
   };
   let currentStatus = data.situacao || 'Rascunho';
+  const initialStatus = currentStatus;
   const statusTag = document.getElementById('statusTag');
   const statusOptions = document.getElementById('statusOptions');
   const converterBtn = document.getElementById('converterOrcamento');
@@ -710,7 +711,7 @@
   if (form) {
     form.addEventListener('submit', e => {
       e.preventDefault();
-      const closeAfter = e.submitter?.id === 'salvarFecharOrcamento';
+      const closeAfter = e.submitter?.id === 'salvarFecharOrcamento' || currentStatus !== initialStatus;
       const proceed = () => saveChanges(closeAfter);
       if (currentStatus === 'Aprovado') {
         showActionDialog('Tem certeza que deseja converter este orçamento em pedido?', ok => {
