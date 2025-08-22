@@ -107,9 +107,11 @@
   }
 
   const tableBody = document.querySelector('#itensTabela tbody');
+  const ordemContainer = document.getElementById('confirmarOrdemContainer');
   const ordemBtn = document.getElementById('confirmarOrdemBtn');
   let ordemConfirmada = false;
   if (ordemBtn) {
+    ordemContainer?.classList.add('hidden');
     ordemBtn.addEventListener('click', () => {
       ordemConfirmada = !ordemConfirmada;
       ordemBtn.classList.toggle('active', ordemConfirmada);
@@ -322,6 +324,10 @@
   form.addEventListener('submit', async e => {
     e.preventDefault();
     if(!ordemConfirmada){
+      if(ordemContainer){
+        ordemContainer.classList.remove('hidden');
+        ordemContainer.scrollIntoView({ behavior: 'smooth', block: 'end' });
+      }
       if(typeof showToast === 'function') showToast('Confirme a posição produtiva de insumos', 'error');
       return;
     }
