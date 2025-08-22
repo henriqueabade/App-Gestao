@@ -49,6 +49,31 @@ function showStatusConfirmDialog(message, cb) {
     overlay.querySelector('#statusNo').addEventListener('click', () => { overlay.remove(); cb(false); });
 }
 
+let statusTooltip;
+function showStatusTooltip(e) {
+    const badge = e.currentTarget;
+    const items = [
+        { label: 'Data Início Produção', value: badge.dataset.aprovacao },
+        { label: 'Data de Envio', value: badge.dataset.envio },
+        { label: 'Data de Entrega', value: badge.dataset.entrega },
+        { label: 'Data de Cancelamento', value: badge.dataset.cancelamento }
+    ].filter(i => i.value);
+    if (!items.length) return;
+    statusTooltip = document.createElement('div');
+    statusTooltip.className = 'status-tooltip glass-surface text-white text-xs rounded-lg p-2 border border-white/10';
+    statusTooltip.innerHTML = items.map(i => `<div><span class="font-semibold">${i.label}:</span> ${i.value}</div>`).join('');
+    document.body.appendChild(statusTooltip);
+    const rect = badge.getBoundingClientRect();
+    statusTooltip.style.left = `${rect.left + window.scrollX}px`;
+    statusTooltip.style.top = `${rect.bottom + window.scrollY + 4}px`;
+}
+function hideStatusTooltip() {
+    if (statusTooltip) {
+        statusTooltip.remove();
+        statusTooltip = null;
+    }
+}
+
 async function carregarPedidos() {
     try {
         const resp = await fetch('http://localhost:3000/api/pedidos');
@@ -83,7 +108,7 @@ async function carregarPedidos() {
                 <td class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-violet)">${p.data_emissao || ''}</td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm text-white">${valor}</td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-violet)">${condicao}</td>
-                <td class="px-6 py-4 whitespace-nowrap"><span class="${badgeClass} px-3 py-1 rounded-full text-xs font-medium">${p.situacao}</span></td>
+                <td class="px-6 py-4 whitespace-nowrap"><span class="${badgeClass} px-3 py-1 rounded-full text-xs font-medium status-badge" data-aprovacao="${p.data_aprovacao || ''}" data-envio="${p.data_envio || ''}" data-entrega="${p.data_entrega || ''}" data-cancelamento="${p.data_cancelamento || ''}">${p.situacao}</span></td>
                 <td class="px-6 py-4 whitespace-nowrap text-center">
                     <div class="flex items-center justify-center space-x-2">
                         <i class="fas fa-eye w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Visualizar"></i>
@@ -141,6 +166,10 @@ async function carregarPedidos() {
                     window.electronAPI.openPdf(id, 'pedido');
                 }
             });
+        });
+        tbody.querySelectorAll('.status-badge').forEach(badge => {
+            badge.addEventListener('mouseenter', showStatusTooltip);
+            badge.addEventListener('mouseleave', hideStatusTooltip);
         });
         await popularClientes();
     } catch (err) {
