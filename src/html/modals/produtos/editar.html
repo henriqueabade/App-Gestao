@@ -169,13 +169,7 @@
         <div class="glass-surface rounded-xl p-6 border border-white/10">
           <div class="flex items-center justify-between mb-4">
             <h3 class="text-lg font-semibold text-white">ITENS</h3>
-            <div class="flex items-center gap-4">
-              <span id="totalInsumosTitulo" class="flex flex-wrap justify-end gap-2"></span>
-              <label class="flex items-center gap-2 text-white text-sm">
-                confirmo posição produtiva de insumos
-                <input id="confirmarOrdemToggle" type="checkbox" class="component-toggle" />
-              </label>
-            </div>
+            <span id="totalInsumosTitulo" class="flex flex-wrap justify-end gap-2"></span>
           </div>
           <div class="glass-surface rounded-xl shadow-lg animate-fade-in-up mt-6 table-scroll">
               <table id="itensTabela" class="w-full text-sm">
@@ -192,6 +186,11 @@
                   <tbody>
                           </tbody>
               </table>
+          </div>
+          <div class="mt-6 flex justify-center">
+            <button id="confirmarOrdemBtn" type="button" class="confirmar-ordem-btn">
+              CONFIRMO POSIÇÃO PRODUTIVA DE CADA INSUMO
+            </button>
           </div>
           <!-- Observações removidas -->
         </div>

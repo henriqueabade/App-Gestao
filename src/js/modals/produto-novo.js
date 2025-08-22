@@ -107,7 +107,14 @@
   }
 
   const tableBody = document.querySelector('#itensTabela tbody');
-  const ordemToggle = document.getElementById('confirmarOrdemToggle');
+  const ordemBtn = document.getElementById('confirmarOrdemBtn');
+  let ordemConfirmada = false;
+  if (ordemBtn) {
+    ordemBtn.addEventListener('click', () => {
+      ordemConfirmada = !ordemConfirmada;
+      ordemBtn.classList.toggle('active', ordemConfirmada);
+    });
+  }
   let itens = [];
   let dragging = null;
 
@@ -118,12 +125,12 @@
 
   function renderActionButtons(item){
     const cell = item.row.querySelector('.action-cell');
-    cell.innerHTML = `
-      <div class="flex items-center justify-center space-x-2">
-        <i class="fas fa-bars w-5 h-5 cursor-move p-1 rounded drag-handle" style="color: var(--color-primary)" title="Reordenar"></i>
-        <i class="fas fa-edit w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10 edit-item" style="color: var(--color-primary)" title="Editar"></i>
-        <i class="fas fa-trash w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10 hover:text-white delete-item" style="color: var(--color-red)" title="Excluir"></i>
-      </div>`;
+      cell.innerHTML = `
+        <div class="flex items-center justify-center space-x-2">
+          <i class="fas fa-bars w-5 h-5 cursor-move p-1 rounded drag-handle" style="color: var(--color-pen)" title="Reordenar"></i>
+          <i class="fas fa-edit w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10 edit-item" style="color: var(--color-pen)" title="Editar"></i>
+          <i class="fas fa-trash w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10 hover:text-white delete-item" style="color: var(--color-pen)" title="Excluir"></i>
+        </div>`;
     cell.querySelector('.edit-item').addEventListener('click', () => startEdit(item));
     cell.querySelector('.delete-item').addEventListener('click', () => startDelete(item));
   }
@@ -314,7 +321,7 @@
 
   form.addEventListener('submit', async e => {
     e.preventDefault();
-    if(!ordemToggle || !ordemToggle.checked){
+    if(!ordemConfirmada){
       if(typeof showToast === 'function') showToast('Confirme a posição produtiva de insumos', 'error');
       return;
     }
