@@ -63,6 +63,7 @@ router.get('/:id', async (req, res) => {
       razao_social: row.razao_social,
       cnpj: row.cnpj,
       inscricao_estadual: row.inscricao_estadual,
+      site: row.site,
       comprador_nome: row.comprador_nome,
       telefone_fixo: row.telefone_fixo,
       telefone_celular: row.telefone_celular,
