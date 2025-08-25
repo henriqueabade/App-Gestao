@@ -3,10 +3,11 @@ const db = require('./db');
 
 const router = express.Router();
 
-// Lista todos os pedidos
-router.get('/', async (_req, res) => {
+// Lista pedidos com filtro opcional por cliente
+router.get('/', async (req, res) => {
+  const { clienteId } = req.query;
   try {
-    const { rows } = await db.query(
+    let query =
       `SELECT p.id, p.numero, c.nome_fantasia AS cliente, to_char(p.data_emissao,'DD/MM/YYYY') AS data_emissao,
               p.valor_final, p.parcelas, p.situacao, p.dono,
               to_char(p.data_aprovacao,'DD/MM/YYYY') AS data_aprovacao,
@@ -14,9 +15,14 @@ router.get('/', async (_req, res) => {
               to_char(p.data_entrega,'DD/MM/YYYY') AS data_entrega,
               to_char(p.data_cancelamento,'DD/MM/YYYY') AS data_cancelamento
          FROM pedidos p
-         LEFT JOIN clientes c ON c.id = p.cliente_id
-        ORDER BY p.id DESC`
-    );
+         LEFT JOIN clientes c ON c.id = p.cliente_id`;
+    const params = [];
+    if (clienteId) {
+      params.push(clienteId);
+      query += ' WHERE p.cliente_id = $1';
+    }
+    query += ' ORDER BY p.id DESC';
+    const { rows } = await db.query(query, params);
     res.json(rows);
   } catch (err) {
     console.error('Erro ao listar pedidos:', err);
