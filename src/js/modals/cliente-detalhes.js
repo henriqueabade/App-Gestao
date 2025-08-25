@@ -1,6 +1,7 @@
 (function(){
   const overlay = document.getElementById('detalhesClienteOverlay');
   if(!overlay) return;
+  overlay.classList.remove('hidden');
   const close = () => Modal.close('detalhesCliente');
   overlay.addEventListener('click', e => { if(e.target === overlay) close(); });
   const voltar = document.getElementById('voltarDetalhesCliente');
