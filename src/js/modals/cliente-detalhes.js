@@ -106,6 +106,12 @@
       const el = document.getElementById(id);
       if(el) el.value = cli[map[id]] || '';
     }
+    const avatar = document.getElementById('empresaAvatar');
+    if(avatar){
+      const name = cli.nome_fantasia || cli.razao_social || '';
+      const initials = name.split(' ').filter(Boolean).map(n=>n[0]).join('').substring(0,2).toUpperCase();
+      avatar.textContent = initials;
+    }
   }
 
   function preencherEnderecos(cli){
@@ -174,8 +180,22 @@
       const pedidos = await pedidosRes.json();
       const orcamentos = await orcamentosRes.json();
       const ordens = [
-        ...pedidos.map(p => ({ numero:p.numero, tipo:'Pedido', inicio:p.data_emissao, valor:p.valor_final, status:p.situacao })),
-        ...orcamentos.map(o => ({ numero:o.numero, tipo:'Orçamento', inicio:o.data_emissao, valor:o.valor_final, status:o.situacao }))
+        ...pedidos.map(p => ({
+          numero:p.numero,
+          tipo:'Pedido',
+          inicio:p.data_emissao,
+          condicao: p.parcelas > 1 ? `${p.parcelas}x` : 'À vista',
+          valor:p.valor_final,
+          status:p.situacao
+        })),
+        ...orcamentos.map(o => ({
+          numero:o.numero,
+          tipo:'Orçamento',
+          inicio:o.data_emissao,
+          condicao: o.parcelas > 1 ? `${o.parcelas}x` : 'À vista',
+          valor:o.valor_final,
+          status:o.situacao
+        }))
       ];
       renderOrdens(ordens);
     }catch(err){
@@ -188,18 +208,19 @@
     if(!tbody) return;
     tbody.innerHTML = '';
     if(!ordens.length){
-      tbody.innerHTML = '<tr><td colspan="5" class="py-12 text-center text-gray-400">Nenhuma ordem encontrada</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="6" class="py-12 text-center text-gray-400">Nenhuma ordem encontrada</td></tr>';
       return;
     }
     const formatCurrency = v => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v || 0);
     ordens.forEach(o => {
       const tr = document.createElement('tr');
       tr.innerHTML = `
-        <td class="w-1/5 py-4 px-4 text-white">${o.numero}</td>
-        <td class="w-1/5 py-4 px-4 text-white">${o.tipo}</td>
-        <td class="w-1/5 py-4 px-4 text-white">${o.inicio || ''}</td>
-        <td class="w-1/5 py-4 px-4 text-right text-white">${formatCurrency(o.valor)}</td>
-        <td class="w-1/5 py-4 px-4 text-center text-white">${o.status || ''}</td>`;
+        <td class="w-1/6 py-4 px-4 text-left text-white">${o.numero}</td>
+        <td class="w-1/6 py-4 px-4 text-left text-white">${o.tipo}</td>
+        <td class="w-1/6 py-4 px-4 text-left text-white">${o.inicio || ''}</td>
+        <td class="w-1/6 py-4 px-4 text-left text-white">${o.condicao || ''}</td>
+        <td class="w-1/6 py-4 px-4 text-left text-white">${formatCurrency(o.valor)}</td>
+        <td class="w-1/6 py-4 px-4 text-left text-white">${o.status || ''}</td>`;
       tbody.appendChild(tr);
     });
   }
