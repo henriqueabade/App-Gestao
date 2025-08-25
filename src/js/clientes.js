@@ -97,6 +97,7 @@ function renderClientes(clientes) {
             <td class="px-6 py-4 whitespace-nowrap text-center">
                 <div class="flex items-center justify-center space-x-2">
                     <i class="fas fa-eye w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Visualizar"></i>
+                    <i class="fas fa-edit w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Editar"></i>
                     <i class="fas fa-trash w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-red)" title="Excluir"></i>
                 </div>
             </td>`;
@@ -104,6 +105,11 @@ function renderClientes(clientes) {
         if (eyeBtn) eyeBtn.addEventListener('click', (e) => {
             e.stopPropagation();
             abrirDetalhesCliente(c);
+        });
+        const editBtn = tr.querySelector('.fa-edit');
+        if (editBtn) editBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            console.log('Editar cliente');
         });
         tbody.appendChild(tr);
     });
