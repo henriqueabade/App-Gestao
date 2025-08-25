@@ -7,6 +7,8 @@
     --color-bordeaux: #6a152c;
     --color-bg-deep: #310017;
     --color-surface: rgba(255,255,255,0.08);
+    --color-input: rgba(0,0,0,0.3);
+    --color-inputBorder: rgba(255,255,255,0.15);
     --color-green: #a2ffa6;
     --color-red: #ff5858;
     --color-blue: #8aa7f3;
@@ -124,3 +126,25 @@ body {
 #bt-actions {
     margin-top: 1vw;
 }
+
+.text-primary { color: var(--color-primary); }
+.bg-input { background: var(--color-input); }
+.border-inputBorder { border-color: var(--color-inputBorder); }
+.focus\:border-primary:focus { border-color: var(--color-primary); }
+.focus\:ring-primary\/50:focus { box-shadow: 0 0 0 2px rgba(182,160,62,0.5); }
+.select-arrow {
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='m6 8 4 4 4-4'/%3e%3c/svg%3e");
+    background-position: right 0.5rem center;
+    background-repeat: no-repeat;
+    background-size: 1.5em 1.5em;
+    padding-right: 2.5rem;
+}
+.tab-active {
+    color: var(--color-primary) !important;
+    border-bottom-color: var(--color-primary) !important;
+}
+.animate-modalFade { animation: modalFade 0.3s ease-out forwards; }
+.slide-in { animation: slideIn 0.3s ease-out forwards; }
+@keyframes modalFade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes slideIn { from { transform: translateY(16px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+
