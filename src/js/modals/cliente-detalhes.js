@@ -20,8 +20,6 @@
         preencherEnderecos(data.cliente);
         renderContatos(data.contatos || []);
         inicializarToggles(data.cliente);
-        const siteInput = document.getElementById('clienteSite');
-        if(siteInput) siteInput.value = data.cliente.site || '';
         const notas = document.getElementById('clienteNotas');
         if(notas) notas.value = data.cliente.anotacoes || '';
       }
@@ -139,7 +137,12 @@
         <td class="py-4 px-4 text-white">${c.email || ''}</td>
         <td class="py-4 px-4 text-white">${c.telefone_celular || ''}</td>
         <td class="py-4 px-4 text-white">${c.telefone_fixo || ''}</td>
-        <td class="py-4 px-4 text-center text-white">-</td>`;
+        <td class="py-4 px-4 text-center text-white">
+          <div class="flex items-center justify-center gap-2">
+            <i class="fas fa-edit w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Editar"></i>
+            <i class="fas fa-trash w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10 hover:text-white" style="color: var(--color-red)" title="Excluir"></i>
+          </div>
+        </td>`;
       tbody.appendChild(tr);
     });
   }
@@ -192,11 +195,11 @@
     ordens.forEach(o => {
       const tr = document.createElement('tr');
       tr.innerHTML = `
-        <td class="py-4 px-4 text-white">${o.numero}</td>
-        <td class="py-4 px-4 text-white">${o.tipo}</td>
-        <td class="py-4 px-4 text-white">${o.inicio || ''}</td>
-        <td class="py-4 px-4 text-right text-white">${formatCurrency(o.valor)}</td>
-        <td class="py-4 px-4 text-center text-white">${o.status || ''}</td>`;
+        <td class="w-1/5 py-4 px-4 text-white">${o.numero}</td>
+        <td class="w-1/5 py-4 px-4 text-white">${o.tipo}</td>
+        <td class="w-1/5 py-4 px-4 text-white">${o.inicio || ''}</td>
+        <td class="w-1/5 py-4 px-4 text-right text-white">${formatCurrency(o.valor)}</td>
+        <td class="w-1/5 py-4 px-4 text-center text-white">${o.status || ''}</td>`;
       tbody.appendChild(tr);
     });
   }
