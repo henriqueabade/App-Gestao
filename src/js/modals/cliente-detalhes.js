@@ -1,4 +1,4 @@
-(function(){
+(async function(){
   const overlay = document.getElementById('detalhesClienteOverlay');
   if(!overlay) return;
   overlay.classList.remove('hidden');
@@ -12,6 +12,18 @@
   if(cliente){
     const titulo = document.getElementById('clienteDetalhesTitulo');
     if(titulo) titulo.textContent = `Detalhes – ${cliente.nome_fantasia || ''}`;
+    try {
+      const res = await fetch(`http://localhost:3000/api/clientes/${cliente.id}`);
+      const data = await res.json();
+      if(data && data.cliente){
+        preencherEnderecos(data.cliente);
+        renderContatos(data.contatos || []);
+        inicializarToggles(data.cliente);
+      }
+      carregarOrdens(cliente.id);
+    } catch(err){
+      console.error('Erro ao carregar detalhes do cliente', err);
+    }
   }
 
   const tablist = overlay.querySelector('[role="tablist"]');
@@ -69,7 +81,7 @@
           activateTab(tabs[tabs.length - 1]);
           break;
         case 'Enter':
-        case ' ': 
+        case ' ':
           e.preventDefault();
           if(currentIndex >= 0) activateTab(tabs[currentIndex]);
           break;
@@ -84,4 +96,96 @@
     if(savedTab && tabs.includes(savedTab)) initialTab = savedTab;
   }
   activateTab(initialTab, { setFocus: false });
+
+  function preencherEnderecos(cli){
+    const fill = (prefix, data) => {
+      if(!data) return;
+      for(const key of ['rua','numero','complemento','bairro','cidade','estado','cep']){
+        const el = document.getElementById(`${prefix}${key.charAt(0).toUpperCase()+key.slice(1)}`);
+        if(el) el.value = data[key] || '';
+      }
+    };
+    fill('reg', cli.endereco_registro);
+    fill('cob', cli.endereco_cobranca);
+    fill('ent', cli.endereco_entrega);
+  }
+
+  function renderContatos(contatos){
+    const tbody = document.getElementById('contatosTabela');
+    if(!tbody) return;
+    tbody.innerHTML = '';
+    if(!contatos.length){
+      tbody.innerHTML = '<tr><td colspan="6" class="py-12 text-center text-gray-400">Nenhum contato cadastrado</td></tr>';
+      return;
+    }
+    contatos.forEach(c => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td class="py-4 px-4 text-white">${c.nome || ''}</td>
+        <td class="py-4 px-4 text-white">${c.cargo || ''}</td>
+        <td class="py-4 px-4 text-white">${c.email || ''}</td>
+        <td class="py-4 px-4 text-white">${c.telefone_celular || ''}</td>
+        <td class="py-4 px-4 text-white">${c.telefone_fixo || ''}</td>
+        <td class="py-4 px-4 text-center text-white">-</td>`;
+      tbody.appendChild(tr);
+    });
+  }
+
+  function inicializarToggles(cli){
+    const same = (a,b) => JSON.stringify(a) === JSON.stringify(b);
+    const cobToggle = document.getElementById('cobrancaIgual');
+    const cobFields = document.getElementById('cobrancaFields');
+    const entToggle = document.getElementById('entregaIgual');
+    const entFields = document.getElementById('entregaFields');
+    if(cobToggle && cobFields){
+      const update = () => cobFields.classList.toggle('hidden', cobToggle.checked);
+      cobToggle.addEventListener('change', update);
+      if(same(cli.endereco_cobranca, cli.endereco_registro)){ cobToggle.checked = true; update(); }
+    }
+    if(entToggle && entFields){
+      const update = () => entFields.classList.toggle('hidden', entToggle.checked);
+      entToggle.addEventListener('change', update);
+      if(same(cli.endereco_entrega, cli.endereco_registro)){ entToggle.checked = true; update(); }
+    }
+  }
+
+  async function carregarOrdens(id){
+    try{
+      const [pedidosRes, orcamentosRes] = await Promise.all([
+        fetch(`http://localhost:3000/api/pedidos?clienteId=${id}`),
+        fetch(`http://localhost:3000/api/orcamentos?clienteId=${id}`)
+      ]);
+      const pedidos = await pedidosRes.json();
+      const orcamentos = await orcamentosRes.json();
+      const ordens = [
+        ...pedidos.map(p => ({ numero:p.numero, tipo:'Pedido', inicio:p.data_emissao, fim:p.data_entrega, valor:p.valor_final, status:p.situacao })),
+        ...orcamentos.map(o => ({ numero:o.numero, tipo:'Orçamento', inicio:o.data_emissao, fim:'', valor:o.valor_final, status:o.situacao }))
+      ];
+      renderOrdens(ordens);
+    }catch(err){
+      console.error('Erro ao carregar ordens', err);
+    }
+  }
+
+  function renderOrdens(ordens){
+    const tbody = document.getElementById('ordensTabela');
+    if(!tbody) return;
+    tbody.innerHTML = '';
+    if(!ordens.length){
+      tbody.innerHTML = '<tr><td colspan="7" class="py-12 text-center text-gray-400">Nenhuma ordem encontrada</td></tr>';
+      return;
+    }
+    ordens.forEach(o => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td class="py-4 px-4 text-white">${o.numero}</td>
+        <td class="py-4 px-4 text-white">${o.tipo}</td>
+        <td class="py-4 px-4 text-white">${o.inicio || ''}</td>
+        <td class="py-4 px-4 text-white">${o.fim || ''}</td>
+        <td class="py-4 px-4 text-right text-white">${o.valor || ''}</td>
+        <td class="py-4 px-4 text-center text-white">${o.status || ''}</td>
+        <td class="py-4 px-4 text-center text-white">-</td>`;
+      tbody.appendChild(tr);
+    });
+  }
 })();
