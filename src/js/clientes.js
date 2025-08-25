@@ -100,8 +100,18 @@ function renderClientes(clientes) {
                     <i class="fas fa-trash w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-red)" title="Excluir"></i>
                 </div>
             </td>`;
+        const eyeBtn = tr.querySelector('.fa-eye');
+        if (eyeBtn) eyeBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            abrirDetalhesCliente(c);
+        });
         tbody.appendChild(tr);
     });
+}
+
+function abrirDetalhesCliente(cliente) {
+    window.clienteDetalhes = cliente;
+    Modal.open('modals/clientes/detalhes.html', '../js/modals/cliente-detalhes.js', 'detalhesCliente');
 }
 
 function renderTotais(clientes) {
