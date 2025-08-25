@@ -103,7 +103,7 @@ function toggleCrmSubmenu() {
     if (crmExpanded) {
         crmSubmenu.classList.add('open');
         chevron.classList.add('rotated');
-        if (!sidebarExpanded) expandSidebar();
+        // CRM submenu should not trigger sidebar expansion
     } else {
         crmSubmenu.classList.remove('open');
         chevron.classList.remove('rotated');
