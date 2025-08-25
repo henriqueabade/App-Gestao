@@ -56,17 +56,26 @@ let crmExpanded = false;
 function expandSidebar() {
     if (!sidebarExpanded) {
         sidebar.classList.remove('sidebar-collapsed');
-        sidebar.classList.add('sidebar-expanded', 'sidebar-text-visible');
+        sidebar.classList.add('sidebar-expanded');
         const offset = window.innerWidth >= 1024 ? '240px' : '200px';
         mainContent.style.marginLeft = offset;
         if (companyName) companyName.classList.remove('collapsed');
+
+        // Aguarda a animação de expansão finalizar para exibir o texto
+        sidebar.addEventListener('transitionend', (e) => {
+            if (e.propertyName === 'width') {
+                sidebar.classList.add('sidebar-text-visible');
+            }
+        }, { once: true });
+
         sidebarExpanded = true;
     }
 }
 
 function collapseSidebar() {
     if (sidebarExpanded) {
-        sidebar.classList.remove('sidebar-expanded', 'sidebar-text-visible');
+        sidebar.classList.remove('sidebar-text-visible');
+        sidebar.classList.remove('sidebar-expanded');
         sidebar.classList.add('sidebar-collapsed');
         mainContent.style.marginLeft = '64px';
         if (companyName) companyName.classList.add('collapsed');
