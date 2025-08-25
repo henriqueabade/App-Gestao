@@ -16,6 +16,7 @@
       const res = await fetch(`http://localhost:3000/api/clientes/${cliente.id}`);
       const data = await res.json();
       if(data && data.cliente){
+        preencherDadosEmpresa(data.cliente);
         preencherEnderecos(data.cliente);
         renderContatos(data.contatos || []);
         inicializarToggles(data.cliente);
@@ -93,6 +94,21 @@
   }
 
   activateTab(tabs[0], { setFocus: false });
+
+  function preencherDadosEmpresa(cli){
+    const map = {
+      empresaRazaoSocial: 'razao_social',
+      empresaNomeFantasia: 'nome_fantasia',
+      empresaCnpj: 'cnpj',
+      empresaSegmento: 'segmento',
+      empresaInscricaoEstadual: 'inscricao_estadual',
+      empresaSite: 'site'
+    };
+    for(const id in map){
+      const el = document.getElementById(id);
+      if(el) el.value = cli[map[id]] || '';
+    }
+  }
 
   function preencherEnderecos(cli){
     const fill = (prefix, data) => {
