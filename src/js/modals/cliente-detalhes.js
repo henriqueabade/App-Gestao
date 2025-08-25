@@ -19,6 +19,10 @@
         preencherEnderecos(data.cliente);
         renderContatos(data.contatos || []);
         inicializarToggles(data.cliente);
+        const siteInput = document.getElementById('clienteSite');
+        if(siteInput) siteInput.value = data.cliente.site || '';
+        const notas = document.getElementById('clienteNotas');
+        if(notas) notas.value = data.cliente.anotacoes || '';
       }
       carregarOrdens(cliente.id);
     } catch(err){
@@ -47,7 +51,6 @@
     const targetPanel = overlay.querySelector('#'+targetTab.getAttribute('aria-controls'));
     if(targetPanel) targetPanel.classList.remove('hidden');
     if(setFocus) targetTab.focus();
-    localStorage.setItem('clientDetailsTab', targetTab.id);
   }
 
   tabs.forEach(tab => {
@@ -89,13 +92,7 @@
     });
   }
 
-  const savedTabId = localStorage.getItem('clientDetailsTab');
-  let initialTab = tabs[0];
-  if(savedTabId){
-    const savedTab = overlay.querySelector('#'+savedTabId);
-    if(savedTab && tabs.includes(savedTab)) initialTab = savedTab;
-  }
-  activateTab(initialTab, { setFocus: false });
+  activateTab(tabs[0], { setFocus: false });
 
   function preencherEnderecos(cli){
     const fill = (prefix, data) => {
@@ -158,8 +155,8 @@
       const pedidos = await pedidosRes.json();
       const orcamentos = await orcamentosRes.json();
       const ordens = [
-        ...pedidos.map(p => ({ numero:p.numero, tipo:'Pedido', inicio:p.data_emissao, fim:p.data_entrega, valor:p.valor_final, status:p.situacao })),
-        ...orcamentos.map(o => ({ numero:o.numero, tipo:'Orçamento', inicio:o.data_emissao, fim:'', valor:o.valor_final, status:o.situacao }))
+        ...pedidos.map(p => ({ numero:p.numero, tipo:'Pedido', inicio:p.data_emissao, valor:p.valor_final, status:p.situacao })),
+        ...orcamentos.map(o => ({ numero:o.numero, tipo:'Orçamento', inicio:o.data_emissao, valor:o.valor_final, status:o.situacao }))
       ];
       renderOrdens(ordens);
     }catch(err){
@@ -172,19 +169,18 @@
     if(!tbody) return;
     tbody.innerHTML = '';
     if(!ordens.length){
-      tbody.innerHTML = '<tr><td colspan="7" class="py-12 text-center text-gray-400">Nenhuma ordem encontrada</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="5" class="py-12 text-center text-gray-400">Nenhuma ordem encontrada</td></tr>';
       return;
     }
+    const formatCurrency = v => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v || 0);
     ordens.forEach(o => {
       const tr = document.createElement('tr');
       tr.innerHTML = `
         <td class="py-4 px-4 text-white">${o.numero}</td>
         <td class="py-4 px-4 text-white">${o.tipo}</td>
         <td class="py-4 px-4 text-white">${o.inicio || ''}</td>
-        <td class="py-4 px-4 text-white">${o.fim || ''}</td>
-        <td class="py-4 px-4 text-right text-white">${o.valor || ''}</td>
-        <td class="py-4 px-4 text-center text-white">${o.status || ''}</td>
-        <td class="py-4 px-4 text-center text-white">-</td>`;
+        <td class="py-4 px-4 text-right text-white">${formatCurrency(o.valor)}</td>
+        <td class="py-4 px-4 text-center text-white">${o.status || ''}</td>`;
       tbody.appendChild(tr);
     });
   }
