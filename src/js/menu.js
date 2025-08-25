@@ -62,11 +62,14 @@ function expandSidebar() {
         if (companyName) companyName.classList.remove('collapsed');
 
         // Aguarda a animação de expansão finalizar para exibir o texto
+        const showText = () => sidebar.classList.add('sidebar-text-visible');
         sidebar.addEventListener('transitionend', (e) => {
             if (e.propertyName === 'width') {
-                sidebar.classList.add('sidebar-text-visible');
+                showText();
             }
         }, { once: true });
+        // Fallback caso o evento transitionend não seja disparado
+        setTimeout(showText, 300);
 
         sidebarExpanded = true;
     }
