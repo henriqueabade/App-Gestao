@@ -1,8 +1,9 @@
 <div id="detalhesClienteOverlay" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center p-4">
   <div class="w-full max-w-6xl max-h-[90vh] glass-surface backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade slide-in overflow-hidden flex flex-col">
-    <header class="flex items-center justify-between px-8 py-5 border-b border-white/10 flex-shrink-0">
-      <button id="voltarDetalhesCliente" class="btn-neutral px-4 py-2 rounded-lg text-white font-medium flex items-center gap-2">← Voltar</button>
-      <h2 id="clienteDetalhesTitulo" class="text-lg font-semibold text-white">Detalhes – João Silva Ltda</h2>
+    <header class="grid grid-cols-3 items-center px-8 py-5 border-b border-white/10 flex-shrink-0">
+      <button id="voltarDetalhesCliente" class="btn-neutral px-4 py-2 rounded-lg text-white font-medium flex items-center gap-2 justify-self-start">← Voltar</button>
+      <h2 id="clienteDetalhesTitulo" class="text-lg font-semibold text-white text-center">Detalhes – João Silva Ltda</h2>
+      <span></span>
     </header>
 
     <nav class="px-8 border-b border-white/10 flex-shrink-0" role="tablist">
@@ -52,7 +53,7 @@
               </div>
               <div>
                 <label class="block text-sm font-medium text-gray-300 mb-2">Site</label>
-                <input id="clienteSite" type="url" placeholder="https://www.exemplo.com.br" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                <input id="empresaSite" type="url" placeholder="https://www.exemplo.com.br" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
               </div>
             </div>
           </div>
@@ -225,14 +226,14 @@
         </div>
         <div class="glass-surface rounded-xl border border-white/10 overflow-hidden">
           <div class="overflow-x-auto">
-            <table class="w-full text-sm">
+            <table class="w-full text-sm table-fixed">
               <thead class="glass-surface">
                 <tr class="border-b border-white/10">
-                  <th class="text-left py-4 px-4 text-gray-300 font-medium">Nº ORDEM</th>
-                  <th class="text-left py-4 px-4 text-gray-300 font-medium">TIPO</th>
-                  <th class="text-left py-4 px-4 text-gray-300 font-medium">INÍCIO</th>
-                  <th class="text-right py-4 px-4 text-gray-300 font-medium">VALOR</th>
-                  <th class="text-center py-4 px-4 text-gray-300 font-medium">STATUS</th>
+                  <th class="w-1/5 text-left py-4 px-4 text-gray-300 font-medium">Nº ORDEM</th>
+                  <th class="w-1/5 text-left py-4 px-4 text-gray-300 font-medium">TIPO</th>
+                  <th class="w-1/5 text-left py-4 px-4 text-gray-300 font-medium">INÍCIO</th>
+                  <th class="w-1/5 text-right py-4 px-4 text-gray-300 font-medium">VALOR</th>
+                  <th class="w-1/5 text-center py-4 px-4 text-gray-300 font-medium">STATUS</th>
                 </tr>
               </thead>
               <tbody id="ordensTabela">
