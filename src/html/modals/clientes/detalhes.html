@@ -3,7 +3,6 @@
     <header class="flex items-center justify-between px-8 py-5 border-b border-white/10 flex-shrink-0">
       <button id="voltarDetalhesCliente" class="btn-neutral px-4 py-2 rounded-lg text-white font-medium flex items-center gap-2">← Voltar</button>
       <h2 id="clienteDetalhesTitulo" class="text-lg font-semibold text-white">Detalhes – João Silva Ltda</h2>
-      <button class="btn-primary px-6 py-2 rounded-lg text-white font-medium">Salvar</button>
     </header>
 
     <nav class="px-8 border-b border-white/10 flex-shrink-0" role="tablist">
@@ -53,7 +52,7 @@
               </div>
               <div>
                 <label class="block text-sm font-medium text-gray-300 mb-2">Site</label>
-                <input id="empresaSite" type="url" placeholder="https://www.exemplo.com.br" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                <input id="clienteSite" type="url" placeholder="https://www.exemplo.com.br" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
               </div>
             </div>
           </div>
@@ -131,10 +130,10 @@
         <div class="mb-8">
           <div class="flex items-center justify-between mb-4">
             <h3 class="text-lg font-semibold text-white">Endereço de Cobrança</h3>
-            <div class="flex items-center gap-3">
-              <span class="text-sm text-gray-300">Igual ao de Registro</span>
+            <label class="flex items-center gap-3">
               <input id="cobrancaIgual" type="checkbox" class="component-toggle" />
-            </div>
+              <span class="text-sm text-gray-300">Igual ao de Registro</span>
+            </label>
           </div>
           <div id="cobrancaFields" class="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div class="md:col-span-2">
@@ -176,10 +175,10 @@
         <div>
           <div class="flex items-center justify-between mb-4">
             <h3 class="text-lg font-semibold text-white">Endereço de Entrega</h3>
-            <div class="flex items-center gap-3">
-              <span class="text-sm text-gray-300">Igual ao de Registro</span>
+            <label class="flex items-center gap-3">
               <input id="entregaIgual" type="checkbox" class="component-toggle" />
-            </div>
+              <span class="text-sm text-gray-300">Igual ao de Registro</span>
+            </label>
           </div>
           <div id="entregaFields" class="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div class="md:col-span-2">
@@ -232,15 +231,13 @@
                   <th class="text-left py-4 px-4 text-gray-300 font-medium">Nº ORDEM</th>
                   <th class="text-left py-4 px-4 text-gray-300 font-medium">TIPO</th>
                   <th class="text-left py-4 px-4 text-gray-300 font-medium">INÍCIO</th>
-                  <th class="text-left py-4 px-4 text-gray-300 font-medium">FIM</th>
                   <th class="text-right py-4 px-4 text-gray-300 font-medium">VALOR</th>
                   <th class="text-center py-4 px-4 text-gray-300 font-medium">STATUS</th>
-                  <th class="text-center py-4 px-4 text-gray-300 font-medium">AÇÕES</th>
                 </tr>
               </thead>
               <tbody id="ordensTabela">
                 <tr>
-                  <td colspan="7" class="py-12 text-center text-gray-400">Criar no banco de dados</td>
+                  <td colspan="5" class="py-12 text-center text-gray-400">Criar no banco de dados</td>
                 </tr>
               </tbody>
             </table>
@@ -251,13 +248,13 @@
       <section id="panel-notas" role="tabpanel" aria-labelledby="tab-notas" class="px-8 py-6 hidden">
         <div>
           <label class="block text-sm font-medium text-gray-300 mb-2">Observações</label>
-          <textarea rows="12" placeholder="Digite suas observações sobre o cliente..." class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition resize-none"></textarea>
+          <textarea id="clienteNotas" rows="12" placeholder="Digite suas observações sobre o cliente..." class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition resize-none"></textarea>
         </div>
       </section>
     </div>
 
     <footer class="flex justify-end items-center gap-4 px-8 py-5 border-t border-white/10 flex-shrink-0">
-      <button class="btn-neutral px-6 py-2 rounded-lg text-white font-medium min-w-[120px]">Cancelar</button>
+      <button class="btn-danger px-6 py-2 rounded-lg text-white font-medium min-w-[120px]">Cancelar</button>
       <button class="btn-primary px-6 py-2 rounded-lg text-white font-medium min-w-[120px]">Salvar</button>
     </footer>
   </div>
