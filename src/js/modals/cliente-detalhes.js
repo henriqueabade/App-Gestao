@@ -215,12 +215,12 @@
     ordens.forEach(o => {
       const tr = document.createElement('tr');
       tr.innerHTML = `
-        <td class="w-1/6 py-4 px-4 text-left text-white">${o.numero}</td>
-        <td class="w-1/6 py-4 px-4 text-left text-white">${o.tipo}</td>
-        <td class="w-1/6 py-4 px-4 text-left text-white">${o.inicio || ''}</td>
-        <td class="w-1/6 py-4 px-4 text-left text-white">${o.condicao || ''}</td>
-        <td class="w-1/6 py-4 px-4 text-left text-white">${formatCurrency(o.valor)}</td>
-        <td class="w-1/6 py-4 px-4 text-left text-white">${o.status || ''}</td>`;
+        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">${o.numero}</td>
+        <td class="px-6 py-4 whitespace-nowrap text-sm text-white">${o.tipo}</td>
+        <td class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-violet)">${o.inicio || ''}</td>
+        <td class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-violet)">${o.condicao || ''}</td>
+        <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-white">${formatCurrency(o.valor)}</td>
+        <td class="px-6 py-4 whitespace-nowrap text-sm text-white">${o.status || ''}</td>`;
       tbody.appendChild(tr);
     });
   }
