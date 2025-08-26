@@ -418,8 +418,8 @@ function abrirEditarProduto(prod) {
         showToast('Produto inválido', 'error');
         return;
     }
-    window.produtoSelecionado = prod;
-    openModalWithSpinner('modals/produtos/editar.html', '../js/modals/produto-editar.js', 'editarProduto');
+    window.produtoDetalhesEditar = prod;
+    openModalWithSpinner('modals/produtos/editar-detalhes.html', '../js/modals/produto-detalhes-editar.js', 'editarDetalhesProduto');
 }
 
 function abrirExcluirProduto(prod) {
