@@ -1,48 +1,46 @@
-<div id="detalhesProspeccaoOverlay" class="hidden fixed inset-0 bg-black/50 overflow-y-auto z-50">
-  <div class="min-h-full text-white">
-    <!-- Sticky Header -->
-    <header class="sticky top-0 z-20 bg-surface/80 backdrop-blur-xl border-b border-white/10">
-        <div class="px-6 py-4">
-            <!-- Breadcrumb -->
-            <nav class="text-sm text-gray-400 mb-3">
-                <span>Leads</span>
-                <span class="mx-2">/</span>
-                <span class="text-white">Prospectos</span>
-            </nav>
+<div id="detalhesProspeccaoOverlay" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+  <div class="w-full max-w-6xl max-h-[90vh] glass-surface backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade slide-in overflow-hidden flex flex-col text-white">
+    <header class="px-8 py-5 border-b border-white/10 flex-shrink-0">
+        <!-- Breadcrumb -->
+        <nav class="text-sm text-gray-400 mb-3">
+            <span>Leads</span>
+            <span class="mx-2">/</span>
+            <span class="text-white">Prospectos</span>
+        </nav>
 
-            <!-- Header Content -->
-            <div class="flex items-center justify-between">
-                <div>
-                    <h1 id="modalProspectNameHeader" class="text-2xl font-bold text-white"></h1>
-                    <p id="modalProspectCompanyHeader" class="text-gray-300"></p>
-                </div>
+        <!-- Header Content -->
+        <div class="flex items-center justify-between">
+            <div>
+                <h1 id="modalProspectNameHeader" class="text-2xl font-bold text-white"></h1>
+                <p id="modalProspectCompanyHeader" class="text-gray-300"></p>
+            </div>
 
-                <div class="flex items-center gap-3">
-                    <button class="btn-primary px-4 py-2 rounded-lg text-white font-medium">
-                        Editar
-                    </button>
-                    <button id="prospectDelete" class="btn-danger px-4 py-2 rounded-lg text-white font-medium">
-                        Deletar
-                    </button>
-                    <button class="btn-dark-blue px-4 py-2 rounded-lg text-white font-medium">
-                        Alterar Responsável
-                    </button>
-                    <button id="toggleNotify" aria-pressed="false" class="btn-ghost px-4 py-2 rounded-lg text-white font-medium">
-                        Notificações
-                    </button>
-                    <button class="btn-success px-6 py-2 rounded-lg font-medium text-black">
-                        Converter
-                    </button>
-                    <button id="fecharDetalhesProspeccao" class="btn-danger p-2 rounded-lg text-white">
-                        ✕
-                    </button>
-                </div>
+            <div class="flex items-center gap-3">
+                <button class="btn-primary px-4 py-2 rounded-lg text-white font-medium">
+                    Editar
+                </button>
+                <button id="prospectDelete" class="btn-danger px-4 py-2 rounded-lg text-white font-medium">
+                    Deletar
+                </button>
+                <button class="btn-dark-blue px-4 py-2 rounded-lg text-white font-medium">
+                    Alterar Responsável
+                </button>
+                <button id="toggleNotify" aria-pressed="false" class="btn-ghost px-4 py-2 rounded-lg text-white font-medium">
+                    Notificações
+                </button>
+                <button class="btn-success px-6 py-2 rounded-lg font-medium text-black">
+                    Converter
+                </button>
+                <button id="fecharDetalhesProspeccao" class="btn-danger p-2 rounded-lg text-white">
+                    ✕
+                </button>
             </div>
         </div>
     </header>
 
-    <!-- Summary Card -->
-    <div class="px-6 py-6">
+    <div class="flex-1 overflow-y-auto modal-scroll">
+      <!-- Summary Card -->
+      <div class="px-8 py-6">
         <section class="w-full rounded-2xl bg-[--color-surface] backdrop-blur p-6 lg:p-8 shadow-lg">
             <div class="grid gap-6 lg:grid-cols-[1.1fr_auto_0.9fr] items-center">
                 <!-- Identidade -->
@@ -83,11 +81,10 @@
             </div>
             <div class="mt-6 lg:hidden h-px w-full bg-white/10"></div>
         </section>
-    </div>
+      </div>
 
-    <!-- Sticky Tabs -->
-    <nav class="sticky top-[120px] z-10 bg-surface/80 backdrop-blur-xl border-b border-white/10" role="tablist">
-        <div class="px-6">
+      <nav class="sticky top-0 z-10 bg-surface/80 backdrop-blur-xl border-b border-white/10" role="tablist">
+        <div class="px-8">
             <div class="flex gap-8 overflow-x-auto">
                 <button role="tab" data-tab="overview" aria-selected="true"
                         class="py-4 px-2 text-sm font-medium border-b-2 tab-active whitespace-nowrap transition">
@@ -107,10 +104,10 @@
                 </button>
             </div>
         </div>
-    </nav>
+      </nav>
 
-    <!-- Tab Content -->
-    <div class="px-6 py-6">
+      <!-- Tab Content -->
+      <div class="px-8 py-6">
         <!-- Visão Geral -->
         <section data-panel="overview" class="space-y-6">
             <!-- Informações de Contato -->
@@ -465,6 +462,7 @@
                 </div>
             </div>
         </section>
+      </div>
     </div>
   </div>
 </div>
