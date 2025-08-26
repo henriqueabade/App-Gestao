@@ -16,17 +16,13 @@
     <header class="sticky top-0 z-20 bg-surface/80 backdrop-blur-xl border-b border-white/10">
         <div class="px-6 py-4">
             <!-- Breadcrumb -->
-            <nav class="text-sm text-gray-400 mb-3">
-                <span>Leads</span>
-                <span class="mx-2">/</span>
-                <span class="text-white">Prospectos</span>
-            </nav>
+            <nav class="text-sm text-gray-400 mb-3 text-center">Mais Detalhes Prospecção</nav>
 
             <!-- Header Content -->
             <div class="flex items-center justify-between">
-                <div>
-                    <h1 id="prospectNameHeader" class="text-2xl font-bold text-white"></h1>
-                    <p id="prospectCompanyHeader" class="text-gray-300"></p>
+                <div class="text-left">
+                    <h1 id="prospectNameHeader" class="text-2xl font-bold text-white">Jennifer Wilson</h1>
+                    <p id="prospectCompanyHeader" class="text-gray-300">Acme Corporation</p>
                 </div>
 
                 <div class="flex items-center gap-3">
@@ -60,11 +56,11 @@
                 <!-- Identidade -->
                 <div class="flex items-center gap-4">
                     <div class="h-16 w-16 rounded-full ring-2 ring-[--color-primary] grid place-items-center text-[--color-primary] font-semibold shrink-0">
-                        <span id="prospectInitials"></span>
+                        <span id="prospectInitials">JW</span>
                     </div>
                     <div class="min-w-0">
-                        <h2 id="prospectName" class="text-xl lg:text-2xl font-semibold text-white truncate" title=""></h2>
-                        <p id="prospectCompany" class="text-sm text-white/70 truncate" title=""></p>
+                        <h2 id="prospectName" class="text-xl lg:text-2xl font-semibold text-white truncate" title="Jennifer Wilson">Jennifer Wilson</h2>
+                        <p id="prospectCompany" class="text-sm text-white/70 truncate" title="Acme Corporation">Acme Corporation</p>
                     </div>
                 </div>
 
@@ -75,28 +71,28 @@
                 <div class="grid grid-cols-2 md:grid-cols-3 gap-4">
                     <div class="rounded-xl bg-white/5 p-3">
                         <span class="text-[11px] uppercase tracking-wide text-white/60">Responsável</span>
-                        <p id="prospectOwner" class="text-sm text-white"></p>
+                        <p id="prospectOwner" class="text-sm text-white">João Silva</p>
                     </div>
-                    <a id="prospectEmailLink" href="#" aria-label="" class="rounded-xl bg-white/5 hover:bg-white/10 p-3">
+                    <a id="prospectEmailLink" href="mailto:jennifer@acme.com" aria-label="Enviar e-mail para Jennifer Wilson" class="rounded-xl bg-white/5 hover:bg-white/10 p-3">
                         <span class="text-[11px] uppercase tracking-wide text-white/60">E-mail</span>
-                        <p id="prospectEmail" class="text-sm text-white truncate" title=""></p>
+                        <p id="prospectEmail" class="text-sm text-white truncate" title="jennifer@acme.com">jennifer@acme.com</p>
                     </a>
-                    <a id="prospectPhoneLink" href="#" aria-label="" class="rounded-xl bg-white/5 hover:bg-white/10 p-3">
+                    <a id="prospectPhoneLink" href="tel:(11)3333-4444" aria-label="Ligar para Jennifer Wilson" class="rounded-xl bg-white/5 hover:bg-white/10 p-3">
                         <span class="text-[11px] uppercase tracking-wide text-white/60">Telefone</span>
-                        <p id="prospectPhone" class="text-sm text-white"></p>
+                        <p id="prospectPhone" class="text-sm text-white">(11) 3333-4444</p>
                     </a>
-                    <a id="prospectCellLink" href="#" aria-label="" class="rounded-xl bg-white/5 hover:bg-white/10 p-3">
+                    <a id="prospectCellLink" href="tel:(11)99999-9999" aria-label="Ligar para Jennifer Wilson" class="rounded-xl bg-white/5 hover:bg-white/10 p-3">
                         <span class="text-[11px] uppercase tracking-wide text-white/60">Celular</span>
-                        <p id="prospectCell" class="text-sm text-white"></p>
+                        <p id="prospectCell" class="text-sm text-white">(11) 99999-9999</p>
                     </a>
                     <div class="rounded-xl bg-white/5 p-3">
                         <span class="text-[11px] uppercase tracking-wide text-white/60">Empresa</span>
-                        <p id="prospectCompanyMeta" class="text-sm text-white"></p>
+                        <p id="prospectCompanyMeta" class="text-sm text-white">Acme Corporation</p>
                     </div>
                     <div class="rounded-xl bg-white/5 p-3">
                         <span class="text-[11px] uppercase tracking-wide text-white/60">Status</span>
                         <div class="text-sm text-white">
-                            <span id="prospectStatus" class="inline-flex mt-1 px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-500/20 text-emerald-200"></span>
+                            <span id="prospectStatus" class="inline-flex mt-1 px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-500/20 text-emerald-200">Novo</span>
                         </div>
                     </div>
                 </div>

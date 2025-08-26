@@ -2,15 +2,11 @@
   <div class="w-full max-w-6xl max-h-[90vh] glass-surface backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade slide-in overflow-hidden flex flex-col text-white">
     <header class="px-8 py-5 border-b border-white/10 flex-shrink-0">
         <!-- Breadcrumb -->
-        <nav class="text-sm text-gray-400 mb-3">
-            <span>Leads</span>
-            <span class="mx-2">/</span>
-            <span class="text-white">Prospectos</span>
-        </nav>
+        <nav class="text-sm text-gray-400 mb-3 text-center">Mais Detalhes Prospecção</nav>
 
         <!-- Header Content -->
         <div class="flex items-center justify-between">
-            <div>
+            <div class="text-left">
                 <h1 id="modalProspectNameHeader" class="text-2xl font-bold text-white"></h1>
                 <p id="modalProspectCompanyHeader" class="text-gray-300"></p>
             </div>
@@ -58,7 +54,7 @@
                 <div class="hidden lg:block h-16 w-px bg-white/10 justify-self-center"></div>
 
                 <!-- Metadados -->
-                <div class="grid grid-cols-2 gap-4">
+                <div class="grid grid-cols-2 md:grid-cols-3 gap-4">
                     <div class="rounded-xl bg-white/5 p-3">
                         <span class="text-[11px] uppercase tracking-wide text-white/60">Responsável</span>
                         <p id="modalProspectOwner" class="text-sm text-white"></p>
@@ -71,6 +67,14 @@
                         <span class="text-[11px] uppercase tracking-wide text-white/60">Telefone</span>
                         <p id="modalProspectPhone" class="text-sm text-white"></p>
                     </a>
+                    <a id="modalProspectCellLink" href="#" aria-label="" class="rounded-xl bg-white/5 hover:bg-white/10 p-3">
+                        <span class="text-[11px] uppercase tracking-wide text-white/60">Celular</span>
+                        <p id="modalProspectCell" class="text-sm text-white"></p>
+                    </a>
+                    <div class="rounded-xl bg-white/5 p-3">
+                        <span class="text-[11px] uppercase tracking-wide text-white/60">Empresa</span>
+                        <p id="modalProspectCompanyMeta" class="text-sm text-white"></p>
+                    </div>
                     <div class="rounded-xl bg-white/5 p-3">
                         <span class="text-[11px] uppercase tracking-wide text-white/60">Status</span>
                         <div class="text-sm text-white">
