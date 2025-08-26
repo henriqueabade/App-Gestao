@@ -74,4 +74,11 @@
       }
     });
   }
+
+  overlay.querySelectorAll('a[data-external]').forEach(a => {
+    a.addEventListener('click', e => {
+      e.preventDefault();
+      window.electronAPI.openExternal(a.href);
+    });
+  });
 })();
