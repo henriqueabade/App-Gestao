@@ -65,32 +65,36 @@
   const placeholder = 'Não informado';
   const val = v => (v && String(v).trim()) ? v : placeholder;
   const get = id => document.getElementById(id);
+  const setText = (el, text) => {
+    const isPlaceholder = text === placeholder;
+    el.textContent = text;
+    el.title = text;
+    el.classList.toggle('text-white/50', isPlaceholder);
+    el.classList.toggle('text-white', !isPlaceholder);
+  };
   const initialsEl = get('modalProspectInitials');
   if (initialsEl) initialsEl.textContent = data.initials;
   const nEl = get('modalProspectName');
   if (nEl) {
     const name = val(data.name);
-    nEl.textContent = name;
-    nEl.title = name;
+    setText(nEl, name);
   }
   const cEl = get('modalProspectCompany');
   if (cEl) {
     const company = val(data.company);
-    cEl.textContent = company;
-    cEl.title = company;
+    setText(cEl, company);
   }
   const headerNameEl = get('modalProspectNameHeader');
   if (headerNameEl) headerNameEl.textContent = val(data.name);
   const headerCompanyEl = get('modalProspectCompanyHeader');
   if (headerCompanyEl) headerCompanyEl.textContent = val(data.company);
   const ownerEl = get('modalProspectOwner');
-  if (ownerEl) ownerEl.textContent = val(data.ownerName);
+  if (ownerEl) setText(ownerEl, val(data.ownerName));
   const emailLink = get('modalProspectEmailLink');
   const emailEl = get('modalProspectEmail');
   if (emailLink && emailEl) {
     const email = val(data.email);
-    emailEl.textContent = email;
-    emailEl.title = email;
+    setText(emailEl, email);
     if(email !== placeholder){
       emailLink.href = `mailto:${data.email}`;
       emailLink.setAttribute('aria-label', `Enviar e-mail para ${data.name}`);
@@ -103,7 +107,7 @@
   const phoneEl = get('modalProspectPhone');
   if (phoneLink && phoneEl) {
     const phone = val(data.phone);
-    phoneEl.textContent = phone;
+    setText(phoneEl, phone);
     if(phone !== placeholder){
       phoneLink.href = `tel:${data.phone}`;
       phoneLink.setAttribute('aria-label', `Ligar para ${data.name}`);
@@ -116,7 +120,7 @@
   const cellEl = get('modalProspectCell');
   if (cellLink && cellEl) {
     const cell = val(data.cell);
-    cellEl.textContent = cell;
+    setText(cellEl, cell);
     if(cell !== placeholder){
       cellLink.href = `tel:${data.cell}`;
       cellLink.setAttribute('aria-label', `Ligar para ${data.name}`);
@@ -126,9 +130,15 @@
     }
   }
   const companyMetaEl = get('modalProspectCompanyMeta');
-  if (companyMetaEl) companyMetaEl.textContent = val(data.company);
+  if (companyMetaEl) setText(companyMetaEl, val(data.company));
   const statusEl = get('modalProspectStatus');
-  if (statusEl) statusEl.textContent = val(data.status);
+  if (statusEl) {
+    const status = val(data.status);
+    const isPlaceholder = status === placeholder;
+    statusEl.textContent = status;
+    statusEl.title = status;
+    statusEl.className = 'mt-1 inline-flex max-w-max px-2.5 py-1 rounded-full text-xs font-medium truncate ' + (isPlaceholder ? 'bg-white/5 text-white/50' : 'bg-emerald-500/20 text-emerald-200');
+  }
 
   const notifyBtn = document.getElementById('toggleNotify');
   if(notifyBtn){
