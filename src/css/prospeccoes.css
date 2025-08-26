@@ -78,6 +78,27 @@ body {
     transform: scale(1.05);
 }
 
+.btn-success {
+    background: var(--color-green);
+    color: #000;
+    transition: all 150ms ease;
+}
+
+.btn-success:hover {
+    background: rgba(162, 255, 166, 0.8);
+    transform: scale(1.05);
+}
+
+.btn-dark-blue {
+    background: #1e3a8a;
+    transition: all 150ms ease;
+}
+
+.btn-dark-blue:hover {
+    background: #1e40af;
+    transform: scale(1.05);
+}
+
 .badge-success {
     background: rgba(162, 255, 166, 0.2);
     color: var(--color-green);
