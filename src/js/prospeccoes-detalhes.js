@@ -109,7 +109,7 @@ function initDetalhesProspeccao() {
     cellLink.setAttribute('role', 'button');
     cellLink.setAttribute('aria-label', `Copiar celular de ${prospect.name}`);
     cellEl.textContent = prospect.mobile;
-    cellEl.title = prospect.mobile;
+   cellEl.title = prospect.mobile;
     cellLink.addEventListener('click', e => {
       e.preventDefault();
       navigator.clipboard
