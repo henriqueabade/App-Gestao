@@ -64,6 +64,14 @@ function initProspeccoes() {
             Modal.open('modals/prospeccoes/detalhes.html', '../js/modals/prospeccao-detalhes.js', 'detalhesProspeccao');
         });
     });
+
+    document.querySelectorAll('.fa-trash').forEach(icon => {
+        icon.addEventListener('click', () => {
+            if (confirm('Deletar este prospect?')) {
+                console.log('Prospect deletado');
+            }
+        });
+    });
 }
 
 if (document.readyState === 'loading') {
