@@ -55,11 +55,15 @@ function initDetalhesProspeccao() {
   const get = id => document.getElementById(id);
   const initialsEl = get('prospectInitials');
   if (initialsEl) initialsEl.textContent = prospect.initials;
+  const headerNameEl = get('prospectNameHeader');
+  if (headerNameEl) headerNameEl.textContent = prospect.name;
   const nameEl = get('prospectName');
   if (nameEl) {
     nameEl.textContent = prospect.name;
     nameEl.title = prospect.name;
   }
+  const headerCompanyEl = get('prospectCompanyHeader');
+  if (headerCompanyEl) headerCompanyEl.textContent = prospect.company;
   const companyEl = get('prospectCompany');
   if (companyEl) {
     companyEl.textContent = prospect.company;
