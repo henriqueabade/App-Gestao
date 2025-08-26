@@ -16,6 +16,19 @@ async function carregarClientes() {
     }
 }
 
+function updateEmptyStateClientes(hasData) {
+    const tableWrapper = document.getElementById('clientesTableWrapper');
+    const emptyState = document.getElementById('clientesEmptyState');
+    if (!tableWrapper || !emptyState) return;
+    if (hasData) {
+        tableWrapper.classList.remove('hidden');
+        emptyState.classList.add('hidden');
+    } else {
+        tableWrapper.classList.add('hidden');
+        emptyState.classList.remove('hidden');
+    }
+}
+
 function popularFiltros(clientes) {
     const donoSel = document.getElementById('filtroDono');
     const statusSel = document.getElementById('filtroStatus');
@@ -113,6 +126,7 @@ function renderClientes(clientes) {
         });
         tbody.appendChild(tr);
     });
+    updateEmptyStateClientes(clientes.length > 0);
 }
 
 function openModalWithSpinner(htmlPath, scriptPath, overlayId) {
@@ -198,6 +212,10 @@ function initClientes() {
 
     document.getElementById('btnFiltrar')?.addEventListener('click', aplicarFiltros);
     document.getElementById('btnLimpar')?.addEventListener('click', limparFiltros);
+
+    document.getElementById('clientesEmptyNew')?.addEventListener('click', () => {
+        document.getElementById('btnNovoCliente')?.click();
+    });
 
     carregarClientes();
 }
