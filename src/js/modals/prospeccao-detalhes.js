@@ -101,7 +101,7 @@
         e.preventDefault();
         navigator.clipboard
           .writeText(data.email)
-          .then(() => window.showToast?.('E-mail copiado!', 'success'));
+          .then(() => showToast('E-mail copiado!', 'success'));
       });
     }
   }
@@ -116,7 +116,7 @@
         e.preventDefault();
         navigator.clipboard
           .writeText(data.phone)
-          .then(() => window.showToast?.('Telefone copiado!', 'success'));
+          .then(() => showToast('Telefone copiado!', 'success'));
       });
     }
   }
@@ -131,7 +131,7 @@
         e.preventDefault();
         navigator.clipboard
           .writeText(data.cell)
-          .then(() => window.showToast?.('Celular copiado!', 'success'));
+          .then(() => showToast('Celular copiado!', 'success'));
       });
     }
   }
