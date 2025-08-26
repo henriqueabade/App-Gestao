@@ -4,8 +4,8 @@
   overlay.classList.remove('hidden');
   const close = () => Modal.close('detalhesProspeccao');
   overlay.addEventListener('click', e => { if(e.target === overlay) close(); });
-  const btnClose = document.getElementById('fecharDetalhesProspeccao');
-  if(btnClose) btnClose.addEventListener('click', close);
+  const btnBack = document.getElementById('voltarDetalhesProspeccao');
+  if(btnBack) btnBack.addEventListener('click', close);
   document.addEventListener('keydown', function esc(e){ if(e.key==='Escape'){ close(); document.removeEventListener('keydown', esc); }});
 
   function setTab(id){

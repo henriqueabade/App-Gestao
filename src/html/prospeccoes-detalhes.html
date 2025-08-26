@@ -13,37 +13,37 @@
 <body class="text-white">
   <div class="modulo-container">
     <!-- Sticky Header -->
-    <header class="sticky top-0 z-20 bg-surface/80 backdrop-blur-xl border-b border-white/10">
-        <div class="px-6 py-4">
-            <h2 class="text-lg font-semibold text-white text-center mb-3">DETALHES PROSPECÇÃO</h2>
-            <div class="flex items-center justify-between">
-                <div class="flex-1 text-center">
-                    <h1 id="prospectNameHeader" class="text-2xl font-bold text-white">Jennifer Wilson</h1>
-                    <p id="prospectCompanyHeader" class="text-gray-300">Acme Corporation</p>
-                </div>
-                <div class="flex items-center gap-3">
-                    <button class="btn-primary px-4 py-2 rounded-lg text-white font-medium">
-                        Editar
-                    </button>
-                    <button id="prospectDelete" class="btn-danger px-4 py-2 rounded-lg text-white font-medium">
-                        Deletar
-                    </button>
-                    <button class="btn-dark-blue px-4 py-2 rounded-lg text-white font-medium">
-                        Alterar Responsável
-                    </button>
-                    <button id="toggleNotify" aria-pressed="false" class="btn-ghost px-4 py-2 rounded-lg text-white font-medium">
-                        Notificações
-                    </button>
-                    <button class="btn-success px-6 py-2 rounded-lg font-medium text-black">
-                        Converter
-                    </button>
-                    <button id="fecharDetalhesProspeccao" class="btn-danger p-2 rounded-lg text-white">
-                        ✕
-                    </button>
-                </div>
-            </div>
-        </div>
-    </header>
+      <header class="sticky top-0 z-20 bg-surface/80 backdrop-blur-xl border-b border-white/10">
+          <div class="px-6 py-4">
+              <div class="flex items-center mb-3">
+                  <button id="voltarDetalhesProspeccao" type="button" class="btn-neutral px-4 py-2 rounded-lg text-white font-medium flex items-center gap-2">← Voltar</button>
+                  <h2 class="flex-1 text-lg font-semibold text-center text-white">DETALHES PROSPECÇÃO</h2>
+              </div>
+              <div class="flex items-center justify-between">
+                  <div class="flex-1 text-center">
+                      <h1 id="prospectNameHeader" class="text-2xl font-bold text-white">Jennifer Wilson</h1>
+                      <p id="prospectCompanyHeader" class="text-gray-300">Acme Corporation</p>
+                  </div>
+                  <div class="flex items-center gap-3">
+                      <button class="btn-primary px-4 py-2 rounded-lg text-white font-medium">
+                          Editar
+                      </button>
+                      <button id="prospectDelete" class="btn-danger px-4 py-2 rounded-lg text-white font-medium">
+                          Deletar
+                      </button>
+                      <button class="btn-dark-blue px-4 py-2 rounded-lg text-white font-medium">
+                          Alterar Responsável
+                      </button>
+                      <button id="toggleNotify" aria-pressed="false" class="btn-ghost px-4 py-2 rounded-lg text-white font-medium">
+                          Notificações
+                      </button>
+                      <button class="btn-success px-6 py-2 rounded-lg font-medium text-black">
+                          Converter
+                      </button>
+                  </div>
+              </div>
+          </div>
+      </header>
 
     <!-- Summary Card -->
     <div class="px-6 py-6">
@@ -98,7 +98,7 @@
     </div>
 
     <!-- Sticky Tabs -->
-    <nav class="sticky top-[120px] z-10 bg-surface/80 backdrop-blur-xl border-b border-white/10" role="tablist">
+      <nav class="sticky top-[120px] z-20 bg-surface/80 backdrop-blur-xl border-b border-white/10" role="tablist">
         <div class="px-6">
             <div class="flex gap-8 overflow-x-auto">
                 <button role="tab" data-tab="overview" aria-selected="true"
