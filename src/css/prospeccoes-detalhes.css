@@ -11,3 +11,18 @@
 .bg-surface\/80 { background: rgba(255, 255, 255, 0.08); }
 .bg-surface\/60 { background: rgba(255, 255, 255, 0.06); }
 .bg-surface\/40 { background: rgba(255, 255, 255, 0.04); }
+
+/* Botões */
+.btn-neutral {
+    background: rgba(255,255,255,0.1);
+    transition: all 150ms ease;
+}
+
+.btn-neutral:hover {
+    background: rgba(255,255,255,0.15);
+    transform: scale(1.05);
+}
+
+.btn-neutral:active {
+    transform: scale(0.95);
+}
