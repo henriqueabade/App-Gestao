@@ -75,24 +75,45 @@ function initDetalhesProspeccao() {
   const emailLink = get('prospectEmailLink');
   const emailEl = get('prospectEmail');
   if (emailLink && emailEl) {
-    emailLink.href = `mailto:${prospect.email}`;
-    emailLink.setAttribute('aria-label', `Enviar e-mail para ${prospect.name}`);
+    emailLink.href = '#';
+    emailLink.setAttribute('role', 'button');
+    emailLink.setAttribute('aria-label', `Copiar e-mail de ${prospect.name}`);
     emailEl.textContent = prospect.email;
     emailEl.title = prospect.email;
+    emailLink.addEventListener('click', e => {
+      e.preventDefault();
+      navigator.clipboard
+        .writeText(prospect.email)
+        .then(() => window.showToast?.('E-mail copiado!', 'success'));
+    });
   }
   const phoneLink = get('prospectPhoneLink');
   const phoneEl = get('prospectPhone');
   if (phoneLink && phoneEl) {
-    phoneLink.href = `tel:${prospect.phone}`;
-    phoneLink.setAttribute('aria-label', `Ligar para ${prospect.name}`);
+    phoneLink.href = '#';
+    phoneLink.setAttribute('role', 'button');
+    phoneLink.setAttribute('aria-label', `Copiar telefone de ${prospect.name}`);
     phoneEl.textContent = prospect.phone;
+    phoneLink.addEventListener('click', e => {
+      e.preventDefault();
+      navigator.clipboard
+        .writeText(prospect.phone)
+        .then(() => window.showToast?.('Telefone copiado!', 'success'));
+    });
   }
   const cellLink = get('prospectCellLink');
   const cellEl = get('prospectCell');
   if (cellLink && cellEl) {
-    cellLink.href = `tel:${prospect.mobile}`;
-    cellLink.setAttribute('aria-label', `Ligar para ${prospect.name} (celular)`);
+    cellLink.href = '#';
+    cellLink.setAttribute('role', 'button');
+    cellLink.setAttribute('aria-label', `Copiar celular de ${prospect.name}`);
     cellEl.textContent = prospect.mobile;
+    cellLink.addEventListener('click', e => {
+      e.preventDefault();
+      navigator.clipboard
+        .writeText(prospect.mobile)
+        .then(() => window.showToast?.('Celular copiado!', 'success'));
+    });
   }
   const companyMetaEl = get('prospectCompanyMeta');
   if (companyMetaEl) companyMetaEl.textContent = prospect.company;
