@@ -109,7 +109,7 @@ function renderClientes(clientes) {
         const editBtn = tr.querySelector('.fa-edit');
         if (editBtn) editBtn.addEventListener('click', (e) => {
             e.stopPropagation();
-            console.log('Editar cliente');
+            abrirEditarCliente(c);
         });
         tbody.appendChild(tr);
     });
@@ -145,6 +145,11 @@ function openModalWithSpinner(htmlPath, scriptPath, overlayId) {
 function abrirDetalhesCliente(cliente) {
     window.clienteDetalhes = cliente;
     openModalWithSpinner('modals/clientes/detalhes.html', '../js/modals/cliente-detalhes.js', 'detalhesCliente');
+}
+
+function abrirEditarCliente(cliente) {
+    window.clienteEditar = cliente;
+    openModalWithSpinner('modals/clientes/editar.html', '../js/modals/cliente-editar.js', 'editarCliente');
 }
 
 function renderTotais(clientes) {
