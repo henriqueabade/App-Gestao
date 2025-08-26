@@ -7,35 +7,19 @@
   if(btnBack) btnBack.addEventListener('click', close);
   document.addEventListener('keydown', function esc(e){ if(e.key==='Escape'){ close(); document.removeEventListener('keydown', esc); }});
 
-  function showTabLoader(){
-    const container = document.getElementById('prospectTabContent');
-    if(!container) return () => {};
-    const loader = document.createElement('div');
-    loader.className = 'absolute inset-0 flex items-center justify-center bg-black/50';
-    loader.innerHTML = '<div class="w-12 h-12 border-4 border-[#b6a03e] border-t-transparent rounded-full animate-spin"></div>';
-    container.appendChild(loader);
-    return () => loader.remove();
-  }
-
-  function setTab(id, skipLoader){
-    let hideLoader = () => {};
-    if(!skipLoader) hideLoader = showTabLoader();
-    overlay.querySelectorAll('[data-panel]').forEach(p => p.classList.add('hidden'));
-    setTimeout(() => {
-      overlay.querySelectorAll('[data-panel]').forEach(p => p.classList.toggle('hidden', p.dataset.panel !== id));
-      overlay.querySelectorAll('[role="tab"]').forEach(t => {
-        const active = t.dataset.tab === id;
-        t.setAttribute('aria-selected', active);
-        if(active){
-          t.classList.add('tab-active');
-          t.classList.remove('text-gray-400','border-transparent');
-        } else {
-          t.classList.remove('tab-active');
-          t.classList.add('text-gray-400','border-transparent');
-        }
-      });
-      hideLoader();
-    }, skipLoader ? 0 : 300);
+  function setTab(id){
+    overlay.querySelectorAll('[data-panel]').forEach(p => p.classList.toggle('hidden', p.dataset.panel !== id));
+    overlay.querySelectorAll('[role="tab"]').forEach(t => {
+      const active = t.dataset.tab === id;
+      t.setAttribute('aria-selected', active);
+      if(active){
+        t.classList.add('tab-active');
+        t.classList.remove('text-gray-400','border-transparent');
+      } else {
+        t.classList.remove('tab-active');
+        t.classList.add('text-gray-400','border-transparent');
+      }
+    });
   }
 
   overlay.querySelectorAll('[role="tab"]').forEach(t => {
@@ -64,7 +48,7 @@
     }
   });
 
-  setTab('overview', true);
+  setTab('overview');
 
   // Preenche os dados do prospecto no modal
   const data = window.prospectDetails || {
