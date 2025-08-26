@@ -65,9 +65,11 @@
   const placeholder = 'Não informado';
   const val = v => (v && String(v).trim()) ? v : placeholder;
   const get = id => document.getElementById(id);
-  const setText = (el, text) => {
+  const truncate = (str, max) => str.length > max ? str.slice(0, max - 1) + '…' : str;
+  const setText = (el, text, max) => {
     const isPlaceholder = text === placeholder;
-    el.textContent = text;
+    const display = (!isPlaceholder && max) ? truncate(text, max) : text;
+    el.textContent = display;
     el.title = text;
     el.classList.toggle('text-white/50', isPlaceholder);
     el.classList.toggle('text-white', !isPlaceholder);
@@ -82,12 +84,12 @@
   const cEl = get('modalProspectCompany');
   if (cEl) {
     const company = val(data.company);
-    setText(cEl, company);
+    setText(cEl, company, 40);
   }
   const headerNameEl = get('modalProspectNameHeader');
   if (headerNameEl) headerNameEl.textContent = val(data.name);
   const headerCompanyEl = get('modalProspectCompanyHeader');
-  if (headerCompanyEl) headerCompanyEl.textContent = val(data.company);
+  if (headerCompanyEl) setText(headerCompanyEl, val(data.company), 40);
   const ownerEl = get('modalProspectOwner');
   if (ownerEl) setText(ownerEl, val(data.ownerName));
   const emailLink = get('modalProspectEmailLink');
@@ -109,7 +111,7 @@
   const phoneEl = get('modalProspectPhone');
   if (phoneLink && phoneEl) {
     const phone = val(data.phone);
-    setText(phoneEl, phone);
+    setText(phoneEl, phone, 20);
     phoneLink.setAttribute('aria-label', phone !== placeholder ? `Copiar telefone de ${data.name}` : 'Telefone não informado');
     if (phone !== placeholder) {
       phoneLink.addEventListener('click', e => {
@@ -124,7 +126,7 @@
   const cellEl = get('modalProspectCell');
   if (cellLink && cellEl) {
     const cell = val(data.cell);
-    setText(cellEl, cell);
+    setText(cellEl, cell, 20);
     cellLink.setAttribute('aria-label', cell !== placeholder ? `Copiar celular de ${data.name}` : 'Celular não informado');
     if (cell !== placeholder) {
       cellLink.addEventListener('click', e => {
@@ -136,7 +138,7 @@
     }
   }
   const companyMetaEl = get('modalProspectCompanyMeta');
-  if (companyMetaEl) setText(companyMetaEl, val(data.company));
+  if (companyMetaEl) setText(companyMetaEl, val(data.company), 40);
   const statusEl = get('modalProspectStatus');
   if (statusEl) {
     const status = val(data.status);

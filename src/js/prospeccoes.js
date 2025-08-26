@@ -45,14 +45,19 @@ function initProspeccoes() {
                 const email = emailCell?.textContent.trim() || '';
                 const status = statusCell?.textContent.trim() || '';
                 const ownerName = ownerCell?.textContent.trim() || '';
+                const limit = (str, max) => str && str.length > max ? str.slice(0, max) : str;
+                const company = limit(row.dataset.company?.trim() || '', 60);
+                const phone = limit(row.dataset.phone?.trim() || '', 20);
+                const cell = limit(row.dataset.cell?.trim() || '', 20);
                 const initials = name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
                 window.prospectDetails = {
                     initials,
                     name,
-                    company: '',
+                    company,
                     ownerName,
                     email,
-                    phone: '',
+                    phone,
+                    cell,
                     status
                 };
             }
