@@ -100,7 +100,7 @@
     if(['INPUT','SELECT','TEXTAREA'].includes(e.target.tagName)){
       e.preventDefault();
       e.target.blur();
-      showToast('Não é possível editar aqui. Use o botão Editar.');
+      showToast('Não é possível editar aqui. Use o botão Editar.', 'error');
     }
   };
   overlay.addEventListener('mousedown', warn, true);
@@ -182,14 +182,14 @@
     const entToggle = document.getElementById('entregaIgual');
     const entFields = document.getElementById('entregaFields');
     if(cobToggle && cobFields){
-      const update = () => cobFields.classList.toggle('hidden', cobToggle.checked);
-      cobToggle.addEventListener('change', update);
-      if(same(cli.endereco_cobranca, cli.endereco_registro)){ cobToggle.checked = true; update(); }
+      if(same(cli.endereco_cobranca, cli.endereco_registro)) cobToggle.checked = true;
+      cobFields.classList.toggle('hidden', cobToggle.checked);
+      cobToggle.disabled = true;
     }
     if(entToggle && entFields){
-      const update = () => entFields.classList.toggle('hidden', entToggle.checked);
-      entToggle.addEventListener('change', update);
-      if(same(cli.endereco_entrega, cli.endereco_registro)){ entToggle.checked = true; update(); }
+      if(same(cli.endereco_entrega, cli.endereco_registro)) entToggle.checked = true;
+      entFields.classList.toggle('hidden', entToggle.checked);
+      entToggle.disabled = true;
     }
   }
 
