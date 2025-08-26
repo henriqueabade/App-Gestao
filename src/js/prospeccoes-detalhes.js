@@ -42,6 +42,46 @@ function initDetalhesProspeccao() {
 
   setTab('overview');
 
+  // Preenche os dados do prospecto no cabeçalho
+  const prospect = window.prospectDetails || {
+    initials: 'JW',
+    name: 'Jennifer Wilson',
+    company: 'Acme Corporation',
+    ownerName: 'João Silva',
+    email: 'jennifer@acme.com',
+    phone: '(11) 99999-9999',
+    status: 'Novo'
+  };
+  const get = id => document.getElementById(id);
+  get('prospectInitials')?.textContent = prospect.initials;
+  const nameEl = get('prospectName');
+  if (nameEl) {
+    nameEl.textContent = prospect.name;
+    nameEl.title = prospect.name;
+  }
+  const companyEl = get('prospectCompany');
+  if (companyEl) {
+    companyEl.textContent = prospect.company;
+    companyEl.title = prospect.company;
+  }
+  get('prospectOwner')?.textContent = prospect.ownerName;
+  const emailLink = get('prospectEmailLink');
+  const emailEl = get('prospectEmail');
+  if (emailLink && emailEl) {
+    emailLink.href = `mailto:${prospect.email}`;
+    emailLink.setAttribute('aria-label', `Enviar e-mail para ${prospect.name}`);
+    emailEl.textContent = prospect.email;
+    emailEl.title = prospect.email;
+  }
+  const phoneLink = get('prospectPhoneLink');
+  const phoneEl = get('prospectPhone');
+  if (phoneLink && phoneEl) {
+    phoneLink.href = `tel:${prospect.phone}`;
+    phoneLink.setAttribute('aria-label', `Ligar para ${prospect.name}`);
+    phoneEl.textContent = prospect.phone;
+  }
+  get('prospectStatus')?.textContent = prospect.status;
+
   const notifyBtn = document.getElementById('toggleNotify');
   if (notifyBtn) {
     notifyBtn.addEventListener('click', function () {
