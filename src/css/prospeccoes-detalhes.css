@@ -1,1 +1,13 @@
 /* Estilos para detalhes de prospecções */
+
+.text-primary { color: var(--color-primary); }
+.text-violet { color: var(--color-violet); }
+
+.border-primary\/20 { border-color: rgba(182, 160, 62, 0.2); }
+.border-violet\/20 { border-color: rgba(163, 148, 167, 0.2); }
+
+.bg-primary\/20 { background: rgba(182, 160, 62, 0.2); }
+
+.bg-surface\/80 { background: rgba(255, 255, 255, 0.08); }
+.bg-surface\/60 { background: rgba(255, 255, 255, 0.06); }
+.bg-surface\/40 { background: rgba(255, 255, 255, 0.04); }
