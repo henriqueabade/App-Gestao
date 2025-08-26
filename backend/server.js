@@ -6,7 +6,6 @@ const express               = require('express');
 const cors                  = require('cors');
 const path                  = require('path');
 const clientesRouter        = require('./clientesController');
-const contatosRouter        = require('./contatosController');
 const passwordResetRouter   = require('./passwordResetRoutes');
 const usuariosRouter        = require('./usuariosController');
 const transportadorasRouter = require('./transportadorasController');
@@ -18,7 +17,6 @@ app.use(cors());
 app.use(express.json());
 
 app.use('/api/clientes', clientesRouter);
-app.use('/api/contatos', contatosRouter);
 app.use('/api/usuarios', usuariosRouter);
 app.use('/api/transportadoras', transportadorasRouter);
 app.use('/api/orcamentos', orcamentosRouter);
