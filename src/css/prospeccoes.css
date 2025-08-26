@@ -98,10 +98,6 @@ body {
     background: rgba(255,255,255,0.2);
 }
 
-.btn-neutral:active {
-    transform: scale(0.95);
-}
-
 .btn-success {
     background: var(--color-green);
     color: #000;
