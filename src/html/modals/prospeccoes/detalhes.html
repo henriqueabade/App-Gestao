@@ -1,34 +1,34 @@
 <div id="detalhesProspeccaoOverlay" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-  <div class="w-full max-w-6xl max-h-[90vh] glass-surface backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade slide-in overflow-hidden flex flex-col text-white">
-    <header class="px-8 py-6 border-b border-white/10 flex flex-col gap-4 flex-shrink-0">
-        <h2 class="text-lg font-semibold text-center text-white">DETALHES PROSPECÇÃO</h2>
+    <div class="w-full max-w-6xl max-h-[90vh] glass-surface backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade slide-in overflow-hidden flex flex-col text-white">
+      <header class="px-8 py-6 border-b border-white/10 flex flex-col gap-4 flex-shrink-0">
         <div class="flex items-center">
-            <div class="flex-1 text-center">
-                <h1 id="modalProspectNameHeader" class="text-2xl font-bold text-white">Jennifer Wilson</h1>
-                <p id="modalProspectCompanyHeader" class="text-gray-300">Acme Corporation</p>
-            </div>
-            <div class="flex items-center gap-3 justify-end">
-                <button class="btn-primary px-4 py-2 rounded-lg text-white font-medium">
-                    Editar
-                </button>
-                <button id="prospectDelete" class="btn-danger px-4 py-2 rounded-lg text-white font-medium">
-                    Deletar
-                </button>
-                <button class="btn-dark-blue px-4 py-2 rounded-lg text-white font-medium">
-                    Alterar Responsável
-                </button>
-                <button id="toggleNotify" aria-pressed="false" class="btn-ghost px-4 py-2 rounded-lg text-white font-medium">
-                    Notificações
-                </button>
-                <button class="btn-success px-6 py-2 rounded-lg font-medium text-black">
-                    Converter
-                </button>
-                <button id="fecharDetalhesProspeccao" class="btn-danger p-2 rounded-lg text-white">
-                    ✕
-                </button>
-            </div>
+          <button id="voltarDetalhesProspeccao" type="button" class="btn-neutral px-4 py-2 rounded-lg text-white font-medium flex items-center gap-2">← Voltar</button>
+          <h2 class="flex-1 text-lg font-semibold text-center text-white">DETALHES PROSPECÇÃO</h2>
         </div>
-    </header>
+        <div class="flex items-center">
+          <div class="flex-1 text-center">
+            <h1 id="modalProspectNameHeader" class="text-2xl font-bold text-white">Jennifer Wilson</h1>
+            <p id="modalProspectCompanyHeader" class="text-gray-300">Acme Corporation</p>
+          </div>
+          <div class="flex items-center gap-3 justify-end">
+            <button class="btn-primary px-4 py-2 rounded-lg text-white font-medium">
+              Editar
+            </button>
+            <button id="prospectDelete" class="btn-danger px-4 py-2 rounded-lg text-white font-medium">
+              Deletar
+            </button>
+            <button class="btn-dark-blue px-4 py-2 rounded-lg text-white font-medium">
+              Alterar Responsável
+            </button>
+            <button id="toggleNotify" aria-pressed="false" class="btn-ghost px-4 py-2 rounded-lg text-white font-medium">
+              Notificações
+            </button>
+            <button class="btn-success px-6 py-2 rounded-lg font-medium text-black">
+              Converter
+            </button>
+          </div>
+        </div>
+      </header>
 
     <div class="flex-1 overflow-y-auto modal-scroll">
       <!-- Summary Card -->
@@ -83,7 +83,7 @@
         </section>
       </div>
 
-      <nav class="sticky top-0 z-10 bg-surface/80 backdrop-blur-xl border-b border-white/10" role="tablist">
+        <nav class="sticky top-0 z-20 bg-surface/80 backdrop-blur-xl border-b border-white/10" role="tablist">
         <div class="px-8">
             <div class="flex gap-8 overflow-x-auto">
                 <button role="tab" data-tab="overview" aria-selected="true"

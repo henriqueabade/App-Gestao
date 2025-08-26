@@ -135,7 +135,7 @@ function initDetalhesProspeccao() {
     });
   });
 
-  document.getElementById('fecharDetalhesProspeccao')?.addEventListener('click', () => loadPage('prospeccoes'));
+  document.getElementById('voltarDetalhesProspeccao')?.addEventListener('click', () => loadPage('prospeccoes'));
 }
 
 if (document.readyState === 'loading') {
