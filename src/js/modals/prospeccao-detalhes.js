@@ -75,6 +75,14 @@
     });
   }
 
+  const novaTarefaBtn = document.getElementById('btnNovaTarefa');
+  if(novaTarefaBtn){
+    novaTarefaBtn.addEventListener('click', () => {
+      close();
+      loadPage('tarefas');
+    });
+  }
+
   overlay.querySelectorAll('a[data-external]').forEach(a => {
     a.addEventListener('click', e => {
       e.preventDefault();

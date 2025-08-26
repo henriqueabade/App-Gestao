@@ -68,6 +68,16 @@ body {
     transform: scale(1.05);
 }
 
+.btn-blue {
+    background: var(--color-blue);
+    transition: all 150ms ease;
+}
+
+.btn-blue:hover {
+    background: rgba(138, 167, 243, 0.9);
+    transform: scale(1.05);
+}
+
 .btn-danger {
     background: var(--color-bordeaux);
     transition: all 150ms ease;

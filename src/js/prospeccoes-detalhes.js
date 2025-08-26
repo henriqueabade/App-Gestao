@@ -66,6 +66,11 @@ function initDetalhesProspeccao() {
     });
   }
 
+  const novaTarefaBtn = document.getElementById('btnNovaTarefa');
+  if (novaTarefaBtn) {
+    novaTarefaBtn.addEventListener('click', () => loadPage('tarefas'));
+  }
+
   document.querySelectorAll('a[data-external]').forEach(a => {
     a.addEventListener('click', e => {
       e.preventDefault();
