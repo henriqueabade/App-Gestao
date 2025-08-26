@@ -96,6 +96,25 @@
 
   activateTab(tabs[0], { setFocus: false });
 
+  const warn = e => {
+    if(['INPUT','SELECT','TEXTAREA'].includes(e.target.tagName)){
+      e.preventDefault();
+      e.target.blur();
+      showToast('Não é possível editar aqui. Use o botão Editar.');
+    }
+  };
+  overlay.addEventListener('mousedown', warn, true);
+  overlay.addEventListener('focusin', warn);
+  overlay.querySelectorAll('input, textarea').forEach(el => el.readOnly = true);
+
+  const editar = document.getElementById('editarDetalhesCliente');
+  if(editar){
+    editar.addEventListener('click', () => {
+      close();
+      if(cliente) abrirEditarCliente(cliente);
+    });
+  }
+
   function preencherDadosEmpresa(cli){
     const map = {
       empresaRazaoSocial: 'razao_social',
