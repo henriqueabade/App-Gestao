@@ -88,6 +88,22 @@ body {
     transform: scale(1.05);
 }
 
+.btn-neutral {
+    background: rgba(255,255,255,0.1);
+    border: 1px solid rgba(255,255,255,0.2);
+    cursor: pointer;
+    transition: all 150ms ease;
+}
+
+.btn-neutral:hover {
+    background: rgba(255,255,255,0.2);
+    transform: scale(1.05);
+}
+
+.btn-neutral:active {
+    transform: scale(0.95);
+}
+
 .btn-success {
     background: var(--color-green);
     color: #000;
