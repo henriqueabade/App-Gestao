@@ -58,7 +58,8 @@
     company: 'Acme Corporation',
     ownerName: 'João Silva',
     email: 'jennifer@acme.com',
-    phone: '(11) 99999-9999',
+    phone: '(11) 3333-4444',
+    cell: '(11) 99999-9999',
     status: 'Novo'
   };
   const get = id => document.getElementById(id);
@@ -74,6 +75,10 @@
     cEl.textContent = data.company;
     cEl.title = data.company;
   }
+  const headerNameEl = get('modalProspectNameHeader');
+  if (headerNameEl) headerNameEl.textContent = data.name;
+  const headerCompanyEl = get('modalProspectCompanyHeader');
+  if (headerCompanyEl) headerCompanyEl.textContent = data.company;
   const ownerEl = get('modalProspectOwner');
   if (ownerEl) ownerEl.textContent = data.ownerName;
   const emailLink = get('modalProspectEmailLink');
@@ -91,6 +96,15 @@
     phoneLink.setAttribute('aria-label', `Ligar para ${data.name}`);
     phoneEl.textContent = data.phone;
   }
+  const cellLink = get('modalProspectCellLink');
+  const cellEl = get('modalProspectCell');
+  if (cellLink && cellEl) {
+    cellLink.href = `tel:${data.cell}`;
+    cellLink.setAttribute('aria-label', `Ligar para ${data.name}`);
+    cellEl.textContent = data.cell;
+  }
+  const companyMetaEl = get('modalProspectCompanyMeta');
+  if (companyMetaEl) companyMetaEl.textContent = data.company;
   const statusEl = get('modalProspectStatus');
   if (statusEl) statusEl.textContent = data.status;
 
