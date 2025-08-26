@@ -809,6 +809,11 @@ ipcMain.handle('open-pdf', (_event, { id, tipo }) => {
   return true;
 });
 
+ipcMain.handle('open-external', (_event, url) => {
+  shell.openExternal(url);
+  return true;
+});
+
 if (DEBUG) {
   ipcMain.on('debug-log', (_, m) => console.log('[popup]', m));
 }
