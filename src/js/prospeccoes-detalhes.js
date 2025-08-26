@@ -53,7 +53,8 @@ function initDetalhesProspeccao() {
     status: 'Novo'
   };
   const get = id => document.getElementById(id);
-  get('prospectInitials')?.textContent = prospect.initials;
+  const initialsEl = get('prospectInitials');
+  if (initialsEl) initialsEl.textContent = prospect.initials;
   const nameEl = get('prospectName');
   if (nameEl) {
     nameEl.textContent = prospect.name;
@@ -64,9 +65,8 @@ function initDetalhesProspeccao() {
     companyEl.textContent = prospect.company;
     companyEl.title = prospect.company;
   }
-  get('prospectNameHeader')?.textContent = prospect.name;
-  get('prospectCompanyHeader')?.textContent = prospect.company;
-  get('prospectOwner')?.textContent = prospect.ownerName;
+  const ownerEl = get('prospectOwner');
+  if (ownerEl) ownerEl.textContent = prospect.ownerName;
   const emailLink = get('prospectEmailLink');
   const emailEl = get('prospectEmail');
   if (emailLink && emailEl) {
@@ -82,7 +82,8 @@ function initDetalhesProspeccao() {
     phoneLink.setAttribute('aria-label', `Ligar para ${prospect.name}`);
     phoneEl.textContent = prospect.phone;
   }
-  get('prospectStatus')?.textContent = prospect.status;
+  const statusEl = get('prospectStatus');
+  if (statusEl) statusEl.textContent = prospect.status;
 
   const notifyBtn = document.getElementById('toggleNotify');
   if (notifyBtn) {
