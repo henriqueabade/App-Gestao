@@ -75,8 +75,6 @@ function initDetalhesProspeccao() {
   const emailLink = get('prospectEmailLink');
   const emailEl = get('prospectEmail');
   if (emailLink && emailEl) {
-    emailLink.href = '#';
-    emailLink.setAttribute('role', 'button');
     emailLink.setAttribute('aria-label', `Copiar e-mail de ${prospect.name}`);
     emailEl.textContent = prospect.email;
     emailEl.title = prospect.email;
@@ -90,8 +88,6 @@ function initDetalhesProspeccao() {
   const phoneLink = get('prospectPhoneLink');
   const phoneEl = get('prospectPhone');
   if (phoneLink && phoneEl) {
-    phoneLink.href = '#';
-    phoneLink.setAttribute('role', 'button');
     phoneLink.setAttribute('aria-label', `Copiar telefone de ${prospect.name}`);
     phoneEl.textContent = prospect.phone;
     phoneEl.title = prospect.phone;
@@ -105,11 +101,9 @@ function initDetalhesProspeccao() {
   const cellLink = get('prospectCellLink');
   const cellEl = get('prospectCell');
   if (cellLink && cellEl) {
-    cellLink.href = '#';
-    cellLink.setAttribute('role', 'button');
     cellLink.setAttribute('aria-label', `Copiar celular de ${prospect.name}`);
     cellEl.textContent = prospect.mobile;
-   cellEl.title = prospect.mobile;
+    cellEl.title = prospect.mobile;
     cellLink.addEventListener('click', e => {
       e.preventDefault();
       navigator.clipboard
