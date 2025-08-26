@@ -276,22 +276,27 @@
                     <table class="w-full text-sm">
                         <thead>
                             <tr class="border-b border-white/10">
-                                <th class="text-left py-3 text-gray-300">Nome da Ordem</th>
-                                <th class="text-left py-3 text-gray-300">Estágio</th>
-                                <th class="text-right py-3 text-gray-300">Valor</th>
-                                <th class="text-left py-3 text-gray-300">Data de Fechamento</th>
+                                <th class="text-left py-3 text-gray-300">Código</th>
+                                <th class="text-left py-3 text-gray-300">Cliente</th>
+                                <th class="text-left py-3 text-gray-300">Data</th>
+                                <th class="text-right py-3 text-gray-300">Valor Total</th>
+                                <th class="text-left py-3 text-gray-300">Condição</th>
+                                <th class="text-left py-3 text-gray-300">Status</th>
                                 <th class="text-center py-3 text-gray-300">Ações</th>
                             </tr>
                         </thead>
                         <tbody>
                             <tr class="border-b border-white/5">
-                                <td class="py-3 text-white">Marketing Digital Premium</td>
-                                <td class="py-3"><span class="badge-warning px-2 py-1 rounded text-xs">Proposta</span></td>
-                                <td class="py-3 text-right text-white">R$ 45.000</td>
+                                <td class="py-3 text-white">#123</td>
+                                <td class="py-3 text-white">Acme Corporation</td>
                                 <td class="py-3 text-gray-300">15/02/2024</td>
+                                <td class="py-3 text-right text-white">R$ 45.000</td>
+                                <td class="py-3 text-gray-300">À vista</td>
+                                <td class="py-3"><span class="badge-warning px-2 py-1 rounded text-xs">Proposta</span></td>
                                 <td class="py-3 text-center">
                                     <div class="flex items-center justify-center space-x-2">
                                         <i class="fas fa-edit w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Editar"></i>
+                                        <i class="fas fa-trash w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-red)" title="Excluir"></i>
                                     </div>
                                 </td>
                             </tr>
@@ -300,10 +305,10 @@
                 </div>
             </div>
 
-            <!-- Empresa -->
+            <!-- Mais Contatos da Empresa -->
             <div class="bg-surface/60 backdrop-blur-xl rounded-2xl border border-white/10 p-6">
                 <div class="flex justify-between items-center mb-4">
-                    <h3 class="text-lg font-semibold text-white">Empresa</h3>
+                    <h3 class="text-lg font-semibold text-white">Mais Contatos da Empresa</h3>
                     <button class="btn-primary px-4 py-2 rounded-lg text-white font-medium">
                         + Novo
                     </button>
@@ -313,17 +318,26 @@
                         <thead>
                             <tr class="border-b border-white/10">
                                 <th class="text-left py-3 text-gray-300">Nome</th>
-                                <th class="text-left py-3 text-gray-300">Tipo</th>
+                                <th class="text-left py-3 text-gray-300">Cargo</th>
                                 <th class="text-left py-3 text-gray-300">E-mail</th>
-                                <th class="text-left py-3 text-gray-300">Telefone</th>
+                                <th class="text-left py-3 text-gray-300">Celular</th>
+                                <th class="text-left py-3 text-gray-300">Tel. Fixo</th>
+                                <th class="text-center py-3 text-gray-300">Ações</th>
                             </tr>
                         </thead>
                         <tbody>
                             <tr class="border-b border-white/5">
                                 <td class="py-3 text-white">Jennifer Wilson</td>
-                                <td class="py-3 text-gray-300">Contato Principal</td>
+                                <td class="py-3 text-gray-300">Diretora de Marketing</td>
                                 <td class="py-3 text-white">jennifer@acme.com</td>
                                 <td class="py-3 text-gray-300">(11) 99999-9999</td>
+                                <td class="py-3 text-gray-300">(11) 3333-4444</td>
+                                <td class="py-3 text-center">
+                                    <div class="flex items-center justify-center space-x-2">
+                                        <i class="fas fa-edit w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Editar"></i>
+                                        <i class="fas fa-trash w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-red)" title="Excluir"></i>
+                                    </div>
+                                </td>
                             </tr>
                         </tbody>
                     </table>
@@ -346,6 +360,7 @@
                                 <th class="text-left py-3 text-gray-300">Status</th>
                                 <th class="text-left py-3 text-gray-300">Data</th>
                                 <th class="text-left py-3 text-gray-300">Resposta</th>
+                                <th class="text-center py-3 text-gray-300">Ações</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -354,6 +369,12 @@
                                 <td class="py-3"><span class="badge-success px-2 py-1 rounded text-xs">Concluída</span></td>
                                 <td class="py-3 text-gray-300">10/01/2024</td>
                                 <td class="py-3 text-gray-300">Interessado</td>
+                                <td class="py-3 text-center">
+                                    <div class="flex items-center justify-center space-x-2">
+                                        <i class="fas fa-edit w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Editar"></i>
+                                        <i class="fas fa-trash w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-red)" title="Excluir"></i>
+                                    </div>
+                                </td>
                             </tr>
                         </tbody>
                     </table>
@@ -372,7 +393,10 @@
                     <div class="bg-surface/40 rounded-lg p-4 border border-white/5">
                         <div class="flex justify-between items-start mb-2">
                             <h4 class="font-medium text-white">Primeira impressão</h4>
-                            <button class="text-gray-400 hover:text-white">✏️</button>
+                            <div class="flex gap-2">
+                                <button class="text-gray-400 hover:text-white" title="Editar"><i class="fas fa-edit"></i></button>
+                                <button class="text-gray-400 hover:text-white" title="Excluir"><i class="fas fa-trash"></i></button>
+                            </div>
                         </div>
                         <p class="text-gray-300 text-sm mb-2">Cliente muito receptivo, empresa em crescimento acelerado. Demonstrou interesse real em automação de marketing.</p>
                         <p class="text-xs text-gray-500">Carlos Silva • 3 dias atrás</p>
