@@ -38,6 +38,24 @@ function initProspeccoes() {
 
     document.querySelectorAll('.fa-eye').forEach(icon => {
         icon.addEventListener('click', () => {
+            const row = icon.closest('tr');
+            if (row) {
+                const [nameCell, emailCell, statusCell, ownerCell] = row.querySelectorAll('td');
+                const name = nameCell?.textContent.trim() || '';
+                const email = emailCell?.textContent.trim() || '';
+                const status = statusCell?.textContent.trim() || '';
+                const ownerName = ownerCell?.textContent.trim() || '';
+                const initials = name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
+                window.prospectDetails = {
+                    initials,
+                    name,
+                    company: '',
+                    ownerName,
+                    email,
+                    phone: '',
+                    status
+                };
+            }
             loadPage('prospeccoes-detalhes');
         });
     });
