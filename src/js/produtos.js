@@ -28,6 +28,19 @@ async function carregarProdutos() {
 }
 window.carregarProdutos = carregarProdutos;
 
+function updateEmptyStateProdutos(hasData) {
+    const wrapper = document.getElementById('produtosTableWrapper');
+    const empty = document.getElementById('produtosEmptyState');
+    if (!wrapper || !empty) return;
+    if (hasData) {
+        wrapper.classList.remove('hidden');
+        empty.classList.add('hidden');
+    } else {
+        wrapper.classList.add('hidden');
+        empty.classList.remove('hidden');
+    }
+}
+
 function renderProdutos(produtos) {
     const tbody = document.getElementById('produtosTableBody');
     if (!tbody) return;
@@ -83,6 +96,7 @@ function renderProdutos(produtos) {
 
     if (window.feather) feather.replace();
     attachProductInfoEvents();
+    updateEmptyStateProdutos(produtos.length > 0);
 }
 
 function popularFiltros() {
@@ -355,6 +369,10 @@ function initProdutos() {
     document.getElementById('filterPriceMin')?.addEventListener('input', marcarFiltrosPendentes);
     document.getElementById('filterPriceMax')?.addEventListener('input', marcarFiltrosPendentes);
     document.getElementById('zeroStock')?.addEventListener('change', () => aplicarFiltro(true));
+
+    document.getElementById('produtosEmptyNew')?.addEventListener('click', () => {
+        document.getElementById('btnNovoProduto')?.click();
+    });
 
     carregarProdutos();
 

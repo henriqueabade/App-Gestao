@@ -85,7 +85,7 @@
         </div>
 
         <!-- Products Table -->
-        <div class="glass-surface rounded-xl shadow-lg animate-fade-in-up mt-6 table-scroll">
+        <div id="produtosTableWrapper" class="glass-surface rounded-xl shadow-lg animate-fade-in-up mt-6 table-scroll">
             <table class="w-full">
                 <thead class="bg-gray-50 sticky top-0">
                         <tr>
@@ -103,6 +103,25 @@
                         <!-- Linhas geradas dinamicamente -->
                     </tbody>
                 </table>
+        </div>
+
+        <!-- Empty State -->
+        <div id="produtosEmptyState" class="hidden py-12 flex flex-col items-center justify-center text-center px-4">
+          <div class="rounded-full bg-[var(--color-primary-opacity)] p-4 mb-4">
+            <i class="fas fa-box-open w-12 h-12 text-[var(--color-primary)]"></i>
+          </div>
+          <h3 class="text-lg font-medium text-white">Nenhum produto encontrado</h3>
+          <p class="mt-1 text-sm text-white/70">Cadastre o primeiro agora!</p>
+          <div class="mt-6">
+            <button
+              id="produtosEmptyNew"
+              type="button"
+              class="btn-primary inline-flex items-center px-4 py-2 text-sm font-medium rounded-md text-white"
+            >
+              <i class="fas fa-plus w-4 h-4 mr-2"></i>
+              Novo Produto
+            </button>
+          </div>
         </div>
     </div>
 </div>
