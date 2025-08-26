@@ -64,6 +64,8 @@ function initDetalhesProspeccao() {
     companyEl.textContent = prospect.company;
     companyEl.title = prospect.company;
   }
+  get('prospectNameHeader')?.textContent = prospect.name;
+  get('prospectCompanyHeader')?.textContent = prospect.company;
   get('prospectOwner')?.textContent = prospect.ownerName;
   const emailLink = get('prospectEmailLink');
   const emailEl = get('prospectEmail');

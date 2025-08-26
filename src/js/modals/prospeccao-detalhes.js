@@ -73,6 +73,8 @@
     cEl.textContent = data.company;
     cEl.title = data.company;
   }
+  get('modalProspectNameHeader')?.textContent = data.name;
+  get('modalProspectCompanyHeader')?.textContent = data.company;
   get('modalProspectOwner')?.textContent = data.ownerName;
   const emailLink = get('modalProspectEmailLink');
   const emailEl = get('modalProspectEmail');
