@@ -56,7 +56,7 @@ function initProspeccoes() {
                     status
                 };
             }
-            loadPage('prospeccoes-detalhes');
+            Modal.open('modals/prospeccoes/detalhes.html', '../js/modals/prospeccao-detalhes.js', 'detalhesProspeccao');
         });
     });
 }
