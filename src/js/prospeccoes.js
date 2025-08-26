@@ -38,7 +38,7 @@ function initProspeccoes() {
 
     document.querySelectorAll('.fa-eye').forEach(icon => {
         icon.addEventListener('click', () => {
-            Modal.open('modals/prospeccoes/detalhes.html', '../js/modals/prospeccao-detalhes.js', 'detalhesProspeccao');
+            loadPage('prospeccoes-detalhes');
         });
     });
 }
