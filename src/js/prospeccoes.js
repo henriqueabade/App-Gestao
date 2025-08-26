@@ -35,6 +35,12 @@ function initProspeccoes() {
     document.querySelectorAll('.fa-edit').forEach(icon => {
         icon.addEventListener('click', () => avancarEtapa('1', 'novo'));
     });
+
+    document.querySelectorAll('.fa-eye').forEach(icon => {
+        icon.addEventListener('click', () => {
+            Modal.open('modals/prospeccoes/detalhes.html', '../js/modals/prospeccao-detalhes.js', 'detalhesProspeccao');
+        });
+    });
 }
 
 if (document.readyState === 'loading') {

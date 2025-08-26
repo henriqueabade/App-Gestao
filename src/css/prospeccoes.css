@@ -7,9 +7,12 @@
     --color-bordeaux: #6a152c;
     --color-bg-deep: #310017;
     --color-surface: rgba(255,255,255,0.08);
+    --color-input: rgba(0,0,0,0.3);
+    --color-inputBorder: rgba(255,255,255,0.15);
     --color-green: #a2ffa6;
     --color-red: #ff5858;
     --color-blue: #8aa7f3;
+    --color-orange: #ffa366;
     --neutral-100: #f9fafb;
     --neutral-500: #6b7280;
 }
@@ -23,6 +26,26 @@ body {
     background: var(--color-surface);
     backdrop-filter: blur(16px);
     -webkit-backdrop-filter: blur(16px);
+}
+
+.bg-surface { background: var(--color-surface); }
+.bg-input { background: var(--color-input); }
+.border-inputBorder { border-color: var(--color-inputBorder); }
+
+.btn-ghost {
+    background: transparent;
+    border: 1px solid rgba(255,255,255,0.2);
+    transition: all 150ms ease;
+}
+
+.btn-ghost:hover {
+    background: rgba(255,255,255,0.1);
+    transform: scale(1.05);
+}
+
+.tab-active {
+    color: var(--color-primary) !important;
+    border-bottom-color: var(--color-primary) !important;
 }
 
 .btn-primary {
@@ -58,11 +81,13 @@ body {
 .badge-success {
     background: rgba(162, 255, 166, 0.2);
     color: var(--color-green);
+    border: 1px solid rgba(162, 255, 166, 0.3);
 }
 
 .badge-warning {
-    background: rgba(212, 193, 105, 0.2);
-    color: var(--color-primary);
+    background: rgba(255, 163, 102, 0.2);
+    color: var(--color-orange);
+    border: 1px solid rgba(255, 163, 102, 0.3);
 }
 
 .badge-danger {
@@ -73,6 +98,26 @@ body {
 .badge-info {
     background: rgba(138, 167, 243, 0.2);
     color: var(--color-blue);
+    border: 1px solid rgba(138, 167, 243, 0.3);
+}
+
+.timeline-item::before {
+    content: '';
+    position: absolute;
+    left: 15px;
+    top: 0;
+    bottom: -20px;
+    width: 2px;
+    background: rgba(255,255,255,0.1);
+}
+
+.timeline-item:last-child::before {
+    display: none;
+}
+
+.timeline-marker {
+    background: var(--color-primary);
+    border: 3px solid rgba(182, 160, 62, 0.3);
 }
 
 .input-glass {
