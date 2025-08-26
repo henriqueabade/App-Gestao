@@ -99,7 +99,7 @@ body {
 }
 
 .btn-neutral:active {
-    transform: scale(0.25);
+    transform: scale(0.95);
 }
 
 .btn-success {
