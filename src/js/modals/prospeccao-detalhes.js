@@ -95,12 +95,14 @@
   if (emailLink && emailEl) {
     const email = val(data.email);
     setText(emailEl, email);
-    if(email !== placeholder){
-      emailLink.href = `mailto:${data.email}`;
-      emailLink.setAttribute('aria-label', `Enviar e-mail para ${data.name}`);
-    } else {
-      emailLink.removeAttribute('href');
-      emailLink.setAttribute('aria-label', 'E-mail não informado');
+    emailLink.setAttribute('aria-label', email !== placeholder ? `Copiar e-mail de ${data.name}` : 'E-mail não informado');
+    if (email !== placeholder) {
+      emailLink.addEventListener('click', e => {
+        e.preventDefault();
+        navigator.clipboard
+          .writeText(data.email)
+          .then(() => window.showToast?.('E-mail copiado!', 'success'));
+      });
     }
   }
   const phoneLink = get('modalProspectPhoneLink');
@@ -108,12 +110,14 @@
   if (phoneLink && phoneEl) {
     const phone = val(data.phone);
     setText(phoneEl, phone);
-    if(phone !== placeholder){
-      phoneLink.href = `tel:${data.phone}`;
-      phoneLink.setAttribute('aria-label', `Ligar para ${data.name}`);
-    } else {
-      phoneLink.removeAttribute('href');
-      phoneLink.setAttribute('aria-label', 'Telefone não informado');
+    phoneLink.setAttribute('aria-label', phone !== placeholder ? `Copiar telefone de ${data.name}` : 'Telefone não informado');
+    if (phone !== placeholder) {
+      phoneLink.addEventListener('click', e => {
+        e.preventDefault();
+        navigator.clipboard
+          .writeText(data.phone)
+          .then(() => window.showToast?.('Telefone copiado!', 'success'));
+      });
     }
   }
   const cellLink = get('modalProspectCellLink');
@@ -121,12 +125,14 @@
   if (cellLink && cellEl) {
     const cell = val(data.cell);
     setText(cellEl, cell);
-    if(cell !== placeholder){
-      cellLink.href = `tel:${data.cell}`;
-      cellLink.setAttribute('aria-label', `Ligar para ${data.name}`);
-    } else {
-      cellLink.removeAttribute('href');
-      cellLink.setAttribute('aria-label', 'Celular não informado');
+    cellLink.setAttribute('aria-label', cell !== placeholder ? `Copiar celular de ${data.name}` : 'Celular não informado');
+    if (cell !== placeholder) {
+      cellLink.addEventListener('click', e => {
+        e.preventDefault();
+        navigator.clipboard
+          .writeText(data.cell)
+          .then(() => window.showToast?.('Celular copiado!', 'success'));
+      });
     }
   }
   const companyMetaEl = get('modalProspectCompanyMeta');
