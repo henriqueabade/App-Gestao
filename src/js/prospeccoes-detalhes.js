@@ -50,6 +50,7 @@ function initDetalhesProspeccao() {
     ownerName: 'João Silva',
     email: 'jennifer@acme.com',
     phone: '(11) 99999-9999',
+    mobile: '(11) 98888-7777',
     status: 'Novo'
   };
   const get = id => document.getElementById(id);
@@ -86,6 +87,15 @@ function initDetalhesProspeccao() {
     phoneLink.setAttribute('aria-label', `Ligar para ${prospect.name}`);
     phoneEl.textContent = prospect.phone;
   }
+  const cellLink = get('prospectCellLink');
+  const cellEl = get('prospectCell');
+  if (cellLink && cellEl) {
+    cellLink.href = `tel:${prospect.mobile}`;
+    cellLink.setAttribute('aria-label', `Ligar para ${prospect.name} (celular)`);
+    cellEl.textContent = prospect.mobile;
+  }
+  const companyMetaEl = get('prospectCompanyMeta');
+  if (companyMetaEl) companyMetaEl.textContent = prospect.company;
   const statusEl = get('prospectStatus');
   if (statusEl) statusEl.textContent = prospect.status;
 
