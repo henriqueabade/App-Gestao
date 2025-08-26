@@ -51,6 +51,46 @@
 
   setTab('overview');
 
+  // Preenche os dados do prospecto no modal
+  const data = window.prospectDetails || {
+    initials: 'JW',
+    name: 'Jennifer Wilson',
+    company: 'Acme Corporation',
+    ownerName: 'João Silva',
+    email: 'jennifer@acme.com',
+    phone: '(11) 99999-9999',
+    status: 'Novo'
+  };
+  const get = id => document.getElementById(id);
+  get('modalProspectInitials')?.textContent = data.initials;
+  const nEl = get('modalProspectName');
+  if (nEl) {
+    nEl.textContent = data.name;
+    nEl.title = data.name;
+  }
+  const cEl = get('modalProspectCompany');
+  if (cEl) {
+    cEl.textContent = data.company;
+    cEl.title = data.company;
+  }
+  get('modalProspectOwner')?.textContent = data.ownerName;
+  const emailLink = get('modalProspectEmailLink');
+  const emailEl = get('modalProspectEmail');
+  if (emailLink && emailEl) {
+    emailLink.href = `mailto:${data.email}`;
+    emailLink.setAttribute('aria-label', `Enviar e-mail para ${data.name}`);
+    emailEl.textContent = data.email;
+    emailEl.title = data.email;
+  }
+  const phoneLink = get('modalProspectPhoneLink');
+  const phoneEl = get('modalProspectPhone');
+  if (phoneLink && phoneEl) {
+    phoneLink.href = `tel:${data.phone}`;
+    phoneLink.setAttribute('aria-label', `Ligar para ${data.name}`);
+    phoneEl.textContent = data.phone;
+  }
+  get('modalProspectStatus')?.textContent = data.status;
+
   const notifyBtn = document.getElementById('toggleNotify');
   if(notifyBtn){
     notifyBtn.addEventListener('click', function(){

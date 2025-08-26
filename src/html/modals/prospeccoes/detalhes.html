@@ -48,11 +48,11 @@
                 <!-- Identidade -->
                 <div class="flex items-center gap-4">
                     <div class="h-16 w-16 rounded-full ring-2 ring-[--color-primary] grid place-items-center text-[--color-primary] font-semibold shrink-0">
-                        {{initials}}
+                        <span id="modalProspectInitials"></span>
                     </div>
                     <div class="min-w-0">
-                        <h2 class="text-xl lg:text-2xl font-semibold text-white truncate" title="{{name}}">{{name}}</h2>
-                        <p class="text-sm text-white/70 truncate" title="{{company}}">{{company}}</p>
+                        <h2 id="modalProspectName" class="text-xl lg:text-2xl font-semibold text-white truncate" title=""></h2>
+                        <p id="modalProspectCompany" class="text-sm text-white/70 truncate" title=""></p>
                     </div>
                 </div>
 
@@ -63,20 +63,20 @@
                 <div class="grid grid-cols-2 gap-4">
                     <div class="rounded-xl bg-white/5 p-3">
                         <span class="text-[11px] uppercase tracking-wide text-white/60">Responsável</span>
-                        <p class="text-sm text-white">{{ownerName}}</p>
+                        <p id="modalProspectOwner" class="text-sm text-white"></p>
                     </div>
-                    <a href="mailto:{{email}}" aria-label="Enviar e-mail para {{name}}" class="rounded-xl bg-white/5 hover:bg-white/10 p-3">
+                    <a id="modalProspectEmailLink" href="#" aria-label="" class="rounded-xl bg-white/5 hover:bg-white/10 p-3">
                         <span class="text-[11px] uppercase tracking-wide text-white/60">E-mail</span>
-                        <p class="text-sm text-white truncate" title="{{email}}">{{email}}</p>
+                        <p id="modalProspectEmail" class="text-sm text-white truncate" title=""></p>
                     </a>
-                    <a href="tel:{{phone}}" aria-label="Ligar para {{name}}" class="rounded-xl bg-white/5 hover:bg-white/10 p-3">
+                    <a id="modalProspectPhoneLink" href="#" aria-label="" class="rounded-xl bg-white/5 hover:bg-white/10 p-3">
                         <span class="text-[11px] uppercase tracking-wide text-white/60">Telefone</span>
-                        <p class="text-sm text-white">{{phone}}</p>
+                        <p id="modalProspectPhone" class="text-sm text-white"></p>
                     </a>
                     <div class="rounded-xl bg-white/5 p-3">
                         <span class="text-[11px] uppercase tracking-wide text-white/60">Status</span>
                         <div class="text-sm text-white">
-                            <span class="inline-flex mt-1 px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-500/20 text-emerald-200">{{status}}</span>
+                            <span id="modalProspectStatus" class="inline-flex mt-1 px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-500/20 text-emerald-200"></span>
                         </div>
                     </div>
                 </div>
