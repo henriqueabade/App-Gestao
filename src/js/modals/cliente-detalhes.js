@@ -1,7 +1,6 @@
 (async function(){
   const overlay = document.getElementById('detalhesClienteOverlay');
   if(!overlay) return;
-  overlay.classList.remove('hidden');
   const close = () => Modal.close('detalhesCliente');
   overlay.addEventListener('click', e => { if(e.target === overlay) close(); });
   const voltar = document.getElementById('voltarDetalhesCliente');
@@ -23,10 +22,14 @@
         const notas = document.getElementById('clienteNotas');
         if(notas) notas.value = data.cliente.anotacoes || '';
       }
-      carregarOrdens(cliente.id);
+      await carregarOrdens(cliente.id);
     } catch(err){
       console.error('Erro ao carregar detalhes do cliente', err);
+    } finally {
+      window.dispatchEvent(new CustomEvent('modalSpinnerLoaded', { detail: 'detalhesCliente' }));
     }
+  } else {
+    window.dispatchEvent(new CustomEvent('modalSpinnerLoaded', { detail: 'detalhesCliente' }));
   }
 
   const tablist = overlay.querySelector('[role="tablist"]');
