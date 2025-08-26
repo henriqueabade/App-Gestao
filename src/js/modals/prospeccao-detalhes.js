@@ -62,7 +62,8 @@
     status: 'Novo'
   };
   const get = id => document.getElementById(id);
-  get('modalProspectInitials')?.textContent = data.initials;
+  const initialsEl = get('modalProspectInitials');
+  if (initialsEl) initialsEl.textContent = data.initials;
   const nEl = get('modalProspectName');
   if (nEl) {
     nEl.textContent = data.name;
@@ -73,7 +74,8 @@
     cEl.textContent = data.company;
     cEl.title = data.company;
   }
-  get('modalProspectOwner')?.textContent = data.ownerName;
+  const ownerEl = get('modalProspectOwner');
+  if (ownerEl) ownerEl.textContent = data.ownerName;
   const emailLink = get('modalProspectEmailLink');
   const emailEl = get('modalProspectEmail');
   if (emailLink && emailEl) {
@@ -89,7 +91,8 @@
     phoneLink.setAttribute('aria-label', `Ligar para ${data.name}`);
     phoneEl.textContent = data.phone;
   }
-  get('modalProspectStatus')?.textContent = data.status;
+  const statusEl = get('modalProspectStatus');
+  if (statusEl) statusEl.textContent = data.status;
 
   const notifyBtn = document.getElementById('toggleNotify');
   if(notifyBtn){
