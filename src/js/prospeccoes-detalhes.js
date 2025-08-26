@@ -94,6 +94,7 @@ function initDetalhesProspeccao() {
     phoneLink.setAttribute('role', 'button');
     phoneLink.setAttribute('aria-label', `Copiar telefone de ${prospect.name}`);
     phoneEl.textContent = prospect.phone;
+    phoneEl.title = prospect.phone;
     phoneLink.addEventListener('click', e => {
       e.preventDefault();
       navigator.clipboard
@@ -108,6 +109,7 @@ function initDetalhesProspeccao() {
     cellLink.setAttribute('role', 'button');
     cellLink.setAttribute('aria-label', `Copiar celular de ${prospect.name}`);
     cellEl.textContent = prospect.mobile;
+   cellEl.title = prospect.mobile;
     cellLink.addEventListener('click', e => {
       e.preventDefault();
       navigator.clipboard
