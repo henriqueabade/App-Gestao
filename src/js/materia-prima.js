@@ -30,6 +30,9 @@ function initMateriaPrima() {
     document.getElementById('btnLimpar')?.addEventListener('click', limparFiltros);
     document.getElementById('zeroStock')?.addEventListener('change', aplicarFiltros);
     document.getElementById('btnNovoInsumo')?.addEventListener('click', abrirNovoInsumo);
+    document.getElementById('materiaPrimaEmptyNew')?.addEventListener('click', () => {
+        document.getElementById('btnNovoInsumo')?.click();
+    });
 
     const infoIcon = document.getElementById('totaisInfoIcon');
     const popover = document.getElementById('totaisPopover');

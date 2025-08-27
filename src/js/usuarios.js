@@ -45,6 +45,9 @@ function initUsuarios() {
     document.getElementById('btnNovoUsuario')?.addEventListener('click', () => {
         console.log('Criar novo usuário');
     });
+    document.getElementById('usuariosEmptyNew')?.addEventListener('click', () => {
+        document.getElementById('btnNovoUsuario')?.click();
+    });
 
     document.getElementById('aplicarFiltro')?.addEventListener('click', aplicarFiltros);
     document.getElementById('filtroBusca')?.addEventListener('input', aplicarFiltros);

@@ -256,6 +256,9 @@ function initPedidos() {
             showFunctionUnavailableDialog('Conversão de orçamento ainda não implementada.');
         });
     }
+    document.getElementById('pedidosEmptyNew')?.addEventListener('click', () => {
+        document.getElementById('converterOrcamentoBtn')?.click();
+    });
 
     const filtrar = document.getElementById('btnFiltrar');
     const limpar = document.getElementById('btnLimpar');

@@ -73,6 +73,13 @@ function initProspeccoes() {
 
     carregarProspeccoes();
 
+    document.getElementById('btnNovaProspeccao')?.addEventListener('click', () => {
+        console.log('Criar nova prospecção');
+    });
+    document.getElementById('prospeccoesEmptyNew')?.addEventListener('click', () => {
+        document.getElementById('btnNovaProspeccao')?.click();
+    });
+
     // Exemplo de uso das funções
     document.querySelectorAll('.fa-edit').forEach(icon => {
         icon.addEventListener('click', () => avancarEtapa('1', 'novo'));

@@ -262,6 +262,9 @@ function initOrcamentos() {
             Modal.open('modals/orcamentos/novo.html', '../js/modals/orcamento-novo.js', 'novoOrcamento');
         });
     }
+    document.getElementById('orcamentosEmptyNew')?.addEventListener('click', () => {
+        document.getElementById('novoOrcamentoBtn')?.click();
+    });
 
     const filtrar = document.getElementById('btnFiltrar');
     const limpar = document.getElementById('btnLimpar');
