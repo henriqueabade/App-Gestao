@@ -198,6 +198,7 @@ window.abrirEditarCliente = abrirEditarCliente;
 
 window.addEventListener('clienteEditado', () => carregarClientes(true));
 window.addEventListener('clienteExcluido', () => carregarClientes(true));
+window.addEventListener('clienteAdicionado', () => carregarClientes(true));
 
 function renderTotais(clientes) {
     const container = document.getElementById('totaisBadges');
