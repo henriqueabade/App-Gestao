@@ -8,6 +8,15 @@
   document.addEventListener('keydown', function esc(e){ if(e.key==='Escape'){ close(); document.removeEventListener('keydown', esc); }});
 
   const cliente = window.clienteDetalhes;
+  if(!window.geoService){
+    await new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = '../js/geo-service.js';
+      s.onload = resolve;
+      s.onerror = reject;
+      document.head.appendChild(s);
+    });
+  }
   if(cliente){
     const titulo = document.getElementById('clienteDetalhesTitulo');
     if(titulo) titulo.textContent = `Detalhes – ${cliente.nome_fantasia || ''}`;
@@ -16,7 +25,7 @@
       const data = await res.json();
       if(data && data.cliente){
         preencherDadosEmpresa(data.cliente);
-        preencherEnderecos(data.cliente);
+        await preencherEnderecos(data.cliente);
         renderContatos(data.contatos || []);
         inicializarToggles(data.cliente);
         const notas = document.getElementById('clienteNotas');
@@ -141,17 +150,33 @@
     }
   }
 
-  function preencherEnderecos(cli){
-    const fill = (prefix, data) => {
+  async function preencherEnderecos(cli){
+    const fill = async (prefix, data) => {
       if(!data) return;
-      for(const key of ['rua','numero','complemento','bairro','cidade','estado','cep']){
+      for(const key of ['rua','numero','complemento','bairro','cidade','cep']){
         const el = document.getElementById(`${prefix}${key.charAt(0).toUpperCase()+key.slice(1)}`);
         if(el) el.value = data[key] || '';
       }
+      const paisSel = document.getElementById(prefix + 'Pais');
+      const estadoSel = document.getElementById(prefix + 'Estado');
+      if(paisSel && estadoSel){
+        const countries = await geoService.getCountries();
+        paisSel.innerHTML = '<option value="">Selecione</option>' +
+          countries.map(c => `<option value="${c.code}">${c.name}</option>`).join('');
+        paisSel.value = data.pais || '';
+        if(data.pais){
+          const states = await geoService.getStatesByCountry(data.pais);
+          estadoSel.innerHTML = '<option value="">Selecione</option>' +
+            states.map(s => `<option value="${s.code}">${s.name}</option>`).join('');
+          estadoSel.value = data.estado || '';
+        } else {
+          estadoSel.innerHTML = '<option value="">Selecione o país</option>';
+        }
+      }
     };
-    fill('reg', cli.endereco_registro);
-    fill('cob', cli.endereco_cobranca);
-    fill('ent', cli.endereco_entrega);
+    await fill('reg', cli.endereco_registro);
+    await fill('cob', cli.endereco_cobranca);
+    await fill('ent', cli.endereco_entrega);
   }
 
   function renderContatos(contatos){

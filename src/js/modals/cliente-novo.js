@@ -1,4 +1,4 @@
-(function(){
+(async function(){
   const overlay = document.getElementById('novoClienteOverlay');
   if(!overlay) return;
   const close = () => Modal.close('novoCliente');
@@ -105,6 +105,48 @@
   }
   initToggles();
 
+  async function ensureGeo(){
+    if(window.geoService) return;
+    await new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = '../js/geo-service.js';
+      s.onload = resolve;
+      s.onerror = reject;
+      document.head.appendChild(s);
+    });
+  }
+  await ensureGeo();
+
+  async function setupEndereco(prefix){
+    const paisSel = document.getElementById(prefix + 'Pais');
+    const estadoSel = document.getElementById(prefix + 'Estado');
+    if(!paisSel || !estadoSel) return;
+    const countries = await geoService.getCountries();
+    paisSel.innerHTML = '<option value="">Selecione</option>' +
+      countries.map(c => `<option value="${c.code}">${c.name}</option>`).join('');
+    estadoSel.disabled = true;
+    estadoSel.innerHTML = '<option value="">Selecione o país</option>';
+    paisSel.addEventListener('change', async () => {
+      const code = paisSel.value;
+      if(!code){
+        estadoSel.disabled = true;
+        estadoSel.innerHTML = '<option value="">Selecione o país</option>';
+        return;
+      }
+      const states = await geoService.getStatesByCountry(code);
+      estadoSel.disabled = false;
+      estadoSel.innerHTML = '<option value="">Selecione</option>' +
+        states.map(s => `<option value="${s.code}">${s.name}</option>`).join('');
+    });
+    estadoSel.addEventListener('mousedown', e => {
+      if(!paisSel.value){
+        e.preventDefault();
+        alert('Por favor, selecione o país primeiro');
+      }
+    });
+  }
+  ['reg','cob','ent'].forEach(setupEndereco);
+
   // contatos management
   const contatos = [];
   function renderContatos(){
@@ -169,6 +211,7 @@
       complemento: getVal(prefix+'Complemento'),
       bairro: getVal(prefix+'Bairro'),
       cidade: getVal(prefix+'Cidade'),
+      pais: getVal(prefix+'Pais'),
       estado: getVal(prefix+'Estado'),
       cep: getVal(prefix+'Cep')
     });
