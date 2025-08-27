@@ -197,6 +197,7 @@ function abrirExcluirCliente(cliente) {
 window.abrirEditarCliente = abrirEditarCliente;
 
 window.addEventListener('clienteEditado', () => carregarClientes(true));
+window.addEventListener('clienteExcluido', () => carregarClientes(true));
 
 function renderTotais(clientes) {
     const container = document.getElementById('totaisBadges');
