@@ -35,7 +35,9 @@ function setupDb() {
       reg_cidade text,
       reg_uf text,
       reg_cep text,
-      reg_pais text
+      reg_pais text,
+      status_cliente text,
+      dono_cliente text
     );
   `);
   db.public.none(`
@@ -103,6 +105,46 @@ test('GET /api/clientes/:id/resumo formata endereços e contatos', async () => {
       email: 'maria@example.com'
     }
   ]);
+
+  server.close();
+});
+
+test('GET /api/clientes/lista inclui pais', async () => {
+  const mem = setupDb();
+  const { Pool } = mem.adapters.createPg();
+  const pool = new Pool();
+
+  await pool.query(`INSERT INTO clientes (id, nome_fantasia, cnpj, ent_uf, ent_pais, status_cliente, dono_cliente)
+                    VALUES (1, 'Cliente A', '123', 'SP', 'BR', 'Ativo', 'Joao')`);
+
+  const dbModulePath = require.resolve('./db');
+  require.cache[dbModulePath] = {
+    exports: {
+      query: (text, params) => pool.query(text, params),
+      connect: () => pool.connect()
+    }
+  };
+  delete require.cache[require.resolve('./clientesController')];
+  const clientesRouter = require('./clientesController');
+
+  const app = express();
+  app.use('/api/clientes', clientesRouter);
+  const server = app.listen(0);
+  await new Promise(resolve => server.once('listening', resolve));
+  const port = server.address().port;
+
+  const res = await fetch(`http://localhost:${port}/api/clientes/lista`);
+  assert.strictEqual(res.status, 200);
+  const body = await res.json();
+  assert.deepStrictEqual(body, [{
+    id: 1,
+    nome_fantasia: 'Cliente A',
+    cnpj: '123',
+    pais: 'BR',
+    estado: 'SP',
+    status_cliente: 'Ativo',
+    dono_cliente: 'Joao'
+  }]);
 
   server.close();
 });
