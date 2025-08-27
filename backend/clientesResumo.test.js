@@ -65,9 +65,9 @@ test('GET /api/clientes/:id/resumo formata endereços e contatos', async () => {
     reg_logradouro, reg_numero, reg_complemento, reg_bairro, reg_cidade, reg_uf, reg_cep, reg_pais
   ) VALUES (
     1, 'Cliente A', 'Cliente A SA', '123', '321',
-    'Rua X', '10', '', 'Bairro X', 'Cidade X', 'SP', '12345-678', 'BR',
-    'Rua X', '10', '', 'Bairro X', 'Cidade X', 'SP', '12345-678', 'BR',
-    'Rua Y', '20', 'Sala 5', 'Bairro Y', 'Cidade Y', 'RJ', '98765-432', 'BR'
+    'Rua X', '10', '', 'Bairro X', 'Cidade X', 'São Paulo', '12345-678', 'Brasil',
+    'Rua X', '10', '', 'Bairro X', 'Cidade X', 'São Paulo', '12345-678', 'Brasil',
+    'Rua Y', '20', 'Sala 5', 'Bairro Y', 'Cidade Y', 'Rio de Janeiro', '98765-432', 'Brasil'
   );`);
 
   await pool.query(`INSERT INTO contatos_cliente (id_cliente, nome, telefone_fixo, telefone_celular, email)
@@ -93,9 +93,9 @@ test('GET /api/clientes/:id/resumo formata endereços e contatos', async () => {
   assert.strictEqual(res.status, 200);
   const body = await res.json();
 
-  assert.strictEqual(body.endereco_entrega, 'Rua X, 10, Bairro X - Cidade X/SP - 12345-678 - BR');
+  assert.strictEqual(body.endereco_entrega, 'Rua X, 10, Bairro X - Cidade X/São Paulo - 12345-678 - Brasil');
   assert.strictEqual(body.endereco_faturamento, 'Igual Entrega');
-  assert.strictEqual(body.endereco_registro, 'Rua Y, 20 - Sala 5, Bairro Y - Cidade Y/RJ - 98765-432 - BR');
+  assert.strictEqual(body.endereco_registro, 'Rua Y, 20 - Sala 5, Bairro Y - Cidade Y/Rio de Janeiro - 98765-432 - Brasil');
   assert.deepStrictEqual(body.contatos, [
     {
       id_cliente: 1,
@@ -115,7 +115,7 @@ test('GET /api/clientes/lista inclui pais', async () => {
   const pool = new Pool();
 
   await pool.query(`INSERT INTO clientes (id, nome_fantasia, cnpj, ent_uf, ent_pais, status_cliente, dono_cliente)
-                    VALUES (1, 'Cliente A', '123', 'SP', 'BR', 'Ativo', 'Joao')`);
+                    VALUES (1, 'Cliente A', '123', 'São Paulo', 'Brasil', 'Ativo', 'Joao')`);
 
   const dbModulePath = require.resolve('./db');
   require.cache[dbModulePath] = {
@@ -140,8 +140,8 @@ test('GET /api/clientes/lista inclui pais', async () => {
     id: 1,
     nome_fantasia: 'Cliente A',
     cnpj: '123',
-    pais: 'BR',
-    estado: 'SP',
+    pais: 'Brasil',
+    estado: 'São Paulo',
     status_cliente: 'Ativo',
     dono_cliente: 'Joao'
   }]);

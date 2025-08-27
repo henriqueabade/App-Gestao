@@ -136,20 +136,26 @@
     if(paisSel && estadoSel){
       const countries = await geoService.getCountries();
       paisSel.innerHTML = '<option value="">Selecione</option>' +
-        countries.map(c => `<option value="${c.code}">${c.name}</option>`).join('');
+        countries.map(c => `<option value="${c.name}" data-code="${c.code}">${c.name}</option>`).join('');
       if(data?.pais){
         paisSel.value = data.pais;
-        const states = await geoService.getStatesByCountry(data.pais);
-        estadoSel.innerHTML = '<option value="">Selecione</option>' +
-          states.map(s => `<option value="${s.code}">${s.name}</option>`).join('');
-        estadoSel.disabled = false;
-        estadoSel.value = data.estado || '';
+        const code = countries.find(c => c.name === data.pais)?.code;
+        if(code){
+          const states = await geoService.getStatesByCountry(code);
+          estadoSel.innerHTML = '<option value="">Selecione</option>' +
+            states.map(s => `<option value="${s.name}">${s.name}</option>`).join('');
+          estadoSel.disabled = false;
+          estadoSel.value = data.estado || '';
+        } else {
+          estadoSel.disabled = true;
+          estadoSel.innerHTML = '<option value="">Selecione o país</option>';
+        }
       } else {
         estadoSel.disabled = true;
         estadoSel.innerHTML = '<option value="">Selecione o país</option>';
       }
       paisSel.addEventListener('change', async () => {
-        const code = paisSel.value;
+        const code = paisSel.selectedOptions[0]?.dataset.code;
         if(!code){
           estadoSel.disabled = true;
           estadoSel.innerHTML = '<option value="">Selecione o país</option>';
@@ -158,7 +164,7 @@
         const states = await geoService.getStatesByCountry(code);
         estadoSel.disabled = false;
         estadoSel.innerHTML = '<option value="">Selecione</option>' +
-          states.map(s => `<option value="${s.code}">${s.name}</option>`).join('');
+          states.map(s => `<option value="${s.name}">${s.name}</option>`).join('');
       });
       estadoSel.addEventListener('mousedown', e => {
         if(!paisSel.value){
