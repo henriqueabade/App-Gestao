@@ -88,7 +88,10 @@
 
       <section id="panel-enderecos" role="tabpanel" aria-labelledby="tab-enderecos" class="px-8 py-6 hidden">
         <div class="mb-8">
-          <h3 class="text-lg font-semibold text-white mb-4">Endereço de Registro</h3>
+          <h3 class="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+            <button id="copyRegEndereco" type="button" class="text-gray-400 hover:text-white"><i class="fas fa-copy"></i></button>
+            Endereço de Registro
+          </h3>
           <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div class="md:col-span-2">
               <label class="block text-sm font-medium text-gray-300 mb-2">Rua</label>
@@ -131,7 +134,10 @@
 
         <div class="mb-8">
           <div class="flex items-center justify-between mb-4">
-            <h3 class="text-lg font-semibold text-white">Endereço de Cobrança</h3>
+            <h3 class="text-lg font-semibold text-white flex items-center gap-2">
+              <button id="copyCobEndereco" type="button" class="text-gray-400 hover:text-white"><i class="fas fa-copy"></i></button>
+              Endereço de Cobrança
+            </h3>
             <label class="flex items-center gap-3">
               <input id="cobrancaIgual" type="checkbox" class="component-toggle" />
               <span class="text-sm text-gray-300">Igual ao de Registro</span>
@@ -179,7 +185,10 @@
 
         <div>
           <div class="flex items-center justify-between mb-4">
-            <h3 class="text-lg font-semibold text-white">Endereço de Entrega</h3>
+            <h3 class="text-lg font-semibold text-white flex items-center gap-2">
+              <button id="copyEntEndereco" type="button" class="text-gray-400 hover:text-white"><i class="fas fa-copy"></i></button>
+              Endereço de Entrega
+            </h3>
             <label class="flex items-center gap-3">
               <input id="entregaIgual" type="checkbox" class="component-toggle" />
               <span class="text-sm text-gray-300">Igual ao de Registro</span>
