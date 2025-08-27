@@ -5,6 +5,7 @@
   overlay.addEventListener('click', e => { if(e.target === overlay) close(); });
   const voltar = document.getElementById('voltarEditarCliente');
   if(voltar) voltar.addEventListener('click', close);
+  document.getElementById('cancelarEditarCliente')?.addEventListener('click', close);
   document.addEventListener('keydown', function esc(e){ if(e.key==='Escape'){ close(); document.removeEventListener('keydown', esc); }});
 
   const cliente = window.clienteEditar;
@@ -342,6 +343,7 @@
         if(!res.ok) throw new Error('Erro ao salvar');
         showToast('Cliente atualizado com sucesso');
         window.dispatchEvent(new Event('clienteEditado'));
+        close();
       }catch(err){
         console.error('Erro ao atualizar cliente', err);
         showToast('Erro ao salvar cliente', 'error');
