@@ -37,7 +37,8 @@ function setupDb() {
       reg_cep text,
       reg_pais text,
       status_cliente text,
-      dono_cliente text
+      dono_cliente text,
+      origem_captacao text
     );
   `);
   db.public.none(`
@@ -114,8 +115,8 @@ test('GET /api/clientes/lista inclui pais', async () => {
   const { Pool } = mem.adapters.createPg();
   const pool = new Pool();
 
-  await pool.query(`INSERT INTO clientes (id, nome_fantasia, cnpj, ent_uf, ent_pais, status_cliente, dono_cliente)
-                    VALUES (1, 'Cliente A', '123', 'SP', 'BR', 'Ativo', 'Joao')`);
+  await pool.query(`INSERT INTO clientes (id, nome_fantasia, cnpj, ent_uf, ent_pais, status_cliente, dono_cliente, origem_captacao)
+                    VALUES (1, 'Cliente A', '123', 'SP', 'BR', 'Ativo', 'Joao', 'Indicação')`);
 
   const dbModulePath = require.resolve('./db');
   require.cache[dbModulePath] = {

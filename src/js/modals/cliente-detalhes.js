@@ -17,6 +17,20 @@
       document.head.appendChild(s);
     });
   }
+
+  async function carregarDonos(){
+    try{
+      const res = await fetch('http://localhost:3000/api/usuarios/lista');
+      const usuarios = await res.json();
+      const sel = document.getElementById('empresaDono');
+      if(sel){
+        sel.innerHTML = '<option value="">Selecione o dono</option>' +
+          usuarios.map(u => `<option value="${u.nome}">${u.nome}</option>`).join('');
+      }
+    }catch(err){
+      console.error('Erro ao carregar donos', err);
+    }
+  }
   if(cliente){
     const titulo = document.getElementById('clienteDetalhesTitulo');
     if(titulo) titulo.textContent = `Detalhes – ${cliente.nome_fantasia || ''}`;
@@ -24,6 +38,7 @@
       const res = await fetch(`http://localhost:3000/api/clientes/${cliente.id}`);
       const data = await res.json();
       if(data && data.cliente){
+        await carregarDonos();
         preencherDadosEmpresa(data.cliente);
         await preencherEnderecos(data.cliente);
         renderContatos(data.contatos || []);
@@ -115,6 +130,7 @@
   overlay.addEventListener('mousedown', warn, true);
   overlay.addEventListener('focusin', warn);
   overlay.querySelectorAll('input, textarea').forEach(el => el.readOnly = true);
+  overlay.querySelectorAll('select').forEach(el => el.disabled = true);
   addCopyButtons();
 
   const editar = document.getElementById('editarDetalhesCliente');
@@ -134,9 +150,11 @@
       empresaRazaoSocial: 'razao_social',
       empresaNomeFantasia: 'nome_fantasia',
       empresaCnpj: 'cnpj',
-      empresaSegmento: 'segmento',
+      empresaDono: 'dono_cliente',
       empresaInscricaoEstadual: 'inscricao_estadual',
-      empresaSite: 'site'
+      empresaSite: 'site',
+      empresaStatus: 'status_cliente',
+      empresaOrigemCaptacao: 'origem_captacao'
     };
     for(const id in map){
       const el = document.getElementById(id);

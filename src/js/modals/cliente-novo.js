@@ -117,6 +117,21 @@
   }
   await ensureGeo();
 
+  async function carregarDonos(){
+    try{
+      const res = await fetch('http://localhost:3000/api/usuarios/lista');
+      const usuarios = await res.json();
+      const sel = document.getElementById('empresaDono');
+      if(sel){
+        sel.innerHTML = '<option value="">Selecione o dono</option>' +
+          usuarios.map(u => `<option value="${u.nome}">${u.nome}</option>`).join('');
+      }
+    }catch(err){
+      console.error('Erro ao carregar donos', err);
+    }
+  }
+  await carregarDonos();
+
   async function setupEndereco(prefix){
     const paisSel = document.getElementById(prefix + 'Pais');
     const estadoSel = document.getElementById(prefix + 'Estado');
@@ -196,8 +211,9 @@
       empresaRazaoSocial: 'Razão Social',
       empresaNomeFantasia: 'Nome Fantasia',
       empresaCnpj: 'CNPJ',
-      empresaSegmento: 'Segmento',
-      empresaInscricaoEstadual: 'Inscrição Estadual'
+      empresaDono: 'Dono',
+      empresaInscricaoEstadual: 'Inscrição Estadual',
+      empresaStatus: 'Status'
     };
     for(const id in requiredEmpresa){
       if(!getVal(id)) missing.push({tab:'tab-dados-empresa', field:id, name: requiredEmpresa[id]});
@@ -250,9 +266,11 @@
       razao_social: getVal('empresaRazaoSocial'),
       nome_fantasia: getVal('empresaNomeFantasia'),
       cnpj: getVal('empresaCnpj'),
-      segmento: getVal('empresaSegmento'),
+      dono_cliente: getVal('empresaDono'),
       inscricao_estadual: getVal('empresaInscricaoEstadual'),
       site: getVal('empresaSite') || 'Não Informado',
+      status_cliente: getVal('empresaStatus'),
+      origem_captacao: getVal('empresaOrigemCaptacao'),
       endereco_registro: reg,
       endereco_cobranca: cob,
       endereco_entrega: ent,

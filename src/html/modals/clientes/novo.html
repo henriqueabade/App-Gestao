@@ -37,13 +37,9 @@
                 <input id="empresaCnpj" type="text" placeholder="00.000.000/0001-00" maxlength="18" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
               </div>
               <div>
-                <label class="block text-sm font-medium text-gray-300 mb-2">Segmento</label>
-                <select id="empresaSegmento" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition select-arrow appearance-none">
-                  <option value="">Selecione o segmento</option>
-                  <option value="varejo">Varejo</option>
-                  <option value="atacado">Atacado</option>
-                  <option value="servicos">Serviços</option>
-                  <option value="industria">Indústria</option>
+                <label class="block text-sm font-medium text-gray-300 mb-2">Dono</label>
+                <select id="empresaDono" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition select-arrow appearance-none">
+                  <option value="">Selecione o dono</option>
                 </select>
               </div>
               <div>
@@ -53,6 +49,18 @@
               <div>
                 <label class="block text-sm font-medium text-gray-300 mb-2">Site</label>
                 <input id="empresaSite" type="url" placeholder="https://www.exemplo.com.br" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-300 mb-2">Status</label>
+                <select id="empresaStatus" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition select-arrow appearance-none">
+                  <option value="">Selecione o status</option>
+                  <option value="Ativo">Ativo</option>
+                  <option value="Inativo">Inativo</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-300 mb-2">Origem Captação</label>
+                <input id="empresaOrigemCaptacao" type="text" placeholder="Origem da captação" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
               </div>
             </div>
           </div>

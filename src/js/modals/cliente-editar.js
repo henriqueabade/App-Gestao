@@ -17,6 +17,20 @@
       document.head.appendChild(s);
     });
   }
+
+  async function carregarDonos(){
+    try{
+      const res = await fetch('http://localhost:3000/api/usuarios/lista');
+      const usuarios = await res.json();
+      const sel = document.getElementById('empresaDono');
+      if(sel){
+        sel.innerHTML = '<option value="">Selecione o dono</option>' +
+          usuarios.map(u => `<option value="${u.nome}">${u.nome}</option>`).join('');
+      }
+    }catch(err){
+      console.error('Erro ao carregar donos', err);
+    }
+  }
   let contatos = [];
   const novosContatos = [];
   if(cliente){
@@ -26,6 +40,7 @@
       const res = await fetch(`http://localhost:3000/api/clientes/${cliente.id}`);
       const data = await res.json();
       if(data && data.cliente){
+        await carregarDonos();
         preencherDadosEmpresa(data.cliente);
         await preencherEnderecos(data.cliente);
         renderContatos(data.contatos || []);
@@ -115,9 +130,11 @@
       empresaRazaoSocial: 'razao_social',
       empresaNomeFantasia: 'nome_fantasia',
       empresaCnpj: 'cnpj',
-      empresaSegmento: 'segmento',
+      empresaDono: 'dono_cliente',
       empresaInscricaoEstadual: 'inscricao_estadual',
-      empresaSite: 'site'
+      empresaSite: 'site',
+      empresaStatus: 'status_cliente',
+      empresaOrigemCaptacao: 'origem_captacao'
     };
     for(const id in map){
       const el = document.getElementById(id);
@@ -313,8 +330,11 @@
       razao_social: getVal('empresaRazaoSocial'),
       nome_fantasia: getVal('empresaNomeFantasia'),
       cnpj: getVal('empresaCnpj'),
+      dono_cliente: getVal('empresaDono'),
       inscricao_estadual: getVal('empresaInscricaoEstadual'),
       site: getVal('empresaSite'),
+      status_cliente: getVal('empresaStatus'),
+      origem_captacao: getVal('empresaOrigemCaptacao'),
       endereco_registro: reg,
       endereco_cobranca: cob,
       endereco_entrega: ent,
