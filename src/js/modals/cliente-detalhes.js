@@ -110,7 +110,10 @@
   const editar = document.getElementById('editarDetalhesCliente');
   if(editar){
     editar.addEventListener('click', () => {
-      if(cliente) abrirEditarCliente(cliente);
+      if(cliente){
+        Modal.close('detalhesCliente');
+        abrirEditarCliente(cliente);
+      }
     });
   }
 
