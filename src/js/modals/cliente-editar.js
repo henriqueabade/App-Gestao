@@ -164,7 +164,7 @@
   }
 
   document.getElementById('addContatoBtn')?.addEventListener('click', () => {
-    Modal.open('modals/clientes/contato.html', '../js/modals/cliente-contato.js', 'novoContatoCliente');
+    Modal.open('modals/clientes/contato.html', '../js/modals/cliente-contato.js', 'novoContatoCliente', true);
   });
 
   window.addEventListener('clienteContatoAdicionado', e => {
