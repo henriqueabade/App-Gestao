@@ -1,8 +1,37 @@
 // Script principal do módulo de Contatos
 // Responsável por carregar e filtrar contatos vinculados aos clientes
 
+function updateEmptyStateContatos(hasData) {
+    const wrapper = document.getElementById('contatosTableWrapper');
+    const empty = document.getElementById('contatosEmptyState');
+    if (!wrapper || !empty) return;
+    if (hasData) {
+        wrapper.classList.remove('hidden');
+        empty.classList.add('hidden');
+    } else {
+        wrapper.classList.add('hidden');
+        empty.classList.remove('hidden');
+    }
+}
+
+function aplicarFiltroContatos() {
+    const termo = document.querySelector('input[placeholder="Nome / Empresa"]')?.value.toLowerCase() || '';
+    const tipos = Array.from(document.querySelectorAll('input[type="checkbox"]:checked')).map(cb => cb.nextElementSibling?.textContent.trim());
+    let visible = 0;
+    document.querySelectorAll('#contatosTableWrapper tbody tr').forEach(row => {
+        const nome = row.cells[0]?.innerText.toLowerCase() || '';
+        const empresa = row.cells[2]?.innerText.toLowerCase() || '';
+        const tipo = row.cells[1]?.innerText.trim();
+        const matchTermo = !termo || nome.includes(termo) || empresa.includes(termo);
+        const matchTipo = tipos.length === 0 || tipos.includes(tipo);
+        const show = matchTermo && matchTipo;
+        row.style.display = show ? '' : 'none';
+        if (show) visible++;
+    });
+    updateEmptyStateContatos(visible > 0);
+}
+
 function initContatos() {
-    // Animação de entrada para elementos marcados
     document.querySelectorAll('.animate-fade-in-up').forEach((el, index) => {
         setTimeout(() => {
             el.style.opacity = '1';
@@ -10,25 +39,20 @@ function initContatos() {
         }, index * 100);
     });
 
-    // Eventos de filtro por tipo
     document.querySelectorAll('input[type="checkbox"]').forEach(cb => {
-        cb.addEventListener('change', () => {
-            console.log(`Filtro ${cb.nextElementSibling?.textContent}: ${cb.checked}`);
-        });
+        cb.addEventListener('change', aplicarFiltroContatos);
     });
 
-    // Busca por nome ou empresa
     const searchInput = document.querySelector('input[placeholder="Nome / Empresa"]');
-    searchInput?.addEventListener('input', e => {
-        console.log('Busca:', e.target.value);
-    });
+    searchInput?.addEventListener('input', aplicarFiltroContatos);
 
-    // Ação de edição (placeholder)
     document.querySelectorAll('.fa-edit').forEach(icon => {
         icon.addEventListener('click', () => {
             console.log('Editar contato');
         });
     });
+
+    aplicarFiltroContatos();
 }
 
 if (document.readyState === 'loading') {
