@@ -106,6 +106,7 @@
   overlay.addEventListener('mousedown', warn, true);
   overlay.addEventListener('focusin', warn);
   overlay.querySelectorAll('input, textarea').forEach(el => el.readOnly = true);
+  addCopyButtons();
 
   const editar = document.getElementById('editarDetalhesCliente');
   if(editar){
@@ -195,6 +196,32 @@
       entFields.classList.toggle('hidden', entToggle.checked);
       entToggle.disabled = true;
     }
+  }
+
+  function addCopyButtons(){
+    const fields = overlay.querySelectorAll('input:not([type="checkbox"]):not([type="radio"]), textarea');
+    fields.forEach(field => {
+      const wrapper = document.createElement('div');
+      wrapper.className = 'relative';
+      field.parentNode.insertBefore(wrapper, field);
+      wrapper.appendChild(field);
+      field.classList.add('pr-10');
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'absolute inset-y-0 right-0 flex items-center px-3 text-gray-400 hover:text-white';
+      btn.innerHTML = '<i class="fas fa-copy"></i>';
+      btn.addEventListener('click', async e => {
+        e.preventDefault();
+        e.stopPropagation();
+        try{
+          await navigator.clipboard.writeText(field.value || '');
+          showToast('Dado copiado!', 'success');
+        }catch{
+          showToast('Erro ao copiar', 'error');
+        }
+      });
+      wrapper.appendChild(btn);
+    });
   }
 
   async function carregarOrdens(id){
