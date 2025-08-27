@@ -294,8 +294,8 @@
       }
       if(!res.ok) throw new Error('Erro ao registrar');
       showToast('Cliente registrado com sucesso');
+      window.dispatchEvent(new Event('clienteAdicionado'));
       close();
-      if(typeof carregarClientes === 'function') await carregarClientes(true);
     }catch(err){
       console.error('Erro ao registrar cliente', err);
       showToast('Erro ao registrar cliente', 'error');
