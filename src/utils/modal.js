@@ -13,14 +13,16 @@ const ModalManager = (() => {
       const empty = document.createElement('div');
       empty.className = 'modal-empty-state hidden py-12 flex flex-col items-center justify-center text-center px-4';
       empty.innerHTML = `
-        <div class="rounded-full bg-[var(--color-primary-opacity)] p-6 mb-4">
-          <i class="fas fa-box-open text-[var(--color-primary)] text-6xl"></i>
+        <div class="rounded-full bg-[var(--color-primary-opacity)] p-8 mb-6">
+          <i class="fas fa-box-open text-[var(--color-primary)] text-8xl"></i>
         </div>
         <h3 class="text-lg font-medium text-white">Nenhum resultado encontrado</h3>
       `;
       table.parentNode.insertBefore(empty, table.nextSibling);
       const check = () => {
-        const visible = Array.from(tbody.querySelectorAll('tr')).filter(r => r.style.display !== 'none');
+        const visible = Array.from(tbody.querySelectorAll('tr')).filter(r =>
+          r.style.display !== 'none' && !r.classList.contains('hidden') && !r.hidden
+        );
         if (visible.length === 0) {
           table.classList.add('hidden');
           empty.classList.remove('hidden');
@@ -29,7 +31,12 @@ const ModalManager = (() => {
           empty.classList.add('hidden');
         }
       };
-      new MutationObserver(check).observe(tbody, { childList: true, subtree: true, attributes: true, attributeFilter: ['style', 'class'] });
+      new MutationObserver(check).observe(tbody, {
+        childList: true,
+        subtree: true,
+        attributes: true,
+        attributeFilter: ['style', 'class', 'hidden']
+      });
       check();
     });
   }
