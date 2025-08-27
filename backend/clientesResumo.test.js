@@ -37,7 +37,8 @@ function setupDb() {
       reg_cep text,
       reg_pais text,
       status_cliente text,
-      dono_cliente text
+      dono_cliente text,
+      origem_captacao text
     );
   `);
   db.public.none(`
