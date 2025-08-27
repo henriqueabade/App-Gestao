@@ -5,7 +5,8 @@
 const ENDPOINT_COUNTRIES =
   'https://restcountries.com/v3.1/all?fields=name,cca2'; // leve (nome + ISO-2)
 const ENDPOINT_STATES =
-  'https://raw.githubusercontent.com/dr5hn/countries-states-cities-database/master/states.json'; // carregado sob demanda
+  // dataset completo de estados, listado dentro da pasta "json" do repositório
+  'https://raw.githubusercontent.com/dr5hn/countries-states-cities-database/master/json/states.json'; // carregado sob demanda
 
 // Fallbacks offline mínimos para evitar falhas quando não há internet
 const FALLBACK_COUNTRIES = [{ name: 'Brasil', code: 'BR' }];
