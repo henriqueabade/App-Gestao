@@ -69,6 +69,7 @@ function aplicarFiltros() {
         const matchTermo = !termo ||
             c.nome_fantasia.toLowerCase().includes(termo) ||
             (c.cnpj || '').toLowerCase().includes(termo) ||
+            (c.pais || '').toLowerCase().includes(termo) ||
             (c.estado || '').toLowerCase().includes(termo);
         const matchDono = !dono || c.dono_cliente === dono;
         const matchStatus = !status || c.status_cliente === status;
@@ -118,6 +119,7 @@ function renderClientes(clientes) {
         tr.innerHTML = `
             <td class="px-6 py-4 whitespace-nowrap text-sm text-white">${c.nome_fantasia}</td>
             <td class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-violet)">${c.cnpj}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-violet)">${c.pais || ''}</td>
             <td class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-violet)">${c.estado}</td>
             <td class="px-6 py-4 whitespace-nowrap">${badgeForStatus(c.status_cliente)}</td>
             <td class="px-6 py-4 whitespace-nowrap text-sm text-white">${c.dono_cliente || ''}</td>

@@ -30,12 +30,13 @@ router.get('/lista', async (_req, res) => {
   try {
     // 'ent_uf' holds the two letter state for the delivery address
     const result = await pool.query(
-      'SELECT id, nome_fantasia, cnpj, ent_uf, status_cliente, dono_cliente FROM clientes ORDER BY nome_fantasia'
+      'SELECT id, nome_fantasia, cnpj, pais, ent_uf, status_cliente, dono_cliente FROM clientes ORDER BY nome_fantasia'
     );
     const clientes = result.rows.map(c => ({
       id: c.id,
       nome_fantasia: c.nome_fantasia,
       cnpj: c.cnpj,
+      pais: c.pais || '',
       estado: extractUF(c.ent_uf) || 'Unidentified State',
       status_cliente: c.status_cliente,
       dono_cliente: c.dono_cliente
