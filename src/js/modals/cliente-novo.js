@@ -138,13 +138,11 @@
   renderContatos();
 
   document.getElementById('addContatoBtn')?.addEventListener('click', () => {
-    const nome = prompt('Nome do contato:')?.trim();
-    if(!nome) return;
-    const cargo = prompt('Cargo:')?.trim() || '';
-    const email = prompt('E-mail:')?.trim() || '';
-    const telCel = prompt('Telefone Celular:')?.trim() || '';
-    const telFixo = prompt('Telefone Fixo:')?.trim() || '';
-    contatos.push({ nome, cargo, email, telefone_celular: telCel, telefone_fixo: telFixo });
+    Modal.open('modals/clientes/contato.html', '../js/modals/cliente-contato.js', 'novoContatoCliente');
+  });
+
+  window.addEventListener('clienteContatoAdicionado', e => {
+    contatos.push(e.detail);
     renderContatos();
   });
 
