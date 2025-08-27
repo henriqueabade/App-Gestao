@@ -28,9 +28,9 @@ function extractUF(endereco) {
 
 router.get('/lista', async (_req, res) => {
   try {
-    // 'ent_uf' holds the two letter state for the delivery address
+    // 'ent_pais' and 'ent_uf' hold the country and state for the delivery address
     const result = await pool.query(
-      'SELECT id, nome_fantasia, cnpj, reg_pais, ent_uf, status_cliente, dono_cliente FROM clientes ORDER BY nome_fantasia'
+      'SELECT id, nome_fantasia, cnpj, ent_pais AS pais, ent_uf, status_cliente, dono_cliente FROM clientes ORDER BY nome_fantasia'
     );
     const clientes = result.rows.map(c => ({
       id: c.id,
