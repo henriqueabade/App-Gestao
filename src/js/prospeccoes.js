@@ -21,6 +21,21 @@ function registrarHistorico(leadId, observacao) {
     console.log(`Histórico do lead ${leadId}: ${observacao}`);
 }
 
+function updateEmptyStateProspeccoes() {
+    const wrapper = document.getElementById('prospeccoesTableWrapper');
+    const empty = document.getElementById('prospeccoesEmptyState');
+    const tbody = wrapper?.querySelector('tbody');
+    if (!wrapper || !empty || !tbody) return;
+    const hasData = Array.from(tbody.querySelectorAll('tr')).some(r => r.style.display !== 'none');
+    if (hasData) {
+        wrapper.classList.remove('hidden');
+        empty.classList.add('hidden');
+    } else {
+        wrapper.classList.add('hidden');
+        empty.classList.remove('hidden');
+    }
+}
+
 function openModalWithSpinner(htmlPath, scriptPath, overlayId) {
     Modal.closeAll();
     const spinner = document.createElement('div');
@@ -99,6 +114,8 @@ function initProspeccoes() {
             }
         });
     });
+
+    updateEmptyStateProspeccoes();
 }
 
 if (document.readyState === 'loading') {

@@ -177,7 +177,7 @@
                 </div>
 
                 <!-- Leads Table -->
-                <div class="glass-surface shadow rounded-xl table-scroll">
+                <div id="prospeccoesTableWrapper" class="glass-surface shadow rounded-xl table-scroll">
                     <table class="w-full">
                         <thead class="bg-gray-50 sticky top-0">
                             <tr>
@@ -427,7 +427,16 @@
                                     </td>
                                 </tr>
                             </tbody>
-                        </table>
+                    </table>
+                </div>
+
+                <!-- Empty State -->
+                <div id="prospeccoesEmptyState" class="hidden py-12 flex flex-col items-center justify-center text-center px-4">
+                  <div class="rounded-full bg-[var(--color-primary-opacity)] p-8 mb-6">
+                    <i class="fas fa-box-open text-8xl text-[var(--color-primary)]"></i>
+                  </div>
+                  <h3 class="text-lg font-medium text-white">Nenhuma prospecção encontrada</h3>
+                  <p class="mt-1 text-sm text-white/70">Tente ajustar os filtros.</p>
                 </div>
             </div>
         </div>

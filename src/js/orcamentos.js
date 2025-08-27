@@ -1,6 +1,19 @@
 // Lógica de interação para o módulo de Orçamentos
 window.customStartDate = null;
 window.customEndDate = null;
+
+function updateEmptyStateOrcamentos(hasData) {
+    const wrapper = document.getElementById('orcamentosTableWrapper');
+    const empty = document.getElementById('orcamentosEmptyState');
+    if (!wrapper || !empty) return;
+    if (hasData) {
+        wrapper.classList.remove('hidden');
+        empty.classList.add('hidden');
+    } else {
+        wrapper.classList.add('hidden');
+        empty.classList.remove('hidden');
+    }
+}
 async function popularClientes() {
     const select = document.getElementById('filterClient');
     if (!select) return;
@@ -176,6 +189,7 @@ async function carregarOrcamentos() {
             });
         });
         await popularClientes();
+        updateEmptyStateOrcamentos(data.length > 0);
     } catch (err) {
         console.error('Erro ao carregar orçamentos', err);
     }
@@ -216,6 +230,8 @@ function aplicarFiltro() {
 
         row.style.display = show ? '' : 'none';
     });
+    const hasVisible = Array.from(document.querySelectorAll('#orcamentosTabela tr')).some(r => r.style.display !== 'none');
+    updateEmptyStateOrcamentos(hasVisible);
 }
 
 function limparFiltros() {

@@ -268,7 +268,6 @@
         if(!res.ok) throw new Error('Erro ao salvar');
         showToast('Cliente atualizado com sucesso');
         window.dispatchEvent(new Event('clienteEditado'));
-        close();
       }catch(err){
         console.error('Erro ao atualizar cliente', err);
         showToast('Erro ao salvar cliente', 'error');

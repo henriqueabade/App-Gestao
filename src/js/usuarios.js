@@ -8,6 +8,19 @@ const API_URL = 'http://localhost:3000';
 // Cache local dos usuários carregados
 let usuariosCache = [];
 
+function updateEmptyStateUsuarios(hasData) {
+    const wrapper = document.getElementById('usuariosTableWrapper');
+    const empty = document.getElementById('usuariosEmptyState');
+    if (!wrapper || !empty) return;
+    if (hasData) {
+        wrapper.classList.remove('hidden');
+        empty.classList.add('hidden');
+    } else {
+        wrapper.classList.add('hidden');
+        empty.classList.remove('hidden');
+    }
+}
+
 function coletarFiltros() {
     const status = [];
     document.querySelectorAll('.checkbox-custom:checked').forEach(cb => status.push(cb.value));
@@ -132,6 +145,8 @@ function renderUsuarios(lista) {
             console.log('Remover usuário');
         });
     });
+
+    updateEmptyStateUsuarios(lista.length > 0);
 }
 
 function atualizarResumo() {

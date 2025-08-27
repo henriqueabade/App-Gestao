@@ -6,6 +6,41 @@ const ModalManager = (() => {
   const modalConfigs = {
   };
 
+  function setupEmptyStates(wrapper) {
+    wrapper.querySelectorAll('table').forEach(table => {
+      const tbody = table.tBodies[0];
+      if (!tbody) return;
+      const empty = document.createElement('div');
+      empty.className = 'modal-empty-state hidden py-12 flex flex-col items-center justify-center text-center px-4';
+      empty.innerHTML = `
+        <div class="rounded-full bg-[var(--color-primary-opacity)] p-8 mb-6">
+          <i class="fas fa-box-open text-[var(--color-primary)] text-8xl"></i>
+        </div>
+        <h3 class="text-lg font-medium text-white">Nenhum resultado encontrado</h3>
+      `;
+      table.parentNode.insertBefore(empty, table.nextSibling);
+      const check = () => {
+        const visible = Array.from(tbody.querySelectorAll('tr')).filter(r =>
+          r.style.display !== 'none' && !r.classList.contains('hidden') && !r.hidden
+        );
+        if (visible.length === 0) {
+          table.classList.add('hidden');
+          empty.classList.remove('hidden');
+        } else {
+          table.classList.remove('hidden');
+          empty.classList.add('hidden');
+        }
+      };
+      new MutationObserver(check).observe(tbody, {
+        childList: true,
+        subtree: true,
+        attributes: true,
+        attributeFilter: ['style', 'class', 'hidden']
+      });
+      check();
+    });
+  }
+
   async function open(htmlPath, scriptPath, overlayId, keepExisting = false) {
     if (arguments.length === 1) {
       const cfg = modalConfigs[htmlPath];
@@ -30,6 +65,7 @@ const ModalManager = (() => {
     if (token !== openToken) return;
     document.body.appendChild(wrapper);
     document.body.classList.add('overflow-hidden');
+    setupEmptyStates(wrapper);
 
     if (scriptPath) {
       const script = document.createElement('script');
