@@ -187,6 +187,65 @@ router.get('/:id/resumo', async (req, res) => {
   }
 });
 
+router.post('/', async (req, res) => {
+  const cli = req.body || {};
+  const values = [
+    cli.razao_social,
+    cli.nome_fantasia,
+    cli.cnpj,
+    cli.inscricao_estadual,
+    cli.site,
+    cli.endereco_registro?.rua,
+    cli.endereco_registro?.numero,
+    cli.endereco_registro?.complemento,
+    cli.endereco_registro?.bairro,
+    cli.endereco_registro?.cidade,
+    cli.endereco_registro?.estado,
+    cli.endereco_registro?.cep,
+    cli.endereco_cobranca?.rua,
+    cli.endereco_cobranca?.numero,
+    cli.endereco_cobranca?.complemento,
+    cli.endereco_cobranca?.bairro,
+    cli.endereco_cobranca?.cidade,
+    cli.endereco_cobranca?.estado,
+    cli.endereco_cobranca?.cep,
+    cli.endereco_entrega?.rua,
+    cli.endereco_entrega?.numero,
+    cli.endereco_entrega?.complemento,
+    cli.endereco_entrega?.bairro,
+    cli.endereco_entrega?.cidade,
+    cli.endereco_entrega?.estado,
+    cli.endereco_entrega?.cep,
+    cli.anotacoes
+  ];
+  try {
+    const insertRes = await pool.query(
+      `INSERT INTO clientes (
+        razao_social, nome_fantasia, cnpj, inscricao_estadual, site,
+        reg_logradouro, reg_numero, reg_complemento, reg_bairro, reg_cidade, reg_uf, reg_cep,
+        cob_logradouro, cob_numero, cob_complemento, cob_bairro, cob_cidade, cob_uf, cob_cep,
+        ent_logradouro, ent_numero, ent_complemento, ent_bairro, ent_cidade, ent_uf, ent_cep,
+        anotacoes
+      ) VALUES (
+        $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27
+      ) RETURNING id`,
+      values
+    );
+    const clienteId = insertRes.rows[0].id;
+    const contatos = Array.isArray(cli.contatos) ? cli.contatos : [];
+    for(const ct of contatos){
+      await pool.query(
+        'INSERT INTO contatos_cliente (id_cliente, nome, cargo, telefone_celular, telefone_fixo, email) VALUES ($1,$2,$3,$4,$5,$6)',
+        [clienteId, ct.nome, ct.cargo, ct.telefone_celular, ct.telefone_fixo, ct.email]
+      );
+    }
+    res.json({ id: clienteId });
+  } catch(err){
+    console.error('Erro ao criar cliente:', err);
+    res.status(500).json({ error: 'Erro ao criar cliente' });
+  }
+});
+
 // PUT /api/clientes/:id
 router.put('/:id', async (req, res) => {
   const { id } = req.params;
