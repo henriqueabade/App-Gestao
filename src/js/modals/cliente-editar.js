@@ -227,4 +227,52 @@
       tbody.appendChild(tr);
     });
   }
+
+  function coletarDados(){
+    const getVal = id => document.getElementById(id)?.value?.trim() || '';
+    const endereco = prefix => ({
+      rua: getVal(prefix+'Rua'),
+      numero: getVal(prefix+'Numero'),
+      complemento: getVal(prefix+'Complemento'),
+      bairro: getVal(prefix+'Bairro'),
+      cidade: getVal(prefix+'Cidade'),
+      estado: getVal(prefix+'Estado'),
+      cep: getVal(prefix+'Cep')
+    });
+    const reg = endereco('reg');
+    const cob = document.getElementById('cobrancaIgual')?.checked ? reg : endereco('cob');
+    const ent = document.getElementById('entregaIgual')?.checked ? reg : endereco('ent');
+    return {
+      razao_social: getVal('empresaRazaoSocial'),
+      nome_fantasia: getVal('empresaNomeFantasia'),
+      cnpj: getVal('empresaCnpj'),
+      inscricao_estadual: getVal('empresaInscricaoEstadual'),
+      site: getVal('empresaSite'),
+      endereco_registro: reg,
+      endereco_cobranca: cob,
+      endereco_entrega: ent,
+      anotacoes: document.getElementById('clienteNotas')?.value || ''
+    };
+  }
+
+  const salvarBtn = overlay.querySelector('footer .btn-primary');
+  if(salvarBtn && cliente){
+    salvarBtn.addEventListener('click', async () => {
+      const dados = coletarDados();
+      try{
+        const res = await fetch(`http://localhost:3000/api/clientes/${cliente.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(dados)
+        });
+        if(!res.ok) throw new Error('Erro ao salvar');
+        showToast('Cliente atualizado com sucesso');
+        close();
+        if(typeof carregarClientes === 'function') carregarClientes();
+      }catch(err){
+        console.error('Erro ao atualizar cliente', err);
+        showToast('Erro ao salvar cliente', 'error');
+      }
+    });
+  }
 })();
