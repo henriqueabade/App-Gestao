@@ -331,4 +331,28 @@ router.put('/:id', async (req, res) => {
   }
 });
 
+// DELETE /api/clientes/:id
+router.delete('/:id', async (req, res) => {
+  const { id } = req.params;
+  try {
+    const orcRes = await pool.query('SELECT 1 FROM orcamentos WHERE cliente_id = $1 LIMIT 1', [id]);
+    if (orcRes.rows.length) {
+      return res.status(400).json({ error: 'Não é possível excluir: cliente possui orçamentos vinculados' });
+    }
+
+    await pool.query('BEGIN');
+    await pool.query('DELETE FROM contatos_cliente WHERE id_cliente = $1', [id]);
+    await pool.query('DELETE FROM contratos WHERE cliente_id = $1', [id]);
+    await pool.query('DELETE FROM cliente_notas WHERE cliente_id = $1', [id]);
+    await pool.query('DELETE FROM clientes WHERE id = $1', [id]);
+    await pool.query('COMMIT');
+
+    res.json({ success: true });
+  } catch (err) {
+    await pool.query('ROLLBACK').catch(() => {});
+    console.error('Erro ao excluir cliente:', err);
+    res.status(500).json({ error: 'Erro ao excluir cliente' });
+  }
+});
+
 module.exports = router;

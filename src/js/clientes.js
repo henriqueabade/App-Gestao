@@ -140,6 +140,11 @@ function renderClientes(clientes) {
             e.stopPropagation();
             abrirEditarCliente(c);
         });
+        const delBtn = tr.querySelector('.fa-trash');
+        if (delBtn) delBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            abrirExcluirCliente(c);
+        });
         tbody.appendChild(tr);
     });
     updateEmptyStateClientes(clientes.length > 0);
@@ -180,6 +185,11 @@ function abrirDetalhesCliente(cliente) {
 function abrirEditarCliente(cliente) {
     window.clienteEditar = cliente;
     openModalWithSpinner('modals/clientes/editar.html', '../js/modals/cliente-editar.js', 'editarCliente');
+}
+
+function abrirExcluirCliente(cliente) {
+    window.clienteExcluir = cliente;
+    Modal.open('modals/clientes/excluir.html', '../js/modals/cliente-excluir.js', 'excluirCliente');
 }
 
 // Expose the edit modal opener globally so other scripts (like the
