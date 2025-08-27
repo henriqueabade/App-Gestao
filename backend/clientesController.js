@@ -186,4 +186,79 @@ router.get('/:id/resumo', async (req, res) => {
     res.status(500).json({ error: 'Erro ao buscar resumo do cliente' });
   }
 });
+
+// PUT /api/clientes/:id
+router.put('/:id', async (req, res) => {
+  const { id } = req.params;
+  const cli = req.body || {};
+  const values = [
+    cli.razao_social,
+    cli.nome_fantasia,
+    cli.cnpj,
+    cli.inscricao_estadual,
+    cli.site,
+    cli.endereco_registro?.rua,
+    cli.endereco_registro?.numero,
+    cli.endereco_registro?.complemento,
+    cli.endereco_registro?.bairro,
+    cli.endereco_registro?.cidade,
+    cli.endereco_registro?.estado,
+    cli.endereco_registro?.cep,
+    cli.endereco_cobranca?.rua,
+    cli.endereco_cobranca?.numero,
+    cli.endereco_cobranca?.complemento,
+    cli.endereco_cobranca?.bairro,
+    cli.endereco_cobranca?.cidade,
+    cli.endereco_cobranca?.estado,
+    cli.endereco_cobranca?.cep,
+    cli.endereco_entrega?.rua,
+    cli.endereco_entrega?.numero,
+    cli.endereco_entrega?.complemento,
+    cli.endereco_entrega?.bairro,
+    cli.endereco_entrega?.cidade,
+    cli.endereco_entrega?.estado,
+    cli.endereco_entrega?.cep,
+    cli.anotacoes,
+    id
+  ];
+  try {
+    await pool.query(
+      `UPDATE clientes SET
+        razao_social = $1,
+        nome_fantasia = $2,
+        cnpj = $3,
+        inscricao_estadual = $4,
+        site = $5,
+        reg_logradouro = $6,
+        reg_numero = $7,
+        reg_complemento = $8,
+        reg_bairro = $9,
+        reg_cidade = $10,
+        reg_uf = $11,
+        reg_cep = $12,
+        cob_logradouro = $13,
+        cob_numero = $14,
+        cob_complemento = $15,
+        cob_bairro = $16,
+        cob_cidade = $17,
+        cob_uf = $18,
+        cob_cep = $19,
+        ent_logradouro = $20,
+        ent_numero = $21,
+        ent_complemento = $22,
+        ent_bairro = $23,
+        ent_cidade = $24,
+        ent_uf = $25,
+        ent_cep = $26,
+        anotacoes = $27
+       WHERE id = $28`,
+      values
+    );
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Erro ao atualizar cliente:', err);
+    res.status(500).json({ error: 'Erro ao atualizar cliente' });
+  }
+});
+
 module.exports = router;

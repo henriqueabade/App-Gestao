@@ -110,7 +110,6 @@
   const editar = document.getElementById('editarDetalhesCliente');
   if(editar){
     editar.addEventListener('click', () => {
-      close();
       if(cliente) abrirEditarCliente(cliente);
     });
   }
