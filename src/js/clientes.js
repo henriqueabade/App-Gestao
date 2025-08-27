@@ -226,6 +226,10 @@ function initClientes() {
 
     document.getElementById('btnFiltrar')?.addEventListener('click', aplicarFiltros);
     document.getElementById('btnLimpar')?.addEventListener('click', limparFiltros);
+    document.getElementById('btnNovoCliente')?.addEventListener('click', () => {
+        openModalWithSpinner('modals/clientes/novo.html', '../js/modals/cliente-novo.js', 'novoCliente');
+    });
+
 
     document.getElementById('clientesEmptyNew')?.addEventListener('click', () => {
         document.getElementById('btnNovoCliente')?.click();
