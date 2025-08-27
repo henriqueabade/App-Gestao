@@ -10,6 +10,19 @@
   // signal spinner loaded immediately
   window.dispatchEvent(new CustomEvent('modalSpinnerLoaded', { detail: 'novoCliente' }));
 
+  const cnpjInput = document.getElementById('empresaCnpj');
+  if (cnpjInput) {
+    cnpjInput.addEventListener('input', () => {
+      cnpjInput.value = cnpjInput.value.replace(/\D/g, '').slice(0, 14);
+    });
+  }
+  const ieInput = document.getElementById('empresaInscricaoEstadual');
+  if (ieInput) {
+    ieInput.addEventListener('input', () => {
+      ieInput.value = ieInput.value.replace(/\D/g, '').slice(0, 15);
+    });
+  }
+
   const tablist = overlay.querySelector('[role="tablist"]');
   const tabs = Array.from(overlay.querySelectorAll('[role="tab"]'));
   const panels = Array.from(overlay.querySelectorAll('[role="tabpanel"]'));
@@ -216,6 +229,10 @@
         headers:{'Content-Type':'application/json'},
         body: JSON.stringify(dados)
       });
+      if (res.status === 409) {
+        showToast('Cliente já registrado', 'error');
+        return;
+      }
       if(!res.ok) throw new Error('Erro ao registrar');
       showToast('Cliente registrado com sucesso');
       close();
