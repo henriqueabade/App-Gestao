@@ -112,7 +112,9 @@
     editar.addEventListener('click', () => {
       if(cliente){
         Modal.close('detalhesCliente');
-        setTimeout(() => abrirEditarCliente(cliente), 0);
+        setTimeout(() => {
+          if(window.abrirEditarCliente) window.abrirEditarCliente(cliente);
+        }, 0);
       }
     });
   }
