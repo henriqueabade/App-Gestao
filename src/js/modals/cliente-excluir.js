@@ -16,10 +16,12 @@
         carregarClientes(true);
       }else{
         showToast(data.error || 'Erro ao excluir cliente', 'error');
+        close();
       }
     }catch(err){
       console.error(err);
       showToast('Erro ao excluir cliente', 'error');
+      close();
     }
   });
 })();
