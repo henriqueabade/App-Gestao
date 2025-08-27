@@ -180,6 +180,8 @@ function abrirEditarCliente(cliente) {
     openModalWithSpinner('modals/clientes/editar.html', '../js/modals/cliente-editar.js', 'editarCliente');
 }
 
+window.addEventListener('clienteEditado', () => carregarClientes(true));
+
 function renderTotais(clientes) {
     const container = document.getElementById('totaisBadges');
     if (!container) return;
