@@ -7,6 +7,9 @@
   document.addEventListener('keydown', function esc(e){ if(e.key==='Escape'){ close(); document.removeEventListener('keydown', esc); }});
 
   const form = document.getElementById('novoContatoClienteForm');
+  const onlyDigits = e => { e.target.value = e.target.value.replace(/\D/g, ''); };
+  form.telefone_celular.addEventListener('input', onlyDigits);
+  form.telefone_fixo.addEventListener('input', onlyDigits);
   form.addEventListener('submit', e => {
     e.preventDefault();
     const data = {
