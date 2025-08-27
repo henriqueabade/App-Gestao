@@ -105,6 +105,21 @@
   }
   initToggles();
 
+  async function carregarUsuarios(){
+    try {
+      const res = await fetch('http://localhost:3000/api/usuarios/lista');
+      const usuarios = await res.json();
+      const sel = document.getElementById('empresaDono');
+      if(sel){
+        sel.innerHTML = '<option value="">Selecione o dono</option>' +
+          usuarios.map(u => `<option value="${u.nome}">${u.nome}</option>`).join('');
+      }
+    } catch(err){
+      console.error('Erro ao carregar usuários', err);
+    }
+  }
+  carregarUsuarios();
+
   async function ensureGeo(){
     if(window.geoService) return;
     await new Promise((resolve, reject) => {
@@ -196,7 +211,8 @@
       empresaRazaoSocial: 'Razão Social',
       empresaNomeFantasia: 'Nome Fantasia',
       empresaCnpj: 'CNPJ',
-      empresaSegmento: 'Segmento',
+      empresaDono: 'Dono',
+      empresaStatus: 'Status',
       empresaInscricaoEstadual: 'Inscrição Estadual'
     };
     for(const id in requiredEmpresa){
@@ -250,9 +266,11 @@
       razao_social: getVal('empresaRazaoSocial'),
       nome_fantasia: getVal('empresaNomeFantasia'),
       cnpj: getVal('empresaCnpj'),
-      segmento: getVal('empresaSegmento'),
       inscricao_estadual: getVal('empresaInscricaoEstadual'),
       site: getVal('empresaSite') || 'Não Informado',
+      status_cliente: getVal('empresaStatus'),
+      dono_cliente: getVal('empresaDono'),
+      origem_captacao: getVal('empresaOrigemCaptacao'),
       endereco_registro: reg,
       endereco_cobranca: cob,
       endereco_entrega: ent,

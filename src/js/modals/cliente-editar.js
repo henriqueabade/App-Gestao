@@ -27,7 +27,7 @@
       const res = await fetch(`http://localhost:3000/api/clientes/${cliente.id}`);
       const data = await res.json();
       if(data && data.cliente){
-        preencherDadosEmpresa(data.cliente);
+        await preencherDadosEmpresa(data.cliente);
         await preencherEnderecos(data.cliente);
         renderContatos(data.contatos || []);
         preencherEnderecos(data.cliente);
@@ -111,12 +111,11 @@
 
   activateTab(tabs[0], { setFocus: false });
 
-  function preencherDadosEmpresa(cli){
+  async function preencherDadosEmpresa(cli){
     const map = {
       empresaRazaoSocial: 'razao_social',
       empresaNomeFantasia: 'nome_fantasia',
       empresaCnpj: 'cnpj',
-      empresaSegmento: 'segmento',
       empresaInscricaoEstadual: 'inscricao_estadual',
       empresaSite: 'site'
     };
@@ -124,6 +123,22 @@
       const el = document.getElementById(id);
       if(el) el.value = cli[map[id]] || '';
     }
+    const donoSel = document.getElementById('empresaDono');
+    if(donoSel){
+      try{
+        const res = await fetch('http://localhost:3000/api/usuarios/lista');
+        const usuarios = await res.json();
+        donoSel.innerHTML = '<option value="">Selecione o dono</option>' +
+          usuarios.map(u => `<option value="${u.nome}">${u.nome}</option>`).join('');
+        donoSel.value = cli.dono_cliente || '';
+      }catch(err){
+        console.error('Erro ao carregar usuários', err);
+      }
+    }
+    const statusSel = document.getElementById('empresaStatus');
+    if(statusSel) statusSel.value = cli.status_cliente || '';
+    const origemInput = document.getElementById('empresaOrigemCaptacao');
+    if(origemInput) origemInput.value = cli.origem_captacao || '';
     const avatar = document.getElementById('empresaAvatar');
     if(avatar){
       const name = cli.nome_fantasia || cli.razao_social || '';
@@ -322,6 +337,9 @@
       cnpj: getVal('empresaCnpj'),
       inscricao_estadual: getVal('empresaInscricaoEstadual'),
       site: getVal('empresaSite'),
+      status_cliente: getVal('empresaStatus'),
+      dono_cliente: getVal('empresaDono'),
+      origem_captacao: getVal('empresaOrigemCaptacao'),
       endereco_registro: reg,
       endereco_cobranca: cob,
       endereco_entrega: ent,

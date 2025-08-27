@@ -201,7 +201,10 @@ router.post('/', async (req, res) => {
     cli.endereco_entrega?.cidade,
     cli.endereco_entrega?.estado,
     cli.endereco_entrega?.cep,
-    cli.anotacoes
+    cli.anotacoes,
+    cli.status_cliente,
+    cli.dono_cliente,
+    cli.origem_captacao
   ];
   try {
     const dupCheck = await pool.query('SELECT id FROM clientes WHERE cnpj = $1', [cli.cnpj]);
@@ -214,9 +217,9 @@ router.post('/', async (req, res) => {
         reg_pais, reg_logradouro, reg_numero, reg_complemento, reg_bairro, reg_cidade, reg_uf, reg_cep,
         cob_pais, cob_logradouro, cob_numero, cob_complemento, cob_bairro, cob_cidade, cob_uf, cob_cep,
         ent_pais, ent_logradouro, ent_numero, ent_complemento, ent_bairro, ent_cidade, ent_uf, ent_cep,
-        anotacoes
+        anotacoes, status_cliente, dono_cliente, origem_captacao
       ) VALUES (
-        $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30
+        $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33
       ) RETURNING id`,
       values
     );
@@ -270,6 +273,9 @@ router.put('/:id', async (req, res) => {
     cli.endereco_entrega?.estado,
     cli.endereco_entrega?.cep,
     cli.anotacoes,
+    cli.status_cliente,
+    cli.dono_cliente,
+    cli.origem_captacao,
     id
   ];
   try {
@@ -304,8 +310,11 @@ router.put('/:id', async (req, res) => {
         ent_cidade = $27,
         ent_uf = $28,
         ent_cep = $29,
-        anotacoes = $30
-       WHERE id = $31`,
+        anotacoes = $30,
+        status_cliente = $31,
+        dono_cliente = $32,
+        origem_captacao = $33
+       WHERE id = $34`,
       values
     );
     const contatos = Array.isArray(cli.contatos) ? cli.contatos : [];

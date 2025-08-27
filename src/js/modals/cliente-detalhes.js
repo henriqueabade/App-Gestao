@@ -135,9 +135,11 @@
       empresaRazaoSocial: 'razao_social',
       empresaNomeFantasia: 'nome_fantasia',
       empresaCnpj: 'cnpj',
-      empresaSegmento: 'segmento',
       empresaInscricaoEstadual: 'inscricao_estadual',
-      empresaSite: 'site'
+      empresaSite: 'site',
+      empresaDono: 'dono_cliente',
+      empresaStatus: 'status_cliente',
+      empresaOrigemCaptacao: 'origem_captacao'
     };
     for(const id in map){
       const el = document.getElementById(id);
