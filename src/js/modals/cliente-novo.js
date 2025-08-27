@@ -181,16 +181,14 @@
       const first = missing[0];
       const tabEl = document.getElementById(first.tab);
       if(tabEl) activateTab(tabEl);
-      if(first.field){
-        const el = document.getElementById(first.field);
-        if(el){
-          el.classList.add('border-red-500');
-          el.scrollIntoView({behavior:'smooth', block:'center'});
-          setTimeout(()=>el.classList.remove('border-red-500'),2000);
-          el.focus();
-        }
+      const el = first.field ? document.getElementById(first.field) : null;
+      if(el){
+        el.classList.add('border-red-500');
+        el.scrollIntoView({behavior:'smooth', block:'center'});
+        el.focus();
+        setTimeout(()=>el.classList.remove('border-red-500'),2000);
       }
-      showToast('Preencha os campos obrigatórios: '+ missing.map(m=>m.name).join(', '), 'error');
+      showToast('Preencha '+ first.name, 'error');
       return null;
     }
 
