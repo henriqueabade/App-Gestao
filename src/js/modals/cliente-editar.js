@@ -17,6 +17,8 @@
       document.head.appendChild(s);
     });
   }
+  let contatos = [];
+  const novosContatos = [];
   if(cliente){
     const titulo = document.getElementById('clienteEditarTitulo');
     if(titulo) titulo.textContent = `Editar – ${cliente.nome_fantasia || ''}`;
@@ -27,6 +29,9 @@
         preencherDadosEmpresa(data.cliente);
         await preencherEnderecos(data.cliente);
         renderContatos(data.contatos || []);
+        preencherEnderecos(data.cliente);
+        contatos = data.contatos || [];
+        renderContatos();
         inicializarToggles(data.cliente);
         const notas = document.getElementById('clienteNotas');
         if(notas) notas.value = data.cliente.anotacoes || '';
@@ -176,7 +181,7 @@
     await setupEndereco('ent', cli.endereco_entrega);
   }
 
-  function renderContatos(contatos){
+  function renderContatos(){
     const tbody = document.getElementById('contatosTabela');
     if(!tbody) return;
     tbody.innerHTML = '';
@@ -184,23 +189,38 @@
       tbody.innerHTML = '<tr><td colspan="6" class="py-12 text-center text-gray-400">Nenhum contato cadastrado</td></tr>';
       return;
     }
-    contatos.forEach(c => {
+    contatos.forEach((c, idx) => {
       const tr = document.createElement('tr');
+      const actions = c.novo ? `<div class="flex items-center justify-center gap-2"><i class="fas fa-trash w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10 hover:text-white" style="color: var(--color-red)" title="Excluir"></i></div>` : '-';
       tr.innerHTML = `
         <td class="py-4 px-4 text-white">${c.nome || ''}</td>
         <td class="py-4 px-4 text-white">${c.cargo || ''}</td>
         <td class="py-4 px-4 text-white">${c.email || ''}</td>
         <td class="py-4 px-4 text-white">${c.telefone_celular || ''}</td>
         <td class="py-4 px-4 text-white">${c.telefone_fixo || ''}</td>
-        <td class="py-4 px-4 text-center text-white">
-          <div class="flex items-center justify-center gap-2">
-            <i class="fas fa-edit w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Editar"></i>
-            <i class="fas fa-trash w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10 hover:text-white" style="color: var(--color-red)" title="Excluir"></i>
-          </div>
-        </td>`;
+        <td class="py-4 px-4 text-center text-white">${actions}</td>`;
+      if(c.novo){
+        tr.querySelector('.fa-trash').addEventListener('click', () => {
+          contatos.splice(idx,1);
+          const nIdx = novosContatos.indexOf(c);
+          if(nIdx >= 0) novosContatos.splice(nIdx,1);
+          renderContatos();
+        });
+      }
       tbody.appendChild(tr);
     });
   }
+
+  document.getElementById('addContatoBtn')?.addEventListener('click', () => {
+    Modal.open('modals/clientes/contato.html', '../js/modals/cliente-contato.js', 'novoContatoCliente');
+  });
+
+  window.addEventListener('clienteContatoAdicionado', e => {
+    const ct = { ...e.detail, novo: true };
+    contatos.push(ct);
+    novosContatos.push(ct);
+    renderContatos();
+  });
 
   function inicializarToggles(cli){
     const same = (a,b) => JSON.stringify(a) === JSON.stringify(b);
@@ -298,7 +318,8 @@
       endereco_registro: reg,
       endereco_cobranca: cob,
       endereco_entrega: ent,
-      anotacoes: document.getElementById('clienteNotas')?.value || ''
+      anotacoes: document.getElementById('clienteNotas')?.value || '',
+      contatos: novosContatos
     };
   }
 

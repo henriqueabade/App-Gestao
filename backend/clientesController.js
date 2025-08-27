@@ -330,6 +330,13 @@ router.put('/:id', async (req, res) => {
        WHERE id = $31`,
       values
     );
+    const contatos = Array.isArray(cli.contatos) ? cli.contatos : [];
+    for(const ct of contatos){
+      await pool.query(
+        'INSERT INTO contatos_cliente (id_cliente, nome, cargo, telefone_celular, telefone_fixo, email) VALUES ($1,$2,$3,$4,$5,$6)',
+        [id, ct.nome, ct.cargo, ct.telefone_celular, ct.telefone_fixo, ct.email]
+      );
+    }
     res.json({ success: true });
   } catch (err) {
     console.error('Erro ao atualizar cliente:', err);
