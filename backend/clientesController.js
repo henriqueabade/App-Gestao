@@ -75,6 +75,7 @@ router.get('/:id', async (req, res) => {
         complemento: row.reg_complemento,
         bairro: row.reg_bairro,
         cidade: row.reg_cidade,
+        pais: row.reg_pais,
         estado: row.reg_uf,
         cep: row.reg_cep
       },
@@ -84,6 +85,7 @@ router.get('/:id', async (req, res) => {
         complemento: row.cob_complemento,
         bairro: row.cob_bairro,
         cidade: row.cob_cidade,
+        pais: row.cob_pais,
         estado: row.cob_uf,
         cep: row.cob_cep
       },
@@ -93,6 +95,7 @@ router.get('/:id', async (req, res) => {
         complemento: row.ent_complemento,
         bairro: row.ent_bairro,
         cidade: row.ent_cidade,
+        pais: row.ent_pais,
         estado: row.ent_uf,
         cep: row.ent_cep
       },
@@ -149,16 +152,17 @@ router.get('/:id/resumo', async (req, res) => {
       const cidade = row[`${prefix}_cidade`] || '';
       const uf = row[`${prefix}_uf`] || '';
       const cep = row[`${prefix}_cep`] || '';
+      const pais = row[`${prefix}_pais`] || '';
 
       return (
         `${logradouro}, ${numero}` +
         (complemento ? ` - ${complemento}` : '') +
-        `, ${bairro} - ${cidade}/${uf} - ${cep}`
+        `, ${bairro} - ${cidade}/${uf} - ${cep}` + (pais ? ` - ${pais}` : '')
       );
     }
 
     function enderecoIgual(aPrefix, bPrefix) {
-      const fields = ['logradouro', 'numero', 'complemento', 'bairro', 'cidade', 'uf', 'cep'];
+      const fields = ['logradouro', 'numero', 'complemento', 'bairro', 'cidade', 'uf', 'cep', 'pais'];
       return fields.every((f) => row[`${aPrefix}_${f}`] === row[`${bPrefix}_${f}`]);
     }
 
@@ -195,6 +199,7 @@ router.post('/', async (req, res) => {
     cli.cnpj,
     cli.inscricao_estadual,
     cli.site,
+    cli.endereco_registro?.pais,
     cli.endereco_registro?.rua,
     cli.endereco_registro?.numero,
     cli.endereco_registro?.complemento,
@@ -202,6 +207,7 @@ router.post('/', async (req, res) => {
     cli.endereco_registro?.cidade,
     cli.endereco_registro?.estado,
     cli.endereco_registro?.cep,
+    cli.endereco_cobranca?.pais,
     cli.endereco_cobranca?.rua,
     cli.endereco_cobranca?.numero,
     cli.endereco_cobranca?.complemento,
@@ -209,6 +215,7 @@ router.post('/', async (req, res) => {
     cli.endereco_cobranca?.cidade,
     cli.endereco_cobranca?.estado,
     cli.endereco_cobranca?.cep,
+    cli.endereco_entrega?.pais,
     cli.endereco_entrega?.rua,
     cli.endereco_entrega?.numero,
     cli.endereco_entrega?.complemento,
@@ -226,12 +233,12 @@ router.post('/', async (req, res) => {
     const insertRes = await pool.query(
       `INSERT INTO clientes (
         razao_social, nome_fantasia, cnpj, inscricao_estadual, site,
-        reg_logradouro, reg_numero, reg_complemento, reg_bairro, reg_cidade, reg_uf, reg_cep,
-        cob_logradouro, cob_numero, cob_complemento, cob_bairro, cob_cidade, cob_uf, cob_cep,
-        ent_logradouro, ent_numero, ent_complemento, ent_bairro, ent_cidade, ent_uf, ent_cep,
+        reg_pais, reg_logradouro, reg_numero, reg_complemento, reg_bairro, reg_cidade, reg_uf, reg_cep,
+        cob_pais, cob_logradouro, cob_numero, cob_complemento, cob_bairro, cob_cidade, cob_uf, cob_cep,
+        ent_pais, ent_logradouro, ent_numero, ent_complemento, ent_bairro, ent_cidade, ent_uf, ent_cep,
         anotacoes
       ) VALUES (
-        $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27
+        $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30
       ) RETURNING id`,
       values
     );
@@ -260,6 +267,7 @@ router.put('/:id', async (req, res) => {
     cli.cnpj,
     cli.inscricao_estadual,
     cli.site,
+    cli.endereco_registro?.pais,
     cli.endereco_registro?.rua,
     cli.endereco_registro?.numero,
     cli.endereco_registro?.complemento,
@@ -267,6 +275,7 @@ router.put('/:id', async (req, res) => {
     cli.endereco_registro?.cidade,
     cli.endereco_registro?.estado,
     cli.endereco_registro?.cep,
+    cli.endereco_cobranca?.pais,
     cli.endereco_cobranca?.rua,
     cli.endereco_cobranca?.numero,
     cli.endereco_cobranca?.complemento,
@@ -274,6 +283,7 @@ router.put('/:id', async (req, res) => {
     cli.endereco_cobranca?.cidade,
     cli.endereco_cobranca?.estado,
     cli.endereco_cobranca?.cep,
+    cli.endereco_entrega?.pais,
     cli.endereco_entrega?.rua,
     cli.endereco_entrega?.numero,
     cli.endereco_entrega?.complemento,
@@ -292,29 +302,32 @@ router.put('/:id', async (req, res) => {
         cnpj = $3,
         inscricao_estadual = $4,
         site = $5,
-        reg_logradouro = $6,
-        reg_numero = $7,
-        reg_complemento = $8,
-        reg_bairro = $9,
-        reg_cidade = $10,
-        reg_uf = $11,
-        reg_cep = $12,
-        cob_logradouro = $13,
-        cob_numero = $14,
-        cob_complemento = $15,
-        cob_bairro = $16,
-        cob_cidade = $17,
-        cob_uf = $18,
-        cob_cep = $19,
-        ent_logradouro = $20,
-        ent_numero = $21,
-        ent_complemento = $22,
-        ent_bairro = $23,
-        ent_cidade = $24,
-        ent_uf = $25,
-        ent_cep = $26,
-        anotacoes = $27
-       WHERE id = $28`,
+        reg_pais = $6,
+        reg_logradouro = $7,
+        reg_numero = $8,
+        reg_complemento = $9,
+        reg_bairro = $10,
+        reg_cidade = $11,
+        reg_uf = $12,
+        reg_cep = $13,
+        cob_pais = $14,
+        cob_logradouro = $15,
+        cob_numero = $16,
+        cob_complemento = $17,
+        cob_bairro = $18,
+        cob_cidade = $19,
+        cob_uf = $20,
+        cob_cep = $21,
+        ent_pais = $22,
+        ent_logradouro = $23,
+        ent_numero = $24,
+        ent_complemento = $25,
+        ent_bairro = $26,
+        ent_cidade = $27,
+        ent_uf = $28,
+        ent_cep = $29,
+        anotacoes = $30
+       WHERE id = $31`,
       values
     );
     const contatos = Array.isArray(cli.contatos) ? cli.contatos : [];

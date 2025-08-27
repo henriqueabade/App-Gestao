@@ -8,6 +8,15 @@
   document.addEventListener('keydown', function esc(e){ if(e.key==='Escape'){ close(); document.removeEventListener('keydown', esc); }});
 
   const cliente = window.clienteEditar;
+  if(!window.geoService){
+    await new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = '../js/geo-service.js';
+      s.onload = resolve;
+      s.onerror = reject;
+      document.head.appendChild(s);
+    });
+  }
   let contatos = [];
   const novosContatos = [];
   if(cliente){
@@ -18,6 +27,8 @@
       const data = await res.json();
       if(data && data.cliente){
         preencherDadosEmpresa(data.cliente);
+        await preencherEnderecos(data.cliente);
+        renderContatos(data.contatos || []);
         preencherEnderecos(data.cliente);
         contatos = data.contatos || [];
         renderContatos();
@@ -119,18 +130,55 @@
       avatar.textContent = initials;
     }
   }
-
-  function preencherEnderecos(cli){
-    const fill = (prefix, data) => {
-      if(!data) return;
-      for(const key of ['rua','numero','complemento','bairro','cidade','estado','cep']){
+  async function setupEndereco(prefix, data){
+    const paisSel = document.getElementById(prefix + 'Pais');
+    const estadoSel = document.getElementById(prefix + 'Estado');
+    if(paisSel && estadoSel){
+      const countries = await geoService.getCountries();
+      paisSel.innerHTML = '<option value="">Selecione</option>' +
+        countries.map(c => `<option value="${c.code}">${c.name}</option>`).join('');
+      if(data?.pais){
+        paisSel.value = data.pais;
+        const states = await geoService.getStatesByCountry(data.pais);
+        estadoSel.innerHTML = '<option value="">Selecione</option>' +
+          states.map(s => `<option value="${s.code}">${s.name}</option>`).join('');
+        estadoSel.disabled = false;
+        estadoSel.value = data.estado || '';
+      } else {
+        estadoSel.disabled = true;
+        estadoSel.innerHTML = '<option value="">Selecione o país</option>';
+      }
+      paisSel.addEventListener('change', async () => {
+        const code = paisSel.value;
+        if(!code){
+          estadoSel.disabled = true;
+          estadoSel.innerHTML = '<option value="">Selecione o país</option>';
+          return;
+        }
+        const states = await geoService.getStatesByCountry(code);
+        estadoSel.disabled = false;
+        estadoSel.innerHTML = '<option value="">Selecione</option>' +
+          states.map(s => `<option value="${s.code}">${s.name}</option>`).join('');
+      });
+      estadoSel.addEventListener('mousedown', e => {
+        if(!paisSel.value){
+          e.preventDefault();
+          alert('Por favor, selecione o país primeiro');
+        }
+      });
+    }
+    if(data){
+      for(const key of ['rua','numero','complemento','bairro','cidade','cep']){
         const el = document.getElementById(`${prefix}${key.charAt(0).toUpperCase()+key.slice(1)}`);
         if(el) el.value = data[key] || '';
       }
-    };
-    fill('reg', cli.endereco_registro);
-    fill('cob', cli.endereco_cobranca);
-    fill('ent', cli.endereco_entrega);
+    }
+  }
+
+  async function preencherEnderecos(cli){
+    await setupEndereco('reg', cli.endereco_registro);
+    await setupEndereco('cob', cli.endereco_cobranca);
+    await setupEndereco('ent', cli.endereco_entrega);
   }
 
   function renderContatos(){
@@ -254,6 +302,7 @@
       complemento: getVal(prefix+'Complemento'),
       bairro: getVal(prefix+'Bairro'),
       cidade: getVal(prefix+'Cidade'),
+      pais: getVal(prefix+'Pais'),
       estado: getVal(prefix+'Estado'),
       cep: getVal(prefix+'Cep')
     });
