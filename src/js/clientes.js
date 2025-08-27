@@ -3,14 +3,28 @@
 
 let todosClientes = [];
 
-async function carregarClientes() {
+async function carregarClientes(preserveFilters = false) {
     try {
         const resp = await fetch('http://localhost:3000/api/clientes/lista');
         const clientes = await resp.json();
         todosClientes = clientes;
-        popularFiltros(clientes);
-        renderClientes(clientes);
-        renderTotais(clientes);
+        if (preserveFilters) {
+            const buscaVal = document.getElementById('filtroBusca')?.value || '';
+            const donoVal = document.getElementById('filtroDono')?.value || '';
+            const statusVal = document.getElementById('filtroStatus')?.value || '';
+            popularFiltros(clientes);
+            const buscaEl = document.getElementById('filtroBusca');
+            const donoEl = document.getElementById('filtroDono');
+            const statusEl = document.getElementById('filtroStatus');
+            if (buscaEl) buscaEl.value = buscaVal;
+            if (donoEl) donoEl.value = donoVal;
+            if (statusEl) statusEl.value = statusVal;
+            aplicarFiltros();
+        } else {
+            popularFiltros(clientes);
+            renderClientes(clientes);
+            renderTotais(clientes);
+        }
     } catch (err) {
         console.error('Erro ao carregar clientes', err);
     }
@@ -165,6 +179,8 @@ function abrirEditarCliente(cliente) {
     window.clienteEditar = cliente;
     openModalWithSpinner('modals/clientes/editar.html', '../js/modals/cliente-editar.js', 'editarCliente');
 }
+
+window.addEventListener('clienteEditado', () => carregarClientes(true));
 
 function renderTotais(clientes) {
     const container = document.getElementById('totaisBadges');
