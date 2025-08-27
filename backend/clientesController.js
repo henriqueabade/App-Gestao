@@ -4,40 +4,17 @@ const pool = require('./db');
 const router = express.Router();
 
 // GET /api/clientes/lista
-// The database now stores address fields in individual columns (ent_uf, reg_uf,
-// etc.).  Keep the utility for backwards compatibility but simply return the
-// value when it's already a 2-letter state.
-function extractUF(endereco) {
-  if (!endereco) return '';
-  if (typeof endereco === 'string' && endereco.length === 2) return endereco.toUpperCase();
-  const regex = /,\s*([A-Za-z]{2})\s*,\s*CEP/i;
-  const match = endereco.match(regex);
-  const validUF = [
-    'AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA',
-    'PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO'
-  ];
-  if (match) {
-    const uf = match[1].toUpperCase();
-    return validUF.includes(uf) ? uf : '';
-  }
-  const beforeCep = endereco.split(/CEP/i)[0];
-  const parts = beforeCep.split(',').map(p => p.trim()).filter(Boolean);
-  const ufCandidate = parts[parts.length - 1]?.toUpperCase();
-  return validUF.includes(ufCandidate) ? ufCandidate : '';
-}
-
 router.get('/lista', async (_req, res) => {
   try {
-    // 'ent_pais' and 'ent_uf' hold the country and state for the delivery address
     const result = await pool.query(
-      'SELECT id, nome_fantasia, cnpj, ent_pais AS pais, ent_uf, status_cliente, dono_cliente FROM clientes ORDER BY nome_fantasia'
+      'SELECT id, nome_fantasia, cnpj, ent_pais AS pais, ent_uf AS estado, status_cliente, dono_cliente FROM clientes ORDER BY nome_fantasia'
     );
     const clientes = result.rows.map(c => ({
       id: c.id,
       nome_fantasia: c.nome_fantasia,
       cnpj: c.cnpj,
-      pais: c.reg_pais || '',
-      estado: extractUF(c.ent_uf) || 'Unidentified State',
+      pais: c.pais || '',
+      estado: c.estado || '',
       status_cliente: c.status_cliente,
       dono_cliente: c.dono_cliente
     }));
@@ -200,7 +177,7 @@ router.post('/', async (req, res) => {
     cli.cnpj,
     cli.inscricao_estadual,
     cli.site,
-    cli.endereco_registro?.reg_pais,
+    cli.endereco_registro?.pais,
     cli.endereco_registro?.rua,
     cli.endereco_registro?.numero,
     cli.endereco_registro?.complemento,
@@ -208,7 +185,7 @@ router.post('/', async (req, res) => {
     cli.endereco_registro?.cidade,
     cli.endereco_registro?.estado,
     cli.endereco_registro?.cep,
-    cli.endereco_cobranca?.cob_pais,
+    cli.endereco_cobranca?.pais,
     cli.endereco_cobranca?.rua,
     cli.endereco_cobranca?.numero,
     cli.endereco_cobranca?.complemento,
@@ -216,7 +193,7 @@ router.post('/', async (req, res) => {
     cli.endereco_cobranca?.cidade,
     cli.endereco_cobranca?.estado,
     cli.endereco_cobranca?.cep,
-    cli.endereco_entrega?.ent_pais,
+    cli.endereco_entrega?.pais,
     cli.endereco_entrega?.rua,
     cli.endereco_entrega?.numero,
     cli.endereco_entrega?.complemento,
@@ -268,7 +245,7 @@ router.put('/:id', async (req, res) => {
     cli.cnpj,
     cli.inscricao_estadual,
     cli.site,
-    cli.endereco_registro?.reg_pais,
+    cli.endereco_registro?.pais,
     cli.endereco_registro?.rua,
     cli.endereco_registro?.numero,
     cli.endereco_registro?.complemento,
@@ -276,7 +253,7 @@ router.put('/:id', async (req, res) => {
     cli.endereco_registro?.cidade,
     cli.endereco_registro?.estado,
     cli.endereco_registro?.cep,
-    cli.endereco_cobranca?.cob_pais,
+    cli.endereco_cobranca?.pais,
     cli.endereco_cobranca?.rua,
     cli.endereco_cobranca?.numero,
     cli.endereco_cobranca?.complemento,
@@ -284,7 +261,7 @@ router.put('/:id', async (req, res) => {
     cli.endereco_cobranca?.cidade,
     cli.endereco_cobranca?.estado,
     cli.endereco_cobranca?.cep,
-    cli.endereco_entrega?.ent_pais,
+    cli.endereco_entrega?.pais,
     cli.endereco_entrega?.rua,
     cli.endereco_entrega?.numero,
     cli.endereco_entrega?.complemento,
