@@ -1,6 +1,19 @@
 // Lógica principal do módulo Matéria Prima
 let todosMateriais = [];
 
+function updateEmptyStateMateriaPrima(hasData) {
+    const wrapper = document.getElementById('materiaPrimaTableWrapper');
+    const empty = document.getElementById('materiaPrimaEmptyState');
+    if (!wrapper || !empty) return;
+    if (hasData) {
+        wrapper.classList.remove('hidden');
+        empty.classList.add('hidden');
+    } else {
+        wrapper.classList.add('hidden');
+        empty.classList.remove('hidden');
+    }
+}
+
 // Inicializa animações e eventos
 function initMateriaPrima() {
     document.querySelectorAll('.animate-fade-in-up').forEach((el, index) => {
@@ -101,6 +114,7 @@ function aplicarFiltros() {
 
     renderMateriais(filtrados);
     renderTotais(filtrados);
+    updateEmptyStateMateriaPrima(filtrados.length > 0);
 }
 
 function limparFiltros() {

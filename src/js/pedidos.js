@@ -2,6 +2,19 @@
 window.customStartDate = null;
 window.customEndDate = null;
 
+function updateEmptyStatePedidos(hasData) {
+    const wrapper = document.getElementById('pedidosTableWrapper');
+    const empty = document.getElementById('pedidosEmptyState');
+    if (!wrapper || !empty) return;
+    if (hasData) {
+        wrapper.classList.remove('hidden');
+        empty.classList.add('hidden');
+    } else {
+        wrapper.classList.add('hidden');
+        empty.classList.remove('hidden');
+    }
+}
+
 async function popularClientes() {
     const select = document.getElementById('filterClient');
     if (!select) return;
@@ -172,6 +185,7 @@ async function carregarPedidos() {
             badge.addEventListener('mouseleave', hideStatusTooltip);
         });
         await popularClientes();
+        updateEmptyStatePedidos(data.length > 0);
     } catch (err) {
         console.error('Erro ao carregar pedidos', err);
     }
@@ -211,6 +225,8 @@ function aplicarFiltro() {
 
         row.style.display = show ? '' : 'none';
     });
+    const hasVisible = Array.from(document.querySelectorAll('#pedidosTabela tr')).some(r => r.style.display !== 'none');
+    updateEmptyStatePedidos(hasVisible);
 }
 
 function limparFiltros() {
