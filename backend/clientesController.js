@@ -219,6 +219,10 @@ router.post('/', async (req, res) => {
     cli.anotacoes
   ];
   try {
+    const dupCheck = await pool.query('SELECT id FROM clientes WHERE cnpj = $1', [cli.cnpj]);
+    if (dupCheck.rows.length) {
+      return res.status(409).json({ error: 'Cliente já registrado' });
+    }
     const insertRes = await pool.query(
       `INSERT INTO clientes (
         razao_social, nome_fantasia, cnpj, inscricao_estadual, site,
