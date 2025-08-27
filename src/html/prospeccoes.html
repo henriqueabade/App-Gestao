@@ -28,7 +28,7 @@
                     <option>Todos os Leads</option>
                     <option>Leads da Equipe</option>
                 </select>
-                <button class="btn-primary text-white rounded-md px-4 py-2 font-medium">
+                <button id="btnNovaProspeccao" class="btn-primary text-white rounded-md px-4 py-2 font-medium">
                     <i class="fas fa-plus mr-2"></i>Novo
                 </button>
                 <button class="btn-primary text-white rounded-md px-4 py-2 font-medium">
@@ -437,6 +437,16 @@
                   </div>
                   <h3 class="text-lg font-medium text-white">Nenhuma prospecção encontrada</h3>
                   <p class="mt-1 text-sm text-white/70">Tente ajustar os filtros.</p>
+                  <div class="mt-6">
+                    <button
+                      id="prospeccoesEmptyNew"
+                      type="button"
+                      class="btn-primary inline-flex items-center px-4 py-2 text-sm font-medium rounded-md text-white"
+                    >
+                      <i class="fas fa-plus w-4 h-4 mr-2"></i>
+                      Nova Prospecção
+                    </button>
+                  </div>
                 </div>
             </div>
         </div>

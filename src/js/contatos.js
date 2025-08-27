@@ -46,6 +46,13 @@ function initContatos() {
     const searchInput = document.querySelector('input[placeholder="Nome / Empresa"]');
     searchInput?.addEventListener('input', aplicarFiltroContatos);
 
+    document.getElementById('btnNovoContato')?.addEventListener('click', () => {
+        console.log('Criar novo contato');
+    });
+    document.getElementById('contatosEmptyNew')?.addEventListener('click', () => {
+        document.getElementById('btnNovoContato')?.click();
+    });
+
     document.querySelectorAll('.fa-edit').forEach(icon => {
         icon.addEventListener('click', () => {
             console.log('Editar contato');
