@@ -116,6 +116,7 @@
   overlay.addEventListener('focusin', warn);
   overlay.querySelectorAll('input, textarea').forEach(el => el.readOnly = true);
   addCopyButtons();
+  setupAddressCopyButtons();
 
   const editar = document.getElementById('editarDetalhesCliente');
   if(editar){
@@ -251,6 +252,39 @@
         }
       });
       wrapper.appendChild(btn);
+    });
+  }
+
+  function setupAddressCopyButtons(){
+    const formatAddress = prefix => {
+      const rua = document.getElementById(prefix + 'Rua')?.value.trim() || '';
+      const numero = document.getElementById(prefix + 'Numero')?.value.trim() || '';
+      const complemento = document.getElementById(prefix + 'Complemento')?.value.trim() || '';
+      const bairro = document.getElementById(prefix + 'Bairro')?.value.trim() || '';
+      const cidade = document.getElementById(prefix + 'Cidade')?.value.trim() || '';
+      const estado = document.getElementById(prefix + 'Estado')?.value.trim() || '';
+      const pais = document.getElementById(prefix + 'Pais')?.value.trim() || '';
+      const cep = document.getElementById(prefix + 'Cep')?.value.trim() || '';
+      return `${rua} ${numero}${complemento ? ', ' + complemento : ''}, ${bairro}, ${cidade}/${estado}, ${pais} - ${cep}`;
+    };
+    const buttons = {
+      reg: 'copyRegEndereco',
+      cob: 'copyCobEndereco',
+      ent: 'copyEntEndereco'
+    };
+    Object.entries(buttons).forEach(([prefix, id]) => {
+      const btn = document.getElementById(id);
+      if(btn){
+        btn.addEventListener('click', async () => {
+          const text = formatAddress(prefix);
+          try{
+            await navigator.clipboard.writeText(text);
+            showToast('Endereço copiado!', 'success');
+          }catch{
+            showToast('Erro ao copiar', 'error');
+          }
+        });
+      }
     });
   }
 
