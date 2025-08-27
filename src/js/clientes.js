@@ -180,6 +180,10 @@ function abrirEditarCliente(cliente) {
     openModalWithSpinner('modals/clientes/editar.html', '../js/modals/cliente-editar.js', 'editarCliente');
 }
 
+// Expose the edit modal opener globally so other scripts (like the
+// detalhes modal) can trigger it after closing.
+window.abrirEditarCliente = abrirEditarCliente;
+
 window.addEventListener('clienteEditado', () => carregarClientes(true));
 
 function renderTotais(clientes) {
