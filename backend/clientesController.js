@@ -342,7 +342,9 @@ router.delete('/:id', async (req, res) => {
 
     await pool.query('BEGIN');
     await pool.query('DELETE FROM contatos_cliente WHERE id_cliente = $1', [id]);
-    await pool.query('DELETE FROM contratos WHERE cliente_id = $1', [id]);
+    try {
+      await pool.query('DELETE FROM contratos WHERE cliente_id = $1', [id]);
+    } catch (_) {}
     await pool.query('DELETE FROM cliente_notas WHERE cliente_id = $1', [id]);
     await pool.query('DELETE FROM clientes WHERE id = $1', [id]);
     await pool.query('COMMIT');
