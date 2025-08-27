@@ -13,7 +13,11 @@
       if(resp.ok){
         showToast('Cliente excluído com sucesso!', 'success');
         close();
-        carregarClientes(true);
+        if (typeof carregarClientes === 'function') {
+          await carregarClientes(true);
+        } else {
+          window.dispatchEvent(new Event('clienteExcluido'));
+        }
       }else{
         showToast(data.error || 'Erro ao excluir cliente', 'error');
         close();
