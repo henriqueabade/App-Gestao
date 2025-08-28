@@ -7,31 +7,6 @@
   document.addEventListener('keydown', function esc(e){ if(e.key === 'Escape'){ close(); document.removeEventListener('keydown', esc); } });
   const form = document.getElementById('editarOrcamentoForm');
 
-  // Abre modal de conversão (Fase 1) para revisar peças e insumos
-  function openConversionModal(closeAfter){
-    const pieces = Array.from(document.querySelectorAll('#orcamentoItens tbody tr')).map(tr => ({
-      nome: tr.children[0]?.textContent?.trim() || '',
-      qtd: parseInt(tr.children[1]?.textContent || '0', 10) || 0,
-      estoque: 0,
-      produzir: parseInt(tr.children[1]?.textContent || '0', 10) || 0
-    })).filter(p => p.nome && p.qtd > 0);
-    const clienteNome = (()=>{
-      const sel = document.getElementById('editarCliente');
-      const opt = sel?.options?.[sel.selectedIndex];
-      return opt?.textContent || '';
-    })();
-    window.conversionContext = {
-      quote: { numero: data.numero || '', cliente: clienteNome || '', data: data.data_emissao || null },
-      pieces
-    };
-    window._onConfirmConversion = ({ decisionNote }) => {
-      window._conversionDecisionNote = decisionNote || '';
-      saveChanges(closeAfter);
-    };
-    window._onCancelConversion = () => {};
-    Modal.open('modals/orcamentos/converter.html', '../js/modals/orcamento-converter.js', 'converterOrcamento', true);
-  }
-
   // carga de dados
   const id = window.selectedQuoteId;
   let data = window.quoteData || {};
@@ -344,35 +319,6 @@
   }
   updateStatusTag();
   updateConverterBtn();
-
-  // Intercepta submissão quando status = Aprovado para abrir o modal de conversão
-  if (form) {
-    form.addEventListener('submit', e => {
-      if (currentStatus === 'Aprovado') {
-        e.preventDefault();
-        e.stopImmediatePropagation();
-        const closeAfter = e.submitter?.id === 'salvarFecharOrcamento' || currentStatus !== initialStatus;
-        openConversionModal(closeAfter);
-      }
-    }, true);
-  }
-
-  // Intercepta clique em "Converter em Pedido" para abrir o modal de conversão
-  if (converterBtn) {
-    converterBtn.addEventListener('click', e => {
-      // Deixe bloqueio padrão quando não pendente
-      if (currentStatus !== 'Pendente') return;
-      e.preventDefault();
-      e.stopImmediatePropagation();
-      showActionDialog('Tem certeza que deseja converter este or��amento em pedido?', ok => {
-        if (!ok) return;
-        currentStatus = 'Aprovado';
-        updateStatusTag();
-        updateConverterBtn();
-        openConversionModal(true);
-      });
-    }, true);
-  }
 
   const statusLocked = currentStatus !== 'Rascunho';
   if (statusTag && statusOptions) {
