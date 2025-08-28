@@ -19,7 +19,7 @@
     });
   }
   let contatos = [];
-  const novosContatos = [];
+  const contatosExcluidos = [];
   if(cliente){
     const titulo = document.getElementById('clienteEditarTitulo');
     if(titulo) titulo.textContent = `Editar – ${cliente.nome_fantasia || ''}`;
@@ -29,9 +29,7 @@
       if(data && data.cliente){
         await preencherDadosEmpresa(data.cliente);
         await preencherEnderecos(data.cliente);
-        renderContatos(data.contatos || []);
-        preencherEnderecos(data.cliente);
-        contatos = data.contatos || [];
+        contatos = (data.contatos || []).map(c => ({ ...c, status: 'unchanged' }));
         renderContatos();
         inicializarToggles(data.cliente);
         const notas = document.getElementById('clienteNotas');
@@ -213,23 +211,77 @@
     }
     contatos.forEach((c, idx) => {
       const tr = document.createElement('tr');
-      const actions = c.novo ? `<div class="flex items-center justify-center gap-2"><i class="fas fa-trash w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10 hover:text-white" style="color: var(--color-red)" title="Excluir"></i></div>` : '-';
       tr.innerHTML = `
         <td class="py-4 px-4 text-white">${c.nome || ''}</td>
         <td class="py-4 px-4 text-white">${c.cargo || ''}</td>
         <td class="py-4 px-4 text-white">${c.email || ''}</td>
         <td class="py-4 px-4 text-white">${c.telefone_celular || ''}</td>
         <td class="py-4 px-4 text-white">${c.telefone_fixo || ''}</td>
-        <td class="py-4 px-4 text-center text-white">${actions}</td>`;
-      if(c.novo){
-        tr.querySelector('.fa-trash').addEventListener('click', () => {
-          contatos.splice(idx,1);
-          const nIdx = novosContatos.indexOf(c);
-          if(nIdx >= 0) novosContatos.splice(nIdx,1);
-          renderContatos();
-        });
-      }
+        <td class="py-4 px-4 text-center text-white">
+          <div class="flex items-center justify-center gap-2">
+            <i class="fas fa-edit w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10 edit-contato" style="color: var(--color-primary)" title="Editar"></i>
+            <i class="fas fa-trash w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10 hover:text-white delete-contato" style="color: var(--color-red)" title="Excluir"></i>
+          </div>
+        </td>`;
+      tr.querySelector('.edit-contato').addEventListener('click', () => startEditContato(idx));
+      tr.querySelector('.delete-contato').addEventListener('click', () => confirmDeleteContato(idx));
       tbody.appendChild(tr);
+    });
+  }
+
+  function startEditContato(idx){
+    const ct = contatos[idx];
+    const tbody = document.getElementById('contatosTabela');
+    const tr = tbody?.children[idx];
+    if(!tr) return;
+    const input = val => `<input type="text" class="w-full bg-input border border-inputBorder rounded-lg px-2 py-1 text-white text-sm" value="${val || ''}">`;
+    tr.innerHTML = `
+      <td class="py-2 px-4">${input(ct.nome)}</td>
+      <td class="py-2 px-4">${input(ct.cargo)}</td>
+      <td class="py-2 px-4">${input(ct.email)}</td>
+      <td class="py-2 px-4">${input(ct.telefone_celular)}</td>
+      <td class="py-2 px-4">${input(ct.telefone_fixo)}</td>
+      <td class="py-2 px-4 text-center">
+        <div class="flex items-center justify-center gap-2">
+          <i class="fas fa-check w-5 h-5 cursor-pointer p-1 rounded text-green-400 confirm-edit"></i>
+          <i class="fas fa-times w-5 h-5 cursor-pointer p-1 rounded text-red-400 cancel-edit"></i>
+        </div>
+      </td>`;
+    const inputs = tr.querySelectorAll('input');
+    tr.querySelector('.confirm-edit').addEventListener('click', () => {
+      ct.nome = inputs[0].value.trim();
+      ct.cargo = inputs[1].value.trim();
+      ct.email = inputs[2].value.trim();
+      ct.telefone_celular = inputs[3].value.trim();
+      ct.telefone_fixo = inputs[4].value.trim();
+      if(ct.status !== 'new') ct.status = 'updated';
+      renderContatos();
+    });
+    tr.querySelector('.cancel-edit').addEventListener('click', () => {
+      renderContatos();
+    });
+  }
+
+  function showConfirmDialog(message, cb){
+    const ov=document.createElement('div');
+    ov.className='fixed inset-0 z-[2000] bg-black/50 flex items-center justify-center p-4';
+    ov.innerHTML=`<div class="max-w-md w-full glass-surface backdrop-blur-xl rounded-2xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade"><div class="p-6 text-center"><h3 class="text-lg font-semibold mb-4 text-white">Tem certeza?</h3><p class="text-sm text-gray-300 mb-6">${message}</p><div class="flex justify-center gap-4"><button id="dlgYes" class="btn-warning px-4 py-2 rounded-lg text-white font-medium">Sim</button><button id="dlgNo" class="btn-neutral px-4 py-2 rounded-lg text-white font-medium">Não</button></div></div></div>`;
+    document.body.appendChild(ov);
+    ov.querySelector('#dlgYes').addEventListener('click',()=>{ov.remove();cb(true);});
+    ov.querySelector('#dlgNo').addEventListener('click',()=>{ov.remove();cb(false);});
+  }
+
+  function confirmDeleteContato(idx){
+    const ct = contatos[idx];
+    showConfirmDialog('Deseja excluir este contato?', yes => {
+      if(!yes) return;
+      if(ct.status === 'new'){
+        contatos.splice(idx,1);
+      }else{
+        contatosExcluidos.push(ct.id);
+        contatos.splice(idx,1);
+      }
+      renderContatos();
     });
   }
 
@@ -238,9 +290,8 @@
   });
 
   window.addEventListener('clienteContatoAdicionado', e => {
-    const ct = { ...e.detail, novo: true };
+    const ct = { ...e.detail, status: 'new' };
     contatos.push(ct);
-    novosContatos.push(ct);
     renderContatos();
   });
 
@@ -331,6 +382,8 @@
     const reg = endereco('reg');
     const cob = document.getElementById('cobrancaIgual')?.checked ? reg : endereco('cob');
     const ent = document.getElementById('entregaIgual')?.checked ? reg : endereco('ent');
+    const contatosNovos = contatos.filter(c => c.status === 'new').map(({status, id, ...rest}) => rest);
+    const contatosAtualizados = contatos.filter(c => c.status === 'updated').map(({status, ...rest}) => rest);
     return {
       razao_social: getVal('empresaRazaoSocial'),
       nome_fantasia: getVal('empresaNomeFantasia'),
@@ -344,7 +397,9 @@
       endereco_cobranca: cob,
       endereco_entrega: ent,
       anotacoes: document.getElementById('clienteNotas')?.value || '',
-      contatos: novosContatos
+      contatosNovos,
+      contatosAtualizados,
+      contatosExcluidos
     };
   }
 

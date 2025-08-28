@@ -317,12 +317,23 @@ router.put('/:id', async (req, res) => {
        WHERE id = $34`,
       values
     );
-    const contatos = Array.isArray(cli.contatos) ? cli.contatos : [];
-    for(const ct of contatos){
+    const contatosNovos = Array.isArray(cli.contatosNovos) ? cli.contatosNovos : [];
+    for(const ct of contatosNovos){
       await pool.query(
         'INSERT INTO contatos_cliente (id_cliente, nome, cargo, telefone_celular, telefone_fixo, email) VALUES ($1,$2,$3,$4,$5,$6)',
         [id, ct.nome, ct.cargo, ct.telefone_celular, ct.telefone_fixo, ct.email]
       );
+    }
+    const contatosAtualizados = Array.isArray(cli.contatosAtualizados) ? cli.contatosAtualizados : [];
+    for(const ct of contatosAtualizados){
+      await pool.query(
+        'UPDATE contatos_cliente SET nome=$1, cargo=$2, telefone_celular=$3, telefone_fixo=$4, email=$5 WHERE id=$6 AND id_cliente=$7',
+        [ct.nome, ct.cargo, ct.telefone_celular, ct.telefone_fixo, ct.email, ct.id, id]
+      );
+    }
+    const contatosExcluidos = Array.isArray(cli.contatosExcluidos) ? cli.contatosExcluidos : [];
+    for(const cid of contatosExcluidos){
+      await pool.query('DELETE FROM contatos_cliente WHERE id=$1 AND id_cliente=$2', [cid, id]);
     }
     res.json({ success: true });
   } catch (err) {
