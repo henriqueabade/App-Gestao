@@ -458,9 +458,13 @@
 
     qtyInput.addEventListener('input', () => {
       const q = parseFloat(qtyInput.value) || 0;
-      const condDesc = (editarCondicao.value === 'vista' ? 5 : 0);
-      const qtyDesc = q > 1 ? 5 : 0;
-      descInput.value = (condDesc + qtyDesc).toFixed(2);
+      const oldQty = parseFloat(qtyVal) || 0;
+      // Use a condição anterior (prevCondicao) para calcular o default antigo e preservar corretamente o especial
+      const oldDefault = (oldQty > 1 ? 5 : 0) + (prevCondicao === 'vista' ? 5 : 0);
+      const oldTotal = parseFloat(descVal) || 0;
+      const special = Math.max(oldTotal - oldDefault, 0);
+      const newDefault = (q > 1 ? 5 : 0) + (editarCondicao.value === 'vista' ? 5 : 0);
+      descInput.value = (special + newDefault).toFixed(2);
     });
 
     confirmBtn.addEventListener('click', () => {
@@ -543,7 +547,8 @@
       if (!prodId) return;
       confirmResetIfNeeded(() => {
         const prod = products[prodId];
-        addItem({ id: prodId, nome: prod.nome, qtd, valor: prod.valor, desc: 0 });
+        // Não force desconto zero; deixe aplicar desconto padrão automaticamente
+        addItem({ id: prodId, nome: prod.nome, qtd, valor: prod.valor });
         produtoSelect.value = '';
         produtoSelect.setAttribute('data-filled', 'false');
         document.getElementById('novoItemQtd').value = 1;
@@ -706,6 +711,82 @@
       console.error(err);
       showToast('Erro ao atualizar orçamento', 'error');
     }
+  }
+
+  // Abre o modal de conversão mantendo este modal de edição no fundo
+  function openConverterModal(onConfirm) {
+    const linhas = Array.from(itensTbody?.children || []).map(tr => ({
+      produto_id: Number(tr.dataset.id),
+      nome: tr.children[0]?.textContent?.trim() || '',
+      qtd: Number(tr.children[1]?.textContent?.trim() || '0')
+    })).filter(x => x.produto_id && x.qtd);
+    const clienteNome = editarCliente.options[editarCliente.selectedIndex]?.textContent || '';
+    window.quoteConversionContext = {
+      id,
+      numero: data.numero,
+      cliente: clienteNome,
+      data_emissao: data.data_emissao,
+      items: linhas
+    };
+
+    window.confirmQuoteConversion = (changes) => {
+      try {
+        const dels = new Set(changes?.deletions || []);
+        if (dels.size) {
+          Array.from(itensTbody.children).forEach(tr => {
+            const pid = Number(tr.dataset.id);
+            if (dels.has(pid)) tr.remove();
+          });
+        }
+        (changes?.replacements || []).forEach(rep => {
+          const tr = Array.from(itensTbody.children).find(r => Number(r.dataset.id) === Number(rep.oldId));
+          if (tr) {
+            tr.dataset.id = String(rep.newId);
+            if (tr.children[0]) tr.children[0].textContent = rep.newName || tr.children[0].textContent;
+            if (rep.newPrice != null && tr.children[2]) {
+              const newVal = Number(rep.newPrice) || 0;
+              tr.children[2].textContent = newVal.toFixed(2);
+              // Atualiza total da linha com novo valor unitário
+              try { updateLineTotal(tr); } catch(_e) {}
+            }
+          }
+        });
+        recalcTotals();
+        onConfirm?.();
+      } catch (err) {
+        console.error('Erro ao aplicar alterações da conversão', err);
+        showToast('Erro ao aplicar alterações da conversão', 'error');
+      } finally {
+        window.confirmQuoteConversion = null;
+        window.quoteConversionContext = null;
+      }
+    };
+    Modal.open('modals/orcamentos/converter.html', '../js/modals/orcamento-converter.js', 'converterOrcamento', true);
+  }
+
+  // Captura o submit antes do handler padrão para abrir o modal de conversão quando necessário
+  if (form) {
+    form.addEventListener('submit', e => {
+      if (currentStatus === 'Aprovado') {
+        e.preventDefault();
+        if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+        const closeAfter = e.submitter?.id === 'salvarFecharOrcamento' || currentStatus !== initialStatus;
+        openConverterModal(() => saveChanges(closeAfter));
+      }
+    }, true);
+  }
+
+  // Captura o clique de "Converter em Pedido" para usar o modal novo
+  if (typeof converterBtn !== 'undefined' && converterBtn) {
+    converterBtn.addEventListener('click', e => {
+      if (currentStatus !== 'Pendente') return; // deixa o handler original avisar
+      e.preventDefault();
+      if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+      currentStatus = 'Aprovado';
+      updateStatusTag();
+      updateConverterBtn();
+      openConverterModal(() => saveChanges(true));
+    }, true);
   }
 
   if (form) {

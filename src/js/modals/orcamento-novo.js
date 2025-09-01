@@ -305,9 +305,13 @@
 
     qtyInput.addEventListener('input', () => {
       const q = parseFloat(qtyInput.value) || 0;
-      const condDesc = (condicaoSelect.value === 'vista' ? 5 : 0);
-      const qtyDesc = q > 1 ? 5 : 0;
-      descInput.value = (condDesc + qtyDesc).toFixed(2);
+      const oldQty = parseFloat(qtyVal) || 0;
+      // Use prevCondicao como referência do default antigo (condição vigente quando o desconto atual foi aplicado)
+      const oldDefault = (oldQty > 1 ? 5 : 0) + (prevCondicao === 'vista' ? 5 : 0);
+      const oldTotal = parseFloat(descVal) || 0;
+      const special = Math.max(oldTotal - oldDefault, 0);
+      const newDefault = (q > 1 ? 5 : 0) + (condicaoSelect.value === 'vista' ? 5 : 0);
+      descInput.value = (special + newDefault).toFixed(2);
     });
 
     confirmBtn.addEventListener('click', () => {
