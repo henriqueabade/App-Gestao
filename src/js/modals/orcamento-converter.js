@@ -63,8 +63,11 @@
       const prod = r.produto_id != null ? mapById.get(String(r.produto_id)) : null;
       const disponivel = Number(prod?.quantidade_total ?? 0);
       r.qtd = Number(r.qtd || r.quantidade || 0);
-      r.em_estoque = Math.max(0, Math.min(disponivel, r.qtd));
-      r.a_produzir = Math.max(0, r.qtd - r.em_estoque);
+      r.pronta = Number(r.pronta || 0);
+      const estoqueLiquido = Math.max(0, disponivel - r.pronta);
+      const desejado = Math.max(0, r.qtd - r.pronta);
+      r.em_estoque = Math.max(0, Math.min(estoqueLiquido, desejado));
+      r.a_produzir = Math.max(0, desejado - r.em_estoque);
       r.error = !r.nome || isNaN(r.qtd) || r.qtd <= 0;
       totalOrc += r.qtd;
       totalEst += r.em_estoque;
@@ -98,6 +101,7 @@
         <td class="py-3 px-2 text-white">${r.nome || ''}</td>
         <td class="py-3 px-2 text-center text-white">${r.qtd}</td>
         <td class="py-3 px-2 text-center text-white">${r.em_estoque ?? 0}</td>
+        <td class="py-3 px-2 text-center text-white">${r.pronta ?? 0}</td>
         <td class="py-3 px-2 text-center text-white">${r.produzir_total ?? 0}</td>
         <td class="py-3 px-2 text-center text-white">${r.produzir_parcial ?? 0} ${infoSpan}</td>
         <td class="py-3 px-2 text-center">${statusHtml}</td>
@@ -258,6 +262,7 @@
         const lotes = Array.isArray(detalhes?.lotes) ? detalhes.lotes : [];
 
         const readyQty = lotes.filter(l => lastEtapa && String(l.etapa) === String(lastEtapa)).reduce((a,b)=> a + Number(b.quantidade||0), 0);
+        r.pronta = readyQty;
         const semiByStage = new Map();
         lotes.forEach(l => {
           const nomeEtapa = String(l.etapa||'').trim();
@@ -265,7 +270,7 @@
           semiByStage.set(nomeEtapa, (semiByStage.get(nomeEtapa)||0) + Number(l.quantidade||0));
         });
         const qtd = Number(r.qtd||0);
-        const neededAfterReady = Math.max(0, qtd - readyQty);
+        const neededAfterReady = Math.max(0, qtd - r.em_estoque - readyQty);
 
         // Produzir Parcial: aproveita semis mais avançadas primeiro
         const semiStagesDesc = Array.from(semiByStage.entries())
@@ -292,7 +297,10 @@
           rota.forEach(i => {
             const proc = String(i.processo||'');
             const ordemProc = etapaMap.get(proc) ?? 0;
-            if (etapaMinOrdem === -Infinity || ordemProc > etapaMinOrdem) {
+            const ordemInsumo = Number(i.ordem_insumo||0);
+            const ordemMin = etapaMinOrdem * 1000; // ordem por etapa
+            const atual = ordemProc * 1000 + ordemInsumo;
+            if (etapaMinOrdem === -Infinity || atual > ordemMin) {
               const nome = i.nome || '';
               const unidade = i.unidade || '';
               const necessario = Number(i.quantidade||0) * Number(unidades);
@@ -324,7 +332,11 @@
 
         // Dados do popover
         const processEntries = Array.from(semiByStage.entries()).map(([nome, q]) => ({ nome, ordem: etapaMap.get(String(nome)) ?? -1, q }));
-        const currentProc = processEntries.sort((a,b)=> b.ordem - a.ordem)[0]?.nome || null;
+        const currentLote = lotes
+          .filter(l => String(l.etapa) !== String(lastEtapa))
+          .sort((a,b)=> (etapaMap.get(String(b.etapa)) ?? -1) - (etapaMap.get(String(a.etapa)) ?? -1))[0];
+        const currentProc = currentLote ? String(currentLote.etapa) : null;
+        const currentDate = currentLote ? new Date(currentLote.data_hora_completa).toLocaleDateString('pt-BR') : 'N/A';
         // Último insumo: o faltante mais avançado
         let lastItem = null;
         for (const f of r.faltantes) {
@@ -333,13 +345,15 @@
         }
         const pendingList = r.faltantes.map(f => ({ name: f.nome, qty: Math.max(0, Math.ceil(Number(f.necessario||0))) }));
         r.popover = {
-          lastItem: lastItem ? { name: lastItem.name, qty: lastItem.qty, when: 'N/A' } : {},
-          process: currentProc ? { name: currentProc, since: 'N/A' } : {},
+          lastItem: lastItem ? { name: lastItem.name, qty: lastItem.qty } : {},
+          process: currentProc ? { name: currentProc, since: currentDate } : {},
           pending: pendingList
         };
+        r.a_produzir = r.produzir_total + r.produzir_parcial;
       }
 
       lastStockByName = stockByName;
+      recomputeStocks();
       buildInsumosGrid(stockByName);
       renderRows();
       validate();
@@ -425,7 +439,8 @@
   document.getElementById('converterDecisionNote')?.addEventListener('input', () => { computeInsumosAndRender(); });
   onlyMissingToggle?.addEventListener('change', () => {
     state.insumosView.mostrarSomenteFaltantes = !!onlyMissingToggle.checked;
-    computeInsumosAndRender();
+    insumosBody.innerHTML = '<tr><td colspan="7" class="py-6 text-center text-gray-300"><i class="fas fa-sync-alt rotating mr-2"></i>Recarregando...</td></tr>';
+    setTimeout(() => { computeInsumosAndRender(); }, 1000);
   });
   insumosReloadBtn?.addEventListener('click', () => {
     state.insumosView.filtroPecaId = null;
@@ -473,7 +488,7 @@
           <h3 class="text-sm font-semibold text-primary mb-2 flex items-center gap-2">Último insumo</h3>
           <div class="flex items-center justify-between text-sm py-1">
             <span class="text-white font-medium">${lastItem.name||'N/A'}</span>
-            <div class="text-right"><div class="text-white">${lastItem.qty||0} un</div><div class="text-gray-400 text-xs">${lastItem.when||'N/A'}</div></div>
+            <div class="text-right"><div class="text-white">${lastItem.qty||0} un</div></div>
           </div>
         </div>
         <div class="mb-4">
@@ -482,7 +497,7 @@
         </div>
         <div>
           <h3 class="text-sm font-semibold text-primary mb-2 flex items-center gap-2">Pendentes</h3>
-          <div class="max-h-36 overflow-auto pr-1">
+          <div class="max-h-36 overflow-auto pr-1 modal-scroll">
             ${pending.length? pending.slice(0,6).map(item=>`<div class=\"flex items-center justify-between text-sm py-1.5\"><span class=\"text-gray-300 flex items-center\"><span class=\"text-primary mr-2\">•</span>${item.name}</span><span class=\"text-white\">${item.qty} un</span></div>`).join('') : '<div class="text-gray-400 text-sm py-2">Nenhum item pendente</div>'}
           </div>
           ${pending.length? `<div class=\"mt-3 pt-3 border-t border-white/10\"><span class=\"inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-primary/20 text-primary border border-primary/30\">${pending.length} ${pending.length===1?'item pendente':'itens pendentes'}</span></div>`:''}
