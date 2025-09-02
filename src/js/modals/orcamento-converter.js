@@ -270,6 +270,10 @@
           semiByStage.set(nomeEtapa, (semiByStage.get(nomeEtapa)||0) + Number(l.quantidade||0));
         });
         const qtd = Number(r.qtd||0);
+        const disponivel = Number(prod?.quantidade_total || 0);
+        const estoqueLiquido = Math.max(0, disponivel - r.pronta);
+        const desejado = Math.max(0, qtd - r.pronta);
+        r.em_estoque = Math.max(0, Math.min(estoqueLiquido, desejado));
         const neededAfterReady = Math.max(0, qtd - r.em_estoque - readyQty);
 
         // Produzir Parcial: aproveita semis mais avançadas primeiro
@@ -450,7 +454,9 @@
     setTimeout(() => { computeInsumosAndRender(); }, 1000);
   });
   allowNegativeToggle?.addEventListener('change', () => {
-    state.allowNegativeStock = !!allowNegativeToggle.checked; computeInsumosAndRender();
+    state.allowNegativeStock = !!allowNegativeToggle.checked;
+    insumosBody.innerHTML = '<tr><td colspan="7" class="py-6 text-center text-gray-300"><i class="fas fa-sync-alt rotating mr-2"></i>Recarregando...</td></tr>';
+    setTimeout(() => { computeInsumosAndRender(); }, 1000);
   });
 
   // Popover de peça (clique)
