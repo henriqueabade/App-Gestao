@@ -64,8 +64,10 @@
       const disponivel = Number(prod?.quantidade_total ?? 0);
       r.qtd = Number(r.qtd || r.quantidade || 0);
       r.pronta = Number(r.pronta || 0);
-      r.em_estoque = Math.max(0, Math.min(disponivel, r.qtd));
-      r.a_produzir = Math.max(0, r.qtd - r.em_estoque - r.pronta);
+      const estoqueLiquido = Math.max(0, disponivel - r.pronta);
+      const desejado = Math.max(0, r.qtd - r.pronta);
+      r.em_estoque = Math.max(0, Math.min(estoqueLiquido, desejado));
+      r.a_produzir = Math.max(0, desejado - r.em_estoque);
       r.error = !r.nome || isNaN(r.qtd) || r.qtd <= 0;
       totalOrc += r.qtd;
       totalEst += r.em_estoque;
@@ -437,7 +439,8 @@
   document.getElementById('converterDecisionNote')?.addEventListener('input', () => { computeInsumosAndRender(); });
   onlyMissingToggle?.addEventListener('change', () => {
     state.insumosView.mostrarSomenteFaltantes = !!onlyMissingToggle.checked;
-    computeInsumosAndRender();
+    insumosBody.innerHTML = '<tr><td colspan="7" class="py-6 text-center text-gray-300"><i class="fas fa-sync-alt rotating mr-2"></i>Recarregando...</td></tr>';
+    setTimeout(() => { computeInsumosAndRender(); }, 1000);
   });
   insumosReloadBtn?.addEventListener('click', () => {
     state.insumosView.filtroPecaId = null;
