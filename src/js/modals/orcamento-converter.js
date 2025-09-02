@@ -152,7 +152,7 @@
     });
 
     // Inicializa popovers após render
-    initPieceHoverPopover?.('.js-piece-info');
+    initPiecePopover?.('.js-piece-info');
   }
 
   function validate() {
@@ -438,16 +438,16 @@
     state.allowNegativeStock = !!allowNegativeToggle.checked; computeInsumosAndRender();
   });
 
-  // Popover de peça (hover)
-  function initPieceHoverPopover(selector = '.js-piece-info'){
+  // Popover de peça (clique)
+  function initPiecePopover(selector = '.js-piece-info'){
     createPopoverContainer();
     document.querySelectorAll(selector).forEach(trigger => {
-      let hideTimeout = null;
-      trigger.addEventListener('mouseenter', e => { clearTimeout(hideTimeout); showPopover(e.currentTarget); });
-      trigger.addEventListener('mouseleave', () => { hideTimeout = setTimeout(hidePopover, 100); });
-      trigger.addEventListener('focus', e => { clearTimeout(hideTimeout); showPopover(e.currentTarget); });
-      trigger.addEventListener('blur', () => { hideTimeout = setTimeout(hidePopover, 100); });
-      trigger.addEventListener('click', e => { e.preventDefault(); const t=e.currentTarget; if (t.getAttribute('aria-expanded')==='true') hidePopover(); else showPopover(t); });
+      trigger.addEventListener('click', e => {
+        e.preventDefault();
+        const t = e.currentTarget;
+        if (t.getAttribute('aria-expanded') === 'true') hidePopover();
+        else showPopover(t);
+      });
       trigger.addEventListener('keydown', e => { if (e.key==='Escape') { hidePopover(); trigger.focus(); } });
     });
     document.addEventListener('click', e => { if (!e.target.closest('.js-piece-info') && !e.target.closest('#piece-popover')) hidePopover(); });
@@ -464,8 +464,8 @@
     p.tabIndex=-1;
     document.body.appendChild(p);
   }
-  function showPopover(trigger){ const pop=document.getElementById('piece-popover'); buildPopover(trigger); placePopover(trigger); pop.classList.remove('opacity-0','scale-95','pointer-events-none'); pop.classList.add('opacity-100','scale-100','pointer-events-auto'); trigger.setAttribute('aria-expanded','true'); pop.addEventListener('mouseenter',()=>clearTimeout(hidePopover._t)); pop.addEventListener('mouseleave',()=>{ hidePopover._t = setTimeout(hidePopover,100); }); }
-  function hidePopover(){ const pop=document.getElementById('piece-popover'); if(!pop) return; clearTimeout(hidePopover._t); pop.classList.remove('opacity-100','scale-100','pointer-events-auto'); pop.classList.add('opacity-0','scale-95','pointer-events-none'); document.querySelectorAll('.js-piece-info[aria-expanded="true"]').forEach(t=>t.setAttribute('aria-expanded','false')); }
+  function showPopover(trigger){ const pop=document.getElementById('piece-popover'); hidePopover(); buildPopover(trigger); placePopover(trigger); pop.classList.remove('opacity-0','scale-95','pointer-events-none'); pop.classList.add('opacity-100','scale-100','pointer-events-auto'); trigger.setAttribute('aria-expanded','true'); }
+  function hidePopover(){ const pop=document.getElementById('piece-popover'); if(!pop) return; pop.classList.remove('opacity-100','scale-100','pointer-events-auto'); pop.classList.add('opacity-0','scale-95','pointer-events-none'); document.querySelectorAll('.js-piece-info[aria-expanded="true"]').forEach(t=>t.setAttribute('aria-expanded','false')); }
   function buildPopover(trigger){ const lastItem=JSON.parse(trigger.dataset.lastItem||'{}'); const process=JSON.parse(trigger.dataset.process||'{}'); const pending=JSON.parse(trigger.dataset.pending||'[]'); const pop=document.getElementById('piece-popover'); pop.innerHTML=`
       <div class="bg-white/10 backdrop-blur-md border border-white/20 rounded-xl shadow-2xl max-w-sm w-[360px] p-4 text-neutral-100">
         <div class="popover-arrow absolute w-3 h-3 bg-white/10 border-l border-t border-white/20 rotate-45 -translate-y-1/2"></div>
@@ -488,6 +488,6 @@
           ${pending.length? `<div class=\"mt-3 pt-3 border-t border-white/10\"><span class=\"inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-primary/20 text-primary border border-primary/30\">${pending.length} ${pending.length===1?'item pendente':'itens pendentes'}</span></div>`:''}
         </div>
       </div>`; }
-  function placePopover(trigger){ const pop=document.getElementById('piece-popover'); const r=trigger.getBoundingClientRect(); const pw=360, ph=320; const vw=window.innerWidth, vh=window.innerHeight; let top,left,arrowClass=''; const above=r.top, below=vh-r.bottom, leftSpace=r.left, rightSpace=vw-r.right; if (above>=ph){ top=r.top-ph-8; left=Math.max(16, Math.min(r.left + (r.width/2) - pw/2, vw-pw-16)); arrowClass='bottom-[-6px] left-1/2 transform -translate-x-1/2'; } else if (below>=ph){ top=r.bottom+8; left=Math.max(16, Math.min(r.left + (r.width/2) - pw/2, vw-pw-16)); arrowClass='top-[-6px] left-1/2 transform -translate-x-1/2 rotate-[225deg]'; } else if (rightSpace>=pw+20){ top=Math.max(16, Math.min(r.top + (r.height/2) - ph/2, vh-ph-16)); left=r.right+8; arrowClass='left-[-6px] top-1/2 transform -translate-y-1/2 rotate-[135deg]'; } else if (leftSpace>=pw+20){ top=Math.max(16, Math.min(r.top + (r.height/2) - ph/2, vh-ph-16)); left=r.left-pw-8; arrowClass='right-[-6px] top-1/2 transform -translate-y-1/2 rotate-[315deg]'; } else { top=Math.max(16, (vh-ph)/2); left=Math.max(16, (vw-pw)/2); arrowClass='hidden'; } pop.style.top=`${top}px`; pop.style.left=`${left}px`; const a=pop.querySelector('.popover-arrow'); if(a){ a.className=`popover-arrow absolute w-3 h-3 bg-white/10 border-l border-t border-white/20 ${arrowClass}`; } }
+  function placePopover(trigger){ const pop=document.getElementById('piece-popover'); const r=trigger.getBoundingClientRect(); const { width: pw, height: ph } = pop.getBoundingClientRect(); const vw=window.innerWidth, vh=window.innerHeight; let top,left,arrowClass=''; const above=r.top, below=vh-r.bottom, leftSpace=r.left, rightSpace=vw-r.right; if (rightSpace>=pw+20){ top=Math.max(16, Math.min(r.top + (r.height/2) - ph/2, vh-ph-16)); left=r.right+8; arrowClass='left-[-6px] top-1/2 transform -translate-y-1/2 rotate-[135deg]'; } else if (leftSpace>=pw+20){ top=Math.max(16, Math.min(r.top + (r.height/2) - ph/2, vh-ph-16)); left=r.left-pw-8; arrowClass='right-[-6px] top-1/2 transform -translate-y-1/2 rotate-[315deg]'; } else if (below>=ph){ top=r.bottom+8; left=Math.max(16, Math.min(r.left + (r.width/2) - pw/2, vw-pw-16)); arrowClass='top-[-6px] left-1/2 transform -translate-x-1/2 rotate-[225deg]'; } else if (above>=ph){ top=r.top-ph-8; left=Math.max(16, Math.min(r.left + (r.width/2) - pw/2, vw-pw-16)); arrowClass='bottom-[-6px] left-1/2 transform -translate-x-1/2'; } else { top=Math.max(16, (vh-ph)/2); left=Math.max(16, (vw-pw)/2); arrowClass='hidden'; } pop.style.top=`${top}px`; pop.style.left=`${left}px`; const a=pop.querySelector('.popover-arrow'); if(a){ a.className=`popover-arrow absolute w-3 h-3 bg-white/10 border-l border-t border-white/20 ${arrowClass}`; } }
 })();
 
