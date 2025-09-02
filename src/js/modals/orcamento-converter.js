@@ -379,7 +379,13 @@
       if (negative) tr.classList.add('negative-balance');
       tr.classList.add('border-b','border-white/5');
       const flags = [];
-      if (negative && !stock.infinito) flags.push('<span class="badge-danger px-2 py-0.5 rounded text-[10px]" title="Saldo previsto negativo">negativo</span>');
+      if (saldo === Infinity) {
+        flags.push('<span class="badge-success px-2 py-0.5 rounded text-[10px]" title="Estoque infinito">infinito</span>');
+      } else if (negative) {
+        flags.push('<span class="badge-danger px-2 py-0.5 rounded text-[10px]" title="Saldo previsto negativo">negativo</span>');
+      } else {
+        flags.push('<span class="badge-info px-2 py-0.5 rounded text-[10px]" title="Saldo previsto correto">correto</span>');
+      }
       tr.innerHTML = `
         <td class="py-3 px-2 text-white">${v.nome}</td>
         <td class="py-3 px-2 text-center text-gray-300">${v.un || stock.unidade || ''}</td>

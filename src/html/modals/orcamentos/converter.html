@@ -7,8 +7,8 @@
       </div>
       <div class="flex items-center gap-6">
         <label class="flex items-center gap-3 text-sm text-gray-200 select-none">
-          <span>Permitir saldo negativo</span>
-          <input id="allowNegativeToggle" type="checkbox" class="component-toggle" />
+          <input id="allowNegativeStock" type="checkbox" class="component-toggle" />
+          Permitir estoque negativo
         </label>
         <div class="flex items-center gap-3">
           <button id="voltarConverterOrcamento" class="btn-danger px-4 py-2 rounded-lg text-white font-medium">Cancelar</button>
@@ -64,8 +64,8 @@
               <h3 class="text-lg font-semibold text-white">Insumos: <span id="insumosTituloPeca" class="text-gray-200">Totais</span></h3>
               <div class="flex items-center gap-4">
                 <label class="flex items-center gap-3 text-sm text-gray-200 select-none">
-                  <span>Somente faltantes</span>
                   <input id="onlyMissingToggle" type="checkbox" class="component-toggle" checked />
+                  Somente faltantes
                 </label>
                 <button class="btn-neutral px-3 py-1 rounded text-sm flex items-center gap-2" data-action="insumos-reload" title="Recarregar insumos (totais)">
                   <i class="fas fa-sync-alt"></i>

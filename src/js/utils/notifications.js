@@ -17,7 +17,7 @@ function showToast(message, type = 'info') {
     if (!notificationContainer) {
       notificationContainer = document.createElement('div');
       notificationContainer.id = 'notification';
-      notificationContainer.className = 'fixed left-1/2 top-1/2 transform -translate-x-1/2 -translate-y-1/2 mt-20 space-y-2 z-[10000]';
+      notificationContainer.className = 'fixed left-1/2 top-1/2 transform -translate-x-1/2 -translate-y-1/2 mt-20 space-y-2 z-[11000]';
       document.body.appendChild(notificationContainer);
     }
   }
@@ -47,7 +47,7 @@ function createPopup(target, html, { margin = 8, onHide } = {}) {
   const popup = document.createElement('div');
   popup.className = 'fixed z-50';
   popup.style.position = 'fixed';
-  popup.style.zIndex = '10000';
+  popup.style.zIndex = '11000';
   popup.innerHTML = html;
   document.body.appendChild(popup);
 
