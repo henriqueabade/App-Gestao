@@ -453,7 +453,17 @@
     document.addEventListener('click', e => { if (!e.target.closest('.js-piece-info') && !e.target.closest('#piece-popover')) hidePopover(); });
     document.addEventListener('keydown', e => { if (e.key==='Escape') hidePopover(); });
   }
-  function createPopoverContainer(){ if (document.getElementById('piece-popover')) return; const p=document.createElement('div'); p.id='piece-popover'; p.className='fixed pointer-events-none opacity-0 scale-95 transition-all duration-150 ease-out z-50'; p.setAttribute('role','dialog'); p.setAttribute('aria-modal','false'); p.tabIndex=-1; document.body.appendChild(p); }
+  function createPopoverContainer(){
+    if (document.getElementById('piece-popover')) return;
+    const p=document.createElement('div');
+    p.id='piece-popover';
+    p.className='fixed pointer-events-none opacity-0 scale-95 transition-all duration-150 ease-out z-[11000]';
+    p.style.zIndex='11000';
+    p.setAttribute('role','dialog');
+    p.setAttribute('aria-modal','false');
+    p.tabIndex=-1;
+    document.body.appendChild(p);
+  }
   function showPopover(trigger){ const pop=document.getElementById('piece-popover'); buildPopover(trigger); placePopover(trigger); pop.classList.remove('opacity-0','scale-95','pointer-events-none'); pop.classList.add('opacity-100','scale-100','pointer-events-auto'); trigger.setAttribute('aria-expanded','true'); pop.addEventListener('mouseenter',()=>clearTimeout(hidePopover._t)); pop.addEventListener('mouseleave',()=>{ hidePopover._t = setTimeout(hidePopover,100); }); }
   function hidePopover(){ const pop=document.getElementById('piece-popover'); if(!pop) return; clearTimeout(hidePopover._t); pop.classList.remove('opacity-100','scale-100','pointer-events-auto'); pop.classList.add('opacity-0','scale-95','pointer-events-none'); document.querySelectorAll('.js-piece-info[aria-expanded="true"]').forEach(t=>t.setAttribute('aria-expanded','false')); }
   function buildPopover(trigger){ const lastItem=JSON.parse(trigger.dataset.lastItem||'{}'); const process=JSON.parse(trigger.dataset.process||'{}'); const pending=JSON.parse(trigger.dataset.pending||'[]'); const pop=document.getElementById('piece-popover'); pop.innerHTML=`
