@@ -31,19 +31,19 @@
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <!-- Coluna esquerda -->
                 <div class="space-y-3">
-                    <button class="w-full btn-secondary text-white rounded-md px-4 py-3 font-medium flex items-center justify-center">
+                    <button data-action="exportar-csv" class="w-full btn-secondary text-white rounded-md px-4 py-3 font-medium flex items-center justify-center">
                         <i class="fas fa-download mr-2"></i>Exportar CSV
                     </button>
-                    <button class="w-full btn-secondary text-white rounded-md px-4 py-3 font-medium flex items-center justify-center">
+                    <button data-action="importar-csv" class="w-full btn-secondary text-white rounded-md px-4 py-3 font-medium flex items-center justify-center">
                         <i class="fas fa-upload mr-2"></i>Importar CSV
                     </button>
                 </div>
                 <!-- Coluna direita -->
                 <div class="space-y-3">
-                    <button class="w-full btn-secondary text-white rounded-md px-4 py-3 font-medium flex items-center justify-center">
+                    <button data-action="gerar-relatorio" class="w-full btn-secondary text-white rounded-md px-4 py-3 font-medium flex items-center justify-center">
                         <i class="fas fa-file-alt mr-2"></i>Gerar Relatório
                     </button>
-                    <button class="w-full btn-secondary text-white rounded-md px-4 py-3 font-medium flex items-center justify-center">
+                    <button data-action="enviar-email-massa" class="w-full btn-secondary text-white rounded-md px-4 py-3 font-medium flex items-center justify-center">
                         <i class="fas fa-envelope mr-2"></i>Enviar E-mail em Massa
                     </button>
                 </div>
@@ -86,8 +86,8 @@
 
                 <!-- Ações -->
                 <div id= "bt-actions" class="flex gap-2 flex-shrink-0">
-                    <button class="btn-secondary text-white rounded-md px-4 h-12 text-sm font-medium">Filtrar</button>
-                    <button class="btn-warning text-white rounded-md px-4 h-12 text-sm font-medium">Limpar</button>
+                    <button data-action="filtrar" class="btn-secondary text-white rounded-md px-4 h-12 text-sm font-medium">Filtrar</button>
+                    <button data-action="limpar" class="btn-warning text-white rounded-md px-4 h-12 text-sm font-medium">Limpar</button>
                 </div>
             </div>
         </div>

@@ -2,24 +2,24 @@
   <div role="dialog" aria-modal="true" tabindex="0" class="w-full max-w-7xl max-h-[95vh] bg-surface/60 backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade slide-in overflow-hidden flex flex-col">
     <header class="flex flex-wrap items-center justify-between gap-4 px-8 py-5 border-b border-white/10 flex-shrink-0">
       <div>
-        <h2 class="text-xl font-semibold text-white">Revisar conversão de orçamento</h2>
+        <h2 class="text-xl font-semibold text-white">REVISAR CONVERSÃO DE ORÇAMENTO</h2>
         <p id="converterOrcamentoSubtitulo" class="text-gray-300 text-sm"></p>
       </div>
       <div class="flex items-center gap-6">
-        <label class="flex items-center gap-2 text-sm text-gray-200 select-none">
-          <input id="allowNegativeStock" type="checkbox" class="accent-[var(--color-primary)] w-4 h-4 rounded" />
-          Permitir estoque negativo
+        <label class="flex items-center gap-3 text-sm text-gray-200 select-none">
+          <span>Permitir saldo negativo</span>
+          <input id="allowNegativeToggle" type="checkbox" class="component-toggle" />
         </label>
         <div class="flex items-center gap-3">
-          <button id="voltarConverterOrcamento" class="btn-neutral px-4 py-2 rounded-lg text-white font-medium">Cancelar</button>
-          <button id="confirmarConverterOrcamento" class="btn-primary px-5 py-2 rounded-lg text-white font-medium opacity-60 cursor-not-allowed" disabled>Confirmar conversão</button>
+          <button id="voltarConverterOrcamento" class="btn-danger px-4 py-2 rounded-lg text-white font-medium">Cancelar</button>
+          <button id="confirmarConverterOrcamento" class="btn-primary px-5 py-2 rounded-lg text-white font-medium opacity-60 cursor-not-allowed" disabled>Confirmar Conversão</button>
         </div>
       </div>
     </header>
 
     <div id="converterWarning" class="px-8 py-3 bg-red-500/10 border-b border-red-500/20 flex-shrink-0 hidden">
       <div class="flex items-center gap-3">
-        <span class="text-red-400">⚠️</span>
+        <span class="text-red-400">⚠</span>
         <span id="converterWarningText" class="text-red-300 font-medium text-sm"></span>
       </div>
     </div>
@@ -44,8 +44,8 @@
                     <th class="text-left py-3 px-2 text-gray-300 font-medium">Peça</th>
                     <th class="text-center py-3 px-2 text-gray-300 font-medium">Qtd Orçada</th>
                     <th class="text-center py-3 px-2 text-gray-300 font-medium">Em Estoque</th>
-                    <th class="text-center py-3 px-2 text-gray-300 font-medium">A Produzir</th>
-                    <th class="text-center py-3 px-2 text-gray-300 font-medium">Classe</th>
+                    <th class="text-center py-3 px-2 text-gray-300 font-medium">Produzir Total</th>
+                    <th class="text-center py-3 px-2 text-gray-300 font-medium">Produzir Parcial</th>
                     <th class="text-center py-3 px-2 text-gray-300 font-medium">Status</th>
                     <th class="text-center py-3 px-2 text-gray-300 font-medium">Ações</th>
                   </tr>
@@ -61,13 +61,16 @@
 
           <div class="w-full bg-surface/40 rounded-2xl border border-white/10 p-6">
             <div class="flex items-center justify-between mb-4">
-              <h3 class="text-lg font-semibold text-white">Insumos</h3>
+              <h3 class="text-lg font-semibold text-white">Insumos: <span id="insumosTituloPeca" class="text-gray-200">Totais</span></h3>
               <div class="flex items-center gap-4">
-                <label class="flex items-center gap-2 text-sm text-gray-200 select-none">
-                  <input id="onlyMissingToggle" type="checkbox" class="accent-[var(--color-primary)] w-4 h-4 rounded" checked />
-                  Somente faltantes
+                <label class="flex items-center gap-3 text-sm text-gray-200 select-none">
+                  <span>Somente faltantes</span>
+                  <input id="onlyMissingToggle" type="checkbox" class="component-toggle" checked />
                 </label>
-                <button class="btn-ghost px-3 py-1 rounded text-sm" data-action="insumos-reload">Reload</button>
+                <button class="btn-neutral px-3 py-1 rounded text-sm flex items-center gap-2" data-action="insumos-reload" title="Recarregar insumos (totais)">
+                  <i class="fas fa-sync-alt"></i>
+                  Reload
+                </button>
               </div>
             </div>
             <div class="table-scroll">
@@ -83,9 +86,7 @@
                     <th class="text-center py-3 px-2 text-gray-300 font-medium">Flags</th>
                   </tr>
                 </thead>
-                <tbody id="converterInsumosBody">
-                  <!-- Fase 1: preenchimento simplificado / placeholder -->
-                </tbody>
+                <tbody id="converterInsumosBody"></tbody>
               </table>
             </div>
             <div class="mt-6">
@@ -104,7 +105,7 @@
         <div class="flex flex-col h-full">
           <header class="flex items-center justify-between px-6 py-4 border-b border-white/10">
             <h3 class="text-lg font-semibold text-white">Substituir Peça</h3>
-            <button class="btn-neutral px-3 py-1 rounded-lg text-white" data-close="drawer">✕</button>
+            <button class="btn-neutral px-3 py-1 rounded-lg text-white" data-close="drawer">Fechar</button>
           </header>
           <div class="flex-1 overflow-y-auto p-6">
             <p class="text-gray-300 mb-2">Substituindo: <span id="converterReplacingName" class="text-white font-medium"></span></p>

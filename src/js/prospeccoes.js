@@ -80,6 +80,19 @@ function initProspeccoes() {
         document.getElementById('btnNovaProspeccao')?.click();
     });
 
+    document.getElementById('btnImportarLeads')?.addEventListener('click', () => {
+        alert('Função em desenvolvimento');
+    });
+    document.getElementById('btnOcultarGraficoFunil')?.addEventListener('click', () => {
+        alert('Função em desenvolvimento');
+    });
+    document.getElementById('btnFiltrarProspeccoes')?.addEventListener('click', () => {
+        alert('Função em desenvolvimento');
+    });
+    document.getElementById('btnLimparProspeccoes')?.addEventListener('click', () => {
+        alert('Função em desenvolvimento');
+    });
+
     // Exemplo de uso das funções
     document.querySelectorAll('.fa-edit').forEach(icon => {
         icon.addEventListener('click', () => avancarEtapa('1', 'novo'));

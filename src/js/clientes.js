@@ -250,6 +250,11 @@ function initClientes() {
         openModalWithSpinner('modals/clientes/novo.html', '../js/modals/cliente-novo.js', 'novoCliente');
     });
 
+    const emDesenvolvimento = () => alert('Função em desenvolvimento');
+    document.getElementById('btnExportarCSV')?.addEventListener('click', emDesenvolvimento);
+    document.getElementById('btnImportarCSV')?.addEventListener('click', emDesenvolvimento);
+    document.getElementById('btnGerarRelatorio')?.addEventListener('click', emDesenvolvimento);
+    document.getElementById('btnEnviarEmailMassa')?.addEventListener('click', emDesenvolvimento);
 
     document.getElementById('clientesEmptyNew')?.addEventListener('click', () => {
         document.getElementById('btnNovoCliente')?.click();
