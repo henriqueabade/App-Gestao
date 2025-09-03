@@ -31,7 +31,6 @@
 
   let listaProdutos = [];
   let rows = Array.isArray(ctx.items) ? ctx.items.map(p => ({...p})) : [];
-  let etapas = [];
   const state = {
     allowNegativeStock: false,
     insumosView: { filtroPecaId: null, mostrarSomenteFaltantes: true }
@@ -51,23 +50,13 @@
     try { listaProdutos = await (window.electronAPI?.listarProdutos?.() ?? []); }
     catch (err) { console.error('Erro ao listar produtos', err); listaProdutos = []; }
   }
-  async function carregarEtapas() {
-    try { etapas = await (window.electronAPI?.listarEtapasProducao?.() ?? []); }
-    catch (err) { console.error('Erro ao listar etapas de produção', err); etapas = []; }
-  }
 
   function recomputeStocks() {
     let totalOrc = 0, totalEst = 0, totalProd = 0, validas = 0;
-    const mapById = new Map(listaProdutos.map(p => [String(p.id), p]));
     rows.forEach(r => {
-      const prod = r.produto_id != null ? mapById.get(String(r.produto_id)) : null;
-      const disponivel = Number(prod?.quantidade_total ?? 0);
       r.qtd = Number(r.qtd || r.quantidade || 0);
-      r.pronta = Number(r.pronta || 0);
-      const estoqueLiquido = Math.max(0, disponivel - r.pronta);
-      const desejado = Math.max(0, r.qtd - r.pronta);
-      r.em_estoque = Math.max(0, Math.min(estoqueLiquido, desejado));
-      r.a_produzir = Math.max(0, desejado - r.em_estoque);
+      r.em_estoque = Number(r.em_estoque || 0);
+      r.a_produzir = Number(r.a_produzir || 0);
       r.error = !r.nome || isNaN(r.qtd) || r.qtd <= 0;
       totalOrc += r.qtd;
       totalEst += r.em_estoque;
@@ -89,12 +78,9 @@
       let statusHtml = '<span class="text-green-400" title="OK">&#10003;</span>';
       if (r.a_produzir > 0 && r.status === 'atencao') statusHtml = '<span class="text-orange-300" title="Atenção">&#9888;</span>';
 
-      const infoSpan = (Number(r.produzir_parcial||0) > 0) ? `
-        <span class="js-piece-info inline-flex items-center justify-center w-6 h-6 rounded-full bg-white/10 hover:bg-white/20 focus:outline-none focus:ring-2 focus:ring-primary/50 transition-colors ml-1" aria-haspopup="dialog" aria-expanded="false"
-          data-last-item='${JSON.stringify(r.popover?.lastItem||{})}'
-          data-process='${JSON.stringify(r.popover?.process||{})}'
-          data-pending='${JSON.stringify(r.popover?.pending||[])}'>
-          <svg class="w-3 h-3 text-gray-300" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/></svg>
+      const infoSpan = (Array.isArray(r.popover?.variants) && r.popover.variants.length > 0) ? `
+        <span class="js-piece-info inline-flex items-center justify-center w-6 h-6 rounded-full bg-white/10 hover:bg-white/20 focus:outline-none focus:ring-2 focus:ring-primary/50 transition-colors ml-1" aria-haspopup="dialog" aria-expanded="false" data-variants='${JSON.stringify(r.popover.variants)}' data-page="0">
+          <svg class="w-3 h-3 text-gray-300" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10a8 8 0 1 1-16 0 8 8 0 0116 0zm-7-4a 1 1 0 11-2 0 1 1 0 012 0zM9 9a 1 1 0 000 2v3a 1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/></svg>
         </span>` : '';
 
       tr.innerHTML = `
@@ -229,142 +215,122 @@
   });
 
   // Cálculo de insumos e status por peça
-  async function computeInsumosAndRender(){
-    try {
-      const byId = new Map(listaProdutos.map(p => [String(p.id), p]));
-      const etapaMap = new Map(etapas.map(e => [String(e.nome), Number(e.ordem)]));
-      const lastEtapa = etapas.length ? etapas.reduce((a,b)=> (a.ordem>b.ordem? a : b)).nome : null;
+async function computeInsumosAndRender(){
+  try {
+    const byId = new Map(listaProdutos.map(p => [String(p.id), p]));
 
-      // Estoque de matéria-prima
-      let materias = [];
-      try { materias = await (window.electronAPI?.listarMateriaPrima?.('') ?? []); }
-      catch (err) { console.error('Erro ao listar matéria-prima', err); }
-      const stockByName = new Map();
-      materias.forEach(m => {
-        const key = m.nome || '';
-        if (!key) return;
-        const cur = stockByName.get(key) || { quantidade: 0, unidade: m.unidade || '', infinito: !!m.infinito };
-        cur.quantidade += Number(m.quantidade || 0);
-        cur.infinito = cur.infinito || !!m.infinito;
-        stockByName.set(key, cur);
+    // Estoque de matéria-prima
+    let materias = [];
+    try { materias = await (window.electronAPI?.listarMateriaPrima?.('') ?? []); }
+    catch (err) { console.error('Erro ao listar matéria-prima', err); }
+    const stockByName = new Map();
+    materias.forEach(m => {
+      const key = m.nome || '';
+      if (!key) return;
+      const cur = stockByName.get(key) || { quantidade: 0, unidade: m.unidade || '', infinito: !!m.infinito };
+      cur.quantidade += Number(m.quantidade || 0);
+      cur.infinito = cur.infinito || !!m.infinito;
+      stockByName.set(key, cur);
+    });
+
+    for (const r of rows) {
+      const prod = byId.get(String(r.produto_id));
+      const codigo = prod?.codigo; r.status=''; r.faltantes=[]; r.produzir_total=0; r.produzir_parcial=0; r.popover={variants:[]}; r.pronta=0; r.em_estoque=0; r.a_produzir=0;
+      if (!codigo) continue;
+
+      let detalhes = {};
+      try { detalhes = await (window.electronAPI?.listarDetalhesProduto?.({ produtoCodigo: codigo, produtoId: r.produto_id }) ?? {}); }
+      catch (e) { console.error('detalhes', e); }
+      const rota = Array.isArray(detalhes?.itens) ? detalhes.itens : [];
+      const lotes = Array.isArray(detalhes?.lotes) ? detalhes.lotes : [];
+
+      const orderById = new Map(rota.map(i => [Number(i.insumo_id), Number(i.ordem_insumo||0)]));
+      const rotaSorted = rota.slice().sort((a,b)=> Number(a.ordem_insumo||0) - Number(b.ordem_insumo||0));
+      const maxOrder = rotaSorted.length ? Math.max(...rotaSorted.map(i=> Number(i.ordem_insumo||0))) : 0;
+
+      let readyQty = 0;
+      const partials = [];
+      lotes.forEach(l => {
+        const qty = Number(l.quantidade||0);
+        const lastId = Number(l.ultimo_insumo_id||0);
+        const ord = orderById.get(lastId) || 0;
+        if (ord >= maxOrder && maxOrder > 0) readyQty += qty;
+        else partials.push({ order: ord, qty, lastId, lastName: l.ultimo_item || '' });
       });
+      const parcialTotal = partials.reduce((a,b)=> a + b.qty, 0);
+      const totalStock = readyQty + parcialTotal;
+      r.pronta = readyQty;
+      r.em_estoque = totalStock;
 
-      // Por peça
-      for (const r of rows) {
-        const prod = byId.get(String(r.produto_id));
-        const codigo = prod?.codigo; r.status = ''; r.faltantes = []; r.produzir_total = 0; r.produzir_parcial = 0; r.popover = {};
-        if (!codigo) continue;
-
-        let rota = [];
-        try { rota = await (window.electronAPI?.listarInsumosProduto?.(codigo) ?? []); } catch (e) { console.error('rota', e); }
-        let detalhes = {};
-        try { detalhes = await (window.electronAPI?.listarDetalhesProduto?.({ produtoCodigo: codigo, produtoId: r.produto_id }) ?? {}); } catch (e) { console.error('detalhes', e); }
-        const lotes = Array.isArray(detalhes?.lotes) ? detalhes.lotes : [];
-
-        const readyQty = lotes.filter(l => lastEtapa && String(l.etapa) === String(lastEtapa)).reduce((a,b)=> a + Number(b.quantidade||0), 0);
-        r.pronta = readyQty;
-        const semiByStage = new Map();
-        lotes.forEach(l => {
-          const nomeEtapa = String(l.etapa||'').trim();
-          if (!nomeEtapa || nomeEtapa === lastEtapa) return;
-          semiByStage.set(nomeEtapa, (semiByStage.get(nomeEtapa)||0) + Number(l.quantidade||0));
-        });
-        const qtd = Number(r.qtd||0);
-        const disponivel = Number(prod?.quantidade_total || 0);
-        const estoqueLiquido = Math.max(0, disponivel - r.pronta);
-        const desejado = Math.max(0, qtd - r.pronta);
-        r.em_estoque = Math.max(0, Math.min(estoqueLiquido, desejado));
-        const neededAfterReady = Math.max(0, qtd - r.em_estoque - readyQty);
-
-        // Produzir Parcial: aproveita semis mais avançadas primeiro
-        const semiStagesDesc = Array.from(semiByStage.entries())
-          .map(([nome, q]) => ({ nome, q, ordem: etapaMap.get(String(nome)) ?? -1 }))
-          .sort((a,b)=> (b.ordem - a.ordem));
-        let remaining = neededAfterReady;
-        let firstStageName = null, firstStageTaken = 0;
-        for (const st of semiStagesDesc) {
-          if (remaining <= 0) break;
-          const take = Math.min(st.q, remaining);
-          if (take > 0 && firstStageName === null) { firstStageName = st.nome; firstStageTaken = take; }
-          r.produzir_parcial += take; remaining -= take;
+      const qtd = Number(r.qtd||0);
+      let needed = Math.max(0, qtd - readyQty);
+      partials.sort((a,b)=> b.order - a.order);
+      const usedPartials = new Map();
+      for (const p of partials) {
+        if (needed <= 0) break;
+        const take = Math.min(p.qty, needed);
+        if (take > 0) {
+          needed -= take;
+          const cur = usedPartials.get(p.order) || { order: p.order, qty: 0, lastName: p.lastName, lastId: p.lastId };
+          cur.qty += take;
+          usedPartials.set(p.order, cur);
         }
-        r.produzir_total = Math.max(0, neededAfterReady - r.produzir_parcial);
-        r.parcial_info = { etapa: firstStageName, quantidade: firstStageTaken };
-
-        // faltantes (agregados por insumo + etapa)
-        let needed = neededAfterReady;
-        const semiStagesAsc = Array.from(semiByStage.entries())
-          .map(([nome, q]) => ({ nome, q, ordem: etapaMap.get(String(nome)) ?? -1 }))
-          .sort((a,b)=> (a.ordem - b.ordem));
-        const addFaltantes = (etapaMinOrdem, unidades) => {
-          if (!unidades) return;
-          rota.forEach(i => {
-            const proc = String(i.processo||'');
-            const ordemProc = etapaMap.get(proc) ?? 0;
-            const ordemInsumo = Number(i.ordem_insumo||0);
-            const ordemMin = etapaMinOrdem * 1000; // ordem por etapa
-            const atual = ordemProc * 1000 + ordemInsumo;
-            if (etapaMinOrdem === -Infinity || atual > ordemMin) {
-              const nome = i.nome || '';
-              const unidade = i.unidade || '';
-              const necessario = Number(i.quantidade||0) * Number(unidades);
-              const key = `${nome}__${unidade}__${proc}`;
-              const cur = r.faltantes.find(x => x.key === key) || { key, nome, un: unidade, necessario: 0, etapa: proc };
-              cur.necessario += necessario;
-              if (!r.faltantes.find(x => x.key === key)) r.faltantes.push(cur);
-            }
-          });
-        };
-        for (const st of semiStagesAsc) {
-          if (needed <= 0) break;
-          const useUnits = Math.min(st.q, needed);
-          addFaltantes(st.ordem ?? 0, useUnits);
-          needed -= useUnits;
-        }
-        if (needed > 0) addFaltantes(-Infinity, needed);
-
-        // Status
-        let pieceHasNegative = false;
-        for (const f of r.faltantes) {
-          const stock = stockByName.get(f.nome) || { quantidade: 0, infinito: false };
-          if (!stock.infinito) {
-            const saldo = Number(stock.quantidade||0) - Number(f.necessario||0);
-            if (saldo < 0) { pieceHasNegative = true; break; }
-          }
-        }
-        r.status = (r.a_produzir > 0 && pieceHasNegative) ? 'atencao' : 'ok';
-
-        // Dados do popover
-        const processEntries = Array.from(semiByStage.entries()).map(([nome, q]) => ({ nome, ordem: etapaMap.get(String(nome)) ?? -1, q }));
-        const currentLote = lotes
-          .filter(l => String(l.etapa) !== String(lastEtapa))
-          .sort((a,b)=> (etapaMap.get(String(b.etapa)) ?? -1) - (etapaMap.get(String(a.etapa)) ?? -1))[0];
-        const currentProc = currentLote ? String(currentLote.etapa) : null;
-        const currentDate = currentLote ? new Date(currentLote.data_hora_completa).toLocaleDateString('pt-BR') : 'N/A';
-        // Último insumo: o faltante mais avançado
-        let lastItem = null;
-        for (const f of r.faltantes) {
-          const ord = etapaMap.get(String(f.etapa)) ?? -1;
-          if (!lastItem || ord > lastItem.ordem) lastItem = { name: f.nome, qty: Math.max(0, Math.ceil(Number(f.necessario||0))), ordem: ord };
-        }
-        const pendingList = r.faltantes.map(f => ({ name: f.nome, qty: Math.max(0, Math.ceil(Number(f.necessario||0))) }));
-        r.popover = {
-          lastItem: lastItem ? { name: lastItem.name, qty: lastItem.qty } : {},
-          process: currentProc ? { name: currentProc, since: currentDate } : {},
-          pending: pendingList
-        };
-        r.a_produzir = r.produzir_total + r.produzir_parcial;
       }
+      r.produzir_parcial = Array.from(usedPartials.values()).reduce((a,b)=> a + b.qty, 0);
+      r.produzir_total = Math.max(0, qtd - readyQty - r.produzir_parcial);
+      r.a_produzir = r.produzir_parcial + r.produzir_total;
 
-      lastStockByName = stockByName;
-      recomputeStocks();
-      buildInsumosGrid(stockByName);
-      renderRows();
-      validate();
-    } catch (err) {
-      console.error('Erro ao calcular insumos', err);
+      const addFaltantes = (orderMin, units) => {
+        if (!units) return;
+        rotaSorted.forEach(i => {
+          const ord = Number(i.ordem_insumo||0);
+          if (ord > orderMin) {
+            const nome = i.nome || '';
+            const unidade = i.unidade || '';
+            const necessario = Number(i.quantidade||0) * units;
+              const key = `${nome}__${unidade}`;
+              const cur = r.faltantes.find(x => x.key === key) || { key, nome, un: unidade, necessario: 0, etapa: '' };
+            cur.necessario += necessario;
+            if (!r.faltantes.find(x => x.key === key)) r.faltantes.push(cur);
+          }
+        });
+      };
+      usedPartials.forEach(v => addFaltantes(v.order, v.qty));
+      if (r.produzir_total > 0) addFaltantes(0, r.produzir_total);
+
+      let pieceHasNegative = false;
+      for (const f of r.faltantes) {
+        const stock = stockByName.get(f.nome) || { quantidade: 0, infinito: false };
+        if (!stock.infinito) {
+          const saldo = Number(stock.quantidade||0) - Number(f.necessario||0);
+          if (saldo < 0) { pieceHasNegative = true; break; }
+        }
+      }
+      r.status = (r.a_produzir > 0 && pieceHasNegative) ? 'atencao' : 'ok';
+
+      r.popover.variants = Array.from(usedPartials.values())
+        .sort((a,b)=> b.order - a.order)
+        .map(v => {
+          const pending = rotaSorted.filter(i => Number(i.ordem_insumo||0) > v.order)
+            .map(i => ({ name: i.nome, pending: Math.ceil(Number(i.quantidade||0) * v.qty), total: Math.ceil(Number(i.quantidade||0) * v.qty), un: i.unidade }));
+          const lastItem = rotaSorted.find(i => Number(i.ordem_insumo||0) === v.order);
+          return {
+            lastItem: { name: lastItem ? lastItem.nome : 'Nenhum', qty: lastItem ? Math.ceil(Number(lastItem.quantidade||0) * v.qty) : 0 },
+            pending
+          };
+        });
     }
+
+    lastStockByName = stockByName;
+    recomputeStocks();
+    buildInsumosGrid(stockByName);
+    renderRows();
+    validate();
+  } catch (err) {
+    console.error('Erro ao calcular insumos', err);
   }
+}
+
 
   function buildInsumosGrid(stockByName){
     stockByName = stockByName && stockByName.size ? stockByName : (lastStockByName || new Map());
@@ -424,7 +390,7 @@
 
   // Init
   (async function init(){
-    await carregarProdutos(); await carregarEtapas();
+    await carregarProdutos();
     if (!rows.length) {
       const tbody = document.querySelector('#orcamentoItens tbody');
       rows = Array.from(tbody?.children || []).map(tr => ({
@@ -487,28 +453,36 @@
   }
   function showPopover(trigger){ const pop=document.getElementById('piece-popover'); hidePopover(); buildPopover(trigger); placePopover(trigger); pop.classList.remove('opacity-0','scale-95','pointer-events-none'); pop.classList.add('opacity-100','scale-100','pointer-events-auto'); trigger.setAttribute('aria-expanded','true'); }
   function hidePopover(){ const pop=document.getElementById('piece-popover'); if(!pop) return; pop.classList.remove('opacity-100','scale-100','pointer-events-auto'); pop.classList.add('opacity-0','scale-95','pointer-events-none'); document.querySelectorAll('.js-piece-info[aria-expanded="true"]').forEach(t=>t.setAttribute('aria-expanded','false')); }
-  function buildPopover(trigger){ const lastItem=JSON.parse(trigger.dataset.lastItem||'{}'); const process=JSON.parse(trigger.dataset.process||'{}'); const pending=JSON.parse(trigger.dataset.pending||'[]'); const pop=document.getElementById('piece-popover'); pop.innerHTML=`
-      <div class="bg-white/10 backdrop-blur-md border border-white/20 rounded-xl shadow-2xl max-w-sm w-[360px] p-4 text-neutral-100">
-        <div class="popover-arrow absolute w-3 h-3 bg-white/10 border-l border-t border-white/20 rotate-45 -translate-y-1/2"></div>
-        <div class="mb-4">
-          <h3 class="text-sm font-semibold text-primary mb-2 flex items-center gap-2">Último insumo</h3>
-          <div class="flex items-center justify-between text-sm py-1">
-            <span class="text-white font-medium">${lastItem.name||'N/A'}</span>
-            <div class="text-right"><div class="text-white">${lastItem.qty||0} un</div></div>
+    function buildPopover(trigger){
+      const variants=JSON.parse(trigger.dataset.variants||'[]');
+      let page=Number(trigger.dataset.page||0);
+      if(isNaN(page)||page<0) page=0;
+      if(page>=variants.length) page=variants.length-1;
+      trigger.dataset.page=String(page);
+      const v=variants[page]||{};
+      const pop=document.getElementById('piece-popover');
+      const nav=variants.length>1?`<div class="flex items-center justify-between text-xs mb-2"><button class="js-pop-prev ${page<=0?'invisible':''}">&lt;</button><span>${page+1}/${variants.length}</span><button class="js-pop-next ${page>=variants.length-1?'invisible':''}">&gt;</button></div>`:'';
+      pop.innerHTML=`
+        <div class="bg-white/10 backdrop-blur-md border border-white/20 rounded-xl shadow-2xl max-w-sm w-[360px] p-4 text-neutral-100">
+          <div class="popover-arrow absolute w-3 h-3 bg-white/10 border-l border-t border-white/20 rotate-45 -translate-y-1/2"></div>
+          ${nav}
+          <div class="mb-4">
+            <h3 class="text-sm font-semibold text-primary mb-2 flex items-center gap-2">Último insumo</h3>
+            <div class="flex items-center justify-between text-sm py-1"><span class="text-white font-medium">${v.lastItem?.name||'N/A'}</span><div class="text-right"><div class="text-white">${v.lastItem?.qty||0} un</div></div></div>
           </div>
-        </div>
-        <div class="mb-4">
-          <h3 class="text-sm font-semibold text-primary mb-2 flex items-center gap-2">Processo atual</h3>
-          <div class="flex items-center justify-between text-sm py-1"><span class="text-white font-medium">${process.name||'N/A'}</span><div class="text-gray-400 text-xs">desde ${process.since||'N/A'}</div></div>
-        </div>
-        <div>
-          <h3 class="text-sm font-semibold text-primary mb-2 flex items-center gap-2">Pendentes</h3>
-          <div class="max-h-36 overflow-auto pr-1 modal-scroll">
-            ${pending.length? pending.slice(0,6).map(item=>`<div class=\"flex items-center justify-between text-sm py-1.5\"><span class=\"text-gray-300 flex items-center\"><span class=\"text-primary mr-2\">•</span>${item.name}</span><span class=\"text-white\">${item.qty} un</span></div>`).join('') : '<div class="text-gray-400 text-sm py-2">Nenhum item pendente</div>'}
+          <div>
+            <h3 class="text-sm font-semibold text-primary mb-2 flex items-center gap-2">Pendentes</h3>
+            <div class="max-h-36 overflow-auto pr-1 modal-scroll">
+              ${v.pending&&v.pending.length? v.pending.slice(0,6).map(item=>`<div class=\"flex items-center justify-between text-sm py-1.5\"><span class=\"text-gray-300 flex items-center\"><span class=\"text-primary mr-2\">•</span>${item.name}</span><span class=\"text-white\">${item.pending}/${item.total} ${item.un||''}</span></div>`).join('') : '<div class="text-gray-400 text-sm py-2">Nenhum item pendente</div>'}
+            </div>
+            ${v.pending&&v.pending.length? `<div class=\"mt-3 pt-3 border-t border-white/10\"><span class=\"inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-primary/20 text-primary border border-primary/30\">${v.pending.length} ${v.pending.length===1?'item pendente':'itens pendentes'}</span></div>`:''}
           </div>
-          ${pending.length? `<div class=\"mt-3 pt-3 border-t border-white/10\"><span class=\"inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-primary/20 text-primary border border-primary/30\">${pending.length} ${pending.length===1?'item pendente':'itens pendentes'}</span></div>`:''}
-        </div>
-      </div>`; }
+        </div>`;
+      if(variants.length>1){
+        pop.querySelector('.js-pop-prev')?.addEventListener('click',e=>{e.stopPropagation();trigger.dataset.page=String(page-1);buildPopover(trigger);});
+        pop.querySelector('.js-pop-next')?.addEventListener('click',e=>{e.stopPropagation();trigger.dataset.page=String(page+1);buildPopover(trigger);});
+      }
+    }
   function placePopover(trigger){ const pop=document.getElementById('piece-popover'); const r=trigger.getBoundingClientRect(); const { width: pw, height: ph } = pop.getBoundingClientRect(); const vw=window.innerWidth, vh=window.innerHeight; let top,left,arrowClass=''; const above=r.top, below=vh-r.bottom, leftSpace=r.left, rightSpace=vw-r.right; if (rightSpace>=pw+20){ top=Math.max(16, Math.min(r.top + (r.height/2) - ph/2, vh-ph-16)); left=r.right+8; arrowClass='left-[-6px] top-1/2 transform -translate-y-1/2 rotate-[135deg]'; } else if (leftSpace>=pw+20){ top=Math.max(16, Math.min(r.top + (r.height/2) - ph/2, vh-ph-16)); left=r.left-pw-8; arrowClass='right-[-6px] top-1/2 transform -translate-y-1/2 rotate-[315deg]'; } else if (below>=ph){ top=r.bottom+8; left=Math.max(16, Math.min(r.left + (r.width/2) - pw/2, vw-pw-16)); arrowClass='top-[-6px] left-1/2 transform -translate-x-1/2 rotate-[225deg]'; } else if (above>=ph){ top=r.top-ph-8; left=Math.max(16, Math.min(r.left + (r.width/2) - pw/2, vw-pw-16)); arrowClass='bottom-[-6px] left-1/2 transform -translate-x-1/2'; } else { top=Math.max(16, (vh-ph)/2); left=Math.max(16, (vw-pw)/2); arrowClass='hidden'; } pop.style.top=`${top}px`; pop.style.left=`${left}px`; const a=pop.querySelector('.popover-arrow'); if(a){ a.className=`popover-arrow absolute w-3 h-3 bg-white/10 border-l border-t border-white/20 ${arrowClass}`; } }
 })();
 
