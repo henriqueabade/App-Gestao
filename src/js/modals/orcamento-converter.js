@@ -255,7 +255,7 @@ async function computeInsumosAndRender(){
         const lastId = Number(l.ultimo_insumo_id||0);
         const ord = orderById.get(lastId) || 0;
         if (ord >= maxOrder && maxOrder > 0) readyQty += qty;
-        else partials.push({ order: ord, qty, lastId, lastName: l.ultimo_item || '' });
+        else partials.push({ order: ord, qty, lastId, lastName: l.ultimo_item || '', process: l.etapa || '', usedAt: l.data_hora_completa || '' });
       });
       const parcialTotal = partials.reduce((a,b)=> a + b.qty, 0);
       const totalStock = readyQty + parcialTotal;
@@ -271,7 +271,7 @@ async function computeInsumosAndRender(){
         const take = Math.min(p.qty, needed);
         if (take > 0) {
           needed -= take;
-          const cur = usedPartials.get(p.order) || { order: p.order, qty: 0, lastName: p.lastName, lastId: p.lastId };
+          const cur = usedPartials.get(p.order) || { order: p.order, qty: 0, lastName: p.lastName, lastId: p.lastId, process: p.process, usedAt: p.usedAt };
           cur.qty += take;
           usedPartials.set(p.order, cur);
         }
@@ -315,7 +315,16 @@ async function computeInsumosAndRender(){
             .map(i => ({ name: i.nome, pending: Math.ceil(Number(i.quantidade||0) * v.qty), total: Math.ceil(Number(i.quantidade||0) * v.qty), un: i.unidade }));
           const lastItem = rotaSorted.find(i => Number(i.ordem_insumo||0) === v.order);
           return {
-            lastItem: { name: lastItem ? lastItem.nome : 'Nenhum', qty: lastItem ? Math.ceil(Number(lastItem.quantidade||0) * v.qty) : 0 },
+            qty: v.qty,
+            lastItem: {
+              name: lastItem ? lastItem.nome : 'Nenhum',
+              qty: lastItem ? Math.ceil(Number(lastItem.quantidade||0) * v.qty) : 0,
+              time: v.usedAt
+            },
+            currentProcess: {
+              name: v.process || (lastItem ? lastItem.processo : ''),
+              since: v.usedAt
+            },
             pending
           };
         });
@@ -461,23 +470,33 @@ async function computeInsumosAndRender(){
       trigger.dataset.page=String(page);
       const v=variants[page]||{};
       const pop=document.getElementById('piece-popover');
-      const nav=variants.length>1?`<div class="flex items-center justify-between text-xs mb-2"><button class="js-pop-prev ${page<=0?'invisible':''}">&lt;</button><span>${page+1}/${variants.length}</span><button class="js-pop-next ${page>=variants.length-1?'invisible':''}">&gt;</button></div>`:'';
+      const nav=variants.length>1?`<div class="flex items-center gap-2 text-xs mb-2"><button class="js-pop-prev ${page<=0?'invisible':''}">&lt;</button><span class="px-2 py-0.5 bg-white/10 rounded">${page+1}/${variants.length}</span><button class="js-pop-next ${page>=variants.length-1?'invisible':''}">&gt;</button></div>`:'';
       pop.innerHTML=`
         <div class="bg-white/10 backdrop-blur-md border border-white/20 rounded-xl shadow-2xl max-w-sm w-[360px] p-4 text-neutral-100">
           <div class="popover-arrow absolute w-3 h-3 bg-white/10 border-l border-t border-white/20 rotate-45 -translate-y-1/2"></div>
           ${nav}
           <div class="mb-4">
-            <h3 class="text-sm font-semibold text-primary mb-2 flex items-center gap-2">Último insumo</h3>
-            <div class="flex items-center justify-between text-sm py-1"><span class="text-white font-medium">${v.lastItem?.name||'N/A'}</span><div class="text-right"><div class="text-white">${v.lastItem?.qty||0} un</div></div></div>
+            <h3 class="text-sm font-semibold text-amber-400 mb-2 flex items-center justify-between"><span class="flex items-center gap-2"><i class='fas fa-box-open'></i>Último insumo</span><span class="text-amber-400 text-xs">Quantidade Usada: ${v.qty||0}</span></h3>
+            <div class="flex items-center justify-between text-sm py-1"><span class="text-white font-medium">${v.lastItem?.name||'N/A'}</span><div class="text-right"><div class="text-white">${v.lastItem?.qty||0} un</div>${v.lastItem?.time?`<div class=\"text-xs text-gray-400\">${formatRel(v.lastItem.time)}</div>`:''}</div></div>
+          </div>
+          <div class="mb-4">
+            <h3 class="text-sm font-semibold text-blue-400 mb-2 flex items-center gap-2"><i class='fas fa-cogs'></i>Processo atual</h3>
+            <div class="flex items-center justify-between text-sm py-1"><span class="text-white font-medium">${v.currentProcess?.name||'N/A'}</span><span class="text-gray-400 text-xs">${v.currentProcess?.since ? `desde ${new Date(v.currentProcess.since).toLocaleDateString('pt-BR')}` : ''}</span></div>
           </div>
           <div>
-            <h3 class="text-sm font-semibold text-primary mb-2 flex items-center gap-2">Pendentes</h3>
+            <h3 class="text-sm font-semibold text-orange-400 mb-2 flex items-center gap-2"><i class='fas fa-exclamation-circle'></i>Pendentes</h3>
             <div class="max-h-36 overflow-auto pr-1 modal-scroll">
-              ${v.pending&&v.pending.length? v.pending.slice(0,6).map(item=>`<div class=\"flex items-center justify-between text-sm py-1.5\"><span class=\"text-gray-300 flex items-center\"><span class=\"text-primary mr-2\">•</span>${item.name}</span><span class=\"text-white\">${item.pending}/${item.total} ${item.un||''}</span></div>`).join('') : '<div class="text-gray-400 text-sm py-2">Nenhum item pendente</div>'}
+              ${v.pending&&v.pending.length? v.pending.map(item=>`<div class=\"flex items-center justify-between text-sm py-1.5\"><span class=\"text-gray-300 flex items-center\"><span class=\"text-orange-400 mr-2\">•</span>${item.name}</span><span class=\"text-white\">${item.pending}/${item.total} ${item.un||''}</span></div>`).join('') : '<div class="text-gray-400 text-sm py-2">Nenhum item pendente</div>'}
             </div>
-            ${v.pending&&v.pending.length? `<div class=\"mt-3 pt-3 border-t border-white/10\"><span class=\"inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-primary/20 text-primary border border-primary/30\">${v.pending.length} ${v.pending.length===1?'item pendente':'itens pendentes'}</span></div>`:''}
+            ${v.pending&&v.pending.length? `<div class=\"mt-3 pt-3 border-t border-white/10\"><span class=\"inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-500/20 text-orange-400 border border-orange-500/30\">${v.pending.length} ${v.pending.length===1?'item pendente':'itens pendentes'}</span></div>`:''}
           </div>
         </div>`;
+      function formatRel(ts){
+        const d=new Date(ts); if(isNaN(d)) return '';
+        const diff=Date.now()-d.getTime(); const h=Math.floor(diff/3600000);
+        if(h<24) return `há ${h}h`; const day=Math.floor(h/24);
+        if(day<30) return `há ${day}d`; return d.toLocaleDateString('pt-BR');
+      }
       if(variants.length>1){
         pop.querySelector('.js-pop-prev')?.addEventListener('click',e=>{e.stopPropagation();trigger.dataset.page=String(page-1);buildPopover(trigger);});
         pop.querySelector('.js-pop-next')?.addEventListener('click',e=>{e.stopPropagation();trigger.dataset.page=String(page+1);buildPopover(trigger);});
