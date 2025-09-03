@@ -283,13 +283,21 @@ async function computeInsumosAndRender(){
       const addFaltantes = (orderMin, units) => {
         if (!units) return;
         rotaSorted.forEach(i => {
-          const ord = Number(i.ordem_insumo||0);
+          const ord = Number(i.ordem_insumo || 0);
           if (ord > orderMin) {
             const nome = i.nome || '';
             const unidade = i.unidade || '';
-            const necessario = Number(i.quantidade||0) * units;
-              const key = `${nome}__${unidade}`;
-              const cur = r.faltantes.find(x => x.key === key) || { key, nome, un: unidade, necessario: 0, etapa: '' };
+            const necessario = Number(i.quantidade || 0) * units;
+            const key = `${nome}__${unidade}`;
+            const cur =
+              r.faltantes.find(x => x.key === key) || {
+                key,
+                nome,
+                un: unidade,
+                necessario: 0,
+                etapa: i.processo || '',
+                ordem: ord
+              };
             cur.necessario += necessario;
             if (!r.faltantes.find(x => x.key === key)) r.faltantes.push(cur);
           }
@@ -309,22 +317,28 @@ async function computeInsumosAndRender(){
       r.status = (r.a_produzir > 0 && pieceHasNegative) ? 'atencao' : 'ok';
 
       r.popover.variants = Array.from(usedPartials.values())
-        .sort((a,b)=> b.order - a.order)
+        .sort((a, b) => b.order - a.order)
         .map(v => {
-          const pending = rotaSorted.filter(i => Number(i.ordem_insumo||0) > v.order)
-            .map(i => ({ name: i.nome, pending: Math.ceil(Number(i.quantidade||0) * v.qty), total: Math.ceil(Number(i.quantidade||0) * v.qty), un: i.unidade }));
-          const lastItem = rotaSorted.find(i => Number(i.ordem_insumo||0) === v.order);
+          const pending = rotaSorted
+            .filter(i => Number(i.ordem_insumo || 0) > v.order)
+            .map(i => ({
+              name: i.nome,
+              pending: Math.ceil(Number(i.quantidade || 0) * v.qty),
+              un: i.unidade
+            }));
+          const lastItem = rotaSorted.find(i => Number(i.ordem_insumo || 0) === v.order);
           return {
             qty: v.qty,
             lastItem: {
               name: lastItem ? lastItem.nome : 'Nenhum',
-              qty: lastItem ? Math.ceil(Number(lastItem.quantidade||0) * v.qty) : 0,
+              qty: lastItem ? Math.ceil(Number(lastItem.quantidade || 0) * v.qty) : 0,
               time: v.usedAt
             },
             currentProcess: {
               name: v.process || (lastItem ? lastItem.processo : ''),
               since: v.usedAt
             },
+            totalItems: rotaSorted.length,
             pending
           };
         });
@@ -341,7 +355,7 @@ async function computeInsumosAndRender(){
 }
 
 
-  function buildInsumosGrid(stockByName){
+  function buildInsumosGrid(stockByName) {
     stockByName = stockByName && stockByName.size ? stockByName : (lastStockByName || new Map());
     const filtroPecaId = state.insumosView.filtroPecaId;
     const mostrarSomenteFaltantes = state.insumosView.mostrarSomenteFaltantes;
@@ -350,50 +364,92 @@ async function computeInsumosAndRender(){
     rows.forEach(p => {
       if (filtroPecaId && Number(p.produto_id) !== Number(filtroPecaId)) return;
       (p.faltantes || []).forEach(fi => {
-        list.push({ produto_id: p.produto_id, nome: fi.nome, un: fi.un, etapa: fi.etapa, necessario: Number(fi.necessario||0) });
+        list.push({
+          produto_id: p.produto_id,
+          nome: fi.nome,
+          un: fi.un,
+          etapa: fi.etapa,
+          necessario: Number(fi.necessario || 0),
+          ordem: fi.ordem || 0
+        });
       });
     });
-    const agg = new Map();
-    list.forEach(i => {
-      const key = `${i.nome}__${i.un}__${i.etapa}`;
-      const cur = agg.get(key) || { nome: i.nome, un: i.un, etapa: i.etapa, necessario: 0 };
-      cur.necessario += i.necessario;
-      agg.set(key, cur);
-    });
+
     let anyNegative = false;
-    for (const v of Array.from(agg.values()).sort((a,b)=> a.nome.localeCompare(b.nome))) {
-      const stock = (stockByName && stockByName.get(v.nome)) || { quantidade: 0, unidade: v.un, infinito: false };
-      const disponivel = stock.infinito ? Infinity : Number(stock.quantidade||0);
-      const saldo = disponivel === Infinity ? Infinity : (disponivel - Number(v.necessario||0));
-      const negative = saldo !== Infinity && saldo < 0;
-      if (negative) anyNegative = true;
-      if (mostrarSomenteFaltantes && !negative) continue;
-      const tr = document.createElement('tr');
-      if (negative) tr.classList.add('negative-balance');
-      tr.classList.add('border-b','border-white/5');
-      const flags = [];
-      if (saldo === Infinity) {
-        flags.push('<span class="badge-success px-2 py-0.5 rounded text-[10px]" title="Estoque infinito">infinito</span>');
-      } else if (negative) {
-        flags.push('<span class="badge-danger px-2 py-0.5 rounded text-[10px]" title="Saldo previsto negativo">negativo</span>');
-      } else {
-        flags.push('<span class="badge-info px-2 py-0.5 rounded text-[10px]" title="Saldo previsto correto">correto</span>');
+
+    if (filtroPecaId) {
+      list.sort((a, b) => a.ordem - b.ordem);
+      list.forEach(v => {
+        const stock = (stockByName && stockByName.get(v.nome)) || { quantidade: 0, unidade: v.un, infinito: false };
+        const disponivel = stock.infinito ? Infinity : Number(stock.quantidade || 0);
+        const saldo = disponivel === Infinity ? Infinity : disponivel - Number(v.necessario || 0);
+        const negative = saldo !== Infinity && saldo < 0;
+        if (negative) anyNegative = true;
+        if (mostrarSomenteFaltantes && !negative) return;
+        const tr = document.createElement('tr');
+        if (negative) tr.classList.add('negative-balance');
+        tr.classList.add('border-b', 'border-white/5');
+        const flags = [];
+        if (saldo === Infinity) {
+          flags.push('<span class="badge-success px-2 py-0.5 rounded text-[10px]" title="Estoque infinito">infinito</span>');
+        } else if (negative) {
+          flags.push('<span class="badge-danger px-2 py-0.5 rounded text-[10px]" title="Saldo previsto negativo">negativo</span>');
+        } else {
+          flags.push('<span class="badge-info px-2 py-0.5 rounded text-[10px]" title="Saldo previsto correto">correto</span>');
+        }
+        tr.innerHTML = `
+          <td class="py-3 px-2 text-white">${v.nome}</td>
+          <td class="py-3 px-2 text-center text-gray-300">${v.un || stock.unidade || ''}</td>
+          <td class="py-3 px-2 text-center">${disponivel === Infinity ? '<span class="badge-success px-2 py-0.5 rounded text-[10px]">infinito</span>' : '<span class="text-white">' + disponivel.toLocaleString('pt-BR') + '</span>'}</td>
+          <td class="py-3 px-2 text-center text-white">${Number(v.necessario || 0).toLocaleString('pt-BR')}</td>
+          <td class="py-3 px-2 text-center">${negative ? '<span class="status-alert font-medium" title="Saldo previsto negativo">' + saldo.toLocaleString('pt-BR') + '</span>' : (saldo === Infinity ? '<span class="badge-success px-2 py-0.5 rounded text-[10px]">infinito</span>' : '<span class="status-ok font-medium">' + saldo.toLocaleString('pt-BR') + '</span>')}</td>
+          <td class="py-3 px-2 text-center text-white">${v.etapa || '-'}</td>
+          <td class="py-3 px-2 text-center text-white">${flags.join(' ')}</td>`;
+        insumosBody.appendChild(tr);
+      });
+    } else {
+      const agg = new Map();
+      list.forEach(i => {
+        const key = `${i.nome}__${i.un}__${i.etapa}`;
+        const cur = agg.get(key) || { nome: i.nome, un: i.un, etapa: i.etapa, necessario: 0 };
+        cur.necessario += i.necessario;
+        agg.set(key, cur);
+      });
+      for (const v of Array.from(agg.values()).sort((a, b) => a.nome.localeCompare(b.nome))) {
+        const stock = (stockByName && stockByName.get(v.nome)) || { quantidade: 0, unidade: v.un, infinito: false };
+        const disponivel = stock.infinito ? Infinity : Number(stock.quantidade || 0);
+        const saldo = disponivel === Infinity ? Infinity : disponivel - Number(v.necessario || 0);
+        const negative = saldo !== Infinity && saldo < 0;
+        if (negative) anyNegative = true;
+        if (mostrarSomenteFaltantes && !negative) continue;
+        const tr = document.createElement('tr');
+        if (negative) tr.classList.add('negative-balance');
+        tr.classList.add('border-b', 'border-white/5');
+        const flags = [];
+        if (saldo === Infinity) {
+          flags.push('<span class="badge-success px-2 py-0.5 rounded text-[10px]" title="Estoque infinito">infinito</span>');
+        } else if (negative) {
+          flags.push('<span class="badge-danger px-2 py-0.5 rounded text-[10px]" title="Saldo previsto negativo">negativo</span>');
+        } else {
+          flags.push('<span class="badge-info px-2 py-0.5 rounded text-[10px]" title="Saldo previsto correto">correto</span>');
+        }
+        tr.innerHTML = `
+          <td class="py-3 px-2 text-white">${v.nome}</td>
+          <td class="py-3 px-2 text-center text-gray-300">${v.un || stock.unidade || ''}</td>
+          <td class="py-3 px-2 text-center">${disponivel === Infinity ? '<span class="badge-success px-2 py-0.5 rounded text-[10px]">infinito</span>' : '<span class="text-white">' + disponivel.toLocaleString('pt-BR') + '</span>'}</td>
+          <td class="py-3 px-2 text-center text-white">${Number(v.necessario || 0).toLocaleString('pt-BR')}</td>
+          <td class="py-3 px-2 text-center">${negative ? '<span class="status-alert font-medium" title="Saldo previsto negativo">' + saldo.toLocaleString('pt-BR') + '</span>' : (saldo === Infinity ? '<span class="badge-success px-2 py-0.5 rounded text-[10px]">infinito</span>' : '<span class="status-ok font-medium">' + saldo.toLocaleString('pt-BR') + '</span>')}</td>
+          <td class="py-3 px-2 text-center text-white">${v.etapa || '-'}</td>
+          <td class="py-3 px-2 text-center text-white">${flags.join(' ')}</td>`;
+        insumosBody.appendChild(tr);
       }
-      tr.innerHTML = `
-        <td class="py-3 px-2 text-white">${v.nome}</td>
-        <td class="py-3 px-2 text-center text-gray-300">${v.un || stock.unidade || ''}</td>
-        <td class="py-3 px-2 text-center">${disponivel === Infinity ? '<span class="badge-success px-2 py-0.5 rounded text-[10px]">infinito</span>' : '<span class="text-white">' + disponivel.toLocaleString('pt-BR') + '</span>'}</td>
-        <td class="py-3 px-2 text-center text-white">${Number(v.necessario||0).toLocaleString('pt-BR')}</td>
-        <td class="py-3 px-2 text-center">${negative ? '<span class="status-alert font-medium" title="Saldo previsto negativo">' + saldo.toLocaleString('pt-BR') + '</span>' : (saldo === Infinity ? '<span class="badge-success px-2 py-0.5 rounded text-[10px]">infinito</span>' : '<span class="status-ok font-medium">' + saldo.toLocaleString('pt-BR') + '</span>')}</td>
-        <td class="py-3 px-2 text-center text-white">${v.etapa || '-'}</td>
-        <td class="py-3 px-2 text-center text-white">${flags.join(' ')}</td>`;
-      insumosBody.appendChild(tr);
     }
+
     if (anyNegative && !state.allowNegativeStock) {
       warningText.textContent = 'Há insumos com saldo negativo. Permita negativo ou ajuste peças/insumos.';
       warning.classList.remove('hidden');
       btnConfirmar.disabled = true;
-      btnConfirmar.classList.add('opacity-60','cursor-not-allowed');
+      btnConfirmar.classList.add('opacity-60', 'cursor-not-allowed');
     }
   }
 
@@ -470,9 +526,16 @@ async function computeInsumosAndRender(){
       trigger.dataset.page=String(page);
       const v=variants[page]||{};
       const pop=document.getElementById('piece-popover');
-      const nav=variants.length>1?`<div class="flex items-center gap-2 text-xs mb-2"><button class="js-pop-prev ${page<=0?'invisible':''}">&lt;</button><span class="px-2 py-0.5 bg-white/10 rounded">${page+1}/${variants.length}</span><button class="js-pop-next ${page>=variants.length-1?'invisible':''}">&gt;</button></div>`:'';
-      pop.innerHTML=`
-        <div class="bg-white/10 backdrop-blur-md border border-white/20 rounded-xl shadow-2xl max-w-sm w-[360px] p-4 text-neutral-100">
+      const nav =
+        variants.length > 1
+          ? `<div class="absolute top-2 right-2 flex items-center rounded-full overflow-hidden border border-white/20 text-xs shadow">
+               <button class="js-pop-prev px-2 py-1 bg-white/5 ${page <= 0 ? 'opacity-30 cursor-default pointer-events-none' : 'hover:bg-white/10'}"><i class='fas fa-chevron-left'></i></button>
+               <span class="px-3 py-1 bg-white/10 text-white">${page + 1}/${variants.length}</span>
+               <button class="js-pop-next px-2 py-1 bg-white/5 ${page >= variants.length - 1 ? 'opacity-30 cursor-default pointer-events-none' : 'hover:bg-white/10'}"><i class='fas fa-chevron-right'></i></button>
+             </div>`
+          : '';
+      pop.innerHTML = `
+        <div class="bg-white/10 backdrop-blur-md border border-white/20 rounded-xl shadow-2xl max-w-sm w-[360px] p-4 text-neutral-100 relative">
           <div class="popover-arrow absolute w-3 h-3 bg-white/10 border-l border-t border-white/20 rotate-45 -translate-y-1/2"></div>
           ${nav}
           <div class="mb-4">
@@ -480,15 +543,15 @@ async function computeInsumosAndRender(){
             <div class="flex items-center justify-between text-sm py-1"><span class="text-white font-medium">${v.lastItem?.name||'N/A'}</span><div class="text-right"><div class="text-white">${v.lastItem?.qty||0} un</div>${v.lastItem?.time?`<div class=\"text-xs text-gray-400\">${formatRel(v.lastItem.time)}</div>`:''}</div></div>
           </div>
           <div class="mb-4">
-            <h3 class="text-sm font-semibold text-blue-400 mb-2 flex items-center gap-2"><i class='fas fa-cogs'></i>Processo atual</h3>
+            <h3 class="text-sm font-semibold text-amber-400 mb-2 flex items-center gap-2"><i class='fas fa-cogs'></i>Processo atual</h3>
             <div class="flex items-center justify-between text-sm py-1"><span class="text-white font-medium">${v.currentProcess?.name||'N/A'}</span><span class="text-gray-400 text-xs">${v.currentProcess?.since ? `desde ${new Date(v.currentProcess.since).toLocaleDateString('pt-BR')}` : ''}</span></div>
           </div>
           <div>
-            <h3 class="text-sm font-semibold text-orange-400 mb-2 flex items-center gap-2"><i class='fas fa-exclamation-circle'></i>Pendentes</h3>
+            <h3 class="text-sm font-semibold text-amber-400 mb-2 flex items-center gap-2"><i class='fas fa-exclamation-circle'></i>Pendentes</h3>
             <div class="max-h-36 overflow-auto pr-1 modal-scroll">
-              ${v.pending&&v.pending.length? v.pending.map(item=>`<div class=\"flex items-center justify-between text-sm py-1.5\"><span class=\"text-gray-300 flex items-center\"><span class=\"text-orange-400 mr-2\">•</span>${item.name}</span><span class=\"text-white\">${item.pending}/${item.total} ${item.un||''}</span></div>`).join('') : '<div class="text-gray-400 text-sm py-2">Nenhum item pendente</div>'}
+              ${v.pending && v.pending.length ? v.pending.map(item => `<div class=\"flex items-center justify-between text-sm py-1.5\"><span class=\"text-gray-300 flex items-center\"><span class=\"text-amber-400 mr-2\">•</span>${item.name}</span><span class=\"text-white\">${item.pending} ${item.un||''}</span></div>`).join('') : '<div class="text-gray-400 text-sm py-2">Nenhum item pendente</div>'}
             </div>
-            ${v.pending&&v.pending.length? `<div class=\"mt-3 pt-3 border-t border-white/10\"><span class=\"inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-500/20 text-orange-400 border border-orange-500/30\">${v.pending.length} ${v.pending.length===1?'item pendente':'itens pendentes'}</span></div>`:''}
+            ${v.pending && v.pending.length ? `<div class=\"mt-3 pt-3 border-t border-white/10\"><span class=\"inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border border-white text-amber-400\">${v.pending.length}/${v.totalItems} itens pendentes</span></div>` : ''}
           </div>
         </div>`;
       function formatRel(ts){
