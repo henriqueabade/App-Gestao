@@ -548,7 +548,7 @@ async function computeInsumosAndRender(){
           </div>
           <div>
             <h3 class="text-sm font-semibold text-amber-400 mb-2 flex items-center gap-2"><i class='fas fa-exclamation-circle'></i>Pendentes</h3>
-            <div class="max-h-36 overflow-auto pr-1 modal-scroll">
+            <div class="max-h-48 overflow-auto pr-1 modal-scroll">
               ${v.pending && v.pending.length ? v.pending.map(item => `<div class=\"flex items-center justify-between text-sm py-1.5\"><span class=\"text-gray-300 flex items-center\"><span class=\"text-amber-400 mr-2\">•</span>${item.name}</span><span class=\"text-white\">${item.pending} ${item.un||''}</span></div>`).join('') : '<div class="text-gray-400 text-sm py-2">Nenhum item pendente</div>'}
             </div>
             ${v.pending && v.pending.length ? `<div class=\"mt-3 pt-3 border-t border-white/10\"><span class=\"inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border border-white text-amber-400\">${v.pending.length}/${v.totalItems} itens pendentes</span></div>` : ''}
