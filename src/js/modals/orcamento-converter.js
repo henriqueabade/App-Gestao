@@ -528,7 +528,7 @@ async function computeInsumosAndRender(){
       const pop=document.getElementById('piece-popover');
       const nav =
         variants.length > 1
-          ? `<div class="absolute top-0 right-3 flex items-center rounded-full overflow-hidden border border-white/20 text-xs shadow">
+          ? `<div class="absolute top-2 right-3 flex items-center rounded-full overflow-hidden border border-white/20 text-xs shadow">
                <button class="js-pop-prev px-2 py-1 bg-white/5 ${page <= 0 ? 'opacity-30 cursor-default pointer-events-none' : 'hover:bg-white/10'}"><i class='fas fa-chevron-left'></i></button>
                <span class="px-3 py-1 bg-white/10 text-white">${page + 1}/${variants.length}</span>
                <button class="js-pop-next px-2 py-1 bg-white/5 ${page >= variants.length - 1 ? 'opacity-30 cursor-default pointer-events-none' : 'hover:bg-white/10'}"><i class='fas fa-chevron-right'></i></button>
