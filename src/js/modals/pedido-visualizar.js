@@ -27,6 +27,8 @@
   const itensTbody = overlay.querySelector('#pedidoItens tbody');
   const pagamentoBox = overlay.querySelector('#visualizarPedidoPagamento');
 
+  window.cancelarPedidoContext = null;
+
   try {
     const resp = await fetch(`http://localhost:3000/api/pedidos/${id}`);
     if (!resp.ok) throw new Error('Falha ao buscar pedido');
@@ -244,13 +246,31 @@
         pagamentoBox.classList.remove('hidden');
       }
     }
+
+    const clienteNome = clienteSel?.selectedOptions?.[0]?.textContent?.trim() || data.cliente || '';
+    const contatoNome = contatoSel?.selectedOptions?.[0]?.textContent?.trim() || data.contato || '';
+    window.cancelarPedidoContext = {
+      id,
+      pedido: data,
+      numero: data.numero || '',
+      cliente: clienteNome,
+      contato: contatoNome,
+      status: data.situacao || '',
+      dataEmissao: data.data_emissao || data.dataEmissao || '',
+    };
   } catch (err) {
     console.error('Erro ao carregar pedido', err);
     if (typeof showToast === 'function') showToast('Erro ao carregar pedido', 'error');
+    window.cancelarPedidoContext = null;
   }
 
   overlay.querySelector('#cancelarVisualizarPedido')?.addEventListener('click', () => {
-    if (typeof showToast === 'function') showToast('Funcionalidade em criação!', 'info');
+    if (!window.cancelarPedidoContext || !window.cancelarPedidoContext.pedido) {
+      if (typeof showToast === 'function') showToast('Não foi possível carregar os dados do pedido.', 'error');
+      return;
+    }
+    close();
+    Modal.open('modals/pedidos/cancelar.html', '../js/modals/pedido-cancelar.js', 'cancelarPedido');
   });
 
   window.dispatchEvent(new CustomEvent('pedidoModalLoaded', { detail: overlayId }));

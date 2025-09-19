@@ -1,0 +1,97 @@
+<div id="cancelarPedidoOverlay" class="fixed inset-x-0 bottom-0 top-14 z-[1003] bg-black/50 flex items-start justify-center p-4 overflow-y-auto">
+  <div role="dialog" aria-modal="true" tabindex="0" class="w-full max-w-6xl max-h-[95vh] glass-surface backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade slide-in overflow-hidden flex flex-col">
+    <header class="flex items-center justify-between px-8 py-6 border-b border-white/10 flex-shrink-0">
+      <div>
+        <h2 id="cancelarPedidoTitulo" class="text-2xl font-bold text-white mb-1">Cancelar Pedido</h2>
+        <p id="cancelarPedidoInfo" class="text-gray-300 text-sm"></p>
+      </div>
+      <button id="fecharCancelarPedido" class="btn-ghost p-3 rounded-lg text-white" aria-label="Fechar">✕</button>
+    </header>
+
+    <div id="cancelarPedidoAlerta" class="px-8 py-4 bg-orange-500/10 border-b border-orange-500/20 flex-shrink-0">
+      <div class="flex items-start gap-3">
+        <span class="text-orange-400 text-xl">⚠️</span>
+        <div>
+          <h3 class="text-orange-300 font-semibold mb-1">Atenção: Cancelamento de Pedido</h3>
+          <p class="text-orange-200 text-sm">
+            Ao cancelar este pedido, peças e insumos serão revertidos. Defina o destino de cada item antes de confirmar.
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <div id="cancelarPedidoPendencias" class="px-8 py-3 bg-red-500/10 border-b border-red-500/20 flex-shrink-0 hidden">
+      <div class="flex items-center gap-3">
+        <span class="text-red-400">🚫</span>
+        <span id="cancelarPedidoPendenciasTexto" class="text-red-300 font-medium text-sm"></span>
+      </div>
+    </div>
+
+    <div class="flex-1 overflow-y-auto">
+      <div class="p-8 space-y-8">
+        <section class="bg-surface/40 rounded-2xl border border-white/10 p-6">
+          <header class="flex items-center justify-between mb-4">
+            <h3 class="text-lg font-semibold text-white">Peças e Insumos do Pedido</h3>
+            <span id="cancelarPedidoStatus" class="badge-warning px-3 py-1 rounded-full text-xs font-medium hidden"></span>
+          </header>
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+              <thead>
+                <tr class="border-b border-white/10 text-gray-300 text-xs uppercase">
+                  <th class="text-left py-3 px-4 font-medium">Item</th>
+                  <th class="text-center py-3 px-4 font-medium">Quantidade</th>
+                  <th class="text-center py-3 px-4 font-medium">Origem</th>
+                  <th class="text-center py-3 px-4 font-medium">Situação</th>
+                  <th class="text-center py-3 px-4 font-medium">Ação</th>
+                </tr>
+              </thead>
+              <tbody id="cancelarPedidoItens"></tbody>
+            </table>
+            <div id="cancelarPedidoItensVazio" class="py-6 text-center text-sm text-gray-300 hidden">
+              Nenhum item foi encontrado para este pedido.
+            </div>
+          </div>
+        </section>
+
+        <section id="cancelarPedidoResumoRealocacao" class="bg-surface/40 rounded-2xl border border-white/10 p-6 hidden">
+          <header class="flex items-center justify-between mb-4">
+            <h3 class="text-lg font-semibold text-white">Resumo de Realocações</h3>
+          </header>
+          <div id="cancelarPedidoListaRealocacao" class="space-y-3"></div>
+        </section>
+
+        <section id="cancelarPedidoPedidosDisponiveis" class="bg-surface/40 rounded-2xl border border-white/10 p-6 hidden">
+          <h3 class="text-lg font-semibold text-white mb-4">Pedidos Disponíveis para Realocação</h3>
+          <div id="cancelarPedidoPedidosLista" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
+          <p id="cancelarPedidoPedidosVazio" class="text-sm text-gray-300" hidden>Nenhum pedido compatível encontrado.</p>
+        </section>
+      </div>
+    </div>
+
+    <footer class="flex justify-end items-center gap-4 px-8 py-6 border-t border-white/10 flex-shrink-0">
+      <button id="cancelarPedidoFecharFooter" class="btn-neutral px-6 py-3 rounded-lg text-white font-medium">Voltar sem cancelar</button>
+      <button id="cancelarPedidoConfirmar" class="btn-danger px-6 py-3 rounded-lg text-white font-medium" disabled>
+        Confirmar Cancelamento
+      </button>
+    </footer>
+  </div>
+</div>
+
+<div id="cancelarPedidoDrawer" class="fixed inset-0 z-[1004] hidden">
+  <div class="cancelar-drawer-overlay absolute inset-0 bg-black/50"></div>
+  <div id="cancelarPedidoDrawerPanel" class="absolute right-0 top-0 h-full w-full max-w-lg glass-surface backdrop-blur-xl border-l border-white/10 transform translate-x-full transition-transform duration-300">
+    <div class="flex flex-col h-full">
+      <header class="flex items-center justify-between px-6 py-4 border-b border-white/10">
+        <div>
+          <h3 class="text-lg font-semibold text-white">Realocar Item</h3>
+          <p id="cancelarPedidoDrawerItem" class="text-gray-300 text-sm"></p>
+        </div>
+        <button id="cancelarPedidoDrawerFechar" class="btn-ghost p-2 rounded-lg text-white" aria-label="Fechar">✕</button>
+      </header>
+      <div class="flex-1 overflow-y-auto p-6">
+        <div id="cancelarPedidoDrawerLista" class="space-y-4"></div>
+        <p id="cancelarPedidoDrawerVazio" class="text-sm text-gray-300 hidden">Nenhum pedido disponível para realocação.</p>
+      </div>
+    </div>
+  </div>
+</div>
