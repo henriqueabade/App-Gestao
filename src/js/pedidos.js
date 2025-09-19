@@ -87,6 +87,11 @@ function hideStatusTooltip() {
     }
 }
 
+
+function openVisualizarPedidoModal(id) {
+    window.selectedOrderId = id;
+    Modal.open('modals/pedidos/visualizar.html', '../js/modals/pedido-visualizar.js', 'visualizarPedido');
+}
 async function carregarPedidos() {
     try {
         const resp = await fetch('http://localhost:3000/api/pedidos');
@@ -155,18 +160,27 @@ async function carregarPedidos() {
             }
             tbody.appendChild(tr);
         });
-        const ownerSelect = document.getElementById('filterOwner');
-        if (ownerSelect) {
-            ownerSelect.innerHTML = '<option value="">Todos os Donos</option>' +
-                [...owners].map(d => `<option value="${d}">${d}</option>`).join('');
-        }
-        tbody.querySelectorAll('.fa-eye,.fa-clipboard').forEach(icon => {
-            icon.addEventListener('click', e => {
-                e.stopPropagation();
-                showFunctionUnavailableDialog('Função em desenvolvimento.');
-            });
-        });
-
+        const ownerSelect = document.getElementById('filterOwner');
+        if (ownerSelect) {
+            ownerSelect.innerHTML = '<option value="">Todos os Donos</option>' +
+                [...owners].map(d => `<option value="${d}">${d}</option>`).join('');
+        }
+
+        tbody.querySelectorAll('.fa-eye').forEach(icon => {
+            icon.addEventListener('click', e => {
+                e.stopPropagation();
+                const id = e.currentTarget.closest('tr')?.dataset.id;
+                if (!id) return;
+                openVisualizarPedidoModal(id);
+            });
+        });
+
+        tbody.querySelectorAll('.fa-clipboard').forEach(icon => {
+            icon.addEventListener('click', e => {
+                e.stopPropagation();
+                showFunctionUnavailableDialog('Fun??o em desenvolvimento.');
+            });
+        });
         tbody.querySelectorAll('.fa-download').forEach(icon => {
             icon.addEventListener('click', e => {
                 e.stopPropagation();

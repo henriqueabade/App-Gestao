@@ -218,6 +218,14 @@ input[type="date"]:valid::-webkit-datetime-edit {
     transform: translateY(-50%);
 }
 
+.modal-actions-disabled {
+    pointer-events: none;
+}
+
+.modal-actions-disabled .icon-disabled {
+    opacity: 0.5;
+}
+
 /* Opções de status desabilitadas */
 .status-disabled {
     position: relative;
