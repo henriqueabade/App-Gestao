@@ -27,3 +27,4 @@
 .fa-pencil-alt::before { content: '✏️'; }
 .fa-trash::before { content: '🗑'; }
 .fa-file-import::before { content: '📥'; }
+.fa-phone-plus::before { content: '📞+'; }

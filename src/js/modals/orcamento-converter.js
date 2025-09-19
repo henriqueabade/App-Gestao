@@ -8,7 +8,26 @@
   let replaceModalRefs = null;
   const replaceModalState = {
     selectedProductId: null,
-    searchTerm: ''
+    selectedVariantKey: null,
+    searchTerm: '',
+    variants: []
+  };
+
+  const normalizeText = value => {
+    if (!value) return '';
+    return String(value)
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase();
+  };
+
+  const buildGroupKey = (name, id) => {
+    const normalized = normalizeText(name || '');
+    const base = normalized.split('-')[0]?.trim() || '';
+    const clean = base.replace(/[^a-z0-9]+/g, ' ').trim();
+    if (clean) return clean;
+    if (id != null) return `id-${id}`;
+    return '';
   };
   document.addEventListener('keydown', function esc(e){
     if (e.key === 'Escape') {
@@ -236,6 +255,9 @@
     };
     overlay.querySelectorAll('[data-action="close"]').forEach(btn => btn.addEventListener('click', closeReplaceModal));
     replaceModalRefs.confirmBtn?.addEventListener('click', handleReplaceModalConfirm);
+    if (replaceModalRefs.search) {
+      replaceModalRefs.search.placeholder = 'Filtrar variações por nome ou código';
+    }
     replaceModalRefs.search?.addEventListener('input', e => {
       replaceModalState.searchTerm = e.target.value || '';
       renderReplaceModalList();
@@ -258,8 +280,12 @@
     const refs = ensureReplaceModal();
     const row = rows[index];
     if (!row) return;
-    replaceModalState.selectedProductId = null;
+    replaceModalState.selectedProductId = row.forceProduceAll ? null : Number(row.produto_id || 0);
+    replaceModalState.selectedVariantKey = row.forceProduceAll
+      ? 'produce-new'
+      : (row.produto_id != null ? `stock-${row.produto_id}` : null);
     replaceModalState.searchTerm = '';
+    replaceModalState.variants = [];
     if (refs.search) refs.search.value = '';
     renderReplaceModalSummary();
     renderReplaceModalList();
@@ -272,7 +298,9 @@
     if (!replaceModalRefs) return;
     replaceModalRefs.overlay.classList.add('hidden');
     replaceModalState.selectedProductId = null;
+    replaceModalState.selectedVariantKey = null;
     replaceModalState.searchTerm = '';
+    replaceModalState.variants = [];
     if (replaceModalRefs.search) replaceModalRefs.search.value = '';
     currentReplaceIndex = -1;
     updateReplaceModalConfirmButton();
@@ -298,7 +326,11 @@
     setReplaceModalField('piece-qty', `${formatNumber(qtd)} unidades`);
     const estoque = toNumber(row.em_estoque);
     const produzir = toNumber(row.a_produzir);
-    setReplaceModalField('piece-status', `Estoque: ${formatNumber(estoque)} | Produzir: ${formatNumber(produzir)}`);
+    if (row.forceProduceAll) {
+      setReplaceModalField('piece-status', `Produção integral planejada (${formatNumber(qtd)} un)`);
+    } else {
+      setReplaceModalField('piece-status', `Estoque: ${formatNumber(estoque)} | Produzir: ${formatNumber(produzir)}`);
+    }
     const etapa = row.faltantes?.[0]?.etapa || row.popover?.variants?.[0]?.currentProcess?.name || '-';
     setReplaceModalField('piece-stage', etapa || '-');
     setReplaceModalField('piece-details', `${formatNumber(qtd)} unidades - Etapa: ${etapa || '-'}`);
@@ -313,80 +345,236 @@
     const row = rows[currentReplaceIndex];
     if (!row) {
       container.innerHTML = '<p class="text-sm text-gray-400">Nenhuma peça selecionada.</p>';
+      replaceModalState.variants = [];
       updateReplaceModalConfirmButton();
       return;
     }
-    const term = (replaceModalState.searchTerm || '').trim().toLowerCase();
-    let filtered = listaProdutos.filter(p => Number(p.id) !== Number(row.produto_id));
-    if (term) {
-      filtered = filtered.filter(p => {
-        const nome = String(p.nome || '').toLowerCase();
-        const codigo = String(p.codigo || '').toLowerCase();
-        return nome.includes(term) || codigo.includes(term);
+
+    const requiredQty = Number(row.qtd || row.quantidade || 0) || 0;
+    const rowGroupKey = buildGroupKey(row.nome, row.produto_id);
+
+    const productVariantsMap = new Map();
+    listaProdutos.forEach(prod => {
+      if (buildGroupKey(prod.nome, prod.id) !== rowGroupKey) return;
+      const available = Number(prod.quantidade_total || prod.estoque || 0) || 0;
+      productVariantsMap.set(Number(prod.id), {
+        key: `stock-${prod.id}`,
+        type: 'stock',
+        product: prod,
+        available,
+        description: prod.descricao || '',
+        price: Number(prod.preco_venda || 0) || 0,
+        isCurrent: Number(prod.id) === Number(row.produto_id)
       });
+    });
+
+    const productVariants = Array.from(productVariantsMap.values())
+      .filter(variant => variant.available > 0 || variant.isCurrent)
+      .sort((a, b) => {
+        if (a.isCurrent && !b.isCurrent) return -1;
+        if (!a.isCurrent && b.isCurrent) return 1;
+        return (b.available - a.available) || 0;
+      });
+
+    const produceVariant = {
+      key: 'produce-new',
+      type: 'produce',
+      name: 'Produzir do zero',
+      description: 'Nenhuma peça será retirada do estoque. Toda a quantidade será enviada para produção.',
+      available: requiredQty,
+      product: null
+    };
+
+    replaceModalState.variants = [...productVariants, produceVariant];
+
+    const variantKeys = new Set(replaceModalState.variants.map(v => v.key));
+    if (!variantKeys.has(replaceModalState.selectedVariantKey)) {
+      if (row.forceProduceAll) {
+        replaceModalState.selectedVariantKey = 'produce-new';
+        replaceModalState.selectedProductId = null;
+      } else {
+        const preferred = productVariants.find(v => v.isCurrent && v.available > 0)
+          || productVariants.find(v => v.isCurrent)
+          || productVariants[0]
+          || null;
+        if (preferred) {
+          replaceModalState.selectedVariantKey = preferred.key;
+          replaceModalState.selectedProductId = Number(preferred.product.id);
+        } else {
+          replaceModalState.selectedVariantKey = 'produce-new';
+          replaceModalState.selectedProductId = null;
+        }
+      }
     }
-    filtered = filtered.slice(0, 50);
-    if (!filtered.length) {
-      container.innerHTML = '<p class="text-sm text-gray-400">Nenhuma peça encontrada para os filtros atuais.</p>';
-      updateReplaceModalConfirmButton();
-      return;
-    }
+
+    const searchTerm = normalizeText(replaceModalState.searchTerm || '');
+    const filteredProducts = searchTerm
+      ? productVariants.filter(variant => {
+          const name = normalizeText(variant.product?.nome || '');
+          const code = normalizeText(variant.product?.codigo || '');
+          const desc = normalizeText(variant.description || '');
+          return name.includes(searchTerm) || code.includes(searchTerm) || desc.includes(searchTerm);
+        })
+      : productVariants;
+
     container.innerHTML = '';
-    const selectedId = Number(replaceModalState.selectedProductId || 0);
-    filtered.forEach(prod => {
-      const estoque = Number(prod.quantidade_total || prod.estoque || 0);
-      const preco = Number(prod.preco_venda || 0);
-      const precoInfo = preco
-        ? `<span class="px-2 py-1 rounded-full bg-white/5 border border-white/10">R$ ${preco.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>`
-        : '';
+
+    const info = document.createElement('div');
+    info.className = 'mb-4 text-sm text-gray-300 space-y-1';
+    const plural = requiredQty === 1 ? '' : 's';
+    info.innerHTML = `
+      <p class="text-gray-200">Quantidade orçada: <span class="text-white font-semibold">${requiredQty.toLocaleString('pt-BR')}</span> unidade${plural}</p>
+      <p class="text-xs text-gray-400">Escolha uma variação disponível em estoque ou opte por produzir do zero para manter a quantidade planejada.</p>`;
+    container.appendChild(info);
+
+    if (!productVariants.length) {
+      const alert = document.createElement('p');
+      alert.className = 'text-xs text-amber-200 bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-2 mb-4';
+      alert.textContent = 'Nenhuma variação com estoque disponível foi encontrada. Utilize a opção de produção para cumprir o orçamento.';
+      container.appendChild(alert);
+    } else if (!filteredProducts.length) {
+      const alert = document.createElement('p');
+      alert.className = 'text-xs text-gray-400 mb-4';
+      alert.textContent = 'Nenhuma variação corresponde aos filtros aplicados.';
+      container.appendChild(alert);
+    }
+
+    const variantsToRender = [...filteredProducts, produceVariant];
+
+    variantsToRender.forEach(variant => {
+      const isSelected = replaceModalState.selectedVariantKey === variant.key;
       const button = document.createElement('button');
       button.type = 'button';
-      button.dataset.productId = String(prod.id);
-      button.className = 'w-full text-left bg-surface/40 border border-white/10 rounded-xl px-4 py-3 transition hover:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/40';
-      if (Number(prod.id) === selectedId) {
+      button.dataset.variantKey = variant.key;
+      button.className = 'w-full text-left bg-surface/40 border border-white/10 rounded-xl px-4 py-4 transition hover:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/40 mb-3 last:mb-0';
+      if (isSelected) {
         button.classList.add('border-primary', 'ring-1', 'ring-primary/50');
       }
-      button.innerHTML = `
-        <div class="flex items-start justify-between gap-4">
-          <div>
-            <p class="text-white font-medium">${prod.nome || 'Peça sem nome'}</p>
-            <p class="text-gray-400 text-xs">${prod.codigo || ''}</p>
+
+      if (variant.type === 'stock') {
+        const insufficient = variant.available < requiredQty && requiredQty > 0;
+        const badgeClass = insufficient ? 'badge-warning' : 'badge-success';
+        const badgeText = insufficient
+          ? `${variant.available.toLocaleString('pt-BR')} em estoque (insuficiente)`
+          : `${variant.available.toLocaleString('pt-BR')} em estoque`;
+        const priceInfo = variant.price
+          ? `<span class="px-2 py-1 rounded-full bg-white/5 border border-white/10">R$ ${variant.price.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>`
+          : '';
+        const categoriaInfo = variant.product?.categoria
+          ? `<span class="px-2 py-1 rounded-full bg-white/5 border border-white/10">${variant.product.categoria}</span>`
+          : '';
+        const descriptionHtml = variant.description
+          ? `<p class="text-gray-400 text-xs mt-2">${variant.description}</p>`
+          : '';
+        const insuffInfo = insufficient
+          ? `<p class="text-xs text-amber-300 mt-2">Estoque menor que o necessário para ${requiredQty.toLocaleString('pt-BR')} unidade${plural}. Selecione outra variação ou produza do zero.</p>`
+          : '';
+        button.innerHTML = `
+          <div class="flex items-start justify-between gap-4">
+            <div>
+              <p class="text-white font-medium">${variant.product?.nome || 'Peça sem nome'}</p>
+              <p class="text-gray-400 text-xs">${variant.product?.codigo || ''}</p>
+              ${descriptionHtml}
+              ${insuffInfo}
+            </div>
+            <span class="${badgeClass} px-2 py-1 rounded text-xs">${badgeText}</span>
           </div>
-          <span class="${estoque > 0 ? 'badge-success' : 'badge-danger'} px-2 py-1 rounded text-xs">${estoque.toLocaleString('pt-BR')} em estoque</span>
-        </div>
-        <div class="mt-3 flex flex-wrap gap-2 text-xs text-gray-300">
-          <span class="px-2 py-1 rounded-full bg-white/5 border border-white/10">ID ${prod.id}</span>
-          ${precoInfo}
-        </div>`;
+          <div class="mt-3 flex flex-wrap gap-2 text-xs text-gray-300">
+            <span class="px-2 py-1 rounded-full bg-white/5 border border-white/10">ID ${variant.product?.id}</span>
+            ${categoriaInfo}
+            ${priceInfo}
+          </div>`;
+      } else {
+        button.innerHTML = `
+          <div class="flex items-start justify-between gap-4">
+            <div>
+              <p class="text-white font-medium">Produzir do zero</p>
+              <p class="text-gray-400 text-xs mt-2">${requiredQty > 0
+                ? `Produzir ${requiredQty.toLocaleString('pt-BR')} unidade${plural} a partir da matéria-prima, sem utilizar estoque.`
+                : 'Enviar a peça diretamente para produção, sem utilizar estoque.'}</p>
+            </div>
+            <span class="badge-info px-2 py-1 rounded text-xs">${requiredQty.toLocaleString('pt-BR')} para produzir</span>
+          </div>`;
+      }
+
       button.addEventListener('click', () => {
-        replaceModalState.selectedProductId = Number(prod.id);
+        replaceModalState.selectedVariantKey = variant.key;
+        if (variant.type === 'stock') {
+          replaceModalState.selectedProductId = Number(variant.product?.id || 0) || null;
+        } else {
+          replaceModalState.selectedProductId = null;
+        }
         updateReplaceModalConfirmButton();
         renderReplaceModalList();
       });
+
       container.appendChild(button);
     });
+
     updateReplaceModalConfirmButton();
+  }
+
+  function findSelectedVariant() {
+    return replaceModalState.variants.find(v => v.key === replaceModalState.selectedVariantKey) || null;
   }
 
   function updateReplaceModalConfirmButton() {
     if (!replaceModalRefs || !replaceModalRefs.confirmBtn) return;
     const btn = replaceModalRefs.confirmBtn;
-    btn.disabled = !replaceModalState.selectedProductId;
-    btn.className = 'btn-primary px-5 py-2 rounded-lg text-white font-medium transition';
-    btn.textContent = 'Confirmar Substituição';
+    const row = rows[currentReplaceIndex];
+    const requiredQty = Number(row?.qtd || row?.quantidade || 0) || 0;
+    const selected = findSelectedVariant();
+    let disabled = !selected;
+    let label = 'Confirmar Substituição';
+
+    if (selected) {
+      if (selected.type === 'produce') {
+        label = requiredQty > 0
+          ? `Produzir ${requiredQty.toLocaleString('pt-BR')} un`
+          : 'Produzir do zero';
+      } else {
+        if (selected.available < requiredQty && requiredQty > 0) {
+          disabled = true;
+          label = 'Estoque insuficiente';
+        } else {
+          label = 'Confirmar Substituição';
+        }
+      }
+    }
+
+    btn.disabled = disabled;
+    btn.className = disabled
+      ? 'btn-primary px-5 py-2 rounded-lg text-white font-medium transition opacity-60 cursor-not-allowed'
+      : 'btn-primary px-5 py-2 rounded-lg text-white font-medium transition';
+    btn.textContent = label;
   }
 
   function handleReplaceModalConfirm() {
     if (currentReplaceIndex < 0) return;
     const row = rows[currentReplaceIndex];
     if (!row) return;
-    const replacementId = Number(replaceModalState.selectedProductId || 0);
-    if (!replacementId) return;
-    const produto = listaProdutos.find(p => Number(p.id) === replacementId);
+    const selected = findSelectedVariant();
+    if (!selected) return;
+
+    if (selected.type === 'produce') {
+      row.forceProduceAll = true;
+      row.approved = false;
+      closeReplaceModal();
+      recomputeStocks();
+      renderRows();
+      validate();
+      computeInsumosAndRender();
+      return;
+    }
+
+    const produto = selected.product;
     if (!produto) return;
+    if (row._origId == null) row._origId = row.produto_id;
     row.produto_id = Number(produto.id);
     row.nome = produto.nome;
     row.preco_venda = Number(produto.preco_venda || 0);
+    row.codigo = produto.codigo;
+    row.forceProduceAll = false;
     row.approved = false;
     closeReplaceModal();
     recomputeStocks();
@@ -440,7 +628,10 @@ async function computeInsumosAndRender(){
       try { detalhes = await (window.electronAPI?.listarDetalhesProduto?.({ produtoCodigo: codigo, produtoId: r.produto_id }) ?? {}); }
       catch (e) { console.error('detalhes', e); }
       const rota = Array.isArray(detalhes?.itens) ? detalhes.itens : [];
-      const lotes = Array.isArray(detalhes?.lotes) ? detalhes.lotes : [];
+      const rawLotes = Array.isArray(detalhes?.lotes) ? detalhes.lotes : [];
+      const forceAll = !!r.forceProduceAll;
+      const lotes = forceAll ? [] : rawLotes;
+      r.forceProduceAll = forceAll;
 
       const orderById = new Map(rota.map(i => [Number(i.insumo_id), Number(i.ordem_insumo||0)]));
       const rotaSorted = rota.slice().sort((a,b)=> Number(a.ordem_insumo||0) - Number(b.ordem_insumo||0));

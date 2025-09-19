@@ -71,8 +71,12 @@
     } catch (err) {
       console.error('Erro ao carregar contatos', err);
       if (contatoSel) {
-        contatoSel.innerHTML = data.contato_id ? `<option>${data.contato_id}</option>` : '<option></option>';
-        filled(contatoSel);
+        const fallback = data.contato || data.contato_id || '';
+        contatoSel.innerHTML = fallback ? `<option>${fallback}</option>` : '<option></option>';
+        if (fallback) {
+          contatoSel.value = fallback;
+          filled(contatoSel);
+        }
       }
     }
 
@@ -91,6 +95,12 @@
       }
     } catch (err) {
       console.error('Erro ao carregar transportadoras', err);
+    } finally {
+      if (transportadoraSel && !transportadoraSel.value && data.transportadora) {
+        transportadoraSel.innerHTML = `<option>${data.transportadora}</option>`;
+        transportadoraSel.value = data.transportadora;
+        filled(transportadoraSel);
+      }
     }
 
     if (formaSel) {
@@ -121,12 +131,15 @@
     }
 
     const statusConfig = {
+      'Produção': { badge: 'badge-warning', dateKey: 'data_aprovacao' },
+      'Em Produção': { badge: 'badge-warning', dateKey: 'data_aprovacao' },
       'Em Producao': { badge: 'badge-warning', dateKey: 'data_aprovacao' },
-      'Producao': { badge: 'badge-warning', dateKey: 'data_aprovacao' },
-      'Enviado': { badge: 'badge-info', dateKey: 'data_envio' },
-      'Entregue': { badge: 'badge-success', dateKey: 'data_entrega' },
-      'Cancelado': { badge: 'badge-danger', dateKey: 'data_cancelamento' },
-      'Rascunho': { badge: 'badge-neutral', dateKey: 'data_emissao' }
+      Producao: { badge: 'badge-warning', dateKey: 'data_aprovacao' },
+      Pendente: { badge: 'badge-warning', dateKey: 'data_emissao' },
+      Enviado: { badge: 'badge-info', dateKey: 'data_envio' },
+      Entregue: { badge: 'badge-success', dateKey: 'data_entrega' },
+      Cancelado: { badge: 'badge-danger', dateKey: 'data_cancelamento' },
+      Rascunho: { badge: 'badge-neutral', dateKey: 'data_emissao' }
     };
     const statusTag = overlay.querySelector('#statusPedidoTag');
     const dateTag = overlay.querySelector('#dataStatusPedidoTag');
@@ -211,7 +224,8 @@
             const diff = Math.ceil((new Date(p.data_vencimento) - dataEmissao) / 86400000);
             prazoDias = `${diff} dias`;
           }
-          return `<tr class="border-b border-white/10"><td class="px-6 py-4 text-left text-sm text-white">${p.numero_parcela || ''}?</td><td class="px-6 py-4 text-left text-sm text-white">${fmtCurrency(p.valor)}</td><td class="px-6 py-4 text-left text-sm text-white">${prazoDias}</td></tr>`;
+          const numeroParcela = p.numero_parcela ? `${p.numero_parcela}ª` : '';
+          return `<tr class="border-b border-white/10"><td class="px-6 py-4 text-left text-sm text-white">${numeroParcela}</td><td class="px-6 py-4 text-left text-sm text-white">${fmtCurrency(p.valor)}</td><td class="px-6 py-4 text-left text-sm text-white">${prazoDias}</td></tr>`;
         }).join('');
         pagamentoBox.innerHTML = `
           <h4 class="text-white font-medium mb-4">Parcelas</h4>
@@ -236,7 +250,7 @@
   }
 
   overlay.querySelector('#cancelarVisualizarPedido')?.addEventListener('click', () => {
-    if (typeof showToast === 'function') showToast('Funcionalidade em criacao!', 'info');
+    if (typeof showToast === 'function') showToast('Funcionalidade em criação!', 'info');
   });
 
   window.dispatchEvent(new CustomEvent('pedidoModalLoaded', { detail: overlayId }));
