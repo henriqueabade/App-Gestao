@@ -9,6 +9,10 @@
   document.addEventListener('keydown', function esc(e){ if(e.key==='Escape'){ close(); document.removeEventListener('keydown', esc); }});
 
   const cliente = window.clienteEditar;
+  const preferencias = window.clienteEditarPreferencias || null;
+  if (preferencias) {
+    delete window.clienteEditarPreferencias;
+  }
   if(!window.geoService){
     await new Promise((resolve, reject) => {
       const s = document.createElement('script');
@@ -66,6 +70,31 @@
     const targetPanel = overlay.querySelector('#'+targetTab.getAttribute('aria-controls'));
     if(targetPanel) targetPanel.classList.remove('hidden');
     if(setFocus) targetTab.focus();
+  }
+
+  function applyPreferencias() {
+    if (!preferencias) return;
+    const { tabId, abrirNovoContato } = preferencias;
+    if (tabId) {
+      const targetTab = tabs.find(tab => tab.id === tabId || `#${tab.id}` === tabId);
+      if (targetTab) {
+        activateTab(targetTab, { setFocus: false });
+      }
+    }
+    if (abrirNovoContato) {
+      const abrirContato = () => {
+        const btn = document.getElementById('addContatoBtn');
+        if (btn) btn.click();
+      };
+      const esperarOverlay = () => {
+        if (!overlay || !overlay.classList.contains('hidden')) {
+          setTimeout(abrirContato, 50);
+        } else {
+          requestAnimationFrame(esperarOverlay);
+        }
+      };
+      esperarOverlay();
+    }
   }
 
   tabs.forEach(tab => {
@@ -288,6 +317,8 @@
   document.getElementById('addContatoBtn')?.addEventListener('click', () => {
     Modal.open('modals/clientes/contato.html', '../js/modals/cliente-contato.js', 'novoContatoCliente', true);
   });
+
+  applyPreferencias();
 
   window.addEventListener('clienteContatoAdicionado', e => {
     const ct = { ...e.detail, status: 'new' };

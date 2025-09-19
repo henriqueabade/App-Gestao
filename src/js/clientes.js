@@ -127,6 +127,7 @@ function renderClientes(clientes) {
                 <div class="flex items-center justify-center space-x-2">
                     <i class="fas fa-eye w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Visualizar"></i>
                     <i class="fas fa-edit w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Editar"></i>
+                    <i class="fas fa-phone-plus w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Novo contato"></i>
                     <i class="fas fa-trash w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-red)" title="Excluir"></i>
                 </div>
             </td>`;
@@ -139,6 +140,11 @@ function renderClientes(clientes) {
         if (editBtn) editBtn.addEventListener('click', (e) => {
             e.stopPropagation();
             abrirEditarCliente(c);
+        });
+        const quickContactBtn = tr.querySelector('.fa-phone-plus');
+        if (quickContactBtn) quickContactBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            abrirEditarCliente(c, { tabId: 'tab-contatos', abrirNovoContato: true });
         });
         const delBtn = tr.querySelector('.fa-trash');
         if (delBtn) delBtn.addEventListener('click', (e) => {
@@ -182,8 +188,13 @@ function abrirDetalhesCliente(cliente) {
     openModalWithSpinner('modals/clientes/detalhes.html', '../js/modals/cliente-detalhes.js', 'detalhesCliente');
 }
 
-function abrirEditarCliente(cliente) {
+function abrirEditarCliente(cliente, options = {}) {
     window.clienteEditar = cliente;
+    if (options && Object.keys(options).length) {
+        window.clienteEditarPreferencias = { ...options };
+    } else {
+        delete window.clienteEditarPreferencias;
+    }
     openModalWithSpinner('modals/clientes/editar.html', '../js/modals/cliente-editar.js', 'editarCliente');
 }
 
