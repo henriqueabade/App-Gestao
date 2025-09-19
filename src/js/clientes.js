@@ -126,9 +126,8 @@ function renderClientes(clientes) {
             <td class="px-6 py-4 whitespace-nowrap text-center">
                 <div class="flex items-center justify-center space-x-2">
                     <i class="fas fa-eye w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Visualizar"></i>
-                    <i class="fas fa-phone-plus w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Novo contato"></i>
+                    <i class="fas fa-user-plus action-new-contact w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Novo contato"></i>
                     <i class="fas fa-edit w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Editar"></i>
-                    <i class="fas fa-phone-plus w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Novo contato"></i>
                     <i class="fas fa-trash w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-red)" title="Excluir"></i>
                 </div>
             </td>`;
@@ -142,7 +141,7 @@ function renderClientes(clientes) {
             e.stopPropagation();
             abrirEditarCliente(c);
         });
-        const quickContactBtn = tr.querySelector('.fa-phone-plus');
+        const quickContactBtn = tr.querySelector('.action-new-contact');
         if (quickContactBtn) quickContactBtn.addEventListener('click', (e) => {
             e.stopPropagation();
             abrirEditarCliente(c, { tabId: 'tab-contatos', abrirNovoContato: true });

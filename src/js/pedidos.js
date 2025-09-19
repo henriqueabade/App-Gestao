@@ -88,9 +88,36 @@ function hideStatusTooltip() {
 }
 
 
+function openPedidoModal(htmlPath, scriptPath, overlayId) {
+    Modal.closeAll();
+    const spinner = document.createElement('div');
+    spinner.id = 'modalLoading';
+    spinner.className = 'fixed inset-0 z-[2000] bg-black/50 flex items-center justify-center';
+    spinner.innerHTML = '<div class="w-16 h-16 border-4 border-[#b6a03e] border-t-transparent rounded-full animate-spin"></div>';
+    document.body.appendChild(spinner);
+    const start = Date.now();
+    function handleLoaded(e) {
+        if (e.detail !== overlayId) return;
+        const overlay = document.getElementById(`${overlayId}Overlay`);
+        const elapsed = Date.now() - start;
+        const show = () => {
+            spinner.remove();
+            overlay?.classList.remove('hidden');
+        };
+        if (elapsed < 3000) {
+            setTimeout(show, Math.max(0, 2000 - elapsed));
+        } else {
+            show();
+        }
+        window.removeEventListener('pedidoModalLoaded', handleLoaded);
+    }
+    window.addEventListener('pedidoModalLoaded', handleLoaded);
+    Modal.open(htmlPath, scriptPath, overlayId, true);
+}
+
 function openVisualizarPedidoModal(id) {
     window.selectedOrderId = id;
-    Modal.open('modals/pedidos/visualizar.html', '../js/modals/pedido-visualizar.js', 'visualizarPedido');
+    openPedidoModal('modals/pedidos/visualizar.html', '../js/modals/pedido-visualizar.js', 'visualizarPedido');
 }
 async function carregarPedidos() {
     try {
