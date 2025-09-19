@@ -9,12 +9,10 @@
   const replaceModalState = {
     searchTerm: '',
     variants: [],
-    selections: new Map(),
-    initialSelections: null,
-    loadingVariants: null,
-    variantsLoadedForRowId: null
+    selection: new Map(),
+    produceQty: 0,
+    selectionInitialized: false
   };
-  const productBreakdownCache = new Map();
 
   const normalizeText = value => {
     if (!value) return '';
@@ -402,44 +400,51 @@
         </header>
         <div class="flex-1 overflow-y-auto modal-scroll">
           <div class="p-6 space-y-6">
-            <div class="bg-surface/40 rounded-lg border border-white/10 p-4 space-y-4">
-              <div>
-                <h4 class="font-medium text-white mb-3">Peça Atual</h4>
-                <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
-                  <div>
-                    <p class="text-gray-400 text-xs mb-1">Nome</p>
-                    <p class="text-white font-medium" data-field="piece-name"></p>
-                  </div>
-                  <div>
-                    <p class="text-gray-400 text-xs mb-1">Qtd Orçada</p>
-                    <p class="text-white font-medium" data-field="piece-qty"></p>
-                  </div>
-                  <div>
-                    <p class="text-gray-400 text-xs mb-1">Status</p>
-                    <span class="badge-warning px-2 py-1 rounded text-xs" data-field="piece-status"></span>
-                  </div>
-                  <div>
-                    <p class="text-gray-400 text-xs mb-1">Etapa</p>
-                    <span class="badge-info px-2 py-1 rounded text-xs" data-field="piece-stage"></span>
-                  </div>
-                </div>
-              </div>
-              <div class="space-y-3">
-                <p class="text-gray-400 text-sm" data-field="piece-details"></p>
+            <div class="bg-surface/40 rounded-lg border border-white/10 p-4">
+              <h4 class="font-medium text-white mb-3">Peça Atual</h4>
+              <div class="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-6 gap-4">
                 <div>
-                  <p class="text-gray-300 text-xs uppercase tracking-wide mb-2">Tipos encontrados em estoque</p>
-                  <div data-field="piece-stock-breakdown" class="space-y-2"></div>
+                  <p class="text-gray-400 text-xs mb-1">Nome</p>
+                  <p class="text-white font-medium" data-field="piece-name"></p>
                 </div>
-                <div data-field="piece-selection" class="hidden border border-primary/40 bg-primary/5 rounded-lg p-3 space-y-2"></div>
+                <div>
+                  <p class="text-gray-400 text-xs mb-1">Qtd Orçada</p>
+                  <p class="text-white font-medium" data-field="piece-qty"></p>
+                </div>
+                <div>
+                  <p class="text-gray-400 text-xs mb-1">Total em Estoque</p>
+                  <span class="badge-success px-2 py-1 rounded text-xs" data-field="piece-stock"></span>
+                </div>
+                <div>
+                  <p class="text-gray-400 text-xs mb-1">Prontas</p>
+                  <span class="badge-info px-2 py-1 rounded text-xs" data-field="piece-ready"></span>
+                </div>
+                <div>
+                  <p class="text-gray-400 text-xs mb-1">Produzir Parcial</p>
+                  <span class="badge-warning px-2 py-1 rounded text-xs" data-field="piece-produce-partial"></span>
+                </div>
+                <div>
+                  <p class="text-gray-400 text-xs mb-1">Produzir Total</p>
+                  <span class="badge-danger px-2 py-1 rounded text-xs" data-field="piece-produce-total"></span>
+                </div>
               </div>
+              <p class="text-gray-400 text-sm mt-4" data-field="piece-details"></p>
             </div>
             <div class="bg-surface/40 rounded-lg border border-white/10 p-4">
               <h4 class="font-medium text-white mb-3">Buscar alternativa</h4>
               <input type="text" data-role="search" placeholder="Buscar por processo, insumo ou código" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-2 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
             </div>
             <div class="bg-surface/40 rounded-lg border border-white/10 p-4">
-              <h4 class="font-medium text-white mb-4">Peças disponíveis</h4>
-              <div data-role="results" class="space-y-3 max-h-[360px] overflow-y-auto pr-1 modal-scroll"></div>
+              <div class="flex items-center justify-between mb-4">
+                <h4 class="text-xs font-semibold text-gray-200 uppercase tracking-[0.25em]">TIPOS SELECIONADOS AUTOMATICAMENTE</h4>
+                <span data-role="selection-indicator" class="badge-info px-3 py-1 rounded-full text-[11px] font-medium">0/0 un</span>
+              </div>
+              <div data-role="selection" class="space-y-3 max-h-[320px] overflow-y-auto pr-1 modal-scroll"></div>
+              <p data-role="selection-summary" class="text-xs text-gray-400 mt-4"></p>
+            </div>
+            <div class="bg-surface/40 rounded-lg border border-white/10 p-4">
+              <h4 class="font-medium text-white mb-4">Peças compatíveis</h4>
+              <div data-role="results" class="space-y-3 max-h-[320px] overflow-y-auto pr-1 modal-scroll"></div>
             </div>
           </div>
         </div>
@@ -457,8 +462,9 @@
       confirmBtn: overlay.querySelector('[data-action="confirm"]'),
       search: overlay.querySelector('[data-role="search"]'),
       results: overlay.querySelector('[data-role="results"]'),
-      stockBreakdown: overlay.querySelector('[data-field="piece-stock-breakdown"]'),
-      selectionSummary: overlay.querySelector('[data-field="piece-selection"]')
+      selection: overlay.querySelector('[data-role="selection"]'),
+      selectionSummary: overlay.querySelector('[data-role="selection-summary"]'),
+      selectionIndicator: overlay.querySelector('[data-role="selection-indicator"]')
     };
     overlay.querySelectorAll('[data-action="close"]').forEach(btn => btn.addEventListener('click', closeReplaceModal));
     replaceModalRefs.confirmBtn?.addEventListener('click', handleReplaceModalConfirm);
@@ -489,12 +495,9 @@
     if (!row) return;
     replaceModalState.searchTerm = '';
     replaceModalState.variants = [];
-    replaceModalState.selections = new Map();
-    replaceModalState.loadingVariants = null;
-    replaceModalState.variantsLoadedForRowId = null;
-    replaceModalState.initialSelections = Array.isArray(row.replacementPlan?.selections)
-      ? row.replacementPlan.selections.map(sel => ({ key: sel.key, qty: sel.qty }))
-      : null;
+    replaceModalState.selection = new Map();
+    replaceModalState.produceQty = 0;
+    replaceModalState.selectionInitialized = false;
     if (refs.search) refs.search.value = '';
     renderReplaceModalSummary();
     await renderReplaceModalList({ forceReload: true });
@@ -508,10 +511,9 @@
     replaceModalRefs.overlay.classList.add('hidden');
     replaceModalState.searchTerm = '';
     replaceModalState.variants = [];
-    replaceModalState.selections = new Map();
-    replaceModalState.initialSelections = null;
-    replaceModalState.loadingVariants = null;
-    replaceModalState.variantsLoadedForRowId = null;
+    replaceModalState.selection = new Map();
+    replaceModalState.produceQty = 0;
+    replaceModalState.selectionInitialized = false;
     if (replaceModalRefs.search) replaceModalRefs.search.value = '';
     currentReplaceIndex = -1;
     updateReplaceModalConfirmButton();
@@ -536,109 +538,240 @@
     const qtd = toNumber(row.qtd || row.quantidade || 0);
     setReplaceModalField('piece-qty', `${formatNumber(qtd)} unidades`);
     const estoque = toNumber(row.em_estoque);
-    const produzir = toNumber(row.a_produzir);
-    if (row.forceProduceAll) {
-      setReplaceModalField('piece-status', `Produção integral planejada (${formatNumber(qtd)} un)`);
-    } else {
-      setReplaceModalField('piece-status', `Estoque: ${formatNumber(estoque)} | Produzir: ${formatNumber(produzir)}`);
-    }
+    const prontas = toNumber(row.pronta);
+    const produzirTotal = toNumber(row.produzir_total);
+    const produzirParcial = toNumber(row.produzir_parcial);
+    setReplaceModalField('piece-stock', `${formatNumber(estoque)} un`);
+    setReplaceModalField('piece-ready', `${formatNumber(prontas)} un`);
+    setReplaceModalField('piece-produce-total', `${formatNumber(produzirTotal)} un`);
+    setReplaceModalField('piece-produce-partial', `${formatNumber(produzirParcial)} un`);
     const etapa = row.faltantes?.[0]?.etapa || row.popover?.variants?.[0]?.currentProcess?.name || '-';
-    setReplaceModalField('piece-stage', etapa || '-');
+    const details = [
+      etapa ? `Etapa atual: ${etapa}` : null,
+      `Estoque: ${formatNumber(estoque)} un`,
+      `Produzir total: ${formatNumber(produzirTotal)} un`,
+      `Produzir parcial: ${formatNumber(produzirParcial)} un`
+    ].filter(Boolean).join(' • ');
+    setReplaceModalField('piece-details', details);
     const subtitle = ctx.numero ? `Orçamento ${ctx.numero}` : (ctx.cliente || '');
     setReplaceModalField('modal-subtitle', subtitle);
-    const detailsText = `${formatNumber(qtd)} unidade${qtd === 1 ? '' : 's'} necessárias no orçamento.`;
-    setReplaceModalField('piece-details', detailsText);
-
-    const breakdownContainer = replaceModalRefs.stockBreakdown;
-    if (breakdownContainer) {
-      const breakdown = Array.isArray(row.stockBreakdown) ? row.stockBreakdown : [];
-      if (!breakdown.length) {
-        breakdownContainer.innerHTML = '<p class="text-xs text-gray-500">Nenhum lote em estoque para esta peça.</p>';
-      } else {
-        breakdownContainer.innerHTML = breakdown.map(point => {
-          const badgeClass = point.isFinal ? 'badge-success' : 'badge-info';
-          const available = Math.max(0, Number(point.available || 0)).toLocaleString('pt-BR');
-          const process = point.processName || 'Processo não informado';
-          const lastItem = point.lastItemName || 'Sem último insumo';
-          return `
-            <div class="flex items-center justify-between gap-4 rounded-lg border border-white/10 bg-white/5 px-3 py-2">
-              <div>
-                <p class="text-white text-sm font-medium">${lastItem}</p>
-                <p class="text-xs text-gray-400">${process}</p>
-              </div>
-              <span class="${badgeClass} px-2 py-1 rounded text-xs">${available} em estoque</span>
-            </div>`;
-        }).join('');
-      }
-    }
-
-    const selectionContainer = replaceModalRefs.selectionSummary;
-    if (selectionContainer) {
-      const plan = buildSelectionPlan(row);
-      if (plan.totalSelected > 0) {
-        selectionContainer.classList.remove('hidden');
-        const totalLabel = `${plan.totalSelected.toLocaleString('pt-BR')} de ${plan.requiredQty.toLocaleString('pt-BR')} un`;
-        const remaining = Math.max(0, plan.remaining).toLocaleString('pt-BR');
-        let inner = `
-          <div class="flex items-center justify-between text-sm text-white font-medium">
-            <span>Seleção atual</span>
-            <span>${totalLabel}</span>
-          </div>`;
-        if (plan.stock.length) {
-          inner += '<ul class="space-y-2">';
-          plan.stock.forEach(item => {
-            inner += `
-              <li class="flex items-center justify-between gap-3 text-sm">
-                <div>
-                  <p class="text-white font-medium">${item.lastItemName || 'Sem insumo'}</p>
-                  <p class="text-xs text-gray-400">${item.processName || 'Processo não informado'}</p>
-                </div>
-                <span class="badge-info px-2 py-1 rounded text-xs">${item.qty.toLocaleString('pt-BR')} un</span>
-              </li>`;
-          });
-          inner += '</ul>';
-        }
-        if (plan.produceQty > 0) {
-          inner += `
-            <div class="flex items-center justify-between gap-3 text-sm pt-2 border-t border-white/10">
-              <span class="text-white font-medium">Produzir do zero</span>
-              <span class="badge-warning px-2 py-1 rounded text-xs">${plan.produceQty.toLocaleString('pt-BR')} un</span>
-            </div>`;
-        }
-        inner += `
-          <p class="text-xs text-gray-300 border-t border-white/10 pt-2 mt-2">Restante para atingir o orçado: <span class="${plan.remaining === 0 ? 'text-emerald-300' : 'text-amber-300'} font-semibold">${remaining} un</span></p>`;
-        selectionContainer.innerHTML = inner;
-      } else {
-        selectionContainer.classList.add('hidden');
-        selectionContainer.innerHTML = '';
-      }
-    }
-
   }
 
-  async function applyQuantityChange(variant, desiredQty, options = {}) {
+
+  function ensureSelectionMap() {
+    if (!(replaceModalState.selection instanceof Map)) {
+      replaceModalState.selection = new Map();
+    }
+    return replaceModalState.selection;
+  }
+
+  function getRequiredQuantity(row) {
+    return Number(row?.qtd || row?.quantidade || 0) || 0;
+  }
+
+  function getSelectionQuantity(key) {
+    const map = ensureSelectionMap();
+    return Number(map.get(key) || 0);
+  }
+
+  function setSelectionQuantity(key, quantity) {
+    const map = ensureSelectionMap();
+    const value = Math.max(0, Math.floor(Number(quantity) || 0));
+    if (value <= 0) map.delete(key);
+    else map.set(key, value);
+  }
+
+  function clearSelection() {
+    const map = ensureSelectionMap();
+    map.clear();
+  }
+
+  function getStockSelectionEntries() {
+    if (!Array.isArray(replaceModalState.variants)) return [];
+    return replaceModalState.variants
+      .filter(variant => variant.type === 'stock')
+      .map(variant => ({ variant, qty: getSelectionQuantity(variant.key) }))
+      .filter(entry => entry.qty > 0);
+  }
+
+  function getTotalSelectedStock() {
+    return getStockSelectionEntries().reduce((sum, entry) => sum + entry.qty, 0);
+  }
+
+  function allocateFromVariants(variants, amount) {
+    let remaining = Math.max(0, Math.floor(Number(amount) || 0));
+    if (remaining <= 0) return 0;
+    variants.forEach(variant => {
+      if (remaining <= 0 || variant.type !== 'stock') return;
+      const current = getSelectionQuantity(variant.key);
+      const available = Math.max(0, Math.floor(Number(variant.available) || 0));
+      const free = Math.max(0, available - current);
+      if (free <= 0) return;
+      const use = Math.min(free, remaining);
+      if (use > 0) {
+        setSelectionQuantity(variant.key, current + use);
+        remaining -= use;
+      }
+    });
+    return remaining;
+  }
+
+  function initializeSelection(row, productVariants, requiredQty) {
+    clearSelection();
+    replaceModalState.produceQty = 0;
+    let remaining = requiredQty;
+
+    const saved = row.replacementSelection;
+    if (saved && Array.isArray(saved.stocks)) {
+      saved.stocks.forEach(item => {
+        const productId = Number(item.productId);
+        const variant = productVariants.find(v => Number(v.product?.id) === productId);
+        if (!variant) return;
+        const available = Math.max(0, Math.floor(Number(variant.available) || 0));
+        const qty = Math.max(0, Math.floor(Number(item.quantity) || 0));
+        const use = Math.min(available, qty);
+        if (use > 0) setSelectionQuantity(variant.key, use);
+      });
+      const totalStock = getTotalSelectedStock();
+      const savedProduce = Math.max(0, Math.floor(Number(saved.produceQty) || 0));
+      replaceModalState.produceQty = Math.min(savedProduce, Math.max(0, requiredQty - totalStock));
+      remaining = Math.max(0, requiredQty - totalStock - replaceModalState.produceQty);
+    } else if (row.forceProduceAll) {
+      replaceModalState.produceQty = requiredQty;
+      remaining = 0;
+    } else {
+      const currentVariant = productVariants.find(v => Number(v.product?.id) === Number(row.produto_id));
+      if (currentVariant) {
+        const available = Math.max(0, Math.floor(Number(currentVariant.available) || 0));
+        const use = Math.min(available, remaining);
+        if (use > 0) {
+          setSelectionQuantity(currentVariant.key, use);
+          remaining -= use;
+        }
+      }
+    }
+
+    if (remaining > 0) {
+      remaining = allocateFromVariants(productVariants, remaining);
+    }
+
+    if (remaining > 0) {
+      replaceModalState.produceQty += remaining;
+    }
+  }
+
+  function clampSelectionToAvailability(productVariants, requiredQty) {
+    const map = ensureSelectionMap();
+    const validKeys = new Set(productVariants.map(v => v.key));
+    Array.from(map.keys()).forEach(key => {
+      if (!validKeys.has(key)) {
+        map.delete(key);
+        return;
+      }
+      const variant = productVariants.find(v => v.key === key);
+      if (!variant) return;
+      const max = Math.max(0, Math.floor(Number(variant.available) || 0));
+      const current = Math.max(0, Math.floor(Number(map.get(key) || 0)));
+      if (current > max) map.set(key, max);
+    });
+
+    const required = Math.max(0, Math.floor(Number(requiredQty) || 0));
+    const totalStock = getTotalSelectedStock();
+    const maxProduce = Math.max(0, required - totalStock);
+    replaceModalState.produceQty = Math.max(0, Math.floor(Number(replaceModalState.produceQty) || 0));
+    if (replaceModalState.produceQty > maxProduce) replaceModalState.produceQty = maxProduce;
+  }
+
+  function renderSelectionList() {
+    if (!replaceModalRefs) return;
+    const container = replaceModalRefs.selection;
+    if (!container) return;
     const row = rows[currentReplaceIndex];
-    if (!row) return;
-    const requiredQty = Number(row.qtd || row.quantidade || 0) || 0;
-    const sanitized = Math.max(0, Math.floor(Number(desiredQty) || 0));
-    if (!replaceModalState.selections || !(replaceModalState.selections instanceof Map)) {
-      replaceModalState.selections = new Map();
+    if (!row) {
+      container.innerHTML = '<p class="text-sm text-gray-400">Nenhuma peça selecionada.</p>';
+      return;
     }
-    const current = getSelectionQuantity(variant.key);
-    const totalWithoutCurrent = getTotalSelectedQuantity() - current;
-    const baseMax = variant.type === 'produce'
-      ? requiredQty
-      : Math.min(requiredQty, Math.floor(Number(variant.available) || 0));
-    const maxAllowed = Math.min(baseMax, Math.max(0, requiredQty - totalWithoutCurrent));
-    const finalQty = Math.min(sanitized, Math.max(0, maxAllowed));
-    if (finalQty > 0) replaceModalState.selections.set(variant.key, finalQty);
-    else replaceModalState.selections.delete(variant.key);
-    enforceSelectionLimits(requiredQty);
-    const focus = options.focus ? { ...options.focus } : null;
-    await renderReplaceModalList({ skipReload: true, focus });
+
+    const requiredQty = getRequiredQuantity(row);
+    const entries = getStockSelectionEntries();
+    const produceQty = Math.max(0, Math.floor(Number(replaceModalState.produceQty) || 0));
+    const totalStock = entries.reduce((sum, entry) => sum + entry.qty, 0);
+    const totalSelecionado = totalStock + produceQty;
+    const diff = requiredQty - totalSelecionado;
+
+    container.innerHTML = '';
+
+    if (!entries.length && produceQty === 0) {
+      container.innerHTML = '<p class="text-sm text-gray-400">Nenhum tipo selecionado. Ajuste as quantidades ao lado para compor a substituição.</p>';
+    } else {
+      entries.forEach(entry => {
+        const item = document.createElement('div');
+        item.className = 'bg-white/5 border border-white/10 rounded-xl px-4 py-3 flex items-center justify-between gap-4';
+        const prod = entry.variant.product;
+        item.innerHTML = `
+          <div>
+            <p class="text-white text-sm font-semibold">${prod?.nome || 'Peça sem nome'}</p>
+            <p class="text-gray-400 text-xs">${prod?.codigo || ''}</p>
+          </div>
+          <div class="flex items-center gap-3">
+            <span class="badge-info px-2 py-1 rounded text-xs">${entry.qty.toLocaleString('pt-BR')} un</span>
+            <button type="button" class="btn-neutral px-2 py-1 rounded text-xs" data-action="remove-selection" data-variant-key="${entry.variant.key}">Remover</button>
+          </div>`;
+        container.appendChild(item);
+      });
+
+      if (produceQty > 0) {
+        const produceItem = document.createElement('div');
+        produceItem.className = 'bg-white/5 border border-white/10 rounded-xl px-4 py-3 flex items-center justify-between gap-4';
+        produceItem.innerHTML = `
+          <div>
+            <p class="text-white text-sm font-semibold">Produção</p>
+            <p class="text-gray-400 text-xs">Gerar novas unidades</p>
+          </div>
+          <div class="flex items-center gap-3">
+            <span class="badge-warning px-2 py-1 rounded text-xs">${produceQty.toLocaleString('pt-BR')} un</span>
+            <button type="button" class="btn-neutral px-2 py-1 rounded text-xs" data-action="clear-produce">Remover</button>
+          </div>`;
+        container.appendChild(produceItem);
+      }
+    }
+
+    const summaryEl = replaceModalRefs.selectionSummary;
+    if (summaryEl) {
+      if (diff === 0) summaryEl.textContent = 'Seleção completa para atender o orçamento.';
+      else if (diff > 0) summaryEl.textContent = `Faltam ${diff.toLocaleString('pt-BR')} unidade(s) para cobrir o total necessário.`;
+      else summaryEl.textContent = `Remova ${Math.abs(diff).toLocaleString('pt-BR')} unidade(s) para igualar ao necessário.`;
+    }
+
+    const indicator = replaceModalRefs.selectionIndicator;
+    if (indicator) {
+      let badgeClass = 'badge-info';
+      if (diff === 0 && requiredQty > 0) badgeClass = 'badge-success';
+      else if (diff > 0) badgeClass = 'badge-warning';
+      else if (diff < 0) badgeClass = 'badge-danger';
+      indicator.textContent = `${totalSelecionado.toLocaleString('pt-BR')} / ${requiredQty.toLocaleString('pt-BR')} un`;
+      indicator.className = `${badgeClass} px-3 py-1 rounded-full text-[11px] font-medium`;
+    }
+
+    container.querySelectorAll('[data-action="remove-selection"]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const key = btn.getAttribute('data-variant-key');
+        if (!key) return;
+        setSelectionQuantity(key, 0);
+        replaceModalState.selectionInitialized = true;
+        renderReplaceModalList();
+      });
+    });
+    container.querySelectorAll('[data-action="clear-produce"]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        replaceModalState.produceQty = 0;
+        replaceModalState.selectionInitialized = true;
+        renderReplaceModalList();
+      });
+    });
   }
 
-  async function renderReplaceModalList(options = {}) {
+  function renderReplaceModalList() {
     if (!replaceModalRefs) return;
     const { forceReload = false, skipReload = false, focus = null } = options;
     const container = replaceModalRefs.results;
@@ -648,88 +781,58 @@
       container.innerHTML = '<p class="text-sm text-gray-400">Nenhuma peça selecionada.</p>';
       replaceModalState.variants = [];
       updateReplaceModalConfirmButton();
+      renderSelectionList();
       return;
     }
 
-    const requiredQty = Number(row.qtd || row.quantidade || 0) || 0;
-    if (!replaceModalState.selections || !(replaceModalState.selections instanceof Map)) {
-      replaceModalState.selections = new Map();
-    }
+    const requiredQty = getRequiredQuantity(row);
+    const rowCode = (row.codigo || '').trim();
+    const rowGroupKey = buildGroupKey(row.nome, row.produto_id);
 
-    const rowProductId = Number(row.produto_id || 0);
-    const needsReload = forceReload
-      || (!skipReload && (!replaceModalState.variants.length || replaceModalState.variantsLoadedForRowId !== rowProductId));
-
-    if (needsReload) {
-      container.innerHTML = '<p class="text-sm text-gray-400">Carregando variações disponíveis...</p>';
-      const loadPromise = (async () => {
-        const groupKey = buildGroupKey(row.nome, row.produto_id);
-        const candidates = listaProdutos.filter(prod => buildGroupKey(prod.nome, prod.id) === groupKey);
-        const variantList = [];
-        for (const prod of candidates) {
-          const breakdown = await loadProductBreakdown(prod);
-          breakdown.forEach(point => {
-            variantList.push({
-              key: `stock-${prod.id}-${point.key}`,
-              type: 'stock',
-              product: prod,
-              stage: point,
-              available: Math.max(0, Number(point.available || 0)),
-              isCurrentProduct: Number(prod.id) === Number(row.produto_id)
-            });
-          });
-        }
-        const produceVariant = {
-          key: 'produce-new',
-          type: 'produce',
-          available: requiredQty,
-          stage: null,
-          product: null,
-          isCurrentProduct: false
-        };
-        const dedup = new Map();
-        variantList.forEach(v => dedup.set(v.key, v));
-        dedup.set(produceVariant.key, produceVariant);
-        const sorted = Array.from(dedup.values()).sort((a, b) => {
-          if (a.type !== b.type) return a.type === 'stock' ? -1 : 1;
-          if (a.type === 'stock' && b.type === 'stock') {
-            if (a.isCurrentProduct && !b.isCurrentProduct) return -1;
-            if (!a.isCurrentProduct && b.isCurrentProduct) return 1;
-            const orderDiff = (b.stage?.order || 0) - (a.stage?.order || 0);
-            if (orderDiff !== 0) return orderDiff;
-            return (b.available || 0) - (a.available || 0);
-          }
-          return 0;
-        });
-        replaceModalState.variants = sorted;
-        replaceModalState.variantsLoadedForRowId = rowProductId;
-        return sorted;
-      })();
-      replaceModalState.loadingVariants = loadPromise;
-      try {
-        await loadPromise;
-      } finally {
-        replaceModalState.loadingVariants = null;
+    const productVariantsMap = new Map();
+    listaProdutos.forEach(prod => {
+      const prodCode = (prod.codigo || '').trim();
+      if (rowCode) {
+        if (prodCode !== rowCode) return;
+      } else if (buildGroupKey(prod.nome, prod.id) !== rowGroupKey) {
+        return;
       }
-      if (replaceModalState.initialSelections) {
-        const map = new Map();
-        replaceModalState.initialSelections.forEach(sel => {
-          const variant = getVariantByKey(sel.key);
-          if (!variant) return;
-          const sanitized = sanitizePositiveInt(sel.qty);
-          if (!sanitized) return;
-          map.set(variant.key, sanitized);
-        });
-        replaceModalState.selections = map;
-        enforceSelectionLimits(requiredQty);
-        replaceModalState.initialSelections = null;
-      }
-    } else if (replaceModalState.loadingVariants) {
-      try { await replaceModalState.loadingVariants; }
-      catch (err) { console.error(err); }
-    }
+      const available = Number(prod.quantidade_total || prod.estoque || 0) || 0;
+      productVariantsMap.set(Number(prod.id), {
+        key: `stock-${prod.id}`,
+        type: 'stock',
+        product: prod,
+        available,
+        description: prod.descricao || '',
+        price: Number(prod.preco_venda || 0) || 0,
+        isCurrent: Number(prod.id) === Number(row.produto_id)
+      });
+    });
 
-    enforceSelectionLimits(requiredQty);
+    const productVariants = Array.from(productVariantsMap.values())
+      .sort((a, b) => {
+        if (a.isCurrent && !b.isCurrent) return -1;
+        if (!a.isCurrent && b.isCurrent) return 1;
+        return (Number(b.available) || 0) - (Number(a.available) || 0);
+      });
+
+    const produceVariant = {
+      key: 'produce-new',
+      type: 'produce',
+      name: 'Produzir do zero',
+      description: 'Nenhuma peça será retirada do estoque. Toda a quantidade restante será enviada para produção.',
+      available: requiredQty,
+      product: null
+    };
+
+    replaceModalState.variants = [...productVariants, produceVariant];
+
+    if (!replaceModalState.selectionInitialized) {
+      initializeSelection(row, productVariants, requiredQty);
+      replaceModalState.selectionInitialized = true;
+    } else {
+      clampSelectionToAvailability(productVariants, requiredQty);
+    }
 
     const searchTerm = normalizeText(replaceModalState.searchTerm || '');
     const variants = replaceModalState.variants.slice();
@@ -752,20 +855,19 @@
     const info = document.createElement('div');
     info.className = 'mb-4 text-sm text-gray-300 space-y-1';
     info.innerHTML = `
-      <p class="text-gray-200">Quantidade orçada: <span class="text-white font-semibold">${requiredQty.toLocaleString('pt-BR')}</span> un</p>
-      <p class="text-xs text-gray-400">Combine diferentes pontos em estoque e produção para suprir a necessidade do orçamento.</p>
-      <p class="text-xs ${plan.totalSelected === requiredQty ? 'text-emerald-300' : 'text-amber-300'}">Selecionado: ${plan.totalSelected.toLocaleString('pt-BR')} / ${requiredQty.toLocaleString('pt-BR')} un</p>`;
+      <p class="text-gray-200">Quantidade orçada: <span class="text-white font-semibold">${requiredQty.toLocaleString('pt-BR')}</span> unidade${plural}</p>
+      <p class="text-xs text-gray-400">Distribua a quantidade entre os tipos abaixo e complemente com produção quando necessário.</p>`;
     container.appendChild(info);
 
     if (!stockVariants.length) {
       const alert = document.createElement('p');
       alert.className = 'text-xs text-amber-200 bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-2 mb-4';
-      alert.textContent = 'Nenhum ponto de estoque foi encontrado para esta peça. Utilize a produção para atender o orçamento.';
+      alert.textContent = 'Nenhum item com o mesmo código foi encontrado em estoque. Utilize produção para atender o orçamento.';
       container.appendChild(alert);
     } else if (!filteredStock.length) {
       const alert = document.createElement('p');
       alert.className = 'text-xs text-gray-400 mb-4';
-      alert.textContent = 'Nenhuma variação corresponde aos filtros aplicados.';
+      alert.textContent = 'Nenhum tipo corresponde aos filtros aplicados.';
       container.appendChild(alert);
     }
 
@@ -773,114 +875,153 @@
     if (produceVariant) variantsToRender.push(produceVariant);
 
     variantsToRender.forEach(variant => {
-      const currentQty = getSelectionQuantity(variant.key);
-      const totalWithoutCurrent = getTotalSelectedQuantity() - currentQty;
-      const baseMax = variant.type === 'produce'
-        ? requiredQty
-        : Math.min(requiredQty, Math.floor(Number(variant.available) || 0));
-      const maxAllowed = Math.min(baseMax, Math.max(0, requiredQty - totalWithoutCurrent));
-      const card = document.createElement('div');
-      card.className = 'w-full bg-surface/40 border border-white/10 rounded-xl px-4 py-4 transition focus-within:border-primary/60 focus-within:ring-1 focus-within:ring-primary/40 mb-3 last:mb-0';
-      if (currentQty > 0) {
-        card.classList.add('border-primary', 'ring-1', 'ring-primary/50');
-      }
-
       if (variant.type === 'stock') {
-        const process = variant.stage?.processName || 'Processo não informado';
-        const lastItem = variant.stage?.lastItemName || 'Sem último insumo';
-        const badgeClass = variant.stage?.isFinal ? 'badge-success' : 'badge-info';
+        const card = document.createElement('div');
+        card.className = 'bg-surface/40 border border-white/10 rounded-xl px-4 py-4 mb-3 last:mb-0';
+        const selectedQty = getSelectionQuantity(variant.key);
+        const available = Math.max(0, Math.floor(Number(variant.available) || 0));
+        const remaining = Math.max(0, available - selectedQty);
+        const badgeClass = remaining > 0 ? 'badge-success' : 'badge-danger';
+        const priceInfo = variant.price
+          ? `<span class="px-2 py-1 rounded-full bg-white/5 border border-white/10">R$ ${variant.price.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>`
+          : '';
+        const categoriaInfo = variant.product?.categoria
+          ? `<span class="px-2 py-1 rounded-full bg-white/5 border border-white/10">${variant.product.categoria}</span>`
+          : '';
+        const descriptionHtml = variant.description
+          ? `<p class="text-gray-400 text-xs mt-2">${variant.description}</p>`
+          : '';
+        const inputId = `variant-${variant.key}`;
         card.innerHTML = `
           <div class="flex items-start justify-between gap-4">
             <div>
-              <p class="text-white font-semibold">${lastItem}</p>
-              <p class="text-xs text-gray-400">${process}</p>
-              ${variant.product?.codigo ? `<p class="text-xs text-gray-500 mt-1">Código: ${variant.product.codigo}</p>` : ''}
+              <p class="text-white font-medium">${variant.product?.nome || 'Peça sem nome'}</p>
+              <p class="text-gray-400 text-xs">${variant.product?.codigo || ''}</p>
+              ${descriptionHtml}
             </div>
-            <span class="${badgeClass} px-2 py-1 rounded text-xs">${Math.max(0, Number(variant.available || 0)).toLocaleString('pt-BR')} em estoque</span>
+            <span class="${badgeClass} px-2 py-1 rounded text-xs" data-role="availability">${remaining.toLocaleString('pt-BR')} em estoque</span>
           </div>
-          <div class="mt-3 flex items-center gap-3">
-            <span class="text-xs text-gray-400 uppercase tracking-wide">Selecionar</span>
-            <div class="flex items-center gap-2">
-              <button type="button" class="js-qty-btn w-8 h-8 rounded-lg bg-white/5 border border-white/10 text-white text-sm" data-step="-1">-</button>
-              <input type="number" inputmode="numeric" min="0" class="w-16 text-center bg-white/5 border border-white/10 rounded-lg text-white" data-variant-input="${variant.key}" value="${currentQty}" max="${maxAllowed}" />
-              <button type="button" class="js-qty-btn w-8 h-8 rounded-lg bg-white/5 border border-white/10 text-white text-sm" data-step="1">+</button>
-            </div>
-            <span class="text-xs text-gray-400 ml-auto">Máx: ${maxAllowed.toLocaleString('pt-BR')} un</span>
-          </div>`;
-      } else {
-        const remaining = Math.max(0, requiredQty - (getTotalSelectedQuantity() - currentQty));
-        card.innerHTML = `
-          <div class="flex items-start justify-between gap-4">
-            <div>
-              <p class="text-white font-semibold">Produzir do zero</p>
-              <p class="text-xs text-gray-400 mt-1">Defina o total que deverá seguir para produção.</p>
-            </div>
-            <span class="badge-warning px-2 py-1 rounded text-xs">Restante permitido: ${remaining.toLocaleString('pt-BR')} un</span>
+          <div class="mt-3 flex flex-wrap items-center gap-3 text-xs text-gray-300">
+            <label class="text-gray-300" for="${inputId}">Selecionar</label>
+            <input id="${inputId}" type="number" min="0" max="${available}" step="1" value="${selectedQty}" data-role="stock-input" data-variant-key="${variant.key}" class="w-24 bg-input border border-inputBorder rounded px-2 py-1 text-white text-sm focus:border-primary focus:ring-1 focus:ring-primary/50" />
+            <button type="button" class="btn-secondary px-2 py-1 rounded text-xs" data-action="fill-max" data-variant-key="${variant.key}">Usar máx.</button>
+            <button type="button" class="btn-neutral px-2 py-1 rounded text-xs" data-action="clear-selection" data-variant-key="${variant.key}">Limpar</button>
           </div>
-          <div class="mt-3 flex items-center gap-3">
-            <span class="text-xs text-gray-400 uppercase tracking-wide">Produzir</span>
-            <div class="flex items-center gap-2">
-              <button type="button" class="js-qty-btn w-8 h-8 rounded-lg bg-white/5 border border-white/10 text-white text-sm" data-step="-1">-</button>
-              <input type="number" inputmode="numeric" min="0" class="w-20 text-center bg-white/5 border border-white/10 rounded-lg text-white" data-variant-input="${variant.key}" value="${currentQty}" max="${maxAllowed}" />
-              <button type="button" class="js-qty-btn w-8 h-8 rounded-lg bg-white/5 border border-white/10 text-white text-sm" data-step="1">+</button>
-            </div>
+          <div class="mt-2 text-[11px] text-gray-400 flex flex-wrap gap-2">
+            <span class="px-2 py-1 rounded-full bg-white/5 border border-white/10">ID ${variant.product?.id}</span>
+            ${categoriaInfo}
+            ${priceInfo}
           </div>`;
-      }
 
-      const input = card.querySelector(`[data-variant-input="${variant.key}"]`);
-      if (input) {
-        input.addEventListener('input', async e => {
-          const value = Number(e.target.value);
-          await applyQuantityChange(variant, value, { focus: { key: variant.key } });
+        container.appendChild(card);
+
+        const input = card.querySelector('input[data-role="stock-input"]');
+        input?.addEventListener('input', e => {
+          const key = e.currentTarget.getAttribute('data-variant-key');
+          if (!key) return;
+          const max = Math.max(0, Math.floor(Number(e.currentTarget.getAttribute('max')) || 0));
+          const value = Math.max(0, Math.min(max, Math.floor(Number(e.currentTarget.value) || 0)));
+          setSelectionQuantity(key, value);
+          replaceModalState.selectionInitialized = true;
+          renderReplaceModalList();
         });
-        input.addEventListener('blur', async e => {
-          const value = Number(e.target.value);
-          await applyQuantityChange(variant, value, { focus: { key: variant.key } });
+
+        card.querySelectorAll('[data-action="fill-max"]').forEach(btn => {
+          btn.addEventListener('click', () => {
+            const key = btn.getAttribute('data-variant-key');
+            if (!key) return;
+            const max = Math.max(0, Math.floor(Number(btn.previousElementSibling?.getAttribute('max')) || 0));
+            setSelectionQuantity(key, max);
+            replaceModalState.selectionInitialized = true;
+            renderReplaceModalList();
+          });
+        });
+
+        card.querySelectorAll('[data-action="clear-selection"]').forEach(btn => {
+          btn.addEventListener('click', () => {
+            const key = btn.getAttribute('data-variant-key');
+            if (!key) return;
+            setSelectionQuantity(key, 0);
+            replaceModalState.selectionInitialized = true;
+            renderReplaceModalList();
+          });
+        });
+      } else {
+        const card = document.createElement('div');
+        card.className = 'bg-surface/40 border border-white/10 rounded-xl px-4 py-4 mb-3 last:mb-0';
+        const produceValue = Math.max(0, Math.floor(Number(replaceModalState.produceQty) || 0));
+        card.innerHTML = `
+          <div class="flex items-start justify-between gap-4">
+            <div>
+              <p class="text-white font-medium">Produzir novas unidades</p>
+              <p class="text-gray-400 text-xs mt-2">Use esta opção para completar o que faltar após utilizar o estoque.</p>
+            </div>
+            <span class="badge-info px-2 py-1 rounded text-xs">${produceValue.toLocaleString('pt-BR')} planejadas</span>
+          </div>
+          <div class="mt-3 flex flex-wrap items-center gap-3 text-xs text-gray-300">
+            <label class="text-gray-300" for="produce-input">Qtd produção</label>
+            <input id="produce-input" type="number" min="0" max="${requiredQty}" step="1" value="${produceValue}" data-role="produce-input" class="w-24 bg-input border border-inputBorder rounded px-2 py-1 text-white text-sm focus:border-primary focus:ring-1 focus:ring-primary/50" />
+            <button type="button" class="btn-neutral px-2 py-1 rounded text-xs" data-action="produce-clear">Zerar</button>
+          </div>`;
+        container.appendChild(card);
+
+        const input = card.querySelector('input[data-role="produce-input"]');
+        input?.addEventListener('input', e => {
+          const max = Math.max(0, Math.floor(Number(e.currentTarget.getAttribute('max')) || 0));
+          const value = Math.max(0, Math.min(max, Math.floor(Number(e.currentTarget.value) || 0)));
+          replaceModalState.produceQty = value;
+          replaceModalState.selectionInitialized = true;
+          renderReplaceModalList();
+        });
+
+        card.querySelectorAll('[data-action="produce-clear"]').forEach(btn => {
+          btn.addEventListener('click', () => {
+            replaceModalState.produceQty = 0;
+            replaceModalState.selectionInitialized = true;
+            renderReplaceModalList();
+          });
         });
       }
-      card.querySelectorAll('.js-qty-btn').forEach(btn => {
-        btn.addEventListener('click', async () => {
-          const step = Number(btn.dataset.step || 0);
-          const nextValue = getSelectionQuantity(variant.key) + step;
-          await applyQuantityChange(variant, nextValue, { focus: { key: variant.key, select: true } });
-        });
-      });
-      container.appendChild(card);
     });
 
-    renderReplaceModalSummary();
+    renderSelectionList();
     updateReplaceModalConfirmButton();
-
-    if (focus?.key) {
-      const targetInput = container.querySelector(`[data-variant-input="${focus.key}"]`);
-      if (targetInput) {
-        targetInput.focus();
-        if (focus.select) targetInput.select();
-        else targetInput.setSelectionRange(targetInput.value.length, targetInput.value.length);
-      }
-    }
   }
 
   function updateReplaceModalConfirmButton() {
     if (!replaceModalRefs || !replaceModalRefs.confirmBtn) return;
     const btn = replaceModalRefs.confirmBtn;
     const row = rows[currentReplaceIndex];
-    const requiredQty = Number(row?.qtd || row?.quantidade || 0) || 0;
-    const plan = buildSelectionPlan(row);
-    const totalSelected = plan.totalSelected;
-    const remaining = Math.max(0, requiredQty - totalSelected);
-    let label = 'Confirmar Substituição';
-    let disabled = true;
+    if (!row) {
+      btn.disabled = true;
+      btn.className = 'btn-primary px-5 py-2 rounded-lg text-white font-medium transition opacity-60 cursor-not-allowed';
+      btn.textContent = 'Confirmar Substituição';
+      return;
+    }
+    const requiredQty = getRequiredQuantity(row);
+    const stockTotal = getTotalSelectedStock();
+    const produceQty = Math.max(0, Math.floor(Number(replaceModalState.produceQty) || 0));
+    const total = stockTotal + produceQty;
+    const diff = requiredQty - total;
 
-    if (requiredQty <= 0) {
-      label = 'Quantidade inválida';
-    } else if (totalSelected === requiredQty) {
-      disabled = false;
-      label = 'Confirmar Substituição';
-    } else if (totalSelected > requiredQty) {
-      label = 'Quantidade excedida';
+    let disabled = false;
+    let label = 'Confirmar Substituição';
+
+    if (requiredQty > 0) {
+      if (diff > 0) {
+        disabled = true;
+        label = `Faltam ${diff.toLocaleString('pt-BR')} un`;
+      } else if (diff < 0) {
+        disabled = true;
+        label = `Excedente ${Math.abs(diff).toLocaleString('pt-BR')} un`;
+      } else if (stockTotal === 0 && produceQty > 0) {
+        label = `Produzir ${produceQty.toLocaleString('pt-BR')} un`;
+      }
     } else {
-      label = `Selecione mais ${remaining.toLocaleString('pt-BR')} un`;
+      if (total <= 0) {
+        disabled = true;
+        label = 'Selecione ao menos 1 un';
+      }
     }
 
     btn.disabled = disabled;
@@ -894,25 +1035,33 @@
     if (currentReplaceIndex < 0) return;
     const row = rows[currentReplaceIndex];
     if (!row) return;
-    const plan = buildSelectionPlan(row);
-    if (plan.requiredQty <= 0 || plan.totalSelected !== plan.requiredQty) return;
+    const requiredQty = getRequiredQuantity(row);
+    const stockEntries = getStockSelectionEntries();
+    const produceQty = Math.max(0, Math.floor(Number(replaceModalState.produceQty) || 0));
+    const total = stockEntries.reduce((sum, entry) => sum + entry.qty, 0) + produceQty;
+    if (requiredQty > 0 && total !== requiredQty) return;
+    if (requiredQty === 0 && total <= 0) return;
 
-    row.replacementPlan = plan;
-    row.approved = false;
-    row.forceProduceAll = plan.produceQty >= plan.requiredQty && plan.stock.length === 0;
-
-    if (plan.stock.length) {
-      const primary = plan.stock[0];
-      const variant = getVariantByKey(primary.variantKey);
-      if (variant?.product) {
-        const produto = variant.product;
-        if (row._origId == null) row._origId = row.produto_id;
-        row.produto_id = Number(produto.id);
-        row.nome = produto.nome;
-        row.preco_venda = Number(produto.preco_venda || 0);
-        row.codigo = produto.codigo;
-      }
+    const orderedStock = stockEntries.slice().sort((a, b) => b.qty - a.qty);
+    const primary = orderedStock[0] || null;
+    if (primary && primary.variant?.product) {
+      const produto = primary.variant.product;
+      if (row._origId == null) row._origId = row.produto_id;
+      row.produto_id = Number(produto.id);
+      row.nome = produto.nome;
+      row.preco_venda = Number(produto.preco_venda || 0);
+      row.codigo = produto.codigo;
     }
+
+    row.forceProduceAll = !orderedStock.length && produceQty > 0;
+    row.approved = false;
+    row.replacementSelection = {
+      stocks: orderedStock.map(entry => ({
+        productId: Number(entry.variant.product?.id),
+        quantity: entry.qty
+      })),
+      produceQty
+    };
 
     closeReplaceModal();
     recomputeStocks();
@@ -959,7 +1108,7 @@ async function computeInsumosAndRender(){
 
     for (const r of rows) {
       const prod = byId.get(String(r.produto_id));
-      const codigo = prod?.codigo; r.status=''; r.faltantes=[]; r.produzir_total=0; r.produzir_parcial=0; r.popover={variants:[]}; r.pronta=0; r.em_estoque=0; r.a_produzir=0;
+      const codigo = prod?.codigo; r.status=''; r.faltantes=[]; r.produzir_total=0; r.produzir_parcial=0; r.popover={variants:[]}; r.pronta=0; r.em_estoque=0; r.a_produzir=0; r.codigo = codigo;
       if (!codigo) continue;
 
       let detalhes = {};
