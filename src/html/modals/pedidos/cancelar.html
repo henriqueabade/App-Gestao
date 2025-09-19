@@ -1,5 +1,5 @@
 <div id="cancelarPedidoOverlay" class="fixed inset-x-0 bottom-0 top-14 z-[1003] bg-black/50 flex items-start justify-center p-4 overflow-y-auto">
-  <div role="dialog" aria-modal="true" tabindex="0" class="w-full max-w-6xl max-h-[95vh] glass-surface backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade slide-in overflow-hidden flex flex-col">
+  <div role="dialog" aria-modal="true" tabindex="0" class="w-full max-w-6xl h-[calc(100vh-3.5rem)] max-h-[calc(100vh-3.5rem)] glass-surface backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade slide-in overflow-hidden flex flex-col">
     <header class="flex items-center justify-between px-8 py-6 border-b border-white/10 flex-shrink-0">
       <div>
         <h2 id="cancelarPedidoTitulo" class="text-2xl font-bold text-white mb-1">Cancelar Pedido</h2>
@@ -34,7 +34,7 @@
             <h3 class="text-lg font-semibold text-white">Peças e Insumos do Pedido</h3>
             <span id="cancelarPedidoStatus" class="badge-warning px-3 py-1 rounded-full text-xs font-medium hidden"></span>
           </header>
-          <div class="overflow-x-auto">
+          <div class="overflow-x-auto max-h-[45vh] overflow-y-auto modal-scroll">
             <table class="w-full text-sm">
               <thead>
                 <tr class="border-b border-white/10 text-gray-300 text-xs uppercase">
