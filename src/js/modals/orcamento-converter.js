@@ -4,7 +4,19 @@
   if (!overlay) return;
   const close = () => Modal.close(overlayId);
   overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
-  document.addEventListener('keydown', function esc(e){ if(e.key === 'Escape'){ close(); document.removeEventListener('keydown', esc); } });
+
+  let replaceModalRefs = null;
+  const replaceModalState = {
+    selectedProductId: null,
+    searchTerm: ''
+  };
+  document.addEventListener('keydown', function esc(e){
+    if (e.key === 'Escape') {
+      if (replaceModalRefs && !replaceModalRefs.overlay.classList.contains('hidden')) return;
+      close();
+      document.removeEventListener('keydown', esc);
+    }
+  });
 
   const ctx = window.quoteConversionContext || {};
   const subtitulo = document.getElementById('converterOrcamentoSubtitulo');
@@ -19,18 +31,13 @@
   const chipEstoque = document.getElementById('chipEmEstoque');
   const chipProduzir = document.getElementById('chipAProduzir');
   const pecasTotal = document.getElementById('converterPecasTotal');
-  const allowNegativeToggle = document.getElementById('allowNegativeToggle');
   const onlyMissingToggle = document.getElementById('onlyMissingToggle');
   const insumosReloadBtn = document.querySelector('button[data-action="insumos-reload"]');
   const insumosTituloPeca = document.getElementById('insumosTituloPeca');
 
-  const drawer = document.getElementById('converterReplaceDrawer');
-  const replacingName = document.getElementById('converterReplacingName');
-  const searchProduto = document.getElementById('converterSearchProduto');
-  const replaceList = document.getElementById('converterReplaceList');
 
   let listaProdutos = [];
-  let rows = Array.isArray(ctx.items) ? ctx.items.map(p => ({...p})) : [];
+  let rows = Array.isArray(ctx.items) ? ctx.items.map(p => ({ ...p, approved: !!p.approved })) : [];
   const state = {
     allowNegativeStock: false,
     insumosView: { filtroPecaId: null, mostrarSomenteFaltantes: true }
@@ -75,12 +82,20 @@
       const tr = document.createElement('tr');
       tr.className = 'border-b border-white/10';
       tr.dataset.index = String(idx);
-      let statusHtml = '<span class="text-green-400" title="OK">&#10003;</span>';
-      if (r.a_produzir > 0 && r.status === 'atencao') statusHtml = '<span class="text-orange-300" title="Atenção">&#9888;</span>';
+      const isAttention = r.a_produzir > 0 && r.status === 'atencao';
+      const isApproved = !!r.approved;
+      const statusIcon = isAttention ? '&#9888;' : '&#10003;';
+      const statusTitle = isAttention ? 'Atenção' : 'OK';
+      const statusColor = isAttention
+        ? (isApproved ? 'text-green-400' : 'text-orange-300')
+        : (isApproved ? 'text-green-400' : 'text-blue-400');
+      const statusHtml = `<span class="${statusColor}" title="${statusTitle}">${statusIcon}</span>`;
+      const actionClass = isApproved ? 'btn-danger' : 'btn-success';
+      const actionLabel = isApproved ? 'Desaprovar' : 'Aprovar';
 
       const infoSpan = (Array.isArray(r.popover?.variants) && r.popover.variants.length > 0) ? `
         <span class="js-piece-info inline-flex items-center justify-center w-6 h-6 rounded-full bg-white/10 hover:bg-white/20 focus:outline-none focus:ring-2 focus:ring-primary/50 transition-colors ml-1" aria-haspopup="dialog" aria-expanded="false" data-variants='${JSON.stringify(r.popover.variants)}' data-page="0">
-          <svg class="w-3 h-3 text-gray-300" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10a8 8 0 1 1-16 0 8 8 0 0116 0zm-7-4a 1 1 0 11-2 0 1 1 0 012 0zM9 9a 1 1 0 000 2v3a 1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/></svg>
+          <svg class="w-3 h-3 text-gray-300" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10a8 8 0 1 1-16 0 8 8 0 0116 0zm-7-4a 1 1 0 11-2 0 1 1 0 012 0zM9 9a 1 1 0 000 2v3a 1 1 0 001 1h1a 1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/></svg>
         </span>` : '';
 
       tr.innerHTML = `
@@ -95,38 +110,31 @@
           <div class="flex justify-center gap-2">
             <button class="btn-secondary px-2 py-1 rounded text-xs" data-action="view-insumos" data-peca-id="${r.produto_id}">Visualizar</button>
             <button class="btn-warning px-2 py-1 rounded text-xs" data-action="replace">Substituir</button>
-            <button class="btn-danger px-2 py-1 rounded text-xs" data-action="delete">Excluir</button>
+            <button class="${actionClass} px-2 py-1 rounded text-xs" data-action="toggle-approval">${actionLabel}</button>
           </div>
         </td>`;
       pecasBody.appendChild(tr);
     });
 
-    pecasBody.querySelectorAll('button[data-action="delete"]').forEach(btn => {
+    pecasBody.querySelectorAll('button[data-action="toggle-approval"]').forEach(btn => {
       btn.addEventListener('click', e => {
         const tr = e.currentTarget.closest('tr');
-        const i = Number(tr?.dataset.index);
-        if (!isNaN(i)) {
-          const toDel = rows[i];
-          const ok = confirm(`Excluir "${toDel?.nome}" do orçamento?`);
-          if (ok) {
-            rows.splice(i, 1);
-            recomputeStocks();
-            renderRows();
-            validate();
-            computeInsumosAndRender();
-          }
-        }
+        const index = Number(tr?.dataset.index);
+        if (isNaN(index)) return;
+        const row = rows[index];
+        if (!row) return;
+        row.approved = !row.approved;
+        renderRows();
+        validate();
       });
     });
 
     pecasBody.querySelectorAll('button[data-action="replace"]').forEach(btn => {
-      btn.addEventListener('click', e => {
+      btn.addEventListener('click', async e => {
         const tr = e.currentTarget.closest('tr');
-        currentReplaceIndex = Number(tr?.dataset.index);
-        if (isNaN(currentReplaceIndex)) return;
-        replacingName.textContent = rows[currentReplaceIndex]?.nome || '';
-        openDrawer();
-        renderReplaceList();
+        const index = Number(tr?.dataset.index);
+        if (isNaN(index)) return;
+        await openReplaceModal(index);
       });
     });
 
@@ -141,7 +149,6 @@
       });
     });
 
-    // Inicializa popovers após render
     initPiecePopover?.('.js-piece-info');
   }
 
@@ -164,37 +171,228 @@
     }
   }
 
-  function openDrawer() { drawer.classList.remove('hidden'); }
-  function closeDrawer() { drawer.classList.add('hidden'); currentReplaceIndex = -1; searchProduto.value = ''; }
-
-  function renderReplaceList() {
-    const term = (searchProduto.value || '').toLowerCase();
-    const filtered = listaProdutos.filter(p => !term || (String(p.codigo||'').toLowerCase().includes(term) || String(p.nome||'').toLowerCase().includes(term)));
-    replaceList.innerHTML = '';
-    filtered.slice(0, 50).forEach(p => {
-      const card = document.createElement('div');
-      card.className = 'bg-surface/40 rounded-lg p-4 border border-white/10 hover:border-primary/30 transition';
-      const estoque = Number(p.quantidade_total || 0);
-      card.innerHTML = `
-        <div class="flex justify-between items-start mb-1">
-          <h4 class="font-medium text-white">${p.nome}</h4>
-          <span class="${estoque > 0 ? 'badge-success' : 'badge-warning'} px-2 py-1 rounded text-xs">${estoque} em estoque</span>
+  function ensureReplaceModal() {
+    if (replaceModalRefs) return replaceModalRefs;
+    const overlay = document.createElement('div');
+    overlay.id = 'converterReplaceModal';
+    overlay.className = 'fixed inset-0 z-[12000] flex items-center justify-center px-4 py-6 bg-black/60 hidden';
+    overlay.innerHTML = `
+      <div data-role="modal" class="w-full max-w-4xl max-h-[90vh] bg-surface/80 backdrop-blur-xl border border-white/20 ring-1 ring-white/10 rounded-2xl shadow-2xl/60 flex flex-col overflow-hidden">
+        <header class="flex items-center justify-between px-6 py-4 border-b border-white/10">
+          <div>
+            <h3 class="text-xl font-bold text-white">Substituir Peça</h3>
+            <p data-field="modal-subtitle" class="text-gray-300 text-sm"></p>
+          </div>
+          <button type="button" data-action="close" class="btn-neutral px-3 py-2 rounded-lg text-white">X</button>
+        </header>
+        <div class="flex-1 overflow-y-auto modal-scroll">
+          <div class="p-6 space-y-6">
+            <div class="bg-surface/40 rounded-lg border border-white/10 p-4">
+              <h4 class="font-medium text-white mb-3">Peça Atual</h4>
+              <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div>
+                  <p class="text-gray-400 text-xs mb-1">Nome</p>
+                  <p class="text-white font-medium" data-field="piece-name"></p>
+                </div>
+                <div>
+                  <p class="text-gray-400 text-xs mb-1">Qtd Orçada</p>
+                  <p class="text-white font-medium" data-field="piece-qty"></p>
+                </div>
+                <div>
+                  <p class="text-gray-400 text-xs mb-1">Status</p>
+                  <span class="badge-warning px-2 py-1 rounded text-xs" data-field="piece-status"></span>
+                </div>
+                <div>
+                  <p class="text-gray-400 text-xs mb-1">Etapa</p>
+                  <span class="badge-info px-2 py-1 rounded text-xs" data-field="piece-stage"></span>
+                </div>
+              </div>
+              <p class="text-gray-400 text-sm mt-4" data-field="piece-details"></p>
+            </div>
+            <div class="bg-surface/40 rounded-lg border border-white/10 p-4">
+              <h4 class="font-medium text-white mb-3">Buscar alternativa</h4>
+              <input type="text" data-role="search" placeholder="Buscar por nome ou código" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-2 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+            </div>
+            <div class="bg-surface/40 rounded-lg border border-white/10 p-4">
+              <h4 class="font-medium text-white mb-4">Peças compatíveis</h4>
+              <div data-role="results" class="space-y-3 max-h-[320px] overflow-y-auto pr-1 modal-scroll"></div>
+            </div>
+          </div>
         </div>
-        <p class="text-gray-400 text-xs mb-3">${p.codigo || ''}</p>
-        <button class="btn-primary px-3 py-1 rounded text-sm" data-id="${p.id}" data-nome="${p.nome}" data-preco="${Number(p.preco_venda||0)}">Selecionar</button>`;
-      replaceList.appendChild(card);
+        <footer class="flex justify-end items-center gap-3 px-6 py-4 border-t border-white/10">
+          <button type="button" data-action="close" class="btn-neutral px-5 py-2 rounded-lg text-white font-medium">Cancelar</button>
+          <button type="button" data-action="confirm" class="btn-primary px-5 py-2 rounded-lg text-white font-medium" disabled>Confirmar Substituição</button>
+        </footer>
+      </div>`;
+    document.body.appendChild(overlay);
+    const modal = overlay.querySelector('[data-role="modal"]');
+    modal?.setAttribute('tabindex', '-1');
+    replaceModalRefs = {
+      overlay,
+      modal,
+      confirmBtn: overlay.querySelector('[data-action="confirm"]'),
+      search: overlay.querySelector('[data-role="search"]'),
+      results: overlay.querySelector('[data-role="results"]')
+    };
+    overlay.querySelectorAll('[data-action="close"]').forEach(btn => btn.addEventListener('click', closeReplaceModal));
+    replaceModalRefs.confirmBtn?.addEventListener('click', handleReplaceModalConfirm);
+    replaceModalRefs.search?.addEventListener('input', e => {
+      replaceModalState.searchTerm = e.target.value || '';
+      renderReplaceModalList();
     });
-    replaceList.querySelectorAll('button[data-id]').forEach(btn => {
-      btn.addEventListener('click', e => {
-        const id = Number(e.currentTarget.getAttribute('data-id'));
-        const nome = e.currentTarget.getAttribute('data-nome') || '';
-        const preco = Number(e.currentTarget.getAttribute('data-preco') || '0');
-        if (isNaN(currentReplaceIndex) || currentReplaceIndex < 0) return;
-        const r = rows[currentReplaceIndex];
-        r.produto_id = id; r.nome = nome; r.preco_venda = preco;
-        recomputeStocks(); renderRows(); validate(); computeInsumosAndRender(); closeDrawer();
+    document.addEventListener('keydown', handleReplaceModalKey);
+    return replaceModalRefs;
+  }
+
+  function setReplaceModalField(field, value) {
+    if (!replaceModalRefs) return;
+    replaceModalRefs.overlay.querySelectorAll(`[data-field="${field}"]`).forEach(el => {
+      el.textContent = value ?? '';
+    });
+  }
+
+  async function openReplaceModal(index) {
+    if (isNaN(index) || index < 0) return;
+    await (listaProdutos.length ? Promise.resolve() : carregarProdutos());
+    currentReplaceIndex = index;
+    const refs = ensureReplaceModal();
+    const row = rows[index];
+    if (!row) return;
+    replaceModalState.selectedProductId = null;
+    replaceModalState.searchTerm = '';
+    if (refs.search) refs.search.value = '';
+    renderReplaceModalSummary();
+    renderReplaceModalList();
+    updateReplaceModalConfirmButton();
+    refs.overlay.classList.remove('hidden');
+    requestAnimationFrame(() => { refs.modal?.focus(); });
+  }
+
+  function closeReplaceModal() {
+    if (!replaceModalRefs) return;
+    replaceModalRefs.overlay.classList.add('hidden');
+    replaceModalState.selectedProductId = null;
+    replaceModalState.searchTerm = '';
+    if (replaceModalRefs.search) replaceModalRefs.search.value = '';
+    currentReplaceIndex = -1;
+    updateReplaceModalConfirmButton();
+  }
+
+  function handleReplaceModalKey(e) {
+    if (e.key === 'Escape' && replaceModalRefs && !replaceModalRefs.overlay.classList.contains('hidden')) {
+      closeReplaceModal();
+    }
+  }
+
+  function renderReplaceModalSummary() {
+    if (!replaceModalRefs) return;
+    const row = rows[currentReplaceIndex];
+    if (!row) return;
+    const toNumber = value => {
+      const num = Number(value);
+      return Number.isFinite(num) ? num : 0;
+    };
+    const formatNumber = value => toNumber(value).toLocaleString('pt-BR');
+    setReplaceModalField('piece-name', row.nome || 'Peça sem nome');
+    const qtd = toNumber(row.qtd || row.quantidade || 0);
+    setReplaceModalField('piece-qty', `${formatNumber(qtd)} unidades`);
+    const estoque = toNumber(row.em_estoque);
+    const produzir = toNumber(row.a_produzir);
+    setReplaceModalField('piece-status', `Estoque: ${formatNumber(estoque)} | Produzir: ${formatNumber(produzir)}`);
+    const etapa = row.faltantes?.[0]?.etapa || row.popover?.variants?.[0]?.currentProcess?.name || '-';
+    setReplaceModalField('piece-stage', etapa || '-');
+    setReplaceModalField('piece-details', `${formatNumber(qtd)} unidades - Etapa: ${etapa || '-'}`);
+    const subtitle = ctx.numero ? `Orçamento ${ctx.numero}` : (ctx.cliente || '');
+    setReplaceModalField('modal-subtitle', subtitle);
+  }
+
+  function renderReplaceModalList() {
+    if (!replaceModalRefs) return;
+    const container = replaceModalRefs.results;
+    if (!container) return;
+    const row = rows[currentReplaceIndex];
+    if (!row) {
+      container.innerHTML = '<p class="text-sm text-gray-400">Nenhuma peça selecionada.</p>';
+      updateReplaceModalConfirmButton();
+      return;
+    }
+    const term = (replaceModalState.searchTerm || '').trim().toLowerCase();
+    let filtered = listaProdutos.filter(p => Number(p.id) !== Number(row.produto_id));
+    if (term) {
+      filtered = filtered.filter(p => {
+        const nome = String(p.nome || '').toLowerCase();
+        const codigo = String(p.codigo || '').toLowerCase();
+        return nome.includes(term) || codigo.includes(term);
       });
+    }
+    filtered = filtered.slice(0, 50);
+    if (!filtered.length) {
+      container.innerHTML = '<p class="text-sm text-gray-400">Nenhuma peça encontrada para os filtros atuais.</p>';
+      updateReplaceModalConfirmButton();
+      return;
+    }
+    container.innerHTML = '';
+    const selectedId = Number(replaceModalState.selectedProductId || 0);
+    filtered.forEach(prod => {
+      const estoque = Number(prod.quantidade_total || prod.estoque || 0);
+      const preco = Number(prod.preco_venda || 0);
+      const precoInfo = preco
+        ? `<span class="px-2 py-1 rounded-full bg-white/5 border border-white/10">R$ ${preco.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>`
+        : '';
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.dataset.productId = String(prod.id);
+      button.className = 'w-full text-left bg-surface/40 border border-white/10 rounded-xl px-4 py-3 transition hover:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/40';
+      if (Number(prod.id) === selectedId) {
+        button.classList.add('border-primary', 'ring-1', 'ring-primary/50');
+      }
+      button.innerHTML = `
+        <div class="flex items-start justify-between gap-4">
+          <div>
+            <p class="text-white font-medium">${prod.nome || 'Peça sem nome'}</p>
+            <p class="text-gray-400 text-xs">${prod.codigo || ''}</p>
+          </div>
+          <span class="${estoque > 0 ? 'badge-success' : 'badge-danger'} px-2 py-1 rounded text-xs">${estoque.toLocaleString('pt-BR')} em estoque</span>
+        </div>
+        <div class="mt-3 flex flex-wrap gap-2 text-xs text-gray-300">
+          <span class="px-2 py-1 rounded-full bg-white/5 border border-white/10">ID ${prod.id}</span>
+          ${precoInfo}
+        </div>`;
+      button.addEventListener('click', () => {
+        replaceModalState.selectedProductId = Number(prod.id);
+        updateReplaceModalConfirmButton();
+        renderReplaceModalList();
+      });
+      container.appendChild(button);
     });
+    updateReplaceModalConfirmButton();
+  }
+
+  function updateReplaceModalConfirmButton() {
+    if (!replaceModalRefs || !replaceModalRefs.confirmBtn) return;
+    const btn = replaceModalRefs.confirmBtn;
+    btn.disabled = !replaceModalState.selectedProductId;
+    btn.className = 'btn-primary px-5 py-2 rounded-lg text-white font-medium transition';
+    btn.textContent = 'Confirmar Substituição';
+  }
+
+  function handleReplaceModalConfirm() {
+    if (currentReplaceIndex < 0) return;
+    const row = rows[currentReplaceIndex];
+    if (!row) return;
+    const replacementId = Number(replaceModalState.selectedProductId || 0);
+    if (!replacementId) return;
+    const produto = listaProdutos.find(p => Number(p.id) === replacementId);
+    if (!produto) return;
+    row.produto_id = Number(produto.id);
+    row.nome = produto.nome;
+    row.preco_venda = Number(produto.preco_venda || 0);
+    row.approved = false;
+    closeReplaceModal();
+    recomputeStocks();
+    renderRows();
+    validate();
+    computeInsumosAndRender();
   }
 
   // Botões básicos
@@ -446,7 +644,7 @@ async function computeInsumosAndRender(){
     }
 
     if (anyNegative && !state.allowNegativeStock) {
-      warningText.textContent = 'Há insumos com saldo negativo. Permita negativo ou ajuste peças/insumos.';
+      warningText.textContent = 'Há insumos com saldo negativo. Ajuste peças/insumos.';
       warning.classList.remove('hidden');
       btnConfirmar.disabled = true;
       btnConfirmar.classList.add('opacity-60', 'cursor-not-allowed');
@@ -461,11 +659,14 @@ async function computeInsumosAndRender(){
       rows = Array.from(tbody?.children || []).map(tr => ({
         produto_id: Number(tr.dataset.id),
         nome: tr.children[0]?.textContent?.trim() || '',
-        qtd: Number(tr.children[1]?.textContent?.trim() || '0')
+        qtd: Number(tr.children[1]?.textContent?.trim() || '0'),
+        approved: false
       })).filter(x => x.produto_id && x.qtd);
     }
-    rows.forEach(r => { r._origId = r.produto_id; });
-    state.allowNegativeStock = !!allowNegativeToggle?.checked;
+    rows.forEach(r => {
+      r._origId = r.produto_id;
+      r.approved = !!r.approved;
+    });
     if (insumosTituloPeca) insumosTituloPeca.textContent = 'Totais';
     recomputeStocks(); renderRows(); validate(); await computeInsumosAndRender();
   })();
@@ -481,11 +682,6 @@ async function computeInsumosAndRender(){
     state.insumosView.filtroPecaId = null;
     if (onlyMissingToggle) { onlyMissingToggle.checked = false; state.insumosView.mostrarSomenteFaltantes = false; }
     if (insumosTituloPeca) insumosTituloPeca.textContent = 'Totais';
-    insumosBody.innerHTML = '<tr><td colspan="7" class="py-6 text-center text-gray-300"><i class="fas fa-sync-alt rotating mr-2"></i>Recarregando...</td></tr>';
-    setTimeout(() => { computeInsumosAndRender(); }, 1000);
-  });
-  allowNegativeToggle?.addEventListener('change', () => {
-    state.allowNegativeStock = !!allowNegativeToggle.checked;
     insumosBody.innerHTML = '<tr><td colspan="7" class="py-6 text-center text-gray-300"><i class="fas fa-sync-alt rotating mr-2"></i>Recarregando...</td></tr>';
     setTimeout(() => { computeInsumosAndRender(); }, 1000);
   });
@@ -505,6 +701,7 @@ async function computeInsumosAndRender(){
     document.addEventListener('click', e => { if (!e.target.closest('.js-piece-info') && !e.target.closest('#piece-popover')) hidePopover(); });
     document.addEventListener('keydown', e => { if (e.key==='Escape') hidePopover(); });
   }
+
   function createPopoverContainer(){
     if (document.getElementById('piece-popover')) return;
     const p=document.createElement('div');
