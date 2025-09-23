@@ -308,6 +308,35 @@
       const actionClass = isApproved ? 'btn-danger' : 'btn-success';
       const actionLabel = isApproved ? 'Desaprovar' : 'Aprovar';
 
+      const viewButtonHtml = `
+        <button class="btn-secondary w-8 h-8 flex items-center justify-center rounded text-white focus:outline-none focus:ring-2 focus:ring-white/40"
+          data-action="view-insumos" data-peca-id="${r.produto_id}" title="Visualizar" aria-label="Visualizar">
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M2.036 12.322a1.012 1.012 0 010-.644C3.423 7.51 7.36 4.5 12 4.5c4.64 0 8.577 3.01 9.964 7.178.07.207.07.437 0 .644C20.577 16.49 16.64 19.5 12 19.5c-4.64 0-8.577-3.01-9.964-7.178z"></path>
+            <path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+          </svg>
+        </button>`;
+
+      const replaceButtonHtml = `
+        <button class="btn-warning w-8 h-8 flex items-center justify-center rounded text-white focus:outline-none focus:ring-2 focus:ring-white/40"
+          data-action="replace" title="Substituir" aria-label="Substituir">
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4.5 7.5A7.5 7.5 0 0112 4.5a7.5 7.5 0 017.5 7.5"></path>
+            <path d="M19.5 12v4.5H15"></path>
+            <path d="M19.5 16.5A7.5 7.5 0 0112 19.5a7.5 7.5 0 01-7.5-7.5"></path>
+            <path d="M4.5 12V7.5H9"></path>
+          </svg>
+        </button>`;
+
+      const actionIcon = isApproved
+        ? `<svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 18L18 6"></path><path d="M6 6l12 12"></path></svg>`
+        : `<svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 12.75l6 6 9-13.5"></path></svg>`;
+      const toggleButtonHtml = `
+        <button class="${actionClass} w-8 h-8 flex items-center justify-center rounded ${isApproved ? 'text-white' : 'text-black'} focus:outline-none focus:ring-2 focus:ring-white/40"
+          data-action="toggle-approval" title="${actionLabel}" aria-label="${actionLabel}">
+          ${actionIcon}
+        </button>`;
+
       const infoSpan = (Array.isArray(r.popover?.variants) && r.popover.variants.length > 0) ? `
         <span class="js-piece-info inline-flex items-center justify-center w-6 h-6 rounded-full bg-white/10 hover:bg-white/20 focus:outline-none focus:ring-2 focus:ring-primary/50 transition-colors ml-1" aria-haspopup="dialog" aria-expanded="false" data-variants='${JSON.stringify(r.popover.variants)}' data-page="0">
           <svg class="w-3 h-3 text-gray-300" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10a8 8 0 1 1-16 0 8 8 0 0116 0zm-7-4a 1 1 0 11-2 0 1 1 0 012 0zM9 9a 1 1 0 000 2v3a 1 1 0 001 1h1a 1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/></svg>
@@ -322,10 +351,10 @@
         <td class="py-3 px-2 text-center text-white">${r.produzir_parcial ?? 0} ${infoSpan}</td>
         <td class="py-3 px-2 text-center">${statusHtml}</td>
         <td class="py-3 px-2 text-center">
-          <div class="flex justify-center gap-2">
-            <button class="btn-secondary px-2 py-1 rounded text-xs" data-action="view-insumos" data-peca-id="${r.produto_id}">Visualizar</button>
-            <button class="btn-warning px-2 py-1 rounded text-xs" data-action="replace">Substituir</button>
-            <button class="${actionClass} px-2 py-1 rounded text-xs" data-action="toggle-approval">${actionLabel}</button>
+          <div class="flex justify-center gap-1">
+            ${viewButtonHtml}
+            ${replaceButtonHtml}
+            ${toggleButtonHtml}
           </div>
         </td>`;
       pecasBody.appendChild(tr);

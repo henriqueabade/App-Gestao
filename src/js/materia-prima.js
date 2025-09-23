@@ -322,16 +322,16 @@ function renderMateriais(listaMateriais) {
 
         const preco = Number(item.preco_unitario || 0);
         tr.innerHTML = `
-            <td class="px-6 py-4 whitespace-nowrap relative">
+            <td class="px-6 py-4 whitespace-nowrap relative text-base text-white">
                 <div class="flex items-center">
-                    <span class="text-sm text-white">${item.nome}</span>
+                    <span class="font-medium">${item.nome}</span>
                     <i class="info-icon ml-2" data-id="${item.id}"></i>
                 </div>
             </td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-white">${quantidadeValor}</td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-violet)">${item.unidade || ''}</td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-white">R$ ${preco.toFixed(2).replace('.', ',')}</td>
-            <td class="px-6 py-4 whitespace-nowrap text-center">${acoes}</td>`;
+            <td class="px-6 py-4 whitespace-nowrap text-base text-white">${quantidadeValor}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-base" style="color: var(--color-violet)">${item.unidade || ''}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-base text-white">R$ ${preco.toFixed(2).replace('.', ',')}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-base text-center">${acoes}</td>`;
         tbody.appendChild(tr);
         const editBtn = tr.querySelector('.fa-edit');
         const delBtn = tr.querySelector('.fa-trash');
