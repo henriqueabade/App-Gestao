@@ -16,6 +16,7 @@
   const pendingBanner = document.getElementById('cancelarPedidoPendencias');
   const pendingText = document.getElementById('cancelarPedidoPendenciasTexto');
   const confirmBtn = document.getElementById('cancelarPedidoConfirmar');
+  const resetDestinationsBtn = document.getElementById('cancelarPedidoResetDestinos');
   const itensBody = document.getElementById('cancelarPedidoItens');
   const itensEmpty = document.getElementById('cancelarPedidoItensVazio');
   const statusTag = document.getElementById('cancelarPedidoStatus');
@@ -31,7 +32,7 @@
   const drawerEmpty = document.getElementById('cancelarPedidoDrawerVazio');
   const drawerItem = document.getElementById('cancelarPedidoDrawerItem');
 
-  const actionState = new Map();
+  const destinationState = new Map();
   const itemInfo = new Map();
   const itemKeys = [];
   let currentReallocationKey = null;
@@ -239,7 +240,8 @@
     daysValue: typeof order?.__daysInProduction === 'number' ? order.__daysInProduction : null
   });
 
-  const togglePendingBanner = message => {
+
+  function togglePendingBanner(message) {
     if (!pendingBanner || !pendingText) return;
     if (message) {
       pendingBanner.classList.remove('hidden');
@@ -248,31 +250,325 @@
       pendingBanner.classList.add('hidden');
       pendingText.textContent = '';
     }
+  }
+
+  const toNumber = value => {
+    const num = Number(value ?? 0);
+    return Number.isFinite(num) ? num : 0;
   };
 
-  const updateValidation = () => {
-    const total = itemKeys.length;
-    const assigned = itemKeys.filter(key => actionState.get(key)?.action).length;
-    const pending = total - assigned;
-    const reallocatePending = itemKeys.filter(key => {
-      const state = actionState.get(key);
-      return state?.action === 'reallocate' && !state.orderId;
-    }).length;
+  const normalizeQuantity = value => {
+    const num = Number(value ?? 0);
+    if (!Number.isFinite(num) || num < 0) return 0;
+    return Number(num.toFixed(4));
+  };
+
+  const formatNumber = value => toNumber(value).toLocaleString('pt-BR', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  });
+
+  const formatUnitsLabel = value => {
+    const amount = normalizeQuantity(value);
+    const label = Math.abs(amount - 1) < 1e-6 ? 'unidade' : 'unidades';
+    return `${formatNumber(amount)} ${label}`;
+  };
+
+  function ensureDestinationState(key, totalQuantity = 0) {
+    if (!destinationState.has(key)) {
+      destinationState.set(key, {
+        total: normalizeQuantity(totalQuantity),
+        stock: 0,
+        discard: 0,
+        reallocations: [],
+        remaining: normalizeQuantity(totalQuantity)
+      });
+    }
+    const state = destinationState.get(key);
+    if (totalQuantity && !state.total) {
+      state.total = normalizeQuantity(totalQuantity);
+      state.remaining = normalizeQuantity(totalQuantity);
+    }
+    if (!Array.isArray(state.reallocations)) state.reallocations = [];
+    return state;
+  }
+
+  function sumReallocations(state) {
+    return (state.reallocations || []).reduce(
+      (sum, entry) => sum + normalizeQuantity(entry.quantity),
+      0
+    );
+  }
+
+  function recalcRemaining(state) {
+    const assigned = normalizeQuantity(state.stock) + normalizeQuantity(state.discard) + sumReallocations(state);
+    const remaining = normalizeQuantity(Math.max(0, toNumber(state.total) - assigned));
+    state.remaining = remaining;
+    return remaining;
+  }
+
+  function updateDrawerHeader(key) {
+    if (!drawerItem) return;
+    const info = itemInfo.get(key);
+    const state = destinationState.get(key);
+    if (!info || !state) {
+      drawerItem.textContent = '';
+      return;
+    }
+    drawerItem.textContent = `${info.name} • Restante: ${formatUnitsLabel(state.remaining)}`;
+  }
+
+  function updateAssignmentsUI(key) {
+    const info = itemInfo.get(key);
+    const state = destinationState.get(key);
+    if (!info?.assignmentsContainer || !state) return;
+
+    const container = info.assignmentsContainer;
+    container.innerHTML = '';
+
+    const chips = [];
+    if (normalizeQuantity(state.stock) > 0) {
+      chips.push({ action: 'stock', label: '📦 Retornar ao estoque', quantity: state.stock });
+    }
+    if (normalizeQuantity(state.discard) > 0) {
+      chips.push({ action: 'discard', label: '🗑️ Descartar', quantity: state.discard });
+    }
+    (state.reallocations || [])
+      .filter(entry => normalizeQuantity(entry.quantity) > 0)
+      .forEach(entry => {
+        chips.push({
+          action: 'reallocate',
+          orderId: entry.orderId,
+          label: `🔄 ${formatOrderLabel(entry.orderId)}`,
+          quantity: entry.quantity
+        });
+      });
+
+    if (!chips.length) {
+      const placeholder = document.createElement('p');
+      placeholder.className = 'text-[11px] text-gray-400 text-center';
+      placeholder.textContent = 'Destinação pendente';
+      container.appendChild(placeholder);
+      return;
+    }
+
+    chips.forEach(chip => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'w-full text-left bg-white/5 border border-white/10 px-3 py-2 rounded-lg text-xs text-gray-200 hover:border-primary/40 transition';
+      button.innerHTML = `
+        <div class="flex items-center justify-between gap-2">
+          <span>${chip.label}</span>
+          <span class="font-semibold text-white">${formatUnitsLabel(chip.quantity)}</span>
+        </div>
+      `;
+      if (chip.action === 'stock' || chip.action === 'discard') {
+        button.title = 'Clique para ajustar a quantidade.';
+        button.addEventListener('click', () => handleSimpleAction(key, chip.action));
+      } else if (chip.action === 'reallocate' && chip.orderId) {
+        button.title = 'Clique para ajustar a realocação.';
+        button.addEventListener('click', () => openReallocationQuantity(key, chip.orderId));
+      }
+      container.appendChild(button);
+    });
+  }
+
+  function updateItemDestinationsUI(key) {
+    const info = itemInfo.get(key);
+    if (!info) return;
+    const state = ensureDestinationState(key, info.quantity);
+    state.reallocations = (state.reallocations || []).filter(entry => normalizeQuantity(entry.quantity) > 0);
+    const remaining = recalcRemaining(state);
+    if (info.remainingCell) {
+      info.remainingCell.textContent = formatNumber(remaining);
+      info.remainingCell.className = `px-4 py-3 text-center text-sm font-semibold ${remaining > 0 ? 'text-orange-200' : 'text-emerald-200'}`;
+    }
+    updateAssignmentsUI(key);
+    if (drawer && !drawer.classList.contains('hidden') && currentReallocationKey === key) {
+      updateDrawerHeader(key);
+      renderDrawerOrdersForItem(key);
+    }
+  }
+
+  function openQuantityDialog({ title, description, max, initial, confirmLabel = 'Confirmar' }) {
+    return new Promise(resolve => {
+      const overlay = document.createElement('div');
+      overlay.className = 'fixed inset-0 z-[2000] bg-black/50 flex items-center justify-center p-4';
+      const safeMax = normalizeQuantity(max);
+      const initialValue = normalizeQuantity(initial ?? safeMax);
+      overlay.innerHTML = `
+        <div class="max-w-sm w-full glass-surface backdrop-blur-xl rounded-2xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade">
+          <div class="p-6 space-y-4">
+            <div>
+              <h3 class="text-lg font-semibold text-white">${title}</h3>
+              ${description ? `<p class="text-sm text-gray-300 mt-1">${description}</p>` : ''}
+            </div>
+            <div class="space-y-2">
+              <label class="text-xs uppercase tracking-wide text-gray-400">Quantidade</label>
+              <input type="number" step="0.01" min="0" class="w-full bg-input border border-inputBorder rounded-lg px-3 py-2 text-white" value="${initialValue}" />
+              <p class="text-xs text-gray-400">Disponível: ${formatUnitsLabel(safeMax)}.</p>
+              <p class="text-xs text-red-400 hidden" data-error></p>
+            </div>
+            <div class="flex justify-end gap-3 pt-2">
+              <button type="button" data-action="cancel" class="btn-neutral px-4 py-2 rounded-lg text-white font-medium">Cancelar</button>
+              <button type="button" data-action="confirm" class="btn-primary px-4 py-2 rounded-lg text-white font-medium">${confirmLabel}</button>
+            </div>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(overlay);
+
+      const input = overlay.querySelector('input');
+      const errorEl = overlay.querySelector('[data-error]');
+
+      const cleanup = () => {
+        document.removeEventListener('keydown', onKeyDown);
+        overlay.remove();
+      };
+
+      const close = value => {
+        cleanup();
+        resolve(value);
+      };
+
+      const showError = message => {
+        if (!errorEl) return;
+        errorEl.textContent = message;
+        errorEl.classList.remove('hidden');
+      };
+
+      const clearError = () => errorEl?.classList.add('hidden');
+
+      const confirm = () => {
+        clearError();
+        const raw = (input?.value || '').replace(',', '.');
+        const value = normalizeQuantity(raw);
+        if (!Number.isFinite(value) || value < 0) {
+          showError('Informe uma quantidade válida.');
+          return;
+        }
+        if (value > safeMax) {
+          showError(`Informe um valor menor ou igual a ${formatUnitsLabel(safeMax)}.`);
+          return;
+        }
+        close(value);
+      };
+
+      const onKeyDown = e => {
+        if (e.key === 'Escape') close(null);
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          confirm();
+        }
+      };
+
+      overlay.addEventListener('click', e => {
+        if (e.target === overlay) close(null);
+      });
+
+      overlay.querySelector('[data-action="cancel"]')?.addEventListener('click', () => close(null));
+      overlay.querySelector('[data-action="confirm"]')?.addEventListener('click', confirm);
+      input?.addEventListener('input', clearError);
+
+      document.addEventListener('keydown', onKeyDown);
+      input?.focus();
+      input?.select();
+    });
+  }
+
+  function openConfirmDialog({ title, message, confirmLabel = 'Sim', cancelLabel = 'Não' }) {
+    return new Promise(resolve => {
+      const overlay = document.createElement('div');
+      overlay.className = 'fixed inset-0 z-[2000] bg-black/50 flex items-center justify-center p-4';
+      overlay.innerHTML = `
+        <div class="max-w-md w-full glass-surface backdrop-blur-xl rounded-2xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade">
+          <div class="p-6 space-y-6 text-center">
+            <div>
+              <h3 class="text-lg font-semibold text-white">${title}</h3>
+              <p class="text-sm text-gray-300 mt-2">${message}</p>
+            </div>
+            <div class="flex justify-center gap-4">
+              <button type="button" data-action="confirm" class="btn-warning px-5 py-2 rounded-lg text-white font-medium">${confirmLabel}</button>
+              <button type="button" data-action="cancel" class="btn-neutral px-5 py-2 rounded-lg text-white font-medium">${cancelLabel}</button>
+            </div>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(overlay);
+
+      const cleanup = () => {
+        document.removeEventListener('keydown', onKeyDown);
+        overlay.remove();
+      };
+
+      const close = result => {
+        cleanup();
+        resolve(result);
+      };
+
+      const onKeyDown = e => {
+        if (e.key === 'Escape') close(false);
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          close(true);
+        }
+      };
+
+      overlay.addEventListener('click', e => {
+        if (e.target === overlay) close(false);
+      });
+
+      overlay.querySelector('[data-action="confirm"]')?.addEventListener('click', () => close(true));
+      overlay.querySelector('[data-action="cancel"]')?.addEventListener('click', () => close(false));
+      document.addEventListener('keydown', onKeyDown);
+    });
+  }
+
+  function resetAllDestinations() {
+    destinationState.forEach((state, key) => {
+      state.stock = 0;
+      state.discard = 0;
+      state.reallocations = [];
+      state.remaining = normalizeQuantity(state.total);
+      updateItemDestinationsUI(key);
+    });
+    refreshOrdersUI();
+  }
+
+  function updateValidation() {
+    let pendingUnits = 0;
+    let hasAssignments = false;
+    destinationState.forEach(state => {
+      const assignedStock = normalizeQuantity(state.stock);
+      const assignedDiscard = normalizeQuantity(state.discard);
+      const assignedReallocate = sumReallocations(state);
+      if (assignedStock > 0 || assignedDiscard > 0 || assignedReallocate > 0) {
+        hasAssignments = true;
+      }
+      const remaining = Math.max(0, toNumber(state.total) - (assignedStock + assignedDiscard + assignedReallocate));
+      pendingUnits += remaining;
+    });
+    pendingUnits = normalizeQuantity(pendingUnits);
 
     let message = '';
-    if (!total) {
+    if (!itemKeys.length) {
       message = 'Não há itens para cancelar.';
-    } else if (pending > 0) {
-      message = `Defina destino para ${pending} ${pending === 1 ? 'item' : 'itens'} antes de confirmar.`;
-    } else if (reallocatePending > 0) {
-      message = `Selecione o pedido de destino para ${reallocatePending} ${reallocatePending === 1 ? 'item realocado' : 'itens realocados'}.`;
+    } else if (pendingUnits > 0) {
+      message = `Defina destino para ${formatUnitsLabel(pendingUnits)} antes de confirmar.`;
     }
 
     togglePendingBanner(message);
     if (confirmBtn) confirmBtn.disabled = Boolean(message);
-  };
+    if (resetDestinationsBtn) {
+      if (!message && hasAssignments) {
+        resetDestinationsBtn.classList.remove('hidden');
+      } else {
+        resetDestinationsBtn.classList.add('hidden');
+      }
+    }
+  }
 
-  const rebuildMatches = () => {
+  function rebuildMatches() {
     itemMatches.clear();
     const aggregatedMap = new Map();
 
@@ -300,28 +596,38 @@
         matches.sort((a, b) => compareOrdersByProductionDate(a.order, b.order));
         itemMatches.set(key, matches);
       }
+
+      const reallocateBtn = info?.buttons?.reallocate;
+      if (reallocateBtn) {
+        const hasMatches = matches.length > 0;
+        reallocateBtn.disabled = !hasMatches;
+        if (!hasMatches) {
+          reallocateBtn.classList.add('opacity-40', 'cursor-not-allowed');
+          reallocateBtn.title = 'Nenhum pedido disponível para realocação.';
+        } else {
+          reallocateBtn.classList.remove('opacity-40', 'cursor-not-allowed');
+          reallocateBtn.title = 'Realocar em outro pedido';
+        }
+      }
     });
 
     aggregatedOrderEntries = Array.from(aggregatedMap.values());
     aggregatedOrderEntries.sort((a, b) => compareOrdersByProductionDate(a.order, b.order));
+  }
 
-    itemKeys.forEach(key => {
-      const info = itemInfo.get(key);
-      if (!info?.reallocateOption) return;
-      const hasMatches = itemMatches.has(key);
-      info.reallocateOption.disabled = !hasMatches;
-      info.reallocateOption.textContent = hasMatches
-        ? '🔄 Realocar em outro pedido'
-        : '🔄 Realocar indisponível';
-
-      if (!hasMatches && actionState.get(key)?.action === 'reallocate') {
-        actionState.delete(key);
-        if (info.select) info.select.value = '';
-      }
+  function getAssignedForOrder(orderId) {
+    let total = 0;
+    destinationState.forEach(state => {
+      (state.reallocations || []).forEach(entry => {
+        if (String(entry.orderId) === String(orderId)) {
+          total += normalizeQuantity(entry.quantity);
+        }
+      });
     });
-  };
+    return normalizeQuantity(total);
+  }
 
-  const renderAvailableOrders = entries => {
+  function renderAvailableOrders(entries) {
     if (!ordersSection || !ordersList || !ordersEmpty) return;
     const hasEntries = Array.isArray(entries) && entries.length > 0;
     const shouldShowSection = ordersLoading || hasEntries || itemKeys.length > 0;
@@ -356,6 +662,10 @@
           <span class="text-xs font-semibold text-white">${match.quantityLabel}</span>
         </div>
       `).join('');
+      const assignedTotal = getAssignedForOrder(order.id);
+      const assignedLabel = assignedTotal > 0
+        ? `<div class="pt-2 border-t border-white/5 text-xs text-primary-200">Destinado: ${formatUnitsLabel(assignedTotal)}</div>`
+        : '';
 
       const card = document.createElement('div');
       card.className = 'glass-surface rounded-xl border border-white/10 p-4 transition hover:border-primary/40 space-y-3';
@@ -369,15 +679,17 @@
         <p class="text-xs font-semibold text-red-400">Convertido em ${meta.conversionLabel}</p>
         <span class="inline-flex px-2 py-1 rounded-full border border-red-500/40 bg-red-500/10 text-[11px] font-semibold text-red-300">${meta.daysLabel}</span>
         ${itemsList ? `<div class="space-y-2 pt-2 border-t border-white/5"><p class="text-xs text-gray-300 uppercase tracking-wide">Peças compatíveis</p>${itemsList}</div>` : ''}
+        ${assignedLabel}
       `;
       ordersList.appendChild(card);
     });
-  };
+  }
 
-  const renderDrawerOrdersForItem = key => {
+  function renderDrawerOrdersForItem(key) {
     if (!drawerList || !drawerEmpty) return;
     drawerList.innerHTML = '';
     const matches = key ? itemMatches.get(key) || [] : [];
+    const state = destinationState.get(key);
     const hasOrders = matches.length > 0;
 
     if (!hasOrders) {
@@ -397,7 +709,10 @@
       const badgeClass = isOrderInProduction(order) ? 'badge-warning' : 'badge-success';
       const button = document.createElement('button');
       button.type = 'button';
-      button.className = 'w-full text-left glass-surface rounded-xl border border-white/10 px-4 py-4 transition hover:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/40 space-y-3';
+      const existing = state?.reallocations?.find(entry => String(entry.orderId) === String(order.id));
+      const assigned = existing ? normalizeQuantity(existing.quantity) : 0;
+      const available = normalizeQuantity((state?.remaining || 0) + assigned);
+      button.className = `w-full text-left glass-surface rounded-xl border px-4 py-4 transition hover:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/40 space-y-3 ${assigned > 0 ? 'border-primary/60 bg-primary/10' : 'border-white/10'}`;
       button.innerHTML = `
         <div class="flex items-center justify-between">
           <h4 class="font-medium text-white">#${order.numero || order.id}</h4>
@@ -411,8 +726,12 @@
           <p class="text-xs font-semibold text-red-400">Convertido em ${conversionLabel}</p>
           <div class="flex flex-wrap items-center gap-2">
             <span class="inline-flex px-2 py-1 rounded-full border border-red-500/40 bg-red-500/10 text-[11px] font-semibold text-red-300">${daysLabel}</span>
-            <span class="inline-flex px-2 py-1 rounded-full border border-primary/40 bg-primary/10 text-[11px] font-semibold text-primary-200">Possui ${formatQuantity(quantity)}</span>
+            <span class="inline-flex px-2 py-1 rounded-full border border-primary/40 bg-primary/10 text-[11px] font-semibold text-primary-200">Compatível: ${formatQuantity(quantity)}</span>
           </div>
+        </div>
+        <div class="flex flex-col gap-1">
+          <span class="text-xs text-gray-300">Disponível para realocar: ${formatUnitsLabel(available)}</span>
+          ${assigned > 0 ? `<span class="text-xs text-primary-200 font-semibold">Destino atual: ${formatUnitsLabel(assigned)}</span>` : ''}
         </div>
         <div class="flex justify-end">
           <span class="btn-primary px-3 py-1 rounded text-xs">Selecionar este pedido</span>
@@ -421,12 +740,37 @@
       button.addEventListener('click', () => selectReallocationOrder(order.id));
       drawerList.appendChild(button);
     });
-  };
+  }
 
-  const renderSummary = () => {
+  function renderSummary() {
     if (!summarySection || !summaryList) return;
-    const reallocateItems = itemKeys.filter(key => actionState.get(key)?.action === 'reallocate');
-    if (!reallocateItems.length) {
+    const reallocationMap = new Map();
+    const stockEntries = [];
+    const discardEntries = [];
+
+    destinationState.forEach((state, key) => {
+      const info = itemInfo.get(key);
+      if (!info) return;
+      const stockQty = normalizeQuantity(state.stock);
+      const discardQty = normalizeQuantity(state.discard);
+      if (stockQty > 0) {
+        stockEntries.push({ key, name: info.name, quantity: stockQty });
+      }
+      if (discardQty > 0) {
+        discardEntries.push({ key, name: info.name, quantity: discardQty });
+      }
+      (state.reallocations || []).forEach(entry => {
+        const qty = normalizeQuantity(entry.quantity);
+        if (qty <= 0) return;
+        const bucket = reallocationMap.get(entry.orderId) || { orderId: entry.orderId, total: 0, items: [] };
+        bucket.total += qty;
+        bucket.items.push({ key, name: info.name, quantity: qty });
+        reallocationMap.set(entry.orderId, bucket);
+      });
+    });
+
+    const hasData = reallocationMap.size || stockEntries.length || discardEntries.length;
+    if (!hasData) {
       summarySection.classList.add('hidden');
       summaryList.innerHTML = '';
       return;
@@ -435,54 +779,113 @@
     summarySection.classList.remove('hidden');
     summaryList.innerHTML = '';
 
-    reallocateItems.forEach(key => {
-      const info = itemInfo.get(key);
-      const state = actionState.get(key) || {};
-      const matches = itemMatches.get(key) || [];
-      const selectedMatch = state.orderId
-        ? matches.find(m => String(m.order.id) === String(state.orderId))
-        : null;
-      const badgeClass = state.orderId ? 'badge-success' : 'badge-warning';
-      const badgeText = state.orderId ? formatOrderLabel(state.orderId) : 'Aguardando destino';
-      const actionLabel = state.orderId ? 'Alterar destino' : 'Escolher pedido';
-      const orderMeta = selectedMatch ? getOrderMeta(selectedMatch.order) : null;
-      const quantityLabel = selectedMatch ? formatQuantity(selectedMatch.quantity) : '';
+    if (reallocationMap.size) {
+      const heading = document.createElement('p');
+      heading.className = 'text-xs uppercase tracking-wide text-primary-200 font-semibold';
+      heading.textContent = 'Realocações';
+      summaryList.appendChild(heading);
+
+      Array.from(reallocationMap.values())
+        .sort((a, b) => toNumber(a.orderId) - toNumber(b.orderId))
+        .forEach(bucket => {
+          const wrapper = document.createElement('div');
+          wrapper.className = 'bg-surface/40 rounded-xl border border-white/10 p-4 space-y-3';
+          const order = (availableOrders || []).find(o => String(o.id) === String(bucket.orderId));
+          const meta = order ? getOrderMeta(order) : null;
+          const headerLabel = order ? formatOrderLabel(order.id) : `Pedido ${bucket.orderId}`;
+          wrapper.innerHTML = `
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <p class="text-white text-sm font-semibold">${headerLabel}</p>
+                ${meta ? `<p class="text-[11px] text-gray-300">Convertido em ${meta.conversionLabel}</p>` : ''}
+              </div>
+              <span class="badge-success px-3 py-1 rounded-full text-xs font-medium">${formatUnitsLabel(bucket.total)}</span>
+            </div>
+          `;
+          const list = document.createElement('div');
+          list.className = 'space-y-2';
+          bucket.items.sort((a, b) => a.name.localeCompare(b.name)).forEach(item => {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'w-full flex items-center justify-between gap-3 bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-left text-xs text-gray-200 hover:border-primary/40 transition';
+            btn.innerHTML = `
+              <span>${item.name}</span>
+              <span class="text-white font-semibold">${formatUnitsLabel(item.quantity)}</span>
+            `;
+            btn.addEventListener('click', () => openReallocationQuantity(item.key, bucket.orderId));
+            list.appendChild(btn);
+          });
+          wrapper.appendChild(list);
+          summaryList.appendChild(wrapper);
+        });
+    }
+
+    if (stockEntries.length) {
+      const heading = document.createElement('p');
+      heading.className = 'text-xs uppercase tracking-wide text-emerald-200 font-semibold mt-4';
+      heading.textContent = 'Retorno ao estoque';
+      summaryList.appendChild(heading);
 
       const wrapper = document.createElement('div');
-      wrapper.className = 'flex flex-col gap-3 bg-surface/40 rounded-xl p-4 border border-white/10';
-
-      const header = document.createElement('div');
-      header.className = 'flex flex-wrap items-start justify-between gap-3';
-      header.innerHTML = `
-        <div>
-          <p class="text-white text-sm font-medium">${info?.name || 'Item'}</p>
-          <p class="text-gray-300 text-xs">${info?.quantityLabel || ''}</p>
-        </div>
-        <div class="flex items-center gap-3">
-          <span class="${badgeClass} px-3 py-1 rounded-full text-xs font-medium">${badgeText}</span>
-          <button data-item="${key}" class="btn-primary px-3 py-2 rounded-lg text-white text-xs">${actionLabel}</button>
+      wrapper.className = 'bg-surface/40 rounded-xl border border-white/10 p-4 space-y-2';
+      const total = normalizeQuantity(stockEntries.reduce((sum, item) => sum + item.quantity, 0));
+      wrapper.innerHTML = `
+        <div class="flex items-center justify-between">
+          <p class="text-white text-sm font-semibold">Total</p>
+          <span class="badge-success px-3 py-1 rounded-full text-xs font-medium">${formatUnitsLabel(total)}</span>
         </div>
       `;
-      wrapper.appendChild(header);
-
-      if (selectedMatch && orderMeta) {
-        const details = document.createElement('div');
-        details.className = 'flex flex-wrap items-center gap-2';
-        details.innerHTML = `
-          <p class="text-xs font-semibold text-red-400">Convertido em ${orderMeta.conversionLabel}</p>
-          <span class="inline-flex px-2 py-1 rounded-full border border-red-500/40 bg-red-500/10 text-[11px] font-semibold text-red-300">${orderMeta.daysLabel}</span>
-          <span class="inline-flex px-2 py-1 rounded-full border border-primary/40 bg-primary/10 text-[11px] font-semibold text-primary-200">Possui ${quantityLabel}</span>
+      const list = document.createElement('div');
+      list.className = 'space-y-2 pt-2 border-t border-white/5';
+      stockEntries.sort((a, b) => a.name.localeCompare(b.name)).forEach(item => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'w-full flex items-center justify-between gap-3 bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-left text-xs text-gray-200 hover:border-primary/40 transition';
+        btn.innerHTML = `
+          <span>${item.name}</span>
+          <span class="text-white font-semibold">${formatUnitsLabel(item.quantity)}</span>
         `;
-        wrapper.appendChild(details);
-      }
-
-      const button = header.querySelector('button');
-      button?.addEventListener('click', () => openDrawer(key));
+        btn.addEventListener('click', () => handleSimpleAction(item.key, 'stock'));
+        list.appendChild(btn);
+      });
+      wrapper.appendChild(list);
       summaryList.appendChild(wrapper);
-    });
-  };
+    }
 
-  const refreshOrdersUI = () => {
+    if (discardEntries.length) {
+      const heading = document.createElement('p');
+      heading.className = 'text-xs uppercase tracking-wide text-red-200 font-semibold mt-4';
+      heading.textContent = 'Descartes';
+      summaryList.appendChild(heading);
+
+      const wrapper = document.createElement('div');
+      wrapper.className = 'bg-surface/40 rounded-xl border border-white/10 p-4 space-y-2';
+      const total = normalizeQuantity(discardEntries.reduce((sum, item) => sum + item.quantity, 0));
+      wrapper.innerHTML = `
+        <div class="flex items-center justify-between">
+          <p class="text-white text-sm font-semibold">Total</p>
+          <span class="badge-danger px-3 py-1 rounded-full text-xs font-medium">${formatUnitsLabel(total)}</span>
+        </div>
+      `;
+      const list = document.createElement('div');
+      list.className = 'space-y-2 pt-2 border-t border-white/5';
+      discardEntries.sort((a, b) => a.name.localeCompare(b.name)).forEach(item => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'w-full flex items-center justify-between gap-3 bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-left text-xs text-gray-200 hover:border-primary/40 transition';
+        btn.innerHTML = `
+          <span>${item.name}</span>
+          <span class="text-white font-semibold">${formatUnitsLabel(item.quantity)}</span>
+        `;
+        btn.addEventListener('click', () => handleSimpleAction(item.key, 'discard'));
+        list.appendChild(btn);
+      });
+      wrapper.appendChild(list);
+      summaryList.appendChild(wrapper);
+    }
+  }
+
+  function refreshOrdersUI() {
     renderAvailableOrders(aggregatedOrderEntries);
     if (currentReallocationKey) {
       renderDrawerOrdersForItem(currentReallocationKey);
@@ -491,98 +894,147 @@
     }
     renderSummary();
     updateValidation();
-  };
+  }
 
-  const openDrawer = key => {
+  function openDrawer(key) {
     if (!drawer || !drawerPanel) return;
+    const state = destinationState.get(key);
+    const hasExisting = state?.reallocations?.some(entry => normalizeQuantity(entry.quantity) > 0);
+    if (!hasExisting && (!state || normalizeQuantity(state.remaining) <= 0)) {
+      if (typeof showToast === 'function') {
+        showToast('Não há quantidade disponível para realocar. Ajuste outras destinações primeiro.', 'info');
+      } else if (typeof window.alert === 'function') {
+        window.alert('Não há quantidade disponível para realocar. Ajuste outras destinações primeiro.');
+      }
+      return;
+    }
     currentReallocationKey = key;
-    const info = itemInfo.get(key);
-    if (drawerItem) drawerItem.textContent = info ? `${info.name} (${info.quantityLabel})` : '';
+    updateDrawerHeader(key);
     renderDrawerOrdersForItem(key);
     drawer.classList.remove('hidden');
     requestAnimationFrame(() => drawerPanel.classList.remove('translate-x-full'));
-  };
+  }
 
-  const closeDrawer = () => {
+  function closeDrawer() {
     if (!drawer || !drawerPanel) return;
     drawerPanel.classList.add('translate-x-full');
     setTimeout(() => {
       drawer?.classList.add('hidden');
       currentReallocationKey = null;
     }, 300);
-  };
+  }
 
   drawerOverlay?.addEventListener('click', closeDrawer);
   document.getElementById('cancelarPedidoDrawerFechar')?.addEventListener('click', closeDrawer);
 
-  const ensureActionEntry = key => {
-    if (!actionState.has(key)) {
-      actionState.set(key, { action: '', orderId: null });
-    }
-    return actionState.get(key);
-  };
-
-  const handleActionChange = (key, action) => {
+  async function handleSimpleAction(key, action) {
     const info = itemInfo.get(key);
-    const state = ensureActionEntry(key);
-    let finalAction = action;
-
-    if (action === 'reallocate') {
-      if (ordersLoading) {
-        if (typeof showToast === 'function') {
-          showToast('Aguarde o carregamento dos pedidos disponíveis.', 'info');
-        } else if (typeof window.alert === 'function') {
-          window.alert('Aguarde o carregamento dos pedidos disponíveis.');
-        }
-        if (info?.select) info.select.value = '';
-        finalAction = '';
-      } else {
-        const matches = itemMatches.get(key) || [];
-        if (!matches.length) {
-          const message = 'Nenhum pedido em produção possui esta peça disponível para realocação.';
-          if (typeof showToast === 'function') {
-            showToast(message, 'warning');
-          } else if (typeof window.alert === 'function') {
-            window.alert(message);
-          }
-          if (info?.select) info.select.value = '';
-          finalAction = '';
-        } else if (!state.orderId) {
-          openDrawer(key);
-        }
+    const state = ensureDestinationState(key, info?.quantity || 0);
+    const currentValue = normalizeQuantity(state[action] || 0);
+    const max = normalizeQuantity(state.remaining + currentValue);
+    if (max <= 0 && currentValue <= 0) {
+      const message = 'Todas as unidades deste item já possuem destino definido.';
+      if (typeof showToast === 'function') {
+        showToast(message, 'info');
+      } else if (typeof window.alert === 'function') {
+        window.alert(message);
       }
+      return;
     }
 
-    state.action = finalAction;
-    if (finalAction !== 'reallocate') {
-      state.orderId = null;
-      if (drawer && !drawer.classList.contains('hidden') && currentReallocationKey === key) {
-        closeDrawer();
+    const titles = {
+      stock: 'Retorno ao estoque',
+      discard: 'Descartar item'
+    };
+    const descriptions = {
+      stock: `Informe a quantidade de ${info?.name || 'itens'} que retornará ao estoque.`,
+      discard: `Informe a quantidade de ${info?.name || 'itens'} que será descartada.`
+    };
+
+    const quantity = await openQuantityDialog({
+      title: titles[action] || 'Definir quantidade',
+      description: descriptions[action] || '',
+      max,
+      initial: currentValue,
+      confirmLabel: 'Salvar'
+    });
+
+    if (quantity === null) return;
+
+    state[action] = normalizeQuantity(quantity);
+    updateItemDestinationsUI(key);
+    refreshOrdersUI();
+  }
+
+  function handleReallocateClick(key) {
+    if (ordersLoading) {
+      if (typeof showToast === 'function') {
+        showToast('Aguarde o carregamento dos pedidos disponíveis.', 'info');
+      } else if (typeof window.alert === 'function') {
+        window.alert('Aguarde o carregamento dos pedidos disponíveis.');
       }
+      return;
+    }
+    const matches = itemMatches.get(key) || [];
+    const state = destinationState.get(key);
+    const hasExisting = state?.reallocations?.some(entry => normalizeQuantity(entry.quantity) > 0);
+    if (!matches.length && !hasExisting) {
+      const message = 'Nenhum pedido em produção possui esta peça disponível para realocação.';
+      if (typeof showToast === 'function') {
+        showToast(message, 'warning');
+      } else if (typeof window.alert === 'function') {
+        window.alert(message);
+      }
+      return;
+    }
+    openDrawer(key);
+  }
+
+  async function openReallocationQuantity(key, orderId) {
+    const info = itemInfo.get(key);
+    const state = ensureDestinationState(key, info?.quantity || 0);
+    const existing = (state.reallocations || []).find(entry => String(entry.orderId) === String(orderId));
+    const currentValue = existing ? normalizeQuantity(existing.quantity) : 0;
+    const available = normalizeQuantity(state.remaining + currentValue);
+
+    if (available <= 0 && currentValue <= 0) {
+      const message = 'Não há quantidade disponível para realocar para este pedido.';
+      if (typeof showToast === 'function') {
+        showToast(message, 'info');
+      } else if (typeof window.alert === 'function') {
+        window.alert(message);
+      }
+      return false;
     }
 
-    if (!finalAction) {
-      actionState.delete(key);
+    const quantity = await openQuantityDialog({
+      title: `Realocar para ${formatOrderLabel(orderId)}`,
+      description: `Informe a quantidade de ${info?.name || 'itens'} que será realocada para este pedido.`,
+      max: available,
+      initial: currentValue,
+      confirmLabel: 'Salvar realocação'
+    });
+
+    if (quantity === null) return false;
+
+    const normalized = normalizeQuantity(quantity);
+    if (normalized <= 0) {
+      state.reallocations = (state.reallocations || []).filter(entry => String(entry.orderId) !== String(orderId));
+    } else if (existing) {
+      existing.quantity = normalized;
     } else {
-      actionState.set(key, state);
+      state.reallocations.push({ orderId, quantity: normalized });
     }
+    updateItemDestinationsUI(key);
+    refreshOrdersUI();
+    return true;
+  }
 
-    renderSummary();
-    updateValidation();
-  };
-
-  const selectReallocationOrder = orderId => {
+  async function selectReallocationOrder(orderId) {
     if (!currentReallocationKey) return;
-    const info = itemInfo.get(currentReallocationKey);
-    const state = ensureActionEntry(currentReallocationKey);
-    state.action = 'reallocate';
-    state.orderId = orderId;
-    actionState.set(currentReallocationKey, state);
-    if (info?.select) info.select.value = 'reallocate';
-    closeDrawer();
-    renderSummary();
-    updateValidation();
-  };
+    const updated = await openReallocationQuantity(currentReallocationKey, orderId);
+    if (updated) closeDrawer();
+  }
 
   const nameFallback = (item, index) => item.nome || item.descricao || item.produto || `Item ${index + 1}`;
   const origemFallback = item => item.origem || item.origem_item || item.origem_producao || '';
@@ -593,6 +1045,8 @@
     statusTag.classList.remove('hidden');
   }
 
+  itemKeys.length = 0;
+  destinationState.clear();
   if (itensBody) itensBody.innerHTML = '';
   if (!itens.length) {
     itensEmpty?.classList.remove('hidden');
@@ -616,7 +1070,11 @@
 
       const qtyTd = document.createElement('td');
       qtyTd.className = 'px-4 py-3 text-center text-sm text-white';
-      qtyTd.textContent = Number(quantity ?? 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      qtyTd.textContent = formatNumber(quantity);
+
+      const remainingTd = document.createElement('td');
+      remainingTd.className = 'px-4 py-3 text-center text-sm font-semibold text-orange-200';
+      remainingTd.textContent = formatNumber(quantity);
 
       const origemTd = document.createElement('td');
       origemTd.className = 'px-4 py-3 text-center text-sm text-gray-200';
@@ -628,25 +1086,64 @@
 
       const actionTd = document.createElement('td');
       actionTd.className = 'px-4 py-3 text-center text-sm';
-      const select = document.createElement('select');
-      select.className = 'w-full bg-input border border-inputBorder rounded-lg px-3 py-2 text-white text-xs focus:border-primary focus:ring-2 focus:ring-primary/50 transition appearance-none';
-      select.innerHTML = `
-        <option value="">Selecionar ação...</option>
-        <option value="stock">📦 Retornar ao estoque</option>
-        <option value="reallocate">🔄 Realocar em outro pedido</option>
-        <option value="discard">🗑️ Descartar</option>`;
-      select.addEventListener('change', e => handleActionChange(key, e.target.value));
-      actionTd.appendChild(select);
+      const actionsWrapper = document.createElement('div');
+      actionsWrapper.className = 'flex flex-col items-center gap-3';
 
-      tr.append(nameTd, qtyTd, origemTd, situacaoTd, actionTd);
+      const buttonsRow = document.createElement('div');
+      buttonsRow.className = 'flex items-center justify-center gap-2';
+
+      const createActionButton = (icon, title, onClick, extraClasses = '') => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = `w-10 h-10 flex items-center justify-center rounded-lg border border-white/10 bg-white/5 text-lg text-white hover:border-primary/40 transition focus:outline-none focus:ring-2 focus:ring-primary/40 ${extraClasses}`;
+        btn.title = title;
+        btn.innerHTML = `<span>${icon}</span>`;
+        btn.addEventListener('click', onClick);
+        return btn;
+      };
+
+      const stockBtn = createActionButton('📦', 'Retornar ao estoque', () => handleSimpleAction(key, 'stock'));
+      const reallocateBtn = createActionButton('🔄', 'Realocar em outro pedido', () => handleReallocateClick(key));
+      const discardBtn = createActionButton('🗑️', 'Descartar peça', () => handleSimpleAction(key, 'discard'));
+
+      buttonsRow.append(stockBtn, reallocateBtn, discardBtn);
+
+      const assignmentsContainer = document.createElement('div');
+      assignmentsContainer.className = 'w-full flex flex-col items-center gap-2 mt-1';
+
+      actionsWrapper.append(buttonsRow, assignmentsContainer);
+      actionTd.appendChild(actionsWrapper);
+
+      tr.append(nameTd, qtyTd, remainingTd, origemTd, situacaoTd, actionTd);
       itensBody?.appendChild(tr);
 
       itemKeys.push(key);
       const signature = buildItemSignature(item);
-      const reallocateOption = select.querySelector('option[value="reallocate"]');
-      itemInfo.set(key, { item, name, quantity, quantityLabel, select, signature, reallocateOption });
+      itemInfo.set(key, {
+        item,
+        name,
+        quantity,
+        quantityLabel,
+        signature,
+        remainingCell: remainingTd,
+        assignmentsContainer,
+        buttons: { stock: stockBtn, reallocate: reallocateBtn, discard: discardBtn }
+      });
+      ensureDestinationState(key, quantity);
+      updateItemDestinationsUI(key);
     });
   }
+
+  resetDestinationsBtn?.addEventListener('click', async () => {
+    const confirmed = await openConfirmDialog({
+      title: 'Reiniciar destinação',
+      message: 'Deseja reiniciar a destinação das peças? As quantidades definidas serão perdidas.',
+      confirmLabel: 'Sim, reiniciar',
+      cancelLabel: 'Manter'
+    });
+    if (!confirmed) return;
+    resetAllDestinations();
+  });
 
   const ensureAvailableOrdersLoaded = async () => {
     ordersLoading = true;
@@ -733,22 +1230,41 @@
 
   const confirm = async () => {
     if (!confirmBtn || confirmBtn.disabled) return;
-    const actions = itemKeys.map(key => {
+
+    const actions = [];
+    let totalReallocate = 0;
+    let totalStock = 0;
+    let totalDiscard = 0;
+
+    destinationState.forEach((state, key) => {
       const info = itemInfo.get(key);
-      const state = actionState.get(key) || { action: '', orderId: null };
-      return {
-        item: info?.item || null,
-        action: state.action,
-        orderId: state.orderId
-      };
+      if (!info) return;
+      const base = { item: info.item || null };
+
+      const stockQty = normalizeQuantity(state.stock);
+      if (stockQty > 0) {
+        actions.push({ ...base, action: 'stock', quantity: stockQty });
+        totalStock += stockQty;
+      }
+
+      const discardQty = normalizeQuantity(state.discard);
+      if (discardQty > 0) {
+        actions.push({ ...base, action: 'discard', quantity: discardQty });
+        totalDiscard += discardQty;
+      }
+
+      (state.reallocations || []).forEach(entry => {
+        const qty = normalizeQuantity(entry.quantity);
+        if (qty <= 0) return;
+        actions.push({ ...base, action: 'reallocate', orderId: entry.orderId, quantity: qty });
+        totalReallocate += qty;
+      });
     });
 
-    const hasReallocations = actions.some(a => a.action === 'reallocate');
-    const hasDiscards = actions.some(a => a.action === 'discard');
     const messageLines = ['Confirmar cancelamento do pedido?'];
-    if (hasReallocations) messageLines.push('• Alguns itens serão realocados para outros pedidos.');
-    if (hasDiscards) messageLines.push('• Alguns itens serão descartados.');
-    if (actions.some(a => a.action === 'stock')) messageLines.push('• Demais itens retornarão ao estoque.');
+    if (totalReallocate > 0) messageLines.push(`• ${formatUnitsLabel(totalReallocate)} serão realocadas para outros pedidos.`);
+    if (totalStock > 0) messageLines.push(`• ${formatUnitsLabel(totalStock)} retornarão ao estoque.`);
+    if (totalDiscard > 0) messageLines.push(`• ${formatUnitsLabel(totalDiscard)} serão descartadas.`);
 
     if (!window.confirm(messageLines.join('\n'))) return;
 

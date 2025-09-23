@@ -40,9 +40,10 @@
                 <tr class="border-b border-white/10 text-gray-300 text-xs uppercase">
                   <th class="text-left py-3 px-4 font-medium">Item</th>
                   <th class="text-center py-3 px-4 font-medium">Quantidade</th>
+                  <th class="text-center py-3 px-4 font-medium">Quantidade Restante</th>
                   <th class="text-center py-3 px-4 font-medium">Origem</th>
                   <th class="text-center py-3 px-4 font-medium">Situação</th>
-                  <th class="text-center py-3 px-4 font-medium">Ação</th>
+                  <th class="text-center py-3 px-4 font-medium">Destinações</th>
                 </tr>
               </thead>
               <tbody id="cancelarPedidoItens"></tbody>
@@ -70,6 +71,7 @@
 
     <footer class="flex justify-end items-center gap-4 px-8 py-6 border-t border-white/10 flex-shrink-0">
       <button id="cancelarPedidoFecharFooter" class="btn-neutral px-6 py-3 rounded-lg text-white font-medium">Voltar sem cancelar</button>
+      <button id="cancelarPedidoResetDestinos" class="btn-ghost px-6 py-3 rounded-lg text-white font-medium hidden">Reiniciar destinação</button>
       <button id="cancelarPedidoConfirmar" class="btn-danger px-6 py-3 rounded-lg text-white font-medium" disabled>
         Confirmar Cancelamento
       </button>

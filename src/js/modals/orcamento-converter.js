@@ -12,7 +12,8 @@
     selections: new Map(),
     initialSelections: null,
     loadingVariants: null,
-    variantsLoadedForRowId: null
+    variantsLoadedForRowId: null,
+    originalPlan: null
   };
   const productBreakdownCache = new Map();
 
@@ -434,7 +435,7 @@
             <div class="bg-surface/40 rounded-lg border border-white/10 p-4 space-y-4">
               <div>
                 <h4 class="font-medium text-white mb-3">Peça Atual</h4>
-                <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
                   <div>
                     <p class="text-gray-400 text-xs mb-1">Nome</p>
                     <p class="text-white font-medium" data-field="piece-name"></p>
@@ -444,19 +445,27 @@
                     <p class="text-white font-medium" data-field="piece-qty"></p>
                   </div>
                   <div>
-                    <p class="text-gray-400 text-xs mb-1">Status</p>
-                    <span class="badge-warning px-2 py-1 rounded text-xs" data-field="piece-status"></span>
+                    <p class="text-gray-400 text-xs mb-1">Total em Estoque</p>
+                    <p class="text-white font-medium" data-field="piece-stock-total"></p>
                   </div>
                   <div>
-                    <p class="text-gray-400 text-xs mb-1">Etapa</p>
-                    <span class="badge-info px-2 py-1 rounded text-xs" data-field="piece-stage"></span>
+                    <p class="text-gray-400 text-xs mb-1">Peças Prontas</p>
+                    <p class="text-white font-medium" data-field="piece-ready"></p>
+                  </div>
+                  <div>
+                    <p class="text-gray-400 text-xs mb-1">Produzir Parcial</p>
+                    <p class="text-white font-medium" data-field="piece-produce-partial"></p>
+                  </div>
+                  <div>
+                    <p class="text-gray-400 text-xs mb-1">Produzir Total</p>
+                    <p class="text-white font-medium" data-field="piece-produce-total"></p>
                   </div>
                 </div>
               </div>
               <div class="space-y-3">
                 <p class="text-gray-400 text-sm" data-field="piece-details"></p>
                 <div>
-                  <p class="text-gray-300 text-xs uppercase tracking-wide mb-2">Tipos encontrados em estoque</p>
+                  <p class="text-gray-300 text-xs uppercase tracking-wide mb-2">TIPOS SELECIONADOS AUTOMATICAMENTE</p>
                   <div data-field="piece-stock-breakdown" class="space-y-2"></div>
                 </div>
                 <div data-field="piece-selection" class="hidden border border-primary/40 bg-primary/5 rounded-lg p-3 space-y-2"></div>
@@ -524,6 +533,9 @@
     replaceModalState.initialSelections = Array.isArray(row.replacementPlan?.selections)
       ? row.replacementPlan.selections.map(sel => ({ key: sel.key, qty: sel.qty }))
       : null;
+    replaceModalState.originalPlan = row.replacementPlan
+      ? JSON.parse(JSON.stringify(row.replacementPlan))
+      : null;
     if (refs.search) refs.search.value = '';
     renderReplaceModalSummary();
     await renderReplaceModalList({ forceReload: true });
@@ -541,6 +553,7 @@
     replaceModalState.initialSelections = null;
     replaceModalState.loadingVariants = null;
     replaceModalState.variantsLoadedForRowId = null;
+    replaceModalState.originalPlan = null;
     if (replaceModalRefs.search) replaceModalRefs.search.value = '';
     currentReplaceIndex = -1;
     updateReplaceModalConfirmButton();
@@ -564,15 +577,14 @@
     setReplaceModalField('piece-name', row.nome || 'Peça sem nome');
     const qtd = toNumber(row.qtd || row.quantidade || 0);
     setReplaceModalField('piece-qty', `${formatNumber(qtd)} unidades`);
-    const estoque = toNumber(row.em_estoque);
-    const produzir = toNumber(row.a_produzir);
-    if (row.forceProduceAll) {
-      setReplaceModalField('piece-status', `Produção integral planejada (${formatNumber(qtd)} un)`);
-    } else {
-      setReplaceModalField('piece-status', `Estoque: ${formatNumber(estoque)} | Produzir: ${formatNumber(produzir)}`);
-    }
-    const etapa = row.faltantes?.[0]?.etapa || row.popover?.variants?.[0]?.currentProcess?.name || '-';
-    setReplaceModalField('piece-stage', etapa || '-');
+    const estoqueTotal = toNumber(row.em_estoque);
+    const prontas = toNumber(row.pronta);
+    const produzirParcial = toNumber(row.produzir_parcial);
+    const produzirTotal = toNumber(row.produzir_total);
+    setReplaceModalField('piece-stock-total', `${formatNumber(estoqueTotal)} un`);
+    setReplaceModalField('piece-ready', `${formatNumber(prontas)} un`);
+    setReplaceModalField('piece-produce-partial', `${formatNumber(produzirParcial)} un`);
+    setReplaceModalField('piece-produce-total', `${formatNumber(produzirTotal)} un`);
     const subtitle = ctx.numero ? `Orçamento ${ctx.numero}` : (ctx.cliente || '');
     setReplaceModalField('modal-subtitle', subtitle);
     const detailsText = `${formatNumber(qtd)} unidade${qtd === 1 ? '' : 's'} necessárias no orçamento.`;
@@ -580,24 +592,48 @@
 
     const breakdownContainer = replaceModalRefs.stockBreakdown;
     if (breakdownContainer) {
-      const breakdown = Array.isArray(row.stockBreakdown) ? row.stockBreakdown : [];
-      if (!breakdown.length) {
-        breakdownContainer.innerHTML = '<p class="text-xs text-gray-500">Nenhum lote em estoque para esta peça.</p>';
-      } else {
-        breakdownContainer.innerHTML = breakdown.map(point => {
-          const badgeClass = point.isFinal ? 'badge-success' : 'badge-info';
-          const available = Math.max(0, Number(point.available || 0)).toLocaleString('pt-BR');
-          const process = point.processName || 'Processo não informado';
-          const lastItem = point.lastItemName || 'Sem último insumo';
-          return `
-            <div class="flex items-center justify-between gap-4 rounded-lg border border-white/10 bg-white/5 px-3 py-2">
-              <div>
-                <p class="text-white text-sm font-medium">${lastItem}</p>
-                <p class="text-xs text-gray-400">${process}</p>
-              </div>
-              <span class="${badgeClass} px-2 py-1 rounded text-xs">${available} em estoque</span>
+      const originalPlan = replaceModalState.originalPlan;
+      const hasStockSelections = Array.isArray(originalPlan?.stock) && originalPlan.stock.length > 0;
+      const produceQty = Number(originalPlan?.produceQty || 0);
+      const requiredQty = Number(originalPlan?.requiredQty || 0);
+      const totalSelected = Number(originalPlan?.totalSelected || 0);
+      if (hasStockSelections || produceQty > 0) {
+        const autoRemainingClass = requiredQty === totalSelected ? 'text-emerald-300' : 'text-amber-300';
+        let content = `
+          <div class="flex items-center justify-between text-sm text-white font-medium">
+            <span>Seleção automática</span>
+            <span>${totalSelected.toLocaleString('pt-BR')} de ${requiredQty.toLocaleString('pt-BR')} un</span>
+          </div>`;
+        if (hasStockSelections) {
+          content += '<ul class="space-y-2">';
+          originalPlan.stock.forEach(item => {
+            const qty = Number(item.qty || 0);
+            const process = item.processName || 'Processo não informado';
+            const lastItem = item.lastItemName || 'Sem insumo';
+            content += `
+              <li class="flex items-center justify-between gap-3 text-sm">
+                <div>
+                  <p class="text-white font-medium">${lastItem}</p>
+                  <p class="text-xs text-gray-400">${process}</p>
+                </div>
+                <span class="badge-info px-2 py-1 rounded text-xs">${qty.toLocaleString('pt-BR')} un</span>
+              </li>`;
+          });
+          content += '</ul>';
+        }
+        if (produceQty > 0) {
+          content += `
+            <div class="flex items-center justify-between gap-3 text-sm pt-2 border-t border-white/10">
+              <span class="text-white font-medium">Produzir do zero</span>
+              <span class="badge-warning px-2 py-1 rounded text-xs">${produceQty.toLocaleString('pt-BR')} un</span>
             </div>`;
-        }).join('');
+        }
+        const remainingAuto = Math.max(0, requiredQty - totalSelected).toLocaleString('pt-BR');
+        content += `
+          <p class="text-xs text-gray-300 border-t border-white/10 pt-2 mt-2">Restante planejado: <span class="${autoRemainingClass} font-semibold">${remainingAuto} un</span></p>`;
+        breakdownContainer.innerHTML = content;
+      } else {
+        breakdownContainer.innerHTML = '<p class="text-xs text-gray-500">Nenhuma seleção automática registrada para esta peça.</p>';
       }
     }
 
@@ -608,6 +644,7 @@
         selectionContainer.classList.remove('hidden');
         const totalLabel = `${plan.totalSelected.toLocaleString('pt-BR')} de ${plan.requiredQty.toLocaleString('pt-BR')} un`;
         const remaining = Math.max(0, plan.remaining).toLocaleString('pt-BR');
+        const remainingClass = plan.remaining === 0 ? 'text-emerald-300' : 'text-amber-300';
         let inner = `
           <div class="flex items-center justify-between text-sm text-white font-medium">
             <span>Seleção atual</span>
@@ -635,7 +672,7 @@
             </div>`;
         }
         inner += `
-          <p class="text-xs text-gray-300 border-t border-white/10 pt-2 mt-2">Restante para atingir o orçado: <span class="${plan.remaining === 0 ? 'text-emerald-300' : 'text-amber-300'} font-semibold">${remaining} un</span></p>`;
+          <p class="text-xs text-gray-300 border-t border-white/10 pt-2 mt-2">Restante para atingir o orçado: <span class="${remainingClass} font-semibold">${remaining} un</span></p>`;
         selectionContainer.innerHTML = inner;
       } else {
         selectionContainer.classList.add('hidden');
@@ -677,6 +714,7 @@
       container.innerHTML = '<p class="text-sm text-gray-400">Nenhuma peça selecionada.</p>';
       replaceModalState.variants = [];
       updateReplaceModalConfirmButton();
+      renderSelectionList();
       return;
     }
 
@@ -686,14 +724,21 @@
     }
 
     const rowProductId = Number(row.produto_id || 0);
+    const normalizeCode = code => String(code || '').trim().toUpperCase();
+    const rowProductCode = normalizeCode(row.codigo);
     const needsReload = forceReload
       || (!skipReload && (!replaceModalState.variants.length || replaceModalState.variantsLoadedForRowId !== rowProductId));
 
     if (needsReload) {
       container.innerHTML = '<p class="text-sm text-gray-400">Carregando variações disponíveis...</p>';
       const loadPromise = (async () => {
-        const groupKey = buildGroupKey(row.nome, row.produto_id);
-        const candidates = listaProdutos.filter(prod => buildGroupKey(prod.nome, prod.id) === groupKey);
+        let candidates = [];
+        if (rowProductCode) {
+          candidates = listaProdutos.filter(prod => normalizeCode(prod.codigo) === rowProductCode);
+        } else {
+          const groupKey = buildGroupKey(row.nome, row.produto_id);
+          candidates = listaProdutos.filter(prod => buildGroupKey(prod.nome, prod.id) === groupKey);
+        }
         const variantList = [];
         for (const prod of candidates) {
           const breakdown = await loadProductBreakdown(prod);
@@ -794,7 +839,7 @@
     } else if (!filteredStock.length) {
       const alert = document.createElement('p');
       alert.className = 'text-xs text-gray-400 mb-4';
-      alert.textContent = 'Nenhuma variação corresponde aos filtros aplicados.';
+      alert.textContent = 'Nenhum tipo corresponde aos filtros aplicados.';
       container.appendChild(alert);
     }
 
@@ -817,7 +862,9 @@
       if (variant.type === 'stock') {
         const process = variant.stage?.processName || 'Processo não informado';
         const lastItem = variant.stage?.lastItemName || 'Sem último insumo';
-        const badgeClass = variant.stage?.isFinal ? 'badge-success' : 'badge-info';
+        const remainingInVariant = Math.max(0, Math.floor(Number(variant.available || 0)) - currentQty);
+        const badgeClass = remainingInVariant > 0 ? 'badge-success' : 'badge-danger';
+        const badgeLabel = `${remainingInVariant.toLocaleString('pt-BR')} em estoque`;
         card.innerHTML = `
           <div class="flex items-start justify-between gap-4">
             <div>
@@ -825,7 +872,7 @@
               <p class="text-xs text-gray-400">${process}</p>
               ${variant.product?.codigo ? `<p class="text-xs text-gray-500 mt-1">Código: ${variant.product.codigo}</p>` : ''}
             </div>
-            <span class="${badgeClass} px-2 py-1 rounded text-xs">${Math.max(0, Number(variant.available || 0)).toLocaleString('pt-BR')} em estoque</span>
+            <span class="${badgeClass} px-2 py-1 rounded text-xs">${badgeLabel}</span>
           </div>
           <div class="mt-3 flex items-center gap-3">
             <span class="text-xs text-gray-400 uppercase tracking-wide">Selecionar</span>
@@ -836,6 +883,40 @@
             </div>
             <span class="text-xs text-gray-400 ml-auto">Máx: ${maxAllowed.toLocaleString('pt-BR')} un</span>
           </div>`;
+
+        container.appendChild(card);
+
+        const input = card.querySelector('input[data-role="stock-input"]');
+        input?.addEventListener('input', e => {
+          const key = e.currentTarget.getAttribute('data-variant-key');
+          if (!key) return;
+          const max = Math.max(0, Math.floor(Number(e.currentTarget.getAttribute('max')) || 0));
+          const value = Math.max(0, Math.min(max, Math.floor(Number(e.currentTarget.value) || 0)));
+          setSelectionQuantity(key, value);
+          replaceModalState.selectionInitialized = true;
+          renderReplaceModalList();
+        });
+
+        card.querySelectorAll('[data-action="fill-max"]').forEach(btn => {
+          btn.addEventListener('click', () => {
+            const key = btn.getAttribute('data-variant-key');
+            if (!key) return;
+            const max = Math.max(0, Math.floor(Number(btn.previousElementSibling?.getAttribute('max')) || 0));
+            setSelectionQuantity(key, max);
+            replaceModalState.selectionInitialized = true;
+            renderReplaceModalList();
+          });
+        });
+
+        card.querySelectorAll('[data-action="clear-selection"]').forEach(btn => {
+          btn.addEventListener('click', () => {
+            const key = btn.getAttribute('data-variant-key');
+            if (!key) return;
+            setSelectionQuantity(key, 0);
+            replaceModalState.selectionInitialized = true;
+            renderReplaceModalList();
+          });
+        });
       } else {
         const remaining = Math.max(0, requiredQty - (getTotalSelectedQuantity() - currentQty));
         card.innerHTML = `
@@ -988,7 +1069,7 @@ async function computeInsumosAndRender(){
 
     for (const r of rows) {
       const prod = byId.get(String(r.produto_id));
-      const codigo = prod?.codigo; r.status=''; r.faltantes=[]; r.produzir_total=0; r.produzir_parcial=0; r.popover={variants:[]}; r.pronta=0; r.em_estoque=0; r.a_produzir=0;
+      const codigo = prod?.codigo; r.status=''; r.faltantes=[]; r.produzir_total=0; r.produzir_parcial=0; r.popover={variants:[]}; r.pronta=0; r.em_estoque=0; r.a_produzir=0; r.codigo = codigo;
       if (!codigo) continue;
 
       let detalhes = {};
