@@ -314,6 +314,12 @@ input[type="date"]:valid::-webkit-datetime-edit {
     z-index: 1;
 }
 
+#converterOrcamentoOverlay .table-scroll th,
+#converterOrcamentoOverlay .table-scroll td {
+    word-break: normal;
+    hyphens: manual;
+}
+
 #bt-actions {
     margin-top: 1vw;
 }

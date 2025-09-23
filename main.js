@@ -124,12 +124,12 @@ const offsetX = 0;
 const offsetY = 0;
 
 function getBoundsForDisplay(display, offX = offsetX, offY = offsetY) {
-  const { bounds, workAreaSize } = display;
+  const { bounds } = display;
   return {
     x: Math.round(bounds.x + offX),
     y: Math.round(bounds.y + offY),
-    width: Math.round(workAreaSize.width),
-    height: Math.round(workAreaSize.height)
+    width: Math.round(bounds.width),
+    height: Math.round(bounds.height)
   };
 }
 
