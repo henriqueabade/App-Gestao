@@ -213,8 +213,8 @@ function createLoginWindow(show = true, showOnLoad = true) {
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
-    nodeIntegration: false
-  }
+      nodeIntegration: false,
+    },
   });
 
   // Espera o conteúdo estar pronto para posicionar e exibir
@@ -240,9 +240,8 @@ function createLoginWindow(show = true, showOnLoad = true) {
   // Carrega o HTML, passando hidden=0/1 via query (como você já fazia)
   loginWindow.loadFile(
     path.join(__dirname, 'src/login/login.html'),
-    { query: { hidden: showOnLoad ? '0' : '1'
-     } }
-  );  
+    { query: { hidden: showOnLoad ? '0' : '1' } },
+  );
 
   loginWindow.on('closed', () => {
     loginWindow = null;
@@ -273,8 +272,8 @@ function createDashboardWindow(show = true) {
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
-    nodeIntegration: false
-  }
+      nodeIntegration: false,
+    },
   });
 
   dashboardWindow.once('ready-to-show', () => {
