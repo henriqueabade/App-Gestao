@@ -391,4 +391,6 @@ body {
     max-height: calc(var(--module-height) - 260px) !important;
     overflow-y: auto;
     overflow-x: hidden;
+    width: 100%;
+    -webkit-overflow-scrolling: touch;
 }

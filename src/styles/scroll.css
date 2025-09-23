@@ -47,15 +47,47 @@ html, body, #app, #mainContent  {
 
 /* 3a) Scroll personalizado para tabelas */
 .table-scroll {
+  position: relative;
   overflow-y: auto;
-  overflow-x: hidden;
+  overflow-x: auto;
   max-height: calc(var(--module-height) - 200px);
   box-sizing: border-box;
+  width: 100%;
+  -webkit-overflow-scrolling: touch;
+}
+
+.table-scroll table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: auto;
+}
+
+.table-scroll th,
+.table-scroll td {
+  padding: clamp(0.35rem, 0.5rem + 0.2vw, 0.75rem);
+  font-size: clamp(0.7rem, 0.65rem + 0.4vw, 0.95rem);
+  white-space: normal;
+  word-break: break-word;
+  hyphens: auto;
+  line-height: 1.4;
+  vertical-align: middle;
+}
+
+.table-scroll th {
+  text-align: left;
+}
+
+@media (max-width: 768px) {
+  .table-scroll th,
+  .table-scroll td {
+    padding: clamp(0.3rem, 1.2vw + 0.25rem, 0.6rem);
+  }
 }
 
 /* personalização do scrollbar (WebKit/Blink) */
 .table-scroll::-webkit-scrollbar {
   width: 6px;
+  height: 6px;
 }
 .table-scroll::-webkit-scrollbar-track {
   background: #1e1e1e00;
@@ -71,8 +103,9 @@ html, body, #app, #mainContent  {
 /* 3b) Scroll personalizado para conteúdo de modais */
 .modal-scroll {
   overflow-y: auto;
-  overflow-x: hidden;
+  overflow-x: auto;
   scrollbar-width: thin;
+  -webkit-overflow-scrolling: touch;
 }
 
 .modal-scroll::-webkit-scrollbar {
