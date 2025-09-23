@@ -328,10 +328,10 @@
 
     const chips = [];
     if (normalizeQuantity(state.stock) > 0) {
-      chips.push({ action: 'stock', label: '📦 Retornar ao estoque', quantity: state.stock });
+      chips.push({ action: 'stock', icon: 'fa-box-open', label: 'Retornar ao estoque', quantity: state.stock });
     }
     if (normalizeQuantity(state.discard) > 0) {
-      chips.push({ action: 'discard', label: '🗑️ Descartar', quantity: state.discard });
+      chips.push({ action: 'discard', icon: 'fa-trash', label: 'Descartar', quantity: state.discard });
     }
     (state.reallocations || [])
       .filter(entry => normalizeQuantity(entry.quantity) > 0)
@@ -339,7 +339,8 @@
         chips.push({
           action: 'reallocate',
           orderId: entry.orderId,
-          label: `🔄 ${formatOrderLabel(entry.orderId)}`,
+          icon: 'fa-exchange-alt',
+          label: formatOrderLabel(entry.orderId),
           quantity: entry.quantity
         });
       });
@@ -356,9 +357,13 @@
       const button = document.createElement('button');
       button.type = 'button';
       button.className = 'w-full text-left bg-white/5 border border-white/10 px-3 py-2 rounded-lg text-xs text-gray-200 hover:border-primary/40 transition';
+      const iconHtml = chip.icon ? `<i class="fas ${chip.icon} text-sm" aria-hidden="true"></i>` : '';
       button.innerHTML = `
         <div class="flex items-center justify-between gap-2">
-          <span>${chip.label}</span>
+          <span class="flex items-center gap-2">
+            ${iconHtml}
+            <span>${chip.label}</span>
+          </span>
           <span class="font-semibold text-white">${formatUnitsLabel(chip.quantity)}</span>
         </div>
       `;
@@ -1092,19 +1097,19 @@
       const buttonsRow = document.createElement('div');
       buttonsRow.className = 'flex items-center justify-center gap-2';
 
-      const createActionButton = (icon, title, onClick, extraClasses = '') => {
+      const createActionButton = (iconClass, title, onClick, extraClasses = '') => {
         const btn = document.createElement('button');
         btn.type = 'button';
         btn.className = `w-10 h-10 flex items-center justify-center rounded-lg border border-white/10 bg-white/5 text-lg text-white hover:border-primary/40 transition focus:outline-none focus:ring-2 focus:ring-primary/40 ${extraClasses}`;
         btn.title = title;
-        btn.innerHTML = `<span>${icon}</span>`;
+        btn.innerHTML = `<i class="fas ${iconClass}" aria-hidden="true"></i>`;
         btn.addEventListener('click', onClick);
         return btn;
       };
 
-      const stockBtn = createActionButton('📦', 'Retornar ao estoque', () => handleSimpleAction(key, 'stock'));
-      const reallocateBtn = createActionButton('🔄', 'Realocar em outro pedido', () => handleReallocateClick(key));
-      const discardBtn = createActionButton('🗑️', 'Descartar peça', () => handleSimpleAction(key, 'discard'));
+      const stockBtn = createActionButton('fa-box-open', 'Retornar ao estoque', () => handleSimpleAction(key, 'stock'));
+      const reallocateBtn = createActionButton('fa-exchange-alt', 'Realocar em outro pedido', () => handleReallocateClick(key));
+      const discardBtn = createActionButton('fa-trash', 'Descartar peça', () => handleSimpleAction(key, 'discard'));
 
       buttonsRow.append(stockBtn, reallocateBtn, discardBtn);
 

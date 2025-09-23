@@ -226,6 +226,54 @@
     });
     return plan;
   }
+
+  function buildVariantSummaryListHTML(items, row, options = {}) {
+    if (!Array.isArray(items) || !items.length) return '';
+    const { showCurrentBadge = false } = options;
+    let html = '<ul class="space-y-3">';
+    let hasAny = false;
+    items.forEach(item => {
+      const qty = Number(item?.qty || 0);
+      if (!(qty > 0)) return;
+      hasAny = true;
+      const productName = item?.productName || row?.nome || 'Peça do orçamento';
+      const productCode = item?.productCode ? String(item.productCode) : '';
+      const processName = item?.processName || 'Processo não informado';
+      const lastItem = item?.lastItemName || 'Sem último insumo';
+      const isCurrent = !!(showCurrentBadge && item?.isCurrentProduct);
+      html += `
+        <li class="rounded-xl border border-white/10 bg-white/5 px-3 py-3">
+          <div class="flex flex-wrap items-start justify-between gap-3">
+            <div class="space-y-1">
+              <p class="text-xs text-gray-400 uppercase tracking-wide">Peça</p>
+              <p class="text-white font-semibold leading-tight whitespace-pre-line break-words">${productName}</p>
+              ${productCode ? `<p class="text-[11px] text-gray-500">Cód: ${productCode}</p>` : ''}
+              ${isCurrent ? '<p class="text-[11px] text-gray-400 uppercase tracking-wide">Peça do orçamento</p>' : ''}
+            </div>
+            <span class="badge-info px-2 py-1 rounded text-xs whitespace-nowrap">${qty.toLocaleString('pt-BR')} un</span>
+          </div>
+          <div class="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs text-gray-300">
+            <p><span class="text-gray-400">Etapa:</span> ${processName}</p>
+            <p><span class="text-gray-400">Último insumo:</span> ${lastItem}</p>
+          </div>
+        </li>`;
+    });
+    html += '</ul>';
+    return hasAny ? html : '';
+  }
+
+  function buildProduceSummaryHTML(quantity, label = 'Produzir do zero') {
+    const qty = Number(quantity || 0);
+    if (!(qty > 0)) return '';
+    return `
+      <div class="rounded-xl border border-amber-400/40 bg-amber-500/10 px-3 py-3 flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <p class="text-white font-semibold">${label}</p>
+          <p class="text-xs text-gray-300">Quantidade planejada para produção.</p>
+        </div>
+        <span class="badge-warning px-2 py-1 rounded text-xs whitespace-nowrap">${qty.toLocaleString('pt-BR')} un</span>
+      </div>`;
+  }
   document.addEventListener('keydown', function esc(e){
     if (e.key === 'Escape') {
       if (replaceModalRefs && !replaceModalRefs.overlay.classList.contains('hidden')) return;
@@ -433,42 +481,48 @@
         <div class="flex-1 overflow-y-auto modal-scroll">
           <div class="p-6 space-y-6">
             <div class="bg-surface/40 rounded-lg border border-white/10 p-4 space-y-4">
-              <div>
-                <h4 class="font-medium text-white mb-3">Peça Atual</h4>
-                <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
-                  <div>
-                    <p class="text-gray-400 text-xs mb-1">Nome</p>
-                    <p class="text-white font-medium" data-field="piece-name"></p>
+              <div class="space-y-4">
+                <h4 class="font-medium text-white">Peça Atual</h4>
+                <div class="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-6">
+                  <div class="flex-1 space-y-3">
+                    <div>
+                      <p class="text-gray-400 text-xs uppercase tracking-wide mb-1">Nome</p>
+                      <p class="text-white font-semibold text-lg leading-tight whitespace-pre-line break-words" data-field="piece-name"></p>
+                    </div>
+                    <p class="text-sm text-gray-300" data-field="piece-details"></p>
                   </div>
-                  <div>
-                    <p class="text-gray-400 text-xs mb-1">Qtd Orçada</p>
-                    <p class="text-white font-medium" data-field="piece-qty"></p>
-                  </div>
-                  <div>
-                    <p class="text-gray-400 text-xs mb-1">Total em Estoque</p>
-                    <p class="text-white font-medium" data-field="piece-stock-total"></p>
-                  </div>
-                  <div>
-                    <p class="text-gray-400 text-xs mb-1">Peças Prontas</p>
-                    <p class="text-white font-medium" data-field="piece-ready"></p>
-                  </div>
-                  <div>
-                    <p class="text-gray-400 text-xs mb-1">Produzir Parcial</p>
-                    <p class="text-white font-medium" data-field="piece-produce-partial"></p>
-                  </div>
-                  <div>
-                    <p class="text-gray-400 text-xs mb-1">Produzir Total</p>
-                    <p class="text-white font-medium" data-field="piece-produce-total"></p>
+                  <div class="w-full lg:max-w-md space-y-3">
+                    <div class="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                      <div>
+                        <p class="text-gray-400 text-xs uppercase tracking-wide mb-1">Qtd Orçada</p>
+                        <p class="text-white font-semibold" data-field="piece-qty"></p>
+                      </div>
+                      <div>
+                        <p class="text-gray-400 text-xs uppercase tracking-wide mb-1">Total em Estoque</p>
+                        <p class="text-white font-semibold" data-field="piece-stock-total"></p>
+                      </div>
+                      <div>
+                        <p class="text-gray-400 text-xs uppercase tracking-wide mb-1">Peças Prontas</p>
+                        <p class="text-white font-semibold" data-field="piece-ready"></p>
+                      </div>
+                      <div>
+                        <p class="text-gray-400 text-xs uppercase tracking-wide mb-1">Produzir Parcial</p>
+                        <p class="text-white font-semibold" data-field="piece-produce-partial"></p>
+                      </div>
+                      <div>
+                        <p class="text-gray-400 text-xs uppercase tracking-wide mb-1">Produzir Total</p>
+                        <p class="text-white font-semibold" data-field="piece-produce-total"></p>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
               <div class="space-y-3">
-                <p class="text-gray-400 text-sm" data-field="piece-details"></p>
                 <div>
                   <p class="text-gray-300 text-xs uppercase tracking-wide mb-2">TIPOS SELECIONADOS AUTOMATICAMENTE</p>
-                  <div data-field="piece-stock-breakdown" class="space-y-2"></div>
+                  <div data-field="piece-stock-breakdown" class="space-y-3"></div>
                 </div>
-                <div data-field="piece-selection" class="hidden border border-primary/40 bg-primary/5 rounded-lg p-3 space-y-2"></div>
+                <div data-field="piece-selection" class="hidden border border-primary/40 bg-primary/5 rounded-lg p-3 space-y-3"></div>
               </div>
             </div>
             <div class="bg-surface/40 rounded-lg border border-white/10 p-4">
@@ -593,41 +647,22 @@
     const breakdownContainer = replaceModalRefs.stockBreakdown;
     if (breakdownContainer) {
       const originalPlan = replaceModalState.originalPlan;
-      const hasStockSelections = Array.isArray(originalPlan?.stock) && originalPlan.stock.length > 0;
+      const stockList = Array.isArray(originalPlan?.stock) ? originalPlan.stock : [];
+      const hasStockSelections = stockList.some(item => Number(item?.qty || 0) > 0);
       const produceQty = Number(originalPlan?.produceQty || 0);
       const requiredQty = Number(originalPlan?.requiredQty || 0);
       const totalSelected = Number(originalPlan?.totalSelected || 0);
       if (hasStockSelections || produceQty > 0) {
         const autoRemainingClass = requiredQty === totalSelected ? 'text-emerald-300' : 'text-amber-300';
         let content = `
-          <div class="flex items-center justify-between text-sm text-white font-medium">
+          <div class="flex items-center justify-between text-sm text-white font-semibold">
             <span>Seleção automática</span>
             <span>${totalSelected.toLocaleString('pt-BR')} de ${requiredQty.toLocaleString('pt-BR')} un</span>
           </div>`;
-        if (hasStockSelections) {
-          content += '<ul class="space-y-2">';
-          originalPlan.stock.forEach(item => {
-            const qty = Number(item.qty || 0);
-            const process = item.processName || 'Processo não informado';
-            const lastItem = item.lastItemName || 'Sem insumo';
-            content += `
-              <li class="flex items-center justify-between gap-3 text-sm">
-                <div>
-                  <p class="text-white font-medium">${lastItem}</p>
-                  <p class="text-xs text-gray-400">${process}</p>
-                </div>
-                <span class="badge-info px-2 py-1 rounded text-xs">${qty.toLocaleString('pt-BR')} un</span>
-              </li>`;
-          });
-          content += '</ul>';
-        }
-        if (produceQty > 0) {
-          content += `
-            <div class="flex items-center justify-between gap-3 text-sm pt-2 border-t border-white/10">
-              <span class="text-white font-medium">Produzir do zero</span>
-              <span class="badge-warning px-2 py-1 rounded text-xs">${produceQty.toLocaleString('pt-BR')} un</span>
-            </div>`;
-        }
+        const autoListHtml = buildVariantSummaryListHTML(stockList, row, { showCurrentBadge: true });
+        if (autoListHtml) content += autoListHtml;
+        const produceHtml = buildProduceSummaryHTML(produceQty);
+        if (produceHtml) content += produceHtml;
         const remainingAuto = Math.max(0, requiredQty - totalSelected).toLocaleString('pt-BR');
         content += `
           <p class="text-xs text-gray-300 border-t border-white/10 pt-2 mt-2">Restante planejado: <span class="${autoRemainingClass} font-semibold">${remainingAuto} un</span></p>`;
@@ -646,31 +681,14 @@
         const remaining = Math.max(0, plan.remaining).toLocaleString('pt-BR');
         const remainingClass = plan.remaining === 0 ? 'text-emerald-300' : 'text-amber-300';
         let inner = `
-          <div class="flex items-center justify-between text-sm text-white font-medium">
+          <div class="flex items-center justify-between text-sm text-white font-semibold">
             <span>Seleção atual</span>
             <span>${totalLabel}</span>
           </div>`;
-        if (plan.stock.length) {
-          inner += '<ul class="space-y-2">';
-          plan.stock.forEach(item => {
-            inner += `
-              <li class="flex items-center justify-between gap-3 text-sm">
-                <div>
-                  <p class="text-white font-medium">${item.lastItemName || 'Sem insumo'}</p>
-                  <p class="text-xs text-gray-400">${item.processName || 'Processo não informado'}</p>
-                </div>
-                <span class="badge-info px-2 py-1 rounded text-xs">${item.qty.toLocaleString('pt-BR')} un</span>
-              </li>`;
-          });
-          inner += '</ul>';
-        }
-        if (plan.produceQty > 0) {
-          inner += `
-            <div class="flex items-center justify-between gap-3 text-sm pt-2 border-t border-white/10">
-              <span class="text-white font-medium">Produzir do zero</span>
-              <span class="badge-warning px-2 py-1 rounded text-xs">${plan.produceQty.toLocaleString('pt-BR')} un</span>
-            </div>`;
-        }
+        const selectionListHtml = buildVariantSummaryListHTML(plan.stock, row, { showCurrentBadge: true });
+        if (selectionListHtml) inner += selectionListHtml;
+        const produceHtml = buildProduceSummaryHTML(plan.produceQty);
+        if (produceHtml) inner += produceHtml;
         inner += `
           <p class="text-xs text-gray-300 border-t border-white/10 pt-2 mt-2">Restante para atingir o orçado: <span class="${remainingClass} font-semibold">${remaining} un</span></p>`;
         selectionContainer.innerHTML = inner;
