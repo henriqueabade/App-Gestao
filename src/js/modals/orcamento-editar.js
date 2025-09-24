@@ -714,7 +714,7 @@
   }
 
   // Abre o modal de conversão mantendo este modal de edição no fundo
-  function openConverterModal(onConfirm) {
+  async function openConverterModal(onConfirm) {
     const linhas = Array.from(itensTbody?.children || []).map(tr => ({
       produto_id: Number(tr.dataset.id),
       nome: tr.children[0]?.textContent?.trim() || '',
@@ -761,7 +761,12 @@
         window.quoteConversionContext = null;
       }
     };
-    Modal.open('modals/orcamentos/converter.html', '../js/modals/orcamento-converter.js', 'converterOrcamento', true);
+    const openConverter = () => Modal.open('modals/orcamentos/converter.html', '../js/modals/orcamento-converter.js', 'converterOrcamento', true);
+    if (typeof window.withModalLoading === 'function') {
+      await window.withModalLoading(2000, openConverter);
+    } else {
+      await openConverter();
+    }
   }
 
   // Captura o submit antes do handler padrão para abrir o modal de conversão quando necessário

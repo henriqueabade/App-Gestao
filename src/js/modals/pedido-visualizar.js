@@ -264,13 +264,18 @@
     window.cancelarPedidoContext = null;
   }
 
-  overlay.querySelector('#cancelarVisualizarPedido')?.addEventListener('click', () => {
+  overlay.querySelector('#cancelarVisualizarPedido')?.addEventListener('click', async () => {
     if (!window.cancelarPedidoContext || !window.cancelarPedidoContext.pedido) {
       if (typeof showToast === 'function') showToast('Não foi possível carregar os dados do pedido.', 'error');
       return;
     }
     close();
-    Modal.open('modals/pedidos/cancelar.html', '../js/modals/pedido-cancelar.js', 'cancelarPedido');
+    const openCancelModal = () => Modal.open('modals/pedidos/cancelar.html', '../js/modals/pedido-cancelar.js', 'cancelarPedido');
+    if (typeof window.withModalLoading === 'function') {
+      await window.withModalLoading(2000, openCancelModal);
+    } else {
+      await openCancelModal();
+    }
   });
 
   window.dispatchEvent(new CustomEvent('pedidoModalLoaded', { detail: overlayId }));

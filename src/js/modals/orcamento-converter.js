@@ -623,36 +623,46 @@
 
   async function openReplaceModal(index) {
     if (isNaN(index) || index < 0) return;
-    await (listaProdutos.length ? Promise.resolve() : carregarProdutos());
-    currentReplaceIndex = index;
     const refs = ensureReplaceModal();
     const row = rows[index];
-    if (!row) return;
-    replaceModalState.searchTerm = '';
-    replaceModalState.variants = [];
-    replaceModalState.selections = new Map();
-    replaceModalState.loadingVariants = null;
-    replaceModalState.variantsLoadedForRowId = null;
-    replaceModalState.initialSelections = Array.isArray(row.replacementPlan?.selections)
-      ? row.replacementPlan.selections.map(sel => ({ key: sel.key, qty: sel.qty }))
-      : null;
-    const manualPlan = row.replacementPlan
-      ? JSON.parse(JSON.stringify(row.replacementPlan))
-      : null;
-    const hasManualSelection = manualPlan
-      && ((Array.isArray(manualPlan.stock) && manualPlan.stock.some(item => Number(item?.qty || 0) > 0))
-        || Number(manualPlan.produceQty || 0) > 0
-        || Number(manualPlan.totalSelected || 0) > 0);
-    const autoPlan = buildOriginalPlanFromRow(row);
-    const hasAutoSelection = autoPlan
-      && ((Array.isArray(autoPlan.stock) && autoPlan.stock.some(item => Number(item?.qty || 0) > 0))
-        || Number(autoPlan.produceQty || 0) > 0
-        || Number(autoPlan.totalSelected || 0) > 0);
-    replaceModalState.originalPlan = hasAutoSelection ? autoPlan : (hasManualSelection ? manualPlan : autoPlan);
-    if (refs.search) refs.search.value = '';
-    renderReplaceModalSummary();
-    await renderReplaceModalList({ forceReload: true });
-    updateReplaceModalConfirmButton();
+    if (!refs || !row) return;
+    currentReplaceIndex = index;
+
+    const prepareModal = async () => {
+      await (listaProdutos.length ? Promise.resolve() : carregarProdutos());
+      replaceModalState.searchTerm = '';
+      replaceModalState.variants = [];
+      replaceModalState.selections = new Map();
+      replaceModalState.loadingVariants = null;
+      replaceModalState.variantsLoadedForRowId = null;
+      replaceModalState.initialSelections = Array.isArray(row.replacementPlan?.selections)
+        ? row.replacementPlan.selections.map(sel => ({ key: sel.key, qty: sel.qty }))
+        : null;
+      const manualPlan = row.replacementPlan
+        ? JSON.parse(JSON.stringify(row.replacementPlan))
+        : null;
+      const hasManualSelection = manualPlan
+        && ((Array.isArray(manualPlan.stock) && manualPlan.stock.some(item => Number(item?.qty || 0) > 0))
+          || Number(manualPlan.produceQty || 0) > 0
+          || Number(manualPlan.totalSelected || 0) > 0);
+      const autoPlan = buildOriginalPlanFromRow(row);
+      const hasAutoSelection = autoPlan
+        && ((Array.isArray(autoPlan.stock) && autoPlan.stock.some(item => Number(item?.qty || 0) > 0))
+          || Number(autoPlan.produceQty || 0) > 0
+          || Number(autoPlan.totalSelected || 0) > 0);
+      replaceModalState.originalPlan = hasAutoSelection ? autoPlan : (hasManualSelection ? manualPlan : autoPlan);
+      if (refs.search) refs.search.value = '';
+      renderReplaceModalSummary();
+      await renderReplaceModalList({ forceReload: true });
+      updateReplaceModalConfirmButton();
+    };
+
+    if (typeof window.withModalLoading === 'function') {
+      await window.withModalLoading(1000, prepareModal);
+    } else {
+      await prepareModal();
+    }
+
     refs.overlay.classList.remove('hidden');
     requestAnimationFrame(() => { refs.modal?.focus(); });
   }
@@ -1074,7 +1084,16 @@
   }
 
   // Botões básicos
-  btnCancelar.addEventListener('click', close);
+  function handleCancelConversion() {
+    try { closeReplaceModal(); }
+    catch (err) { console.error(err); }
+    window.confirmQuoteConversion = null;
+    window.quoteConversionContext = null;
+    if (typeof Modal?.closeAll === 'function') Modal.closeAll();
+    else close();
+  }
+
+  btnCancelar.addEventListener('click', handleCancelConversion);
   btnConfirmar.addEventListener('click', () => {
     const deletions = (ctx.items || [])
       .filter(orig => !rows.find(r => r.produto_id === orig.produto_id))

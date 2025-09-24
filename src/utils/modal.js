@@ -117,6 +117,34 @@ const ModalManager = (() => {
 window.ModalManager = ModalManager;
 window.Modal = ModalManager;
 
+function createModalLoadingOverlay() {
+  const existing = document.getElementById('modalLoading');
+  if (existing) existing.remove();
+  const spinner = document.createElement('div');
+  spinner.id = 'modalLoading';
+  spinner.className = 'fixed inset-0 z-[2000] bg-black/50 flex items-center justify-center';
+  spinner.innerHTML = '<div class="w-16 h-16 border-4 border-[#b6a03e] border-t-transparent rounded-full animate-spin"></div>';
+  return spinner;
+}
+
+async function withModalLoading(duration = 0, action) {
+  const spinner = createModalLoadingOverlay();
+  document.body.appendChild(spinner);
+  try {
+    if (duration > 0) {
+      await new Promise(resolve => setTimeout(resolve, duration));
+    }
+    if (typeof action === 'function') {
+      return await action();
+    }
+    return action;
+  } finally {
+    if (spinner.isConnected) spinner.remove();
+  }
+}
+
+window.withModalLoading = withModalLoading;
+
 function closeAllModals() {
   ModalManager.closeAll();
   document.querySelectorAll('.order-detail-overlay.open')
