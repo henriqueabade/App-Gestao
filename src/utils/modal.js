@@ -1,5 +1,6 @@
 const ModalManager = (() => {
   const modals = new Map();
+  const readyModals = new Set();
   // Token used to ensure only the latest open() call displays a modal.
   // Any call to closeAll() increments this token, invalidating in-flight opens.
   let openToken = 0;
@@ -52,6 +53,7 @@ const ModalManager = (() => {
 
     // Closing existing modals invalidates older open() calls via openToken.
     if (!keepExisting) closeAll();
+    readyModals.delete(overlayId);
     // Increment and store token so async steps know if they should continue.
     const token = ++openToken;
 
@@ -78,6 +80,11 @@ const ModalManager = (() => {
   }
 
   function close(overlayId) {
+    if (!readyModals.has(overlayId)) {
+      readyModals.add(overlayId);
+      window.dispatchEvent(new CustomEvent('modal-ready', { detail: overlayId }));
+    }
+    readyModals.delete(overlayId);
     const wrapper = modals.get(overlayId);
     if (wrapper) {
       wrapper.remove();
@@ -111,7 +118,35 @@ const ModalManager = (() => {
     }
   }
 
-  return { open, close, closeAll };
+  function signalReady(overlayId) {
+    readyModals.add(overlayId);
+    window.dispatchEvent(new CustomEvent('modal-ready', { detail: overlayId }));
+  }
+
+  function waitForReady(overlayId, timeout = 15000) {
+    if (readyModals.has(overlayId)) return Promise.resolve();
+    return new Promise(resolve => {
+      let timer = null;
+      const cleanup = () => {
+        window.removeEventListener('modal-ready', onReady);
+        if (timer) clearTimeout(timer);
+      };
+      const onReady = event => {
+        if (event?.detail !== overlayId) return;
+        cleanup();
+        resolve();
+      };
+      window.addEventListener('modal-ready', onReady);
+      if (timeout > 0) {
+        timer = setTimeout(() => {
+          cleanup();
+          resolve();
+        }, timeout);
+      }
+    });
+  }
+
+  return { open, close, closeAll, signalReady, waitForReady };
 })();
 
 window.ModalManager = ModalManager;

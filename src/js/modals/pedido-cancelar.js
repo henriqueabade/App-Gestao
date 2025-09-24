@@ -3,8 +3,36 @@
   const overlay = document.getElementById('cancelarPedidoOverlay');
   if (!overlay) return;
 
+  let readyMarked = false;
+  const markReady = (reveal = true) => {
+    if (!overlay || !overlay.classList) {
+      if (!readyMarked && typeof Modal?.signalReady === 'function') {
+        readyMarked = true;
+        Modal.signalReady(overlayId);
+      }
+      return;
+    }
+
+    if (reveal && overlay.classList.contains('hidden')) {
+      overlay.classList.remove('hidden');
+      overlay.removeAttribute('aria-hidden');
+    } else if (!reveal) {
+      overlay.setAttribute('aria-hidden', 'true');
+    }
+
+    if (!readyMarked) {
+      readyMarked = true;
+      overlay.dataset.modalReady = 'true';
+      overlay.removeAttribute('data-modal-loading');
+      if (typeof Modal?.signalReady === 'function') {
+        Modal.signalReady(overlayId);
+      }
+    }
+  };
+
   const context = window.cancelarPedidoContext;
   if (!context || !context.pedido) {
+    markReady(false);
     Modal.close(overlayId);
     return;
   }
@@ -1250,6 +1278,7 @@
     } finally {
       ordersLoading = false;
       refreshOrdersUI();
+      markReady(true);
     }
   };
 

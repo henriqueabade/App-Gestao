@@ -270,7 +270,12 @@
       return;
     }
     close();
-    const openCancelModal = () => Modal.open('modals/pedidos/cancelar.html', '../js/modals/pedido-cancelar.js', 'cancelarPedido');
+    const openCancelModal = async () => {
+      await Modal.open('modals/pedidos/cancelar.html', '../js/modals/pedido-cancelar.js', 'cancelarPedido');
+      if (typeof Modal?.waitForReady === 'function') {
+        await Modal.waitForReady('cancelarPedido');
+      }
+    };
     if (typeof window.withModalLoading === 'function') {
       await window.withModalLoading(2000, openCancelModal);
     } else {

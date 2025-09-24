@@ -762,7 +762,12 @@
       }
     };
     const shouldSkipInnerLoading = window.autoOpenQuoteConversion?.skipInnerSpinner;
-    const openConverter = () => Modal.open('modals/orcamentos/converter.html', '../js/modals/orcamento-converter.js', 'converterOrcamento', true);
+    const openConverter = async () => {
+      await Modal.open('modals/orcamentos/converter.html', '../js/modals/orcamento-converter.js', 'converterOrcamento', true);
+      if (typeof Modal?.waitForReady === 'function') {
+        await Modal.waitForReady('converterOrcamento');
+      }
+    };
     if (!shouldSkipInnerLoading && typeof window.withModalLoading === 'function') {
       await window.withModalLoading(2000, openConverter);
     } else {
