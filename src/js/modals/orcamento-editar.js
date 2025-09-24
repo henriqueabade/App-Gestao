@@ -761,8 +761,9 @@
         window.quoteConversionContext = null;
       }
     };
+    const shouldSkipInnerLoading = window.autoOpenQuoteConversion?.skipInnerSpinner;
     const openConverter = () => Modal.open('modals/orcamentos/converter.html', '../js/modals/orcamento-converter.js', 'converterOrcamento', true);
-    if (typeof window.withModalLoading === 'function') {
+    if (!shouldSkipInnerLoading && typeof window.withModalLoading === 'function') {
       await window.withModalLoading(2000, openConverter);
     } else {
       await openConverter();
@@ -854,6 +855,12 @@
       showToast('Erro ao clonar orçamento', 'error');
     }
   });
+
+  if (window.autoOpenQuoteConversion?.id === id) {
+    setTimeout(() => {
+      openConverterModal(() => {});
+    });
+  }
 
   window.dispatchEvent(new CustomEvent('orcamentoModalLoaded', { detail: overlayId }));
 })();
