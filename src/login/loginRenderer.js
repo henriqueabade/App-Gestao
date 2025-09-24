@@ -141,6 +141,12 @@ if (intro) {
 
   const storedPin = localStorage.getItem('pin');
   const storedUser = localStorage.getItem('user');
+  let parsedStoredUser = null;
+  try {
+    parsedStoredUser = storedUser ? JSON.parse(storedUser) : null;
+  } catch (_) {
+    parsedStoredUser = null;
+  }
   const rememberUser = localStorage.getItem('rememberUser') === '1';
   if (storedUser && rememberUser) {
     let saved = await window.electronAPI.loadState();
@@ -149,7 +155,7 @@ if (intro) {
         const savedUser = saved.storage && saved.storage.user
           ? JSON.parse(saved.storage.user)
           : null;
-        const current = JSON.parse(storedUser);
+        const current = parsedStoredUser;
         if (
           savedUser &&
           current &&
@@ -169,7 +175,7 @@ if (intro) {
       }
     }
 
-    const result = await window.electronAPI.autoLogin(storedPin);
+    const result = await window.electronAPI.autoLogin(storedPin, parsedStoredUser);
     if (result && result.success) {
       if (storedUser) sessionStorage.setItem('currentUser', storedUser);
       return;

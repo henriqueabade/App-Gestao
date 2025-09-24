@@ -8,6 +8,7 @@ const {
   isPinError,
   isNetworkError
 } = require('./backend/backend');
+const { registrarUltimaSaida, registrarUltimaEntrada } = require('./backend/userActivity');
 const db = require('./backend/db');
 const fs = require('fs');
 const {
@@ -106,6 +107,11 @@ let dashboardWindow = null;
 let stateFile;
 let displayFile;
 let currentDisplayId;
+let currentUserSession = null;
+let lastRecordedAction = null;
+let isPersistingExit = false;
+let closingDashboardWindow = false;
+let quittingApp = false;
 
 function logDisplayInfo(context, selected) {
   if (!DEBUG) return;
@@ -179,6 +185,209 @@ function handleDisplaysChanged() {
     dashboardWindow.setBounds(bounds);
     dashboardWindow.setFullScreen(true);
   }
+}
+
+const IPC_ACTION_MAP = {
+  'adicionar-materia-prima': { module: 'Matéria-Prima', label: 'Adicionou matéria-prima' },
+  'atualizar-materia-prima': { module: 'Matéria-Prima', label: 'Atualizou matéria-prima' },
+  'excluir-materia-prima': { module: 'Matéria-Prima', label: 'Removeu matéria-prima' },
+  'registrar-entrada-materia-prima': { module: 'Matéria-Prima', label: 'Registrou entrada em matéria-prima' },
+  'registrar-saida-materia-prima': { module: 'Matéria-Prima', label: 'Registrou saída em matéria-prima' },
+  'atualizar-preco-materia-prima': { module: 'Matéria-Prima', label: 'Atualizou preço de matéria-prima' },
+  'adicionar-categoria': { module: 'Matéria-Prima', label: 'Adicionou categoria' },
+  'adicionar-unidade': { module: 'Matéria-Prima', label: 'Adicionou unidade' },
+  'adicionar-colecao': { module: 'Produtos', label: 'Adicionou coleção' },
+  'remover-categoria': { module: 'Matéria-Prima', label: 'Removeu categoria' },
+  'remover-unidade': { module: 'Matéria-Prima', label: 'Removeu unidade' },
+  'remover-colecao': { module: 'Produtos', label: 'Removeu coleção' },
+  'adicionar-produto': { module: 'Produtos', label: 'Adicionou produto' },
+  'atualizar-produto': { module: 'Produtos', label: 'Atualizou produto' },
+  'excluir-produto': { module: 'Produtos', label: 'Removeu produto' },
+  'inserir-lote-produto': { module: 'Produtos', label: 'Inseriu lote de produto' },
+  'atualizar-lote-produto': { module: 'Produtos', label: 'Atualizou lote de produto' },
+  'excluir-lote-produto': { module: 'Produtos', label: 'Removeu lote de produto' },
+  'salvar-produto-detalhado': { module: 'Produtos', label: 'Salvou produto detalhado' },
+  'adicionar-etapa-producao': { module: 'Produtos', label: 'Adicionou etapa de produção' },
+  'remover-etapa-producao': { module: 'Produtos', label: 'Removeu etapa de produção' },
+  'registrar-usuario': { module: 'Usuários', label: 'Registrou novo usuário' }
+};
+
+const API_MODULE_TITLES = {
+  clientes: 'Clientes',
+  orcamentos: 'Orçamentos',
+  pedidos: 'Pedidos',
+  transportadoras: 'Transportadoras',
+  usuarios: 'Usuários',
+  materia_prima: 'Matéria-Prima',
+  materia: 'Matéria-Prima',
+  produtos: 'Produtos',
+  financeiro: 'Financeiro',
+  contatos: 'Contatos'
+};
+
+function setCurrentUserSession(user) {
+  if (user && user.id) {
+    currentUserSession = {
+      id: user.id,
+      nome: user.nome,
+      perfil: user.perfil
+    };
+  } else {
+    currentUserSession = null;
+  }
+  lastRecordedAction = null;
+  quittingApp = false;
+}
+
+function summarizeValue(value) {
+  if (value === null || value === undefined) return '';
+  if (typeof value === 'string') return value.trim();
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  return '';
+}
+
+function summarizePayload(payload) {
+  if (payload === null || payload === undefined) return '';
+  if (typeof payload === 'string') return payload.slice(0, 180);
+  if (typeof payload === 'number' || typeof payload === 'boolean') return String(payload);
+  if (Array.isArray(payload)) {
+    return payload
+      .slice(0, 3)
+      .map(item => summarizePayload(item))
+      .filter(Boolean)
+      .join(', ');
+  }
+  if (typeof payload === 'object') {
+    const keys = ['nome', 'name', 'codigo', 'id', 'email', 'cliente', 'cliente_id', 'produto', 'status', 'descricao', 'titulo'];
+    const parts = [];
+    for (const key of keys) {
+      if (Object.prototype.hasOwnProperty.call(payload, key)) {
+        const value = summarizePayload(payload[key]);
+        if (value) parts.push(`${key}: ${value}`);
+      }
+    }
+    if (!parts.length && typeof payload.dados === 'object') {
+      const nested = summarizePayload(payload.dados);
+      if (nested) parts.push(nested);
+    }
+    if (!parts.length && typeof payload.produto === 'object') {
+      const nested = summarizePayload(payload.produto);
+      if (nested) parts.push(nested);
+    }
+    if (!parts.length && Array.isArray(payload.itens)) {
+      const nested = summarizePayload(payload.itens);
+      if (nested) parts.push(`itens: ${nested}`);
+    }
+    if (!parts.length && payload.nome_categoria) {
+      const value = summarizeValue(payload.nome_categoria);
+      if (value) parts.push(`nome_categoria: ${value}`);
+    }
+    if (!parts.length) {
+      try {
+        return JSON.stringify(payload).slice(0, 200);
+      } catch (err) {
+        return '';
+      }
+    }
+    return parts.join(', ');
+  }
+  return '';
+}
+
+function capitalizeModuleName(key = '') {
+  return key
+    .replace(/[-_]/g, ' ')
+    .split(' ')
+    .filter(Boolean)
+    .map(part => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+}
+
+function normalizeIpcAction(action) {
+  if (!action || !action.channel) return null;
+  const meta = IPC_ACTION_MAP[action.channel];
+  if (!meta) return null;
+  if (action.result && (action.result.success === false || action.result.error)) return null;
+  const details = summarizePayload(action.payload) || summarizePayload(action.result);
+  const description = details ? `${meta.label} (${details})` : meta.label;
+  return { module: meta.module, description };
+}
+
+function normalizeFetchAction(action) {
+  if (!action || !action.url) return null;
+  if (action.ok === false) return null;
+  const method = (action.method || 'GET').toUpperCase();
+  if (method === 'GET' || method === 'HEAD') return null;
+  try {
+    const parsed = new URL(action.url);
+    const segments = parsed.pathname.split('/').filter(Boolean);
+    const apiIndex = segments.indexOf('api');
+    if (apiIndex === -1 || apiIndex >= segments.length - 1) return null;
+    const rawModule = segments[apiIndex + 1] || '';
+    const normalizedKey = rawModule.replace(/-/g, '_');
+    const module =
+      API_MODULE_TITLES[normalizedKey] ||
+      API_MODULE_TITLES[rawModule] ||
+      capitalizeModuleName(rawModule);
+    const pathInfo = segments.slice(apiIndex + 1).join('/');
+    const summary = action.bodySummary ? ` :: ${action.bodySummary}` : '';
+    return {
+      module,
+      description: `${method} ${pathInfo}${summary}`
+    };
+  } catch (err) {
+    return null;
+  }
+}
+
+function normalizeUserAction(action) {
+  if (!action) return null;
+  let data = null;
+  if (action.source === 'ipc') {
+    data = normalizeIpcAction(action);
+  } else if (action.source === 'fetch') {
+    data = normalizeFetchAction(action);
+  } else if (action.module || action.description) {
+    data = { module: action.module, description: action.description };
+  }
+  if (!data) return null;
+  const timestamp = new Date(action.timestamp || Date.now());
+  if (Number.isNaN(timestamp.getTime())) return null;
+  return {
+    timestamp,
+    module: data.module || 'Sistema',
+    description: data.description || 'Ação registrada',
+    details: action
+  };
+}
+
+async function persistUserExit(reason) {
+  if (!currentUserSession || isPersistingExit) return;
+  isPersistingExit = true;
+  const payload = { saida: new Date() };
+  if (lastRecordedAction) {
+    payload.ultimaAcao = {
+      timestamp: lastRecordedAction.timestamp,
+      modulo: lastRecordedAction.module,
+      descricao: lastRecordedAction.description
+    };
+  }
+  try {
+    await registrarUltimaSaida(currentUserSession.id, payload);
+  } catch (err) {
+    console.error('Falha ao registrar saída do usuário:', err);
+  }
+  currentUserSession = null;
+  lastRecordedAction = null;
+  isPersistingExit = false;
+}
+
+async function flushAndQuit(reason) {
+  if (!quittingApp) {
+    quittingApp = true;
+    await persistUserExit(reason);
+  }
+  app.quit();
 }
 
 function createLoginWindow(show = true, showOnLoad = true) {
@@ -327,6 +536,22 @@ function createDashboardWindow(show = true) {
     dashboardWindow.webContents.send('select-tab', 'dashboard');
   });
 
+  dashboardWindow.on('close', (event) => {
+    if (!currentUserSession || closingDashboardWindow) return;
+    event.preventDefault();
+    closingDashboardWindow = true;
+    persistUserExit('dashboard-close')
+      .catch(err => {
+        console.error('Falha ao registrar saída ao fechar dashboard:', err);
+      })
+      .finally(() => {
+        closingDashboardWindow = false;
+        if (dashboardWindow && !dashboardWindow.isDestroyed()) {
+          dashboardWindow.close();
+        }
+      });
+  });
+
   // Carrega a nova tela de menu
   dashboardWindow.loadFile(path.join(__dirname, 'src/html/menu.html'));
   dashboardWindow.on('closed', () => {
@@ -374,7 +599,15 @@ app.whenReady().then(() => {
 });
 
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') app.quit();
+  if (process.platform !== 'darwin') flushAndQuit('window-all-closed');
+});
+
+app.on('before-quit', (event) => {
+  if (quittingApp) return;
+  if (currentUserSession) {
+    event.preventDefault();
+    flushAndQuit('before-quit');
+  }
 });
 
 ipcMain.handle('registrar-usuario', async (_event, dados) => {
@@ -389,6 +622,7 @@ ipcMain.handle('registrar-usuario', async (_event, dados) => {
 ipcMain.handle('login-usuario', async (event, dados) => {
   try {
     const user = await loginUsuario(dados.email, dados.password, dados.pin);
+    setCurrentUserSession(user);
     return { success: true, user };
   } catch (err) {
     return { success: false, message: err.message };
@@ -603,7 +837,10 @@ ipcMain.handle('salvar-produto-detalhado', async (_e, { codigo, produto, itens }
   return salvarProdutoDetalhado(codigo, produto, itens);
 });
 
-ipcMain.handle('auto-login', async (_event, pin) => {
+ipcMain.handle('auto-login', async (_event, payload) => {
+  const { pin, user } = typeof payload === 'object' && payload !== null
+    ? payload
+    : { pin: payload };
   try {
     if (pin) {
       db.init(pin);
@@ -628,6 +865,16 @@ ipcMain.handle('auto-login', async (_event, pin) => {
     if (loginWindow) {
       loginWindow.close();
     }
+    if (user && user.id) {
+      setCurrentUserSession(user);
+      try {
+        await registrarUltimaEntrada(user.id);
+      } catch (err) {
+        console.error('Falha ao registrar ultima entrada (auto-login):', err);
+      }
+    } else {
+      setCurrentUserSession(null);
+    }
     if (dashboardWindow) {
       dashboardWindow.show();
       dashboardWindow.focus();
@@ -635,6 +882,7 @@ ipcMain.handle('auto-login', async (_event, pin) => {
     return { success: true };
   } catch (err) {
     console.error('Auto-login failed:', err.message);
+    currentUserSession = null;
     if (isNetworkError(err)) {
       return { success: false, reason: 'offline' };
     }
@@ -713,7 +961,18 @@ ipcMain.handle('clear-state', () => {
   return true;
 });
 
+ipcMain.handle('record-user-action', async (_event, action) => {
+  if (!currentUserSession) return false;
+  const normalized = normalizeUserAction(action);
+  if (!normalized) return false;
+  if (!lastRecordedAction || normalized.timestamp >= lastRecordedAction.timestamp) {
+    lastRecordedAction = normalized;
+  }
+  return true;
+});
+
 ipcMain.handle('close-dashboard', async () => {
+  await persistUserExit('close-dashboard');
   if (dashboardWindow) {
     dashboardWindow.close();
   }
@@ -732,6 +991,7 @@ ipcMain.handle('close-login', async () => {
 });
 
 ipcMain.handle('logout', async () => {
+  await persistUserExit('logout');
   if (dashboardWindow && !dashboardWindow.isDestroyed()) {
     dashboardWindow.close();
   }
@@ -758,7 +1018,7 @@ ipcMain.handle('show-login', async () => {
 
 
 ipcMain.handle('close-window', () => {
-  app.quit();
+  flushAndQuit('close-window');
 });
 ipcMain.handle('minimize-window', (event) => {
   const win = BrowserWindow.fromWebContents(event.sender);

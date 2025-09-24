@@ -1,6 +1,7 @@
 const pool = require('./db');
 const bcrypt = require('bcrypt');
 const { sendRegistrationEmail } = require("../src/email/sendRegistrationEmail");
+const { registrarUltimaEntrada } = require('./userActivity');
 
 // Track failed PIN attempts across session
 let pinErrorAttempts = 0;
@@ -94,6 +95,11 @@ async function loginUsuario(email, senha, pin) {
     if (!senhaCorreta) throw new Error('Senha incorreta');
 
     pinErrorAttempts = 0; // reset after successful login
+    try {
+      await registrarUltimaEntrada(usuario.id);
+    } catch (err) {
+      console.error('Falha ao registrar ultima entrada do usuário:', err);
+    }
     return { id: usuario.id, nome: usuario.nome, perfil: usuario.perfil };
   } catch (err) {
     if (isNetworkError(err)) {
