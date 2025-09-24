@@ -365,6 +365,7 @@ async function persistUserExit(reason) {
   if (!currentUserSession || isPersistingExit) return;
   isPersistingExit = true;
   const payload = { saida: new Date() };
+  if (reason) payload.motivo = reason;
   if (lastRecordedAction) {
     payload.ultimaAcao = {
       timestamp: lastRecordedAction.timestamp,

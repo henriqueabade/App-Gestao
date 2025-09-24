@@ -51,7 +51,23 @@ function formatarDescricaoAlteracao(descricao) {
     if (!descricao || !String(descricao).trim()) {
         return 'Nenhuma alteração registrada';
     }
-    return escapeHtml(descricao);
+
+    return String(descricao)
+        .split('|')
+        .map(parte => parte.trim())
+        .filter(Boolean)
+        .map(parte => {
+            const horarioRegex = /^horário:\s*/i;
+            if (horarioRegex.test(parte)) {
+                const valor = parte.replace(horarioRegex, '').trim();
+                const data = new Date(valor);
+                if (!Number.isNaN(data.getTime())) {
+                    return escapeHtml(`Horário: ${formatarDataHoraCompleta(data)}`);
+                }
+            }
+            return escapeHtml(parte);
+        })
+        .join('<br>');
 }
 
 function estaOnline(ultimaAtividade) {
@@ -62,7 +78,32 @@ function estaOnline(ultimaAtividade) {
 }
 
 function resolverStatusOnline(usuario) {
+    const ultimaEntrada = obterPrimeiroValor(usuario, [
+        'ultimaEntradaEm',
+        'ultima_entrada_em',
+        'ultimaEntrada',
+        'ultima_entrada'
+    ]);
+    const ultimaSaida = obterPrimeiroValor(usuario, [
+        'ultimaSaidaEm',
+        'ultima_saida_em',
+        'ultimaSaida',
+        'ultima_saida'
+    ]);
+
+    const entradaData = ultimaEntrada ? new Date(ultimaEntrada) : null;
+    const saidaData = ultimaSaida ? new Date(ultimaSaida) : null;
+    const entradaValida = entradaData && !Number.isNaN(entradaData.getTime());
+    const saidaValida = saidaData && !Number.isNaN(saidaData.getTime());
+
+    if (entradaValida || saidaValida) {
+        if (!saidaValida) return Boolean(entradaValida);
+        if (!entradaValida) return false;
+        return saidaData.getTime() < entradaData.getTime();
+    }
+
     if (typeof usuario.online === 'boolean') return usuario.online;
+
     const ultimaAtividade = obterPrimeiroValor(usuario, [
         'ultimaAtividadeEm',
         'ultima_atividade_em',
@@ -328,6 +369,18 @@ function renderUsuarios(lista) {
         const sessaoClasse = online ? 'usuario-sessao-badge online' : 'usuario-sessao-badge offline';
         const sessaoRotulo = online ? 'Online' : 'Offline';
         const ultimoLoginValor = obterPrimeiroValor(u, ['ultimoLoginEm', 'ultimo_login_em', 'ultimoLogin', 'ultimo_login']);
+        const ultimaEntradaValor = obterPrimeiroValor(u, [
+            'ultimaEntradaEm',
+            'ultima_entrada_em',
+            'ultimaEntrada',
+            'ultima_entrada'
+        ]);
+        const ultimaSaidaValor = obterPrimeiroValor(u, [
+            'ultimaSaidaEm',
+            'ultima_saida_em',
+            'ultimaSaida',
+            'ultima_saida'
+        ]);
         const ultimaAlteracaoValor = obterPrimeiroValor(u, [
             'ultimaAlteracaoEm',
             'ultima_alteracao_em',
@@ -345,6 +398,8 @@ function renderUsuarios(lista) {
             'ultima_acao'
         ]);
         const ultimoLoginTexto = escapeHtml(formatarDataHoraCompleta(ultimoLoginValor));
+        const ultimaEntradaTexto = escapeHtml(formatarDataHoraCompleta(ultimaEntradaValor));
+        const ultimaSaidaTexto = escapeHtml(formatarDataHoraCompleta(ultimaSaidaValor));
         const ultimaAlteracaoTexto = escapeHtml(formatarDataHoraCompleta(ultimaAlteracaoValor));
         const ultimaDescricaoTexto = formatarDescricaoAlteracao(ultimaDescricaoValor);
         tr.innerHTML = `
@@ -369,6 +424,28 @@ function renderUsuarios(lista) {
                             <span class="sr-only">Ver atividade recente de ${nome}</span>
                             <span class="info-icon" aria-hidden="true"></span>
                         </button>
+                    </div>
+                    <div class="usuario-popover glass-surface rounded-xl p-4 text-left text-sm shadow-xl">
+                        <div class="usuario-popover-section">
+                            <span class="usuario-popover-label">Último login</span>
+                            <span class="usuario-popover-value">${ultimoLoginTexto}</span>
+                        </div>
+                        <div class="usuario-popover-section">
+                            <span class="usuario-popover-label">Última entrada</span>
+                            <span class="usuario-popover-value">${ultimaEntradaTexto}</span>
+                        </div>
+                        <div class="usuario-popover-section">
+                            <span class="usuario-popover-label">Última saída</span>
+                            <span class="usuario-popover-value">${ultimaSaidaTexto}</span>
+                        </div>
+                        <div class="usuario-popover-section">
+                            <span class="usuario-popover-label">Última alteração</span>
+                            <span class="usuario-popover-value">${ultimaAlteracaoTexto}</span>
+                        </div>
+                        <div class="usuario-popover-section">
+                            <span class="usuario-popover-label">Alteração registrada</span>
+                            <p class="usuario-popover-description">${ultimaDescricaoTexto}</p>
+                        </div>
                     </div>
                 </div>
             </td>

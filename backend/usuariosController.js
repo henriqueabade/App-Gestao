@@ -33,9 +33,19 @@ router.get('/lista', async (_req, res) => {
     garantirColuna('ultima_acao_em', 'ultima_acao_em') ||
       garantirColuna('ultima_alteracao_em', 'ultima_acao_em');
 
-    garantirColuna('ultima_acao_descricao', 'ultima_acao_descricao') ||
-      garantirColuna('ultima_alteracao_descricao', 'ultima_acao_descricao') ||
-      garantirColuna('ultima_acao', 'ultima_acao_descricao');
+    garantirColuna('ultima_entrada', 'ultima_entrada') ||
+      garantirColuna('ultima_entrada_em', 'ultima_entrada');
+    garantirColuna('ultima_saida', 'ultima_saida') ||
+      garantirColuna('ultima_saida_em', 'ultima_saida');
+
+    garantirColuna('local_ultima_acao', 'local_ultima_acao') ||
+      garantirColuna('local_ultima_alteracao', 'local_ultima_acao');
+
+    garantirColuna('especificacao_ultima_acao', 'especificacao_ultima_acao') ||
+      garantirColuna('especificacao_ultima_alteracao', 'especificacao_ultima_acao') ||
+      garantirColuna('ultima_acao_descricao', 'especificacao_ultima_acao') ||
+      garantirColuna('ultima_alteracao_descricao', 'especificacao_ultima_acao') ||
+      garantirColuna('ultima_acao', 'especificacao_ultima_acao');
 
     const query = `SELECT ${selecionar.join(', ')} FROM usuarios u ORDER BY u.nome`;
     const result = await pool.query(query);
@@ -50,12 +60,32 @@ router.get('/lista', async (_req, res) => {
       const ultimoLogin = parseDate(u.ultimo_login_em);
       const ultimaAtividade = parseDate(u.ultima_atividade_em);
       const ultimaAcaoEm = parseDate(u.ultima_acao_em) || ultimaAtividade;
-      const descricao = u.ultima_acao_descricao || null;
+      const ultimaEntrada = parseDate(u.ultima_entrada || u.ultima_entrada_em);
+      const ultimaSaida = parseDate(u.ultima_saida || u.ultima_saida_em);
+      const ultimaAcaoLocal = u.local_ultima_acao || u.local_ultima_alteracao || null;
+      const descricao =
+        u.especificacao_ultima_acao ||
+        u.especificacao_ultima_alteracao ||
+        u.ultima_acao_descricao ||
+        u.ultima_alteracao_descricao ||
+        u.ultima_acao ||
+        null;
 
-      const ONLINE_LIMITE_MINUTOS = 5;
-      const online = ultimaAtividade
-        ? Date.now() - ultimaAtividade.getTime() <= ONLINE_LIMITE_MINUTOS * 60 * 1000
-        : false;
+      let online;
+      if (ultimaEntrada || ultimaSaida) {
+        if (!ultimaSaida) {
+          online = Boolean(ultimaEntrada);
+        } else if (!ultimaEntrada) {
+          online = false;
+        } else {
+          online = ultimaSaida.getTime() < ultimaEntrada.getTime();
+        }
+      } else {
+        const ONLINE_LIMITE_MINUTOS = 5;
+        online = ultimaAtividade
+          ? Date.now() - ultimaAtividade.getTime() <= ONLINE_LIMITE_MINUTOS * 60 * 1000
+          : false;
+      }
 
       const serializar = data => (data ? data.toISOString() : null);
 
@@ -69,7 +99,14 @@ router.get('/lista', async (_req, res) => {
         ultimoLoginEm: serializar(ultimoLogin),
         ultimaAtividadeEm: serializar(ultimaAtividade),
         ultimaAlteracaoEm: serializar(ultimaAcaoEm),
-        ultimaAlteracaoDescricao: descricao
+        ultimaEntradaEm: serializar(ultimaEntrada),
+        ultimaSaidaEm: serializar(ultimaSaida),
+        ultimaAlteracaoDescricao: [
+          ultimaAcaoLocal ? `Módulo: ${ultimaAcaoLocal}` : null,
+          descricao
+        ]
+          .filter(Boolean)
+          .join(' | ')
       };
     });
 
