@@ -250,6 +250,38 @@ function createLoginWindow(show = true, showOnLoad = true) {
 }
 
 
+function revealLoginWindow() {
+  return new Promise((resolve) => {
+    if (!loginWindow || loginWindow.isDestroyed()) {
+      resolve();
+      return;
+    }
+
+    const finish = () => {
+      if (!loginWindow || loginWindow.isDestroyed()) {
+        resolve();
+        return;
+      }
+
+      try {
+        loginWindow.show();
+        loginWindow.focus();
+        loginWindow.webContents.send('activate-tab', 'login');
+      } catch (err) {
+        console.error('Failed to show login window', err);
+      }
+      resolve();
+    };
+
+    if (loginWindow.webContents.isLoading()) {
+      loginWindow.once('ready-to-show', finish);
+    } else {
+      finish();
+    }
+  });
+}
+
+
 function createDashboardWindow(show = true) {
   const savedDisplay = loadSavedDisplay();
   logDisplayInfo('create-dashboard', savedDisplay);
@@ -700,7 +732,10 @@ ipcMain.handle('close-login', async () => {
 });
 
 ipcMain.handle('logout', async () => {
+  if (dashboardWindow && !dashboardWindow.isDestroyed()) {
     dashboardWindow.close();
+  }
+  return true;
 });
 
 ipcMain.handle('open-login-hidden', async () => {
@@ -714,19 +749,10 @@ ipcMain.handle('open-login-hidden', async () => {
 // 3) Mostra o loginWindow **somente** após o conteúdo terminar de carregar,
 //    evitando o flash branco
 ipcMain.handle('show-login', async () => {
-  if (loginWindow) {
-    loginWindow.once('ready-to-show', () => {
-      loginWindow.show();
-      loginWindow.focus();
-      loginWindow.webContents.send('activate-tab', 'login');
-    });
-    // se já carregou
-    if (!loginWindow.webContents.isLoading()) {
-      loginWindow.show();
-      loginWindow.focus();
-      loginWindow.webContents.send('activate-tab', 'login');
-    }
+  if (!loginWindow) {
+    createLoginWindow(false, false);
   }
+  await revealLoginWindow();
   return true;
 });
 

@@ -28,7 +28,7 @@ function showFailure() {
   showSpinner('var(--color-red)');
 }
 
-function handleDisconnect(reason) {
+async function handleDisconnect(reason) {
   showFailure();
   if (window.stopServerCheck) window.stopServerCheck();
   if (reason === 'pin') {
@@ -40,8 +40,20 @@ function handleDisconnect(reason) {
     window.electronAPI.saveState(window.collectState());
   }
   if (window.electronAPI) {
-    window.electronAPI.openLoginHidden();
-    window.electronAPI.logout();
+    try {
+      await window.electronAPI.openLoginHidden();
+      await window.electronAPI.showLogin();
+      await new Promise((resolve) => {
+        if (typeof requestAnimationFrame === 'function') {
+          requestAnimationFrame(() => resolve());
+        } else {
+          resolve();
+        }
+      });
+      await window.electronAPI.logout();
+    } catch (err) {
+      console.error('Failed to return to login after disconnect', err);
+    }
   }
 }
 
@@ -54,7 +66,7 @@ async function verifyConnection() {
     if (result && result.success) {
       showSuccess();
     } else if (result && (result.reason === 'pin' || result.reason === 'offline')) {
-      handleDisconnect(result.reason);
+      await handleDisconnect(result.reason);
     } else {
       showFailure();
     }
