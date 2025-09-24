@@ -161,6 +161,29 @@
     return replaceModalState.committedSelections;
   }
 
+  function hasPendingSelections() {
+    const selections = ensureSelectionMap();
+    for (const qty of selections.values()) {
+      if (sanitizePositiveInt(qty) > 0) return true;
+    }
+    return false;
+  }
+
+  function clearPendingSelections() {
+    const selections = ensureSelectionMap();
+    if (!selections.size) return false;
+    let hadPositive = false;
+    selections.forEach(qty => {
+      if (sanitizePositiveInt(qty) > 0) hadPositive = true;
+    });
+    if (!hadPositive) {
+      selections.clear();
+      return false;
+    }
+    selections.clear();
+    return true;
+  }
+
   function getCommittedQuantity(key) {
     if (!key) return 0;
     const list = ensureCommittedList();
@@ -816,6 +839,7 @@
     overlay.querySelectorAll('[data-action="close"]').forEach(btn => btn.addEventListener('click', closeReplaceModal));
     replaceModalRefs.confirmBtn?.addEventListener('click', handleReplaceModalConfirm);
     replaceModalRefs.commitBtn?.addEventListener('click', handleCommitSelection);
+    replaceModalRefs.modal?.addEventListener('pointerdown', handleReplaceModalPointerDown);
     if (replaceModalRefs.search) {
       replaceModalRefs.search.placeholder = 'Filtrar por processo, insumo ou código';
     }
@@ -1012,6 +1036,14 @@
     if (!row) return;
     const requiredQty = Number(row.qtd || row.quantidade || 0) || 0;
     const sanitizedTotal = Math.max(0, Math.floor(Number(desiredTotal) || 0));
+    if (sanitizedTotal > 0) {
+      const selections = ensureSelectionMap();
+      selections.forEach((qty, key) => {
+        if (key !== variant.key && sanitizePositiveInt(qty) > 0) {
+          selections.delete(key);
+        }
+      });
+    }
     const baseMax = variant.type === 'produce'
       ? requiredQty
       : Math.min(requiredQty, Math.floor(Number(variant.available) || 0));
@@ -1192,6 +1224,9 @@
     const variantsToRender = [...filteredStock];
     if (produceVariant) variantsToRender.push(produceVariant);
 
+    const committedTotalOverall = getTotalCommittedQuantity();
+    const remainingGlobalCapacity = Math.max(0, requiredQty - committedTotalOverall);
+
     variantsToRender.forEach(variant => {
       const committedQty = getCommittedQuantity(variant.key);
       const currentQty = getSelectionQuantity(variant.key);
@@ -1203,6 +1238,7 @@
       const budgetRemaining = Math.max(0, requiredQty - totalWithoutVariant);
       const effectiveMax = Math.max(0, Math.min(baseMax, budgetRemaining));
       const inputMax = Math.max(totalQty, effectiveMax);
+      const canCommitCurrent = currentQty > 0 && remainingGlobalCapacity > 0;
       const card = document.createElement('div');
       card.className = 'w-full bg-surface/40 border border-white/10 rounded-xl px-4 py-4 transition focus-within:border-primary/60 focus-within:ring-1 focus-within:ring-primary/40 mb-3 last:mb-0';
       card.setAttribute('data-variant-key', variant.key);
@@ -1226,13 +1262,14 @@
             </div>
             <span class="${badgeClass} px-2 py-1 rounded text-xs">${badgeLabel}</span>
           </div>
-            <div class="mt-3 flex items-center gap-3">
+            <div class="mt-3 flex items-center gap-3 flex-wrap md:flex-nowrap">
               <span class="text-xs text-gray-400 uppercase tracking-wide">Selecionar</span>
               ${committedQty > 0 ? `<span class="text-[11px] text-emerald-300">Fixado: ${committedQty.toLocaleString('pt-BR')} un</span>` : ''}
               <div class="flex items-center gap-2">
-              <button type="button" class="js-qty-btn w-8 h-8 rounded-lg bg-white/5 border border-white/10 text-white text-sm flex items-center justify-center" data-step="-1">-</button>
-              <input type="number" inputmode="numeric" min="0" class="w-16 h-8 text-center bg-white/5 border border-white/10 rounded-lg text-white leading-[32px]" data-variant-input="${variant.key}" value="${totalQty}" max="${inputMax}" />
-              <button type="button" class="js-qty-btn w-8 h-8 rounded-lg bg-white/5 border border-white/10 text-white text-sm flex items-center justify-center" data-step="1">+</button>
+                <button type="button" class="js-qty-btn w-8 h-8 rounded-lg bg-white/5 border border-white/10 text-white text-sm flex items-center justify-center" data-step="-1">-</button>
+                <input type="number" inputmode="numeric" min="0" class="w-16 h-8 text-center bg-white/5 border border-white/10 rounded-lg text-white leading-[32px]" data-variant-input="${variant.key}" value="${totalQty}" max="${inputMax}" />
+                <button type="button" class="js-qty-btn w-8 h-8 rounded-lg bg-white/5 border border-white/10 text-white text-sm flex items-center justify-center" data-step="1">+</button>
+                <button type="button" class="js-commit-btn ${canCommitCurrent ? 'btn-primary' : 'hidden'} px-3 py-1 rounded-lg text-xs font-medium text-white" data-variant-key="${variant.key}" ${canCommitCurrent ? '' : 'disabled'}>Confirmar</button>
               </div>
             <span class="text-xs text-gray-400 ml-auto whitespace-nowrap">Disp.: ${availableTotal.toLocaleString('pt-BR')} • Orçamento: ${budgetRemaining.toLocaleString('pt-BR')} un</span>
           </div>`;
@@ -1246,13 +1283,14 @@
             </div>
             <span class="badge-warning px-2 py-1 rounded text-xs">Restante permitido: ${remaining.toLocaleString('pt-BR')} un</span>
           </div>
-          <div class="mt-3 flex items-center gap-3">
+          <div class="mt-3 flex items-center gap-3 flex-wrap md:flex-nowrap">
             <span class="text-xs text-gray-400 uppercase tracking-wide">Produzir</span>
             ${committedQty > 0 ? `<span class="text-[11px] text-emerald-300">Fixado: ${committedQty.toLocaleString('pt-BR')} un</span>` : ''}
             <div class="flex items-center gap-2">
               <button type="button" class="js-qty-btn w-8 h-8 rounded-lg bg-white/5 border border-white/10 text-white text-sm flex items-center justify-center" data-step="-1">-</button>
               <input type="number" inputmode="numeric" min="0" class="w-20 h-8 text-center bg-white/5 border border-white/10 rounded-lg text-white leading-[32px]" data-variant-input="${variant.key}" value="${totalQty}" max="${inputMax}" />
               <button type="button" class="js-qty-btn w-8 h-8 rounded-lg bg-white/5 border border-white/10 text-white text-sm flex items-center justify-center" data-step="1">+</button>
+              <button type="button" class="js-commit-btn ${canCommitCurrent ? 'btn-primary' : 'hidden'} px-3 py-1 rounded-lg text-xs font-medium text-white" data-variant-key="${variant.key}" ${canCommitCurrent ? '' : 'disabled'}>Confirmar</button>
             </div>
           </div>`;
       }
@@ -1273,6 +1311,14 @@
           const step = Number(btn.dataset.step || 0);
           const nextValue = step > 0 ? totalQty + step : 0;
           await applyTotalQuantityChange(variant, nextValue, { focus: { key: variant.key, select: true } });
+        });
+      });
+      card.querySelectorAll('.js-commit-btn').forEach(btn => {
+        btn.addEventListener('click', e => {
+          e.preventDefault();
+          e.stopPropagation();
+          const key = btn.getAttribute('data-variant-key');
+          commitVariantSelection(key);
         });
       });
       container.appendChild(card);
@@ -1324,28 +1370,10 @@
   function updateCommitButtonState() {
     if (!replaceModalRefs || !replaceModalRefs.commitBtn) return;
     const btn = replaceModalRefs.commitBtn;
-    const row = rows[currentReplaceIndex];
-    if (!row) {
-      btn.classList.add('hidden');
-      return;
-    }
-    const requiredQty = Number(row.qtd || row.quantidade || 0) || 0;
-    const selections = ensureSelectionMap();
-    let currentTotal = 0;
-    selections.forEach(qty => { currentTotal += sanitizePositiveInt(qty); });
-    const committedTotal = getTotalCommittedQuantity();
-    const remaining = Math.max(0, requiredQty - committedTotal);
-    const shouldShow = currentTotal > 0 && remaining > 0;
-    btn.classList.toggle('hidden', !shouldShow);
-    btn.disabled = !shouldShow;
-    if (shouldShow) {
-      const futureTotal = Math.min(remaining, currentTotal);
-      btn.textContent = `Adicionar Tipo (${futureTotal.toLocaleString('pt-BR')} un)`;
-      btn.classList.remove('opacity-60', 'cursor-not-allowed');
-    } else {
-      btn.textContent = 'Adicionar Tipo';
-      btn.classList.add('opacity-60', 'cursor-not-allowed');
-    }
+    btn.classList.add('hidden');
+    btn.disabled = true;
+    btn.textContent = 'Adicionar Tipo';
+    btn.classList.add('opacity-60', 'cursor-not-allowed');
   }
 
   function handleCommitSelection() {
@@ -1390,6 +1418,59 @@
       renderReplaceModalSummary();
       updateReplaceModalConfirmButton();
     }
+  }
+
+  function commitVariantSelection(variantKey) {
+    if (!variantKey) return;
+    if (currentReplaceIndex < 0) return;
+    const row = rows[currentReplaceIndex];
+    if (!row) return;
+    const variant = getVariantByKey(variantKey);
+    if (!variant) return;
+
+    const selections = ensureSelectionMap();
+    const currentQty = sanitizePositiveInt(selections.get(variantKey));
+    if (!currentQty) return;
+
+    const requiredQty = Number(row.qtd || row.quantidade || 0) || 0;
+    if (!(requiredQty > 0)) {
+      selections.delete(variantKey);
+      renderReplaceModalList({ skipReload: true });
+      return;
+    }
+
+    const baseMax = variant.type === 'produce'
+      ? requiredQty
+      : Math.min(requiredQty, Math.floor(Number(variant.available) || 0));
+    const remainingCapacity = Math.max(0, requiredQty - getTotalCommittedQuantity());
+    const finalQty = Math.min(baseMax, currentQty, remainingCapacity);
+
+    if (!(finalQty > 0)) {
+      selections.delete(variantKey);
+      renderReplaceModalList({ skipReload: true });
+      return;
+    }
+
+    addCommittedQuantity(variantKey, finalQty);
+    const leftover = Math.max(0, currentQty - finalQty);
+    if (leftover > 0) selections.set(variantKey, leftover);
+    else selections.delete(variantKey);
+
+    enforceSelectionLimits(requiredQty);
+    renderReplaceModalList({ skipReload: true, focus: { key: variantKey } });
+  }
+
+  function handleReplaceModalPointerDown(e) {
+    if (!hasPendingSelections()) return;
+    const target = e.target;
+    if (target && target.closest('[data-variant-key]')) return;
+    setTimeout(() => {
+      if (!hasPendingSelections()) return;
+      const cleared = clearPendingSelections();
+      if (cleared) {
+        renderReplaceModalList({ skipReload: true });
+      }
+    }, 0);
   }
 
   function handleReplaceModalConfirm() {
