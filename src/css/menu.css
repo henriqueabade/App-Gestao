@@ -121,11 +121,17 @@ header.glass-surface {
     padding-right: 0.5rem;
 }
 
-.sidebar-collapsed .sidebar-item,
-.sidebar-collapsed .submenu-item {
+.sidebar-collapsed .sidebar-item {
     justify-content: center;
     padding-left: 0.75rem;
     padding-right: 0.75rem;
+}
+
+.sidebar-collapsed .submenu-item {
+    justify-content: flex-start;
+    padding-left: 0.75rem;
+    padding-right: 0.75rem;
+    width: 100%;
 }
 
 .sidebar-collapsed .sidebar-item i,
@@ -134,9 +140,21 @@ header.glass-surface {
 }
 
 .sidebar-collapsed .sidebar-text,
-.sidebar-collapsed .submenu,
 .sidebar-collapsed .chevron {
     display: none;
+}
+
+.sidebar-collapsed .submenu {
+    padding-left: 0;
+    padding-right: 0;
+}
+
+.sidebar-collapsed .submenu.open {
+    margin-top: 0.25rem;
+}
+
+.sidebar-expanded .submenu-item {
+    padding-left: 3rem;
 }
 
 .submenu {
