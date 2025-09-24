@@ -142,6 +142,8 @@
       replaceModalState.selections = new Map();
     }
     if (!replaceModalState.selections.size) return;
+
+    const sanitizedEntries = [];
     replaceModalState.selections.forEach((qty, key) => {
       const variant = getVariantByKey(key);
       if (!variant) {
@@ -152,29 +154,24 @@
         ? requiredQty
         : Math.min(requiredQty, Math.floor(Number(variant.available) || 0));
       const sanitized = Math.min(baseMax, sanitizePositiveInt(qty));
-      if (sanitized > 0) replaceModalState.selections.set(key, sanitized);
-      else replaceModalState.selections.delete(key);
+      if (sanitized > 0) {
+        sanitizedEntries.push({ key, qty: sanitized });
+      } else {
+        replaceModalState.selections.delete(key);
+      }
     });
 
-    let total = getTotalSelectedQuantity();
-    if (total <= requiredQty) return;
-    const entries = Array.from(replaceModalState.selections.entries())
-      .map(([key, qty]) => ({ key, qty: sanitizePositiveInt(qty), variant: getVariantByKey(key) }))
-      .filter(entry => entry.variant);
-    entries.sort((a, b) => {
-      const aProduce = a.variant?.type === 'produce' ? 1 : 0;
-      const bProduce = b.variant?.type === 'produce' ? 1 : 0;
-      if (aProduce !== bProduce) return bProduce - aProduce; // produzidos primeiro para redução
-      return (b.qty || 0) - (a.qty || 0);
+    replaceModalState.selections.clear();
+    let runningTotal = 0;
+    sanitizedEntries.forEach(entry => {
+      if (runningTotal >= requiredQty) return;
+      const remaining = Math.max(0, requiredQty - runningTotal);
+      const finalQty = Math.min(entry.qty, remaining);
+      if (finalQty > 0) {
+        replaceModalState.selections.set(entry.key, finalQty);
+        runningTotal += finalQty;
+      }
     });
-    for (const entry of entries) {
-      if (total <= requiredQty) break;
-      const reduce = Math.min(entry.qty, total - requiredQty);
-      const newQty = entry.qty - reduce;
-      if (newQty > 0) replaceModalState.selections.set(entry.key, newQty);
-      else replaceModalState.selections.delete(entry.key);
-      total -= reduce;
-    }
   }
 
   function buildSelectionPlan(row) {
@@ -781,7 +778,9 @@
     const baseMax = variant.type === 'produce'
       ? requiredQty
       : Math.min(requiredQty, Math.floor(Number(variant.available) || 0));
-    const finalQty = Math.min(sanitized, Math.max(0, baseMax));
+    const totalWithoutCurrent = Math.max(0, getTotalSelectedQuantity() - current);
+    const remainingBudget = Math.max(0, requiredQty - totalWithoutCurrent);
+    const finalQty = Math.min(sanitized, Math.max(0, Math.min(baseMax, remainingBudget)));
     if (finalQty > 0) replaceModalState.selections.set(variant.key, finalQty);
     else replaceModalState.selections.delete(variant.key);
     enforceSelectionLimits(requiredQty);
@@ -938,6 +937,8 @@
         ? requiredQty
         : Math.min(requiredQty, Math.floor(Number(variant.available) || 0));
       const remainingBudget = Math.max(0, requiredQty - totalWithoutCurrent);
+      const allowedMax = Math.max(0, Math.min(baseMax, remainingBudget));
+      const inputMax = Math.max(currentQty, allowedMax);
       const card = document.createElement('div');
       card.className = 'w-full bg-surface/40 border border-white/10 rounded-xl px-4 py-4 transition focus-within:border-primary/60 focus-within:ring-1 focus-within:ring-primary/40 mb-3 last:mb-0';
       card.setAttribute('data-variant-key', variant.key);
@@ -964,13 +965,13 @@
             <span class="text-xs text-gray-400 uppercase tracking-wide">Selecionar</span>
             <div class="flex items-center gap-2">
               <button type="button" class="js-qty-btn w-8 h-8 rounded-lg bg-white/5 border border-white/10 text-white text-sm" data-step="-1">-</button>
-              <input type="number" inputmode="numeric" min="0" class="w-16 text-center bg-white/5 border border-white/10 rounded-lg text-white" data-variant-input="${variant.key}" value="${currentQty}" max="${baseMax}" />
+              <input type="number" inputmode="numeric" min="0" class="w-16 h-8 text-center bg-white/5 border border-white/10 rounded-lg text-white leading-tight" data-variant-input="${variant.key}" value="${currentQty}" max="${inputMax}" />
               <button type="button" class="js-qty-btn w-8 h-8 rounded-lg bg-white/5 border border-white/10 text-white text-sm" data-step="1">+</button>
             </div>
-            <span class="text-xs text-gray-400 ml-auto whitespace-nowrap">Disp.: ${baseMax.toLocaleString('pt-BR')} • Orçamento: ${remainingBudget.toLocaleString('pt-BR')} un</span>
+            <span class="text-xs text-gray-400 ml-auto whitespace-nowrap">Disp.: ${baseMax.toLocaleString('pt-BR')} • Orçamento: ${allowedMax.toLocaleString('pt-BR')} un</span>
           </div>`;
       } else {
-        const remaining = remainingBudget;
+        const remaining = allowedMax;
         card.innerHTML = `
           <div class="flex items-start justify-between gap-4">
             <div>
@@ -983,7 +984,7 @@
             <span class="text-xs text-gray-400 uppercase tracking-wide">Produzir</span>
             <div class="flex items-center gap-2">
               <button type="button" class="js-qty-btn w-8 h-8 rounded-lg bg-white/5 border border-white/10 text-white text-sm" data-step="-1">-</button>
-              <input type="number" inputmode="numeric" min="0" class="w-20 text-center bg-white/5 border border-white/10 rounded-lg text-white" data-variant-input="${variant.key}" value="${currentQty}" max="${baseMax}" />
+              <input type="number" inputmode="numeric" min="0" class="w-20 h-8 text-center bg-white/5 border border-white/10 rounded-lg text-white leading-tight" data-variant-input="${variant.key}" value="${currentQty}" max="${inputMax}" />
               <button type="button" class="js-qty-btn w-8 h-8 rounded-lg bg-white/5 border border-white/10 text-white text-sm" data-step="1">+</button>
             </div>
           </div>`;
