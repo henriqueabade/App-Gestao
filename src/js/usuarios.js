@@ -8,6 +8,110 @@ const API_URL = 'http://localhost:3000';
 // Cache local dos usuários carregados
 let usuariosCache = [];
 
+const ONLINE_LIMITE_MINUTOS = 5;
+
+function obterPrimeiroValor(obj, chaves) {
+    if (!obj) return null;
+    for (const chave of chaves) {
+        if (Object.prototype.hasOwnProperty.call(obj, chave) && obj[chave] !== null && obj[chave] !== undefined && obj[chave] !== '') {
+            return obj[chave];
+        }
+    }
+    return null;
+}
+
+function escapeHtml(texto) {
+    if (texto === null || texto === undefined) return '';
+    return String(texto)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+function formatarDataHoraCompleta(valor) {
+    if (!valor) return 'Sem registro';
+    const data = valor instanceof Date ? valor : new Date(valor);
+    if (Number.isNaN(data.getTime())) return 'Sem registro';
+    return data.toLocaleString('pt-BR', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit'
+    });
+}
+
+function formatarDescricaoAlteracao(descricao) {
+    if (!descricao || !String(descricao).trim()) {
+        return 'Nenhuma alteração registrada';
+    }
+    return escapeHtml(descricao);
+}
+
+function estaOnline(ultimaAtividade) {
+    if (!ultimaAtividade) return false;
+    const data = ultimaAtividade instanceof Date ? ultimaAtividade : new Date(ultimaAtividade);
+    if (Number.isNaN(data.getTime())) return false;
+    return Date.now() - data.getTime() <= ONLINE_LIMITE_MINUTOS * 60 * 1000;
+}
+
+function resolverStatusOnline(usuario) {
+    if (typeof usuario.online === 'boolean') return usuario.online;
+    const ultimaAtividade = obterPrimeiroValor(usuario, [
+        'ultimaAtividadeEm',
+        'ultima_atividade_em',
+        'ultimaAtividade',
+        'ultima_atividade',
+        'ultimaAlteracaoEm',
+        'ultima_alteracao_em',
+        'ultimaAcaoEm',
+        'ultima_acao_em'
+    ]);
+    return estaOnline(ultimaAtividade);
+}
+
+function fecharPopoversUsuarios() {
+    document.querySelectorAll('.usuario-popover.show').forEach(pop => {
+        pop.classList.remove('show');
+        const trigger = pop.closest('.usuario-popover-container')?.querySelector('.usuario-detalhes-trigger');
+        if (trigger) trigger.setAttribute('aria-expanded', 'false');
+    });
+}
+
+let popoverEventosRegistrados = false;
+
+function prepararPopoversUsuarios() {
+    document.querySelectorAll('.usuario-detalhes-trigger').forEach(botao => {
+        botao.addEventListener('click', evento => {
+            evento.stopPropagation();
+            const container = botao.closest('.usuario-popover-container');
+            const popover = container?.querySelector('.usuario-popover');
+            if (!popover) return;
+            const estavaAberto = popover.classList.contains('show');
+            fecharPopoversUsuarios();
+            if (!estavaAberto) {
+                popover.classList.add('show');
+                botao.setAttribute('aria-expanded', 'true');
+            }
+        });
+    });
+
+    if (!popoverEventosRegistrados) {
+        document.addEventListener('click', evento => {
+            if (!evento.target.closest('.usuario-popover-container')) {
+                fecharPopoversUsuarios();
+            }
+        });
+        document.addEventListener('keydown', evento => {
+            if (evento.key === 'Escape') fecharPopoversUsuarios();
+        });
+        popoverEventosRegistrados = true;
+    }
+}
+
 function updateEmptyStateUsuarios(hasData) {
     const wrapper = document.getElementById('usuariosTableWrapper');
     const empty = document.getElementById('usuariosEmptyState');
@@ -106,25 +210,80 @@ function aplicarFiltros() {
 function renderUsuarios(lista) {
     const tbody = document.getElementById('listaUsuarios');
     if (!tbody) return;
+    fecharPopoversUsuarios();
     tbody.innerHTML = '';
     lista.forEach(u => {
         const tr = document.createElement('tr');
         tr.classList.add('table-row');
+        const nome = escapeHtml(u.nome);
         const iniciais = u.nome
             .split(' ')
             .map(p => p[0])
             .join('')
             .substring(0, 2)
             .toUpperCase();
+        const email = escapeHtml(u.email);
+        const perfil = escapeHtml(u.perfil || '');
+        const online = resolverStatusOnline(u);
+        const sessaoClasse = online ? 'usuario-sessao-badge online' : 'usuario-sessao-badge offline';
+        const sessaoRotulo = online ? 'Online' : 'Offline';
+        const ultimoLoginValor = obterPrimeiroValor(u, ['ultimoLoginEm', 'ultimo_login_em', 'ultimoLogin', 'ultimo_login']);
+        const ultimaAlteracaoValor = obterPrimeiroValor(u, [
+            'ultimaAlteracaoEm',
+            'ultima_alteracao_em',
+            'ultimaAcaoEm',
+            'ultima_acao_em',
+            'ultimaAtividadeEm',
+            'ultima_atividade_em'
+        ]);
+        const ultimaDescricaoValor = obterPrimeiroValor(u, [
+            'ultimaAlteracaoDescricao',
+            'ultima_alteracao_descricao',
+            'ultimaAcaoDescricao',
+            'ultima_acao_descricao',
+            'ultimaAcao',
+            'ultima_acao'
+        ]);
+        const ultimoLoginTexto = escapeHtml(formatarDataHoraCompleta(ultimoLoginValor));
+        const ultimaAlteracaoTexto = escapeHtml(formatarDataHoraCompleta(ultimaAlteracaoValor));
+        const ultimaDescricaoTexto = formatarDescricaoAlteracao(ultimaDescricaoValor);
         tr.innerHTML = `
             <td class="px-6 py-4">
                 <div class="w-9 h-9 rounded-full flex items-center justify-center text-white font-medium text-sm" style="background: var(--color-primary)">${iniciais}</div>
             </td>
             <td class="px-6 py-4">
-                <div class="text-sm font-medium text-white">${u.nome}</div>
+                <div class="usuario-popover-container relative">
+                    <div class="flex items-center gap-2">
+                        <div class="text-sm font-medium text-white">${nome}</div>
+                        <button type="button" class="usuario-detalhes-trigger" aria-expanded="false" aria-haspopup="dialog" title="Ver atividade recente de ${nome}">
+                            <span class="sr-only">Ver atividade recente de ${nome}</span>
+                            <i class="fas fa-circle-info"></i>
+                        </button>
+                    </div>
+                    <div class="usuario-popover glass-surface rounded-xl p-4 text-left text-sm shadow-xl">
+                        <div class="usuario-popover-section">
+                            <span class="usuario-popover-label">Último login</span>
+                            <span class="usuario-popover-value">${ultimoLoginTexto}</span>
+                        </div>
+                        <div class="usuario-popover-section">
+                            <span class="usuario-popover-label">Última alteração</span>
+                            <span class="usuario-popover-value">${ultimaAlteracaoTexto}</span>
+                        </div>
+                        <div class="usuario-popover-section">
+                            <span class="usuario-popover-label">Alteração registrada</span>
+                            <p class="usuario-popover-description">${ultimaDescricaoTexto}</p>
+                        </div>
+                    </div>
+                </div>
             </td>
-            <td class="px-6 py-4 text-sm text-white">${u.email}</td>
-            <td class="px-6 py-4 text-sm text-white">${u.perfil || ''}</td>
+            <td class="px-6 py-4 text-sm text-white">${email}</td>
+            <td class="px-6 py-4 text-sm text-white">${perfil}</td>
+            <td class="px-6 py-4">
+                <span class="${sessaoClasse}">
+                    <span class="status-dot"></span>
+                    ${sessaoRotulo}
+                </span>
+            </td>
             <td class="px-6 py-4">
                 <span class="${u.status === 'Ativo' ? 'badge-success' : 'badge-danger'} px-2 py-1 rounded-full text-xs font-medium">${u.status}</span>
             </td>
@@ -149,6 +308,7 @@ function renderUsuarios(lista) {
         });
     });
 
+    prepararPopoversUsuarios();
     updateEmptyStateUsuarios(lista.length > 0);
 }
 

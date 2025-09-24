@@ -259,3 +259,137 @@ body {
     margin-top: 1.5vw;
 }
 
+.usuario-detalhes-trigger {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 9999px;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    color: var(--color-primary-light);
+    transition: all 150ms ease;
+}
+
+.usuario-detalhes-trigger i {
+    font-size: 14px;
+}
+
+.usuario-detalhes-trigger:hover,
+.usuario-detalhes-trigger:focus {
+    outline: none;
+    transform: translateY(-2px) scale(1.02);
+    background: rgba(255, 255, 255, 0.16);
+    color: var(--color-primary);
+}
+
+.usuario-popover {
+    position: absolute;
+    top: calc(100% + 12px);
+    right: 0;
+    min-width: 260px;
+    max-width: 320px;
+    background: rgba(49, 0, 23, 0.92);
+    box-shadow: 0 18px 30px rgba(0, 0, 0, 0.55);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 18px;
+    opacity: 0;
+    transform: translateY(12px);
+    pointer-events: none;
+    transition: opacity 180ms ease, transform 180ms ease;
+    z-index: 40;
+}
+
+.usuario-popover::before {
+    content: '';
+    position: absolute;
+    top: -10px;
+    right: 22px;
+    width: 18px;
+    height: 18px;
+    background: rgba(49, 0, 23, 0.92);
+    transform: rotate(45deg);
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    border-left: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.usuario-popover.show {
+    opacity: 1;
+    transform: translateY(0);
+    pointer-events: auto;
+}
+
+.usuario-popover-section {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-bottom: 14px;
+}
+
+.usuario-popover-section:last-child {
+    margin-bottom: 0;
+}
+
+.usuario-popover-label {
+    font-size: 0.65rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: rgba(255, 255, 255, 0.58);
+}
+
+.usuario-popover-value {
+    font-size: 0.95rem;
+    font-weight: 500;
+    color: #fff;
+}
+
+.usuario-popover-description {
+    font-size: 0.9rem;
+    color: rgba(255, 255, 255, 0.86);
+    line-height: 1.4;
+}
+
+.usuario-sessao-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0.4rem 0.9rem;
+    border-radius: 9999px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    transition: transform 150ms ease;
+}
+
+.usuario-sessao-badge.online {
+    background: rgba(162, 255, 166, 0.18);
+    color: var(--color-green);
+    border: 1px solid rgba(162, 255, 166, 0.35);
+}
+
+.usuario-sessao-badge.offline {
+    background: rgba(255, 255, 255, 0.08);
+    color: rgba(255, 255, 255, 0.65);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.usuario-sessao-badge:hover {
+    transform: translateY(-1px);
+}
+
+.status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--color-green);
+    box-shadow: 0 0 0 4px rgba(162, 255, 166, 0.25);
+    transition: background 150ms ease, box-shadow 150ms ease;
+}
+
+.usuario-sessao-badge.offline .status-dot {
+    background: rgba(255, 255, 255, 0.35);
+    box-shadow: none;
+}
+
