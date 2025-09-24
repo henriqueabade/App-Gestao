@@ -115,6 +115,30 @@ header.glass-surface {
     transform: translateX(0);
 }
 
+/* Sidebar recolhida mantém apenas os ícones visíveis */
+.sidebar-collapsed nav {
+    padding-left: 0.5rem;
+    padding-right: 0.5rem;
+}
+
+.sidebar-collapsed .sidebar-item,
+.sidebar-collapsed .submenu-item {
+    justify-content: center;
+    padding-left: 0.75rem;
+    padding-right: 0.75rem;
+}
+
+.sidebar-collapsed .sidebar-item i,
+.sidebar-collapsed .submenu-item i {
+    margin-right: 0;
+}
+
+.sidebar-collapsed .sidebar-text,
+.sidebar-collapsed .submenu,
+.sidebar-collapsed .chevron {
+    display: none;
+}
+
 .submenu {
     max-height: 0;
     overflow: hidden;
