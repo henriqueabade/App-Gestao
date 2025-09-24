@@ -89,8 +89,8 @@
   });
 
   const formatQuantity = value => {
-    const num = Number(value ?? 0);
-    return `${num.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${num === 1 ? 'unidade' : 'unidades'}`;
+    const num = normalizeQuantity(value);
+    return `${num.toLocaleString('pt-BR')} ${num === 1 ? 'unidade' : 'unidades'}`;
   };
 
   const formatOrderLabel = orderId => {
@@ -260,17 +260,14 @@
   const normalizeQuantity = value => {
     const num = Number(value ?? 0);
     if (!Number.isFinite(num) || num < 0) return 0;
-    return Number(num.toFixed(4));
+    return Math.trunc(num);
   };
 
-  const formatNumber = value => toNumber(value).toLocaleString('pt-BR', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2
-  });
+  const formatNumber = value => normalizeQuantity(value).toLocaleString('pt-BR');
 
   const formatUnitsLabel = value => {
     const amount = normalizeQuantity(value);
-    const label = Math.abs(amount - 1) < 1e-6 ? 'unidade' : 'unidades';
+    const label = amount === 1 ? 'unidade' : 'unidades';
     return `${formatNumber(amount)} ${label}`;
   };
 
@@ -328,10 +325,22 @@
 
     const chips = [];
     if (normalizeQuantity(state.stock) > 0) {
-      chips.push({ action: 'stock', icon: 'fa-box-open', label: 'Retornar ao estoque', quantity: state.stock });
+      chips.push({
+        action: 'stock',
+        icon: 'fa-box-open',
+        label: 'Retornar ao estoque',
+        quantity: state.stock,
+        colorClass: 'text-amber-300'
+      });
     }
     if (normalizeQuantity(state.discard) > 0) {
-      chips.push({ action: 'discard', icon: 'fa-trash', label: 'Descartar', quantity: state.discard });
+      chips.push({
+        action: 'discard',
+        icon: 'fa-trash',
+        label: 'Descartar',
+        quantity: state.discard,
+        colorClass: 'text-red-400'
+      });
     }
     (state.reallocations || [])
       .filter(entry => normalizeQuantity(entry.quantity) > 0)
@@ -341,7 +350,8 @@
           orderId: entry.orderId,
           icon: 'fa-exchange-alt',
           label: formatOrderLabel(entry.orderId),
-          quantity: entry.quantity
+          quantity: entry.quantity,
+          colorClass: 'text-sky-300'
         });
       });
 
@@ -357,7 +367,7 @@
       const button = document.createElement('button');
       button.type = 'button';
       button.className = 'w-full text-left bg-white/5 border border-white/10 px-3 py-2 rounded-lg text-xs text-gray-200 hover:border-primary/40 transition';
-      const iconHtml = chip.icon ? `<i class="fas ${chip.icon} text-sm" aria-hidden="true"></i>` : '';
+      const iconHtml = chip.icon ? `<i class="fas ${chip.icon} text-sm ${chip.colorClass || ''}" aria-hidden="true"></i>` : '';
       button.innerHTML = `
         <div class="flex items-center justify-between gap-2">
           <span class="flex items-center gap-2">
@@ -410,7 +420,7 @@
             </div>
             <div class="space-y-2">
               <label class="text-xs uppercase tracking-wide text-gray-400">Quantidade</label>
-              <input type="number" step="0.01" min="0" class="w-full bg-input border border-inputBorder rounded-lg px-3 py-2 text-white" value="${initialValue}" />
+              <input type="number" step="1" min="0" inputmode="numeric" pattern="\\d*" class="w-full bg-input border border-inputBorder rounded-lg px-3 py-2 text-white" value="${initialValue}" />
               <p class="text-xs text-gray-400">Disponível: ${formatUnitsLabel(safeMax)}.</p>
               <p class="text-xs text-red-400 hidden" data-error></p>
             </div>
@@ -446,8 +456,16 @@
 
       const confirm = () => {
         clearError();
-        const raw = (input?.value || '').replace(',', '.');
-        const value = normalizeQuantity(raw);
+        const raw = (input?.value || '').trim();
+        if (!raw) {
+          showError('Informe uma quantidade.');
+          return;
+        }
+        if (!/^\d+$/.test(raw)) {
+          showError('Informe um número inteiro.');
+          return;
+        }
+        const value = Number.parseInt(raw, 10);
         if (!Number.isFinite(value) || value < 0) {
           showError('Informe uma quantidade válida.');
           return;
@@ -473,7 +491,20 @@
 
       overlay.querySelector('[data-action="cancel"]')?.addEventListener('click', () => close(null));
       overlay.querySelector('[data-action="confirm"]')?.addEventListener('click', confirm);
-      input?.addEventListener('input', clearError);
+      const sanitizeInput = () => {
+        if (!input) return;
+        const sanitized = input.value.replace(/[^0-9]/g, '');
+        if (sanitized !== input.value) input.value = sanitized;
+        clearError();
+      };
+
+      input?.addEventListener('keydown', e => {
+        if (['e', 'E', ',', '.', '+', '-'].includes(e.key)) {
+          e.preventDefault();
+        }
+      });
+
+      input?.addEventListener('input', sanitizeInput);
 
       document.addEventListener('keydown', onKeyDown);
       input?.focus();
@@ -565,7 +596,7 @@
     togglePendingBanner(message);
     if (confirmBtn) confirmBtn.disabled = Boolean(message);
     if (resetDestinationsBtn) {
-      if (!message && hasAssignments) {
+      if (hasAssignments) {
         resetDestinationsBtn.classList.remove('hidden');
       } else {
         resetDestinationsBtn.classList.add('hidden');
@@ -1097,19 +1128,19 @@
       const buttonsRow = document.createElement('div');
       buttonsRow.className = 'flex items-center justify-center gap-2';
 
-      const createActionButton = (iconClass, title, onClick, extraClasses = '') => {
+      const createActionButton = (iconClass, title, onClick, extraClasses = '', iconColorClass = '') => {
         const btn = document.createElement('button');
         btn.type = 'button';
         btn.className = `w-10 h-10 flex items-center justify-center rounded-lg border border-white/10 bg-white/5 text-lg text-white hover:border-primary/40 transition focus:outline-none focus:ring-2 focus:ring-primary/40 ${extraClasses}`;
         btn.title = title;
-        btn.innerHTML = `<i class="fas ${iconClass}" aria-hidden="true"></i>`;
+        btn.innerHTML = `<i class="fas ${iconClass} ${iconColorClass}" aria-hidden="true"></i>`;
         btn.addEventListener('click', onClick);
         return btn;
       };
 
-      const stockBtn = createActionButton('fa-box-open', 'Retornar ao estoque', () => handleSimpleAction(key, 'stock'));
-      const reallocateBtn = createActionButton('fa-exchange-alt', 'Realocar em outro pedido', () => handleReallocateClick(key));
-      const discardBtn = createActionButton('fa-trash', 'Descartar peça', () => handleSimpleAction(key, 'discard'));
+      const stockBtn = createActionButton('fa-box-open', 'Retornar ao estoque', () => handleSimpleAction(key, 'stock'), '', 'text-amber-300');
+      const reallocateBtn = createActionButton('fa-exchange-alt', 'Realocar em outro pedido', () => handleReallocateClick(key), '', 'text-sky-300');
+      const discardBtn = createActionButton('fa-trash', 'Descartar peça', () => handleSimpleAction(key, 'discard'), '', 'text-red-400');
 
       buttonsRow.append(stockBtn, reallocateBtn, discardBtn);
 
