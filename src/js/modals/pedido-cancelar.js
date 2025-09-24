@@ -817,7 +817,7 @@
 
     if (reallocationMap.size) {
       const heading = document.createElement('p');
-      heading.className = 'text-xs uppercase tracking-wide text-primary-200 font-semibold';
+      heading.className = 'text-xs uppercase tracking-wide font-semibold text-sky-300';
       heading.textContent = 'Realocações';
       summaryList.appendChild(heading);
 
@@ -835,7 +835,7 @@
                 <p class="text-white text-sm font-semibold">${headerLabel}</p>
                 ${meta ? `<p class="text-[11px] text-gray-300">Convertido em ${meta.conversionLabel}</p>` : ''}
               </div>
-              <span class="badge-success px-3 py-1 rounded-full text-xs font-medium">${formatUnitsLabel(bucket.total)}</span>
+              <span class="badge-info px-3 py-1 rounded-full text-xs font-medium">${formatUnitsLabel(bucket.total)}</span>
             </div>
           `;
           const list = document.createElement('div');
@@ -1138,7 +1138,7 @@
         return btn;
       };
 
-      const stockBtn = createActionButton('fa-box-open', 'Retornar ao estoque', () => handleSimpleAction(key, 'stock'), '', 'text-amber-300');
+      const stockBtn = createActionButton('fa-box-open', 'Retornar ao estoque', () => handleSimpleAction(key, 'stock'), '', 'text-emerald-300');
       const reallocateBtn = createActionButton('fa-exchange-alt', 'Realocar em outro pedido', () => handleReallocateClick(key), '', 'text-sky-300');
       const discardBtn = createActionButton('fa-trash', 'Descartar peça', () => handleSimpleAction(key, 'discard'), '', 'text-red-400');
 
