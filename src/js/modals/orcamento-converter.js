@@ -678,8 +678,16 @@
   }
 
   function showPieceApprovedDialog() {
+    document.getElementById('pieceApprovedDialogOverlay')?.remove();
     const overlay = document.createElement('div');
-    overlay.className = 'fixed inset-0 z-[13000] bg-black/60 flex items-center justify-center p-4';
+    overlay.id = 'pieceApprovedDialogOverlay';
+    overlay.className = 'fixed inset-0 bg-black/60 flex items-center justify-center p-4';
+    const baseOverlay = document.getElementById('converterOrcamentoOverlay');
+    const computedZ = baseOverlay ? window.getComputedStyle(baseOverlay).zIndex : '';
+    const parsedZ = Number(computedZ);
+    const fallbackZ = 15000;
+    const finalZ = Number.isFinite(parsedZ) ? Math.max(parsedZ + 2, fallbackZ) : fallbackZ;
+    overlay.style.zIndex = String(finalZ);
     overlay.innerHTML = `
       <div class="max-w-sm w-full glass-surface backdrop-blur-xl rounded-2xl border border-yellow-500/20 ring-1 ring-yellow-500/30 shadow-2xl/40 animate-modalFade">
         <div class="p-6 text-center">
