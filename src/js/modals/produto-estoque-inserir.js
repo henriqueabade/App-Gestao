@@ -77,11 +77,19 @@
       }
       const produto = window.produtoDetalhes;
       if(!produto) return;
+      const etapaNome = processoSelect.options[processoSelect.selectedIndex]?.textContent || etapa;
       const existente = produto.lotes?.find(l => String(l.etapa) === String(etapa) && String(l.ultimo_insumo_id) === String(itemId));
       if(existente){
         window.somarEstoqueInfo = {
           existing: existente,
           adicionar: quantidade,
+          produto: {
+            id: produto.id,
+            nome: produto.nome,
+            codigo: produto.codigo
+          },
+          etapa: etapaNome,
+          itemNome: itemNome,
           reload: () => {
             processoSelect.value = '';
             itemInput.value = '';
@@ -100,7 +108,17 @@
           produtoId: produto.id,
           etapa,
           ultimoInsumoId: itemId,
-          quantidade
+          quantidade,
+          __meta: {
+            produto: {
+              id: produto.id,
+              nome: produto.nome,
+              codigo: produto.codigo
+            },
+            etapa: etapaNome,
+            itemNome,
+            quantidade
+          }
         });
         showToast('Produto inserido', 'success');
         processoSelect.value = '';

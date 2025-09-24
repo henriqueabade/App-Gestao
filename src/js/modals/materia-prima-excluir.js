@@ -8,7 +8,16 @@
     const item = window.materiaExcluir;
     if(!item) return;
     try{
-      await window.electronAPI.excluirMateriaPrima(item.id);
+      await window.electronAPI.excluirMateriaPrima({
+        id: item.id,
+        __meta: {
+          nome: item.nome,
+          categoria: item.categoria,
+          quantidade: item.quantidade,
+          unidade: item.unidade,
+          processo: item.processo
+        }
+      });
       showToast('Insumo excluído com sucesso!', 'success');
       close();
       Modal.close('editarInsumo');

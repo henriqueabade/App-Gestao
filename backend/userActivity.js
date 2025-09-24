@@ -53,27 +53,11 @@ async function registrarUltimaEntrada(usuarioId, data = new Date()) {
   await updateUsuarioCampos(usuarioId, campos);
 }
 
-function montarDetalhesAcao(info = {}) {
-  const partes = [];
-  const { modulo, descricao, timestamp, motivo } = info;
-
-  if (modulo) partes.push(`Módulo: ${modulo}`);
-  if (descricao) partes.push(`Ação: ${descricao}`);
-
-  const horario = normalizarData(timestamp);
-  if (horario) partes.push(`Horário: ${horario.toISOString()}`);
-
-  if (motivo) partes.push(`Motivo: ${motivo}`);
-
-  if (!partes.length) return null;
-  return partes.join(' | ');
-}
-
 async function registrarUltimaSaida(usuarioId, info = {}) {
   const saida = normalizarData(info.saida, new Date());
   const ultimaAcao = info.ultimaAcao || {};
   const timestamp = normalizarData(ultimaAcao.timestamp);
-  const descricaoDet = montarDetalhesAcao({ ...ultimaAcao, motivo: info.motivo });
+  const descricaoDet = typeof ultimaAcao.descricao === 'string' ? ultimaAcao.descricao : null;
 
   const campos = {
     ultima_saida: saida,

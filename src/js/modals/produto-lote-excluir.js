@@ -8,7 +8,16 @@
     const item = window.loteExcluir;
     if(!item) return;
     try {
-      await window.electronAPI.excluirLoteProduto(item.id);
+      const payload = {
+        id: item.id,
+        __meta: {
+          produto: item.produto,
+          etapa: item.etapa,
+          itemNome: item.itemNome,
+          quantidade: item.quantidade
+        }
+      };
+      await window.electronAPI.excluirLoteProduto(payload);
       showToast('Lote excluído', 'success');
       close();
       item.reload?.();

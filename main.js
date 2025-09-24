@@ -294,6 +294,460 @@ function summarizePayload(payload) {
   return '';
 }
 
+function formatNumber(value, options = {}) {
+  const num = Number(value);
+  if (!Number.isFinite(num)) return '';
+  const { decimals } = options;
+  if (typeof decimals === 'number') {
+    return num.toLocaleString('pt-BR', {
+      minimumFractionDigits: decimals,
+      maximumFractionDigits: decimals
+    });
+  }
+  if (Number.isInteger(num)) {
+    return num.toLocaleString('pt-BR');
+  }
+  return num.toLocaleString('pt-BR', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  });
+}
+
+function formatCurrency(value) {
+  const num = Number(value);
+  if (!Number.isFinite(num)) return '';
+  return num.toLocaleString('pt-BR', {
+    style: 'currency',
+    currency: 'BRL'
+  });
+}
+
+function formatBoolean(value) {
+  return value ? 'Sim' : 'Não';
+}
+
+function formatText(value) {
+  if (value === null || value === undefined) return '';
+  if (typeof value === 'string') return value.trim();
+  if (typeof value === 'number') return formatNumber(value);
+  if (typeof value === 'boolean') return formatBoolean(value);
+  return String(value);
+}
+
+function formatQuantity(value, unit, options = {}) {
+  const num = Number(value);
+  if (!Number.isFinite(num)) return '';
+  const abs = Math.abs(num);
+  const baseOptions = {};
+  if (typeof options.decimals === 'number') {
+    baseOptions.decimals = options.decimals;
+  }
+  const formattedBase = options.signed
+    ? formatNumber(abs, baseOptions)
+    : formatNumber(num, baseOptions);
+  const sign = options.signed ? (num > 0 ? '+' : num < 0 ? '−' : '') : '';
+  const valueStr = sign ? `${sign}${formattedBase}` : formattedBase;
+  return unit ? `${valueStr} ${unit}` : valueStr;
+}
+
+function describeQuantityChange(before, after, unit) {
+  const prev = Number(before);
+  const next = Number(after);
+  const hasPrev = Number.isFinite(prev);
+  const hasNext = Number.isFinite(next);
+  if (!hasPrev && !hasNext) return null;
+  if (hasPrev && hasNext) {
+    const delta = next - prev;
+    const deltaText = formatQuantity(delta, unit, { signed: true });
+    return `quantidade: ${formatQuantity(prev, unit)} → ${formatQuantity(next, unit)}${deltaText ? ` (${deltaText})` : ''}`;
+  }
+  if (hasNext) {
+    return `quantidade definida para ${formatQuantity(next, unit)}`;
+  }
+  return `quantidade removida (anterior ${formatQuantity(prev, unit)})`;
+}
+
+function describePriceChange(before, after) {
+  const prev = Number(before);
+  const next = Number(after);
+  const hasPrev = Number.isFinite(prev);
+  const hasNext = Number.isFinite(next);
+  if (!hasPrev && !hasNext) return null;
+  if (hasPrev && hasNext) {
+    if (Math.abs(prev - next) < 0.0001) return null;
+    const delta = next - prev;
+    const deltaText = formatCurrency(Math.abs(delta));
+    const prefix = delta > 0 ? '+' : delta < 0 ? '−' : '';
+    return `preço: ${formatCurrency(prev)} → ${formatCurrency(next)}${deltaText ? ` (${prefix}${deltaText})` : ''}`;
+  }
+  if (hasNext) {
+    return `preço ajustado para ${formatCurrency(next)}`;
+  }
+  return `preço removido (anterior ${formatCurrency(prev)})`;
+}
+
+function describeTextChange(label, before, after) {
+  const prev = formatText(before);
+  const next = formatText(after);
+  if (!prev && !next) return null;
+  if (prev === next) return null;
+  if (prev && next) return `${label}: ${prev} → ${next}`;
+  if (next) return `${label}: ${next}`;
+  return `${label}: removido (${prev})`;
+}
+
+function describeIpcActionDetails(channel, payload, result) {
+  const payloadObj = typeof payload === 'object' && payload !== null ? payload : null;
+  switch (channel) {
+    case 'adicionar-materia-prima': {
+      const data = (result && result.materia) || result || payloadObj || {};
+      const nome = data.nome || payloadObj?.nome;
+      const categoria = data.categoria || payloadObj?.categoria;
+      const unidade = data.unidade || payloadObj?.unidade;
+      const processo = data.processo || payloadObj?.processo;
+      const infinito = data.infinito ?? payloadObj?.infinito;
+      const quantidade = data.quantidade ?? payloadObj?.quantidade;
+      const preco = data.preco_unitario ?? payloadObj?.preco_unitario;
+      const detalhes = [];
+      if (categoria) detalhes.push(`categoria ${categoria}`);
+      if (unidade) detalhes.push(`unidade ${unidade}`);
+      if (processo) detalhes.push(`processo ${processo}`);
+      if (infinito) {
+        detalhes.push('estoque infinito');
+      } else if (quantidade !== undefined && quantidade !== null) {
+        const qtdText = formatQuantity(quantidade, unidade);
+        if (qtdText) detalhes.push(`estoque ${qtdText}`);
+      }
+      if (preco !== undefined && preco !== null) {
+        const precoText = formatCurrency(preco);
+        if (precoText) detalhes.push(`preço unitário ${precoText}`);
+      }
+      const base = nome ? `Adicionou insumo "${nome}"` : 'Adicionou matéria-prima';
+      return detalhes.length ? `${base} (${detalhes.join(' | ')})` : base;
+    }
+    case 'atualizar-materia-prima': {
+      const dados = payloadObj?.dados || {};
+      const before = dados.__meta?.antes || payloadObj?.__meta?.antes || null;
+      const after = (result && result.materia) || result || dados;
+      const nome = after?.nome ?? dados.nome ?? before?.nome;
+      const unidade = after?.unidade ?? dados.unidade ?? before?.unidade;
+      const changes = [];
+      const quantidadeChange = describeQuantityChange(before?.quantidade, after?.quantidade ?? dados.quantidade, unidade);
+      if (quantidadeChange) changes.push(quantidadeChange);
+      const precoChange = describePriceChange(before?.preco_unitario, after?.preco_unitario ?? dados.preco_unitario);
+      if (precoChange) changes.push(precoChange);
+      const categoriaChange = describeTextChange('categoria', before?.categoria, after?.categoria ?? dados.categoria);
+      if (categoriaChange) changes.push(categoriaChange);
+      const unidadeChange = describeTextChange('unidade', before?.unidade, after?.unidade ?? dados.unidade);
+      if (unidadeChange) changes.push(unidadeChange);
+      const processoChange = describeTextChange('processo', before?.processo, after?.processo ?? dados.processo);
+      if (processoChange) changes.push(processoChange);
+      const infinitoBefore = before?.infinito;
+      const infinitoAfter = after?.infinito ?? dados.infinito;
+      if (infinitoBefore !== undefined || infinitoAfter !== undefined) {
+        if (infinitoBefore !== infinitoAfter) {
+          const labelAtual = formatBoolean(!!infinitoAfter);
+          const labelAnterior = infinitoBefore === undefined ? null : formatBoolean(!!infinitoBefore);
+          changes.push(labelAnterior ? `estoque infinito: ${labelAnterior} → ${labelAtual}` : `estoque infinito: ${labelAtual}`);
+        }
+      }
+      const descricaoChange = describeTextChange('descrição', before?.descricao, after?.descricao ?? dados.descricao);
+      if (descricaoChange) changes.push(descricaoChange);
+      if (!changes.length) return null;
+      const base = nome ? `Atualizou insumo "${nome}"` : 'Atualizou matéria-prima';
+      return `${base} (${changes.join(' | ')})`;
+    }
+    case 'excluir-materia-prima': {
+      const meta = payloadObj?.__meta || {};
+      const nome = meta.nome;
+      const categoria = meta.categoria;
+      const unidade = meta.unidade;
+      const processo = meta.processo;
+      const quantidade = meta.quantidade;
+      const detalhes = [];
+      if (categoria) detalhes.push(`categoria ${categoria}`);
+      if (unidade) detalhes.push(`unidade ${unidade}`);
+      if (processo) detalhes.push(`processo ${processo}`);
+      if (quantidade !== undefined && quantidade !== null) {
+        const qtdText = formatQuantity(quantidade, unidade);
+        if (qtdText) detalhes.push(`estoque removido ${qtdText}`);
+      }
+      const base = nome ? `Removeu insumo "${nome}"` : payloadObj?.id ? `Removeu matéria-prima #${payloadObj.id}` : 'Removeu matéria-prima';
+      return detalhes.length ? `${base} (${detalhes.join(' | ')})` : base;
+    }
+    case 'registrar-entrada-materia-prima': {
+      const quantidade = Number(payloadObj?.quantidade);
+      const data = result || {};
+      const nome = data.nome;
+      const unidade = data.unidade;
+      const saldoAtual = Number(data.quantidade);
+      const saldoAnterior = Number.isFinite(quantidade) && Number.isFinite(saldoAtual)
+        ? saldoAtual - quantidade
+        : undefined;
+      const detalhes = [];
+      if (Number.isFinite(quantidade)) {
+        const qtdText = formatQuantity(quantidade, unidade);
+        if (qtdText) detalhes.push(`entrada de ${qtdText}`);
+      }
+      if (Number.isFinite(saldoAtual)) {
+        if (Number.isFinite(saldoAnterior)) {
+          detalhes.push(`saldo ${formatQuantity(saldoAnterior, unidade)} → ${formatQuantity(saldoAtual, unidade)}`);
+        } else {
+          detalhes.push(`saldo atual ${formatQuantity(saldoAtual, unidade)}`);
+        }
+      }
+      const base = nome ? `Registrou entrada do insumo "${nome}"` : 'Registrou entrada em matéria-prima';
+      return detalhes.length ? `${base} (${detalhes.join(' | ')})` : base;
+    }
+    case 'registrar-saida-materia-prima': {
+      const quantidade = Number(payloadObj?.quantidade);
+      const data = result || {};
+      const nome = data.nome;
+      const unidade = data.unidade;
+      const saldoAtual = Number(data.quantidade);
+      const saldoAnterior = Number.isFinite(quantidade) && Number.isFinite(saldoAtual)
+        ? saldoAtual + quantidade
+        : undefined;
+      const detalhes = [];
+      if (Number.isFinite(quantidade)) {
+        const qtdText = formatQuantity(quantidade, unidade);
+        if (qtdText) detalhes.push(`retirou ${qtdText}`);
+      }
+      if (Number.isFinite(saldoAtual)) {
+        if (Number.isFinite(saldoAnterior)) {
+          detalhes.push(`saldo ${formatQuantity(saldoAnterior, unidade)} → ${formatQuantity(saldoAtual, unidade)}`);
+        } else {
+          detalhes.push(`saldo atual ${formatQuantity(saldoAtual, unidade)}`);
+        }
+      }
+      const base = nome ? `Registrou saída do insumo "${nome}"` : 'Registrou saída em matéria-prima';
+      return detalhes.length ? `${base} (${detalhes.join(' | ')})` : base;
+    }
+    case 'atualizar-preco-materia-prima': {
+      const data = result || {};
+      const nome = data.nome;
+      const preco = data.preco_unitario ?? payloadObj?.preco;
+      const precoText = formatCurrency(preco);
+      const detalhes = precoText ? [`preço unitário ${precoText}`] : [];
+      const base = nome ? `Atualizou preço do insumo "${nome}"` : 'Atualizou preço de matéria-prima';
+      return detalhes.length ? `${base} (${detalhes.join(' | ')})` : base;
+    }
+    case 'adicionar-categoria': {
+      const nome = result || payload;
+      const text = formatText(nome);
+      return text ? `Adicionou categoria "${text}"` : null;
+    }
+    case 'adicionar-unidade': {
+      const nome = result || payload;
+      const text = formatText(nome);
+      return text ? `Adicionou unidade "${text}"` : null;
+    }
+    case 'adicionar-colecao': {
+      const nome = result || payload;
+      const text = formatText(nome);
+      return text ? `Adicionou coleção "${text}"` : null;
+    }
+    case 'remover-categoria': {
+      const nome = typeof payload === 'string' ? payload : payloadObj;
+      const text = formatText(nome);
+      return text ? `Removeu categoria "${text}"` : null;
+    }
+    case 'remover-unidade': {
+      const nome = typeof payload === 'string' ? payload : payloadObj;
+      const text = formatText(nome);
+      return text ? `Removeu unidade "${text}"` : null;
+    }
+    case 'remover-colecao': {
+      const nome = typeof payload === 'string' ? payload : payloadObj;
+      const text = formatText(nome);
+      return text ? `Removeu coleção "${text}"` : null;
+    }
+    case 'adicionar-produto': {
+      const data = result || {};
+      const nome = data.nome || payloadObj?.nome;
+      const codigo = data.codigo || payloadObj?.codigo;
+      const categoria = data.categoria || payloadObj?.categoria;
+      const preco = data.preco_venda ?? payloadObj?.preco_venda;
+      const markup = data.pct_markup ?? payloadObj?.pct_markup;
+      const status = data.status ?? payloadObj?.status;
+      const detalhes = [];
+      if (codigo) detalhes.push(`código ${codigo}`);
+      if (categoria) detalhes.push(`coleção ${categoria}`);
+      if (preco !== undefined && preco !== null) {
+        const precoText = formatCurrency(preco);
+        if (precoText) detalhes.push(`preço de venda ${precoText}`);
+      }
+      if (markup !== undefined && markup !== null) {
+        const markupText = formatNumber(markup, { decimals: 2 });
+        if (markupText) detalhes.push(`markup ${markupText}%`);
+      }
+      if (status) detalhes.push(`status ${status}`);
+      const base = nome ? `Adicionou produto "${nome}"` : 'Adicionou produto';
+      return detalhes.length ? `${base} (${detalhes.join(' | ')})` : base;
+    }
+    case 'atualizar-produto': {
+      const dados = payloadObj?.dados || {};
+      const before = dados.__meta?.antes || payloadObj?.__meta?.antes || null;
+      const after = result || {};
+      const nome = after.nome ?? dados.nome ?? before?.nome;
+      const codigo = after.codigo ?? dados.codigo ?? before?.codigo;
+      const categoria = after.categoria ?? dados.categoria ?? before?.categoria;
+      const preco = after.preco_venda ?? dados.preco_venda;
+      const markup = after.pct_markup ?? dados.pct_markup;
+      const status = after.status ?? dados.status;
+      const changes = [];
+      if (before) {
+        const nomeChange = describeTextChange('nome', before.nome, after.nome ?? dados.nome);
+        if (nomeChange) changes.push(nomeChange);
+        const codigoChange = describeTextChange('código', before.codigo, after.codigo ?? dados.codigo);
+        if (codigoChange) changes.push(codigoChange);
+        const categoriaChange = describeTextChange('coleção', before.categoria, after.categoria ?? dados.categoria);
+        if (categoriaChange) changes.push(categoriaChange);
+        const precoChange = describePriceChange(before.preco_venda, after.preco_venda ?? dados.preco_venda);
+        if (precoChange) changes.push(precoChange);
+        const markupChange = describeTextChange('markup', before.pct_markup != null ? `${formatNumber(before.pct_markup, { decimals: 2 })}%` : null, markup != null ? `${formatNumber(markup, { decimals: 2 })}%` : null);
+        if (markupChange) changes.push(markupChange);
+        const statusChange = describeTextChange('status', before.status, after.status ?? dados.status);
+        if (statusChange) changes.push(statusChange);
+      } else {
+        if (codigo) changes.push(`código ${codigo}`);
+        if (categoria) changes.push(`coleção ${categoria}`);
+        if (preco !== undefined && preco !== null) {
+          const precoText = formatCurrency(preco);
+          if (precoText) changes.push(`preço de venda ${precoText}`);
+        }
+        if (markup !== undefined && markup !== null) {
+          const markupText = formatNumber(markup, { decimals: 2 });
+          if (markupText) changes.push(`markup ${markupText}%`);
+        }
+        if (status) changes.push(`status ${status}`);
+      }
+      if (!changes.length) return null;
+      const base = nome ? `Atualizou produto "${nome}"` : 'Atualizou produto';
+      return `${base} (${changes.join(' | ')})`;
+    }
+    case 'excluir-produto': {
+      const meta = payloadObj?.__meta || {};
+      const nome = meta.nome;
+      const codigo = meta.codigo;
+      const categoria = meta.categoria;
+      const detalhes = [];
+      if (codigo) detalhes.push(`código ${codigo}`);
+      if (categoria) detalhes.push(`coleção ${categoria}`);
+      if (meta.preco_venda !== undefined && meta.preco_venda !== null) {
+        const precoText = formatCurrency(meta.preco_venda);
+        if (precoText) detalhes.push(`preço de venda ${precoText}`);
+      }
+      if (meta.status) detalhes.push(`status ${meta.status}`);
+      const base = nome ? `Removeu produto "${nome}"` : payloadObj?.id ? `Removeu produto #${payloadObj.id}` : 'Removeu produto';
+      return detalhes.length ? `${base} (${detalhes.join(' | ')})` : base;
+    }
+    case 'inserir-lote-produto': {
+      const meta = payloadObj?.__meta || {};
+      const produto = meta.produto || {};
+      const etapa = meta.etapa || payloadObj?.etapa;
+      const itemNome = meta.itemNome;
+      const quantidade = (result && result.quantidade) ?? payloadObj?.quantidade;
+      const detalhes = [];
+      if (produto.codigo) detalhes.push(`código ${produto.codigo}`);
+      if (etapa) detalhes.push(`etapa ${etapa}`);
+      if (itemNome) detalhes.push(`item ${itemNome}`);
+      if (quantidade !== undefined && quantidade !== null) {
+        const qtdText = formatQuantity(quantidade, meta.unidade);
+        if (qtdText) detalhes.push(`quantidade ${qtdText}`);
+      }
+      const base = produto.nome ? `Inseriu lote para o produto "${produto.nome}"` : 'Inseriu lote de produto';
+      return detalhes.length ? `${base} (${detalhes.join(' | ')})` : base;
+    }
+    case 'atualizar-lote-produto': {
+      const meta = payloadObj?.__meta || {};
+      const produto = meta.produto || {};
+      const etapa = meta.etapa || payloadObj?.etapa;
+      const itemNome = meta.itemNome;
+      const unidade = meta.unidade;
+      const quantidadeAnterior = meta.quantidadeAnterior;
+      const quantidadeNova = meta.quantidadeNova ?? payloadObj?.quantidade ?? result?.quantidade;
+      const change = describeQuantityChange(quantidadeAnterior, quantidadeNova, unidade);
+      const detalhes = [];
+      if (produto.codigo) detalhes.push(`código ${produto.codigo}`);
+      if (etapa) detalhes.push(`etapa ${etapa}`);
+      if (itemNome) detalhes.push(`item ${itemNome}`);
+      if (change) detalhes.push(change);
+      const base = produto.nome ? `Atualizou lote do produto "${produto.nome}"` : 'Atualizou lote de produto';
+      return detalhes.length ? `${base} (${detalhes.join(' | ')})` : base;
+    }
+    case 'excluir-lote-produto': {
+      const meta = payloadObj?.__meta || {};
+      const produto = meta.produto || {};
+      const etapa = meta.etapa;
+      const itemNome = meta.itemNome;
+      const quantidade = meta.quantidade;
+      const detalhes = [];
+      if (produto.codigo) detalhes.push(`código ${produto.codigo}`);
+      if (etapa) detalhes.push(`etapa ${etapa}`);
+      if (itemNome) detalhes.push(`item ${itemNome}`);
+      if (quantidade !== undefined && quantidade !== null) {
+        const qtdText = formatQuantity(quantidade, meta.unidade);
+        if (qtdText) detalhes.push(`estoque removido ${qtdText}`);
+      }
+      const base = produto.nome ? `Removeu lote do produto "${produto.nome}"` : 'Removeu lote de produto';
+      return detalhes.length ? `${base} (${detalhes.join(' | ')})` : base;
+    }
+    case 'salvar-produto-detalhado': {
+      const produto = payloadObj?.produto || {};
+      const codigo = payloadObj?.codigo || produto.codigo;
+      const nome = produto.nome;
+      const precoBase = produto.preco_base;
+      const precoVenda = produto.preco_venda;
+      const itens = payloadObj?.itens || {};
+      const detalhes = [];
+      if (codigo) detalhes.push(`código ${codigo}`);
+      if (precoBase !== undefined && precoBase !== null) {
+        const precoText = formatCurrency(precoBase);
+        if (precoText) detalhes.push(`preço base ${precoText}`);
+      }
+      if (precoVenda !== undefined && precoVenda !== null) {
+        const precoText = formatCurrency(precoVenda);
+        if (precoText) detalhes.push(`preço de venda ${precoText}`);
+      }
+      const inseridos = Array.isArray(itens.inseridos) ? itens.inseridos.length : 0;
+      const atualizados = Array.isArray(itens.atualizados) ? itens.atualizados.length : 0;
+      const deletados = Array.isArray(itens.deletados) ? itens.deletados.length : 0;
+      const resumoItens = [];
+      if (inseridos) resumoItens.push(`${inseridos} adicionado(s)`);
+      if (atualizados) resumoItens.push(`${atualizados} atualizado(s)`);
+      if (deletados) resumoItens.push(`${deletados} removido(s)`);
+      if (resumoItens.length) detalhes.push(`insumos ${resumoItens.join(', ')}`);
+      const base = nome ? `Salvou detalhes do produto "${nome}"` : 'Salvou detalhes do produto';
+      return detalhes.length ? `${base} (${detalhes.join(' | ')})` : base;
+    }
+    case 'adicionar-etapa-producao': {
+      const nome = payloadObj?.nome || result?.nome;
+      const ordem = payloadObj?.ordem ?? result?.ordem;
+      const detalhes = [];
+      if (ordem !== undefined && ordem !== null) detalhes.push(`ordem ${ordem}`);
+      const base = nome ? `Adicionou etapa de produção "${nome}"` : 'Adicionou etapa de produção';
+      return detalhes.length ? `${base} (${detalhes.join(' | ')})` : base;
+    }
+    case 'remover-etapa-producao': {
+      const nome = typeof payload === 'string' ? payload : payloadObj;
+      const text = formatText(nome);
+      return text ? `Removeu etapa de produção "${text}"` : null;
+    }
+    case 'registrar-usuario': {
+      const data = payloadObj || {};
+      const nome = data.name || data.nome;
+      const email = data.email;
+      const detalhes = [];
+      if (email) detalhes.push(`email ${email}`);
+      const base = nome ? `Registrou usuário "${nome}"` : 'Registrou novo usuário';
+      return detalhes.length ? `${base} (${detalhes.join(' | ')})` : base;
+    }
+    default:
+      return null;
+  }
+}
+
 function capitalizeModuleName(key = '') {
   return key
     .replace(/[-_]/g, ' ')
@@ -308,6 +762,10 @@ function normalizeIpcAction(action) {
   const meta = IPC_ACTION_MAP[action.channel];
   if (!meta) return null;
   if (action.result && (action.result.success === false || action.result.error)) return null;
+  const detailed = describeIpcActionDetails(action.channel, action.payload, action.result);
+  if (detailed) {
+    return { module: meta.module, description: detailed };
+  }
   const details = summarizePayload(action.payload) || summarizePayload(action.result);
   const description = details ? `${meta.label} (${details})` : meta.label;
   return { module: meta.module, description };
@@ -365,7 +823,6 @@ async function persistUserExit(reason) {
   if (!currentUserSession || isPersistingExit) return;
   isPersistingExit = true;
   const payload = { saida: new Date() };
-  if (reason) payload.motivo = reason;
   if (lastRecordedAction) {
     payload.ultimaAcao = {
       timestamp: lastRecordedAction.timestamp,
@@ -649,8 +1106,12 @@ ipcMain.handle('atualizar-materia-prima', async (_e, { id, dados }) => {
     return { success: false, message: err.message, code: err.code };
   }
 });
-ipcMain.handle('excluir-materia-prima', async (_e, id) => {
+ipcMain.handle('excluir-materia-prima', async (_e, info) => {
   try {
+    const id = typeof info === 'object' && info !== null ? info.id : info;
+    if (id === undefined || id === null) {
+      return { success: false, message: 'ID inválido', code: 'invalid-id' };
+    }
     await excluirMateria(id);
     return { success: true };
   } catch (err) {
@@ -787,10 +1248,14 @@ ipcMain.handle('adicionar-produto', async (_e, dados) => {
 ipcMain.handle('atualizar-produto', async (_e, { id, dados }) => {
   return atualizarProduto(id, dados);
 });
-ipcMain.handle('excluir-produto', async (_e, id) => {
+ipcMain.handle('excluir-produto', async (_e, info) => {
   try {
+    const id = typeof info === 'object' && info !== null ? info.id : info;
+    if (id === undefined || id === null) {
+      return { error: 'invalid-id' };
+    }
     await excluirProduto(id);
-    return true;
+    return { success: true };
   } catch (err) {
     return { error: err.message };
   }
@@ -810,9 +1275,13 @@ ipcMain.handle('inserir-lote-produto', async (_e, dados) => {
 ipcMain.handle('atualizar-lote-produto', async (_e, { id, quantidade }) => {
   return atualizarLoteProduto(id, quantidade);
 });
-ipcMain.handle('excluir-lote-produto', async (_e, id) => {
+ipcMain.handle('excluir-lote-produto', async (_e, info) => {
+  const id = typeof info === 'object' && info !== null ? info.id : info;
+  if (id === undefined || id === null) {
+    return { success: false, error: 'invalid-id' };
+  }
   await excluirLoteProduto(id);
-  return true;
+  return { success: true };
 });
 ipcMain.handle('listar-insumos-produto', async (_e, codigo) => {
   return listarInsumosProduto(codigo);

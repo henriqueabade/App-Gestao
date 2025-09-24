@@ -9,7 +9,19 @@
     if(!info) return;
     try {
       const novaQtd = Number(info.existing.quantidade) + Number(info.adicionar);
-      await window.electronAPI.atualizarLoteProduto({ id: info.existing.id, quantidade: novaQtd });
+      const quantidadeAtual = Number(info.existing.quantidade);
+      await window.electronAPI.atualizarLoteProduto({
+        id: info.existing.id,
+        quantidade: novaQtd,
+        __meta: {
+          produto: info.produto,
+          etapa: info.etapa || info.existing.etapa,
+          itemNome: info.itemNome || info.existing.ultimo_item,
+          quantidadeAnterior: isNaN(quantidadeAtual) ? undefined : quantidadeAtual,
+          quantidadeNova: novaQtd,
+          alteracao: isNaN(quantidadeAtual) ? undefined : novaQtd - quantidadeAtual
+        }
+      });
       showToast('Produto registrado', 'success');
       close();
       info.reload?.();

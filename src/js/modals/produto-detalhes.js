@@ -54,7 +54,7 @@
         const editBtn = tr.querySelector('.fa-edit');
         const delBtn = tr.querySelector('.fa-trash');
         if (editBtn) editBtn.addEventListener('click', () => editarLinha(tr, d));
-        if (delBtn) delBtn.addEventListener('click', () => excluirLote(d.id));
+        if (delBtn) delBtn.addEventListener('click', () => excluirLote(d));
         tbody.appendChild(tr);
       });
       const totalEl = document.getElementById('totalEstoque');
@@ -84,7 +84,23 @@
     confirmBtn.addEventListener('click', async () => {
       const novaQtd = Number(input.value);
       try {
-        await window.electronAPI.atualizarLoteProduto({ id: dados.id, quantidade: novaQtd });
+        const quantidadeAtual = Number(original);
+        await window.electronAPI.atualizarLoteProduto({
+          id: dados.id,
+          quantidade: novaQtd,
+          __meta: {
+            produto: {
+              id: item.id,
+              nome: item.nome,
+              codigo: item.codigo
+            },
+            etapa: dados.etapa,
+            itemNome: dados.ultimo_item,
+            quantidadeAnterior: isNaN(quantidadeAtual) ? undefined : quantidadeAtual,
+            quantidadeNova: novaQtd,
+            alteracao: isNaN(quantidadeAtual) ? undefined : novaQtd - quantidadeAtual
+          }
+        });
         showToast('Quantidade atualizada', 'success');
         carregarDetalhes(item.codigo, item.id);
         if (typeof carregarProdutos === 'function') carregarProdutos();
@@ -96,9 +112,18 @@
     cancelBtn.addEventListener('click', () => carregarDetalhes(item.codigo, item.id));
   }
 
-  function excluirLote(id) {
+  function excluirLote(dados) {
+    if(!dados) return;
     window.loteExcluir = {
-      id,
+      id: dados.id,
+      quantidade: dados?.quantidade,
+      produto: {
+        id: item?.id,
+        nome: item?.nome,
+        codigo: item?.codigo
+      },
+      etapa: dados?.etapa,
+      itemNome: dados?.ultimo_item,
       reload: () => {
         carregarDetalhes(item.codigo, item.id);
         if (typeof carregarProdutos === 'function') carregarProdutos();

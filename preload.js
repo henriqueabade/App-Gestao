@@ -92,12 +92,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
     recordIpcAction('atualizar-produto', { id, dados }, result);
     return result;
   },
-  excluirProduto: async (id) => {
-    const result = await ipcRenderer.invoke('excluir-produto', id);
+  excluirProduto: async (info) => {
+    const payload = typeof info === 'object' && info !== null ? info : { id: info };
+    const result = await ipcRenderer.invoke('excluir-produto', payload.id);
     if (result && result.error) {
       throw new Error(result.error);
     }
-    recordIpcAction('excluir-produto', id, result);
+    recordIpcAction('excluir-produto', payload, result);
     return result;
   },
   listarDetalhesProduto: (params) => ipcRenderer.invoke('listar-detalhes-produto', params),
@@ -111,9 +112,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
     recordIpcAction('atualizar-lote-produto', dados, result);
     return result;
   },
-  excluirLoteProduto: async (id) => {
-    const result = await ipcRenderer.invoke('excluir-lote-produto', id);
-    recordIpcAction('excluir-lote-produto', id, result);
+  excluirLoteProduto: async (info) => {
+    const payload = typeof info === 'object' && info !== null ? info : { id: info };
+    if (payload.id === undefined || payload.id === null) {
+      throw new Error('ID do lote não informado');
+    }
+    const result = await ipcRenderer.invoke('excluir-lote-produto', payload.id);
+    recordIpcAction('excluir-lote-produto', payload, result);
     return result;
   },
   listarInsumosProduto: (codigo) => ipcRenderer.invoke('listar-insumos-produto', codigo),
@@ -155,14 +160,18 @@ contextBridge.exposeInMainWorld('electronAPI', {
     recordIpcAction('atualizar-materia-prima', { id, dados }, result);
     return result.materia;
   },
-  excluirMateriaPrima: async (id) => {
-    const result = await ipcRenderer.invoke('excluir-materia-prima', id);
+  excluirMateriaPrima: async (info) => {
+    const payload = typeof info === 'object' && info !== null ? info : { id: info };
+    if (payload.id === undefined || payload.id === null) {
+      throw new Error('ID do insumo não informado');
+    }
+    const result = await ipcRenderer.invoke('excluir-materia-prima', payload.id);
     if (result && result.success === false) {
       const err = new Error(result.message);
       if (result.code) err.code = result.code;
       throw err;
     }
-    recordIpcAction('excluir-materia-prima', id, result);
+    recordIpcAction('excluir-materia-prima', payload, result);
     return result;
   },
   registrarEntrada: async (id, quantidade) => {

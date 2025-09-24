@@ -15,7 +15,16 @@
     const item = window.produtoExcluir;
     if(!item) return;
     try{
-      await window.electronAPI.excluirProduto(item.id);
+      await window.electronAPI.excluirProduto({
+        id: item.id,
+        __meta: {
+          nome: item.nome,
+          codigo: item.codigo,
+          categoria: item.categoria,
+          preco_venda: item.preco_venda,
+          status: item.status
+        }
+      });
       showToast('Produto excluído com sucesso!', 'success');
       close();
       carregarProdutos();

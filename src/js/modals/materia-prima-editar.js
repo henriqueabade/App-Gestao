@@ -110,7 +110,18 @@
       return;
     }
     try{
-      await window.electronAPI.atualizarMateriaPrima(item.id, dados);
+      const metaAntes = item ? {
+        nome: item.nome,
+        categoria: item.categoria,
+        quantidade: item.infinito ? null : Number(item.quantidade),
+        unidade: item.unidade,
+        preco_unitario: item.preco_unitario,
+        processo: item.processo,
+        infinito: !!item.infinito,
+        descricao: item.descricao
+      } : null;
+      const payload = metaAntes ? { ...dados, __meta: { antes: metaAntes } } : dados;
+      await window.electronAPI.atualizarMateriaPrima(item.id, payload);
       showToast('Insumo atualizado com sucesso!', 'success');
       close();
       carregarMateriais();
