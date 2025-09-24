@@ -276,18 +276,16 @@
   function buildVariantSummaryListHTML(items, row, options = {}) {
     if (!Array.isArray(items) || !items.length) return '';
     const { showCurrentBadge = false } = options;
-    let html = '<ul class="space-y-3">';
-    let hasAny = false;
+    const renderedItems = [];
     items.forEach(item => {
       const qty = Number(item?.qty || 0);
       if (!(qty > 0)) return;
-      hasAny = true;
       const productName = item?.productName || row?.nome || 'Peça do orçamento';
       const productCode = item?.productCode ? String(item.productCode) : '';
       const processName = item?.processName || 'Processo não informado';
       const lastItem = item?.lastItemName || 'Sem último insumo';
       const isCurrent = !!(showCurrentBadge && item?.isCurrentProduct);
-      html += `
+      renderedItems.push(`
         <li class="rounded-xl border border-white/10 bg-white/5 px-3 py-3">
           <div class="flex flex-wrap items-start justify-between gap-3">
             <div class="space-y-1">
@@ -302,10 +300,15 @@
             <p><span class="text-gray-400">Etapa:</span> ${processName}</p>
             <p><span class="text-gray-400">Último insumo:</span> ${lastItem}</p>
           </div>
-        </li>`;
+        </li>`);
     });
-    html += '</ul>';
-    return hasAny ? html : '';
+    if (!renderedItems.length) return '';
+    const needsScroll = renderedItems.length > 3;
+    const listClasses = ['space-y-3'];
+    if (needsScroll) {
+      listClasses.push('max-h-60', 'overflow-y-auto', 'pr-1', 'modal-scroll');
+    }
+    return `<ul class="${listClasses.join(' ')}">${renderedItems.join('')}</ul>`;
   }
 
   function buildProduceSummaryHTML(quantity, label = 'Produzir do zero') {
@@ -927,6 +930,7 @@
       const remainingBudget = Math.max(0, requiredQty - totalWithoutCurrent);
       const card = document.createElement('div');
       card.className = 'w-full bg-surface/40 border border-white/10 rounded-xl px-4 py-4 transition focus-within:border-primary/60 focus-within:ring-1 focus-within:ring-primary/40 mb-3 last:mb-0';
+      card.setAttribute('data-variant-key', variant.key);
       if (currentQty > 0) {
         card.classList.add('border-primary', 'ring-1', 'ring-primary/50');
       }
@@ -955,40 +959,6 @@
             </div>
             <span class="text-xs text-gray-400 ml-auto whitespace-nowrap">Disp.: ${baseMax.toLocaleString('pt-BR')} • Orçamento: ${remainingBudget.toLocaleString('pt-BR')} un</span>
           </div>`;
-
-        container.appendChild(card);
-
-        const input = card.querySelector('input[data-role="stock-input"]');
-        input?.addEventListener('input', e => {
-          const key = e.currentTarget.getAttribute('data-variant-key');
-          if (!key) return;
-          const max = Math.max(0, Math.floor(Number(e.currentTarget.getAttribute('max')) || 0));
-          const value = Math.max(0, Math.min(max, Math.floor(Number(e.currentTarget.value) || 0)));
-          setSelectionQuantity(key, value);
-          replaceModalState.selectionInitialized = true;
-          renderReplaceModalList();
-        });
-
-        card.querySelectorAll('[data-action="fill-max"]').forEach(btn => {
-          btn.addEventListener('click', () => {
-            const key = btn.getAttribute('data-variant-key');
-            if (!key) return;
-            const max = Math.max(0, Math.floor(Number(btn.previousElementSibling?.getAttribute('max')) || 0));
-            setSelectionQuantity(key, max);
-            replaceModalState.selectionInitialized = true;
-            renderReplaceModalList();
-          });
-        });
-
-        card.querySelectorAll('[data-action="clear-selection"]').forEach(btn => {
-          btn.addEventListener('click', () => {
-            const key = btn.getAttribute('data-variant-key');
-            if (!key) return;
-            setSelectionQuantity(key, 0);
-            replaceModalState.selectionInitialized = true;
-            renderReplaceModalList();
-          });
-        });
       } else {
         const remaining = remainingBudget;
         card.innerHTML = `
@@ -1011,17 +981,17 @@
 
       const input = card.querySelector(`[data-variant-input="${variant.key}"]`);
       if (input) {
-        input.addEventListener('input', async e => {
-          const value = Number(e.target.value);
+        const handleManualChange = async e => {
+          const value = Math.floor(Number(e.target.value) || 0);
           await applyQuantityChange(variant, value, { focus: { key: variant.key } });
-        });
-        input.addEventListener('blur', async e => {
-          const value = Number(e.target.value);
-          await applyQuantityChange(variant, value, { focus: { key: variant.key } });
-        });
+        };
+        input.addEventListener('input', handleManualChange);
+        input.addEventListener('blur', handleManualChange);
       }
       card.querySelectorAll('.js-qty-btn').forEach(btn => {
-        btn.addEventListener('click', async () => {
+        btn.addEventListener('click', async e => {
+          e.preventDefault();
+          e.stopPropagation();
           const step = Number(btn.dataset.step || 0);
           const nextValue = getSelectionQuantity(variant.key) + step;
           await applyQuantityChange(variant, nextValue, { focus: { key: variant.key, select: true } });
