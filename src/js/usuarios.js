@@ -47,6 +47,26 @@ function formatarDataHoraCompleta(valor) {
     });
 }
 
+function normalizarParaComparacao(texto) {
+    if (!texto) return '';
+    return texto
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase();
+}
+
+function formatarSegmentoDescricao(parte) {
+    const horarioRegex = /^hor[áa]rio:\s*/i;
+    if (horarioRegex.test(parte)) {
+        const valor = parte.replace(horarioRegex, '').trim();
+        const data = new Date(valor);
+        if (!Number.isNaN(data.getTime())) {
+            return escapeHtml(`Horário: ${formatarDataHoraCompleta(data)}`);
+        }
+    }
+    return escapeHtml(parte);
+}
+
 function formatarDescricaoAlteracao(descricao, local, especificacao) {
     const localLimpo = local && String(local).trim();
     const especificacaoLimpa = especificacao && String(especificacao).trim();
@@ -57,9 +77,26 @@ function formatarDescricaoAlteracao(descricao, local, especificacao) {
             partes.push(`Usuário alterou o módulo ${escapeHtml(localLimpo)}`);
         }
         if (especificacaoLimpa) {
-            partes.push(`mudando ${escapeHtml(especificacaoLimpa)}`);
+            const detalhesEspecificacao = especificacaoLimpa
+                .split('|')
+                .map(parte => parte.trim())
+                .filter(Boolean)
+                .filter(parte => {
+                    const normalizado = normalizarParaComparacao(parte);
+                    if (normalizado.startsWith('motivo')) return false;
+                    if (localLimpo && normalizado.startsWith('modulo')) return false;
+                    return true;
+                })
+                .map(formatarSegmentoDescricao);
+
+            if (detalhesEspecificacao.length) {
+                partes.push(`mudando ${detalhesEspecificacao.join(' | ')}`);
+            }
         }
-        return partes.join(', ');
+
+        if (partes.length) {
+            return partes.join(', ');
+        }
     }
 
     if (!descricao || !String(descricao).trim()) {
@@ -70,17 +107,7 @@ function formatarDescricaoAlteracao(descricao, local, especificacao) {
         .split('|')
         .map(parte => parte.trim())
         .filter(Boolean)
-        .map(parte => {
-            const horarioRegex = /^horário:\s*/i;
-            if (horarioRegex.test(parte)) {
-                const valor = parte.replace(horarioRegex, '').trim();
-                const data = new Date(valor);
-                if (!Number.isNaN(data.getTime())) {
-                    return escapeHtml(`Horário: ${formatarDataHoraCompleta(data)}`);
-                }
-            }
-            return escapeHtml(parte);
-        })
+        .map(formatarSegmentoDescricao)
         .join('<br>');
 }
 
