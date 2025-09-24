@@ -488,9 +488,28 @@
           </svg>
         </button>`;
 
+      const replaceButtonClasses = [
+        'btn-warning',
+        'w-8',
+        'h-8',
+        'flex',
+        'items-center',
+        'justify-center',
+        'rounded',
+        'text-white',
+        'focus:outline-none',
+        'focus:ring-2',
+        'focus:ring-white/40'
+      ];
+      if (isApproved) {
+        replaceButtonClasses.push('opacity-50', 'cursor-not-allowed');
+      }
+      const replaceButtonTitle = isApproved
+        ? 'Peça aprovada - desaprove antes de substituir'
+        : 'Substituir';
       const replaceButtonHtml = `
-        <button class="btn-warning w-8 h-8 flex items-center justify-center rounded text-white focus:outline-none focus:ring-2 focus:ring-white/40"
-          data-action="replace" title="Substituir" aria-label="Substituir">
+        <button class="${replaceButtonClasses.join(' ')}"
+          data-action="replace" data-approved="${isApproved ? 'true' : 'false'}" title="${replaceButtonTitle}" aria-label="Substituir">
           <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
             <path d="M4.5 7.5A7.5 7.5 0 0112 4.5a7.5 7.5 0 017.5 7.5"></path>
             <path d="M19.5 12v4.5H15"></path>
@@ -549,6 +568,12 @@
         const tr = e.currentTarget.closest('tr');
         const index = Number(tr?.dataset.index);
         if (isNaN(index)) return;
+        const row = rows[index];
+        if (!row) return;
+        if (row.approved) {
+          showPieceApprovedDialog();
+          return;
+        }
         await openReplaceModal(index);
       });
     });
@@ -565,6 +590,25 @@
     });
 
     initPiecePopover?.('.js-piece-info');
+  }
+
+  function showPieceApprovedDialog() {
+    const overlay = document.createElement('div');
+    overlay.className = 'fixed inset-0 z-[13000] bg-black/60 flex items-center justify-center p-4';
+    overlay.innerHTML = `
+      <div class="max-w-sm w-full glass-surface backdrop-blur-xl rounded-2xl border border-yellow-500/20 ring-1 ring-yellow-500/30 shadow-2xl/40 animate-modalFade">
+        <div class="p-6 text-center">
+          <h3 class="text-lg font-semibold mb-4 text-yellow-400">Peça Aprovada</h3>
+          <p class="text-sm text-gray-300 mb-6">Esta peça já foi aprovada. Para substituí-la, é necessário desaprová-la primeiro.</p>
+          <div class="flex justify-center">
+            <button id="pieceApprovedOk" class="btn-neutral px-4 py-2 rounded-lg text-white font-medium">Entendi</button>
+          </div>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+    const closeDialog = () => { if (overlay.isConnected) overlay.remove(); };
+    overlay.querySelector('#pieceApprovedOk')?.addEventListener('click', closeDialog, { once: true });
+    overlay.addEventListener('click', e => { if (e.target === overlay) closeDialog(); });
   }
 
   function validate() {
