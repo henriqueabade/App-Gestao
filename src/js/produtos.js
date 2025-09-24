@@ -15,6 +15,7 @@ let filtrosPendentes = false;
 let produtosRenderizados = [];
 let currentProductPopup = null;
 let productInfoEventsBound = false;
+let produtoActionsBound = false;
 
 async function carregarProdutos() {
     try {
@@ -44,59 +45,120 @@ function updateEmptyStateProdutos(hasData) {
 function renderProdutos(produtos) {
     const tbody = document.getElementById('produtosTableBody');
     if (!tbody) return;
-    tbody.innerHTML = '';
-    produtosRenderizados = produtos;
 
-    produtos.forEach(p => {
-        const tr = document.createElement('tr');
-        tr.className = 'transition-colors duration-150';
-        tr.style.cursor = 'pointer';
-        tr.onmouseover = () => tr.style.background = 'rgba(163, 148, 167, 0.05)';
-        tr.onmouseout = () => tr.style.background = 'transparent';
+    produtosRenderizados = [...produtos];
+    tbody.innerHTML = produtos.map((prod, index) => criarLinhaProduto(prod, index)).join('');
 
-        const statusText = p.status || '';
-        const badgeClass = statusText.toLowerCase() === 'em linha' ? 'badge-success' : 'badge-danger';
+    aplicarEfeitoHoverLinhas();
+    garantirEventosAcoesProdutos();
 
-        tr.innerHTML = `
+    if (window.feather) feather.replace();
+    attachProductInfoEvents();
+    updateEmptyStateProdutos(produtos.length > 0);
+}
+
+function criarLinhaProduto(produto, index) {
+    const statusText = produto.status || '';
+    const badgeClass = statusText.toLowerCase() === 'em linha' ? 'badge-success' : 'badge-danger';
+    const markup = formatPercent(produto.pct_markup);
+    const quantidade = produto.quantidade_total ?? 0;
+    const codigo = produto.codigo || '';
+    const nome = reduzirNome(produto.nome) || '';
+    const categoria = produto.categoria || '';
+    const precoVenda = formatCurrency(produto.preco_venda);
+    const produtoId = produto?.id != null ? ` data-id="${produto.id}"` : '';
+    const infoId = produto?.id ?? '';
+
+    return `
+        <tr class="transition-colors duration-150" data-index="${index}"${produtoId} style="cursor: pointer;">
             <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-white relative">
                 <div class="flex items-center">
-                    <span>${p.codigo || ''}</span>
-                    <i class="info-icon ml-2" data-id="${p.id}"></i>
+                    <span>${codigo}</span>
+                    <i class="info-icon ml-2" data-id="${infoId}"></i>
                 </div>
             </td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-white">${reduzirNome(p.nome) || ''}</td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-violet)">${p.categoria || ''}</td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-white">${formatCurrency(p.preco_venda)}</td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-green)">${formatPercent(p.pct_markup)}</td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-white">${p.quantidade_total ?? 0}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-white">${nome}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-violet)">${categoria}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-white">${precoVenda}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-green)">${markup}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-white">${quantidade}</td>
             <td class="px-6 py-4 whitespace-nowrap">
                 <span class="${badgeClass} px-3 py-1 rounded-full text-xs font-medium">
                     ${statusText}
                 </span>
             </td>
-            <td class="px-6 py-4 whitespace-nowrap text-center action-cell"></td>
-        `;
-        tbody.appendChild(tr);
-    });
+            <td class="px-6 py-4 whitespace-nowrap text-center action-cell">
+                <div class="flex items-center justify-center space-x-2">
+                    <i class="fas fa-eye w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" data-action="view" data-index="${index}" title="Visualizar" style="color: var(--color-primary)"></i>
+                    <i class="fas fa-edit w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" data-action="edit" data-index="${index}" title="Editar" style="color: var(--color-primary)"></i>
+                    <i class="fas fa-trash w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10 hover:text-white" data-action="delete" data-index="${index}" title="Excluir" style="color: var(--color-red)"></i>
+                </div>
+            </td>
+        </tr>
+    `;
+}
 
-    const template = document.getElementById('action-icons-template');
-    if (template) {
-        document.querySelectorAll('.action-cell').forEach((cell, index) => {
-            cell.appendChild(template.content.cloneNode(true));
-            const icons = cell.querySelectorAll('i');
-            const prod = produtos[index];
-            const ver = icons[0];
-            const editar = icons[1];
-            const excluir = icons[2];
-            if (ver) ver.addEventListener('click', e => { e.stopPropagation(); abrirDetalhesProduto(prod); });
-            if (editar) editar.addEventListener('click', e => { e.stopPropagation(); abrirEditarProduto(prod); });
-            if (excluir) excluir.addEventListener('click', e => { e.stopPropagation(); abrirExcluirProduto(prod); });
+function aplicarEfeitoHoverLinhas() {
+    const tbody = document.getElementById('produtosTableBody');
+    if (!tbody) return;
+    tbody.querySelectorAll('tr').forEach(tr => {
+        tr.addEventListener('mouseover', () => {
+            tr.style.background = 'rgba(163, 148, 167, 0.05)';
         });
-    }
+        tr.addEventListener('mouseout', () => {
+            tr.style.background = 'transparent';
+        });
+    });
+}
 
-    if (window.feather) feather.replace();
-    attachProductInfoEvents();
-    updateEmptyStateProdutos(produtos.length > 0);
+function garantirEventosAcoesProdutos() {
+    if (produtoActionsBound) return;
+    const tbody = document.getElementById('produtosTableBody');
+    if (!tbody) return;
+    produtoActionsBound = true;
+
+    tbody.addEventListener('click', event => {
+        const actionEl = event.target.closest('[data-action]');
+        if (!actionEl || !tbody.contains(actionEl)) return;
+
+        event.preventDefault();
+        event.stopPropagation();
+
+        const action = actionEl.dataset.action;
+        const indexAttr = actionEl.dataset.index;
+        let produto = null;
+
+        if (indexAttr !== undefined) {
+            const index = Number(indexAttr);
+            if (!Number.isNaN(index)) {
+                produto = produtosRenderizados[index];
+            }
+        }
+
+        if (!produto) {
+            const row = actionEl.closest('tr');
+            const id = row?.dataset?.id;
+            if (id) {
+                produto = produtosRenderizados.find(p => String(p.id) === id);
+            }
+        }
+
+        if (!produto) return;
+
+        switch (action) {
+            case 'view':
+                abrirDetalhesProduto(produto);
+                break;
+            case 'edit':
+                abrirEditarProduto(produto);
+                break;
+            case 'delete':
+                abrirExcluirProduto(produto);
+                break;
+            default:
+                break;
+        }
+    });
 }
 
 function popularFiltros() {
