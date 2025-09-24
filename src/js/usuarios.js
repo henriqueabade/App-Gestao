@@ -7,6 +7,9 @@ const API_URL = 'http://localhost:3000';
 
 // Cache local dos usuários carregados
 let usuariosCache = [];
+let usuarioPopoverAtual = null;
+
+const USUARIO_TRIGGER_ACTIVE_CLASS = 'usuario-detalhes-trigger--active';
 
 const ONLINE_LIMITE_MINUTOS = 5;
 
@@ -74,40 +77,87 @@ function resolverStatusOnline(usuario) {
 }
 
 function fecharPopoversUsuarios() {
-    document.querySelectorAll('.usuario-popover.show').forEach(pop => {
-        pop.classList.remove('show');
-        const trigger = pop.closest('.usuario-popover-container')?.querySelector('.usuario-detalhes-trigger');
-        if (trigger) trigger.setAttribute('aria-expanded', 'false');
-    });
+    if (!usuarioPopoverAtual) return;
+    const { popup, trigger } = usuarioPopoverAtual;
+    if (popup && typeof popup.remove === 'function') {
+        popup.remove();
+    }
+    if (trigger) {
+        trigger.setAttribute('aria-expanded', 'false');
+        trigger.classList.remove(USUARIO_TRIGGER_ACTIVE_CLASS);
+    }
+    usuarioPopoverAtual = null;
+}
+
+function criarConteudoPopoverUsuario(botao) {
+    const nome = botao.dataset.nome || 'Usuário';
+    const ultimoLogin = botao.dataset.ultimoLogin || 'Sem registro';
+    const ultimaAlteracao = botao.dataset.ultimaAlteracao || 'Sem registro';
+    const ultimaDescricao = botao.dataset.ultimaDescricao || 'Nenhuma alteração registrada';
+    return `
+        <div class="usuario-popover-card">
+            <div class="usuario-popover-header">
+                <span class="usuario-popover-title">Atividade recente</span>
+                <span class="usuario-popover-username">${nome}</span>
+            </div>
+            <div class="usuario-popover-section">
+                <span class="usuario-popover-label">Último login</span>
+                <span class="usuario-popover-value">${ultimoLogin}</span>
+            </div>
+            <div class="usuario-popover-section">
+                <span class="usuario-popover-label">Última alteração</span>
+                <span class="usuario-popover-value">${ultimaAlteracao}</span>
+            </div>
+            <div class="usuario-popover-section">
+                <span class="usuario-popover-label">Alteração registrada</span>
+                <p class="usuario-popover-description">${ultimaDescricao}</p>
+            </div>
+        </div>`;
+}
+
+function abrirPopoverUsuario(botao) {
+    if (typeof window.createPopup !== 'function') {
+        console.warn('createPopup não disponível para popover de usuário');
+        return;
+    }
+    const html = criarConteudoPopoverUsuario(botao);
+    const { popup } = window.createPopup(botao, html, { margin: 12 });
+    usuarioPopoverAtual = { popup, trigger: botao };
+    botao.setAttribute('aria-expanded', 'true');
+    botao.classList.add(USUARIO_TRIGGER_ACTIVE_CLASS);
 }
 
 let popoverEventosRegistrados = false;
 
 function prepararPopoversUsuarios() {
     document.querySelectorAll('.usuario-detalhes-trigger').forEach(botao => {
+        if (botao.dataset.popoverBound === 'true') return;
+        botao.dataset.popoverBound = 'true';
         botao.addEventListener('click', evento => {
+            evento.preventDefault();
             evento.stopPropagation();
-            const container = botao.closest('.usuario-popover-container');
-            const popover = container?.querySelector('.usuario-popover');
-            if (!popover) return;
-            const estavaAberto = popover.classList.contains('show');
-            fecharPopoversUsuarios();
-            if (!estavaAberto) {
-                popover.classList.add('show');
-                botao.setAttribute('aria-expanded', 'true');
+            if (usuarioPopoverAtual?.trigger === botao) {
+                fecharPopoversUsuarios();
+                return;
             }
+            fecharPopoversUsuarios();
+            abrirPopoverUsuario(botao);
         });
     });
 
     if (!popoverEventosRegistrados) {
         document.addEventListener('click', evento => {
-            if (!evento.target.closest('.usuario-popover-container')) {
-                fecharPopoversUsuarios();
-            }
+            if (!usuarioPopoverAtual) return;
+            const { popup, trigger } = usuarioPopoverAtual;
+            if (trigger?.contains(evento.target)) return;
+            if (popup?.contains(evento.target)) return;
+            fecharPopoversUsuarios();
         });
         document.addEventListener('keydown', evento => {
             if (evento.key === 'Escape') fecharPopoversUsuarios();
         });
+        window.addEventListener('resize', fecharPopoversUsuarios);
+        window.addEventListener('scroll', fecharPopoversUsuarios, true);
         popoverEventosRegistrados = true;
     }
 }
@@ -305,24 +355,20 @@ function renderUsuarios(lista) {
                 <div class="usuario-popover-container relative">
                     <div class="flex items-center gap-2">
                         <div class="text-sm font-medium text-white">${nome}</div>
-                        <button type="button" class="usuario-detalhes-trigger" aria-expanded="false" aria-haspopup="dialog" title="Ver atividade recente de ${nome}">
+                        <button
+                            type="button"
+                            class="usuario-detalhes-trigger"
+                            aria-expanded="false"
+                            aria-haspopup="dialog"
+                            title="Ver atividade recente de ${nome}"
+                            data-nome="${nome}"
+                            data-ultimo-login="${ultimoLoginTexto}"
+                            data-ultima-alteracao="${ultimaAlteracaoTexto}"
+                            data-ultima-descricao="${ultimaDescricaoTexto}"
+                        >
                             <span class="sr-only">Ver atividade recente de ${nome}</span>
-                            <i class="fas fa-circle-info"></i>
+                            <span class="info-icon" aria-hidden="true"></span>
                         </button>
-                    </div>
-                    <div class="usuario-popover glass-surface rounded-xl p-4 text-left text-sm shadow-xl">
-                        <div class="usuario-popover-section">
-                            <span class="usuario-popover-label">Último login</span>
-                            <span class="usuario-popover-value">${ultimoLoginTexto}</span>
-                        </div>
-                        <div class="usuario-popover-section">
-                            <span class="usuario-popover-label">Última alteração</span>
-                            <span class="usuario-popover-value">${ultimaAlteracaoTexto}</span>
-                        </div>
-                        <div class="usuario-popover-section">
-                            <span class="usuario-popover-label">Alteração registrada</span>
-                            <p class="usuario-popover-description">${ultimaDescricaoTexto}</p>
-                        </div>
                     </div>
                 </div>
             </td>
