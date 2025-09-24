@@ -47,16 +47,16 @@ body {
     border-color: var(--color-primary);
 }
 
-.sidebar-item {
+.task-sidebar-item {
     transition: all 150ms ease;
     cursor: pointer;
 }
 
-.sidebar-item:hover {
+.task-sidebar-item:hover {
     background: rgba(255, 255, 255, 0.05);
 }
 
-.sidebar-item.active {
+.task-sidebar-item.active {
     background: rgba(182, 160, 62, 0.2);
     border-left: 3px solid var(--color-primary);
 }

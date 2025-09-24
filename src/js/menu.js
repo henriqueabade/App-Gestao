@@ -17,8 +17,23 @@ async function loadPage(page) {
 
     try {
         const resp = await fetch(`../html/${page}.html`);
-        content.innerHTML = await resp.text();
-        const module = content.querySelector('.modulo-container');
+        const rawHtml = await resp.text();
+
+        const parser = new DOMParser();
+        const parsed = parser.parseFromString(rawHtml, 'text/html');
+        const parsedModule = parsed.querySelector('.modulo-container');
+
+        let module;
+        if (parsedModule) {
+            const importedModule = document.importNode(parsedModule, true);
+            content.innerHTML = '';
+            content.appendChild(importedModule);
+            module = content.querySelector('.modulo-container');
+        } else {
+            content.innerHTML = rawHtml;
+            module = content.querySelector('.modulo-container');
+        }
+
         if (module) {
             module.classList.add('module-enter');
             module.addEventListener('animationend', () => {
