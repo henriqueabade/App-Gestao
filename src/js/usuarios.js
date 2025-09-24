@@ -164,28 +164,78 @@ function initUsuarios() {
     });
 
     // Controle do popover de resumo
-    const infoIcon = document.querySelector('.info-icon');
+    const infoIcon = document.getElementById('usuariosResumoInfo');
     const resumoPopover = document.getElementById('resumoPopover');
 
     if (infoIcon && resumoPopover) {
-        const mostrarPopover = () => {
-            const rect = infoIcon.getBoundingClientRect();
-            resumoPopover.style.left = '1vw';
-            resumoPopover.style.top = '2.5vw';
-            resumoPopover.classList.add('show');
+        let hideTimeout;
+
+        const posicionarPopover = () => {
+            if (!resumoPopover.classList.contains('show')) return;
+
+            const iconRect = infoIcon.getBoundingClientRect();
+            const popRect = resumoPopover.getBoundingClientRect();
+            const viewportPadding = 16;
+
+            let left = iconRect.left + iconRect.width / 2 - popRect.width / 2;
+            left = Math.max(viewportPadding, Math.min(left, window.innerWidth - popRect.width - viewportPadding));
+
+            let top = iconRect.bottom + 12;
+            const overflowBottom = top + popRect.height + viewportPadding > window.innerHeight;
+            if (overflowBottom) {
+                top = iconRect.top - popRect.height - 12;
+            }
+            if (top < viewportPadding) {
+                top = viewportPadding;
+            }
+
+            resumoPopover.style.left = `${left}px`;
+            resumoPopover.style.top = `${top}px`;
+        };
+
+        const limparOcultamento = () => {
+            if (hideTimeout) {
+                clearTimeout(hideTimeout);
+                hideTimeout = null;
+            }
         };
 
         const ocultarPopover = () => {
+            limparOcultamento();
             resumoPopover.classList.remove('show');
         };
 
+        const agendarOcultamento = () => {
+            limparOcultamento();
+            hideTimeout = setTimeout(() => {
+                if (!infoIcon.matches(':hover') && !resumoPopover.matches(':hover') && document.activeElement !== infoIcon) {
+                    resumoPopover.classList.remove('show');
+                }
+            }, 120);
+        };
+
+        const mostrarPopover = () => {
+            limparOcultamento();
+            resumoPopover.classList.add('show');
+            requestAnimationFrame(posicionarPopover);
+        };
+
         infoIcon.addEventListener('mouseenter', mostrarPopover);
-        infoIcon.addEventListener('mouseleave', () => {
-            setTimeout(() => {
-                if (!resumoPopover.matches(':hover')) ocultarPopover();
-            }, 100);
+        infoIcon.addEventListener('focus', mostrarPopover);
+        infoIcon.addEventListener('mouseleave', agendarOcultamento);
+        infoIcon.addEventListener('blur', ocultarPopover);
+        infoIcon.addEventListener('keydown', evento => {
+            if (evento.key === 'Escape') {
+                ocultarPopover();
+                infoIcon.blur();
+            }
         });
-        resumoPopover.addEventListener('mouseleave', ocultarPopover);
+
+        resumoPopover.addEventListener('mouseenter', limparOcultamento);
+        resumoPopover.addEventListener('mouseleave', agendarOcultamento);
+
+        window.addEventListener('resize', posicionarPopover);
+        window.addEventListener('scroll', posicionarPopover, { passive: true });
     }
 }
 
