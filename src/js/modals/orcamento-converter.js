@@ -40,7 +40,8 @@
     initialSelections: null,
     loadingVariants: null,
     variantsLoadedForRowId: null,
-    originalPlan: null
+    originalPlan: null,
+    committedSelections: []
   };
   const productBreakdownCache = new Map();
 
@@ -153,6 +154,49 @@
     return replaceModalState.selections;
   }
 
+  function ensureCommittedList() {
+    if (!Array.isArray(replaceModalState.committedSelections)) {
+      replaceModalState.committedSelections = [];
+    }
+    return replaceModalState.committedSelections;
+  }
+
+  function getCommittedQuantity(key) {
+    if (!key) return 0;
+    const list = ensureCommittedList();
+    const entry = list.find(item => item?.key === key);
+    return sanitizePositiveInt(entry?.qty);
+  }
+
+  function setCommittedQuantity(key, quantity) {
+    if (!key) return;
+    const list = ensureCommittedList();
+    const sanitized = sanitizePositiveInt(quantity);
+    const index = list.findIndex(item => item?.key === key);
+    if (sanitized > 0) {
+      if (index >= 0) list[index].qty = sanitized;
+      else list.push({ key, qty: sanitized });
+    } else if (index >= 0) {
+      list.splice(index, 1);
+    }
+  }
+
+  function addCommittedQuantity(key, quantity) {
+    if (!key) return;
+    const current = getCommittedQuantity(key);
+    const total = current + sanitizePositiveInt(quantity);
+    setCommittedQuantity(key, total);
+  }
+
+  function clearCommittedSelections() {
+    replaceModalState.committedSelections = [];
+  }
+
+  function getTotalCommittedQuantity() {
+    const list = ensureCommittedList();
+    return list.reduce((acc, entry) => acc + sanitizePositiveInt(entry?.qty), 0);
+  }
+
   function getSelectionQuantity(key) {
     const selections = ensureSelectionMap();
     return sanitizePositiveInt(selections.get(key));
@@ -164,7 +208,7 @@
     selections.forEach(value => {
       total += sanitizePositiveInt(value);
     });
-    return total;
+    return total + getTotalCommittedQuantity();
   }
 
   function enforceSelectionLimits(requiredQty) {
@@ -189,8 +233,14 @@
       }
     });
 
+    const committedTotal = Math.min(requiredQty, getTotalCommittedQuantity());
+    if (committedTotal >= requiredQty) {
+      selections.clear();
+      return;
+    }
+
     selections.clear();
-    let runningTotal = 0;
+    let runningTotal = committedTotal;
     sanitizedEntries.forEach(entry => {
       if (runningTotal >= requiredQty) return;
       const remaining = Math.max(0, requiredQty - runningTotal);
@@ -263,6 +313,36 @@
     if (!replaceModalState.selections || !(replaceModalState.selections instanceof Map)) {
       replaceModalState.selections = new Map();
     }
+    const committedList = ensureCommittedList();
+    committedList.forEach(entry => {
+      const variant = getVariantByKey(entry.key);
+      if (!variant) return;
+      const qty = sanitizePositiveInt(entry.qty);
+      if (!qty) return;
+      const variantMax = variant.type === 'produce'
+        ? requiredQty
+        : Math.min(requiredQty, Math.floor(Number(variant.available) || 0));
+      const clamped = Math.min(variantMax, qty);
+      if (!clamped) return;
+      plan.totalSelected += clamped;
+      if (variant.type === 'produce') {
+        plan.produceQty += clamped;
+      } else {
+        plan.stock.push({
+          variantKey: variant.key,
+          qty: clamped,
+          productId: Number(variant.product?.id),
+          productName: variant.product?.nome || '',
+          productCode: variant.product?.codigo || '',
+          processName: variant.stage?.processName || '',
+          lastItemName: variant.stage?.lastItemName || '',
+          order: Number(variant.stage?.order || 0),
+          isCurrentProduct: !!variant.isCurrentProduct,
+          committed: true
+        });
+      }
+      plan.selections.push({ key: variant.key, qty: clamped, committed: true });
+    });
     replaceModalState.selections.forEach((qty, key) => {
       const variant = getVariantByKey(key);
       if (!variant) return;
@@ -286,10 +366,11 @@
           processName: variant.stage?.processName || '',
           lastItemName: variant.stage?.lastItemName || '',
           order: Number(variant.stage?.order || 0),
-          isCurrentProduct: !!variant.isCurrentProduct
+          isCurrentProduct: !!variant.isCurrentProduct,
+          committed: false
         });
       }
-      plan.selections.push({ key, qty: clamped });
+      plan.selections.push({ key, qty: clamped, committed: false });
     });
     plan.remaining = Math.max(0, requiredQty - plan.totalSelected);
     plan.stock.sort((a, b) => {
@@ -358,6 +439,9 @@
       const processName = item?.processName || 'Processo não informado';
       const lastItem = item?.lastItemName || 'Sem último insumo';
       const isCurrent = !!(showCurrentBadge && item?.isCurrentProduct);
+      const committedTag = item?.committed
+        ? '<p class="text-[11px] text-emerald-300 uppercase tracking-wide">Seleção concluída</p>'
+        : '';
       renderedItems.push(`
         <li class="rounded-xl border border-white/10 bg-white/5 px-3 py-3">
           <div class="flex flex-wrap items-start justify-between gap-3">
@@ -366,6 +450,7 @@
               <p class="text-white font-semibold leading-tight whitespace-pre-line break-words">${productName}</p>
               ${productCode ? `<p class="text-[11px] text-gray-500">Cód: ${productCode}</p>` : ''}
               ${isCurrent ? '<p class="text-[11px] text-gray-400 uppercase tracking-wide">Peça do orçamento</p>' : ''}
+              ${committedTag}
             </div>
             <span class="badge-info px-2 py-1 rounded text-xs whitespace-nowrap">${qty.toLocaleString('pt-BR')} un</span>
           </div>
@@ -703,6 +788,7 @@
         </div>
         <footer class="flex justify-end items-center gap-3 px-6 py-4 border-t border-white/10">
           <button type="button" data-action="close" class="btn-danger px-5 py-2 rounded-lg text-white font-medium">Cancelar</button>
+          <button type="button" data-action="commit" class="btn-secondary px-5 py-2 rounded-lg text-white font-medium hidden">Adicionar Tipo</button>
           <button type="button" data-action="confirm" class="btn-primary px-5 py-2 rounded-lg text-white font-medium" disabled>Confirmar Substituição</button>
         </footer>
       </div>`;
@@ -713,6 +799,7 @@
       overlay,
       modal,
       confirmBtn: overlay.querySelector('[data-action="confirm"]'),
+      commitBtn: overlay.querySelector('[data-action="commit"]'),
       search: overlay.querySelector('[data-role="search"]'),
       results: overlay.querySelector('[data-role="results"]'),
       stockBreakdown: overlay.querySelector('[data-field="piece-stock-breakdown"]'),
@@ -720,6 +807,7 @@
     };
     overlay.querySelectorAll('[data-action="close"]').forEach(btn => btn.addEventListener('click', closeReplaceModal));
     replaceModalRefs.confirmBtn?.addEventListener('click', handleReplaceModalConfirm);
+    replaceModalRefs.commitBtn?.addEventListener('click', handleCommitSelection);
     if (replaceModalRefs.search) {
       replaceModalRefs.search.placeholder = 'Filtrar por processo, insumo ou código';
     }
@@ -752,6 +840,7 @@
       replaceModalState.selections = new Map();
       replaceModalState.loadingVariants = null;
       replaceModalState.variantsLoadedForRowId = null;
+      clearCommittedSelections();
       replaceModalState.initialSelections = Array.isArray(row.replacementPlan?.selections)
         ? row.replacementPlan.selections.map(sel => ({ key: sel.key, qty: sel.qty }))
         : null;
@@ -794,9 +883,11 @@
     replaceModalState.loadingVariants = null;
     replaceModalState.variantsLoadedForRowId = null;
     replaceModalState.originalPlan = null;
+    clearCommittedSelections();
     if (replaceModalRefs.search) replaceModalRefs.search.value = '';
     currentReplaceIndex = -1;
     updateReplaceModalConfirmButton();
+    updateCommitButtonState();
   }
 
   function handleReplaceModalKey(e) {
@@ -908,6 +999,34 @@
     await renderReplaceModalList({ skipReload: true, focus });
   }
 
+  async function applyTotalQuantityChange(variant, desiredTotal, options = {}) {
+    const row = rows[currentReplaceIndex];
+    if (!row) return;
+    const requiredQty = Number(row.qtd || row.quantidade || 0) || 0;
+    const sanitizedTotal = Math.max(0, Math.floor(Number(desiredTotal) || 0));
+    const baseMax = variant.type === 'produce'
+      ? requiredQty
+      : Math.min(requiredQty, Math.floor(Number(variant.available) || 0));
+    const committedQty = getCommittedQuantity(variant.key);
+    const currentQty = getSelectionQuantity(variant.key);
+    const totalQty = committedQty + currentQty;
+    const totalWithoutVariant = Math.max(0, getTotalSelectedQuantity() - totalQty);
+    const maxAllowed = Math.max(0, Math.min(baseMax, requiredQty - totalWithoutVariant));
+    const clampedTotal = Math.min(sanitizedTotal, maxAllowed);
+
+    if (clampedTotal < committedQty) {
+      setCommittedQuantity(variant.key, clampedTotal);
+    }
+
+    const updatedCommitted = getCommittedQuantity(variant.key);
+    const desiredCurrent = Math.max(0, clampedTotal - updatedCommitted);
+    await applyQuantityChange(variant, desiredCurrent, options);
+
+    if (clampedTotal === 0) {
+      setCommittedQuantity(variant.key, 0);
+    }
+  }
+
   async function renderReplaceModalList(options = {}) {
     if (!replaceModalRefs) return;
     const { forceReload = false, skipReload = false, focus = null } = options;
@@ -918,6 +1037,7 @@
       container.innerHTML = '<p class="text-sm text-gray-400">Nenhuma peça selecionada.</p>';
       replaceModalState.variants = [];
       updateReplaceModalConfirmButton();
+      updateCommitButtonState();
       renderSelectionList();
       return;
     }
@@ -990,16 +1110,30 @@
         replaceModalState.loadingVariants = null;
       }
       if (replaceModalState.initialSelections) {
-        const map = new Map();
+        const merged = [];
+        let runningTotal = 0;
         replaceModalState.initialSelections.forEach(sel => {
           const variant = getVariantByKey(sel.key);
           if (!variant) return;
           const sanitized = sanitizePositiveInt(sel.qty);
           if (!sanitized) return;
-          map.set(variant.key, sanitized);
+          const baseMax = variant.type === 'produce'
+            ? requiredQty
+            : Math.min(requiredQty, Math.floor(Number(variant.available) || 0));
+          const remaining = Math.max(0, requiredQty - runningTotal);
+          if (!remaining) return;
+          const clamped = Math.min(baseMax, sanitized, remaining);
+          if (!clamped) return;
+          merged.push({ key: variant.key, qty: clamped });
+          runningTotal += clamped;
         });
-        replaceModalState.selections = map;
-        enforceSelectionLimits(requiredQty);
+        const aggregate = new Map();
+        merged.forEach(entry => {
+          aggregate.set(entry.key, (aggregate.get(entry.key) || 0) + entry.qty);
+        });
+        replaceModalState.committedSelections = Array.from(aggregate.entries())
+          .map(([key, qty]) => ({ key, qty }));
+        replaceModalState.selections = new Map();
         replaceModalState.initialSelections = null;
       }
     } else if (replaceModalState.loadingVariants) {
@@ -1051,25 +1185,28 @@
     if (produceVariant) variantsToRender.push(produceVariant);
 
     variantsToRender.forEach(variant => {
+      const committedQty = getCommittedQuantity(variant.key);
       const currentQty = getSelectionQuantity(variant.key);
-      const totalWithoutCurrent = Math.max(0, getTotalSelectedQuantity() - currentQty);
+      const totalQty = committedQty + currentQty;
+      const totalWithoutVariant = Math.max(0, getTotalSelectedQuantity() - totalQty);
       const baseMax = variant.type === 'produce'
         ? requiredQty
         : Math.min(requiredQty, Math.floor(Number(variant.available) || 0));
-      const budgetRemaining = Math.max(0, requiredQty - totalWithoutCurrent);
-      const effectiveMax = Math.max(0, Math.min(baseMax, requiredQty));
-      const inputMax = Math.max(currentQty, effectiveMax);
+      const budgetRemaining = Math.max(0, requiredQty - totalWithoutVariant);
+      const effectiveMax = Math.max(0, Math.min(baseMax, budgetRemaining));
+      const inputMax = Math.max(totalQty, effectiveMax);
       const card = document.createElement('div');
       card.className = 'w-full bg-surface/40 border border-white/10 rounded-xl px-4 py-4 transition focus-within:border-primary/60 focus-within:ring-1 focus-within:ring-primary/40 mb-3 last:mb-0';
       card.setAttribute('data-variant-key', variant.key);
-      if (currentQty > 0) {
+      if (totalQty > 0) {
         card.classList.add('border-primary', 'ring-1', 'ring-primary/50');
       }
 
       if (variant.type === 'stock') {
         const process = variant.stage?.processName || 'Processo não informado';
         const lastItem = variant.stage?.lastItemName || 'Sem último insumo';
-        const remainingInVariant = Math.max(0, Math.floor(Number(variant.available || 0)) - currentQty);
+        const availableTotal = Math.max(0, Math.floor(Number(variant.available || 0)));
+        const remainingInVariant = Math.max(0, availableTotal - totalQty);
         const badgeClass = remainingInVariant > 0 ? 'badge-success' : 'badge-danger';
         const badgeLabel = `${remainingInVariant.toLocaleString('pt-BR')} em estoque`;
         card.innerHTML = `
@@ -1083,12 +1220,13 @@
           </div>
             <div class="mt-3 flex items-center gap-3">
               <span class="text-xs text-gray-400 uppercase tracking-wide">Selecionar</span>
+              ${committedQty > 0 ? `<span class="text-[11px] text-emerald-300">Fixado: ${committedQty.toLocaleString('pt-BR')} un</span>` : ''}
               <div class="flex items-center gap-2">
               <button type="button" class="js-qty-btn w-8 h-8 rounded-lg bg-white/5 border border-white/10 text-white text-sm flex items-center justify-center" data-step="-1">-</button>
-              <input type="number" inputmode="numeric" min="0" class="w-16 h-8 text-center bg-white/5 border border-white/10 rounded-lg text-white leading-[32px]" data-variant-input="${variant.key}" value="${currentQty}" max="${inputMax}" />
+              <input type="number" inputmode="numeric" min="0" class="w-16 h-8 text-center bg-white/5 border border-white/10 rounded-lg text-white leading-[32px]" data-variant-input="${variant.key}" value="${totalQty}" max="${inputMax}" />
               <button type="button" class="js-qty-btn w-8 h-8 rounded-lg bg-white/5 border border-white/10 text-white text-sm flex items-center justify-center" data-step="1">+</button>
               </div>
-            <span class="text-xs text-gray-400 ml-auto whitespace-nowrap">Disp.: ${baseMax.toLocaleString('pt-BR')} • Orçamento: ${budgetRemaining.toLocaleString('pt-BR')} un</span>
+            <span class="text-xs text-gray-400 ml-auto whitespace-nowrap">Disp.: ${availableTotal.toLocaleString('pt-BR')} • Orçamento: ${budgetRemaining.toLocaleString('pt-BR')} un</span>
           </div>`;
       } else {
         const remaining = budgetRemaining;
@@ -1102,9 +1240,10 @@
           </div>
           <div class="mt-3 flex items-center gap-3">
             <span class="text-xs text-gray-400 uppercase tracking-wide">Produzir</span>
+            ${committedQty > 0 ? `<span class="text-[11px] text-emerald-300">Fixado: ${committedQty.toLocaleString('pt-BR')} un</span>` : ''}
             <div class="flex items-center gap-2">
               <button type="button" class="js-qty-btn w-8 h-8 rounded-lg bg-white/5 border border-white/10 text-white text-sm flex items-center justify-center" data-step="-1">-</button>
-              <input type="number" inputmode="numeric" min="0" class="w-20 h-8 text-center bg-white/5 border border-white/10 rounded-lg text-white leading-[32px]" data-variant-input="${variant.key}" value="${currentQty}" max="${inputMax}" />
+              <input type="number" inputmode="numeric" min="0" class="w-20 h-8 text-center bg-white/5 border border-white/10 rounded-lg text-white leading-[32px]" data-variant-input="${variant.key}" value="${totalQty}" max="${inputMax}" />
               <button type="button" class="js-qty-btn w-8 h-8 rounded-lg bg-white/5 border border-white/10 text-white text-sm flex items-center justify-center" data-step="1">+</button>
             </div>
           </div>`;
@@ -1114,7 +1253,7 @@
       if (input) {
         const handleManualChange = async e => {
           const value = Math.floor(Number(e.target.value) || 0);
-          await applyQuantityChange(variant, value, { focus: { key: variant.key } });
+          await applyTotalQuantityChange(variant, value, { focus: { key: variant.key } });
         };
         input.addEventListener('input', handleManualChange);
         input.addEventListener('blur', handleManualChange);
@@ -1124,8 +1263,8 @@
           e.preventDefault();
           e.stopPropagation();
           const step = Number(btn.dataset.step || 0);
-          const nextValue = getSelectionQuantity(variant.key) + step;
-          await applyQuantityChange(variant, nextValue, { focus: { key: variant.key, select: true } });
+          const nextValue = step > 0 ? totalQty + step : 0;
+          await applyTotalQuantityChange(variant, nextValue, { focus: { key: variant.key, select: true } });
         });
       });
       container.appendChild(card);
@@ -1133,6 +1272,7 @@
 
     renderReplaceModalSummary();
     updateReplaceModalConfirmButton();
+    updateCommitButtonState();
 
     if (focus?.key) {
       const targetInput = container.querySelector(`[data-variant-input="${focus.key}"]`);
@@ -1171,6 +1311,77 @@
       ? 'btn-primary px-5 py-2 rounded-lg text-white font-medium transition opacity-60 cursor-not-allowed'
       : 'btn-primary px-5 py-2 rounded-lg text-white font-medium transition';
     btn.textContent = label;
+  }
+
+  function updateCommitButtonState() {
+    if (!replaceModalRefs || !replaceModalRefs.commitBtn) return;
+    const btn = replaceModalRefs.commitBtn;
+    const row = rows[currentReplaceIndex];
+    if (!row) {
+      btn.classList.add('hidden');
+      return;
+    }
+    const requiredQty = Number(row.qtd || row.quantidade || 0) || 0;
+    const selections = ensureSelectionMap();
+    let currentTotal = 0;
+    selections.forEach(qty => { currentTotal += sanitizePositiveInt(qty); });
+    const committedTotal = getTotalCommittedQuantity();
+    const remaining = Math.max(0, requiredQty - committedTotal);
+    const shouldShow = currentTotal > 0 && remaining > 0;
+    btn.classList.toggle('hidden', !shouldShow);
+    btn.disabled = !shouldShow;
+    if (shouldShow) {
+      const futureTotal = Math.min(remaining, currentTotal);
+      btn.textContent = `Adicionar Tipo (${futureTotal.toLocaleString('pt-BR')} un)`;
+      btn.classList.remove('opacity-60', 'cursor-not-allowed');
+    } else {
+      btn.textContent = 'Adicionar Tipo';
+      btn.classList.add('opacity-60', 'cursor-not-allowed');
+    }
+  }
+
+  function handleCommitSelection() {
+    if (currentReplaceIndex < 0) return;
+    const row = rows[currentReplaceIndex];
+    if (!row) return;
+    const requiredQty = Number(row.qtd || row.quantidade || 0) || 0;
+    if (!(requiredQty > 0)) return;
+    const selections = ensureSelectionMap();
+    if (!selections.size) return;
+
+    let committedTotal = getTotalCommittedQuantity();
+    let remaining = Math.max(0, requiredQty - committedTotal);
+    if (!(remaining > 0)) {
+      selections.clear();
+      renderReplaceModalList({ skipReload: true });
+      return;
+    }
+
+    let anyCommitted = false;
+    const ordered = Array.from(selections.entries());
+    for (const [key, qty] of ordered) {
+      const variant = getVariantByKey(key);
+      if (!variant) continue;
+      const sanitized = sanitizePositiveInt(qty);
+      if (!sanitized) continue;
+      const baseMax = variant.type === 'produce'
+        ? requiredQty
+        : Math.min(requiredQty, Math.floor(Number(variant.available) || 0));
+      remaining = Math.max(0, requiredQty - getTotalCommittedQuantity());
+      if (!(remaining > 0)) break;
+      const finalQty = Math.min(baseMax, sanitized, remaining);
+      if (!(finalQty > 0)) continue;
+      addCommittedQuantity(variant.key, finalQty);
+      anyCommitted = true;
+    }
+
+    selections.clear();
+    enforceSelectionLimits(requiredQty);
+    renderReplaceModalList({ skipReload: true });
+    if (anyCommitted) {
+      renderReplaceModalSummary();
+      updateReplaceModalConfirmButton();
+    }
   }
 
   function handleReplaceModalConfirm() {
