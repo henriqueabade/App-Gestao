@@ -47,7 +47,21 @@ function formatarDataHoraCompleta(valor) {
     });
 }
 
-function formatarDescricaoAlteracao(descricao) {
+function formatarDescricaoAlteracao(descricao, local, especificacao) {
+    const localLimpo = local && String(local).trim();
+    const especificacaoLimpa = especificacao && String(especificacao).trim();
+
+    if (localLimpo || especificacaoLimpa) {
+        const partes = [];
+        if (localLimpo) {
+            partes.push(`Usuário alterou o módulo ${escapeHtml(localLimpo)}`);
+        }
+        if (especificacaoLimpa) {
+            partes.push(`mudando ${escapeHtml(especificacaoLimpa)}`);
+        }
+        return partes.join(', ');
+    }
+
     if (!descricao || !String(descricao).trim()) {
         return 'Nenhuma alteração registrada';
     }
@@ -368,12 +382,21 @@ function renderUsuarios(lista) {
         const online = resolverStatusOnline(u);
         const sessaoClasse = online ? 'usuario-sessao-badge online' : 'usuario-sessao-badge offline';
         const sessaoRotulo = online ? 'Online' : 'Offline';
-        const ultimoLoginValor = obterPrimeiroValor(u, ['ultimoLoginEm', 'ultimo_login_em', 'ultimoLogin', 'ultimo_login']);
         const ultimaEntradaValor = obterPrimeiroValor(u, [
             'ultimaEntradaEm',
             'ultima_entrada_em',
             'ultimaEntrada',
             'ultima_entrada'
+        ]);
+        const ultimoLoginValor = obterPrimeiroValor(u, [
+            'ultimaEntradaEm',
+            'ultima_entrada_em',
+            'ultimaEntrada',
+            'ultima_entrada',
+            'ultimoLoginEm',
+            'ultimo_login_em',
+            'ultimoLogin',
+            'ultimo_login'
         ]);
         const ultimaSaidaValor = obterPrimeiroValor(u, [
             'ultimaSaidaEm',
@@ -384,6 +407,8 @@ function renderUsuarios(lista) {
         const ultimaAlteracaoValor = obterPrimeiroValor(u, [
             'ultimaAlteracaoEm',
             'ultima_alteracao_em',
+            'ultimaAlteracao',
+            'ultima_alteracao',
             'ultimaAcaoEm',
             'ultima_acao_em',
             'ultimaAtividadeEm',
@@ -397,11 +422,30 @@ function renderUsuarios(lista) {
             'ultimaAcao',
             'ultima_acao'
         ]);
-        const ultimoLoginTexto = escapeHtml(formatarDataHoraCompleta(ultimoLoginValor));
+        const localUltimaAlteracao = obterPrimeiroValor(u, [
+            'localUltimaAlteracao',
+            'local_ultima_alteracao',
+            'localUltimaAcao',
+            'local_ultima_acao'
+        ]);
+        const especificacaoUltimaAlteracao = obterPrimeiroValor(u, [
+            'especificacaoUltimaAlteracao',
+            'especificacao_ultima_alteracao',
+            'especificacaoUltimaAcao',
+            'especificacao_ultima_acao'
+        ]);
         const ultimaEntradaTexto = escapeHtml(formatarDataHoraCompleta(ultimaEntradaValor));
+        const ultimoLoginTexto =
+            ultimaEntradaTexto !== 'Sem registro'
+                ? ultimaEntradaTexto
+                : escapeHtml(formatarDataHoraCompleta(ultimoLoginValor));
         const ultimaSaidaTexto = escapeHtml(formatarDataHoraCompleta(ultimaSaidaValor));
         const ultimaAlteracaoTexto = escapeHtml(formatarDataHoraCompleta(ultimaAlteracaoValor));
-        const ultimaDescricaoTexto = formatarDescricaoAlteracao(ultimaDescricaoValor);
+        const ultimaDescricaoTexto = formatarDescricaoAlteracao(
+            ultimaDescricaoValor,
+            localUltimaAlteracao,
+            especificacaoUltimaAlteracao
+        );
         tr.innerHTML = `
             <td class="px-6 py-4">
                 <div class="w-9 h-9 rounded-full flex items-center justify-center text-white font-medium text-sm" style="background: var(--color-primary)">${iniciais}</div>

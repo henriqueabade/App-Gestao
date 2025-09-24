@@ -289,6 +289,10 @@ body {
     transform: scale(1.08);
 }
 
+.usuario-popover {
+    display: none;
+}
+
 .usuario-popover-card {
     min-width: 260px;
     max-width: 320px;
