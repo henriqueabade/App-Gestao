@@ -133,7 +133,14 @@ function resolverStatusOnline(usuario) {
 
 function fecharPopoversUsuarios() {
     if (!usuarioPopoverAtual) return;
-    const { popup, trigger } = usuarioPopoverAtual;
+    const { popup, trigger, cleanup } = usuarioPopoverAtual;
+    if (typeof cleanup === 'function') {
+        try {
+            cleanup();
+        } catch (erro) {
+            console.error('Erro ao limpar eventos do popover de usuário', erro);
+        }
+    }
     if (popup && typeof popup.remove === 'function') {
         popup.remove();
     }
@@ -177,7 +184,46 @@ function abrirPopoverUsuario(botao) {
     }
     const html = criarConteudoPopoverUsuario(botao);
     const { popup } = window.createPopup(botao, html, { margin: 12 });
-    usuarioPopoverAtual = { popup, trigger: botao };
+
+    let hideTimeoutId = null;
+    const cancelarOcultacao = () => {
+        if (hideTimeoutId) {
+            clearTimeout(hideTimeoutId);
+            hideTimeoutId = null;
+        }
+    };
+
+    const agendarOcultacao = () => {
+        cancelarOcultacao();
+        hideTimeoutId = setTimeout(() => {
+            hideTimeoutId = null;
+            const aindaSobreTrigger = botao.matches(':hover');
+            const aindaSobrePopup = popup.matches(':hover');
+            if (!aindaSobreTrigger && !aindaSobrePopup) {
+                fecharPopoversUsuarios();
+            }
+        }, 120);
+    };
+
+    const listeners = [
+        { elemento: botao, tipo: 'mouseleave', handler: agendarOcultacao },
+        { elemento: popup, tipo: 'mouseleave', handler: agendarOcultacao },
+        { elemento: botao, tipo: 'mouseenter', handler: cancelarOcultacao },
+        { elemento: popup, tipo: 'mouseenter', handler: cancelarOcultacao }
+    ];
+
+    listeners.forEach(({ elemento, tipo, handler }) => {
+        elemento.addEventListener(tipo, handler);
+    });
+
+    const cleanup = () => {
+        cancelarOcultacao();
+        listeners.forEach(({ elemento, tipo, handler }) => {
+            elemento.removeEventListener(tipo, handler);
+        });
+    };
+
+    usuarioPopoverAtual = { popup, trigger: botao, cleanup };
     botao.setAttribute('aria-expanded', 'true');
     botao.classList.add(USUARIO_TRIGGER_ACTIVE_CLASS);
 }
