@@ -1,6 +1,5 @@
 // Lógica de interação para o módulo de Orçamentos
-window.customStartDate = null;
-window.customEndDate = null;
+window.customPeriodOrcamentos = null;
 
 function updateEmptyStateOrcamentos(hasData) {
     const wrapper = document.getElementById('orcamentosTableWrapper');
@@ -264,6 +263,7 @@ function aplicarFiltro() {
     const dono = document.getElementById('filterOwner')?.value || '';
     const cliente = document.getElementById('filterClient')?.value.toLowerCase() || '';
     const now = new Date();
+    const customPeriod = window.customPeriodOrcamentos;
     document.querySelectorAll('#orcamentosTabela tr').forEach(row => {
         const rowStatus = row.cells[5]?.innerText.trim() || '';
         const rowCliente = row.cells[1]?.innerText.trim().toLowerCase() || '';
@@ -277,9 +277,9 @@ function aplicarFiltro() {
         if (periodo) {
             const [d, m, y] = dateText.split('/').map(Number);
             const rowDate = new Date(y, m - 1, d);
-            if (periodo === 'Personalizado' && window.customStartDate && window.customEndDate) {
-                const inicio = new Date(window.customStartDate);
-                const fim = new Date(window.customEndDate);
+            if (periodo === 'Personalizado' && customPeriod?.start && customPeriod?.end) {
+                const inicio = new Date(customPeriod.start);
+                const fim = new Date(customPeriod.end);
                 show &&= rowDate >= inicio && rowDate <= fim;
             } else {
                 const diff = (now - rowDate) / (1000 * 60 * 60 * 24);
@@ -299,13 +299,16 @@ function aplicarFiltro() {
 function limparFiltros() {
     document.getElementById('filterStatus').value = '';
     const periodSel = document.getElementById('filterPeriod');
-    periodSel.value = '';
-    const customOpt = periodSel.querySelector('option[value="Personalizado"]');
-    if (customOpt) customOpt.textContent = 'Personalizado';
+    if (periodSel) {
+        periodSel.value = '';
+        periodSel.dataset.customActive = '';
+        periodSel.dataset.currentValue = '';
+        const customOpt = periodSel.querySelector('option[value="Personalizado"]');
+        if (customOpt) customOpt.textContent = 'Personalizado';
+    }
     document.getElementById('filterOwner').value = '';
     document.getElementById('filterClient').value = '';
-    window.customStartDate = null;
-    window.customEndDate = null;
+    window.customPeriodOrcamentos = null;
     aplicarFiltro();
 }
 
@@ -336,28 +339,125 @@ function initOrcamentos() {
     const periodSelect = document.getElementById('filterPeriod');
     const periodModal = document.getElementById('periodModal');
     const periodConfirm = document.getElementById('periodConfirm');
-    periodSelect?.addEventListener('change', () => {
-        if (periodSelect.value === 'Personalizado') {
-            periodModal.classList.remove('hidden');
+    const periodCancel = document.getElementById('periodCancel');
+    const startInput = document.getElementById('startDate');
+    const endInput = document.getElementById('endDate');
+
+    const customOption = periodSelect?.querySelector('option[value="Personalizado"]');
+    const formatDisplayDate = isoDate => {
+        if (!isoDate) return '';
+        const [year, month, day] = isoDate.split('-');
+        return `${day}/${month}/${year}`;
+    };
+    const updateCustomOptionLabel = () => {
+        if (!customOption) return;
+        const customPeriod = window.customPeriodOrcamentos;
+        if (customPeriod?.start && customPeriod?.end) {
+            customOption.textContent = `${formatDisplayDate(customPeriod.start)} - ${formatDisplayDate(customPeriod.end)}`;
         } else {
-            const customOpt = periodSelect.querySelector('option[value="Personalizado"]');
-            if (customOpt) customOpt.textContent = 'Personalizado';
-            window.customStartDate = null;
-            window.customEndDate = null;
+            customOption.textContent = 'Personalizado';
         }
-    });
-    periodConfirm?.addEventListener('click', () => {
-        window.customStartDate = document.getElementById('startDate').value;
-        window.customEndDate = document.getElementById('endDate').value;
+    };
+    const closePeriodModal = () => {
+        if (!periodModal) return;
         periodModal.classList.add('hidden');
-        const customOpt = periodSelect.querySelector('option[value="Personalizado"]');
-        if (customOpt && window.customStartDate && window.customEndDate) {
-            const fmt = d => d.split('-').reverse().join('/');
-            customOpt.textContent = `${fmt(window.customStartDate)} - ${fmt(window.customEndDate)}`;
+        periodModal.setAttribute('aria-hidden', 'true');
+    };
+    const openPeriodModal = previousValue => {
+        if (!periodModal) return;
+        periodModal.classList.remove('hidden');
+        periodModal.setAttribute('aria-hidden', 'false');
+        const customPeriod = window.customPeriodOrcamentos;
+        if (startInput) startInput.value = customPeriod?.start || '';
+        if (endInput) endInput.value = customPeriod?.end || '';
+        if (periodSelect && typeof previousValue !== 'undefined') {
+            periodSelect.dataset.modalPreviousValue = previousValue;
         }
-        periodSelect.value = 'Personalizado';
+        setTimeout(() => startInput?.focus(), 50);
+    };
+    const handleCancel = () => {
+        closePeriodModal();
+        if (!periodSelect) return;
+        const previousValue = periodSelect.dataset.modalPreviousValue;
+        delete periodSelect.dataset.modalPreviousValue;
+        if (periodSelect.dataset.customActive === 'true') {
+            periodSelect.value = 'Personalizado';
+            periodSelect.dataset.currentValue = 'Personalizado';
+            updateCustomOptionLabel();
+        } else {
+            const fallback = previousValue ?? periodSelect.dataset.currentValue ?? '';
+            periodSelect.value = fallback;
+            periodSelect.dataset.currentValue = fallback;
+            if (!fallback) updateCustomOptionLabel();
+        }
+        aplicarFiltro();
+    };
+
+    if (periodSelect) {
+        periodSelect.dataset.currentValue = periodSelect.value || '';
+        periodSelect.addEventListener('change', () => {
+            const previousValue = periodSelect.dataset.currentValue || '';
+            if (periodSelect.value === 'Personalizado') {
+                openPeriodModal(previousValue);
+                periodSelect.value = previousValue;
+            } else {
+                window.customPeriodOrcamentos = null;
+                periodSelect.dataset.customActive = '';
+                periodSelect.dataset.currentValue = periodSelect.value || '';
+                updateCustomOptionLabel();
+                aplicarFiltro();
+            }
+        });
+        periodSelect.addEventListener('click', () => {
+            if (periodSelect.value === 'Personalizado' && periodSelect.dataset.customActive === 'true') {
+                openPeriodModal('Personalizado');
+            }
+        });
+    }
+
+    updateCustomOptionLabel();
+
+    periodConfirm?.addEventListener('click', () => {
+        const startValue = startInput?.value;
+        const endValue = endInput?.value;
+        if (!startValue || !endValue) {
+            if (typeof showToast === 'function') {
+                showToast('Informe a data inicial e final para o período personalizado.', 'warning');
+            } else {
+                alert('Informe a data inicial e final para o período personalizado.');
+            }
+            return;
+        }
+        if (new Date(startValue) > new Date(endValue)) {
+            if (typeof showToast === 'function') {
+                showToast('A data inicial não pode ser maior que a data final.', 'warning');
+            } else {
+                alert('A data inicial não pode ser maior que a data final.');
+            }
+            return;
+        }
+        window.customPeriodOrcamentos = { start: startValue, end: endValue };
+        if (periodSelect) {
+            periodSelect.value = 'Personalizado';
+            periodSelect.dataset.currentValue = 'Personalizado';
+            periodSelect.dataset.customActive = 'true';
+        }
+        updateCustomOptionLabel();
+        closePeriodModal();
         aplicarFiltro();
     });
+
+    periodCancel?.addEventListener('click', handleCancel);
+    periodModal?.addEventListener('click', event => {
+        if (event.target === periodModal) handleCancel();
+    });
+    if (periodModal) {
+        document.addEventListener('keydown', event => {
+            if (event.key === 'Escape' && !periodModal.classList.contains('hidden')) {
+                handleCancel();
+            }
+        });
+    }
 
     carregarOrcamentos();
 }
