@@ -2,6 +2,12 @@
   const overlayId = 'visualizarOrcamento';
   const overlay = document.getElementById('visualizarOrcamentoOverlay');
   if (!overlay) return;
+  const escapeAttr = value => String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/'/g, '&#39;');
   const close = () => Modal.close(overlayId);
   const esc = e => { if (e.key === 'Escape') { close(); document.removeEventListener('keydown', esc); } };
   overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
@@ -96,13 +102,13 @@
       const tr = document.createElement('tr');
       tr.className = 'border-b border-white/10';
       tr.innerHTML = `
-        <td class="px-6 py-4 text-sm text-white">${it.nome}</td>
-        <td class="px-6 py-4 text-left text-sm text-white">${qtd}</td>
-        <td class="px-6 py-4 text-left text-sm text-white">${valorUnit.toFixed(2)}</td>
-        <td class="px-6 py-4 text-left text-sm text-white">${valorUnitDesc.toFixed(2)}</td>
-        <td class="px-6 py-4 text-left text-sm text-white">${(descPagPrc + descEspPrc).toFixed(2)}</td>
-        <td class="px-6 py-4 text-left text-sm text-white">${valorTotal.toFixed(2)}</td>
-        <td class="px-6 py-4 text-center">
+        <td class="text-left text-white" title="${escapeAttr(it.nome)}">${it.nome}</td>
+        <td class="text-center text-white">${qtd}</td>
+        <td class="text-right text-white">${valorUnit.toFixed(2)}</td>
+        <td class="text-right text-white">${valorUnitDesc.toFixed(2)}</td>
+        <td class="text-center text-white">${(descPagPrc + descEspPrc).toFixed(2)}</td>
+        <td class="text-right text-white">${valorTotal.toFixed(2)}</td>
+        <td class="text-center actions-cell">
           <i class="fas fa-edit w-5 h-5 p-1 rounded icon-disabled" style="color: var(--color-primary)"></i>
           <i class="fas fa-trash w-5 h-5 p-1 rounded text-red-400 icon-disabled"></i>
         </td>`;

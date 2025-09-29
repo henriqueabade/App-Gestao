@@ -3,6 +3,13 @@
   const overlay = document.getElementById('visualizarPedidoOverlay');
   if (!overlay) return;
 
+  const escapeAttr = value => String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/'/g, '&#39;');
+
   const close = () => {
     Modal.close(overlayId);
     document.removeEventListener('keydown', esc);
@@ -184,13 +191,13 @@
       const tr = document.createElement('tr');
       tr.className = 'border-b border-white/10';
       tr.innerHTML = `
-        <td class="px-6 py-4 text-sm text-white">${item.nome || ''}</td>
-        <td class="px-6 py-4 text-left text-sm text-white">${fmtNumber(qtd)}</td>
-        <td class="px-6 py-4 text-left text-sm text-white">${fmtNumber(valorUnit)}</td>
-        <td class="px-6 py-4 text-left text-sm text-white">${fmtNumber(valorUnitDesc)}</td>
-        <td class="px-6 py-4 text-left text-sm text-white">${fmtNumber(descPagPrc + descEspPrc)}</td>
-        <td class="px-6 py-4 text-left text-sm text-white">${fmtCurrency(valorTotal)}</td>
-        <td class="px-6 py-4 text-center modal-actions-disabled">
+        <td class="text-left text-white" title="${escapeAttr(item.nome || '')}">${item.nome || ''}</td>
+        <td class="text-center text-white">${fmtNumber(qtd)}</td>
+        <td class="text-right text-white">${fmtNumber(valorUnit)}</td>
+        <td class="text-right text-white">${fmtNumber(valorUnitDesc)}</td>
+        <td class="text-center text-white">${fmtNumber(descPagPrc + descEspPrc)}</td>
+        <td class="text-right text-white">${fmtCurrency(valorTotal)}</td>
+        <td class="text-center modal-actions-disabled actions-cell">
           <div class="flex items-center justify-center gap-2">
             <i class="fas fa-edit w-5 h-5 p-1 rounded icon-disabled" style="color: var(--color-primary)"></i>
             <i class="fas fa-trash w-5 h-5 p-1 rounded text-red-400 icon-disabled"></i>

@@ -3,6 +3,12 @@
   const overlay = document.getElementById('novoOrcamentoOverlay');
   // Scroll do Novo Orçamento restrito ao corpo (entre header e footer), igual Editar Orçamento.
   if (!overlay) return;
+  const escapeAttr = value => String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/'/g, '&#39;');
   const close = () => Modal.close(overlayId);
   overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
   document.addEventListener('keydown', function esc(e){ if(e.key === 'Escape'){ close(); document.removeEventListener('keydown', esc); } });
@@ -404,13 +410,13 @@
     tr.dataset.id = prodId;
     tr.className = 'border-b border-white/10';
     tr.innerHTML = `
-        <td class="px-6 py-4 text-sm text-white">${product.nome}</td>
-        <td class="px-6 py-4 text-center text-sm text-white">${qtd}</td>
-        <td class="px-6 py-4 text-right text-sm text-white">${product.valor.toFixed(2)}</td>
-        <td class="px-6 py-4 text-right text-sm text-white">0.00</td>
-        <td class="px-6 py-4 text-center text-sm text-white">${defaultDesc.toFixed(2)}</td>
-        <td class="px-6 py-4 text-right text-sm text-white total-cell"></td>
-        <td class="px-6 py-4 text-center">
+        <td class="text-left text-white" title="${escapeAttr(product.nome)}">${product.nome}</td>
+        <td class="text-center text-white">${qtd}</td>
+        <td class="text-right text-white">${product.valor.toFixed(2)}</td>
+        <td class="text-right text-white">0.00</td>
+        <td class="text-center text-white">${defaultDesc.toFixed(2)}</td>
+        <td class="text-right text-white total-cell"></td>
+        <td class="text-center actions-cell">
           <i class="fas fa-edit w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)"></i>
           <i class="fas fa-trash w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10 text-red-400"></i>
         </td>`;

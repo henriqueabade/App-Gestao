@@ -77,6 +77,68 @@ html, body, #app, #mainContent  {
   text-align: left;
 }
 
+/* Tabelas compactas de itens (pedidos e orçamentos) */
+.items-table {
+  table-layout: fixed;
+  width: 100%;
+}
+
+.items-table th,
+.items-table td {
+  padding: clamp(0.35rem, 0.3rem + 0.3vw, 0.55rem);
+  font-size: clamp(0.65rem, 0.6rem + 0.2vw, 0.8rem);
+  white-space: nowrap;
+  line-height: 1.2;
+}
+
+.items-table th {
+  letter-spacing: 0.08em;
+}
+
+.items-table td {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.items-table td.actions-cell {
+  overflow: visible;
+}
+
+.items-table th:nth-child(1),
+.items-table td:nth-child(1) {
+  width: 30%;
+}
+
+.items-table th:nth-child(2),
+.items-table td:nth-child(2) {
+  width: 8%;
+}
+
+.items-table th:nth-child(3),
+.items-table td:nth-child(3) {
+  width: 15%;
+}
+
+.items-table th:nth-child(4),
+.items-table td:nth-child(4) {
+  width: 17%;
+}
+
+.items-table th:nth-child(5),
+.items-table td:nth-child(5) {
+  width: 10%;
+}
+
+.items-table th:nth-child(6),
+.items-table td:nth-child(6) {
+  width: 12%;
+}
+
+.items-table th:nth-child(7),
+.items-table td:nth-child(7) {
+  width: 8%;
+}
+
 @media (max-width: 768px) {
   .table-scroll th,
   .table-scroll td {
