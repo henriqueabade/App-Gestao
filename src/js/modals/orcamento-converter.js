@@ -41,7 +41,8 @@
     loadingVariants: null,
     variantsLoadedForRowId: null,
     originalPlan: null,
-    committedSelections: []
+    committedSelections: [],
+    activeVariantKey: null
   };
   const productBreakdownCache = new Map();
 
@@ -161,6 +162,21 @@
     return replaceModalState.committedSelections;
   }
 
+  function setActiveVariantKey(key) {
+    replaceModalState.activeVariantKey = key || null;
+  }
+
+  function getActiveVariantKey() {
+    return replaceModalState.activeVariantKey || null;
+  }
+
+  function clearActiveVariantKeyIfMatches(key) {
+    if (!key) return;
+    if (replaceModalState.activeVariantKey === key) {
+      replaceModalState.activeVariantKey = null;
+    }
+  }
+
   function hasPendingSelections() {
     const selections = ensureSelectionMap();
     for (const qty of selections.values()) {
@@ -170,18 +186,7 @@
   }
 
   function clearPendingSelections() {
-    const selections = ensureSelectionMap();
-    if (!selections.size) return false;
-    let hadPositive = false;
-    selections.forEach(qty => {
-      if (sanitizePositiveInt(qty) > 0) hadPositive = true;
-    });
-    if (!hadPositive) {
-      selections.clear();
-      return false;
-    }
-    selections.clear();
-    return true;
+    return clearAllStaging();
   }
 
   function getCommittedQuantity(key) {
@@ -215,6 +220,166 @@
     replaceModalState.committedSelections = [];
   }
 
+  function getRequiredQuantity(row) {
+    return Number(row?.qtd || row?.quantidade || 0) || 0;
+  }
+
+  function getTotalConfirmedQuantity() {
+    return getTotalCommittedQuantity();
+  }
+
+  function getGlobalRemainingCapacity(requiredQty) {
+    const confirmed = getTotalConfirmedQuantity();
+    return Math.max(0, requiredQty - confirmed);
+  }
+
+  function getVariantStockLimit(variant, requiredQty) {
+    if (!variant) return 0;
+    if (variant.type === 'produce') return requiredQty;
+    return Math.max(0, Math.floor(Number(variant.available) || 0));
+  }
+
+  function computeVariantMax(variant, requiredQty) {
+    if (!variant) return 0;
+    const confirmedQty = getCommittedQuantity(variant.key);
+    const stagingQty = getSelectionQuantity(variant.key);
+    const stockLimit = getVariantStockLimit(variant, requiredQty);
+    const stockRemaining = Math.max(0, stockLimit - confirmedQty);
+    const globalRemaining = getGlobalRemainingCapacity(requiredQty);
+    const effectiveGlobal = Math.max(0, globalRemaining + stagingQty);
+    return Math.max(0, Math.min(stockRemaining, effectiveGlobal));
+  }
+
+  function setStagingQuantity(key, quantity) {
+    const selections = ensureSelectionMap();
+    const sanitized = sanitizePositiveInt(quantity);
+    if (sanitized > 0) {
+      selections.set(key, sanitized);
+      setActiveVariantKey(key);
+    } else {
+      selections.delete(key);
+      clearActiveVariantKeyIfMatches(key);
+    }
+  }
+
+  function clearOtherStaging(currentKey) {
+    const selections = ensureSelectionMap();
+    let changed = false;
+    selections.forEach((qty, key) => {
+      if (key !== currentKey) {
+        selections.delete(key);
+        changed = true;
+      }
+    });
+    if (changed && currentKey) setActiveVariantKey(currentKey);
+    return changed;
+  }
+
+  function clearStagingForVariant(key) {
+    const selections = ensureSelectionMap();
+    if (selections.has(key)) {
+      selections.delete(key);
+      clearActiveVariantKeyIfMatches(key);
+      return true;
+    }
+    clearActiveVariantKeyIfMatches(key);
+    return false;
+  }
+
+  function clearAllStaging() {
+    const selections = ensureSelectionMap();
+    if (!selections.size) {
+      clearActiveVariantKeyIfMatches(getActiveVariantKey());
+      return false;
+    }
+    const hadPositive = Array.from(selections.values())
+      .some(value => sanitizePositiveInt(value) > 0);
+    selections.clear();
+    clearActiveVariantKeyIfMatches(getActiveVariantKey());
+    return hadPositive;
+  }
+
+  // Atualiza a quantidade em edição para o tipo informado e garante foco no campo apropriado.
+  function updateStagingQuantityForVariant(variant, desiredQty, options = {}) {
+    if (!variant) return;
+    const row = rows[currentReplaceIndex];
+    if (!row) return;
+    const requiredQty = getRequiredQuantity(row);
+    const sanitized = Math.max(0, Math.floor(Number(desiredQty) || 0));
+    clearOtherStaging(variant.key);
+    const maxAllowed = computeVariantMax(variant, requiredQty);
+    const clamped = Math.min(maxAllowed, sanitized);
+    if (clamped > 0) setStagingQuantity(variant.key, clamped);
+    else clearStagingForVariant(variant.key);
+    enforceSelectionLimits(requiredQty);
+    const focus = options.focus ? { ...options.focus } : null;
+    renderReplaceModalList({ skipReload: true, focus });
+  }
+
+  // Incrementa a quantidade em edição utilizando o botão de + e mantém o input selecionado.
+  function incrementStagingQuantity(variant, step = 1) {
+    if (!variant) return;
+    const row = rows[currentReplaceIndex];
+    if (!row) return;
+    const requiredQty = getRequiredQuantity(row);
+    const current = getSelectionQuantity(variant.key);
+    const target = current + Math.max(1, step);
+    const maxAllowed = computeVariantMax(variant, requiredQty);
+    if (maxAllowed <= 0) return;
+    clearOtherStaging(variant.key);
+    const clamped = Math.min(maxAllowed, target);
+    if (clamped > 0) setStagingQuantity(variant.key, clamped);
+    enforceSelectionLimits(requiredQty);
+    renderReplaceModalList({ skipReload: true, focus: { key: variant.key, select: true } });
+  }
+
+  // Move a quantidade em edição para o estado confirmado respeitando orçamento e estoque.
+  function confirmStagingForVariant(variantKey) {
+    if (!variantKey) return false;
+    const variant = getVariantByKey(variantKey);
+    if (!variant) return false;
+    const row = rows[currentReplaceIndex];
+    if (!row) return false;
+    const requiredQty = getRequiredQuantity(row);
+    if (!(requiredQty > 0)) return false;
+    const stagingQty = getSelectionQuantity(variantKey);
+    if (!(stagingQty > 0)) return false;
+    const maxAllowed = computeVariantMax(variant, requiredQty);
+    const finalQty = Math.min(stagingQty, maxAllowed);
+    if (!(finalQty > 0)) return false;
+    addCommittedQuantity(variantKey, finalQty);
+    clearStagingForVariant(variantKey);
+    enforceSelectionLimits(requiredQty);
+    renderReplaceModalSummary();
+    updateReplaceModalConfirmButton();
+    renderReplaceModalList({ skipReload: true, focus: { key: variantKey } });
+    return true;
+  }
+
+  // Diminui unidades já confirmadas quando o usuário pressiona o botão - fora do modo de edição.
+  function reduceConfirmedQuantity(variantKey, amount = 1) {
+    if (!variantKey) return false;
+    const current = getCommittedQuantity(variantKey);
+    if (!(current > 0)) return false;
+    const next = Math.max(0, current - Math.max(1, amount));
+    setCommittedQuantity(variantKey, next);
+    renderReplaceModalSummary();
+    updateReplaceModalConfirmButton();
+    renderReplaceModalList({ skipReload: true, focus: { key: variantKey } });
+    return true;
+  }
+
+  // Atualiza os contadores "Selecionado" e "Restante" exibidos acima da lista.
+  function updateSelectionStatusCounter(selected, required, remaining) {
+    if (!replaceModalRefs) return;
+    if (replaceModalRefs.selectionCounter) {
+      replaceModalRefs.selectionCounter.textContent = `Selecionado: ${selected.toLocaleString('pt-BR')} / ${required.toLocaleString('pt-BR')}`;
+    }
+    if (replaceModalRefs.selectionRemaining) {
+      replaceModalRefs.selectionRemaining.textContent = `Restante: ${remaining.toLocaleString('pt-BR')}`;
+    }
+  }
+
   function getTotalCommittedQuantity() {
     const list = ensureCommittedList();
     return list.reduce((acc, entry) => acc + sanitizePositiveInt(entry?.qty), 0);
@@ -225,102 +390,36 @@
     return sanitizePositiveInt(selections.get(key));
   }
 
-  function getTotalSelectedQuantity() {
-    const selections = ensureSelectionMap();
-    let total = 0;
-    selections.forEach(value => {
-      total += sanitizePositiveInt(value);
-    });
-    return total + getTotalCommittedQuantity();
-  }
-
   function enforceSelectionLimits(requiredQty) {
     const selections = ensureSelectionMap();
     if (!selections.size) return;
 
-    const sanitizedEntries = [];
+    const activeKey = getActiveVariantKey();
+    let detectedActive = false;
+
     selections.forEach((qty, key) => {
       const variant = getVariantByKey(key);
       if (!variant) {
         selections.delete(key);
         return;
       }
-      const baseMax = variant.type === 'produce'
-        ? requiredQty
-        : Math.min(requiredQty, Math.floor(Number(variant.available) || 0));
-      const sanitized = Math.min(baseMax, sanitizePositiveInt(qty));
-      if (sanitized > 0) {
-        sanitizedEntries.push({ key, qty: sanitized });
+      if (activeKey && key !== activeKey) {
+        selections.delete(key);
+        return;
+      }
+      const clamped = Math.min(computeVariantMax(variant, requiredQty), sanitizePositiveInt(qty));
+      if (clamped > 0) {
+        selections.set(key, clamped);
+        setActiveVariantKey(key);
+        detectedActive = true;
       } else {
         selections.delete(key);
       }
     });
 
-    const committedTotal = Math.min(requiredQty, getTotalCommittedQuantity());
-    if (committedTotal >= requiredQty) {
-      selections.clear();
-      return;
+    if (!detectedActive) {
+      clearActiveVariantKeyIfMatches(activeKey);
     }
-
-    selections.clear();
-    let runningTotal = committedTotal;
-    sanitizedEntries.forEach(entry => {
-      if (runningTotal >= requiredQty) return;
-      const remaining = Math.max(0, requiredQty - runningTotal);
-      const finalQty = Math.min(entry.qty, remaining);
-      if (finalQty > 0) {
-        selections.set(entry.key, finalQty);
-        runningTotal += finalQty;
-      }
-    });
-  }
-
-  function rebalanceSelectionsForVariant(variant, desiredQty, requiredQty) {
-    const selections = ensureSelectionMap();
-    const targetQty = Math.max(0, Math.floor(Number(desiredQty) || 0));
-    if (!(targetQty > 0)) return 0;
-
-    const baseTotal = getTotalSelectedQuantity();
-    let finalQty = targetQty;
-    let totalAfter = baseTotal + finalQty;
-    if (totalAfter > requiredQty) {
-      let excess = totalAfter - requiredQty;
-      const adjustable = Array.from(selections.entries())
-        .map(([key, qty]) => {
-          const normalizedQty = sanitizePositiveInt(qty);
-          if (!normalizedQty) return null;
-          const info = getVariantByKey(key);
-          const priority = info?.type === 'produce' ? 0 : 1;
-          return {
-            key,
-            qty: normalizedQty,
-            priority,
-            order: Number(info?.stage?.order || 0)
-          };
-        })
-        .filter(Boolean)
-        .sort((a, b) => {
-          if (a.priority !== b.priority) return a.priority - b.priority;
-          if (b.order !== a.order) return b.order - a.order;
-          return b.qty - a.qty;
-        });
-
-      adjustable.forEach(entry => {
-        if (excess <= 0) return;
-        if (entry.key === variant.key || entry.qty <= 0) return;
-        const take = Math.min(excess, entry.qty);
-        const remaining = entry.qty - take;
-        if (remaining > 0) selections.set(entry.key, remaining);
-        else selections.delete(entry.key);
-        excess -= take;
-      });
-
-      if (excess > 0) {
-        finalQty = Math.max(0, finalQty - excess);
-      }
-    }
-
-    return finalQty;
   }
 
   function buildSelectionPlan(row) {
@@ -333,9 +432,6 @@
       stock: [],
       selections: []
     };
-    if (!replaceModalState.selections || !(replaceModalState.selections instanceof Map)) {
-      replaceModalState.selections = new Map();
-    }
     const committedList = ensureCommittedList();
     committedList.forEach(entry => {
       const variant = getVariantByKey(entry.key);
@@ -365,35 +461,6 @@
         });
       }
       plan.selections.push({ key: variant.key, qty: clamped, committed: true });
-    });
-    replaceModalState.selections.forEach((qty, key) => {
-      const variant = getVariantByKey(key);
-      if (!variant) return;
-      const sanitized = sanitizePositiveInt(qty);
-      if (!sanitized) return;
-      const variantMax = variant.type === 'produce'
-        ? requiredQty
-        : Math.min(requiredQty, Math.floor(Number(variant.available) || 0));
-      const clamped = Math.min(variantMax, sanitized);
-      if (!clamped) return;
-      plan.totalSelected += clamped;
-      if (variant.type === 'produce') {
-        plan.produceQty += clamped;
-      } else {
-        plan.stock.push({
-          variantKey: key,
-          qty: clamped,
-          productId: Number(variant.product?.id),
-          productName: variant.product?.nome || '',
-          productCode: variant.product?.codigo || '',
-          processName: variant.stage?.processName || '',
-          lastItemName: variant.stage?.lastItemName || '',
-          order: Number(variant.stage?.order || 0),
-          isCurrentProduct: !!variant.isCurrentProduct,
-          committed: false
-        });
-      }
-      plan.selections.push({ key, qty: clamped, committed: false });
     });
     plan.remaining = Math.max(0, requiredQty - plan.totalSelected);
     plan.stock.sort((a, b) => {
@@ -813,6 +880,10 @@
             </div>
             <div class="bg-surface/40 rounded-lg border border-white/10 p-4">
               <h4 class="font-medium text-white mb-4">Peças disponíveis</h4>
+              <div class="flex flex-wrap items-center justify-between gap-3 text-sm text-gray-300 mb-4" data-field="selection-status">
+                <span data-field="selection-counter">Selecionado: 0 / 0</span>
+                <span data-field="selection-remaining">Restante: 0</span>
+              </div>
               <div data-role="results" class="space-y-3 max-h-[360px] overflow-y-auto pr-1 modal-scroll"></div>
             </div>
           </div>
@@ -834,7 +905,9 @@
       search: overlay.querySelector('[data-role="search"]'),
       results: overlay.querySelector('[data-role="results"]'),
       stockBreakdown: overlay.querySelector('[data-field="piece-stock-breakdown"]'),
-      selectionSummary: overlay.querySelector('[data-field="piece-selection"]')
+      selectionSummary: overlay.querySelector('[data-field="piece-selection"]'),
+      selectionCounter: overlay.querySelector('[data-field="selection-counter"]'),
+      selectionRemaining: overlay.querySelector('[data-field="selection-remaining"]')
     };
     overlay.querySelectorAll('[data-action="close"]').forEach(btn => btn.addEventListener('click', closeReplaceModal));
     replaceModalRefs.confirmBtn?.addEventListener('click', handleReplaceModalConfirm);
@@ -870,6 +943,7 @@
       replaceModalState.searchTerm = '';
       replaceModalState.variants = [];
       replaceModalState.selections = new Map();
+      replaceModalState.activeVariantKey = null;
       replaceModalState.loadingVariants = null;
       replaceModalState.variantsLoadedForRowId = null;
       clearCommittedSelections();
@@ -920,12 +994,20 @@
     currentReplaceIndex = -1;
     updateReplaceModalConfirmButton();
     updateCommitButtonState();
+    updateSelectionStatusCounter(0, 0, 0);
+    replaceModalState.activeVariantKey = null;
   }
 
   function handleReplaceModalKey(e) {
-    if (e.key === 'Escape' && replaceModalRefs && !replaceModalRefs.overlay.classList.contains('hidden')) {
-      closeReplaceModal();
+    if (e.key !== 'Escape') return;
+    if (!replaceModalRefs || replaceModalRefs.overlay.classList.contains('hidden')) return;
+    if (hasPendingSelections()) {
+      if (clearAllStaging()) {
+        renderReplaceModalList({ skipReload: true });
+      }
+      return;
     }
+    closeReplaceModal();
   }
 
   function renderReplaceModalSummary() {
@@ -1009,64 +1091,6 @@
 
   }
 
-  async function applyQuantityChange(variant, desiredQty, options = {}) {
-    const row = rows[currentReplaceIndex];
-    if (!row) return;
-    const requiredQty = Number(row.qtd || row.quantidade || 0) || 0;
-    const sanitized = Math.max(0, Math.floor(Number(desiredQty) || 0));
-    const selections = ensureSelectionMap();
-    const baseMax = variant.type === 'produce'
-      ? requiredQty
-      : Math.min(requiredQty, Math.floor(Number(variant.available) || 0));
-    const targetQty = Math.min(baseMax, sanitized);
-    selections.delete(variant.key);
-    let finalQty = 0;
-    if (targetQty > 0) {
-      finalQty = rebalanceSelectionsForVariant(variant, targetQty, requiredQty);
-    }
-    if (finalQty > 0) selections.set(variant.key, finalQty);
-    else selections.delete(variant.key);
-    enforceSelectionLimits(requiredQty);
-    const focus = options.focus ? { ...options.focus } : null;
-    await renderReplaceModalList({ skipReload: true, focus });
-  }
-
-  async function applyTotalQuantityChange(variant, desiredTotal, options = {}) {
-    const row = rows[currentReplaceIndex];
-    if (!row) return;
-    const requiredQty = Number(row.qtd || row.quantidade || 0) || 0;
-    const sanitizedTotal = Math.max(0, Math.floor(Number(desiredTotal) || 0));
-    if (sanitizedTotal > 0) {
-      const selections = ensureSelectionMap();
-      selections.forEach((qty, key) => {
-        if (key !== variant.key && sanitizePositiveInt(qty) > 0) {
-          selections.delete(key);
-        }
-      });
-    }
-    const baseMax = variant.type === 'produce'
-      ? requiredQty
-      : Math.min(requiredQty, Math.floor(Number(variant.available) || 0));
-    const committedQty = getCommittedQuantity(variant.key);
-    const currentQty = getSelectionQuantity(variant.key);
-    const totalQty = committedQty + currentQty;
-    const totalWithoutVariant = Math.max(0, getTotalSelectedQuantity() - totalQty);
-    const maxAllowed = Math.max(0, Math.min(baseMax, requiredQty - totalWithoutVariant));
-    const clampedTotal = Math.min(sanitizedTotal, maxAllowed);
-
-    if (clampedTotal < committedQty) {
-      setCommittedQuantity(variant.key, clampedTotal);
-    }
-
-    const updatedCommitted = getCommittedQuantity(variant.key);
-    const desiredCurrent = Math.max(0, clampedTotal - updatedCommitted);
-    await applyQuantityChange(variant, desiredCurrent, options);
-
-    if (clampedTotal === 0) {
-      setCommittedQuantity(variant.key, 0);
-    }
-  }
-
   async function renderReplaceModalList(options = {}) {
     if (!replaceModalRefs) return;
     const { forceReload = false, skipReload = false, focus = null } = options;
@@ -1078,6 +1102,7 @@
       replaceModalState.variants = [];
       updateReplaceModalConfirmButton();
       updateCommitButtonState();
+      updateSelectionStatusCounter(0, 0, 0);
       renderSelectionList();
       return;
     }
@@ -1201,12 +1226,14 @@
 
     container.innerHTML = '';
     const plan = buildSelectionPlan(row);
+    const confirmedTotal = plan.totalSelected;
     const info = document.createElement('div');
     info.className = 'mb-4 text-sm text-gray-300 space-y-1';
+    const selectionClass = confirmedTotal === requiredQty ? 'text-emerald-300' : 'text-amber-300';
     info.innerHTML = `
       <p class="text-gray-200">Quantidade orçada: <span class="text-white font-semibold">${requiredQty.toLocaleString('pt-BR')}</span> un</p>
-      <p class="text-xs text-gray-400">Combine diferentes pontos em estoque e produção para suprir a necessidade do orçamento.</p>
-      <p class="text-xs ${plan.totalSelected === requiredQty ? 'text-emerald-300' : 'text-amber-300'}">Selecionado: ${plan.totalSelected.toLocaleString('pt-BR')} / ${requiredQty.toLocaleString('pt-BR')} un</p>`;
+      <p class="text-xs text-gray-400">Use os botões de + e - para preparar a quantidade e confirme cada tipo para somar ao total.</p>
+      <p class="text-xs ${selectionClass}">Confirmado: ${confirmedTotal.toLocaleString('pt-BR')} / ${requiredQty.toLocaleString('pt-BR')} un</p>`;
     container.appendChild(info);
 
     if (!stockVariants.length) {
@@ -1226,101 +1253,164 @@
 
     const committedTotalOverall = getTotalCommittedQuantity();
     const remainingGlobalCapacity = Math.max(0, requiredQty - committedTotalOverall);
+    updateSelectionStatusCounter(committedTotalOverall, requiredQty, remainingGlobalCapacity);
 
     variantsToRender.forEach(variant => {
       const committedQty = getCommittedQuantity(variant.key);
-      const currentQty = getSelectionQuantity(variant.key);
-      const totalQty = committedQty + currentQty;
-      const totalWithoutVariant = Math.max(0, getTotalSelectedQuantity() - totalQty);
-      const baseMax = variant.type === 'produce'
-        ? requiredQty
-        : Math.min(requiredQty, Math.floor(Number(variant.available) || 0));
-      const budgetRemaining = Math.max(0, requiredQty - totalWithoutVariant);
-      const effectiveMax = Math.max(0, Math.min(baseMax, budgetRemaining));
-      const inputMax = Math.max(totalQty, effectiveMax);
-      const canCommitCurrent = currentQty > 0 && remainingGlobalCapacity > 0;
-      const card = document.createElement('div');
+      const stagingQty = getSelectionQuantity(variant.key);
+      const variantMax = computeVariantMax(variant, requiredQty);
+      const isStaging = stagingQty > 0;
+      const card = document.createElement('article');
       card.className = 'w-full bg-surface/40 border border-white/10 rounded-xl px-4 py-4 transition focus-within:border-primary/60 focus-within:ring-1 focus-within:ring-primary/40 mb-3 last:mb-0';
       card.setAttribute('data-variant-key', variant.key);
-      if (totalQty > 0) {
-        card.classList.add('border-primary', 'ring-1', 'ring-primary/50');
+      const variantLabel = variant.type === 'stock'
+        ? (variant.stage?.lastItemName || 'Tipo de estoque')
+        : 'Produção';
+      if (isStaging) {
+        card.classList.add('border-primary', 'ring-2', 'ring-primary/50', 'bg-primary/10');
+      } else if (committedQty > 0) {
+        card.classList.add('border-primary/40', 'bg-primary/5');
       }
 
+      const confirmedChip = committedQty > 0
+        ? `<span class="inline-flex items-center gap-1 text-xs text-emerald-300 bg-emerald-500/10 border border-emerald-400/40 rounded-full px-2 py-1" data-role="confirmed-chip">Confirmadas: ${committedQty.toLocaleString('pt-BR')} un</span>`
+        : '';
+      const stockLimit = getVariantStockLimit(variant, requiredQty);
+      const stockAvailable = Math.max(0, stockLimit - committedQty);
+      const globalAllowance = Math.max(0, remainingGlobalCapacity + stagingQty);
+
+      let headerHtml = '';
+      let limitHint = '';
+      // Cabeçalho e dicas variam conforme o item utiliza estoque existente ou produção.
       if (variant.type === 'stock') {
         const process = variant.stage?.processName || 'Processo não informado';
         const lastItem = variant.stage?.lastItemName || 'Sem último insumo';
-        const availableTotal = Math.max(0, Math.floor(Number(variant.available || 0)));
-        const remainingInVariant = Math.max(0, availableTotal - totalQty);
-        const badgeClass = remainingInVariant > 0 ? 'badge-success' : 'badge-danger';
-        const badgeLabel = `${remainingInVariant.toLocaleString('pt-BR')} em estoque`;
-        card.innerHTML = `
+        const productCode = variant.product?.codigo ? `<p class="text-xs text-gray-500 mt-1">Código: ${variant.product.codigo}</p>` : '';
+        const badgeClass = stockAvailable > 0 ? 'badge-success' : 'badge-danger';
+        const badgeLabel = `${stockAvailable.toLocaleString('pt-BR')} un disponíveis`;
+        headerHtml = `
           <div class="flex items-start justify-between gap-4">
             <div>
               <p class="text-white font-semibold">${lastItem}</p>
               <p class="text-xs text-gray-400">${process}</p>
-              ${variant.product?.codigo ? `<p class="text-xs text-gray-500 mt-1">Código: ${variant.product.codigo}</p>` : ''}
+              ${productCode}
             </div>
-            <span class="${badgeClass} px-2 py-1 rounded text-xs">${badgeLabel}</span>
-          </div>
-            <div class="mt-3 flex items-center gap-3 flex-wrap md:flex-nowrap">
-              <span class="text-xs text-gray-400 uppercase tracking-wide">Selecionar</span>
-              ${committedQty > 0 ? `<span class="text-[11px] text-emerald-300">Fixado: ${committedQty.toLocaleString('pt-BR')} un</span>` : ''}
-              <div class="flex items-center gap-2">
-                <button type="button" class="js-qty-btn w-8 h-8 rounded-lg bg-white/5 border border-white/10 text-white text-sm flex items-center justify-center" data-step="-1">-</button>
-                <input type="number" inputmode="numeric" min="0" class="w-16 h-8 text-center bg-white/5 border border-white/10 rounded-lg text-white leading-[32px]" data-variant-input="${variant.key}" value="${totalQty}" max="${inputMax}" />
-                <button type="button" class="js-qty-btn w-8 h-8 rounded-lg bg-white/5 border border-white/10 text-white text-sm flex items-center justify-center" data-step="1">+</button>
-                <button type="button" class="js-commit-btn ${canCommitCurrent ? 'btn-primary' : 'hidden'} px-3 py-1 rounded-lg text-xs font-medium text-white" data-variant-key="${variant.key}" ${canCommitCurrent ? '' : 'disabled'}>Confirmar</button>
-              </div>
-            <span class="text-xs text-gray-400 ml-auto whitespace-nowrap">Disp.: ${availableTotal.toLocaleString('pt-BR')} • Orçamento: ${budgetRemaining.toLocaleString('pt-BR')} un</span>
+            <div class="flex flex-col items-end gap-2 text-right">
+              ${confirmedChip}
+              <span class="${badgeClass} px-2 py-1 rounded text-xs">${badgeLabel}</span>
+            </div>
           </div>`;
+        limitHint = `Estoque: ${stockAvailable.toLocaleString('pt-BR')} • Orçamento: ${globalAllowance.toLocaleString('pt-BR')} un`;
       } else {
-        const remaining = budgetRemaining;
-        card.innerHTML = `
+        headerHtml = `
           <div class="flex items-start justify-between gap-4">
             <div>
               <p class="text-white font-semibold">Produzir do zero</p>
               <p class="text-xs text-gray-400 mt-1">Defina o total que deverá seguir para produção.</p>
             </div>
-            <span class="badge-warning px-2 py-1 rounded text-xs">Restante permitido: ${remaining.toLocaleString('pt-BR')} un</span>
-          </div>
-          <div class="mt-3 flex items-center gap-3 flex-wrap md:flex-nowrap">
-            <span class="text-xs text-gray-400 uppercase tracking-wide">Produzir</span>
-            ${committedQty > 0 ? `<span class="text-[11px] text-emerald-300">Fixado: ${committedQty.toLocaleString('pt-BR')} un</span>` : ''}
-            <div class="flex items-center gap-2">
-              <button type="button" class="js-qty-btn w-8 h-8 rounded-lg bg-white/5 border border-white/10 text-white text-sm flex items-center justify-center" data-step="-1">-</button>
-              <input type="number" inputmode="numeric" min="0" class="w-20 h-8 text-center bg-white/5 border border-white/10 rounded-lg text-white leading-[32px]" data-variant-input="${variant.key}" value="${totalQty}" max="${inputMax}" />
-              <button type="button" class="js-qty-btn w-8 h-8 rounded-lg bg-white/5 border border-white/10 text-white text-sm flex items-center justify-center" data-step="1">+</button>
-              <button type="button" class="js-commit-btn ${canCommitCurrent ? 'btn-primary' : 'hidden'} px-3 py-1 rounded-lg text-xs font-medium text-white" data-variant-key="${variant.key}" ${canCommitCurrent ? '' : 'disabled'}>Confirmar</button>
+            <div class="flex flex-col items-end gap-2 text-right">
+              ${confirmedChip}
+              <span class="badge-warning px-2 py-1 rounded text-xs">Orçamento: ${globalAllowance.toLocaleString('pt-BR')} un</span>
             </div>
           </div>`;
+        limitHint = `Orçamento disponível: ${globalAllowance.toLocaleString('pt-BR')} un`;
       }
 
-      const input = card.querySelector(`[data-variant-input="${variant.key}"]`);
-      if (input) {
-        const handleManualChange = async e => {
-          const value = Math.floor(Number(e.target.value) || 0);
-          await applyTotalQuantityChange(variant, value, { focus: { key: variant.key } });
-        };
-        input.addEventListener('input', handleManualChange);
-        input.addEventListener('blur', handleManualChange);
+      const plusDisabled = variantMax <= 0 || stagingQty >= variantMax;
+      const minusDisabled = isStaging ? stagingQty <= 0 : committedQty <= 0;
+      const confirmDisabled = !(isStaging && stagingQty > 0 && stagingQty <= variantMax);
+      const confirmText = isStaging
+        ? `Confirmar ${stagingQty.toLocaleString('pt-BR')} un`
+        : 'Confirmar';
+      const minusAriaLabel = isStaging
+        ? `Remover unidade em edição para ${variantLabel}`
+        : `Remover unidade confirmada de ${variantLabel}`;
+      const plusAriaLabel = `Adicionar unidade para ${variantLabel}`;
+
+      const confirmAria = isStaging
+        ? `Confirmar ${stagingQty.toLocaleString('pt-BR')} unidades em ${variantLabel}`
+        : `Confirmar seleção de ${variantLabel}`;
+
+      card.innerHTML = `
+        ${headerHtml}
+        <div class="mt-3 flex flex-wrap items-center gap-3">
+          <div class="flex items-center gap-2">
+            <button type="button" class="w-8 h-8 rounded-lg bg-white/5 border border-white/10 text-white text-sm flex items-center justify-center ${minusDisabled ? 'opacity-40 cursor-not-allowed' : ''}" data-role="decrement" ${minusDisabled ? 'disabled' : ''} aria-label="${minusAriaLabel}">-</button>
+            <input type="number" inputmode="numeric" min="0" class="w-20 h-8 text-center bg-white/5 border border-white/10 rounded-lg text-white leading-[32px]" data-role="quantity-input" data-variant-key="${variant.key}" value="${stagingQty}" max="${Math.max(stagingQty, variantMax)}" aria-label="Quantidade em edição para ${variantLabel}" />
+            <button type="button" class="w-8 h-8 rounded-lg bg-white/5 border border-white/10 text-white text-sm flex items-center justify-center ${plusDisabled ? 'opacity-40 cursor-not-allowed' : ''}" data-role="increment" ${plusDisabled ? 'disabled' : ''} aria-label="${plusAriaLabel}">+</button>
+          </div>
+          <button type="button" class="px-3 py-1 rounded-lg text-xs font-medium text-white ${confirmDisabled ? 'btn-primary opacity-60 cursor-not-allowed' : 'btn-primary'}" data-role="confirm" data-variant-key="${variant.key}" ${confirmDisabled ? 'disabled' : ''} aria-label="${confirmAria}">${confirmText}</button>
+          <span class="text-xs text-gray-400 ml-auto">${limitHint}</span>
+        </div>`;
+
+      const decrementBtn = card.querySelector('[data-role="decrement"]');
+      if (decrementBtn) {
+        decrementBtn.addEventListener('click', e => {
+          e.preventDefault();
+          e.stopPropagation();
+          const currentStaging = getSelectionQuantity(variant.key);
+          if (currentStaging > 0) {
+            const next = Math.max(0, currentStaging - 1);
+            updateStagingQuantityForVariant(variant, next, { focus: { key: variant.key, select: true } });
+          } else {
+            reduceConfirmedQuantity(variant.key, 1);
+          }
+        });
       }
-      card.querySelectorAll('.js-qty-btn').forEach(btn => {
-        btn.addEventListener('click', async e => {
+
+      const incrementBtn = card.querySelector('[data-role="increment"]');
+      if (incrementBtn) {
+        incrementBtn.addEventListener('click', e => {
           e.preventDefault();
           e.stopPropagation();
-          const step = Number(btn.dataset.step || 0);
-          const nextValue = step > 0 ? totalQty + step : 0;
-          await applyTotalQuantityChange(variant, nextValue, { focus: { key: variant.key, select: true } });
+          incrementStagingQuantity(variant, 1);
         });
-      });
-      card.querySelectorAll('.js-commit-btn').forEach(btn => {
-        btn.addEventListener('click', e => {
+      }
+
+      const input = card.querySelector('[data-role="quantity-input"]');
+      if (input) {
+        input.addEventListener('focus', () => {
+          clearOtherStaging(variant.key);
+          setActiveVariantKey(variant.key);
+        });
+        input.addEventListener('input', e => {
+          const value = Math.max(0, Math.floor(Number(e.target.value) || 0));
+          updateStagingQuantityForVariant(variant, value, { focus: { key: variant.key } });
+        });
+        input.addEventListener('keydown', e => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            confirmStagingForVariant(variant.key);
+          } else if (e.key === 'Escape') {
+            e.preventDefault();
+            if (clearStagingForVariant(variant.key)) {
+              renderReplaceModalList({ skipReload: true });
+            }
+          }
+        });
+      }
+
+      const confirmBtn = card.querySelector('[data-role="confirm"]');
+      if (confirmBtn) {
+        confirmBtn.addEventListener('click', e => {
           e.preventDefault();
           e.stopPropagation();
-          const key = btn.getAttribute('data-variant-key');
-          commitVariantSelection(key);
+          confirmStagingForVariant(variant.key);
         });
+      }
+
+      card.addEventListener('focusin', () => {
+        setActiveVariantKey(variant.key);
       });
+      card.addEventListener('focusout', e => {
+        const related = e.relatedTarget;
+        if (related && card.contains(related)) return;
+        if (getSelectionQuantity(variant.key) > 0) {
+          clearStagingForVariant(variant.key);
+          renderReplaceModalList({ skipReload: true });
+        }
+      });
+
       container.appendChild(card);
     });
 
@@ -1329,7 +1419,7 @@
     updateCommitButtonState();
 
     if (focus?.key) {
-      const targetInput = container.querySelector(`[data-variant-input="${focus.key}"]`);
+      const targetInput = container.querySelector(`[data-role="quantity-input"][data-variant-key="${focus.key}"]`);
       if (targetInput) {
         targetInput.focus();
         if (focus.select) targetInput.select();
@@ -1351,6 +1441,8 @@
 
     if (requiredQty <= 0) {
       label = 'Quantidade inválida';
+    } else if (hasPendingSelections()) {
+      label = 'Conclua as edições pendentes';
     } else if (totalSelected === requiredQty) {
       disabled = false;
       label = 'Confirmar Substituição';
@@ -1377,97 +1469,28 @@
   }
 
   function handleCommitSelection() {
-    if (currentReplaceIndex < 0) return;
-    const row = rows[currentReplaceIndex];
-    if (!row) return;
-    const requiredQty = Number(row.qtd || row.quantidade || 0) || 0;
-    if (!(requiredQty > 0)) return;
-    const selections = ensureSelectionMap();
-    if (!selections.size) return;
-
-    let committedTotal = getTotalCommittedQuantity();
-    let remaining = Math.max(0, requiredQty - committedTotal);
-    if (!(remaining > 0)) {
-      selections.clear();
-      renderReplaceModalList({ skipReload: true });
-      return;
-    }
-
-    let anyCommitted = false;
-    const ordered = Array.from(selections.entries());
-    for (const [key, qty] of ordered) {
-      const variant = getVariantByKey(key);
-      if (!variant) continue;
-      const sanitized = sanitizePositiveInt(qty);
-      if (!sanitized) continue;
-      const baseMax = variant.type === 'produce'
-        ? requiredQty
-        : Math.min(requiredQty, Math.floor(Number(variant.available) || 0));
-      remaining = Math.max(0, requiredQty - getTotalCommittedQuantity());
-      if (!(remaining > 0)) break;
-      const finalQty = Math.min(baseMax, sanitized, remaining);
-      if (!(finalQty > 0)) continue;
-      addCommittedQuantity(variant.key, finalQty);
-      anyCommitted = true;
-    }
-
-    selections.clear();
-    enforceSelectionLimits(requiredQty);
-    renderReplaceModalList({ skipReload: true });
-    if (anyCommitted) {
-      renderReplaceModalSummary();
-      updateReplaceModalConfirmButton();
+    const activeKey = getActiveVariantKey();
+    if (!activeKey) return;
+    if (getSelectionQuantity(activeKey) > 0) {
+      confirmStagingForVariant(activeKey);
     }
   }
 
   function commitVariantSelection(variantKey) {
     if (!variantKey) return;
-    if (currentReplaceIndex < 0) return;
-    const row = rows[currentReplaceIndex];
-    if (!row) return;
-    const variant = getVariantByKey(variantKey);
-    if (!variant) return;
-
-    const selections = ensureSelectionMap();
-    const currentQty = sanitizePositiveInt(selections.get(variantKey));
-    if (!currentQty) return;
-
-    const requiredQty = Number(row.qtd || row.quantidade || 0) || 0;
-    if (!(requiredQty > 0)) {
-      selections.delete(variantKey);
-      renderReplaceModalList({ skipReload: true });
-      return;
-    }
-
-    const baseMax = variant.type === 'produce'
-      ? requiredQty
-      : Math.min(requiredQty, Math.floor(Number(variant.available) || 0));
-    const remainingCapacity = Math.max(0, requiredQty - getTotalCommittedQuantity());
-    const finalQty = Math.min(baseMax, currentQty, remainingCapacity);
-
-    if (!(finalQty > 0)) {
-      selections.delete(variantKey);
-      renderReplaceModalList({ skipReload: true });
-      return;
-    }
-
-    addCommittedQuantity(variantKey, finalQty);
-    const leftover = Math.max(0, currentQty - finalQty);
-    if (leftover > 0) selections.set(variantKey, leftover);
-    else selections.delete(variantKey);
-
-    enforceSelectionLimits(requiredQty);
-    renderReplaceModalList({ skipReload: true, focus: { key: variantKey } });
+    confirmStagingForVariant(variantKey);
   }
 
   function handleReplaceModalPointerDown(e) {
     if (!hasPendingSelections()) return;
+    const activeKey = getActiveVariantKey();
+    if (!activeKey) return;
     const target = e.target;
-    if (target && target.closest('[data-variant-key]')) return;
+    const card = target ? target.closest('[data-variant-key]') : null;
+    if (card && card.getAttribute('data-variant-key') === activeKey) return;
     setTimeout(() => {
-      if (!hasPendingSelections()) return;
-      const cleared = clearPendingSelections();
-      if (cleared) {
+      if (getSelectionQuantity(activeKey) > 0) {
+        clearStagingForVariant(activeKey);
         renderReplaceModalList({ skipReload: true });
       }
     }, 0);
