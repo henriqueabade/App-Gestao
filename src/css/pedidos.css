@@ -201,47 +201,26 @@ input[type="date"]:valid::-webkit-datetime-edit {
 }
 
 #pedidoItens {
-    table-layout: auto;
+    table-layout: fixed;
+    width: 100%;
 }
 
 #pedidoItens th,
 #pedidoItens td {
     text-align: left;
+    white-space: normal;
+    min-width: 0;
+    word-break: break-word;
 }
 
 #pedidoItens th:first-child,
 #pedidoItens td:first-child {
     width: 24%;
-    min-width: 200px;
-    white-space: normal;
-}
-
-#pedidoItens th:not(:first-child),
-#pedidoItens td:not(:first-child) {
-    white-space: nowrap;
-}
-
-#pedidoItens th:nth-child(2),
-#pedidoItens td:nth-child(2) {
-    min-width: 80px;
-}
-
-#pedidoItens th:nth-child(3),
-#pedidoItens td:nth-child(3),
-#pedidoItens th:nth-child(4),
-#pedidoItens td:nth-child(4),
-#pedidoItens th:nth-child(5),
-#pedidoItens td:nth-child(5),
-#pedidoItens th:nth-child(6),
-#pedidoItens td:nth-child(6) {
-    min-width: 150px;
 }
 
 #pedidoItens th:last-child,
 #pedidoItens td:last-child {
     text-align: center;
-    min-width: 120px;
-    white-space: nowrap;
 }
 
 .icon-disabled {
