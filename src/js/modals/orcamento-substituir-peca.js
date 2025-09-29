@@ -98,15 +98,6 @@
       .toLowerCase();
   };
 
-  const buildGroupKey = (name, id) => {
-    const normalized = normalizeText(name || '');
-    const base = normalized.split('-')[0]?.trim() || '';
-    const clean = base.replace(/[^a-z0-9]+/g, ' ').trim();
-    if (clean) return clean;
-    if (id != null) return `id-${id}`;
-    return '';
-  };
-
   const sanitizePositiveInt = value => {
     const num = Math.floor(Number(value) || 0);
     return Number.isFinite(num) && num > 0 ? num : 0;
@@ -346,15 +337,6 @@
     replaceModalState.activeVariantKey = null;
     updateCommitButtonState();
     return changed;
-  };
-
-  const reduceConfirmedQuantity = (key, amount) => {
-    const sanitized = sanitizePositiveInt(amount);
-    if (!sanitized) return;
-    const current = getCommittedQuantity(key);
-    const next = Math.max(0, current - sanitized);
-    setCommittedQuantity(key, next);
-    updateReplaceModalConfirmButton();
   };
 
   const confirmStagingForVariant = key => {
@@ -630,15 +612,27 @@
       const plan = buildSelectionPlan(row);
       if (plan.totalSelected > 0) {
         selectionContainer.classList.remove('hidden');
+        const remaining = Math.max(0, plan.requiredQty - plan.totalSelected);
+        const statusClass = plan.totalSelected === plan.requiredQty ? 'text-emerald-300' : 'text-amber-300';
         let html = `
-          <div class="flex items-center justify-between text-sm text-white font-semibold">
-            <span>Seleção atual</span>
-            <span>${plan.totalSelected.toLocaleString('pt-BR')} de ${plan.requiredQty.toLocaleString('pt-BR')} un</span>
+          <div class="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <h4 class="text-white font-semibold text-base">Nova seleção</h4>
+              <p class="text-xs text-gray-400 mt-1">Resumo das peças confirmadas para substituir.</p>
+            </div>
+            <div class="text-right">
+              <p class="text-sm text-white font-semibold">${plan.totalSelected.toLocaleString('pt-BR')} de ${plan.requiredQty.toLocaleString('pt-BR')} un</p>
+              <p class="text-xs ${statusClass}">Restante: ${remaining.toLocaleString('pt-BR')} un</p>
+            </div>
           </div>`;
         const listHtml = buildVariantSummaryListHTML(plan.stock, row, { showCurrentBadge: true });
-        if (listHtml) html += listHtml;
         const produceHtml = buildProduceSummaryHTML(plan.produceQty);
-        if (produceHtml) html += produceHtml;
+        const sections = [];
+        if (listHtml) sections.push(listHtml);
+        if (produceHtml) sections.push(produceHtml);
+        if (sections.length) {
+          html += `<div class="space-y-3 pt-3 border-t border-white/10">${sections.join('')}</div>`;
+        }
         selectionContainer.innerHTML = html;
       } else {
         selectionContainer.classList.add('hidden');
@@ -679,23 +673,14 @@
       replaceModalState.variants = [];
       const loadPromise = (async () => {
         const candidates = [];
-        if (rowProductId) {
-          const sameId = productList.find(prod => Number(prod.id) === rowProductId);
-          if (sameId) candidates.push(sameId);
-        }
         if (rowProductCode) {
           productList.filter(prod => normalizeCode(prod.codigo) === rowProductCode).forEach(prod => {
             if (!candidates.includes(prod)) candidates.push(prod);
           });
         }
-        if (row.nome) {
-          const groupKey = buildGroupKey(row.nome, row.produto_id);
-          productList.filter(prod => buildGroupKey(prod.nome, prod.id) === groupKey).forEach(prod => {
-            if (!candidates.includes(prod)) candidates.push(prod);
-          });
-        }
-        if (!candidates.length) {
-          candidates.push(...productList);
+        if (!candidates.length && rowProductId) {
+          const sameId = productList.find(prod => Number(prod.id) === rowProductId);
+          if (sameId) candidates.push(sameId);
         }
         const unique = new Map();
         candidates.forEach(prod => unique.set(prod.id, prod));
@@ -831,6 +816,8 @@
       const stagingQty = getSelectionQuantity(variant.key);
       const variantMax = computeVariantMax(variant, requiredQty);
       const isStaging = stagingQty > 0;
+      const displayedQty = isStaging ? stagingQty : committedQty;
+      const quantityState = isStaging ? 'editing' : (committedQty > 0 ? 'committed' : 'idle');
       const card = document.createElement('article');
       card.className = 'w-full bg-surface/40 border border-white/10 rounded-xl px-4 py-4 transition focus-within:border-primary/60 focus-within:ring-1 focus-within:ring-primary/40 mb-3 last:mb-0';
       card.setAttribute('data-variant-key', variant.key);
@@ -849,6 +836,17 @@
       const stockLimit = getVariantStockLimit(variant, requiredQty);
       const stockAvailable = Math.max(0, stockLimit - committedQty);
       const globalAllowance = Math.max(0, remainingGlobalCapacity + stagingQty);
+
+      const quantityClasses = ['w-20', 'h-8', 'text-center', 'rounded-lg', 'leading-[32px]'];
+      let quantityAttributes = '';
+      if (quantityState === 'committed') {
+        quantityClasses.push('bg-white/5', 'border', 'border-white/5', 'text-gray-300', 'opacity-70', 'pointer-events-none');
+        quantityAttributes = 'readonly aria-readonly="true" tabindex="-1"';
+      } else {
+        quantityClasses.push('bg-white/5', 'border', 'border-white/10', 'text-white');
+      }
+      const quantityAttributeString = quantityAttributes ? ` ${quantityAttributes}` : '';
+      const inputMax = Math.max(stagingQty, variantMax, committedQty);
 
       let headerHtml = '';
       let limitHint = '';
@@ -887,14 +885,14 @@
       }
 
       const plusDisabled = variantMax <= 0 || stagingQty >= variantMax;
-      const minusDisabled = isStaging ? stagingQty <= 0 : committedQty <= 0;
+      const minusDisabled = quantityState === 'editing' ? stagingQty <= 0 : committedQty <= 0;
       const confirmDisabled = !(isStaging && stagingQty > 0 && stagingQty <= variantMax);
       const confirmText = isStaging
         ? `Confirmar ${stagingQty.toLocaleString('pt-BR')} un`
         : 'Confirmar';
       const minusAriaLabel = isStaging
-        ? `Remover unidade em edição para ${variantLabel}`
-        : `Remover unidade confirmada de ${variantLabel}`;
+        ? `Limpar quantidade em edição para ${variantLabel}`
+        : `Remover quantidade confirmada de ${variantLabel}`;
       const plusAriaLabel = `Adicionar unidade para ${variantLabel}`;
 
       const confirmAria = isStaging
@@ -906,7 +904,7 @@
         <div class="mt-3 flex flex-wrap items-center gap-3">
           <div class="flex items-center gap-2">
             <button type="button" class="w-8 h-8 rounded-lg bg-white/5 border border-white/10 text-white text-sm flex items-center justify-center ${minusDisabled ? 'opacity-40 cursor-not-allowed' : ''}" data-role="decrement" ${minusDisabled ? 'disabled' : ''} aria-label="${minusAriaLabel}">-</button>
-            <input type="number" inputmode="numeric" min="0" class="w-20 h-8 text-center bg-white/5 border border-white/10 rounded-lg text-white leading-[32px]" data-role="quantity-input" data-variant-key="${variant.key}" value="${stagingQty}" max="${Math.max(stagingQty, variantMax)}" aria-label="Quantidade em edição para ${variantLabel}" />
+            <input type="number" inputmode="numeric" min="0" class="${quantityClasses.join(' ')}" data-role="quantity-input" data-variant-key="${variant.key}" value="${displayedQty}" max="${inputMax}" aria-label="Quantidade em edição para ${variantLabel}"${quantityAttributeString} />
             <button type="button" class="w-8 h-8 rounded-lg bg-white/5 border border-white/10 text-white text-sm flex items-center justify-center ${plusDisabled ? 'opacity-40 cursor-not-allowed' : ''}" data-role="increment" ${plusDisabled ? 'disabled' : ''} aria-label="${plusAriaLabel}">+</button>
           </div>
           <button type="button" class="px-3 py-1 rounded-lg text-xs font-medium text-white ${confirmDisabled ? 'btn-primary opacity-60 cursor-not-allowed' : 'btn-primary'}" data-role="confirm" data-variant-key="${variant.key}" ${confirmDisabled ? 'disabled' : ''} aria-label="${confirmAria}">${confirmText}</button>
@@ -920,10 +918,11 @@
           e.stopPropagation();
           const currentStaging = getSelectionQuantity(variant.key);
           if (currentStaging > 0) {
-            const next = Math.max(0, currentStaging - 1);
-            updateStagingQuantityForVariant(variant, next, { focus: { key: variant.key, select: true } });
-          } else {
-            reduceConfirmedQuantity(variant.key, 1);
+            clearStagingForVariant(variant.key);
+            renderReplaceModalList({ skipReload: true });
+          } else if (getCommittedQuantity(variant.key) > 0) {
+            setCommittedQuantity(variant.key, 0);
+            updateReplaceModalConfirmButton();
             renderReplaceModalList({ skipReload: true });
           }
         });
@@ -962,6 +961,10 @@
 
       container.appendChild(card);
     });
+
+    updateReplaceModalConfirmButton();
+    updateCommitButtonState();
+    renderReplaceModalSummary();
   }
 
   function updateReplaceModalConfirmButton() {
