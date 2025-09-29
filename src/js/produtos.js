@@ -87,8 +87,8 @@ function criarLinhaProduto(produto, index) {
                     ${statusText}
                 </span>
             </td>
-            <td class="px-6 py-4 whitespace-nowrap text-center action-cell">
-                <div class="flex items-center justify-center space-x-2">
+            <td class="px-6 py-4 whitespace-nowrap text-left action-cell">
+                <div class="flex items-center justify-start space-x-2">
                     <i class="fas fa-eye w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" data-action="view" data-index="${index}" title="Visualizar" style="color: var(--color-primary)"></i>
                     <i class="fas fa-edit w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" data-action="edit" data-index="${index}" title="Editar" style="color: var(--color-primary)"></i>
                     <i class="fas fa-trash w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10 hover:text-white" data-action="delete" data-index="${index}" title="Excluir" style="color: var(--color-red)"></i>

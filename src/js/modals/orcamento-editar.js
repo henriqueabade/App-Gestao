@@ -450,8 +450,8 @@
     const valVal = valCell.textContent.trim();
     const descVal = descCell.textContent.trim();
 
-    qtyCell.innerHTML = `<input type="number" class="w-16 bg-input border border-inputBorder rounded px-2 py-1 text-white text-xs text-center focus:border-primary focus:ring-1 focus:ring-primary/50 transition" value="${qtyVal}" min="1">`;
-    descCell.innerHTML = `<input type="number" class="w-16 bg-input border border-inputBorder rounded px-2 py-1 text-white text-xs text-center focus:border-primary focus:ring-1 focus:ring-primary/50 transition" value="${descVal}" min="0" step="0.01">`;
+    qtyCell.innerHTML = `<input type="number" class="w-16 bg-input border border-inputBorder rounded px-2 py-1 text-white text-xs text-left focus:border-primary focus:ring-1 focus:ring-primary/50 transition" value="${qtyVal}" min="1">`;
+    descCell.innerHTML = `<input type="number" class="w-16 bg-input border border-inputBorder rounded px-2 py-1 text-white text-xs text-left focus:border-primary focus:ring-1 focus:ring-primary/50 transition" value="${descVal}" min="0" step="0.01">`;
 
     actionsCell.innerHTML = `
       <i class="fas fa-check w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10 text-green-400"></i>
@@ -531,12 +531,12 @@
       if (item.id) tr.dataset.id = item.id;
     tr.innerHTML = `
         <td class="text-left text-white" title="${escapeAttr(item.nome)}">${item.nome}</td>
-        <td class="text-center text-white">${item.qtd}</td>
-        <td class="text-right text-white">${item.valor.toFixed(2)}</td>
-        <td class="text-right text-white">0.00</td>
-        <td class="text-center text-white">${defaultDesc.toFixed(2)}</td>
-        <td class="text-right text-white total-cell"></td>
-        <td class="text-center actions-cell">
+        <td class="text-left text-white">${item.qtd}</td>
+        <td class="text-left text-white">${item.valor.toFixed(2)}</td>
+        <td class="text-left text-white">0.00</td>
+        <td class="text-left text-white">${defaultDesc.toFixed(2)}</td>
+        <td class="text-left text-white total-cell"></td>
+        <td class="text-left actions-cell">
           <i class="fas fa-edit w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)"></i>
           <i class="fas fa-trash w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10 text-red-400"></i>
         </td>

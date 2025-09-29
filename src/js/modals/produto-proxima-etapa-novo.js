@@ -41,7 +41,7 @@
   function renderActions(item){
     const cell = item.row.querySelector('.action-cell');
     cell.innerHTML = `
-      <div class="flex items-center justify-center space-x-2">
+      <div class="flex items-center justify-start space-x-2">
         <i class="fas fa-edit w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10 edit-item" style="color: var(--color-primary)" title="Editar"></i>
         <i class="fas fa-trash w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10 hover:text-white delete-item" style="color: var(--color-red)" title="Excluir"></i>
       </div>`;
@@ -54,7 +54,7 @@
     const original = item.quantidade;
     cell.innerHTML = `
       <div class="flex items-center justify-center space-x-1">
-        <input type="number" step="0.01" class="w-20 bg-input border border-inputBorder rounded text-white text-sm text-center" value="${formatNumber(item.quantidade)}">
+        <input type="number" step="0.01" class="w-20 bg-input border border-inputBorder rounded text-white text-sm text-left" value="${formatNumber(item.quantidade)}">
         <i class="fas fa-check w-5 h-5 cursor-pointer p-1 rounded text-green-400 confirm-edit"></i>
         <i class="fas fa-times w-5 h-5 cursor-pointer p-1 rounded text-red-400 cancel-edit"></i>
       </div>`;
@@ -75,7 +75,7 @@
   function startDelete(item){
     const cell = item.row.querySelector('.action-cell');
     cell.innerHTML = `
-      <div class="flex items-center justify-center space-x-2">
+      <div class="flex items-center justify-start space-x-2">
         <i class="fas fa-check w-5 h-5 cursor-pointer p-1 rounded text-green-400 confirm-del"></i>
         <i class="fas fa-times w-5 h-5 cursor-pointer p-1 rounded text-red-400 cancel-del"></i>
       </div>`;
@@ -94,11 +94,11 @@
     tr.className = 'border-b border-white/5 item-row';
     tr.innerHTML = `
       <td class="py-4 px-4 text-white">${item.nome}</td>
-      <td class="py-4 px-4 text-center quantidade-cell"><span class="quantidade-text">${formatNumber(item.quantidade)}</span></td>
-      <td class="py-4 px-4 text-center text-gray-300">${item.unidade || ''}</td>
-      <td class="py-4 px-4 text-right text-white">${formatCurrency(item.preco_unitario)}</td>
-      <td class="py-4 px-4 text-right text-white item-total">${formatCurrency(item.quantidade * item.preco_unitario)}</td>
-      <td class="py-4 px-4 text-center action-cell"></td>`;
+      <td class="py-4 px-4 text-left quantidade-cell"><span class="quantidade-text">${formatNumber(item.quantidade)}</span></td>
+      <td class="py-4 px-4 text-left text-gray-300">${item.unidade || ''}</td>
+      <td class="py-4 px-4 text-left text-white">${formatCurrency(item.preco_unitario)}</td>
+      <td class="py-4 px-4 text-left text-white item-total">${formatCurrency(item.quantidade * item.preco_unitario)}</td>
+      <td class="py-4 px-4 text-left action-cell"></td>`;
     tabelaBody.appendChild(tr);
     item.row = tr;
     item.totalEl = tr.querySelector('.item-total');

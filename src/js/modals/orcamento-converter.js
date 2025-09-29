@@ -370,14 +370,14 @@
 
       tr.innerHTML = `
         <td class="py-3 px-2 text-white">${r.nome || ''}</td>
-        <td class="py-3 px-2 text-center text-white">${r.qtd}</td>
-        <td class="py-3 px-2 text-center text-white">${r.em_estoque ?? 0}</td>
-        <td class="py-3 px-2 text-center text-white">${r.pronta ?? 0}</td>
-        <td class="py-3 px-2 text-center text-white">${r.produzir_total ?? 0}</td>
-        <td class="py-3 px-2 text-center text-white">${r.produzir_parcial ?? 0} ${infoSpan}</td>
-        <td class="py-3 px-2 text-center">${statusHtml}</td>
-        <td class="py-3 px-2 text-center">
-          <div class="flex justify-center gap-1">
+        <td class="py-3 px-2 text-left text-white">${r.qtd}</td>
+        <td class="py-3 px-2 text-left text-white">${r.em_estoque ?? 0}</td>
+        <td class="py-3 px-2 text-left text-white">${r.pronta ?? 0}</td>
+        <td class="py-3 px-2 text-left text-white">${r.produzir_total ?? 0}</td>
+        <td class="py-3 px-2 text-left text-white">${r.produzir_parcial ?? 0} ${infoSpan}</td>
+        <td class="py-3 px-2 text-left">${statusHtml}</td>
+        <td class="py-3 px-2 text-left">
+          <div class="flex justify-start gap-1">
             ${viewButtonHtml}
             ${replaceButtonHtml}
             ${toggleButtonHtml}
@@ -780,12 +780,12 @@ async function computeInsumosAndRender(){
         }
         tr.innerHTML = `
           <td class="py-3 px-2 text-white">${v.nome}</td>
-          <td class="py-3 px-2 text-center text-gray-300">${v.un || stock.unidade || ''}</td>
-          <td class="py-3 px-2 text-center">${disponivel === Infinity ? '<span class="badge-success px-2 py-0.5 rounded text-[10px]">infinito</span>' : '<span class="text-white">' + disponivel.toLocaleString('pt-BR') + '</span>'}</td>
-          <td class="py-3 px-2 text-center text-white">${Number(v.necessario || 0).toLocaleString('pt-BR')}</td>
-          <td class="py-3 px-2 text-center">${negative ? '<span class="status-alert font-medium" title="Saldo previsto negativo">' + saldo.toLocaleString('pt-BR') + '</span>' : (saldo === Infinity ? '<span class="badge-success px-2 py-0.5 rounded text-[10px]">infinito</span>' : '<span class="status-ok font-medium">' + saldo.toLocaleString('pt-BR') + '</span>')}</td>
-          <td class="py-3 px-2 text-center text-white">${v.etapa || '-'}</td>
-          <td class="py-3 px-2 text-center text-white">${flags.join(' ')}</td>`;
+          <td class="py-3 px-2 text-left text-gray-300">${v.un || stock.unidade || ''}</td>
+          <td class="py-3 px-2 text-left">${disponivel === Infinity ? '<span class="badge-success px-2 py-0.5 rounded text-[10px]">infinito</span>' : '<span class="text-white">' + disponivel.toLocaleString('pt-BR') + '</span>'}</td>
+          <td class="py-3 px-2 text-left text-white">${Number(v.necessario || 0).toLocaleString('pt-BR')}</td>
+          <td class="py-3 px-2 text-left">${negative ? '<span class="status-alert font-medium" title="Saldo previsto negativo">' + saldo.toLocaleString('pt-BR') + '</span>' : (saldo === Infinity ? '<span class="badge-success px-2 py-0.5 rounded text-[10px]">infinito</span>' : '<span class="status-ok font-medium">' + saldo.toLocaleString('pt-BR') + '</span>')}</td>
+          <td class="py-3 px-2 text-left text-white">${v.etapa || '-'}</td>
+          <td class="py-3 px-2 text-left text-white">${flags.join(' ')}</td>`;
         insumosBody.appendChild(tr);
       });
     } else {
@@ -816,12 +816,12 @@ async function computeInsumosAndRender(){
         }
         tr.innerHTML = `
           <td class="py-3 px-2 text-white">${v.nome}</td>
-          <td class="py-3 px-2 text-center text-gray-300">${v.un || stock.unidade || ''}</td>
-          <td class="py-3 px-2 text-center">${disponivel === Infinity ? '<span class="badge-success px-2 py-0.5 rounded text-[10px]">infinito</span>' : '<span class="text-white">' + disponivel.toLocaleString('pt-BR') + '</span>'}</td>
-          <td class="py-3 px-2 text-center text-white">${Number(v.necessario || 0).toLocaleString('pt-BR')}</td>
-          <td class="py-3 px-2 text-center">${negative ? '<span class="status-alert font-medium" title="Saldo previsto negativo">' + saldo.toLocaleString('pt-BR') + '</span>' : (saldo === Infinity ? '<span class="badge-success px-2 py-0.5 rounded text-[10px]">infinito</span>' : '<span class="status-ok font-medium">' + saldo.toLocaleString('pt-BR') + '</span>')}</td>
-          <td class="py-3 px-2 text-center text-white">${v.etapa || '-'}</td>
-          <td class="py-3 px-2 text-center text-white">${flags.join(' ')}</td>`;
+          <td class="py-3 px-2 text-left text-gray-300">${v.un || stock.unidade || ''}</td>
+          <td class="py-3 px-2 text-left">${disponivel === Infinity ? '<span class="badge-success px-2 py-0.5 rounded text-[10px]">infinito</span>' : '<span class="text-white">' + disponivel.toLocaleString('pt-BR') + '</span>'}</td>
+          <td class="py-3 px-2 text-left text-white">${Number(v.necessario || 0).toLocaleString('pt-BR')}</td>
+          <td class="py-3 px-2 text-left">${negative ? '<span class="status-alert font-medium" title="Saldo previsto negativo">' + saldo.toLocaleString('pt-BR') + '</span>' : (saldo === Infinity ? '<span class="badge-success px-2 py-0.5 rounded text-[10px]">infinito</span>' : '<span class="status-ok font-medium">' + saldo.toLocaleString('pt-BR') + '</span>')}</td>
+          <td class="py-3 px-2 text-left text-white">${v.etapa || '-'}</td>
+          <td class="py-3 px-2 text-left text-white">${flags.join(' ')}</td>`;
         insumosBody.appendChild(tr);
       }
     }
@@ -873,14 +873,14 @@ async function computeInsumosAndRender(){
   document.getElementById('converterDecisionNote')?.addEventListener('input', () => { computeInsumosAndRender(); });
   onlyMissingToggle?.addEventListener('change', () => {
     state.insumosView.mostrarSomenteFaltantes = !!onlyMissingToggle.checked;
-    insumosBody.innerHTML = '<tr><td colspan="7" class="py-6 text-center text-gray-300"><i class="fas fa-sync-alt rotating mr-2"></i>Recarregando...</td></tr>';
+    insumosBody.innerHTML = '<tr><td colspan="7" class="py-6 text-left text-gray-300"><i class="fas fa-sync-alt rotating mr-2"></i>Recarregando...</td></tr>';
     setTimeout(() => { computeInsumosAndRender(); }, 1000);
   });
   insumosReloadBtn?.addEventListener('click', () => {
     state.insumosView.filtroPecaId = null;
     if (onlyMissingToggle) { onlyMissingToggle.checked = false; state.insumosView.mostrarSomenteFaltantes = false; }
     if (insumosTituloPeca) insumosTituloPeca.textContent = 'Totais';
-    insumosBody.innerHTML = '<tr><td colspan="7" class="py-6 text-center text-gray-300"><i class="fas fa-sync-alt rotating mr-2"></i>Recarregando...</td></tr>';
+    insumosBody.innerHTML = '<tr><td colspan="7" class="py-6 text-left text-gray-300"><i class="fas fa-sync-alt rotating mr-2"></i>Recarregando...</td></tr>';
     setTimeout(() => { computeInsumosAndRender(); }, 1000);
   });
 

@@ -424,7 +424,7 @@
     const remaining = recalcRemaining(state);
     if (info.remainingCell) {
       info.remainingCell.textContent = formatNumber(remaining);
-      info.remainingCell.className = `px-4 py-3 text-center text-sm font-semibold ${remaining > 0 ? 'text-orange-200' : 'text-emerald-200'}`;
+      info.remainingCell.className = `px-4 py-3 text-left text-sm font-semibold ${remaining > 0 ? 'text-orange-200' : 'text-emerald-200'}`;
     }
     updateAssignmentsUI(key);
     if (drawer && !drawer.classList.contains('hidden') && currentReallocationKey === key) {
@@ -1133,23 +1133,23 @@
       nameTd.textContent = name;
 
       const qtyTd = document.createElement('td');
-      qtyTd.className = 'px-4 py-3 text-center text-sm text-white';
+      qtyTd.className = 'px-4 py-3 text-left text-sm text-white';
       qtyTd.textContent = formatNumber(quantity);
 
       const remainingTd = document.createElement('td');
-      remainingTd.className = 'px-4 py-3 text-center text-sm font-semibold text-orange-200';
+      remainingTd.className = 'px-4 py-3 text-left text-sm font-semibold text-orange-200';
       remainingTd.textContent = formatNumber(quantity);
 
       const origemTd = document.createElement('td');
-      origemTd.className = 'px-4 py-3 text-center text-sm text-gray-200';
+      origemTd.className = 'px-4 py-3 text-left text-sm text-gray-200';
       origemTd.textContent = origem;
 
       const situacaoTd = document.createElement('td');
-      situacaoTd.className = 'px-4 py-3 text-center text-sm text-gray-200';
+      situacaoTd.className = 'px-4 py-3 text-left text-sm text-gray-200';
       situacaoTd.textContent = situacao;
 
       const actionTd = document.createElement('td');
-      actionTd.className = 'px-4 py-3 text-center text-sm';
+      actionTd.className = 'px-4 py-3 text-left text-sm';
       const actionsWrapper = document.createElement('div');
       actionsWrapper.className = 'flex flex-col items-center gap-3';
 

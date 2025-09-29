@@ -163,8 +163,8 @@ async function carregarPedidos() {
                 <td class="px-6 py-4 whitespace-nowrap text-sm text-white">${valor}</td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-violet)">${condicao}</td>
                 <td class="px-6 py-4 whitespace-nowrap"><span class="${badgeClass} px-3 py-1 rounded-full text-xs font-medium status-badge" data-aprovacao="${p.data_aprovacao || ''}" data-envio="${p.data_envio || ''}" data-entrega="${p.data_entrega || ''}" data-cancelamento="${p.data_cancelamento || ''}">${p.situacao}</span></td>
-                <td class="px-6 py-4 whitespace-nowrap text-center">
-                    <div class="flex items-center justify-center space-x-2">
+                <td class="px-6 py-4 whitespace-nowrap text-left">
+                    <div class="flex items-center justify-start space-x-2">
                         <i class="fas fa-eye w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Visualizar"></i>
                         <i class="fas fa-check w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Concluir"></i>
                         <i class="fas fa-clipboard w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Relatório"></i>

@@ -192,7 +192,7 @@
     if(!tbody) return;
     tbody.innerHTML = '';
     if(!contatos.length){
-      tbody.innerHTML = '<tr><td colspan="6" class="py-12 text-center text-gray-400">Nenhum contato cadastrado</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="6" class="py-12 text-left text-gray-400">Nenhum contato cadastrado</td></tr>';
       return;
     }
     contatos.forEach(c => {
@@ -203,8 +203,8 @@
         <td class="py-4 px-4 text-white">${c.email || ''}</td>
         <td class="py-4 px-4 text-white">${c.telefone_celular || ''}</td>
         <td class="py-4 px-4 text-white">${c.telefone_fixo || ''}</td>
-        <td class="py-4 px-4 text-center text-white">
-          <div class="flex items-center justify-center gap-2">
+        <td class="py-4 px-4 text-left text-white">
+          <div class="flex items-center justify-start gap-2">
             <i class="fas fa-edit w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Editar"></i>
             <i class="fas fa-trash w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10 hover:text-white" style="color: var(--color-red)" title="Excluir"></i>
           </div>
@@ -327,7 +327,7 @@
     if(!tbody) return;
     tbody.innerHTML = '';
     if(!ordens.length){
-      tbody.innerHTML = '<tr><td colspan="6" class="py-12 text-center text-gray-400">Nenhuma ordem encontrada</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="6" class="py-12 text-left text-gray-400">Nenhuma ordem encontrada</td></tr>';
       return;
     }
     const formatCurrency = v => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v || 0);
@@ -338,7 +338,7 @@
         <td class="px-6 py-4 whitespace-nowrap text-sm text-white">${o.tipo}</td>
         <td class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-violet)">${o.inicio || ''}</td>
         <td class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-violet)">${o.condicao || ''}</td>
-        <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-white">${formatCurrency(o.valor)}</td>
+        <td class="px-6 py-4 whitespace-nowrap text-sm text-left text-white">${formatCurrency(o.valor)}</td>
         <td class="px-6 py-4 whitespace-nowrap text-sm text-white">${o.status || ''}</td>`;
       tbody.appendChild(tr);
     });

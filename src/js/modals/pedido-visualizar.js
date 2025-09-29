@@ -192,13 +192,13 @@
       tr.className = 'border-b border-white/10';
       tr.innerHTML = `
         <td class="text-left text-white" title="${escapeAttr(item.nome || '')}">${item.nome || ''}</td>
-        <td class="text-center text-white">${fmtNumber(qtd)}</td>
-        <td class="text-right text-white">${fmtNumber(valorUnit)}</td>
-        <td class="text-right text-white">${fmtNumber(valorUnitDesc)}</td>
-        <td class="text-center text-white">${fmtNumber(descPagPrc + descEspPrc)}</td>
-        <td class="text-right text-white">${fmtCurrency(valorTotal)}</td>
-        <td class="text-center modal-actions-disabled actions-cell">
-          <div class="flex items-center justify-center gap-2">
+        <td class="text-left text-white">${fmtNumber(qtd)}</td>
+        <td class="text-left text-white">${fmtNumber(valorUnit)}</td>
+        <td class="text-left text-white">${fmtNumber(valorUnitDesc)}</td>
+        <td class="text-left text-white">${fmtNumber(descPagPrc + descEspPrc)}</td>
+        <td class="text-left text-white">${fmtCurrency(valorTotal)}</td>
+        <td class="text-left modal-actions-disabled actions-cell">
+          <div class="flex items-center justify-start gap-2">
             <i class="fas fa-edit w-5 h-5 p-1 rounded icon-disabled" style="color: var(--color-primary)"></i>
             <i class="fas fa-trash w-5 h-5 p-1 rounded text-red-400 icon-disabled"></i>
           </div>

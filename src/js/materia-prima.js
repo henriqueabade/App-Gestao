@@ -283,7 +283,7 @@ function renderMateriais(listaMateriais) {
     if (!tbody) return;
     tbody.innerHTML = '';
     const acoes = `
-        <div class="flex items-center justify-center space-x-2">
+        <div class="flex items-center justify-start space-x-2">
             <i class="fas fa-edit w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Editar"></i>
             <i class="fas fa-trash w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10 hover:text-white" style="color: var(--color-red)" title="Excluir"></i>
         </div>`;
@@ -331,7 +331,7 @@ function renderMateriais(listaMateriais) {
             <td class="px-6 py-4 whitespace-nowrap text-base text-white">${quantidadeValor}</td>
             <td class="px-6 py-4 whitespace-nowrap text-base" style="color: var(--color-violet)">${item.unidade || ''}</td>
             <td class="px-6 py-4 whitespace-nowrap text-base text-white">R$ ${preco.toFixed(2).replace('.', ',')}</td>
-            <td class="px-6 py-4 whitespace-nowrap text-base text-center">${acoes}</td>`;
+            <td class="px-6 py-4 whitespace-nowrap text-base text-left">${acoes}</td>`;
         tbody.appendChild(tr);
         const editBtn = tr.querySelector('.fa-edit');
         const delBtn = tr.querySelector('.fa-trash');

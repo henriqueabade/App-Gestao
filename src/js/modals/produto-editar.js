@@ -99,13 +99,13 @@
         // fallback para mostrar mensagem no corpo do modal
         const host = document.getElementById('editarProdutoBody') || overlay;
         const holder = document.createElement('div');
-        holder.className = 'py-4 text-center text-red-400';
+        holder.className = 'py-4 text-left text-red-400';
         holder.textContent = msg;
         host.appendChild(holder);
         console.error('[editar-produto] Sem tbody para renderizar erro:', msg);
         return;
       }
-      tableBody.innerHTML = `<tr><td colspan="6" class="py-4 text-center text-red-400">${msg}</td></tr>`;
+      tableBody.innerHTML = `<tr><td colspan="6" class="py-4 text-left text-red-400">${msg}</td></tr>`;
     }
 
     function showFunctionUnavailableDialog(message){
@@ -311,7 +311,7 @@
     function renderActionButtons(item){
       const actionCell = item.row.querySelector('.action-cell');
       actionCell.innerHTML = `
-        <div class="flex items-center justify-center space-x-2">
+        <div class="flex items-center justify-start space-x-2">
           <i class="fas fa-bars w-5 h-5 cursor-move p-1 rounded drag-handle" style="color: var(--color-pen)" title="Reordenar"></i>
           <i class="fas fa-edit w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10 edit-item" style="color: var(--color-primary)" title="Editar"></i>
           <i class="fas fa-trash w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10 hover:text-white delete-item" style="color: var(--color-red)" title="Excluir"></i>
@@ -324,8 +324,8 @@
       const cell = item.row.querySelector('.quantidade-cell');
       const original = item.quantidade;
       cell.innerHTML = `
-        <div class="flex items-center justify-center space-x-1">
-          <input type="number" step="0.01" class="w-20 bg-input border border-inputBorder rounded text-white text-sm text-center" value="${item.quantidade}">
+        <div class="flex items-center justify-start space-x-1">
+          <input type="number" step="0.01" class="w-20 bg-input border border-inputBorder rounded text-white text-sm text-left" value="${item.quantidade}">
           <i class="fas fa-check w-5 h-5 cursor-pointer p-1 rounded text-green-400 confirm-edit"></i>
           <i class="fas fa-times w-5 h-5 cursor-pointer p-1 rounded text-red-400 cancel-edit"></i>
         </div>`;
@@ -349,7 +349,7 @@
     function startDelete(item){
       const actionCell = item.row.querySelector('.action-cell');
       actionCell.innerHTML = `
-        <div class="flex items-center justify-center space-x-2">
+        <div class="flex items-center justify-start space-x-2">
           <i class="fas fa-check w-5 h-5 cursor-pointer p-1 rounded text-green-400 confirm-del"></i>
           <i class="fas fa-times w-5 h-5 cursor-pointer p-1 rounded text-red-400 cancel-del"></i>
         </div>`;
@@ -390,7 +390,7 @@
 
       if(itens.length === 0){
         const tr = document.createElement('tr');
-        tr.innerHTML = '<td colspan="6" class="py-4 text-center text-gray-400">Nenhum item encontrado</td>';
+        tr.innerHTML = '<td colspan="6" class="py-4 text-left text-gray-400">Nenhum item encontrado</td>';
         tableBody.appendChild(tr);
         updateTotals();
         return;
@@ -416,7 +416,7 @@
       ordenados.forEach(([proc, arr]) => {
         const header = document.createElement('tr');
         header.className = 'process-row';
-        header.innerHTML = `<td colspan="6" class="px-6 py-2 bg-gray-50 border-t border-gray-200 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">${proc}</td>`;
+        header.innerHTML = `<td colspan="6" class="px-6 py-2 bg-gray-50 border-t border-gray-200 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">${proc}</td>`;
         tableBody.appendChild(header);
         processOrder.push(proc);
         processos[proc] = { itens: arr, total: 0 };
@@ -429,11 +429,11 @@
           tr.setAttribute('draggable','true');
           tr.innerHTML = `
             <td class="py-3 px-2 text-sm text-white">${item.nome ?? '—'}</td>
-            <td class="py-3 px-2 text-sm text-center quantidade-cell"><span class="quantidade-text">${formatNumber(item.quantidade)}</span></td>
-            <td class="py-3 px-2 text-sm text-center unidade-cell">${item.unidade ?? '—'}</td>
-            <td class="py-3 px-2 text-sm text-right text-white item-unit">${formatCurrency(item.preco_unitario || 0)}</td>
-            <td class="py-3 px-2 text-sm text-right text-white item-total">${formatCurrency((item.preco_unitario || 0) * (item.quantidade || 0))}</td>
-            <td class="py-3 px-2 text-sm text-center action-cell"></td>`;
+            <td class="py-3 px-2 text-sm text-left quantidade-cell"><span class="quantidade-text">${formatNumber(item.quantidade)}</span></td>
+            <td class="py-3 px-2 text-sm text-left unidade-cell">${item.unidade ?? '—'}</td>
+            <td class="py-3 px-2 text-sm text-left text-white item-unit">${formatCurrency(item.preco_unitario || 0)}</td>
+            <td class="py-3 px-2 text-sm text-left text-white item-total">${formatCurrency((item.preco_unitario || 0) * (item.quantidade || 0))}</td>
+            <td class="py-3 px-2 text-sm text-left action-cell"></td>`;
           tableBody.appendChild(tr);
           item.row = tr;
           item.unitEl = tr.querySelector('.item-unit');
@@ -769,20 +769,20 @@
             if (!tableBody) {
               showError('Estrutura da tabela não encontrada (itens)');
             } else if (itensData.length === 0) {
-              tableBody.innerHTML = '<tr><td colspan="6" class="py-4 text-center text-gray-400">Nenhum item encontrado</td></tr>';
+              tableBody.innerHTML = '<tr><td colspan="6" class="py-4 text-left text-gray-400">Nenhum item encontrado</td></tr>';
             } else {
               tableBody.innerHTML = itensData.map(it => `
                 <tr class="border-b border-white/5">
                   <td class="py-3 px-2 text-white">${it.nome ?? '—'}</td>
-                  <td class="py-3 px-2 text-center">${(Number.isInteger(it.quantidade)? it.quantidade : (parseFloat(it.quantidade)||0).toFixed(2))}</td>
-                  <td class="py-3 px-2 text-center">${it.unidade ?? '—'}</td>
-                  <td class="py-3 px-2 text-right text-white">
+                  <td class="py-3 px-2 text-left">${(Number.isInteger(it.quantidade)? it.quantidade : (parseFloat(it.quantidade)||0).toFixed(2))}</td>
+                  <td class="py-3 px-2 text-left">${it.unidade ?? '—'}</td>
+                  <td class="py-3 px-2 text-left text-white">
                     ${(it.preco_unitario||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'})}
                   </td>
-                  <td class="py-3 px-2 text-right text-white">
+                  <td class="py-3 px-2 text-left text-white">
                     ${(((it.preco_unitario||0)*(it.quantidade||0))).toLocaleString('pt-BR',{style:'currency',currency:'BRL'})}
                   </td>
-                  <td class="py-3 px-2 text-center">—</td>
+                  <td class="py-3 px-2 text-left">—</td>
                 </tr>
               `).join('');
             }
@@ -798,7 +798,7 @@
         const msg = err && err.message ? err.message : 'Erro ao carregar dados';
         if (!tableBody) tableBody = resolveItensTbody();
         if (tableBody) {
-          tableBody.innerHTML = `<tr><td colspan="6" class="py-4 text-center text-red-400">${msg}</td></tr>`;
+          tableBody.innerHTML = `<tr><td colspan="6" class="py-4 text-left text-red-400">${msg}</td></tr>`;
         }
       } finally {
         window.dispatchEvent(new CustomEvent('modalSpinnerLoaded', { detail: 'editarProduto' }));

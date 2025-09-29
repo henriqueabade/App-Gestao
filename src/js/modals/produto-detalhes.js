@@ -42,10 +42,10 @@
         tr.innerHTML = `
           <td class="py-4 px-4 text-gray-300">${d.etapa || ''}</td>
           <td class="py-4 px-4 text-white font-medium">${d.ultimo_item || ''}</td>
-          <td class="py-4 px-4 text-center text-white font-medium">${d.quantidade ?? ''}</td>
+          <td class="py-4 px-4 text-left text-white font-medium">${d.quantidade ?? ''}</td>
           <td class="py-4 px-4 text-gray-300">${formatDateTime(d.data_hora_completa)}</td>
-          <td class="py-4 px-4 text-center">
-            <div class="flex items-center justify-center space-x-2">
+          <td class="py-4 px-4 text-left">
+            <div class="flex items-center justify-start space-x-2">
               <i class="fas fa-edit w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Editar"></i>
               <i class="fas fa-trash w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10 hover:text-white" style="color: var(--color-red)" title="Excluir"></i>
             </div>
@@ -73,7 +73,7 @@
     const qtdCell = tr.children[2];
     const actionsCell = tr.children[4];
     const original = dados.quantidade;
-    qtdCell.innerHTML = `<input type="number" class="w-20 bg-transparent border-b border-white/20 text-center text-white focus:outline-none" value="${original}">`;
+    qtdCell.innerHTML = `<input type="number" class="w-20 bg-transparent border-b border-white/20 text-left text-white focus:outline-none" value="${original}">`;
     actionsCell.innerHTML = `
       <div class="flex items-center justify-center space-x-2">
         <i class="fas fa-check w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-green)" title="Confirmar"></i>
