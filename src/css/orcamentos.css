@@ -28,6 +28,51 @@ body {
     -webkit-backdrop-filter: blur(16px);
 }
 
+.glass-panel {
+    position: relative;
+    overflow: hidden;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: rgba(17, 24, 39, 0.55);
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+    box-shadow: 0 20px 40px rgba(15, 23, 42, 0.3);
+}
+
+.glass-panel::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    background: radial-gradient(circle at 20% 20%, rgba(255, 255, 255, 0.32), transparent 60%),
+                radial-gradient(circle at 80% 0%, rgba(255, 255, 255, 0.18), transparent 55%);
+    mix-blend-mode: screen;
+    opacity: 0.75;
+}
+
+.glass-panel > * {
+    position: relative;
+    z-index: 1;
+}
+
+.glass-panel-blue {
+    background: linear-gradient(140deg, rgba(56, 189, 248, 0.38), rgba(29, 78, 216, 0.16));
+    border-color: rgba(125, 211, 252, 0.55);
+    box-shadow: 0 0 32px rgba(56, 189, 248, 0.45);
+}
+
+.glass-panel-red {
+    background: linear-gradient(140deg, rgba(248, 113, 113, 0.4), rgba(190, 24, 93, 0.18));
+    border-color: rgba(248, 113, 113, 0.5);
+    box-shadow: 0 0 32px rgba(248, 113, 113, 0.4);
+}
+
+.glass-panel-green {
+    background: linear-gradient(140deg, rgba(16, 185, 129, 0.38), rgba(5, 150, 105, 0.16));
+    border-color: rgba(45, 212, 191, 0.5);
+    box-shadow: 0 0 32px rgba(16, 185, 129, 0.42);
+}
+
 .btn-primary {
     background: var(--color-primary);
     transition: all 150ms ease;
