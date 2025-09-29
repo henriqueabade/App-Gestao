@@ -107,12 +107,18 @@ header.glass-surface {
 .sidebar-text {
     opacity: 0;
     transform: translateX(-10px);
-    transition: all 200ms ease;
+    max-width: 0;
+    margin-left: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    transition: opacity 200ms ease, transform 200ms ease, max-width 200ms ease, margin-left 200ms ease;
 }
 
 .sidebar-text-visible .sidebar-text {
     opacity: 1;
     transform: translateX(0);
+    max-width: 12rem;
+    margin-left: 0.75rem;
 }
 
 /* Sidebar recolhida mantém apenas os ícones visíveis */
@@ -122,7 +128,7 @@ header.glass-surface {
 }
 
 .sidebar-collapsed .sidebar-item {
-    justify-content: center;
+    justify-content: flex-start;
     padding-left: 0.75rem;
     padding-right: 0.75rem;
 }
@@ -139,7 +145,6 @@ header.glass-surface {
     margin-right: 0;
 }
 
-.sidebar-collapsed .sidebar-text,
 .sidebar-collapsed .chevron {
     display: none;
 }
