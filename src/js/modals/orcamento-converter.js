@@ -208,6 +208,10 @@
     plan.remaining = remaining;
     plan.produceQty = produceQty;
 
+    if (plan && typeof plan === 'object' && 'selections' in plan) {
+      delete plan.selections;
+    }
+
     row.replacementPlan = plan;
     row.stockBreakdown = buildBreakdownFromPlan(normalizedStock);
     row.em_estoque = totalStock;
