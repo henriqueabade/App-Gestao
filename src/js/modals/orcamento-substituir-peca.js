@@ -47,7 +47,6 @@
     modal: overlay.querySelector('[data-role="modal"]'),
     confirmBtn: overlay.querySelector('[data-action="confirm"]'),
     resetBtn: overlay.querySelector('[data-action="reset-selection"]'),
-    commitBtn: overlay.querySelector('[data-action="commit"]'),
     search: overlay.querySelector('[data-role="search"]'),
     results: overlay.querySelector('[data-role="results"]'),
     stockBreakdown: overlay.querySelector('[data-field="piece-stock-breakdown"]'),
@@ -94,7 +93,13 @@
   function openResetSelectionDialog() {
     return new Promise(resolve => {
       const dialogOverlay = document.createElement('div');
-      dialogOverlay.className = 'fixed inset-0 z-[13000] bg-black/60 flex items-center justify-center p-4';
+      dialogOverlay.className = 'fixed inset-0 bg-black/60 flex items-center justify-center p-4';
+      const baseOverlay = replaceModalRefs?.overlay;
+      const computedZ = baseOverlay ? window.getComputedStyle(baseOverlay).zIndex : '';
+      const parsedZ = Number(computedZ);
+      const fallbackZ = 15000;
+      const finalZ = Number.isFinite(parsedZ) ? Math.max(parsedZ + 5, fallbackZ) : fallbackZ;
+      dialogOverlay.style.zIndex = String(finalZ);
       dialogOverlay.innerHTML = `
         <div class="max-w-md w-full glass-surface backdrop-blur-xl rounded-2xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade">
           <div class="p-6 text-center space-y-4">
@@ -359,12 +364,10 @@
         });
       }
     }
-    updateCommitButtonState();
   };
 
   const clearStagingForVariant = key => {
     setSelectionQuantity(key, 0);
-    updateCommitButtonState();
     updateResetButtonState();
   };
 
@@ -379,7 +382,6 @@
     });
     replaceModalState.selections = new Map();
     replaceModalState.activeVariantKey = null;
-    updateCommitButtonState();
     updateResetButtonState();
     return changed;
   };
@@ -441,18 +443,19 @@
       if (variant.type === 'produce') {
         plan.produceQty += clamped;
       } else {
-        plan.stock.push({
-          variantKey: variant.key,
-          qty: clamped,
-          productId: Number(variant.product?.id),
-          productName: variant.product?.nome || '',
-          productCode: variant.product?.codigo || '',
-          processName: variant.stage?.processName || '',
-          lastItemName: variant.stage?.lastItemName || '',
-          order: Number(variant.stage?.order || 0),
-          isCurrentProduct: !!variant.isCurrentProduct,
-          committed: true
-        });
+      plan.stock.push({
+        variantKey: variant.key,
+        qty: clamped,
+        productId: Number(variant.product?.id),
+        productName: variant.product?.nome || '',
+        productCode: variant.product?.codigo || '',
+        processName: variant.stage?.processName || '',
+        lastItemName: variant.stage?.lastItemName || '',
+        order: Number(variant.stage?.order || 0),
+        isFinal: !!variant.stage?.isFinal,
+        isCurrentProduct: !!variant.isCurrentProduct,
+        committed: true
+      });
       }
       plan.selections.push({ key: variant.key, qty: clamped, committed: true });
     });
@@ -493,6 +496,7 @@
         processName: entry?.processName || '',
         lastItemName: entry?.lastItemName || '',
         order: Number(entry?.order || 0),
+        isFinal: !!entry?.isFinal,
         isCurrentProduct: true
       });
       plan.totalSelected += qty;
@@ -579,35 +583,6 @@
       const max = computeVariantMax(variant, requiredQty);
       if (qty > max) selections.set(key, max);
     });
-  }
-
-  function handleCommitSelection() {
-    const row = replaceModalState.currentRow;
-    if (!row) return;
-    const selections = ensureSelectionMap();
-    const requiredQty = getRequiredQuantity(row);
-    const entries = Array.from(selections.entries()).filter(([, qty]) => qty > 0);
-    if (!entries.length) return;
-    entries.forEach(([key, qty]) => {
-      const variant = getVariantByKey(key);
-      if (!variant) return;
-      const max = computeVariantMax(variant, requiredQty);
-      const clamped = Math.min(qty, max);
-      if (clamped > 0) addCommittedQuantity(key, clamped);
-    });
-    replaceModalState.selections = new Map();
-    replaceModalState.activeVariantKey = null;
-    updateReplaceModalConfirmButton();
-    updateCommitButtonState();
-    renderReplaceModalList({ skipReload: true });
-  }
-
-  // Botão de commit visível apenas quando há seleções pendentes (estado "pendente").
-  function updateCommitButtonState() {
-    if (!replaceModalRefs || !replaceModalRefs.commitBtn) return;
-    const selections = ensureSelectionMap();
-    const hasPending = Array.from(selections.values()).some(qty => sanitizePositiveInt(qty) > 0);
-    replaceModalRefs.commitBtn.classList.toggle('hidden', !hasPending);
   }
 
   function hasAnySelections() {
@@ -1038,7 +1013,6 @@
     });
 
     updateReplaceModalConfirmButton();
-    updateCommitButtonState();
     renderReplaceModalSummary();
   }
 
@@ -1117,7 +1091,6 @@
   }
 
   replaceModalRefs.confirmBtn?.addEventListener('click', handleReplaceModalConfirm);
-  replaceModalRefs.commitBtn?.addEventListener('click', handleCommitSelection);
   replaceModalRefs.resetBtn?.addEventListener('click', handleResetSelection);
   replaceModalRefs.modal?.addEventListener('pointerdown', handleReplaceModalPointerDown);
   replaceModalRefs.search?.addEventListener('input', async e => {
@@ -1145,7 +1118,6 @@
     renderReplaceModalSummary();
     await renderReplaceModalList({ forceReload: true });
     updateReplaceModalConfirmButton();
-    updateCommitButtonState();
   };
 
   try {

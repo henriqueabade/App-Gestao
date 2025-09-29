@@ -148,6 +148,75 @@
   const substituirPecaOverlayId = 'substituirPeca';
   const substituirPecaEvent = 'pecas:substituidas';
 
+  const clonePlan = plan => {
+    if (!plan) return null;
+    try { return JSON.parse(JSON.stringify(plan)); }
+    catch (err) { console.error('Erro ao clonar plano de substituição', err); return null; }
+  };
+
+  const sanitizeQty = value => {
+    const num = Number(value);
+    return Number.isFinite(num) ? Math.max(0, Math.floor(num)) : 0;
+  };
+
+  const buildBreakdownFromPlan = stockList => {
+    if (!Array.isArray(stockList)) return [];
+    return stockList.map((entry, index) => ({
+      key: `${entry?.variantKey || entry?.key || index}`,
+      order: Number.isFinite(Number(entry?.order)) ? Number(entry.order) : 0,
+      available: sanitizeQty(entry?.qty),
+      lastItemName: entry?.lastItemName || '',
+      processName: entry?.processName || '',
+      isFinal: !!entry?.isFinal
+    }));
+  };
+
+  function applyReplacementPlanToRow(row, planOverride = null) {
+    if (!row) return;
+    const plan = clonePlan(planOverride || row.replacementPlan);
+    if (!plan) return;
+
+    const requiredRowQty = sanitizeQty(row.qtd || row.quantidade || 0);
+    const planRequiredQty = sanitizeQty(plan.requiredQty);
+    const requiredQty = requiredRowQty > 0 ? requiredRowQty : planRequiredQty;
+
+    const normalizedStock = Array.isArray(plan.stock) ? plan.stock.map((entry, index) => ({
+      variantKey: entry?.variantKey || entry?.key || `stock-${index}`,
+      qty: sanitizeQty(entry?.qty),
+      productId: Number.isFinite(Number(entry?.productId)) ? Number(entry.productId) : null,
+      productName: entry?.productName || entry?.product_name || '',
+      productCode: entry?.productCode || entry?.product_code || '',
+      processName: entry?.processName || '',
+      lastItemName: entry?.lastItemName || '',
+      order: Number.isFinite(Number(entry?.order)) ? Number(entry.order) : 0,
+      isFinal: !!entry?.isFinal,
+      isCurrentProduct: !!entry?.isCurrentProduct
+    })) : [];
+
+    const totalStock = normalizedStock.reduce((acc, item) => acc + sanitizeQty(item.qty), 0);
+    const readyStock = normalizedStock
+      .filter(item => item.isFinal)
+      .reduce((acc, item) => acc + sanitizeQty(item.qty), 0);
+    const partialStock = Math.max(0, totalStock - readyStock);
+    const produceQty = sanitizeQty(plan.produceQty);
+    const totalSelected = totalStock + produceQty;
+    const remaining = Math.max(0, requiredQty - totalSelected);
+
+    plan.stock = normalizedStock;
+    plan.requiredQty = requiredQty;
+    plan.totalSelected = totalSelected;
+    plan.remaining = remaining;
+    plan.produceQty = produceQty;
+
+    row.replacementPlan = plan;
+    row.stockBreakdown = buildBreakdownFromPlan(normalizedStock);
+    row.em_estoque = totalStock;
+    row.pronta = readyStock;
+    row.produzir_parcial = partialStock;
+    row.produzir_total = produceQty + remaining;
+    row.a_produzir = row.produzir_parcial + row.produzir_total;
+  }
+
   function isSubstituirPecaOpen() {
     const overlayEl = document.getElementById('substituirPecaOverlay');
     return overlayEl && !overlayEl.classList.contains('hidden');
@@ -198,11 +267,11 @@
     const row = rows[idx];
     if (!row || !detail.plan) return;
 
-    row.replacementPlan = detail.plan;
+    applyReplacementPlanToRow(row, detail.plan);
     row.approved = false;
     row.forceProduceAll = !!detail.forceProduceAll;
 
-    if (Array.isArray(detail.plan.stock) && detail.plan.stock.length && detail.selectedProduct) {
+    if (Array.isArray(detail.plan?.stock) && detail.plan.stock.length && detail.selectedProduct) {
       const produto = detail.selectedProduct;
       if (row._origId == null) row._origId = row.produto_id;
       row.produto_id = Number(produto.id);
@@ -568,6 +637,10 @@ async function computeInsumosAndRender(){
           };
         });
       r.stockBreakdown = buildStockBreakdownFromDetails(rota, rawLotes);
+
+      if (r.replacementPlan) {
+        applyReplacementPlanToRow(r);
+      }
     }
 
     lastStockByName = stockByName;
