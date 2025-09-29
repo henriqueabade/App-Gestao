@@ -419,16 +419,34 @@ function initUsuarios() {
 
 function aplicarFiltros() {
     const filtros = coletarFiltros();
-    const busca = filtros.busca.toLowerCase();
+    const busca = normalizarParaComparacao(filtros.busca);
+    const perfilFiltro = normalizarParaComparacao(filtros.perfil);
+    const statusFiltros = new Set(
+        filtros.status
+            .map(status => normalizarParaComparacao(status))
+            .filter(Boolean)
+    );
+
     const filtrados = usuariosCache.filter(u => {
-        if (busca && !u.nome.toLowerCase().includes(busca) && !u.email.toLowerCase().includes(busca)) {
+        const nomeNormalizado = normalizarParaComparacao(u.nome);
+        const emailNormalizado = normalizarParaComparacao(u.email);
+
+        if (busca && !nomeNormalizado.includes(busca) && !emailNormalizado.includes(busca)) {
             return false;
         }
-        if (filtros.perfil && u.perfil !== filtros.perfil) {
-            return false;
+
+        if (perfilFiltro) {
+            const perfilUsuario = normalizarParaComparacao(u.perfil);
+            if (!perfilUsuario || perfilUsuario !== perfilFiltro) {
+                return false;
+            }
         }
-        if (filtros.status.length > 0 && !filtros.status.includes(u.status.toLowerCase())) {
-            return false;
+
+        if (statusFiltros.size > 0) {
+            const statusUsuario = normalizarParaComparacao(u.status);
+            if (!statusUsuario || !statusFiltros.has(statusUsuario)) {
+                return false;
+            }
         }
         return true;
     });
