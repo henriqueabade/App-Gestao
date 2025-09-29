@@ -526,7 +526,16 @@ async function computeInsumosAndRender(){
 
     for (const r of rows) {
       const prod = byId.get(String(r.produto_id));
-      const codigo = prod?.codigo; r.status=''; r.faltantes=[]; r.produzir_total=0; r.produzir_parcial=0; r.popover={variants:[]}; r.pronta=0; r.em_estoque=0; r.a_produzir=0; r.codigo = codigo;
+      const codigo = prod?.codigo;
+      r.status = '';
+      r.faltantes = [];
+      r.produzir_total = 0;
+      r.produzir_parcial = 0;
+      r.popover = { variants: [] };
+      r.pronta = 0;
+      r.em_estoque = 0;
+      r.a_produzir = 0;
+      r.codigo = codigo;
       if (!codigo) continue;
 
       let detalhes = {};
@@ -535,111 +544,184 @@ async function computeInsumosAndRender(){
       const rota = Array.isArray(detalhes?.itens) ? detalhes.itens : [];
       const rawLotes = Array.isArray(detalhes?.lotes) ? detalhes.lotes : [];
       const forceAll = !!r.forceProduceAll;
-      const lotes = forceAll ? [] : rawLotes;
-      r.forceProduceAll = forceAll;
+      const orderById = new Map(rota.map(i => [Number(i.insumo_id), Number(i.ordem_insumo || 0)]));
+      const rotaSorted = rota.slice().sort((a, b) => Number(a.ordem_insumo || 0) - Number(b.ordem_insumo || 0));
+      const maxOrder = rotaSorted.length ? Math.max(...rotaSorted.map(i => Number(i.ordem_insumo || 0))) : 0;
+      const faltantesMap = new Map();
+      const partialRecords = new Map();
 
-      const orderById = new Map(rota.map(i => [Number(i.insumo_id), Number(i.ordem_insumo||0)]));
-      const rotaSorted = rota.slice().sort((a,b)=> Number(a.ordem_insumo||0) - Number(b.ordem_insumo||0));
-      const maxOrder = rotaSorted.length ? Math.max(...rotaSorted.map(i=> Number(i.ordem_insumo||0))) : 0;
-
-      let readyQty = 0;
-      const partials = [];
-      lotes.forEach(l => {
-        const qty = Number(l.quantidade||0);
-        const lastId = Number(l.ultimo_insumo_id||0);
-        const ord = orderById.get(lastId) || 0;
-        if (ord >= maxOrder && maxOrder > 0) readyQty += qty;
-        else partials.push({ order: ord, qty, lastId, lastName: l.ultimo_item || '', process: l.etapa || '', usedAt: l.data_hora_completa || '' });
-      });
-      const parcialTotal = partials.reduce((a,b)=> a + b.qty, 0);
-      const totalStock = readyQty + parcialTotal;
-      r.pronta = readyQty;
-      r.em_estoque = totalStock;
-
-      const qtd = Number(r.qtd||0);
-      let needed = Math.max(0, qtd - readyQty);
-      partials.sort((a,b)=> b.order - a.order);
-      const usedPartials = new Map();
-      for (const p of partials) {
-        if (needed <= 0) break;
-        const take = Math.min(p.qty, needed);
-        if (take > 0) {
-          needed -= take;
-          const cur = usedPartials.get(p.order) || { order: p.order, qty: 0, lastName: p.lastName, lastId: p.lastId, process: p.process, usedAt: p.usedAt };
-          cur.qty += take;
-          usedPartials.set(p.order, cur);
-        }
-      }
-      r.produzir_parcial = Array.from(usedPartials.values()).reduce((a,b)=> a + b.qty, 0);
-      r.produzir_total = Math.max(0, qtd - readyQty - r.produzir_parcial);
-      r.a_produzir = r.produzir_parcial + r.produzir_total;
+      const registerPartial = (orderValue, qtyValue, meta = {}) => {
+        const qty = Number(qtyValue);
+        if (!(qty > 0)) return;
+        const order = Number.isFinite(Number(orderValue)) ? Number(orderValue) : 0;
+        const key = order;
+        const existing = partialRecords.get(key) || {
+          order,
+          qty: 0,
+          lastName: meta.lastName || '',
+          process: meta.process || '',
+          usedAt: meta.usedAt || '',
+          lastId: Number.isFinite(Number(meta.lastId)) ? Number(meta.lastId) : null
+        };
+        existing.qty += qty;
+        if (!existing.lastName && meta.lastName) existing.lastName = meta.lastName;
+        if (!existing.process && meta.process) existing.process = meta.process;
+        if (!existing.usedAt && meta.usedAt) existing.usedAt = meta.usedAt;
+        if (existing.lastId == null && Number.isFinite(Number(meta.lastId))) existing.lastId = Number(meta.lastId);
+        partialRecords.set(key, existing);
+      };
 
       const addFaltantes = (orderMin, units) => {
-        if (!units) return;
+        const sanitizedUnits = Number(units);
+        if (!(sanitizedUnits > 0)) return;
         rotaSorted.forEach(i => {
           const ord = Number(i.ordem_insumo || 0);
           if (ord > orderMin) {
             const nome = i.nome || '';
+            if (!nome) return;
             const unidade = i.unidade || '';
-            const necessario = Number(i.quantidade || 0) * units;
+            const necessario = Number(i.quantidade || 0) * sanitizedUnits;
+            if (!(necessario > 0)) return;
             const key = `${nome}__${unidade}`;
-            const cur =
-              r.faltantes.find(x => x.key === key) || {
-                key,
-                nome,
-                un: unidade,
-                necessario: 0,
-                etapa: i.processo || '',
-                ordem: ord
-              };
-            cur.necessario += necessario;
-            if (!r.faltantes.find(x => x.key === key)) r.faltantes.push(cur);
+            const existing = faltantesMap.get(key) || {
+              key,
+              nome,
+              un: unidade,
+              necessario: 0,
+              etapa: i.processo || '',
+              ordem: ord
+            };
+            existing.necessario += necessario;
+            if (!existing.etapa && i.processo) existing.etapa = i.processo;
+            existing.ordem = Math.max(existing.ordem || 0, ord);
+            faltantesMap.set(key, existing);
           }
         });
       };
-      usedPartials.forEach(v => addFaltantes(v.order, v.qty));
-      if (r.produzir_total > 0) addFaltantes(0, r.produzir_total);
+
+      let readyQty = 0;
+      let partialQtyTotal = 0;
+      let produceTotal = 0;
+      let usedPlanData = false;
+
+      if (r.replacementPlan) {
+        applyReplacementPlanToRow(r);
+        const planData = clonePlan(r.replacementPlan);
+        if (planData) {
+          const planStock = Array.isArray(planData.stock) ? planData.stock : [];
+          planStock.forEach(entry => {
+            const qty = Number(entry?.qty || 0);
+            if (!(qty > 0)) return;
+            const order = Number(entry?.order || 0);
+            if (entry?.isFinal) {
+              readyQty += qty;
+            } else {
+              registerPartial(order, qty, {
+                lastName: entry?.lastItemName || '',
+                process: entry?.processName || '',
+                usedAt: entry?.usedAt || '',
+                lastId: entry?.lastInsumoId
+              });
+            }
+          });
+          partialQtyTotal = Array.from(partialRecords.values()).reduce((acc, item) => acc + Number(item.qty || 0), 0);
+          produceTotal = Math.max(0, Number(planData.produceQty || 0) + Number(planData.remaining || 0));
+          r.pronta = readyQty;
+          r.em_estoque = readyQty + partialQtyTotal;
+          r.produzir_parcial = partialQtyTotal;
+          r.produzir_total = produceTotal;
+          r.a_produzir = r.produzir_parcial + r.produzir_total;
+          usedPlanData = true;
+        }
+      }
+
+      if (!usedPlanData) {
+        const lotes = forceAll ? [] : rawLotes;
+        const partialCandidates = [];
+        lotes.forEach(l => {
+          const qty = Number(l.quantidade || 0);
+          if (!(qty > 0)) return;
+          const lastId = Number(l.ultimo_insumo_id || 0);
+          const ord = orderById.get(lastId) || 0;
+          if (ord >= maxOrder && maxOrder > 0) readyQty += qty;
+          else {
+            partialCandidates.push({
+              order: ord,
+              qty,
+              lastId,
+              lastName: l.ultimo_item || '',
+              process: l.etapa || '',
+              usedAt: l.data_hora_completa || ''
+            });
+          }
+        });
+        const qtd = Number(r.qtd || 0);
+        let needed = Math.max(0, qtd - readyQty);
+        partialCandidates.sort((a, b) => b.order - a.order);
+        for (const candidate of partialCandidates) {
+          if (needed <= 0) break;
+          const take = Math.min(candidate.qty, needed);
+          if (take > 0) {
+            needed -= take;
+            registerPartial(candidate.order, take, candidate);
+          }
+        }
+        partialQtyTotal = Array.from(partialRecords.values()).reduce((acc, item) => acc + Number(item.qty || 0), 0);
+        produceTotal = Math.max(0, Number(r.qtd || 0) - readyQty - partialQtyTotal);
+        r.pronta = readyQty;
+        r.em_estoque = readyQty + partialQtyTotal;
+        r.produzir_parcial = partialQtyTotal;
+        r.produzir_total = produceTotal;
+        r.a_produzir = r.produzir_parcial + r.produzir_total;
+        r.stockBreakdown = buildStockBreakdownFromDetails(rota, rawLotes);
+      }
+
+      partialRecords.forEach(record => addFaltantes(record.order, record.qty));
+      if (produceTotal > 0) addFaltantes(Number.NEGATIVE_INFINITY, produceTotal);
+
+      r.faltantes = Array.from(faltantesMap.values());
 
       let pieceHasNegative = false;
       for (const f of r.faltantes) {
         const stock = stockByName.get(f.nome) || { quantidade: 0, infinito: false };
         if (!stock.infinito) {
-          const saldo = Number(stock.quantidade||0) - Number(f.necessario||0);
+          const saldo = Number(stock.quantidade || 0) - Number(f.necessario || 0);
           if (saldo < 0) { pieceHasNegative = true; break; }
         }
       }
       r.status = (r.a_produzir > 0 && pieceHasNegative) ? 'atencao' : 'ok';
 
-      r.popover.variants = Array.from(usedPartials.values())
+      const popoverVariants = Array.from(partialRecords.values())
         .sort((a, b) => b.order - a.order)
-        .map(v => {
+        .map(record => {
+          const order = Number(record.order || 0);
+          const stageItem = rotaSorted.find(i => Number(i.ordem_insumo || 0) === order) || null;
           const pending = rotaSorted
-            .filter(i => Number(i.ordem_insumo || 0) > v.order)
+            .filter(i => Number(i.ordem_insumo || 0) > order)
             .map(i => ({
               name: i.nome,
-              pending: Math.ceil(Number(i.quantidade || 0) * v.qty),
+              pending: Number(i.quantidade || 0) * Number(record.qty || 0),
               un: i.unidade
             }));
-          const lastItem = rotaSorted.find(i => Number(i.ordem_insumo || 0) === v.order);
           return {
-            qty: v.qty,
+            qty: Number(record.qty || 0),
             lastItem: {
-              name: lastItem ? lastItem.nome : 'Nenhum',
-              qty: lastItem ? Math.ceil(Number(lastItem.quantidade || 0) * v.qty) : 0,
-              time: v.usedAt
+              name: stageItem ? stageItem.nome : (record.lastName || 'Nenhum'),
+              qty: stageItem ? Number(stageItem.quantidade || 0) * Number(record.qty || 0) : 0,
+              time: record.usedAt || ''
             },
             currentProcess: {
-              name: v.process || (lastItem ? lastItem.processo : ''),
-              since: v.usedAt
+              name: record.process || (stageItem ? stageItem.processo : ''),
+              since: record.usedAt || ''
             },
             totalItems: rotaSorted.length,
             pending
           };
         });
-      r.stockBreakdown = buildStockBreakdownFromDetails(rota, rawLotes);
+      r.popover.variants = popoverVariants;
 
-      if (r.replacementPlan) {
-        applyReplacementPlanToRow(r);
+      if (!usedPlanData) {
+        r.forceProduceAll = forceAll;
       }
     }
 
