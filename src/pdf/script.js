@@ -146,8 +146,8 @@ async function buildDocument() {
 
       const cols = ['Código','Nome do Produto','NCM','Quantidade','Valor Unitário','Total Desconto','Valor Total'];
       const widths = ['10%','30%','12%','10%','12%','13%','13%'];
-      const thead = `<thead><tr>${cols.map((c,i)=>`<th style="width:${widths[i]}">${c}</th>`).join('')}</tr></thead>`;
-      const tbody = `<tbody>${chunk.map(row=>`<tr>${row.map(cell=>`<td>${cell}</td>`).join('')}</tr>`).join('')}</tbody>`;
+      const thead = `<thead><tr>${cols.map((c,i)=>`<th style="width:${widths[i]};text-align:left;">${c}</th>`).join('')}</tr></thead>`;
+      const tbody = `<tbody>${chunk.map(row=>`<tr>${row.map(cell=>`<td style="text-align:left;">${cell}</td>`).join('')}</tr>`).join('')}</tbody>`;
 
       let html = `
       ${header}
@@ -159,10 +159,10 @@ async function buildDocument() {
       <div class="text-sm mt-2">
         <h3 class="font-bold text-accent-red mb-1">RESUMO DE VALORES</h3>
         <table class="w-full mb-2">
-          <tr><td>Desconto de Pagamento:</td><td class="text-right">${formatCurrency(orc.desconto_pagamento)}</td></tr>
-          <tr><td>Desconto Especial:</td><td class="text-right">${formatCurrency(orc.desconto_especial)}</td></tr>
-          <tr><td>Desconto Total:</td><td class="text-right">${formatCurrency(orc.desconto_total)}</td></tr>
-          <tr class="border-t"><td><strong>Valor a Pagar:</strong></td><td class="text-right"><strong>${formatCurrency(orc.valor_final)}</strong></td></tr>
+          <tr><td style="text-align:left;">Desconto de Pagamento:</td><td class="text-right">${formatCurrency(orc.desconto_pagamento)}</td></tr>
+          <tr><td style="text-align:left;">Desconto Especial:</td><td class="text-right">${formatCurrency(orc.desconto_especial)}</td></tr>
+          <tr><td style="text-align:left;">Desconto Total:</td><td class="text-right">${formatCurrency(orc.desconto_total)}</td></tr>
+          <tr class="border-t"><td style="text-align:left;"><strong>Valor a Pagar:</strong></td><td class="text-right"><strong>${formatCurrency(orc.valor_final)}</strong></td></tr>
         </table>
         <p class="font-semibold text-accent-red mb-1">OBSERVAÇÕES:</p>
         <p>${orc.observacoes || '- Nenhuma observação.'}</p>

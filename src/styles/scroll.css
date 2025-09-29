@@ -159,6 +159,12 @@ html, body, #app, #mainContent  {
   }
 }
 
+/* Alinhamento padrão para todas as tabelas */
+table th,
+table td {
+  text-align: left;
+}
+
 /* personalização do scrollbar (WebKit/Blink) */
 .table-scroll::-webkit-scrollbar {
   width: 6px;
