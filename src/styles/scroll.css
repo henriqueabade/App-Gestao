@@ -81,18 +81,19 @@ html, body, #app, #mainContent  {
 .items-table {
   table-layout: fixed;
   width: 100%;
+  border-collapse: collapse;
 }
 
 .items-table th,
 .items-table td {
-  padding: clamp(0.35rem, 0.3rem + 0.3vw, 0.55rem);
-  font-size: clamp(0.65rem, 0.6rem + 0.2vw, 0.8rem);
+  padding: clamp(0.28rem, 0.24rem + 0.28vw, 0.48rem);
+  font-size: clamp(0.7rem, 0.64rem + 0.25vw, 0.92rem);
   white-space: nowrap;
-  line-height: 1.2;
+  line-height: 1.25;
 }
 
 .items-table th {
-  letter-spacing: 0.08em;
+  letter-spacing: 0.05em;
 }
 
 .items-table td {
@@ -106,12 +107,12 @@ html, body, #app, #mainContent  {
 
 .items-table th:nth-child(1),
 .items-table td:nth-child(1) {
-  width: 30%;
+  width: 26%;
 }
 
 .items-table th:nth-child(2),
 .items-table td:nth-child(2) {
-  width: 8%;
+  width: 7%;
 }
 
 .items-table th:nth-child(3),
@@ -126,17 +127,21 @@ html, body, #app, #mainContent  {
 
 .items-table th:nth-child(5),
 .items-table td:nth-child(5) {
-  width: 10%;
+  width: 9%;
 }
 
 .items-table th:nth-child(6),
 .items-table td:nth-child(6) {
-  width: 12%;
+  width: 17%;
 }
 
 .items-table th:nth-child(7),
 .items-table td:nth-child(7) {
-  width: 8%;
+  width: 9%;
+}
+
+.items-table-scroll {
+  overflow-x: hidden;
 }
 
 @media (max-width: 768px) {
