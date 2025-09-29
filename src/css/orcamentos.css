@@ -320,6 +320,50 @@ input[type="date"]:valid::-webkit-datetime-edit {
     hyphens: manual;
 }
 
+#orcamentoItens {
+    table-layout: auto;
+}
+
+#orcamentoItens th,
+#orcamentoItens td {
+    text-align: left;
+}
+
+#orcamentoItens th:first-child,
+#orcamentoItens td:first-child {
+    width: 24%;
+    min-width: 200px;
+    white-space: normal;
+}
+
+#orcamentoItens th:not(:first-child),
+#orcamentoItens td:not(:first-child) {
+    white-space: nowrap;
+}
+
+#orcamentoItens th:nth-child(2),
+#orcamentoItens td:nth-child(2) {
+    min-width: 80px;
+}
+
+#orcamentoItens th:nth-child(3),
+#orcamentoItens td:nth-child(3),
+#orcamentoItens th:nth-child(4),
+#orcamentoItens td:nth-child(4),
+#orcamentoItens th:nth-child(5),
+#orcamentoItens td:nth-child(5),
+#orcamentoItens th:nth-child(6),
+#orcamentoItens td:nth-child(6) {
+    min-width: 150px;
+}
+
+#orcamentoItens th:last-child,
+#orcamentoItens td:last-child {
+    text-align: center;
+    min-width: 120px;
+    white-space: nowrap;
+}
+
 #bt-actions {
     margin-top: 1vw;
 }

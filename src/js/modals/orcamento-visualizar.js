@@ -97,11 +97,11 @@
       tr.className = 'border-b border-white/10';
       tr.innerHTML = `
         <td class="px-6 py-4 text-sm text-white">${it.nome}</td>
-        <td class="px-6 py-4 text-center text-sm text-white">${qtd}</td>
-        <td class="px-6 py-4 text-right text-sm text-white">${valorUnit.toFixed(2)}</td>
-        <td class="px-6 py-4 text-right text-sm text-white">${valorUnitDesc.toFixed(2)}</td>
-        <td class="px-6 py-4 text-center text-sm text-white">${(descPagPrc + descEspPrc).toFixed(2)}</td>
-        <td class="px-6 py-4 text-right text-sm text-white">${valorTotal.toFixed(2)}</td>
+        <td class="px-6 py-4 text-left text-sm text-white">${qtd}</td>
+        <td class="px-6 py-4 text-left text-sm text-white">${valorUnit.toFixed(2)}</td>
+        <td class="px-6 py-4 text-left text-sm text-white">${valorUnitDesc.toFixed(2)}</td>
+        <td class="px-6 py-4 text-left text-sm text-white">${(descPagPrc + descEspPrc).toFixed(2)}</td>
+        <td class="px-6 py-4 text-left text-sm text-white">${valorTotal.toFixed(2)}</td>
         <td class="px-6 py-4 text-center">
           <i class="fas fa-edit w-5 h-5 p-1 rounded icon-disabled" style="color: var(--color-primary)"></i>
           <i class="fas fa-trash w-5 h-5 p-1 rounded text-red-400 icon-disabled"></i>

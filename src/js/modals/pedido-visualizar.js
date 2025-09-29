@@ -185,11 +185,11 @@
       tr.className = 'border-b border-white/10';
       tr.innerHTML = `
         <td class="px-6 py-4 text-sm text-white">${item.nome || ''}</td>
-        <td class="px-6 py-4 text-center text-sm text-white">${fmtNumber(qtd)}</td>
-        <td class="px-6 py-4 text-right text-sm text-white">${fmtNumber(valorUnit)}</td>
-        <td class="px-6 py-4 text-right text-sm text-white">${fmtNumber(valorUnitDesc)}</td>
-        <td class="px-6 py-4 text-center text-sm text-white">${fmtNumber(descPagPrc + descEspPrc)}</td>
-        <td class="px-6 py-4 text-right text-sm text-white">${fmtCurrency(valorTotal)}</td>
+        <td class="px-6 py-4 text-left text-sm text-white">${fmtNumber(qtd)}</td>
+        <td class="px-6 py-4 text-left text-sm text-white">${fmtNumber(valorUnit)}</td>
+        <td class="px-6 py-4 text-left text-sm text-white">${fmtNumber(valorUnitDesc)}</td>
+        <td class="px-6 py-4 text-left text-sm text-white">${fmtNumber(descPagPrc + descEspPrc)}</td>
+        <td class="px-6 py-4 text-left text-sm text-white">${fmtCurrency(valorTotal)}</td>
         <td class="px-6 py-4 text-center modal-actions-disabled">
           <div class="flex items-center justify-center gap-2">
             <i class="fas fa-edit w-5 h-5 p-1 rounded icon-disabled" style="color: var(--color-primary)"></i>

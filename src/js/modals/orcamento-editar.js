@@ -525,11 +525,11 @@
       if (item.id) tr.dataset.id = item.id;
       tr.innerHTML = `
         <td class="px-6 py-4 text-sm text-white">${item.nome}</td>
-        <td class="px-6 py-4 text-center text-sm text-white">${item.qtd}</td>
-        <td class="px-6 py-4 text-right text-sm text-white">${item.valor.toFixed(2)}</td>
-        <td class="px-6 py-4 text-right text-sm text-white">0.00</td>
-        <td class="px-6 py-4 text-center text-sm text-white">${defaultDesc.toFixed(2)}</td>
-        <td class="px-6 py-4 text-right text-sm text-white total-cell"></td>
+        <td class="px-6 py-4 text-left text-sm text-white">${item.qtd}</td>
+        <td class="px-6 py-4 text-left text-sm text-white">${item.valor.toFixed(2)}</td>
+        <td class="px-6 py-4 text-left text-sm text-white">0.00</td>
+        <td class="px-6 py-4 text-left text-sm text-white">${defaultDesc.toFixed(2)}</td>
+        <td class="px-6 py-4 text-left text-sm text-white total-cell"></td>
         <td class="px-6 py-4 text-center">
           <i class="fas fa-edit w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)"></i>
           <i class="fas fa-trash w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10 text-red-400"></i>
