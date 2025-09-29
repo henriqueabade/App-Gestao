@@ -46,6 +46,7 @@
     overlay,
     modal: overlay.querySelector('[data-role="modal"]'),
     confirmBtn: overlay.querySelector('[data-action="confirm"]'),
+    resetBtn: overlay.querySelector('[data-action="reset-selection"]'),
     commitBtn: overlay.querySelector('[data-action="commit"]'),
     search: overlay.querySelector('[data-role="search"]'),
     results: overlay.querySelector('[data-role="results"]'),
@@ -89,6 +90,39 @@
   overlay.querySelectorAll('[data-action="close"]').forEach(btn => {
     btn.addEventListener('click', closeModal);
   });
+
+  function openResetSelectionDialog() {
+    return new Promise(resolve => {
+      const dialogOverlay = document.createElement('div');
+      dialogOverlay.className = 'fixed inset-0 z-[13000] bg-black/60 flex items-center justify-center p-4';
+      dialogOverlay.innerHTML = `
+        <div class="max-w-md w-full glass-surface backdrop-blur-xl rounded-2xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade">
+          <div class="p-6 text-center space-y-4">
+            <div>
+              <h3 class="text-lg font-semibold text-sky-300">Reiniciar seleção</h3>
+              <p class="text-sm text-gray-300 mt-2">Deseja reiniciar a seleção de peças? Esta ação vai remover todas as peças selecionadas até o momento.</p>
+            </div>
+            <div class="flex justify-center gap-4">
+              <button type="button" data-action="confirm" class="btn-warning px-4 py-2 rounded-lg text-white font-medium">Sim</button>
+              <button type="button" data-action="cancel" class="btn-neutral px-4 py-2 rounded-lg text-white font-medium">Não</button>
+            </div>
+          </div>
+        </div>`;
+      document.body.appendChild(dialogOverlay);
+
+      const cleanup = result => {
+        if (dialogOverlay.isConnected) dialogOverlay.remove();
+        resolve(!!result);
+      };
+
+      dialogOverlay.addEventListener('click', e => {
+        if (e.target === dialogOverlay) cleanup(false);
+      });
+
+      dialogOverlay.querySelector('[data-action="confirm"]')?.addEventListener('click', () => cleanup(true), { once: true });
+      dialogOverlay.querySelector('[data-action="cancel"]')?.addEventListener('click', () => cleanup(false), { once: true });
+    });
+  }
 
   const normalizeText = value => {
     if (!value) return '';
@@ -234,6 +268,7 @@
     } else if (index >= 0) {
       list.splice(index, 1);
     }
+    updateResetButtonState();
   };
 
   const addCommittedQuantity = (key, quantity) => {
@@ -245,6 +280,7 @@
 
   const clearCommittedSelections = () => {
     replaceModalState.committedSelections = [];
+    updateResetButtonState();
   };
 
   const getVariantByKey = key => replaceModalState.variants.find(v => v.key === key) || null;
@@ -254,11 +290,6 @@
   const getTotalCommittedQuantity = () => {
     const list = ensureCommittedList();
     return list.reduce((acc, item) => acc + sanitizePositiveInt(item?.qty), 0);
-  };
-
-  const getGlobalRemainingCapacity = requiredQty => {
-    const confirmed = getTotalCommittedQuantity();
-    return Math.max(0, requiredQty - confirmed);
   };
 
   const getVariantStockLimit = (variant, requiredQty) => {
@@ -273,12 +304,23 @@
     const stagingQty = getSelectionQuantity(variant.key);
     const stockLimit = getVariantStockLimit(variant, requiredQty);
     const stockRemaining = Math.max(0, stockLimit - confirmedQty);
-    const globalRemaining = getGlobalRemainingCapacity(requiredQty);
-    const effectiveGlobal = Math.max(0, globalRemaining + stagingQty);
+    const allowedForStaging = Math.max(0, requiredQty - getTotalCommittedQuantity());
+    const totalStaging = getTotalStagingQuantity();
+    const otherStaging = Math.max(0, totalStaging - stagingQty);
+    const effectiveGlobal = Math.max(0, allowedForStaging - otherStaging);
     return Math.max(0, Math.min(stockRemaining, effectiveGlobal));
   };
 
   const getSelectionMap = () => ensureSelectionMap();
+
+  const getTotalStagingQuantity = () => {
+    const selections = getSelectionMap();
+    let total = 0;
+    selections.forEach(qty => {
+      total += sanitizePositiveInt(qty);
+    });
+    return total;
+  };
 
   const getSelectionQuantity = key => {
     if (!key) return 0;
@@ -307,6 +349,7 @@
     const max = computeVariantMax(variant, requiredQty);
     const next = Math.min(Math.max(0, sanitizePositiveInt(quantity)), max);
     setSelectionQuantity(variant.key, next);
+    updateResetButtonState();
     if (options?.focus?.key === variant.key) {
       const input = replaceModalRefs?.results?.querySelector(`input[data-variant-key="${variant.key}"]`);
       if (input) {
@@ -322,6 +365,7 @@
   const clearStagingForVariant = key => {
     setSelectionQuantity(key, 0);
     updateCommitButtonState();
+    updateResetButtonState();
   };
 
   const clearAllStaging = () => {
@@ -336,7 +380,26 @@
     replaceModalState.selections = new Map();
     replaceModalState.activeVariantKey = null;
     updateCommitButtonState();
+    updateResetButtonState();
     return changed;
+  };
+
+  async function handleResetSelection() {
+    const confirmed = await openResetSelectionDialog();
+    if (!confirmed) return;
+    clearCommittedSelections();
+    clearAllStaging();
+    await renderReplaceModalList({ skipReload: true });
+    updateReplaceModalConfirmButton();
+  }
+
+  const reduceConfirmedQuantity = (key, amount) => {
+    const sanitized = sanitizePositiveInt(amount);
+    if (!sanitized) return;
+    const current = getCommittedQuantity(key);
+    const next = Math.max(0, current - sanitized);
+    setCommittedQuantity(key, next);
+    updateReplaceModalConfirmButton();
   };
 
   const confirmStagingForVariant = key => {
@@ -545,6 +608,16 @@
     const selections = ensureSelectionMap();
     const hasPending = Array.from(selections.values()).some(qty => sanitizePositiveInt(qty) > 0);
     replaceModalRefs.commitBtn.classList.toggle('hidden', !hasPending);
+  }
+
+  function hasAnySelections() {
+    return getTotalStagingQuantity() > 0 || getTotalCommittedQuantity() > 0;
+  }
+
+  function updateResetButtonState() {
+    if (!replaceModalRefs?.resetBtn) return;
+    const shouldShow = hasAnySelections();
+    replaceModalRefs.resetBtn.classList.toggle('hidden', !shouldShow);
   }
 
   function setReplaceModalField(field, value) {
@@ -756,6 +829,7 @@
           .map(([key, qty]) => ({ key, qty }));
         replaceModalState.selections = new Map();
         replaceModalState.initialSelections = null;
+        updateResetButtonState();
       }
     } else if (replaceModalState.loadingVariants) {
       try { await replaceModalState.loadingVariants; }
@@ -810,6 +884,7 @@
     const committedTotalOverall = getTotalCommittedQuantity();
     const remainingGlobalCapacity = Math.max(0, requiredQty - committedTotalOverall);
     updateSelectionStatusCounter(committedTotalOverall, requiredQty, remainingGlobalCapacity);
+    updateResetButtonState();
 
     variantsToRender.forEach(variant => {
       const committedQty = getCommittedQuantity(variant.key);
@@ -1043,6 +1118,7 @@
 
   replaceModalRefs.confirmBtn?.addEventListener('click', handleReplaceModalConfirm);
   replaceModalRefs.commitBtn?.addEventListener('click', handleCommitSelection);
+  replaceModalRefs.resetBtn?.addEventListener('click', handleResetSelection);
   replaceModalRefs.modal?.addEventListener('pointerdown', handleReplaceModalPointerDown);
   replaceModalRefs.search?.addEventListener('input', async e => {
     replaceModalState.searchTerm = e.target.value || '';
