@@ -11,6 +11,8 @@
 
   let readyMarked = false;
   const markReady = (reveal = true) => {
+    const deferReveal = !!window.autoOpenQuoteConversion?.deferReveal;
+    const shouldReveal = reveal && !deferReveal;
     if (!overlay || !overlay.classList) {
       if (!readyMarked && typeof Modal?.signalReady === 'function') {
         readyMarked = true;
@@ -19,10 +21,13 @@
       return;
     }
 
-    if (reveal && overlay.classList.contains('hidden')) {
-      overlay.classList.remove('hidden');
+    if (shouldReveal) {
+      if (overlay.classList.contains('hidden')) {
+        overlay.classList.remove('hidden');
+      }
       overlay.removeAttribute('aria-hidden');
-    } else if (!reveal) {
+    } else {
+      overlay.classList.add('hidden');
       overlay.setAttribute('aria-hidden', 'true');
     }
 

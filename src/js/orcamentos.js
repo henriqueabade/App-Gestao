@@ -125,8 +125,12 @@ function openConversionFlow(id) {
         const elapsed = Date.now() - start;
         const show = () => {
             if (spinner.isConnected) spinner.remove();
-            document.getElementById('editarOrcamentoOverlay')?.classList.remove('hidden');
-            document.getElementById('converterOrcamentoOverlay')?.classList.remove('hidden');
+            const editOverlay = document.getElementById('editarOrcamentoOverlay');
+            const convertOverlay = document.getElementById('converterOrcamentoOverlay');
+            editOverlay?.classList.remove('hidden');
+            editOverlay?.removeAttribute('aria-hidden');
+            convertOverlay?.classList.remove('hidden');
+            convertOverlay?.removeAttribute('aria-hidden');
             window.autoOpenQuoteConversion = null;
         };
         const remaining = Math.max(0, 3000 - elapsed);
@@ -146,12 +150,16 @@ function openConversionFlow(id) {
     const failSafe = setTimeout(() => {
         window.removeEventListener('orcamentoModalLoaded', handleLoaded);
         if (spinner.isConnected) spinner.remove();
-        document.getElementById('editarOrcamentoOverlay')?.classList.remove('hidden');
-        document.getElementById('converterOrcamentoOverlay')?.classList.remove('hidden');
+        const editOverlay = document.getElementById('editarOrcamentoOverlay');
+        const convertOverlay = document.getElementById('converterOrcamentoOverlay');
+        editOverlay?.classList.remove('hidden');
+        editOverlay?.removeAttribute('aria-hidden');
+        convertOverlay?.classList.remove('hidden');
+        convertOverlay?.removeAttribute('aria-hidden');
         window.autoOpenQuoteConversion = null;
     }, 7000);
     window.addEventListener('orcamentoModalLoaded', handleLoaded);
-    window.autoOpenQuoteConversion = { id, skipInnerSpinner: true };
+    window.autoOpenQuoteConversion = { id, skipInnerSpinner: true, deferReveal: true };
     window.selectedQuoteId = id;
     Modal.open('modals/orcamentos/editar.html', '../js/modals/orcamento-editar.js', 'editarOrcamento');
 }
@@ -187,7 +195,12 @@ async function carregarOrcamentos() {
             const downloadTitle = isDraft ? 'PDF indisponível' : 'Baixar PDF';
             const editBlocked = ['Aprovado','Expirado','Rejeitado'].includes(o.situacao);
             const editClass = editBlocked ? 'icon-disabled' : '';
-            const convertBlocked = ['Aprovado','Expirado','Rejeitado'].includes(o.situacao);
+            const convertBlocked = ['Aprovado','Expirado','Rejeitado','Rascunho'].includes(o.situacao);
+            const convertTitle = convertBlocked
+                ? (isDraft
+                    ? 'Converter indisponível para orçamentos em rascunho'
+                    : 'Converter indisponível para este status')
+                : 'Converter em pedido';
             const convertClass = convertBlocked ? 'icon-disabled' : '';
             tr.innerHTML = `
                 <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">${o.numero}</td>
@@ -198,7 +211,7 @@ async function carregarOrcamentos() {
                 <td class="px-6 py-4 whitespace-nowrap"><span class="${badgeClass} px-3 py-1 rounded-full text-xs font-medium">${o.situacao}</span></td>
                 <td class="px-6 py-4 whitespace-nowrap text-center">
                     <div class="flex items-center justify-center space-x-2">
-                        <i class="fas fa-money-bill-wave w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10 ${convertClass}" style="color: var(--color-primary)" title="Converter em pedido"></i>
+                        <i class="fas fa-money-bill-wave w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10 ${convertClass}" style="color: var(--color-primary)" title="${convertTitle}"></i>
                         <i class="fas fa-eye w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Visualizar"></i>
                         <i class="fas fa-edit w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10 ${editClass}" style="color: var(--color-primary)" title="Editar"></i>
                         <i class="fas fa-download w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10 ${downloadClass}" style="color: var(--color-primary)" title="${downloadTitle}"></i>
@@ -249,11 +262,16 @@ async function carregarOrcamentos() {
         tbody.querySelectorAll('.fa-money-bill-wave').forEach(icon => {
             icon.addEventListener('click', e => {
                 e.stopPropagation();
+                const tr = e.currentTarget.closest('tr');
+                const status = tr?.cells?.[5]?.innerText?.trim() || '';
                 if (icon.classList.contains('icon-disabled')) {
-                    showFunctionUnavailableDialog('Orçamentos aprovados, expirados ou rejeitados não podem ser convertidos em pedido.');
+                    if (status === 'Rascunho') {
+                        showFunctionUnavailableDialog('Orçamentos em rascunho não podem ser convertidos em pedido. Altere o status para Pendente antes de converter.');
+                    } else {
+                        showFunctionUnavailableDialog('Orçamentos aprovados, expirados ou rejeitados não podem ser convertidos em pedido.');
+                    }
                     return;
                 }
-                const tr = e.currentTarget.closest('tr');
                 const id = tr?.dataset.id;
                 if (!id) return;
                 openConversionFlow(id);
