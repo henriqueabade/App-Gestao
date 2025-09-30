@@ -6,6 +6,8 @@
   "scripts": {
     "start": "electron .",
     "dist": "electron-builder --config electron-builder.config.js",
+    "dist:publish": "electron-builder --config electron-builder.config.js --publish onTagOrDraft",
+    "publish": "npm run dist:publish",
     "verify-smtp": "node backend/verifyTransporter.js",
     "test": "node --test backend",
     "build:tailwind": "tailwindcss -i ./src/styles/tailwind-input.css -o ./src/styles/tailwind-offline.css --minify"
@@ -25,7 +27,8 @@
     "dotenv": "^17.0.1",
     "express": "^5.1.0",
     "nodemailer": "^7.0.5",
-    "pg": "^8.16.0"
+    "pg": "^8.16.0",
+    "electron-updater": "^6.6.2"
   },
   "type": "commonjs",
   "build": {

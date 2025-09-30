@@ -2,6 +2,7 @@
 const { app, BrowserWindow, ipcMain, screen, shell } = require('electron');
 const path = require('path');
 const DEBUG = process.env.DEBUG === 'true';
+const { autoUpdater } = require('electron-updater');
 const {
   registrarUsuario,
   loginUsuario,
@@ -112,6 +113,57 @@ let lastRecordedAction = null;
 let isPersistingExit = false;
 let closingDashboardWindow = false;
 let quittingApp = false;
+
+function initializeAutoUpdater() {
+  if (!app.isPackaged) {
+    if (DEBUG) {
+      console.warn('AutoUpdater: ignorado em ambiente de desenvolvimento');
+    }
+    return;
+  }
+
+  if (process.env.ELECTRON_UPDATE_DISABLE === 'true') {
+    console.warn('AutoUpdater: desabilitado pela variável ELECTRON_UPDATE_DISABLE');
+    return;
+  }
+
+  const explicitFeedUrl = process.env.ELECTRON_UPDATE_URL;
+  if (explicitFeedUrl) {
+    try {
+      autoUpdater.setFeedURL({ url: explicitFeedUrl });
+      if (DEBUG) {
+        console.log('AutoUpdater: feed customizado configurado', explicitFeedUrl);
+      }
+    } catch (err) {
+      console.error('AutoUpdater: falha ao configurar feed customizado', err);
+    }
+  }
+
+  autoUpdater.on('error', err => {
+    console.error('AutoUpdater: erro', err);
+  });
+
+  autoUpdater.on('download-progress', progress => {
+    if (DEBUG) {
+      console.log('AutoUpdater: progresso do download', {
+        percent: Number(progress.percent?.toFixed?.(2) ?? progress.percent),
+        transferred: progress.transferred,
+        total: progress.total,
+        bytesPerSecond: progress.bytesPerSecond
+      });
+    }
+  });
+
+  autoUpdater.on('update-downloaded', info => {
+    console.log('AutoUpdater: atualização pronta para instalação', info.version);
+  });
+
+  autoUpdater
+    .checkForUpdatesAndNotify()
+    .catch(err => {
+      console.error('AutoUpdater: falha ao verificar atualizações', err);
+    });
+}
 
 function logDisplayInfo(context, selected) {
   if (!DEBUG) return;
@@ -1054,6 +1106,7 @@ app.whenReady().then(() => {
   });
 
   showStartupBanner();
+  initializeAutoUpdater();
 });
 
 app.on('window-all-closed', () => {
