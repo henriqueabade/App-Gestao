@@ -619,6 +619,19 @@ header.glass-surface {
 
 .sidebar-item,
 .submenu-item {
+    will-change: color, background-color;
+}
+
+#sidebar {
+    overflow: hidden;
+    transition-property: width, background-color, box-shadow;
+    transition-duration: 220ms;
+    transition-timing-function: ease;
+    will-change: width;
+}
+
+.sidebar-item,
+.submenu-item {
     /* Default menu color and smooth transition */
     color: var(--color-violet);
     transition: color 0.2s ease, background 150ms ease;
@@ -664,6 +677,7 @@ header.glass-surface {
     overflow: hidden;
     white-space: nowrap;
     transition: opacity 200ms ease, transform 200ms ease, max-width 200ms ease, margin-left 200ms ease;
+    will-change: opacity, transform, max-width, margin-left;
 }
 
 .sidebar-text-visible .sidebar-text {
@@ -718,13 +732,14 @@ header.glass-surface {
     max-height: 0;
     overflow: hidden;
     transition: max-height 300ms ease-in-out;
+    will-change: max-height;
 }
 
 .submenu.open { max-height: 200px; }
 
 .submenu-item {
     padding-left: 3rem;
-    transition: all 150ms ease;
+    transition: color 150ms ease, background 150ms ease, padding-left 220ms ease;
     cursor: pointer;
 }
 

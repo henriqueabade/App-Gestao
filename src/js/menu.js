@@ -1329,14 +1329,36 @@ function expandSidebar() {
 }
 
 function collapseSidebar() {
-    if (sidebarExpanded) {
-        sidebar.classList.remove('sidebar-text-visible');
+    if (!sidebarExpanded) {
+        return;
+    }
+
+    const finalizeCollapse = () => {
+        if (!sidebarExpanded) {
+            sidebar.classList.remove('sidebar-text-visible');
+        }
+    };
+
+    sidebar.addEventListener(
+        'transitionend',
+        (event) => {
+            if (event.propertyName === 'width') {
+                finalizeCollapse();
+            }
+        },
+        { once: true }
+    );
+
+    requestAnimationFrame(() => {
         sidebar.classList.remove('sidebar-expanded');
         sidebar.classList.add('sidebar-collapsed');
-        mainContent.style.marginLeft = '64px';
-        if (companyName) companyName.classList.add('collapsed');
-        sidebarExpanded = false;
-    }
+    });
+
+    mainContent.style.marginLeft = '64px';
+    if (companyName) companyName.classList.add('collapsed');
+    sidebarExpanded = false;
+
+    setTimeout(finalizeCollapse, 250);
     // Submenu CRM permanece aberto; fechamento apenas via clique
 }
 
