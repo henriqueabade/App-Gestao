@@ -12,15 +12,20 @@ let pendingRefreshFrame = null;
 
 // Diferença mínima entre scrollHeight e clientHeight para considerar que há overflow
 const MIN_SCROLL_DIFF = 8;
-const OVERFLOW_STABLE_DELAY = 180;
+const OVERFLOW_STABLE_DELAY = 600;
 
 let pendingStabilityTimeout = null;
 let pendingStabilityCandidate = null;
+let stabilityObserver = null;
 
 function clearPendingStability() {
   if (pendingStabilityTimeout !== null) {
     clearTimeout(pendingStabilityTimeout);
     pendingStabilityTimeout = null;
+  }
+  if (stabilityObserver) {
+    stabilityObserver.disconnect();
+    stabilityObserver = null;
   }
   pendingStabilityCandidate = null;
 }
@@ -149,34 +154,99 @@ function refreshScrollbar() {
       return;
     }
 
-    clearPendingStability();
-    pendingStabilityCandidate = candidate;
-    pendingStabilityTimeout = setTimeout(() => {
-      requestAnimationFrame(() => {
-        const stableCandidate = pendingStabilityCandidate;
-        if (!stableCandidate) {
-          clearPendingStability();
-          return;
-        }
-
-        if (!stableCandidate.isConnected) {
-          removeScrollbar();
-          clearPendingStability();
-          return;
-        }
-
-        const stableDiff = stableCandidate.scrollHeight - stableCandidate.clientHeight;
-        if (stableDiff <= MIN_SCROLL_DIFF) {
-          removeScrollbar();
-          clearPendingStability();
-          return;
-        }
-
-        createScrollbar(stableCandidate);
-        clearPendingStability();
-      });
-    }, OVERFLOW_STABLE_DELAY);
+    waitForStableOverflow(candidate);
   });
+}
+
+function waitForStableOverflow(candidate) {
+  clearPendingStability();
+  pendingStabilityCandidate = candidate;
+
+  const finalize = () => {
+    requestAnimationFrame(() => {
+      const stableCandidate = pendingStabilityCandidate;
+      if (!stableCandidate) {
+        clearPendingStability();
+        return;
+      }
+
+      if (!stableCandidate.isConnected) {
+        removeScrollbar();
+        clearPendingStability();
+        return;
+      }
+
+      const stableDiff = stableCandidate.scrollHeight - stableCandidate.clientHeight;
+      if (stableDiff > MIN_SCROLL_DIFF) {
+        createScrollbar(stableCandidate);
+      } else {
+        removeScrollbar();
+      }
+      clearPendingStability();
+    });
+  };
+
+  const scheduleFinalization = () => {
+    if (pendingStabilityTimeout !== null) {
+      clearTimeout(pendingStabilityTimeout);
+    }
+    pendingStabilityTimeout = setTimeout(finalize, OVERFLOW_STABLE_DELAY);
+  };
+
+  scheduleFinalization();
+
+  if (typeof ResizeObserver !== 'undefined') {
+    stabilityObserver = new ResizeObserver(() => {
+      scheduleFinalization();
+    });
+    stabilityObserver.observe(candidate);
+  } else {
+    let rafId = null;
+    let prevWidth = candidate.clientWidth;
+    let prevHeight = candidate.clientHeight;
+    let prevScrollHeight = candidate.scrollHeight;
+
+    const loop = () => {
+      if (!pendingStabilityCandidate) {
+        rafId = null;
+        return;
+      }
+
+      if (!candidate.isConnected) {
+        removeScrollbar();
+        clearPendingStability();
+        rafId = null;
+        return;
+      }
+
+      const currentWidth = candidate.clientWidth;
+      const currentHeight = candidate.clientHeight;
+      const currentScrollHeight = candidate.scrollHeight;
+
+      if (
+        currentWidth !== prevWidth ||
+        currentHeight !== prevHeight ||
+        currentScrollHeight !== prevScrollHeight
+      ) {
+        prevWidth = currentWidth;
+        prevHeight = currentHeight;
+        prevScrollHeight = currentScrollHeight;
+        scheduleFinalization();
+      }
+
+      rafId = requestAnimationFrame(loop);
+    };
+
+    rafId = requestAnimationFrame(loop);
+    stabilityObserver = {
+      disconnect() {
+        if (rafId !== null) {
+          cancelAnimationFrame(rafId);
+          rafId = null;
+        }
+      }
+    };
+  }
 }
 
 // Observa carregamento dinâmico de novos módulos
