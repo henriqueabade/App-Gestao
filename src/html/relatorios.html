@@ -1,120 +1,115 @@
 <div class="modulo-container relatorios-module">
     <!-- Header -->
-    <div class="relatorios-header glass-panel sticky top-0 z-40 border border-white/10 mb-8">
-        <div class="relatorios-header-inner max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <!-- Breadcrumb -->
-            <div class="relatorios-breadcrumb flex items-center gap-2 text-sm py-3 border-b border-white/5">
-                <a href="#" class="text-gray-400 hover:text-white transition-colors">Home</a>
-                <svg class="w-4 h-4 text-gray-500" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
-                    <path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 111.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd"></path>
-                </svg>
-                <span class="text-white">Relatórios</span>
-            </div>
+    <div class="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between mb-8 px-4 sm:px-6 lg:px-8">
+        <div>
+            <h1 class="text-2xl font-semibold text-white">Relatórios</h1>
+            <p class="text-gray-400 mt-2">Gere, visualize e exporte dados do sistema</p>
+        </div>
 
-            <!-- Title & Actions -->
-            <div class="py-6">
-                <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-                    <div>
-                        <h1 class="text-2xl font-bold text-white">Relatórios</h1>
-                        <p class="text-gray-400 mt-1">Gere, visualize e exporte dados do sistema</p>
-                    </div>
+        <div class="flex flex-col gap-3 w-full lg:w-auto">
+            <div class="flex flex-wrap items-center justify-end gap-3 relatorios-actions">
+                <button class="btn-primary px-4 py-2 rounded-lg font-medium flex items-center gap-2">
+                    <i class="fas fa-plus"></i>
+                    Novo Relatório
+                </button>
 
-                    <div class="flex flex-wrap items-center gap-3 relatorios-actions">
-                        <button class="btn-primary px-4 py-2 rounded-lg font-medium flex items-center gap-2">
-                            <i class="fas fa-plus"></i>
-                            Novo Relatório
-                        </button>
+                <button id="relatoriosSaveTemplateBtn" class="btn-neutral px-4 py-2 rounded-lg font-medium">
+                    <i class="fas fa-bookmark"></i>
+                    Salvar Modelo
+                </button>
 
-                        <button id="relatoriosSaveTemplateBtn" class="btn-neutral px-4 py-2 rounded-lg font-medium">
-                            <i class="fas fa-bookmark"></i>
-                            Salvar Modelo
-                        </button>
-
-                        <div class="relative">
-                            <button id="relatoriosLoadTemplateBtn" class="btn-neutral px-4 py-2 rounded-lg font-medium flex items-center gap-2">
-                                <i class="fas fa-layer-group"></i>
-                                Carregar Modelo
-                                <i class="fas fa-chevron-down text-xs"></i>
-                            </button>
-                            <div id="relatoriosTemplateDropdown" class="relatorios-dropdown">
-                                <div class="py-2">
-                                    <a href="#" class="relatorios-dropdown-item">Relatório Estoque Mensal</a>
-                                    <a href="#" class="relatorios-dropdown-item">Análise de Vendas Q3</a>
-                                    <a href="#" class="relatorios-dropdown-item">Clientes Ativos 2025</a>
-                                    <hr class="my-2 border-white/10">
-                                    <a href="#" class="relatorios-dropdown-item text-gray-400">Gerenciar Modelos</a>
-                                </div>
-                            </div>
-                        </div>
-
-                        <button id="relatoriosScheduleBtn" class="btn-neutral px-4 py-2 rounded-lg font-medium">
-                            <i class="fas fa-clock"></i>
-                            Agendar
-                        </button>
-
-                        <div class="relative">
-                            <button id="relatoriosExportBtn" class="btn-bordeaux px-4 py-2 rounded-lg font-medium flex items-center gap-2">
-                                <i class="fas fa-file-export"></i>
-                                Exportar
-                                <i class="fas fa-chevron-down text-xs"></i>
-                            </button>
-                            <div id="relatoriosExportDropdown" class="relatorios-dropdown w-48">
-                                <div class="py-2">
-                                    <a href="#" class="relatorios-dropdown-item flex items-center gap-3">
-                                        <i class="fas fa-file-pdf text-red-400"></i>
-                                        PDF
-                                    </a>
-                                    <a href="#" class="relatorios-dropdown-item flex items-center gap-3">
-                                        <i class="fas fa-file-excel text-green-400"></i>
-                                        Excel
-                                    </a>
-                                    <a href="#" class="relatorios-dropdown-item flex items-center gap-3">
-                                        <i class="fas fa-file-csv text-blue-400"></i>
-                                        CSV
-                                    </a>
-                                    <hr class="my-2 border-white/10">
-                                    <a href="#" class="relatorios-dropdown-item flex items-center gap-3">
-                                        <i class="fas fa-print text-gray-400"></i>
-                                        Imprimir
-                                    </a>
-                                </div>
-                            </div>
+                <div class="relative">
+                    <button id="relatoriosLoadTemplateBtn" class="btn-neutral px-4 py-2 rounded-lg font-medium flex items-center gap-2">
+                        <i class="fas fa-layer-group"></i>
+                        Carregar Modelo
+                        <i class="fas fa-chevron-down text-xs"></i>
+                    </button>
+                    <div id="relatoriosTemplateDropdown" class="relatorios-dropdown">
+                        <div class="py-2">
+                            <a href="#" class="relatorios-dropdown-item">Relatório Estoque Mensal</a>
+                            <a href="#" class="relatorios-dropdown-item">Análise de Vendas Q3</a>
+                            <a href="#" class="relatorios-dropdown-item">Clientes Ativos 2025</a>
+                            <hr class="my-2 border-white/10">
+                            <a href="#" class="relatorios-dropdown-item text-gray-400">Gerenciar Modelos</a>
                         </div>
                     </div>
                 </div>
+
+                <button id="relatoriosScheduleBtn" class="btn-neutral px-4 py-2 rounded-lg font-medium">
+                    <i class="fas fa-clock"></i>
+                    Agendar
+                </button>
+
+                <div class="relative">
+                    <button id="relatoriosExportBtn" class="btn-bordeaux px-4 py-2 rounded-lg font-medium flex items-center gap-2">
+                        <i class="fas fa-file-export"></i>
+                        Exportar
+                        <i class="fas fa-chevron-down text-xs"></i>
+                    </button>
+                    <div id="relatoriosExportDropdown" class="relatorios-dropdown w-48">
+                        <div class="py-2">
+                            <a href="#" class="relatorios-dropdown-item flex items-center gap-3">
+                                <i class="fas fa-file-pdf text-red-400"></i>
+                                PDF
+                            </a>
+                            <a href="#" class="relatorios-dropdown-item flex items-center gap-3">
+                                <i class="fas fa-file-excel text-green-400"></i>
+                                Excel
+                            </a>
+                            <a href="#" class="relatorios-dropdown-item flex items-center gap-3">
+                                <i class="fas fa-file-csv text-blue-400"></i>
+                                CSV
+                            </a>
+                            <hr class="my-2 border-white/10">
+                            <a href="#" class="relatorios-dropdown-item flex items-center gap-3">
+                                <i class="fas fa-print text-gray-400"></i>
+                                Imprimir
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex flex-wrap items-center justify-end gap-3">
+                <button id="relatoriosShareBtn" class="btn-neutral px-4 py-2 rounded-lg font-medium flex items-center gap-2">
+                    <i class="fas fa-share-alt"></i>
+                    <span class="relatorios-share-label">Compartilhar</span>
+                </button>
+                <button class="btn-danger-light px-4 py-2 rounded-lg font-medium flex items-center gap-2">
+                    <i class="fas fa-times"></i>
+                    Fechar
+                </button>
             </div>
         </div>
     </div>
 
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <!-- Report Tabs -->
-        <div class="mb-8">
-            <div class="glass-panel rounded-2xl p-2">
-                <div role="tablist" class="flex flex-wrap gap-2" aria-label="Categorias de Relatórios">
-                    <button role="tab" aria-selected="true" class="relatorios-tab tab-active" data-relatorios-tab="estoque">
-                        Estoque
-                    </button>
-                    <button role="tab" aria-selected="false" class="relatorios-tab tab-inactive" data-relatorios-tab="producao">
-                        Produção &amp; Produtos
-                    </button>
-                    <button role="tab" aria-selected="false" class="relatorios-tab tab-inactive" data-relatorios-tab="clientes">
-                        Clientes &amp; CRM
-                    </button>
-                    <button role="tab" aria-selected="false" class="relatorios-tab tab-inactive" data-relatorios-tab="orcamentos">
-                        Orçamentos
-                    </button>
-                    <button role="tab" aria-selected="false" class="relatorios-tab tab-inactive" data-relatorios-tab="pedidos">
-                        Pedidos
-                    </button>
-                    <button role="tab" aria-selected="false" class="relatorios-tab tab-inactive" data-relatorios-tab="usuarios">
-                        Usuários &amp; Auditoria
-                    </button>
-                </div>
+        <div class="glass-surface rounded-xl p-4 mb-8">
+            <div role="tablist" class="flex flex-wrap gap-2" aria-label="Categorias de Relatórios">
+                <button role="tab" aria-selected="true" class="relatorios-tab tab-active" data-relatorios-tab="estoque">
+                    Estoque
+                </button>
+                <button role="tab" aria-selected="false" class="relatorios-tab tab-inactive" data-relatorios-tab="producao">
+                    Produção &amp; Produtos
+                </button>
+                <button role="tab" aria-selected="false" class="relatorios-tab tab-inactive" data-relatorios-tab="clientes">
+                    Clientes &amp; CRM
+                </button>
+                <button role="tab" aria-selected="false" class="relatorios-tab tab-inactive" data-relatorios-tab="orcamentos">
+                    Orçamentos
+                </button>
+                <button role="tab" aria-selected="false" class="relatorios-tab tab-inactive" data-relatorios-tab="pedidos">
+                    Pedidos
+                </button>
+                <button role="tab" aria-selected="false" class="relatorios-tab tab-inactive" data-relatorios-tab="usuarios">
+                    Usuários &amp; Auditoria
+                </button>
             </div>
         </div>
 
         <!-- Filters Section -->
-        <section class="glass-panel rounded-2xl p-6 mb-8">
+        <section class="glass-surface rounded-xl p-6 mb-8">
             <h2 class="section-title">Filtros</h2>
 
             <!-- Common Filters -->
@@ -258,7 +253,7 @@
         </section>
 
         <!-- KPIs Section -->
-        <section class="mb-8">
+        <section class="glass-surface rounded-xl p-6 mb-8">
             <h2 class="section-title">Indicadores</h2>
             <div id="relatoriosKpiContainer">
                 <div class="relatorios-kpi-grid" data-relatorios-kpi="estoque">
@@ -302,8 +297,8 @@
         </section>
 
         <!-- Results Section -->
-        <section class="glass-panel rounded-2xl mb-8">
-            <div class="border-b border-white/10 p-4">
+        <section class="glass-surface rounded-xl mb-8 overflow-hidden">
+            <div class="border-b border-white/10 px-6 py-4">
                 <div class="flex flex-wrap gap-2" role="tablist" aria-label="Visão dos resultados">
                     <button class="result-tab result-tab-active" data-relatorios-result="table">
                         Tabela
@@ -319,7 +314,7 @@
 
             <div class="p-6">
                 <div id="relatoriosTableView" class="relatorios-result-content">
-                    <div class="overflow-x-auto">
+                    <div class="table-scroll">
                         <table class="w-full text-sm">
                             <thead class="sticky top-0 bg-surface/80 backdrop-blur-sm">
                                 <tr class="border-b border-white/10">
@@ -477,35 +472,6 @@
                 </div>
             </div>
         </section>
-    </div>
-
-    <!-- Bottom Action Bar -->
-    <div class="relatorios-bottom-bar">
-        <div class="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-4">
-            <div class="flex flex-wrap items-center gap-3">
-                <button class="btn-primary px-4 py-2 rounded-lg font-medium flex items-center gap-2">
-                    <i class="fas fa-file-export"></i>
-                    Exportar
-                </button>
-                <button id="relatoriosShareBtn" class="btn-neutral px-4 py-2 rounded-lg font-medium flex items-center gap-2">
-                    <i class="fas fa-share-alt"></i>
-                    <span class="relatorios-share-label">Compartilhar</span>
-                </button>
-                <button class="btn-neutral px-4 py-2 rounded-lg font-medium flex items-center gap-2">
-                    <i class="fas fa-bookmark"></i>
-                    Salvar Modelo
-                </button>
-                <button class="btn-neutral px-4 py-2 rounded-lg font-medium flex items-center gap-2">
-                    <i class="fas fa-clock"></i>
-                    Agendar
-                </button>
-            </div>
-
-            <button class="btn-danger-light px-4 py-2 rounded-lg font-medium flex items-center gap-2">
-                <i class="fas fa-times"></i>
-                Fechar
-            </button>
-        </div>
     </div>
 
     <!-- Save Template Modal -->

@@ -24,21 +24,6 @@ body {
     color: #fff;
 }
 
-.relatorios-module .glass-panel {
-    background: rgba(17, 24, 39, 0.55);
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
-    border-radius: 1rem;
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    box-shadow: 0 20px 40px rgba(15, 23, 42, 0.25);
-}
-
-.relatorios-header {
-    background: rgba(17, 24, 39, 0.75);
-    backdrop-filter: blur(18px);
-    -webkit-backdrop-filter: blur(18px);
-}
-
 .relatorios-module .btn-primary {
     background: var(--color-primary);
     color: #fff;
@@ -92,8 +77,7 @@ body {
     background: rgba(255, 88, 88, 0.26);
 }
 
-.relatorios-actions i,
-.relatorios-bottom-bar i {
+.relatorios-actions i {
     font-size: 0.85rem;
 }
 
@@ -408,18 +392,6 @@ body {
     font-weight: 500;
 }
 
-.relatorios-bottom-bar {
-    position: sticky;
-    bottom: 0;
-    width: 100%;
-    background: rgba(17, 24, 39, 0.8);
-    backdrop-filter: blur(18px);
-    -webkit-backdrop-filter: blur(18px);
-    border-top: 1px solid rgba(255, 255, 255, 0.12);
-    padding: 1rem;
-    margin-top: 2rem;
-}
-
 .relatorios-module .relatorios-dropdown {
     position: absolute;
     right: 0;
@@ -501,15 +473,5 @@ body {
     }
     100% {
         background-position: -200% 0;
-    }
-}
-
-@media (max-width: 1024px) {
-    .relatorios-header {
-        position: static;
-    }
-
-    .relatorios-bottom-bar {
-        position: static;
     }
 }
