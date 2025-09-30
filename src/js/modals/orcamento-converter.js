@@ -363,7 +363,7 @@
         renderRows();
         validate();
       })
-      .then(() => computeInsumosAndRender())
+      .then(() => computeInsumosAndRender({ showPiecesSpinner: false, showInsumosSpinner: false }))
       .catch(err => { console.error('Erro ao recalcular dados após substituição', err); })
       .finally(() => {
         finalizePiecesLoading();
@@ -505,8 +505,13 @@
         state.insumosView.filtroPecaId = isNaN(pid) ? null : pid;
         const item = rows.find(r => Number(r.produto_id) === pid);
         if (insumosTituloPeca) insumosTituloPeca.textContent = item?.nome ? item.nome : 'Totais';
-        buildInsumosGrid();
-        validate();
+        const finalizeInsumosLoading = showTableLoading(insumosBody, 'Filtrando insumos...');
+        try {
+          buildInsumosGrid();
+          validate();
+        } finally {
+          finalizeInsumosLoading();
+        }
       });
     });
 
@@ -591,7 +596,14 @@
   });
 
   // Cálculo de insumos e status por peça
-async function computeInsumosAndRender(){
+async function computeInsumosAndRender(options = {}) {
+  const {
+    showPiecesSpinner = true,
+    showInsumosSpinner = true,
+    message = 'Recalculando insumos...'
+  } = options || {};
+  const finalizePiecesLoading = showPiecesSpinner ? showTableLoading(pecasBody, 'Recalculando peças...') : () => {};
+  const finalizeInsumosLoading = showInsumosSpinner ? showTableLoading(insumosBody, message) : () => {};
   try {
     const byId = new Map(listaProdutos.map(p => [String(p.id), p]));
 
@@ -828,6 +840,9 @@ async function computeInsumosAndRender(){
     validate();
   } catch (err) {
     console.error('Erro ao calcular insumos', err);
+  } finally {
+    finalizeInsumosLoading();
+    finalizePiecesLoading();
   }
 }
 
@@ -947,7 +962,7 @@ async function computeInsumosAndRender(){
       r.approved = !!r.approved;
     });
     if (insumosTituloPeca) insumosTituloPeca.textContent = 'Totais';
-    recomputeStocks(); renderRows(); validate(); await computeInsumosAndRender();
+    recomputeStocks(); renderRows(); validate(); await computeInsumosAndRender({ message: 'Carregando insumos...' });
   })();
 
   initPromise
@@ -966,18 +981,19 @@ async function computeInsumosAndRender(){
     });
 
   // Eventos extra
-  document.getElementById('converterDecisionNote')?.addEventListener('input', () => { computeInsumosAndRender(); });
+  document.getElementById('converterDecisionNote')?.addEventListener('input', () => {
+    computeInsumosAndRender({ message: 'Atualizando insumos...' });
+  });
   onlyMissingToggle?.addEventListener('change', () => {
     state.insumosView.mostrarSomenteFaltantes = !!onlyMissingToggle.checked;
-    insumosBody.innerHTML = '<tr><td colspan="7" class="py-6 text-left text-gray-300"><i class="fas fa-sync-alt rotating mr-2"></i>Recarregando...</td></tr>';
-    setTimeout(() => { computeInsumosAndRender(); }, 1000);
+    const message = state.insumosView.mostrarSomenteFaltantes ? 'Filtrando insumos faltantes...' : 'Atualizando insumos...';
+    computeInsumosAndRender({ message });
   });
   insumosReloadBtn?.addEventListener('click', () => {
     state.insumosView.filtroPecaId = null;
     if (onlyMissingToggle) { onlyMissingToggle.checked = false; state.insumosView.mostrarSomenteFaltantes = false; }
     if (insumosTituloPeca) insumosTituloPeca.textContent = 'Totais';
-    insumosBody.innerHTML = '<tr><td colspan="7" class="py-6 text-left text-gray-300"><i class="fas fa-sync-alt rotating mr-2"></i>Recarregando...</td></tr>';
-    setTimeout(() => { computeInsumosAndRender(); }, 1000);
+    computeInsumosAndRender({ message: 'Recarregando insumos...' });
   });
 
   // Popover de peça (clique)
