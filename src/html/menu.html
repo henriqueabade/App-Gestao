@@ -85,14 +85,34 @@
                                 </button>
                             </div>
                         </div>
-                        <button id="checkUpdatesBtn" type="button" class="app-update-check">
-                            <i id="checkUpdatesIcon" class="fas fa-arrows-rotate app-update-check-icon" aria-hidden="true"></i>
-                            <span id="checkUpdatesLabel" class="app-update-check-label">Checar atualização</span>
-                        </button>
-                        <button id="publishUpdateBtn" type="button" class="app-update-button hidden">
-                            <i class="fas fa-cloud-upload-alt app-update-button-icon" aria-hidden="true"></i>
-                            <span id="publishUpdateLabel" class="app-update-button-label"></span>
-                        </button>
+                        <div id="userUpdateControl" class="user-updates hidden">
+                            <button
+                                id="userUpdatesTrigger"
+                                type="button"
+                                class="user-updates-trigger"
+                                data-state="idle"
+                                aria-expanded="false"
+                                aria-haspopup="true"
+                            >
+                                <i id="userUpdatesIcon" class="fas fa-circle-check user-updates-icon" aria-hidden="true"></i>
+                                <div class="user-updates-text">
+                                    <span id="userUpdatesLabel">Atualizações indisponíveis</span>
+                                    <span id="userUpdatesVersion" class="user-updates-version"></span>
+                                </div>
+                                <i class="fas fa-chevron-down user-updates-caret" aria-hidden="true"></i>
+                            </button>
+                            <div
+                                id="userUpdatesPanel"
+                                class="user-updates-panel hidden"
+                                role="region"
+                                aria-hidden="true"
+                            >
+                                <button id="userUpdateAction" type="button" class="user-update-action">
+                                    <i id="userUpdateActionIcon" class="fas fa-cloud-download-alt" aria-hidden="true"></i>
+                                    <span id="userUpdateActionLabel">Aplicar atualização</span>
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 </div>
                 <div class="flex items-center space-x-2" id="userSummary" aria-live="polite">

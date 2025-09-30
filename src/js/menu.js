@@ -18,11 +18,6 @@ const AppUpdates = (() => {
         badgeSubtitle: document.getElementById('appUpdateBadgeSubtitle'),
         progress: document.getElementById('appUpdateProgress'),
         progressBar: document.getElementById('appUpdateProgressBar'),
-        checkBtn: document.getElementById('checkUpdatesBtn'),
-        checkIcon: document.getElementById('checkUpdatesIcon'),
-        checkLabel: document.getElementById('checkUpdatesLabel'),
-        publishBtn: document.getElementById('publishUpdateBtn'),
-        publishLabel: document.getElementById('publishUpdateLabel'),
         supAdmin: {
             container: document.getElementById('supAdminUpdateControl'),
             trigger: document.getElementById('supAdminUpdatesTrigger'),
@@ -32,6 +27,18 @@ const AppUpdates = (() => {
             publish: document.getElementById('supAdminPublishAction'),
             publishIcon: document.getElementById('supAdminPublishIcon'),
             publishLabel: document.getElementById('supAdminPublishLabel')
+        },
+        user: {
+            container: document.getElementById('userUpdateControl'),
+            trigger: document.getElementById('userUpdatesTrigger'),
+            icon: document.getElementById('userUpdatesIcon'),
+            label: document.getElementById('userUpdatesLabel'),
+            version: document.getElementById('userUpdatesVersion'),
+            caret: document.querySelector('#userUpdatesTrigger .user-updates-caret'),
+            panel: document.getElementById('userUpdatesPanel'),
+            action: document.getElementById('userUpdateAction'),
+            actionIcon: document.getElementById('userUpdateActionIcon'),
+            actionLabel: document.getElementById('userUpdateActionLabel')
         }
     };
 
@@ -51,6 +58,16 @@ const AppUpdates = (() => {
             panelOpen: false,
             lastError: null,
             successTimer: null
+        },
+        userControl: {
+            mode: 'idle',
+            panelOpen: false,
+            pendingAction: false,
+            spinner: null,
+            spinnerMessage: '',
+            lastError: null,
+            forceAvailable: false,
+            errorAcknowledged: false
         }
     };
 
@@ -145,13 +162,15 @@ const AppUpdates = (() => {
     function updateContainerVisibility() {
         if (!elements.container) return;
         const badgeVisible = elements.badge && !elements.badge.classList.contains('hidden');
-        const buttonVisible = elements.publishBtn && !elements.publishBtn.classList.contains('hidden');
-        const checkVisible = elements.checkBtn && !elements.checkBtn.classList.contains('hidden');
         const supAdminVisible = Boolean(
             elements.supAdmin?.container &&
             !elements.supAdmin.container.classList.contains('hidden')
         );
-        setElementHidden(elements.container, !(badgeVisible || buttonVisible || checkVisible || supAdminVisible));
+        const userVisible = Boolean(
+            elements.user?.container &&
+            !elements.user.container.classList.contains('hidden')
+        );
+        setElementHidden(elements.container, !(badgeVisible || supAdminVisible || userVisible));
     }
 
     function clearSupAdminSuccessTimer() {
@@ -287,6 +306,471 @@ const AppUpdates = (() => {
         }
 
         updateContainerVisibility();
+    }
+
+    function escapeHtml(text) {
+        if (text === null || text === undefined) return '';
+        return String(text).replace(/[&<>"]+/g, match => {
+            switch (match) {
+                case '&':
+                    return '&amp;';
+                case '<':
+                    return '&lt;';
+                case '>':
+                    return '&gt;';
+                case '"':
+                    return '&quot;';
+                default:
+                    return match;
+            }
+        });
+    }
+
+    function showUpdateDialog({ title, message, confirmLabel = 'OK', cancelLabel = null, variant = 'info' }) {
+        return new Promise(resolve => {
+            const overlay = document.createElement('div');
+            overlay.className = 'warning-overlay';
+
+            const modal = document.createElement('div');
+            modal.className = 'warning-modal';
+            modal.setAttribute('role', 'dialog');
+            modal.setAttribute('aria-modal', 'true');
+
+            const titleId = `updateDialogTitle-${Date.now()}`;
+            modal.setAttribute('aria-labelledby', titleId);
+
+            const iconWrap = document.createElement('div');
+            iconWrap.className = 'warning-icon';
+
+            const circle = document.createElement('div');
+            circle.className = 'warning-icon-circle';
+            const icon = document.createElement('i');
+            icon.classList.add('fas');
+            if (variant === 'error') {
+                icon.classList.add('fa-triangle-exclamation');
+            } else if (variant === 'confirm') {
+                icon.classList.add('fa-circle-question');
+            } else {
+                icon.classList.add('fa-circle-info');
+            }
+            circle.appendChild(icon);
+            iconWrap.appendChild(circle);
+
+            const titleEl = document.createElement('h2');
+            titleEl.id = titleId;
+            titleEl.className = 'warning-title text-lg';
+            titleEl.innerHTML = escapeHtml(title || 'Atualizações');
+
+            const messageEl = document.createElement('p');
+            messageEl.className = 'warning-text mt-3';
+            const safeMessage = escapeHtml(message || '');
+            messageEl.innerHTML = safeMessage.replace(/\n/g, '<br>');
+
+            const actions = document.createElement('div');
+            actions.className = cancelLabel ? 'mt-6 space-y-3' : 'mt-6';
+
+            const confirmBtn = document.createElement('button');
+            confirmBtn.type = 'button';
+            confirmBtn.className = 'warning-button';
+            confirmBtn.textContent = confirmLabel;
+            confirmBtn.dataset.action = 'confirm';
+
+            let cancelBtn = null;
+            if (cancelLabel) {
+                cancelBtn = document.createElement('button');
+                cancelBtn.type = 'button';
+                cancelBtn.dataset.action = 'cancel';
+                cancelBtn.textContent = cancelLabel;
+                cancelBtn.className = 'warning-button bg-white/10 text-white border border-white/20';
+                actions.appendChild(cancelBtn);
+            }
+
+            actions.appendChild(confirmBtn);
+
+            modal.appendChild(iconWrap);
+            modal.appendChild(titleEl);
+            modal.appendChild(messageEl);
+            modal.appendChild(actions);
+
+            overlay.appendChild(modal);
+            document.body.appendChild(overlay);
+
+            requestAnimationFrame(() => {
+                modal.classList.add('show');
+                confirmBtn.focus();
+            });
+
+            const cleanup = result => {
+                modal.classList.remove('show');
+                setTimeout(() => {
+                    if (overlay.isConnected) overlay.remove();
+                }, 160);
+                resolve(result);
+            };
+
+            overlay.addEventListener('click', event => {
+                if (event.target === overlay && !cancelLabel) {
+                    cleanup(true);
+                } else if (event.target === overlay && cancelLabel) {
+                    cleanup(false);
+                }
+            });
+
+            confirmBtn.addEventListener('click', () => cleanup(true));
+            if (cancelBtn) {
+                cancelBtn.addEventListener('click', () => cleanup(false));
+            }
+
+            overlay.addEventListener('keydown', event => {
+                if (event.key === 'Escape') {
+                    cleanup(Boolean(cancelLabel));
+                }
+            });
+        });
+    }
+
+    function ensureUserSpinner(message) {
+        const control = state.userControl;
+        if (control.spinner && control.spinner.isConnected) {
+            const label = control.spinner.querySelector('[data-role="message"]');
+            if (label) label.textContent = message || 'Processando atualização...';
+            return;
+        }
+
+        const overlay = document.createElement('div');
+        overlay.className = 'fixed inset-0 z-[2000] bg-black/60 backdrop-blur-sm flex flex-col items-center justify-center gap-4';
+        overlay.setAttribute('role', 'alert');
+        overlay.innerHTML = `
+            <div class="w-16 h-16 border-4 border-[#60a5fa] border-t-transparent rounded-full animate-spin"></div>
+            <p class="text-sm text-white font-medium" data-role="message">${escapeHtml(message || 'Processando atualização...')}</p>
+        `;
+        document.body.appendChild(overlay);
+        control.spinner = overlay;
+    }
+
+    function hideUserSpinner() {
+        const overlay = state.userControl.spinner;
+        if (overlay && overlay.isConnected) {
+            overlay.remove();
+        }
+        state.userControl.spinner = null;
+        state.userControl.spinnerMessage = '';
+    }
+
+    function setUserMode(mode, options = {}) {
+        const valid = new Set(['idle', 'checking', 'available', 'updating', 'error', 'up-to-date']);
+        const nextMode = valid.has(mode) ? mode : 'idle';
+        state.userControl.mode = nextMode;
+        if (options.panelOpen !== undefined) {
+            state.userControl.panelOpen = nextMode === 'available' && Boolean(options.panelOpen);
+        } else if (nextMode !== 'available') {
+            state.userControl.panelOpen = false;
+        }
+        if (options.lastError !== undefined) {
+            state.userControl.lastError = options.lastError || null;
+        } else if (nextMode !== 'error') {
+            state.userControl.lastError = null;
+        }
+        if (options.spinnerMessage !== undefined) {
+            state.userControl.spinnerMessage = options.spinnerMessage || '';
+        }
+
+        if (nextMode === 'updating') {
+            ensureUserSpinner(state.userControl.spinnerMessage || 'Aplicando atualização...');
+        } else {
+            hideUserSpinner();
+        }
+
+        applyUserState();
+    }
+
+    function applyUserState() {
+        const user = elements.user;
+        if (!user?.container || !user.trigger || !user.icon || !user.label) {
+            updateContainerVisibility();
+            return;
+        }
+
+        const profile = state.user || {};
+        const isSupAdmin = profile?.perfil === 'Sup Admin';
+        user.container.classList.toggle('hidden', isSupAdmin);
+
+        if (isSupAdmin) {
+            state.userControl.panelOpen = false;
+            hideUserSpinner();
+            updateContainerVisibility();
+            return;
+        }
+
+        const mode = state.userControl.mode || 'idle';
+        const trigger = user.trigger;
+
+        let iconClass = 'fa-circle-check';
+        let labelText = 'Atualizações indisponíveis';
+        let disableTrigger = false;
+        let caretVisible = mode === 'available';
+        let busy = false;
+
+        switch (mode) {
+            case 'checking':
+                iconClass = 'fa-circle-notch';
+                labelText = 'Verificando atualizações...';
+                disableTrigger = true;
+                busy = true;
+                break;
+            case 'available':
+                iconClass = 'fa-cloud-download-alt';
+                labelText = state.updateStatus?.latestVersion
+                    ? `Atualização v${state.updateStatus.latestVersion}`
+                    : 'Atualização disponível';
+                break;
+            case 'updating':
+                iconClass = 'fa-wifi';
+                labelText = 'Aplicando atualização...';
+                disableTrigger = true;
+                busy = true;
+                caretVisible = false;
+                break;
+            case 'error':
+                iconClass = 'fa-circle-xmark';
+                labelText = state.userControl.lastError || 'Falha na atualização';
+                caretVisible = false;
+                break;
+            case 'up-to-date':
+                iconClass = 'fa-circle-check';
+                labelText = 'Aplicativo atualizado';
+                break;
+            default:
+                break;
+        }
+
+        if (state.updateStatus?.status === 'disabled') {
+            labelText = state.updateStatus.statusMessage || 'Atualizações indisponíveis';
+        }
+
+        user.icon.className = `fas ${iconClass} user-updates-icon`;
+        user.label.textContent = labelText;
+
+        if (user.version) {
+            const version = state.localVersion || state.updateStatus?.localVersion;
+            user.version.textContent = version ? `Versão ${version}` : '';
+        }
+
+        trigger.dataset.state = mode;
+        trigger.setAttribute('data-state', mode);
+        trigger.disabled = disableTrigger;
+        trigger.setAttribute('aria-busy', busy ? 'true' : 'false');
+        trigger.setAttribute('aria-expanded', state.userControl.panelOpen && mode === 'available' ? 'true' : 'false');
+
+        if (user.caret) {
+            user.caret.classList.toggle('hidden', !caretVisible);
+        }
+
+        if (user.panel) {
+            const showPanel = state.userControl.panelOpen && mode === 'available';
+            user.panel.classList.toggle('hidden', !showPanel);
+            user.panel.setAttribute('aria-hidden', showPanel ? 'false' : 'true');
+        }
+
+        if (user.action) {
+            user.action.disabled = mode !== 'available';
+        }
+
+        updateContainerVisibility();
+    }
+
+    function updateUserControlFromStatus() {
+        const profile = state.user || {};
+        if (profile?.perfil === 'Sup Admin') {
+            applyUserState();
+            return;
+        }
+
+        const status = state.updateStatus?.status;
+        const lastErrorMessage = state.updateStatus?.statusMessage || state.updateStatus?.error?.friendlyMessage || state.updateStatus?.error?.message;
+
+        if (status !== 'error') {
+            state.userControl.errorAcknowledged = false;
+        }
+
+        switch (status) {
+            case 'checking':
+                setUserMode('checking');
+                break;
+            case 'update-available':
+            case 'downloaded':
+                setUserMode('available', { panelOpen: state.userControl.panelOpen });
+                break;
+            case 'downloading':
+                setUserMode('updating', { spinnerMessage: 'Baixando atualização...' });
+                break;
+            case 'installing':
+                setUserMode('updating', { spinnerMessage: 'Aplicando atualização...' });
+                break;
+            case 'up-to-date':
+                setUserMode('up-to-date');
+                break;
+            case 'disabled':
+                setUserMode('idle');
+                break;
+            case 'error':
+                setUserMode('error', { lastError: lastErrorMessage });
+                if (!state.userControl.errorAcknowledged) {
+                    state.userControl.errorAcknowledged = true;
+                    showUpdateDialog({
+                        title: 'Erro na atualização',
+                        message: lastErrorMessage || 'Ocorreu um erro durante a atualização.',
+                        confirmLabel: 'OK',
+                        variant: 'error'
+                    }).then(() => {
+                        state.userControl.pendingAction = false;
+                        if (state.updateStatus?.latestVersion) {
+                            runAutomaticCheck({ silent: true });
+                        } else {
+                            setUserMode('idle');
+                        }
+                    });
+                }
+                break;
+            default:
+                setUserMode('idle');
+                break;
+        }
+    }
+
+    async function handleUserTriggerClick(event) {
+        event.preventDefault();
+        if (state.actionBusy) return;
+        const mode = state.userControl.mode;
+        if (mode === 'updating') return;
+
+        if (mode === 'available') {
+            const nextOpen = !state.userControl.panelOpen;
+            setUserMode('available', { panelOpen: nextOpen });
+            return;
+        }
+
+        if (mode === 'error') {
+            const message = state.userControl.lastError || 'Ocorreu um erro durante a última tentativa de atualização.';
+            await showUpdateDialog({
+                title: 'Atualizações',
+                message,
+                confirmLabel: 'OK',
+                variant: 'error'
+            });
+            setUserMode('available', { panelOpen: false });
+            return;
+        }
+
+        state.actionBusy = true;
+        try {
+            setUserMode('checking');
+            const result = await runAutomaticCheck({ silent: true });
+            const status = result?.status || state.updateStatus?.status;
+            if (status === 'update-available' || status === 'downloaded') {
+                setUserMode('available', { panelOpen: true });
+            } else if (status === 'error') {
+                const message = result?.statusMessage || result?.error?.friendlyMessage || result?.error?.message || 'Não foi possível verificar atualizações.';
+                await showUpdateDialog({
+                    title: 'Atualizações',
+                    message,
+                    confirmLabel: 'OK',
+                    variant: 'error'
+                });
+                setUserMode('idle');
+            } else {
+                const version = state.localVersion || result?.localVersion || state.updateStatus?.localVersion;
+                const lines = ['O programa está na última versão disponível.'];
+                if (version) lines.push(`Versão instalada: ${version}.`);
+                await showUpdateDialog({
+                    title: 'Atualizações',
+                    message: lines.join('\n'),
+                    confirmLabel: 'Entendi'
+                });
+                setUserMode('idle');
+            }
+        } catch (err) {
+            await showUpdateDialog({
+                title: 'Atualizações',
+                message: err?.message || 'Não foi possível verificar atualizações.',
+                confirmLabel: 'OK',
+                variant: 'error'
+            });
+            setUserMode('idle');
+        } finally {
+            state.actionBusy = false;
+        }
+    }
+
+    async function handleUserUpdateAction(event) {
+        event.preventDefault();
+        if (state.actionBusy) return;
+        if (state.userControl.mode !== 'available') return;
+
+        const latestVersion = state.updateStatus?.latestVersion || state.availableVersion;
+        const lines = ['Tem certeza que deseja aplicar a atualização agora?'];
+        if (latestVersion) {
+            lines.push(`Versão disponível: ${latestVersion}.`);
+        }
+        lines.push('Ao atualizar, alterações não salvas serão perdidas.');
+
+        const confirmed = await showUpdateDialog({
+            title: 'Aplicar atualização',
+            message: lines.join('\n'),
+            confirmLabel: 'Sim',
+            cancelLabel: 'Não',
+            variant: 'confirm'
+        });
+
+        if (!confirmed) {
+            return;
+        }
+
+        state.actionBusy = true;
+        state.userControl.pendingAction = true;
+        setUserMode('updating', { panelOpen: false, spinnerMessage: 'Baixando atualização...' });
+
+        try {
+            const api = window.electronAPI || {};
+            if (!api.downloadUpdate || !api.installUpdate) {
+                throw new Error('Atualização automática indisponível neste ambiente.');
+            }
+
+            const downloadResult = await api.downloadUpdate();
+            if (downloadResult?.status === 'error') {
+                throw new Error(downloadResult?.statusMessage || 'Falha ao baixar a atualização.');
+            }
+
+            const installResult = await api.installUpdate();
+            if (installResult === false) {
+                throw new Error('Não foi possível iniciar a instalação da atualização.');
+            }
+        } catch (err) {
+            state.userControl.pendingAction = false;
+            state.actionBusy = false;
+            hideUserSpinner();
+            setUserMode('available', { panelOpen: false });
+            await showUpdateDialog({
+                title: 'Erro na atualização',
+                message: err?.message || 'Não foi possível aplicar a atualização.',
+                confirmLabel: 'OK',
+                variant: 'error'
+            });
+            runAutomaticCheck({ silent: true });
+        }
+    }
+
+    function handleUserPanelDismiss(event) {
+        if (!state.userControl.panelOpen) return;
+        const container = elements.user?.container;
+        if (!container || container.contains(event.target)) return;
+        setUserMode('available', { panelOpen: false });
+    }
+
+    function handleUserPanelKeydown(event) {
+        if (event.key !== 'Escape') return;
+        if (!state.userControl.panelOpen) return;
+        setUserMode('available', { panelOpen: false });
     }
 
     function setSupAdminMode(mode, options = {}) {
@@ -563,208 +1047,6 @@ const AppUpdates = (() => {
         updateContainerVisibility();
     }
 
-    function updateCheckButton() {
-        const btn = elements.checkBtn;
-        const label = elements.checkLabel;
-        const icon = elements.checkIcon;
-        if (!btn || !label || !icon) {
-            updateContainerVisibility();
-            return;
-        }
-
-        const hasApi = Boolean(
-            window.electronAPI?.checkForUpdates ||
-            window.electronAPI?.downloadUpdate ||
-            window.electronAPI?.installUpdate
-        );
-
-        if (!hasApi) {
-            setElementHidden(btn, true);
-            updateContainerVisibility();
-            return;
-        }
-
-        setElementHidden(btn, false);
-
-        const status = state.updateStatus || {};
-        let action = 'check';
-        let text = 'Checar atualização';
-        let iconName = 'fa-arrows-rotate';
-        let spin = false;
-        let disabled = false;
-        let title = '';
-
-        const applyIcon = () => {
-            const classes = ['fas', iconName, 'app-update-check-icon'];
-            if (spin) classes.push('fa-spin');
-            icon.className = classes.join(' ');
-        };
-
-        if (state.actionBusy) {
-            spin = true;
-            disabled = true;
-            iconName = 'fa-circle-notch';
-            text = status.statusMessage || 'Processando atualização...';
-        } else if (status.status) {
-            switch (status.status) {
-                case 'checking':
-                    spin = true;
-                    disabled = true;
-                    iconName = 'fa-circle-notch';
-                    text = status.statusMessage || 'Verificando...';
-                    break;
-                case 'update-available': {
-                    const canDownload = Boolean(window.electronAPI?.downloadUpdate);
-                    action = canDownload ? 'download' : 'check';
-                    iconName = canDownload ? 'fa-cloud-download-alt' : 'fa-arrows-rotate';
-                    const versionLabel = state.availableVersion || status.latestVersion;
-                    text = canDownload
-                        ? (versionLabel ? `Baixar v${versionLabel}` : 'Baixar atualização')
-                        : 'Checar atualização';
-                    disabled = !canDownload && !window.electronAPI?.checkForUpdates;
-                    title = status.statusMessage || '';
-                    break;
-                }
-                case 'downloading': {
-                    spin = true;
-                    disabled = true;
-                    iconName = 'fa-circle-notch';
-                    const rawPercent = status.downloadProgress?.percent;
-                    if (typeof rawPercent === 'number' && !Number.isNaN(rawPercent)) {
-                        const percent = clampPercent(rawPercent);
-                        text = `Baixando (${percent}%)`;
-                    } else {
-                        text = 'Baixando...';
-                    }
-                    title = status.statusMessage || '';
-                    break;
-                }
-                case 'downloaded': {
-                    const canInstall = Boolean(window.electronAPI?.installUpdate);
-                    action = canInstall ? 'install' : (window.electronAPI?.checkForUpdates ? 'check' : 'none');
-                    iconName = canInstall ? 'fa-arrow-rotate-right' : 'fa-arrows-rotate';
-                    text = canInstall ? 'Instalar atualização' : 'Checar atualização';
-                    disabled = action === 'none';
-                    title = status.statusMessage || '';
-                    break;
-                }
-                case 'installing':
-                    spin = true;
-                    disabled = true;
-                    iconName = 'fa-circle-notch';
-                    text = status.statusMessage || 'Instalando...';
-                    break;
-                case 'up-to-date':
-                    iconName = 'fa-check';
-                    text = 'Checar novamente';
-                    title = status.statusMessage || 'Aplicativo atualizado.';
-                    break;
-                case 'disabled':
-                    iconName = 'fa-ban';
-                    action = 'none';
-                    text = 'Atualizações indisponíveis';
-                    disabled = true;
-                    title = status.statusMessage || 'Atualizações automáticas foram desabilitadas.';
-                    break;
-                case 'error':
-                    iconName = 'fa-triangle-exclamation';
-                    text = 'Tentar novamente';
-                    title = status.statusMessage || status.error?.friendlyMessage || '';
-                    break;
-                default:
-                    break;
-            }
-        }
-
-        if (!title) {
-            title = text;
-        }
-
-        btn.dataset.action = action;
-        btn.disabled = disabled;
-        btn.title = title;
-        btn.setAttribute('aria-disabled', disabled ? 'true' : 'false');
-        btn.setAttribute('aria-busy', spin ? 'true' : 'false');
-        btn.classList.toggle('is-loading', spin);
-        applyIcon();
-        label.textContent = text;
-
-        updateContainerVisibility();
-    }
-
-    function updatePublishButton() {
-        const btn = elements.publishBtn;
-        const label = elements.publishLabel;
-        if (!btn || !label) {
-            updateContainerVisibility();
-            return;
-        }
-
-        const publishState = state.publishState || {};
-        const updateStatus = state.updateStatus || {};
-        const profile = state.user || {};
-        const isSupAdmin = profile?.perfil === 'Sup Admin';
-        const publishing = Boolean(publishState.publishing);
-
-        if (isSupAdmin) {
-            setElementHidden(btn, true);
-            applySupAdminState();
-            updateContainerVisibility();
-            return;
-        }
-
-        const localVersion = publishState.localVersion || updateStatus.localVersion || state.localVersion;
-        const latestPublishedVersion = publishState.latestPublishedVersion || updateStatus.latestPublishedVersion || state.latestPublishedVersion;
-        const availableVersion = updateStatus.latestVersion || publishState.availableVersion || state.availableVersion;
-
-        if (localVersion) state.localVersion = localVersion;
-        if (latestPublishedVersion) state.latestPublishedVersion = latestPublishedVersion;
-        if (availableVersion) state.availableVersion = availableVersion;
-
-        const fallbackCanPublish = Boolean(
-            availableVersion &&
-            (!latestPublishedVersion || availableVersion !== latestPublishedVersion)
-        );
-
-        const canPublish = publishing || Boolean(
-            publishState.canPublish ??
-            updateStatus.canPublish ??
-            fallbackCanPublish
-        );
-
-        const shouldShow = isSupAdmin && (canPublish || publishing);
-        setElementHidden(btn, !shouldShow);
-
-        if (!shouldShow) {
-            btn.disabled = false;
-            btn.classList.remove('is-loading');
-            updateContainerVisibility();
-            return;
-        }
-
-        if (publishing) {
-            btn.disabled = true;
-            btn.classList.add('is-loading');
-            label.textContent = publishState.message || 'Publicando...';
-            btn.title = 'Publicação em andamento';
-        } else {
-            btn.disabled = false;
-            btn.classList.remove('is-loading');
-            if (localVersion && latestPublishedVersion) {
-                label.textContent = `${localVersion} → ${latestPublishedVersion}`;
-            } else if (localVersion && availableVersion) {
-                label.textContent = `${localVersion} → ${availableVersion}`;
-            } else if (availableVersion) {
-                label.textContent = `Publicar v${availableVersion}`;
-            } else {
-                label.textContent = 'Publicar atualização';
-            }
-            btn.title = 'Publicar atualização para os clientes';
-        }
-
-        updateContainerVisibility();
-    }
-
     function handleUpdateToasts(previousState, current) {
         if (!current || !window.showToast) return;
         const status = current.status;
@@ -817,9 +1099,9 @@ const AppUpdates = (() => {
         state.user = user || {};
         ensureAutoCheckTimer();
         runAutomaticCheck({ silent: true });
-        updatePublishButton();
-        updateCheckButton();
         applySupAdminState();
+        updateUserControlFromStatus();
+        applyUserState();
         persistState();
     }
 
@@ -833,10 +1115,9 @@ const AppUpdates = (() => {
             state.publishState = { ...(state.publishState || {}), canPublish: newStatus.canPublish };
         }
 
-        updateCheckButton();
         updateBadge();
-        updatePublishButton();
         applySupAdminState();
+        updateUserControlFromStatus();
         if (!options.silent) {
             handleUpdateToasts(previousState, newStatus);
         }
@@ -850,8 +1131,8 @@ const AppUpdates = (() => {
         if (newState.latestPublishedVersion) state.latestPublishedVersion = newState.latestPublishedVersion;
         if (newState.localVersion) state.localVersion = newState.localVersion;
         if (newState.availableVersion) state.availableVersion = newState.availableVersion;
-        updatePublishButton();
-        updateCheckButton();
+        applySupAdminState();
+        updateUserControlFromStatus();
         if (newState.publishing === true) {
             setSupAdminMode('publishing', { panelOpen: false });
         } else if (newState.publishing === false) {
@@ -870,7 +1151,6 @@ const AppUpdates = (() => {
     function handlePublishError(payload) {
         publishStartToastShown = false;
         state.publishState = { ...(state.publishState || {}), publishing: false };
-        updatePublishButton();
         setSupAdminMode('error', { panelOpen: false, lastError: payload?.message });
         const errorMessage = payload?.message || 'Falha ao publicar atualização.';
         if (typeof window.alert === 'function') {
@@ -882,103 +1162,19 @@ const AppUpdates = (() => {
         persistState();
     }
 
-    async function handleCheckAction() {
-        const btn = elements.checkBtn;
-        if (!btn || state.actionBusy) return;
-
-        const action = btn.dataset.action || 'check';
-        if (action === 'none') return;
-
-        const electronAPI = window.electronAPI || {};
-        if (
-            action === 'download' && !electronAPI.downloadUpdate ||
-            action === 'install' && !electronAPI.installUpdate ||
-            action === 'check' && !electronAPI.checkForUpdates && !electronAPI.getUpdateStatus
-        ) {
-            return;
-        }
-
-        state.actionBusy = true;
-        updateCheckButton();
-
-        try {
-            let result = null;
-            if (action === 'download') {
-                result = await electronAPI.downloadUpdate();
-            } else if (action === 'install') {
-                result = await electronAPI.installUpdate();
-                if (result?.canInstall === false && window.showToast) {
-                    window.showToast(
-                        result.statusMessage || 'Nenhuma atualização disponível para instalar.',
-                        'warning'
-                    );
-                }
-            } else {
-                if (electronAPI.checkForUpdates) {
-                    result = await electronAPI.checkForUpdates();
-                } else if (electronAPI.getUpdateStatus) {
-                    result = await electronAPI.getUpdateStatus({ refresh: true });
-                }
-            }
-
-            if (result && typeof result === 'object') {
-                setUpdateStatus(result);
-            }
-        } catch (err) {
-            if (window.showToast) {
-                window.showToast(
-                    err?.message || 'Não foi possível verificar atualizações.',
-                    'error'
-                );
-            }
-        } finally {
-            state.actionBusy = false;
-            updateCheckButton();
-            persistState();
-        }
-    }
-
-    async function triggerPublish() {
-        if (!window.electronAPI?.publishUpdate) return;
-        const btn = elements.publishBtn;
-        if (btn) {
-            btn.disabled = true;
-            btn.classList.add('is-loading');
-        }
-        try {
-            const result = await window.electronAPI.publishUpdate();
-            if (result?.success) {
-                setPublishState(result, { silent: true });
-            } else {
-                if (result) setPublishState(result, { silent: true });
-                if (window.showToast) {
-                    const message = result?.message || result?.error || 'Não foi possível iniciar a publicação.';
-                    if (message) {
-                        const type = result?.code === 'in-progress' ? 'info' : 'error';
-                        window.showToast(message, type);
-                    }
-                }
-            }
-        } catch (err) {
-            if (window.showToast) {
-                window.showToast(err?.message || 'Não foi possível iniciar a publicação.', 'error');
-            }
-        } finally {
-            updatePublishButton();
-            persistState();
-        }
-    }
-
     function attachEvents() {
         if (eventsAttached) return;
 
-        if (elements.checkBtn) {
-            elements.checkBtn.addEventListener('click', handleCheckAction);
+        if (elements.user?.trigger) {
+            elements.user.trigger.addEventListener('click', handleUserTriggerClick);
         }
 
-        if (elements.publishBtn) {
-            elements.publishBtn.addEventListener('click', triggerPublish);
+        if (elements.user?.action) {
+            elements.user.action.addEventListener('click', handleUserUpdateAction);
         }
+
+        document.addEventListener('click', handleUserPanelDismiss);
+        document.addEventListener('keydown', handleUserPanelKeydown);
 
         if (elements.supAdmin?.trigger) {
             elements.supAdmin.trigger.addEventListener('click', handleSupAdminTriggerClick);
@@ -1026,16 +1222,14 @@ const AppUpdates = (() => {
             setUpdateStatus(restored.updateStatus, { silent: true });
         } else {
             updateBadge();
-            updateCheckButton();
+            updateUserControlFromStatus();
         }
         if (restored.publishState) {
             setPublishState(restored.publishState, { silent: true });
-        } else {
-            updatePublishButton();
         }
         applySupAdminState();
+        applyUserState();
         updateContainerVisibility();
-        updateCheckButton();
         attachEvents();
         if (typeof window !== 'undefined') {
             window.addEventListener('beforeunload', stopAutoCheckTimer);

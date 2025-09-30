@@ -180,6 +180,194 @@ body {
     font-size: 0.9rem;
 }
 
+.user-updates {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+}
+
+.user-updates.hidden {
+    display: none !important;
+}
+
+.user-updates-trigger {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.65rem;
+    padding: 0.45rem 1rem;
+    border-radius: 9999px;
+    border: 1px solid rgba(162, 255, 166, 0.4);
+    background: rgba(162, 255, 166, 0.12);
+    color: #22c55e;
+    font-size: 0.82rem;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    transition: background 160ms ease, border-color 160ms ease, color 160ms ease, transform 160ms ease;
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.12);
+}
+
+.user-updates-trigger:focus {
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(162, 255, 166, 0.25);
+}
+
+.user-updates-trigger:hover:not(:disabled) {
+    transform: translateY(-1px);
+}
+
+.user-updates-trigger:disabled {
+    cursor: not-allowed;
+    opacity: 0.7;
+}
+
+.user-updates-trigger[data-state="idle"],
+.user-updates-trigger[data-state="up-to-date"] {
+    color: #22c55e;
+    border-color: rgba(34, 197, 94, 0.45);
+    background: rgba(34, 197, 94, 0.14);
+}
+
+.user-updates-trigger[data-state="checking"] {
+    color: #34d399;
+    border-color: rgba(52, 211, 153, 0.45);
+    background: rgba(52, 211, 153, 0.16);
+}
+
+.user-updates-trigger[data-state="available"],
+.user-updates-trigger[data-state="available"] .user-updates-caret {
+    color: #60a5fa;
+}
+
+.user-updates-trigger[data-state="available"] {
+    border-color: rgba(96, 165, 250, 0.5);
+    background: rgba(96, 165, 250, 0.18);
+}
+
+.user-updates-trigger[data-state="updating"] {
+    color: #60a5fa;
+    border-color: rgba(96, 165, 250, 0.6);
+    background: rgba(37, 99, 235, 0.2);
+}
+
+.user-updates-trigger[data-state="error"] {
+    color: #f87171;
+    border-color: rgba(248, 113, 113, 0.5);
+    background: rgba(248, 113, 113, 0.14);
+}
+
+.user-updates-icon,
+.user-updates-label,
+.user-updates-version,
+.user-updates-caret {
+    color: currentColor;
+}
+
+.user-updates-icon {
+    font-size: 1rem;
+    transition: transform 160ms ease, color 160ms ease;
+}
+
+.user-updates-trigger[data-state="checking"] .user-updates-icon {
+    animation: app-update-spin 0.9s linear infinite;
+}
+
+.user-updates-trigger[data-state="updating"] .user-updates-icon {
+    animation: user-updates-signal 1.2s ease-in-out infinite;
+}
+
+.user-updates-text {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.05rem;
+    text-align: left;
+}
+
+.user-updates-text span {
+    color: inherit;
+}
+
+.user-updates-version {
+    font-size: 0.7rem;
+    font-weight: 500;
+    opacity: 0.75;
+}
+
+.user-updates-caret {
+    font-size: 0.65rem;
+    transition: transform 160ms ease;
+}
+
+.user-updates-trigger[aria-expanded="true"] .user-updates-caret {
+    transform: rotate(180deg);
+}
+
+.user-updates-panel {
+    position: absolute;
+    top: calc(100% + 0.5rem);
+    right: 0;
+    min-width: 220px;
+    padding: 0.6rem;
+    border-radius: 0.75rem;
+    background: rgba(31, 20, 28, 0.95);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.25);
+    backdrop-filter: blur(10px);
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    z-index: 1200;
+}
+
+.user-updates-panel.hidden {
+    display: none !important;
+}
+
+.user-update-action {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    width: 100%;
+    padding: 0.55rem 0.95rem;
+    border-radius: 0.65rem;
+    border: 1px solid rgba(96, 165, 250, 0.55);
+    background: rgba(59, 130, 246, 0.15);
+    color: #93c5fd;
+    font-size: 0.82rem;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    transition: background 150ms ease, border-color 150ms ease, transform 150ms ease;
+}
+
+.user-update-action:hover:not(:disabled) {
+    border-color: rgba(59, 130, 246, 0.75);
+    background: rgba(37, 99, 235, 0.22);
+    transform: translateY(-1px);
+}
+
+.user-update-action:disabled {
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+
+.user-update-action i,
+.user-update-action span {
+    color: currentColor;
+}
+
+@keyframes user-updates-signal {
+    0%,
+    100% {
+        transform: scale(1);
+        opacity: 1;
+    }
+    50% {
+        transform: scale(1.08);
+        opacity: 0.7;
+    }
+}
+
 .sup-admin-updates-trigger[data-state="publishing"] .sup-admin-updates-icon {
     animation: sup-admin-wifi 1.1s ease-in-out infinite;
 }
