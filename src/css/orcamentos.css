@@ -369,6 +369,14 @@ input[type="date"]:valid::-webkit-datetime-edit {
     position: relative;
 }
 
+#converterOrcamentoOverlay .quote-piece-approved {
+    background: rgba(34, 197, 94, 0.16);
+}
+
+#converterOrcamentoOverlay .quote-piece-approved:hover {
+    background: rgba(34, 197, 94, 0.22);
+}
+
 #converterOrcamentoOverlay .table-loading-overlay {
     position: absolute;
     inset: 0;

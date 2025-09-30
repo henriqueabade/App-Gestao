@@ -252,29 +252,93 @@ function attachRawMaterialInfoEvents() {
     const tbody = document.getElementById('materiaPrimaTableBody');
     if (!tbody) return;
 
-    tbody.querySelectorAll('.info-icon').forEach(icon => {
-        if (icon.dataset.bound) return;
-        icon.dataset.bound = 'true';
+    tbody.querySelectorAll('.info-icon').forEach(bindRawMaterialInfoIcon);
+}
 
-        icon.addEventListener('mouseenter', () => {
-            const id = icon.dataset.id;
-            if (!id) {
-                window.electronAPI?.log?.('attachRawMaterialInfoEvents invalid id');
-                return;
-            }
-            window.electronAPI?.log?.(`attachRawMaterialInfoEvents icon=${id}`);
-            const item = materiaisMap.get(id) || materiais.find(m => String(m.id) === id);
-            if (item) showRawMaterialInfoPopup(icon, item);
-        });
 
-        icon.addEventListener('mouseleave', () => {
-            setTimeout(() => {
-                if (!currentRawMaterialPopup?.matches(':hover')) hideRawMaterialInfoPopup();
-            }, 100);
-        });
+function bindRawMaterialInfoIcon(icon) {
+    if (!icon || icon.dataset.bound) return;
+    icon.dataset.bound = 'true';
+    icon.addEventListener('mouseenter', () => {
+        const id = icon.dataset.id;
+        if (!id) {
+            window.electronAPI?.log?.('bindRawMaterialInfoIcon invalid id');
+            return;
+        }
+        const item = materiaisMap.get(id) || materiais.find(m => String(m.id) === id);
+        if (item) showRawMaterialInfoPopup(icon, item);
+    });
+
+    icon.addEventListener('mouseleave', () => {
+        setTimeout(() => {
+            if (!currentRawMaterialPopup?.matches(':hover')) hideRawMaterialInfoPopup();
+        }, 100);
     });
 }
 
+function createMateriaPrimaRow(item) {
+    const tr = document.createElement('tr');
+    tr.className = 'transition-colors duration-150';
+    tr.style.cursor = 'pointer';
+
+    const isInfinite = !!item.infinito;
+    const quantidadeValor = isInfinite ? '∞' : (item.quantidade ?? 0);
+    const quantidadeNumero = Number(item.quantidade);
+
+    let baseColor = 'transparent';
+    if (isInfinite) {
+        baseColor = 'rgba(162, 255, 166, 0.1)';
+        tr.style.borderLeft = `4px solid var(--color-green)`;
+    } else if (!isNaN(quantidadeNumero) && quantidadeNumero < 10) {
+        baseColor = 'rgba(255, 88, 88, 0.1)';
+        tr.style.borderLeft = `4px solid var(--color-red)`;
+    }
+    tr.style.background = baseColor;
+
+    tr.addEventListener('mouseover', () => {
+        if (isInfinite) {
+            tr.style.background = 'rgba(162, 255, 166, 0.15)';
+        } else if (!isNaN(quantidadeNumero) && quantidadeNumero < 10) {
+            tr.style.background = 'rgba(255, 88, 88, 0.15)';
+        } else {
+            tr.style.background = 'rgba(163, 148, 167, 0.05)';
+        }
+    });
+    tr.addEventListener('mouseout', () => {
+        tr.style.background = baseColor;
+    });
+
+    const preco = Number(item.preco_unitario || 0);
+    tr.innerHTML = `
+        <td class="px-6 py-4 whitespace-nowrap relative text-base text-white">
+            <div class="flex items-center">
+                <span class="font-medium">${item.nome}</span>
+                <i class="info-icon ml-2" data-id="${item.id}"></i>
+            </div>
+        </td>
+        <td class="px-6 py-4 whitespace-nowrap text-base text-white">${quantidadeValor}</td>
+        <td class="px-6 py-4 whitespace-nowrap text-base" style="color: var(--color-violet)">${item.unidade || ''}</td>
+        <td class="px-6 py-4 whitespace-nowrap text-base text-white">R$ ${preco.toFixed(2).replace('.', ',')}</td>
+        <td class="px-6 py-4 whitespace-nowrap text-base text-left">
+            <div class="flex items-center justify-start space-x-2">
+                <i class="fas fa-edit w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Editar"></i>
+                <i class="fas fa-trash w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10 hover:text-white" style="color: var(--color-red)" title="Excluir"></i>
+            </div>
+        </td>`;
+
+    const infoIcon = tr.querySelector('.info-icon');
+    if (infoIcon) {
+        infoIcon.dataset.id = String(item.id);
+        bindRawMaterialInfoIcon(infoIcon);
+    }
+
+    const editBtn = tr.querySelector('.fa-edit');
+    const delBtn = tr.querySelector('.fa-trash');
+    if (editBtn) editBtn.addEventListener('click', e => { e.stopPropagation(); abrirEditarInsumo(item); });
+    if (delBtn) delBtn.addEventListener('click', e => { e.stopPropagation(); abrirExcluirInsumo(item); });
+
+    return tr;
+}
 
 function renderMateriais(listaMateriais) {
     materiais = listaMateriais;
@@ -282,65 +346,25 @@ function renderMateriais(listaMateriais) {
     const tbody = document.getElementById('materiaPrimaTableBody');
     if (!tbody) return;
     tbody.innerHTML = '';
-    const acoes = `
-        <div class="flex items-center justify-start space-x-2">
-            <i class="fas fa-edit w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Editar"></i>
-            <i class="fas fa-trash w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10 hover:text-white" style="color: var(--color-red)" title="Excluir"></i>
-        </div>`;
 
-    materiais.forEach((item) => {
-        const tr = document.createElement('tr');
-        tr.className = 'transition-colors duration-150';
-        tr.style.cursor = 'pointer';
+    const chunkSize = 50;
+    let index = 0;
 
-        const isInfinite = !!item.infinito;
-        const quantidadeValor = isInfinite ? '∞' : (item.quantidade ?? 0);
-        const quantidadeNumero = Number(item.quantidade);
-
-        let baseColor = 'transparent';
-        if (isInfinite) {
-            baseColor = 'rgba(162, 255, 166, 0.1)';
-            tr.style.borderLeft = `4px solid var(--color-green)`;
-        } else if (!isNaN(quantidadeNumero) && quantidadeNumero < 10) {
-            baseColor = 'rgba(255, 88, 88, 0.1)';
-            tr.style.borderLeft = `4px solid var(--color-red)`;
+    const renderChunk = () => {
+        const fragment = document.createDocumentFragment();
+        const end = Math.min(index + chunkSize, materiais.length);
+        for (; index < end; index++) {
+            fragment.appendChild(createMateriaPrimaRow(materiais[index]));
         }
-        tr.style.background = baseColor;
+        tbody.appendChild(fragment);
+        if (index < materiais.length) {
+            requestAnimationFrame(renderChunk);
+        } else {
+            if (window.feather) feather.replace();
+        }
+    };
 
-        tr.addEventListener('mouseover', () => {
-            if (isInfinite) {
-                tr.style.background = 'rgba(162, 255, 166, 0.15)';
-            } else if (!isNaN(quantidadeNumero) && quantidadeNumero < 10) {
-                tr.style.background = 'rgba(255, 88, 88, 0.15)';
-            } else {
-                tr.style.background = 'rgba(163, 148, 167, 0.05)';
-            }
-        });
-        tr.addEventListener('mouseout', () => {
-            tr.style.background = baseColor;
-        });
-
-        const preco = Number(item.preco_unitario || 0);
-        tr.innerHTML = `
-            <td class="px-6 py-4 whitespace-nowrap relative text-base text-white">
-                <div class="flex items-center">
-                    <span class="font-medium">${item.nome}</span>
-                    <i class="info-icon ml-2" data-id="${item.id}"></i>
-                </div>
-            </td>
-            <td class="px-6 py-4 whitespace-nowrap text-base text-white">${quantidadeValor}</td>
-            <td class="px-6 py-4 whitespace-nowrap text-base" style="color: var(--color-violet)">${item.unidade || ''}</td>
-            <td class="px-6 py-4 whitespace-nowrap text-base text-white">R$ ${preco.toFixed(2).replace('.', ',')}</td>
-            <td class="px-6 py-4 whitespace-nowrap text-base text-left">${acoes}</td>`;
-        tbody.appendChild(tr);
-        const editBtn = tr.querySelector('.fa-edit');
-        const delBtn = tr.querySelector('.fa-trash');
-        if (editBtn) editBtn.addEventListener('click', e => { e.stopPropagation(); abrirEditarInsumo(item); });
-        if (delBtn) delBtn.addEventListener('click', e => { e.stopPropagation(); abrirExcluirInsumo(item); });
-    });
-
-    if (window.feather) feather.replace();
-    attachRawMaterialInfoEvents();
+    requestAnimationFrame(renderChunk);
 }
 
 function openModalWithSpinner(htmlPath, scriptPath, overlayId) {

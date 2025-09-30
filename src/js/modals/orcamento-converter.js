@@ -391,6 +391,8 @@
       tr.dataset.index = String(idx);
       const isAttention = r.a_produzir > 0 && r.status === 'atencao';
       const isApproved = !!r.approved;
+      if (isApproved) tr.classList.add('quote-piece-approved');
+      const primaryTextClass = isApproved ? 'text-green-300' : 'text-white';
       const statusIcon = isAttention ? '&#9888;' : '&#10003;';
       const statusTitle = isAttention ? 'Atenção' : 'OK';
       const statusColor = isAttention
@@ -448,18 +450,19 @@
           ${actionIcon}
         </button>`;
 
+      const infoIconClass = isApproved ? 'text-green-200' : 'text-gray-300';
       const infoSpan = (Array.isArray(r.popover?.variants) && r.popover.variants.length > 0) ? `
-        <span class="js-piece-info inline-flex items-center justify-center w-6 h-6 rounded-full bg-white/10 hover:bg-white/20 focus:outline-none focus:ring-2 focus:ring-primary/50 transition-colors ml-1" aria-haspopup="dialog" aria-expanded="false" data-variants='${JSON.stringify(r.popover.variants)}' data-page="0">
-          <svg class="w-3 h-3 text-gray-300" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10a8 8 0 1 1-16 0 8 8 0 0116 0zm-7-4a 1 1 0 11-2 0 1 1 0 012 0zM9 9a 1 1 0 000 2v3a 1 1 0 001 1h1a 1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/></svg>
+        <span class="js-piece-info inline-flex items-center justify-center w-6 h-6 rounded-full bg-white/10 hover:bg-white/20 focus:outline-none focus:ring-2 focus:ring-primary/50 transition-colors ml-1 ${infoIconClass}" aria-haspopup="dialog" aria-expanded="false" data-variants='${JSON.stringify(r.popover.variants)}' data-page="0">
+          <svg class="w-3 h-3 ${infoIconClass}" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10a8 8 0 1 1-16 0 8 8 0 0116 0zm-7-4a 1 1 0 11-2 0 1 1 0 012 0zM9 9a 1 1 0 000 2v3a 1 1 0 001 1h1a 1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/></svg>
         </span>` : '';
 
       tr.innerHTML = `
-        <td class="py-3 px-2 text-white">${r.nome || ''}</td>
-        <td class="py-3 px-2 text-left text-white">${r.qtd}</td>
-        <td class="py-3 px-2 text-left text-white">${r.em_estoque ?? 0}</td>
-        <td class="py-3 px-2 text-left text-white">${r.pronta ?? 0}</td>
-        <td class="py-3 px-2 text-left text-white">${r.produzir_total ?? 0}</td>
-        <td class="py-3 px-2 text-left text-white">${r.produzir_parcial ?? 0} ${infoSpan}</td>
+        <td class="py-3 px-2 ${primaryTextClass}">${r.nome || ''}</td>
+        <td class="py-3 px-2 text-left ${primaryTextClass}">${r.qtd}</td>
+        <td class="py-3 px-2 text-left ${primaryTextClass}">${r.em_estoque ?? 0}</td>
+        <td class="py-3 px-2 text-left ${primaryTextClass}">${r.pronta ?? 0}</td>
+        <td class="py-3 px-2 text-left ${primaryTextClass}">${r.produzir_total ?? 0}</td>
+        <td class="py-3 px-2 text-left ${primaryTextClass}">${r.produzir_parcial ?? 0} ${infoSpan}</td>
         <td class="py-3 px-2 text-left">${statusHtml}</td>
         <td class="py-3 px-2 text-left">
           <div class="flex justify-start gap-1">
@@ -600,12 +603,26 @@ async function computeInsumosAndRender(options = {}) {
   const {
     showPiecesSpinner = true,
     showInsumosSpinner = true,
-    message = 'Recalculando insumos...'
+    message = 'Recalculando insumos...',
+    forceRenderPieces = false
   } = options || {};
   const finalizePiecesLoading = showPiecesSpinner ? showTableLoading(pecasBody, 'Recalculando peças...') : () => {};
   const finalizeInsumosLoading = showInsumosSpinner ? showTableLoading(insumosBody, message) : () => {};
   try {
     const byId = new Map(listaProdutos.map(p => [String(p.id), p]));
+
+    const captureRowViewState = row => ({
+      nome: row?.nome || '',
+      qtd: Number(row?.qtd || row?.quantidade || 0),
+      emEstoque: Number(row?.em_estoque || 0),
+      pronta: Number(row?.pronta || 0),
+      produzirTotal: Number(row?.produzir_total || 0),
+      produzirParcial: Number(row?.produzir_parcial || 0),
+      status: row?.status || '',
+      approved: !!row?.approved,
+      popoverKey: JSON.stringify(Array.isArray(row?.popover?.variants) ? row.popover.variants : [])
+    });
+    const previousViewState = rows.map(captureRowViewState);
 
     // Estoque de matéria-prima
     let materias = [];
@@ -833,10 +850,35 @@ async function computeInsumosAndRender(options = {}) {
       }
     }
 
+    const nextViewState = rows.map(captureRowViewState);
+    let shouldRenderPieces = previousViewState.length !== nextViewState.length;
+    if (!shouldRenderPieces) {
+      for (let i = 0; i < nextViewState.length; i++) {
+        const prev = previousViewState[i] || {};
+        const next = nextViewState[i];
+        if (
+          prev.nome !== next.nome ||
+          prev.qtd !== next.qtd ||
+          prev.emEstoque !== next.emEstoque ||
+          prev.pronta !== next.pronta ||
+          prev.produzirTotal !== next.produzirTotal ||
+          prev.produzirParcial !== next.produzirParcial ||
+          prev.status !== next.status ||
+          prev.approved !== next.approved ||
+          prev.popoverKey !== next.popoverKey
+        ) {
+          shouldRenderPieces = true;
+          break;
+        }
+      }
+    }
+
     lastStockByName = stockByName;
     recomputeStocks();
     buildInsumosGrid(stockByName);
-    renderRows();
+    if (shouldRenderPieces || forceRenderPieces) {
+      renderRows();
+    }
     validate();
   } catch (err) {
     console.error('Erro ao calcular insumos', err);
@@ -984,16 +1026,25 @@ async function computeInsumosAndRender(options = {}) {
   document.getElementById('converterDecisionNote')?.addEventListener('input', () => {
     computeInsumosAndRender({ message: 'Atualizando insumos...' });
   });
+  function refreshInsumosTable(message = 'Atualizando insumos...') {
+    const finalize = showTableLoading(insumosBody, message);
+    try {
+      buildInsumosGrid();
+      validate();
+    } finally {
+      finalize();
+    }
+  }
   onlyMissingToggle?.addEventListener('change', () => {
     state.insumosView.mostrarSomenteFaltantes = !!onlyMissingToggle.checked;
     const message = state.insumosView.mostrarSomenteFaltantes ? 'Filtrando insumos faltantes...' : 'Atualizando insumos...';
-    computeInsumosAndRender({ message });
+    refreshInsumosTable(message);
   });
   insumosReloadBtn?.addEventListener('click', () => {
     state.insumosView.filtroPecaId = null;
     if (onlyMissingToggle) { onlyMissingToggle.checked = false; state.insumosView.mostrarSomenteFaltantes = false; }
     if (insumosTituloPeca) insumosTituloPeca.textContent = 'Totais';
-    computeInsumosAndRender({ message: 'Recarregando insumos...' });
+    computeInsumosAndRender({ message: 'Recarregando insumos...', showPiecesSpinner: false });
   });
 
   // Popover de peça (clique)
