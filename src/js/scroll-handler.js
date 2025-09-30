@@ -7,6 +7,9 @@ const SCROLL_STEP = 40;
 // Referência à instância atual da scrollbar
 let currentScrollbar = null;
 
+// Diferença mínima entre scrollHeight e clientHeight para considerar que há overflow
+const MIN_SCROLL_DIFF = 8;
+
 // Remove a scrollbar custom atual (se houver)
 function removeScrollbar() {
   if (currentScrollbar) {
@@ -98,7 +101,10 @@ function refreshScrollbar() {
   // Filtra pelos que realmente estão visíveis e precisam de scroll
   const visible = modules.filter(m => {
     const rect = m.getBoundingClientRect();
-    return rect.height > 0 && m.scrollHeight > m.clientHeight;
+    if (rect.height <= 0) return false;
+
+    const diff = m.scrollHeight - m.clientHeight;
+    return diff > MIN_SCROLL_DIFF;
   });
 
   if (visible.length > 0) {

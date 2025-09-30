@@ -453,7 +453,20 @@
   }
 
   function renderRows() {
-    pecasBody.innerHTML = '';
+    if (!pecasBody) return;
+    const isLoading = pecasBody.dataset.tableLoading === 'true';
+    let placeholderRow = null;
+    if (isLoading) {
+      placeholderRow = pecasBody.querySelector('.table-loading-placeholder');
+      if (!placeholderRow) {
+        placeholderRow = ensureTableLoadingPlaceholder(pecasBody);
+      }
+      if (placeholderRow && placeholderRow.parentElement !== pecasBody) {
+        pecasBody.prepend(placeholderRow);
+      }
+    }
+
+    const fragment = document.createDocumentFragment();
     rows.forEach((r, idx) => {
       const tr = document.createElement('tr');
       tr.className = 'border-b border-white/10';
@@ -540,8 +553,20 @@
             ${toggleButtonHtml}
           </div>
         </td>`;
-      pecasBody.appendChild(tr);
+      fragment.appendChild(tr);
     });
+
+    if (isLoading && placeholderRow) {
+      Array.from(pecasBody.children).forEach(child => {
+        if (child !== placeholderRow) child.remove();
+      });
+      pecasBody.appendChild(fragment);
+    } else {
+      while (pecasBody.firstChild) {
+        pecasBody.removeChild(pecasBody.firstChild);
+      }
+      pecasBody.appendChild(fragment);
+    }
 
     pecasBody.querySelectorAll('button[data-action="toggle-approval"]').forEach(btn => {
       btn.addEventListener('click', e => {
