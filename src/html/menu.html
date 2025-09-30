@@ -30,33 +30,17 @@
             </div>
 
             <!-- User Info & Actions -->
-            <div class="flex items-center space-x-4">
-                <div class="flex items-center space-x-3" id="userSummary" aria-live="polite">
-                    <div id="userAvatar" class="user-avatar hidden" aria-hidden="true"></div>
-                    <div class="text-right">
-                        <div id="userName" class="text-sm font-medium"></div>
-                        <div id="userProfile" class="text-xs" style="color: var(--color-violet)"></div>
-                    </div>
-                </div>
+            <div class="flex items-center space-x-2">
                 <div id="appUpdateContainer" class="app-update-container hidden" aria-live="polite">
-                    <div class="app-update-actions">
-                        <button id="checkUpdatesBtn" type="button" class="app-update-check">
-                            <i id="checkUpdatesIcon" class="fas fa-arrows-rotate app-update-check-icon" aria-hidden="true"></i>
-                            <span id="checkUpdatesLabel" class="app-update-check-label">Checar atualização</span>
-                        </button>
-                        <button id="publishUpdateBtn" type="button" class="app-update-button hidden">
-                            <i class="fas fa-cloud-upload-alt app-update-button-icon" aria-hidden="true"></i>
-                            <span id="publishUpdateLabel" class="app-update-button-label"></span>
-                        </button>
-                    </div>
-                    <div
+                    <button
                         id="appUpdateBadge"
                         class="app-update-badge hidden"
+                        type="button"
                         role="status"
                         aria-live="polite"
                         tabindex="0"
                     >
-                        <div class="app-update-badge-header">
+                        <div class="app-update-badge-content">
                             <i class="fas fa-cloud-download-alt app-update-badge-icon" aria-hidden="true"></i>
                             <span id="appUpdateBadgeTitle" class="app-update-badge-title"></span>
                         </div>
@@ -71,6 +55,23 @@
                         >
                             <div id="appUpdateProgressBar" class="app-update-progress-bar"></div>
                         </div>
+                    </button>
+                    <div class="app-update-actions">
+                        <button id="checkUpdatesBtn" type="button" class="app-update-check">
+                            <i id="checkUpdatesIcon" class="fas fa-arrows-rotate app-update-check-icon" aria-hidden="true"></i>
+                            <span id="checkUpdatesLabel" class="app-update-check-label">Checar atualização</span>
+                        </button>
+                        <button id="publishUpdateBtn" type="button" class="app-update-button hidden">
+                            <i class="fas fa-cloud-upload-alt app-update-button-icon" aria-hidden="true"></i>
+                            <span id="publishUpdateLabel" class="app-update-button-label"></span>
+                        </button>
+                    </div>
+                </div>
+                <div class="flex items-center space-x-2" id="userSummary" aria-live="polite">
+                    <div id="userAvatar" class="user-avatar hidden" aria-hidden="true"></div>
+                    <div class="text-right">
+                        <div id="userName" class="text-sm font-medium"></div>
+                        <div id="userProfile" class="text-xs" style="color: var(--color-violet)"></div>
                     </div>
                 </div>
 

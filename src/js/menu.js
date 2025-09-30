@@ -258,11 +258,18 @@ const AppUpdates = (() => {
         if (elements.badgeSubtitle) elements.badgeSubtitle.textContent = subtitle;
         setBadgeVariant(variant);
 
-        if (tooltip) {
-            elements.badge.setAttribute('data-tooltip', tooltip);
-            elements.badge.setAttribute('aria-label', tooltip.replace(/\n/g, ' • '));
+        const tooltipMessage = [subtitle, tooltip].filter(Boolean).join('\n\n');
+        const ariaLabelParts = [title, subtitle, tooltip].filter(Boolean);
+
+        if (tooltipMessage) {
+            elements.badge.setAttribute('data-tooltip', tooltipMessage);
         } else {
             elements.badge.removeAttribute('data-tooltip');
+        }
+
+        if (ariaLabelParts.length) {
+            elements.badge.setAttribute('aria-label', ariaLabelParts.join(' • '));
+        } else {
             elements.badge.removeAttribute('aria-label');
         }
 
