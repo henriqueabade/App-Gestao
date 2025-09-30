@@ -13,13 +13,36 @@ window.addEventListener('DOMContentLoaded', () => {
       }
     }
     const user = stored ? JSON.parse(stored) : {};
+    const isSupAdmin = user.perfil === 'Sup Admin';
     if (nameEl) nameEl.textContent = user.nome || '';
     if (profileEl) profileEl.textContent = user.perfil || 'Sem Perfil';
     if (appUpdates && typeof appUpdates.setUserProfile === 'function') {
       appUpdates.setUserProfile(user);
     }
 
-    if (window.electronAPI?.getUpdateStatus) {
+    let pendingUpdate = null;
+    const rawPendingUpdate = sessionStorage.getItem('pendingUpdate');
+    if (rawPendingUpdate) {
+      try {
+        pendingUpdate = JSON.parse(rawPendingUpdate);
+      } catch (err) {
+        pendingUpdate = null;
+        sessionStorage.removeItem('pendingUpdate');
+      }
+    }
+
+    if (pendingUpdate) {
+      if (pendingUpdate.publishState && appUpdates?.setPublishState) {
+        appUpdates.setPublishState(pendingUpdate.publishState, { silent: true });
+      }
+      if (appUpdates?.setUpdateStatus) {
+        appUpdates.setUpdateStatus(pendingUpdate, { origin: 'login-cache' });
+      }
+      sessionStorage.removeItem('pendingUpdate');
+    }
+
+    const shouldRequestStatus = isSupAdmin || !pendingUpdate;
+    if (shouldRequestStatus && window.electronAPI?.getUpdateStatus) {
       window.electronAPI
         .getUpdateStatus()
         .then(status => {

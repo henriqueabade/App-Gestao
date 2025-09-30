@@ -17,6 +17,24 @@ function showToast(message, type = "info") {
 let currentPinPopup = null;
 let pinErrorShown = false;
 let offlineErrorShown = false;
+
+async function cacheUpdateStatus() {
+  if (typeof sessionStorage === 'undefined') return;
+  if (!window.electronAPI?.getUpdateStatus) {
+    sessionStorage.removeItem('pendingUpdate');
+    return;
+  }
+  try {
+    const status = await window.electronAPI.getUpdateStatus();
+    if (status !== undefined) {
+      sessionStorage.setItem('pendingUpdate', JSON.stringify(status));
+    } else {
+      sessionStorage.removeItem('pendingUpdate');
+    }
+  } catch (err) {
+    sessionStorage.removeItem('pendingUpdate');
+  }
+}
 function createPinPopupContent() {
   return `
     <div class="bg-white p-4 rounded-lg shadow-md border border-gray-100 w-64 text-sm text-gray-700 leading-relaxed">
@@ -177,7 +195,9 @@ if (intro) {
 
     const result = await window.electronAPI.autoLogin(storedPin, parsedStoredUser);
     if (result && result.success) {
-      if (storedUser) sessionStorage.setItem('currentUser', storedUser);
+      const cachedUser = storedUser || (result.user ? JSON.stringify(result.user) : null);
+      if (cachedUser) sessionStorage.setItem('currentUser', cachedUser);
+      await cacheUpdateStatus();
       return;
     }
     localStorage.removeItem('user');
@@ -365,6 +385,7 @@ if (intro) {
       localStorage.setItem('rememberUser', remember ? '1' : '0');
       localStorage.setItem('pin', pin);
       sessionStorage.setItem('currentUser', JSON.stringify(result.user));
+      await cacheUpdateStatus();
 
       if (pinInput) {
         pinInput.value = pin;

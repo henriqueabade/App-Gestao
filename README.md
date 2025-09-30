@@ -68,6 +68,24 @@ npm run dist:publish
 Esse script executa `electron-builder --publish onTagOrDraft`, que sobe os artefatos somente quando o commit estiver associado
 a uma tag ou a um rascunho de release, evitando uploads acidentais.
 
+### Fluxo de publicação via dashboard
+
+1. Gere e publique os artefatos conforme descrito acima para alimentar o feed de updates.
+2. Quando o Sup Admin acessar o dashboard, o botão **Publicar atualização** ficará disponível sempre que houver uma versão mais
+   recente no feed. Ao clicar, o aplicativo dispara o processo de publicação monitorado pelo `electron-updater`.
+3. Os demais usuários recebem o aviso assim que fizerem login: o app baixa automaticamente a atualização disponível e exibe o
+   alerta correspondente durante o download e instalação.
+
+Para que o fluxo funcione, garanta que:
+
+- As máquinas clientes consigam acessar a URL do feed (`ELECTRON_UPDATE_URL` ou o endpoint gerado pelo provedor configurado), com
+  as portas HTTP/HTTPS liberadas no firewall corporativo.
+- Caso os artefatos estejam em repositório privado (ex.: GitHub privado, Spaces protegido), as credenciais/tokens necessários
+  estejam configurados no ambiente responsável pela publicação (`GH_TOKEN`, chaves S3, etc.) e, quando aplicável, que o aplicativo
+  possua token ou cabeçalhos de autenticação para consumir o feed.
+- Os manifestos `latest.yml`/`app-update.yml` e os instaladores permaneçam disponíveis publicamente (ou autenticados com as
+  credenciais acima) para que o `electron-updater` consiga consultá-los.
+
 ## Publicação e atualizações automáticas
 
 O `electron-builder` está configurado para publicar os artefatos da aplicação e gerar os feeds consumidos pelo
