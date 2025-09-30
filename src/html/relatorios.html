@@ -1,0 +1,628 @@
+<div class="modulo-container relatorios-module">
+    <!-- Header -->
+    <div class="relatorios-header glass-panel sticky top-0 z-40 border border-white/10 mb-8">
+        <div class="relatorios-header-inner max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <!-- Breadcrumb -->
+            <div class="relatorios-breadcrumb flex items-center gap-2 text-sm py-3 border-b border-white/5">
+                <a href="#" class="text-gray-400 hover:text-white transition-colors">Home</a>
+                <svg class="w-4 h-4 text-gray-500" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+                    <path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 111.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd"></path>
+                </svg>
+                <span class="text-white">Relatórios</span>
+            </div>
+
+            <!-- Title & Actions -->
+            <div class="py-6">
+                <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+                    <div>
+                        <h1 class="text-2xl font-bold text-white">Relatórios</h1>
+                        <p class="text-gray-400 mt-1">Gere, visualize e exporte dados do sistema</p>
+                    </div>
+
+                    <div class="flex flex-wrap items-center gap-3 relatorios-actions">
+                        <button class="btn-primary px-4 py-2 rounded-lg font-medium flex items-center gap-2">
+                            <i class="fas fa-plus"></i>
+                            Novo Relatório
+                        </button>
+
+                        <button id="relatoriosSaveTemplateBtn" class="btn-neutral px-4 py-2 rounded-lg font-medium">
+                            <i class="fas fa-bookmark"></i>
+                            Salvar Modelo
+                        </button>
+
+                        <div class="relative">
+                            <button id="relatoriosLoadTemplateBtn" class="btn-neutral px-4 py-2 rounded-lg font-medium flex items-center gap-2">
+                                <i class="fas fa-layer-group"></i>
+                                Carregar Modelo
+                                <i class="fas fa-chevron-down text-xs"></i>
+                            </button>
+                            <div id="relatoriosTemplateDropdown" class="relatorios-dropdown">
+                                <div class="py-2">
+                                    <a href="#" class="relatorios-dropdown-item">Relatório Estoque Mensal</a>
+                                    <a href="#" class="relatorios-dropdown-item">Análise de Vendas Q3</a>
+                                    <a href="#" class="relatorios-dropdown-item">Clientes Ativos 2025</a>
+                                    <hr class="my-2 border-white/10">
+                                    <a href="#" class="relatorios-dropdown-item text-gray-400">Gerenciar Modelos</a>
+                                </div>
+                            </div>
+                        </div>
+
+                        <button id="relatoriosScheduleBtn" class="btn-neutral px-4 py-2 rounded-lg font-medium">
+                            <i class="fas fa-clock"></i>
+                            Agendar
+                        </button>
+
+                        <div class="relative">
+                            <button id="relatoriosExportBtn" class="btn-bordeaux px-4 py-2 rounded-lg font-medium flex items-center gap-2">
+                                <i class="fas fa-file-export"></i>
+                                Exportar
+                                <i class="fas fa-chevron-down text-xs"></i>
+                            </button>
+                            <div id="relatoriosExportDropdown" class="relatorios-dropdown w-48">
+                                <div class="py-2">
+                                    <a href="#" class="relatorios-dropdown-item flex items-center gap-3">
+                                        <i class="fas fa-file-pdf text-red-400"></i>
+                                        PDF
+                                    </a>
+                                    <a href="#" class="relatorios-dropdown-item flex items-center gap-3">
+                                        <i class="fas fa-file-excel text-green-400"></i>
+                                        Excel
+                                    </a>
+                                    <a href="#" class="relatorios-dropdown-item flex items-center gap-3">
+                                        <i class="fas fa-file-csv text-blue-400"></i>
+                                        CSV
+                                    </a>
+                                    <hr class="my-2 border-white/10">
+                                    <a href="#" class="relatorios-dropdown-item flex items-center gap-3">
+                                        <i class="fas fa-print text-gray-400"></i>
+                                        Imprimir
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <!-- Report Tabs -->
+        <div class="mb-8">
+            <div class="glass-panel rounded-2xl p-2">
+                <div role="tablist" class="flex flex-wrap gap-2" aria-label="Categorias de Relatórios">
+                    <button role="tab" aria-selected="true" class="relatorios-tab tab-active" data-relatorios-tab="estoque">
+                        Estoque
+                    </button>
+                    <button role="tab" aria-selected="false" class="relatorios-tab tab-inactive" data-relatorios-tab="producao">
+                        Produção &amp; Produtos
+                    </button>
+                    <button role="tab" aria-selected="false" class="relatorios-tab tab-inactive" data-relatorios-tab="clientes">
+                        Clientes &amp; CRM
+                    </button>
+                    <button role="tab" aria-selected="false" class="relatorios-tab tab-inactive" data-relatorios-tab="orcamentos">
+                        Orçamentos
+                    </button>
+                    <button role="tab" aria-selected="false" class="relatorios-tab tab-inactive" data-relatorios-tab="pedidos">
+                        Pedidos
+                    </button>
+                    <button role="tab" aria-selected="false" class="relatorios-tab tab-inactive" data-relatorios-tab="usuarios">
+                        Usuários &amp; Auditoria
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Filters Section -->
+        <section class="glass-panel rounded-2xl p-6 mb-8">
+            <h2 class="section-title">Filtros</h2>
+
+            <!-- Common Filters -->
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+                <!-- Period -->
+                <div class="floating-label">
+                    <select class="relatorios-input">
+                        <option value="">Selecione...</option>
+                        <option value="7">Últimos 7 dias</option>
+                        <option value="30">Últimos 30 dias</option>
+                        <option value="90">Últimos 90 dias</option>
+                        <option value="custom">Período personalizado</option>
+                    </select>
+                    <label>Período</label>
+                </div>
+
+                <!-- Status -->
+                <div class="floating-label">
+                    <input type="text" placeholder=" " class="relatorios-input">
+                    <label>Status</label>
+                </div>
+
+                <!-- Responsible -->
+                <div class="floating-label">
+                    <select class="relatorios-input">
+                        <option value="">Todos</option>
+                        <option value="joao">João Silva</option>
+                        <option value="maria">Maria Santos</option>
+                        <option value="pedro">Pedro Lima</option>
+                    </select>
+                    <label>Responsável</label>
+                </div>
+
+                <!-- Search -->
+                <div class="floating-label">
+                    <input type="text" placeholder=" " class="relatorios-input">
+                    <label>Buscar</label>
+                </div>
+            </div>
+
+            <!-- Tab-specific Filters -->
+            <div id="relatoriosSpecificFilters">
+                <div class="relatorios-tab-content" data-relatorios-tab-content="estoque">
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+                        <div class="floating-label">
+                            <select class="relatorios-input">
+                                <option value="">Todas</option>
+                                <option value="madeira">Madeira</option>
+                                <option value="metal">Metal</option>
+                                <option value="tecido">Tecido</option>
+                            </select>
+                            <label>Categoria</label>
+                        </div>
+
+                        <div class="floating-label">
+                            <select class="relatorios-input">
+                                <option value="">Todas</option>
+                                <option value="un">Unidade</option>
+                                <option value="kg">Quilograma</option>
+                                <option value="m">Metro</option>
+                            </select>
+                            <label>Unidade</label>
+                        </div>
+
+                        <div class="floating-label">
+                            <select class="relatorios-input">
+                                <option value="">Todos</option>
+                                <option value="corte">Corte</option>
+                                <option value="montagem">Montagem</option>
+                                <option value="acabamento">Acabamento</option>
+                            </select>
+                            <label>Processo</label>
+                        </div>
+
+                        <div class="flex items-center gap-4">
+                            <label class="relatorios-checkbox">
+                                <input type="checkbox" class="relatorios-checkbox-input">
+                                <span>Apenas infinitos</span>
+                            </label>
+                            <label class="relatorios-checkbox">
+                                <input type="checkbox" class="relatorios-checkbox-input">
+                                <span>Abaixo do mínimo</span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="relatorios-tab-content hidden" data-relatorios-tab-content="producao">
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+                        <div class="floating-label">
+                            <select class="relatorios-input">
+                                <option value="">Todas</option>
+                                <option value="moveis">Móveis</option>
+                                <option value="decoracao">Decoração</option>
+                            </select>
+                            <label>Categoria</label>
+                        </div>
+
+                        <div class="floating-label">
+                            <select class="relatorios-input">
+                                <option value="">Todas</option>
+                                <option value="ativo">Ativo</option>
+                                <option value="inativo">Inativo</option>
+                            </select>
+                            <label>Status</label>
+                        </div>
+
+                        <div class="floating-label">
+                            <select class="relatorios-input">
+                                <option value="">Todas</option>
+                                <option value="projeto">Projeto</option>
+                                <option value="producao">Produção</option>
+                                <option value="finalizado">Finalizado</option>
+                            </select>
+                            <label>Etapa</label>
+                        </div>
+
+                        <div class="floating-label">
+                            <input type="number" placeholder=" " class="relatorios-input">
+                            <label>Markup mínimo (%)</label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Filter Actions -->
+            <div class="flex flex-wrap items-center gap-3">
+                <button class="btn-primary px-6 py-2 rounded-lg font-medium">
+                    Aplicar Filtros
+                </button>
+                <button class="btn-neutral px-6 py-2 rounded-lg font-medium">
+                    Limpar
+                </button>
+
+                <div class="flex flex-wrap gap-2 ml-auto">
+                    <span class="chip chip-success">Ativo</span>
+                    <span class="chip chip-warning">Pendente</span>
+                    <span class="chip chip-info">Em Análise</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- KPIs Section -->
+        <section class="mb-8">
+            <h2 class="section-title">Indicadores</h2>
+            <div id="relatoriosKpiContainer">
+                <div class="relatorios-kpi-grid" data-relatorios-kpi="estoque">
+                    <article class="relatorios-kpi-card">
+                        <div class="flex items-center gap-4">
+                            <div class="relatorios-kpi-icon bg-blue-500/20">
+                                <i class="fas fa-th-large text-blue-400"></i>
+                            </div>
+                            <div>
+                                <p class="relatorios-kpi-value">1.247</p>
+                                <p class="relatorios-kpi-label">Total de Itens</p>
+                            </div>
+                        </div>
+                    </article>
+
+                    <article class="relatorios-kpi-card">
+                        <div class="flex items-center gap-4">
+                            <div class="relatorios-kpi-icon bg-green-500/20">
+                                <i class="fas fa-check-circle text-green-400"></i>
+                            </div>
+                            <div>
+                                <p class="relatorios-kpi-value">89</p>
+                                <p class="relatorios-kpi-label">Itens Infinitos</p>
+                            </div>
+                        </div>
+                    </article>
+
+                    <article class="relatorios-kpi-card">
+                        <div class="flex items-center gap-4">
+                            <div class="relatorios-kpi-icon bg-purple-500/20">
+                                <i class="fas fa-coins text-purple-400"></i>
+                            </div>
+                            <div>
+                                <p class="relatorios-kpi-value">R$ 456K</p>
+                                <p class="relatorios-kpi-label">Valor Total</p>
+                            </div>
+                        </div>
+                    </article>
+                </div>
+            </div>
+        </section>
+
+        <!-- Results Section -->
+        <section class="glass-panel rounded-2xl mb-8">
+            <div class="border-b border-white/10 p-4">
+                <div class="flex flex-wrap gap-2" role="tablist" aria-label="Visão dos resultados">
+                    <button class="result-tab result-tab-active" data-relatorios-result="table">
+                        Tabela
+                    </button>
+                    <button class="result-tab result-tab-inactive" data-relatorios-result="charts">
+                        Gráficos
+                    </button>
+                    <button class="result-tab result-tab-inactive" data-relatorios-result="detail">
+                        Master-Detail
+                    </button>
+                </div>
+            </div>
+
+            <div class="p-6">
+                <div id="relatoriosTableView" class="relatorios-result-content">
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm">
+                            <thead class="sticky top-0 bg-surface/80 backdrop-blur-sm">
+                                <tr class="border-b border-white/10">
+                                    <th class="table-header text-left">Nome</th>
+                                    <th class="table-header text-left">Categoria</th>
+                                    <th class="table-header text-center">Unidade</th>
+                                    <th class="table-header text-right">Quantidade</th>
+                                    <th class="table-header text-right">Preço</th>
+                                    <th class="table-header text-center">Processo</th>
+                                    <th class="table-header text-center">Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr class="table-row">
+                                    <td class="table-cell text-white font-medium">Parafuso 5mm</td>
+                                    <td class="table-cell text-gray-400">Metal</td>
+                                    <td class="table-cell text-center text-gray-400">un</td>
+                                    <td class="table-cell text-right text-white">150</td>
+                                    <td class="table-cell text-right text-white">R$ 0,25</td>
+                                    <td class="table-cell text-center text-gray-400">Montagem</td>
+                                    <td class="table-cell text-center">
+                                        <span class="chip chip-success">Disponível</span>
+                                    </td>
+                                </tr>
+                                <tr class="table-row">
+                                    <td class="table-cell text-white font-medium">Madeira Pinus 2x4</td>
+                                    <td class="table-cell text-gray-400">Madeira</td>
+                                    <td class="table-cell text-center text-gray-400">m</td>
+                                    <td class="table-cell text-right text-white">25</td>
+                                    <td class="table-cell text-right text-white">R$ 12,50</td>
+                                    <td class="table-cell text-center text-gray-400">Corte</td>
+                                    <td class="table-cell text-center">
+                                        <span class="chip chip-warning">Baixo</span>
+                                    </td>
+                                </tr>
+                                <tr class="table-row">
+                                    <td class="table-cell text-white font-medium">Verniz Premium</td>
+                                    <td class="table-cell text-gray-400">Químico</td>
+                                    <td class="table-cell text-center text-gray-400">L</td>
+                                    <td class="table-cell text-right text-white">∞</td>
+                                    <td class="table-cell text-right text-white">R$ 45,00</td>
+                                    <td class="table-cell text-center text-gray-400">Acabamento</td>
+                                    <td class="table-cell text-center">
+                                        <span class="chip chip-info">Infinito</span>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div class="relatorios-table-footer">
+                        <span class="text-sm text-gray-400">Mostrando 1-10 de 1.247 itens</span>
+                        <div class="flex items-center gap-2">
+                            <button class="table-pagination">Anterior</button>
+                            <span class="table-pagination table-pagination-active">1</span>
+                            <span class="table-pagination">2</span>
+                            <span class="table-pagination">3</span>
+                            <button class="table-pagination">Próximo</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="relatoriosChartsView" class="relatorios-result-content hidden">
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        <article class="relatorios-chart-card">
+                            <h3 class="chart-title">Distribuição por Categoria</h3>
+                            <div class="relatorios-chart-placeholder">
+                                <i class="fas fa-chart-pie text-4xl opacity-50"></i>
+                                <p class="mt-4">Gráfico de Pizza</p>
+                                <p class="text-sm text-gray-400">Placeholder para Chart.js</p>
+                            </div>
+                        </article>
+
+                        <article class="relatorios-chart-card">
+                            <h3 class="chart-title">Evolução do Estoque</h3>
+                            <div class="relatorios-chart-placeholder">
+                                <i class="fas fa-chart-line text-4xl opacity-50"></i>
+                                <p class="mt-4">Gráfico de Linha</p>
+                                <p class="text-sm text-gray-400">Placeholder para Chart.js</p>
+                            </div>
+                        </article>
+                    </div>
+                </div>
+
+                <div id="relatoriosDetailView" class="relatorios-result-content hidden">
+                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        <section class="lg:col-span-1">
+                            <h3 class="chart-title">Itens de Estoque</h3>
+                            <div class="space-y-2 max-h-96 overflow-y-auto">
+                                <article class="relatorios-master-item">
+                                    <p class="text-white font-medium">Parafuso 5mm</p>
+                                    <p class="text-gray-400 text-sm">Metal • 150 un</p>
+                                </article>
+                                <article class="relatorios-master-item">
+                                    <p class="text-white font-medium">Madeira Pinus 2x4</p>
+                                    <p class="text-gray-400 text-sm">Madeira • 25 m</p>
+                                </article>
+                                <article class="relatorios-master-item">
+                                    <p class="text-white font-medium">Verniz Premium</p>
+                                    <p class="text-gray-400 text-sm">Químico • ∞ L</p>
+                                </article>
+                            </div>
+                        </section>
+
+                        <section class="lg:col-span-2">
+                            <h3 class="chart-title">Detalhes do Item</h3>
+                            <div class="relatorios-detail-card">
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    <div>
+                                        <h4 class="detail-subtitle">Informações Gerais</h4>
+                                        <dl class="relatorios-detail-list">
+                                            <div>
+                                                <dt>Nome:</dt>
+                                                <dd>Parafuso 5mm</dd>
+                                            </div>
+                                            <div>
+                                                <dt>Categoria:</dt>
+                                                <dd>Metal</dd>
+                                            </div>
+                                            <div>
+                                                <dt>Unidade:</dt>
+                                                <dd>un</dd>
+                                            </div>
+                                            <div>
+                                                <dt>Preço:</dt>
+                                                <dd>R$ 0,25</dd>
+                                            </div>
+                                        </dl>
+                                    </div>
+                                    <div>
+                                        <h4 class="detail-subtitle">Estoque &amp; Processo</h4>
+                                        <dl class="relatorios-detail-list">
+                                            <div>
+                                                <dt>Quantidade:</dt>
+                                                <dd>150</dd>
+                                            </div>
+                                            <div>
+                                                <dt>Mínimo:</dt>
+                                                <dd>50</dd>
+                                            </div>
+                                            <div>
+                                                <dt>Processo:</dt>
+                                                <dd>Montagem</dd>
+                                            </div>
+                                            <div class="flex items-center justify-between gap-4">
+                                                <dt>Status:</dt>
+                                                <dd><span class="chip chip-success">Disponível</span></dd>
+                                            </div>
+                                        </dl>
+                                    </div>
+                                </div>
+                            </div>
+                        </section>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <!-- Bottom Action Bar -->
+    <div class="relatorios-bottom-bar">
+        <div class="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-4">
+            <div class="flex flex-wrap items-center gap-3">
+                <button class="btn-primary px-4 py-2 rounded-lg font-medium flex items-center gap-2">
+                    <i class="fas fa-file-export"></i>
+                    Exportar
+                </button>
+                <button id="relatoriosShareBtn" class="btn-neutral px-4 py-2 rounded-lg font-medium flex items-center gap-2">
+                    <i class="fas fa-share-alt"></i>
+                    <span class="relatorios-share-label">Compartilhar</span>
+                </button>
+                <button class="btn-neutral px-4 py-2 rounded-lg font-medium flex items-center gap-2">
+                    <i class="fas fa-bookmark"></i>
+                    Salvar Modelo
+                </button>
+                <button class="btn-neutral px-4 py-2 rounded-lg font-medium flex items-center gap-2">
+                    <i class="fas fa-clock"></i>
+                    Agendar
+                </button>
+            </div>
+
+            <button class="btn-danger-light px-4 py-2 rounded-lg font-medium flex items-center gap-2">
+                <i class="fas fa-times"></i>
+                Fechar
+            </button>
+        </div>
+    </div>
+
+    <!-- Save Template Modal -->
+    <div id="relatoriosSaveTemplateModal" class="relatorios-modal hidden">
+        <div class="relatorios-modal-backdrop"></div>
+        <div class="relatorios-modal-dialog">
+            <div class="p-6">
+                <h3 class="text-lg font-semibold text-white mb-4">Salvar Modelo de Relatório</h3>
+
+                <div class="space-y-4">
+                    <div class="floating-label">
+                        <input type="text" placeholder=" " class="relatorios-input">
+                        <label>Nome do modelo</label>
+                    </div>
+
+                    <div class="floating-label">
+                        <select class="relatorios-input">
+                            <option value="personal">Pessoal</option>
+                            <option value="team">Equipe</option>
+                            <option value="public">Público</option>
+                        </select>
+                        <label>Visibilidade</label>
+                    </div>
+
+                    <div class="floating-label">
+                        <textarea placeholder=" " rows="3" class="relatorios-input resize-none"></textarea>
+                        <label>Descrição (opcional)</label>
+                    </div>
+
+                    <div>
+                        <p class="text-sm text-gray-400 mb-2">Filtros incluídos:</p>
+                        <div class="space-y-2">
+                            <label class="relatorios-checkbox">
+                                <input type="checkbox" class="relatorios-checkbox-input" checked>
+                                <span>Período selecionado</span>
+                            </label>
+                            <label class="relatorios-checkbox">
+                                <input type="checkbox" class="relatorios-checkbox-input" checked>
+                                <span>Filtros específicos</span>
+                            </label>
+                            <label class="relatorios-checkbox">
+                                <input type="checkbox" class="relatorios-checkbox-input">
+                                <span>Configuração de colunas</span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex items-center gap-3 mt-6">
+                    <button class="btn-primary flex-1 px-4 py-2 rounded-lg font-medium">
+                        Salvar
+                    </button>
+                    <button id="relatoriosCancelSaveTemplate" class="btn-neutral flex-1 px-4 py-2 rounded-lg font-medium">
+                        Cancelar
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Schedule Modal -->
+    <div id="relatoriosScheduleModal" class="relatorios-modal hidden">
+        <div class="relatorios-modal-backdrop"></div>
+        <div class="relatorios-modal-dialog">
+            <div class="p-6">
+                <h3 class="text-lg font-semibold text-white mb-4">Agendar Relatório</h3>
+
+                <div class="space-y-4">
+                    <div class="floating-label">
+                        <select class="relatorios-input">
+                            <option value="daily">Diário</option>
+                            <option value="weekly">Semanal</option>
+                            <option value="monthly">Mensal</option>
+                        </select>
+                        <label>Frequência</label>
+                    </div>
+
+                    <div class="floating-label">
+                        <input type="time" class="relatorios-input">
+                        <label>Horário</label>
+                    </div>
+
+                    <div class="floating-label">
+                        <select class="relatorios-input">
+                            <option value="pdf">PDF</option>
+                            <option value="excel">Excel</option>
+                            <option value="csv">CSV</option>
+                        </select>
+                        <label>Formato</label>
+                    </div>
+
+                    <div class="floating-label">
+                        <input type="email" placeholder=" " class="relatorios-input">
+                        <label>Destinatários (separados por vírgula)</label>
+                    </div>
+
+                    <div class="flex flex-wrap gap-2">
+                        <span class="chip chip-info flex items-center gap-2">
+                            joao@empresa.com
+                            <button class="chip-action" type="button" aria-label="Remover joao@empresa.com">×</button>
+                        </span>
+                        <span class="chip chip-info flex items-center gap-2">
+                            maria@empresa.com
+                            <button class="chip-action" type="button" aria-label="Remover maria@empresa.com">×</button>
+                        </span>
+                    </div>
+                </div>
+
+                <div class="flex items-center gap-3 mt-6">
+                    <button class="btn-primary flex-1 px-4 py-2 rounded-lg font-medium">
+                        Agendar
+                    </button>
+                    <button id="relatoriosCancelSchedule" class="btn-neutral flex-1 px-4 py-2 rounded-lg font-medium">
+                        Cancelar
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

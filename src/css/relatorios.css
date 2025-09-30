@@ -1,0 +1,515 @@
+/* Estilos específicos do módulo Relatórios */
+:root {
+    --color-primary: #b6a03e;
+    --color-primary-light: #d4c169;
+    --color-primary-dark: #7f6a27;
+    --color-violet: #A394A7;
+    --color-bordeaux: #6a152c;
+    --color-bg-deep: #310017;
+    --color-surface: rgba(255, 255, 255, 0.08);
+    --color-input: rgba(0, 0, 0, 0.3);
+    --color-input-border: rgba(255, 255, 255, 0.15);
+    --color-green: #a2ffa6;
+    --color-red: #ff5858;
+    --color-blue: #8aa7f3;
+    --color-orange: #ffa366;
+}
+
+body {
+    background: linear-gradient(135deg, var(--color-bg-deep) 0%, #1a0009 100%);
+    min-height: 100vh;
+}
+
+.relatorios-module {
+    color: #fff;
+}
+
+.relatorios-module .glass-panel {
+    background: rgba(17, 24, 39, 0.55);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border-radius: 1rem;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    box-shadow: 0 20px 40px rgba(15, 23, 42, 0.25);
+}
+
+.relatorios-header {
+    background: rgba(17, 24, 39, 0.75);
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+}
+
+.relatorios-module .btn-primary {
+    background: var(--color-primary);
+    color: #fff;
+    transition: all 150ms ease;
+}
+
+.relatorios-module .btn-primary:hover {
+    background: var(--color-primary-light);
+    transform: translateY(-1px);
+}
+
+.relatorios-module .btn-neutral {
+    background: rgba(255, 255, 255, 0.1);
+    color: #fff;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    transition: all 150ms ease;
+}
+
+.relatorios-module .btn-neutral:hover {
+    background: rgba(255, 255, 255, 0.18);
+}
+
+.relatorios-module .btn-bordeaux {
+    background: var(--color-bordeaux);
+    color: #fff;
+    transition: all 150ms ease;
+}
+
+.relatorios-module .btn-bordeaux:hover {
+    background: rgba(106, 21, 44, 0.85);
+}
+
+.relatorios-module .btn-success {
+    background: rgba(162, 255, 166, 0.22);
+    color: var(--color-green);
+    border: 1px solid rgba(162, 255, 166, 0.4);
+}
+
+.relatorios-module .btn-success:hover {
+    background: rgba(162, 255, 166, 0.3);
+}
+
+.relatorios-module .btn-danger-light {
+    background: rgba(255, 88, 88, 0.18);
+    color: var(--color-red);
+    border: 1px solid rgba(255, 88, 88, 0.3);
+    transition: all 150ms ease;
+}
+
+.relatorios-module .btn-danger-light:hover {
+    background: rgba(255, 88, 88, 0.26);
+}
+
+.relatorios-actions i,
+.relatorios-bottom-bar i {
+    font-size: 0.85rem;
+}
+
+.relatorios-module .relatorios-tab {
+    padding: 0.5rem 1rem;
+    border-radius: 0.75rem;
+    font-weight: 500;
+    font-size: 0.9rem;
+    transition: all 150ms ease;
+}
+
+.relatorios-module .tab-active {
+    background: var(--color-primary);
+    color: #fff;
+}
+
+.relatorios-module .tab-inactive {
+    background: rgba(255, 255, 255, 0.12);
+    color: #d1d5db;
+}
+
+.relatorios-module .tab-inactive:hover {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+.relatorios-module .floating-label {
+    position: relative;
+}
+
+.relatorios-module .floating-label label {
+    position: absolute;
+    left: 0.75rem;
+    top: 0.75rem;
+    color: #9ca3af;
+    transition: all 0.2s ease;
+    pointer-events: none;
+    padding: 0 0.25rem;
+}
+
+.relatorios-module .floating-label input:focus + label,
+.relatorios-module .floating-label input:not(:placeholder-shown) + label,
+.relatorios-module .floating-label select:focus + label,
+.relatorios-module .floating-label select:not([value=""]) + label,
+.relatorios-module .floating-label textarea:focus + label,
+.relatorios-module .floating-label textarea:not(:placeholder-shown) + label {
+    transform: translateY(-1.6rem) scale(0.85);
+    color: var(--color-primary);
+}
+
+.relatorios-module .relatorios-input {
+    width: 100%;
+    padding: 0.75rem 0.9rem;
+    border-radius: 0.75rem;
+    border: 1px solid var(--color-input-border);
+    background: var(--color-input);
+    color: #fff;
+    transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+
+.relatorios-module .relatorios-input:focus {
+    outline: none;
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 3px rgba(182, 160, 62, 0.25);
+}
+
+.relatorios-module .relatorios-checkbox {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.9rem;
+    cursor: pointer;
+    color: #fff;
+}
+
+.relatorios-module .relatorios-checkbox-input {
+    width: 1rem;
+    height: 1rem;
+    accent-color: var(--color-primary);
+    background: var(--color-input);
+    border: 1px solid var(--color-input-border);
+    border-radius: 0.25rem;
+}
+
+.relatorios-module .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.4rem 0.9rem;
+    border-radius: 9999px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    border: 1px solid transparent;
+}
+
+.relatorios-module .chip-success {
+    background: rgba(162, 255, 166, 0.18);
+    border-color: rgba(162, 255, 166, 0.35);
+    color: var(--color-green);
+}
+
+.relatorios-module .chip-warning {
+    background: rgba(255, 163, 102, 0.18);
+    border-color: rgba(255, 163, 102, 0.35);
+    color: var(--color-orange);
+}
+
+.relatorios-module .chip-info {
+    background: rgba(138, 167, 243, 0.18);
+    border-color: rgba(138, 167, 243, 0.35);
+    color: var(--color-blue);
+}
+
+.relatorios-module .chip-action {
+    color: inherit;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+}
+
+.section-title {
+    font-size: 1.1rem;
+    font-weight: 600;
+    margin-bottom: 1.5rem;
+}
+
+.relatorios-module .relatorios-kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 1.5rem;
+}
+
+.relatorios-module .relatorios-kpi-card {
+    background: rgba(17, 24, 39, 0.55);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 1.5rem;
+    padding: 1.5rem;
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+}
+
+.relatorios-module .relatorios-kpi-icon {
+    width: 3rem;
+    height: 3rem;
+    border-radius: 0.85rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.relatorios-module .relatorios-kpi-value {
+    font-size: 1.5rem;
+    font-weight: 700;
+}
+
+.relatorios-module .relatorios-kpi-label {
+    font-size: 0.9rem;
+    color: #9ca3af;
+}
+
+.relatorios-module .result-tab {
+    padding: 0.5rem 1rem;
+    border-radius: 0.75rem;
+    font-weight: 500;
+    font-size: 0.9rem;
+    transition: all 150ms ease;
+}
+
+.relatorios-module .result-tab-active {
+    background: var(--color-primary);
+    color: #fff;
+}
+
+.relatorios-module .result-tab-inactive {
+    background: rgba(255, 255, 255, 0.12);
+    color: #d1d5db;
+}
+
+.relatorios-module .result-tab-inactive:hover {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+.relatorios-module .relatorios-result-content {
+    animation: relatoriosFade 200ms ease;
+}
+
+@keyframes relatoriosFade {
+    from {
+        opacity: 0;
+        transform: translateY(8px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.relatorios-module .table-header {
+    padding: 1rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #9ca3af;
+}
+
+.relatorios-module .table-row {
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    transition: background 150ms ease;
+}
+
+.relatorios-module .table-row:hover {
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.relatorios-module .table-cell {
+    padding: 1rem;
+    vertical-align: middle;
+}
+
+.relatorios-module .relatorios-table-footer {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding-top: 1.5rem;
+    margin-top: 1.5rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.relatorios-module .table-pagination {
+    padding: 0.3rem 0.75rem;
+    border-radius: 0.75rem;
+    background: rgba(255, 255, 255, 0.1);
+    color: #d1d5db;
+    font-size: 0.8rem;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.relatorios-module .table-pagination-active {
+    background: var(--color-primary);
+    color: #fff;
+    border-color: transparent;
+}
+
+.relatorios-module .relatorios-chart-card {
+    background: rgba(17, 24, 39, 0.45);
+    border-radius: 1.25rem;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    padding: 1.5rem;
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+}
+
+.relatorios-module .chart-title {
+    font-size: 1rem;
+    font-weight: 600;
+    margin-bottom: 1rem;
+}
+
+.relatorios-module .relatorios-chart-placeholder {
+    height: 16rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    color: #9ca3af;
+    text-align: center;
+}
+
+.relatorios-module .relatorios-master-item {
+    padding: 0.8rem;
+    border-radius: 0.85rem;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    transition: background 150ms ease, border-color 150ms ease;
+    cursor: pointer;
+}
+
+.relatorios-module .relatorios-master-item:hover {
+    background: rgba(255, 255, 255, 0.12);
+    border-color: rgba(255, 255, 255, 0.2);
+}
+
+.relatorios-module .relatorios-detail-card {
+    background: rgba(17, 24, 39, 0.45);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 1.5rem;
+    padding: 1.5rem;
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+}
+
+.relatorios-module .detail-subtitle {
+    color: var(--color-primary);
+    font-weight: 600;
+    margin-bottom: 0.75rem;
+}
+
+.relatorios-module .relatorios-detail-list {
+    display: grid;
+    gap: 0.5rem;
+    font-size: 0.9rem;
+}
+
+.relatorios-module .relatorios-detail-list dt {
+    color: #9ca3af;
+}
+
+.relatorios-module .relatorios-detail-list dd {
+    color: #fff;
+    font-weight: 500;
+}
+
+.relatorios-bottom-bar {
+    position: sticky;
+    bottom: 0;
+    width: 100%;
+    background: rgba(17, 24, 39, 0.8);
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+    border-top: 1px solid rgba(255, 255, 255, 0.12);
+    padding: 1rem;
+    margin-top: 2rem;
+}
+
+.relatorios-module .relatorios-dropdown {
+    position: absolute;
+    right: 0;
+    top: calc(100% + 0.5rem);
+    min-width: 12rem;
+    background: rgba(17, 24, 39, 0.8);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 0.9rem;
+    box-shadow: 0 20px 40px rgba(15, 23, 42, 0.25);
+    opacity: 0;
+    transform: translateY(-8px) scale(0.95);
+    pointer-events: none;
+    transition: all 150ms ease;
+    z-index: 50;
+}
+
+.relatorios-module .relatorios-dropdown.visible {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    pointer-events: auto;
+}
+
+.relatorios-module .relatorios-dropdown-item {
+    display: block;
+    padding: 0.6rem 1rem;
+    font-size: 0.85rem;
+    color: #fff;
+    transition: background 150ms ease;
+}
+
+.relatorios-module .relatorios-dropdown-item:hover {
+    background: rgba(255, 255, 255, 0.12);
+}
+
+.relatorios-module .relatorios-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+}
+
+.relatorios-module .relatorios-modal:not(.hidden) {
+    display: flex;
+}
+
+.relatorios-module .relatorios-modal-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.55);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+}
+
+.relatorios-module .relatorios-modal-dialog {
+    position: relative;
+    width: 100%;
+    max-width: 28rem;
+    border-radius: 1.5rem;
+    background: rgba(17, 24, 39, 0.85);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    box-shadow: 0 20px 45px rgba(15, 23, 42, 0.35);
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+    overflow: hidden;
+}
+
+.relatorios-module .skeleton {
+    background: linear-gradient(90deg, rgba(255, 255, 255, 0.1) 25%, rgba(255, 255, 255, 0.2) 50%, rgba(255, 255, 255, 0.1) 75%);
+    background-size: 200% 100%;
+    animation: relatoriosSkeleton 1.5s infinite;
+}
+
+@keyframes relatoriosSkeleton {
+    0% {
+        background-position: 200% 0;
+    }
+    100% {
+        background-position: -200% 0;
+    }
+}
+
+@media (max-width: 1024px) {
+    .relatorios-header {
+        position: static;
+    }
+
+    .relatorios-bottom-bar {
+        position: static;
+    }
+}
