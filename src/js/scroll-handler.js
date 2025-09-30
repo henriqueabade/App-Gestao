@@ -7,6 +7,9 @@ const SCROLL_STEP = 40;
 // Referência à instância atual da scrollbar
 let currentScrollbar = null;
 
+// Mantém referência para um frame de validação pendente
+let pendingRefreshFrame = null;
+
 // Diferença mínima entre scrollHeight e clientHeight para considerar que há overflow
 const MIN_SCROLL_DIFF = 8;
 
@@ -93,8 +96,10 @@ function createScrollbar(module) {
 
 // Encontra o primeiro módulo “visível” que necessite de scroll e cria/remova scrollbar
 function refreshScrollbar() {
-  // Remove barra antiga
-  removeScrollbar();
+  if (pendingRefreshFrame !== null) {
+    cancelAnimationFrame(pendingRefreshFrame);
+    pendingRefreshFrame = null;
+  }
 
   // Busca todos os módulos e tabelas com scroll
   const modules = Array.from(document.querySelectorAll('.modulo-container, .table-scroll'));
@@ -107,9 +112,29 @@ function refreshScrollbar() {
     return diff > MIN_SCROLL_DIFF;
   });
 
-  if (visible.length > 0) {
-    createScrollbar(visible[0]);
+  if (visible.length === 0) {
+    removeScrollbar();
+    return;
   }
+
+  const candidate = visible[0];
+
+  pendingRefreshFrame = requestAnimationFrame(() => {
+    pendingRefreshFrame = null;
+
+    if (!candidate.isConnected) {
+      removeScrollbar();
+      return;
+    }
+
+    const diff = candidate.scrollHeight - candidate.clientHeight;
+    if (diff <= MIN_SCROLL_DIFF) {
+      removeScrollbar();
+      return;
+    }
+
+    createScrollbar(candidate);
+  });
 }
 
 // Observa carregamento dinâmico de novos módulos
