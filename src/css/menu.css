@@ -43,6 +43,196 @@ body {
     flex-wrap: nowrap;
 }
 
+.sup-admin-updates {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+}
+
+.sup-admin-updates.hidden {
+    display: none !important;
+}
+
+.sup-admin-updates-trigger {
+    --sup-admin-color: var(--color-green);
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.45rem 0.95rem;
+    border-radius: 9999px;
+    border: 1px solid rgba(162, 255, 166, 0.45);
+    background: rgba(162, 255, 166, 0.12);
+    color: var(--sup-admin-color);
+    font-size: 0.8rem;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    transition: background 160ms ease, border-color 160ms ease, color 160ms ease, transform 160ms ease;
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.12);
+}
+
+.sup-admin-updates-trigger:focus {
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(162, 255, 166, 0.3);
+}
+
+.sup-admin-updates-trigger:hover:not(:disabled) {
+    transform: translateY(-1px);
+}
+
+.sup-admin-updates-trigger i,
+.sup-admin-updates-trigger span {
+    color: currentColor;
+}
+
+.sup-admin-updates-trigger[data-state="idle"] {
+    --sup-admin-color: var(--color-green);
+    border-color: rgba(162, 255, 166, 0.4);
+    background: rgba(162, 255, 166, 0.12);
+}
+
+.sup-admin-updates-trigger[data-state="available"],
+.sup-admin-updates-trigger[data-state="publishing"] {
+    --sup-admin-color: var(--color-blue);
+    border-color: rgba(138, 167, 243, 0.5);
+    background: rgba(138, 167, 243, 0.15);
+}
+
+.sup-admin-updates-trigger[data-state="success"] {
+    --sup-admin-color: var(--color-green);
+    border-color: rgba(162, 255, 166, 0.5);
+    background: rgba(162, 255, 166, 0.18);
+}
+
+.sup-admin-updates-trigger[data-state="error"] {
+    --sup-admin-color: var(--color-red);
+    border-color: rgba(255, 88, 88, 0.5);
+    background: rgba(255, 88, 88, 0.12);
+}
+
+.sup-admin-updates-trigger[aria-expanded="true"] {
+    transform: translateY(-1px);
+}
+
+.sup-admin-updates-icon {
+    font-size: 0.95rem;
+    transition: transform 160ms ease;
+}
+
+.sup-admin-updates-trigger[aria-expanded="true"] .sup-admin-updates-icon {
+    transform: rotate(2deg);
+}
+
+.sup-admin-updates-panel {
+    position: absolute;
+    top: calc(100% + 0.5rem);
+    left: 0;
+    min-width: 220px;
+    padding: 0.5rem;
+    border-radius: 0.75rem;
+    background: rgba(31, 20, 28, 0.95);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.25);
+    backdrop-filter: blur(10px);
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    z-index: 1200;
+}
+
+.sup-admin-updates-panel.hidden {
+    display: none !important;
+}
+
+.sup-admin-publish-action {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    width: 100%;
+    padding: 0.5rem 0.85rem;
+    border-radius: 0.65rem;
+    border: 1px solid rgba(138, 167, 243, 0.45);
+    background: rgba(138, 167, 243, 0.12);
+    color: var(--color-blue);
+    font-size: 0.8rem;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    transition: background 150ms ease, border-color 150ms ease, transform 150ms ease;
+}
+
+.sup-admin-publish-action:hover:not(:disabled) {
+    background: rgba(138, 167, 243, 0.22);
+    border-color: rgba(138, 167, 243, 0.65);
+    transform: translateY(-1px);
+}
+
+.sup-admin-publish-action:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.sup-admin-publish-action i,
+.sup-admin-publish-action span {
+    color: currentColor;
+}
+
+.sup-admin-publish-action i {
+    font-size: 0.9rem;
+}
+
+.sup-admin-updates-trigger[data-state="publishing"] .sup-admin-updates-icon {
+    animation: sup-admin-wifi 1.1s ease-in-out infinite;
+}
+
+.sup-admin-updates-trigger[data-state="success"] .sup-admin-updates-icon,
+.sup-admin-updates-trigger[data-state="error"] .sup-admin-updates-icon {
+    animation: none;
+}
+
+.sup-admin-updates-trigger[data-state="publishing"] span {
+    color: var(--color-blue);
+}
+
+.sup-admin-updates-trigger[data-state="success"] span {
+    color: var(--color-green);
+}
+
+.sup-admin-updates-trigger[data-state="error"] span {
+    color: var(--color-red);
+}
+
+.sup-admin-updates-trigger[disabled] {
+    opacity: 0.65;
+    cursor: not-allowed;
+}
+
+.sup-admin-updates-trigger[disabled] .sup-admin-updates-icon {
+    animation: none;
+}
+
+.sup-admin-updates-trigger .status-dot {
+    width: 0.35rem;
+    height: 0.35rem;
+    border-radius: 9999px;
+    background: currentColor;
+    box-shadow: 0 0 8px currentColor;
+}
+
+@keyframes sup-admin-wifi {
+    0% {
+        transform: scale(1);
+        opacity: 0.75;
+    }
+    50% {
+        transform: scale(1.1);
+        opacity: 1;
+    }
+    100% {
+        transform: scale(1);
+        opacity: 0.75;
+    }
+}
+
 .user-avatar {
     width: 2.4rem;
     height: 2.4rem;

@@ -22,7 +22,17 @@ const AppUpdates = (() => {
         checkIcon: document.getElementById('checkUpdatesIcon'),
         checkLabel: document.getElementById('checkUpdatesLabel'),
         publishBtn: document.getElementById('publishUpdateBtn'),
-        publishLabel: document.getElementById('publishUpdateLabel')
+        publishLabel: document.getElementById('publishUpdateLabel'),
+        supAdmin: {
+            container: document.getElementById('supAdminUpdateControl'),
+            trigger: document.getElementById('supAdminUpdatesTrigger'),
+            icon: document.getElementById('supAdminUpdatesIcon'),
+            label: document.getElementById('supAdminUpdatesLabel'),
+            panel: document.getElementById('supAdminUpdatesPanel'),
+            publish: document.getElementById('supAdminPublishAction'),
+            publishIcon: document.getElementById('supAdminPublishIcon'),
+            publishLabel: document.getElementById('supAdminPublishLabel')
+        }
     };
 
     const state = {
@@ -33,7 +43,15 @@ const AppUpdates = (() => {
         latestPublishedVersion: null,
         availableVersion: null,
         lastStatus: null,
-        actionBusy: false
+        actionBusy: false,
+        autoCheckInterval: null,
+        autoCheckPending: false,
+        supAdmin: {
+            mode: 'idle',
+            panelOpen: false,
+            lastError: null,
+            successTimer: null
+        }
     };
 
     let publishStartToastShown = false;
@@ -129,7 +147,275 @@ const AppUpdates = (() => {
         const badgeVisible = elements.badge && !elements.badge.classList.contains('hidden');
         const buttonVisible = elements.publishBtn && !elements.publishBtn.classList.contains('hidden');
         const checkVisible = elements.checkBtn && !elements.checkBtn.classList.contains('hidden');
-        setElementHidden(elements.container, !(badgeVisible || buttonVisible || checkVisible));
+        const supAdminVisible = Boolean(
+            elements.supAdmin?.container &&
+            !elements.supAdmin.container.classList.contains('hidden')
+        );
+        setElementHidden(elements.container, !(badgeVisible || buttonVisible || checkVisible || supAdminVisible));
+    }
+
+    function clearSupAdminSuccessTimer() {
+        if (state.supAdmin.successTimer) {
+            clearTimeout(state.supAdmin.successTimer);
+            state.supAdmin.successTimer = null;
+        }
+    }
+
+    function computePublishAvailability() {
+        const publishState = state.publishState || {};
+        const updateStatus = state.updateStatus || {};
+        const explicit = publishState.canPublish ?? updateStatus.canPublish;
+        if (typeof explicit === 'boolean') {
+            return explicit;
+        }
+
+        const status = updateStatus.status;
+        if (status === 'update-available' || status === 'downloading' || status === 'downloaded') {
+            return true;
+        }
+
+        const availableVersion = publishState.availableVersion || updateStatus.latestVersion || state.availableVersion;
+        const latestPublishedVersion = publishState.latestPublishedVersion || updateStatus.latestPublishedVersion || state.latestPublishedVersion;
+        const localVersion = publishState.localVersion || updateStatus.localVersion || state.localVersion;
+
+        if (availableVersion && latestPublishedVersion) {
+            return availableVersion !== latestPublishedVersion;
+        }
+        if (availableVersion && localVersion) {
+            return availableVersion !== localVersion;
+        }
+        return false;
+    }
+
+    function setSupAdminIcon(mode) {
+        const icon = elements.supAdmin?.icon;
+        if (!icon) return;
+        icon.classList.add('sup-admin-updates-icon');
+        icon.classList.remove('fa-cloud-upload-alt', 'fa-wifi', 'fa-check', 'fa-xmark');
+        let iconName = 'fa-cloud-upload-alt';
+        switch (mode) {
+            case 'publishing':
+                iconName = 'fa-wifi';
+                break;
+            case 'success':
+                iconName = 'fa-check';
+                break;
+            case 'error':
+                iconName = 'fa-xmark';
+                break;
+            default:
+                iconName = 'fa-cloud-upload-alt';
+                break;
+        }
+        icon.classList.add(iconName);
+    }
+
+    function buildSupAdminPublishLabel() {
+        const publishState = state.publishState || {};
+        const updateStatus = state.updateStatus || {};
+        const availableVersion = publishState.availableVersion || updateStatus.latestVersion || state.availableVersion;
+        const latestPublishedVersion = publishState.latestPublishedVersion || updateStatus.latestPublishedVersion || state.latestPublishedVersion;
+        const localVersion = publishState.localVersion || updateStatus.localVersion || state.localVersion;
+
+        if (availableVersion && latestPublishedVersion && availableVersion !== latestPublishedVersion) {
+            return `Publicar v${availableVersion}`;
+        }
+        if (availableVersion && localVersion && availableVersion !== localVersion) {
+            return `Publicar v${availableVersion}`;
+        }
+        if (availableVersion) {
+            return `Publicar v${availableVersion}`;
+        }
+        return 'Publicar atualização';
+    }
+
+    function applySupAdminState() {
+        const sup = elements.supAdmin;
+        if (!sup?.container || !sup.trigger || !sup.icon || !sup.label) {
+            updateContainerVisibility();
+            return;
+        }
+
+        const profile = state.user || {};
+        const isSupAdmin = profile?.perfil === 'Sup Admin';
+        sup.container.classList.toggle('hidden', !isSupAdmin);
+
+        if (!isSupAdmin) {
+            state.supAdmin.panelOpen = false;
+            clearSupAdminSuccessTimer();
+            updateContainerVisibility();
+            return;
+        }
+
+        const hasPending = computePublishAvailability();
+        let mode = state.supAdmin.mode || 'idle';
+
+        if (mode === 'idle' && hasPending) {
+            mode = 'available';
+            state.supAdmin.mode = mode;
+        }
+        if (mode === 'available' && !hasPending) {
+            mode = 'idle';
+            state.supAdmin.mode = mode;
+            state.supAdmin.panelOpen = false;
+        }
+        if (mode === 'error' && !hasPending) {
+            mode = 'idle';
+            state.supAdmin.mode = mode;
+        }
+        setSupAdminIcon(mode);
+
+        sup.trigger.setAttribute('data-state', mode);
+        sup.trigger.dataset.state = mode;
+        const isPublishing = mode === 'publishing';
+        sup.trigger.disabled = isPublishing;
+        sup.trigger.setAttribute('aria-expanded', state.supAdmin.panelOpen && mode === 'available' ? 'true' : 'false');
+
+        sup.label.textContent = 'Atualizações';
+
+        if (sup.panel) {
+            const showPanel = state.supAdmin.panelOpen && mode === 'available';
+            sup.panel.classList.toggle('hidden', !showPanel);
+            sup.panel.setAttribute('aria-hidden', showPanel ? 'false' : 'true');
+        }
+
+        if (sup.publish) {
+            sup.publish.disabled = mode !== 'available';
+            if (sup.publishLabel) {
+                sup.publishLabel.textContent = buildSupAdminPublishLabel();
+            }
+        }
+
+        updateContainerVisibility();
+    }
+
+    function setSupAdminMode(mode, options = {}) {
+        const validModes = new Set(['idle', 'available', 'publishing', 'success', 'error']);
+        const nextMode = validModes.has(mode) ? mode : 'idle';
+        state.supAdmin.mode = nextMode;
+        if (options.panelOpen !== undefined) {
+            state.supAdmin.panelOpen = Boolean(options.panelOpen);
+        }
+        if (options.lastError !== undefined) {
+            state.supAdmin.lastError = options.lastError;
+        } else if (nextMode !== 'error') {
+            state.supAdmin.lastError = null;
+        }
+
+        if (nextMode === 'success') {
+            clearSupAdminSuccessTimer();
+            state.supAdmin.successTimer = setTimeout(() => {
+                state.supAdmin.successTimer = null;
+                if (state.supAdmin.mode === 'success') {
+                    const hasPending = computePublishAvailability();
+                    setSupAdminMode(hasPending ? 'available' : 'idle', { panelOpen: false });
+                }
+            }, 2200);
+        } else {
+            clearSupAdminSuccessTimer();
+        }
+
+        applySupAdminState();
+    }
+
+    async function runAutomaticCheck({ silent = true } = {}) {
+        if (!window.electronAPI?.getUpdateStatus) return null;
+        if (state.autoCheckPending) return null;
+        state.autoCheckPending = true;
+        try {
+            const result = await window.electronAPI.getUpdateStatus({ refresh: true });
+            if (result && typeof result === 'object') {
+                setUpdateStatus(result, { silent });
+                if (result.publishState) {
+                    setPublishState(result.publishState, { silent: true });
+                }
+            }
+            return result;
+        } catch (err) {
+            if (!silent && window.showToast) {
+                window.showToast(err?.message || 'Não foi possível verificar atualizações.', 'error');
+            }
+            return null;
+        } finally {
+            state.autoCheckPending = false;
+        }
+    }
+
+    function ensureAutoCheckTimer() {
+        if (state.autoCheckInterval || !window.electronAPI?.getUpdateStatus) return;
+        const intervalMs = 30 * 60 * 1000;
+        state.autoCheckInterval = setInterval(() => {
+            runAutomaticCheck({ silent: true });
+        }, intervalMs);
+    }
+
+    function stopAutoCheckTimer() {
+        if (state.autoCheckInterval) {
+            clearInterval(state.autoCheckInterval);
+            state.autoCheckInterval = null;
+        }
+    }
+
+    async function handleSupAdminTriggerClick() {
+        if (state.supAdmin.mode === 'publishing') return;
+        await runAutomaticCheck({ silent: true });
+        const hasPending = computePublishAvailability();
+        if (!hasPending) {
+            setSupAdminMode('idle', { panelOpen: false });
+            const message = 'Não há atualizações para publicar. Todas já foram publicadas.';
+            if (window.showToast) {
+                window.showToast(message, 'success');
+            } else if (typeof window.alert === 'function') {
+                window.alert(message);
+            }
+            return;
+        }
+
+        const nextOpen = !state.supAdmin.panelOpen;
+        setSupAdminMode('available', { panelOpen: nextOpen });
+    }
+
+    async function handleSupAdminPublish() {
+        if (!window.electronAPI?.publishUpdate) return;
+        if (state.supAdmin.mode === 'publishing') return;
+
+        setSupAdminMode('publishing', { panelOpen: false });
+        try {
+            const result = await window.electronAPI.publishUpdate();
+            if (result?.success) {
+                setPublishState(result, { silent: true });
+                setSupAdminMode('success', { panelOpen: false });
+                if (window.showToast) {
+                    window.showToast('Atualização publicada com sucesso!', 'success');
+                }
+                await runAutomaticCheck({ silent: true });
+            } else {
+                const message = result?.message || result?.error || 'Falha ao publicar atualização.';
+                if (result?.code === 'in-progress') {
+                    if (window.showToast) {
+                        window.showToast(message || 'Uma publicação já está em andamento.', 'info');
+                    }
+                    setSupAdminMode('publishing', { panelOpen: false });
+                } else if (result?.code) {
+                    setSupAdminMode('error', { panelOpen: false, lastError: message });
+                    if (typeof window.alert === 'function') {
+                        window.alert(message);
+                    } else if (window.showToast) {
+                        window.showToast(message, 'error');
+                    }
+                    setSupAdminMode('available', { panelOpen: false });
+                }
+            }
+        } catch (err) {
+            const message = err?.message || 'Falha ao publicar atualização.';
+            setSupAdminMode('error', { panelOpen: false, lastError: message });
+            if (typeof window.alert === 'function') {
+                window.alert(message);
+            } else if (window.showToast) {
+                window.showToast(message, 'error');
+            }
+            setSupAdminMode('available', { panelOpen: false });
+        }
     }
 
     function setBadgeVariant(variant) {
@@ -420,6 +706,13 @@ const AppUpdates = (() => {
         const isSupAdmin = profile?.perfil === 'Sup Admin';
         const publishing = Boolean(publishState.publishing);
 
+        if (isSupAdmin) {
+            setElementHidden(btn, true);
+            applySupAdminState();
+            updateContainerVisibility();
+            return;
+        }
+
         const localVersion = publishState.localVersion || updateStatus.localVersion || state.localVersion;
         const latestPublishedVersion = publishState.latestPublishedVersion || updateStatus.latestPublishedVersion || state.latestPublishedVersion;
         const availableVersion = updateStatus.latestVersion || publishState.availableVersion || state.availableVersion;
@@ -522,8 +815,11 @@ const AppUpdates = (() => {
 
     function setUserProfile(user) {
         state.user = user || {};
+        ensureAutoCheckTimer();
+        runAutomaticCheck({ silent: true });
         updatePublishButton();
         updateCheckButton();
+        applySupAdminState();
         persistState();
     }
 
@@ -540,6 +836,7 @@ const AppUpdates = (() => {
         updateCheckButton();
         updateBadge();
         updatePublishButton();
+        applySupAdminState();
         if (!options.silent) {
             handleUpdateToasts(previousState, newStatus);
         }
@@ -555,6 +852,14 @@ const AppUpdates = (() => {
         if (newState.availableVersion) state.availableVersion = newState.availableVersion;
         updatePublishButton();
         updateCheckButton();
+        if (newState.publishing === true) {
+            setSupAdminMode('publishing', { panelOpen: false });
+        } else if (newState.publishing === false) {
+            const hasPending = computePublishAvailability();
+            setSupAdminMode(hasPending ? 'available' : 'success', { panelOpen: false });
+        } else {
+            applySupAdminState();
+        }
         if (!options.silent && newState.message && window.showToast) {
             const type = newState.publishing === false ? 'success' : 'info';
             window.showToast(newState.message, type);
@@ -566,10 +871,15 @@ const AppUpdates = (() => {
         publishStartToastShown = false;
         state.publishState = { ...(state.publishState || {}), publishing: false };
         updatePublishButton();
-        persistState();
-        if (payload?.message && window.showToast) {
-            window.showToast(payload.message, 'error');
+        setSupAdminMode('error', { panelOpen: false, lastError: payload?.message });
+        const errorMessage = payload?.message || 'Falha ao publicar atualização.';
+        if (typeof window.alert === 'function') {
+            window.alert(errorMessage);
+        } else if (window.showToast) {
+            window.showToast(errorMessage, 'error');
         }
+        setSupAdminMode('available', { panelOpen: false });
+        persistState();
     }
 
     async function handleCheckAction() {
@@ -670,6 +980,14 @@ const AppUpdates = (() => {
             elements.publishBtn.addEventListener('click', triggerPublish);
         }
 
+        if (elements.supAdmin?.trigger) {
+            elements.supAdmin.trigger.addEventListener('click', handleSupAdminTriggerClick);
+        }
+
+        if (elements.supAdmin?.publish) {
+            elements.supAdmin.publish.addEventListener('click', handleSupAdminPublish);
+        }
+
         if (window.electronAPI?.onUpdateStatus) {
             window.electronAPI.onUpdateStatus(payload => {
                 setUpdateStatus(payload, { silent: false });
@@ -715,9 +1033,13 @@ const AppUpdates = (() => {
         } else {
             updatePublishButton();
         }
+        applySupAdminState();
         updateContainerVisibility();
         updateCheckButton();
         attachEvents();
+        if (typeof window !== 'undefined') {
+            window.addEventListener('beforeunload', stopAutoCheckTimer);
+        }
     }
 
     return {

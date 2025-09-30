@@ -57,6 +57,34 @@
                         </div>
                     </button>
                     <div class="app-update-actions">
+                        <div id="supAdminUpdateControl" class="sup-admin-updates hidden">
+                            <button
+                                id="supAdminUpdatesTrigger"
+                                type="button"
+                                class="sup-admin-updates-trigger"
+                                data-state="idle"
+                                aria-expanded="false"
+                                aria-haspopup="true"
+                            >
+                                <i id="supAdminUpdatesIcon" class="fas fa-cloud-upload-alt sup-admin-updates-icon" aria-hidden="true"></i>
+                                <span id="supAdminUpdatesLabel">Atualizações</span>
+                            </button>
+                            <div
+                                id="supAdminUpdatesPanel"
+                                class="sup-admin-updates-panel hidden"
+                                role="region"
+                                aria-hidden="true"
+                            >
+                                <button
+                                    id="supAdminPublishAction"
+                                    type="button"
+                                    class="sup-admin-publish-action"
+                                >
+                                    <i id="supAdminPublishIcon" class="fas fa-cloud-upload-alt" aria-hidden="true"></i>
+                                    <span id="supAdminPublishLabel">Publicar atualização</span>
+                                </button>
+                            </div>
+                        </div>
                         <button id="checkUpdatesBtn" type="button" class="app-update-check">
                             <i id="checkUpdatesIcon" class="fas fa-arrows-rotate app-update-check-icon" aria-hidden="true"></i>
                             <span id="checkUpdatesLabel" class="app-update-check-label">Checar atualização</span>
