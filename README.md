@@ -15,6 +15,8 @@ Este projeto é um aplicativo desktop baseado em Electron para gerenciar o fluxo
    ```bash
    npm install
    ```
+   Sempre que uma nova dependência for adicionada ao `package.json` (por exemplo, `electron-updater`), execute novamente o
+   comando acima para garantir que o `node_modules/` esteja atualizado.
 3. Crie um banco PostgreSQL chamado `Santissimo_Decor_App_Gestao` (ou defina a variável `DB_NAME` com outro nome). Configure também as variáveis de ambiente de conexão:
    - `DB_USER`
    - `DB_PASSWORD`
@@ -60,6 +62,9 @@ Ao rodar o instalador, ele verifica se o aplicativo já está presente no sistem
 Se a versão instalada for igual ou mais recente, a instalação é cancelada e
 é exibida uma notificação. Se a versão nova for superior, o instalador
 continua e realiza a atualização automaticamente.
+
+> **Pipelines CI/CD**: certifique-se de incluir uma etapa `npm install` antes dos comandos de build/empacotamento para que
+> todas as dependências declaradas estejam disponíveis em ambientes limpos.
 
 Para publicar um build assinado e gerar os manifestos de atualização (`latest.yml` ou `app-update.yml`), execute:
 ```bash
