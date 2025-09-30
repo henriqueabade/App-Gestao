@@ -1,6 +1,7 @@
 window.addEventListener('DOMContentLoaded', () => {
   const nameEl = document.getElementById('userName');
   const profileEl = document.getElementById('userProfile');
+  const avatarEl = document.getElementById('userAvatar');
   const appUpdates = window.AppUpdates || null;
   try {
     const storedSession = sessionStorage.getItem('currentUser');
@@ -16,6 +17,35 @@ window.addEventListener('DOMContentLoaded', () => {
     const isSupAdmin = user.perfil === 'Sup Admin';
     if (nameEl) nameEl.textContent = user.nome || '';
     if (profileEl) profileEl.textContent = user.perfil || 'Sem Perfil';
+    if (avatarEl) {
+      const avatarUrl = user.avatarUrl || user.fotoUrl || user.foto || null;
+      const initials = (user.nome || '')
+        .trim()
+        .split(/\s+/)
+        .filter(Boolean)
+        .slice(0, 2)
+        .map(part => part[0])
+        .join('')
+        .toUpperCase();
+
+      if (avatarUrl) {
+        const safeUrl = String(avatarUrl).replace(/"/g, '\\"');
+        avatarEl.style.backgroundImage = `url("${safeUrl}")`;
+        avatarEl.classList.add('has-image');
+        avatarEl.textContent = '';
+        avatarEl.classList.remove('hidden');
+      } else if (initials) {
+        avatarEl.style.removeProperty('background-image');
+        avatarEl.classList.remove('has-image');
+        avatarEl.textContent = initials;
+        avatarEl.classList.remove('hidden');
+      } else {
+        avatarEl.style.removeProperty('background-image');
+        avatarEl.classList.remove('has-image');
+        avatarEl.textContent = '';
+        avatarEl.classList.add('hidden');
+      }
+    }
     if (appUpdates && typeof appUpdates.setUserProfile === 'function') {
       appUpdates.setUserProfile(user);
     }

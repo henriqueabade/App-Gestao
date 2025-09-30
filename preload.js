@@ -242,6 +242,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   loadState: () => ipcRenderer.invoke('load-state'),
   clearState: () => ipcRenderer.invoke('clear-state'),
   getUpdateStatus: (options) => invokeIpc('get-update-status', options),
+  checkForUpdates: () => invokeIpc('check-for-updates', null, { trackAction: true }),
   downloadUpdate: () => invokeIpc('download-update', null, { trackAction: true }),
   installUpdate: () => invokeIpc('install-update', null, { trackAction: true }),
   publishUpdate: () => invokeIpc('publish-update', null, { trackAction: true }),

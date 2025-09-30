@@ -18,6 +18,9 @@ const AppUpdates = (() => {
         badgeSubtitle: document.getElementById('appUpdateBadgeSubtitle'),
         progress: document.getElementById('appUpdateProgress'),
         progressBar: document.getElementById('appUpdateProgressBar'),
+        checkBtn: document.getElementById('checkUpdatesBtn'),
+        checkIcon: document.getElementById('checkUpdatesIcon'),
+        checkLabel: document.getElementById('checkUpdatesLabel'),
         publishBtn: document.getElementById('publishUpdateBtn'),
         publishLabel: document.getElementById('publishUpdateLabel')
     };
@@ -29,17 +32,21 @@ const AppUpdates = (() => {
         localVersion: null,
         latestPublishedVersion: null,
         availableVersion: null,
-        lastStatus: null
+        lastStatus: null,
+        actionBusy: false
     };
 
     let publishStartToastShown = false;
     let eventsAttached = false;
 
     const STATUS_WITH_BADGE = new Set([
+        'checking',
         'update-available',
         'downloading',
         'downloaded',
         'installing',
+        'up-to-date',
+        'disabled',
         'error'
     ]);
 
@@ -121,7 +128,8 @@ const AppUpdates = (() => {
         if (!elements.container) return;
         const badgeVisible = elements.badge && !elements.badge.classList.contains('hidden');
         const buttonVisible = elements.publishBtn && !elements.publishBtn.classList.contains('hidden');
-        setElementHidden(elements.container, !(badgeVisible || buttonVisible));
+        const checkVisible = elements.checkBtn && !elements.checkBtn.classList.contains('hidden');
+        setElementHidden(elements.container, !(badgeVisible || buttonVisible || checkVisible));
     }
 
     function setBadgeVariant(variant) {
@@ -158,6 +166,15 @@ const AppUpdates = (() => {
         });
 
         switch (status.status) {
+            case 'checking':
+                variant = 'progress';
+                title = 'Verificando atualizações...';
+                subtitle = status.statusMessage || 'Aguarde enquanto buscamos novas versões.';
+                if (elements.progress) {
+                    setElementHidden(elements.progress, true);
+                    elements.progress.setAttribute('aria-hidden', 'true');
+                }
+                break;
             case 'update-available':
                 variant = 'info';
                 title = state.availableVersion
@@ -191,6 +208,15 @@ const AppUpdates = (() => {
                     elements.progress.setAttribute('aria-hidden', 'true');
                 }
                 break;
+            case 'up-to-date':
+                variant = 'success';
+                title = 'Aplicativo atualizado';
+                subtitle = status.statusMessage || 'Você já está na última versão.';
+                if (elements.progress) {
+                    setElementHidden(elements.progress, true);
+                    elements.progress.setAttribute('aria-hidden', 'true');
+                }
+                break;
             case 'installing':
                 variant = 'progress';
                 title = 'Instalando atualização';
@@ -204,6 +230,15 @@ const AppUpdates = (() => {
                 variant = 'error';
                 title = 'Erro na atualização';
                 subtitle = status.statusMessage || status.error?.friendlyMessage || 'Tente novamente mais tarde.';
+                if (elements.progress) {
+                    setElementHidden(elements.progress, true);
+                    elements.progress.setAttribute('aria-hidden', 'true');
+                }
+                break;
+            case 'disabled':
+                variant = 'muted';
+                title = 'Atualizações indisponíveis';
+                subtitle = status.statusMessage || 'Procure o administrador para habilitar as atualizações.';
                 if (elements.progress) {
                     setElementHidden(elements.progress, true);
                     elements.progress.setAttribute('aria-hidden', 'true');
@@ -232,6 +267,135 @@ const AppUpdates = (() => {
         }
 
         setElementHidden(elements.badge, false);
+        updateContainerVisibility();
+    }
+
+    function updateCheckButton() {
+        const btn = elements.checkBtn;
+        const label = elements.checkLabel;
+        const icon = elements.checkIcon;
+        if (!btn || !label || !icon) {
+            updateContainerVisibility();
+            return;
+        }
+
+        const hasApi = Boolean(
+            window.electronAPI?.checkForUpdates ||
+            window.electronAPI?.downloadUpdate ||
+            window.electronAPI?.installUpdate
+        );
+
+        if (!hasApi) {
+            setElementHidden(btn, true);
+            updateContainerVisibility();
+            return;
+        }
+
+        setElementHidden(btn, false);
+
+        const status = state.updateStatus || {};
+        let action = 'check';
+        let text = 'Checar atualização';
+        let iconName = 'fa-arrows-rotate';
+        let spin = false;
+        let disabled = false;
+        let title = '';
+
+        const applyIcon = () => {
+            const classes = ['fas', iconName, 'app-update-check-icon'];
+            if (spin) classes.push('fa-spin');
+            icon.className = classes.join(' ');
+        };
+
+        if (state.actionBusy) {
+            spin = true;
+            disabled = true;
+            iconName = 'fa-circle-notch';
+            text = status.statusMessage || 'Processando atualização...';
+        } else if (status.status) {
+            switch (status.status) {
+                case 'checking':
+                    spin = true;
+                    disabled = true;
+                    iconName = 'fa-circle-notch';
+                    text = status.statusMessage || 'Verificando...';
+                    break;
+                case 'update-available': {
+                    const canDownload = Boolean(window.electronAPI?.downloadUpdate);
+                    action = canDownload ? 'download' : 'check';
+                    iconName = canDownload ? 'fa-cloud-download-alt' : 'fa-arrows-rotate';
+                    const versionLabel = state.availableVersion || status.latestVersion;
+                    text = canDownload
+                        ? (versionLabel ? `Baixar v${versionLabel}` : 'Baixar atualização')
+                        : 'Checar atualização';
+                    disabled = !canDownload && !window.electronAPI?.checkForUpdates;
+                    title = status.statusMessage || '';
+                    break;
+                }
+                case 'downloading': {
+                    spin = true;
+                    disabled = true;
+                    iconName = 'fa-circle-notch';
+                    const rawPercent = status.downloadProgress?.percent;
+                    if (typeof rawPercent === 'number' && !Number.isNaN(rawPercent)) {
+                        const percent = clampPercent(rawPercent);
+                        text = `Baixando (${percent}%)`;
+                    } else {
+                        text = 'Baixando...';
+                    }
+                    title = status.statusMessage || '';
+                    break;
+                }
+                case 'downloaded': {
+                    const canInstall = Boolean(window.electronAPI?.installUpdate);
+                    action = canInstall ? 'install' : (window.electronAPI?.checkForUpdates ? 'check' : 'none');
+                    iconName = canInstall ? 'fa-arrow-rotate-right' : 'fa-arrows-rotate';
+                    text = canInstall ? 'Instalar atualização' : 'Checar atualização';
+                    disabled = action === 'none';
+                    title = status.statusMessage || '';
+                    break;
+                }
+                case 'installing':
+                    spin = true;
+                    disabled = true;
+                    iconName = 'fa-circle-notch';
+                    text = status.statusMessage || 'Instalando...';
+                    break;
+                case 'up-to-date':
+                    iconName = 'fa-check';
+                    text = 'Checar novamente';
+                    title = status.statusMessage || 'Aplicativo atualizado.';
+                    break;
+                case 'disabled':
+                    iconName = 'fa-ban';
+                    action = 'none';
+                    text = 'Atualizações indisponíveis';
+                    disabled = true;
+                    title = status.statusMessage || 'Atualizações automáticas foram desabilitadas.';
+                    break;
+                case 'error':
+                    iconName = 'fa-triangle-exclamation';
+                    text = 'Tentar novamente';
+                    title = status.statusMessage || status.error?.friendlyMessage || '';
+                    break;
+                default:
+                    break;
+            }
+        }
+
+        if (!title) {
+            title = text;
+        }
+
+        btn.dataset.action = action;
+        btn.disabled = disabled;
+        btn.title = title;
+        btn.setAttribute('aria-disabled', disabled ? 'true' : 'false');
+        btn.setAttribute('aria-busy', spin ? 'true' : 'false');
+        btn.classList.toggle('is-loading', spin);
+        applyIcon();
+        label.textContent = text;
+
         updateContainerVisibility();
     }
 
@@ -318,6 +482,9 @@ const AppUpdates = (() => {
         if (status === previousStatus) return;
 
         switch (status) {
+            case 'checking':
+                window.showToast('Verificando atualizações...', 'info');
+                break;
             case 'update-available':
                 window.showToast(
                     current.latestVersion
@@ -335,6 +502,12 @@ const AppUpdates = (() => {
             case 'installing':
                 window.showToast('Reiniciando para finalizar a atualização.', 'info');
                 break;
+            case 'up-to-date':
+                window.showToast(current.statusMessage || 'Aplicativo já está atualizado.', 'success');
+                break;
+            case 'disabled':
+                window.showToast(current.statusMessage || 'Atualizações automáticas desabilitadas.', 'warning');
+                break;
             default:
                 break;
         }
@@ -343,6 +516,7 @@ const AppUpdates = (() => {
     function setUserProfile(user) {
         state.user = user || {};
         updatePublishButton();
+        updateCheckButton();
         persistState();
     }
 
@@ -356,6 +530,7 @@ const AppUpdates = (() => {
             state.publishState = { ...(state.publishState || {}), canPublish: newStatus.canPublish };
         }
 
+        updateCheckButton();
         updateBadge();
         updatePublishButton();
         if (!options.silent) {
@@ -372,6 +547,7 @@ const AppUpdates = (() => {
         if (newState.localVersion) state.localVersion = newState.localVersion;
         if (newState.availableVersion) state.availableVersion = newState.availableVersion;
         updatePublishButton();
+        updateCheckButton();
         if (!options.silent && newState.message && window.showToast) {
             const type = newState.publishing === false ? 'success' : 'info';
             window.showToast(newState.message, type);
@@ -386,6 +562,62 @@ const AppUpdates = (() => {
         persistState();
         if (payload?.message && window.showToast) {
             window.showToast(payload.message, 'error');
+        }
+    }
+
+    async function handleCheckAction() {
+        const btn = elements.checkBtn;
+        if (!btn || state.actionBusy) return;
+
+        const action = btn.dataset.action || 'check';
+        if (action === 'none') return;
+
+        const electronAPI = window.electronAPI || {};
+        if (
+            action === 'download' && !electronAPI.downloadUpdate ||
+            action === 'install' && !electronAPI.installUpdate ||
+            action === 'check' && !electronAPI.checkForUpdates && !electronAPI.getUpdateStatus
+        ) {
+            return;
+        }
+
+        state.actionBusy = true;
+        updateCheckButton();
+
+        try {
+            let result = null;
+            if (action === 'download') {
+                result = await electronAPI.downloadUpdate();
+            } else if (action === 'install') {
+                result = await electronAPI.installUpdate();
+                if (result?.canInstall === false && window.showToast) {
+                    window.showToast(
+                        result.statusMessage || 'Nenhuma atualização disponível para instalar.',
+                        'warning'
+                    );
+                }
+            } else {
+                if (electronAPI.checkForUpdates) {
+                    result = await electronAPI.checkForUpdates();
+                } else if (electronAPI.getUpdateStatus) {
+                    result = await electronAPI.getUpdateStatus({ refresh: true });
+                }
+            }
+
+            if (result && typeof result === 'object') {
+                setUpdateStatus(result);
+            }
+        } catch (err) {
+            if (window.showToast) {
+                window.showToast(
+                    err?.message || 'Não foi possível verificar atualizações.',
+                    'error'
+                );
+            }
+        } finally {
+            state.actionBusy = false;
+            updateCheckButton();
+            persistState();
         }
     }
 
@@ -422,6 +654,10 @@ const AppUpdates = (() => {
 
     function attachEvents() {
         if (eventsAttached) return;
+
+        if (elements.checkBtn) {
+            elements.checkBtn.addEventListener('click', handleCheckAction);
+        }
 
         if (elements.publishBtn) {
             elements.publishBtn.addEventListener('click', triggerPublish);
@@ -465,6 +701,7 @@ const AppUpdates = (() => {
             setUpdateStatus(restored.updateStatus, { silent: true });
         } else {
             updateBadge();
+            updateCheckButton();
         }
         if (restored.publishState) {
             setPublishState(restored.publishState, { silent: true });
@@ -472,6 +709,7 @@ const AppUpdates = (() => {
             updatePublishButton();
         }
         updateContainerVisibility();
+        updateCheckButton();
         attachEvents();
     }
 
