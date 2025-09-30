@@ -1,6 +1,7 @@
 window.addEventListener('DOMContentLoaded', () => {
   const nameEl = document.getElementById('userName');
   const profileEl = document.getElementById('userProfile');
+  const appUpdates = window.AppUpdates || null;
   try {
     const storedSession = sessionStorage.getItem('currentUser');
     let stored = storedSession || localStorage.getItem('user');
@@ -14,6 +15,26 @@ window.addEventListener('DOMContentLoaded', () => {
     const user = stored ? JSON.parse(stored) : {};
     if (nameEl) nameEl.textContent = user.nome || '';
     if (profileEl) profileEl.textContent = user.perfil || 'Sem Perfil';
+    if (appUpdates && typeof appUpdates.setUserProfile === 'function') {
+      appUpdates.setUserProfile(user);
+    }
+
+    if (window.electronAPI?.getUpdateStatus) {
+      window.electronAPI
+        .getUpdateStatus()
+        .then(status => {
+          if (!status) return;
+          if (status.publishState && appUpdates?.setPublishState) {
+            appUpdates.setPublishState(status.publishState, { silent: true });
+          }
+          if (appUpdates?.setUpdateStatus) {
+            appUpdates.setUpdateStatus(status, { origin: 'initial' });
+          }
+        })
+        .catch(() => {
+          /* ignore initial update status errors */
+        });
+    }
   } catch (e) {
     /* ignore */
   }
