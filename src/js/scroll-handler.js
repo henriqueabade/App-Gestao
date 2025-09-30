@@ -30,6 +30,72 @@ function clearPendingStability() {
   pendingStabilityCandidate = null;
 }
 
+function createOverflowStabilityMonitor(candidate, scheduleFinalization, useResizeObserver) {
+  let resizeObserver = null;
+  let rafId = null;
+  let lastScrollHeight = candidate.scrollHeight;
+  let lastClientWidth = candidate.clientWidth;
+  let lastClientHeight = candidate.clientHeight;
+
+  const updateMetricsIfChanged = () => {
+    const currentScrollHeight = candidate.scrollHeight;
+    const currentClientWidth = candidate.clientWidth;
+    const currentClientHeight = candidate.clientHeight;
+
+    if (
+      currentScrollHeight !== lastScrollHeight ||
+      currentClientWidth !== lastClientWidth ||
+      currentClientHeight !== lastClientHeight
+    ) {
+      lastScrollHeight = currentScrollHeight;
+      lastClientWidth = currentClientWidth;
+      lastClientHeight = currentClientHeight;
+      scheduleFinalization();
+    }
+  };
+
+  const loop = () => {
+    if (pendingStabilityCandidate !== candidate) {
+      rafId = null;
+      return;
+    }
+
+    if (!candidate.isConnected) {
+      rafId = null;
+      removeScrollbar();
+      return;
+    }
+
+    updateMetricsIfChanged();
+    rafId = requestAnimationFrame(loop);
+  };
+
+  rafId = requestAnimationFrame(loop);
+
+  if (useResizeObserver) {
+    resizeObserver = new ResizeObserver(() => {
+      if (pendingStabilityCandidate !== candidate || !candidate.isConnected) {
+        return;
+      }
+      updateMetricsIfChanged();
+    });
+    resizeObserver.observe(candidate);
+  }
+
+  return {
+    disconnect() {
+      if (resizeObserver) {
+        resizeObserver.disconnect();
+        resizeObserver = null;
+      }
+      if (rafId !== null) {
+        cancelAnimationFrame(rafId);
+        rafId = null;
+      }
+    }
+  };
+}
+
 // Remove a scrollbar custom atual (se houver)
 function removeScrollbar() {
   clearPendingStability();
@@ -195,58 +261,12 @@ function waitForStableOverflow(candidate) {
 
   scheduleFinalization();
 
-  if (typeof ResizeObserver !== 'undefined') {
-    stabilityObserver = new ResizeObserver(() => {
-      scheduleFinalization();
-    });
-    stabilityObserver.observe(candidate);
-  } else {
-    let rafId = null;
-    let prevWidth = candidate.clientWidth;
-    let prevHeight = candidate.clientHeight;
-    let prevScrollHeight = candidate.scrollHeight;
-
-    const loop = () => {
-      if (!pendingStabilityCandidate) {
-        rafId = null;
-        return;
-      }
-
-      if (!candidate.isConnected) {
-        removeScrollbar();
-        clearPendingStability();
-        rafId = null;
-        return;
-      }
-
-      const currentWidth = candidate.clientWidth;
-      const currentHeight = candidate.clientHeight;
-      const currentScrollHeight = candidate.scrollHeight;
-
-      if (
-        currentWidth !== prevWidth ||
-        currentHeight !== prevHeight ||
-        currentScrollHeight !== prevScrollHeight
-      ) {
-        prevWidth = currentWidth;
-        prevHeight = currentHeight;
-        prevScrollHeight = currentScrollHeight;
-        scheduleFinalization();
-      }
-
-      rafId = requestAnimationFrame(loop);
-    };
-
-    rafId = requestAnimationFrame(loop);
-    stabilityObserver = {
-      disconnect() {
-        if (rafId !== null) {
-          cancelAnimationFrame(rafId);
-          rafId = null;
-        }
-      }
-    };
-  }
+  const hasResizeObserver = typeof ResizeObserver !== 'undefined';
+  stabilityObserver = createOverflowStabilityMonitor(
+    candidate,
+    scheduleFinalization,
+    hasResizeObserver
+  );
 }
 
 // Observa carregamento dinâmico de novos módulos
