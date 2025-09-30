@@ -12,9 +12,22 @@ let pendingRefreshFrame = null;
 
 // Diferença mínima entre scrollHeight e clientHeight para considerar que há overflow
 const MIN_SCROLL_DIFF = 8;
+const OVERFLOW_STABLE_DELAY = 180;
+
+let pendingStabilityTimeout = null;
+let pendingStabilityCandidate = null;
+
+function clearPendingStability() {
+  if (pendingStabilityTimeout !== null) {
+    clearTimeout(pendingStabilityTimeout);
+    pendingStabilityTimeout = null;
+  }
+  pendingStabilityCandidate = null;
+}
 
 // Remove a scrollbar custom atual (se houver)
 function removeScrollbar() {
+  clearPendingStability();
   if (currentScrollbar) {
     currentScrollbar.remove();
     currentScrollbar = null;
@@ -113,6 +126,7 @@ function refreshScrollbar() {
   });
 
   if (visible.length === 0) {
+    clearPendingStability();
     removeScrollbar();
     return;
   }
@@ -124,16 +138,44 @@ function refreshScrollbar() {
 
     if (!candidate.isConnected) {
       removeScrollbar();
+      clearPendingStability();
       return;
     }
 
     const diff = candidate.scrollHeight - candidate.clientHeight;
     if (diff <= MIN_SCROLL_DIFF) {
       removeScrollbar();
+      clearPendingStability();
       return;
     }
 
-    createScrollbar(candidate);
+    clearPendingStability();
+    pendingStabilityCandidate = candidate;
+    pendingStabilityTimeout = setTimeout(() => {
+      requestAnimationFrame(() => {
+        const stableCandidate = pendingStabilityCandidate;
+        if (!stableCandidate) {
+          clearPendingStability();
+          return;
+        }
+
+        if (!stableCandidate.isConnected) {
+          removeScrollbar();
+          clearPendingStability();
+          return;
+        }
+
+        const stableDiff = stableCandidate.scrollHeight - stableCandidate.clientHeight;
+        if (stableDiff <= MIN_SCROLL_DIFF) {
+          removeScrollbar();
+          clearPendingStability();
+          return;
+        }
+
+        createScrollbar(stableCandidate);
+        clearPendingStability();
+      });
+    }, OVERFLOW_STABLE_DELAY);
   });
 }
 
