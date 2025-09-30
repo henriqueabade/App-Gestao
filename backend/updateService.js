@@ -127,10 +127,10 @@ function decorateError(error) {
     err.friendlyMessage = 'Servidor de atualização indisponível no momento.';
   } else if (message.toLowerCase().includes('desabilit')) {
     err.code = 'disabled';
-    err.friendlyMessage = 'Atualizações automáticas foram desabilitadas pelo administrador.';
+    err.friendlyMessage = 'Atualizações Desabilitadas';
   } else if (message.toLowerCase().includes('desenvolvimento')) {
     err.code = 'dev-mode';
-    err.friendlyMessage = 'Atualizações automáticas estão indisponíveis no modo de desenvolvimento.';
+    err.friendlyMessage = 'Atualizações Indisponíveis';
   } else {
     err.code = err.code || 'unexpected';
     err.friendlyMessage = 'Ocorreu um erro ao verificar atualizações.';
