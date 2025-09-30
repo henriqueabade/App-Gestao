@@ -365,6 +365,54 @@ input[type="date"]:valid::-webkit-datetime-edit {
     hyphens: manual;
 }
 
+#converterOrcamentoOverlay .table-scroll {
+    position: relative;
+}
+
+#converterOrcamentoOverlay .table-loading-overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.75rem;
+    background: rgba(10, 12, 24, 0.72);
+    backdrop-filter: blur(2px);
+    color: #f3f4f6;
+    font-size: 0.95rem;
+    font-weight: 500;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease;
+    z-index: 5;
+}
+
+#converterOrcamentoOverlay .table-loading-overlay.visible {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+#converterOrcamentoOverlay .table-loading-content {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+#converterOrcamentoOverlay .table-loading-spinner {
+    width: 32px;
+    height: 32px;
+    border-radius: 9999px;
+    border: 3px solid rgba(255, 255, 255, 0.35);
+    border-top-color: var(--color-primary);
+    animation: converter-table-spin 1s linear infinite;
+}
+
+@keyframes converter-table-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
 #orcamentoItens {
     table-layout: fixed;
     width: 100%;

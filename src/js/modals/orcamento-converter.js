@@ -66,6 +66,52 @@
   const insumosReloadBtn = document.querySelector('button[data-action="insumos-reload"]');
   const insumosTituloPeca = document.getElementById('insumosTituloPeca');
 
+  const TABLE_SPINNER_MIN_DURATION = 1000;
+  function showTableLoading(tbody, message = 'Recalculando...') {
+    if (!tbody) return () => {};
+    const container = tbody.closest('.table-scroll');
+    if (!container) return () => {};
+    let overlay = container.querySelector('.table-loading-overlay');
+    if (!overlay) {
+      overlay = document.createElement('div');
+      overlay.className = 'table-loading-overlay';
+      overlay.setAttribute('role', 'status');
+      overlay.setAttribute('aria-live', 'polite');
+      overlay.innerHTML = `
+        <div class="table-loading-content">
+          <span class="table-loading-spinner" aria-hidden="true"></span>
+          <span class="table-loading-text"></span>
+        </div>
+      `;
+      overlay.dataset.loadingCount = '0';
+      container.appendChild(overlay);
+    }
+    const textEl = overlay.querySelector('.table-loading-text');
+    if (textEl) textEl.textContent = message;
+    const currentCount = Number(overlay.dataset.loadingCount || '0');
+    overlay.dataset.loadingCount = String(currentCount + 1);
+    overlay.classList.add('visible');
+    tbody.setAttribute('aria-busy', 'true');
+    const start = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+    let closed = false;
+    return () => {
+      if (closed) return;
+      closed = true;
+      const end = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+      const elapsed = Math.max(0, end - start);
+      const delay = Math.max(0, TABLE_SPINNER_MIN_DURATION - elapsed);
+      setTimeout(() => {
+        const current = Number(overlay.dataset.loadingCount || '0');
+        const next = Math.max(0, current - 1);
+        overlay.dataset.loadingCount = String(next);
+        if (next <= 0) {
+          overlay.classList.remove('visible');
+          overlay.dataset.loadingCount = '0';
+          tbody.removeAttribute('aria-busy');
+        }
+      }, delay);
+    };
+  }
 
   let listaProdutos = [];
   let rows = Array.isArray(ctx.items) ? ctx.items.map(p => ({ ...p, approved: !!p.approved })) : [];
@@ -171,6 +217,25 @@
     }));
   };
 
+  const summarizeBreakdownAvailability = breakdown => {
+    const initial = { total: 0, ready: 0 };
+    const summary = Array.isArray(breakdown)
+      ? breakdown.reduce((acc, entry) => {
+        const qty = sanitizeQty(entry?.available);
+        if (qty > 0) {
+          acc.total += qty;
+          if (entry?.isFinal) acc.ready += qty;
+        }
+        return acc;
+      }, initial)
+      : initial;
+    return {
+      total: summary.total,
+      ready: summary.ready,
+      partial: Math.max(0, summary.total - summary.ready)
+    };
+  };
+
   function applyReplacementPlanToRow(row, planOverride = null) {
     if (!row) return;
     const plan = clonePlan(planOverride || row.replacementPlan);
@@ -219,6 +284,11 @@
     row.produzir_parcial = partialStock;
     row.produzir_total = produceQty + remaining;
     row.a_produzir = row.produzir_parcial + row.produzir_total;
+    row.selectedStockSummary = {
+      total: totalStock,
+      ready: readyStock,
+      partial: partialStock
+    };
   }
 
   function isSubstituirPecaOpen() {
@@ -284,10 +354,21 @@
       row.codigo = produto.codigo;
     }
 
-    recomputeStocks();
-    renderRows();
-    validate();
-    computeInsumosAndRender();
+    const finalizePiecesLoading = showTableLoading(pecasBody, 'Recalculando peças...');
+    const finalizeInsumosLoading = showTableLoading(insumosBody, 'Recalculando insumos...');
+
+    Promise.resolve()
+      .then(() => {
+        recomputeStocks();
+        renderRows();
+        validate();
+      })
+      .then(() => computeInsumosAndRender())
+      .catch(err => { console.error('Erro ao recalcular dados após substituição', err); })
+      .finally(() => {
+        finalizePiecesLoading();
+        finalizeInsumosLoading();
+      });
   };
 
   window.addEventListener(substituirPecaEvent, handlePiecesReplaced);
@@ -608,6 +689,8 @@ async function computeInsumosAndRender(){
       let produceTotal = 0;
       let usedPlanData = false;
 
+      let availableBreakdown = [];
+
       if (r.replacementPlan) {
         applyReplacementPlanToRow(r);
         const planData = clonePlan(r.replacementPlan);
@@ -677,8 +760,17 @@ async function computeInsumosAndRender(){
         r.produzir_parcial = partialQtyTotal;
         r.produzir_total = produceTotal;
         r.a_produzir = r.produzir_parcial + r.produzir_total;
-        r.stockBreakdown = buildStockBreakdownFromDetails(rota, rawLotes);
+        availableBreakdown = buildStockBreakdownFromDetails(rota, rawLotes);
+        r.stockBreakdown = availableBreakdown;
       }
+
+      if (!Array.isArray(availableBreakdown) || !availableBreakdown.length) {
+        availableBreakdown = buildStockBreakdownFromDetails(rota, rawLotes);
+      }
+      const availability = summarizeBreakdownAvailability(availableBreakdown);
+      r.availableStockBreakdown = availableBreakdown;
+      r.availableStock = availability;
+      r.em_estoque = availability.total;
 
       partialRecords.forEach(record => addFaltantes(record.order, record.qty));
       if (produceTotal > 0) addFaltantes(Number.NEGATIVE_INFINITY, produceTotal);
