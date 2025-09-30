@@ -19,6 +19,19 @@ body {
     min-height: 100vh;
 }
 
+.materia-prima-module {
+    display: flex;
+    flex-direction: column;
+    gap: clamp(1.25rem, 1vw + 0.75rem, 2rem);
+    min-height: var(--module-height);
+    padding-right: clamp(1.5rem, 2vw, 3rem);
+    box-sizing: border-box;
+}
+
+.materia-prima-module > * {
+    flex-shrink: 0;
+}
+
 .glass-surface {
     background: var(--color-surface);
     backdrop-filter: blur(16px);
@@ -393,4 +406,35 @@ body {
     overflow-x: hidden;
     width: 100%;
     -webkit-overflow-scrolling: touch;
+}
+
+#materiaPrimaTableWrapper {
+    --materia-prima-table-height: clamp(240px, calc(var(--module-height) - 320px), 68vh);
+    height: var(--materia-prima-table-height);
+    min-height: var(--materia-prima-table-height);
+    max-height: var(--materia-prima-table-height) !important;
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+
+@media (max-width: 1024px) {
+    .materia-prima-module {
+        padding-right: clamp(1rem, 4vw, 2.5rem);
+        gap: clamp(1rem, 1.2rem + 0.5vw, 1.75rem);
+    }
+
+    #materiaPrimaTableWrapper {
+        --materia-prima-table-height: clamp(220px, calc(var(--module-height) - 340px), 72vh);
+    }
+}
+
+@media (max-width: 768px) {
+    .materia-prima-module {
+        padding-right: clamp(0.5rem, 6vw, 1.5rem);
+        min-height: var(--module-height);
+    }
+
+    #materiaPrimaTableWrapper {
+        --materia-prima-table-height: clamp(200px, calc(var(--module-height) - 360px), 75vh);
+    }
 }
