@@ -29,9 +29,16 @@ function initMateriaPrima() {
     document.getElementById('btnFiltrar')?.addEventListener('click', aplicarFiltros);
     document.getElementById('btnLimpar')?.addEventListener('click', limparFiltros);
     document.getElementById('zeroStock')?.addEventListener('change', aplicarFiltros);
-    document.getElementById('btnNovoInsumo')?.addEventListener('click', abrirNovoInsumo);
-    document.getElementById('materiaPrimaEmptyNew')?.addEventListener('click', () => {
-        document.getElementById('btnNovoInsumo')?.click();
+
+    const novoBtn = document.getElementById('btnNovoInsumo');
+    novoBtn?.addEventListener('click', event => {
+        event.stopPropagation();
+        abrirNovoInsumo();
+    });
+
+    document.getElementById('materiaPrimaEmptyNew')?.addEventListener('click', event => {
+        event.stopPropagation();
+        abrirNovoInsumo();
     });
 
     const infoIcon = document.getElementById('totaisInfoIcon');

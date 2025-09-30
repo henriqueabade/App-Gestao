@@ -415,6 +415,15 @@ input[type="date"]:valid::-webkit-datetime-edit {
     animation: converter-table-spin 1s linear infinite;
 }
 
+#converterOrcamentoOverlay .table-scroll tbody {
+    transition: opacity 0.2s ease;
+}
+
+#converterOrcamentoOverlay .table-scroll.table-loading-active tbody,
+#converterOrcamentoOverlay .table-scroll tbody[data-table-loading="true"] {
+    opacity: 0;
+}
+
 @keyframes converter-table-spin {
     to {
         transform: rotate(360deg);

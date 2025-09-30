@@ -90,6 +90,12 @@
     if (textEl) textEl.textContent = message;
     const currentCount = Number(overlay.dataset.loadingCount || '0');
     overlay.dataset.loadingCount = String(currentCount + 1);
+    const containerCount = Number(container.dataset.tableLoadingCount || '0');
+    container.dataset.tableLoadingCount = String(containerCount + 1);
+    container.classList.add('table-loading-active');
+    const tbodyCount = Number(tbody.dataset.tableLoadingCount || '0');
+    tbody.dataset.tableLoadingCount = String(tbodyCount + 1);
+    tbody.dataset.tableLoading = 'true';
     overlay.classList.add('visible');
     tbody.setAttribute('aria-busy', 'true');
     const start = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
@@ -106,7 +112,23 @@
         overlay.dataset.loadingCount = String(next);
         if (next <= 0) {
           overlay.classList.remove('visible');
-          overlay.dataset.loadingCount = '0';
+          delete overlay.dataset.loadingCount;
+        }
+
+        const containerCurrent = Number(container.dataset.tableLoadingCount || '0');
+        const containerNext = Math.max(0, containerCurrent - 1);
+        container.dataset.tableLoadingCount = String(containerNext);
+        if (containerNext <= 0) {
+          container.classList.remove('table-loading-active');
+          delete container.dataset.tableLoadingCount;
+        }
+
+        const tbodyCurrent = Number(tbody.dataset.tableLoadingCount || '0');
+        const tbodyNext = Math.max(0, tbodyCurrent - 1);
+        tbody.dataset.tableLoadingCount = String(tbodyNext);
+        if (tbodyNext <= 0) {
+          delete tbody.dataset.tableLoadingCount;
+          delete tbody.dataset.tableLoading;
           tbody.removeAttribute('aria-busy');
         }
       }, delay);
