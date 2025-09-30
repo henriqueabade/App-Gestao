@@ -4,6 +4,7 @@ const path = require('path');
 const DEBUG = process.env.DEBUG === 'true';
 const { autoUpdater } = require('electron-updater');
 const updateService = require('./backend/updateService');
+const publisher = require('./backend/publisher');
 const {
   registrarUsuario,
   loginUsuario,
@@ -110,10 +111,52 @@ let stateFile;
 let displayFile;
 let currentDisplayId;
 let currentUserSession = null;
+let isSupAdmin = false;
 let lastRecordedAction = null;
 let isPersistingExit = false;
 let closingDashboardWindow = false;
 let quittingApp = false;
+let publishState = {
+  publishing: false,
+  latestPublishedVersion: app.getVersion()
+};
+
+function getPublishLogPath() {
+  return path.join(__dirname, 'publish-audit.log');
+}
+
+function recordPublishAudit(event, extra = {}) {
+  const payload = {
+    timestamp: new Date().toISOString(),
+    event,
+    userId: currentUserSession?.id ?? null,
+    userName: currentUserSession?.nome ?? null,
+    ...extra
+  };
+  try {
+    fs.appendFileSync(getPublishLogPath(), `${JSON.stringify(payload)}\n`);
+  } catch (err) {
+    console.error('Não foi possível registrar auditoria de publicação:', err);
+  }
+}
+
+function broadcastPublishEvent(channel, payload) {
+  BrowserWindow.getAllWindows().forEach(win => {
+    if (!win.isDestroyed()) {
+      win.webContents.send(channel, payload);
+    }
+  });
+}
+
+function updatePublishState(partial = {}) {
+  if (Object.prototype.hasOwnProperty.call(partial, 'publishing')) {
+    publishState.publishing = partial.publishing;
+  }
+  if (Object.prototype.hasOwnProperty.call(partial, 'latestPublishedVersion')) {
+    publishState.latestPublishedVersion = partial.latestPublishedVersion;
+  }
+  return { ...publishState };
+}
 
 function configureAutoUpdaterFeed() {
   const feedUrl = process.env.ELECTRON_UPDATE_URL;
@@ -286,8 +329,10 @@ function setCurrentUserSession(user) {
       nome: user.nome,
       perfil: user.perfil
     };
+    isSupAdmin = user.perfil === 'Sup Admin';
   } else {
     currentUserSession = null;
+    isSupAdmin = false;
   }
   lastRecordedAction = null;
   quittingApp = false;
@@ -1143,6 +1188,71 @@ ipcMain.handle('login-usuario', async (event, dados) => {
     return { success: true, user };
   } catch (err) {
     return { success: false, message: err.message };
+  }
+});
+
+ipcMain.handle('publish-update', async () => {
+  if (!currentUserSession) {
+    return {
+      success: false,
+      code: 'unauthenticated',
+      ...publishState
+    };
+  }
+
+  if (!isSupAdmin) {
+    return {
+      success: false,
+      code: 'forbidden',
+      ...publishState
+    };
+  }
+
+  if (publishState.publishing || publisher.isPublishing()) {
+    return {
+      success: false,
+      code: 'in-progress',
+      ...publishState
+    };
+  }
+
+  const startState = updatePublishState({ publishing: true });
+  const startMessage = 'Iniciando pipeline de publicação...';
+  broadcastPublishEvent('publish-progress', {
+    ...startState,
+    message: startMessage
+  });
+  recordPublishAudit('publish-start', { version: app.getVersion() });
+
+  const progressHandler = info => {
+    if (!info || !info.message) return;
+    broadcastPublishEvent('publish-progress', {
+      ...publishState,
+      message: info.message
+    });
+  };
+
+  try {
+    await publisher.runPublishPipeline({
+      user: currentUserSession,
+      onProgress: progressHandler
+    });
+    const successState = updatePublishState({
+      publishing: false,
+      latestPublishedVersion: app.getVersion()
+    });
+    broadcastPublishEvent('publish-done', { ...successState });
+    recordPublishAudit('publish-success', { version: successState.latestPublishedVersion });
+    return { success: true, ...successState };
+  } catch (err) {
+    const errorState = updatePublishState({ publishing: false });
+    const message = err?.message || 'Falha ao publicar atualização.';
+    broadcastPublishEvent('publish-error', {
+      ...errorState,
+      message
+    });
+    recordPublishAudit('publish-failure', { error: message });
+    return { success: false, error: message, ...errorState };
   }
 });
 
