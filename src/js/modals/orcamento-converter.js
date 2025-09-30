@@ -67,36 +67,83 @@
   const insumosTituloPeca = document.getElementById('insumosTituloPeca');
 
   const TABLE_SPINNER_MIN_DURATION = 1000;
-  function showTableLoading(tbody, message = 'Recalculando...') {
-    if (!tbody) return () => {};
-    const container = tbody.closest('.table-scroll');
-    if (!container) return () => {};
-    let overlay = container.querySelector('.table-loading-overlay');
-    if (!overlay) {
-      overlay = document.createElement('div');
-      overlay.className = 'table-loading-overlay';
-      overlay.setAttribute('role', 'status');
-      overlay.setAttribute('aria-live', 'polite');
-      overlay.innerHTML = `
-        <div class="table-loading-content">
+
+  function getTableColumnCount(tbody) {
+    if (!tbody) return 1;
+    const rows = Array.from(tbody.querySelectorAll('tr'));
+    for (const row of rows) {
+      if (row.classList?.contains('table-loading-placeholder')) continue;
+      const cells = Array.from(row.children).filter(cell => {
+        const tag = cell.tagName ? cell.tagName.toLowerCase() : '';
+        return tag === 'td' || tag === 'th';
+      });
+      if (cells.length) {
+        return cells.reduce((total, cell) => {
+          const span = Number(cell.getAttribute?.('colspan') || '1');
+          return total + (Number.isFinite(span) && span > 0 ? span : 1);
+        }, 0);
+      }
+    }
+    const table = tbody.closest?.('table');
+    const headRow = table?.querySelector?.('thead tr');
+    if (headRow) {
+      const headCells = Array.from(headRow.children).filter(cell => {
+        const tag = cell.tagName ? cell.tagName.toLowerCase() : '';
+        return tag === 'td' || tag === 'th';
+      });
+      if (headCells.length) {
+        return headCells.reduce((total, cell) => {
+          const span = Number(cell.getAttribute?.('colspan') || '1');
+          return total + (Number.isFinite(span) && span > 0 ? span : 1);
+        }, 0);
+      }
+    }
+    return 1;
+  }
+
+  function ensureTableLoadingPlaceholder(tbody) {
+    if (!tbody) return null;
+    let row = tbody.querySelector('.table-loading-placeholder');
+    const columnCount = getTableColumnCount(tbody);
+    if (!row) {
+      row = document.createElement('tr');
+      row.className = 'table-loading-placeholder';
+      row.setAttribute('role', 'status');
+      row.setAttribute('aria-live', 'polite');
+      const cell = document.createElement('td');
+      cell.colSpan = Math.max(1, columnCount);
+      cell.innerHTML = `
+        <div class="table-loading-inline">
           <span class="table-loading-spinner" aria-hidden="true"></span>
           <span class="table-loading-text"></span>
         </div>
       `;
-      overlay.dataset.loadingCount = '0';
-      container.appendChild(overlay);
+      row.appendChild(cell);
+      if (typeof tbody.prepend === 'function') tbody.prepend(row);
+      else tbody.insertBefore(row, tbody.firstChild);
+    } else {
+      const cell = row.querySelector('td');
+      if (cell) cell.colSpan = Math.max(1, columnCount);
     }
-    const textEl = overlay.querySelector('.table-loading-text');
+    return row;
+  }
+
+  function showTableLoading(tbody, message = 'Recalculando...') {
+    if (!tbody) return () => {};
+    const container = tbody.closest('.table-scroll');
+    if (!container) return () => {};
+    const placeholderRow = ensureTableLoadingPlaceholder(tbody);
+    if (!placeholderRow) return () => {};
+    const textEl = placeholderRow.querySelector('.table-loading-text');
     if (textEl) textEl.textContent = message;
-    const currentCount = Number(overlay.dataset.loadingCount || '0');
-    overlay.dataset.loadingCount = String(currentCount + 1);
+    const placeholderCount = Number(placeholderRow.dataset.loadingCount || '0');
+    placeholderRow.dataset.loadingCount = String(placeholderCount + 1);
     const containerCount = Number(container.dataset.tableLoadingCount || '0');
     container.dataset.tableLoadingCount = String(containerCount + 1);
     container.classList.add('table-loading-active');
     const tbodyCount = Number(tbody.dataset.tableLoadingCount || '0');
     tbody.dataset.tableLoadingCount = String(tbodyCount + 1);
     tbody.dataset.tableLoading = 'true';
-    overlay.classList.add('visible');
     tbody.setAttribute('aria-busy', 'true');
     const start = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
     let closed = false;
@@ -107,14 +154,6 @@
       const elapsed = Math.max(0, end - start);
       const delay = Math.max(0, TABLE_SPINNER_MIN_DURATION - elapsed);
       setTimeout(() => {
-        const current = Number(overlay.dataset.loadingCount || '0');
-        const next = Math.max(0, current - 1);
-        overlay.dataset.loadingCount = String(next);
-        if (next <= 0) {
-          overlay.classList.remove('visible');
-          delete overlay.dataset.loadingCount;
-        }
-
         const containerCurrent = Number(container.dataset.tableLoadingCount || '0');
         const containerNext = Math.max(0, containerCurrent - 1);
         container.dataset.tableLoadingCount = String(containerNext);
@@ -130,6 +169,14 @@
           delete tbody.dataset.tableLoadingCount;
           delete tbody.dataset.tableLoading;
           tbody.removeAttribute('aria-busy');
+        }
+
+        const placeholderCurrent = Number(placeholderRow.dataset.loadingCount || '0');
+        const placeholderNext = Math.max(0, placeholderCurrent - 1);
+        placeholderRow.dataset.loadingCount = String(placeholderNext);
+        if (placeholderNext <= 0) {
+          delete placeholderRow.dataset.loadingCount;
+          if (placeholderRow.isConnected) placeholderRow.remove();
         }
       }, delay);
     };
