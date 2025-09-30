@@ -3,6 +3,7 @@ const { app, BrowserWindow, ipcMain, screen, shell } = require('electron');
 const path = require('path');
 const DEBUG = process.env.DEBUG === 'true';
 const { autoUpdater } = require('electron-updater');
+const updateService = require('./backend/updateService');
 const {
   registrarUsuario,
   loginUsuario,
@@ -114,54 +115,54 @@ let isPersistingExit = false;
 let closingDashboardWindow = false;
 let quittingApp = false;
 
+function configureAutoUpdaterFeed() {
+  const feedUrl = process.env.ELECTRON_UPDATE_URL;
+  const channel = process.env.ELECTRON_UPDATE_CHANNEL;
+
+  if (!feedUrl) {
+    if (DEBUG) {
+      console.warn('AutoUpdater: nenhum feed customizado configurado (ELECTRON_UPDATE_URL ausente).');
+    }
+    updateService.recordFeedConfiguration(false);
+    return;
+  }
+
+  const feedOptions = channel ? { url: feedUrl, channel } : { url: feedUrl };
+  try {
+    autoUpdater.setFeedURL(feedOptions);
+    updateService.recordFeedConfiguration(true);
+    if (DEBUG) {
+      console.log('AutoUpdater: feed configurado', feedOptions);
+    }
+  } catch (error) {
+    console.error('AutoUpdater: falha ao configurar feed customizado', error);
+    updateService.recordFeedConfiguration(false, error);
+  }
+}
+
 function initializeAutoUpdater() {
   if (!app.isPackaged) {
     if (DEBUG) {
       console.warn('AutoUpdater: ignorado em ambiente de desenvolvimento');
     }
+    updateService.recordFeedConfiguration(false, new Error('Atualizações indisponíveis durante o desenvolvimento.'));
     return;
   }
 
   if (process.env.ELECTRON_UPDATE_DISABLE === 'true') {
     console.warn('AutoUpdater: desabilitado pela variável ELECTRON_UPDATE_DISABLE');
+    updateService.recordFeedConfiguration(false, new Error('Atualizações desabilitadas.'));
     return;
   }
 
-  const explicitFeedUrl = process.env.ELECTRON_UPDATE_URL;
-  if (explicitFeedUrl) {
-    try {
-      autoUpdater.setFeedURL({ url: explicitFeedUrl });
-      if (DEBUG) {
-        console.log('AutoUpdater: feed customizado configurado', explicitFeedUrl);
-      }
-    } catch (err) {
-      console.error('AutoUpdater: falha ao configurar feed customizado', err);
-    }
-  }
+  configureAutoUpdaterFeed();
 
-  autoUpdater.on('error', err => {
-    console.error('AutoUpdater: erro', err);
-  });
-
-  autoUpdater.on('download-progress', progress => {
-    if (DEBUG) {
-      console.log('AutoUpdater: progresso do download', {
-        percent: Number(progress.percent?.toFixed?.(2) ?? progress.percent),
-        transferred: progress.transferred,
-        total: progress.total,
-        bytesPerSecond: progress.bytesPerSecond
-      });
-    }
-  });
-
-  autoUpdater.on('update-downloaded', info => {
-    console.log('AutoUpdater: atualização pronta para instalação', info.version);
-  });
-
-  autoUpdater
-    .checkForUpdatesAndNotify()
+  updateService
+    .checkForUpdates()
     .catch(err => {
-      console.error('AutoUpdater: falha ao verificar atualizações', err);
+      if (DEBUG) {
+        console.error('AutoUpdater: falha ao verificar atualizações', err);
+      }
     });
 }
 
@@ -278,6 +279,7 @@ const API_MODULE_TITLES = {
 };
 
 function setCurrentUserSession(user) {
+  const previousUserId = currentUserSession?.id ?? null;
   if (user && user.id) {
     currentUserSession = {
       id: user.id,
@@ -289,6 +291,10 @@ function setCurrentUserSession(user) {
   }
   lastRecordedAction = null;
   quittingApp = false;
+  const nextUserId = currentUserSession?.id ?? null;
+  if (previousUserId !== nextUserId) {
+    updateService.resetCachedState(nextUserId ? 'user-switched' : 'session-ended');
+  }
 }
 
 function summarizeValue(value) {
@@ -1138,6 +1144,55 @@ ipcMain.handle('login-usuario', async (event, dados) => {
   } catch (err) {
     return { success: false, message: err.message };
   }
+});
+
+ipcMain.handle('get-update-status', async (_event, options = {}) => {
+  const refresh = Boolean(options?.refresh);
+  if (refresh) {
+    await updateService.checkForUpdates({ silent: true });
+  }
+  return updateService.getUpdateStatus();
+});
+
+ipcMain.handle('check-for-updates', async () => {
+  return updateService.checkForUpdates();
+});
+
+ipcMain.handle('download-update', async () => {
+  const statusBefore = updateService.getUpdateStatus();
+
+  if (statusBefore.status === 'downloaded' || statusBefore.status === 'installing') {
+    return statusBefore;
+  }
+
+  if (statusBefore.status !== 'update-available' && statusBefore.status !== 'downloading') {
+    const afterCheck = await updateService.checkForUpdates({ silent: true });
+    if (afterCheck.status !== 'update-available') {
+      return afterCheck;
+    }
+  }
+
+  return updateService.downloadUpdate();
+});
+
+ipcMain.handle('install-update', async () => {
+  const statusBefore = updateService.getUpdateStatus();
+  if (statusBefore.status !== 'downloaded') {
+    return {
+      ...statusBefore,
+      canInstall: false,
+      statusMessage:
+        statusBefore.status === 'installing'
+          ? statusBefore.statusMessage
+          : 'Nenhuma atualização baixada para instalar.'
+    };
+  }
+
+  const success = updateService.installUpdate();
+  return {
+    ...updateService.getUpdateStatus(),
+    canInstall: success
+  };
 });
 
 ipcMain.handle('listar-materia-prima', async (_e, { filtro }) => {
