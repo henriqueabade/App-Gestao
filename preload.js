@@ -17,6 +17,49 @@ function recordIpcAction(channel, payload, result) {
   recordAction({ source: 'ipc', channel, payload, result });
 }
 
+function formatErrorForRecord(err) {
+  if (!err) return null;
+  const error = err instanceof Error ? err : new Error(String(err));
+  return {
+    message: error.message || String(error),
+    code: error.code,
+    stack: DEBUG ? error.stack : undefined
+  };
+}
+
+async function invokeIpc(channel, payload, { trackAction = false } = {}) {
+  try {
+    const result = await ipcRenderer.invoke(channel, payload);
+    if (trackAction) {
+      recordIpcAction(channel, payload, result);
+    }
+    return result;
+  } catch (err) {
+    if (trackAction) {
+      recordIpcAction(channel, payload, { error: formatErrorForRecord(err) });
+    }
+    if (DEBUG) console.error(`${channel} failed`, err);
+    throw err;
+  }
+}
+
+function subscribeToChannel(channel, callback) {
+  if (typeof callback !== 'function') {
+    return () => {};
+  }
+  const listener = (_event, payload) => {
+    try {
+      callback(payload);
+    } catch (err) {
+      if (DEBUG) console.error(`listener for ${channel} failed`, err);
+    }
+  };
+  ipcRenderer.on(channel, listener);
+  return () => {
+    ipcRenderer.removeListener(channel, listener);
+  };
+}
+
 contextBridge.exposeInMainWorld('electronAPI', {
   log: (msg) => {
     if (DEBUG) ipcRenderer.send('debug-log', msg);
@@ -198,6 +241,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   saveState: (state) => ipcRenderer.invoke('save-state', state),
   loadState: () => ipcRenderer.invoke('load-state'),
   clearState: () => ipcRenderer.invoke('clear-state'),
+  getUpdateStatus: (options) => invokeIpc('get-update-status', options),
+  downloadUpdate: () => invokeIpc('download-update', null, { trackAction: true }),
+  installUpdate: () => invokeIpc('install-update', null, { trackAction: true }),
+  publishUpdate: () => invokeIpc('publish-update', null, { trackAction: true }),
   showLogin: () => ipcRenderer.invoke('show-login'),
   closeWindow: () => ipcRenderer.invoke('close-window'),
   minimizeWindow: () => ipcRenderer.invoke('minimize-window'),
@@ -216,7 +263,19 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onActivateTab: (callback) =>
     ipcRenderer.on('activate-tab', (_event, tab) => callback(tab)),
   onSelectTab: (callback) =>
-    ipcRenderer.on('select-tab', (_event, tab) => callback(tab))
+    ipcRenderer.on('select-tab', (_event, tab) => callback(tab)),
+  onUpdateStatus: (callback) => subscribeToChannel('update-status', callback),
+  onPublishStatus: (callback) => {
+    const unsubscribes = ['publish-progress', 'publish-done'].map(channel =>
+      subscribeToChannel(channel, callback)
+    );
+    return () => {
+      unsubscribes.forEach(unsub => {
+        if (typeof unsub === 'function') unsub();
+      });
+    };
+  },
+  onPublishError: (callback) => subscribeToChannel('publish-error', callback)
   });
 
 
