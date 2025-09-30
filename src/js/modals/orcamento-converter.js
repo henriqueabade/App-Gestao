@@ -987,7 +987,26 @@ async function computeInsumosAndRender(options = {}) {
     stockByName = stockByName && stockByName.size ? stockByName : (lastStockByName || new Map());
     const filtroPecaId = state.insumosView.filtroPecaId;
     const mostrarSomenteFaltantes = state.insumosView.mostrarSomenteFaltantes;
-    insumosBody.innerHTML = '';
+
+    const insumosLoading = insumosBody?.dataset?.tableLoading === 'true';
+    let insumosPlaceholder = null;
+    if (insumosLoading) {
+      insumosPlaceholder = insumosBody.querySelector('.table-loading-placeholder');
+      if (!insumosPlaceholder) {
+        insumosPlaceholder = ensureTableLoadingPlaceholder(insumosBody);
+      }
+      if (insumosPlaceholder && insumosPlaceholder.parentElement !== insumosBody) {
+        insumosBody.prepend(insumosPlaceholder);
+      }
+    }
+
+    if (insumosLoading && insumosPlaceholder) {
+      Array.from(insumosBody.children).forEach(child => {
+        if (child !== insumosPlaceholder) child.remove();
+      });
+    } else {
+      insumosBody.innerHTML = '';
+    }
     const list = [];
     rows.forEach(p => {
       if (filtroPecaId && Number(p.produto_id) !== Number(filtroPecaId)) return;
