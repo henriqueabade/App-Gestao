@@ -142,7 +142,7 @@ async function checkForUpdates({ silent = false } = {}) {
   await ensureAppReady();
 
   if (!app.isPackaged) {
-    const message = 'Atualizações automáticas indisponíveis durante o desenvolvimento.';
+    const message = 'Atualizações Indisponíveis';
     setStatus({
       status: 'disabled',
       statusMessage: message,
@@ -152,7 +152,7 @@ async function checkForUpdates({ silent = false } = {}) {
   }
 
   if (UPDATE_DISABLED) {
-    const message = 'Atualizações automáticas foram desabilitadas pelo administrador.';
+    const message = 'Atualizações Desabilitadas';
     setStatus({
       status: 'disabled',
       statusMessage: message,
