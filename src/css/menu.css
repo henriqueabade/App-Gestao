@@ -192,15 +192,16 @@ body {
 }
 
 .user-updates-trigger {
+    --user-updates-color: var(--color-green);
     display: inline-flex;
     align-items: center;
-    gap: 0.65rem;
-    padding: 0.45rem 1rem;
+    gap: 0.5rem;
+    padding: 0.45rem 0.95rem;
     border-radius: 9999px;
-    border: 1px solid rgba(162, 255, 166, 0.4);
+    border: 1px solid rgba(162, 255, 166, 0.45);
     background: rgba(162, 255, 166, 0.12);
-    color: #22c55e;
-    font-size: 0.82rem;
+    color: var(--user-updates-color);
+    font-size: 0.8rem;
     font-weight: 600;
     letter-spacing: 0.01em;
     transition: background 160ms ease, border-color 160ms ease, color 160ms ease, transform 160ms ease;
@@ -209,7 +210,7 @@ body {
 
 .user-updates-trigger:focus {
     outline: none;
-    box-shadow: 0 0 0 2px rgba(162, 255, 166, 0.25);
+    box-shadow: 0 0 0 2px rgba(162, 255, 166, 0.3);
 }
 
 .user-updates-trigger:hover:not(:disabled) {
@@ -221,50 +222,38 @@ body {
     opacity: 0.7;
 }
 
-.user-updates-trigger[data-state="idle"],
-.user-updates-trigger[data-state="up-to-date"] {
-    color: #22c55e;
-    border-color: rgba(34, 197, 94, 0.45);
-    background: rgba(34, 197, 94, 0.14);
-}
-
-.user-updates-trigger[data-state="checking"] {
-    color: #34d399;
-    border-color: rgba(52, 211, 153, 0.45);
-    background: rgba(52, 211, 153, 0.16);
-}
-
-.user-updates-trigger[data-state="available"],
-.user-updates-trigger[data-state="available"] .user-updates-caret {
-    color: #60a5fa;
-}
-
-.user-updates-trigger[data-state="available"] {
-    border-color: rgba(96, 165, 250, 0.5);
-    background: rgba(96, 165, 250, 0.18);
-}
-
-.user-updates-trigger[data-state="updating"] {
-    color: #60a5fa;
-    border-color: rgba(96, 165, 250, 0.6);
-    background: rgba(37, 99, 235, 0.2);
-}
-
-.user-updates-trigger[data-state="error"] {
-    color: #f87171;
-    border-color: rgba(248, 113, 113, 0.5);
-    background: rgba(248, 113, 113, 0.14);
-}
-
-.user-updates-icon,
-.user-updates-label,
-.user-updates-version,
-.user-updates-caret {
+.user-updates-trigger i,
+.user-updates-trigger span {
     color: currentColor;
 }
 
+.user-updates-trigger[data-state="idle"],
+.user-updates-trigger[data-state="up-to-date"] {
+    --user-updates-color: var(--color-green);
+    border-color: rgba(162, 255, 166, 0.45);
+    background: rgba(162, 255, 166, 0.12);
+}
+
+.user-updates-trigger[data-state="checking"],
+.user-updates-trigger[data-state="available"],
+.user-updates-trigger[data-state="updating"] {
+    --user-updates-color: var(--color-blue);
+    border-color: rgba(138, 167, 243, 0.5);
+    background: rgba(138, 167, 243, 0.15);
+}
+
+.user-updates-trigger[data-state="error"] {
+    --user-updates-color: var(--color-red);
+    border-color: rgba(255, 88, 88, 0.5);
+    background: rgba(255, 88, 88, 0.12);
+}
+
+.user-updates-trigger[aria-expanded="true"] {
+    transform: translateY(-1px);
+}
+
 .user-updates-icon {
-    font-size: 1rem;
+    font-size: 0.95rem;
     transition: transform 160ms ease, color 160ms ease;
 }
 
@@ -274,33 +263,6 @@ body {
 
 .user-updates-trigger[data-state="updating"] .user-updates-icon {
     animation: user-updates-signal 1.2s ease-in-out infinite;
-}
-
-.user-updates-text {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 0.05rem;
-    text-align: left;
-}
-
-.user-updates-text span {
-    color: inherit;
-}
-
-.user-updates-version {
-    font-size: 0.7rem;
-    font-weight: 500;
-    opacity: 0.75;
-}
-
-.user-updates-caret {
-    font-size: 0.65rem;
-    transition: transform 160ms ease;
-}
-
-.user-updates-trigger[aria-expanded="true"] .user-updates-caret {
-    transform: rotate(180deg);
 }
 
 .user-updates-panel {

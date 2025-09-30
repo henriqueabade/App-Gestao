@@ -33,8 +33,6 @@ const AppUpdates = (() => {
             trigger: document.getElementById('userUpdatesTrigger'),
             icon: document.getElementById('userUpdatesIcon'),
             label: document.getElementById('userUpdatesLabel'),
-            version: document.getElementById('userUpdatesVersion'),
-            caret: document.querySelector('#userUpdatesTrigger .user-updates-caret'),
             panel: document.getElementById('userUpdatesPanel'),
             action: document.getElementById('userUpdateAction'),
             actionIcon: document.getElementById('userUpdateActionIcon'),
@@ -508,7 +506,6 @@ const AppUpdates = (() => {
         let iconClass = 'fa-circle-check';
         let labelText = 'Atualizações indisponíveis';
         let disableTrigger = false;
-        let caretVisible = mode === 'available';
         let busy = false;
 
         switch (mode) {
@@ -529,12 +526,10 @@ const AppUpdates = (() => {
                 labelText = 'Aplicando atualização...';
                 disableTrigger = true;
                 busy = true;
-                caretVisible = false;
                 break;
             case 'error':
                 iconClass = 'fa-circle-xmark';
                 labelText = state.userControl.lastError || 'Falha na atualização';
-                caretVisible = false;
                 break;
             case 'up-to-date':
                 iconClass = 'fa-circle-check';
@@ -551,20 +546,11 @@ const AppUpdates = (() => {
         user.icon.className = `fas ${iconClass} user-updates-icon`;
         user.label.textContent = labelText;
 
-        if (user.version) {
-            const version = state.localVersion || state.updateStatus?.localVersion;
-            user.version.textContent = version ? `Versão ${version}` : '';
-        }
-
         trigger.dataset.state = mode;
         trigger.setAttribute('data-state', mode);
         trigger.disabled = disableTrigger;
         trigger.setAttribute('aria-busy', busy ? 'true' : 'false');
         trigger.setAttribute('aria-expanded', state.userControl.panelOpen && mode === 'available' ? 'true' : 'false');
-
-        if (user.caret) {
-            user.caret.classList.toggle('hidden', !caretVisible);
-        }
 
         if (user.panel) {
             const showPanel = state.userControl.panelOpen && mode === 'available';
