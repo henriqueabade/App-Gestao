@@ -1,9 +1,9 @@
 <div class="modulo-container relatorios-module">
     <!-- Header -->
-    <div class="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between mb-8 px-4 sm:px-6 lg:px-8">
-        <div>
-            <h1 class="text-2xl font-semibold text-white">Relatórios</h1>
-            <p class="text-gray-400 mt-2">Gere, visualize e exporte dados do sistema</p>
+    <div class="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between mb-8 animate-fade-in-up">
+        <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
+            <h1 class="text-2xl font-semibold text-white sm:mb-0">Relatórios</h1>
+            <p class="text-gray-400 sm:mt-0">Gere, visualize e exporte dados do sistema</p>
         </div>
 
         <div class="flex flex-col gap-3 w-full lg:w-auto">
@@ -67,9 +67,9 @@
         </div>
     </div>
 
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div class="flex flex-col gap-8">
         <!-- Report Tabs -->
-        <div class="glass-surface rounded-xl p-4 mb-8">
+        <div class="glass-surface rounded-xl p-4">
             <div role="tablist" class="flex flex-wrap gap-2" aria-label="Categorias de Relatórios">
                 <button role="tab" aria-selected="true" class="tab-active" data-relatorios-tab="estoque">
                     Estoque
@@ -93,7 +93,7 @@
         </div>
 
         <!-- Filters Section -->
-        <section class="glass-surface rounded-xl p-6 mb-8">
+        <section class="glass-surface rounded-xl p-6">
             <h2 class="section-title">Filtros</h2>
 
             <!-- Common Filters -->
