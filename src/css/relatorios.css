@@ -382,6 +382,24 @@ body {
     vertical-align: middle;
 }
 
+.relatorios-module .relatorios-table-container {
+    display: block;
+}
+
+.relatorios-module .relatorios-table-wrapper {
+    border-radius: 1.25rem;
+    overflow: hidden;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.relatorios-module .relatorios-table-wrapper > .table-scroll {
+    border-radius: inherit;
+}
+
+.relatorios-module .relatorios-table-enter {
+    animation: relatoriosFloatIn 0.45s ease-out both;
+}
+
 .relatorios-module .table-scroll {
     --relatorios-table-height: clamp(240px, calc(var(--module-height) - 320px), 68vh);
     height: var(--relatorios-table-height);
