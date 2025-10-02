@@ -292,27 +292,32 @@ body {
     }
 }
 
-.relatorios-module .table-header {
-    padding: 1rem;
+.relatorios-module .relatorios-table thead th {
+    position: sticky;
+    top: 0;
+    background: rgba(249, 250, 251, 0.95);
+    color: #6b7280;
     font-size: 0.75rem;
     font-weight: 600;
     letter-spacing: 0.08em;
     text-transform: uppercase;
-    color: #9ca3af;
+    z-index: 5;
 }
 
-.relatorios-module .table-row {
-    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+.relatorios-module .relatorios-table tbody tr {
     transition: background 150ms ease;
 }
 
-.relatorios-module .table-row:hover {
-    background: rgba(255, 255, 255, 0.05);
+.relatorios-module .relatorios-table tbody tr:hover {
+    background: rgba(163, 148, 167, 0.08);
 }
 
-.relatorios-module .table-cell {
-    padding: 1rem;
+.relatorios-module .relatorios-table tbody td {
     vertical-align: middle;
+}
+
+.relatorios-module .table-scroll {
+    max-height: calc(var(--module-height) - 260px) !important;
 }
 
 .relatorios-module .relatorios-table-footer {
