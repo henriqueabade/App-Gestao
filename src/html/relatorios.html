@@ -70,14 +70,17 @@
         <!-- Report Tabs -->
         <div class="glass-surface rounded-xl p-4 animate-fade-in-up">
             <div role="tablist" class="flex flex-wrap gap-2" aria-label="Categorias de Relatórios">
-                <button role="tab" aria-selected="true" class="tab-active" data-relatorios-tab="estoque">
-                    Estoque
+                <button role="tab" aria-selected="true" class="tab-active" data-relatorios-tab="materia-prima">
+                    Matéria-Prima
                 </button>
-                <button role="tab" aria-selected="false" class="tab-inactive" data-relatorios-tab="producao">
-                    Produção &amp; Produtos
+                <button role="tab" aria-selected="false" class="tab-inactive" data-relatorios-tab="produtos">
+                    Produtos
                 </button>
                 <button role="tab" aria-selected="false" class="tab-inactive" data-relatorios-tab="clientes">
-                    Clientes &amp; CRM
+                    Clientes
+                </button>
+                <button role="tab" aria-selected="false" class="tab-inactive" data-relatorios-tab="prospeccoes">
+                    Prospecções
                 </button>
                 <button role="tab" aria-selected="false" class="tab-inactive" data-relatorios-tab="orcamentos">
                     Orçamentos
@@ -86,7 +89,7 @@
                     Pedidos
                 </button>
                 <button role="tab" aria-selected="false" class="tab-inactive" data-relatorios-tab="usuarios">
-                    Usuários &amp; Auditoria
+                    Usuários
                 </button>
             </div>
         </div>
@@ -140,7 +143,7 @@
 
             <!-- Tab-specific Filters -->
             <div id="relatoriosSpecificFilters">
-                <div class="relatorios-tab-content" data-relatorios-tab-content="estoque">
+                <div class="relatorios-tab-content" data-relatorios-tab-content="materia-prima">
                     <div class="filter-bar relatorios-filter-bar">
                         <div class="relatorios-filter-field">
                             <label class="relatorios-filter-label text-white">Categoria</label>
@@ -185,7 +188,7 @@
                     </div>
                 </div>
 
-                <div class="relatorios-tab-content hidden" data-relatorios-tab-content="producao">
+                <div class="relatorios-tab-content hidden" data-relatorios-tab-content="produtos">
                     <div class="filter-bar relatorios-filter-bar">
                         <div class="relatorios-filter-field">
                             <label class="relatorios-filter-label text-white">Categoria</label>
@@ -234,7 +237,7 @@
         <section class="glass-surface rounded-xl p-6 mb-8 animate-fade-in-up">
             <h2 class="section-title">Indicadores</h2>
             <div id="relatoriosKpiContainer">
-                <div class="relatorios-kpi-grid" data-relatorios-kpi="estoque">
+                <div class="relatorios-kpi-grid" data-relatorios-kpi="materia-prima">
                     <article class="relatorios-kpi-card animate-fade-in-up">
                         <div class="flex items-center gap-4">
                             <div class="relatorios-kpi-icon bg-blue-500/20">
@@ -343,16 +346,6 @@
                         </table>
                     </div>
 
-                    <div class="relatorios-table-footer">
-                        <span class="text-sm text-gray-400">Mostrando 1-10 de 1.247 itens</span>
-                        <div class="flex items-center gap-2">
-                            <button class="table-pagination">Anterior</button>
-                            <span class="table-pagination table-pagination-active">1</span>
-                            <span class="table-pagination">2</span>
-                            <span class="table-pagination">3</span>
-                            <button class="table-pagination">Próximo</button>
-                        </div>
-                    </div>
                 </div>
 
                 <div id="relatoriosChartsView" class="relatorios-result-content hidden">

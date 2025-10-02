@@ -317,33 +317,26 @@ body {
 }
 
 .relatorios-module .table-scroll {
-    max-height: calc(var(--module-height) - 260px) !important;
+    --relatorios-table-height: clamp(240px, calc(var(--module-height) - 320px), 68vh);
+    height: var(--relatorios-table-height);
+    min-height: var(--relatorios-table-height);
+    max-height: var(--relatorios-table-height) !important;
+    overflow-y: auto;
+    overflow-x: hidden;
+    width: 100%;
+    -webkit-overflow-scrolling: touch;
 }
 
-.relatorios-module .relatorios-table-footer {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: space-between;
-    gap: 1rem;
-    padding-top: 1.5rem;
-    margin-top: 1.5rem;
-    border-top: 1px solid rgba(255, 255, 255, 0.12);
+@media (max-width: 1024px) {
+    .relatorios-module .table-scroll {
+        --relatorios-table-height: clamp(220px, calc(var(--module-height) - 340px), 72vh);
+    }
 }
 
-.relatorios-module .table-pagination {
-    padding: 0.3rem 0.75rem;
-    border-radius: 0.75rem;
-    background: rgba(255, 255, 255, 0.1);
-    color: #d1d5db;
-    font-size: 0.8rem;
-    border: 1px solid rgba(255, 255, 255, 0.15);
-}
-
-.relatorios-module .table-pagination-active {
-    background: var(--color-primary);
-    color: #fff;
-    border-color: transparent;
+@media (max-width: 768px) {
+    .relatorios-module .table-scroll {
+        --relatorios-table-height: clamp(200px, calc(var(--module-height) - 360px), 75vh);
+    }
 }
 
 .relatorios-module .relatorios-chart-card {
