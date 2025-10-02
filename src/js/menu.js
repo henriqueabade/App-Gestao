@@ -49,6 +49,7 @@ const AppUpdates = (() => {
             icon: document.getElementById('supAdminUpdatesIcon'),
             label: document.getElementById('supAdminUpdatesLabel'),
             panel: document.getElementById('supAdminUpdatesPanel'),
+            summary: document.getElementById('supAdminUpdatesSummary'),
             publish: document.getElementById('supAdminPublishAction'),
             publishIcon: document.getElementById('supAdminPublishIcon'),
             publishLabel: document.getElementById('supAdminPublishLabel')
@@ -59,6 +60,7 @@ const AppUpdates = (() => {
             icon: document.getElementById('userUpdatesIcon'),
             label: document.getElementById('userUpdatesLabel'),
             panel: document.getElementById('userUpdatesPanel'),
+            summary: document.getElementById('userUpdatesSummary'),
             action: document.getElementById('userUpdateAction'),
             actionIcon: document.getElementById('userUpdateActionIcon'),
             actionLabel: document.getElementById('userUpdateActionLabel')
@@ -196,6 +198,457 @@ const AppUpdates = (() => {
         setElementHidden(elements.container, !(badgeVisible || supAdminVisible || userVisible));
     }
 
+    const STATUS_LABELS = {
+        checking: 'Verificando atualizações',
+        'update-available': 'Atualização disponível',
+        downloading: 'Baixando atualização',
+        downloaded: 'Atualização baixada',
+        installing: 'Instalando atualização',
+        'up-to-date': 'Aplicativo atualizado',
+        disabled: 'Atualizações desabilitadas',
+        error: 'Erro na atualização',
+        idle: 'Aguardando verificação'
+    };
+
+    const SUP_ADMIN_MODE_LABELS = {
+        idle: 'Aguardando publicação',
+        available: 'Atualizações pendentes',
+        publishing: 'Publicando atualização',
+        success: 'Publicação concluída',
+        error: 'Erro na publicação'
+    };
+
+    const USER_MODE_LABELS = {
+        idle: 'Aguardando verificação',
+        checking: 'Verificando atualizações',
+        available: 'Atualização disponível',
+        updating: 'Processando atualização',
+        error: 'Erro detectado',
+        'up-to-date': 'Aplicativo atualizado'
+    };
+
+    function translateLabel(dictionary, key, fallback) {
+        if (!key) return fallback || null;
+        return dictionary[key] || fallback || null;
+    }
+
+    function formatDateTime(value) {
+        if (!value) return null;
+        const date = value instanceof Date ? value : new Date(value);
+        if (Number.isNaN(date.getTime())) return null;
+        return date.toLocaleString('pt-BR', {
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+        });
+    }
+
+    function parseSummaryHighlights(value) {
+        if (value === null || value === undefined) return [];
+        const text = String(value).replace(/\r\n|\r/g, '\n');
+        const lines = text
+            .split('\n')
+            .map(line => line.trim())
+            .filter(Boolean);
+        if (!lines.length) return [];
+        if (lines.length === 1 && !/^[-*•]/.test(lines[0])) {
+            return [];
+        }
+        return lines.map(line => line.replace(/^[-*•]+\s*/, '').trim()).filter(Boolean);
+    }
+
+    function normalizeReleaseEntries() {
+        const rawNotes = state.updateStatus?.releaseNotes;
+        const notesArray = Array.isArray(rawNotes) ? rawNotes : rawNotes ? [rawNotes] : [];
+        const fallbackTitle =
+            state.updateStatus?.releaseName ||
+            (state.updateStatus?.latestVersion ? `Versão ${state.updateStatus.latestVersion}` : null);
+        const fallbackDate = state.updateStatus?.releaseDate || null;
+
+        return notesArray
+            .map((entry, index) => {
+                if (!entry && typeof entry !== 'number') return null;
+                if (typeof entry === 'string') {
+                    const highlights = parseSummaryHighlights(entry);
+                    return {
+                        id: `release-${index}`,
+                        title: fallbackTitle || 'Notas da atualização',
+                        version: null,
+                        date: fallbackDate,
+                        author: null,
+                        highlights,
+                        summary: !highlights.length ? entry.trim() : ''
+                    };
+                }
+
+                const summaryText =
+                    (typeof entry.summary === 'string' && entry.summary.trim()) ||
+                    (typeof entry.note === 'string' && entry.note.trim()) ||
+                    (typeof entry.text === 'string' && entry.text.trim()) ||
+                    '';
+
+                const highlights = Array.isArray(entry.highlights)
+                    ? entry.highlights.filter(Boolean)
+                    : parseSummaryHighlights(summaryText || entry.description || '');
+
+                const normalizedHighlights = highlights.length
+                    ? highlights
+                    : parseSummaryHighlights(summaryText);
+
+                const summary = normalizedHighlights.length ? '' : summaryText;
+                const titleCandidate =
+                    entry.title ||
+                    entry.name ||
+                    (entry.version ? `Versão ${entry.version}` : null) ||
+                    fallbackTitle ||
+                    'Notas da atualização';
+                const dateCandidate = entry.date || entry.releaseDate || fallbackDate || null;
+                const versionCandidate = entry.version || null;
+                const authorCandidate = entry.author || null;
+
+                return {
+                    id: entry.id || `release-${index}`,
+                    title: titleCandidate,
+                    version: versionCandidate,
+                    date: dateCandidate,
+                    author: authorCandidate,
+                    highlights: normalizedHighlights,
+                    summary
+                };
+            })
+            .filter(Boolean);
+    }
+
+    function extractPendingChangeEntries() {
+        const pending = state.publishState?.pendingChanges;
+        if (!pending) return [];
+        const source = Array.isArray(pending) ? pending : [pending];
+        return source
+            .map((entry, index) => {
+                if (!entry && typeof entry !== 'number') return null;
+                if (typeof entry === 'string') {
+                    const highlights = parseSummaryHighlights(entry);
+                    return {
+                        id: `pending-${index}`,
+                        title: 'Alteração pendente',
+                        version: null,
+                        date: null,
+                        author: null,
+                        highlights,
+                        summary: !highlights.length ? entry.trim() : ''
+                    };
+                }
+
+                const details =
+                    (typeof entry.description === 'string' && entry.description.trim()) ||
+                    (typeof entry.summary === 'string' && entry.summary.trim()) ||
+                    (typeof entry.details === 'string' && entry.details.trim()) ||
+                    (typeof entry.text === 'string' && entry.text.trim()) ||
+                    '';
+
+                const highlightCandidates = Array.isArray(entry.items)
+                    ? entry.items
+                          .map(item => (item !== null && item !== undefined ? String(item).trim() : ''))
+                          .filter(Boolean)
+                    : parseSummaryHighlights(details);
+
+                const summary = highlightCandidates.length ? '' : details;
+                const title =
+                    entry.title ||
+                    entry.name ||
+                    entry.group ||
+                    (entry.version ? `Versão ${entry.version}` : null) ||
+                    'Alteração pendente';
+                const date = entry.date || entry.timestamp || entry.updatedAt || null;
+                const version = entry.version || entry.tag || null;
+                const author = entry.author || entry.user || entry.owner || null;
+
+                return {
+                    id: entry.id || entry.key || `pending-${index}`,
+                    title,
+                    version,
+                    date,
+                    author,
+                    highlights: highlightCandidates,
+                    summary
+                };
+            })
+            .filter(Boolean);
+    }
+
+    function buildChangeEntries() {
+        const releaseEntries = normalizeReleaseEntries();
+        const pendingEntries = extractPendingChangeEntries();
+        return [...releaseEntries, ...pendingEntries];
+    }
+
+    function buildUpdateSummary(audience = 'user') {
+        const sections = [];
+        const updateStatus = state.updateStatus || {};
+        const publishState = state.publishState || {};
+        const versionItems = [];
+        const localVersion = state.localVersion || publishState.localVersion || updateStatus.localVersion;
+        const availableVersion =
+            publishState.availableVersion || updateStatus.latestVersion || state.availableVersion;
+        const publishedVersion =
+            publishState.latestPublishedVersion || updateStatus.latestPublishedVersion || state.latestPublishedVersion;
+
+        const addVersionItem = (label, value) => {
+            if (value === null || value === undefined || value === '') return;
+            versionItems.push({ label, value });
+        };
+
+        addVersionItem('Versão local', localVersion);
+        addVersionItem('Versão disponível', availableVersion);
+        addVersionItem('Última publicada', publishedVersion);
+        addVersionItem('Canal', updateStatus.channel);
+
+        if (versionItems.length) {
+            sections.push({ kind: 'definition', title: 'Versões monitoradas', items: versionItems });
+        }
+
+        const statusItems = [];
+        const statusLabel = translateLabel(STATUS_LABELS, updateStatus.status, null);
+        if (statusLabel) {
+            statusItems.push({ label: 'Estado', value: statusLabel });
+        }
+        if (updateStatus.statusMessage && updateStatus.statusMessage !== statusLabel) {
+            statusItems.push({ label: 'Mensagem', value: updateStatus.statusMessage });
+        }
+        const progressPercent = updateStatus.downloadProgress?.percent;
+        if (typeof progressPercent === 'number') {
+            statusItems.push({ label: 'Download', value: `${clampPercent(progressPercent)}%` });
+        }
+        const lastCheck = formatDateTime(updateStatus.lastCheckAt);
+        if (lastCheck) {
+            statusItems.push({ label: 'Última verificação', value: lastCheck });
+        }
+        if (statusItems.length) {
+            sections.push({ kind: 'definition', title: 'Status da atualização', items: statusItems });
+        }
+
+        if (audience === 'supAdmin') {
+            const publishItems = [];
+            const modeLabel = translateLabel(SUP_ADMIN_MODE_LABELS, state.supAdmin.mode, null);
+            if (modeLabel) {
+                publishItems.push({ label: 'Estado da publicação', value: modeLabel });
+            }
+            if (publishState.message) {
+                publishItems.push({ label: 'Mensagem recente', value: publishState.message });
+            }
+            if (state.supAdmin.lastError) {
+                publishItems.push({ label: 'Último erro', value: state.supAdmin.lastError });
+            }
+            publishItems.push({
+                label: 'Pendências para publicar',
+                value: computePublishAvailability() ? 'Sim' : 'Não'
+            });
+            const filtered = publishItems.filter(item => item.value);
+            if (filtered.length) {
+                sections.push({ kind: 'definition', title: 'Publicação', items: filtered });
+            }
+        } else {
+            const userItems = [];
+            const modeLabel = translateLabel(USER_MODE_LABELS, state.userControl.mode, null);
+            if (modeLabel) {
+                userItems.push({ label: 'Estado do assistente', value: modeLabel });
+            }
+            if (state.userControl.spinnerMessage && state.userControl.mode === 'updating') {
+                userItems.push({ label: 'Progresso', value: state.userControl.spinnerMessage });
+            }
+            if (state.userControl.lastError && state.userControl.mode === 'error') {
+                userItems.push({ label: 'Último erro', value: state.userControl.lastError });
+            }
+            if (state.userControl.pendingAction) {
+                userItems.push({ label: 'Ação pendente', value: 'Processando atualização' });
+            }
+            const filtered = userItems.filter(item => item.value);
+            if (filtered.length) {
+                sections.push({ kind: 'definition', title: 'Assistente de atualização', items: filtered });
+            }
+        }
+
+        const changeEntries = buildChangeEntries();
+        if (changeEntries.length) {
+            sections.push({ kind: 'changes', title: 'Resumo das alterações', items: changeEntries });
+        }
+
+        let emptyMessage;
+        if (audience === 'supAdmin') {
+            emptyMessage = computePublishAvailability()
+                ? 'Resumo em preparação. Aguarde enquanto coletamos as últimas alterações.'
+                : 'Nenhuma atualização pendente para publicação.';
+        } else if (state.userControl.mode === 'available' || updateStatus.status === 'update-available') {
+            emptyMessage = 'Resumo ainda não disponível para esta atualização.';
+        } else {
+            emptyMessage = 'Nenhuma atualização disponível no momento.';
+        }
+
+        return { sections, emptyMessage };
+    }
+
+    function renderSummary(container, summary) {
+        if (!container || !summary) return;
+        container.innerHTML = '';
+        const sections = Array.isArray(summary.sections) ? summary.sections : [];
+        let appended = false;
+
+        sections.forEach(section => {
+            if (!Array.isArray(section.items) || !section.items.length) return;
+            const sectionEl = document.createElement('section');
+            sectionEl.className = 'updates-summary__section';
+
+            const heading = document.createElement('h3');
+            heading.className = 'updates-summary__heading';
+            heading.textContent = section.title;
+            sectionEl.appendChild(heading);
+
+            let hasContent = false;
+
+            if (section.kind === 'definition') {
+                const dl = document.createElement('dl');
+                dl.className = 'updates-summary__definition';
+                section.items.forEach(item => {
+                    if (!item || item.value === undefined || item.value === null || item.value === '') return;
+                    const dt = document.createElement('dt');
+                    dt.textContent = item.label;
+                    const dd = document.createElement('dd');
+                    dd.textContent = item.value;
+                    dl.appendChild(dt);
+                    dl.appendChild(dd);
+                });
+                if (dl.childElementCount > 0) {
+                    sectionEl.appendChild(dl);
+                    hasContent = true;
+                }
+            } else if (section.kind === 'list') {
+                const ul = document.createElement('ul');
+                ul.className = 'updates-summary__list';
+                section.items.forEach(text => {
+                    if (!text) return;
+                    const li = document.createElement('li');
+                    li.textContent = text;
+                    ul.appendChild(li);
+                });
+                if (ul.childElementCount > 0) {
+                    sectionEl.appendChild(ul);
+                    hasContent = true;
+                }
+            } else if (section.kind === 'changes') {
+                const list = document.createElement('ul');
+                list.className = 'updates-summary__changes';
+                section.items.forEach(entry => {
+                    if (!entry) return;
+                    const li = document.createElement('li');
+                    li.className = 'updates-summary__change';
+
+                    const header = document.createElement('div');
+                    header.className = 'updates-summary__change-header';
+                    let headerHasContent = false;
+
+                    if (entry.title) {
+                        const titleEl = document.createElement('span');
+                        titleEl.className = 'updates-summary__change-title';
+                        titleEl.textContent = entry.title;
+                        header.appendChild(titleEl);
+                        headerHasContent = true;
+                    }
+
+                    const metaParts = [];
+                    if (entry.version) {
+                        metaParts.push(`v${entry.version}`);
+                    }
+                    const formattedDate = formatDateTime(entry.date);
+                    if (formattedDate) {
+                        metaParts.push(formattedDate);
+                    }
+                    if (entry.author) {
+                        metaParts.push(entry.author);
+                    }
+                    if (metaParts.length) {
+                        const metaEl = document.createElement('span');
+                        metaEl.className = 'updates-summary__change-meta';
+                        metaEl.textContent = metaParts.join(' • ');
+                        header.appendChild(metaEl);
+                        headerHasContent = true;
+                    }
+
+                    if (headerHasContent) {
+                        li.appendChild(header);
+                    }
+
+                    const highlights = Array.isArray(entry.highlights) ? entry.highlights.filter(Boolean) : [];
+                    if (highlights.length) {
+                        const bulletList = document.createElement('ul');
+                        bulletList.className = 'updates-summary__change-points';
+                        highlights.forEach(text => {
+                            if (!text) return;
+                            const bullet = document.createElement('li');
+                            bullet.textContent = text;
+                            bulletList.appendChild(bullet);
+                        });
+                        if (bulletList.childElementCount > 0) {
+                            li.appendChild(bulletList);
+                        }
+                    }
+
+                    if (!highlights.length && entry.summary) {
+                        const note = document.createElement('p');
+                        note.className = 'updates-summary__change-note';
+                        note.textContent = entry.summary;
+                        li.appendChild(note);
+                    }
+
+                    if (!li.childElementCount) {
+                        const fallback = document.createElement('p');
+                        fallback.className = 'updates-summary__change-note';
+                        fallback.textContent = 'Alteração registrada.';
+                        li.appendChild(fallback);
+                    }
+
+                    list.appendChild(li);
+                });
+                if (list.childElementCount > 0) {
+                    sectionEl.appendChild(list);
+                    hasContent = true;
+                }
+            }
+
+            if (hasContent) {
+                container.appendChild(sectionEl);
+                appended = true;
+            }
+        });
+
+        if (!appended) {
+            const empty = document.createElement('p');
+            empty.className = 'updates-summary__empty';
+            empty.textContent = summary.emptyMessage || 'Nenhum resumo disponível no momento.';
+            container.appendChild(empty);
+        }
+    }
+
+    function renderSupAdminSummary() {
+        const container = elements.supAdmin?.summary;
+        if (!container) return;
+        const summary = buildUpdateSummary('supAdmin');
+        renderSummary(container, summary);
+    }
+
+    function renderUserSummary() {
+        const container = elements.user?.summary;
+        if (!container) return;
+        const summary = buildUpdateSummary('user');
+        renderSummary(container, summary);
+    }
+
+    function refreshUpdateSummaries() {
+        renderSupAdminSummary();
+        renderUserSummary();
+    }
+
     function clearSupAdminSuccessTimer() {
         if (state.supAdmin.successTimer) {
             clearTimeout(state.supAdmin.successTimer);
@@ -328,6 +781,7 @@ const AppUpdates = (() => {
             }
         }
 
+        renderSupAdminSummary();
         updateContainerVisibility();
     }
 
@@ -587,6 +1041,7 @@ const AppUpdates = (() => {
             user.action.disabled = mode !== 'available';
         }
 
+        renderUserSummary();
         updateContainerVisibility();
     }
 
@@ -650,6 +1105,9 @@ const AppUpdates = (() => {
     }
 
     async function handleUserTriggerClick(event) {
+        if (event && typeof event.button === 'number' && event.button !== 0) {
+            return;
+        }
         event.preventDefault();
         if (state.actionBusy) return;
         const mode = state.userControl.mode;
@@ -778,10 +1236,40 @@ const AppUpdates = (() => {
         setUserMode('available', { panelOpen: false });
     }
 
+    function handleUserHoverExit() {
+        if (!state.userControl.panelOpen) return;
+        if (state.userControl.mode !== 'available') return;
+        setUserMode('available', { panelOpen: false });
+    }
+
+    function handleUserFocusExit(event) {
+        if (!state.userControl.panelOpen) return;
+        if (!elements.user?.container) return;
+        const related = event.relatedTarget;
+        if (related && elements.user.container.contains(related)) return;
+        if (state.userControl.mode !== 'available') return;
+        setUserMode('available', { panelOpen: false });
+    }
+
     function handleUserPanelKeydown(event) {
         if (event.key !== 'Escape') return;
         if (!state.userControl.panelOpen) return;
         setUserMode('available', { panelOpen: false });
+    }
+
+    function handleSupAdminHoverExit() {
+        if (!state.supAdmin.panelOpen) return;
+        if (state.supAdmin.mode !== 'available') return;
+        setSupAdminMode('available', { panelOpen: false });
+    }
+
+    function handleSupAdminFocusExit(event) {
+        if (!state.supAdmin.panelOpen) return;
+        if (!elements.supAdmin?.container) return;
+        const related = event.relatedTarget;
+        if (related && elements.supAdmin.container.contains(related)) return;
+        if (state.supAdmin.mode !== 'available') return;
+        setSupAdminMode('available', { panelOpen: false });
     }
 
     function setSupAdminMode(mode, options = {}) {
@@ -851,7 +1339,10 @@ const AppUpdates = (() => {
         }
     }
 
-    async function handleSupAdminTriggerClick() {
+    async function handleSupAdminTriggerClick(event) {
+        if (event && typeof event.button === 'number' && event.button !== 0) {
+            return;
+        }
         if (state.supAdmin.mode === 'publishing') return;
         await runAutomaticCheck({ silent: true });
         const hasPending = computePublishAvailability();
@@ -1115,6 +1606,7 @@ const AppUpdates = (() => {
         applySupAdminState();
         updateUserControlFromStatus();
         applyUserState();
+        refreshUpdateSummaries();
         persistState();
     }
 
@@ -1135,6 +1627,7 @@ const AppUpdates = (() => {
             handleUpdateToasts(previousState, newStatus);
         }
         state.lastStatus = newStatus?.status || null;
+        refreshUpdateSummaries();
         persistState();
     }
 
@@ -1166,6 +1659,7 @@ const AppUpdates = (() => {
                 window.showToast(message, type);
             }
         }
+        refreshUpdateSummaries();
         persistState();
     }
 
@@ -1195,6 +1689,11 @@ const AppUpdates = (() => {
             elements.user.action.addEventListener('click', handleUserUpdateAction);
         }
 
+        if (elements.user?.container) {
+            elements.user.container.addEventListener('mouseleave', handleUserHoverExit);
+            elements.user.container.addEventListener('focusout', handleUserFocusExit);
+        }
+
         document.addEventListener('click', handleUserPanelDismiss);
         document.addEventListener('keydown', handleUserPanelKeydown);
 
@@ -1204,6 +1703,11 @@ const AppUpdates = (() => {
 
         if (elements.supAdmin?.publish) {
             elements.supAdmin.publish.addEventListener('click', handleSupAdminPublish);
+        }
+
+        if (elements.supAdmin?.container) {
+            elements.supAdmin.container.addEventListener('mouseleave', handleSupAdminHoverExit);
+            elements.supAdmin.container.addEventListener('focusout', handleSupAdminFocusExit);
         }
 
         if (window.electronAPI?.onUpdateStatus) {
