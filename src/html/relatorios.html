@@ -96,9 +96,9 @@
             <h2 class="section-title">Filtros</h2>
 
             <!-- Common Filters -->
-            <div class="filter-bar flex flex-col xl:flex-row xl:flex-wrap gap-6 mb-6">
-                <div class="flex-1 min-w-[220px]">
-                    <label class="block text-sm font-medium text-white mb-2">Período</label>
+            <div class="filter-bar relatorios-filter-bar mb-4">
+                <div class="relatorios-filter-field">
+                    <label class="relatorios-filter-label text-white">Período</label>
                     <select class="input-glass text-white rounded-md px-4 py-3 w-full">
                         <option value="">Selecione...</option>
                         <option value="7">Últimos 7 dias</option>
@@ -108,13 +108,13 @@
                     </select>
                 </div>
 
-                <div class="flex-1 min-w-[220px]">
-                    <label class="block text-sm font-medium text-white mb-2">Status</label>
+                <div class="relatorios-filter-field">
+                    <label class="relatorios-filter-label text-white">Status</label>
                     <input type="text" class="input-glass text-white rounded-md px-4 py-3 w-full" placeholder="Status do relatório">
                 </div>
 
-                <div class="flex-1 min-w-[220px]">
-                    <label class="block text-sm font-medium text-white mb-2">Responsável</label>
+                <div class="relatorios-filter-field">
+                    <label class="relatorios-filter-label text-white">Responsável</label>
                     <select class="input-glass text-white rounded-md px-4 py-3 w-full">
                         <option value="">Todos</option>
                         <option value="joao">João Silva</option>
@@ -123,18 +123,27 @@
                     </select>
                 </div>
 
-                <div class="flex-1 min-w-[220px]">
-                    <label class="block text-sm font-medium text-white mb-2">Buscar</label>
+                <div class="relatorios-filter-field">
+                    <label class="relatorios-filter-label text-white">Buscar</label>
                     <input type="text" class="input-glass text-white rounded-md px-4 py-3 w-full" placeholder="Palavra-chave ou termo">
+                </div>
+
+                <div class="relatorios-filter-actions">
+                    <button class="btn-primary px-5 py-2.5 rounded-lg text-sm font-medium">
+                        Aplicar Filtros
+                    </button>
+                    <button class="btn-secondary px-5 py-2.5 rounded-lg text-sm font-medium">
+                        Limpar
+                    </button>
                 </div>
             </div>
 
             <!-- Tab-specific Filters -->
             <div id="relatoriosSpecificFilters">
                 <div class="relatorios-tab-content" data-relatorios-tab-content="estoque">
-                    <div class="filter-bar flex flex-col xl:flex-row xl:flex-wrap gap-6 mb-6">
-                        <div class="flex-1 min-w-[220px]">
-                            <label class="block text-sm font-medium text-white mb-2">Categoria</label>
+                    <div class="filter-bar relatorios-filter-bar">
+                        <div class="relatorios-filter-field">
+                            <label class="relatorios-filter-label text-white">Categoria</label>
                             <select class="input-glass text-white rounded-md px-4 py-3 w-full">
                                 <option value="">Todas</option>
                                 <option value="madeira">Madeira</option>
@@ -143,8 +152,8 @@
                             </select>
                         </div>
 
-                        <div class="flex-1 min-w-[220px]">
-                            <label class="block text-sm font-medium text-white mb-2">Unidade</label>
+                        <div class="relatorios-filter-field">
+                            <label class="relatorios-filter-label text-white">Unidade</label>
                             <select class="input-glass text-white rounded-md px-4 py-3 w-full">
                                 <option value="">Todas</option>
                                 <option value="un">Unidade</option>
@@ -153,8 +162,8 @@
                             </select>
                         </div>
 
-                        <div class="flex-1 min-w-[220px]">
-                            <label class="block text-sm font-medium text-white mb-2">Processo</label>
+                        <div class="relatorios-filter-field">
+                            <label class="relatorios-filter-label text-white">Processo</label>
                             <select class="input-glass text-white rounded-md px-4 py-3 w-full">
                                 <option value="">Todos</option>
                                 <option value="corte">Corte</option>
@@ -163,13 +172,13 @@
                             </select>
                         </div>
 
-                        <div class="flex flex-wrap items-center gap-4">
-                            <label class="flex items-center gap-2 text-sm text-white">
-                                <input type="checkbox" class="h-4 w-4 rounded border-white/30 bg-transparent">
+                        <div class="relatorios-filter-checkbox-group">
+                            <label class="relatorios-filter-checkbox-option text-white">
+                                <input type="checkbox" class="relatorios-filter-checkbox rounded border-white/30 bg-transparent">
                                 <span>Apenas infinitos</span>
                             </label>
-                            <label class="flex items-center gap-2 text-sm text-white">
-                                <input type="checkbox" class="h-4 w-4 rounded border-white/30 bg-transparent">
+                            <label class="relatorios-filter-checkbox-option text-white">
+                                <input type="checkbox" class="relatorios-filter-checkbox rounded border-white/30 bg-transparent">
                                 <span>Abaixo do mínimo</span>
                             </label>
                         </div>
@@ -177,9 +186,9 @@
                 </div>
 
                 <div class="relatorios-tab-content hidden" data-relatorios-tab-content="producao">
-                    <div class="filter-bar flex flex-col xl:flex-row xl:flex-wrap gap-6 mb-6">
-                        <div class="flex-1 min-w-[220px]">
-                            <label class="block text-sm font-medium text-white mb-2">Categoria</label>
+                    <div class="filter-bar relatorios-filter-bar">
+                        <div class="relatorios-filter-field">
+                            <label class="relatorios-filter-label text-white">Categoria</label>
                             <select class="input-glass text-white rounded-md px-4 py-3 w-full">
                                 <option value="">Todas</option>
                                 <option value="moveis">Móveis</option>
@@ -187,8 +196,8 @@
                             </select>
                         </div>
 
-                        <div class="flex-1 min-w-[220px]">
-                            <label class="block text-sm font-medium text-white mb-2">Status</label>
+                        <div class="relatorios-filter-field">
+                            <label class="relatorios-filter-label text-white">Status</label>
                             <select class="input-glass text-white rounded-md px-4 py-3 w-full">
                                 <option value="">Todas</option>
                                 <option value="ativo">Ativo</option>
@@ -196,8 +205,8 @@
                             </select>
                         </div>
 
-                        <div class="flex-1 min-w-[220px]">
-                            <label class="block text-sm font-medium text-white mb-2">Etapa</label>
+                        <div class="relatorios-filter-field">
+                            <label class="relatorios-filter-label text-white">Etapa</label>
                             <select class="input-glass text-white rounded-md px-4 py-3 w-full">
                                 <option value="">Todas</option>
                                 <option value="projeto">Projeto</option>
@@ -206,28 +215,18 @@
                             </select>
                         </div>
 
-                        <div class="flex-1 min-w-[220px]">
-                            <label class="block text-sm font-medium text-white mb-2">Markup mínimo (%)</label>
+                        <div class="relatorios-filter-field">
+                            <label class="relatorios-filter-label text-white">Markup mínimo (%)</label>
                             <input type="number" class="input-glass text-white rounded-md px-4 py-3 w-full" placeholder="Valor mínimo">
                         </div>
                     </div>
                 </div>
             </div>
 
-            <!-- Filter Actions -->
-            <div class="flex flex-wrap items-center gap-3 animate-fade-in-up">
-                <button class="btn-primary px-6 py-2 rounded-lg font-medium">
-                    Aplicar Filtros
-                </button>
-                <button class="btn-secondary px-6 py-2 rounded-lg font-medium">
-                    Limpar
-                </button>
-
-                <div class="flex flex-wrap gap-2 ml-auto">
-                    <span class="badge-success px-3 py-1 rounded-full text-xs font-medium">Ativo</span>
-                    <span class="badge-warning px-3 py-1 rounded-full text-xs font-medium">Pendente</span>
-                    <span class="badge-neutral px-3 py-1 rounded-full text-xs font-medium">Em Análise</span>
-                </div>
+            <div class="relatorios-filter-status animate-fade-in-up">
+                <span class="badge-success px-3 py-1 rounded-full text-xs font-medium">Ativo</span>
+                <span class="badge-warning px-3 py-1 rounded-full text-xs font-medium">Pendente</span>
+                <span class="badge-neutral px-3 py-1 rounded-full text-xs font-medium">Em Análise</span>
             </div>
         </section>
 

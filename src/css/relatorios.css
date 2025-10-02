@@ -151,6 +151,90 @@ body {
     background: rgba(163, 148, 167, 0.2);
     color: var(--color-violet);
 }
+
+.relatorios-filter-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    align-items: flex-end;
+}
+
+.relatorios-filter-field {
+    flex: 1 1 220px;
+    min-width: 190px;
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+}
+
+.relatorios-filter-label {
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: #f3f4f6;
+}
+
+.relatorios-filter-actions {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    flex-shrink: 0;
+    margin-left: auto;
+}
+
+.relatorios-filter-actions .btn-primary,
+.relatorios-filter-actions .btn-secondary {
+    padding: 0.6rem 1rem;
+    font-size: 0.85rem;
+    border-radius: 0.65rem;
+}
+
+.relatorios-filter-checkbox-group {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.25rem 0;
+}
+
+.relatorios-filter-checkbox-option {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    font-size: 0.85rem;
+}
+
+.relatorios-filter-checkbox {
+    width: 0.9rem;
+    height: 0.9rem;
+    accent-color: var(--color-primary);
+}
+
+.relatorios-filter-status {
+    width: 100%;
+    margin-top: 0.75rem;
+    display: flex;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+@media (max-width: 1023px) {
+    .relatorios-filter-bar {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .relatorios-filter-actions {
+        width: 100%;
+        justify-content: flex-end;
+        margin-left: 0;
+    }
+
+    .relatorios-filter-status {
+        justify-content: flex-start;
+    }
+}
+
 .section-title {
     font-size: 1.1rem;
     font-weight: 600;
