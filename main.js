@@ -116,9 +116,14 @@ let lastRecordedAction = null;
 let isPersistingExit = false;
 let closingDashboardWindow = false;
 let quittingApp = false;
+const localAppVersion = app.getVersion();
+const initialPublishing = publisher.isPublishing();
+
 let publishState = {
-  publishing: false,
-  latestPublishedVersion: app.getVersion()
+  publishing: initialPublishing,
+  canPublish: !initialPublishing,
+  latestPublishedVersion: localAppVersion,
+  localVersion: localAppVersion
 };
 
 function getPublishLogPath() {
@@ -140,21 +145,47 @@ function recordPublishAudit(event, extra = {}) {
   }
 }
 
-function broadcastPublishEvent(channel, payload) {
+function broadcastPublishEvent(channel, payload = {}) {
+  const currentState = { ...publishState };
+  const finalPayload = { ...payload, ...currentState, publishState: currentState };
   BrowserWindow.getAllWindows().forEach(win => {
     if (!win.isDestroyed()) {
-      win.webContents.send(channel, payload);
+      win.webContents.send(channel, finalPayload);
     }
   });
 }
 
 function updatePublishState(partial = {}) {
-  if (Object.prototype.hasOwnProperty.call(partial, 'publishing')) {
-    publishState.publishing = partial.publishing;
+  const hasOwn = key => Object.prototype.hasOwnProperty.call(partial, key);
+  const pipelineActive = publisher.isPublishing();
+
+  if (hasOwn('publishing')) {
+    publishState.publishing = Boolean(partial.publishing);
   }
-  if (Object.prototype.hasOwnProperty.call(partial, 'latestPublishedVersion')) {
+
+  if (hasOwn('latestPublishedVersion')) {
     publishState.latestPublishedVersion = partial.latestPublishedVersion;
   }
+
+  if (hasOwn('localVersion')) {
+    publishState.localVersion = partial.localVersion;
+  } else if (!publishState.localVersion) {
+    publishState.localVersion = app.getVersion();
+  }
+
+  let nextCanPublish;
+  if (hasOwn('canPublish')) {
+    nextCanPublish = Boolean(partial.canPublish);
+  } else if (hasOwn('publishing')) {
+    nextCanPublish = !publishState.publishing && !pipelineActive;
+  }
+
+  if (nextCanPublish !== undefined) {
+    publishState.canPublish = nextCanPublish;
+  } else {
+    publishState.canPublish = !(publishState.publishing || pipelineActive);
+  }
+
   return { ...publishState };
 }
 
@@ -1216,7 +1247,7 @@ ipcMain.handle('publish-update', async () => {
     };
   }
 
-  const startState = updatePublishState({ publishing: true });
+  const startState = updatePublishState({ publishing: true, canPublish: false });
   const startMessage = 'Iniciando pipeline de publicação...';
   broadcastPublishEvent('publish-progress', {
     ...startState,
@@ -1239,13 +1270,15 @@ ipcMain.handle('publish-update', async () => {
     });
     const successState = updatePublishState({
       publishing: false,
-      latestPublishedVersion: app.getVersion()
+      canPublish: true,
+      latestPublishedVersion: app.getVersion(),
+      localVersion: app.getVersion()
     });
     broadcastPublishEvent('publish-done', { ...successState });
     recordPublishAudit('publish-success', { version: successState.latestPublishedVersion });
     return { success: true, ...successState };
   } catch (err) {
-    const errorState = updatePublishState({ publishing: false });
+    const errorState = updatePublishState({ publishing: false, canPublish: true });
     const message = err?.message || 'Falha ao publicar atualização.';
     broadcastPublishEvent('publish-error', {
       ...errorState,
@@ -1261,7 +1294,14 @@ ipcMain.handle('get-update-status', async (_event, options = {}) => {
   if (refresh) {
     await updateService.checkForUpdates({ silent: true });
   }
-  return updateService.getUpdateStatus();
+  const status = updateService.getUpdateStatus();
+  return {
+    ...status,
+    canPublish: publishState.canPublish,
+    latestPublishedVersion: publishState.latestPublishedVersion,
+    localVersion: publishState.localVersion,
+    publishState: { ...publishState }
+  };
 });
 
 ipcMain.handle('check-for-updates', async () => {

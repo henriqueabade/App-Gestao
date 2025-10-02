@@ -898,7 +898,8 @@ const AppUpdates = (() => {
                     } else if (window.showToast) {
                         window.showToast(message, 'error');
                     }
-                    setSupAdminMode('available', { panelOpen: false });
+                    const hasPending = computePublishAvailability();
+                    setSupAdminMode(hasPending ? 'available' : 'idle', { panelOpen: false });
                 }
             }
         } catch (err) {
@@ -909,7 +910,8 @@ const AppUpdates = (() => {
             } else if (window.showToast) {
                 window.showToast(message, 'error');
             }
-            setSupAdminMode('available', { panelOpen: false });
+            const hasPending = computePublishAvailability();
+            setSupAdminMode(hasPending ? 'available' : 'idle', { panelOpen: false });
         }
     }
 
@@ -1138,30 +1140,39 @@ const AppUpdates = (() => {
 
     function setPublishState(newState, options = {}) {
         if (!newState) return;
-        state.publishState = { ...(state.publishState || {}), ...newState };
-        if (newState.latestPublishedVersion) state.latestPublishedVersion = newState.latestPublishedVersion;
-        if (newState.localVersion) state.localVersion = newState.localVersion;
-        if (newState.availableVersion) state.availableVersion = newState.availableVersion;
+        const { publishState: nestedState, ...rest } = newState;
+        const mergedState = { ...(state.publishState || {}), ...rest };
+        if (nestedState && typeof nestedState === 'object') {
+            Object.assign(mergedState, nestedState);
+        }
+        state.publishState = mergedState;
+        if (mergedState.latestPublishedVersion) state.latestPublishedVersion = mergedState.latestPublishedVersion;
+        if (mergedState.localVersion) state.localVersion = mergedState.localVersion;
+        if (mergedState.availableVersion) state.availableVersion = mergedState.availableVersion;
         applySupAdminState();
         updateUserControlFromStatus();
-        if (newState.publishing === true) {
-            setSupAdminMode('publishing', { panelOpen: false });
-        } else if (newState.publishing === false) {
-            const hasPending = computePublishAvailability();
-            setSupAdminMode(hasPending ? 'available' : 'success', { panelOpen: false });
-        } else {
-            applySupAdminState();
+        if (!options.skipSupAdminMode) {
+            if (mergedState.publishing === true) {
+                setSupAdminMode('publishing', { panelOpen: false });
+            } else if (mergedState.publishing === false) {
+                const hasPending = computePublishAvailability();
+                setSupAdminMode(hasPending ? 'available' : 'success', { panelOpen: false });
+            }
         }
-        if (!options.silent && newState.message && window.showToast) {
-            const type = newState.publishing === false ? 'success' : 'info';
-            window.showToast(newState.message, type);
+        if (!options.silent) {
+            const message = rest.message ?? nestedState?.message;
+            if (message && window.showToast) {
+                const type = mergedState.publishing === false ? 'success' : 'info';
+                window.showToast(message, type);
+            }
         }
         persistState();
     }
 
     function handlePublishError(payload) {
         publishStartToastShown = false;
-        state.publishState = { ...(state.publishState || {}), publishing: false };
+        const enriched = { ...(payload || {}), publishing: false };
+        setPublishState(enriched, { silent: true, skipSupAdminMode: true });
         setSupAdminMode('error', { panelOpen: false, lastError: payload?.message });
         const errorMessage = payload?.message || 'Falha ao publicar atualização.';
         if (typeof window.alert === 'function') {
@@ -1169,8 +1180,8 @@ const AppUpdates = (() => {
         } else if (window.showToast) {
             window.showToast(errorMessage, 'error');
         }
-        setSupAdminMode('available', { panelOpen: false });
-        persistState();
+        const hasPending = computePublishAvailability();
+        setSupAdminMode(hasPending ? 'available' : 'idle', { panelOpen: false });
     }
 
     function attachEvents() {
