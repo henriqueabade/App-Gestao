@@ -8,14 +8,28 @@ function initRelatoriosModule() {
 
     applyEntranceAnimations(container);
 
-    setupCategoryTabs(container);
+    const loadTableForTab = setupReportTables(container);
+
+    setupCategoryTabs(container, {
+        onTabChange: tab => {
+            if (loadTableForTab) {
+                loadTableForTab(tab);
+            }
+        }
+    });
     setupResultTabs(container);
     setupDropdowns(container);
     setupModals(container);
     setupShare(container);
+
+    const initialTab = container.querySelector('[data-relatorios-tab].tab-active');
+    if (initialTab && loadTableForTab) {
+        loadTableForTab(initialTab.dataset.relatoriosTab);
+    }
 }
 
-function setupCategoryTabs(root) {
+function setupCategoryTabs(root, options = {}) {
+    const { onTabChange } = options;
     const tabButtons = Array.from(root.querySelectorAll('[data-relatorios-tab]'));
     if (!tabButtons.length) return;
 
@@ -44,8 +58,56 @@ function setupCategoryTabs(root) {
             kpiSections.forEach(section => {
                 section.classList.toggle('hidden', section.dataset.relatoriosKpi !== target);
             });
+
+            if (typeof onTabChange === 'function') {
+                onTabChange(target, button);
+            }
         });
     });
+}
+
+function setupReportTables(root) {
+    const container = root.querySelector('#relatoriosTableContainer');
+    if (!container) return null;
+
+    const templates = new Map();
+    root.querySelectorAll('template[data-relatorios-template]').forEach(template => {
+        const key = template.dataset.relatoriosTemplate;
+        if (key) {
+            templates.set(key, template);
+        }
+    });
+
+    const fallback = root.querySelector('#relatoriosTableFallback');
+
+    const loadTable = key => {
+        if (!key || container.dataset.currentTab === key) return;
+
+        container.dataset.currentTab = key;
+        container.innerHTML = '';
+
+        const template = templates.get(key);
+
+        if (template) {
+            const fragment = template.content.cloneNode(true);
+            container.appendChild(fragment);
+            requestAnimationFrame(() => {
+                const wrapper = container.querySelector('.relatorios-table-wrapper');
+                if (wrapper) {
+                    wrapper.classList.add('relatorios-table-enter');
+                    wrapper.addEventListener('animationend', () => {
+                        wrapper.classList.remove('relatorios-table-enter');
+                    }, { once: true });
+                }
+            });
+        } else if (fallback) {
+            container.appendChild(fallback.content.cloneNode(true));
+        } else {
+            container.innerHTML = '<p class="text-sm text-white/70">Tabela não disponível para esta categoria.</p>';
+        }
+    };
+
+    return loadTable;
 }
 
 function setupResultTabs(root) {
