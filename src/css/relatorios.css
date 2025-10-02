@@ -219,6 +219,58 @@ body {
     accent-color: var(--color-primary);
 }
 
+.relatorios-filter-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.relatorios-filter-tag {
+    padding: 0.35rem 0.85rem;
+    border-radius: 999px;
+    font-size: 0.8rem;
+    font-weight: 500;
+    color: #f3f4f6;
+    background: rgba(94, 234, 212, 0.15);
+    border: 1px solid rgba(94, 234, 212, 0.3);
+    transition: all 0.2s ease;
+}
+
+.relatorios-filter-tag:hover,
+.relatorios-filter-tag:focus {
+    background: rgba(94, 234, 212, 0.3);
+    border-color: rgba(94, 234, 212, 0.45);
+}
+
+.relatorios-filter-tag:focus {
+    outline: 2px solid rgba(94, 234, 212, 0.45);
+    outline-offset: 2px;
+}
+
+.relatorios-filter-hint {
+    font-size: 0.75rem;
+    color: rgba(255, 255, 255, 0.55);
+}
+
+.relatorios-filter-slider {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.relatorios-slider {
+    flex: 1;
+    width: 100%;
+    accent-color: var(--color-primary);
+}
+
+.relatorios-slider-value {
+    font-size: 0.85rem;
+    color: rgba(255, 255, 255, 0.7);
+    min-width: 3rem;
+    text-align: center;
+}
+
 .relatorios-filter-status {
     width: 100%;
     margin-top: 0.75rem;
@@ -242,6 +294,10 @@ body {
 
     .relatorios-filter-status {
         justify-content: flex-start;
+    }
+
+    .relatorios-filter-slider {
+        align-items: stretch;
     }
 }
 
