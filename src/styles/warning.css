@@ -89,10 +89,32 @@
 .warning-button:hover {
   filter: brightness(1.1);
 }
+.warning-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
 .warning-button.pulse {
   animation: pulse 1.5s infinite;
 }
 @keyframes pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.5; }
+}
+
+.warning-input {
+  width: 100%;
+  border-radius: 0.5rem;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(0, 0, 0, 0.25);
+  color: #f5f5f5;
+  padding: 0.6rem 0.75rem;
+  font-size: 0.875rem;
+  font-family: 'Inter', sans-serif;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.warning-input:focus {
+  outline: none;
+  border-color: rgba(182, 160, 62, 0.8);
+  box-shadow: 0 0 0 1px rgba(182, 160, 62, 0.6);
 }

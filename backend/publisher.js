@@ -34,15 +34,16 @@ async function runPublishPipeline(options = {}) {
     throw new Error('Já existe uma publicação em andamento.');
   }
 
-  const { user, onProgress } = options;
+  const { user, onProgress, version } = options;
   const requester = user ? `${user.nome || user.email || user.id || 'usuário desconhecido'}` : 'usuário desconhecido';
-  appendLog(`Publicação iniciada por ${requester}`);
+  const versionSuffix = version ? ` (versão ${version})` : '';
+  appendLog(`Publicação iniciada por ${requester}${versionSuffix}`);
 
   return new Promise((resolve, reject) => {
     try {
       const child = spawn('npx', ['electron-builder', '--publish=always'], {
         cwd: projectRoot,
-        env: process.env,
+        env: { ...process.env, TARGET_VERSION: version || process.env.TARGET_VERSION },
         stdio: ['ignore', 'pipe', 'pipe']
       });
 

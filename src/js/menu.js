@@ -218,6 +218,9 @@ const AppUpdates = (() => {
         error: 'Erro na publicação'
     };
 
+    const VERSION_INPUT_PATTERN = /^\d+\.\d+\.\d+(?:[-.][0-9A-Za-z]+)*$/;
+    const VERSION_INPUT_PLACEHOLDER = 'Ex.: 1.2.0';
+
     const USER_MODE_LABELS = {
         idle: 'Aguardando verificação',
         checking: 'Verificando atualizações',
@@ -906,6 +909,156 @@ const AppUpdates = (() => {
         });
     }
 
+    function promptForVersionNumber({ currentLocal, latestPublished } = {}) {
+        return new Promise(resolve => {
+            const overlay = document.createElement('div');
+            overlay.className = 'warning-overlay';
+
+            const modal = document.createElement('div');
+            modal.className = 'warning-modal';
+            modal.setAttribute('role', 'dialog');
+            modal.setAttribute('aria-modal', 'true');
+
+            const titleId = `versionPromptTitle-${Date.now()}`;
+            modal.setAttribute('aria-labelledby', titleId);
+
+            const iconWrap = document.createElement('div');
+            iconWrap.className = 'warning-icon';
+
+            const circle = document.createElement('div');
+            circle.className = 'warning-icon-circle';
+            const icon = document.createElement('i');
+            icon.classList.add('fas', 'fa-circle-question');
+            circle.appendChild(icon);
+            iconWrap.appendChild(circle);
+
+            const titleEl = document.createElement('h2');
+            titleEl.id = titleId;
+            titleEl.className = 'warning-title text-lg';
+            titleEl.textContent = 'Definir nova versão';
+
+            const messageEl = document.createElement('p');
+            messageEl.className = 'warning-text mt-3';
+            messageEl.textContent = 'Informe o número da versão que será publicada.';
+
+            const contextEl = document.createElement('p');
+            contextEl.className = 'warning-text-small mt-3';
+            contextEl.style.textAlign = 'left';
+            const safeLocal = currentLocal ? escapeHtml(currentLocal) : '—';
+            const safePublished = latestPublished ? escapeHtml(latestPublished) : '—';
+            contextEl.innerHTML = `Versão local atual: <strong>${safeLocal}</strong><br>Última publicada: <strong>${safePublished}</strong>`;
+
+            const input = document.createElement('input');
+            input.type = 'text';
+            input.inputMode = 'decimal';
+            input.autocomplete = 'off';
+            input.spellcheck = false;
+            input.maxLength = 32;
+            input.className = 'warning-input mt-4';
+            input.placeholder = VERSION_INPUT_PLACEHOLDER;
+            input.value = latestPublished || currentLocal || '';
+
+            const hintEl = document.createElement('p');
+            hintEl.className = 'warning-text-small mt-2';
+            hintEl.style.textAlign = 'left';
+            hintEl.textContent = 'Use três segmentos numéricos, como 1.2.0 ou 2.0.0-beta.';
+
+            const errorEl = document.createElement('p');
+            errorEl.className = 'warning-text-small mt-2 hidden';
+            errorEl.style.textAlign = 'left';
+            errorEl.style.color = '#fca5a5';
+            errorEl.textContent = 'Informe uma versão válida no formato 1.2.3.';
+
+            const actions = document.createElement('div');
+            actions.className = 'mt-6 space-y-3';
+
+            const cancelBtn = document.createElement('button');
+            cancelBtn.type = 'button';
+            cancelBtn.dataset.action = 'cancel';
+            cancelBtn.textContent = 'Cancelar';
+            cancelBtn.className = 'warning-button bg-white/10 text-white border border-white/20';
+
+            const confirmBtn = document.createElement('button');
+            confirmBtn.type = 'button';
+            confirmBtn.dataset.action = 'confirm';
+            confirmBtn.textContent = 'Publicar';
+            confirmBtn.className = 'warning-button';
+            confirmBtn.disabled = true;
+
+            actions.appendChild(cancelBtn);
+            actions.appendChild(confirmBtn);
+
+            modal.appendChild(iconWrap);
+            modal.appendChild(titleEl);
+            modal.appendChild(messageEl);
+            modal.appendChild(contextEl);
+            modal.appendChild(input);
+            modal.appendChild(hintEl);
+            modal.appendChild(errorEl);
+            modal.appendChild(actions);
+
+            overlay.appendChild(modal);
+            document.body.appendChild(overlay);
+
+            const normalize = value => value.trim();
+
+            const validate = () => {
+                const value = normalize(input.value);
+                const isValid = Boolean(value) && VERSION_INPUT_PATTERN.test(value);
+                confirmBtn.disabled = !isValid;
+                if (!isValid && value) {
+                    errorEl.classList.remove('hidden');
+                } else {
+                    errorEl.classList.add('hidden');
+                }
+                return isValid;
+            };
+
+            const cleanup = result => {
+                modal.classList.remove('show');
+                setTimeout(() => {
+                    if (overlay.isConnected) overlay.remove();
+                }, 160);
+                resolve(result);
+            };
+
+            cancelBtn.addEventListener('click', () => cleanup(null));
+            confirmBtn.addEventListener('click', () => {
+                if (confirmBtn.disabled) return;
+                cleanup(normalize(input.value));
+            });
+
+            overlay.addEventListener('click', event => {
+                if (event.target === overlay) {
+                    cleanup(null);
+                }
+            });
+
+            overlay.addEventListener('keydown', event => {
+                if (event.key === 'Escape') {
+                    cleanup(null);
+                }
+            });
+
+            input.addEventListener('input', validate);
+            input.addEventListener('keydown', event => {
+                if (event.key === 'Enter') {
+                    event.preventDefault();
+                    if (validate()) {
+                        cleanup(normalize(input.value));
+                    }
+                }
+            });
+
+            requestAnimationFrame(() => {
+                modal.classList.add('show');
+                input.focus();
+                input.select();
+                validate();
+            });
+        });
+    }
+
     function ensureUserSpinner(message) {
         const control = state.userControl;
         if (control.spinner && control.spinner.isConnected) {
@@ -1257,21 +1410,6 @@ const AppUpdates = (() => {
         setUserMode('available', { panelOpen: false });
     }
 
-    function handleSupAdminHoverExit() {
-        if (!state.supAdmin.panelOpen) return;
-        if (state.supAdmin.mode !== 'available') return;
-        setSupAdminMode('available', { panelOpen: false });
-    }
-
-    function handleSupAdminFocusExit(event) {
-        if (!state.supAdmin.panelOpen) return;
-        if (!elements.supAdmin?.container) return;
-        const related = event.relatedTarget;
-        if (related && elements.supAdmin.container.contains(related)) return;
-        if (state.supAdmin.mode !== 'available') return;
-        setSupAdminMode('available', { panelOpen: false });
-    }
-
     function setSupAdminMode(mode, options = {}) {
         const validModes = new Set(['idle', 'available', 'publishing', 'success', 'error']);
         const nextMode = validModes.has(mode) ? mode : 'idle';
@@ -1365,34 +1503,62 @@ const AppUpdates = (() => {
         if (!window.electronAPI?.publishUpdate) return;
         if (state.supAdmin.mode === 'publishing') return;
 
+        const currentLocal =
+            state.localVersion ||
+            state.publishState?.localVersion ||
+            state.updateStatus?.localVersion ||
+            null;
+        const latestPublished =
+            state.latestPublishedVersion ||
+            state.publishState?.latestPublishedVersion ||
+            state.updateStatus?.latestPublishedVersion ||
+            null;
+
+        const version = await promptForVersionNumber({ currentLocal, latestPublished });
+        if (!version) {
+            return;
+        }
+
         setSupAdminMode('publishing', { panelOpen: false });
         try {
-            const result = await window.electronAPI.publishUpdate();
+            const result = await window.electronAPI.publishUpdate({ version });
             if (result?.success) {
                 setPublishState(result, { silent: true });
                 setSupAdminMode('success', { panelOpen: false });
+                const publishedVersion = result?.latestPublishedVersion || version;
                 if (window.showToast) {
-                    window.showToast('Atualização publicada com sucesso!', 'success');
+                    window.showToast(`Versão ${publishedVersion} publicada com sucesso!`, 'success');
                 }
                 await runAutomaticCheck({ silent: true });
-            } else {
-                const message = result?.message || result?.error || 'Falha ao publicar atualização.';
-                if (result?.code === 'in-progress') {
-                    if (window.showToast) {
-                        window.showToast(message || 'Uma publicação já está em andamento.', 'info');
-                    }
-                    setSupAdminMode('publishing', { panelOpen: false });
-                } else if (result?.code) {
-                    setSupAdminMode('error', { panelOpen: false, lastError: message });
-                    if (typeof window.alert === 'function') {
-                        window.alert(message);
-                    } else if (window.showToast) {
-                        window.showToast(message, 'error');
-                    }
-                    const hasPending = computePublishAvailability();
-                    setSupAdminMode(hasPending ? 'available' : 'idle', { panelOpen: false });
-                }
+                return;
             }
+
+            setPublishState(result, { silent: true, skipSupAdminMode: true });
+
+            const message = result?.message || result?.error || 'Falha ao publicar atualização.';
+            if (result?.code === 'in-progress') {
+                if (window.showToast) {
+                    window.showToast(message || 'Uma publicação já está em andamento.', 'info');
+                }
+                setSupAdminMode('publishing', { panelOpen: false });
+                return;
+            }
+
+            const hasPending = computePublishAvailability();
+            if (result?.code === 'invalid-version' || result?.code === 'version-update-failed') {
+                setSupAdminMode(hasPending ? 'available' : 'idle', { panelOpen: false, lastError: message });
+            } else {
+                setSupAdminMode('error', { panelOpen: false, lastError: message });
+                setSupAdminMode(hasPending ? 'available' : 'idle', { panelOpen: false, lastError: message });
+            }
+
+            if (typeof window.alert === 'function') {
+                window.alert(message);
+            } else if (window.showToast) {
+                window.showToast(message, 'error');
+            }
+
+            await runAutomaticCheck({ silent: true });
         } catch (err) {
             const message = err?.message || 'Falha ao publicar atualização.';
             setSupAdminMode('error', { panelOpen: false, lastError: message });
@@ -1402,7 +1568,8 @@ const AppUpdates = (() => {
                 window.showToast(message, 'error');
             }
             const hasPending = computePublishAvailability();
-            setSupAdminMode(hasPending ? 'available' : 'idle', { panelOpen: false });
+            setSupAdminMode(hasPending ? 'available' : 'idle', { panelOpen: false, lastError: message });
+            await runAutomaticCheck({ silent: true });
         }
     }
 
@@ -1703,11 +1870,6 @@ const AppUpdates = (() => {
 
         if (elements.supAdmin?.publish) {
             elements.supAdmin.publish.addEventListener('click', handleSupAdminPublish);
-        }
-
-        if (elements.supAdmin?.container) {
-            elements.supAdmin.container.addEventListener('mouseleave', handleSupAdminHoverExit);
-            elements.supAdmin.container.addEventListener('focusout', handleSupAdminFocusExit);
         }
 
         if (window.electronAPI?.onUpdateStatus) {

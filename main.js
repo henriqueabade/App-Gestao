@@ -5,6 +5,7 @@ const DEBUG = process.env.DEBUG === 'true';
 const { autoUpdater } = require('electron-updater');
 const updateService = require('./backend/updateService');
 const publisher = require('./backend/publisher');
+const versionManager = require('./backend/versionManager');
 const {
   registrarUsuario,
   loginUsuario,
@@ -126,6 +127,57 @@ let publishState = {
   localVersion: localAppVersion
 };
 
+let publishStateFilePath;
+
+function getPublishStateFilePath() {
+  if (!publishStateFilePath) {
+    publishStateFilePath = path.join(app.getPath('userData'), 'publish-state.json');
+  }
+  return publishStateFilePath;
+}
+
+function loadPersistedPublishState() {
+  try {
+    const filePath = getPublishStateFilePath();
+    if (!fs.existsSync(filePath)) {
+      return null;
+    }
+    const raw = fs.readFileSync(filePath, 'utf8');
+    if (!raw.trim()) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object') return null;
+    return parsed;
+  } catch (err) {
+    console.error('Não foi possível carregar estado de publicação persistido:', err);
+    return null;
+  }
+}
+
+function persistPublishStateSnapshot() {
+  try {
+    const filePath = getPublishStateFilePath();
+    const dir = path.dirname(filePath);
+    fs.mkdirSync(dir, { recursive: true });
+    const snapshot = {
+      latestPublishedVersion: publishState.latestPublishedVersion,
+      localVersion: publishState.localVersion
+    };
+    fs.writeFileSync(filePath, `${JSON.stringify(snapshot, null, 2)}\n`);
+  } catch (err) {
+    console.error('Não foi possível salvar estado de publicação:', err);
+  }
+}
+
+const persistedPublishState = loadPersistedPublishState();
+if (persistedPublishState) {
+  if (persistedPublishState.latestPublishedVersion) {
+    publishState.latestPublishedVersion = persistedPublishState.latestPublishedVersion;
+  }
+  if (persistedPublishState.localVersion) {
+    publishState.localVersion = persistedPublishState.localVersion;
+  }
+}
+
 function getPublishLogPath() {
   return path.join(__dirname, 'publish-audit.log');
 }
@@ -184,6 +236,11 @@ function updatePublishState(partial = {}) {
     publishState.canPublish = nextCanPublish;
   } else {
     publishState.canPublish = !(publishState.publishing || pipelineActive);
+  }
+
+  const versionChanged = hasOwn('latestPublishedVersion') || hasOwn('localVersion');
+  if (versionChanged) {
+    persistPublishStateSnapshot();
   }
 
   return { ...publishState };
@@ -1222,7 +1279,7 @@ ipcMain.handle('login-usuario', async (event, dados) => {
   }
 });
 
-ipcMain.handle('publish-update', async () => {
+ipcMain.handle('publish-update', async (_event, payload) => {
   if (!currentUserSession) {
     return {
       success: false,
@@ -1247,45 +1304,88 @@ ipcMain.handle('publish-update', async () => {
     };
   }
 
+  const requestedVersion = typeof payload === 'object' && payload !== null ? payload.version : undefined;
+  const sanitizedVersion = typeof requestedVersion === 'string' ? requestedVersion.trim() : '';
+  const versionPattern = /^\d+\.\d+\.\d+(?:[-.][0-9A-Za-z]+)*$/;
+  if (!sanitizedVersion || !versionPattern.test(sanitizedVersion)) {
+    return {
+      success: false,
+      code: 'invalid-version',
+      message: 'Informe uma versão válida no formato 1.2.3.',
+      ...publishState
+    };
+  }
+
+  let revertVersionChange = null;
+  try {
+    revertVersionChange = versionManager.applyProjectVersion(sanitizedVersion);
+  } catch (err) {
+    return {
+      success: false,
+      code: 'version-update-failed',
+      message: err?.message || 'Falha ao preparar arquivos da nova versão.',
+      ...publishState
+    };
+  }
+
+  const previousLocalVersion = publishState.localVersion;
+  const previousPublishedVersion = publishState.latestPublishedVersion;
+
   const startState = updatePublishState({ publishing: true, canPublish: false });
-  const startMessage = 'Iniciando pipeline de publicação...';
+  const startMessage = `Iniciando publicação da versão ${sanitizedVersion}...`;
   broadcastPublishEvent('publish-progress', {
     ...startState,
-    message: startMessage
+    message: startMessage,
+    targetVersion: sanitizedVersion
   });
-  recordPublishAudit('publish-start', { version: app.getVersion() });
+  recordPublishAudit('publish-start', { version: sanitizedVersion });
 
   const progressHandler = info => {
     if (!info || !info.message) return;
     broadcastPublishEvent('publish-progress', {
       ...publishState,
-      message: info.message
+      message: info.message,
+      targetVersion: sanitizedVersion
     });
   };
 
   try {
     await publisher.runPublishPipeline({
       user: currentUserSession,
-      onProgress: progressHandler
+      onProgress: progressHandler,
+      version: sanitizedVersion
     });
     const successState = updatePublishState({
       publishing: false,
       canPublish: true,
-      latestPublishedVersion: app.getVersion(),
-      localVersion: app.getVersion()
+      latestPublishedVersion: sanitizedVersion,
+      localVersion: sanitizedVersion
     });
-    broadcastPublishEvent('publish-done', { ...successState });
-    recordPublishAudit('publish-success', { version: successState.latestPublishedVersion });
+    broadcastPublishEvent('publish-done', { ...successState, targetVersion: sanitizedVersion });
+    recordPublishAudit('publish-success', { version: sanitizedVersion });
+    revertVersionChange = null;
     return { success: true, ...successState };
   } catch (err) {
+    if (typeof revertVersionChange === 'function') {
+      try {
+        revertVersionChange();
+      } catch (restoreErr) {
+        console.error('Falha ao restaurar arquivos da versão anterior:', restoreErr);
+      }
+    }
     const errorState = updatePublishState({ publishing: false, canPublish: true });
     const message = err?.message || 'Falha ao publicar atualização.';
     broadcastPublishEvent('publish-error', {
       ...errorState,
-      message
+      message,
+      targetVersion: sanitizedVersion
     });
-    recordPublishAudit('publish-failure', { error: message });
-    return { success: false, error: message, ...errorState };
+    recordPublishAudit('publish-failure', { error: message, version: sanitizedVersion });
+    const restoredState = updatePublishState({
+      latestPublishedVersion: previousPublishedVersion,
+      localVersion: previousLocalVersion
+    });
+    return { success: false, error: message, ...restoredState };
   }
 });
 

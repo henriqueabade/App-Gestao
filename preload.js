@@ -245,7 +245,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   checkForUpdates: () => invokeIpc('check-for-updates', null, { trackAction: true }),
   downloadUpdate: () => invokeIpc('download-update', null, { trackAction: true }),
   installUpdate: () => invokeIpc('install-update', null, { trackAction: true }),
-  publishUpdate: () => invokeIpc('publish-update', null, { trackAction: true }),
+  publishUpdate: (payload) => invokeIpc('publish-update', payload, { trackAction: true }),
   showLogin: () => ipcRenderer.invoke('show-login'),
   closeWindow: () => ipcRenderer.invoke('close-window'),
   minimizeWindow: () => ipcRenderer.invoke('minimize-window'),
