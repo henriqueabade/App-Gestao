@@ -24,6 +24,16 @@ body {
     color: #fff;
 }
 
+.relatorios-module .relatorios-header {
+    position: relative;
+    z-index: 80;
+}
+
+.relatorios-module .relatorios-actions {
+    position: relative;
+    z-index: 80;
+}
+
 .animate-fade-in-up {
     opacity: 0;
     transform: translateY(24px);
@@ -421,7 +431,7 @@ body {
     transform: translateY(-8px) scale(0.95);
     pointer-events: none;
     transition: all 150ms ease;
-    z-index: 50;
+    z-index: 120;
 }
 
 .relatorios-module .relatorios-dropdown.visible {
