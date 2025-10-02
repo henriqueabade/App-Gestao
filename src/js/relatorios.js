@@ -21,6 +21,8 @@ function initRelatoriosModule() {
     setupDropdowns(container);
     setupModals(container);
     setupShare(container);
+    setupGeoFilters(container);
+    setupDateRangeFilters(container);
 
     const initialTab = container.querySelector('[data-relatorios-tab].tab-active');
     if (initialTab && loadTableForTab) {
@@ -277,6 +279,107 @@ function animateResultView(view) {
     view.style.transform = 'translateY(24px)';
     void view.offsetWidth;
     view.style.animation = 'relatoriosFloatIn 0.6s ease-out forwards';
+}
+
+function loadScriptOnce(src) {
+    const registry = window.__moduleScriptPromises = window.__moduleScriptPromises || new Map();
+    if (registry.has(src)) {
+        return registry.get(src);
+    }
+
+    const promise = new Promise((resolve, reject) => {
+        const existing = Array.from(document.querySelectorAll('script')).find(script => {
+            const current = script.getAttribute('src') || '';
+            if (!current) return false;
+            if (current === src) return true;
+            return current.endsWith(src.replace('../', '')) || current.includes(src.replace('../', ''));
+        });
+
+        if (existing) {
+            if (existing.dataset.loaded === 'true' || existing.readyState === 'complete') {
+                resolve();
+                return;
+            }
+            existing.addEventListener('load', () => {
+                existing.dataset.loaded = 'true';
+                resolve();
+            }, { once: true });
+            existing.addEventListener('error', reject, { once: true });
+            return;
+        }
+
+        const script = document.createElement('script');
+        script.src = src;
+        script.async = true;
+        script.onload = () => {
+            script.dataset.loaded = 'true';
+            resolve();
+        };
+        script.onerror = () => {
+            script.remove();
+            reject(new Error(`Falha ao carregar script: ${src}`));
+        };
+        document.head.appendChild(script);
+    });
+
+    promise.catch(() => registry.delete(src));
+    registry.set(src, promise);
+    return promise;
+}
+
+async function setupGeoFilters(root) {
+    if (!root) return;
+    try {
+        await loadScriptOnce('../js/utils/geo-multiselect.js');
+        if (window.GeoMultiSelect?.initInContainer) {
+            window.GeoMultiSelect.initInContainer(root, {
+                module: 'relatorios',
+                onChange: detail => {
+                    document.dispatchEvent(new CustomEvent('relatorios:geo-filter-change', {
+                        detail
+                    }));
+                }
+            });
+        }
+    } catch (error) {
+        console.error('Falha ao carregar seleção geográfica', error);
+    }
+}
+
+function setupDateRangeFilters(root) {
+    if (!root || !window.DateRangeFilter?.initDateRangeFilter) return;
+
+    const configs = [
+        { selector: '#relatoriosOrcamentosPeriod', storageKey: 'relatorios-orcamentos' },
+        { selector: '#relatoriosPedidosPeriod', storageKey: 'relatorios-pedidos' }
+    ];
+
+    window.__relatoriosDateRanges = window.__relatoriosDateRanges || {};
+
+    configs.forEach(({ selector, storageKey }) => {
+        const select = root.querySelector(selector);
+        if (!select) return;
+        if (select.dataset.dateRangeInitialized === 'true') return;
+        const controller = window.DateRangeFilter.initDateRangeFilter({
+            selectElement: select,
+            moduleKey: storageKey,
+            getRange: () => window.__relatoriosDateRanges[storageKey] || null,
+            setRange: range => {
+                window.__relatoriosDateRanges[storageKey] = range;
+            },
+            onApply: () => {
+                document.dispatchEvent(new CustomEvent('relatorios:periodo-personalizado', {
+                    detail: {
+                        key: storageKey,
+                        range: window.__relatoriosDateRanges[storageKey] || null
+                    }
+                }));
+            }
+        });
+        if (controller) {
+            select.dataset.dateRangeInitialized = 'true';
+        }
+    });
 }
 
 if (document.readyState === 'loading') {

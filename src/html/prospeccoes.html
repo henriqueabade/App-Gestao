@@ -96,10 +96,36 @@
                             </div>
                         </div>
 
-                        <!-- City/State -->
-                        <div>
-                            <label class="block text-sm font-medium mb-1 text-white">Cidade/Estado</label>
-                            <input type="text" placeholder="Ex: São Paulo, SP" class="input-glass text-white rounded-md px-3 py-2 w-full text-sm">
+                        <!-- Country -->
+                        <div data-geo-wrapper>
+                            <label class="block text-sm font-medium mb-1 text-white">País</label>
+                            <button type="button"
+                                class="input-glass prospeccoes-multiselect-trigger text-white rounded-md px-3 py-2 w-full text-sm flex items-center justify-between gap-3"
+                                data-geo-multiselect="prospeccoes-paises"
+                                data-geo-source="countries"
+                                data-geo-placeholder="Todos os países"
+                                data-geo-title="Selecionar países">
+                                <span class="prospeccoes-multiselect-value" data-geo-summary>Todos os países</span>
+                                <i class="fas fa-chevron-down text-xs text-white/70"></i>
+                            </button>
+                            <input type="hidden" data-geo-input="prospeccoes-paises">
+                        </div>
+
+                        <!-- State -->
+                        <div data-geo-wrapper>
+                            <label class="block text-sm font-medium mb-1 text-white">Estado</label>
+                            <button type="button"
+                                class="input-glass prospeccoes-multiselect-trigger text-white rounded-md px-3 py-2 w-full text-sm flex items-center justify-between gap-3"
+                                data-geo-multiselect="prospeccoes-estados"
+                                data-geo-source="states"
+                                data-geo-placeholder="Todos os estados"
+                                data-geo-title="Selecionar estados"
+                                data-geo-depends-on="prospeccoes-paises"
+                                data-geo-dependency-message="Escolha um país antes de selecionar estados">
+                                <span class="prospeccoes-multiselect-value" data-geo-summary>Todos os estados</span>
+                                <i class="fas fa-chevron-down text-xs text-white/70"></i>
+                            </button>
+                            <input type="hidden" data-geo-input="prospeccoes-estados">
                         </div>
 
                         <!-- Custom Filter Link -->

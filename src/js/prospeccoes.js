@@ -71,6 +71,9 @@ function initProspeccoes() {
         }, index * 100);
     });
 
+    const container = document.querySelector('.modulo-container');
+    setupProspeccoesGeoFilters(container);
+
     carregarProspeccoes();
 
     document.getElementById('btnNovaProspeccao')?.addEventListener('click', () => {
@@ -136,6 +139,73 @@ function initProspeccoes() {
     });
 
     updateEmptyStateProspeccoes();
+}
+
+function loadProspeccoesScriptOnce(src) {
+    const registry = window.__moduleScriptPromises = window.__moduleScriptPromises || new Map();
+    if (registry.has(src)) {
+        return registry.get(src);
+    }
+
+    const promise = new Promise((resolve, reject) => {
+        const existing = Array.from(document.querySelectorAll('script')).find(script => {
+            const current = script.getAttribute('src') || '';
+            if (!current) return false;
+            if (current === src) return true;
+            return current.endsWith(src.replace('../', '')) || current.includes(src.replace('../', ''));
+        });
+
+        if (existing) {
+            if (existing.dataset.loaded === 'true' || existing.readyState === 'complete') {
+                resolve();
+                return;
+            }
+            existing.addEventListener('load', () => {
+                existing.dataset.loaded = 'true';
+                resolve();
+            }, { once: true });
+            existing.addEventListener('error', reject, { once: true });
+            return;
+        }
+
+        const script = document.createElement('script');
+        script.src = src;
+        script.async = true;
+        script.onload = () => {
+            script.dataset.loaded = 'true';
+            resolve();
+        };
+        script.onerror = () => {
+            script.remove();
+            reject(new Error(`Falha ao carregar script: ${src}`));
+        };
+        document.head.appendChild(script);
+    });
+
+    promise.catch(() => registry.delete(src));
+    registry.set(src, promise);
+    return promise;
+}
+
+async function setupProspeccoesGeoFilters(root) {
+    if (!root) return;
+    try {
+        if (!window.GeoMultiSelect?.initInContainer) {
+            await loadProspeccoesScriptOnce('../js/utils/geo-multiselect.js');
+        }
+        if (window.GeoMultiSelect?.initInContainer) {
+            window.GeoMultiSelect.initInContainer(root, {
+                module: 'prospeccoes',
+                onChange: detail => {
+                    document.dispatchEvent(new CustomEvent('prospeccoes:geo-filter-change', {
+                        detail
+                    }));
+                }
+            });
+        }
+    } catch (error) {
+        console.error('Falha ao carregar seleção geográfica em Prospecções', error);
+    }
 }
 
 if (document.readyState === 'loading') {

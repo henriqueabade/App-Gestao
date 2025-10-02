@@ -179,12 +179,6 @@
                             </div>
                         </div>
 
-                        <div class="relatorios-filter-tags" aria-label="Totais por tipo/processo">
-                            <button class="relatorios-filter-tag" type="button">Disponíveis</button>
-                            <button class="relatorios-filter-tag" type="button">Processo Crítico</button>
-                            <button class="relatorios-filter-tag" type="button">Importados</button>
-                            <button class="relatorios-filter-tag" type="button">Consignados</button>
-                        </div>
                     </div>
                 </div>
 
@@ -269,11 +263,6 @@
                             </div>
                         </div>
 
-                        <div class="relatorios-filter-tags" aria-label="Totais por tipo">
-                            <button class="relatorios-filter-tag" type="button">Lançamentos</button>
-                            <button class="relatorios-filter-tag" type="button">Mais Vendidos</button>
-                            <button class="relatorios-filter-tag" type="button">Em Revisão</button>
-                        </div>
                     </div>
                 </div>
 
@@ -317,34 +306,35 @@
                         </div>
 
                         <div class="filter-bar relatorios-filter-bar">
-                            <div class="relatorios-filter-field">
+                            <div class="relatorios-filter-field" data-geo-wrapper>
                                 <label class="relatorios-filter-label text-white">País</label>
-                                <select class="input-glass text-white rounded-md px-4 py-3 w-full" multiple>
-                                    <option value="br">Brasil</option>
-                                    <option value="us">Estados Unidos</option>
-                                    <option value="pt">Portugal</option>
-                                    <option value="ar">Argentina</option>
-                                </select>
-                                <span class="relatorios-filter-hint">Use CTRL/⌘ para selecionar vários</span>
+                                <button type="button"
+                                    class="input-glass relatorios-multiselect-trigger rounded-md px-4 py-3"
+                                    data-geo-multiselect="relatorios-clientes-paises"
+                                    data-geo-source="countries"
+                                    data-geo-placeholder="Todos os países"
+                                    data-geo-title="Selecionar países">
+                                    <span class="relatorios-multiselect-value" data-geo-summary>Todos os países</span>
+                                    <i class="fas fa-chevron-down text-xs text-white/70"></i>
+                                </button>
+                                <input type="hidden" data-geo-input="relatorios-clientes-paises">
                             </div>
 
-                            <div class="relatorios-filter-field">
+                            <div class="relatorios-filter-field" data-geo-wrapper>
                                 <label class="relatorios-filter-label text-white">Estado</label>
-                                <select class="input-glass text-white rounded-md px-4 py-3 w-full" multiple>
-                                    <option value="sp">São Paulo</option>
-                                    <option value="rj">Rio de Janeiro</option>
-                                    <option value="mg">Minas Gerais</option>
-                                    <option value="pr">Paraná</option>
-                                </select>
-                                <span class="relatorios-filter-hint">Seleção múltipla</span>
+                                <button type="button"
+                                    class="input-glass relatorios-multiselect-trigger rounded-md px-4 py-3"
+                                    data-geo-multiselect="relatorios-clientes-estados"
+                                    data-geo-source="states"
+                                    data-geo-placeholder="Todos os estados"
+                                    data-geo-title="Selecionar estados"
+                                    data-geo-depends-on="relatorios-clientes-paises"
+                                    data-geo-dependency-message="Selecione ao menos um país">
+                                    <span class="relatorios-multiselect-value" data-geo-summary>Todos os estados</span>
+                                    <i class="fas fa-chevron-down text-xs text-white/70"></i>
+                                </button>
+                                <input type="hidden" data-geo-input="relatorios-clientes-estados">
                             </div>
-                        </div>
-
-                        <div class="relatorios-filter-tags" aria-label="Totais por tipo">
-                            <button class="relatorios-filter-tag" type="button">Ativos</button>
-                            <button class="relatorios-filter-tag" type="button">Inadimplentes</button>
-                            <button class="relatorios-filter-tag" type="button">Recentes</button>
-                            <button class="relatorios-filter-tag" type="button">VIP</button>
                         </div>
                     </div>
                 </div>
@@ -393,13 +383,6 @@
                             <div class="relatorios-filter-field">
                                 <label class="relatorios-filter-label text-white">Telefone</label>
                                 <input type="tel" class="input-glass text-white rounded-md px-4 py-3 w-full" placeholder="(00) 0000-0000">
-                            </div>
-
-                            <div class="relatorios-filter-tags" aria-label="Totais por tipo">
-                                <button class="relatorios-filter-tag" type="button">Clientes</button>
-                                <button class="relatorios-filter-tag" type="button">Fornecedores</button>
-                                <button class="relatorios-filter-tag" type="button">Parceiros</button>
-                                <button class="relatorios-filter-tag" type="button">Outros</button>
                             </div>
                         </div>
                     </div>
@@ -478,12 +461,6 @@
                             </div>
                         </div>
 
-                        <div class="relatorios-filter-tags" aria-label="Totais por status">
-                            <button class="relatorios-filter-tag" type="button">Novos</button>
-                            <button class="relatorios-filter-tag" type="button">Em Negociação</button>
-                            <button class="relatorios-filter-tag" type="button">Ganhos</button>
-                            <button class="relatorios-filter-tag" type="button">Perdidos</button>
-                        </div>
                     </div>
                 </div>
 
@@ -505,12 +482,12 @@
 
                             <div class="relatorios-filter-field">
                                 <label class="relatorios-filter-label text-white">Período</label>
-                                <select class="input-glass text-white rounded-md px-4 py-3 w-full">
+                                <select id="relatoriosOrcamentosPeriod" class="input-glass text-white rounded-md px-4 py-3 w-full">
                                     <option value="">Selecione...</option>
-                                    <option value="semana">Última semana</option>
-                                    <option value="mes">Último mês</option>
-                                    <option value="trimestre">Último trimestre</option>
-                                    <option value="custom">Personalizado</option>
+                                    <option value="Última semana">Última semana</option>
+                                    <option value="Último mês">Último mês</option>
+                                    <option value="Último trimestre">Último trimestre</option>
+                                    <option value="Personalizado">Personalizado</option>
                                 </select>
                             </div>
 
@@ -571,11 +548,6 @@
                             </div>
                         </div>
 
-                        <div class="relatorios-filter-tags" aria-label="Totais por status">
-                            <button class="relatorios-filter-tag" type="button">Pendentes</button>
-                            <button class="relatorios-filter-tag" type="button">Aprovados</button>
-                            <button class="relatorios-filter-tag" type="button">Rejeitados</button>
-                        </div>
                     </div>
                 </div>
 
@@ -596,12 +568,12 @@
 
                             <div class="relatorios-filter-field">
                                 <label class="relatorios-filter-label text-white">Período</label>
-                                <select class="input-glass text-white rounded-md px-4 py-3 w-full">
+                                <select id="relatoriosPedidosPeriod" class="input-glass text-white rounded-md px-4 py-3 w-full">
                                     <option value="">Selecione...</option>
-                                    <option value="semana">Última semana</option>
-                                    <option value="mes">Último mês</option>
-                                    <option value="trimestre">Último trimestre</option>
-                                    <option value="custom">Personalizado</option>
+                                    <option value="Última semana">Última semana</option>
+                                    <option value="Último mês">Último mês</option>
+                                    <option value="Último trimestre">Último trimestre</option>
+                                    <option value="Personalizado">Personalizado</option>
                                 </select>
                             </div>
 
@@ -662,11 +634,6 @@
                             </div>
                         </div>
 
-                        <div class="relatorios-filter-tags" aria-label="Totais por status">
-                            <button class="relatorios-filter-tag" type="button">Em Produção</button>
-                            <button class="relatorios-filter-tag" type="button">Prontos para Envio</button>
-                            <button class="relatorios-filter-tag" type="button">Atrasados</button>
-                        </div>
                     </div>
                 </div>
 
@@ -725,11 +692,6 @@
                                 </label>
                             </div>
 
-                            <div class="relatorios-filter-tags" aria-label="Totais por perfil">
-                                <button class="relatorios-filter-tag" type="button">Administradores</button>
-                                <button class="relatorios-filter-tag" type="button">Operacionais</button>
-                                <button class="relatorios-filter-tag" type="button">Clientes</button>
-                            </div>
                         </div>
                     </div>
                 </div>
