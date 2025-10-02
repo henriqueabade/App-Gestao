@@ -23,6 +23,27 @@ html, body, #app, #mainContent  {
   scrollbar-width: thin;
 }
 
+#content.no-scroll {
+  height: auto;
+  min-height: var(--module-height);
+  overflow: hidden !important;
+  scrollbar-width: none;
+}
+
+#content.no-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+#content.no-scroll .modulo-container {
+  overflow: visible;
+}
+
+#content.no-scroll .table-scroll {
+  overflow-y: hidden !important;
+  overflow-x: auto;
+  max-height: none;
+}
+
 /* Scrollbar discreta e minimalista */
 #content::-webkit-scrollbar {
     width: 6px;

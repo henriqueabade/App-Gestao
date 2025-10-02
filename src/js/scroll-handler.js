@@ -3,6 +3,7 @@
 
 // Distância de scroll ao clicar nas setas
 const SCROLL_STEP = 40;
+const SCROLL_DISABLED_CLASS = 'no-scroll';
 
 // Referência à instância atual da scrollbar
 let currentScrollbar = null;
@@ -17,6 +18,11 @@ const OVERFLOW_STABLE_DELAY = 600;
 let pendingStabilityTimeout = null;
 let pendingStabilityCandidate = null;
 let stabilityObserver = null;
+
+function isScrollGloballyDisabled() {
+  const content = document.getElementById('content');
+  return Boolean(content && content.classList && content.classList.contains(SCROLL_DISABLED_CLASS));
+}
 
 function clearPendingStability() {
   if (pendingStabilityTimeout !== null) {
@@ -183,6 +189,12 @@ function refreshScrollbar() {
   if (pendingRefreshFrame !== null) {
     cancelAnimationFrame(pendingRefreshFrame);
     pendingRefreshFrame = null;
+  }
+
+  if (isScrollGloballyDisabled()) {
+    clearPendingStability();
+    removeScrollbar();
+    return;
   }
 
   // Busca todos os módulos e tabelas com scroll

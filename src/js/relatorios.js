@@ -59,15 +59,15 @@ function setupResultTabs(root) {
     tabButtons.forEach(button => {
         button.addEventListener('click', () => {
             const target = button.dataset.relatoriosResult;
-            if (!target || !views[target] || button.classList.contains('result-tab-active')) return;
+            if (!target || !views[target] || button.classList.contains('tab-active')) return;
 
             tabButtons.forEach(btn => {
-                btn.classList.remove('result-tab-active');
-                btn.classList.add('result-tab-inactive');
+                btn.classList.remove('tab-active');
+                btn.classList.add('tab-inactive');
             });
 
-            button.classList.add('result-tab-active');
-            button.classList.remove('result-tab-inactive');
+            button.classList.add('tab-active');
+            button.classList.remove('tab-inactive');
 
             Object.entries(views).forEach(([key, view]) => {
                 if (!view) return;

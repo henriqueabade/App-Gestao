@@ -9,6 +9,31 @@ const crmSubmenu = document.getElementById('crmSubmenu');
 const chevron = crmToggle.querySelector('.chevron');
 const companyName = document.getElementById('companyName');
 
+const MODULES_WITHOUT_SCROLL = new Set([
+    'materia-prima',
+    'produtos',
+    'orcamentos',
+    'pedidos',
+    'calendario',
+    'tarefas',
+    'usuarios'
+]);
+
+function applyModuleScrollBehavior(page) {
+    const content = document.getElementById('content');
+    if (!content) return;
+
+    document.body.dataset.currentModule = page;
+
+    if (MODULES_WITHOUT_SCROLL.has(page)) {
+        content.classList.add('no-scroll');
+    } else {
+        content.classList.remove('no-scroll');
+    }
+}
+
+applyModuleScrollBehavior('dashboard');
+
 const AppUpdates = (() => {
     const STATE_KEY = 'menu.app-update-state';
     const elements = {
@@ -1258,7 +1283,10 @@ async function loadPage(page) {
             module = content.querySelector('.modulo-container');
         }
 
+        applyModuleScrollBehavior(page);
+
         if (module) {
+            module.dataset.page = page;
             module.classList.add('module-enter');
             module.addEventListener('animationend', () => {
                 module.classList.remove('module-enter');

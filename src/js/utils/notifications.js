@@ -11,6 +11,42 @@
 
 let notificationContainer;
 
+function applyContainerFallbackStyles(container) {
+  if (!container) return;
+  const style = container.style;
+  style.position = 'fixed';
+  style.left = '50%';
+  style.top = '50%';
+  style.transform = 'translate(-50%, -50%)';
+  style.marginTop = '5rem';
+  style.zIndex = '11000';
+  style.display = 'flex';
+  style.flexDirection = 'column';
+  style.alignItems = 'center';
+  style.gap = '0.5rem';
+  style.pointerEvents = 'none';
+}
+
+function applyToastFallbackStyles(element, type) {
+  if (!element) return;
+  const style = element.style;
+  style.color = '#ffffff';
+  style.padding = '0.5rem 1rem';
+  style.borderRadius = '0.375rem';
+  style.boxShadow = '0 2px 4px rgba(0, 0, 0, 0.15)';
+  style.transition = 'opacity 0.5s ease-in-out';
+  style.backgroundColor = '#374151';
+  style.pointerEvents = 'auto';
+
+  if (type === 'success') {
+    style.backgroundColor = '#16a34a';
+  } else if (type === 'error') {
+    style.backgroundColor = '#dc2626';
+  } else if (type === 'info') {
+    style.backgroundColor = '#2563eb';
+  }
+}
+
 function showToast(message, type = 'info') {
   if (!notificationContainer) {
     notificationContainer = document.getElementById('notification');
@@ -20,12 +56,14 @@ function showToast(message, type = 'info') {
       notificationContainer.className = 'fixed left-1/2 top-1/2 transform -translate-x-1/2 -translate-y-1/2 mt-20 space-y-2 z-[11000]';
       document.body.appendChild(notificationContainer);
     }
+    applyContainerFallbackStyles(notificationContainer);
   }
   const div = document.createElement('div');
   let toastClass = 'toast-info';
   if (type === 'success') toastClass = 'toast-success';
   else if (type === 'error') toastClass = 'toast-error';
   div.className = `toast ${toastClass}`;
+  applyToastFallbackStyles(div, type);
   div.textContent = message;
   notificationContainer.appendChild(div);
   setTimeout(() => {
