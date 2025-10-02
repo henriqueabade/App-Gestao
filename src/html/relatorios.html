@@ -82,6 +82,9 @@
                 <button role="tab" aria-selected="false" class="tab-inactive" data-relatorios-tab="prospeccoes">
                     Prospecções
                 </button>
+                <button role="tab" aria-selected="false" class="tab-inactive" data-relatorios-tab="contatos">
+                    Contatos
+                </button>
                 <button role="tab" aria-selected="false" class="tab-inactive" data-relatorios-tab="orcamentos">
                     Orçamentos
                 </button>
@@ -224,6 +227,52 @@
                         </div>
                     </div>
                 </div>
+
+                <div class="relatorios-tab-content hidden" data-relatorios-tab-content="contatos">
+                    <div class="filter-bar relatorios-filter-bar">
+                        <div class="relatorios-filter-field">
+                            <label class="relatorios-filter-label text-white">Origem</label>
+                            <select class="input-glass text-white rounded-md px-4 py-3 w-full">
+                                <option value="">Todas</option>
+                                <option value="indicacao">Indicação</option>
+                                <option value="website">Site</option>
+                                <option value="evento">Eventos</option>
+                                <option value="rede-social">Redes Sociais</option>
+                            </select>
+                        </div>
+
+                        <div class="relatorios-filter-field">
+                            <label class="relatorios-filter-label text-white">Segmento</label>
+                            <select class="input-glass text-white rounded-md px-4 py-3 w-full">
+                                <option value="">Todos</option>
+                                <option value="residencial">Residencial</option>
+                                <option value="corporativo">Corporativo</option>
+                                <option value="arquitetura">Arquitetura &amp; Design</option>
+                            </select>
+                        </div>
+
+                        <div class="relatorios-filter-field">
+                            <label class="relatorios-filter-label text-white">Status do contato</label>
+                            <select class="input-glass text-white rounded-md px-4 py-3 w-full">
+                                <option value="">Todos</option>
+                                <option value="novo">Novo</option>
+                                <option value="em-andamento">Em andamento</option>
+                                <option value="convertido">Convertido</option>
+                                <option value="inativo">Inativo</option>
+                            </select>
+                        </div>
+
+                        <div class="relatorios-filter-field">
+                            <label class="relatorios-filter-label text-white">Responsável</label>
+                            <select class="input-glass text-white rounded-md px-4 py-3 w-full">
+                                <option value="">Todos</option>
+                                <option value="joao">João Silva</option>
+                                <option value="maria">Maria Santos</option>
+                                <option value="ana">Ana Costa</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
             </div>
 
             <div class="relatorios-filter-status animate-fade-in-up">
@@ -270,6 +319,44 @@
                             <div>
                                 <p class="relatorios-kpi-value">R$ 456K</p>
                                 <p class="relatorios-kpi-label">Valor Total</p>
+                            </div>
+                        </div>
+                    </article>
+                </div>
+
+                <div class="relatorios-kpi-grid hidden" data-relatorios-kpi="contatos">
+                    <article class="relatorios-kpi-card animate-fade-in-up">
+                        <div class="flex items-center gap-4">
+                            <div class="relatorios-kpi-icon bg-amber-500/20">
+                                <i class="fas fa-address-book text-amber-400"></i>
+                            </div>
+                            <div>
+                                <p class="relatorios-kpi-value">327</p>
+                                <p class="relatorios-kpi-label">Total de Contatos</p>
+                            </div>
+                        </div>
+                    </article>
+
+                    <article class="relatorios-kpi-card animate-fade-in-up">
+                        <div class="flex items-center gap-4">
+                            <div class="relatorios-kpi-icon bg-cyan-500/20">
+                                <i class="fas fa-user-check text-cyan-300"></i>
+                            </div>
+                            <div>
+                                <p class="relatorios-kpi-value">58%</p>
+                                <p class="relatorios-kpi-label">Taxa de Conversão</p>
+                            </div>
+                        </div>
+                    </article>
+
+                    <article class="relatorios-kpi-card animate-fade-in-up">
+                        <div class="flex items-center gap-4">
+                            <div class="relatorios-kpi-icon bg-rose-500/20">
+                                <i class="fas fa-phone-volume text-rose-300"></i>
+                            </div>
+                            <div>
+                                <p class="relatorios-kpi-value">42</p>
+                                <p class="relatorios-kpi-label">Follow-ups Pendentes</p>
                             </div>
                         </div>
                     </article>
