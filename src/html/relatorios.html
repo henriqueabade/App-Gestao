@@ -68,7 +68,7 @@
 
     <div class="flex flex-col gap-8">
         <!-- Report Tabs -->
-        <div class="glass-surface rounded-xl p-4">
+        <div class="glass-surface rounded-xl p-4 animate-fade-in-up">
             <div role="tablist" class="flex flex-wrap gap-2" aria-label="Categorias de Relatórios">
                 <button role="tab" aria-selected="true" class="tab-active" data-relatorios-tab="estoque">
                     Estoque
@@ -92,7 +92,7 @@
         </div>
 
         <!-- Filters Section -->
-        <section class="glass-surface rounded-xl p-6">
+        <section class="glass-surface rounded-xl p-6 animate-fade-in-up">
             <h2 class="section-title">Filtros</h2>
 
             <!-- Common Filters -->
@@ -215,7 +215,7 @@
             </div>
 
             <!-- Filter Actions -->
-            <div class="flex flex-wrap items-center gap-3">
+            <div class="flex flex-wrap items-center gap-3 animate-fade-in-up">
                 <button class="btn-primary px-6 py-2 rounded-lg font-medium">
                     Aplicar Filtros
                 </button>
@@ -232,11 +232,11 @@
         </section>
 
         <!-- KPIs Section -->
-        <section class="glass-surface rounded-xl p-6 mb-8">
+        <section class="glass-surface rounded-xl p-6 mb-8 animate-fade-in-up">
             <h2 class="section-title">Indicadores</h2>
             <div id="relatoriosKpiContainer">
                 <div class="relatorios-kpi-grid" data-relatorios-kpi="estoque">
-                    <article class="relatorios-kpi-card">
+                    <article class="relatorios-kpi-card animate-fade-in-up">
                         <div class="flex items-center gap-4">
                             <div class="relatorios-kpi-icon bg-blue-500/20">
                                 <i class="fas fa-th-large text-blue-400"></i>
@@ -248,7 +248,7 @@
                         </div>
                     </article>
 
-                    <article class="relatorios-kpi-card">
+                    <article class="relatorios-kpi-card animate-fade-in-up">
                         <div class="flex items-center gap-4">
                             <div class="relatorios-kpi-icon bg-green-500/20">
                                 <i class="fas fa-check-circle text-green-400"></i>
@@ -260,7 +260,7 @@
                         </div>
                     </article>
 
-                    <article class="relatorios-kpi-card">
+                    <article class="relatorios-kpi-card animate-fade-in-up">
                         <div class="flex items-center gap-4">
                             <div class="relatorios-kpi-icon bg-purple-500/20">
                                 <i class="fas fa-coins text-purple-400"></i>
@@ -276,7 +276,7 @@
         </section>
 
         <!-- Results Section -->
-        <section class="glass-surface rounded-xl mb-8 overflow-hidden">
+        <section class="glass-surface rounded-xl mb-8 overflow-hidden animate-fade-in-up">
             <div class="border-b border-white/10 px-6 py-4">
                 <div class="flex flex-wrap gap-2" role="tablist" aria-label="Visão dos resultados">
                     <button class="tab-active" data-relatorios-result="table">

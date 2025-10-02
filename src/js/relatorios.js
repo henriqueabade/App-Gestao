@@ -6,6 +6,8 @@ function initRelatoriosModule() {
     // Garante que o body esteja liberado caso algum modal anterior tenha alterado o overflow
     document.body.style.overflow = '';
 
+    applyEntranceAnimations(container);
+
     setupCategoryTabs(container);
     setupResultTabs(container);
     setupDropdowns(container);
@@ -56,6 +58,19 @@ function setupResultTabs(root) {
         detail: root.querySelector('#relatoriosDetailView')
     };
 
+    const activateView = target => {
+        Object.entries(views).forEach(([key, view]) => {
+            if (!view) return;
+            const isTarget = key === target;
+            view.classList.toggle('hidden', !isTarget);
+            if (isTarget) {
+                animateResultView(view);
+            }
+        });
+    };
+
+    activateView('table');
+
     tabButtons.forEach(button => {
         button.addEventListener('click', () => {
             const target = button.dataset.relatoriosResult;
@@ -69,10 +84,7 @@ function setupResultTabs(root) {
             button.classList.add('tab-active');
             button.classList.remove('tab-inactive');
 
-            Object.entries(views).forEach(([key, view]) => {
-                if (!view) return;
-                view.classList.toggle('hidden', key !== target);
-            });
+            activateView(target);
         });
     });
 }
@@ -187,6 +199,22 @@ function setupShare(root) {
             console.error('Falha ao copiar link de compartilhamento', error);
         }
     });
+}
+
+function applyEntranceAnimations(root) {
+    const animatedElements = Array.from(root.querySelectorAll('.animate-fade-in-up'));
+    animatedElements.forEach((element, index) => {
+        element.style.animationDelay = `${index * 80}ms`;
+    });
+}
+
+function animateResultView(view) {
+    if (!view) return;
+    view.style.animation = 'none';
+    view.style.opacity = '0';
+    view.style.transform = 'translateY(24px)';
+    void view.offsetWidth;
+    view.style.animation = 'relatoriosFloatIn 0.6s ease-out forwards';
 }
 
 if (document.readyState === 'loading') {
