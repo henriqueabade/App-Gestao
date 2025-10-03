@@ -473,7 +473,38 @@ const AppUpdates = (() => {
             }
         }
 
-        const changeEntries = buildChangeEntries();
+        let changeEntries = buildChangeEntries();
+        const publishPending = computePublishAvailability();
+        const updateHasAvailableStatus =
+            updateStatus.status === 'update-available' || updateStatus.status === 'downloaded';
+
+        if (
+            !changeEntries.length &&
+            ((audience === 'supAdmin' && publishPending) || (audience !== 'supAdmin' && updateHasAvailableStatus))
+        ) {
+            const placeholderTitle =
+                updateStatus.releaseName ||
+                (updateStatus.latestVersion ? `Versão ${updateStatus.latestVersion}` : null) ||
+                (availableVersion ? `Versão ${availableVersion}` : null) ||
+                'Atualização disponível';
+            const placeholderSummary =
+                updateStatus.statusMessage ||
+                publishState.message ||
+                'Nenhuma nota de versão disponível para esta atualização.';
+
+            changeEntries = [
+                {
+                    id: `updates-placeholder-${audience}`,
+                    title: placeholderTitle,
+                    version: updateStatus.latestVersion || availableVersion || null,
+                    date: updateStatus.releaseDate || null,
+                    author: null,
+                    highlights: [],
+                    summary: placeholderSummary
+                }
+            ];
+        }
+
         if (changeEntries.length) {
             sections.push({ kind: 'changes', title: 'Resumo das alterações', items: changeEntries });
         }
@@ -1092,9 +1123,7 @@ const AppUpdates = (() => {
         const nextMode = valid.has(mode) ? mode : 'idle';
         state.userControl.mode = nextMode;
         if (options.panelOpen !== undefined) {
-            state.userControl.panelOpen = nextMode === 'available' && Boolean(options.panelOpen);
-        } else if (nextMode !== 'available') {
-            state.userControl.panelOpen = false;
+            state.userControl.panelOpen = Boolean(options.panelOpen);
         }
         if (options.lastError !== undefined) {
             state.userControl.lastError = options.lastError || null;
@@ -1176,16 +1205,23 @@ const AppUpdates = (() => {
         }
 
         user.icon.className = `fas ${iconClass} user-updates-icon`;
-        user.label.textContent = labelText;
+        user.label.textContent = 'Atualizações';
+        if (labelText && labelText !== 'Atualizações') {
+            user.label.dataset.statusLabel = labelText;
+        } else {
+            delete user.label.dataset.statusLabel;
+        }
 
         trigger.dataset.state = mode;
         trigger.setAttribute('data-state', mode);
         trigger.disabled = disableTrigger;
         trigger.setAttribute('aria-busy', busy ? 'true' : 'false');
-        trigger.setAttribute('aria-expanded', state.userControl.panelOpen && mode === 'available' ? 'true' : 'false');
+        trigger.setAttribute('aria-expanded', state.userControl.panelOpen ? 'true' : 'false');
+        trigger.title = labelText || 'Atualizações';
+        trigger.setAttribute('aria-label', labelText ? `Atualizações – ${labelText}` : 'Atualizações');
 
         if (user.panel) {
-            const showPanel = state.userControl.panelOpen && mode === 'available';
+            const showPanel = Boolean(state.userControl.panelOpen);
             user.panel.classList.toggle('hidden', !showPanel);
             user.panel.setAttribute('aria-hidden', showPanel ? 'false' : 'true');
         }
@@ -1262,65 +1298,57 @@ const AppUpdates = (() => {
             return;
         }
         event.preventDefault();
-        if (state.actionBusy) return;
-        const mode = state.userControl.mode;
-        if (mode === 'updating') return;
 
-        if (mode === 'available') {
-            const nextOpen = !state.userControl.panelOpen;
-            setUserMode('available', { panelOpen: nextOpen });
+        const mode = state.userControl.mode;
+        if (mode === 'updating') {
             return;
         }
 
-        if (mode === 'error') {
-            const message = state.userControl.lastError || 'Ocorreu um erro durante a última tentativa de atualização.';
-            await showUpdateDialog({
-                title: 'Atualizações',
-                message,
-                confirmLabel: 'OK',
-                variant: 'error'
-            });
-            setUserMode('available', { panelOpen: false });
+        const willOpen = !state.userControl.panelOpen;
+        if (!willOpen) {
+            setUserMode(mode, { panelOpen: false });
+            return;
+        }
+
+        setUserMode(mode, { panelOpen: true });
+
+        if (mode === 'available' || state.actionBusy) {
             return;
         }
 
         state.actionBusy = true;
         try {
-            setUserMode('checking');
+            setUserMode('checking', { panelOpen: true });
             const result = await runAutomaticCheck({ silent: true });
             const status = result?.status || state.updateStatus?.status;
+            const message =
+                result?.statusMessage ||
+                result?.error?.friendlyMessage ||
+                result?.error?.message ||
+                state.updateStatus?.statusMessage ||
+                null;
+
             if (status === 'update-available' || status === 'downloaded') {
                 setUserMode('available', { panelOpen: true });
             } else if (status === 'error') {
-                const message = result?.statusMessage || result?.error?.friendlyMessage || result?.error?.message || 'Não foi possível verificar atualizações.';
-                await showUpdateDialog({
-                    title: 'Atualizações',
-                    message,
-                    confirmLabel: 'OK',
-                    variant: 'error'
-                });
-                setUserMode('idle');
+                setUserMode('error', { panelOpen: true, lastError: message });
+                if (message && window.showToast) {
+                    window.showToast(message, 'error');
+                }
+            } else if (status === 'up-to-date') {
+                setUserMode('up-to-date', { panelOpen: true });
             } else {
-                const version = state.localVersion || result?.localVersion || state.updateStatus?.localVersion;
-                const lines = ['O programa está na última versão disponível.'];
-                if (version) lines.push(`Versão instalada: ${version}.`);
-                await showUpdateDialog({
-                    title: 'Atualizações',
-                    message: lines.join('\n'),
-                    confirmLabel: 'Entendi'
-                });
-                setUserMode('idle');
+                setUserMode('idle', { panelOpen: true });
             }
         } catch (err) {
-            await showUpdateDialog({
-                title: 'Atualizações',
-                message: err?.message || 'Não foi possível verificar atualizações.',
-                confirmLabel: 'OK',
-                variant: 'error'
-            });
-            setUserMode('idle');
+            const message = err?.message || 'Não foi possível verificar atualizações.';
+            setUserMode('error', { panelOpen: true, lastError: message });
+            if (window.showToast) {
+                window.showToast(message, 'error');
+            }
         } finally {
             state.actionBusy = false;
+            refreshUpdateSummaries();
         }
     }
 
@@ -1382,32 +1410,22 @@ const AppUpdates = (() => {
         }
     }
 
+    function closeUserPanel() {
+        const currentMode = state.userControl.mode || 'idle';
+        setUserMode(currentMode, { panelOpen: false });
+    }
+
     function handleUserPanelDismiss(event) {
         if (!state.userControl.panelOpen) return;
         const container = elements.user?.container;
         if (!container || container.contains(event.target)) return;
-        setUserMode('available', { panelOpen: false });
-    }
-
-    function handleUserHoverExit() {
-        if (!state.userControl.panelOpen) return;
-        if (state.userControl.mode !== 'available') return;
-        setUserMode('available', { panelOpen: false });
-    }
-
-    function handleUserFocusExit(event) {
-        if (!state.userControl.panelOpen) return;
-        if (!elements.user?.container) return;
-        const related = event.relatedTarget;
-        if (related && elements.user.container.contains(related)) return;
-        if (state.userControl.mode !== 'available') return;
-        setUserMode('available', { panelOpen: false });
+        closeUserPanel();
     }
 
     function handleUserPanelKeydown(event) {
         if (event.key !== 'Escape') return;
         if (!state.userControl.panelOpen) return;
-        setUserMode('available', { panelOpen: false });
+        closeUserPanel();
     }
 
     function setSupAdminMode(mode, options = {}) {
@@ -1854,11 +1872,6 @@ const AppUpdates = (() => {
 
         if (elements.user?.action) {
             elements.user.action.addEventListener('click', handleUserUpdateAction);
-        }
-
-        if (elements.user?.container) {
-            elements.user.container.addEventListener('mouseleave', handleUserHoverExit);
-            elements.user.container.addEventListener('focusout', handleUserFocusExit);
         }
 
         document.addEventListener('click', handleUserPanelDismiss);
