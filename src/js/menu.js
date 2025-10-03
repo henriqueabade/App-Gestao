@@ -992,6 +992,64 @@ const AppUpdates = (() => {
         });
     }
 
+    const publishErrorDialogState = {
+        lastMessage: null,
+        lastShownAt: 0,
+        activePromise: null
+    };
+
+    function showStandardDialog({
+        title,
+        message,
+        confirmLabel = 'OK',
+        variant = 'info'
+    }) {
+        if (typeof showUpdateDialog === 'function') {
+            return showUpdateDialog({ title, message, confirmLabel, variant });
+        }
+        if (window.showToast) {
+            const toastVariant =
+                variant === 'error'
+                    ? 'error'
+                    : variant === 'warning'
+                    ? 'warning'
+                    : variant === 'success'
+                    ? 'success'
+                    : 'info';
+            window.showToast(message, toastVariant);
+        } else if (typeof window.alert === 'function') {
+            window.alert(message);
+        }
+        return Promise.resolve(true);
+    }
+
+    function showPublishErrorDialog(message) {
+        const normalized = (message && message.toString().trim()) || 'Falha ao publicar atualização.';
+        const now = Date.now();
+        if (
+            publishErrorDialogState.lastMessage === normalized &&
+            now - publishErrorDialogState.lastShownAt < 1000 &&
+            publishErrorDialogState.activePromise
+        ) {
+            return publishErrorDialogState.activePromise;
+        }
+        publishErrorDialogState.lastMessage = normalized;
+        publishErrorDialogState.lastShownAt = now;
+        const result = showStandardDialog({
+            title: 'Falha na Publicação',
+            message: normalized,
+            confirmLabel: 'Entendi',
+            variant: 'error'
+        });
+        const trackedPromise = Promise.resolve(result).finally(() => {
+            if (publishErrorDialogState.activePromise === trackedPromise) {
+                publishErrorDialogState.activePromise = null;
+            }
+        });
+        publishErrorDialogState.activePromise = trackedPromise;
+        return trackedPromise;
+    }
+
     function promptForVersionNumber({ currentLocal, latestPublished } = {}) {
         return new Promise(resolve => {
             const overlay = document.createElement('div');
@@ -1563,11 +1621,12 @@ const AppUpdates = (() => {
         if (!hasPending) {
             setSupAdminMode('idle', { panelOpen: false });
             const message = 'Não há atualizações para publicar. Todas já foram publicadas.';
-            if (window.showToast) {
-                window.showToast(message, 'success');
-            } else if (typeof window.alert === 'function') {
-                window.alert(message);
-            }
+            await showStandardDialog({
+                title: 'Atualizações',
+                message,
+                confirmLabel: 'Entendi',
+                variant: 'info'
+            });
             return;
         }
 
@@ -1628,21 +1687,13 @@ const AppUpdates = (() => {
                 setSupAdminMode(hasPending ? 'available' : 'idle', { panelOpen: false, lastError: message });
             }
 
-            if (typeof window.alert === 'function') {
-                window.alert(message);
-            } else if (window.showToast) {
-                window.showToast(message, 'error');
-            }
+            await showPublishErrorDialog(message);
 
             await runAutomaticCheck({ silent: true });
         } catch (err) {
             const message = err?.message || 'Falha ao publicar atualização.';
             setSupAdminMode('error', { panelOpen: false, lastError: message });
-            if (typeof window.alert === 'function') {
-                window.alert(message);
-            } else if (window.showToast) {
-                window.showToast(message, 'error');
-            }
+            await showPublishErrorDialog(message);
             const hasPending = computePublishAvailability();
             setSupAdminMode(hasPending ? 'available' : 'idle', { panelOpen: false, lastError: message });
             await runAutomaticCheck({ silent: true });
@@ -1919,11 +1970,7 @@ const AppUpdates = (() => {
         setPublishState(enriched, { silent: true, skipSupAdminMode: true });
         setSupAdminMode('error', { panelOpen: false, lastError: payload?.message });
         const errorMessage = payload?.message || 'Falha ao publicar atualização.';
-        if (typeof window.alert === 'function') {
-            window.alert(errorMessage);
-        } else if (window.showToast) {
-            window.showToast(errorMessage, 'error');
-        }
+        showPublishErrorDialog(errorMessage);
         const hasPending = computePublishAvailability();
         setSupAdminMode(hasPending ? 'available' : 'idle', { panelOpen: false });
     }
