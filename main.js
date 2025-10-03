@@ -350,37 +350,71 @@ function formatFileList(set, max = 2) {
 function summarizeChangedFiles(files) {
   if (!Array.isArray(files) || !files.length) return '';
   const categories = categorizeChangedFiles(files);
-  const parts = [];
+  const impactMessages = [];
 
-  const appendSummary = (label, items) => {
-    const list = formatFileList(items);
-    if (!list) return;
-    parts.push(`${label} (${list}).`);
-  };
-
-  appendSummary('Interface do usuário', categories.frontend);
-  appendSummary('Serviços internos', categories.backend);
-  appendSummary('Testes automatizados', categories.tests);
-  appendSummary('Documentação', categories.docs);
-  appendSummary('Configurações', categories.config);
-  appendSummary('Dependências', categories.dependencies);
-  appendSummary('Scripts auxiliares', categories.scripts);
-  appendSummary('Recursos estáticos', categories.assets);
-  appendSummary('Base de dados', categories.database);
-
-  if (!parts.length) {
-    const list = formatFileList(categories.other, 3);
-    if (list) {
-      parts.push(`Arquivos atualizados (${list}).`);
+  const CATEGORY_BUILDERS = [
+    {
+      items: categories.frontend,
+      build: list =>
+        `Melhora a experiência do aplicativo com ajustes visuais e de interação (${list}).`
+    },
+    {
+      items: categories.backend,
+      build: list =>
+        `Aprimora os serviços internos para sustentar os novos fluxos de uso (${list}).`
+    },
+    {
+      items: categories.tests,
+      build: list =>
+        `Reforça a confiabilidade com cenários de teste automatizados (${list}).`
+    },
+    {
+      items: categories.docs,
+      build: list =>
+        `Atualiza a documentação para orientar a equipe sobre as mudanças (${list}).`
+    },
+    {
+      items: categories.config,
+      build: list =>
+        `Ajusta configurações do projeto para suportar o novo comportamento (${list}).`
+    },
+    {
+      items: categories.dependencies,
+      build: list =>
+        `Mantém as dependências alinhadas para garantir compatibilidade (${list}).`
+    },
+    {
+      items: categories.scripts,
+      build: list =>
+        `Refina automações e scripts de suporte para facilitar o dia a dia (${list}).`
+    },
+    {
+      items: categories.assets,
+      build: list =>
+        `Atualiza recursos visuais para refletir a nova experiência (${list}).`
+    },
+    {
+      items: categories.database,
+      build: list =>
+        `Organiza estruturas de dados para atender às novas funcionalidades (${list}).`
     }
-  } else {
-    const list = formatFileList(categories.other, 2);
-    if (list) {
-      parts.push(`Outros arquivos (${list}).`);
-    }
+  ];
+
+  CATEGORY_BUILDERS.forEach(({ items, build }) => {
+    const formatted = formatFileList(items);
+    if (!formatted) return;
+    impactMessages.push(build(formatted));
+  });
+
+  const otherList = formatFileList(categories.other, impactMessages.length ? 2 : 3);
+  if (otherList) {
+    const message = impactMessages.length
+      ? `Completa a entrega com ajustes pontuais em outros componentes (${otherList}).`
+      : `Inclui melhorias complementares em arquivos diversos (${otherList}).`;
+    impactMessages.push(message);
   }
 
-  return parts.join(' ');
+  return impactMessages.join(' ');
 }
 
 function collectPendingChangesSince(referenceCommit, headCommit = getHeadCommitHash()) {
