@@ -1,6 +1,7 @@
 
 const { app, BrowserWindow, ipcMain, screen, shell } = require('electron');
 const path = require('path');
+const { spawnSync } = require('child_process');
 const DEBUG = process.env.DEBUG === 'true';
 const { autoUpdater } = require('electron-updater');
 const updateService = require('./backend/updateService');
@@ -119,13 +120,18 @@ let closingDashboardWindow = false;
 let quittingApp = false;
 const localAppVersion = app.getVersion();
 const initialPublishing = publisher.isPublishing();
+const projectRoot = path.resolve(__dirname);
 
 let publishState = {
   publishing: initialPublishing,
   canPublish: !initialPublishing,
   latestPublishedVersion: localAppVersion,
-  localVersion: localAppVersion
+  localVersion: localAppVersion,
+  lastPublishedCommit: null,
+  pendingChanges: []
 };
+
+let gitUnavailable = false;
 
 let publishStateFilePath;
 
@@ -160,7 +166,8 @@ function persistPublishStateSnapshot() {
     fs.mkdirSync(dir, { recursive: true });
     const snapshot = {
       latestPublishedVersion: publishState.latestPublishedVersion,
-      localVersion: publishState.localVersion
+      localVersion: publishState.localVersion,
+      lastPublishedCommit: publishState.lastPublishedCommit
     };
     fs.writeFileSync(filePath, `${JSON.stringify(snapshot, null, 2)}\n`);
   } catch (err) {
@@ -176,7 +183,15 @@ if (persistedPublishState) {
   if (persistedPublishState.localVersion) {
     publishState.localVersion = persistedPublishState.localVersion;
   }
+  if (persistedPublishState.lastPublishedCommit) {
+    publishState.lastPublishedCommit = persistedPublishState.lastPublishedCommit;
+  }
 }
+
+if (!publishState.lastPublishedCommit) {
+  publishState.lastPublishedCommit = getHeadCommitHash();
+}
+refreshPendingChanges();
 
 function getPublishLogPath() {
   return path.join(__dirname, 'publish-audit.log');
@@ -195,6 +210,113 @@ function recordPublishAudit(event, extra = {}) {
   } catch (err) {
     console.error('Não foi possível registrar auditoria de publicação:', err);
   }
+}
+
+function runGitCommand(args) {
+  if (gitUnavailable) return null;
+  try {
+    const result = spawnSync('git', args, {
+      cwd: projectRoot,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe']
+    });
+    if (result.error) throw result.error;
+    if (typeof result.status === 'number' && result.status !== 0) {
+      if (DEBUG) {
+        const stderr = (result.stderr || '').toString().trim();
+        console.warn('git command failed:', ['git', ...args].join(' '), stderr);
+      }
+      return null;
+    }
+    return result.stdout || '';
+  } catch (err) {
+    if (err && err.code === 'ENOENT') {
+      gitUnavailable = true;
+    }
+    if (DEBUG) {
+      console.warn('git command failed:', err);
+    }
+    return null;
+  }
+}
+
+function getHeadCommitHash() {
+  const output = runGitCommand(['rev-parse', 'HEAD']);
+  if (!output) return null;
+  const value = output.trim();
+  return value || null;
+}
+
+function collectPendingChangesSince(referenceCommit, headCommit = getHeadCommitHash()) {
+  if (!referenceCommit || !headCommit || referenceCommit === headCommit) {
+    return [];
+  }
+
+  const output = runGitCommand([
+    'log',
+    '--date=iso-strict',
+    '--pretty=format:%H%x1f%an%x1f%ad%x1f%s%x1f%b%x1e',
+    '--max-count=50',
+    `${referenceCommit}..${headCommit}`
+  ]);
+
+  if (!output) return [];
+
+  return output
+    .split('\x1e')
+    .map(entry => entry.trim())
+    .filter(Boolean)
+    .map(raw => {
+      const [hash, author, date, subject, body] = raw.split('\x1f');
+      const normalizedBody = (body || '').replace(/\r/g, '').trim();
+      const bodyLines = normalizedBody
+        ? normalizedBody
+            .split('\n')
+            .map(line => line.trim())
+            .filter(Boolean)
+        : [];
+      const highlightLines = bodyLines
+        .filter(line => /^[-*•]/.test(line))
+        .map(line => line.replace(/^[-*•]+\s*/, '').trim())
+        .filter(Boolean);
+      const detailLines = bodyLines.filter(line => !/^[-*•]/.test(line));
+      const summaryText = detailLines.join('\n').trim();
+
+      return {
+        id: hash,
+        title: subject || (hash ? `Alteração ${hash.slice(0, 7)}` : 'Alteração pendente'),
+        version: null,
+        date: date || null,
+        author: author || null,
+        highlights: highlightLines,
+        items: highlightLines,
+        summary: summaryText || '',
+        details: normalizedBody
+      };
+    });
+}
+
+function refreshPendingChanges() {
+  if (gitUnavailable) {
+    publishState.pendingChanges = [];
+    return publishState.pendingChanges;
+  }
+
+  const headCommit = getHeadCommitHash();
+  if (!headCommit) {
+    publishState.pendingChanges = [];
+    return publishState.pendingChanges;
+  }
+
+  if (!publishState.lastPublishedCommit) {
+    publishState.lastPublishedCommit = headCommit;
+    publishState.pendingChanges = [];
+    return publishState.pendingChanges;
+  }
+
+  const entries = collectPendingChangesSince(publishState.lastPublishedCommit, headCommit);
+  publishState.pendingChanges = Array.isArray(entries) ? entries : [];
+  return publishState.pendingChanges;
 }
 
 function broadcastPublishEvent(channel, payload = {}) {
@@ -225,6 +347,12 @@ function updatePublishState(partial = {}) {
     publishState.localVersion = app.getVersion();
   }
 
+  if (hasOwn('lastPublishedCommit')) {
+    publishState.lastPublishedCommit = partial.lastPublishedCommit || null;
+  } else if (!publishState.lastPublishedCommit) {
+    publishState.lastPublishedCommit = getHeadCommitHash();
+  }
+
   let nextCanPublish;
   if (hasOwn('canPublish')) {
     nextCanPublish = Boolean(partial.canPublish);
@@ -239,7 +367,10 @@ function updatePublishState(partial = {}) {
   }
 
   const versionChanged = hasOwn('latestPublishedVersion') || hasOwn('localVersion');
-  if (versionChanged) {
+  const commitChanged = hasOwn('lastPublishedCommit');
+  refreshPendingChanges();
+
+  if (versionChanged || commitChanged) {
     persistPublishStateSnapshot();
   }
 
@@ -1359,7 +1490,8 @@ ipcMain.handle('publish-update', async (_event, payload) => {
       publishing: false,
       canPublish: true,
       latestPublishedVersion: sanitizedVersion,
-      localVersion: sanitizedVersion
+      localVersion: sanitizedVersion,
+      lastPublishedCommit: getHeadCommitHash()
     });
     broadcastPublishEvent('publish-done', { ...successState, targetVersion: sanitizedVersion });
     recordPublishAudit('publish-success', { version: sanitizedVersion });
@@ -1394,6 +1526,7 @@ ipcMain.handle('get-update-status', async (_event, options = {}) => {
   if (refresh) {
     await updateService.checkForUpdates({ silent: true });
   }
+  refreshPendingChanges();
   const status = updateService.getUpdateStatus();
   return {
     ...status,

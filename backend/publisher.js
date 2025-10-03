@@ -41,7 +41,8 @@ async function runPublishPipeline(options = {}) {
 
   return new Promise((resolve, reject) => {
     try {
-      const child = spawn('npx', ['electron-builder', '--publish=always'], {
+      const { command, extraArgs } = resolveNpxCommand();
+      const child = spawn(command, [...extraArgs, 'electron-builder', '--publish=always'], {
         cwd: projectRoot,
         env: { ...process.env, TARGET_VERSION: version || process.env.TARGET_VERSION },
         stdio: ['ignore', 'pipe', 'pipe']
@@ -88,6 +89,24 @@ async function runPublishPipeline(options = {}) {
       reject(err);
     }
   });
+}
+
+function resolveNpxCommand() {
+  const nodeDir = path.dirname(process.execPath);
+  const npxBinary = process.platform === 'win32' ? path.join(nodeDir, 'npx.cmd') : path.join(nodeDir, 'npx');
+
+  if (fs.existsSync(npxBinary)) {
+    return { command: npxBinary, extraArgs: [] };
+  }
+
+  try {
+    const npxCli = require.resolve('npm/bin/npx-cli.js');
+    return { command: process.execPath, extraArgs: [npxCli] };
+  } catch (err) {
+    const fallback = process.platform === 'win32' ? 'npx.cmd' : 'npx';
+    appendLog(`Aviso: npx não encontrado em ${npxBinary}, utilizando fallback "${fallback}". Detalhes: ${err.message}`);
+    return { command: fallback, extraArgs: [] };
+  }
 }
 
 function isPublishing() {

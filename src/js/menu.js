@@ -694,8 +694,15 @@ const AppUpdates = (() => {
         const publishState = state.publishState || {};
         const updateStatus = state.updateStatus || {};
         const explicit = publishState.canPublish ?? updateStatus.canPublish;
-        if (typeof explicit === 'boolean') {
-            return explicit;
+        if (typeof explicit === 'boolean' && explicit === false) {
+            return false;
+        }
+
+        const pendingChangesCount = Array.isArray(publishState.pendingChanges)
+            ? publishState.pendingChanges.filter(Boolean).length
+            : 0;
+        if (pendingChangesCount > 0) {
+            return true;
         }
 
         const status = updateStatus.status;
@@ -1830,11 +1837,16 @@ const AppUpdates = (() => {
         applySupAdminState();
         updateUserControlFromStatus();
         if (!options.skipSupAdminMode) {
+            const wasPanelOpen = Boolean(state.supAdmin.panelOpen);
+            const wasModeAvailable = state.supAdmin.mode === 'available';
             if (mergedState.publishing === true) {
                 setSupAdminMode('publishing', { panelOpen: false });
             } else if (mergedState.publishing === false) {
                 const hasPending = computePublishAvailability();
-                setSupAdminMode(hasPending ? 'available' : 'success', { panelOpen: false });
+                const shouldStayOpen = hasPending && wasModeAvailable && wasPanelOpen;
+                setSupAdminMode(hasPending ? 'available' : 'success', {
+                    panelOpen: hasPending ? shouldStayOpen : false
+                });
             }
         }
         if (!options.silent) {
