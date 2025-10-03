@@ -768,7 +768,7 @@ const AppUpdates = (() => {
         return false;
     }
 
-    function setSupAdminIcon(mode) {
+    function setSupAdminIcon(mode, { hasPending = true } = {}) {
         const icon = elements.supAdmin?.icon;
         if (!icon) return;
         icon.classList.add('sup-admin-updates-icon');
@@ -787,6 +787,9 @@ const AppUpdates = (() => {
             default:
                 iconName = 'fa-cloud-upload-alt';
                 break;
+        }
+        if (!hasPending && mode !== 'publishing' && mode !== 'error') {
+            iconName = 'fa-check';
         }
         icon.classList.add(iconName);
     }
@@ -844,7 +847,7 @@ const AppUpdates = (() => {
             mode = 'idle';
             state.supAdmin.mode = mode;
         }
-        setSupAdminIcon(mode);
+        setSupAdminIcon(mode, { hasPending });
 
         sup.trigger.setAttribute('data-state', mode);
         sup.trigger.dataset.state = mode;
