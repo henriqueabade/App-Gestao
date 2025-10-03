@@ -256,6 +256,133 @@ function deriveSummaryFromSubject(subject) {
   return /[.!?…]$/.test(sentence) ? sentence : `${sentence}.`;
 }
 
+function getChangedFilesForCommit(hash) {
+  if (!hash) return [];
+  const output = runGitCommand(['show', '--pretty=format:', '--name-only', hash]);
+  if (!output) return [];
+  return output
+    .split('\n')
+    .map(line => line.trim())
+    .filter(Boolean);
+}
+
+function buildFileDisplayName(filePath) {
+  if (!filePath) return '';
+  const normalized = filePath.replace(/\\/g, '/');
+  const segments = normalized.split('/').filter(Boolean);
+  if (!segments.length) return normalized;
+  if (segments.length === 1) {
+    return segments[0];
+  }
+  return segments.slice(-2).join('/');
+}
+
+function categorizeChangedFiles(files) {
+  const categories = {
+    frontend: new Set(),
+    backend: new Set(),
+    tests: new Set(),
+    docs: new Set(),
+    config: new Set(),
+    dependencies: new Set(),
+    assets: new Set(),
+    database: new Set(),
+    scripts: new Set(),
+    other: new Set()
+  };
+
+  files.forEach(file => {
+    if (!file) return;
+    const normalized = file.replace(/\\/g, '/');
+    const lower = normalized.toLowerCase();
+    const display = buildFileDisplayName(normalized);
+
+    const baseName = path.basename(normalized);
+    const isTest = /test|spec|\.test|\.spec|__tests__/i.test(normalized);
+    const isDoc = lower.startsWith('docs/') || /\.(md|mdx|adoc|rst)$/i.test(baseName);
+    const isConfig =
+      lower.includes('config/') ||
+      /config\.(js|ts|json|mjs|cjs)$/i.test(baseName) ||
+      /\.ya?ml$/i.test(baseName);
+    const isDependency = /package(-lock)?\.json$|yarn\.lock$|pnpm-lock\.ya?ml$/i.test(baseName);
+    const isAsset = /\.(png|jpe?g|gif|svg|ico|webp|bmp)$/i.test(baseName);
+    const isDatabase = /^(data\/|migrations?\/)/.test(lower) || /\.sql$/i.test(baseName);
+    const isScript = lower.startsWith('scripts/') || lower.startsWith('tools/');
+
+    if (normalized.startsWith('src/') || normalized.startsWith('manual-tests/') || normalized.startsWith('public/')) {
+      categories.frontend.add(display);
+    } else if (normalized.startsWith('backend/')) {
+      categories.backend.add(display);
+    } else if (isTest) {
+      categories.tests.add(display);
+    } else if (isDoc) {
+      categories.docs.add(display);
+    } else if (isDependency) {
+      categories.dependencies.add(display);
+    } else if (isConfig) {
+      categories.config.add(display);
+    } else if (isDatabase) {
+      categories.database.add(display);
+    } else if (isScript) {
+      categories.scripts.add(display);
+    } else if (isAsset) {
+      categories.assets.add(display);
+    } else {
+      categories.other.add(display);
+    }
+  });
+
+  return categories;
+}
+
+function formatFileList(set, max = 2) {
+  const values = Array.from(set).filter(Boolean);
+  if (!values.length) return '';
+  const selected = values.slice(0, max);
+  const remaining = values.length - selected.length;
+  const formatted = selected.join(', ');
+  if (remaining > 0) {
+    return `${formatted} e +${remaining}`;
+  }
+  return formatted;
+}
+
+function summarizeChangedFiles(files) {
+  if (!Array.isArray(files) || !files.length) return '';
+  const categories = categorizeChangedFiles(files);
+  const parts = [];
+
+  const appendSummary = (label, items) => {
+    const list = formatFileList(items);
+    if (!list) return;
+    parts.push(`${label} (${list}).`);
+  };
+
+  appendSummary('Interface do usuário', categories.frontend);
+  appendSummary('Serviços internos', categories.backend);
+  appendSummary('Testes automatizados', categories.tests);
+  appendSummary('Documentação', categories.docs);
+  appendSummary('Configurações', categories.config);
+  appendSummary('Dependências', categories.dependencies);
+  appendSummary('Scripts auxiliares', categories.scripts);
+  appendSummary('Recursos estáticos', categories.assets);
+  appendSummary('Base de dados', categories.database);
+
+  if (!parts.length) {
+    const list = formatFileList(categories.other, 3);
+    if (list) {
+      parts.push(`Arquivos atualizados (${list}).`);
+    }
+  } else {
+    const list = formatFileList(categories.other, 2);
+    if (list) {
+      parts.push(`Outros arquivos (${list}).`);
+    }
+  }
+
+  return parts.join(' ');
+}
+
 function collectPendingChangesSince(referenceCommit, headCommit = getHeadCommitHash()) {
   if (!referenceCommit || !headCommit || referenceCommit === headCommit) {
     return [];
@@ -290,7 +417,15 @@ function collectPendingChangesSince(referenceCommit, headCommit = getHeadCommitH
         .filter(Boolean);
       const detailLines = bodyLines.filter(line => !/^[-*•]/.test(line));
       const summaryText = detailLines.join('\n').trim();
-      const derivedSummary = summaryText || deriveSummaryFromSubject(subject);
+      const changedFiles = getChangedFilesForCommit(hash);
+      const fileSummary = summarizeChangedFiles(changedFiles);
+      let derivedSummary = summaryText;
+      if (fileSummary) {
+        derivedSummary = derivedSummary ? `${derivedSummary} ${fileSummary}` : fileSummary;
+      }
+      if (!derivedSummary) {
+        derivedSummary = deriveSummaryFromSubject(subject);
+      }
 
       return {
         id: hash,
@@ -301,7 +436,8 @@ function collectPendingChangesSince(referenceCommit, headCommit = getHeadCommitH
         highlights: highlightLines,
         items: highlightLines,
         summary: derivedSummary,
-        details: normalizedBody
+        details: normalizedBody,
+        files: changedFiles
       };
     });
 }

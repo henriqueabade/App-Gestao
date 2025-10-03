@@ -114,6 +114,9 @@ Variáveis comuns:
 | `ELECTRON_PUBLISH_GITHUB_RELEASE_TYPE` | (Opcional) Tipo de release (`draft`, `prerelease`, etc.). Padrão: `draft`. |
 | `GH_TOKEN` | Personal access token com permissão para criar releases e enviar artefatos. |
 
+> 💡 O comando de publicação valida essas variáveis antes de iniciar o `electron-builder`. Caso o token ou as informações do
+> repositório estejam ausentes, o processo falha imediatamente com uma mensagem orientando quais variáveis definir.
+
 O `electron-builder` gera automaticamente `latest.yml`, além do instalador `.exe` e do pacote `.blockmap`. Durante pipelines CI,
 defina o token (`GH_TOKEN`) e execute `npm run dist:publish` após criar a tag. O release ficará em modo rascunho enquanto não for
 publicado manualmente no GitHub.

@@ -40,6 +40,13 @@ async function runPublishPipeline(options = {}) {
   appendLog(`Publicação iniciada por ${requester}${versionSuffix}`);
 
   return new Promise((resolve, reject) => {
+    const validationError = validatePublishEnvironment();
+    if (validationError) {
+      appendLog(`Validação de ambiente falhou: ${validationError.message}`);
+      emitter.emit('error', validationError);
+      return reject(validationError);
+    }
+
     try {
       const { command, extraArgs } = resolveNpxCommand();
       const child = spawn(command, [...extraArgs, 'electron-builder', '--publish=always'], {
@@ -89,6 +96,40 @@ async function runPublishPipeline(options = {}) {
       reject(err);
     }
   });
+}
+
+function validatePublishEnvironment() {
+  const publishProvider = (process.env.ELECTRON_PUBLISH_PROVIDER || 'github').toLowerCase();
+
+  if (publishProvider === 'github') {
+    const owner = (process.env.ELECTRON_PUBLISH_GITHUB_OWNER || '').trim();
+    const repo = (process.env.ELECTRON_PUBLISH_GITHUB_REPO || '').trim();
+    const slug = (process.env.ELECTRON_PUBLISH_GITHUB_SLUG || '').trim();
+    const token = (process.env.GH_TOKEN || '').trim();
+
+    const missing = [];
+
+    if (!token) {
+      missing.push('GH_TOKEN');
+    }
+
+    const hasSlug = Boolean(slug);
+    const hasOwnerRepo = Boolean(owner && repo);
+
+    if (!hasSlug && !hasOwnerRepo) {
+      missing.push('ELECTRON_PUBLISH_GITHUB_OWNER/REPO ou ELECTRON_PUBLISH_GITHUB_SLUG');
+    }
+
+    if (missing.length > 0) {
+      const instructions =
+        missing.length === 1
+          ? missing[0]
+          : `${missing.slice(0, -1).join(', ')} e ${missing.slice(-1)}`;
+      return new Error(`Defina ${instructions} antes de publicar.`);
+    }
+  }
+
+  return null;
 }
 
 function resolveNpxCommand() {
