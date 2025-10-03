@@ -7,6 +7,7 @@ const { autoUpdater } = require('electron-updater');
 const updateService = require('./backend/updateService');
 const publisher = require('./backend/publisher');
 const versionManager = require('./backend/versionManager');
+const { performReleaseCommit } = require('./backend/gitAutomation');
 const {
   registrarUsuario,
   loginUsuario,
@@ -1666,12 +1667,32 @@ ipcMain.handle('publish-update', async (_event, payload) => {
       onProgress: progressHandler,
       version: sanitizedVersion
     });
+    const gitResult = performReleaseCommit({
+      runGitCommand,
+      version: sanitizedVersion,
+      logger: console
+    });
+
+    if (!gitResult.success) {
+      const gitError = new Error(
+        gitResult.message || 'Falha ao sincronizar repositório após publicação.'
+      );
+      gitError.code = gitResult.code || 'git-automation-failed';
+      gitError.isGitAutomationError = true;
+      throw gitError;
+    }
+
+    const headAfterPush = getHeadCommitHash();
+    const nextHeadCommit = headAfterPush || publishState.lastPublishedCommit;
+    if (!headAfterPush) {
+      console.warn('Não foi possível obter o commit HEAD após o push. Mantendo último commit conhecido.');
+    }
     const successState = updatePublishState({
       publishing: false,
       canPublish: true,
       latestPublishedVersion: sanitizedVersion,
       localVersion: sanitizedVersion,
-      lastPublishedCommit: getHeadCommitHash()
+      lastPublishedCommit: nextHeadCommit
     });
     broadcastPublishEvent('publish-done', { ...successState, targetVersion: sanitizedVersion });
     recordPublishAudit('publish-success', { version: sanitizedVersion });
@@ -1683,10 +1704,22 @@ ipcMain.handle('publish-update', async (_event, payload) => {
         revertVersionChange();
       } catch (restoreErr) {
         console.error('Falha ao restaurar arquivos da versão anterior:', restoreErr);
+      } finally {
+        revertVersionChange = null;
       }
     }
     const errorState = updatePublishState({ publishing: false, canPublish: true });
-    const message = err?.message || 'Falha ao publicar atualização.';
+    const isGitFailure = Boolean(err?.isGitAutomationError || (err?.code && String(err.code).startsWith('git-')));
+    let message;
+    if (gitUnavailable) {
+      console.warn('Git não está disponível neste ambiente; publicação abortada e versão revertida.');
+      message =
+        'Git não está disponível neste ambiente. Instale e configure o Git para concluir a publicação.';
+    } else if (isGitFailure) {
+      message = err?.message || 'Falha ao sincronizar repositório com a nova versão.';
+    } else {
+      message = err?.message || 'Falha ao publicar atualização.';
+    }
     broadcastPublishEvent('publish-error', {
       ...errorState,
       message,
