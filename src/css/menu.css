@@ -492,7 +492,7 @@ body {
     cursor: not-allowed;
 }
 
-.sup-admin-updates-trigger[disabled] .sup-admin-updates-icon {
+.sup-admin-updates-trigger[disabled]:not([data-state="publishing"]) .sup-admin-updates-icon {
     animation: none;
 }
 

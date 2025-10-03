@@ -78,6 +78,8 @@ const AppUpdates = (() => {
         actionBusy: false,
         autoCheckInterval: null,
         autoCheckPending: false,
+        userInitiatedUpdate: false,
+        userUpdateInProgress: false,
         supAdmin: {
             mode: 'idle',
             panelOpen: false,
@@ -109,6 +111,8 @@ const AppUpdates = (() => {
         'disabled',
         'error'
     ]);
+
+    const USER_INITIATED_PROGRESS_STATUSES = new Set(['checking', 'downloading', 'installing']);
 
     function setElementHidden(el, hidden) {
         if (!el) return;
@@ -196,6 +200,39 @@ const AppUpdates = (() => {
             !elements.user.container.classList.contains('hidden')
         );
         setElementHidden(elements.container, !(badgeVisible || supAdminVisible || userVisible));
+    }
+
+    function markUserInitiatedUpdate({ inProgress = false } = {}) {
+        state.userInitiatedUpdate = true;
+        if (inProgress) {
+            state.userUpdateInProgress = true;
+        }
+    }
+
+    function clearUserInitiatedUpdate({ force = false } = {}) {
+        if (force) {
+            state.userInitiatedUpdate = false;
+            state.userUpdateInProgress = false;
+            return;
+        }
+        if (!state.userUpdateInProgress) {
+            state.userInitiatedUpdate = false;
+        }
+    }
+
+    function updateUserInitiatedFromStatus(status) {
+        if (!state.userInitiatedUpdate) {
+            state.userUpdateInProgress = false;
+            return;
+        }
+        if (USER_INITIATED_PROGRESS_STATUSES.has(status)) {
+            state.userUpdateInProgress = true;
+            return;
+        }
+        state.userUpdateInProgress = false;
+        if (!state.userControl.panelOpen) {
+            state.userInitiatedUpdate = false;
+        }
     }
 
     const STATUS_LABELS = {
@@ -614,6 +651,7 @@ const AppUpdates = (() => {
                     }
 
                     const highlights = Array.isArray(entry.highlights) ? entry.highlights.filter(Boolean) : [];
+                    const summaryText = typeof entry.summary === 'string' ? entry.summary.trim() : '';
                     if (highlights.length) {
                         const bulletList = document.createElement('ul');
                         bulletList.className = 'updates-summary__change-points';
@@ -628,10 +666,17 @@ const AppUpdates = (() => {
                         }
                     }
 
-                    if (!highlights.length && entry.summary) {
+                    if (!highlights.length && summaryText) {
                         const note = document.createElement('p');
                         note.className = 'updates-summary__change-note';
-                        note.textContent = entry.summary;
+                        note.textContent = summaryText;
+                        li.appendChild(note);
+                    }
+
+                    if (!li.childElementCount && summaryText) {
+                        const note = document.createElement('p');
+                        note.className = 'updates-summary__change-note';
+                        note.textContent = summaryText;
                         li.appendChild(note);
                     }
 
@@ -1314,9 +1359,11 @@ const AppUpdates = (() => {
         const willOpen = !state.userControl.panelOpen;
         if (!willOpen) {
             setUserMode(mode, { panelOpen: false });
+            clearUserInitiatedUpdate();
             return;
         }
 
+        markUserInitiatedUpdate();
         setUserMode(mode, { panelOpen: true });
 
         if (mode === 'available' || state.actionBusy) {
@@ -1326,7 +1373,7 @@ const AppUpdates = (() => {
         state.actionBusy = true;
         try {
             setUserMode('checking', { panelOpen: true });
-            const result = await runAutomaticCheck({ silent: true });
+            const result = await runAutomaticCheck({ silent: true, userInitiated: true });
             const status = result?.status || state.updateStatus?.status;
             const message =
                 result?.statusMessage ||
@@ -1383,6 +1430,7 @@ const AppUpdates = (() => {
             return;
         }
 
+        markUserInitiatedUpdate({ inProgress: true });
         state.actionBusy = true;
         state.userControl.pendingAction = true;
         setUserMode('updating', { panelOpen: false, spinnerMessage: 'Baixando atualização...' });
@@ -1405,6 +1453,7 @@ const AppUpdates = (() => {
         } catch (err) {
             state.userControl.pendingAction = false;
             state.actionBusy = false;
+            clearUserInitiatedUpdate({ force: true });
             hideUserSpinner();
             setUserMode('available', { panelOpen: false });
             await showUpdateDialog({
@@ -1420,6 +1469,7 @@ const AppUpdates = (() => {
     function closeUserPanel() {
         const currentMode = state.userControl.mode || 'idle';
         setUserMode(currentMode, { panelOpen: false });
+        clearUserInitiatedUpdate();
     }
 
     function handleUserPanelDismiss(event) {
@@ -1464,14 +1514,14 @@ const AppUpdates = (() => {
         applySupAdminState();
     }
 
-    async function runAutomaticCheck({ silent = true } = {}) {
+    async function runAutomaticCheck({ silent = true, userInitiated = false } = {}) {
         if (!window.electronAPI?.getUpdateStatus) return null;
         if (state.autoCheckPending) return null;
         state.autoCheckPending = true;
         try {
             const result = await window.electronAPI.getUpdateStatus({ refresh: true });
             if (result && typeof result === 'object') {
-                setUpdateStatus(result, { silent });
+                setUpdateStatus(result, { silent, userInitiatedUpdate: userInitiated });
                 if (result.publishState) {
                     setPublishState(result.publishState, { silent: true });
                 }
@@ -1489,7 +1539,8 @@ const AppUpdates = (() => {
 
     function ensureAutoCheckTimer() {
         if (state.autoCheckInterval || !window.electronAPI?.getUpdateStatus) return;
-        const intervalMs = 30 * 60 * 1000;
+        // Executa a verificação automática a cada 10 minutos
+        const intervalMs = 10 * 60 * 1000;
         state.autoCheckInterval = setInterval(() => {
             runAutomaticCheck({ silent: true });
         }, intervalMs);
@@ -1743,8 +1794,8 @@ const AppUpdates = (() => {
         updateContainerVisibility();
     }
 
-    function handleUpdateToasts(previousState, current) {
-        if (!current || !window.showToast) return;
+    function handleUpdateToasts(previousState, current, { userInitiated = false } = {}) {
+        if (!userInitiated || !current || !window.showToast) return;
         const status = current.status;
         if (!status) return;
         const previousStatus = previousState?.status;
@@ -1803,6 +1854,7 @@ const AppUpdates = (() => {
     }
 
     function setUpdateStatus(newStatus, options = {}) {
+        const { silent = false, userInitiatedUpdate = false } = options;
         const previousState = state.updateStatus ? { ...state.updateStatus } : null;
         state.updateStatus = newStatus ? { ...newStatus } : null;
         if (newStatus?.localVersion) state.localVersion = newStatus.localVersion;
@@ -1815,9 +1867,10 @@ const AppUpdates = (() => {
         updateBadge();
         applySupAdminState();
         updateUserControlFromStatus();
-        if (!options.silent) {
-            handleUpdateToasts(previousState, newStatus);
+        if (!silent && userInitiatedUpdate) {
+            handleUpdateToasts(previousState, newStatus, { userInitiated: true });
         }
+        updateUserInitiatedFromStatus(newStatus?.status || null);
         state.lastStatus = newStatus?.status || null;
         refreshUpdateSummaries();
         persistState();
@@ -1899,7 +1952,15 @@ const AppUpdates = (() => {
 
         if (window.electronAPI?.onUpdateStatus) {
             window.electronAPI.onUpdateStatus(payload => {
-                setUpdateStatus(payload, { silent: false });
+                const userInitiated = Boolean(
+                    state.userInitiatedUpdate ||
+                    state.userUpdateInProgress ||
+                    state.userControl?.panelOpen
+                );
+                setUpdateStatus(payload, {
+                    silent: !userInitiated,
+                    userInitiatedUpdate: userInitiated
+                });
             });
         }
 
@@ -1932,7 +1993,7 @@ const AppUpdates = (() => {
     function init() {
         const restored = restoreState();
         if (restored.updateStatus) {
-            setUpdateStatus(restored.updateStatus, { silent: true });
+            setUpdateStatus(restored.updateStatus, { silent: true, userInitiatedUpdate: false });
         } else {
             updateBadge();
             updateUserControlFromStatus();

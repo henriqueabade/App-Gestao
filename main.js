@@ -247,6 +247,15 @@ function getHeadCommitHash() {
   return value || null;
 }
 
+function deriveSummaryFromSubject(subject) {
+  if (!subject) return '';
+  const trimmed = String(subject).trim();
+  if (!trimmed) return '';
+  const normalized = trimmed.replace(/\s+/g, ' ');
+  const sentence = `${normalized.charAt(0).toUpperCase()}${normalized.slice(1)}`;
+  return /[.!?…]$/.test(sentence) ? sentence : `${sentence}.`;
+}
+
 function collectPendingChangesSince(referenceCommit, headCommit = getHeadCommitHash()) {
   if (!referenceCommit || !headCommit || referenceCommit === headCommit) {
     return [];
@@ -281,6 +290,7 @@ function collectPendingChangesSince(referenceCommit, headCommit = getHeadCommitH
         .filter(Boolean);
       const detailLines = bodyLines.filter(line => !/^[-*•]/.test(line));
       const summaryText = detailLines.join('\n').trim();
+      const derivedSummary = summaryText || deriveSummaryFromSubject(subject);
 
       return {
         id: hash,
@@ -290,7 +300,7 @@ function collectPendingChangesSince(referenceCommit, headCommit = getHeadCommitH
         author: author || null,
         highlights: highlightLines,
         items: highlightLines,
-        summary: summaryText || '',
+        summary: derivedSummary,
         details: normalizedBody
       };
     });
