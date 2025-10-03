@@ -1,3 +1,10 @@
+// backend/publisher.js
+// ✅ Lê GH_TOKEN do .env
+// ✅ Não exige OWNER/REPO/SLUG do ambiente (usa valores padrão)
+// ✅ Injeta OWNER/REPO/RELEASE_TYPE no spawn para o electron-builder
+
+require('dotenv').config();
+
 const { spawn } = require('child_process');
 const { EventEmitter } = require('events');
 const path = require('path');
@@ -9,30 +16,29 @@ const logFilePath = path.join(projectRoot, 'publish-audit.log');
 
 let currentProcess = null;
 
+// 🔧 AJUSTE AQUI SE PRECISAR:
+const DEFAULT_OWNER = process.env.ELECTRON_PUBLISH_GITHUB_OWNER || 'henriqueabade';
+const DEFAULT_REPO  = process.env.ELECTRON_PUBLISH_GITHUB_REPO  || 'App-Gestao';
+const DEFAULT_RELEASE_TYPE = process.env.ELECTRON_PUBLISH_GITHUB_RELEASE_TYPE || 'draft';
+
 function appendLog(message) {
   const line = `[${new Date().toISOString()}] ${message}\n`;
   fs.appendFile(logFilePath, line, err => {
-    if (err) {
-      console.error('Publish pipeline log write failed:', err);
-    }
+    if (err) console.error('Publish pipeline log write failed:', err);
   });
 }
 
 function notifyProgress(text, stream, callback) {
   if (!text) return;
-  const lines = text.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+  const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
   for (const line of lines) {
-    if (typeof callback === 'function') {
-      callback({ message: line, stream });
-    }
+    if (typeof callback === 'function') callback({ message: line, stream });
     emitter.emit('progress', { message: line, stream });
   }
 }
 
 async function runPublishPipeline(options = {}) {
-  if (currentProcess) {
-    throw new Error('Já existe uma publicação em andamento.');
-  }
+  if (currentProcess) throw new Error('Já existe uma publicação em andamento.');
 
   const { user, onProgress, version } = options;
   const requester = user ? `${user.nome || user.email || user.id || 'usuário desconhecido'}` : 'usuário desconhecido';
@@ -49,9 +55,17 @@ async function runPublishPipeline(options = {}) {
 
     try {
       const { command, extraArgs } = resolveNpxCommand();
-      const child = spawn(command, [...extraArgs, 'electron-builder', '--publish=always'], {
+
+      const child = spawn(command, [...extraArgs, 'electron-builder', '--config', 'electron-builder.config.js', '--publish', 'always'], {
         cwd: projectRoot,
-        env: { ...process.env, TARGET_VERSION: version || process.env.TARGET_VERSION },
+        env: {
+          ...process.env,
+          TARGET_VERSION: version || process.env.TARGET_VERSION,
+          // ✅ injeta fallback seguro pro electron-builder
+          ELECTRON_PUBLISH_GITHUB_OWNER: DEFAULT_OWNER,
+          ELECTRON_PUBLISH_GITHUB_REPO: DEFAULT_REPO,
+          ELECTRON_PUBLISH_GITHUB_RELEASE_TYPE: DEFAULT_RELEASE_TYPE
+        },
         stdio: ['ignore', 'pipe', 'pipe']
       });
 
@@ -99,53 +113,27 @@ async function runPublishPipeline(options = {}) {
 }
 
 function validatePublishEnvironment() {
-  const publishProvider = (process.env.ELECTRON_PUBLISH_PROVIDER || 'github').toLowerCase();
+  // 🔒 ÚNICO requisito obrigatório: GH_TOKEN (pode estar no .env)
+  const token = (process.env.GH_TOKEN || '').trim();
+  if (!token) return new Error('Defina GH_TOKEN (no .env ou nas variáveis do sistema) antes de publicar.');
 
-  if (publishProvider === 'github') {
-    const owner = (process.env.ELECTRON_PUBLISH_GITHUB_OWNER || '').trim();
-    const repo = (process.env.ELECTRON_PUBLISH_GITHUB_REPO || '').trim();
-    const slug = (process.env.ELECTRON_PUBLISH_GITHUB_SLUG || '').trim();
-    const token = (process.env.GH_TOKEN || '').trim();
-
-    const missing = [];
-
-    if (!token) {
-      missing.push('GH_TOKEN');
-    }
-
-    const hasSlug = Boolean(slug);
-    const hasOwnerRepo = Boolean(owner && repo);
-
-    if (!hasSlug && !hasOwnerRepo) {
-      missing.push('ELECTRON_PUBLISH_GITHUB_OWNER/REPO ou ELECTRON_PUBLISH_GITHUB_SLUG');
-    }
-
-    if (missing.length > 0) {
-      const instructions =
-        missing.length === 1
-          ? missing[0]
-          : `${missing.slice(0, -1).join(', ')} e ${missing.slice(-1)}`;
-      return new Error(`Defina ${instructions} antes de publicar.`);
-    }
+  // ⚙️ Dono/Repo agora têm fallback; só avisa se vazio por algum motivo
+  if (!DEFAULT_OWNER || !DEFAULT_REPO) {
+    return new Error('Owner/Repo não definidos. Ajuste DEFAULT_OWNER/DEFAULT_REPO em publisher.js.');
   }
-
   return null;
 }
 
 function resolveNpxCommand() {
   const nodeDir = path.dirname(process.execPath);
   const npxBinary = process.platform === 'win32' ? path.join(nodeDir, 'npx.cmd') : path.join(nodeDir, 'npx');
-
-  if (fs.existsSync(npxBinary)) {
-    return { command: npxBinary, extraArgs: [] };
-  }
-
+  if (fs.existsSync(npxBinary)) return { command: npxBinary, extraArgs: [] };
   try {
     const npxCli = require.resolve('npm/bin/npx-cli.js');
     return { command: process.execPath, extraArgs: [npxCli] };
-  } catch (err) {
+  } catch {
     const fallback = process.platform === 'win32' ? 'npx.cmd' : 'npx';
-    appendLog(`Aviso: npx não encontrado em ${npxBinary}, utilizando fallback "${fallback}". Detalhes: ${err.message}`);
+    appendLog(`Aviso: npx não encontrado em ${npxBinary}, usando fallback "${fallback}".`);
     return { command: fallback, extraArgs: [] };
   }
 }
