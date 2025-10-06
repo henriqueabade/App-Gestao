@@ -26,6 +26,8 @@ const AVATAR_COLORS = [
 
 const reportDataCache = new Map();
 const reportDataPromises = new Map();
+const reportTableRenderers = new Map();
+const filterDefaults = new Map();
 let relatoriosKpiManager = null;
 
 function escapeHtml(value) {
@@ -244,7 +246,390 @@ function getUserStatusVariant(status) {
     if (normalized === 'ativo') return 'success';
     if (['inativo', 'suspenso'].includes(normalized)) return 'danger';
     if (['aguardando', 'pendente'].includes(normalized)) return 'warning';
+    if (normalized === 'offline') return 'secondary';
     return 'neutral';
+}
+
+const FILTERED_EMPTY_MESSAGE = 'Nenhum registro encontrado para os filtros aplicados.';
+
+function parseFilterNumber(value) {
+    if (value === null || value === undefined) return null;
+    const normalized = String(value).replace(/\s+/g, '').replace(',', '.');
+    if (!normalized) return null;
+    const number = Number(normalized);
+    return Number.isFinite(number) ? number : null;
+}
+
+function sanitizeDigits(value) {
+    return typeof value === 'string' ? value.replace(/\D+/g, '') : '';
+}
+
+function includesNormalized(value, searchTerm) {
+    if (!searchTerm) return true;
+    return normalizeText(value).includes(searchTerm);
+}
+
+function getStockMinimum(item) {
+    const candidates = [
+        item?.estoque_minimo,
+        item?.quantidade_minima,
+        item?.quantidade_min,
+        item?.minimo,
+        item?.estoqueMinimo
+    ];
+    for (const candidate of candidates) {
+        const number = Number(candidate);
+        if (Number.isFinite(number)) return number;
+    }
+    return null;
+}
+
+const REPORT_FILTERS = {
+    'materia-prima': (data, filters = {}) => {
+        const list = Array.isArray(data) ? data : [];
+        const searchTerm = normalizeText(filters.search);
+        const processo = normalizeText(filters.processo);
+        const categoria = normalizeText(filters.categoria);
+        const quantidadeMin = parseFilterNumber(filters.quantidadeMin);
+        const quantidadeMax = parseFilterNumber(filters.quantidadeMax);
+        const precoMin = parseFilterNumber(filters.precoMin);
+        const precoMax = parseFilterNumber(filters.precoMax);
+        const semEstoque = Boolean(filters.semEstoque);
+        const baixoEstoque = Boolean(filters.baixoEstoque);
+
+        return list.filter(item => {
+            const nome = item?.nome;
+            if (searchTerm) {
+                const matches = [nome, item?.categoria, item?.processo].some(value => includesNormalized(value, searchTerm));
+                if (!matches) return false;
+            }
+            if (processo && !includesNormalized(item?.processo, processo)) return false;
+            if (categoria && !includesNormalized(item?.categoria, categoria)) return false;
+
+            const quantidade = safeNumber(item?.quantidade);
+            if (semEstoque && quantidade > 0) return false;
+
+            if (Number.isFinite(quantidadeMin) && quantidade < quantidadeMin) return false;
+            if (Number.isFinite(quantidadeMax) && quantidade > quantidadeMax) return false;
+
+            const minimo = getStockMinimum(item);
+            if (baixoEstoque) {
+                if (!Number.isFinite(minimo)) return false;
+                if (!(quantidade > 0 && quantidade < minimo)) return false;
+            }
+
+            const preco = safeNumber(item?.preco_unitario ?? item?.precoUnitario);
+            if (Number.isFinite(precoMin) && preco < precoMin) return false;
+            if (Number.isFinite(precoMax) && preco > precoMax) return false;
+
+            return true;
+        });
+    },
+    produtos: (data, filters = {}) => {
+        const list = Array.isArray(data) ? data : [];
+        const searchTerm = normalizeText(filters.search);
+        const colecao = normalizeText(filters.colecao);
+        const status = normalizeText(filters.status);
+        const quantidadeMin = parseFilterNumber(filters.quantidadeMin);
+        const quantidadeMax = parseFilterNumber(filters.quantidadeMax);
+        const precoMin = parseFilterNumber(filters.precoMin);
+        const precoMax = parseFilterNumber(filters.precoMax);
+        const margemMin = parseFilterNumber(filters.margemMin);
+        const semEstoque = Boolean(filters.semEstoque);
+        const destaque = Boolean(filters.destaque);
+
+        return list.filter(produto => {
+            if (searchTerm) {
+                const matches = [produto?.codigo, produto?.nome, produto?.categoria]
+                    .some(value => includesNormalized(value, searchTerm));
+                if (!matches) return false;
+            }
+
+            if (colecao) {
+                const colecaoProduto = normalizeText(produto?.colecao ?? produto?.linha ?? '');
+                if (!colecaoProduto.includes(colecao)) return false;
+            }
+
+            if (status && !includesNormalized(produto?.status, status)) return false;
+
+            const quantidade = safeNumber(produto?.quantidade_total);
+            if (semEstoque && quantidade > 0) return false;
+            if (Number.isFinite(quantidadeMin) && quantidade < quantidadeMin) return false;
+            if (Number.isFinite(quantidadeMax) && quantidade > quantidadeMax) return false;
+
+            const preco = safeNumber(produto?.preco_venda);
+            if (Number.isFinite(precoMin) && preco < precoMin) return false;
+            if (Number.isFinite(precoMax) && preco > precoMax) return false;
+
+            if (Number.isFinite(margemMin)) {
+                const margem = Number(produto?.pct_markup);
+                if (!Number.isFinite(margem) || margem < margemMin) return false;
+            }
+
+            if (destaque) {
+                const flag = Boolean(produto?.destaque || produto?.is_destaque || produto?.highlight);
+                if (!flag) return false;
+            }
+
+            return true;
+        });
+    },
+    clientes: (data, filters = {}) => {
+        const list = Array.isArray(data) ? data : [];
+        const searchTerm = normalizeText(filters.search);
+        const owner = normalizeText(filters.owner);
+        const status = normalizeText(filters.status);
+
+        return list.filter(cliente => {
+            if (searchTerm) {
+                const matches = [
+                    cliente?.nome_fantasia,
+                    cliente?.cnpj,
+                    cliente?.pais,
+                    cliente?.estado
+                ].some(value => includesNormalized(value, searchTerm));
+                if (!matches) return false;
+            }
+
+            if (owner && !includesNormalized(cliente?.dono_cliente ?? cliente?.dono, owner)) return false;
+            if (status && !includesNormalized(cliente?.status_cliente, status)) return false;
+            return true;
+        });
+    },
+    contatos: (data, filters = {}) => {
+        const list = Array.isArray(data) ? data : [];
+        const searchTerm = normalizeText(filters.search);
+        const tipo = normalizeText(filters.tipo);
+        const empresaFiltro = normalizeText(filters.empresa);
+        const celularFiltro = sanitizeDigits(filters.celular || '');
+        const telefoneFiltro = sanitizeDigits(filters.telefone || '');
+
+        return list.filter(contato => {
+            if (searchTerm) {
+                const matches = [contato?.nome, contato?.cliente, contato?.empresa]
+                    .some(value => includesNormalized(value, searchTerm));
+                if (!matches) return false;
+            }
+
+            if (tipo && !includesNormalized(contato?.cargo, tipo)) return false;
+            if (empresaFiltro && !includesNormalized(contato?.cliente ?? contato?.empresa, empresaFiltro)) return false;
+
+            if (celularFiltro) {
+                const digits = sanitizeDigits(contato?.telefone_celular ?? '');
+                if (!digits.includes(celularFiltro)) return false;
+            }
+
+            if (telefoneFiltro) {
+                const digits = sanitizeDigits(contato?.telefone_fixo ?? '');
+                if (!digits.includes(telefoneFiltro)) return false;
+            }
+
+            return true;
+        });
+    },
+    prospeccoes: (data, filters = {}) => {
+        const list = Array.isArray(data) ? data : [];
+        const searchTerm = normalizeText(filters.search);
+        const status = normalizeText(filters.status);
+        const responsavel = normalizeText(filters.responsavel);
+
+        return list.filter(prospeccao => {
+            if (searchTerm) {
+                const matches = [prospeccao?.nome, prospeccao?.email]
+                    .some(value => includesNormalized(value, searchTerm));
+                if (!matches) return false;
+            }
+            if (status && !includesNormalized(prospeccao?.status, status)) return false;
+            if (responsavel && !includesNormalized(prospeccao?.responsavel, responsavel)) return false;
+            return true;
+        });
+    },
+    orcamentos: (data, filters = {}) => {
+        const list = Array.isArray(data) ? data : [];
+        const status = normalizeText(filters.status);
+        const cliente = normalizeText(filters.cliente);
+        const codigo = normalizeText(filters.codigo);
+        const valorMin = parseFilterNumber(filters.valorMin);
+        const valorMax = parseFilterNumber(filters.valorMax);
+        const condicaoFiltro = normalizeText(filters.condicao);
+
+        return list.filter(orcamento => {
+            if (status && !includesNormalized(orcamento?.situacao, status)) return false;
+            if (cliente && !includesNormalized(orcamento?.cliente, cliente)) return false;
+            if (codigo && !includesNormalized(orcamento?.numero, codigo)) return false;
+
+            const valor = safeNumber(orcamento?.valor_final);
+            if (Number.isFinite(valorMin) && valor < valorMin) return false;
+            if (Number.isFinite(valorMax) && valor > valorMax) return false;
+
+            if (condicaoFiltro) {
+                const condicao = normalizeText(orcamento?.condicao_comercial ?? '');
+                if (!condicao || !condicao.includes(condicaoFiltro)) return false;
+            }
+
+            return true;
+        });
+    },
+    pedidos: (data, filters = {}) => {
+        const list = Array.isArray(data) ? data : [];
+        const status = normalizeText(filters.status);
+        const cliente = normalizeText(filters.cliente);
+        const codigo = normalizeText(filters.codigo);
+        const valorMin = parseFilterNumber(filters.valorMin);
+        const valorMax = parseFilterNumber(filters.valorMax);
+        const condicaoFiltro = normalizeText(filters.condicao);
+
+        return list.filter(pedido => {
+            if (status && !includesNormalized(pedido?.situacao, status)) return false;
+            if (cliente && !includesNormalized(pedido?.cliente, cliente)) return false;
+            if (codigo && !includesNormalized(pedido?.numero, codigo)) return false;
+
+            const valor = safeNumber(pedido?.valor_final);
+            if (Number.isFinite(valorMin) && valor < valorMin) return false;
+            if (Number.isFinite(valorMax) && valor > valorMax) return false;
+
+            if (condicaoFiltro) {
+                const parcelas = Number.parseInt(pedido?.parcelas, 10);
+                if (condicaoFiltro === 'avista' && Number.isFinite(parcelas) && parcelas > 1) return false;
+                if (condicaoFiltro === 'parcelado' && Number.isFinite(parcelas) && parcelas <= 1) return false;
+            }
+
+            return true;
+        });
+    },
+    usuarios: (data, filters = {}) => {
+        const list = Array.isArray(data) ? data : [];
+        const searchTerm = normalizeText(filters.search);
+        const perfil = normalizeText(filters.perfil);
+        const situacao = normalizeText(filters.situacao);
+        const statusFilters = ['ativo', 'inativo', 'aguardando'].filter(flag => Boolean(filters[flag]));
+
+        return list.filter(usuario => {
+            if (searchTerm) {
+                const matches = [usuario?.nome, usuario?.email]
+                    .some(value => includesNormalized(value, searchTerm));
+                if (!matches) return false;
+            }
+
+            if (perfil && !includesNormalized(usuario?.perfil, perfil)) return false;
+
+            if (situacao) {
+                if (situacao === 'online' && !usuario?.online) return false;
+                if (situacao === 'offline' && usuario?.online) return false;
+                if (situacao === 'aguardando') {
+                    const status = normalizeText(usuario?.status);
+                    if (!status.includes('aguard')) return false;
+                }
+            }
+
+            if (statusFilters.length) {
+                const status = normalizeText(usuario?.status);
+                const matchesStatus = statusFilters.some(filter => {
+                    if (filter === 'aguardando') {
+                        return status.includes('aguard');
+                    }
+                    return status === filter;
+                });
+                if (!matchesStatus) return false;
+            }
+
+            return true;
+        });
+    }
+};
+
+function getFilterValues(key, root) {
+    if (!root) return {};
+    const elements = Array.from(root.querySelectorAll(`[data-relatorios-filter="${key}"]`));
+    if (!elements.length) return {};
+
+    return elements.reduce((acc, element) => {
+        const field = element.dataset.filterKey;
+        if (!field) return acc;
+        if (element.type === 'checkbox') {
+            acc[field] = element.checked;
+        } else {
+            acc[field] = element.value ?? '';
+        }
+        return acc;
+    }, {});
+}
+
+function applyReportFilters(key, data, root) {
+    const handler = REPORT_FILTERS[key];
+    const source = Array.isArray(data) ? data : [];
+    if (!handler || !root) return source;
+    try {
+        const filters = getFilterValues(key, root);
+        const result = handler(source, filters);
+        return Array.isArray(result) ? result : source;
+    } catch (error) {
+        console.error(`Erro ao aplicar filtros para "${key}"`, error);
+        return source;
+    }
+}
+
+function setupFilterInteractions(root) {
+    if (!root) return;
+    const sections = Array.from(root.querySelectorAll('[data-relatorios-tab-content]'));
+    sections.forEach(section => {
+        const key = section.dataset.relatoriosTabContent;
+        if (!key || section.dataset.filtersSetup === 'true') return;
+        const inputs = Array.from(section.querySelectorAll(`[data-relatorios-filter="${key}"]`));
+        if (!inputs.length) {
+            section.dataset.filtersSetup = 'true';
+            return;
+        }
+
+        const defaults = inputs.map(element => ({
+            element,
+            value: element.type === 'checkbox' ? element.checked : element.value
+        }));
+        filterDefaults.set(key, defaults);
+
+        const update = () => {
+            const render = reportTableRenderers.get(key);
+            if (typeof render === 'function') {
+                render();
+            }
+        };
+
+        inputs.forEach(element => {
+            const eventName = element.tagName === 'SELECT' || element.type === 'checkbox' || element.type === 'range'
+                ? 'change'
+                : 'input';
+            element.addEventListener(eventName, update);
+        });
+
+        const applyBtn = section.querySelector(`[data-relatorios-apply="${key}"]`);
+        if (applyBtn) {
+            applyBtn.addEventListener('click', event => {
+                event.preventDefault();
+                update();
+            });
+        }
+
+        const resetBtn = section.querySelector(`[data-relatorios-reset="${key}"]`);
+        if (resetBtn) {
+            resetBtn.addEventListener('click', event => {
+                event.preventDefault();
+                const defaultsForKey = filterDefaults.get(key) || [];
+                defaultsForKey.forEach(({ element, value }) => {
+                    if (element.type === 'checkbox') {
+                        element.checked = Boolean(value);
+                    } else {
+                        element.value = value;
+                    }
+                    if (element.type === 'range') {
+                        element.dispatchEvent(new Event('input'));
+                    }
+                });
+                update();
+            });
+        }
+
+        section.dataset.filtersSetup = 'true';
+    });
 }
 
 async function getReportData(key, config) {
@@ -758,13 +1143,13 @@ REPORT_CONFIGS['materia-prima'] = {
         const statusBadge = createBadge(status.label, status.variant, { size: 'sm' });
         return `
             <tr class="transition-colors duration-150">
-                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">${nome}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">${categoria}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-center text-gray-300">${unidade}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-white">${quantidade}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-white">${preco}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-center text-gray-300">${processo}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-center">${statusBadge}</td>
+                <td class="px-6 py-4 whitespace-normal break-words text-left text-sm font-medium text-white">${nome}</td>
+                <td class="px-6 py-4 whitespace-normal break-words text-left text-sm text-gray-300">${categoria}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-left text-sm text-gray-300">${unidade}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-left text-sm text-white">${quantidade}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-left text-sm text-white">${preco}</td>
+                <td class="px-6 py-4 whitespace-normal break-words text-left text-sm text-gray-300">${processo}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-left text-sm">${statusBadge}</td>
             </tr>
         `;
     }
@@ -793,23 +1178,15 @@ REPORT_CONFIGS.produtos = {
         const quantidade = formatNumber(produto?.quantidade_total, { fallback: '0' });
         const statusLabel = produto?.status ? produto.status : '—';
         const statusBadge = createBadge(statusLabel, getProductStatusVariant(produto?.status), { size: 'sm' });
-        const actions = `
-            <div class="flex items-center gap-2">
-                <i class="fas fa-eye w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Visualizar"></i>
-                <i class="fas fa-edit w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Editar"></i>
-                <i class="fas fa-trash w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-red)" title="Excluir"></i>
-            </div>
-        `;
         return `
             <tr class="transition-colors duration-150">
-                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">${codigo}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-white">${nome}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">${categoria}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-white">${precoVenda}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-white">${margem}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-white">${quantidade}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-center">${statusBadge}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-left">${actions}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-left text-sm font-medium text-white">${codigo}</td>
+                <td class="px-6 py-4 whitespace-normal break-words text-left text-sm text-white">${nome}</td>
+                <td class="px-6 py-4 whitespace-normal break-words text-left text-sm text-gray-300">${categoria}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-left text-sm text-white">${precoVenda}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-left text-sm text-white">${margem}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-left text-sm text-white">${quantidade}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-left text-sm">${statusBadge}</td>
             </tr>
         `;
     }
@@ -833,23 +1210,15 @@ REPORT_CONFIGS.clientes = {
         const dono = formatText(cliente?.dono_cliente, '—');
         const statusLabel = cliente?.status_cliente ? cliente.status_cliente : '—';
         const statusBadge = createBadge(statusLabel, getClientStatusVariant(cliente?.status_cliente), { size: 'sm' });
-        const actions = `
-            <div class="flex items-center gap-2">
-                <i class="fas fa-eye w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Visualizar"></i>
-                <i class="fas fa-edit w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Editar"></i>
-                <i class="fas fa-envelope w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Enviar e-mail"></i>
-            </div>
-        `;
 
         return `
             <tr class="transition-colors duration-150">
-                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">${nome}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">${cnpj}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">${pais}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">${estado}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-center">${statusBadge}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">${dono}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-left">${actions}</td>
+                <td class="px-6 py-4 whitespace-normal break-words text-left text-sm font-medium text-white">${nome}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-left text-sm text-gray-300">${cnpj}</td>
+                <td class="px-6 py-4 whitespace-normal break-words text-left text-sm text-gray-300">${pais}</td>
+                <td class="px-6 py-4 whitespace-normal break-words text-left text-sm text-gray-300">${estado}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-left text-sm">${statusBadge}</td>
+                <td class="px-6 py-4 whitespace-normal break-words text-left text-sm text-gray-300">${dono}</td>
             </tr>
         `;
     }
@@ -874,31 +1243,23 @@ REPORT_CONFIGS.contatos = {
         const initials = getInitials(contato?.nome);
         const avatarColor = getAvatarColor(contato?.nome);
         const tipoBadge = createBadge(tipo !== '—' ? tipo : 'Contato', getContactTypeVariant(tipo), { size: 'sm' });
-        const actions = `
-            <div class="flex items-center gap-2">
-                <i class="fas fa-phone w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Ligar"></i>
-                <i class="fas fa-envelope w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Enviar e-mail"></i>
-                <i class="fas fa-comment-dots w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Iniciar conversa"></i>
-            </div>
-        `;
 
         return `
             <tr class="transition-colors duration-150">
-                <td class="px-6 py-4 whitespace-nowrap">
+                <td class="px-6 py-4 text-left">
                     <div class="flex items-center gap-3">
                         <div class="w-9 h-9 rounded-full flex items-center justify-center text-xs font-semibold text-white" style="background:${avatarColor};">${initials}</div>
                         <div>
-                            <p class="text-sm font-medium text-white">${nome}</p>
-                            <p class="text-xs text-white/70">${empresa}</p>
+                            <p class="text-sm font-medium text-white whitespace-normal break-words">${nome}</p>
+                            <p class="text-xs text-white/70 whitespace-normal break-words">${empresa}</p>
                         </div>
                     </div>
                 </td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-center">${tipoBadge}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">${empresa}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">${celular}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">${telefone}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">${email}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-left">${actions}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-left text-sm">${tipoBadge}</td>
+                <td class="px-6 py-4 whitespace-normal break-words text-left text-sm text-gray-300">${empresa}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-left text-sm text-gray-300">${celular}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-left text-sm text-gray-300">${telefone}</td>
+                <td class="px-6 py-4 whitespace-normal break-words text-left text-sm text-gray-300">${email}</td>
             </tr>
         `;
     }
@@ -991,21 +1352,13 @@ REPORT_CONFIGS.prospeccoes = {
         const responsavel = formatText(prospeccao?.responsavel, '—');
         const statusLabel = prospeccao?.status ? prospeccao.status : '—';
         const statusBadge = createBadge(statusLabel, getClientStatusVariant(prospeccao?.status), { size: 'sm' });
-        const actions = `
-            <div class="flex items-center gap-2">
-                <i class="fas fa-eye w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Visualizar"></i>
-                <i class="fas fa-comments w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Registrar interação"></i>
-                <i class="fas fa-trash w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-red)" title="Remover"></i>
-            </div>
-        `;
 
         return `
             <tr class="transition-colors duration-150">
-                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">${nome}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">${email}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-center">${statusBadge}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">${responsavel}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-left">${actions}</td>
+                <td class="px-6 py-4 whitespace-normal break-words text-left text-sm font-medium text-white">${nome}</td>
+                <td class="px-6 py-4 whitespace-normal break-words text-left text-sm text-gray-300">${email}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-left text-sm">${statusBadge}</td>
+                <td class="px-6 py-4 whitespace-normal break-words text-left text-sm text-gray-300">${responsavel}</td>
             </tr>
         `;
     }
@@ -1030,23 +1383,14 @@ REPORT_CONFIGS.orcamentos = {
         const condicao = Number.isFinite(parcelas) && parcelas > 1 ? `${parcelas}x` : 'À vista';
         const statusLabel = orcamento?.situacao ? orcamento.situacao : '—';
         const statusBadge = createBadge(statusLabel, getQuoteStatusVariant(orcamento?.situacao), { size: 'sm' });
-        const actions = `
-            <div class="flex items-center gap-2">
-                <i class="fas fa-eye w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Visualizar"></i>
-                <i class="fas fa-file-export w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Exportar"></i>
-                <i class="fas fa-exchange-alt w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Converter em pedido"></i>
-            </div>
-        `;
-
         return `
             <tr class="transition-colors duration-150">
-                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">${codigo}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">${cliente}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">${dataEmissao}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-white">${valor}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">${condicao}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-center">${statusBadge}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-left">${actions}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-left text-sm font-medium text-white">${codigo}</td>
+                <td class="px-6 py-4 whitespace-normal break-words text-left text-sm text-gray-300">${cliente}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-left text-sm text-gray-300">${dataEmissao}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-left text-sm text-white">${valor}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-left text-sm text-gray-300">${condicao}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-left text-sm">${statusBadge}</td>
             </tr>
         `;
     }
@@ -1071,23 +1415,14 @@ REPORT_CONFIGS.pedidos = {
         const condicao = Number.isFinite(parcelas) && parcelas > 1 ? `${parcelas}x` : 'À vista';
         const statusLabel = pedido?.situacao ? pedido.situacao : '—';
         const statusBadge = createBadge(statusLabel, getOrderStatusVariant(pedido?.situacao), { size: 'sm' });
-        const actions = `
-            <div class="flex items-center gap-2">
-                <i class="fas fa-eye w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Visualizar"></i>
-                <i class="fas fa-truck w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Atualizar entrega"></i>
-                <i class="fas fa-file-invoice-dollar w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Gerar nota"></i>
-            </div>
-        `;
-
         return `
             <tr class="transition-colors duration-150">
-                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">${codigo}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">${cliente}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">${dataEmissao}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-white">${valor}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">${condicao}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-center">${statusBadge}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-left">${actions}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-left text-sm font-medium text-white">${codigo}</td>
+                <td class="px-6 py-4 whitespace-normal break-words text-left text-sm text-gray-300">${cliente}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-left text-sm text-gray-300">${dataEmissao}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-left text-sm text-white">${valor}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-left text-sm text-gray-300">${condicao}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-left text-sm">${statusBadge}</td>
             </tr>
         `;
     }
@@ -1110,33 +1445,27 @@ REPORT_CONFIGS.usuarios = {
         const statusLabel = usuario?.status ? usuario.status : '—';
         const statusBadge = createBadge(statusLabel, getUserStatusVariant(usuario?.status), { size: 'sm' });
         const onlineBadge = createBadge(usuario?.online ? 'Online' : 'Offline', usuario?.online ? 'success' : 'secondary', { size: 'sm' });
-        const ultimaAtividade = usuario?.ultimaAtividadeEm ? formatDate(usuario.ultimaAtividadeEm) : '—';
+        const ultimoLogin = usuario?.ultimoLoginEm
+            ? formatDate(usuario.ultimoLoginEm)
+            : (usuario?.ultimaAtividadeEm ? formatDate(usuario.ultimaAtividadeEm) : '—');
         const initials = getInitials(usuario?.nome);
         const avatarColor = getAvatarColor(usuario?.nome);
-        const actions = `
-            <div class="flex items-center gap-2">
-                <i class="fas fa-user-shield w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Gerenciar permissões"></i>
-                <i class="fas fa-envelope w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Enviar mensagem"></i>
-                <i class="fas fa-ban w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-red)" title="Suspender"></i>
-            </div>
-        `;
 
         return `
             <tr class="transition-colors duration-150">
-                <td class="px-6 py-4 whitespace-nowrap">
+                <td class="px-6 py-4 text-left">
                     <div class="w-10 h-10 rounded-full flex items-center justify-center text-sm font-semibold text-white" style="background:${avatarColor};">${initials}</div>
                 </td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">${nome}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">${email}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">${perfil}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm">
+                <td class="px-6 py-4 whitespace-normal break-words text-left text-sm font-medium text-white">${nome}</td>
+                <td class="px-6 py-4 whitespace-normal break-words text-left text-sm text-gray-300">${email}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-left text-sm text-gray-300">${perfil}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-left text-sm">
                     <div class="flex flex-col gap-1">
                         <span>${onlineBadge}</span>
-                        <span class="text-xs text-white/60">Última atividade: ${ultimaAtividade}</span>
+                        <span class="text-xs text-white/60">Último login: ${ultimoLogin}</span>
                     </div>
                 </td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-center">${statusBadge}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-left">${actions}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-left text-sm">${statusBadge}</td>
             </tr>
         `;
     }
@@ -1173,6 +1502,7 @@ function initRelatoriosModule() {
     setupModals(container);
     setupShare(container);
     setupGeoFilters(container);
+    setupFilterInteractions(container);
     setupDateRangeFilters(container);
 
     if (initialTabKey && loadTableForTab) {
@@ -1334,29 +1664,46 @@ async function populateReportTable(key, container) {
             return;
         }
 
+        const moduleRoot = container.closest('.relatorios-module');
+
         if (!Array.isArray(data) || data.length === 0) {
-            showMessage(config.emptyMessage || 'Nenhum registro encontrado.');
+            const renderEmpty = () => {
+                showMessage(config.emptyMessage || 'Nenhum registro encontrado.');
+            };
+            reportTableRenderers.set(key, renderEmpty);
+            renderEmpty();
             return;
         }
 
-        const rows = data
-            .map(item => {
-                try {
-                    return config.renderRow(item);
-                } catch (error) {
-                    console.error(`Erro ao renderizar linha do relatório "${key}"`, error, item);
-                    return '';
-                }
-            })
-            .filter(Boolean)
-            .join('');
+        const render = () => {
+            const filtered = applyReportFilters(key, data, moduleRoot);
+            if (!Array.isArray(filtered) || filtered.length === 0) {
+                tbody.innerHTML = createMessageRow(table, config.filteredEmptyMessage || FILTERED_EMPTY_MESSAGE);
+                return;
+            }
 
-        if (!rows) {
-            showMessage(config.emptyMessage || 'Nenhum registro disponível.');
-            return;
-        }
+            const rows = filtered
+                .map(item => {
+                    try {
+                        return config.renderRow(item);
+                    } catch (error) {
+                        console.error(`Erro ao renderizar linha do relatório "${key}"`, error, item);
+                        return '';
+                    }
+                })
+                .filter(Boolean)
+                .join('');
 
-        tbody.innerHTML = rows;
+            if (!rows) {
+                tbody.innerHTML = createMessageRow(table, config.filteredEmptyMessage || config.emptyMessage || FILTERED_EMPTY_MESSAGE);
+                return;
+            }
+
+            tbody.innerHTML = rows;
+        };
+
+        render();
+        reportTableRenderers.set(key, render);
     } catch (error) {
         console.error(`Erro ao popular relatório "${key}"`, error);
         if (relatoriosKpiManager) {
@@ -1366,6 +1713,7 @@ async function populateReportTable(key, container) {
             return;
         }
         showMessage(config.errorMessage || 'Não foi possível carregar os dados.');
+        reportTableRenderers.delete(key);
     }
 }
 

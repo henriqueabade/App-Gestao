@@ -388,6 +388,7 @@ body {
     letter-spacing: 0.08em;
     text-transform: uppercase;
     z-index: 5;
+    text-align: left;
 }
 
 .relatorios-module .relatorios-table tbody tr {
@@ -400,6 +401,8 @@ body {
 
 .relatorios-module .relatorios-table tbody td {
     vertical-align: middle;
+    text-align: left;
+    word-break: break-word;
 }
 
 .relatorios-module .relatorios-table-container {

@@ -108,12 +108,12 @@
                         <div class="filter-bar relatorios-filter-bar">
                             <div class="relatorios-filter-field">
                                 <label class="relatorios-filter-label text-white">Buscar Insumo</label>
-                                <input type="search" class="input-glass text-white rounded-md px-4 py-3 w-full" placeholder="Nome, categoria ou processo">
+                                <input type="search" class="input-glass text-white rounded-md px-4 py-3 w-full" placeholder="Nome, categoria ou processo" data-relatorios-filter="materia-prima" data-filter-key="search">
                             </div>
 
                             <div class="relatorios-filter-field">
                                 <label class="relatorios-filter-label text-white">Processo</label>
-                                <select class="input-glass text-white rounded-md px-4 py-3 w-full">
+                                <select class="input-glass text-white rounded-md px-4 py-3 w-full" data-relatorios-filter="materia-prima" data-filter-key="processo">
                                     <option value="">Todos</option>
                                     <option value="corte">Corte</option>
                                     <option value="montagem">Montagem</option>
@@ -124,7 +124,7 @@
 
                             <div class="relatorios-filter-field">
                                 <label class="relatorios-filter-label text-white">Categoria</label>
-                                <select class="input-glass text-white rounded-md px-4 py-3 w-full">
+                                <select class="input-glass text-white rounded-md px-4 py-3 w-full" data-relatorios-filter="materia-prima" data-filter-key="categoria">
                                     <option value="">Todas</option>
                                     <option value="madeira">Madeira</option>
                                     <option value="metal">Metal</option>
@@ -135,11 +135,11 @@
 
                             <div class="relatorios-filter-checkbox-group">
                                 <label class="relatorios-filter-checkbox-option text-white">
-                                    <input type="checkbox" class="relatorios-filter-checkbox rounded border-white/30 bg-transparent">
+                                    <input type="checkbox" class="relatorios-filter-checkbox rounded border-white/30 bg-transparent" data-relatorios-filter="materia-prima" data-filter-key="semEstoque">
                                     <span>0 Estoque</span>
                                 </label>
                                 <label class="relatorios-filter-checkbox-option text-white">
-                                    <input type="checkbox" class="relatorios-filter-checkbox rounded border-white/30 bg-transparent">
+                                    <input type="checkbox" class="relatorios-filter-checkbox rounded border-white/30 bg-transparent" data-relatorios-filter="materia-prima" data-filter-key="baixoEstoque">
                                     <span>Abaixo do mínimo</span>
                                 </label>
                             </div>
@@ -148,29 +148,29 @@
                         <div class="filter-bar relatorios-filter-bar">
                             <div class="relatorios-filter-field">
                                 <label class="relatorios-filter-label text-white">Quantidade mínima</label>
-                                <input type="number" class="input-glass text-white rounded-md px-4 py-3 w-full" placeholder="0">
+                                <input type="number" class="input-glass text-white rounded-md px-4 py-3 w-full" placeholder="0" data-relatorios-filter="materia-prima" data-filter-key="quantidadeMin">
                             </div>
 
                             <div class="relatorios-filter-field">
                                 <label class="relatorios-filter-label text-white">Quantidade máxima</label>
-                                <input type="number" class="input-glass text-white rounded-md px-4 py-3 w-full" placeholder="500">
+                                <input type="number" class="input-glass text-white rounded-md px-4 py-3 w-full" placeholder="500" data-relatorios-filter="materia-prima" data-filter-key="quantidadeMax">
                             </div>
 
                             <div class="relatorios-filter-field">
                                 <label class="relatorios-filter-label text-white">Preço unitário mínimo</label>
-                                <input type="number" class="input-glass text-white rounded-md px-4 py-3 w-full" placeholder="R$ 0,00">
+                                <input type="number" class="input-glass text-white rounded-md px-4 py-3 w-full" placeholder="R$ 0,00" data-relatorios-filter="materia-prima" data-filter-key="precoMin">
                             </div>
 
                             <div class="relatorios-filter-field">
                                 <label class="relatorios-filter-label text-white">Preço unitário máximo</label>
-                                <input type="number" class="input-glass text-white rounded-md px-4 py-3 w-full" placeholder="R$ 500,00">
+                                <input type="number" class="input-glass text-white rounded-md px-4 py-3 w-full" placeholder="R$ 500,00" data-relatorios-filter="materia-prima" data-filter-key="precoMax">
                             </div>
 
                             <div id="bt-actions" class="flex items-center gap-2 flex-shrink-0">
-                                <button id="btnFiltrar" class="btn-secondary text-white rounded-md px-4 py-3 text-sm font-medium">
+                                <button type="button" class="btn-secondary text-white rounded-md px-4 py-3 text-sm font-medium" data-relatorios-apply="materia-prima">
                                     Filtrar
                                 </button>
-                                <button id="btnLimpar" class="btn-warning text-white rounded-md px-4 py-3 text-sm font-medium">
+                                <button type="button" class="btn-warning text-white rounded-md px-4 py-3 text-sm font-medium" data-relatorios-reset="materia-prima">
                                     Limpar
                                 </button>
                             </div>
@@ -185,12 +185,12 @@
                         <div class="filter-bar relatorios-filter-bar">
                             <div class="relatorios-filter-field">
                                 <label class="relatorios-filter-label text-white">Buscar Produto</label>
-                                <input type="search" class="input-glass text-white rounded-md px-4 py-3 w-full" placeholder="Código ou nome">
+                                <input type="search" class="input-glass text-white rounded-md px-4 py-3 w-full" placeholder="Código ou nome" data-relatorios-filter="produtos" data-filter-key="search">
                             </div>
 
                             <div class="relatorios-filter-field">
                                 <label class="relatorios-filter-label text-white">Coleção</label>
-                                <select class="input-glass text-white rounded-md px-4 py-3 w-full">
+                                <select class="input-glass text-white rounded-md px-4 py-3 w-full" data-relatorios-filter="produtos" data-filter-key="colecao">
                                     <option value="">Todas</option>
                                     <option value="essenciais">Essenciais</option>
                                     <option value="premium">Premium</option>
@@ -200,7 +200,7 @@
 
                             <div class="relatorios-filter-field">
                                 <label class="relatorios-filter-label text-white">Status</label>
-                                <select class="input-glass text-white rounded-md px-4 py-3 w-full">
+                                <select class="input-glass text-white rounded-md px-4 py-3 w-full" data-relatorios-filter="produtos" data-filter-key="status">
                                     <option value="">Todos</option>
                                     <option value="ativo">Ativo</option>
                                     <option value="inativo">Inativo</option>
@@ -210,11 +210,11 @@
 
                             <div class="relatorios-filter-checkbox-group">
                                 <label class="relatorios-filter-checkbox-option text-white">
-                                    <input type="checkbox" class="relatorios-filter-checkbox rounded border-white/30 bg-transparent">
+                                    <input type="checkbox" class="relatorios-filter-checkbox rounded border-white/30 bg-transparent" data-relatorios-filter="produtos" data-filter-key="semEstoque">
                                     <span>0 Estoque</span>
                                 </label>
                                 <label class="relatorios-filter-checkbox-option text-white">
-                                    <input type="checkbox" class="relatorios-filter-checkbox rounded border-white/30 bg-transparent">
+                                    <input type="checkbox" class="relatorios-filter-checkbox rounded border-white/30 bg-transparent" data-relatorios-filter="produtos" data-filter-key="destaque">
                                     <span>Somente destaque</span>
                                 </label>
                             </div>
@@ -223,29 +223,29 @@
                         <div class="filter-bar relatorios-filter-bar">
                             <div class="relatorios-filter-field">
                                 <label class="relatorios-filter-label text-white">Preço mínimo</label>
-                                <input type="number" class="input-glass text-white rounded-md px-4 py-3 w-full" placeholder="R$ 0,00">
+                                <input type="number" class="input-glass text-white rounded-md px-4 py-3 w-full" placeholder="R$ 0,00" data-relatorios-filter="produtos" data-filter-key="precoMin">
                             </div>
 
                             <div class="relatorios-filter-field">
                                 <label class="relatorios-filter-label text-white">Preço máximo</label>
-                                <input type="number" class="input-glass text-white rounded-md px-4 py-3 w-full" placeholder="R$ 10.000,00">
+                                <input type="number" class="input-glass text-white rounded-md px-4 py-3 w-full" placeholder="R$ 10.000,00" data-relatorios-filter="produtos" data-filter-key="precoMax">
                             </div>
 
                             <div class="relatorios-filter-field">
                                 <label class="relatorios-filter-label text-white">Quantidade mínima</label>
-                                <input type="number" class="input-glass text-white rounded-md px-4 py-3 w-full" placeholder="0">
+                                <input type="number" class="input-glass text-white rounded-md px-4 py-3 w-full" placeholder="0" data-relatorios-filter="produtos" data-filter-key="quantidadeMin">
                             </div>
 
                             <div class="relatorios-filter-field">
                                 <label class="relatorios-filter-label text-white">Quantidade máxima</label>
-                                <input type="number" class="input-glass text-white rounded-md px-4 py-3 w-full" placeholder="5.000">
+                                <input type="number" class="input-glass text-white rounded-md px-4 py-3 w-full" placeholder="5.000" data-relatorios-filter="produtos" data-filter-key="quantidadeMax">
                             </div>
 
                             <div id="bt-actions" class="flex items-center gap-2 flex-shrink-0">
-                                <button id="btnFiltrar" class="btn-secondary text-white rounded-md px-4 py-3 text-sm font-medium">
+                                <button type="button" class="btn-secondary text-white rounded-md px-4 py-3 text-sm font-medium" data-relatorios-apply="produtos">
                                     Filtrar
                                 </button>
-                                <button id="btnLimpar" class="btn-warning text-white rounded-md px-4 py-3 text-sm font-medium">
+                                <button type="button" class="btn-warning text-white rounded-md px-4 py-3 text-sm font-medium" data-relatorios-reset="produtos">
                                     Limpar
                                 </button>
                             </div>
@@ -255,7 +255,7 @@
                             <label class="relatorios-filter-label text-white">Margem (%)</label>
                             <div class="flex items-center gap-4">
                                 <span class="relatorios-slider-value">0%</span>
-                                <input type="range" min="0" max="100" value="35" class="relatorios-slider">
+                                <input type="range" min="0" max="100" value="35" class="relatorios-slider" data-relatorios-filter="produtos" data-filter-key="margemMin">
                                 <span class="relatorios-slider-value">100%</span>
                             </div>
                         </div>
@@ -269,12 +269,12 @@
                         <div class="filter-bar relatorios-filter-bar">
                             <div class="relatorios-filter-field">
                                 <label class="relatorios-filter-label text-white">Buscar Cliente</label>
-                                <input type="search" class="input-glass text-white rounded-md px-4 py-3 w-full" placeholder="Nome, CNPJ, país ou estado">
+                                <input type="search" class="input-glass text-white rounded-md px-4 py-3 w-full" placeholder="Nome, CNPJ, país ou estado" data-relatorios-filter="clientes" data-filter-key="search">
                             </div>
 
                             <div class="relatorios-filter-field">
                                 <label class="relatorios-filter-label text-white">Dono</label>
-                                <select class="input-glass text-white rounded-md px-4 py-3 w-full">
+                                <select class="input-glass text-white rounded-md px-4 py-3 w-full" data-relatorios-filter="clientes" data-filter-key="owner">
                                     <option value="">Todos</option>
                                     <option value="joao">João Silva</option>
                                     <option value="maria">Maria Santos</option>
@@ -284,7 +284,7 @@
 
                             <div class="relatorios-filter-field">
                                 <label class="relatorios-filter-label text-white">Status</label>
-                                <select class="input-glass text-white rounded-md px-4 py-3 w-full">
+                                <select class="input-glass text-white rounded-md px-4 py-3 w-full" data-relatorios-filter="clientes" data-filter-key="status">
                                     <option value="">Todos</option>
                                     <option value="ativo">Ativo</option>
                                     <option value="suspenso">Suspenso</option>
@@ -293,10 +293,10 @@
                             </div>
 
                             <div id="bt-actions" class="flex items-center gap-2 flex-shrink-0">
-                                <button id="btnFiltrar" class="btn-secondary text-white rounded-md px-4 py-3 text-sm font-medium">
+                                <button type="button" class="btn-secondary text-white rounded-md px-4 py-3 text-sm font-medium" data-relatorios-apply="clientes">
                                     Filtrar
                                 </button>
-                                <button id="btnLimpar" class="btn-warning text-white rounded-md px-4 py-3 text-sm font-medium">
+                                <button type="button" class="btn-warning text-white rounded-md px-4 py-3 text-sm font-medium" data-relatorios-reset="clientes">
                                     Limpar
                                 </button>
                             </div>
@@ -342,12 +342,12 @@
                         <div class="filter-bar relatorios-filter-bar">
                             <div class="relatorios-filter-field">
                                 <label class="relatorios-filter-label text-white">Buscar Contato</label>
-                                <input type="search" class="input-glass text-white rounded-md px-4 py-3 w-full" placeholder="Nome ou empresa">
+                                <input type="search" class="input-glass text-white rounded-md px-4 py-3 w-full" placeholder="Nome ou empresa" data-relatorios-filter="contatos" data-filter-key="search">
                             </div>
 
                             <div class="relatorios-filter-field">
                                 <label class="relatorios-filter-label text-white">Tipo de Contato</label>
-                                <select class="input-glass text-white rounded-md px-4 py-3 w-full">
+                                <select class="input-glass text-white rounded-md px-4 py-3 w-full" data-relatorios-filter="contatos" data-filter-key="tipo">
                                     <option value="">Todos</option>
                                     <option value="fornecedor">Fornecedor</option>
                                     <option value="parceiro">Parceiro</option>
@@ -358,14 +358,14 @@
 
                             <div class="relatorios-filter-field">
                                 <label class="relatorios-filter-label text-white">Empresa</label>
-                                <input type="text" class="input-glass text-white rounded-md px-4 py-3 w-full" placeholder="Empresa">
+                                <input type="text" class="input-glass text-white rounded-md px-4 py-3 w-full" placeholder="Empresa" data-relatorios-filter="contatos" data-filter-key="empresa">
                             </div>
 
                             <div id="bt-actions" class="flex items-center gap-2 flex-shrink-0">
-                                <button id="btnFiltrar" class="btn-secondary text-white rounded-md px-4 py-3 text-sm font-medium">
+                                <button type="button" class="btn-secondary text-white rounded-md px-4 py-3 text-sm font-medium" data-relatorios-apply="contatos">
                                     Filtrar
                                 </button>
-                                <button id="btnLimpar" class="btn-warning text-white rounded-md px-4 py-3 text-sm font-medium">
+                                <button type="button" class="btn-warning text-white rounded-md px-4 py-3 text-sm font-medium" data-relatorios-reset="contatos">
                                     Limpar
                                 </button>
                             </div>
@@ -374,12 +374,12 @@
                         <div class="filter-bar relatorios-filter-bar">
                             <div class="relatorios-filter-field">
                                 <label class="relatorios-filter-label text-white">Celular</label>
-                                <input type="tel" class="input-glass text-white rounded-md px-4 py-3 w-full" placeholder="(00) 00000-0000">
+                                <input type="tel" class="input-glass text-white rounded-md px-4 py-3 w-full" placeholder="(00) 00000-0000" data-relatorios-filter="contatos" data-filter-key="celular">
                             </div>
 
                             <div class="relatorios-filter-field">
                                 <label class="relatorios-filter-label text-white">Telefone</label>
-                                <input type="tel" class="input-glass text-white rounded-md px-4 py-3 w-full" placeholder="(00) 0000-0000">
+                                <input type="tel" class="input-glass text-white rounded-md px-4 py-3 w-full" placeholder="(00) 0000-0000" data-relatorios-filter="contatos" data-filter-key="telefone">
                             </div>
                         </div>
                     </div>
@@ -391,12 +391,12 @@
                         <div class="filter-bar relatorios-filter-bar">
                             <div class="relatorios-filter-field">
                                 <label class="relatorios-filter-label text-white">Buscar Lead</label>
-                                <input type="search" class="input-glass text-white rounded-md px-4 py-3 w-full" placeholder="Nome ou domínio do e-mail">
+                                <input type="search" class="input-glass text-white rounded-md px-4 py-3 w-full" placeholder="Nome ou domínio do e-mail" data-relatorios-filter="prospeccoes" data-filter-key="search">
                             </div>
 
                             <div class="relatorios-filter-field">
                                 <label class="relatorios-filter-label text-white">Status</label>
-                                <select class="input-glass text-white rounded-md px-4 py-3 w-full">
+                                <select class="input-glass text-white rounded-md px-4 py-3 w-full" data-relatorios-filter="prospeccoes" data-filter-key="status">
                                     <option value="">Todos</option>
                                     <option value="novo">Novo</option>
                                     <option value="contactado">Contactado</option>
@@ -407,7 +407,7 @@
 
                             <div class="relatorios-filter-field">
                                 <label class="relatorios-filter-label text-white">Origem do Lead</label>
-                                <select class="input-glass text-white rounded-md px-4 py-3 w-full">
+                                <select class="input-glass text-white rounded-md px-4 py-3 w-full" data-relatorios-filter="prospeccoes" data-filter-key="origem">
                                     <option value="">Todas</option>
                                     <option value="site">Site</option>
                                     <option value="indicacao">Indicação</option>
@@ -418,7 +418,7 @@
 
                             <div class="relatorios-filter-field">
                                 <label class="relatorios-filter-label text-white">Responsável</label>
-                                <select class="input-glass text-white rounded-md px-4 py-3 w-full">
+                                <select class="input-glass text-white rounded-md px-4 py-3 w-full" data-relatorios-filter="prospeccoes" data-filter-key="responsavel">
                                     <option value="">Todos</option>
                                     <option value="joao">João Silva</option>
                                     <option value="maria">Maria Santos</option>
@@ -430,7 +430,7 @@
                         <div class="filter-bar relatorios-filter-bar">
                             <div class="relatorios-filter-field">
                                 <label class="relatorios-filter-label text-white">Cidade</label>
-                                <input type="text" class="input-glass text-white rounded-md px-4 py-3 w-full" placeholder="Digite a cidade">
+                                <input type="text" class="input-glass text-white rounded-md px-4 py-3 w-full" placeholder="Digite a cidade" data-relatorios-filter="prospeccoes" data-filter-key="cidade">
                             </div>
 
                             <div class="relatorios-filter-field">
@@ -467,7 +467,7 @@
                         <div class="filter-bar relatorios-filter-bar">
                             <div class="relatorios-filter-field">
                                 <label class="relatorios-filter-label text-white">Status</label>
-                                <select class="input-glass text-white rounded-md px-4 py-3 w-full">
+                                <select class="input-glass text-white rounded-md px-4 py-3 w-full" data-relatorios-filter="orcamentos" data-filter-key="status">
                                     <option value="">Todos</option>
                                     <option value="rascunho">Rascunho</option>
                                     <option value="pendente">Pendente</option>
@@ -479,7 +479,7 @@
 
                             <div class="relatorios-filter-field">
                                 <label class="relatorios-filter-label text-white">Período</label>
-                                <select id="relatoriosOrcamentosPeriod" class="input-glass text-white rounded-md px-4 py-3 w-full">
+                                <select id="relatoriosOrcamentosPeriod" class="input-glass text-white rounded-md px-4 py-3 w-full" data-relatorios-filter="orcamentos" data-filter-key="periodo">
                                     <option value="">Selecione...</option>
                                     <option value="Última semana">Última semana</option>
                                     <option value="Último mês">Último mês</option>
@@ -490,7 +490,7 @@
 
                             <div class="relatorios-filter-field">
                                 <label class="relatorios-filter-label text-white">Dono</label>
-                                <select class="input-glass text-white rounded-md px-4 py-3 w-full">
+                                <select class="input-glass text-white rounded-md px-4 py-3 w-full" data-relatorios-filter="orcamentos" data-filter-key="dono">
                                     <option value="">Todos</option>
                                     <option value="joao">João Silva</option>
                                     <option value="maria">Maria Santos</option>
@@ -500,7 +500,7 @@
 
                             <div class="relatorios-filter-field">
                                 <label class="relatorios-filter-label text-white">Cliente</label>
-                                <select class="input-glass text-white rounded-md px-4 py-3 w-full">
+                                <select class="input-glass text-white rounded-md px-4 py-3 w-full" data-relatorios-filter="orcamentos" data-filter-key="cliente">
                                     <option value="">Todos</option>
                                     <option value="acme">ACME Corp.</option>
                                     <option value="alpha">Alpha Design</option>
@@ -512,22 +512,22 @@
                         <div class="filter-bar relatorios-filter-bar">
                             <div class="relatorios-filter-field">
                                 <label class="relatorios-filter-label text-white">Código do orçamento</label>
-                                <input type="search" class="input-glass text-white rounded-md px-4 py-3 w-full" placeholder="Buscar por código">
+                                <input type="search" class="input-glass text-white rounded-md px-4 py-3 w-full" placeholder="Buscar por código" data-relatorios-filter="orcamentos" data-filter-key="codigo">
                             </div>
 
                             <div class="relatorios-filter-field">
                                 <label class="relatorios-filter-label text-white">Valor mínimo</label>
-                                <input type="number" class="input-glass text-white rounded-md px-4 py-3 w-full" placeholder="R$ 0,00">
+                                <input type="number" class="input-glass text-white rounded-md px-4 py-3 w-full" placeholder="R$ 0,00" data-relatorios-filter="prospeccoes" data-filter-key="valorMin">
                             </div>
 
                             <div class="relatorios-filter-field">
                                 <label class="relatorios-filter-label text-white">Valor máximo</label>
-                                <input type="number" class="input-glass text-white rounded-md px-4 py-3 w-full" placeholder="R$ 50.000,00">
+                                <input type="number" class="input-glass text-white rounded-md px-4 py-3 w-full" placeholder="R$ 50.000,00" data-relatorios-filter="prospeccoes" data-filter-key="valorMax">
                             </div>
 
                             <div class="relatorios-filter-field">
                                 <label class="relatorios-filter-label text-white">Condição comercial</label>
-                                <select class="input-glass text-white rounded-md px-4 py-3 w-full">
+                                <select class="input-glass text-white rounded-md px-4 py-3 w-full" data-relatorios-filter="prospeccoes" data-filter-key="condicao">
                                     <option value="">Todas</option>
                                     <option value="padrao">Padrão</option>
                                     <option value="especial">Especial</option>
@@ -536,10 +536,10 @@
                             </div>
 
                             <div id="bt-actions" class="flex items-center gap-2 flex-shrink-0">
-                                <button id="btnFiltrar" class="btn-secondary text-white rounded-md px-4 py-3 text-sm font-medium">
+                                <button type="button" class="btn-secondary text-white rounded-md px-4 py-3 text-sm font-medium" data-relatorios-apply="prospeccoes">
                                     Filtrar
                                 </button>
-                                <button id="btnLimpar" class="btn-warning text-white rounded-md px-4 py-3 text-sm font-medium">
+                                <button type="button" class="btn-warning text-white rounded-md px-4 py-3 text-sm font-medium" data-relatorios-reset="prospeccoes">
                                     Limpar
                                 </button>
                             </div>
@@ -554,7 +554,7 @@
                         <div class="filter-bar relatorios-filter-bar">
                             <div class="relatorios-filter-field">
                                 <label class="relatorios-filter-label text-white">Status</label>
-                                <select class="input-glass text-white rounded-md px-4 py-3 w-full">
+                                <select class="input-glass text-white rounded-md px-4 py-3 w-full" data-relatorios-filter="pedidos" data-filter-key="status">
                                     <option value="">Todos</option>
                                     <option value="producao">Em Produção</option>
                                     <option value="enviado">Enviado</option>
@@ -565,7 +565,7 @@
 
                             <div class="relatorios-filter-field">
                                 <label class="relatorios-filter-label text-white">Período</label>
-                                <select id="relatoriosPedidosPeriod" class="input-glass text-white rounded-md px-4 py-3 w-full">
+                                <select id="relatoriosPedidosPeriod" class="input-glass text-white rounded-md px-4 py-3 w-full" data-relatorios-filter="pedidos" data-filter-key="periodo">
                                     <option value="">Selecione...</option>
                                     <option value="Última semana">Última semana</option>
                                     <option value="Último mês">Último mês</option>
@@ -576,7 +576,7 @@
 
                             <div class="relatorios-filter-field">
                                 <label class="relatorios-filter-label text-white">Dono</label>
-                                <select class="input-glass text-white rounded-md px-4 py-3 w-full">
+                                <select class="input-glass text-white rounded-md px-4 py-3 w-full" data-relatorios-filter="pedidos" data-filter-key="dono">
                                     <option value="">Todos</option>
                                     <option value="joao">João Silva</option>
                                     <option value="maria">Maria Santos</option>
@@ -586,7 +586,7 @@
 
                             <div class="relatorios-filter-field">
                                 <label class="relatorios-filter-label text-white">Cliente</label>
-                                <select class="input-glass text-white rounded-md px-4 py-3 w-full">
+                                <select class="input-glass text-white rounded-md px-4 py-3 w-full" data-relatorios-filter="pedidos" data-filter-key="cliente">
                                     <option value="">Todos</option>
                                     <option value="acme">ACME Corp.</option>
                                     <option value="alpha">Alpha Design</option>
@@ -598,22 +598,22 @@
                         <div class="filter-bar relatorios-filter-bar">
                             <div class="relatorios-filter-field">
                                 <label class="relatorios-filter-label text-white">Código do pedido</label>
-                                <input type="search" class="input-glass text-white rounded-md px-4 py-3 w-full" placeholder="Buscar por código">
+                                <input type="search" class="input-glass text-white rounded-md px-4 py-3 w-full" placeholder="Buscar por código" data-relatorios-filter="pedidos" data-filter-key="codigo">
                             </div>
 
                             <div class="relatorios-filter-field">
                                 <label class="relatorios-filter-label text-white">Valor mínimo</label>
-                                <input type="number" class="input-glass text-white rounded-md px-4 py-3 w-full" placeholder="R$ 0,00">
+                                <input type="number" class="input-glass text-white rounded-md px-4 py-3 w-full" placeholder="R$ 0,00" data-relatorios-filter="pedidos" data-filter-key="valorMin">
                             </div>
 
                             <div class="relatorios-filter-field">
                                 <label class="relatorios-filter-label text-white">Valor máximo</label>
-                                <input type="number" class="input-glass text-white rounded-md px-4 py-3 w-full" placeholder="R$ 50.000,00">
+                                <input type="number" class="input-glass text-white rounded-md px-4 py-3 w-full" placeholder="R$ 50.000,00" data-relatorios-filter="pedidos" data-filter-key="valorMax">
                             </div>
 
                             <div class="relatorios-filter-field">
                                 <label class="relatorios-filter-label text-white">Condição de pagamento</label>
-                                <select class="input-glass text-white rounded-md px-4 py-3 w-full">
+                                <select class="input-glass text-white rounded-md px-4 py-3 w-full" data-relatorios-filter="pedidos" data-filter-key="condicao">
                                     <option value="">Todas</option>
                                     <option value="avista">À vista</option>
                                     <option value="30d">30 dias</option>
@@ -622,10 +622,10 @@
                             </div>
 
                             <div id="bt-actions" class="flex items-center gap-2 flex-shrink-0">
-                                <button id="btnFiltrar" class="btn-secondary text-white rounded-md px-4 py-3 text-sm font-medium">
+                                <button type="button" class="btn-secondary text-white rounded-md px-4 py-3 text-sm font-medium" data-relatorios-apply="pedidos">
                                     Filtrar
                                 </button>
-                                <button id="btnLimpar" class="btn-warning text-white rounded-md px-4 py-3 text-sm font-medium">
+                                <button type="button" class="btn-warning text-white rounded-md px-4 py-3 text-sm font-medium" data-relatorios-reset="pedidos">
                                     Limpar
                                 </button>
                             </div>
@@ -640,12 +640,12 @@
                         <div class="filter-bar relatorios-filter-bar">
                             <div class="relatorios-filter-field">
                                 <label class="relatorios-filter-label text-white">Buscar Usuário</label>
-                                <input type="search" class="input-glass text-white rounded-md px-4 py-3 w-full" placeholder="Nome ou e-mail">
+                                <input type="search" class="input-glass text-white rounded-md px-4 py-3 w-full" placeholder="Nome ou e-mail" data-relatorios-filter="usuarios" data-filter-key="search">
                             </div>
 
                             <div class="relatorios-filter-field">
                                 <label class="relatorios-filter-label text-white">Perfil</label>
-                                <select class="input-glass text-white rounded-md px-4 py-3 w-full">
+                                <select class="input-glass text-white rounded-md px-4 py-3 w-full" data-relatorios-filter="usuarios" data-filter-key="perfil">
                                     <option value="">Todos</option>
                                     <option value="admin">Admin</option>
                                     <option value="operacional">Operacional</option>
@@ -655,7 +655,7 @@
 
                             <div class="relatorios-filter-field">
                                 <label class="relatorios-filter-label text-white">Situação</label>
-                                <select class="input-glass text-white rounded-md px-4 py-3 w-full">
+                                <select class="input-glass text-white rounded-md px-4 py-3 w-full" data-relatorios-filter="usuarios" data-filter-key="situacao">
                                     <option value="">Todas</option>
                                     <option value="online">Online</option>
                                     <option value="offline">Offline</option>
@@ -664,10 +664,10 @@
                             </div>
 
                             <div id="bt-actions" class="flex items-center gap-2 flex-shrink-0">
-                                <button id="btnFiltrar" class="btn-secondary text-white rounded-md px-4 py-3 text-sm font-medium">
+                                <button type="button" class="btn-secondary text-white rounded-md px-4 py-3 text-sm font-medium" data-relatorios-apply="usuarios">
                                     Filtrar
                                 </button>
-                                <button id="btnLimpar" class="btn-warning text-white rounded-md px-4 py-3 text-sm font-medium">
+                                <button type="button" class="btn-warning text-white rounded-md px-4 py-3 text-sm font-medium" data-relatorios-reset="usuarios">
                                     Limpar
                                 </button>
                             </div>
@@ -676,15 +676,15 @@
                         <div class="filter-bar relatorios-filter-bar">
                             <div class="relatorios-filter-checkbox-group">
                                 <label class="relatorios-filter-checkbox-option text-white">
-                                    <input type="checkbox" class="relatorios-filter-checkbox rounded border-white/30 bg-transparent">
+                                    <input type="checkbox" class="relatorios-filter-checkbox rounded border-white/30 bg-transparent" data-relatorios-filter="usuarios" data-filter-key="ativo">
                                     <span>Ativo</span>
                                 </label>
                                 <label class="relatorios-filter-checkbox-option text-white">
-                                    <input type="checkbox" class="relatorios-filter-checkbox rounded border-white/30 bg-transparent">
+                                    <input type="checkbox" class="relatorios-filter-checkbox rounded border-white/30 bg-transparent" data-relatorios-filter="usuarios" data-filter-key="inativo">
                                     <span>Inativo</span>
                                 </label>
                                 <label class="relatorios-filter-checkbox-option text-white">
-                                    <input type="checkbox" class="relatorios-filter-checkbox rounded border-white/30 bg-transparent">
+                                    <input type="checkbox" class="relatorios-filter-checkbox rounded border-white/30 bg-transparent" data-relatorios-filter="usuarios" data-filter-key="aguardando">
                                     <span>Aguardando</span>
                                 </label>
                             </div>
@@ -738,11 +738,11 @@
                                         <tr>
                                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nome</th>
                                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Categoria</th>
-                                            <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Unidade</th>
-                                            <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Quantidade</th>
-                                            <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Preço</th>
-                                            <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Processo</th>
-                                            <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Unidade</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Quantidade</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Preço</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Processo</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                                         </tr>
                                     </thead>
                                     <tbody class="divide-y divide-white/10" data-relatorios-body></tbody>
@@ -760,11 +760,10 @@
                                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Código</th>
                                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nome</th>
                                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Categoria</th>
-                                            <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Preço de Venda</th>
-                                            <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Margem (%)</th>
-                                            <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Quantidade</th>
-                                            <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ações</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Preço de Venda</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Margem (%)</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Quantidade</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                                         </tr>
                                     </thead>
                                     <tbody class="divide-y divide-white/10" data-relatorios-body></tbody>
@@ -785,7 +784,6 @@
                                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Estado</th>
                                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Dono</th>
-                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ações</th>
                                         </tr>
                                     </thead>
                                     <tbody class="divide-y divide-white/10" data-relatorios-body></tbody>
@@ -806,7 +804,6 @@
                                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Celular</th>
                                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Telefone</th>
                                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">E-mail</th>
-                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ações</th>
                                         </tr>
                                     </thead>
                                     <tbody class="divide-y divide-white/10" data-relatorios-body></tbody>
@@ -824,7 +821,6 @@
                                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">E-mail</th>
                                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Responsável</th>
-                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ações</th>
                                         </tr>
                                     </thead>
                                     <tbody class="divide-y divide-white/10" data-relatorios-body></tbody>
@@ -842,10 +838,9 @@
                                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Código</th>
                                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cliente</th>
                                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Data</th>
-                                            <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Valor Total</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Valor Total</th>
                                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Condição</th>
-                                            <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ações</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                                         </tr>
                                     </thead>
                                     <tbody class="divide-y divide-white/10" data-relatorios-body></tbody>
@@ -863,10 +858,9 @@
                                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Código</th>
                                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cliente</th>
                                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Data</th>
-                                            <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Valor Total</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Valor Total</th>
                                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Condição</th>
-                                            <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ações</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                                         </tr>
                                     </thead>
                                     <tbody class="divide-y divide-white/10" data-relatorios-body></tbody>
@@ -887,7 +881,6 @@
                                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Perfil</th>
                                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Situação</th>
                                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ações</th>
                                         </tr>
                                     </thead>
                                     <tbody class="divide-y divide-white/10" data-relatorios-body></tbody>
