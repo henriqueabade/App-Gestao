@@ -335,15 +335,20 @@ function createKpiLoadingContent() {
         .join('');
 }
 
-function createKpiManager(root) {
+function createKpiManager(root, options = {}) {
+    const { initialTab = null } = options;
     const sections = new Map();
 
     root.querySelectorAll('[data-relatorios-kpi]').forEach(section => {
         const key = section.dataset.relatoriosKpi;
         if (!key) return;
         sections.set(key, section);
-        section.innerHTML = createKpiPlaceholder('Selecione uma categoria para visualizar os indicadores.');
+        section.innerHTML = '';
     });
+
+    if (initialTab && sections.has(initialTab)) {
+        sections.get(initialTab).innerHTML = createKpiLoadingContent();
+    }
 
     const setContent = (key, html) => {
         const section = sections.get(key);
@@ -1149,7 +1154,11 @@ function initRelatoriosModule() {
 
     applyEntranceAnimations(container);
 
-    relatoriosKpiManager = createKpiManager(container);
+    const initialTabButton = container.querySelector('[data-relatorios-tab].tab-active')
+        || container.querySelector('[data-relatorios-tab]');
+    const initialTabKey = initialTabButton?.dataset?.relatoriosTab || null;
+
+    relatoriosKpiManager = createKpiManager(container, { initialTab: initialTabKey });
     const loadTableForTab = setupReportTables(container);
 
     setupCategoryTabs(container, {
@@ -1166,9 +1175,8 @@ function initRelatoriosModule() {
     setupGeoFilters(container);
     setupDateRangeFilters(container);
 
-    const initialTab = container.querySelector('[data-relatorios-tab].tab-active');
-    if (initialTab && loadTableForTab) {
-        loadTableForTab(initialTab.dataset.relatoriosTab);
+    if (initialTabKey && loadTableForTab) {
+        loadTableForTab(initialTabKey);
     }
 }
 
@@ -1180,34 +1188,63 @@ function setupCategoryTabs(root, options = {}) {
     const filterSections = Array.from(root.querySelectorAll('[data-relatorios-tab-content]'));
     const kpiSections = Array.from(root.querySelectorAll('[data-relatorios-kpi]'));
 
+    let activeTab = null;
+
+    const applyVisibility = target => {
+        filterSections.forEach(section => {
+            section.classList.toggle('hidden', section.dataset.relatoriosTabContent !== target);
+        });
+
+        kpiSections.forEach(section => {
+            section.classList.toggle('hidden', section.dataset.relatoriosKpi !== target);
+        });
+    };
+
+    const updateButtonsState = activeButton => {
+        tabButtons.forEach(btn => {
+            const isActive = btn === activeButton;
+            btn.classList.toggle('tab-active', isActive);
+            btn.classList.toggle('tab-inactive', !isActive);
+            btn.setAttribute('aria-selected', isActive ? 'true' : 'false');
+        });
+    };
+
+    const activateTab = (button, { emitEvent = true } = {}) => {
+        const target = button?.dataset?.relatoriosTab;
+        if (!target || target === activeTab) return;
+
+        activeTab = target;
+        updateButtonsState(button);
+        applyVisibility(target);
+
+        if (emitEvent && typeof onTabChange === 'function') {
+            onTabChange(target, button);
+        }
+    };
+
+    const initialButton = tabButtons.find(btn => btn.classList.contains('tab-active')) || tabButtons[0];
+    if (initialButton) {
+        activeTab = initialButton.dataset?.relatoriosTab || null;
+        updateButtonsState(initialButton);
+        applyVisibility(activeTab);
+    }
+
     tabButtons.forEach(button => {
         button.addEventListener('click', () => {
-            const target = button.dataset.relatoriosTab;
-            if (!target || button.classList.contains('tab-active')) return;
-
-            tabButtons.forEach(btn => {
-                btn.classList.remove('tab-active');
-                btn.classList.add('tab-inactive');
-                btn.setAttribute('aria-selected', 'false');
-            });
-
-            button.classList.add('tab-active');
-            button.classList.remove('tab-inactive');
-            button.setAttribute('aria-selected', 'true');
-
-            filterSections.forEach(section => {
-                section.classList.toggle('hidden', section.dataset.relatoriosTabContent !== target);
-            });
-
-            kpiSections.forEach(section => {
-                section.classList.toggle('hidden', section.dataset.relatoriosKpi !== target);
-            });
-
-            if (typeof onTabChange === 'function') {
-                onTabChange(target, button);
-            }
+            if (button.classList.contains('tab-active')) return;
+            activateTab(button);
         });
     });
+
+    return {
+        getActiveTab: () => activeTab,
+        activateTab: (target, options = {}) => {
+            const button = tabButtons.find(btn => btn.dataset?.relatoriosTab === target);
+            if (button) {
+                activateTab(button, options);
+            }
+        }
+    };
 }
 
 function setupReportTables(root) {
