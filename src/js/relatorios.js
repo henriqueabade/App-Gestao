@@ -731,17 +731,54 @@ function createKpiManager(root, options = {}) {
         section.innerHTML = '';
     });
 
+    let activeKey = null;
+
     if (initialTab && sections.has(initialTab)) {
+        activeKey = initialTab;
         sections.get(initialTab).innerHTML = createKpiLoadingContent();
     }
+
+    const clearInactiveSections = () => {
+        sections.forEach((section, key) => {
+            if (key !== activeKey && section.innerHTML) {
+                section.innerHTML = '';
+            }
+        });
+    };
 
     const setContent = (key, html) => {
         const section = sections.get(key);
         if (!section) return;
+        if (activeKey !== key) {
+            if (section.innerHTML) {
+                section.innerHTML = '';
+            }
+            return;
+        }
         section.innerHTML = html;
     };
 
     return {
+        setActiveKey(key) {
+            if (!key || !sections.has(key)) {
+                activeKey = null;
+                sections.forEach(section => {
+                    if (section.innerHTML) {
+                        section.innerHTML = '';
+                    }
+                });
+                return;
+            }
+            const previousKey = activeKey;
+            activeKey = key;
+            if (key !== previousKey) {
+                const currentSection = sections.get(key);
+                if (currentSection && currentSection.innerHTML) {
+                    currentSection.innerHTML = '';
+                }
+            }
+            clearInactiveSections();
+        },
         setLoading(key) {
             setContent(key, createKpiLoadingContent());
         },
@@ -752,23 +789,26 @@ function createKpiManager(root, options = {}) {
             setContent(key, createKpiPlaceholder('Indicadores não disponíveis para esta categoria.'));
         },
         setData(key, data, config) {
-            const section = sections.get(key);
-            if (!section) return;
             if (!config?.computeKpis) {
-                section.innerHTML = createKpiPlaceholder('Indicadores não disponíveis para esta categoria.');
+                setContent(key, createKpiPlaceholder('Indicadores não disponíveis para esta categoria.'));
+                return;
+            }
+
+            if (activeKey !== key) {
+                setContent(key, '');
                 return;
             }
 
             try {
                 const kpis = config.computeKpis(Array.isArray(data) ? data : []);
                 if (!Array.isArray(kpis) || !kpis.length) {
-                    section.innerHTML = createKpiPlaceholder('Nenhum indicador disponível.');
+                    setContent(key, createKpiPlaceholder('Nenhum indicador disponível.'));
                     return;
                 }
-                section.innerHTML = renderKpiCards(kpis);
+                setContent(key, renderKpiCards(kpis));
             } catch (error) {
                 console.error(`Erro ao calcular indicadores para "${key}"`, error);
-                section.innerHTML = createKpiPlaceholder('Não foi possível calcular os indicadores.');
+                setContent(key, createKpiPlaceholder('Não foi possível calcular os indicadores.'));
             }
         }
     };
@@ -1546,6 +1586,9 @@ function setupCategoryTabs(root, options = {}) {
         activeTab = target;
         updateButtonsState(button);
         applyVisibility(target);
+        if (relatoriosKpiManager?.setActiveKey) {
+            relatoriosKpiManager.setActiveKey(target);
+        }
 
         if (emitEvent && typeof onTabChange === 'function') {
             onTabChange(target, button);
@@ -1557,6 +1600,9 @@ function setupCategoryTabs(root, options = {}) {
         activeTab = initialButton.dataset?.relatoriosTab || null;
         updateButtonsState(initialButton);
         applyVisibility(activeTab);
+        if (relatoriosKpiManager?.setActiveKey && activeTab) {
+            relatoriosKpiManager.setActiveKey(activeTab);
+        }
     }
 
     tabButtons.forEach(button => {
