@@ -26,6 +26,7 @@ const AVATAR_COLORS = [
 
 const reportDataCache = new Map();
 const reportDataPromises = new Map();
+let relatoriosKpiManager = null;
 
 function escapeHtml(value) {
     if (value === null || value === undefined) return '';
@@ -70,6 +71,11 @@ function formatPercent(value, { fallback = '—' } = {}) {
     const number = Number(value);
     if (!Number.isFinite(number)) return fallback;
     return `${percentFormatter.format(number)}%`;
+}
+
+function safeNumber(value) {
+    const number = Number(value);
+    return Number.isFinite(number) ? number : 0;
 }
 
 function formatDate(value) {
@@ -276,12 +282,459 @@ async function getReportData(key, config) {
     }
 }
 
+function createKpiItem({ value, label, icon = 'fas fa-chart-line', iconBg = 'bg-white/10', iconColor = 'text-white/80' }) {
+    return { value, label, icon, iconBg, iconColor };
+}
+
+function renderKpiCards(kpis) {
+    if (!Array.isArray(kpis) || !kpis.length) {
+        return createKpiPlaceholder('Nenhum indicador disponível.');
+    }
+
+    return kpis
+        .map(item => {
+            const value = item?.value ?? '—';
+            const label = item?.label ?? '';
+            const icon = item?.icon ?? 'fas fa-chart-line';
+            const iconBg = item?.iconBg ?? 'bg-white/10';
+            const iconColor = item?.iconColor ?? 'text-white';
+            return `
+                <article class="relatorios-kpi-card animate-fade-in-up">
+                    <div class="flex items-center gap-4">
+                        <div class="relatorios-kpi-icon ${iconBg}">
+                            <i class="${icon} ${iconColor}"></i>
+                        </div>
+                        <div>
+                            <p class="relatorios-kpi-value">${escapeHtml(String(value))}</p>
+                            <p class="relatorios-kpi-label">${escapeHtml(String(label))}</p>
+                        </div>
+                    </div>
+                </article>
+            `;
+        })
+        .join('');
+}
+
+function createKpiPlaceholder(message) {
+    return `<div class="relatorios-kpi-placeholder text-sm text-white/70">${escapeHtml(String(message))}</div>`;
+}
+
+function createKpiLoadingContent() {
+    return Array.from({ length: 4 })
+        .map(() => `
+            <article class="relatorios-kpi-card">
+                <div class="flex items-center gap-4 animate-pulse">
+                    <div class="relatorios-kpi-icon bg-white/10"></div>
+                    <div class="flex-1 space-y-2">
+                        <div class="h-4 bg-white/10 rounded w-24"></div>
+                        <div class="h-3 bg-white/5 rounded w-32"></div>
+                    </div>
+                </div>
+            </article>
+        `)
+        .join('');
+}
+
+function createKpiManager(root) {
+    const sections = new Map();
+
+    root.querySelectorAll('[data-relatorios-kpi]').forEach(section => {
+        const key = section.dataset.relatoriosKpi;
+        if (!key) return;
+        sections.set(key, section);
+        section.innerHTML = createKpiPlaceholder('Selecione uma categoria para visualizar os indicadores.');
+    });
+
+    const setContent = (key, html) => {
+        const section = sections.get(key);
+        if (!section) return;
+        section.innerHTML = html;
+    };
+
+    return {
+        setLoading(key) {
+            setContent(key, createKpiLoadingContent());
+        },
+        setError(key, message) {
+            setContent(key, createKpiPlaceholder(message || 'Não foi possível carregar os indicadores.'));
+        },
+        setUnavailable(key) {
+            setContent(key, createKpiPlaceholder('Indicadores não disponíveis para esta categoria.'));
+        },
+        setData(key, data, config) {
+            const section = sections.get(key);
+            if (!section) return;
+            if (!config?.computeKpis) {
+                section.innerHTML = createKpiPlaceholder('Indicadores não disponíveis para esta categoria.');
+                return;
+            }
+
+            try {
+                const kpis = config.computeKpis(Array.isArray(data) ? data : []);
+                if (!Array.isArray(kpis) || !kpis.length) {
+                    section.innerHTML = createKpiPlaceholder('Nenhum indicador disponível.');
+                    return;
+                }
+                section.innerHTML = renderKpiCards(kpis);
+            } catch (error) {
+                console.error(`Erro ao calcular indicadores para "${key}"`, error);
+                section.innerHTML = createKpiPlaceholder('Não foi possível calcular os indicadores.');
+            }
+        }
+    };
+}
+
+function computeMateriaPrimaKpis(items = []) {
+    const list = Array.isArray(items) ? items : [];
+    const total = list.length;
+    const finite = list.filter(item => !item?.infinito);
+    const critical = finite.filter(item => {
+        const qty = safeNumber(item?.quantidade);
+        return qty > 0 && qty < 10;
+    }).length;
+    const outOfStock = finite.filter(item => safeNumber(item?.quantidade) <= 0).length;
+    const totalValue = finite.reduce((sum, item) => sum + safeNumber(item?.quantidade) * safeNumber(item?.preco_unitario), 0);
+
+    return [
+        createKpiItem({
+            value: formatNumber(total, { fallback: '0' }),
+            label: 'Materiais cadastrados',
+            icon: 'fas fa-boxes-stacked',
+            iconBg: 'bg-indigo-500/20',
+            iconColor: 'text-indigo-300'
+        }),
+        createKpiItem({
+            value: formatNumber(critical, { fallback: '0' }),
+            label: 'Itens em estoque crítico',
+            icon: 'fas fa-exclamation-triangle',
+            iconBg: 'bg-rose-500/20',
+            iconColor: 'text-rose-300'
+        }),
+        createKpiItem({
+            value: formatNumber(outOfStock, { fallback: '0' }),
+            label: 'Itens sem estoque',
+            icon: 'fas fa-ban',
+            iconBg: 'bg-gray-500/20',
+            iconColor: 'text-gray-200'
+        }),
+        createKpiItem({
+            value: formatCurrency(totalValue),
+            label: 'Valor total em estoque',
+            icon: 'fas fa-coins',
+            iconBg: 'bg-amber-500/20',
+            iconColor: 'text-amber-300'
+        })
+    ];
+}
+
+function computeProdutosKpis(items = []) {
+    const list = Array.isArray(items) ? items : [];
+    const total = list.length;
+    const activeStatuses = new Set(['em linha', 'ativo', 'disponivel', 'disponível']);
+    const active = list.filter(produto => activeStatuses.has(normalizeText(produto?.status))).length;
+    const totalStock = list.reduce((sum, produto) => sum + safeNumber(produto?.quantidade_total), 0);
+    const totalValue = list.reduce((sum, produto) => sum + safeNumber(produto?.quantidade_total) * safeNumber(produto?.preco_venda), 0);
+
+    return [
+        createKpiItem({
+            value: formatNumber(total, { fallback: '0' }),
+            label: 'Produtos cadastrados',
+            icon: 'fas fa-boxes-stacked',
+            iconBg: 'bg-indigo-500/20',
+            iconColor: 'text-indigo-300'
+        }),
+        createKpiItem({
+            value: formatNumber(active, { fallback: '0' }),
+            label: 'Ativos em linha',
+            icon: 'fas fa-check-circle',
+            iconBg: 'bg-emerald-500/20',
+            iconColor: 'text-emerald-300'
+        }),
+        createKpiItem({
+            value: formatNumber(totalStock, { fallback: '0' }),
+            label: 'Estoque disponível',
+            icon: 'fas fa-layer-group',
+            iconBg: 'bg-blue-500/20',
+            iconColor: 'text-blue-300'
+        }),
+        createKpiItem({
+            value: formatCurrency(totalValue),
+            label: 'Valor potencial',
+            icon: 'fas fa-coins',
+            iconBg: 'bg-amber-500/20',
+            iconColor: 'text-amber-300'
+        })
+    ];
+}
+
+function computeClientesKpis(items = []) {
+    const list = Array.isArray(items) ? items : [];
+    const total = list.length;
+    const active = list.filter(cliente => normalizeText(cliente?.status_cliente) === 'ativo').length;
+    const inadimplentes = list.filter(cliente => normalizeText(cliente?.status_cliente).includes('inadimpl')).length;
+    const owners = new Set();
+    list.forEach(cliente => {
+        const owner = (cliente?.dono_cliente || '').trim();
+        if (owner) owners.add(owner);
+    });
+
+    return [
+        createKpiItem({
+            value: formatNumber(total, { fallback: '0' }),
+            label: 'Clientes cadastrados',
+            icon: 'fas fa-address-book',
+            iconBg: 'bg-blue-500/20',
+            iconColor: 'text-blue-300'
+        }),
+        createKpiItem({
+            value: formatNumber(active, { fallback: '0' }),
+            label: 'Clientes ativos',
+            icon: 'fas fa-user-check',
+            iconBg: 'bg-emerald-500/20',
+            iconColor: 'text-emerald-300'
+        }),
+        createKpiItem({
+            value: formatNumber(inadimplentes, { fallback: '0' }),
+            label: 'Clientes inadimplentes',
+            icon: 'fas fa-exclamation-circle',
+            iconBg: 'bg-rose-500/20',
+            iconColor: 'text-rose-300'
+        }),
+        createKpiItem({
+            value: formatNumber(owners.size, { fallback: '0' }),
+            label: 'Responsáveis únicos',
+            icon: 'fas fa-user-tie',
+            iconBg: 'bg-purple-500/20',
+            iconColor: 'text-purple-300'
+        })
+    ];
+}
+
+function computeContatosKpis(items = []) {
+    const list = Array.isArray(items) ? items : [];
+    const total = list.length;
+    const withEmail = list.filter(contato => Boolean((contato?.email || '').trim())).length;
+    const withPhone = list.filter(contato => {
+        return Boolean((contato?.telefone_fixo || '').trim()) || Boolean((contato?.telefone_celular || '').trim());
+    }).length;
+    const companies = new Set();
+    list.forEach(contato => {
+        const company = (contato?.cliente || '').trim();
+        if (company) companies.add(company);
+    });
+
+    return [
+        createKpiItem({
+            value: formatNumber(total, { fallback: '0' }),
+            label: 'Contatos cadastrados',
+            icon: 'fas fa-id-badge',
+            iconBg: 'bg-cyan-500/20',
+            iconColor: 'text-cyan-300'
+        }),
+        createKpiItem({
+            value: formatNumber(withEmail, { fallback: '0' }),
+            label: 'Contatos com e-mail',
+            icon: 'fas fa-envelope',
+            iconBg: 'bg-indigo-500/20',
+            iconColor: 'text-indigo-300'
+        }),
+        createKpiItem({
+            value: formatNumber(withPhone, { fallback: '0' }),
+            label: 'Contatos com telefone',
+            icon: 'fas fa-phone',
+            iconBg: 'bg-emerald-500/20',
+            iconColor: 'text-emerald-300'
+        }),
+        createKpiItem({
+            value: formatNumber(companies.size, { fallback: '0' }),
+            label: 'Empresas atendidas',
+            icon: 'fas fa-building',
+            iconBg: 'bg-amber-500/20',
+            iconColor: 'text-amber-300'
+        })
+    ];
+}
+
+function computeProspeccoesKpis(items = []) {
+    const list = Array.isArray(items) ? items : [];
+    const total = list.length;
+    const withOwner = list.filter(prospeccao => Boolean((prospeccao?.responsavel || '').trim())).length;
+    const withContact = list.filter(prospeccao => {
+        const email = (prospeccao?.email || '').trim();
+        const phone = (prospeccao?.telefone || prospeccao?.celular || '').trim();
+        return Boolean(email) || Boolean(phone);
+    }).length;
+    const statuses = new Set();
+    list.forEach(prospeccao => {
+        const status = normalizeText(prospeccao?.status);
+        if (status) statuses.add(status);
+    });
+
+    return [
+        createKpiItem({
+            value: formatNumber(total, { fallback: '0' }),
+            label: 'Leads em aberto',
+            icon: 'fas fa-bullseye',
+            iconBg: 'bg-emerald-500/20',
+            iconColor: 'text-emerald-300'
+        }),
+        createKpiItem({
+            value: formatNumber(withOwner, { fallback: '0' }),
+            label: 'Leads com responsável',
+            icon: 'fas fa-user-tie',
+            iconBg: 'bg-blue-500/20',
+            iconColor: 'text-blue-300'
+        }),
+        createKpiItem({
+            value: formatNumber(withContact, { fallback: '0' }),
+            label: 'Leads com contato principal',
+            icon: 'fas fa-address-card',
+            iconBg: 'bg-indigo-500/20',
+            iconColor: 'text-indigo-300'
+        }),
+        createKpiItem({
+            value: formatNumber(statuses.size, { fallback: '0' }),
+            label: 'Status distintos',
+            icon: 'fas fa-chart-pie',
+            iconBg: 'bg-purple-500/20',
+            iconColor: 'text-purple-300'
+        })
+    ];
+}
+
+function computeOrcamentosKpis(items = []) {
+    const list = Array.isArray(items) ? items : [];
+    const total = list.length;
+    const totalValue = list.reduce((sum, orcamento) => sum + safeNumber(orcamento?.valor_final), 0);
+    const approved = list.filter(orcamento => {
+        const status = normalizeText(orcamento?.situacao);
+        return status.includes('aprov') || status.includes('convert') || status.includes('aceit');
+    }).length;
+    const approvalRate = total > 0 ? (approved / total) * 100 : 0;
+
+    return [
+        createKpiItem({
+            value: formatNumber(total, { fallback: '0' }),
+            label: 'Orçamentos emitidos',
+            icon: 'fas fa-file-invoice',
+            iconBg: 'bg-blue-500/20',
+            iconColor: 'text-blue-300'
+        }),
+        createKpiItem({
+            value: formatNumber(approved, { fallback: '0' }),
+            label: 'Orçamentos aprovados',
+            icon: 'fas fa-file-signature',
+            iconBg: 'bg-emerald-500/20',
+            iconColor: 'text-emerald-300'
+        }),
+        createKpiItem({
+            value: formatCurrency(totalValue),
+            label: 'Valor total orçado',
+            icon: 'fas fa-coins',
+            iconBg: 'bg-amber-500/20',
+            iconColor: 'text-amber-300'
+        }),
+        createKpiItem({
+            value: formatPercent(approvalRate, { fallback: '0%' }),
+            label: 'Taxa de aprovação',
+            icon: 'fas fa-percentage',
+            iconBg: 'bg-purple-500/20',
+            iconColor: 'text-purple-300'
+        })
+    ];
+}
+
+function computePedidosKpis(items = []) {
+    const list = Array.isArray(items) ? items : [];
+    const total = list.length;
+    const totalValue = list.reduce((sum, pedido) => sum + safeNumber(pedido?.valor_final), 0);
+    const deliveredStatuses = new Set(['entregue', 'concluido', 'concluído', 'faturado', 'finalizado']);
+    const productionStatuses = new Set(['producao', 'produção', 'em producao', 'em produção']);
+    const delivered = list.filter(pedido => deliveredStatuses.has(normalizeText(pedido?.situacao))).length;
+    const inProduction = list.filter(pedido => productionStatuses.has(normalizeText(pedido?.situacao))).length;
+
+    return [
+        createKpiItem({
+            value: formatNumber(total, { fallback: '0' }),
+            label: 'Pedidos emitidos',
+            icon: 'fas fa-receipt',
+            iconBg: 'bg-emerald-500/20',
+            iconColor: 'text-emerald-300'
+        }),
+        createKpiItem({
+            value: formatNumber(delivered, { fallback: '0' }),
+            label: 'Pedidos entregues',
+            icon: 'fas fa-truck',
+            iconBg: 'bg-blue-500/20',
+            iconColor: 'text-blue-300'
+        }),
+        createKpiItem({
+            value: formatNumber(inProduction, { fallback: '0' }),
+            label: 'Pedidos em produção',
+            icon: 'fas fa-industry',
+            iconBg: 'bg-indigo-500/20',
+            iconColor: 'text-indigo-300'
+        }),
+        createKpiItem({
+            value: formatCurrency(totalValue),
+            label: 'Valor total faturado',
+            icon: 'fas fa-coins',
+            iconBg: 'bg-amber-500/20',
+            iconColor: 'text-amber-300'
+        })
+    ];
+}
+
+function computeUsuariosKpis(items = []) {
+    const list = Array.isArray(items) ? items : [];
+    const total = list.length;
+    const active = list.filter(usuario => normalizeText(usuario?.status) === 'ativo').length;
+    const online = list.filter(usuario => Boolean(usuario?.online)).length;
+    const profiles = new Set();
+    list.forEach(usuario => {
+        const perfil = (usuario?.perfil || '').trim();
+        if (perfil) profiles.add(perfil);
+    });
+
+    return [
+        createKpiItem({
+            value: formatNumber(total, { fallback: '0' }),
+            label: 'Usuários cadastrados',
+            icon: 'fas fa-users',
+            iconBg: 'bg-blue-500/20',
+            iconColor: 'text-blue-300'
+        }),
+        createKpiItem({
+            value: formatNumber(active, { fallback: '0' }),
+            label: 'Usuários ativos',
+            icon: 'fas fa-user-check',
+            iconBg: 'bg-emerald-500/20',
+            iconColor: 'text-emerald-300'
+        }),
+        createKpiItem({
+            value: formatNumber(online, { fallback: '0' }),
+            label: 'Usuários online',
+            icon: 'fas fa-signal',
+            iconBg: 'bg-amber-500/20',
+            iconColor: 'text-amber-300'
+        }),
+        createKpiItem({
+            value: formatNumber(profiles.size, { fallback: '0' }),
+            label: 'Perfis diferentes',
+            icon: 'fas fa-user-shield',
+            iconBg: 'bg-purple-500/20',
+            iconColor: 'text-purple-300'
+        })
+    ];
+}
+
 const REPORT_CONFIGS = {};
 
 REPORT_CONFIGS['materia-prima'] = {
     loadingMessage: 'Carregando matérias-primas...',
     emptyMessage: 'Nenhuma matéria-prima encontrada.',
     errorMessage: 'Não foi possível carregar as matérias-primas.',
+    computeKpis: computeMateriaPrimaKpis,
     async fetchData() {
         if (!window.electronAPI?.listarMateriaPrima) {
             throw new Error('Integração com matérias-primas indisponível.');
@@ -316,6 +769,7 @@ REPORT_CONFIGS.produtos = {
     loadingMessage: 'Carregando produtos...',
     emptyMessage: 'Nenhum produto encontrado.',
     errorMessage: 'Não foi possível carregar os produtos.',
+    computeKpis: computeProdutosKpis,
     async fetchData() {
         if (!window.electronAPI?.listarProdutos) {
             throw new Error('Integração com produtos indisponível.');
@@ -360,6 +814,7 @@ REPORT_CONFIGS.clientes = {
     loadingMessage: 'Carregando clientes...',
     emptyMessage: 'Nenhum cliente encontrado.',
     errorMessage: 'Não foi possível carregar os clientes.',
+    computeKpis: computeClientesKpis,
     async fetchData() {
         const data = await fetchJson(`${RELATORIOS_API_BASE_URL}/api/clientes/lista`);
         if (!Array.isArray(data)) return [];
@@ -399,6 +854,7 @@ REPORT_CONFIGS.contatos = {
     loadingMessage: 'Carregando contatos...',
     emptyMessage: 'Nenhum contato encontrado.',
     errorMessage: 'Não foi possível carregar os contatos.',
+    computeKpis: computeContatosKpis,
     async fetchData() {
         const data = await fetchContactsData();
         return Array.isArray(data) ? data : [];
@@ -447,6 +903,7 @@ REPORT_CONFIGS.prospeccoes = {
     loadingMessage: 'Carregando prospecções...',
     emptyMessage: 'Nenhuma prospecção encontrada.',
     errorMessage: 'Não foi possível carregar as prospecções.',
+    computeKpis: computeProspeccoesKpis,
     async fetchData() {
         const [clientes, contatos] = await Promise.all([
             fetchJson(`${RELATORIOS_API_BASE_URL}/api/clientes/lista`).catch(error => {
@@ -553,6 +1010,7 @@ REPORT_CONFIGS.orcamentos = {
     loadingMessage: 'Carregando orçamentos...',
     emptyMessage: 'Nenhum orçamento encontrado.',
     errorMessage: 'Não foi possível carregar os orçamentos.',
+    computeKpis: computeOrcamentosKpis,
     async fetchData() {
         const data = await fetchJson(`${RELATORIOS_API_BASE_URL}/api/orcamentos`);
         if (!Array.isArray(data)) return [];
@@ -593,6 +1051,7 @@ REPORT_CONFIGS.pedidos = {
     loadingMessage: 'Carregando pedidos...',
     emptyMessage: 'Nenhum pedido encontrado.',
     errorMessage: 'Não foi possível carregar os pedidos.',
+    computeKpis: computePedidosKpis,
     async fetchData() {
         const data = await fetchJson(`${RELATORIOS_API_BASE_URL}/api/pedidos`);
         if (!Array.isArray(data)) return [];
@@ -633,6 +1092,7 @@ REPORT_CONFIGS.usuarios = {
     loadingMessage: 'Carregando usuários...',
     emptyMessage: 'Nenhum usuário encontrado.',
     errorMessage: 'Não foi possível carregar os usuários.',
+    computeKpis: computeUsuariosKpis,
     async fetchData() {
         const data = await fetchJson(`${RELATORIOS_API_BASE_URL}/api/usuarios/lista`);
         if (!Array.isArray(data)) return [];
@@ -679,13 +1139,17 @@ REPORT_CONFIGS.usuarios = {
 
 function initRelatoriosModule() {
     const container = document.querySelector('.relatorios-module');
-    if (!container) return;
+    if (!container) {
+        relatoriosKpiManager = null;
+        return;
+    }
 
     // Garante que o body esteja liberado caso algum modal anterior tenha alterado o overflow
     document.body.style.overflow = '';
 
     applyEntranceAnimations(container);
 
+    relatoriosKpiManager = createKpiManager(container);
     const loadTableForTab = setupReportTables(container);
 
     setupCategoryTabs(container, {
@@ -797,6 +1261,9 @@ async function populateReportTable(key, container) {
     const config = REPORT_CONFIGS[key];
     if (!config) {
         container.innerHTML = '<p class="text-sm text-white/70">Configuração de relatório não encontrada.</p>';
+        if (relatoriosKpiManager) {
+            relatoriosKpiManager.setUnavailable(key);
+        }
         return;
     }
 
@@ -806,6 +1273,9 @@ async function populateReportTable(key, container) {
 
     if (!table || !tbody) {
         console.warn(`Estrutura de tabela ausente para o relatório "${key}".`);
+        if (relatoriosKpiManager) {
+            relatoriosKpiManager.setUnavailable(key);
+        }
         return;
     }
 
@@ -814,9 +1284,15 @@ async function populateReportTable(key, container) {
     };
 
     showMessage(config.loadingMessage || 'Carregando dados...');
+    if (relatoriosKpiManager) {
+        relatoriosKpiManager.setLoading(key);
+    }
 
     try {
         const data = await getReportData(key, config);
+        if (relatoriosKpiManager) {
+            relatoriosKpiManager.setData(key, data, config);
+        }
         if (container.dataset.currentTab !== key) {
             return;
         }
@@ -846,6 +1322,9 @@ async function populateReportTable(key, container) {
         tbody.innerHTML = rows;
     } catch (error) {
         console.error(`Erro ao popular relatório "${key}"`, error);
+        if (relatoriosKpiManager) {
+            relatoriosKpiManager.setError(key, config.errorMessage || 'Não foi possível carregar os dados.');
+        }
         if (container.dataset.currentTab !== key) {
             return;
         }
