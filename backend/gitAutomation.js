@@ -18,7 +18,7 @@ function performReleaseCommit({ runGitCommand, version, logger }) {
   }
 
   const activeLogger = getLogger(logger);
-  const commitMessage = `chore: release v${version}`;
+  const commitMessage = `Publicação: versão ${version}`;
 
   const statusOutput = runGitCommand(['status', '--porcelain']);
   if (statusOutput === null) {
