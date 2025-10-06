@@ -1,4 +1,682 @@
 // Lógica de interação para o módulo de Relatórios
+const RELATORIOS_API_BASE_URL = 'http://localhost:3000';
+const BADGE_CLASS_MAP = {
+    success: 'badge-success',
+    warning: 'badge-warning',
+    danger: 'badge-danger',
+    info: 'badge-info',
+    neutral: 'badge-neutral',
+    secondary: 'badge-secondary'
+};
+
+const currencyFormatter = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
+const numberFormatter = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+const percentFormatter = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 1 });
+
+const AVATAR_COLORS = [
+    'var(--color-primary)',
+    'var(--color-violet)',
+    '#0ea5e9',
+    '#f97316',
+    '#10b981',
+    '#8b5cf6',
+    '#ef4444',
+    '#f59e0b'
+];
+
+const reportDataCache = new Map();
+const reportDataPromises = new Map();
+
+function escapeHtml(value) {
+    if (value === null || value === undefined) return '';
+    return String(value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+function normalizeText(value) {
+    if (value === null || value === undefined) return '';
+    return String(value)
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .trim();
+}
+
+function formatText(value, fallback = '—') {
+    if (value === null || value === undefined) return fallback;
+    const text = String(value).trim();
+    return text ? escapeHtml(text) : fallback;
+}
+
+function formatCurrency(value, { fallback = 'R$ 0,00' } = {}) {
+    const number = Number(value);
+    if (!Number.isFinite(number)) return fallback;
+    return currencyFormatter.format(number);
+}
+
+function formatNumber(value, { fallback = '—', formatter = numberFormatter } = {}) {
+    if (value === Infinity) return '∞';
+    if (value === -Infinity) return '-∞';
+    const number = Number(value);
+    if (!Number.isFinite(number)) return fallback;
+    return formatter.format(number);
+}
+
+function formatPercent(value, { fallback = '—' } = {}) {
+    const number = Number(value);
+    if (!Number.isFinite(number)) return fallback;
+    return `${percentFormatter.format(number)}%`;
+}
+
+function formatDate(value) {
+    if (!value) return '—';
+    if (typeof value === 'string') {
+        const trimmed = value.trim();
+        if (!trimmed) return '—';
+        if (/^\d{2}\/\d{2}\/\d{4}$/.test(trimmed)) return trimmed;
+        const parsed = new Date(trimmed);
+        if (!Number.isNaN(parsed.getTime())) {
+            return parsed.toLocaleDateString('pt-BR');
+        }
+        return trimmed;
+    }
+    const date = value instanceof Date ? value : new Date(value);
+    if (Number.isNaN(date.getTime())) return '—';
+    return date.toLocaleDateString('pt-BR');
+}
+
+function createBadge(label, variant = 'neutral', options = {}) {
+    const { size = 'md', className = '' } = options;
+    const baseClass = BADGE_CLASS_MAP[variant] || BADGE_CLASS_MAP.neutral;
+    const sizeClass = size === 'sm' ? 'px-2 py-1' : 'px-3 py-1';
+    const classes = `${baseClass} ${sizeClass} rounded-full text-xs font-medium${className ? ` ${className}` : ''}`.trim();
+    return `<span class="${classes}">${escapeHtml(label)}</span>`;
+}
+
+function getColumnCount(table) {
+    if (!table) return 1;
+    const headers = table.querySelectorAll('thead th');
+    return headers.length || 1;
+}
+
+function createMessageRow(table, message, options = {}) {
+    const { className = 'px-6 py-6 text-center text-sm text-white/70', allowHtml = false } = options;
+    const colspan = getColumnCount(table);
+    const content = allowHtml ? message : escapeHtml(message);
+    return `<tr><td colspan="${colspan}" class="${className}">${content}</td></tr>`;
+}
+
+function getInitials(name) {
+    const value = name && String(name).trim();
+    if (!value) return '?';
+    const parts = value.split(/\s+/).filter(Boolean);
+    if (!parts.length) return '?';
+    const initials = parts.slice(0, 2).map(part => part[0]).join('');
+    return initials.toUpperCase();
+}
+
+function getAvatarColor(name) {
+    const normalized = normalizeText(name);
+    if (!normalized) return AVATAR_COLORS[0];
+    let hash = 0;
+    for (let i = 0; i < normalized.length; i += 1) {
+        hash = (hash + normalized.charCodeAt(i)) % AVATAR_COLORS.length;
+    }
+    return AVATAR_COLORS[hash];
+}
+
+function formatPhone(value) {
+    return formatText(value, '—');
+}
+
+async function fetchJson(url) {
+    const response = await fetch(url);
+    if (!response.ok) {
+        const error = new Error(`Request failed with status ${response.status}`);
+        error.status = response.status;
+        throw error;
+    }
+    return response.json();
+}
+
+async function fetchContactsData() {
+    const contacts = [];
+    const clients = await fetchJson(`${RELATORIOS_API_BASE_URL}/api/clientes/lista`);
+    for (const client of Array.isArray(clients) ? clients : []) {
+        try {
+            const detail = await fetchJson(`${RELATORIOS_API_BASE_URL}/api/clientes/${client.id}`);
+            const list = Array.isArray(detail?.contatos) ? detail.contatos : [];
+            list.forEach(contact => {
+                contacts.push({ ...contact, cliente: client.nome_fantasia || '', dono: client.dono_cliente || '' });
+            });
+        } catch (err) {
+            console.error('Erro ao carregar contatos do cliente', client?.id, err);
+        }
+    }
+    contacts.sort((a, b) => {
+        const byClient = normalizeText(a.cliente).localeCompare(normalizeText(b.cliente));
+        if (byClient !== 0) return byClient;
+        return normalizeText(a.nome).localeCompare(normalizeText(b.nome));
+    });
+    return contacts;
+}
+
+function getRawMaterialStatus(item) {
+    if (item?.infinito) {
+        return { label: 'Infinito', variant: 'neutral' };
+    }
+    const quantity = Number(item?.quantidade ?? 0);
+    if (!Number.isFinite(quantity) || quantity <= 0) {
+        return { label: 'Sem estoque', variant: 'danger' };
+    }
+    if (quantity < 10) {
+        return { label: 'Baixo', variant: 'warning' };
+    }
+    return { label: 'Disponível', variant: 'success' };
+}
+
+function getProductStatusVariant(status) {
+    const normalized = normalizeText(status);
+    if (!normalized) return 'neutral';
+    if (['ativo', 'em linha'].includes(normalized)) return 'success';
+    if (normalized.includes('reposicao') || normalized === 'pendente') return 'warning';
+    if (['inativo', 'descontinuado', 'cancelado'].includes(normalized)) return 'danger';
+    if (normalized === 'sob demanda') return 'neutral';
+    return 'info';
+}
+
+function getClientStatusVariant(status) {
+    const normalized = normalizeText(status);
+    if (!normalized) return 'neutral';
+    if (normalized === 'ativo') return 'success';
+    if (['inativo', 'inadimplente', 'cancelado'].includes(normalized)) return 'danger';
+    if (['negociacao', 'pendente', 'prospeccao'].includes(normalized)) return 'warning';
+    if (normalized === 'prospect') return 'info';
+    return 'neutral';
+}
+
+function getContactTypeVariant(type) {
+    const normalized = normalizeText(type);
+    if (!normalized) return 'neutral';
+    if (normalized === 'fornecedor') return 'info';
+    if (['parceiro', 'cliente', 'representante comercial'].includes(normalized)) return 'success';
+    if (['arquiteto', 'consultor'].includes(normalized)) return 'warning';
+    if (normalized === 'prospect') return 'secondary';
+    return 'neutral';
+}
+
+function getQuoteStatusVariant(status) {
+    const normalized = normalizeText(status);
+    if (!normalized) return 'neutral';
+    if (['aprovado', 'convertido'].includes(normalized)) return 'success';
+    if (['rejeitado', 'cancelado'].includes(normalized)) return 'danger';
+    if (['pendente', 'revisao'].includes(normalized)) return 'warning';
+    if (normalized === 'rascunho') return 'neutral';
+    if (normalized === 'enviado') return 'info';
+    if (normalized === 'expirado') return 'secondary';
+    return 'neutral';
+}
+
+function getOrderStatusVariant(status) {
+    const normalized = normalizeText(status);
+    if (!normalized) return 'neutral';
+    if (['entregue', 'concluido'].includes(normalized)) return 'success';
+    if (normalized === 'cancelado') return 'danger';
+    if (normalized === 'enviado') return 'info';
+    if (normalized === 'producao') return 'warning';
+    if (normalized === 'rascunho') return 'secondary';
+    return 'neutral';
+}
+
+function getUserStatusVariant(status) {
+    const normalized = normalizeText(status);
+    if (!normalized) return 'neutral';
+    if (normalized === 'ativo') return 'success';
+    if (['inativo', 'suspenso'].includes(normalized)) return 'danger';
+    if (['aguardando', 'pendente'].includes(normalized)) return 'warning';
+    return 'neutral';
+}
+
+async function getReportData(key, config) {
+    if (reportDataCache.has(key)) {
+        return reportDataCache.get(key);
+    }
+
+    if (reportDataPromises.has(key)) {
+        try {
+            const pending = await reportDataPromises.get(key);
+            return Array.isArray(pending) ? pending : [];
+        } catch (error) {
+            console.error(`Erro ao reutilizar promessa de relatório "${key}"`, error);
+            throw error;
+        }
+    }
+
+    const fetchPromise = (async () => {
+        const result = await config.fetchData();
+        const normalized = Array.isArray(result) ? result : [];
+        reportDataCache.set(key, normalized);
+        return normalized;
+    })();
+
+    reportDataPromises.set(key, fetchPromise);
+
+    try {
+        const data = await fetchPromise;
+        return Array.isArray(data) ? data : [];
+    } catch (error) {
+        reportDataCache.delete(key);
+        throw error;
+    } finally {
+        reportDataPromises.delete(key);
+    }
+}
+
+const REPORT_CONFIGS = {};
+
+REPORT_CONFIGS['materia-prima'] = {
+    loadingMessage: 'Carregando matérias-primas...',
+    emptyMessage: 'Nenhuma matéria-prima encontrada.',
+    errorMessage: 'Não foi possível carregar as matérias-primas.',
+    async fetchData() {
+        if (!window.electronAPI?.listarMateriaPrima) {
+            throw new Error('Integração com matérias-primas indisponível.');
+        }
+        const data = await window.electronAPI.listarMateriaPrima('');
+        return Array.isArray(data) ? data : [];
+    },
+    renderRow(item) {
+        const nome = formatText(item?.nome, '—');
+        const categoria = formatText(item?.categoria, '—');
+        const unidade = formatText(item?.unidade, '—');
+        const quantidade = item?.infinito ? '∞' : formatNumber(item?.quantidade, { fallback: '0' });
+        const preco = item?.infinito ? '—' : formatCurrency(item?.preco_unitario);
+        const processo = formatText(item?.processo, '—');
+        const status = getRawMaterialStatus(item);
+        const statusBadge = createBadge(status.label, status.variant, { size: 'sm' });
+        return `
+            <tr class="transition-colors duration-150">
+                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">${nome}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">${categoria}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-center text-gray-300">${unidade}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-white">${quantidade}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-white">${preco}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-center text-gray-300">${processo}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-center">${statusBadge}</td>
+            </tr>
+        `;
+    }
+};
+
+REPORT_CONFIGS.produtos = {
+    loadingMessage: 'Carregando produtos...',
+    emptyMessage: 'Nenhum produto encontrado.',
+    errorMessage: 'Não foi possível carregar os produtos.',
+    async fetchData() {
+        if (!window.electronAPI?.listarProdutos) {
+            throw new Error('Integração com produtos indisponível.');
+        }
+        const data = await window.electronAPI.listarProdutos();
+        return Array.isArray(data) ? data : [];
+    },
+    renderRow(produto) {
+        const codigo = formatText(produto?.codigo, '—');
+        const nome = formatText(produto?.nome, '—');
+        const categoria = formatText(produto?.categoria, '—');
+        const precoVenda = formatCurrency(produto?.preco_venda);
+        const margem = Number.isFinite(Number(produto?.pct_markup))
+            ? formatPercent(Number(produto.pct_markup))
+            : '—';
+        const quantidade = formatNumber(produto?.quantidade_total, { fallback: '0' });
+        const statusLabel = produto?.status ? produto.status : '—';
+        const statusBadge = createBadge(statusLabel, getProductStatusVariant(produto?.status), { size: 'sm' });
+        const actions = `
+            <div class="flex items-center gap-2">
+                <i class="fas fa-eye w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Visualizar"></i>
+                <i class="fas fa-edit w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Editar"></i>
+                <i class="fas fa-trash w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-red)" title="Excluir"></i>
+            </div>
+        `;
+        return `
+            <tr class="transition-colors duration-150">
+                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">${codigo}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-white">${nome}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">${categoria}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-white">${precoVenda}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-white">${margem}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-white">${quantidade}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-center">${statusBadge}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-left">${actions}</td>
+            </tr>
+        `;
+    }
+};
+
+REPORT_CONFIGS.clientes = {
+    loadingMessage: 'Carregando clientes...',
+    emptyMessage: 'Nenhum cliente encontrado.',
+    errorMessage: 'Não foi possível carregar os clientes.',
+    async fetchData() {
+        const data = await fetchJson(`${RELATORIOS_API_BASE_URL}/api/clientes/lista`);
+        if (!Array.isArray(data)) return [];
+        return data.sort((a, b) => normalizeText(a?.nome_fantasia).localeCompare(normalizeText(b?.nome_fantasia)));
+    },
+    renderRow(cliente) {
+        const nome = formatText(cliente?.nome_fantasia, '—');
+        const cnpj = formatText(cliente?.cnpj, '—');
+        const pais = formatText(cliente?.pais, '—');
+        const estado = formatText(cliente?.estado, '—');
+        const dono = formatText(cliente?.dono_cliente, '—');
+        const statusLabel = cliente?.status_cliente ? cliente.status_cliente : '—';
+        const statusBadge = createBadge(statusLabel, getClientStatusVariant(cliente?.status_cliente), { size: 'sm' });
+        const actions = `
+            <div class="flex items-center gap-2">
+                <i class="fas fa-eye w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Visualizar"></i>
+                <i class="fas fa-edit w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Editar"></i>
+                <i class="fas fa-envelope w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Enviar e-mail"></i>
+            </div>
+        `;
+
+        return `
+            <tr class="transition-colors duration-150">
+                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">${nome}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">${cnpj}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">${pais}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">${estado}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-center">${statusBadge}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">${dono}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-left">${actions}</td>
+            </tr>
+        `;
+    }
+};
+
+REPORT_CONFIGS.contatos = {
+    loadingMessage: 'Carregando contatos...',
+    emptyMessage: 'Nenhum contato encontrado.',
+    errorMessage: 'Não foi possível carregar os contatos.',
+    async fetchData() {
+        const data = await fetchContactsData();
+        return Array.isArray(data) ? data : [];
+    },
+    renderRow(contato) {
+        const nome = formatText(contato?.nome, '—');
+        const empresa = formatText(contato?.cliente, '—');
+        const celular = formatPhone(contato?.telefone_celular);
+        const telefone = formatPhone(contato?.telefone_fixo);
+        const email = formatText(contato?.email, '—');
+        const tipo = formatText(contato?.cargo, '—');
+        const initials = getInitials(contato?.nome);
+        const avatarColor = getAvatarColor(contato?.nome);
+        const tipoBadge = createBadge(tipo !== '—' ? tipo : 'Contato', getContactTypeVariant(tipo), { size: 'sm' });
+        const actions = `
+            <div class="flex items-center gap-2">
+                <i class="fas fa-phone w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Ligar"></i>
+                <i class="fas fa-envelope w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Enviar e-mail"></i>
+                <i class="fas fa-comment-dots w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Iniciar conversa"></i>
+            </div>
+        `;
+
+        return `
+            <tr class="transition-colors duration-150">
+                <td class="px-6 py-4 whitespace-nowrap">
+                    <div class="flex items-center gap-3">
+                        <div class="w-9 h-9 rounded-full flex items-center justify-center text-xs font-semibold text-white" style="background:${avatarColor};">${initials}</div>
+                        <div>
+                            <p class="text-sm font-medium text-white">${nome}</p>
+                            <p class="text-xs text-white/70">${empresa}</p>
+                        </div>
+                    </div>
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-center">${tipoBadge}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">${empresa}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">${celular}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">${telefone}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">${email}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-left">${actions}</td>
+            </tr>
+        `;
+    }
+};
+
+REPORT_CONFIGS.prospeccoes = {
+    loadingMessage: 'Carregando prospecções...',
+    emptyMessage: 'Nenhuma prospecção encontrada.',
+    errorMessage: 'Não foi possível carregar as prospecções.',
+    async fetchData() {
+        const [clientes, contatos] = await Promise.all([
+            fetchJson(`${RELATORIOS_API_BASE_URL}/api/clientes/lista`).catch(error => {
+                console.error('Erro ao carregar clientes para prospecções', error);
+                throw error;
+            }),
+            (async () => {
+                if (reportDataCache.has('contatos')) {
+                    return reportDataCache.get('contatos');
+                }
+                if (reportDataPromises.has('contatos')) {
+                    try {
+                        const data = await reportDataPromises.get('contatos');
+                        return Array.isArray(data) ? data : [];
+                    } catch (error) {
+                        console.error('Erro ao reaproveitar contatos em prospecções', error);
+                        return [];
+                    }
+                }
+                try {
+                    const promise = fetchContactsData();
+                    reportDataPromises.set('contatos', promise);
+                    const result = await promise;
+                    const normalized = Array.isArray(result) ? result : [];
+                    reportDataCache.set('contatos', normalized);
+                    return normalized;
+                } catch (error) {
+                    console.error('Erro ao carregar contatos para prospecções', error);
+                    return [];
+                } finally {
+                    reportDataPromises.delete('contatos');
+                }
+            })()
+        ]);
+
+        const contactMap = new Map();
+        (Array.isArray(contatos) ? contatos : []).forEach(contato => {
+            const clientId = contato?.id_cliente || contato?.clienteId;
+            if (clientId && !contactMap.has(clientId)) {
+                contactMap.set(clientId, contato);
+            }
+        });
+
+        const leadStatuses = new Set([
+            'prospect',
+            'prospeccao',
+            'prospecção',
+            'negociacao',
+            'negociação',
+            'lead',
+            'pendente',
+            'contato inicial'
+        ]);
+
+        const leads = (Array.isArray(clientes) ? clientes : [])
+            .filter(cliente => {
+                const status = normalizeText(cliente?.status_cliente);
+                return status && leadStatuses.has(status);
+            })
+            .map(cliente => {
+                const contato = contactMap.get(cliente.id) || null;
+                return {
+                    id: cliente.id,
+                    nome: cliente?.nome_fantasia || '',
+                    email: contato?.email || '',
+                    status: cliente?.status_cliente || '',
+                    responsavel: cliente?.dono_cliente || '',
+                    telefone: contato?.telefone_fixo || '',
+                    celular: contato?.telefone_celular || '',
+                    empresa: cliente?.nome_fantasia || ''
+                };
+            })
+            .sort((a, b) => normalizeText(a.nome).localeCompare(normalizeText(b.nome)));
+
+        return leads;
+    },
+    renderRow(prospeccao) {
+        const nome = formatText(prospeccao?.nome, '—');
+        const email = formatText(prospeccao?.email, '—');
+        const responsavel = formatText(prospeccao?.responsavel, '—');
+        const statusLabel = prospeccao?.status ? prospeccao.status : '—';
+        const statusBadge = createBadge(statusLabel, getClientStatusVariant(prospeccao?.status), { size: 'sm' });
+        const actions = `
+            <div class="flex items-center gap-2">
+                <i class="fas fa-eye w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Visualizar"></i>
+                <i class="fas fa-comments w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Registrar interação"></i>
+                <i class="fas fa-trash w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-red)" title="Remover"></i>
+            </div>
+        `;
+
+        return `
+            <tr class="transition-colors duration-150">
+                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">${nome}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">${email}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-center">${statusBadge}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">${responsavel}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-left">${actions}</td>
+            </tr>
+        `;
+    }
+};
+
+REPORT_CONFIGS.orcamentos = {
+    loadingMessage: 'Carregando orçamentos...',
+    emptyMessage: 'Nenhum orçamento encontrado.',
+    errorMessage: 'Não foi possível carregar os orçamentos.',
+    async fetchData() {
+        const data = await fetchJson(`${RELATORIOS_API_BASE_URL}/api/orcamentos`);
+        if (!Array.isArray(data)) return [];
+        return data.sort((a, b) => normalizeText(a?.numero).localeCompare(normalizeText(b?.numero)));
+    },
+    renderRow(orcamento) {
+        const codigo = formatText(orcamento?.numero, '—');
+        const cliente = formatText(orcamento?.cliente, '—');
+        const dataEmissao = formatDate(orcamento?.data_emissao);
+        const valor = formatCurrency(orcamento?.valor_final);
+        const parcelas = Number.parseInt(orcamento?.parcelas, 10);
+        const condicao = Number.isFinite(parcelas) && parcelas > 1 ? `${parcelas}x` : 'À vista';
+        const statusLabel = orcamento?.situacao ? orcamento.situacao : '—';
+        const statusBadge = createBadge(statusLabel, getQuoteStatusVariant(orcamento?.situacao), { size: 'sm' });
+        const actions = `
+            <div class="flex items-center gap-2">
+                <i class="fas fa-eye w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Visualizar"></i>
+                <i class="fas fa-file-export w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Exportar"></i>
+                <i class="fas fa-exchange-alt w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Converter em pedido"></i>
+            </div>
+        `;
+
+        return `
+            <tr class="transition-colors duration-150">
+                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">${codigo}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">${cliente}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">${dataEmissao}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-white">${valor}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">${condicao}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-center">${statusBadge}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-left">${actions}</td>
+            </tr>
+        `;
+    }
+};
+
+REPORT_CONFIGS.pedidos = {
+    loadingMessage: 'Carregando pedidos...',
+    emptyMessage: 'Nenhum pedido encontrado.',
+    errorMessage: 'Não foi possível carregar os pedidos.',
+    async fetchData() {
+        const data = await fetchJson(`${RELATORIOS_API_BASE_URL}/api/pedidos`);
+        if (!Array.isArray(data)) return [];
+        return data.sort((a, b) => normalizeText(a?.numero).localeCompare(normalizeText(b?.numero)));
+    },
+    renderRow(pedido) {
+        const codigo = formatText(pedido?.numero, '—');
+        const cliente = formatText(pedido?.cliente, '—');
+        const dataEmissao = formatDate(pedido?.data_emissao);
+        const valor = formatCurrency(pedido?.valor_final);
+        const parcelas = Number.parseInt(pedido?.parcelas, 10);
+        const condicao = Number.isFinite(parcelas) && parcelas > 1 ? `${parcelas}x` : 'À vista';
+        const statusLabel = pedido?.situacao ? pedido.situacao : '—';
+        const statusBadge = createBadge(statusLabel, getOrderStatusVariant(pedido?.situacao), { size: 'sm' });
+        const actions = `
+            <div class="flex items-center gap-2">
+                <i class="fas fa-eye w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Visualizar"></i>
+                <i class="fas fa-truck w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Atualizar entrega"></i>
+                <i class="fas fa-file-invoice-dollar w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Gerar nota"></i>
+            </div>
+        `;
+
+        return `
+            <tr class="transition-colors duration-150">
+                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">${codigo}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">${cliente}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">${dataEmissao}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-white">${valor}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">${condicao}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-center">${statusBadge}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-left">${actions}</td>
+            </tr>
+        `;
+    }
+};
+
+REPORT_CONFIGS.usuarios = {
+    loadingMessage: 'Carregando usuários...',
+    emptyMessage: 'Nenhum usuário encontrado.',
+    errorMessage: 'Não foi possível carregar os usuários.',
+    async fetchData() {
+        const data = await fetchJson(`${RELATORIOS_API_BASE_URL}/api/usuarios/lista`);
+        if (!Array.isArray(data)) return [];
+        return data.sort((a, b) => normalizeText(a?.nome).localeCompare(normalizeText(b?.nome)));
+    },
+    renderRow(usuario) {
+        const nome = formatText(usuario?.nome, '—');
+        const email = formatText(usuario?.email, '—');
+        const perfil = formatText(usuario?.perfil, '—');
+        const statusLabel = usuario?.status ? usuario.status : '—';
+        const statusBadge = createBadge(statusLabel, getUserStatusVariant(usuario?.status), { size: 'sm' });
+        const onlineBadge = createBadge(usuario?.online ? 'Online' : 'Offline', usuario?.online ? 'success' : 'secondary', { size: 'sm' });
+        const ultimaAtividade = usuario?.ultimaAtividadeEm ? formatDate(usuario.ultimaAtividadeEm) : '—';
+        const initials = getInitials(usuario?.nome);
+        const avatarColor = getAvatarColor(usuario?.nome);
+        const actions = `
+            <div class="flex items-center gap-2">
+                <i class="fas fa-user-shield w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Gerenciar permissões"></i>
+                <i class="fas fa-envelope w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Enviar mensagem"></i>
+                <i class="fas fa-ban w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-red)" title="Suspender"></i>
+            </div>
+        `;
+
+        return `
+            <tr class="transition-colors duration-150">
+                <td class="px-6 py-4 whitespace-nowrap">
+                    <div class="w-10 h-10 rounded-full flex items-center justify-center text-sm font-semibold text-white" style="background:${avatarColor};">${initials}</div>
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">${nome}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">${email}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">${perfil}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm">
+                    <div class="flex flex-col gap-1">
+                        <span>${onlineBadge}</span>
+                        <span class="text-xs text-white/60">Última atividade: ${ultimaAtividade}</span>
+                    </div>
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-center">${statusBadge}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-left">${actions}</td>
+            </tr>
+        `;
+    }
+};
+
 function initRelatoriosModule() {
     const container = document.querySelector('.relatorios-module');
     if (!container) return;
@@ -82,7 +760,7 @@ function setupReportTables(root) {
 
     const fallback = root.querySelector('#relatoriosTableFallback');
 
-    const loadTable = key => {
+    const loadTable = async key => {
         if (!key || container.dataset.currentTab === key) return;
 
         container.dataset.currentTab = key;
@@ -102,6 +780,9 @@ function setupReportTables(root) {
                     }, { once: true });
                 }
             });
+            populateReportTable(key, container).catch(error => {
+                console.error(`Erro ao carregar tabela do relatório "${key}"`, error);
+            });
         } else if (fallback) {
             container.appendChild(fallback.content.cloneNode(true));
         } else {
@@ -110,6 +791,66 @@ function setupReportTables(root) {
     };
 
     return loadTable;
+}
+
+async function populateReportTable(key, container) {
+    const config = REPORT_CONFIGS[key];
+    if (!config) {
+        container.innerHTML = '<p class="text-sm text-white/70">Configuração de relatório não encontrada.</p>';
+        return;
+    }
+
+    const tableRoot = container.querySelector('[data-relatorios-table-root]') || container;
+    const table = tableRoot.querySelector('table');
+    const tbody = tableRoot.querySelector('[data-relatorios-body]');
+
+    if (!table || !tbody) {
+        console.warn(`Estrutura de tabela ausente para o relatório "${key}".`);
+        return;
+    }
+
+    const showMessage = message => {
+        tbody.innerHTML = createMessageRow(table, message);
+    };
+
+    showMessage(config.loadingMessage || 'Carregando dados...');
+
+    try {
+        const data = await getReportData(key, config);
+        if (container.dataset.currentTab !== key) {
+            return;
+        }
+
+        if (!Array.isArray(data) || data.length === 0) {
+            showMessage(config.emptyMessage || 'Nenhum registro encontrado.');
+            return;
+        }
+
+        const rows = data
+            .map(item => {
+                try {
+                    return config.renderRow(item);
+                } catch (error) {
+                    console.error(`Erro ao renderizar linha do relatório "${key}"`, error, item);
+                    return '';
+                }
+            })
+            .filter(Boolean)
+            .join('');
+
+        if (!rows) {
+            showMessage(config.emptyMessage || 'Nenhum registro disponível.');
+            return;
+        }
+
+        tbody.innerHTML = rows;
+    } catch (error) {
+        console.error(`Erro ao popular relatório "${key}"`, error);
+        if (container.dataset.currentTab !== key) {
+            return;
+        }
+        showMessage(config.errorMessage || 'Não foi possível carregar os dados.');
+    }
 }
 
 function setupResultTabs(root) {
