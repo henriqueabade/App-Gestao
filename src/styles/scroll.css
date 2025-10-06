@@ -44,6 +44,17 @@ html, body, #app, #mainContent  {
   max-height: none;
 }
 
+body[data-current-module="materia-prima"] #content.no-scroll .table-scroll,
+body[data-current-module="produtos"] #content.no-scroll .table-scroll,
+body[data-current-module="orcamentos"] #content.no-scroll .table-scroll,
+body[data-current-module="pedidos"] #content.no-scroll .table-scroll,
+body[data-current-module="calendario"] #content.no-scroll .table-scroll,
+body[data-current-module="tarefas"] #content.no-scroll .table-scroll,
+body[data-current-module="usuarios"] #content.no-scroll .table-scroll {
+  overflow-y: auto !important;
+  max-height: calc(var(--module-height) - 200px);
+}
+
 /* Scrollbar discreta e minimalista */
 #content::-webkit-scrollbar {
     width: 6px;
