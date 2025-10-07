@@ -48,9 +48,20 @@ body {
     display: flex;
     justify-content: flex-end;
     flex-wrap: wrap;
+    align-items: center;
     gap: 0.75rem;
-    margin-bottom: 1.5rem;
-    width: 100%;
+    margin-bottom: 0;
+    margin-left: auto;
+    width: auto;
+}
+
+@media (max-width: 768px) {
+    .relatorios-module .relatorios-table-toolbar {
+        width: 100%;
+        margin-left: 0;
+        margin-top: 0.75rem;
+        justify-content: flex-start;
+    }
 }
 
 .animate-fade-in-up {
