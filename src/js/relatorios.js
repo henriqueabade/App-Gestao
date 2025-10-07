@@ -32,6 +32,19 @@ const filterDefaults = new Map();
 const reportVisibleColumns = new Map();
 const COLUMN_VISIBILITY_STORAGE_PREFIX = 'relatorios-visible-columns';
 let relatoriosKpiManager = null;
+let jsPdfLoaderPromise = null;
+
+function showRelatoriosToast(message, type = 'info') {
+    if (typeof window !== 'undefined' && typeof window.showToast === 'function') {
+        window.showToast(message, type);
+        return;
+    }
+    if (type === 'error') {
+        console.error(message);
+    } else {
+        console.log(message);
+    }
+}
 
 function getColumnStorageKey(key) {
     return `${COLUMN_VISIBILITY_STORAGE_PREFIX}:${key}`;
@@ -253,6 +266,251 @@ function createMessageRow(table, message, options = {}) {
     const colspan = getColumnCount(table);
     const content = allowHtml ? message : escapeHtml(message);
     return `<tr><td colspan="${colspan}" class="${className}">${content}</td></tr>`;
+}
+
+function getExportColumns(key) {
+    const config = REPORT_CONFIGS?.[key];
+    if (!config?.columns?.length) return [];
+    const visibleSet = new Set(getVisibleColumnKeys(key));
+    if (!visibleSet.size) return [];
+    return config.columns.filter(column => visibleSet.has(column.key));
+}
+
+function sanitizeTableCellText(value) {
+    if (value === null || value === undefined) return '';
+    return String(value).replace(/\s+/g, ' ').trim();
+}
+
+function collectTableDataForExport(root, key) {
+    if (!root || !key) return null;
+    const tableContainer = root.querySelector('#relatoriosTableContainer');
+    if (!tableContainer) return null;
+    const tableRoot = tableContainer.querySelector('[data-relatorios-table-root]') || tableContainer;
+    const table = tableRoot.querySelector('table');
+    const tbody = table?.querySelector('tbody');
+    if (!table || !tbody) return null;
+
+    const columns = getExportColumns(key);
+    if (!columns.length) return null;
+
+    const dataRows = Array.from(tbody.querySelectorAll('tr')).filter(row => row.querySelector('[data-column-key]'));
+    const headers = columns.map(column => column.label || column.key || '');
+    const rows = dataRows.map(row => columns.map(column => {
+        const cell = row.querySelector(`[data-column-key="${column.key}"]`);
+        if (!cell || cell.classList.contains('hidden')) return '';
+        return sanitizeTableCellText(cell.textContent);
+    }));
+
+    return { columns, headers, rows, table, tbody };
+}
+
+function createFileSafeSlug(value) {
+    const normalized = normalizeText(value)
+        .replace(/[^a-z0-9\s-]/g, ' ')
+        .replace(/\s+/g, '-')
+        .replace(/-+/g, '-')
+        .replace(/(^-|-$)/g, '');
+    return normalized || 'relatorio';
+}
+
+function createReportTitle(root, key) {
+    if (!root) return 'Relatório';
+    const button = root.querySelector(`[data-relatorios-tab="${key}"]`);
+    const label = button ? sanitizeTableCellText(button.textContent) : '';
+    const title = label ? `Relatório - ${label}` : 'Relatório';
+    return title;
+}
+
+function createReportFileName(key, title, extension) {
+    const base = title || key || 'relatorio';
+    const slug = createFileSafeSlug(base);
+    const now = new Date();
+    const date = now.toISOString().slice(0, 10);
+    const time = now.toISOString().slice(11, 19).replace(/:/g, '-');
+    return `${slug}-${date}-${time}.${extension}`;
+}
+
+function createCsvContent(headers, rows) {
+    const escapeValue = value => {
+        const text = value === null || value === undefined ? '' : String(value);
+        const escaped = text.replace(/"/g, '""');
+        return `"${escaped}"`;
+    };
+    const headerRow = headers.map(escapeValue).join(';');
+    const dataRows = rows.map(row => row.map(escapeValue).join(';'));
+    return `\ufeff${[headerRow, ...dataRows].join('\n')}`;
+}
+
+function buildHtmlTable(headers, rows) {
+    const headerHtml = headers
+        .map(header => `<th>${escapeHtml(header ?? '')}</th>`)
+        .join('');
+    const bodyHtml = rows
+        .map(row => `<tr>${row.map(cell => `<td>${escapeHtml(cell ?? '')}</td>`).join('')}</tr>`)
+        .join('');
+    return `<table><thead><tr>${headerHtml}</tr></thead><tbody>${bodyHtml}</tbody></table>`;
+}
+
+function downloadBlobFromContent(content, mimeType, filename) {
+    if (typeof window === 'undefined') return;
+    const blob = content instanceof Blob ? content : new Blob([content], { type: mimeType });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
+function loadJsPdfLibrary() {
+    if (typeof window === 'undefined') {
+        return Promise.reject(new Error('Ambiente indisponível para gerar PDF.'));
+    }
+
+    if (window.jspdf?.jsPDF) {
+        return Promise.resolve(window.jspdf.jsPDF);
+    }
+
+    if (jsPdfLoaderPromise) {
+        return jsPdfLoaderPromise;
+    }
+
+    jsPdfLoaderPromise = new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = '../js/vendor/jspdf.umd.min.js';
+        script.async = true;
+        script.onload = () => {
+            if (window.jspdf?.jsPDF) {
+                resolve(window.jspdf.jsPDF);
+            } else {
+                reject(new Error('Biblioteca jsPDF não disponível.'));
+            }
+        };
+        script.onerror = () => {
+            reject(new Error('Não foi possível carregar a biblioteca de PDF.'));
+        };
+        document.head.appendChild(script);
+    }).catch(error => {
+        jsPdfLoaderPromise = null;
+        throw error;
+    });
+
+    return jsPdfLoaderPromise;
+}
+
+async function exportReportAsPdf(title, headers, rows, filename) {
+    const jsPDFConstructor = await loadJsPdfLibrary();
+    const orientation = headers.length > 5 ? 'landscape' : 'portrait';
+    const doc = new jsPDFConstructor({ orientation, unit: 'pt' });
+    const margin = 40;
+    const titleFontSize = 16;
+    const bodyFontSize = 10;
+    const lineHeight = 14;
+    const cellPadding = 6;
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(titleFontSize);
+    doc.text(title, margin, margin - 10 + titleFontSize);
+    doc.setFontSize(bodyFontSize);
+    doc.setFont('helvetica', 'normal');
+
+    const pageWidth = doc.internal.pageSize.getWidth();
+    let pageHeight = doc.internal.pageSize.getHeight();
+    const availableWidth = pageWidth - margin * 2;
+
+    const measureText = value => {
+        if (value === null || value === undefined) return 0;
+        return doc.getTextWidth(String(value));
+    };
+
+    let columnWidths = headers.map((header, index) => {
+        const headerWidth = measureText(header) + cellPadding * 2;
+        const dataWidth = rows.reduce((max, row) => {
+            const width = measureText(row[index]) + cellPadding * 2;
+            return Math.max(max, width);
+        }, headerWidth);
+        return Math.max(dataWidth, 60);
+    });
+
+    const totalWidth = columnWidths.reduce((sum, width) => sum + width, 0);
+    if (totalWidth > availableWidth) {
+        const scale = availableWidth / totalWidth;
+        columnWidths = columnWidths.map(width => Math.max(48, width * scale));
+    }
+
+    let currentY = margin + 20;
+    const baseHeight = lineHeight + cellPadding * 2;
+
+    const drawRow = (values, options = {}) => {
+        const { header = false } = options;
+        let rowHeight = baseHeight;
+        const cells = values.map((value, index) => {
+            const text = value === null || value === undefined ? '' : String(value);
+            const cellWidth = Math.max(columnWidths[index] - cellPadding * 2, 24);
+            const lines = doc.splitTextToSize(text, cellWidth);
+            const height = Math.max(baseHeight, lines.length * lineHeight + cellPadding * 2);
+            if (height > rowHeight) rowHeight = height;
+            return { lines, width: columnWidths[index] };
+        });
+
+        if (currentY + rowHeight > pageHeight - margin) {
+            doc.addPage();
+            pageHeight = doc.internal.pageSize.getHeight();
+            currentY = margin;
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(bodyFontSize);
+        }
+
+        let cellX = margin;
+        doc.setFont('helvetica', header ? 'bold' : 'normal');
+
+        cells.forEach((cell, index) => {
+            const rectMode = header ? 'FD' : 'S';
+            if (header) {
+                doc.setFillColor(240, 240, 240);
+            }
+            doc.rect(cellX, currentY, columnWidths[index], rowHeight, rectMode);
+            let textY = currentY + cellPadding + lineHeight;
+            cell.lines.forEach(line => {
+                doc.text(line, cellX + cellPadding, textY - 4);
+                textY += lineHeight;
+            });
+            cellX += columnWidths[index];
+        });
+
+        currentY += rowHeight;
+        doc.setFont('helvetica', 'normal');
+    };
+
+    drawRow(headers, { header: true });
+    rows.forEach(row => drawRow(row));
+
+    doc.save(filename);
+}
+
+function openReportPrintWindow(title, headers, rows) {
+    if (typeof window === 'undefined') return;
+    const tableHtml = buildHtmlTable(headers, rows);
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+        showRelatoriosToast('Não foi possível abrir a janela de impressão.', 'error');
+        return;
+    }
+    const safeTitle = escapeHtml(title);
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${safeTitle}</title><style>
+        body { font-family: Arial, sans-serif; padding: 32px; color: #111; }
+        h1 { font-size: 20px; margin-bottom: 16px; }
+        table { border-collapse: collapse; width: 100%; }
+        th, td { border: 1px solid #444; padding: 8px 10px; text-align: left; font-size: 12px; }
+        th { background: #f3f4f6; }
+    </style></head><body><h1>${safeTitle}</h1>${tableHtml}<script>
+        window.addEventListener('load', function() { setTimeout(function() { window.print(); }, 150); });
+    <\/script></body></html>`;
+    printWindow.document.open();
+    printWindow.document.write(html);
+    printWindow.document.close();
 }
 
 function getInitials(name) {
@@ -2306,6 +2564,9 @@ function initRelatoriosModule() {
     });
     setupResultTabs(container);
     setupDropdowns(container);
+    setupExportActions(container, {
+        getActiveTab: () => tabController?.getActiveTab?.() || initialTabKey
+    });
     setupModals(container);
     setupShare(container);
     setupGeoFilters(container);
@@ -2640,6 +2901,108 @@ function setupDropdowns(root) {
     const handleDocumentClick = () => closeDropdowns();
     document.addEventListener('click', handleDocumentClick);
     window.__relatoriosDropdownHandler = handleDocumentClick;
+}
+
+async function handleReportExport(root, key, type) {
+    const data = collectTableDataForExport(root, key);
+    if (!data) {
+        showRelatoriosToast('Tabela não disponível para exportação.', 'warning');
+        return;
+    }
+
+    const { headers, rows, tbody } = data;
+    if (!rows.length) {
+        const message = sanitizeTableCellText(tbody?.textContent || '');
+        if (message && /carregando/i.test(message)) {
+            showRelatoriosToast('Aguarde o carregamento dos dados antes de exportar.', 'info');
+        } else {
+            showRelatoriosToast('Nenhum dado disponível para exportação.', 'info');
+        }
+        return;
+    }
+
+    const title = createReportTitle(root, key);
+
+    if (type === 'csv') {
+        const content = createCsvContent(headers, rows);
+        downloadBlobFromContent(content, 'text/csv;charset=utf-8;', createReportFileName(key, title, 'csv'));
+        showRelatoriosToast('Relatório exportado em CSV.', 'success');
+        return;
+    }
+
+    if (type === 'excel') {
+        const tableHtml = buildHtmlTable(headers, rows);
+        const html = `<!DOCTYPE html><html><head><meta charset="utf-8"></head><body>${tableHtml}</body></html>`;
+        downloadBlobFromContent(`\ufeff${html}`, 'application/vnd.ms-excel', createReportFileName(key, title, 'xls'));
+        showRelatoriosToast('Relatório exportado em Excel.', 'success');
+        return;
+    }
+
+    if (type === 'pdf') {
+        await exportReportAsPdf(title, headers, rows, createReportFileName(key, title, 'pdf'));
+        showRelatoriosToast('Relatório exportado em PDF.', 'success');
+        return;
+    }
+
+    if (type === 'print') {
+        openReportPrintWindow(title, headers, rows);
+        showRelatoriosToast('Preparando visualização para impressão...', 'info');
+        return;
+    }
+
+    showRelatoriosToast('Formato de exportação não suportado.', 'error');
+}
+
+function setupExportActions(root, options = {}) {
+    if (!root) return;
+    const dropdown = root.querySelector('#relatoriosExportDropdown');
+    const button = root.querySelector('#relatoriosExportBtn');
+    const tableContainer = root.querySelector('#relatoriosTableContainer');
+    if (!dropdown || !button || !tableContainer) return;
+
+    const items = Array.from(dropdown.querySelectorAll('[data-relatorios-export]'));
+    if (!items.length) return;
+
+    const { getActiveTab } = options;
+
+    const resolveKey = () => {
+        const current = tableContainer.dataset?.currentTab;
+        if (current) return current;
+        if (typeof getActiveTab === 'function') {
+            return getActiveTab();
+        }
+        return null;
+    };
+
+    const closeDropdown = () => {
+        dropdown.classList.remove('visible');
+    };
+
+    items.forEach(item => {
+        item.addEventListener('click', event => {
+            event.preventDefault();
+            if (button.disabled) {
+                closeDropdown();
+                return;
+            }
+
+            closeDropdown();
+
+            const type = item.dataset.relatoriosExport;
+            const key = resolveKey();
+            if (!type) return;
+
+            if (!key) {
+                showRelatoriosToast('Selecione uma categoria de relatório antes de exportar.', 'info');
+                return;
+            }
+
+            handleReportExport(root, key, type).catch(error => {
+                console.error(`Erro ao exportar relatório (${type})`, error);
+                showRelatoriosToast('Não foi possível exportar o relatório.', 'error');
+            });
+        });
+    });
 }
 
 function setupColumnVisibilityControl(root) {
