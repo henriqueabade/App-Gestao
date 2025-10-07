@@ -1219,11 +1219,17 @@ REPORT_CONFIGS.produtos = {
     errorMessage: 'Não foi possível carregar os produtos.',
     computeKpis: computeProdutosKpis,
     async fetchData() {
-        if (!window.electronAPI?.listarProdutos) {
-            throw new Error('Integração com produtos indisponível.');
+        try {
+            const data = await (window.electronAPI?.listarProdutos?.() ?? []);
+            if (!Array.isArray(data)) {
+                console.warn('KPI manager (produtos): dados inválidos recebidos, usando lista vazia.', data);
+                return [];
+            }
+            return data;
+        } catch (error) {
+            console.error('KPI manager (produtos): erro ao carregar produtos.', error);
+            return [];
         }
-        const data = await window.electronAPI.listarProdutos();
-        return Array.isArray(data) ? data : [];
     },
     renderRow(produto) {
         const codigo = formatText(produto?.codigo, '—');
