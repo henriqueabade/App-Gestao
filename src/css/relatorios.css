@@ -152,6 +152,11 @@ body {
     color: var(--color-green);
 }
 
+.relatorios-module .badge-danger {
+    background: rgba(255, 88, 88, 0.2);
+    color: var(--color-red);
+}
+
 .relatorios-module .badge-warning {
     background: rgba(212, 193, 105, 0.2);
     color: var(--color-primary);
@@ -171,6 +176,12 @@ body {
     background: rgba(255, 255, 255, 0.85);
     color: #1f2937;
     border: 1px solid rgba(255, 255, 255, 0.6);
+}
+
+.relatorios-module .badge-light {
+    background: rgba(255, 255, 255, 0.95);
+    color: #1f2937;
+    border: 1px solid rgba(255, 255, 255, 0.8);
 }
 
 .relatorios-filter-bar {

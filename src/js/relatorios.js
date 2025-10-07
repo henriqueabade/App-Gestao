@@ -6,7 +6,8 @@ const BADGE_CLASS_MAP = {
     danger: 'badge-danger',
     info: 'badge-info',
     neutral: 'badge-neutral',
-    secondary: 'badge-secondary'
+    secondary: 'badge-secondary',
+    light: 'badge-light'
 };
 
 const currencyFormatter = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -243,7 +244,7 @@ function getQuoteStatusVariant(status) {
     if (['pendente', 'revisao'].includes(normalized)) return 'warning';
     if (normalized === 'rascunho') return 'info';
     if (normalized === 'enviado') return 'info';
-    if (normalized === 'expirado') return 'secondary';
+    if (normalized === 'expirado') return 'light';
     return 'neutral';
 }
 
@@ -1195,7 +1196,8 @@ REPORT_CONFIGS['materia-prima'] = {
         const categoria = formatText(item?.categoria, '—');
         const unidade = formatText(item?.unidade, '—');
         const quantidade = item?.infinito ? '∞' : formatNumber(item?.quantidade, { fallback: '0' });
-        const preco = item?.infinito ? '—' : formatCurrency(item?.preco_unitario);
+        const precoRaw = item?.preco_unitario ?? item?.precoUnitario;
+        const preco = formatCurrency(precoRaw, { fallback: '—' });
         const processo = formatText(item?.processo, '—');
         const status = getRawMaterialStatus(item);
         const statusBadge = createBadge(status.label, status.variant, { size: 'sm' });
