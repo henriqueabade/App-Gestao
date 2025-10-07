@@ -254,6 +254,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setDisplay: (id) => ipcRenderer.invoke('set-display', id),
   openPdf: (id, tipo) => ipcRenderer.invoke('open-pdf', { id, tipo }),
   openExternal: (url) => ipcRenderer.invoke('open-external', url),
+  openExternalHtml: (html) => ipcRenderer.invoke('open-external-html', html),
   recordActivity: (info) => {
     if (!info || typeof info !== 'object') return;
     const payload = { ...info };

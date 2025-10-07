@@ -351,6 +351,268 @@ function buildHtmlTable(headers, rows) {
     return `<table><thead><tr>${headerHtml}</tr></thead><tbody>${bodyHtml}</tbody></table>`;
 }
 
+const REPORT_PT_TO_PX = 96 / 72;
+const REPORT_MM_TO_PX = 96 / 25.4;
+
+function calculateReportLayout(headers, rows, options = {}) {
+    const normalizedHeaders = Array.isArray(headers) ? headers : [];
+    const normalizedRows = Array.isArray(rows) ? rows : [];
+    const columnCount = normalizedHeaders.length;
+    const {
+        availableWidth = 0,
+        baseFontSize = 11,
+        minFontSize = 8,
+        maxFontSize = 13,
+        minColumnWidth = 64,
+        cellPaddingX = 12,
+        measureText
+    } = options;
+
+    if (!columnCount) {
+        return {
+            columnWidths: [],
+            tableWidth: 0,
+            fontSize: baseFontSize,
+            cellPaddingX
+        };
+    }
+
+    const textMeasure = typeof measureText === 'function'
+        ? measureText
+        : (value, fontSize) => {
+            const text = value === null || value === undefined ? '' : String(value);
+            if (!text) return 0;
+            return text.length * fontSize * 0.6;
+        };
+
+    const getWidth = (value, fontSize) => {
+        const text = value === null || value === undefined ? '' : String(value);
+        if (!text) return 0;
+        return textMeasure(text, fontSize);
+    };
+
+    let columnWidths = normalizedHeaders.map((header, index) => {
+        const headerWidth = getWidth(header, baseFontSize) + cellPaddingX * 2;
+        const dataWidth = normalizedRows.reduce((max, row) => {
+            const width = getWidth(row?.[index], baseFontSize) + cellPaddingX * 2;
+            return Math.max(max, width);
+        }, headerWidth);
+        return Math.max(minColumnWidth, dataWidth);
+    });
+
+    let totalWidth = columnWidths.reduce((sum, width) => sum + width, 0);
+
+    if (availableWidth > 0) {
+        if (totalWidth > availableWidth) {
+            const scale = availableWidth / totalWidth;
+            columnWidths = columnWidths.map(width => Math.max(minColumnWidth, width * scale));
+            totalWidth = columnWidths.reduce((sum, width) => sum + width, 0);
+        } else if (totalWidth < availableWidth) {
+            const extra = availableWidth - totalWidth;
+            if (extra > 0) {
+                const base = totalWidth || columnWidths.length;
+                columnWidths = columnWidths.map(width => {
+                    const weight = totalWidth > 0 ? width / base : 1 / columnCount;
+                    return width + extra * weight;
+                });
+                totalWidth = columnWidths.reduce((sum, width) => sum + width, 0);
+            }
+        }
+
+        if (totalWidth > availableWidth) {
+            const overflow = totalWidth - availableWidth;
+            const divisor = totalWidth || 1;
+            columnWidths = columnWidths.map(width => width - (width / divisor) * overflow);
+            totalWidth = columnWidths.reduce((sum, width) => sum + width, 0);
+        }
+    }
+
+    const rowsForScale = [normalizedHeaders, ...normalizedRows];
+    let limitScale = Infinity;
+
+    rowsForScale.forEach(row => {
+        normalizedHeaders.forEach((_, index) => {
+            const textWidth = getWidth(row?.[index], baseFontSize);
+            if (!textWidth) return;
+            const allowed = Math.max(columnWidths[index] - cellPaddingX * 2, minColumnWidth * 0.6);
+            if (allowed <= 0) return;
+            const scale = allowed / textWidth;
+            if (scale < limitScale) {
+                limitScale = scale;
+            }
+        });
+    });
+
+    if (!Number.isFinite(limitScale) || limitScale <= 0) {
+        limitScale = 1;
+    }
+
+    const minScale = minFontSize / baseFontSize;
+    const maxScale = maxFontSize / baseFontSize;
+    let finalScale;
+
+    if (limitScale >= 1) {
+        finalScale = Math.min(limitScale, maxScale);
+    } else {
+        finalScale = Math.max(limitScale, minScale);
+    }
+
+    finalScale = Math.max(minScale, Math.min(finalScale, maxScale));
+    const fontSize = baseFontSize * finalScale;
+    const tableWidth = columnWidths.reduce((sum, width) => sum + width, 0);
+
+    return {
+        columnWidths,
+        tableWidth,
+        fontSize,
+        cellPaddingX
+    };
+}
+
+let reportCanvasContext = null;
+
+function getReportCanvasContext() {
+    if (typeof document === 'undefined') {
+        return null;
+    }
+    if (!reportCanvasContext) {
+        const canvas = document.createElement('canvas');
+        reportCanvasContext = canvas.getContext('2d');
+    }
+    return reportCanvasContext;
+}
+
+function measureReportTextWithCanvas(value, fontSizePt) {
+    const text = value === null || value === undefined ? '' : String(value);
+    if (!text) return 0;
+    const context = getReportCanvasContext();
+    if (!context) {
+        return text.length * fontSizePt * 0.6;
+    }
+    const fontSizePx = fontSizePt * REPORT_PT_TO_PX;
+    context.font = `${fontSizePx}px Arial`;
+    const metrics = context.measureText(text);
+    return metrics.width;
+}
+
+function createReportPrintHtml(title, headers, rows) {
+    const normalizedHeaders = Array.isArray(headers) ? headers : [];
+    const normalizedRows = Array.isArray(rows) ? rows : [];
+    const orientation = normalizedHeaders.length > 5 ? 'landscape' : 'portrait';
+    const pageWidthMm = orientation === 'landscape' ? 297 : 210;
+    const pageHeightMm = orientation === 'landscape' ? 210 : 297;
+    const marginMm = 15;
+    const availableWidthPx = (pageWidthMm - marginMm * 2) * REPORT_MM_TO_PX;
+
+    const layout = calculateReportLayout(normalizedHeaders, normalizedRows, {
+        availableWidth: availableWidthPx,
+        baseFontSize: 11,
+        minFontSize: 8,
+        maxFontSize: 13,
+        minColumnWidth: 64,
+        cellPaddingX: 12,
+        measureText: measureReportTextWithCanvas
+    });
+
+    const safeTitle = escapeHtml(title ?? 'Relatório');
+    const columnCount = normalizedHeaders.length;
+    const colgroup = columnCount
+        ? `<colgroup>${layout.columnWidths
+            .map(width => `<col style="width:${((width / layout.tableWidth) * 100).toFixed(4)}%">`)
+            .join('')}</colgroup>`
+        : '';
+
+    const headerHtml = columnCount
+        ? normalizedHeaders.map(header => `<th scope="col">${escapeHtml(header ?? '')}</th>`).join('')
+        : '<th scope="col">&nbsp;</th>';
+
+    const hasRows = normalizedRows.length > 0;
+    const bodyHtml = hasRows
+        ? normalizedRows
+            .map(row => {
+                const cells = normalizedHeaders.map((_, index) => `<td>${escapeHtml(row?.[index] ?? '')}</td>`);
+                return `<tr>${cells.join('')}</tr>`;
+            })
+            .join('')
+        : `<tr><td colspan="${Math.max(1, columnCount)}" style="text-align:center; padding: 16px 0;">Nenhum dado disponível.</td></tr>`;
+
+    const headerFontSize = Math.min(layout.fontSize + 2, 14).toFixed(2);
+    const fontSize = layout.fontSize.toFixed(2);
+    const paddingXmm = layout.cellPaddingX ? (layout.cellPaddingX / REPORT_MM_TO_PX).toFixed(4) : (12 / REPORT_MM_TO_PX).toFixed(4);
+
+    return `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"><title>${safeTitle}</title><style>
+        :root {
+            --page-width: ${pageWidthMm}mm;
+            --page-height: ${pageHeightMm}mm;
+            --page-margin: ${marginMm}mm;
+            --font-size: ${fontSize}pt;
+            --header-font-size: ${headerFontSize}pt;
+            --padding-x: ${paddingXmm}mm;
+        }
+        @page {
+            size: A4 ${orientation};
+            margin: var(--page-margin);
+        }
+        html, body {
+            margin: 0;
+            padding: 0;
+            background: #f8f9fb;
+            color: #111;
+            font-family: Arial, sans-serif;
+        }
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+        }
+        .print-page {
+            width: var(--page-width);
+            max-width: 100%;
+            background: #fff;
+            box-sizing: border-box;
+            padding: 0;
+        }
+        .print-content {
+            width: 100%;
+        }
+        h1 {
+            text-align: center;
+            font-size: calc(var(--header-font-size) + 4pt);
+            margin: 0 0 12px;
+        }
+        .table-wrapper {
+            width: 100%;
+            overflow: hidden;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            table-layout: fixed;
+            font-size: var(--font-size);
+        }
+        th, td {
+            border: 1px solid #444;
+            padding: 6px var(--padding-x);
+            white-space: nowrap;
+        }
+        th {
+            background: #f3f4f6;
+            font-size: var(--header-font-size);
+            text-align: center;
+        }
+        td {
+            text-align: left;
+        }
+    </style></head><body><div class="print-page"><div class="print-content"><h1>${safeTitle}</h1><div class="table-wrapper"><table>${colgroup}<thead><tr>${headerHtml}</tr></thead><tbody>${bodyHtml}</tbody></table></div></div></div><script>
+        window.addEventListener('load', function () {
+            setTimeout(function () {
+                window.focus();
+                window.print();
+            }, 300);
+        });
+    <\/script></body></html>`;
+}
+
 function downloadBlobFromContent(content, mimeType, filename) {
     if (typeof window === 'undefined') return;
     const blob = content instanceof Blob ? content : new Blob([content], { type: mimeType });
@@ -402,115 +664,198 @@ function loadJsPdfLibrary() {
 
 async function exportReportAsPdf(title, headers, rows, filename) {
     const jsPDFConstructor = await loadJsPdfLibrary();
-    const orientation = headers.length > 5 ? 'landscape' : 'portrait';
-    const doc = new jsPDFConstructor({ orientation, unit: 'pt' });
-    const margin = 40;
+    const normalizedHeaders = Array.isArray(headers) ? headers : [];
+    const normalizedRows = Array.isArray(rows) ? rows : [];
+    const orientation = normalizedHeaders.length > 5 ? 'landscape' : 'portrait';
+    const doc = new jsPDFConstructor({ orientation, unit: 'pt', format: 'a4' });
+    const margin = 36;
     const titleFontSize = 16;
-    const bodyFontSize = 10;
-    const lineHeight = 14;
-    const cellPadding = 6;
+    const baseFontSize = 11;
+    const minFontSize = 8;
+    const maxFontSize = 13;
+    const cellPaddingX = 12;
+    const cellPaddingY = 8;
 
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(titleFontSize);
-    doc.text(title, margin, margin - 10 + titleFontSize);
-    doc.setFontSize(bodyFontSize);
-    doc.setFont('helvetica', 'normal');
-
-    const pageWidth = doc.internal.pageSize.getWidth();
-    let pageHeight = doc.internal.pageSize.getHeight();
-    const availableWidth = pageWidth - margin * 2;
-
-    const measureText = value => {
-        if (value === null || value === undefined) return 0;
-        return doc.getTextWidth(String(value));
+    const measurePdfText = (value, fontSize) => {
+        const text = value === null || value === undefined ? '' : String(value);
+        if (!text) return 0;
+        const previousSize = doc.internal.getFontSize();
+        doc.setFontSize(fontSize);
+        const width = doc.getTextWidth(text);
+        doc.setFontSize(previousSize);
+        return width;
     };
 
-    let columnWidths = headers.map((header, index) => {
-        const headerWidth = measureText(header) + cellPadding * 2;
-        const dataWidth = rows.reduce((max, row) => {
-            const width = measureText(row[index]) + cellPadding * 2;
-            return Math.max(max, width);
-        }, headerWidth);
-        return Math.max(dataWidth, 60);
+    const pageWidthInitial = doc.internal.pageSize.getWidth();
+    const availableWidth = pageWidthInitial - margin * 2;
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(baseFontSize);
+
+    const layout = calculateReportLayout(normalizedHeaders, normalizedRows, {
+        availableWidth,
+        baseFontSize,
+        minFontSize,
+        maxFontSize,
+        minColumnWidth: 64,
+        cellPaddingX,
+        measureText: measurePdfText
     });
 
-    const totalWidth = columnWidths.reduce((sum, width) => sum + width, 0);
-    if (totalWidth > availableWidth) {
-        const scale = availableWidth / totalWidth;
-        columnWidths = columnWidths.map(width => Math.max(48, width * scale));
-    }
+    let pageWidth = doc.internal.pageSize.getWidth();
+    let pageHeight = doc.internal.pageSize.getHeight();
+    const columnWidths = layout.columnWidths;
+    const tableWidth = layout.tableWidth;
+    const getTableX = () => (columnWidths.length
+        ? Math.max(margin, (pageWidth - tableWidth) / 2)
+        : margin);
+    const bodyFontSize = layout.fontSize;
+    const headerFontSize = Math.min(bodyFontSize + 2, 14);
+    const headerRowHeight = headerFontSize * 1.4 + cellPaddingY * 2;
+    const bodyRowHeight = bodyFontSize * 1.35 + cellPaddingY * 2;
 
-    let currentY = margin + 20;
-    const baseHeight = lineHeight + cellPadding * 2;
+    const refreshPageMetrics = () => {
+        pageWidth = doc.internal.pageSize.getWidth();
+        pageHeight = doc.internal.pageSize.getHeight();
+    };
 
-    const drawRow = (values, options = {}) => {
-        const { header = false } = options;
-        let rowHeight = baseHeight;
-        const cells = values.map((value, index) => {
-            const text = value === null || value === undefined ? '' : String(value);
-            const cellWidth = Math.max(columnWidths[index] - cellPadding * 2, 24);
-            const lines = doc.splitTextToSize(text, cellWidth);
-            const height = Math.max(baseHeight, lines.length * lineHeight + cellPadding * 2);
-            if (height > rowHeight) rowHeight = height;
-            return { lines, width: columnWidths[index] };
-        });
+    let currentY = margin;
 
-        if (currentY + rowHeight > pageHeight - margin) {
-            doc.addPage();
-            pageHeight = doc.internal.pageSize.getHeight();
-            currentY = margin;
-            doc.setFont('helvetica', 'normal');
-            doc.setFontSize(bodyFontSize);
-        }
-
-        let cellX = margin;
-        doc.setFont('helvetica', header ? 'bold' : 'normal');
-
-        cells.forEach((cell, index) => {
-            const rectMode = header ? 'FD' : 'S';
-            if (header) {
-                doc.setFillColor(240, 240, 240);
-            }
-            doc.rect(cellX, currentY, columnWidths[index], rowHeight, rectMode);
-            let textY = currentY + cellPadding + lineHeight;
-            cell.lines.forEach(line => {
-                doc.text(line, cellX + cellPadding, textY - 4);
-                textY += lineHeight;
-            });
-            cellX += columnWidths[index];
-        });
-
-        currentY += rowHeight;
+    const writePageHeader = () => {
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(titleFontSize);
+        doc.text(title, pageWidth / 2, margin, { align: 'center' });
+        currentY = margin + titleFontSize + 12;
         doc.setFont('helvetica', 'normal');
     };
 
-    drawRow(headers, { header: true });
-    rows.forEach(row => drawRow(row));
+    const drawHeaderRow = () => {
+        if (!columnWidths.length) {
+            return;
+        }
+        if (currentY + headerRowHeight > pageHeight - margin) {
+            doc.addPage();
+            refreshPageMetrics();
+            writePageHeader();
+        }
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(headerFontSize);
+        doc.setDrawColor(68, 68, 68);
+        doc.setLineWidth(0.6);
+        doc.setTextColor(17, 17, 17);
+        let cellX = getTableX();
+        normalizedHeaders.forEach((header, index) => {
+            const cellWidth = columnWidths[index];
+            doc.setFillColor(240, 240, 240);
+            doc.rect(cellX, currentY, cellWidth, headerRowHeight, 'FD');
+            const textX = cellX + cellWidth / 2;
+            const textY = currentY + headerRowHeight / 2 + headerFontSize * 0.35;
+            doc.text(String(header ?? ''), textX, textY, { align: 'center' });
+            cellX += cellWidth;
+        });
+        currentY += headerRowHeight;
+        doc.setFont('helvetica', 'normal');
+    };
+
+    const drawBodyRow = row => {
+        if (!columnWidths.length) {
+            return;
+        }
+        if (currentY + bodyRowHeight > pageHeight - margin) {
+            doc.addPage();
+            refreshPageMetrics();
+            writePageHeader();
+            drawHeaderRow();
+        }
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(bodyFontSize);
+        doc.setDrawColor(68, 68, 68);
+        doc.setLineWidth(0.5);
+        doc.setTextColor(17, 17, 17);
+        let cellX = getTableX();
+        normalizedHeaders.forEach((_, index) => {
+            const cellWidth = columnWidths[index];
+            const value = row?.[index];
+            const text = value === null || value === undefined ? '' : String(value);
+            doc.rect(cellX, currentY, cellWidth, bodyRowHeight);
+            const textX = cellX + cellPaddingX;
+            const textY = currentY + bodyRowHeight / 2 + bodyFontSize * 0.35;
+            doc.text(text, textX, textY);
+            cellX += cellWidth;
+        });
+        currentY += bodyRowHeight;
+    };
+
+    refreshPageMetrics();
+    writePageHeader();
+    if (columnWidths.length) {
+        drawHeaderRow();
+    }
+
+    if (!normalizedRows.length) {
+        const emptyHeight = bodyRowHeight;
+        const emptyWidth = columnWidths.length ? tableWidth : availableWidth;
+        if (currentY + emptyHeight > pageHeight - margin) {
+            doc.addPage();
+            refreshPageMetrics();
+            writePageHeader();
+            if (columnWidths.length) {
+                drawHeaderRow();
+            }
+        }
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(bodyFontSize);
+        doc.setDrawColor(68, 68, 68);
+        doc.setLineWidth(0.5);
+        const tableX = getTableX();
+        doc.rect(tableX, currentY, emptyWidth, emptyHeight);
+        const textY = currentY + emptyHeight / 2 + bodyFontSize * 0.35;
+        doc.text('Nenhum dado disponível.', tableX + emptyWidth / 2, textY, { align: 'center' });
+        currentY += emptyHeight;
+    } else {
+        normalizedRows.forEach(row => drawBodyRow(row));
+    }
 
     doc.save(filename);
 }
 
 function openReportPrintWindow(title, headers, rows) {
     if (typeof window === 'undefined') return;
-    const tableHtml = buildHtmlTable(headers, rows);
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) {
-        showRelatoriosToast('Não foi possível abrir a janela de impressão.', 'error');
-        return;
-    }
-    const safeTitle = escapeHtml(title);
-    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${safeTitle}</title><style>
-        body { font-family: Arial, sans-serif; padding: 32px; color: #111; }
-        h1 { font-size: 20px; margin-bottom: 16px; }
-        table { border-collapse: collapse; width: 100%; }
-        th, td { border: 1px solid #444; padding: 8px 10px; text-align: left; font-size: 12px; }
-        th { background: #f3f4f6; }
-    </style></head><body><h1>${safeTitle}</h1>${tableHtml}<script>
-        window.addEventListener('load', function() { setTimeout(function() { window.print(); }, 150); });
-    <\/script></body></html>`;
-    printWindow.document.open();
-    printWindow.document.write(html);
-    printWindow.document.close();
+
+    const html = createReportPrintHtml(title, headers, rows);
+
+    const openInExternalBrowser = async () => {
+        if (window.electronAPI?.openExternalHtml) {
+            try {
+                const opened = await window.electronAPI.openExternalHtml(html);
+                if (opened) {
+                    return true;
+                }
+            } catch (error) {
+                console.error('Falha ao abrir a visualização de impressão externa', error);
+            }
+        }
+        return false;
+    };
+
+    openInExternalBrowser()
+        .then(openedExternally => {
+            if (openedExternally) {
+                return;
+            }
+            const printWindow = window.open('', '_blank');
+            if (!printWindow) {
+                showRelatoriosToast('Não foi possível abrir a janela de impressão.', 'error');
+                return;
+            }
+            printWindow.document.open();
+            printWindow.document.write(html);
+            printWindow.document.close();
+        })
+        .catch(error => {
+            console.error('openReportPrintWindow error', error);
+            showRelatoriosToast('Não foi possível abrir a visualização de impressão.', 'error');
+        });
 }
 
 function getInitials(name) {

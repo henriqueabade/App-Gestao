@@ -2,6 +2,7 @@
 const { app, BrowserWindow, ipcMain, screen, shell } = require('electron');
 const path = require('path');
 const { spawnSync } = require('child_process');
+const { pathToFileURL } = require('url');
 const DEBUG = process.env.DEBUG === 'true';
 const { autoUpdater } = require('electron-updater');
 const updateService = require('./backend/updateService');
@@ -2272,6 +2273,28 @@ ipcMain.handle('open-pdf', (_event, { id, tipo }) => {
 ipcMain.handle('open-external', (_event, url) => {
   shell.openExternal(url);
   return true;
+});
+
+ipcMain.handle('open-external-html', async (_event, html) => {
+  if (typeof html !== 'string' || !html.trim()) {
+    return false;
+  }
+
+  try {
+    const tempDir = path.join(app.getPath('temp'), 'app-gestao-print');
+    await fs.promises.mkdir(tempDir, { recursive: true });
+    const filePath = path.join(
+      tempDir,
+      `relatorio-${Date.now()}-${Math.random().toString(36).slice(2)}.html`
+    );
+    await fs.promises.writeFile(filePath, html, 'utf-8');
+    const fileUrl = pathToFileURL(filePath).toString();
+    await shell.openExternal(fileUrl);
+    return true;
+  } catch (err) {
+    console.error('open-external-html error', err);
+    return false;
+  }
 });
 
 if (DEBUG) {
