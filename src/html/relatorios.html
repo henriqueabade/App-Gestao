@@ -318,7 +318,7 @@
                                     <span class="relatorios-multiselect-value" data-geo-summary>Todos os países</span>
                                     <i class="fas fa-chevron-down text-xs text-white/70"></i>
                                 </button>
-                                <input type="hidden" data-geo-input="relatorios-clientes-paises">
+                                <input type="hidden" data-relatorios-filter="clientes" data-filter-key="paises" data-geo-input="relatorios-clientes-paises">
                             </div>
 
                             <div class="relatorios-filter-field" data-geo-wrapper>
@@ -334,7 +334,7 @@
                                     <span class="relatorios-multiselect-value" data-geo-summary>Todos os estados</span>
                                     <i class="fas fa-chevron-down text-xs text-white/70"></i>
                                 </button>
-                                <input type="hidden" data-geo-input="relatorios-clientes-estados">
+                                <input type="hidden" data-relatorios-filter="clientes" data-filter-key="estados" data-geo-input="relatorios-clientes-estados">
                             </div>
                         </div>
                     </div>
@@ -633,20 +633,20 @@
                         </div>
 
                         <div class="filter-bar relatorios-filter-bar">
-                            <div class="relatorios-filter-field relatorios-filter-toggle-field">
+                            <div class="relatorios-filter-field relatorios-filter-checkbox-field">
                                 <label class="relatorios-filter-label text-white">Status detalhado</label>
-                                <div class="relatorios-filter-toggle-group">
-                                    <label class="relatorios-filter-toggle-option">
-                                        <span class="relatorios-filter-toggle-label">Ativo</span>
-                                        <input type="checkbox" class="component-toggle" data-relatorios-filter="usuarios" data-filter-key="ativo">
+                                <div class="relatorios-filter-checkbox-group">
+                                    <label class="relatorios-filter-checkbox-option">
+                                        <input type="checkbox" class="relatorios-filter-checkbox" data-relatorios-filter="usuarios" data-filter-key="ativo">
+                                        <span class="relatorios-filter-checkbox-label">Ativo</span>
                                     </label>
-                                    <label class="relatorios-filter-toggle-option">
-                                        <span class="relatorios-filter-toggle-label">Inativo</span>
-                                        <input type="checkbox" class="component-toggle" data-relatorios-filter="usuarios" data-filter-key="inativo">
+                                    <label class="relatorios-filter-checkbox-option">
+                                        <input type="checkbox" class="relatorios-filter-checkbox" data-relatorios-filter="usuarios" data-filter-key="inativo">
+                                        <span class="relatorios-filter-checkbox-label">Inativo</span>
                                     </label>
-                                    <label class="relatorios-filter-toggle-option">
-                                        <span class="relatorios-filter-toggle-label">Aguardando</span>
-                                        <input type="checkbox" class="component-toggle" data-relatorios-filter="usuarios" data-filter-key="aguardando">
+                                    <label class="relatorios-filter-checkbox-option">
+                                        <input type="checkbox" class="relatorios-filter-checkbox" data-relatorios-filter="usuarios" data-filter-key="aguardando">
+                                        <span class="relatorios-filter-checkbox-label">Aguardando</span>
                                     </label>
                                 </div>
                             </div>

@@ -261,6 +261,11 @@ body {
     accent-color: var(--color-primary);
 }
 
+.relatorios-filter-checkbox-label {
+    color: #e5e7eb;
+    font-weight: 500;
+}
+
 .relatorios-filter-toggle-field {
     flex: 1 1 220px;
     min-width: 220px;

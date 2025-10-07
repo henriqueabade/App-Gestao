@@ -109,6 +109,12 @@
 
     function buildSelectionDialog({ title, items, selectedValues }) {
         return new Promise(resolve => {
+            const existingOverlay = document.querySelector('.geo-multiselect-overlay');
+            if (existingOverlay && existingOverlay.isConnected) {
+                existingOverlay.remove();
+            }
+            document.body.classList.remove('overflow-hidden');
+
             const overlay = document.createElement('div');
             overlay.className = 'geo-multiselect-overlay';
 
@@ -418,6 +424,45 @@
         const state = new Map();
         const dependents = new Map();
 
+        const emitChange = entry => {
+            if (!entry || typeof options.onChange !== 'function') return;
+            const items = Array.isArray(entry.rawItems)
+                ? entry.rawItems.map(item => ({ ...item }))
+                : [];
+            options.onChange({
+                key: entry.key,
+                values: entry.values.slice(),
+                labels: entry.labels.slice(),
+                items
+            });
+        };
+
+        const applyEntrySelection = (entry, { silent = false } = {}) => {
+            if (!entry) return;
+            updateSummary(entry);
+            if (!silent) {
+                emitChange(entry);
+            }
+
+            const dependentKeys = dependents.get(entry.key) || [];
+            dependentKeys.forEach(depKey => {
+                const depEntry = state.get(depKey);
+                if (!depEntry) return;
+                const shouldDisable = entry.values.length === 0;
+                updateDependentState(depEntry.trigger, shouldDisable);
+                if (depEntry.values.length) {
+                    depEntry.values = [];
+                    depEntry.labels = [];
+                    depEntry.rawItems = [];
+                    depEntry.labelMap.clear();
+                    applyEntrySelection(depEntry, { silent });
+                } else if (shouldDisable) {
+                    depEntry.labelMap.clear();
+                    applyEntrySelection(depEntry, { silent });
+                }
+            });
+        };
+
         triggers.forEach(trigger => {
             const key = trigger.dataset.geoMultiselect;
             if (!key || state.has(key)) return;
@@ -456,8 +501,6 @@
                 updateDependentState(trigger, false);
             }
 
-            updateSummary(entry);
-
             trigger.addEventListener('click', async () => {
                 const dependencyKey = trigger.dataset.geoDependsOn;
                 const dependencyEntry = dependencyKey ? state.get(dependencyKey) : null;
@@ -474,34 +517,10 @@
                     });
                 }
 
-                updateSummary(entry);
-                if (typeof options.onChange === 'function') {
-                    options.onChange({
-                        key,
-                        values: entry.values.slice(),
-                        labels: entry.labels.slice(),
-                        items: entry.rawItems.slice()
-                    });
-                }
-
-                const dependentsKeys = dependents.get(key) || [];
-                dependentsKeys.forEach(depKey => {
-                    const depEntry = state.get(depKey);
-                    if (!depEntry) return;
-                    const shouldDisable = entry.values.length === 0;
-                    updateDependentState(depEntry.trigger, shouldDisable);
-                    if (depEntry.values.length) {
-                        depEntry.values = [];
-                        depEntry.labels = [];
-                        depEntry.rawItems = [];
-                        depEntry.labelMap.clear();
-                        updateSummary(depEntry);
-                        if (typeof options.onChange === 'function') {
-                            options.onChange({ key: depKey, values: [], labels: [], items: [] });
-                        }
-                    }
-                });
+                applyEntrySelection(entry);
             });
+
+            applyEntrySelection(entry, { silent: true });
         });
 
         return {
@@ -511,8 +530,27 @@
                 return {
                     values: entry.values.slice(),
                     labels: entry.labels.slice(),
-                    items: entry.rawItems.slice()
+                    items: entry.rawItems.map(item => ({ ...item }))
                 };
+            },
+            resetSelection(key) {
+                const entry = state.get(key);
+                if (!entry) return { values: [], labels: [], items: [] };
+                entry.values = [];
+                entry.labels = [];
+                entry.rawItems = [];
+                entry.labelMap.clear();
+                applyEntrySelection(entry);
+                return { values: [], labels: [], items: [] };
+            },
+            resetAll() {
+                state.forEach(entry => {
+                    entry.values = [];
+                    entry.labels = [];
+                    entry.rawItems = [];
+                    entry.labelMap.clear();
+                    applyEntrySelection(entry);
+                });
             }
         };
     }

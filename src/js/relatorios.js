@@ -319,6 +319,13 @@ function getRawMaterialStatus(item) {
     if (!Number.isFinite(quantity) || quantity <= 0) {
         return { label: 'Sem estoque', variant: 'danger' };
     }
+    const minimum = getStockMinimum(item);
+    if (Number.isFinite(minimum)) {
+        if (quantity > 0 && quantity < minimum) {
+            return { label: 'Baixo', variant: 'warning' };
+        }
+        return { label: 'Disponível', variant: 'success' };
+    }
     if (quantity < 10) {
         return { label: 'Baixo', variant: 'warning' };
     }
@@ -605,6 +612,142 @@ function syncFilterOptions(key, data, root) {
     filterOptionsState.set(key, state);
 }
 
+function normalizeGeoFilterDetail(value) {
+    if (!value) {
+        return { values: [], labels: [], items: [] };
+    }
+
+    if (typeof value === 'string') {
+        const values = value
+            .split(',')
+            .map(item => item.trim())
+            .filter(Boolean);
+        return {
+            values,
+            labels: [],
+            items: values.map(itemValue => ({ value: itemValue }))
+        };
+    }
+
+    if (Array.isArray(value)) {
+        const values = value
+            .map(item => (item == null ? '' : String(item).trim()))
+            .filter(Boolean);
+        return {
+            values,
+            labels: [],
+            items: values.map(itemValue => ({ value: itemValue }))
+        };
+    }
+
+    if (typeof value === 'object') {
+        const values = Array.isArray(value.values)
+            ? value.values.map(item => (item == null ? '' : String(item))).filter(Boolean)
+            : [];
+        const labels = Array.isArray(value.labels)
+            ? value.labels.map(item => (item == null ? '' : String(item))).filter(Boolean)
+            : [];
+        const items = Array.isArray(value.items)
+            ? value.items
+                .map(item => ({
+                    value: item?.value ? String(item.value) : '',
+                    label: item?.label ? String(item.label) : '',
+                    group: item?.group ? String(item.group) : ''
+                }))
+                .filter(item => item.value || item.label || item.group)
+            : [];
+        return { values, labels, items };
+    }
+
+    return { values: [], labels: [], items: [] };
+}
+
+function buildCountrySelectionSets(selection) {
+    const detail = normalizeGeoFilterDetail(selection);
+    const codes = new Set();
+    const names = new Set();
+
+    detail.values.forEach(value => {
+        const normalized = normalizeText(value);
+        if (normalized) {
+            codes.add(normalized);
+        }
+    });
+
+    detail.labels.forEach(label => {
+        const normalized = normalizeText(label);
+        if (normalized) {
+            names.add(normalized);
+        }
+    });
+
+    detail.items.forEach(item => {
+        const code = normalizeText(item.value);
+        if (code) {
+            codes.add(code);
+        }
+        const label = normalizeText(item.label);
+        if (label) {
+            names.add(label);
+        }
+    });
+
+    return { codes, names };
+}
+
+function buildStateSelectionSets(selection) {
+    const detail = normalizeGeoFilterDetail(selection);
+    const codes = new Set();
+    const names = new Set();
+    const pairs = new Set();
+
+    const registerState = (value, label, group) => {
+        if (label) {
+            const normalizedLabel = normalizeText(label.includes('—') ? label.split('—')[0] : label);
+            if (normalizedLabel) {
+                names.add(normalizedLabel);
+            }
+        }
+        if (!value) return;
+        const [countryPart, statePart] = String(value).split(':');
+        if (statePart) {
+            const normalizedState = normalizeText(statePart);
+            if (normalizedState) {
+                codes.add(normalizedState);
+                if (countryPart) {
+                    const normalizedCountry = normalizeText(countryPart);
+                    if (normalizedCountry) {
+                        pairs.add(`${normalizedCountry}:${normalizedState}`);
+                    }
+                }
+                if (group) {
+                    const normalizedGroup = normalizeText(group);
+                    if (normalizedGroup) {
+                        pairs.add(`${normalizedGroup}:${normalizedState}`);
+                    }
+                }
+            }
+        } else {
+            const normalized = normalizeText(value);
+            if (normalized) {
+                codes.add(normalized);
+            }
+        }
+    };
+
+    detail.values.forEach(value => registerState(value));
+    detail.items.forEach(item => registerState(item.value, item.label, item.group));
+    detail.labels.forEach(label => registerState('', label));
+
+    return { codes, names, pairs };
+}
+
+function buildNormalizedCandidates(values) {
+    return values
+        .map(value => normalizeText(value))
+        .filter(Boolean);
+}
+
 const REPORT_FILTERS = {
     'materia-prima': (data, filters = {}) => {
         const list = Array.isArray(data) ? data : [];
@@ -726,6 +869,11 @@ const REPORT_FILTERS = {
         const searchTerm = normalizeText(filters.search);
         const owner = normalizeText(filters.owner);
         const status = normalizeText(filters.status);
+        const countrySelection = buildCountrySelectionSets(filters.paises);
+        const stateSelection = buildStateSelectionSets(filters.estados);
+
+        const hasCountryFilter = countrySelection.codes.size > 0 || countrySelection.names.size > 0;
+        const hasStateFilter = stateSelection.codes.size > 0 || stateSelection.names.size > 0 || stateSelection.pairs.size > 0;
 
         return list.filter(cliente => {
             const searchValues = [
@@ -746,6 +894,49 @@ const REPORT_FILTERS = {
 
             if (owner && !includesNormalized(cliente?.dono_cliente ?? cliente?.dono, owner)) return false;
             if (status && !includesNormalized(cliente?.status_cliente, status)) return false;
+
+            const countryCandidates = hasCountryFilter || hasStateFilter
+                ? buildNormalizedCandidates([
+                    cliente?.pais,
+                    cliente?.pais_codigo,
+                    cliente?.paisCode,
+                    cliente?.pais_sigla,
+                    cliente?.country,
+                    cliente?.country_code
+                ])
+                : [];
+
+            if (hasCountryFilter) {
+                const matchesCountry = countryCandidates.some(candidate => {
+                    return countrySelection.names.has(candidate) || countrySelection.codes.has(candidate);
+                });
+                if (!matchesCountry) return false;
+            }
+
+            if (hasStateFilter) {
+                const stateCandidates = buildNormalizedCandidates([
+                    cliente?.estado,
+                    cliente?.estado_nome,
+                    cliente?.estadoDescricao,
+                    cliente?.estadoCompleto,
+                    cliente?.uf
+                ]);
+
+                let matchesState = stateCandidates.some(candidate => {
+                    return stateSelection.codes.has(candidate) || stateSelection.names.has(candidate);
+                });
+
+                if (!matchesState && stateSelection.pairs.size && stateCandidates.length && countryCandidates.length) {
+                    matchesState = countryCandidates.some(countryCandidate => {
+                        return stateCandidates.some(stateCandidate => {
+                            return stateSelection.pairs.has(`${countryCandidate}:${stateCandidate}`);
+                        });
+                    });
+                }
+
+                if (!matchesState) return false;
+            }
+
             return true;
         });
     },
@@ -946,11 +1137,28 @@ function getFilterValues(key, root) {
     const elements = Array.from(root.querySelectorAll(`[data-relatorios-filter="${key}"]`));
     if (!elements.length) return {};
 
+    const geoState = root.__relatoriosGeoState instanceof Map ? root.__relatoriosGeoState : null;
+
     return elements.reduce((acc, element) => {
         const field = element.dataset.filterKey;
         if (!field) return acc;
         if (element.type === 'checkbox') {
             acc[field] = element.checked;
+        } else if (element.type === 'hidden' && element.dataset.geoInput) {
+            const geoKey = element.dataset.geoInput;
+            if (geoState?.has(geoKey)) {
+                const selection = geoState.get(geoKey);
+                acc[field] = {
+                    key: selection.key,
+                    values: Array.isArray(selection.values) ? selection.values.slice() : [],
+                    labels: Array.isArray(selection.labels) ? selection.labels.slice() : [],
+                    items: Array.isArray(selection.items)
+                        ? selection.items.map(item => ({ ...item }))
+                        : []
+                };
+                return acc;
+            }
+            acc[field] = element.value ?? '';
         } else {
             acc[field] = element.value ?? '';
         }
@@ -1079,6 +1287,28 @@ function setupFilterInteractions(root) {
                         element.dispatchEvent(new Event('input'));
                     }
                 });
+
+                const geoMappings = root.__relatoriosGeoMappings instanceof Map ? root.__relatoriosGeoMappings : null;
+                const geoController = root.__relatoriosGeoController;
+                const geoState = root.__relatoriosGeoState instanceof Map ? root.__relatoriosGeoState : null;
+                if (geoMappings) {
+                    geoMappings.forEach((mapping, geoKey) => {
+                        if (!mapping || mapping.filterGroup !== key) return;
+                        if (geoController?.resetSelection) {
+                            geoController.resetSelection(geoKey);
+                        } else if (geoState) {
+                            geoState.set(geoKey, {
+                                key: geoKey,
+                                values: [],
+                                labels: [],
+                                items: []
+                            });
+                        }
+                        if (mapping.input) {
+                            mapping.input.value = '';
+                        }
+                    });
+                }
                 update();
             });
         }
@@ -2635,16 +2865,60 @@ async function setupGeoFilters(root) {
     if (!root) return;
     try {
         await loadScriptOnce('../js/utils/geo-multiselect.js');
-        if (window.GeoMultiSelect?.initInContainer) {
-            window.GeoMultiSelect.initInContainer(root, {
-                module: 'relatorios',
-                onChange: detail => {
-                    document.dispatchEvent(new CustomEvent('relatorios:geo-filter-change', {
-                        detail
-                    }));
-                }
-            });
+        if (!window.GeoMultiSelect?.initInContainer) {
+            return;
         }
+
+        const geoState = new Map();
+        const geoMappings = new Map();
+        const geoInputs = Array.from(root.querySelectorAll('[data-geo-input]'));
+
+        geoInputs.forEach(input => {
+            const geoKey = input.dataset.geoInput;
+            if (!geoKey || geoMappings.has(geoKey)) return;
+            geoMappings.set(geoKey, {
+                input,
+                filterGroup: input.dataset.relatoriosFilter || null,
+                filterKey: input.dataset.filterKey || null
+            });
+            geoState.set(geoKey, {
+                key: geoKey,
+                values: [],
+                labels: [],
+                items: []
+            });
+        });
+
+        const controller = window.GeoMultiSelect.initInContainer(root, {
+            module: 'relatorios',
+            onChange: detail => {
+                if (!detail?.key) return;
+                const normalizedDetail = {
+                    key: detail.key,
+                    values: Array.isArray(detail.values) ? detail.values.slice() : [],
+                    labels: Array.isArray(detail.labels) ? detail.labels.slice() : [],
+                    items: Array.isArray(detail.items)
+                        ? detail.items.map(item => ({ ...item }))
+                        : []
+                };
+                geoState.set(detail.key, normalizedDetail);
+
+                const mapping = geoMappings.get(detail.key);
+                if (mapping?.input) {
+                    mapping.input.value = normalizedDetail.values.join(',');
+                }
+
+                document.dispatchEvent(new CustomEvent('relatorios:geo-filter-change', {
+                    detail: normalizedDetail
+                }));
+            }
+        });
+
+        if (controller) {
+            root.__relatoriosGeoController = controller;
+        }
+        root.__relatoriosGeoState = geoState;
+        root.__relatoriosGeoMappings = geoMappings;
     } catch (error) {
         console.error('Falha ao carregar seleção geográfica', error);
     }
