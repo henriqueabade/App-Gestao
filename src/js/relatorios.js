@@ -600,7 +600,8 @@ const FILTER_OPTION_CONFIGS = {
         condicao: item => getPaymentConditionLabels(item)
     },
     usuarios: {
-        perfil: item => item?.perfil
+        perfil: item => item?.perfil,
+        statusDetalhado: item => item?.status
     }
 };
 
@@ -1106,7 +1107,11 @@ const REPORT_FILTERS = {
         const searchTerm = normalizeText(filters.search);
         const perfil = normalizeText(filters.perfil);
         const situacao = normalizeText(filters.situacao);
-        const statusFilters = ['ativo', 'inativo', 'aguardando'].filter(flag => Boolean(filters[flag]));
+        const statusDetalhado = normalizeText(filters.statusDetalhado);
+        const legacyStatusFilters = ['ativo', 'inativo', 'aguardando'].filter(flag => Boolean(filters[flag]));
+        const statusFilters = statusDetalhado
+            ? [statusDetalhado]
+            : legacyStatusFilters;
 
         return list.filter(usuario => {
             const searchValues = [
@@ -1254,6 +1259,56 @@ function setupSliderIndicator(slider) {
     updateIndicator();
 }
 
+function resetFiltersForKey(key, root, { triggerRender = false } = {}) {
+    if (!key || !root) return;
+
+    const defaultsForKey = filterDefaults.get(key) || [];
+    defaultsForKey.forEach(({ element, value }) => {
+        if (!element) return;
+        if (element.type === 'checkbox') {
+            element.checked = Boolean(value);
+        } else {
+            element.value = value;
+        }
+
+        if (element.type === 'range') {
+            element.dispatchEvent(new Event('input'));
+        }
+    });
+
+    const geoMappings = root.__relatoriosGeoMappings instanceof Map ? root.__relatoriosGeoMappings : null;
+    const geoController = root.__relatoriosGeoController;
+    const geoState = root.__relatoriosGeoState instanceof Map ? root.__relatoriosGeoState : null;
+
+    if (geoMappings) {
+        geoMappings.forEach((mapping, geoKey) => {
+            if (!mapping || mapping.filterGroup !== key) return;
+
+            if (geoController?.resetSelection) {
+                geoController.resetSelection(geoKey);
+            } else if (geoState) {
+                geoState.set(geoKey, {
+                    key: geoKey,
+                    values: [],
+                    labels: [],
+                    items: []
+                });
+            }
+
+            if (mapping.input) {
+                mapping.input.value = '';
+            }
+        });
+    }
+
+    if (triggerRender) {
+        const render = reportTableRenderers.get(key);
+        if (typeof render === 'function') {
+            render();
+        }
+    }
+}
+
 function setupFilterInteractions(root) {
     if (!root) return;
     const sections = Array.from(root.querySelectorAll('[data-relatorios-tab-content]'));
@@ -1293,40 +1348,7 @@ function setupFilterInteractions(root) {
         if (resetBtn) {
             resetBtn.addEventListener('click', event => {
                 event.preventDefault();
-                const defaultsForKey = filterDefaults.get(key) || [];
-                defaultsForKey.forEach(({ element, value }) => {
-                    if (element.type === 'checkbox') {
-                        element.checked = Boolean(value);
-                    } else {
-                        element.value = value;
-                    }
-                    if (element.type === 'range') {
-                        element.dispatchEvent(new Event('input'));
-                    }
-                });
-
-                const geoMappings = root.__relatoriosGeoMappings instanceof Map ? root.__relatoriosGeoMappings : null;
-                const geoController = root.__relatoriosGeoController;
-                const geoState = root.__relatoriosGeoState instanceof Map ? root.__relatoriosGeoState : null;
-                if (geoMappings) {
-                    geoMappings.forEach((mapping, geoKey) => {
-                        if (!mapping || mapping.filterGroup !== key) return;
-                        if (geoController?.resetSelection) {
-                            geoController.resetSelection(geoKey);
-                        } else if (geoState) {
-                            geoState.set(geoKey, {
-                                key: geoKey,
-                                values: [],
-                                labels: [],
-                                items: []
-                            });
-                        }
-                        if (mapping.input) {
-                            mapping.input.value = '';
-                        }
-                    });
-                }
-                update();
+                resetFiltersForKey(key, root, { triggerRender: true });
             });
         }
 
@@ -2333,6 +2355,10 @@ function setupCategoryTabs(root, options = {}) {
         const target = button?.dataset?.relatoriosTab;
         const previous = activeTab;
         if (!target || target === previous) return;
+
+        if (previous) {
+            resetFiltersForKey(previous, root);
+        }
 
         activeTab = target;
         updateButtonsState(button);

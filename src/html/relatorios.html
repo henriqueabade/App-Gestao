@@ -461,10 +461,10 @@
                             </div>
 
                             <div id="bt-actions" class="flex items-center gap-2 flex-shrink-0">
-                                <button type="button" class="btn-secondary text-white rounded-md px-4 py-3 text-sm font-medium" data-relatorios-apply="prospeccoes">
+                                <button type="button" class="btn-secondary text-white rounded-md px-4 py-3 text-sm font-medium" data-relatorios-apply="orcamentos">
                                     Filtrar
                                 </button>
-                                <button type="button" class="btn-warning text-white rounded-md px-4 py-3 text-sm font-medium" data-relatorios-reset="prospeccoes">
+                                <button type="button" class="btn-warning text-white rounded-md px-4 py-3 text-sm font-medium" data-relatorios-reset="orcamentos">
                                     Limpar
                                 </button>
                             </div>
@@ -572,6 +572,16 @@
                                 </select>
                             </div>
 
+                            <div class="relatorios-filter-field">
+                                <label class="relatorios-filter-label text-white">Status detalhado</label>
+                                <select class="input-glass text-white rounded-md px-4 py-3 w-full" data-relatorios-filter="usuarios" data-filter-key="statusDetalhado">
+                                    <option value="" data-default-option="true">Todos os status</option>
+                                    <option value="Ativo">Ativo</option>
+                                    <option value="Inativo">Inativo</option>
+                                    <option value="Aguardando">Aguardando</option>
+                                </select>
+                            </div>
+
                             <div id="bt-actions" class="flex items-center gap-2 flex-shrink-0">
                                 <button type="button" class="btn-secondary text-white rounded-md px-4 py-3 text-sm font-medium" data-relatorios-apply="usuarios">
                                     Filtrar
@@ -582,26 +592,6 @@
                             </div>
                         </div>
 
-                        <div class="filter-bar relatorios-filter-bar">
-                            <div class="relatorios-filter-field relatorios-filter-checkbox-field">
-                                <label class="relatorios-filter-label text-white">Status detalhado</label>
-                                <div class="relatorios-filter-checkbox-group">
-                                    <label class="relatorios-filter-checkbox-option">
-                                        <input type="checkbox" class="relatorios-filter-checkbox" data-relatorios-filter="usuarios" data-filter-key="ativo">
-                                        <span class="relatorios-filter-checkbox-label">Ativo</span>
-                                    </label>
-                                    <label class="relatorios-filter-checkbox-option">
-                                        <input type="checkbox" class="relatorios-filter-checkbox" data-relatorios-filter="usuarios" data-filter-key="inativo">
-                                        <span class="relatorios-filter-checkbox-label">Inativo</span>
-                                    </label>
-                                    <label class="relatorios-filter-checkbox-option">
-                                        <input type="checkbox" class="relatorios-filter-checkbox" data-relatorios-filter="usuarios" data-filter-key="aguardando">
-                                        <span class="relatorios-filter-checkbox-label">Aguardando</span>
-                                    </label>
-                                </div>
-                            </div>
-
-                        </div>
                     </div>
                 </div>
             </div>
