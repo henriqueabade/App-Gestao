@@ -29,6 +29,16 @@ body {
     z-index: 80;
 }
 
+.relatorios-module .relatorios-header-actions {
+    position: relative;
+    z-index: 90;
+    gap: 0.75rem;
+}
+
+.relatorios-module .relatorios-header-actions > * {
+    flex-shrink: 0;
+}
+
 .relatorios-module .relatorios-actions {
     position: relative;
     z-index: 80;

@@ -5,6 +5,30 @@
             <h1 class="text-2xl font-semibold text-white sm:mb-0">Relatórios</h1>
             <p class="text-gray-400 sm:mt-0 whitespace-nowrap">Visualize e exporte dados</p>
         </div>
+
+        <div class="flex flex-wrap items-center gap-3 justify-end relatorios-header-actions w-full lg:w-auto">
+            <div class="relative">
+                <button id="relatoriosLoadTemplateBtn" class="btn-primary px-4 py-2 rounded-lg font-medium flex items-center gap-2">
+                    <i class="fas fa-layer-group"></i>
+                    Carregar Modelo
+                    <i class="fas fa-chevron-down text-xs"></i>
+                </button>
+                <div id="relatoriosTemplateDropdown" class="relatorios-dropdown">
+                    <div class="py-2">
+                        <a href="#" class="relatorios-dropdown-item">Relatório Estoque Mensal</a>
+                        <a href="#" class="relatorios-dropdown-item">Análise de Vendas Q3</a>
+                        <a href="#" class="relatorios-dropdown-item">Clientes Ativos 2025</a>
+                        <hr class="my-2 border-white/10">
+                        <a href="#" class="relatorios-dropdown-item text-gray-400">Gerenciar Modelos</a>
+                    </div>
+                </div>
+            </div>
+
+            <button id="relatoriosScheduleBtn" class="btn-warning px-4 py-2 rounded-lg font-medium">
+                <i class="fas fa-clock"></i>
+                Agendar
+            </button>
+        </div>
     </div>
 
     <div class="flex flex-col gap-8">
@@ -599,7 +623,7 @@
         </section>
 
         <!-- Results Section -->
-        <section class="glass-surface rounded-xl mb-8 overflow-hidden animate-fade-in-up">
+        <section class="glass-surface rounded-xl mb-8 animate-fade-in-up">
             <div class="border-b border-white/10 px-6 py-4">
                 <div class="flex flex-wrap gap-2" role="tablist" aria-label="Visão dos resultados">
                     <button class="tab-active" data-relatorios-result="table">
@@ -667,27 +691,6 @@
                                 Salvar Modelo
                             </button>
 
-                            <div class="relative">
-                                <button id="relatoriosLoadTemplateBtn" class="btn-secondary px-4 py-2 rounded-lg font-medium flex items-center gap-2">
-                                    <i class="fas fa-layer-group"></i>
-                                    Carregar Modelo
-                                    <i class="fas fa-chevron-down text-xs"></i>
-                                </button>
-                                <div id="relatoriosTemplateDropdown" class="relatorios-dropdown">
-                                    <div class="py-2">
-                                        <a href="#" class="relatorios-dropdown-item">Relatório Estoque Mensal</a>
-                                        <a href="#" class="relatorios-dropdown-item">Análise de Vendas Q3</a>
-                                        <a href="#" class="relatorios-dropdown-item">Clientes Ativos 2025</a>
-                                        <hr class="my-2 border-white/10">
-                                        <a href="#" class="relatorios-dropdown-item text-gray-400">Gerenciar Modelos</a>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <button id="relatoriosScheduleBtn" class="btn-secondary px-4 py-2 rounded-lg font-medium">
-                                <i class="fas fa-clock"></i>
-                                Agendar
-                            </button>
                         </div>
                     </div>
                     <div id="relatoriosTableContainer" class="relatorios-table-container"></div>
