@@ -29,7 +29,126 @@ const reportDataCache = new Map();
 const reportDataPromises = new Map();
 const reportTableRenderers = new Map();
 const filterDefaults = new Map();
+const reportVisibleColumns = new Map();
+const COLUMN_VISIBILITY_STORAGE_PREFIX = 'relatorios-visible-columns';
 let relatoriosKpiManager = null;
+
+function getColumnStorageKey(key) {
+    return `${COLUMN_VISIBILITY_STORAGE_PREFIX}:${key}`;
+}
+
+function loadStoredVisibleColumns(key, config) {
+    if (!config?.columns?.length) return [];
+    try {
+        if (typeof window === 'undefined' || !window.localStorage) return [];
+        const raw = window.localStorage.getItem(getColumnStorageKey(key));
+        if (!raw) return [];
+        const parsed = JSON.parse(raw);
+        if (!Array.isArray(parsed)) return [];
+        const allowed = new Set(config.columns.map(column => column.key));
+        return parsed.filter(columnKey => allowed.has(columnKey));
+    } catch (error) {
+        console.warn('Não foi possível carregar preferências de colunas do relatório.', error);
+        return [];
+    }
+}
+
+function persistVisibleColumns(key) {
+    try {
+        if (typeof window === 'undefined' || !window.localStorage) return;
+        const set = reportVisibleColumns.get(key);
+        if (!set) {
+            window.localStorage.removeItem(getColumnStorageKey(key));
+            return;
+        }
+        window.localStorage.setItem(getColumnStorageKey(key), JSON.stringify(Array.from(set)));
+    } catch (error) {
+        console.warn('Não foi possível salvar preferências de colunas do relatório.', error);
+    }
+}
+
+function initializeReportColumns(key, config = REPORT_CONFIGS?.[key]) {
+    if (!config?.columns?.length || reportVisibleColumns.has(key)) return;
+    const defaultKeys = config.columns.map(column => column.key).filter(Boolean);
+    if (!defaultKeys.length) return;
+    const stored = loadStoredVisibleColumns(key, config);
+    const initial = stored.length ? stored : defaultKeys;
+    reportVisibleColumns.set(key, new Set(initial));
+}
+
+function initializeAllReportColumns() {
+    if (!REPORT_CONFIGS) return;
+    Object.entries(REPORT_CONFIGS).forEach(([key, config]) => {
+        initializeReportColumns(key, config);
+    });
+}
+
+function getVisibleColumnKeys(key) {
+    initializeReportColumns(key);
+    const set = reportVisibleColumns.get(key);
+    return set ? Array.from(set) : [];
+}
+
+function setVisibleColumns(key, columnKeys) {
+    const config = REPORT_CONFIGS?.[key];
+    if (!config?.columns?.length) return false;
+    initializeReportColumns(key, config);
+    const allowed = new Set(config.columns.map(column => column.key));
+    const filtered = Array.from(new Set(columnKeys)).filter(columnKey => allowed.has(columnKey));
+    if (!filtered.length) return false;
+    reportVisibleColumns.set(key, new Set(filtered));
+    persistVisibleColumns(key);
+    return true;
+}
+
+function setColumnVisibility(key, columnKey, isVisible) {
+    const config = REPORT_CONFIGS?.[key];
+    if (!config?.columns?.length) return false;
+    initializeReportColumns(key, config);
+    const allowed = new Set(config.columns.map(column => column.key));
+    if (!allowed.has(columnKey)) return false;
+    const current = new Set(reportVisibleColumns.get(key) || []);
+    if (!isVisible) {
+        if (!current.has(columnKey)) return false;
+        if (current.size <= 1) return false;
+        current.delete(columnKey);
+    } else {
+        current.add(columnKey);
+    }
+    reportVisibleColumns.set(key, current);
+    persistVisibleColumns(key);
+    return true;
+}
+
+function applyColumnVisibilityToTable(key, root) {
+    if (!root) return;
+    const config = REPORT_CONFIGS?.[key];
+    if (!config?.columns?.length) return;
+    initializeReportColumns(key, config);
+    const visibleSet = new Set(getVisibleColumnKeys(key));
+    if (!visibleSet.size) return;
+
+    const table = root.matches?.('table') ? root : root.querySelector('table');
+    if (!table) return;
+
+    const toggleElement = element => {
+        if (!element) return;
+        const columnKey = element.dataset.columnKey;
+        if (!columnKey) return;
+        element.classList.toggle('hidden', !visibleSet.has(columnKey));
+    };
+
+    table.querySelectorAll('thead [data-column-key]').forEach(toggleElement);
+    table.querySelectorAll('tbody [data-column-key]').forEach(toggleElement);
+}
+
+if (typeof window !== 'undefined') {
+    window.RelatoriosColumnVisibility = {
+        getVisibleColumns: getVisibleColumnKeys,
+        setVisibleColumns,
+        setColumnVisibility
+    };
+}
 
 function escapeHtml(value) {
     if (value === null || value === undefined) return '';
@@ -1497,6 +1616,15 @@ function computeUsuariosKpis(items = []) {
 const REPORT_CONFIGS = {};
 
 REPORT_CONFIGS['materia-prima'] = {
+    columns: [
+        { key: 'nome', label: 'Nome' },
+        { key: 'categoria', label: 'Categoria' },
+        { key: 'unidade', label: 'Unidade' },
+        { key: 'quantidade', label: 'Quantidade' },
+        { key: 'preco', label: 'Preço' },
+        { key: 'processo', label: 'Processo' },
+        { key: 'status', label: 'Status' }
+    ],
     loadingMessage: 'Carregando matérias-primas...',
     emptyMessage: 'Nenhuma matéria-prima encontrada.',
     errorMessage: 'Não foi possível carregar as matérias-primas.',
@@ -1520,19 +1648,28 @@ REPORT_CONFIGS['materia-prima'] = {
         const statusBadge = createBadge(status.label, status.variant, { size: 'sm' });
         return `
             <tr class="transition-colors duration-150">
-                <td class="px-6 py-4 whitespace-normal break-words text-left text-sm font-medium text-white">${nome}</td>
-                <td class="px-6 py-4 whitespace-normal break-words text-left text-sm text-gray-300">${categoria}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-left text-sm text-gray-300">${unidade}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-left text-sm text-white">${quantidade}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-left text-sm text-white">${preco}</td>
-                <td class="px-6 py-4 whitespace-normal break-words text-left text-sm text-gray-300">${processo}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-left text-sm">${statusBadge}</td>
+                <td data-column-key="nome" class="px-6 py-4 whitespace-normal break-words text-left text-sm font-medium text-white">${nome}</td>
+                <td data-column-key="categoria" class="px-6 py-4 whitespace-normal break-words text-left text-sm text-gray-300">${categoria}</td>
+                <td data-column-key="unidade" class="px-6 py-4 whitespace-nowrap text-left text-sm text-gray-300">${unidade}</td>
+                <td data-column-key="quantidade" class="px-6 py-4 whitespace-nowrap text-left text-sm text-white">${quantidade}</td>
+                <td data-column-key="preco" class="px-6 py-4 whitespace-nowrap text-left text-sm text-white">${preco}</td>
+                <td data-column-key="processo" class="px-6 py-4 whitespace-normal break-words text-left text-sm text-gray-300">${processo}</td>
+                <td data-column-key="status" class="px-6 py-4 whitespace-nowrap text-left text-sm">${statusBadge}</td>
             </tr>
         `;
     }
 };
 
 REPORT_CONFIGS.produtos = {
+    columns: [
+        { key: 'codigo', label: 'Código' },
+        { key: 'nome', label: 'Nome' },
+        { key: 'categoria', label: 'Categoria' },
+        { key: 'precoVenda', label: 'Preço de Venda' },
+        { key: 'margem', label: 'Margem (%)' },
+        { key: 'quantidade', label: 'Quantidade' },
+        { key: 'status', label: 'Status' }
+    ],
     loadingMessage: 'Carregando produtos...',
     emptyMessage: 'Nenhum produto encontrado.',
     errorMessage: 'Não foi possível carregar os produtos.',
@@ -1563,19 +1700,27 @@ REPORT_CONFIGS.produtos = {
         const statusBadge = createBadge(statusLabel, getProductStatusVariant(produto?.status), { size: 'sm' });
         return `
             <tr class="transition-colors duration-150">
-                <td class="px-6 py-4 whitespace-nowrap text-left text-sm font-medium text-white">${codigo}</td>
-                <td class="px-6 py-4 whitespace-normal break-words text-left text-sm text-white">${nome}</td>
-                <td class="px-6 py-4 whitespace-normal break-words text-left text-sm text-gray-300">${categoria}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-left text-sm text-white">${precoVenda}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-left text-sm text-white">${margem}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-left text-sm text-white">${quantidade}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-left text-sm">${statusBadge}</td>
+                <td data-column-key="codigo" class="px-6 py-4 whitespace-nowrap text-left text-sm font-medium text-white">${codigo}</td>
+                <td data-column-key="nome" class="px-6 py-4 whitespace-normal break-words text-left text-sm text-white">${nome}</td>
+                <td data-column-key="categoria" class="px-6 py-4 whitespace-normal break-words text-left text-sm text-gray-300">${categoria}</td>
+                <td data-column-key="precoVenda" class="px-6 py-4 whitespace-nowrap text-left text-sm text-white">${precoVenda}</td>
+                <td data-column-key="margem" class="px-6 py-4 whitespace-nowrap text-left text-sm text-white">${margem}</td>
+                <td data-column-key="quantidade" class="px-6 py-4 whitespace-nowrap text-left text-sm text-white">${quantidade}</td>
+                <td data-column-key="status" class="px-6 py-4 whitespace-nowrap text-left text-sm">${statusBadge}</td>
             </tr>
         `;
     }
 };
 
 REPORT_CONFIGS.clientes = {
+    columns: [
+        { key: 'nome', label: 'Nome' },
+        { key: 'cnpj', label: 'CNPJ' },
+        { key: 'pais', label: 'País' },
+        { key: 'estado', label: 'Estado' },
+        { key: 'status', label: 'Status' },
+        { key: 'dono', label: 'Dono' }
+    ],
     loadingMessage: 'Carregando clientes...',
     emptyMessage: 'Nenhum cliente encontrado.',
     errorMessage: 'Não foi possível carregar os clientes.',
@@ -1596,18 +1741,26 @@ REPORT_CONFIGS.clientes = {
 
         return `
             <tr class="transition-colors duration-150">
-                <td class="px-6 py-4 whitespace-normal break-words text-left text-sm font-medium text-white">${nome}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-left text-sm text-gray-300">${cnpj}</td>
-                <td class="px-6 py-4 whitespace-normal break-words text-left text-sm text-gray-300">${pais}</td>
-                <td class="px-6 py-4 whitespace-normal break-words text-left text-sm text-gray-300">${estado}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-left text-sm">${statusBadge}</td>
-                <td class="px-6 py-4 whitespace-normal break-words text-left text-sm text-gray-300">${dono}</td>
+                <td data-column-key="nome" class="px-6 py-4 whitespace-normal break-words text-left text-sm font-medium text-white">${nome}</td>
+                <td data-column-key="cnpj" class="px-6 py-4 whitespace-nowrap text-left text-sm text-gray-300">${cnpj}</td>
+                <td data-column-key="pais" class="px-6 py-4 whitespace-normal break-words text-left text-sm text-gray-300">${pais}</td>
+                <td data-column-key="estado" class="px-6 py-4 whitespace-normal break-words text-left text-sm text-gray-300">${estado}</td>
+                <td data-column-key="status" class="px-6 py-4 whitespace-nowrap text-left text-sm">${statusBadge}</td>
+                <td data-column-key="dono" class="px-6 py-4 whitespace-normal break-words text-left text-sm text-gray-300">${dono}</td>
             </tr>
         `;
     }
 };
 
 REPORT_CONFIGS.contatos = {
+    columns: [
+        { key: 'contato', label: 'Contato' },
+        { key: 'tipo', label: 'Tipo' },
+        { key: 'empresa', label: 'Empresa' },
+        { key: 'celular', label: 'Celular' },
+        { key: 'telefone', label: 'Telefone' },
+        { key: 'email', label: 'E-mail' }
+    ],
     loadingMessage: 'Carregando contatos...',
     emptyMessage: 'Nenhum contato encontrado.',
     errorMessage: 'Não foi possível carregar os contatos.',
@@ -1629,7 +1782,7 @@ REPORT_CONFIGS.contatos = {
 
         return `
             <tr class="transition-colors duration-150">
-                <td class="px-6 py-4 text-left">
+                <td data-column-key="contato" class="px-6 py-4 text-left">
                     <div class="flex items-center gap-3">
                         <div class="w-9 h-9 rounded-full flex items-center justify-center text-xs font-semibold text-white" style="background:${avatarColor};">${initials}</div>
                         <div>
@@ -1638,17 +1791,23 @@ REPORT_CONFIGS.contatos = {
                         </div>
                     </div>
                 </td>
-                <td class="px-6 py-4 whitespace-nowrap text-left text-sm">${tipoBadge}</td>
-                <td class="px-6 py-4 whitespace-normal break-words text-left text-sm text-gray-300">${empresa}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-left text-sm text-gray-300">${celular}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-left text-sm text-gray-300">${telefone}</td>
-                <td class="px-6 py-4 whitespace-normal break-words text-left text-sm text-gray-300">${email}</td>
+                <td data-column-key="tipo" class="px-6 py-4 whitespace-nowrap text-left text-sm">${tipoBadge}</td>
+                <td data-column-key="empresa" class="px-6 py-4 whitespace-normal break-words text-left text-sm text-gray-300">${empresa}</td>
+                <td data-column-key="celular" class="px-6 py-4 whitespace-nowrap text-left text-sm text-gray-300">${celular}</td>
+                <td data-column-key="telefone" class="px-6 py-4 whitespace-nowrap text-left text-sm text-gray-300">${telefone}</td>
+                <td data-column-key="email" class="px-6 py-4 whitespace-normal break-words text-left text-sm text-gray-300">${email}</td>
             </tr>
         `;
     }
 };
 
 REPORT_CONFIGS.prospeccoes = {
+    columns: [
+        { key: 'nome', label: 'Nome do Lead' },
+        { key: 'email', label: 'E-mail' },
+        { key: 'status', label: 'Status' },
+        { key: 'responsavel', label: 'Responsável' }
+    ],
     loadingMessage: 'Carregando prospecções...',
     emptyMessage: 'Nenhuma prospecção encontrada.',
     errorMessage: 'Não foi possível carregar as prospecções.',
@@ -1703,16 +1862,24 @@ REPORT_CONFIGS.prospeccoes = {
 
         return `
             <tr class="transition-colors duration-150">
-                <td class="px-6 py-4 whitespace-normal break-words text-left text-sm font-medium text-white">${nome}</td>
-                <td class="px-6 py-4 whitespace-normal break-words text-left text-sm text-gray-300">${email}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-left text-sm">${statusBadge}</td>
-                <td class="px-6 py-4 whitespace-normal break-words text-left text-sm text-gray-300">${responsavel}</td>
+                <td data-column-key="nome" class="px-6 py-4 whitespace-normal break-words text-left text-sm font-medium text-white">${nome}</td>
+                <td data-column-key="email" class="px-6 py-4 whitespace-normal break-words text-left text-sm text-gray-300">${email}</td>
+                <td data-column-key="status" class="px-6 py-4 whitespace-nowrap text-left text-sm">${statusBadge}</td>
+                <td data-column-key="responsavel" class="px-6 py-4 whitespace-normal break-words text-left text-sm text-gray-300">${responsavel}</td>
             </tr>
         `;
     }
 };
 
 REPORT_CONFIGS.orcamentos = {
+    columns: [
+        { key: 'codigo', label: 'Código' },
+        { key: 'cliente', label: 'Cliente' },
+        { key: 'data', label: 'Data' },
+        { key: 'valor', label: 'Valor Total' },
+        { key: 'condicao', label: 'Condição' },
+        { key: 'status', label: 'Status' }
+    ],
     loadingMessage: 'Carregando orçamentos...',
     emptyMessage: 'Nenhum orçamento encontrado.',
     errorMessage: 'Não foi possível carregar os orçamentos.',
@@ -1733,18 +1900,26 @@ REPORT_CONFIGS.orcamentos = {
         const statusBadge = createBadge(statusLabel, getQuoteStatusVariant(orcamento?.situacao), { size: 'sm' });
         return `
             <tr class="transition-colors duration-150">
-                <td class="px-6 py-4 whitespace-nowrap text-left text-sm font-medium text-white">${codigo}</td>
-                <td class="px-6 py-4 whitespace-normal break-words text-left text-sm text-gray-300">${cliente}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-left text-sm text-gray-300">${dataEmissao}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-left text-sm text-white">${valor}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-left text-sm text-gray-300">${condicao}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-left text-sm">${statusBadge}</td>
+                <td data-column-key="codigo" class="px-6 py-4 whitespace-nowrap text-left text-sm font-medium text-white">${codigo}</td>
+                <td data-column-key="cliente" class="px-6 py-4 whitespace-normal break-words text-left text-sm text-gray-300">${cliente}</td>
+                <td data-column-key="data" class="px-6 py-4 whitespace-nowrap text-left text-sm text-gray-300">${dataEmissao}</td>
+                <td data-column-key="valor" class="px-6 py-4 whitespace-nowrap text-left text-sm text-white">${valor}</td>
+                <td data-column-key="condicao" class="px-6 py-4 whitespace-nowrap text-left text-sm text-gray-300">${condicao}</td>
+                <td data-column-key="status" class="px-6 py-4 whitespace-nowrap text-left text-sm">${statusBadge}</td>
             </tr>
         `;
     }
 };
 
 REPORT_CONFIGS.pedidos = {
+    columns: [
+        { key: 'codigo', label: 'Código' },
+        { key: 'cliente', label: 'Cliente' },
+        { key: 'data', label: 'Data' },
+        { key: 'valor', label: 'Valor Total' },
+        { key: 'condicao', label: 'Condição' },
+        { key: 'status', label: 'Status' }
+    ],
     loadingMessage: 'Carregando pedidos...',
     emptyMessage: 'Nenhum pedido encontrado.',
     errorMessage: 'Não foi possível carregar os pedidos.',
@@ -1765,18 +1940,26 @@ REPORT_CONFIGS.pedidos = {
         const statusBadge = createBadge(statusLabel, getOrderStatusVariant(pedido?.situacao), { size: 'sm' });
         return `
             <tr class="transition-colors duration-150">
-                <td class="px-6 py-4 whitespace-nowrap text-left text-sm font-medium text-white">${codigo}</td>
-                <td class="px-6 py-4 whitespace-normal break-words text-left text-sm text-gray-300">${cliente}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-left text-sm text-gray-300">${dataEmissao}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-left text-sm text-white">${valor}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-left text-sm text-gray-300">${condicao}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-left text-sm">${statusBadge}</td>
+                <td data-column-key="codigo" class="px-6 py-4 whitespace-nowrap text-left text-sm font-medium text-white">${codigo}</td>
+                <td data-column-key="cliente" class="px-6 py-4 whitespace-normal break-words text-left text-sm text-gray-300">${cliente}</td>
+                <td data-column-key="data" class="px-6 py-4 whitespace-nowrap text-left text-sm text-gray-300">${dataEmissao}</td>
+                <td data-column-key="valor" class="px-6 py-4 whitespace-nowrap text-left text-sm text-white">${valor}</td>
+                <td data-column-key="condicao" class="px-6 py-4 whitespace-nowrap text-left text-sm text-gray-300">${condicao}</td>
+                <td data-column-key="status" class="px-6 py-4 whitespace-nowrap text-left text-sm">${statusBadge}</td>
             </tr>
         `;
     }
 };
 
 REPORT_CONFIGS.usuarios = {
+    columns: [
+        { key: 'avatar', label: 'Avatar' },
+        { key: 'nome', label: 'Nome' },
+        { key: 'email', label: 'E-mail' },
+        { key: 'perfil', label: 'Perfil' },
+        { key: 'situacao', label: 'Situação' },
+        { key: 'status', label: 'Status' }
+    ],
     loadingMessage: 'Carregando usuários...',
     emptyMessage: 'Nenhum usuário encontrado.',
     errorMessage: 'Não foi possível carregar os usuários.',
@@ -1801,19 +1984,19 @@ REPORT_CONFIGS.usuarios = {
 
         return `
             <tr class="transition-colors duration-150">
-                <td class="px-6 py-4 text-left">
+                <td data-column-key="avatar" class="px-6 py-4 text-left">
                     <div class="w-10 h-10 rounded-full flex items-center justify-center text-sm font-semibold text-white" style="background:${avatarColor};">${initials}</div>
                 </td>
-                <td class="px-6 py-4 whitespace-normal break-words text-left text-sm font-medium text-white">${nome}</td>
-                <td class="px-6 py-4 whitespace-normal break-words text-left text-sm text-gray-300">${email}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-left text-sm text-gray-300">${perfil}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-left text-sm">
+                <td data-column-key="nome" class="px-6 py-4 whitespace-normal break-words text-left text-sm font-medium text-white">${nome}</td>
+                <td data-column-key="email" class="px-6 py-4 whitespace-normal break-words text-left text-sm text-gray-300">${email}</td>
+                <td data-column-key="perfil" class="px-6 py-4 whitespace-nowrap text-left text-sm text-gray-300">${perfil}</td>
+                <td data-column-key="situacao" class="px-6 py-4 whitespace-nowrap text-left text-sm">
                     <div class="flex flex-col gap-1">
                         <span>${onlineBadge}</span>
                         <span class="text-xs text-white/60">Último login: ${ultimoLogin}</span>
                     </div>
                 </td>
-                <td class="px-6 py-4 whitespace-nowrap text-left text-sm">${statusBadge}</td>
+                <td data-column-key="status" class="px-6 py-4 whitespace-nowrap text-left text-sm">${statusBadge}</td>
             </tr>
         `;
     }
@@ -1837,9 +2020,13 @@ function initRelatoriosModule() {
 
     relatoriosKpiManager = createKpiManager(container, { initialTab: initialTabKey });
     const loadTableForTab = setupReportTables(container);
-
-    setupCategoryTabs(container, {
+    initializeAllReportColumns();
+    const columnControl = setupColumnVisibilityControl(container);
+    const tabController = setupCategoryTabs(container, {
         onTabChange: tab => {
+            if (columnControl) {
+                columnControl.setActiveReport(tab);
+            }
             if (loadTableForTab) {
                 loadTableForTab(tab);
             }
@@ -1852,6 +2039,11 @@ function initRelatoriosModule() {
     setupGeoFilters(container);
     setupFilterInteractions(container);
     setupDateRangeFilters(container);
+
+    const activeTabKey = tabController?.getActiveTab?.() || initialTabKey;
+    if (columnControl && activeTabKey) {
+        columnControl.setActiveReport(activeTabKey);
+    }
 
     if (initialTabKey && loadTableForTab) {
         loadTableForTab(initialTabKey);
@@ -2000,8 +2192,12 @@ async function populateReportTable(key, container) {
         return;
     }
 
+    initializeReportColumns(key, config);
+    const applyColumns = () => applyColumnVisibilityToTable(key, tableRoot);
+
     const showMessage = message => {
         tbody.innerHTML = createMessageRow(table, message);
+        applyColumns();
     };
 
     showMessage(config.loadingMessage || 'Carregando dados...');
@@ -2035,6 +2231,7 @@ async function populateReportTable(key, container) {
             const filtered = applyReportFilters(key, data, moduleRoot);
             if (!Array.isArray(filtered) || filtered.length === 0) {
                 tbody.innerHTML = createMessageRow(table, config.filteredEmptyMessage || FILTERED_EMPTY_MESSAGE);
+                applyColumns();
                 return;
             }
 
@@ -2052,10 +2249,12 @@ async function populateReportTable(key, container) {
 
             if (!rows) {
                 tbody.innerHTML = createMessageRow(table, config.filteredEmptyMessage || config.emptyMessage || FILTERED_EMPTY_MESSAGE);
+                applyColumns();
                 return;
             }
 
             tbody.innerHTML = rows;
+            applyColumns();
         };
 
         render();
@@ -2115,7 +2314,7 @@ function setupResultTabs(root) {
 }
 
 function setupDropdowns(root) {
-    const configs = [
+    const dropdownConfigs = [
         {
             button: root.querySelector('#relatoriosLoadTemplateBtn'),
             dropdown: root.querySelector('#relatoriosTemplateDropdown')
@@ -2124,7 +2323,15 @@ function setupDropdowns(root) {
             button: root.querySelector('#relatoriosExportBtn'),
             dropdown: root.querySelector('#relatoriosExportDropdown')
         }
-    ].filter(({ button, dropdown }) => button && dropdown);
+    ];
+
+    const columnButton = root.querySelector('#relatoriosColumnVisibilityBtn');
+    const columnDropdown = root.querySelector('#relatoriosColumnDropdown');
+    if (columnButton && columnDropdown) {
+        dropdownConfigs.push({ button: columnButton, dropdown: columnDropdown });
+    }
+
+    const configs = dropdownConfigs.filter(({ button, dropdown }) => button && dropdown);
 
     const closeDropdowns = () => {
         configs.forEach(({ dropdown }) => dropdown.classList.remove('visible'));
@@ -2133,6 +2340,10 @@ function setupDropdowns(root) {
     configs.forEach(({ button, dropdown }) => {
         button.addEventListener('click', event => {
             event.stopPropagation();
+            if (button.disabled) {
+                closeDropdowns();
+                return;
+            }
             const isOpen = dropdown.classList.contains('visible');
             closeDropdowns();
             if (!isOpen) {
@@ -2152,6 +2363,138 @@ function setupDropdowns(root) {
     const handleDocumentClick = () => closeDropdowns();
     document.addEventListener('click', handleDocumentClick);
     window.__relatoriosDropdownHandler = handleDocumentClick;
+}
+
+function setupColumnVisibilityControl(root) {
+    const button = root.querySelector('#relatoriosColumnVisibilityBtn');
+    const dropdown = root.querySelector('#relatoriosColumnDropdown');
+    const list = root.querySelector('#relatoriosColumnList');
+    if (!button || !dropdown || !list) return null;
+
+    const feedback = dropdown.querySelector('[data-column-feedback]');
+    const countLabel = button.querySelector('.relatorios-column-count');
+    const tableContainer = root.querySelector('#relatoriosTableContainer');
+    const defaultMessage = '<p class="px-4 py-2 text-sm text-white/60">Selecione um relatório para personalizar.</p>';
+    let activeKey = null;
+
+    const updateFeedback = message => {
+        if (!feedback) return;
+        if (message) {
+            feedback.textContent = message;
+            feedback.classList.remove('hidden');
+        } else {
+            feedback.textContent = '';
+            feedback.classList.add('hidden');
+        }
+    };
+
+    const updateCountLabel = key => {
+        if (!countLabel) return;
+        if (!key) {
+            countLabel.textContent = '';
+            return;
+        }
+        const config = REPORT_CONFIGS?.[key];
+        if (!config?.columns?.length) {
+            countLabel.textContent = '';
+            return;
+        }
+        const visibleCount = getVisibleColumnKeys(key).length;
+        countLabel.textContent = `(${visibleCount}/${config.columns.length})`;
+    };
+
+    const disableControl = () => {
+        activeKey = null;
+        button.disabled = true;
+        list.innerHTML = defaultMessage;
+        updateCountLabel(null);
+        updateFeedback('');
+    };
+
+    const renderOptions = key => {
+        const config = REPORT_CONFIGS?.[key];
+        activeKey = key;
+        if (!config?.columns?.length) {
+            button.disabled = true;
+            list.innerHTML = '<p class="px-4 py-2 text-sm text-white/60">Este relatório não possui colunas personalizáveis.</p>';
+            updateCountLabel(null);
+            updateFeedback('');
+            return;
+        }
+
+        initializeReportColumns(key, config);
+        const visibleSet = new Set(getVisibleColumnKeys(key));
+        button.disabled = false;
+        list.innerHTML = '';
+        updateFeedback('');
+
+        config.columns.forEach(column => {
+            const option = document.createElement('label');
+            option.className = 'flex items-center gap-3 px-4 py-2 text-sm text-white/80 hover:bg-white/10 cursor-pointer';
+
+            const checkbox = document.createElement('input');
+            checkbox.type = 'checkbox';
+            checkbox.className = 'relatorios-filter-checkbox w-4 h-4 rounded border-white/30 bg-transparent';
+            checkbox.checked = visibleSet.has(column.key);
+            checkbox.dataset.columnKey = column.key;
+
+            const labelText = document.createElement('span');
+            labelText.textContent = column.label || column.key;
+
+            option.appendChild(checkbox);
+            option.appendChild(labelText);
+            list.appendChild(option);
+
+            checkbox.addEventListener('change', () => {
+                const isChecked = checkbox.checked;
+                const currentVisible = new Set(getVisibleColumnKeys(key));
+                if (!isChecked && currentVisible.size <= 1 && currentVisible.has(column.key)) {
+                    checkbox.checked = true;
+                    updateFeedback('Pelo menos uma coluna deve permanecer visível.');
+                    return;
+                }
+
+                const updated = setColumnVisibility(key, column.key, isChecked);
+                if (!updated) {
+                    checkbox.checked = !isChecked;
+                    updateFeedback('Não foi possível atualizar as colunas exibidas.');
+                    return;
+                }
+
+                updateFeedback('');
+                updateCountLabel(key);
+
+                if (tableContainer?.dataset.currentTab === key) {
+                    const renderer = reportTableRenderers.get(key);
+                    if (typeof renderer === 'function') {
+                        renderer();
+                    } else if (tableContainer) {
+                        const currentTableRoot = tableContainer.querySelector('[data-relatorios-table-root]') || tableContainer;
+                        applyColumnVisibilityToTable(key, currentTableRoot);
+                    }
+                }
+            });
+        });
+
+        updateCountLabel(key);
+    };
+
+    disableControl();
+
+    return {
+        setActiveReport: key => {
+            if (!key) {
+                disableControl();
+                return;
+            }
+            renderOptions(key);
+        },
+        refresh: () => {
+            if (activeKey) {
+                renderOptions(activeKey);
+            }
+        }
+    };
 }
 
 function setupModals(root) {
