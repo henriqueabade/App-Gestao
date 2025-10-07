@@ -152,25 +152,43 @@ async function fetchJson(url) {
 }
 
 async function fetchContactsData() {
-    const contacts = [];
-    const clients = await fetchJson(`${RELATORIOS_API_BASE_URL}/api/clientes/lista`);
-    for (const client of Array.isArray(clients) ? clients : []) {
-        try {
-            const detail = await fetchJson(`${RELATORIOS_API_BASE_URL}/api/clientes/${client.id}`);
-            const list = Array.isArray(detail?.contatos) ? detail.contatos : [];
-            list.forEach(contact => {
-                contacts.push({ ...contact, cliente: client.nome_fantasia || '', dono: client.dono_cliente || '' });
-            });
-        } catch (err) {
-            console.error('Erro ao carregar contatos do cliente', client?.id, err);
-        }
+    const data = await fetchJson(`${RELATORIOS_API_BASE_URL}/api/clientes/contatos`);
+    if (!Array.isArray(data)) return [];
+
+    return data
+        .map(contact => ({
+            ...contact,
+            cliente: contact?.cliente ?? contact?.nome_fantasia ?? '',
+            dono: contact?.dono ?? contact?.dono_cliente ?? '',
+            status_cliente: contact?.status_cliente ?? ''
+        }))
+        .sort((a, b) => {
+            const byClient = normalizeText(a.cliente).localeCompare(normalizeText(b.cliente));
+            if (byClient !== 0) return byClient;
+            return normalizeText(a.nome).localeCompare(normalizeText(b.nome));
+        });
+}
+
+async function loadContactsReportData() {
+    if (reportDataCache.has('contatos')) {
+        return reportDataCache.get('contatos');
     }
-    contacts.sort((a, b) => {
-        const byClient = normalizeText(a.cliente).localeCompare(normalizeText(b.cliente));
-        if (byClient !== 0) return byClient;
-        return normalizeText(a.nome).localeCompare(normalizeText(b.nome));
-    });
-    return contacts;
+
+    if (!reportDataPromises.has('contatos')) {
+        const promise = (async () => {
+            try {
+                const result = await fetchContactsData();
+                const normalized = Array.isArray(result) ? result : [];
+                reportDataCache.set('contatos', normalized);
+                return normalized;
+            } finally {
+                reportDataPromises.delete('contatos');
+            }
+        })();
+        reportDataPromises.set('contatos', promise);
+    }
+
+    return reportDataPromises.get('contatos');
 }
 
 function getRawMaterialStatus(item) {
@@ -1270,7 +1288,7 @@ REPORT_CONFIGS.contatos = {
     errorMessage: 'Não foi possível carregar os contatos.',
     computeKpis: computeContatosKpis,
     async fetchData() {
-        const data = await fetchContactsData();
+        const data = await loadContactsReportData();
         return Array.isArray(data) ? data : [];
     },
     renderRow(contato) {
@@ -1311,40 +1329,7 @@ REPORT_CONFIGS.prospeccoes = {
     errorMessage: 'Não foi possível carregar as prospecções.',
     computeKpis: computeProspeccoesKpis,
     async fetchData() {
-        const [clientes, contatos] = await Promise.all([
-            fetchJson(`${RELATORIOS_API_BASE_URL}/api/clientes/lista`).catch(error => {
-                console.error('Erro ao carregar clientes para prospecções', error);
-                throw error;
-            }),
-            (async () => {
-                if (reportDataCache.has('contatos')) {
-                    return reportDataCache.get('contatos');
-                }
-                if (reportDataPromises.has('contatos')) {
-                    try {
-                        const data = await reportDataPromises.get('contatos');
-                        return Array.isArray(data) ? data : [];
-                    } catch (error) {
-                        console.error('Erro ao reaproveitar contatos em prospecções', error);
-                        return [];
-                    }
-                }
-                try {
-                    const promise = fetchContactsData();
-                    reportDataPromises.set('contatos', promise);
-                    const result = await promise;
-                    const normalized = Array.isArray(result) ? result : [];
-                    reportDataCache.set('contatos', normalized);
-                    return normalized;
-                } catch (error) {
-                    console.error('Erro ao carregar contatos para prospecções', error);
-                    return [];
-                } finally {
-                    reportDataPromises.delete('contatos');
-                }
-            })()
-        ]);
-
+        const contatos = await loadContactsReportData();
         const contactMap = new Map();
         (Array.isArray(contatos) ? contatos : []).forEach(contato => {
             const clientId = contato?.id_cliente || contato?.clienteId;
@@ -1364,22 +1349,20 @@ REPORT_CONFIGS.prospeccoes = {
             'contato inicial'
         ]);
 
-        const leads = (Array.isArray(clientes) ? clientes : [])
-            .filter(cliente => {
-                const status = normalizeText(cliente?.status_cliente);
-                return status && leadStatuses.has(status);
-            })
-            .map(cliente => {
-                const contato = contactMap.get(cliente.id) || null;
+        const leads = Array.from(contactMap.values())
+            .filter(contato => leadStatuses.has(normalizeText(contato?.status_cliente)))
+            .map(contato => {
+                const clientId = contato?.id_cliente || contato?.clienteId || contato?.id;
+                const nomeFantasia = contato?.cliente || contato?.nome_fantasia || '';
                 return {
-                    id: cliente.id,
-                    nome: cliente?.nome_fantasia || '',
+                    id: clientId,
+                    nome: nomeFantasia,
                     email: contato?.email || '',
-                    status: cliente?.status_cliente || '',
-                    responsavel: cliente?.dono_cliente || '',
+                    status: contato?.status_cliente || '',
+                    responsavel: contato?.dono || contato?.dono_cliente || '',
                     telefone: contato?.telefone_fixo || '',
                     celular: contato?.telefone_celular || '',
-                    empresa: cliente?.nome_fantasia || ''
+                    empresa: nomeFantasia
                 };
             })
             .sort((a, b) => normalizeText(a.nome).localeCompare(normalizeText(b.nome)));

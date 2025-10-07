@@ -25,6 +25,46 @@ router.get('/lista', async (_req, res) => {
   }
 });
 
+// GET /api/clientes/contatos
+router.get('/contatos', async (_req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT
+         cc.id,
+         cc.id_cliente,
+         cc.nome,
+         cc.cargo,
+         cc.telefone_celular,
+         cc.telefone_fixo,
+         cc.email,
+         c.nome_fantasia,
+         c.dono_cliente,
+         c.status_cliente
+       FROM contatos_cliente cc
+       INNER JOIN clientes c ON c.id = cc.id_cliente
+       ORDER BY c.nome_fantasia, cc.nome`
+    );
+
+    const contatos = rows.map((row) => ({
+      id: row.id,
+      id_cliente: row.id_cliente,
+      nome: row.nome,
+      cargo: row.cargo,
+      telefone_celular: row.telefone_celular,
+      telefone_fixo: row.telefone_fixo,
+      email: row.email,
+      cliente: row.nome_fantasia,
+      dono: row.dono_cliente,
+      status_cliente: row.status_cliente
+    }));
+
+    res.json(contatos);
+  } catch (err) {
+    console.error('Erro ao listar contatos dos clientes:', err);
+    res.status(500).json({ error: 'Erro ao listar contatos dos clientes' });
+  }
+});
+
 // GET /api/clientes/:id
 router.get('/:id', async (req, res) => {
   const { id } = req.params;

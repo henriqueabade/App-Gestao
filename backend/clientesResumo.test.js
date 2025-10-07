@@ -46,6 +46,7 @@ function setupDb() {
       id serial primary key,
       id_cliente integer references clientes(id),
       nome text,
+      cargo text,
       telefone_fixo text,
       telefone_celular text,
       email text
@@ -104,6 +105,83 @@ test('GET /api/clientes/:id/resumo formata endereços e contatos', async () => {
       telefone_fixo: '1111-1111',
       telefone_celular: '9999-9999',
       email: 'maria@example.com'
+    }
+  ]);
+
+  server.close();
+});
+
+test('GET /api/clientes/contatos retorna contatos com dados do cliente', async () => {
+  const mem = setupDb();
+  const { Pool } = mem.adapters.createPg();
+  const pool = new Pool();
+
+  await pool.query(`INSERT INTO clientes (id, nome_fantasia, status_cliente, dono_cliente)
+                    VALUES (1, 'Alpha Decor', 'Prospect', 'João'),
+                           (2, 'Beta Imports', 'Negociação', 'Maria')`);
+
+  await pool.query(`INSERT INTO contatos_cliente (id, id_cliente, nome, cargo, telefone_celular, telefone_fixo, email)
+                    VALUES
+                      (10, 1, 'Ana Souza', 'Compras', '(11) 99999-0000', '(11) 4000-1000', 'ana@alpha.com'),
+                      (11, 2, 'Bruno Lima', 'Financeiro', '(21) 98888-1111', '(21) 4000-2000', 'bruno@beta.com'),
+                      (12, 2, 'Carlos Alves', 'Compras', '(21) 97777-2222', '(21) 4000-3000', 'carlos@beta.com')`);
+
+  const dbModulePath = require.resolve('./db');
+  require.cache[dbModulePath] = {
+    exports: {
+      query: (text, params) => pool.query(text, params),
+      connect: () => pool.connect()
+    }
+  };
+  delete require.cache[require.resolve('./clientesController')];
+  const clientesRouter = require('./clientesController');
+
+  const app = express();
+  app.use('/api/clientes', clientesRouter);
+  const server = app.listen(0);
+  await new Promise(resolve => server.once('listening', resolve));
+  const port = server.address().port;
+
+  const res = await fetch(`http://localhost:${port}/api/clientes/contatos`);
+  assert.strictEqual(res.status, 200);
+  const body = await res.json();
+
+  assert.deepStrictEqual(body, [
+    {
+      id: 10,
+      id_cliente: 1,
+      nome: 'Ana Souza',
+      cargo: 'Compras',
+      telefone_celular: '(11) 99999-0000',
+      telefone_fixo: '(11) 4000-1000',
+      email: 'ana@alpha.com',
+      cliente: 'Alpha Decor',
+      dono: 'João',
+      status_cliente: 'Prospect'
+    },
+    {
+      id: 11,
+      id_cliente: 2,
+      nome: 'Bruno Lima',
+      cargo: 'Financeiro',
+      telefone_celular: '(21) 98888-1111',
+      telefone_fixo: '(21) 4000-2000',
+      email: 'bruno@beta.com',
+      cliente: 'Beta Imports',
+      dono: 'Maria',
+      status_cliente: 'Negociação'
+    },
+    {
+      id: 12,
+      id_cliente: 2,
+      nome: 'Carlos Alves',
+      cargo: 'Compras',
+      telefone_celular: '(21) 97777-2222',
+      telefone_fixo: '(21) 4000-3000',
+      email: 'carlos@beta.com',
+      cliente: 'Beta Imports',
+      dono: 'Maria',
+      status_cliente: 'Negociação'
     }
   ]);
 
