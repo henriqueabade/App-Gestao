@@ -9,13 +9,12 @@ let pinErrorAttempts = 0;
 // Helper to detect errors related to an invalid PIN/port
 function isPinError(err) {
   if (!err) return false;
-  const codes = ['ETIMEDOUT', 'ECONNREFUSED', 'ECONNRESET'];
+  const codes = ['ETIMEDOUT', 'ECONNREFUSED'];
   if (codes.includes(err.code)) return true;
   const msg = String(err.message || '').toLowerCase();
   return (
     msg.includes('etimedout') ||
     msg.includes('econnrefused') ||
-    msg.includes('econnreset') ||
     msg.includes('port should') ||
     msg.includes('invalid port')
   );
@@ -24,14 +23,16 @@ function isPinError(err) {
 // Helper to detect network connectivity issues
 function isNetworkError(err) {
   if (!err) return false;
-  const codes = ['ENOTFOUND', 'EAI_AGAIN', 'ENETUNREACH'];
+  const codes = ['ENOTFOUND', 'EAI_AGAIN', 'ENETUNREACH', 'ECONNRESET'];
   if (codes.includes(err.code)) return true;
   const msg = String(err.message || '').toLowerCase();
   return (
     msg.includes('enotfound') ||
     msg.includes('eai_again') ||
     msg.includes('enetworkunreach') ||
-    msg.includes('getaddrinfo')
+    msg.includes('getaddrinfo') ||
+    msg.includes('ssl connection') ||
+    msg.includes('econnreset')
   );
 }
 
