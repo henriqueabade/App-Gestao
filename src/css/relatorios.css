@@ -157,9 +157,20 @@ body {
     color: var(--color-primary);
 }
 
+.relatorios-module .badge-info {
+    background: rgba(138, 167, 243, 0.2);
+    color: var(--color-blue);
+}
+
 .relatorios-module .badge-neutral {
     background: rgba(163, 148, 167, 0.2);
     color: var(--color-violet);
+}
+
+.relatorios-module .badge-secondary {
+    background: rgba(255, 255, 255, 0.85);
+    color: #1f2937;
+    border: 1px solid rgba(255, 255, 255, 0.6);
 }
 
 .relatorios-filter-bar {

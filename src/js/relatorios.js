@@ -193,7 +193,7 @@ async function loadContactsReportData() {
 
 function getRawMaterialStatus(item) {
     if (item?.infinito) {
-        return { label: 'Infinito', variant: 'neutral' };
+        return { label: 'Infinito', variant: 'info' };
     }
     const quantity = Number(item?.quantidade ?? 0);
     if (!Number.isFinite(quantity) || quantity <= 0) {
@@ -241,7 +241,7 @@ function getQuoteStatusVariant(status) {
     if (['aprovado', 'convertido'].includes(normalized)) return 'success';
     if (['rejeitado', 'cancelado'].includes(normalized)) return 'danger';
     if (['pendente', 'revisao'].includes(normalized)) return 'warning';
-    if (normalized === 'rascunho') return 'neutral';
+    if (normalized === 'rascunho') return 'info';
     if (normalized === 'enviado') return 'info';
     if (normalized === 'expirado') return 'secondary';
     return 'neutral';
@@ -264,7 +264,7 @@ function getUserStatusVariant(status) {
     if (normalized === 'ativo') return 'success';
     if (['inativo', 'suspenso'].includes(normalized)) return 'danger';
     if (['aguardando', 'pendente'].includes(normalized)) return 'warning';
-    if (normalized === 'offline') return 'secondary';
+    if (normalized === 'offline') return 'danger';
     return 'neutral';
 }
 
@@ -1473,7 +1473,7 @@ REPORT_CONFIGS.usuarios = {
         const perfil = formatText(usuario?.perfil, '—');
         const statusLabel = usuario?.status ? usuario.status : '—';
         const statusBadge = createBadge(statusLabel, getUserStatusVariant(usuario?.status), { size: 'sm' });
-        const onlineBadge = createBadge(usuario?.online ? 'Online' : 'Offline', usuario?.online ? 'success' : 'secondary', { size: 'sm' });
+        const onlineBadge = createBadge(usuario?.online ? 'Online' : 'Offline', usuario?.online ? 'success' : 'danger', { size: 'sm' });
         const ultimoLogin = usuario?.ultimoLoginEm
             ? formatDate(usuario.ultimoLoginEm)
             : (usuario?.ultimaAtividadeEm ? formatDate(usuario.ultimaAtividadeEm) : '—');
