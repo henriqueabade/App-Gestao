@@ -114,34 +114,29 @@
                             <div class="relatorios-filter-field">
                                 <label class="relatorios-filter-label text-white">Processo</label>
                                 <select class="input-glass text-white rounded-md px-4 py-3 w-full" data-relatorios-filter="materia-prima" data-filter-key="processo">
-                                    <option value="">Todos</option>
-                                    <option value="corte">Corte</option>
-                                    <option value="montagem">Montagem</option>
-                                    <option value="acabamento">Acabamento</option>
-                                    <option value="embalagem">Embalagem</option>
+                                    <option value="" data-default-option="true">Todos os processos</option>
                                 </select>
                             </div>
 
                             <div class="relatorios-filter-field">
                                 <label class="relatorios-filter-label text-white">Categoria</label>
                                 <select class="input-glass text-white rounded-md px-4 py-3 w-full" data-relatorios-filter="materia-prima" data-filter-key="categoria">
-                                    <option value="">Todas</option>
-                                    <option value="madeira">Madeira</option>
-                                    <option value="metal">Metal</option>
-                                    <option value="quimico">Químico</option>
-                                    <option value="tecido">Têxtil</option>
+                                    <option value="" data-default-option="true">Todas as categorias</option>
                                 </select>
                             </div>
 
-                            <div class="relatorios-filter-checkbox-group">
-                                <label class="relatorios-filter-checkbox-option text-white">
-                                    <input type="checkbox" class="relatorios-filter-checkbox rounded border-white/30 bg-transparent" data-relatorios-filter="materia-prima" data-filter-key="semEstoque">
-                                    <span>0 Estoque</span>
-                                </label>
-                                <label class="relatorios-filter-checkbox-option text-white">
-                                    <input type="checkbox" class="relatorios-filter-checkbox rounded border-white/30 bg-transparent" data-relatorios-filter="materia-prima" data-filter-key="baixoEstoque">
-                                    <span>Abaixo do mínimo</span>
-                                </label>
+                            <div class="relatorios-filter-field relatorios-filter-toggle-field">
+                                <label class="relatorios-filter-label text-white">Estoque</label>
+                                <div class="relatorios-filter-toggle-group">
+                                    <label class="relatorios-filter-toggle-option">
+                                        <span class="relatorios-filter-toggle-label">Sem estoque</span>
+                                        <input type="checkbox" class="component-toggle" data-relatorios-filter="materia-prima" data-filter-key="semEstoque">
+                                    </label>
+                                    <label class="relatorios-filter-toggle-option">
+                                        <span class="relatorios-filter-toggle-label">Abaixo do mínimo</span>
+                                        <input type="checkbox" class="component-toggle" data-relatorios-filter="materia-prima" data-filter-key="baixoEstoque">
+                                    </label>
+                                </div>
                             </div>
                         </div>
 
@@ -191,32 +186,29 @@
                             <div class="relatorios-filter-field">
                                 <label class="relatorios-filter-label text-white">Coleção</label>
                                 <select class="input-glass text-white rounded-md px-4 py-3 w-full" data-relatorios-filter="produtos" data-filter-key="colecao">
-                                    <option value="">Todas</option>
-                                    <option value="essenciais">Essenciais</option>
-                                    <option value="premium">Premium</option>
-                                    <option value="corporativo">Corporativo</option>
+                                    <option value="" data-default-option="true">Todas</option>
                                 </select>
                             </div>
 
                             <div class="relatorios-filter-field">
                                 <label class="relatorios-filter-label text-white">Status</label>
                                 <select class="input-glass text-white rounded-md px-4 py-3 w-full" data-relatorios-filter="produtos" data-filter-key="status">
-                                    <option value="">Todos</option>
-                                    <option value="ativo">Ativo</option>
-                                    <option value="inativo">Inativo</option>
-                                    <option value="em-desenvolvimento">Em desenvolvimento</option>
+                                    <option value="" data-default-option="true">Todos</option>
                                 </select>
                             </div>
 
-                            <div class="relatorios-filter-checkbox-group">
-                                <label class="relatorios-filter-checkbox-option text-white">
-                                    <input type="checkbox" class="relatorios-filter-checkbox rounded border-white/30 bg-transparent" data-relatorios-filter="produtos" data-filter-key="semEstoque">
-                                    <span>0 Estoque</span>
-                                </label>
-                                <label class="relatorios-filter-checkbox-option text-white">
-                                    <input type="checkbox" class="relatorios-filter-checkbox rounded border-white/30 bg-transparent" data-relatorios-filter="produtos" data-filter-key="destaque">
-                                    <span>Somente destaque</span>
-                                </label>
+                            <div class="relatorios-filter-field relatorios-filter-toggle-field">
+                                <label class="relatorios-filter-label text-white">Opções</label>
+                                <div class="relatorios-filter-toggle-group">
+                                    <label class="relatorios-filter-toggle-option">
+                                        <span class="relatorios-filter-toggle-label">Sem estoque</span>
+                                        <input type="checkbox" class="component-toggle" data-relatorios-filter="produtos" data-filter-key="semEstoque">
+                                    </label>
+                                    <label class="relatorios-filter-toggle-option">
+                                        <span class="relatorios-filter-toggle-label">Somente destaque</span>
+                                        <input type="checkbox" class="component-toggle" data-relatorios-filter="produtos" data-filter-key="destaque">
+                                    </label>
+                                </div>
                             </div>
                         </div>
 
@@ -278,20 +270,14 @@
                             <div class="relatorios-filter-field">
                                 <label class="relatorios-filter-label text-white">Dono</label>
                                 <select class="input-glass text-white rounded-md px-4 py-3 w-full" data-relatorios-filter="clientes" data-filter-key="owner">
-                                    <option value="">Todos</option>
-                                    <option value="joao">João Silva</option>
-                                    <option value="maria">Maria Santos</option>
-                                    <option value="pedro">Pedro Lima</option>
+                                    <option value="" data-default-option="true">Todos</option>
                                 </select>
                             </div>
 
                             <div class="relatorios-filter-field">
                                 <label class="relatorios-filter-label text-white">Status</label>
                                 <select class="input-glass text-white rounded-md px-4 py-3 w-full" data-relatorios-filter="clientes" data-filter-key="status">
-                                    <option value="">Todos</option>
-                                    <option value="ativo">Ativo</option>
-                                    <option value="suspenso">Suspenso</option>
-                                    <option value="inativo">Inativo</option>
+                                    <option value="" data-default-option="true">Todos</option>
                                 </select>
                             </div>
 
@@ -351,11 +337,7 @@
                             <div class="relatorios-filter-field">
                                 <label class="relatorios-filter-label text-white">Tipo de Contato</label>
                                 <select class="input-glass text-white rounded-md px-4 py-3 w-full" data-relatorios-filter="contatos" data-filter-key="tipo">
-                                    <option value="">Todos</option>
-                                    <option value="fornecedor">Fornecedor</option>
-                                    <option value="parceiro">Parceiro</option>
-                                    <option value="cliente">Cliente</option>
-                                    <option value="prospect">Prospect</option>
+                                    <option value="" data-default-option="true">Todos</option>
                                 </select>
                             </div>
 
@@ -400,32 +382,21 @@
                             <div class="relatorios-filter-field">
                                 <label class="relatorios-filter-label text-white">Status</label>
                                 <select class="input-glass text-white rounded-md px-4 py-3 w-full" data-relatorios-filter="prospeccoes" data-filter-key="status">
-                                    <option value="">Todos</option>
-                                    <option value="novo">Novo</option>
-                                    <option value="contactado">Contactado</option>
-                                    <option value="qualificado">Qualificado</option>
-                                    <option value="desqualificado">Desqualificado</option>
+                                    <option value="" data-default-option="true">Todos</option>
                                 </select>
                             </div>
 
                             <div class="relatorios-filter-field">
                                 <label class="relatorios-filter-label text-white">Origem do Lead</label>
                                 <select class="input-glass text-white rounded-md px-4 py-3 w-full" data-relatorios-filter="prospeccoes" data-filter-key="origem">
-                                    <option value="">Todas</option>
-                                    <option value="site">Site</option>
-                                    <option value="indicacao">Indicação</option>
-                                    <option value="evento">Evento</option>
-                                    <option value="midia">Mídia paga</option>
+                                    <option value="" data-default-option="true">Todas</option>
                                 </select>
                             </div>
 
                             <div class="relatorios-filter-field">
                                 <label class="relatorios-filter-label text-white">Responsável</label>
                                 <select class="input-glass text-white rounded-md px-4 py-3 w-full" data-relatorios-filter="prospeccoes" data-filter-key="responsavel">
-                                    <option value="">Todos</option>
-                                    <option value="joao">João Silva</option>
-                                    <option value="maria">Maria Santos</option>
-                                    <option value="ana">Ana Paula</option>
+                                    <option value="" data-default-option="true">Todos</option>
                                 </select>
                             </div>
                         </div>
@@ -471,12 +442,7 @@
                             <div class="relatorios-filter-field">
                                 <label class="relatorios-filter-label text-white">Status</label>
                                 <select class="input-glass text-white rounded-md px-4 py-3 w-full" data-relatorios-filter="orcamentos" data-filter-key="status">
-                                    <option value="">Todos</option>
-                                    <option value="rascunho">Rascunho</option>
-                                    <option value="pendente">Pendente</option>
-                                    <option value="aprovado">Aprovado</option>
-                                    <option value="rejeitado">Rejeitado</option>
-                                    <option value="expirado">Expirado</option>
+                                    <option value="" data-default-option="true">Todos</option>
                                 </select>
                             </div>
 
@@ -494,20 +460,14 @@
                             <div class="relatorios-filter-field">
                                 <label class="relatorios-filter-label text-white">Dono</label>
                                 <select class="input-glass text-white rounded-md px-4 py-3 w-full" data-relatorios-filter="orcamentos" data-filter-key="dono">
-                                    <option value="">Todos</option>
-                                    <option value="joao">João Silva</option>
-                                    <option value="maria">Maria Santos</option>
-                                    <option value="ana">Ana Paula</option>
+                                    <option value="" data-default-option="true">Todos</option>
                                 </select>
                             </div>
 
                             <div class="relatorios-filter-field">
                                 <label class="relatorios-filter-label text-white">Cliente</label>
                                 <select class="input-glass text-white rounded-md px-4 py-3 w-full" data-relatorios-filter="orcamentos" data-filter-key="cliente">
-                                    <option value="">Todos</option>
-                                    <option value="acme">ACME Corp.</option>
-                                    <option value="alpha">Alpha Design</option>
-                                    <option value="beta">Beta Construções</option>
+                                    <option value="" data-default-option="true">Todos</option>
                                 </select>
                             </div>
                         </div>
@@ -520,21 +480,18 @@
 
                             <div class="relatorios-filter-field">
                                 <label class="relatorios-filter-label text-white">Valor mínimo</label>
-                                <input type="number" class="input-glass text-white rounded-md px-4 py-3 w-full" placeholder="R$ 0,00" data-relatorios-filter="prospeccoes" data-filter-key="valorMin">
+                                <input type="number" class="input-glass text-white rounded-md px-4 py-3 w-full" placeholder="R$ 0,00" data-relatorios-filter="orcamentos" data-filter-key="valorMin">
                             </div>
 
                             <div class="relatorios-filter-field">
                                 <label class="relatorios-filter-label text-white">Valor máximo</label>
-                                <input type="number" class="input-glass text-white rounded-md px-4 py-3 w-full" placeholder="R$ 50.000,00" data-relatorios-filter="prospeccoes" data-filter-key="valorMax">
+                                <input type="number" class="input-glass text-white rounded-md px-4 py-3 w-full" placeholder="R$ 50.000,00" data-relatorios-filter="orcamentos" data-filter-key="valorMax">
                             </div>
 
                             <div class="relatorios-filter-field">
                                 <label class="relatorios-filter-label text-white">Condição comercial</label>
-                                <select class="input-glass text-white rounded-md px-4 py-3 w-full" data-relatorios-filter="prospeccoes" data-filter-key="condicao">
-                                    <option value="">Todas</option>
-                                    <option value="padrao">Padrão</option>
-                                    <option value="especial">Especial</option>
-                                    <option value="promocional">Promocional</option>
+                                <select class="input-glass text-white rounded-md px-4 py-3 w-full" data-relatorios-filter="orcamentos" data-filter-key="condicao">
+                                    <option value="" data-default-option="true">Todas</option>
                                 </select>
                             </div>
 
@@ -558,11 +515,7 @@
                             <div class="relatorios-filter-field">
                                 <label class="relatorios-filter-label text-white">Status</label>
                                 <select class="input-glass text-white rounded-md px-4 py-3 w-full" data-relatorios-filter="pedidos" data-filter-key="status">
-                                    <option value="">Todos</option>
-                                    <option value="producao">Em Produção</option>
-                                    <option value="enviado">Enviado</option>
-                                    <option value="entregue">Entregue</option>
-                                    <option value="cancelado">Cancelado</option>
+                                    <option value="" data-default-option="true">Todos</option>
                                 </select>
                             </div>
 
@@ -580,20 +533,14 @@
                             <div class="relatorios-filter-field">
                                 <label class="relatorios-filter-label text-white">Dono</label>
                                 <select class="input-glass text-white rounded-md px-4 py-3 w-full" data-relatorios-filter="pedidos" data-filter-key="dono">
-                                    <option value="">Todos</option>
-                                    <option value="joao">João Silva</option>
-                                    <option value="maria">Maria Santos</option>
-                                    <option value="pedro">Pedro Lima</option>
+                                    <option value="" data-default-option="true">Todos</option>
                                 </select>
                             </div>
 
                             <div class="relatorios-filter-field">
                                 <label class="relatorios-filter-label text-white">Cliente</label>
                                 <select class="input-glass text-white rounded-md px-4 py-3 w-full" data-relatorios-filter="pedidos" data-filter-key="cliente">
-                                    <option value="">Todos</option>
-                                    <option value="acme">ACME Corp.</option>
-                                    <option value="alpha">Alpha Design</option>
-                                    <option value="beta">Beta Construções</option>
+                                    <option value="" data-default-option="true">Todos</option>
                                 </select>
                             </div>
                         </div>
@@ -617,10 +564,7 @@
                             <div class="relatorios-filter-field">
                                 <label class="relatorios-filter-label text-white">Condição de pagamento</label>
                                 <select class="input-glass text-white rounded-md px-4 py-3 w-full" data-relatorios-filter="pedidos" data-filter-key="condicao">
-                                    <option value="">Todas</option>
-                                    <option value="avista">À vista</option>
-                                    <option value="30d">30 dias</option>
-                                    <option value="parcelado">Parcelado</option>
+                                    <option value="" data-default-option="true">Todas</option>
                                 </select>
                             </div>
 
@@ -649,10 +593,7 @@
                             <div class="relatorios-filter-field">
                                 <label class="relatorios-filter-label text-white">Perfil</label>
                                 <select class="input-glass text-white rounded-md px-4 py-3 w-full" data-relatorios-filter="usuarios" data-filter-key="perfil">
-                                    <option value="">Todos</option>
-                                    <option value="admin">Admin</option>
-                                    <option value="operacional">Operacional</option>
-                                    <option value="cliente">Cliente</option>
+                                    <option value="" data-default-option="true">Todos os perfis</option>
                                 </select>
                             </div>
 
@@ -677,19 +618,22 @@
                         </div>
 
                         <div class="filter-bar relatorios-filter-bar">
-                            <div class="relatorios-filter-checkbox-group">
-                                <label class="relatorios-filter-checkbox-option text-white">
-                                    <input type="checkbox" class="relatorios-filter-checkbox rounded border-white/30 bg-transparent" data-relatorios-filter="usuarios" data-filter-key="ativo">
-                                    <span>Ativo</span>
-                                </label>
-                                <label class="relatorios-filter-checkbox-option text-white">
-                                    <input type="checkbox" class="relatorios-filter-checkbox rounded border-white/30 bg-transparent" data-relatorios-filter="usuarios" data-filter-key="inativo">
-                                    <span>Inativo</span>
-                                </label>
-                                <label class="relatorios-filter-checkbox-option text-white">
-                                    <input type="checkbox" class="relatorios-filter-checkbox rounded border-white/30 bg-transparent" data-relatorios-filter="usuarios" data-filter-key="aguardando">
-                                    <span>Aguardando</span>
-                                </label>
+                            <div class="relatorios-filter-field relatorios-filter-toggle-field">
+                                <label class="relatorios-filter-label text-white">Status detalhado</label>
+                                <div class="relatorios-filter-toggle-group">
+                                    <label class="relatorios-filter-toggle-option">
+                                        <span class="relatorios-filter-toggle-label">Ativo</span>
+                                        <input type="checkbox" class="component-toggle" data-relatorios-filter="usuarios" data-filter-key="ativo">
+                                    </label>
+                                    <label class="relatorios-filter-toggle-option">
+                                        <span class="relatorios-filter-toggle-label">Inativo</span>
+                                        <input type="checkbox" class="component-toggle" data-relatorios-filter="usuarios" data-filter-key="inativo">
+                                    </label>
+                                    <label class="relatorios-filter-toggle-option">
+                                        <span class="relatorios-filter-toggle-label">Aguardando</span>
+                                        <input type="checkbox" class="component-toggle" data-relatorios-filter="usuarios" data-filter-key="aguardando">
+                                    </label>
+                                </div>
                             </div>
 
                         </div>

@@ -288,6 +288,31 @@ function includesNormalized(value, searchTerm) {
     return normalizeText(value).includes(searchTerm);
 }
 
+function flattenFilterCandidates(values, target = []) {
+    if (!Array.isArray(values)) {
+        if (values !== undefined && values !== null) {
+            target.push(values);
+        }
+        return target;
+    }
+
+    values.forEach(value => {
+        if (Array.isArray(value)) {
+            flattenFilterCandidates(value, target);
+        } else if (value !== undefined && value !== null) {
+            target.push(value);
+        }
+    });
+
+    return target;
+}
+
+function matchesSearchTerm(searchTerm, ...values) {
+    if (!searchTerm) return true;
+    const candidates = flattenFilterCandidates(values);
+    return candidates.some(candidate => includesNormalized(candidate, searchTerm));
+}
+
 function getStockMinimum(item) {
     const candidates = [
         item?.estoque_minimo,
@@ -301,6 +326,164 @@ function getStockMinimum(item) {
         if (Number.isFinite(number)) return number;
     }
     return null;
+}
+
+function getPaymentConditionLabels(record) {
+    const labels = [];
+    const condition = record?.condicao_comercial ?? record?.condicao ?? record?.condicaoPagamento;
+    if (condition) {
+        labels.push(String(condition).trim());
+    }
+
+    const parcelCandidates = [
+        record?.parcelas,
+        record?.numeroParcelas,
+        record?.qtdParcelas,
+        record?.parcelamento
+    ];
+
+    const parcelas = parcelCandidates
+        .map(candidate => {
+            const parsed = Number.parseInt(candidate, 10);
+            return Number.isFinite(parsed) ? parsed : null;
+        })
+        .find(Number.isInteger);
+
+    if (Number.isInteger(parcelas)) {
+        labels.push(parcelas <= 1 ? 'À vista' : `${parcelas} parcelas`);
+        if (parcelas > 1) {
+            labels.push('Parcelado');
+        }
+    }
+
+    return labels;
+}
+
+function addOptionCandidate(map, candidate) {
+    if (candidate === null || candidate === undefined) return;
+    if (typeof candidate === 'object') return;
+
+    let text;
+    if (typeof candidate === 'number') {
+        if (!Number.isFinite(candidate)) return;
+        text = candidate.toString();
+    } else if (typeof candidate === 'boolean') {
+        text = candidate ? 'Sim' : 'Não';
+    } else {
+        text = String(candidate).trim();
+    }
+
+    if (!text) return;
+    const normalized = normalizeText(text);
+    if (!normalized) return;
+    if (!map.has(normalized)) {
+        map.set(normalized, { value: text, label: text });
+    }
+}
+
+function collectFilterOptions(items, extractor) {
+    if (typeof extractor !== 'function') return [];
+    const options = new Map();
+    const list = Array.isArray(items) ? items : [];
+
+    list.forEach(item => {
+        const raw = extractor(item);
+        const candidates = flattenFilterCandidates(Array.isArray(raw) ? raw : [raw]);
+        candidates.forEach(candidate => addOptionCandidate(options, candidate));
+    });
+
+    return Array.from(options.values()).sort((a, b) => normalizeText(a.label).localeCompare(normalizeText(b.label)));
+}
+
+function updateSelectOptions(select, options) {
+    if (!select || (select.tagName || '').toUpperCase() !== 'SELECT') return;
+    const existingPlaceholder = Array.from(select.options).find(option => option.dataset.defaultOption === 'true')
+        || select.querySelector('option[value=""]');
+    const placeholderLabel = existingPlaceholder?.textContent?.trim() || 'Todos';
+    const previousValue = select.value;
+
+    select.innerHTML = '';
+
+    const defaultOption = document.createElement('option');
+    defaultOption.value = '';
+    defaultOption.textContent = placeholderLabel;
+    defaultOption.dataset.defaultOption = 'true';
+    select.appendChild(defaultOption);
+
+    options.forEach(option => {
+        const element = document.createElement('option');
+        element.value = option.value;
+        element.textContent = option.label;
+        select.appendChild(element);
+    });
+
+    const normalizedPrevious = normalizeText(previousValue);
+    const matched = options.find(option => normalizeText(option.value) === normalizedPrevious);
+    select.value = matched ? matched.value : '';
+}
+
+const FILTER_OPTION_CONFIGS = {
+    'materia-prima': {
+        processo: item => item?.processo,
+        categoria: item => item?.categoria
+    },
+    produtos: {
+        colecao: item => [item?.colecao, item?.linha],
+        status: item => item?.status
+    },
+    clientes: {
+        owner: item => [item?.dono_cliente, item?.dono],
+        status: item => item?.status_cliente
+    },
+    contatos: {
+        tipo: item => [item?.tipo, item?.cargo]
+    },
+    prospeccoes: {
+        status: item => item?.status,
+        origem: item => item?.origem,
+        responsavel: item => item?.responsavel,
+        condicao: item => [...getPaymentConditionLabels(item), item?.condicao_pagamento, item?.condicao]
+    },
+    orcamentos: {
+        status: item => item?.situacao,
+        dono: item => [item?.dono, item?.responsavel],
+        cliente: item => item?.cliente,
+        condicao: item => [...getPaymentConditionLabels(item), item?.condicao_pagamento, item?.condicao]
+    },
+    pedidos: {
+        status: item => item?.situacao,
+        dono: item => [item?.responsavel, item?.dono],
+        cliente: item => item?.cliente,
+        condicao: item => getPaymentConditionLabels(item)
+    },
+    usuarios: {
+        perfil: item => item?.perfil
+    }
+};
+
+const filterOptionsState = new Map();
+
+function syncFilterOptions(key, data, root) {
+    if (!root) return;
+    const config = FILTER_OPTION_CONFIGS[key];
+    if (!config) return;
+
+    const list = Array.isArray(data) ? data : [];
+    const state = filterOptionsState.get(key) || new Map();
+
+    Object.entries(config).forEach(([filterKey, extractor]) => {
+        const options = collectFilterOptions(list, extractor);
+        const signature = options.map(option => option.value).join('|');
+        if (state.get(filterKey) === signature) {
+            return;
+        }
+
+        state.set(filterKey, signature);
+        const selects = Array.from(root.querySelectorAll(`select[data-relatorios-filter="${key}"][data-filter-key="${filterKey}"]`));
+        selects.forEach(select => updateSelectOptions(select, options));
+    });
+
+    filterOptionsState.set(key, state);
 }
 
 const REPORT_FILTERS = {
@@ -317,11 +500,24 @@ const REPORT_FILTERS = {
         const baixoEstoque = Boolean(filters.baixoEstoque);
 
         return list.filter(item => {
-            const nome = item?.nome;
-            if (searchTerm) {
-                const matches = [nome, item?.categoria, item?.processo].some(value => includesNormalized(value, searchTerm));
-                if (!matches) return false;
+            const statusInfo = getRawMaterialStatus(item);
+            const searchValues = [
+                item?.nome,
+                item?.categoria,
+                item?.processo,
+                item?.unidade,
+                item?.descricao,
+                item?.codigo,
+                item?.codigo_interno,
+                item?.fornecedor,
+                statusInfo?.label
+            ];
+            if (item?.infinito) {
+                searchValues.push('infinito', '∞');
             }
+            searchValues.push(item?.quantidade, item?.preco_unitario ?? item?.precoUnitario);
+
+            if (!matchesSearchTerm(searchTerm, searchValues)) return false;
             if (processo && !includesNormalized(item?.processo, processo)) return false;
             if (categoria && !includesNormalized(item?.categoria, categoria)) return false;
 
@@ -358,11 +554,24 @@ const REPORT_FILTERS = {
         const destaque = Boolean(filters.destaque);
 
         return list.filter(produto => {
-            if (searchTerm) {
-                const matches = [produto?.codigo, produto?.nome, produto?.categoria]
-                    .some(value => includesNormalized(value, searchTerm));
-                if (!matches) return false;
+            const searchValues = [
+                produto?.codigo,
+                produto?.nome,
+                produto?.categoria,
+                produto?.colecao,
+                produto?.linha,
+                produto?.status,
+                produto?.descricao,
+                produto?.referencia,
+                produto?.codigo_barras,
+                produto?.sku
+            ];
+            if (produto?.destaque) {
+                searchValues.push('destaque');
             }
+            searchValues.push(produto?.quantidade_total, produto?.preco_venda);
+
+            if (!matchesSearchTerm(searchTerm, searchValues)) return false;
 
             if (colecao) {
                 const colecaoProduto = normalizeText(produto?.colecao ?? produto?.linha ?? '');
@@ -400,15 +609,21 @@ const REPORT_FILTERS = {
         const status = normalizeText(filters.status);
 
         return list.filter(cliente => {
-            if (searchTerm) {
-                const matches = [
-                    cliente?.nome_fantasia,
-                    cliente?.cnpj,
-                    cliente?.pais,
-                    cliente?.estado
-                ].some(value => includesNormalized(value, searchTerm));
-                if (!matches) return false;
-            }
+            const searchValues = [
+                cliente?.nome_fantasia,
+                cliente?.razao_social,
+                cliente?.cnpj,
+                cliente?.cpf,
+                cliente?.pais,
+                cliente?.estado,
+                cliente?.cidade,
+                cliente?.segmento,
+                cliente?.dono_cliente,
+                cliente?.status_cliente,
+                cliente?.email
+            ];
+
+            if (!matchesSearchTerm(searchTerm, searchValues)) return false;
 
             if (owner && !includesNormalized(cliente?.dono_cliente ?? cliente?.dono, owner)) return false;
             if (status && !includesNormalized(cliente?.status_cliente, status)) return false;
@@ -424,22 +639,33 @@ const REPORT_FILTERS = {
         const telefoneFiltro = sanitizeDigits(filters.telefone || '');
 
         return list.filter(contato => {
-            if (searchTerm) {
-                const matches = [contato?.nome, contato?.cliente, contato?.empresa]
-                    .some(value => includesNormalized(value, searchTerm));
-                if (!matches) return false;
-            }
+            const celularDigits = sanitizeDigits(contato?.telefone_celular ?? contato?.celular ?? '');
+            const telefoneDigits = sanitizeDigits(contato?.telefone_fixo ?? contato?.telefone ?? '');
+            const searchValues = [
+                contato?.nome,
+                contato?.cliente,
+                contato?.empresa,
+                contato?.email,
+                contato?.cargo,
+                contato?.tipo,
+                contato?.status_cliente,
+                contato?.dono,
+                celularDigits,
+                telefoneDigits
+            ];
 
-            if (tipo && !includesNormalized(contato?.cargo, tipo)) return false;
+            if (!matchesSearchTerm(searchTerm, searchValues)) return false;
+
+            if (tipo && !matchesSearchTerm(tipo, [contato?.tipo, contato?.cargo])) return false;
             if (empresaFiltro && !includesNormalized(contato?.cliente ?? contato?.empresa, empresaFiltro)) return false;
 
             if (celularFiltro) {
-                const digits = sanitizeDigits(contato?.telefone_celular ?? '');
+                const digits = celularDigits;
                 if (!digits.includes(celularFiltro)) return false;
             }
 
             if (telefoneFiltro) {
-                const digits = sanitizeDigits(contato?.telefone_fixo ?? '');
+                const digits = telefoneDigits;
                 if (!digits.includes(telefoneFiltro)) return false;
             }
 
@@ -451,15 +677,54 @@ const REPORT_FILTERS = {
         const searchTerm = normalizeText(filters.search);
         const status = normalizeText(filters.status);
         const responsavel = normalizeText(filters.responsavel);
+        const origem = normalizeText(filters.origem);
+        const cidade = normalizeText(filters.cidade);
+        const valorMin = parseFilterNumber(filters.valorMin);
+        const valorMax = parseFilterNumber(filters.valorMax);
+        const condicaoFiltro = normalizeText(filters.condicao);
 
         return list.filter(prospeccao => {
-            if (searchTerm) {
-                const matches = [prospeccao?.nome, prospeccao?.email]
-                    .some(value => includesNormalized(value, searchTerm));
-                if (!matches) return false;
-            }
+            const searchValues = [
+                prospeccao?.nome,
+                prospeccao?.email,
+                prospeccao?.empresa,
+                prospeccao?.cliente,
+                prospeccao?.status,
+                prospeccao?.responsavel,
+                prospeccao?.origem,
+                prospeccao?.cidade,
+                prospeccao?.estado,
+                prospeccao?.condicao_pagamento ?? prospeccao?.condicao,
+                sanitizeDigits(prospeccao?.telefone ?? prospeccao?.celular ?? ''),
+                sanitizeDigits(prospeccao?.whatsapp ?? '')
+            ];
+
+            if (!matchesSearchTerm(searchTerm, searchValues)) return false;
             if (status && !includesNormalized(prospeccao?.status, status)) return false;
             if (responsavel && !includesNormalized(prospeccao?.responsavel, responsavel)) return false;
+            if (origem && !includesNormalized(prospeccao?.origem, origem)) return false;
+            if (cidade && !matchesSearchTerm(cidade, [
+                prospeccao?.cidade,
+                prospeccao?.municipio,
+                prospeccao?.cidade_cliente,
+                prospeccao?.localidade
+            ])) return false;
+
+            const valor = [
+                prospeccao?.valor_estimado,
+                prospeccao?.valor,
+                prospeccao?.valor_total,
+                prospeccao?.valorPotencial,
+                prospeccao?.valor_previsto
+            ]
+                .map(candidate => Number(candidate))
+                .find(number => Number.isFinite(number));
+
+            if (Number.isFinite(valorMin) && (!Number.isFinite(valor) || valor < valorMin)) return false;
+            if (Number.isFinite(valorMax) && (!Number.isFinite(valor) || valor > valorMax)) return false;
+
+            if (condicaoFiltro && !matchesSearchTerm(condicaoFiltro, getPaymentConditionLabels(prospeccao))) return false;
+
             return true;
         });
     },
@@ -481,10 +746,7 @@ const REPORT_FILTERS = {
             if (Number.isFinite(valorMin) && valor < valorMin) return false;
             if (Number.isFinite(valorMax) && valor > valorMax) return false;
 
-            if (condicaoFiltro) {
-                const condicao = normalizeText(orcamento?.condicao_comercial ?? '');
-                if (!condicao || !condicao.includes(condicaoFiltro)) return false;
-            }
+            if (condicaoFiltro && !matchesSearchTerm(condicaoFiltro, getPaymentConditionLabels(orcamento))) return false;
 
             return true;
         });
@@ -507,11 +769,7 @@ const REPORT_FILTERS = {
             if (Number.isFinite(valorMin) && valor < valorMin) return false;
             if (Number.isFinite(valorMax) && valor > valorMax) return false;
 
-            if (condicaoFiltro) {
-                const parcelas = Number.parseInt(pedido?.parcelas, 10);
-                if (condicaoFiltro === 'avista' && Number.isFinite(parcelas) && parcelas > 1) return false;
-                if (condicaoFiltro === 'parcelado' && Number.isFinite(parcelas) && parcelas <= 1) return false;
-            }
+            if (condicaoFiltro && !matchesSearchTerm(condicaoFiltro, getPaymentConditionLabels(pedido))) return false;
 
             return true;
         });
@@ -524,11 +782,18 @@ const REPORT_FILTERS = {
         const statusFilters = ['ativo', 'inativo', 'aguardando'].filter(flag => Boolean(filters[flag]));
 
         return list.filter(usuario => {
-            if (searchTerm) {
-                const matches = [usuario?.nome, usuario?.email]
-                    .some(value => includesNormalized(value, searchTerm));
-                if (!matches) return false;
-            }
+            const searchValues = [
+                usuario?.nome,
+                usuario?.email,
+                usuario?.perfil,
+                usuario?.status,
+                usuario?.departamento,
+                usuario?.cargo,
+                usuario?.apelido
+            ];
+            searchValues.push(usuario?.online ? 'online' : 'offline');
+
+            if (!matchesSearchTerm(searchTerm, searchValues)) return false;
 
             if (perfil && !includesNormalized(usuario?.perfil, perfil)) return false;
 
@@ -1754,6 +2019,8 @@ async function populateReportTable(key, container) {
         }
 
         const moduleRoot = container.closest('.relatorios-module');
+
+        syncFilterOptions(key, data, moduleRoot);
 
         if (!Array.isArray(data) || data.length === 0) {
             const renderEmpty = () => {
