@@ -588,6 +588,63 @@ function applyReportFilters(key, data, root) {
     }
 }
 
+function findSliderIndicator(slider) {
+    if (!slider) return null;
+    const identifier = slider.dataset?.relatoriosSlider;
+    if (!identifier) return null;
+    const wrapper = slider.closest('.relatorios-slider-wrapper');
+    if (!wrapper) return null;
+    return wrapper.querySelector(`[data-relatorios-slider-indicator="${identifier}"]`);
+}
+
+function positionSliderIndicator(slider, indicator) {
+    if (!slider || !indicator) return;
+
+    const min = Number.parseFloat(slider.min ?? '0');
+    const max = Number.parseFloat(slider.max ?? '100');
+    const rawValue = Number.parseFloat(slider.value ?? String(min));
+
+    const safeMin = Number.isFinite(min) ? min : 0;
+    const safeMax = Number.isFinite(max) && max !== safeMin ? max : safeMin + 100;
+    const numericValue = Number.isFinite(rawValue) ? rawValue : safeMin;
+
+    const range = safeMax - safeMin;
+    const percent = range === 0 ? 0 : (numericValue - safeMin) / range;
+    const clampedPercent = Math.min(Math.max(percent, 0), 1);
+    const offset = clampedPercent * 100;
+
+    const decimals = Number.isInteger(numericValue) ? 0 : 2;
+    const formattedValue = Number.isFinite(numericValue)
+        ? numericValue.toLocaleString('pt-BR', {
+            minimumFractionDigits: decimals,
+            maximumFractionDigits: decimals
+        })
+        : '0';
+
+    indicator.textContent = `${formattedValue}%`;
+    indicator.style.left = `${offset}%`;
+    indicator.classList.remove('is-left', 'is-right');
+
+    if (clampedPercent <= 0.05) {
+        indicator.classList.add('is-left');
+    } else if (clampedPercent >= 0.95) {
+        indicator.classList.add('is-right');
+    }
+}
+
+function setupSliderIndicator(slider) {
+    if (!slider || slider.dataset.sliderIndicatorInitialized === 'true') return;
+    const indicator = findSliderIndicator(slider);
+    if (!indicator) return;
+
+    const updateIndicator = () => positionSliderIndicator(slider, indicator);
+    slider.addEventListener('input', updateIndicator);
+    slider.addEventListener('change', updateIndicator);
+
+    slider.dataset.sliderIndicatorInitialized = 'true';
+    updateIndicator();
+}
+
 function setupFilterInteractions(root) {
     if (!root) return;
     const sections = Array.from(root.querySelectorAll('[data-relatorios-tab-content]'));
@@ -606,19 +663,14 @@ function setupFilterInteractions(root) {
         }));
         filterDefaults.set(key, defaults);
 
+        inputs.filter(element => element.type === 'range').forEach(setupSliderIndicator);
+
         const update = () => {
             const render = reportTableRenderers.get(key);
             if (typeof render === 'function') {
                 render();
             }
         };
-
-        inputs.forEach(element => {
-            const eventName = element.tagName === 'SELECT' || element.type === 'checkbox' || element.type === 'range'
-                ? 'change'
-                : 'input';
-            element.addEventListener(eventName, update);
-        });
 
         const applyBtn = section.querySelector(`[data-relatorios-apply="${key}"]`);
         if (applyBtn) {

@@ -255,7 +255,10 @@
                             <label class="relatorios-filter-label text-white">Margem (%)</label>
                             <div class="flex items-center gap-4">
                                 <span class="relatorios-slider-value">0%</span>
-                                <input type="range" min="0" max="100" value="35" class="relatorios-slider" data-relatorios-filter="produtos" data-filter-key="margemMin">
+                                <div class="relatorios-slider-wrapper">
+                                    <span class="relatorios-slider-indicator" data-relatorios-slider-indicator="produtos-margem">0%</span>
+                                    <input type="range" min="0" max="100" value="0" class="relatorios-slider" data-relatorios-filter="produtos" data-filter-key="margemMin" data-relatorios-slider="produtos-margem">
+                                </div>
                                 <span class="relatorios-slider-value">100%</span>
                             </div>
                         </div>

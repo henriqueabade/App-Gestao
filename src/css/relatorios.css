@@ -300,10 +300,19 @@ body {
     gap: 0.75rem;
 }
 
+.relatorios-slider-wrapper {
+    position: relative;
+    flex: 1;
+    width: 100%;
+    padding-top: 1.75rem;
+}
+
 .relatorios-slider {
     flex: 1;
     width: 100%;
     accent-color: var(--color-primary);
+    position: relative;
+    z-index: 1;
 }
 
 .relatorios-slider-value {
@@ -311,6 +320,53 @@ body {
     color: rgba(255, 255, 255, 0.7);
     min-width: 3rem;
     text-align: center;
+}
+
+.relatorios-slider-indicator {
+    position: absolute;
+    top: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--color-primary);
+    color: #2a1c09;
+    font-size: 0.75rem;
+    font-weight: 600;
+    padding: 0.25rem 0.6rem;
+    border-radius: 9999px;
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.25);
+    white-space: nowrap;
+    pointer-events: none;
+    transition: left 0.12s ease-out, transform 0.12s ease-out;
+    z-index: 2;
+}
+
+.relatorios-slider-indicator::after {
+    content: "";
+    position: absolute;
+    bottom: -6px;
+    left: 50%;
+    transform: translateX(-50%);
+    border-width: 6px;
+    border-style: solid;
+    border-color: var(--color-primary) transparent transparent transparent;
+}
+
+.relatorios-slider-indicator.is-left {
+    transform: translateX(0);
+}
+
+.relatorios-slider-indicator.is-right {
+    transform: translateX(-100%);
+}
+
+.relatorios-slider-indicator.is-left::after {
+    left: 12px;
+    transform: translateX(0);
+}
+
+.relatorios-slider-indicator.is-right::after {
+    left: calc(100% - 12px);
+    transform: translateX(-100%);
 }
 
 .relatorios-filter-status {
