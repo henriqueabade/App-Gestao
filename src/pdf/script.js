@@ -1,6 +1,10 @@
 const docContainer = document.getElementById('doc-container');
 const template = document.getElementById('page-template');
 
+window.pdfBuildReady = false;
+window.pdfBuildError = null;
+window.generatedPdfMeta = null;
+
 const thresholdSingle = 9;
 const maxFirst = 14;
 const maxFullNext = 21;
@@ -45,6 +49,13 @@ async function buildDocument() {
     const cliente = clienteResp.cliente || clienteResp;
     const contatos = clienteResp.contatos || [];
     const contato = contatos.find(c => c.id === orc.contato_id) || contatos[0] || {};
+
+    window.generatedPdfMeta = {
+      id,
+      tipo,
+      numero: orc.numero,
+      situacao: orc.situacao
+    };
 
     const endEntrega = cliente.endereco_entrega;
     const endCobranca = cliente.endereco_cobranca;
@@ -186,9 +197,14 @@ async function buildDocument() {
       createPage(html);
     });
 
+    window.pdfBuildReady = true;
+    window.dispatchEvent(new Event('pdf-build-ready'));
+
     // Printing is now user-initiated; remove automatic print dialog
   } catch (err) {
     console.error('Erro ao gerar documento', err);
+    window.pdfBuildError = err?.message || 'Erro ao gerar documento';
+    window.dispatchEvent(new CustomEvent('pdf-build-error', { detail: window.pdfBuildError }));
   }
 }
 

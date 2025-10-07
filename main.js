@@ -1,5 +1,5 @@
 
-const { app, BrowserWindow, ipcMain, screen, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, screen, shell, dialog } = require('electron');
 const path = require('path');
 const { spawnSync } = require('child_process');
 const { pathToFileURL } = require('url');
@@ -2262,12 +2262,93 @@ ipcMain.handle('get-saved-display', () => {
   return currentDisplayId || null;
 });
 
-ipcMain.handle('open-pdf', (_event, { id, tipo }) => {
+ipcMain.handle('open-pdf', async (_event, { id, tipo }) => {
+  if (!id) {
+    return false;
+  }
+
   const url = new URL('http://localhost:3000/pdf');
   url.searchParams.set('id', id);
   if (tipo) url.searchParams.set('tipo', tipo);
-  shell.openExternal(url.toString());
-  return true;
+
+  const pdfWindow = new BrowserWindow({
+    show: false,
+    webPreferences: {
+      sandbox: false,
+      nodeIntegration: false,
+      contextIsolation: true
+    }
+  });
+
+  try {
+    await pdfWindow.loadURL(url.toString());
+
+    await pdfWindow.webContents.executeJavaScript(`
+      (function waitForPdfReady() {
+        if (typeof window === 'undefined') {
+          return true;
+        }
+        if (window.pdfBuildError) {
+          throw new Error(window.pdfBuildError);
+        }
+        if (window.pdfBuildReady) {
+          return true;
+        }
+        return new Promise((resolve, reject) => {
+          window.addEventListener('pdf-build-ready', () => resolve(true), { once: true });
+          window.addEventListener('pdf-build-error', (event) => {
+            const detail = event?.detail || 'Erro ao gerar PDF';
+            reject(new Error(detail));
+          }, { once: true });
+          setTimeout(() => resolve(true), 5000);
+        });
+      })();
+    `, true);
+
+    const meta = await pdfWindow.webContents
+      .executeJavaScript('window.generatedPdfMeta || {};', true)
+      .catch(() => ({}));
+
+    const docType = (meta?.tipo || tipo || 'documento').toString();
+    const docNumber = (meta?.numero || id || '').toString();
+    const baseName = [docType, docNumber].filter(Boolean).join('-') || 'documento';
+    const sanitizedBaseName = baseName
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-zA-Z0-9_-]+/g, '-')
+      .replace(/-+/g, '-')
+      .replace(/^-|-$/g, '') || 'documento';
+
+    const pdfData = await pdfWindow.webContents.printToPDF({
+      printBackground: true,
+      pageSize: 'A4',
+      landscape: false,
+      marginsType: 0
+    });
+
+    const { canceled, filePath } = await dialog.showSaveDialog({
+      title: docType === 'pedido' ? 'Salvar Pedido em PDF' : 'Salvar Orçamento em PDF',
+      defaultPath: path.join(app.getPath('documents'), `${sanitizedBaseName}.pdf`),
+      filters: [{ name: 'Arquivos PDF', extensions: ['pdf'] }]
+    });
+
+    if (canceled || !filePath) {
+      return false;
+    }
+
+    await fs.promises.writeFile(filePath, pdfData);
+    if (filePath) {
+      shell.showItemInFolder(filePath);
+    }
+    return true;
+  } catch (error) {
+    console.error('Erro ao gerar PDF', error);
+    return false;
+  } finally {
+    if (!pdfWindow.isDestroyed()) {
+      pdfWindow.close();
+    }
+  }
 });
 
 ipcMain.handle('open-external', (_event, url) => {
