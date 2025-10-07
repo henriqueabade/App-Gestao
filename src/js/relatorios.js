@@ -67,6 +67,15 @@ function persistVisibleColumns(key) {
     }
 }
 
+function clearStoredVisibleColumns(key) {
+    try {
+        if (typeof window === 'undefined' || !window.localStorage) return;
+        window.localStorage.removeItem(getColumnStorageKey(key));
+    } catch (error) {
+        console.warn('Não foi possível limpar preferências de colunas do relatório.', error);
+    }
+}
+
 function initializeReportColumns(key, config = REPORT_CONFIGS?.[key]) {
     if (!config?.columns?.length || reportVisibleColumns.has(key)) return;
     const defaultKeys = config.columns.map(column => column.key).filter(Boolean);
@@ -118,6 +127,14 @@ function setColumnVisibility(key, columnKey, isVisible) {
     reportVisibleColumns.set(key, current);
     persistVisibleColumns(key);
     return true;
+}
+
+function resetReportColumnsToDefault(key) {
+    const config = REPORT_CONFIGS?.[key];
+    if (!config?.columns?.length) return;
+    reportVisibleColumns.delete(key);
+    clearStoredVisibleColumns(key);
+    initializeReportColumns(key, config);
 }
 
 function applyColumnVisibilityToTable(key, root) {
@@ -2253,7 +2270,10 @@ function initRelatoriosModule() {
     initializeAllReportColumns();
     const columnControl = setupColumnVisibilityControl(container);
     const tabController = setupCategoryTabs(container, {
-        onTabChange: tab => {
+        onTabChange: (tab, button, previousTab) => {
+            if (columnControl && previousTab) {
+                columnControl.resetReport(previousTab);
+            }
             if (columnControl) {
                 columnControl.setActiveReport(tab);
             }
@@ -2311,7 +2331,8 @@ function setupCategoryTabs(root, options = {}) {
 
     const activateTab = (button, { emitEvent = true } = {}) => {
         const target = button?.dataset?.relatoriosTab;
-        if (!target || target === activeTab) return;
+        const previous = activeTab;
+        if (!target || target === previous) return;
 
         activeTab = target;
         updateButtonsState(button);
@@ -2321,7 +2342,7 @@ function setupCategoryTabs(root, options = {}) {
         }
 
         if (emitEvent && typeof onTabChange === 'function') {
-            onTabChange(target, button);
+            onTabChange(target, button, previous);
         }
     };
 
@@ -2718,6 +2739,17 @@ function setupColumnVisibilityControl(root) {
                 return;
             }
             renderOptions(key);
+        },
+        resetReport: key => {
+            if (!key) return;
+            resetReportColumnsToDefault(key);
+            if (tableContainer?.dataset.currentTab === key) {
+                const currentTableRoot = tableContainer.querySelector('[data-relatorios-table-root]') || tableContainer;
+                applyColumnVisibilityToTable(key, currentTableRoot);
+            }
+            if (activeKey === key) {
+                renderOptions(key);
+            }
         },
         refresh: () => {
             if (activeKey) {
