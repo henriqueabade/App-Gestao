@@ -2490,7 +2490,7 @@ const REPORT_CONFIGS = {};
 REPORT_CONFIGS['materia-prima'] = {
     columns: [
         { key: 'nome', label: 'Nome' },
-        { key: 'categoria', label: 'Categoria' },
+        { key: 'colecao', label: 'Coleção' },
         { key: 'unidade', label: 'Unidade' },
         { key: 'quantidade', label: 'Quantidade' },
         { key: 'preco', label: 'Preço' },
@@ -2536,7 +2536,7 @@ REPORT_CONFIGS.produtos = {
     columns: [
         { key: 'codigo', label: 'Código' },
         { key: 'nome', label: 'Nome' },
-        { key: 'categoria', label: 'Categoria' },
+        { key: 'colecao', label: 'Coleção' },
         { key: 'precoVenda', label: 'Preço de Venda' },
         { key: 'margem', label: 'Margem (%)' },
         { key: 'quantidade', label: 'Quantidade' },
@@ -2562,7 +2562,7 @@ REPORT_CONFIGS.produtos = {
     renderRow(produto) {
         const codigo = formatText(produto?.codigo, '—');
         const nome = formatText(produto?.nome, '—');
-        const categoria = formatText(produto?.categoria, '—');
+        const colecao = formatText(produto?.colecao ?? produto?.categoria ?? produto?.linha, '—');
         const precoVenda = formatCurrency(produto?.preco_venda);
         const margem = Number.isFinite(Number(produto?.pct_markup))
             ? formatPercent(Number(produto.pct_markup))
@@ -2574,7 +2574,7 @@ REPORT_CONFIGS.produtos = {
             <tr class="transition-colors duration-150">
                 <td data-column-key="codigo" class="px-6 py-4 whitespace-nowrap text-left text-sm font-medium text-white">${codigo}</td>
                 <td data-column-key="nome" class="px-6 py-4 whitespace-normal break-words text-left text-sm text-white">${nome}</td>
-                <td data-column-key="categoria" class="px-6 py-4 whitespace-normal break-words text-left text-sm text-gray-300">${categoria}</td>
+                <td data-column-key="colecao" class="px-6 py-4 whitespace-normal break-words text-left text-sm text-gray-300">${colecao}</td>
                 <td data-column-key="precoVenda" class="px-6 py-4 whitespace-nowrap text-left text-sm text-white">${precoVenda}</td>
                 <td data-column-key="margem" class="px-6 py-4 whitespace-nowrap text-left text-sm text-white">${margem}</td>
                 <td data-column-key="quantidade" class="px-6 py-4 whitespace-nowrap text-left text-sm text-white">${quantidade}</td>
