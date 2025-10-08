@@ -176,15 +176,15 @@ async function buildDocument() {
         ? 'Igual Endereço de Faturamento'
         : formatEndereco(endRegistro);
 
-    const items = orc.itens.map(it => ({
-      codigo: it.codigo,
-      nome: it.nome,
-      ncm: it.ncm,
-      quantidade: Number(it.quantidade || 0).toLocaleString('pt-BR'),
-      valorUnitario: formatCurrency(it.valor_unitario),
-      desconto: formatCurrency(it.desconto_total),
-      total: formatCurrency(it.valor_total)
-    }));
+    const items = orc.itens.map(it => ([
+      it.codigo ?? '',
+      it.nome ?? '',
+      it.ncm ?? '',
+      Number(it.quantidade || 0).toLocaleString('pt-BR'),
+      formatCurrency(it.valor_unitario),
+      formatCurrency(it.desconto_total),
+      formatCurrency(it.valor_total)
+    ]));
 
     const pages = paginateItems(items);
 
