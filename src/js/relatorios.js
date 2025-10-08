@@ -2490,7 +2490,7 @@ const REPORT_CONFIGS = {};
 REPORT_CONFIGS['materia-prima'] = {
     columns: [
         { key: 'nome', label: 'Nome' },
-        { key: 'colecao', label: 'Coleção' },
+        { key: 'categoria', label: 'Categoria' },
         { key: 'unidade', label: 'Unidade' },
         { key: 'quantidade', label: 'Quantidade' },
         { key: 'preco', label: 'Preço' },

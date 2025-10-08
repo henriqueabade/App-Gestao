@@ -254,6 +254,7 @@ async function carregarOrcamentos() {
                     showPdfUnavailableDialog(id);
                 } else {
                     if (window.electronAPI?.openPdf) {
+                        window.notifyPdfGeneration?.();
                         window.electronAPI.openPdf(id, 'orcamento');
                     }
                 }

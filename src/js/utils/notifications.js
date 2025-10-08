@@ -72,6 +72,30 @@ function showToast(message, type = 'info') {
   }, 3000);
 }
 
+function notifyPdfGeneration(message = 'Gerando PDF...') {
+  if (typeof showToast === 'function') {
+    showToast(message, 'info');
+    return;
+  }
+
+  const fallback = document.createElement('div');
+  fallback.textContent = message;
+  fallback.style.position = 'fixed';
+  fallback.style.left = '50%';
+  fallback.style.top = '2.5rem';
+  fallback.style.transform = 'translateX(-50%)';
+  fallback.style.backgroundColor = '#2563eb';
+  fallback.style.color = '#ffffff';
+  fallback.style.padding = '0.75rem 1.5rem';
+  fallback.style.borderRadius = '0.75rem';
+  fallback.style.boxShadow = '0 10px 25px rgba(37, 99, 235, 0.35)';
+  fallback.style.zIndex = '12000';
+  fallback.style.fontWeight = '600';
+  fallback.style.fontSize = '0.95rem';
+  document.body.appendChild(fallback);
+  setTimeout(() => fallback.remove(), 3000);
+}
+
 /**
  * Create and position a popup relative to a target element.
  * @param {HTMLElement} target anchor element
@@ -122,6 +146,7 @@ function createPopup(target, html, { margin = 8, onHide } = {}) {
 
 window.showToast = window.showToast || showToast;
 window.createPopup = window.createPopup || createPopup;
-window.Notifications = window.Notifications || { showToast, createPopup };
+window.notifyPdfGeneration = window.notifyPdfGeneration || notifyPdfGeneration;
+window.Notifications = window.Notifications || { showToast, createPopup, notifyPdfGeneration };
 
 

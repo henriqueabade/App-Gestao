@@ -226,6 +226,7 @@ async function carregarPedidos() {
                 if (status === 'Rascunho') {
                     showPdfUnavailableDialog();
                 } else if (window.electronAPI?.openPdf) {
+                    window.notifyPdfGeneration?.();
                     window.electronAPI.openPdf(id, 'pedido');
                 }
             });

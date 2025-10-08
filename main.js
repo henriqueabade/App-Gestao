@@ -2337,9 +2337,6 @@ ipcMain.handle('open-pdf', async (_event, { id, tipo }) => {
     }
 
     await fs.promises.writeFile(filePath, pdfData);
-    if (filePath) {
-      shell.showItemInFolder(filePath);
-    }
     return true;
   } catch (error) {
     console.error('Erro ao gerar PDF', error);
