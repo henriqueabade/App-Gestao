@@ -5,11 +5,11 @@ window.pdfBuildReady = false;
 window.pdfBuildError = null;
 window.generatedPdfMeta = null;
 
-const thresholdSingle = 9;
-const maxFirst = 14;
-const maxFullNext = 21;
-const maxLastNext = 16;
-const minLastItems = 3;
+const thresholdSingle = 13;
+const maxFirst = 20;
+const maxFullNext = 30;
+const maxLastNext = 23;
+const minLastItems = 4;
 
 function createPage(html) {
   const clone = template.content.cloneNode(true);
@@ -27,7 +27,24 @@ function formatCurrency(v) {
 function formatEndereco(end) {
   if (!end) return '';
   const { rua = '', numero = '', bairro = '', cidade = '', estado = '', cep = '' } = end;
-  return `${rua}, ${numero} – ${bairro} – ${cidade}/${estado}\nCEP: ${cep}`;
+
+  const primeiraLinha = [];
+
+  if (rua || numero) {
+    const enderecoBase = rua ? `${rua}${numero ? `, ${numero}` : ''}` : numero;
+    if (enderecoBase) primeiraLinha.push(enderecoBase);
+  }
+
+  if (bairro) primeiraLinha.push(bairro);
+
+  const cidadeEstado = [cidade, estado].filter(Boolean).join('/');
+  if (cidadeEstado) primeiraLinha.push(cidadeEstado);
+
+  const linhas = [];
+  if (primeiraLinha.length) linhas.push(primeiraLinha.join(' – '));
+  if (cep) linhas.push(`CEP: ${cep}`);
+
+  return linhas.join('<br/>');
 }
 
 function enderecosIguais(a, b) {
@@ -71,15 +88,15 @@ async function buildDocument() {
         ? 'Igual Endereço de Faturamento'
         : formatEndereco(endRegistro);
 
-    const items = orc.itens.map(it => [
-      it.codigo,
-      it.nome,
-      it.ncm,
-      it.quantidade,
-      formatCurrency(it.valor_unitario),
-      formatCurrency(it.desconto_total),
-      formatCurrency(it.valor_total)
-    ]);
+    const items = orc.itens.map(it => ({
+      codigo: it.codigo,
+      nome: it.nome,
+      ncm: it.ncm,
+      quantidade: Number(it.quantidade || 0).toLocaleString('pt-BR'),
+      valorUnitario: formatCurrency(it.valor_unitario),
+      desconto: formatCurrency(it.desconto_total),
+      total: formatCurrency(it.valor_total)
+    }));
 
     const total = items.length;
     let pages = [];
@@ -155,10 +172,25 @@ async function buildDocument() {
         ? `ITENS DO ${docTitle} (N° ${orc.numero})`
         : `ITENS DO ${docTitle} (N° ${orc.numero}) - Continuação`;
 
-      const cols = ['Código','Nome do Produto','NCM','Quantidade','Valor Unitário','Total Desconto','Valor Total'];
-      const widths = ['10%','30%','12%','10%','12%','13%','13%'];
-      const thead = `<thead><tr>${cols.map((c,i)=>`<th style="width:${widths[i]};text-align:left;">${c}</th>`).join('')}</tr></thead>`;
-      const tbody = `<tbody>${chunk.map(row=>`<tr>${row.map(cell=>`<td style="text-align:left;">${cell}</td>`).join('')}</tr>`).join('')}</tbody>`;
+      const columns = [
+        { key: 'codigo', label: 'Código', width: '10%', align: 'left' },
+        { key: 'nome', label: 'Nome do Produto', width: '30%', align: 'left' },
+        { key: 'ncm', label: 'NCM', width: '12%', align: 'left' },
+        { key: 'quantidade', label: 'Quantidade', width: '10%', align: 'center' },
+        { key: 'valorUnitario', label: 'Valor Unitário', width: '12%', align: 'right' },
+        { key: 'desconto', label: 'Total Desconto', width: '13%', align: 'right' },
+        { key: 'total', label: 'Valor Total', width: '13%', align: 'right' }
+      ];
+
+      const thead = `<thead><tr>${columns
+        .map(col => `<th style="width:${col.width};text-align:${col.align};">${col.label}</th>`)
+        .join('')}</tr></thead>`;
+
+      const tbody = `<tbody>${chunk
+        .map(row => `<tr>${columns
+          .map(col => `<td style="text-align:${col.align};">${row[col.key] ?? ''}</td>`)
+          .join('')}</tr>`)
+        .join('')}</tbody>`;
 
       let html = `
       ${header}
@@ -170,19 +202,23 @@ async function buildDocument() {
       <div class="text-sm mt-2">
         <h3 class="font-bold text-accent-red mb-1">RESUMO DE VALORES</h3>
         <table class="w-full mb-2">
-          <tr><td style="text-align:left;">Desconto de Pagamento:</td><td class="text-right">${formatCurrency(orc.desconto_pagamento)}</td></tr>
-          <tr><td style="text-align:left;">Desconto Especial:</td><td class="text-right">${formatCurrency(orc.desconto_especial)}</td></tr>
-          <tr><td style="text-align:left;">Desconto Total:</td><td class="text-right">${formatCurrency(orc.desconto_total)}</td></tr>
-          <tr class="border-t"><td style="text-align:left;"><strong>Valor a Pagar:</strong></td><td class="text-right"><strong>${formatCurrency(orc.valor_final)}</strong></td></tr>
+          <tr><td style="text-align:left;">Desconto de Pagamento:</td><td style="text-align:right;">${formatCurrency(orc.desconto_pagamento)}</td></tr>
+          <tr><td style="text-align:left;">Desconto Especial:</td><td style="text-align:right;">${formatCurrency(orc.desconto_especial)}</td></tr>
+          <tr><td style="text-align:left;">Desconto Total:</td><td style="text-align:right;">${formatCurrency(orc.desconto_total)}</td></tr>
+          <tr class="border-t"><td style="text-align:left;"><strong>Valor a Pagar:</strong></td><td style="text-align:right;"><strong>${formatCurrency(orc.valor_final)}</strong></td></tr>
         </table>
         <p class="font-semibold text-accent-red mb-1">OBSERVAÇÕES:</p>
-        <p>${orc.observacoes || '- Nenhuma observação.'}</p>
+        <p>${(orc.observacoes && orc.observacoes.trim()
+            ? orc.observacoes.trim()
+            : '- Nenhuma observação.'
+          ).replace(/\n/g, '<br/>')}</p>
         <div class="mt-2">`;
         if (tipo === 'pedido') {
           html += `<p><strong>PEDIDO AUTORIZADO</strong></p>`;
         } else {
           html += `<p><strong>AUTORIZAÇÃO DO PEDIDO:</strong></p>
-          <p>Nome do Responsável: _______________________________         Assinatura:</strong> _______________________________</p>`;
+          <p>Nome do Responsável: _______________________________</p>
+          <p>Assinatura: _______________________________</p>`;
         }
         html += `
         </div>
@@ -190,7 +226,10 @@ async function buildDocument() {
       } else {
         if (tipo !== 'pedido') {
           html += `
-      <p class="mt-2"><strong>Nome do Responsável:</strong> _______________________________         Assinatura:</strong> _______________________________</p>`;
+      <div class="mt-2">
+        <p><strong>Nome do Responsável:</strong> _______________________________</p>
+        <p><strong>Assinatura:</strong> _______________________________</p>
+      </div>`;
         }
       }
 

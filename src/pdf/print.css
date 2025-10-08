@@ -2,13 +2,14 @@
 
 @page {
   size: A4 landscape;
-  margin: 12mm;
+  margin: 5mm;
 }
 
-html, body {
+html,
+body {
   margin: 0;
   padding: 0;
-  font-size: clamp(0.85rem, 1.2vw, 1rem);
+  font-size: 0.85rem;
   line-height: 1.4;
 }
 
@@ -30,10 +31,10 @@ html, body {
   page-break-after: auto;
 }
 
-/* Área de conteúdo com padding adaptativo e espaço extra para o rodapé */
+/* Área de conteúdo com padding fixo e espaço extra para o rodapé */
 .page-content {
-  padding: clamp(6mm, 1.8vw, 12mm);
-  margin-bottom: 32mm;
+  padding: 5mm;
+  margin-bottom: 30mm;
   box-sizing: border-box;
   overflow: hidden;
 }
@@ -41,9 +42,9 @@ html, body {
 /* Footer fixo na borda inferior de cada página */
 .footer {
   position: fixed;
-  bottom: 10mm;
-  left: 12mm;
-  right: 12mm;
+  bottom: 5mm;
+  left: 5mm;
+  right: 5mm;
   border-top: 1px solid #d1d5db;
   padding-top: 2px;
   text-align: center;
@@ -57,15 +58,16 @@ table {
   width: 100%;
   table-layout: fixed;
   border-collapse: collapse;
-  font-size: clamp(0.6rem, 0.95vw, 0.75rem);
+  font-size: 0.75rem;
 }
 
-th, td {
+th,
+td {
   border: 1px solid #d1d5db;
   padding: 4px;
-  white-space: normal;
-  word-break: break-word;
+  white-space: nowrap;
   overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 thead {
@@ -74,7 +76,7 @@ thead {
 
 h3 {
   color: #da0c1d;
-  font-size: clamp(0.9rem, 1.6vw, 1.1rem);
+  font-size: 1rem;
   margin: 0 0 4px 0;
 }
 
