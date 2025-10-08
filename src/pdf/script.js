@@ -5,16 +5,104 @@ window.pdfBuildReady = false;
 window.pdfBuildError = null;
 window.generatedPdfMeta = null;
 
-const thresholdSingle = 13;
-const maxFirst = 20;
-const maxFullNext = 30;
-const maxLastNext = 23;
-const minLastItems = 4;
+const TH_SINGLE = 8;
+const CAP_FIRST = 12;
+const CAP_FULL = 22;
+const CAP_LAST = 15;
+const MIN_LAST_ITEMS = 4;
+const FINAL_BLOCK_RESERVED = 7;
 
 function createPage(html) {
   const clone = template.content.cloneNode(true);
-  clone.querySelector('.page-content').innerHTML = html;
+  const page = clone.querySelector('.page');
+  page.querySelector('.page-content').innerHTML = html;
   docContainer.appendChild(clone);
+  return docContainer.lastElementChild;
+}
+
+function ensureTableFits(page) {
+  const table = page.querySelector('.items-table');
+  if (!table) return;
+
+  const fontSteps = [11, 10, 9, 8];
+  const cells = Array.from(table.querySelectorAll('th, td'));
+
+  for (const size of fontSteps) {
+    table.style.fontSize = `${size}px`;
+    cells.forEach(cell => {
+      cell.style.fontSize = `${size}px`;
+      cell.style.lineHeight = '1.2';
+    });
+
+    const hasOverflow = cells.some(cell => cell.scrollWidth > cell.clientWidth + 1);
+    if (!hasOverflow) {
+      break;
+    }
+  }
+}
+
+function paginateItems(items) {
+  const total = items.length;
+
+  if (total === 0) {
+    return [[]];
+  }
+
+  const canSinglePage = total <= CAP_FIRST && total + FINAL_BLOCK_RESERVED <= CAP_FULL;
+
+  if (total <= TH_SINGLE || canSinglePage) {
+    return [items.slice()];
+  }
+
+  const pages = [];
+  let remaining = items.slice();
+
+  let firstCount = Math.min(CAP_FIRST, remaining.length - MIN_LAST_ITEMS);
+  if (firstCount < TH_SINGLE && remaining.length - TH_SINGLE >= MIN_LAST_ITEMS) {
+    firstCount = TH_SINGLE;
+  }
+  if (remaining.length - firstCount < MIN_LAST_ITEMS) {
+    firstCount = Math.max(remaining.length - MIN_LAST_ITEMS, TH_SINGLE);
+  }
+  firstCount = Math.max(1, Math.min(firstCount, CAP_FIRST));
+
+  pages.push(remaining.splice(0, firstCount));
+
+  while (remaining.length > CAP_LAST) {
+    let chunkSize = Math.min(CAP_FULL, remaining.length - MIN_LAST_ITEMS);
+    if (remaining.length - chunkSize < MIN_LAST_ITEMS) {
+      chunkSize = remaining.length - MIN_LAST_ITEMS;
+    }
+    if (chunkSize > CAP_FULL) {
+      chunkSize = CAP_FULL;
+    }
+    if (chunkSize < MIN_LAST_ITEMS) {
+      chunkSize = MIN_LAST_ITEMS;
+    }
+
+    pages.push(remaining.splice(0, chunkSize));
+  }
+
+  let lastChunk = remaining.splice(0, remaining.length);
+
+  if (lastChunk.length < MIN_LAST_ITEMS && pages.length > 0) {
+    const prev = pages[pages.length - 1];
+    const needed = MIN_LAST_ITEMS - lastChunk.length;
+    const transfer = prev.splice(Math.max(prev.length - needed, 0), needed);
+    lastChunk = transfer.concat(lastChunk);
+  }
+
+  if (lastChunk.length > CAP_LAST) {
+    while (lastChunk.length > CAP_LAST) {
+      pages.push(lastChunk.splice(0, CAP_FULL));
+    }
+  }
+
+  if (lastChunk.length > 0) {
+    pages.push(lastChunk);
+  }
+
+  return pages;
 }
 
 function formatCurrency(v) {
@@ -98,31 +186,7 @@ async function buildDocument() {
       total: formatCurrency(it.valor_total)
     }));
 
-    const total = items.length;
-    let pages = [];
-    let rem = items.slice();
-
-    if (total <= thresholdSingle) {
-      pages.push(rem.splice(0, rem.length));
-    } else {
-      let firstCount = Math.min(maxFirst, rem.length - minLastItems);
-      if (firstCount < thresholdSingle) {
-        firstCount = Math.min(rem.length, thresholdSingle);
-      }
-      pages.push(rem.splice(0, firstCount));
-
-      while (rem.length > maxLastNext) {
-        let chunkSize = maxFullNext;
-        if (rem.length - maxFullNext < minLastItems) {
-          chunkSize = rem.length - minLastItems;
-        }
-        pages.push(rem.splice(0, chunkSize));
-      }
-
-      if (rem.length > 0) {
-        pages.push(rem.splice(0, rem.length));
-      }
-    }
+    const pages = paginateItems(items);
 
     pages.forEach((chunk, idx) => {
       const isFirst = idx === 0;
@@ -167,73 +231,51 @@ async function buildDocument() {
       </div>`;
       }
 
-      const docTitle = tipo === 'pedido' ? 'PEDIDO' : 'ORÇAMENTO';
+      const docLabel = tipo === 'pedido' ? 'PEDIDO' : 'ORÇAMENTO';
       const title = isFirst
-        ? `ITENS DO ${docTitle} (N° ${orc.numero})`
-        : `ITENS DO ${docTitle} (N° ${orc.numero}) - Continuação`;
+        ? `ITENS DO ${docLabel} (N° ${orc.numero})`
+        : `ITENS DO ${docLabel} (N° ${orc.numero}) – Continuação`;
 
-      const columns = [
-        { key: 'codigo', label: 'Código', width: '10%', align: 'left' },
-        { key: 'nome', label: 'Nome do Produto', width: '30%', align: 'left' },
-        { key: 'ncm', label: 'NCM', width: '12%', align: 'left' },
-        { key: 'quantidade', label: 'Quantidade', width: '10%', align: 'center' },
-        { key: 'valorUnitario', label: 'Valor Unitário', width: '12%', align: 'right' },
-        { key: 'desconto', label: 'Total Desconto', width: '13%', align: 'right' },
-        { key: 'total', label: 'Valor Total', width: '13%', align: 'right' }
-      ];
-
-      const thead = `<thead><tr>${columns
-        .map(col => `<th style="width:${col.width};text-align:${col.align};">${col.label}</th>`)
-        .join('')}</tr></thead>`;
-
-      const tbody = `<tbody>${chunk
-        .map(row => `<tr>${columns
-          .map(col => `<td style="text-align:${col.align};">${row[col.key] ?? ''}</td>`)
-          .join('')}</tr>`)
-        .join('')}</tbody>`;
+      const cols = ['Código', 'Nome do Produto', 'NCM', 'Quantidade', 'Valor Unitário', 'Desconto Total', 'Valor Total'];
+      const widths = ['10%', '34%', '12%', '10%', '12%', '10%', '12%'];
+      const thead = `<thead><tr>${cols.map((c,i)=>`<th style="width:${widths[i]};text-align:left;">${c}</th>`).join('')}</tr></thead>`;
+      const tbody = `<tbody>${chunk.map(row=>`<tr>${row.map(cell=>`<td style="text-align:left;">${cell}</td>`).join('')}</tr>`).join('')}</tbody>`;
 
       let html = `
       ${header}
       <h3 class="font-bold text-accent-red mb-1">${title}</h3>
-      <table>${thead}${tbody}</table>`;
+      <table class="items-table">${thead}${tbody}</table>`;
 
       if (isLast) {
         html += `
-      <div class="text-sm mt-2">
+      <div class="final-block">
         <h3 class="font-bold text-accent-red mb-1">RESUMO DE VALORES</h3>
-        <table class="w-full mb-2">
-          <tr><td style="text-align:left;">Desconto de Pagamento:</td><td style="text-align:right;">${formatCurrency(orc.desconto_pagamento)}</td></tr>
-          <tr><td style="text-align:left;">Desconto Especial:</td><td style="text-align:right;">${formatCurrency(orc.desconto_especial)}</td></tr>
-          <tr><td style="text-align:left;">Desconto Total:</td><td style="text-align:right;">${formatCurrency(orc.desconto_total)}</td></tr>
-          <tr class="border-t"><td style="text-align:left;"><strong>Valor a Pagar:</strong></td><td style="text-align:right;"><strong>${formatCurrency(orc.valor_final)}</strong></td></tr>
+        <table>
+          <tr><td>Desconto de Pagamento:</td><td>${formatCurrency(orc.desconto_pagamento)}</td></tr>
+          <tr><td>Desconto Especial:</td><td>${formatCurrency(orc.desconto_especial)}</td></tr>
+          <tr><td>Desconto Total:</td><td>${formatCurrency(orc.desconto_total)}</td></tr>
+          <tr><td><strong>Valor a Pagar:</strong></td><td><strong>${formatCurrency(orc.valor_final)}</strong></td></tr>
         </table>
         <p class="font-semibold text-accent-red mb-1">OBSERVAÇÕES:</p>
-        <p>${(orc.observacoes && orc.observacoes.trim()
-            ? orc.observacoes.trim()
-            : '- Nenhuma observação.'
-          ).replace(/\n/g, '<br/>')}</p>
-        <div class="mt-2">`;
-        if (tipo === 'pedido') {
-          html += `<p><strong>PEDIDO AUTORIZADO</strong></p>`;
-        } else {
-          html += `<p><strong>AUTORIZAÇÃO DO PEDIDO:</strong></p>
-          <p>Nome do Responsável: _______________________________</p>
-          <p>Assinatura: _______________________________</p>`;
-        }
-        html += `
+        <p>${orc.observacoes || '- Nenhuma observação.'}</p>
+        <div>
+          <p class="font-semibold text-accent-red mb-1">AUTORIZAÇÃO DO PEDIDO</p>
+          <div class="authorization-line">
+            <span>Nome do Responsável: _______________________________</span>
+            <span>Assinatura: _______________________________</span>
+          </div>
         </div>
       </div>`;
-      } else {
-        if (tipo !== 'pedido') {
-          html += `
-      <div class="mt-2">
+      } else if (!isFirst) {
+        html += `
+      <div class="signature-block">
         <p><strong>Nome do Responsável:</strong> _______________________________</p>
         <p><strong>Assinatura:</strong> _______________________________</p>
       </div>`;
-        }
       }
 
-      createPage(html);
+      const pageEl = createPage(html);
+      ensureTableFits(pageEl);
     });
 
     window.pdfBuildReady = true;
