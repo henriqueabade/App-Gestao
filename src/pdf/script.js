@@ -10,14 +10,13 @@ const CAP_FIRST = 12;
 const CAP_FULL = 22;
 const CAP_LAST = 15;
 const MIN_LAST_ITEMS = 4;
-const FINAL_BLOCK_RESERVED = 7;
 
 function createPage(html) {
   const clone = template.content.cloneNode(true);
   const page = clone.querySelector('.page');
   page.querySelector('.page-content').innerHTML = html;
   docContainer.appendChild(clone);
-  return docContainer.lastElementChild;
+  return page;
 }
 
 function ensureTableFits(page) {
@@ -27,11 +26,15 @@ function ensureTableFits(page) {
   const fontSteps = [11, 10, 9, 8];
   const cells = Array.from(table.querySelectorAll('th, td'));
 
+  table.style.tableLayout = 'fixed';
+  table.style.width = '100%';
+
   for (const size of fontSteps) {
     table.style.fontSize = `${size}px`;
     cells.forEach(cell => {
       cell.style.fontSize = `${size}px`;
       cell.style.lineHeight = '1.2';
+      cell.style.whiteSpace = 'nowrap';
     });
 
     const hasOverflow = cells.some(cell => cell.scrollWidth > cell.clientWidth + 1);
@@ -48,58 +51,77 @@ function paginateItems(items) {
     return [[]];
   }
 
-  const canSinglePage = total <= CAP_FIRST && total + FINAL_BLOCK_RESERVED <= CAP_FULL;
-
-  if (total <= TH_SINGLE || canSinglePage) {
+  if (total <= TH_SINGLE) {
     return [items.slice()];
   }
 
-  const pages = [];
-  let remaining = items.slice();
+  const memo = new Map();
 
-  let firstCount = Math.min(CAP_FIRST, remaining.length - MIN_LAST_ITEMS);
-  if (firstCount < TH_SINGLE && remaining.length - TH_SINGLE >= MIN_LAST_ITEMS) {
-    firstCount = TH_SINGLE;
-  }
-  if (remaining.length - firstCount < MIN_LAST_ITEMS) {
-    firstCount = Math.max(remaining.length - MIN_LAST_ITEMS, TH_SINGLE);
-  }
+  const canDistribute = remaining => {
+    if (remaining === 0) return true;
+    if (remaining <= CAP_LAST) {
+      return remaining >= MIN_LAST_ITEMS;
+    }
+
+    if (memo.has(remaining)) {
+      return memo.get(remaining);
+    }
+
+    let possible = false;
+    const maxChunk = Math.min(CAP_FULL, remaining - MIN_LAST_ITEMS);
+
+    for (let size = maxChunk; size >= MIN_LAST_ITEMS; size--) {
+      if (size <= 0 || size > remaining) continue;
+      if (canDistribute(remaining - size)) {
+        possible = true;
+        break;
+      }
+    }
+
+    memo.set(remaining, possible);
+    return possible;
+  };
+
+  let firstCount = Math.min(CAP_FIRST, total - MIN_LAST_ITEMS);
   firstCount = Math.max(1, Math.min(firstCount, CAP_FIRST));
 
-  pages.push(remaining.splice(0, firstCount));
-
-  while (remaining.length > CAP_LAST) {
-    let chunkSize = Math.min(CAP_FULL, remaining.length - MIN_LAST_ITEMS);
-    if (remaining.length - chunkSize < MIN_LAST_ITEMS) {
-      chunkSize = remaining.length - MIN_LAST_ITEMS;
-    }
-    if (chunkSize > CAP_FULL) {
-      chunkSize = CAP_FULL;
-    }
-    if (chunkSize < MIN_LAST_ITEMS) {
-      chunkSize = MIN_LAST_ITEMS;
-    }
-
-    pages.push(remaining.splice(0, chunkSize));
+  while (firstCount > 0 && !canDistribute(total - firstCount)) {
+    firstCount--;
   }
 
-  let lastChunk = remaining.splice(0, remaining.length);
-
-  if (lastChunk.length < MIN_LAST_ITEMS && pages.length > 0) {
-    const prev = pages[pages.length - 1];
-    const needed = MIN_LAST_ITEMS - lastChunk.length;
-    const transfer = prev.splice(Math.max(prev.length - needed, 0), needed);
-    lastChunk = transfer.concat(lastChunk);
+  if (firstCount === 0) {
+    firstCount = Math.max(1, Math.min(CAP_FIRST, total - MIN_LAST_ITEMS));
   }
 
-  if (lastChunk.length > CAP_LAST) {
-    while (lastChunk.length > CAP_LAST) {
-      pages.push(lastChunk.splice(0, CAP_FULL));
+  const pages = [];
+  const remainingItems = items.slice();
+
+  pages.push(remainingItems.splice(0, firstCount));
+
+  while (remainingItems.length > 0) {
+    if (remainingItems.length <= CAP_LAST) {
+      pages.push(remainingItems.splice(0));
+      break;
     }
+
+    const maxChunk = Math.min(CAP_FULL, remainingItems.length - MIN_LAST_ITEMS);
+    let chunkSize = Math.max(MIN_LAST_ITEMS, maxChunk);
+
+    while (chunkSize > MIN_LAST_ITEMS && !canDistribute(remainingItems.length - chunkSize)) {
+      chunkSize--;
+    }
+
+    pages.push(remainingItems.splice(0, chunkSize));
   }
 
-  if (lastChunk.length > 0) {
-    pages.push(lastChunk);
+  if (pages.length > 1) {
+    const last = pages[pages.length - 1];
+    if (last.length < MIN_LAST_ITEMS) {
+      const prev = pages[pages.length - 2];
+      const needed = MIN_LAST_ITEMS - last.length;
+      const transfer = prev.splice(Math.max(prev.length - needed, 0), needed);
+      last.unshift(...transfer);
+    }
   }
 
   return pages;

@@ -24,6 +24,10 @@ body {
   width: 100%;
   box-sizing: border-box;
   page-break-after: always;
+  min-height: calc(100vh - 0mm);
+  display: flex;
+  flex-direction: column;
+  background: #fff;
 }
 
 /* Anula quebra após a última página gerada */
@@ -36,11 +40,15 @@ body {
   padding: clamp(6mm, 1.6vw, 10mm) clamp(5mm, 1.4vw, 9mm) clamp(32mm, 9vw, 38mm);
   box-sizing: border-box;
   overflow: hidden;
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: clamp(3mm, 1vw, 6mm);
 }
 
 /* Footer fixo na borda inferior de cada página */
 .footer {
-  position: fixed;
+  position: absolute;
   bottom: 5mm;
   left: 5mm;
   right: 5mm;
@@ -58,6 +66,7 @@ body {
   table-layout: fixed;
   border-collapse: collapse;
   font-size: 11px;
+  margin-bottom: clamp(4mm, 1.2vw, 6mm);
 }
 
 .items-table th,
@@ -88,16 +97,18 @@ h3 {
 }
 
 .signature-block {
-  margin-top: 8mm;
+  margin-top: 4mm;
   font-size: 11px;
+  page-break-inside: avoid;
 }
 
 .final-block {
-  margin-top: 8mm;
+  margin-top: 4mm;
   font-size: 11px;
   display: flex;
   flex-direction: column;
   gap: 8px;
+  page-break-inside: avoid;
 }
 
 .final-block table {
