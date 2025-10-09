@@ -77,10 +77,51 @@ function enderecosIguais(a, b) {
   return keys.every(k => (a[k] || '') === (b[k] || ''));
 }
 
+function parseDate(value) {
+  if (!value) return null;
+
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? null : value;
+  }
+
+  if (typeof value === 'number') {
+    const byNumber = new Date(value);
+    return Number.isNaN(byNumber.getTime()) ? null : byNumber;
+  }
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+
+    const parsed = new Date(trimmed);
+    if (!Number.isNaN(parsed.getTime())) {
+      return parsed;
+    }
+
+    const dateMatch = trimmed.match(
+      /^(\d{2})\/(\d{2})\/(\d{4})(?:\s+(\d{2}):(\d{2})(?::(\d{2}))?)?$/
+    );
+
+    if (dateMatch) {
+      const [, dd, mm, yyyy, hh = '0', min = '0', ss = '0'] = dateMatch;
+      const coerced = new Date(
+        Number(yyyy),
+        Number(mm) - 1,
+        Number(dd),
+        Number(hh),
+        Number(min),
+        Number(ss)
+      );
+      return Number.isNaN(coerced.getTime()) ? null : coerced;
+    }
+  }
+
+  return null;
+}
+
 function formatDate(value) {
-  if (!value) return '';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '';
+  const date = parseDate(value);
+  if (!date) return '';
   return date.toLocaleDateString('pt-BR');
 }
 
@@ -117,7 +158,7 @@ function createHeaderSection(data) {
 
   const docInfo = [
     createInfoParagraph(numLabel, orc.numero),
-    createInfoParagraph('Data de Emissão', new Date(orc.data_emissao).toLocaleDateString('pt-BR')),
+    createInfoParagraph('Data de Emissão', formatDate(orc.data_emissao)),
     createInfoParagraph(sitLabel, orc.situacao),
     createInfoParagraph('Quantidade de Parcelas', orc.parcelas),
     createInfoParagraph('Forma de Pagamento', orc.forma_pagamento || ''),
