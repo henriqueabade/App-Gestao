@@ -37,7 +37,7 @@ body {
 
 /* Área de conteúdo com padding fixo e espaço extra para o rodapé */
 .page-content {
-  padding: clamp(5mm, 1.4vw, 8mm) clamp(4mm, 1.2vw, 8mm) clamp(24mm, 6vw, 30mm);
+  padding: clamp(5mm, 1.4vw, 8mm) clamp(4mm, 1.2vw, 8mm) clamp(12mm, 3vw, 18mm);
   box-sizing: border-box;
   overflow: hidden;
   flex: 1 1 auto;
@@ -48,15 +48,14 @@ body {
 
 /* Footer fixo na borda inferior de cada página */
 .footer {
-  position: absolute;
-  bottom: 5mm;
-  left: 5mm;
-  right: 5mm;
-  border-top: 1px solid #d1d5db;
-  padding-top: 2px;
+  margin-top: auto;
+  margin-left: clamp(4mm, 1.2vw, 8mm);
+  margin-right: clamp(4mm, 1.2vw, 8mm);
+  margin-bottom: clamp(5mm, 1.4vw, 9mm);
+  padding-top: clamp(2mm, 0.6vw, 4mm);
   text-align: center;
   font-size: 0.72rem;
-  background: white;
+  background: transparent;
   box-sizing: border-box;
 }
 
