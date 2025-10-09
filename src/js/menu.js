@@ -125,6 +125,19 @@ const AppUpdates = (() => {
         }
     };
 
+    const summaryCache = {
+        user: {
+            signature: null,
+            pendingSignature: null,
+            raf: null
+        },
+        supAdmin: {
+            signature: null,
+            pendingSignature: null,
+            raf: null
+        }
+    };
+
     let publishStartToastShown = false;
     let eventsAttached = false;
     let scheduledAutoCheckHandle = null;
@@ -589,152 +602,211 @@ const AppUpdates = (() => {
         return { sections, emptyMessage };
     }
 
-    function renderSummary(container, summary) {
-        if (!container || !summary) return;
-        container.innerHTML = '';
-        const sections = Array.isArray(summary.sections) ? summary.sections : [];
-        let appended = false;
+    function computeSummarySignature(summary) {
+        if (!summary) return 'null';
+        try {
+            return JSON.stringify(summary);
+        } catch (err) {
+            return `fallback-${Date.now()}-${Math.random()}`;
+        }
+    }
 
-        sections.forEach(section => {
-            if (!Array.isArray(section.items) || !section.items.length) return;
-            const sectionEl = document.createElement('section');
-            sectionEl.className = 'updates-summary__section';
+    function renderSummary(container, summary, audience = 'user') {
+        if (!container) return;
 
-            const heading = document.createElement('h3');
-            heading.className = 'updates-summary__heading';
-            heading.textContent = section.title;
-            sectionEl.appendChild(heading);
+        const normalizedSummary =
+            summary && typeof summary === 'object'
+                ? summary
+                : { sections: [], emptyMessage: 'Nenhum resumo disponível no momento.' };
 
-            let hasContent = false;
+        const cache = summaryCache[audience] || summaryCache.user;
+        const signature = computeSummarySignature(normalizedSummary);
+        const containerSignature = container.dataset?.summarySignature;
 
-            if (section.kind === 'definition') {
-                const dl = document.createElement('dl');
-                dl.className = 'updates-summary__definition';
-                section.items.forEach(item => {
-                    if (!item || item.value === undefined || item.value === null || item.value === '') return;
-                    const dt = document.createElement('dt');
-                    dt.textContent = item.label;
-                    const dd = document.createElement('dd');
-                    dd.textContent = item.value;
-                    dl.appendChild(dt);
-                    dl.appendChild(dd);
-                });
-                if (dl.childElementCount > 0) {
-                    sectionEl.appendChild(dl);
-                    hasContent = true;
-                }
-            } else if (section.kind === 'list') {
-                const ul = document.createElement('ul');
-                ul.className = 'updates-summary__list';
-                section.items.forEach(text => {
-                    if (!text) return;
-                    const li = document.createElement('li');
-                    li.textContent = text;
-                    ul.appendChild(li);
-                });
-                if (ul.childElementCount > 0) {
-                    sectionEl.appendChild(ul);
-                    hasContent = true;
-                }
-            } else if (section.kind === 'changes') {
-                const list = document.createElement('ul');
-                list.className = 'updates-summary__changes';
-                section.items.forEach(entry => {
-                    if (!entry) return;
-                    const li = document.createElement('li');
-                    li.className = 'updates-summary__change';
+        if (cache.signature === signature && containerSignature === signature) {
+            return;
+        }
 
-                    const header = document.createElement('div');
-                    header.className = 'updates-summary__change-header';
-                    let headerHasContent = false;
+        if (cache.pendingSignature === signature) {
+            return;
+        }
 
-                    if (entry.title) {
-                        const titleEl = document.createElement('span');
-                        titleEl.className = 'updates-summary__change-title';
-                        titleEl.textContent = entry.title;
-                        header.appendChild(titleEl);
-                        headerHasContent = true;
+        const performRender = () => {
+            cache.raf = null;
+            cache.pendingSignature = null;
+
+            const sections = Array.isArray(normalizedSummary.sections) ? normalizedSummary.sections : [];
+            const nodes = [];
+
+            sections.forEach(section => {
+                if (!Array.isArray(section.items) || !section.items.length) return;
+                const sectionEl = document.createElement('section');
+                sectionEl.className = 'updates-summary__section';
+
+                const heading = document.createElement('h3');
+                heading.className = 'updates-summary__heading';
+                heading.textContent = section.title;
+                sectionEl.appendChild(heading);
+
+                let hasContent = false;
+
+                if (section.kind === 'definition') {
+                    const dl = document.createElement('dl');
+                    dl.className = 'updates-summary__definition';
+                    section.items.forEach(item => {
+                        if (!item || item.value === undefined || item.value === null || item.value === '') return;
+                        const dt = document.createElement('dt');
+                        dt.textContent = item.label;
+                        const dd = document.createElement('dd');
+                        dd.textContent = item.value;
+                        dl.appendChild(dt);
+                        dl.appendChild(dd);
+                    });
+                    if (dl.childElementCount > 0) {
+                        sectionEl.appendChild(dl);
+                        hasContent = true;
                     }
+                } else if (section.kind === 'list') {
+                    const ul = document.createElement('ul');
+                    ul.className = 'updates-summary__list';
+                    section.items.forEach(text => {
+                        if (!text) return;
+                        const li = document.createElement('li');
+                        li.textContent = text;
+                        ul.appendChild(li);
+                    });
+                    if (ul.childElementCount > 0) {
+                        sectionEl.appendChild(ul);
+                        hasContent = true;
+                    }
+                } else if (section.kind === 'changes') {
+                    const list = document.createElement('ul');
+                    list.className = 'updates-summary__changes';
+                    section.items.forEach(entry => {
+                        if (!entry) return;
+                        const li = document.createElement('li');
+                        li.className = 'updates-summary__change';
 
-                    const metaParts = [];
-                    if (entry.version) {
-                        metaParts.push(`v${entry.version}`);
-                    }
-                    const formattedDate = formatDateTime(entry.date);
-                    if (formattedDate) {
-                        metaParts.push(formattedDate);
-                    }
-                    if (entry.author) {
-                        metaParts.push(entry.author);
-                    }
-                    if (metaParts.length) {
-                        const metaEl = document.createElement('span');
-                        metaEl.className = 'updates-summary__change-meta';
-                        metaEl.textContent = metaParts.join(' • ');
-                        header.appendChild(metaEl);
-                        headerHasContent = true;
-                    }
+                        const header = document.createElement('div');
+                        header.className = 'updates-summary__change-header';
+                        let headerHasContent = false;
 
-                    if (headerHasContent) {
-                        li.appendChild(header);
-                    }
-
-                    const highlights = Array.isArray(entry.highlights) ? entry.highlights.filter(Boolean) : [];
-                    const summaryText = typeof entry.summary === 'string' ? entry.summary.trim() : '';
-                    if (highlights.length) {
-                        const bulletList = document.createElement('ul');
-                        bulletList.className = 'updates-summary__change-points';
-                        highlights.forEach(text => {
-                            if (!text) return;
-                            const bullet = document.createElement('li');
-                            bullet.textContent = text;
-                            bulletList.appendChild(bullet);
-                        });
-                        if (bulletList.childElementCount > 0) {
-                            li.appendChild(bulletList);
+                        if (entry.title) {
+                            const titleEl = document.createElement('span');
+                            titleEl.className = 'updates-summary__change-title';
+                            titleEl.textContent = entry.title;
+                            header.appendChild(titleEl);
+                            headerHasContent = true;
                         }
-                    }
 
-                    if (!highlights.length && summaryText) {
-                        const note = document.createElement('p');
-                        note.className = 'updates-summary__change-note';
-                        note.textContent = summaryText;
-                        li.appendChild(note);
-                    }
+                        const metaParts = [];
+                        if (entry.version) {
+                            metaParts.push(`v${entry.version}`);
+                        }
+                        const formattedDate = formatDateTime(entry.date);
+                        if (formattedDate) {
+                            metaParts.push(formattedDate);
+                        }
+                        if (entry.author) {
+                            metaParts.push(entry.author);
+                        }
+                        if (metaParts.length) {
+                            const metaEl = document.createElement('span');
+                            metaEl.className = 'updates-summary__change-meta';
+                            metaEl.textContent = metaParts.join(' • ');
+                            header.appendChild(metaEl);
+                            headerHasContent = true;
+                        }
 
-                    if (!li.childElementCount && summaryText) {
-                        const note = document.createElement('p');
-                        note.className = 'updates-summary__change-note';
-                        note.textContent = summaryText;
-                        li.appendChild(note);
-                    }
+                        if (headerHasContent) {
+                            li.appendChild(header);
+                        }
 
-                    if (!li.childElementCount) {
-                        const fallback = document.createElement('p');
-                        fallback.className = 'updates-summary__change-note';
-                        fallback.textContent = 'Alteração registrada.';
-                        li.appendChild(fallback);
-                    }
+                        const highlights = Array.isArray(entry.highlights) ? entry.highlights.filter(Boolean) : [];
+                        const summaryText = typeof entry.summary === 'string' ? entry.summary.trim() : '';
+                        if (highlights.length) {
+                            const bulletList = document.createElement('ul');
+                            bulletList.className = 'updates-summary__change-points';
+                            highlights.forEach(text => {
+                                if (!text) return;
+                                const bullet = document.createElement('li');
+                                bullet.textContent = text;
+                                bulletList.appendChild(bullet);
+                            });
+                            if (bulletList.childElementCount > 0) {
+                                li.appendChild(bulletList);
+                            }
+                        }
 
-                    list.appendChild(li);
-                });
-                if (list.childElementCount > 0) {
-                    sectionEl.appendChild(list);
-                    hasContent = true;
+                        if (!highlights.length && summaryText) {
+                            const note = document.createElement('p');
+                            note.className = 'updates-summary__change-note';
+                            note.textContent = summaryText;
+                            li.appendChild(note);
+                        }
+
+                        if (!li.childElementCount && summaryText) {
+                            const note = document.createElement('p');
+                            note.className = 'updates-summary__change-note';
+                            note.textContent = summaryText;
+                            li.appendChild(note);
+                        }
+
+                        if (!li.childElementCount) {
+                            const fallback = document.createElement('p');
+                            fallback.className = 'updates-summary__change-note';
+                            fallback.textContent = 'Alteração registrada.';
+                            li.appendChild(fallback);
+                        }
+
+                        list.appendChild(li);
+                    });
+                    if (list.childElementCount > 0) {
+                        sectionEl.appendChild(list);
+                        hasContent = true;
+                    }
                 }
+
+                if (hasContent) {
+                    nodes.push(sectionEl);
+                }
+            });
+
+            if (!nodes.length) {
+                const empty = document.createElement('p');
+                empty.className = 'updates-summary__empty';
+                empty.textContent =
+                    normalizedSummary.emptyMessage || 'Nenhum resumo disponível no momento.';
+                nodes.push(empty);
             }
 
-            if (hasContent) {
-                container.appendChild(sectionEl);
-                appended = true;
-            }
-        });
+            const fragment = document.createDocumentFragment();
+            nodes.forEach(node => fragment.appendChild(node));
 
-        if (!appended) {
-            const empty = document.createElement('p');
-            empty.className = 'updates-summary__empty';
-            empty.textContent = summary.emptyMessage || 'Nenhum resumo disponível no momento.';
-            container.appendChild(empty);
+            if (typeof container.replaceChildren === 'function') {
+                container.replaceChildren(fragment);
+            } else {
+                container.innerHTML = '';
+                container.appendChild(fragment);
+            }
+
+            cache.signature = signature;
+            if (container.dataset) {
+                container.dataset.summarySignature = signature;
+            } else {
+                container.setAttribute('data-summary-signature', signature);
+            }
+        };
+
+        if (typeof requestAnimationFrame === 'function') {
+            if (cache.raf !== null && typeof cancelAnimationFrame === 'function') {
+                cancelAnimationFrame(cache.raf);
+                cache.raf = null;
+            }
+            cache.pendingSignature = signature;
+            cache.raf = requestAnimationFrame(performRender);
+        } else {
+            performRender();
         }
     }
 
@@ -742,14 +814,14 @@ const AppUpdates = (() => {
         const container = elements.supAdmin?.summary;
         if (!container) return;
         const summary = buildUpdateSummary('supAdmin');
-        renderSummary(container, summary);
+        renderSummary(container, summary, 'supAdmin');
     }
 
     function renderUserSummary() {
         const container = elements.user?.summary;
         if (!container) return;
         const summary = buildUpdateSummary('user');
-        renderSummary(container, summary);
+        renderSummary(container, summary, 'user');
     }
 
     function refreshUpdateSummaries() {
