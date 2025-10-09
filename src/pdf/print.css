@@ -151,14 +151,27 @@ h3 {
 }
 
 .authorization-line {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 6px;
 }
 
-.authorization-line span {
-  flex: 1;
+.authorization-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.authorization-label {
+  font-weight: 600;
   white-space: nowrap;
+}
+
+.authorization-value {
+  display: block;
+  width: 100%;
+  min-height: 14px;
+  border-bottom: 1px solid #000;
 }
 
 .final-block .authorization-block p {
@@ -167,4 +180,9 @@ h3 {
 
 .page-tail {
   margin-top: auto;
+  page-break-inside: avoid;
+}
+
+.page-tail > * {
+  page-break-inside: avoid;
 }

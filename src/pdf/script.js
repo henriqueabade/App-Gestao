@@ -218,8 +218,14 @@ function buildSignatureBlock(tipo, orc, contatoNome = '') {
     <div class="signature-block">
       <p class="font-semibold text-accent-red mb-1">ACEITE DO ORÇAMENTO</p>
       <div class="authorization-line">
-        <span>Nome do Responsável: _______________________________</span>
-        <span>Assinatura: _______________________________</span>
+        <div class="authorization-field">
+          <span class="authorization-label">Nome do Responsável:</span>
+          <span class="authorization-value"></span>
+        </div>
+        <div class="authorization-field">
+          <span class="authorization-label">Assinatura:</span>
+          <span class="authorization-value"></span>
+        </div>
       </div>
     </div>
   `;
@@ -263,8 +269,14 @@ function buildFinalBlock(tipo, orc, contatoNome = '') {
       <div>
         <p class="font-semibold text-accent-red mb-1">ACEITE DO ORÇAMENTO</p>
         <div class="authorization-line">
-          <span>Nome do Responsável: _______________________________</span>
-          <span>Assinatura: _______________________________</span>
+          <div class="authorization-field">
+            <span class="authorization-label">Nome do Responsável:</span>
+            <span class="authorization-value"></span>
+          </div>
+          <div class="authorization-field">
+            <span class="authorization-label">Assinatura:</span>
+            <span class="authorization-value"></span>
+          </div>
         </div>
       </div>
     </div>
@@ -274,14 +286,17 @@ function buildFinalBlock(tipo, orc, contatoNome = '') {
 function buildPages(context) {
   const { items, orc, tipo, contatoNomeAssinatura = '' } = context;
   const remaining = items.slice();
+  const overflowBuffer = 2;
   let pageIndex = 0;
+  let pendingTailHtml = null;
 
   if (!remaining.length) {
     remaining.push(['', 'Nenhum item disponível', '', '', '', '', '']);
   }
 
-  while (remaining.length > 0) {
+  while (remaining.length > 0 || pendingTailHtml) {
     const isFirst = pageIndex === 0;
+    const isTailOnlyPage = pendingTailHtml && remaining.length === 0;
     const page = createPage();
     const content = page.querySelector('.page-content');
 
@@ -290,6 +305,16 @@ function buildPages(context) {
     if (isFirst) {
       const header = createHeaderSection(context);
       content.appendChild(header);
+    }
+
+    if (isTailOnlyPage) {
+      const tail = document.createElement('div');
+      tail.className = 'page-tail';
+      tail.innerHTML = pendingTailHtml;
+      pendingTailHtml = null;
+      content.appendChild(tail);
+      pageIndex += 1;
+      continue;
     }
 
     const docLabel = tipo === 'pedido' ? 'PEDIDO' : 'ORÇAMENTO';
@@ -312,68 +337,55 @@ function buildPages(context) {
     while (remaining.length > 0) {
       const row = remaining[0];
       appendRow(tbody, row);
+      ensureTableFits(page);
 
-      if (content.scrollHeight > content.clientHeight) {
+      if (content.scrollHeight > content.clientHeight - overflowBuffer) {
         tbody.removeChild(tbody.lastElementChild);
+        ensureTableFits(page);
         break;
       }
 
       pageRows.push(remaining.shift());
     }
 
-    let isLastPage = remaining.length === 0;
-    if (isLastPage) {
-      tail.innerHTML = buildFinalBlock(tipo, orc, contatoNomeAssinatura);
-    } else {
-      tail.innerHTML = buildSignatureBlock(tipo, orc, contatoNomeAssinatura);
-    }
+    let isLastPage = remaining.length === 0 && !pendingTailHtml;
+    const finalTailHtml = buildFinalBlock(tipo, orc, contatoNomeAssinatura);
+    const signatureTailHtml = buildSignatureBlock(tipo, orc, contatoNomeAssinatura);
 
+    tail.innerHTML = isLastPage ? finalTailHtml : signatureTailHtml;
     ensureTableFits(page);
 
     let safety = 0;
-    while (content.scrollHeight > content.clientHeight && safety < 50) {
+    while (
+      content.scrollHeight > content.clientHeight - overflowBuffer &&
+      pageRows.length > 0 &&
+      safety < 200
+    ) {
       safety += 1;
-
-      if (pageRows.length === 0) {
-        break;
-      }
-
       const last = pageRows.pop();
       tbody.removeChild(tbody.lastElementChild);
       remaining.unshift(last);
 
-      if (isLastPage && remaining.length > 0) {
+      if (isLastPage) {
         isLastPage = false;
-        tail.innerHTML = buildSignatureBlock(tipo, orc, contatoNomeAssinatura);
+        tail.innerHTML = signatureTailHtml;
       }
 
       ensureTableFits(page);
     }
 
-    if (!isLastPage && tail.innerHTML.trim() === '') {
-      tail.innerHTML = buildSignatureBlock(tipo, orc, contatoNomeAssinatura);
-    }
-
-    if (content.scrollHeight > content.clientHeight && pageRows.length === 0 && remaining.length > 0) {
-      tail.innerHTML = buildSignatureBlock(tipo, orc, contatoNomeAssinatura);
-    }
-
-    if (isLastPage) {
-      ensureTableFits(page);
-      let guard = 0;
-      while (content.scrollHeight > content.clientHeight && guard < 50 && tbody.rows.length > 0) {
-        guard += 1;
-        const lastRow = pageRows.pop();
-        tbody.removeChild(tbody.lastElementChild);
-        remaining.unshift(lastRow);
-        isLastPage = false;
-        tail.innerHTML = buildSignatureBlock(tipo, orc, contatoNomeAssinatura);
+    if (content.scrollHeight > content.clientHeight - overflowBuffer) {
+      if (isLastPage) {
+        pendingTailHtml = finalTailHtml;
+        tail.innerHTML = signatureTailHtml;
         ensureTableFits(page);
-      }
 
-      if (!isLastPage && remaining.length === 0) {
-        tail.innerHTML = buildFinalBlock(tipo, orc, contatoNomeAssinatura);
-        ensureTableFits(page);
+        if (tbody.rows.length === 0) {
+          page.remove();
+          continue;
+        }
+      } else if (!pageRows.length) {
+        tail.style.fontSize = '0.72rem';
       }
     }
 
