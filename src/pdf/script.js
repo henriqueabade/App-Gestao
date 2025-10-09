@@ -5,16 +5,13 @@ window.pdfBuildReady = false;
 window.pdfBuildError = null;
 window.generatedPdfMeta = null;
 
-const TH_SINGLE = 8;
-const CAP_FIRST = 12;
-const CAP_FULL = 22;
-const CAP_LAST = 15;
-const MIN_LAST_ITEMS = 4;
-
-function createPage(html) {
+function createPage() {
   const clone = template.content.cloneNode(true);
   const page = clone.querySelector('.page');
-  page.querySelector('.page-content').innerHTML = html;
+  const content = page.querySelector('.page-content');
+  if (content) {
+    content.innerHTML = '';
+  }
   docContainer.appendChild(clone);
   return page;
 }
@@ -42,89 +39,6 @@ function ensureTableFits(page) {
       break;
     }
   }
-}
-
-function paginateItems(items) {
-  const total = items.length;
-
-  if (total === 0) {
-    return [[]];
-  }
-
-  if (total <= TH_SINGLE) {
-    return [items.slice()];
-  }
-
-  const memo = new Map();
-
-  const canDistribute = remaining => {
-    if (remaining === 0) return true;
-    if (remaining <= CAP_LAST) {
-      return remaining >= MIN_LAST_ITEMS;
-    }
-
-    if (memo.has(remaining)) {
-      return memo.get(remaining);
-    }
-
-    let possible = false;
-    const maxChunk = Math.min(CAP_FULL, remaining - MIN_LAST_ITEMS);
-
-    for (let size = maxChunk; size >= MIN_LAST_ITEMS; size--) {
-      if (size <= 0 || size > remaining) continue;
-      if (canDistribute(remaining - size)) {
-        possible = true;
-        break;
-      }
-    }
-
-    memo.set(remaining, possible);
-    return possible;
-  };
-
-  let firstCount = Math.min(CAP_FIRST, total - MIN_LAST_ITEMS);
-  firstCount = Math.max(1, Math.min(firstCount, CAP_FIRST));
-
-  while (firstCount > 0 && !canDistribute(total - firstCount)) {
-    firstCount--;
-  }
-
-  if (firstCount === 0) {
-    firstCount = Math.max(1, Math.min(CAP_FIRST, total - MIN_LAST_ITEMS));
-  }
-
-  const pages = [];
-  const remainingItems = items.slice();
-
-  pages.push(remainingItems.splice(0, firstCount));
-
-  while (remainingItems.length > 0) {
-    if (remainingItems.length <= CAP_LAST) {
-      pages.push(remainingItems.splice(0));
-      break;
-    }
-
-    const maxChunk = Math.min(CAP_FULL, remainingItems.length - MIN_LAST_ITEMS);
-    let chunkSize = Math.max(MIN_LAST_ITEMS, maxChunk);
-
-    while (chunkSize > MIN_LAST_ITEMS && !canDistribute(remainingItems.length - chunkSize)) {
-      chunkSize--;
-    }
-
-    pages.push(remainingItems.splice(0, chunkSize));
-  }
-
-  if (pages.length > 1) {
-    const last = pages[pages.length - 1];
-    if (last.length < MIN_LAST_ITEMS) {
-      const prev = pages[pages.length - 2];
-      const needed = MIN_LAST_ITEMS - last.length;
-      const transfer = prev.splice(Math.max(prev.length - needed, 0), needed);
-      last.unshift(...transfer);
-    }
-  }
-
-  return pages;
 }
 
 function formatCurrency(v) {
@@ -163,6 +77,311 @@ function enderecosIguais(a, b) {
   return keys.every(k => (a[k] || '') === (b[k] || ''));
 }
 
+function formatDate(value) {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toLocaleDateString('pt-BR');
+}
+
+function createInfoParagraph(label, value) {
+  const p = document.createElement('p');
+  const strong = document.createElement('strong');
+  strong.textContent = `${label}:`;
+  p.appendChild(strong);
+  p.appendChild(document.createTextNode(` ${value || ''}`));
+  return p;
+}
+
+function createHeaderSection(data) {
+  const {
+    orc,
+    cliente,
+    contato,
+    tipo,
+    endEntregaStr,
+    endCobrancaStr,
+    endRegistroStr
+  } = data;
+
+  const container = document.createElement('div');
+  container.className = 'doc-header';
+
+  const left = document.createElement('div');
+  left.className = 'doc-header-column';
+  const right = document.createElement('div');
+  right.className = 'doc-header-column';
+
+  const numLabel = tipo === 'pedido' ? 'Número do Pedido' : 'Número do Orçamento';
+  const sitLabel = tipo === 'pedido' ? 'Situação do Pedido' : 'Situação do Orçamento';
+
+  const docInfo = [
+    createInfoParagraph(numLabel, orc.numero),
+    createInfoParagraph('Data de Emissão', new Date(orc.data_emissao).toLocaleDateString('pt-BR')),
+    createInfoParagraph(sitLabel, orc.situacao),
+    createInfoParagraph('Quantidade de Parcelas', orc.parcelas),
+    createInfoParagraph('Forma de Pagamento', orc.forma_pagamento || ''),
+    createInfoParagraph('Prazo', orc.prazo || ''),
+    createInfoParagraph('Nome Fantasia', cliente.nome_fantasia || ''),
+    createInfoParagraph('Razão Social', cliente.razao_social || ''),
+    createInfoParagraph('CNPJ', cliente.cnpj || ''),
+    createInfoParagraph('Inscrição Estadual', cliente.inscricao_estadual || '')
+  ];
+
+  docInfo.forEach(p => left.appendChild(p));
+
+  const contatoNome = contato.nome || cliente.comprador_nome || '';
+  const contatoFixo = contato.telefone_fixo || cliente.telefone_fixo || '';
+  const contatoCel = contato.telefone_celular || cliente.telefone_celular || '';
+  const contatoEmail = contato.email || cliente.email || '';
+  const transportadora = orc.transportadora || cliente.transportadora || '';
+
+  const contatoInfo = [
+    createInfoParagraph('Contato', contatoNome),
+    createInfoParagraph('Telefone Fixo', contatoFixo),
+    createInfoParagraph('Telefone Celular', contatoCel),
+    createInfoParagraph('E-mail', contatoEmail)
+  ];
+
+  contatoInfo.forEach(p => right.appendChild(p));
+
+  const entrega = document.createElement('p');
+  entrega.innerHTML = `<strong>Endereço de Entrega:</strong> ${endEntregaStr}`;
+  right.appendChild(entrega);
+
+  const faturamento = document.createElement('p');
+  faturamento.innerHTML = `<strong>Endereço de Faturamento:</strong> ${endCobrancaStr}`;
+  right.appendChild(faturamento);
+
+  const registro = document.createElement('p');
+  registro.innerHTML = `<strong>Endereço de Registro:</strong> ${endRegistroStr}`;
+  right.appendChild(registro);
+
+  right.appendChild(createInfoParagraph('Transportadora', transportadora));
+
+  container.appendChild(left);
+  container.appendChild(right);
+
+  return container;
+}
+
+function createTableSkeleton() {
+  const cols = ['Código', 'Nome do Produto', 'NCM', 'Quantidade', 'Valor Unitário', 'Desconto Total', 'Valor Total'];
+  const widths = ['10%', '34%', '12%', '10%', '12%', '10%', '12%'];
+
+  const table = document.createElement('table');
+  table.className = 'items-table';
+
+  const thead = document.createElement('thead');
+  const headRow = document.createElement('tr');
+  cols.forEach((c, idx) => {
+    const th = document.createElement('th');
+    th.style.width = widths[idx];
+    th.style.textAlign = 'left';
+    th.textContent = c;
+    headRow.appendChild(th);
+  });
+  thead.appendChild(headRow);
+
+  const tbody = document.createElement('tbody');
+  table.appendChild(thead);
+  table.appendChild(tbody);
+
+  return { table, tbody };
+}
+
+function appendRow(tbody, row) {
+  const tr = document.createElement('tr');
+  row.forEach(cell => {
+    const td = document.createElement('td');
+    td.style.textAlign = 'left';
+    td.textContent = cell;
+    tr.appendChild(td);
+  });
+  tbody.appendChild(tr);
+}
+
+function buildSignatureBlock(tipo, orc) {
+  const responsavel = orc.responsavel || orc.dono || '';
+  if (tipo === 'pedido') {
+    const dataAprovacao = formatDate(orc.data_aprovacao);
+    return `
+      <div class="signature-block signature-block--pedido">
+        <p><strong>Pedido autorizado por:</strong> ${responsavel || '—'}</p>
+        <p><strong>Data de Aprovação:</strong> ${dataAprovacao || '—'}</p>
+      </div>
+    `;
+  }
+
+  return `
+    <div class="signature-block">
+      <p><strong>Nome do Responsável:</strong> _______________________________</p>
+      <p><strong>Assinatura:</strong> _______________________________</p>
+    </div>
+  `;
+}
+
+function buildFinalBlock(tipo, orc) {
+  const responsavel = orc.responsavel || orc.dono || '';
+  if (tipo === 'pedido') {
+    const dataAprovacao = formatDate(orc.data_aprovacao);
+    return `
+      <div class="final-block">
+        <h3 class="font-bold text-accent-red mb-1">RESUMO DE VALORES</h3>
+        <table>
+          <tr><td>Desconto de Pagamento:</td><td>${formatCurrency(orc.desconto_pagamento)}</td></tr>
+          <tr><td>Desconto Especial:</td><td>${formatCurrency(orc.desconto_especial)}</td></tr>
+          <tr><td>Desconto Total:</td><td>${formatCurrency(orc.desconto_total)}</td></tr>
+          <tr><td><strong>Valor a Pagar:</strong></td><td><strong>${formatCurrency(orc.valor_final)}</strong></td></tr>
+        </table>
+        <p class="font-semibold text-accent-red mb-1">OBSERVAÇÕES:</p>
+        <p>${orc.observacoes || '- Nenhuma observação.'}</p>
+        <div class="authorization-block">
+          <p class="font-semibold text-accent-red mb-1">AUTORIZAÇÃO DO PEDIDO</p>
+          <p><strong>Pedido autorizado por:</strong> ${responsavel || '—'}</p>
+          <p><strong>Data de Aprovação:</strong> ${dataAprovacao || '—'}</p>
+        </div>
+      </div>
+    `;
+  }
+
+  return `
+    <div class="final-block">
+      <h3 class="font-bold text-accent-red mb-1">RESUMO DE VALORES</h3>
+      <table>
+        <tr><td>Desconto de Pagamento:</td><td>${formatCurrency(orc.desconto_pagamento)}</td></tr>
+        <tr><td>Desconto Especial:</td><td>${formatCurrency(orc.desconto_especial)}</td></tr>
+        <tr><td>Desconto Total:</td><td>${formatCurrency(orc.desconto_total)}</td></tr>
+        <tr><td><strong>Valor a Pagar:</strong></td><td><strong>${formatCurrency(orc.valor_final)}</strong></td></tr>
+      </table>
+      <p class="font-semibold text-accent-red mb-1">OBSERVAÇÕES:</p>
+      <p>${orc.observacoes || '- Nenhuma observação.'}</p>
+      <div>
+        <p class="font-semibold text-accent-red mb-1">AUTORIZAÇÃO DO PEDIDO</p>
+        <div class="authorization-line">
+          <span>Nome do Responsável: _______________________________</span>
+          <span>Assinatura: _______________________________</span>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function buildPages(context) {
+  const { items, orc, tipo } = context;
+  const remaining = items.slice();
+  let pageIndex = 0;
+
+  if (!remaining.length) {
+    remaining.push(['', 'Nenhum item disponível', '', '', '', '', '']);
+  }
+
+  while (remaining.length > 0) {
+    const isFirst = pageIndex === 0;
+    const page = createPage();
+    const content = page.querySelector('.page-content');
+
+    if (!content) break;
+
+    if (isFirst) {
+      const header = createHeaderSection(context);
+      content.appendChild(header);
+    }
+
+    const docLabel = tipo === 'pedido' ? 'PEDIDO' : 'ORÇAMENTO';
+    const title = document.createElement('h3');
+    title.className = 'font-bold text-accent-red mb-1';
+    title.textContent = isFirst
+      ? `ITENS DO ${docLabel} (N° ${orc.numero})`
+      : `ITENS DO ${docLabel} (N° ${orc.numero}) – Continuação`;
+    content.appendChild(title);
+
+    const { table, tbody } = createTableSkeleton();
+    content.appendChild(table);
+
+    const tail = document.createElement('div');
+    tail.className = 'page-tail';
+    content.appendChild(tail);
+
+    const pageRows = [];
+
+    while (remaining.length > 0) {
+      const row = remaining[0];
+      appendRow(tbody, row);
+
+      if (content.scrollHeight > content.clientHeight) {
+        tbody.removeChild(tbody.lastElementChild);
+        break;
+      }
+
+      pageRows.push(remaining.shift());
+    }
+
+    let isLastPage = remaining.length === 0;
+    if (isLastPage) {
+      tail.innerHTML = buildFinalBlock(tipo, orc);
+    } else {
+      tail.innerHTML = buildSignatureBlock(tipo, orc);
+    }
+
+    ensureTableFits(page);
+
+    let safety = 0;
+    while (content.scrollHeight > content.clientHeight && safety < 50) {
+      safety += 1;
+
+      if (pageRows.length === 0) {
+        break;
+      }
+
+      const last = pageRows.pop();
+      tbody.removeChild(tbody.lastElementChild);
+      remaining.unshift(last);
+
+      if (isLastPage && remaining.length > 0) {
+        isLastPage = false;
+        tail.innerHTML = buildSignatureBlock(tipo, orc);
+      }
+
+      ensureTableFits(page);
+    }
+
+    if (!isLastPage && tail.innerHTML.trim() === '') {
+      tail.innerHTML = buildSignatureBlock(tipo, orc);
+    }
+
+    if (content.scrollHeight > content.clientHeight && pageRows.length === 0 && remaining.length > 0) {
+      tail.innerHTML = buildSignatureBlock(tipo, orc);
+    }
+
+    if (isLastPage) {
+      ensureTableFits(page);
+      let guard = 0;
+      while (content.scrollHeight > content.clientHeight && guard < 50 && tbody.rows.length > 0) {
+        guard += 1;
+        const lastRow = pageRows.pop();
+        tbody.removeChild(tbody.lastElementChild);
+        remaining.unshift(lastRow);
+        isLastPage = false;
+        tail.innerHTML = buildSignatureBlock(tipo, orc);
+        ensureTableFits(page);
+      }
+
+      if (!isLastPage && remaining.length === 0) {
+        tail.innerHTML = buildFinalBlock(tipo, orc);
+        ensureTableFits(page);
+      }
+    }
+
+    if (tbody.rows.length === 0 && !isLastPage) {
+      page.remove();
+      continue;
+    }
+
+    pageIndex += 1;
+  }
+}
+
 async function buildDocument() {
   const params = new URLSearchParams(window.location.search);
   const id = params.get('id');
@@ -198,7 +417,7 @@ async function buildDocument() {
         ? 'Igual Endereço de Faturamento'
         : formatEndereco(endRegistro);
 
-    const items = orc.itens.map(it => ([
+    const items = (orc.itens || []).map(it => ([
       it.codigo ?? '',
       it.nome ?? '',
       it.ncm ?? '',
@@ -208,102 +427,20 @@ async function buildDocument() {
       formatCurrency(it.valor_total)
     ]));
 
-    const pages = paginateItems(items);
-
-    pages.forEach((chunk, idx) => {
-      const isFirst = idx === 0;
-      const isLast = idx === pages.length - 1;
-
-      let header = '';
-      if (isFirst) {
-        const numLabel = tipo === 'pedido' ? 'Número do Pedido' : 'Número do Orçamento';
-        const sitLabel = tipo === 'pedido' ? 'Situação do Pedido' : 'Situação do Orçamento';
-        header = `
-      <div class="grid grid-cols-2 gap-2 mb-2">
-        <div>
-          <p><strong>${numLabel}:</strong> ${orc.numero}</p>
-          <p><strong>Data de Emissão:</strong> ${new Date(orc.data_emissao).toLocaleDateString('pt-BR')}</p>
-          <p><strong>${sitLabel}:</strong> ${orc.situacao}</p>
-          <p><strong>Quantidade de Parcelas:</strong> ${orc.parcelas}</p>
-          <p><strong>Forma de Pagamento:</strong> ${orc.forma_pagamento || ''}</p>
-          <p><strong>Prazo:</strong> ${orc.prazo || ''}</p>
-        </div>
-        <div class="text-right">
-          <p><strong>Nome Fantasia:</strong> ${cliente.nome_fantasia || ''}</p>
-          <p><strong>Razão Social:</strong> ${cliente.razao_social || ''}</p>
-          <p><strong>CNPJ:</strong> ${cliente.cnpj || ''}</p>
-          <p><strong>Inscrição Estadual:</strong> ${cliente.inscricao_estadual || ''}</p>
-        </div>
-      </div>
-      <div class="grid grid-cols-3 gap-2 mb-2">
-        <div>
-          <p><strong>Contato:</strong> ${contato.nome || cliente.comprador_nome || ''}</p>
-          <p><strong>Telefone Fixo:</strong> ${contato.telefone_fixo || cliente.telefone_fixo || ''}</p>
-          <p><strong>Telefone Celular:</strong> ${contato.telefone_celular || cliente.telefone_celular || ''}</p>
-          <p><strong>E-mail:</strong> ${contato.email || cliente.email || ''}</p>
-        </div>
-        <div>
-          <p><strong>Endereço de Entrega:</strong> ${endEntregaStr}</p>
-        </div>
-        <div>
-          <p><strong>Endereço de Faturamento:</strong> ${endCobrancaStr}</p>
-          <p><strong>Endereço de Registro:</strong> ${endRegistroStr}</p>
-          <p><strong>Transportadora:</strong> ${orc.transportadora || cliente.transportadora || ''}</p>
-        </div>
-      </div>`;
-      }
-
-      const docLabel = tipo === 'pedido' ? 'PEDIDO' : 'ORÇAMENTO';
-      const title = isFirst
-        ? `ITENS DO ${docLabel} (N° ${orc.numero})`
-        : `ITENS DO ${docLabel} (N° ${orc.numero}) – Continuação`;
-
-      const cols = ['Código', 'Nome do Produto', 'NCM', 'Quantidade', 'Valor Unitário', 'Desconto Total', 'Valor Total'];
-      const widths = ['10%', '34%', '12%', '10%', '12%', '10%', '12%'];
-      const thead = `<thead><tr>${cols.map((c,i)=>`<th style="width:${widths[i]};text-align:left;">${c}</th>`).join('')}</tr></thead>`;
-      const tbody = `<tbody>${chunk.map(row=>`<tr>${row.map(cell=>`<td style="text-align:left;">${cell}</td>`).join('')}</tr>`).join('')}</tbody>`;
-
-      let html = `
-      ${header}
-      <h3 class="font-bold text-accent-red mb-1">${title}</h3>
-      <table class="items-table">${thead}${tbody}</table>`;
-
-      if (isLast) {
-        html += `
-      <div class="final-block">
-        <h3 class="font-bold text-accent-red mb-1">RESUMO DE VALORES</h3>
-        <table>
-          <tr><td>Desconto de Pagamento:</td><td>${formatCurrency(orc.desconto_pagamento)}</td></tr>
-          <tr><td>Desconto Especial:</td><td>${formatCurrency(orc.desconto_especial)}</td></tr>
-          <tr><td>Desconto Total:</td><td>${formatCurrency(orc.desconto_total)}</td></tr>
-          <tr><td><strong>Valor a Pagar:</strong></td><td><strong>${formatCurrency(orc.valor_final)}</strong></td></tr>
-        </table>
-        <p class="font-semibold text-accent-red mb-1">OBSERVAÇÕES:</p>
-        <p>${orc.observacoes || '- Nenhuma observação.'}</p>
-        <div>
-          <p class="font-semibold text-accent-red mb-1">AUTORIZAÇÃO DO PEDIDO</p>
-          <div class="authorization-line">
-            <span>Nome do Responsável: _______________________________</span>
-            <span>Assinatura: _______________________________</span>
-          </div>
-        </div>
-      </div>`;
-      } else if (!isFirst) {
-        html += `
-      <div class="signature-block">
-        <p><strong>Nome do Responsável:</strong> _______________________________</p>
-        <p><strong>Assinatura:</strong> _______________________________</p>
-      </div>`;
-      }
-
-      const pageEl = createPage(html);
-      ensureTableFits(pageEl);
+    docContainer.innerHTML = '';
+    buildPages({
+      items,
+      orc,
+      tipo,
+      cliente,
+      contato,
+      endEntregaStr,
+      endCobrancaStr,
+      endRegistroStr
     });
 
     window.pdfBuildReady = true;
     window.dispatchEvent(new Event('pdf-build-ready'));
-
-    // Printing is now user-initiated; remove automatic print dialog
   } catch (err) {
     console.error('Erro ao gerar documento', err);
     window.pdfBuildError = err?.message || 'Erro ao gerar documento';
@@ -312,4 +449,3 @@ async function buildDocument() {
 }
 
 window.onload = buildDocument;
-
