@@ -37,7 +37,7 @@ body {
 
 /* Área de conteúdo com padding fixo e espaço extra para o rodapé */
 .page-content {
-  padding: clamp(6mm, 1.6vw, 10mm) clamp(5mm, 1.4vw, 9mm) clamp(30mm, 8vw, 36mm);
+  padding: clamp(5mm, 1.4vw, 8mm) clamp(4mm, 1.2vw, 8mm) clamp(24mm, 6vw, 30mm);
   box-sizing: border-box;
   overflow: hidden;
   flex: 1 1 auto;
@@ -71,7 +71,7 @@ body {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  font-size: 0.8rem;
+  font-size: 0.78rem;
 }
 
 .doc-header-column p {
@@ -90,7 +90,7 @@ body {
 .items-table th,
 .items-table td {
   border: 1px solid #d1d5db;
-  padding: 4px;
+  padding: 3px;
   white-space: nowrap;
   word-break: keep-all;
   overflow: visible;
@@ -151,13 +151,13 @@ h3 {
   text-align: right;
 }
 
-.final-block .authorization-line {
+.authorization-line {
   display: flex;
   justify-content: space-between;
-  gap: 16px;
+  gap: 12px;
 }
 
-.final-block .authorization-line span {
+.authorization-line span {
   flex: 1;
   white-space: nowrap;
 }

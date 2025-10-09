@@ -130,7 +130,7 @@ function createHeaderSection(data) {
 
   docInfo.forEach(p => left.appendChild(p));
 
-  const contatoNome = contato.nome || cliente.comprador_nome || '';
+  const contatoNome = contato.nome || orc.contato_nome || cliente.comprador_nome || '';
   const contatoFixo = contato.telefone_fixo || cliente.telefone_fixo || '';
   const contatoCel = contato.telefone_celular || cliente.telefone_celular || '';
   const contatoEmail = contato.email || cliente.email || '';
@@ -201,30 +201,34 @@ function appendRow(tbody, row) {
   tbody.appendChild(tr);
 }
 
-function buildSignatureBlock(tipo, orc) {
-  const responsavel = orc.responsavel || orc.dono || '';
+function buildSignatureBlock(tipo, orc, contatoNome = '') {
   if (tipo === 'pedido') {
     const dataAprovacao = formatDate(orc.data_aprovacao);
+    const autorizadoPor = (contatoNome || '').trim();
     return `
       <div class="signature-block signature-block--pedido">
-        <p><strong>Pedido autorizado por:</strong> ${responsavel || '—'}</p>
-        <p><strong>Data de Aprovação:</strong> ${dataAprovacao || '—'}</p>
+        <p class="font-semibold text-accent-red mb-1">AUTORIZAÇÃO DO PEDIDO</p>
+        <p><strong>Pedido autorizado por:</strong> ${autorizadoPor}</p>
+        <p><strong>Data de Aprovação:</strong> ${dataAprovacao || ''}</p>
       </div>
     `;
   }
 
   return `
     <div class="signature-block">
-      <p><strong>Nome do Responsável:</strong> _______________________________</p>
-      <p><strong>Assinatura:</strong> _______________________________</p>
+      <p class="font-semibold text-accent-red mb-1">ACEITE DO ORÇAMENTO</p>
+      <div class="authorization-line">
+        <span>Nome do Responsável: _______________________________</span>
+        <span>Assinatura: _______________________________</span>
+      </div>
     </div>
   `;
 }
 
-function buildFinalBlock(tipo, orc) {
-  const responsavel = orc.responsavel || orc.dono || '';
+function buildFinalBlock(tipo, orc, contatoNome = '') {
   if (tipo === 'pedido') {
     const dataAprovacao = formatDate(orc.data_aprovacao);
+    const autorizadoPor = (contatoNome || '').trim();
     return `
       <div class="final-block">
         <h3 class="font-bold text-accent-red mb-1">RESUMO DE VALORES</h3>
@@ -238,8 +242,8 @@ function buildFinalBlock(tipo, orc) {
         <p>${orc.observacoes || '- Nenhuma observação.'}</p>
         <div class="authorization-block">
           <p class="font-semibold text-accent-red mb-1">AUTORIZAÇÃO DO PEDIDO</p>
-          <p><strong>Pedido autorizado por:</strong> ${responsavel || '—'}</p>
-          <p><strong>Data de Aprovação:</strong> ${dataAprovacao || '—'}</p>
+          <p><strong>Pedido autorizado por:</strong> ${autorizadoPor}</p>
+          <p><strong>Data de Aprovação:</strong> ${dataAprovacao || ''}</p>
         </div>
       </div>
     `;
@@ -257,7 +261,7 @@ function buildFinalBlock(tipo, orc) {
       <p class="font-semibold text-accent-red mb-1">OBSERVAÇÕES:</p>
       <p>${orc.observacoes || '- Nenhuma observação.'}</p>
       <div>
-        <p class="font-semibold text-accent-red mb-1">AUTORIZAÇÃO DO PEDIDO</p>
+        <p class="font-semibold text-accent-red mb-1">ACEITE DO ORÇAMENTO</p>
         <div class="authorization-line">
           <span>Nome do Responsável: _______________________________</span>
           <span>Assinatura: _______________________________</span>
@@ -268,7 +272,7 @@ function buildFinalBlock(tipo, orc) {
 }
 
 function buildPages(context) {
-  const { items, orc, tipo } = context;
+  const { items, orc, tipo, contatoNomeAssinatura = '' } = context;
   const remaining = items.slice();
   let pageIndex = 0;
 
@@ -319,9 +323,9 @@ function buildPages(context) {
 
     let isLastPage = remaining.length === 0;
     if (isLastPage) {
-      tail.innerHTML = buildFinalBlock(tipo, orc);
+      tail.innerHTML = buildFinalBlock(tipo, orc, contatoNomeAssinatura);
     } else {
-      tail.innerHTML = buildSignatureBlock(tipo, orc);
+      tail.innerHTML = buildSignatureBlock(tipo, orc, contatoNomeAssinatura);
     }
 
     ensureTableFits(page);
@@ -340,18 +344,18 @@ function buildPages(context) {
 
       if (isLastPage && remaining.length > 0) {
         isLastPage = false;
-        tail.innerHTML = buildSignatureBlock(tipo, orc);
+        tail.innerHTML = buildSignatureBlock(tipo, orc, contatoNomeAssinatura);
       }
 
       ensureTableFits(page);
     }
 
     if (!isLastPage && tail.innerHTML.trim() === '') {
-      tail.innerHTML = buildSignatureBlock(tipo, orc);
+      tail.innerHTML = buildSignatureBlock(tipo, orc, contatoNomeAssinatura);
     }
 
     if (content.scrollHeight > content.clientHeight && pageRows.length === 0 && remaining.length > 0) {
-      tail.innerHTML = buildSignatureBlock(tipo, orc);
+      tail.innerHTML = buildSignatureBlock(tipo, orc, contatoNomeAssinatura);
     }
 
     if (isLastPage) {
@@ -363,12 +367,12 @@ function buildPages(context) {
         tbody.removeChild(tbody.lastElementChild);
         remaining.unshift(lastRow);
         isLastPage = false;
-        tail.innerHTML = buildSignatureBlock(tipo, orc);
+        tail.innerHTML = buildSignatureBlock(tipo, orc, contatoNomeAssinatura);
         ensureTableFits(page);
       }
 
       if (!isLastPage && remaining.length === 0) {
-        tail.innerHTML = buildFinalBlock(tipo, orc);
+        tail.innerHTML = buildFinalBlock(tipo, orc, contatoNomeAssinatura);
         ensureTableFits(page);
       }
     }
@@ -395,6 +399,7 @@ async function buildDocument() {
     const cliente = clienteResp.cliente || clienteResp;
     const contatos = clienteResp.contatos || [];
     const contato = contatos.find(c => c.id === orc.contato_id) || contatos[0] || {};
+    const contatoNomeAssinatura = (contato?.nome || orc?.contato_nome || cliente?.comprador_nome || '').trim();
 
     window.generatedPdfMeta = {
       id,
@@ -434,6 +439,7 @@ async function buildDocument() {
       tipo,
       cliente,
       contato,
+      contatoNomeAssinatura,
       endEntregaStr,
       endCobrancaStr,
       endRegistroStr
