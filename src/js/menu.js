@@ -100,6 +100,8 @@ const AppUpdates = (() => {
 
     let publishStartToastShown = false;
     let eventsAttached = false;
+    let scheduledAutoCheckHandle = null;
+    let scheduledAutoCheckType = null;
 
     const STATUS_WITH_BADGE = new Set([
         'checking',
@@ -1248,6 +1250,7 @@ const AppUpdates = (() => {
         }
 
         if (nextMode === 'updating') {
+            clearScheduledAutoCheck();
             ensureUserSpinner(state.userControl.spinnerMessage || 'Aplicando atualização...');
         } else {
             hideUserSpinner();
@@ -1598,12 +1601,96 @@ const AppUpdates = (() => {
         }
     }
 
+    function clearScheduledAutoCheck() {
+        if (scheduledAutoCheckType === 'timeout' && scheduledAutoCheckHandle !== null) {
+            clearTimeout(scheduledAutoCheckHandle);
+        } else if (scheduledAutoCheckType === 'idle' && scheduledAutoCheckHandle !== null) {
+            if (typeof cancelIdleCallback === 'function') {
+                cancelIdleCallback(scheduledAutoCheckHandle);
+            }
+        } else if (scheduledAutoCheckType === 'raf' && scheduledAutoCheckHandle !== null) {
+            cancelAnimationFrame(scheduledAutoCheckHandle);
+        }
+        scheduledAutoCheckHandle = null;
+        scheduledAutoCheckType = null;
+    }
+
+    function scheduleAutoCheck(options = {}) {
+        if (!window.electronAPI?.getUpdateStatus) return;
+        if (state.userControl?.pendingAction || state.userControl?.mode === 'updating') {
+            return;
+        }
+
+        const { delay = 0, silent = true, userInitiated = false } = options;
+
+        const requeueLater = ms => {
+            clearScheduledAutoCheck();
+            scheduledAutoCheckType = 'timeout';
+            scheduledAutoCheckHandle = setTimeout(() => {
+                scheduledAutoCheckHandle = null;
+                scheduledAutoCheckType = null;
+                scheduleAutoCheck({ ...options, delay: 0 });
+            }, ms);
+        };
+
+        if (state.autoCheckPending) {
+            if (scheduledAutoCheckType !== 'timeout') {
+                requeueLater(Math.max(1500, delay || 0));
+            }
+            return;
+        }
+
+        clearScheduledAutoCheck();
+
+        const startCheck = () => {
+            if (typeof document !== 'undefined' && document.hidden) {
+                requeueLater(1500);
+                return;
+            }
+
+            if (typeof requestIdleCallback === 'function') {
+                scheduledAutoCheckType = 'idle';
+                scheduledAutoCheckHandle = requestIdleCallback(() => {
+                    scheduledAutoCheckHandle = null;
+                    scheduledAutoCheckType = null;
+                    runAutomaticCheck({ silent, userInitiated });
+                }, { timeout: 2500 });
+                return;
+            }
+
+            scheduledAutoCheckType = 'raf';
+            scheduledAutoCheckHandle = requestAnimationFrame(() => {
+                scheduledAutoCheckHandle = null;
+                scheduledAutoCheckType = null;
+                runAutomaticCheck({ silent, userInitiated });
+            });
+        };
+
+        if (delay > 0) {
+            scheduledAutoCheckType = 'timeout';
+            scheduledAutoCheckHandle = setTimeout(() => {
+                scheduledAutoCheckHandle = null;
+                scheduledAutoCheckType = null;
+                startCheck();
+            }, delay);
+        } else {
+            startCheck();
+        }
+    }
+
+    function handleVisibilityChange() {
+        if (typeof document === 'undefined' || document.hidden) return;
+        if (state.autoCheckPending) return;
+        if (state.userControl?.pendingAction || state.userControl?.mode === 'updating') return;
+        scheduleAutoCheck({ silent: true, delay: 250 });
+    }
+
     function ensureAutoCheckTimer() {
         if (state.autoCheckInterval || !window.electronAPI?.getUpdateStatus) return;
         // Executa a verificação automática a cada 10 minutos
         const intervalMs = 10 * 60 * 1000;
         state.autoCheckInterval = setInterval(() => {
-            runAutomaticCheck({ silent: true });
+            scheduleAutoCheck({ silent: true });
         }, intervalMs);
     }
 
@@ -1612,6 +1699,7 @@ const AppUpdates = (() => {
             clearInterval(state.autoCheckInterval);
             state.autoCheckInterval = null;
         }
+        clearScheduledAutoCheck();
     }
 
     async function handleSupAdminTriggerClick(event) {
@@ -1899,7 +1987,7 @@ const AppUpdates = (() => {
     function setUserProfile(user) {
         state.user = user || {};
         ensureAutoCheckTimer();
-        runAutomaticCheck({ silent: true });
+        scheduleAutoCheck({ silent: true, delay: 600 });
         applySupAdminState();
         updateUserControlFromStatus();
         applyUserState();
@@ -1991,6 +2079,7 @@ const AppUpdates = (() => {
 
         document.addEventListener('click', handleUserPanelDismiss);
         document.addEventListener('keydown', handleUserPanelKeydown);
+        document.addEventListener('visibilitychange', handleVisibilityChange);
 
         if (elements.supAdmin?.trigger) {
             elements.supAdmin.trigger.addEventListener('click', handleSupAdminTriggerClick);

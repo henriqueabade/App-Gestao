@@ -601,13 +601,27 @@ function initializeAutoUpdater() {
 
   configureAutoUpdaterFeed();
 
-  updateService
-    .checkForUpdates()
-    .catch(err => {
-      if (DEBUG) {
-        console.error('AutoUpdater: falha ao verificar atualizações', err);
-      }
-    });
+  const scheduleInitialCheck = () => {
+    updateService
+      .checkForUpdates()
+      .catch(err => {
+        if (DEBUG) {
+          console.error('AutoUpdater: falha ao verificar atualizações', err);
+        }
+      });
+  };
+
+  const configuredDelay = Number.parseInt(process.env.ELECTRON_UPDATE_INITIAL_DELAY, 10);
+  const defaultDelay = 1500;
+  const delay = Number.isFinite(configuredDelay) ? Math.max(0, configuredDelay) : defaultDelay;
+
+  if (delay > 0) {
+    setTimeout(scheduleInitialCheck, delay);
+  } else if (typeof setImmediate === 'function') {
+    setImmediate(scheduleInitialCheck);
+  } else {
+    scheduleInitialCheck();
+  }
 }
 
 function logDisplayInfo(context, selected) {
