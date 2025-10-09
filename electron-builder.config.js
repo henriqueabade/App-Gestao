@@ -5,9 +5,9 @@ module.exports = {
   productName: 'Santíssimo Decor',
   copyright: '© 2025 Santíssimo',
 
-  directories: {
-    output: path.join(__dirname, 'dist')
-  },
+ directories: {
+  output: 'C:/Users/henri/OneDrive/Work/Santissimo Decor/Novo Programa de Gestão/TestesApp/Instalador'
+},
 
   files: [
     "**/*",
