@@ -358,47 +358,47 @@ function summarizeChangedFiles(files) {
     {
       items: categories.frontend,
       build: list =>
-        `Melhora a experiência do aplicativo com ajustes visuais e de interação (${list}).`
+        `Refina as telas utilizadas pela equipe, ajustando layout, espaçamentos e respostas de interação nos arquivos (${list}) para deixar o fluxo diário mais claro.`
     },
     {
       items: categories.backend,
       build: list =>
-        `Aprimora os serviços internos para sustentar os novos fluxos de uso (${list}).`
+        `Reestrutura serviços internos e regras de negócio (${list}), garantindo respostas consistentes aos novos processos.`
     },
     {
       items: categories.tests,
       build: list =>
-        `Reforça a confiabilidade com cenários de teste automatizados (${list}).`
+        `Reforça a confiabilidade adicionando cenários automatizados que validam os comportamentos atualizados (${list}), prevenindo regressões.`
     },
     {
       items: categories.docs,
       build: list =>
-        `Atualiza a documentação para orientar a equipe sobre as mudanças (${list}).`
+        `Atualiza a documentação compartilhada (${list}) com orientações práticas sobre como aplicar as mudanças.`
     },
     {
       items: categories.config,
       build: list =>
-        `Ajusta configurações do projeto para suportar o novo comportamento (${list}).`
+        `Ajusta configurações e parâmetros do projeto (${list}) para sustentar o novo comportamento em todos os ambientes.`
     },
     {
       items: categories.dependencies,
       build: list =>
-        `Mantém as dependências alinhadas para garantir compatibilidade (${list}).`
+        `Mantém dependências e bibliotecas alinhadas (${list}), preservando compatibilidade e segurança.`
     },
     {
       items: categories.scripts,
       build: list =>
-        `Refina automações e scripts de suporte para facilitar o dia a dia (${list}).`
+        `Refina automações e scripts de suporte (${list}) para simplificar tarefas recorrentes da equipe.`
     },
     {
       items: categories.assets,
       build: list =>
-        `Atualiza recursos visuais para refletir a nova experiência (${list}).`
+        `Atualiza recursos visuais e arquivos estáticos (${list}), assegurando que a identidade visual reflita as melhorias.`
     },
     {
       items: categories.database,
       build: list =>
-        `Organiza estruturas de dados para atender às novas funcionalidades (${list}).`
+        `Organiza estruturas de dados e migrações (${list}) para acomodar os novos fluxos sem perda de informação.`
     }
   ];
 
@@ -411,8 +411,8 @@ function summarizeChangedFiles(files) {
   const otherList = formatFileList(categories.other, impactMessages.length ? 2 : 3);
   if (otherList) {
     const message = impactMessages.length
-      ? `Completa a entrega com ajustes pontuais em outros componentes (${otherList}).`
-      : `Inclui melhorias complementares em arquivos diversos (${otherList}).`;
+      ? `Completa a entrega com ajustes pontuais em componentes adicionais (${otherList}), deixando o pacote coerente.`
+      : `Inclui melhorias complementares em arquivos variados (${otherList}) para dar suporte às demais mudanças.`;
     impactMessages.push(message);
   }
 
