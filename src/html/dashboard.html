@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - Santíssimo Decor</title>
+    <link rel="stylesheet" href="../css/dashboard.css">
+    <link rel="stylesheet" href="../styles/scroll.css">
+</head>
+<body class="text-white">
+    <div class="modulo-container dashboard-module space-y-10">
+        <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-6 animate-fade-in-up">
+            <div>
+                <h1 class="text-3xl font-semibold mb-2">Dashboard</h1>
+                <p class="text-sm" style="color: var(--color-violet)">Visão panorâmica com indicadores simulados do Santíssimo Decor</p>
+            </div>
+            <div class="flex flex-wrap items-center gap-3">
+                <span class="dashboard-badge-soft">
+                    <i class="fas fa-circle text-xs"></i>
+                    Ambiente demonstrativo
+                </span>
+                <span class="dashboard-badge-soft" id="dashboardLastSync" data-dashboard-last-sync>
+                    <i class="fas fa-clock text-xs"></i>
+                    Atualizado há 5 minutos
+                </span>
+                <button class="btn-primary text-white rounded-md px-5 py-2 font-medium flex items-center gap-2" data-dashboard-action="refresh">
+                    <i class="fas fa-sync-alt"></i>
+                    Simular Atualização
+                </button>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
+            <div class="glass-surface rounded-xl p-6 dashboard-card animate-fade-in-up">
+                <div class="dashboard-card-icon" style="background: rgba(182, 160, 62, 0.18); color: var(--color-primary)">
+                    <i class="fas fa-hand-holding-usd"></i>
+                </div>
+                <div>
+                    <p class="dashboard-card-label">Receita Acumulada</p>
+                    <p class="dashboard-card-value" data-metric-target="125430" data-metric-format="currency" data-metric-variance="0.16">R$ 125.430</p>
+                    <span class="dashboard-metric-trend positive" data-trend-format="percent" data-trend-variance="0.18" data-trend-label="vs. mês anterior" data-trend-value="0.084" data-trend-decimals="1">+8,4% vs. mês anterior</span>
+                </div>
+            </div>
+
+            <div class="glass-surface rounded-xl p-6 dashboard-card animate-fade-in-up">
+                <div class="dashboard-card-icon" style="background: rgba(163, 148, 167, 0.18); color: var(--color-violet)">
+                    <i class="fas fa-users"></i>
+                </div>
+                <div>
+                    <p class="dashboard-card-label">Clientes Ativos</p>
+                    <p class="dashboard-card-value" data-metric-target="1247" data-metric-format="number" data-metric-variance="0.12">1.247</p>
+                    <span class="dashboard-metric-trend positive" data-trend-format="percent" data-trend-variance="0.12" data-trend-label="no trimestre" data-trend-value="0.042" data-trend-decimals="1">+4,2% no trimestre</span>
+                </div>
+            </div>
+
+            <div class="glass-surface rounded-xl p-6 dashboard-card animate-fade-in-up">
+                <div class="dashboard-card-icon" style="background: rgba(106, 21, 44, 0.18); color: var(--color-bordeaux)">
+                    <i class="fas fa-box"></i>
+                </div>
+                <div>
+                    <p class="dashboard-card-label">Pedidos em Produção</p>
+                    <p class="dashboard-card-value" data-metric-target="32" data-metric-format="number" data-metric-variance="0.35">32</p>
+                    <span class="dashboard-metric-trend negative" data-trend-format="percent" data-trend-variance="0.22" data-trend-label="vs. semana passada" data-trend-value="-0.031" data-trend-decimals="1">−3,1% vs. semana passada</span>
+                </div>
+            </div>
+
+            <div class="glass-surface rounded-xl p-6 dashboard-card animate-fade-in-up">
+                <div class="dashboard-card-icon" style="background: rgba(138, 167, 243, 0.18); color: var(--color-blue)">
+                    <i class="fas fa-coins"></i>
+                </div>
+                <div>
+                    <p class="dashboard-card-label">Ticket Médio</p>
+                    <p class="dashboard-card-value" data-metric-target="2847" data-metric-format="currency" data-metric-variance="0.14">R$ 2.847</p>
+                    <span class="dashboard-metric-trend positive" data-trend-format="percent" data-trend-variance="0.15" data-trend-label="nos últimos 30 dias" data-trend-value="0.068" data-trend-decimals="1">+6,8% nos últimos 30 dias</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
+            <div class="glass-surface rounded-xl p-6 space-y-6 animate-fade-in-up">
+                <div class="flex items-start justify-between gap-4">
+                    <div>
+                        <h3 class="text-lg font-semibold" style="color: var(--color-primary)">Desempenho Mensal</h3>
+                        <p class="text-sm" style="color: var(--neutral-100)">Comparativo de receita nos últimos 12 meses</p>
+                    </div>
+                    <span class="dashboard-badge-soft">
+                        <i class="fas fa-chart-line text-xs"></i>
+                        Dados ilustrativos
+                    </span>
+                </div>
+                <div class="dashboard-chart-wrapper">
+                    <svg viewBox="0 0 420 220" class="dashboard-line-chart" role="presentation" aria-hidden="true">
+                        <defs>
+                            <linearGradient id="dashboardLineFill" x1="0" x2="0" y1="0" y2="1">
+                                <stop offset="0%" stop-color="rgba(182, 160, 62, 0.55)" />
+                                <stop offset="100%" stop-color="rgba(182, 160, 62, 0)" />
+                            </linearGradient>
+                            <linearGradient id="dashboardLineStroke" x1="0" x2="1" y1="0" y2="0">
+                                <stop offset="0%" stop-color="var(--color-primary)" />
+                                <stop offset="100%" stop-color="var(--color-violet)" />
+                            </linearGradient>
+                        </defs>
+                        <g class="dashboard-grid-lines">
+                            <path d="M40 20 H400" />
+                            <path d="M40 70 H400" />
+                            <path d="M40 120 H400" />
+                            <path d="M40 170 H400" />
+                        </g>
+                        <polyline class="dashboard-line" points="40,160 80,140 120,150 160,120 200,130 240,90 280,110 320,70 360,80 400,45" />
+                        <polygon class="dashboard-area" points="40,160 80,140 120,150 160,120 200,130 240,90 280,110 320,70 360,80 400,45 400,200 40,200" />
+                        <g class="dashboard-points">
+                            <circle cx="40" cy="160" r="4" />
+                            <circle cx="120" cy="150" r="4" />
+                            <circle cx="200" cy="130" r="4" />
+                            <circle cx="280" cy="110" r="4" />
+                            <circle cx="360" cy="80" r="4" />
+                        </g>
+                    </svg>
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+                    <div class="flex items-center gap-3">
+                        <span class="dashboard-legend-dot" style="--legend-color: var(--color-primary)"></span>
+                        Receita confirmada
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <span class="dashboard-legend-dot" style="--legend-color: var(--color-violet)"></span>
+                        Receita projetada
+                    </div>
+                </div>
+            </div>
+
+            <div class="glass-surface rounded-xl p-6 space-y-6 animate-fade-in-up">
+                <div class="flex items-start justify-between gap-4">
+                    <div>
+                        <h3 class="text-lg font-semibold" style="color: var(--color-primary)">Mix de Receita</h3>
+                        <p class="text-sm" style="color: var(--neutral-100)">Proporção entre as principais linhas de produto</p>
+                    </div>
+                    <span class="dashboard-badge-soft">
+                        <i class="fas fa-palette text-xs"></i>
+                        Visual fake
+                    </span>
+                </div>
+                <div class="flex flex-col lg:flex-row items-center lg:items-stretch gap-6">
+                    <div class="dashboard-donut" aria-hidden="true">
+                        <div class="dashboard-donut-inner">
+                            <span class="text-xs uppercase tracking-widest" style="color: var(--neutral-100)">Total estimado</span>
+                            <p class="text-2xl font-semibold text-white">R$ 48,2 mil</p>
+                            <p class="text-xs" style="color: var(--neutral-100)">Referência mensal</p>
+                        </div>
+                    </div>
+                    <div class="flex-1 space-y-3">
+                        <div class="dashboard-legend-item">
+                            <span class="dashboard-legend-dot" style="--legend-color: var(--color-primary)"></span>
+                            <div>
+                                <p class="font-medium">Linha Premium</p>
+                                <p class="text-xs" style="color: var(--neutral-100)">45% do faturamento simulado</p>
+                            </div>
+                            <span class="dashboard-chip chip-positive">+6,1%</span>
+                        </div>
+                        <div class="dashboard-legend-item">
+                            <span class="dashboard-legend-dot" style="--legend-color: var(--color-violet)"></span>
+                            <div>
+                                <p class="font-medium">Projetos Sob Medida</p>
+                                <p class="text-xs" style="color: var(--neutral-100)">32% do faturamento simulado</p>
+                            </div>
+                            <span class="dashboard-chip">+1,8%</span>
+                        </div>
+                        <div class="dashboard-legend-item">
+                            <span class="dashboard-legend-dot" style="--legend-color: var(--color-blue)"></span>
+                            <div>
+                                <p class="font-medium">Varejo Decor</p>
+                                <p class="text-xs" style="color: var(--neutral-100)">18% do faturamento simulado</p>
+                            </div>
+                            <span class="dashboard-chip chip-warning">−2,4%</span>
+                        </div>
+                        <div class="dashboard-legend-item">
+                            <span class="dashboard-legend-dot" style="--legend-color: var(--color-bordeaux)"></span>
+                            <div>
+                                <p class="font-medium">Coleção Autor</p>
+                                <p class="text-xs" style="color: var(--neutral-100)">5% do faturamento simulado</p>
+                            </div>
+                            <span class="dashboard-chip">+0,6%</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="glass-surface rounded-xl shadow-lg table-scroll animate-fade-in-up">
+            <div class="px-6 py-4 border-b border-white/10 flex items-center justify-between">
+                <div>
+                    <h3 class="text-lg font-semibold" style="color: var(--color-primary)">Pedidos Recentes</h3>
+                    <p class="text-xs" style="color: var(--neutral-100)">Resumo fictício das últimas movimentações</p>
+                </div>
+                <span class="dashboard-badge-soft">
+                    <i class="fas fa-download text-xs"></i>
+                    Exportação desabilitada
+                </span>
+            </div>
+            <table class="w-full">
+                <thead class="sticky top-0" style="background: rgba(255,255,255,0.03); color: var(--neutral-100)">
+                    <tr>
+                        <th class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide">Pedido</th>
+                        <th class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide">Cliente</th>
+                        <th class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide">Projeto</th>
+                        <th class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide">Valor</th>
+                        <th class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide">Status</th>
+                        <th class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide">Atualização</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-white/5" data-dashboard-orders>
+                    <tr class="hover:bg-white/5 transition-colors">
+                        <td class="px-6 py-4 whitespace-nowrap text-sm">#SD-1045</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm">Marcela Vieira</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm">Sala de estar - Coleção Aura</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm">R$ 18.900</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm"><span class="dashboard-status dashboard-status--success">Produção concluída</span></td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-violet)">Há 2 horas</td>
+                    </tr>
+                    <tr class="hover:bg-white/5 transition-colors">
+                        <td class="px-6 py-4 whitespace-nowrap text-sm">#SD-1044</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm">Henrique Ramos</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm">Quarto casal - Linha Essenza</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm">R$ 12.480</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm"><span class="dashboard-status dashboard-status--info">Em produção</span></td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-violet)">Há 4 horas</td>
+                    </tr>
+                    <tr class="hover:bg-white/5 transition-colors">
+                        <td class="px-6 py-4 whitespace-nowrap text-sm">#SD-1043</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm">Luciana Prado</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm">Hall social - Peças destaque</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm">R$ 8.350</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm"><span class="dashboard-status dashboard-status--warning">Aguardando aprovação</span></td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-violet)">Ontem</td>
+                    </tr>
+                    <tr class="hover:bg-white/5 transition-colors">
+                        <td class="px-6 py-4 whitespace-nowrap text-sm">#SD-1042</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm">Andréa Martins</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm">Projeto corporativo - Lobby</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm">R$ 25.700</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm"><span class="dashboard-status dashboard-status--success">Entrega agendada</span></td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-violet)">Há 3 dias</td>
+                    </tr>
+                    <tr class="hover:bg-white/5 transition-colors">
+                        <td class="px-6 py-4 whitespace-nowrap text-sm">#SD-1041</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm">Coletivo Mosaico</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm">Mostruário - Coleção Giardino</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm">R$ 6.120</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm"><span class="dashboard-status dashboard-status--neutral">Separação de estoque</span></td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-violet)">Há 5 dias</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
+            <div class="glass-surface rounded-xl p-6 space-y-4 animate-fade-in-up">
+                <div class="flex items-center justify-between">
+                    <h3 class="text-lg font-semibold" style="color: var(--color-primary)">Linha do Tempo</h3>
+                    <span class="dashboard-badge-soft">
+                        <i class="fas fa-stream text-xs"></i>
+                        Atualizações fictícias
+                    </span>
+                </div>
+                <ul class="dashboard-timeline" data-dashboard-timeline>
+                    <li>
+                        <span class="dashboard-timeline-time">09:24</span>
+                        <div>
+                            <p class="font-medium">Pedido #SD-1045 finalizado</p>
+                            <p class="text-xs" style="color: var(--neutral-100)">Equipe de produção confirmou inspeção de qualidade</p>
+                        </div>
+                        <span class="dashboard-chip chip-positive">Produção</span>
+                    </li>
+                    <li>
+                        <span class="dashboard-timeline-time">08:40</span>
+                        <div>
+                            <p class="font-medium">Novo lead cadastrado</p>
+                            <p class="text-xs" style="color: var(--neutral-100)">Contato via Instagram para projeto residencial</p>
+                        </div>
+                        <span class="dashboard-chip">CRM</span>
+                    </li>
+                    <li>
+                        <span class="dashboard-timeline-time">Ontem</span>
+                        <div>
+                            <p class="font-medium">Entrega agendada</p>
+                            <p class="text-xs" style="color: var(--neutral-100)">Equipe logística confirmou entrega em Belo Horizonte</p>
+                        </div>
+                        <span class="dashboard-chip chip-info">Logística</span>
+                    </li>
+                </ul>
+            </div>
+
+            <div class="glass-surface rounded-xl p-6 space-y-6 animate-fade-in-up">
+                <div class="flex items-center justify-between">
+                    <h3 class="text-lg font-semibold" style="color: var(--color-primary)">Próximos Passos</h3>
+                    <span class="dashboard-badge-soft">
+                        <i class="fas fa-lightbulb text-xs"></i>
+                        Sugestões fake
+                    </span>
+                </div>
+                <ul class="dashboard-next-actions">
+                    <li>
+                        <div>
+                            <p class="font-medium">Revisar orçamento da Coleção Aurora</p>
+                            <p class="text-xs" style="color: var(--neutral-100)">Ajustar acabamento metálico conforme briefing</p>
+                        </div>
+                        <span class="dashboard-chip chip-warning">Hoje</span>
+                    </li>
+                    <li>
+                        <div>
+                            <p class="font-medium">Confirmar disponibilidade do ateliê</p>
+                            <p class="text-xs" style="color: var(--neutral-100)">Reserva solicitada para workshop com parceiros</p>
+                        </div>
+                        <span class="dashboard-chip chip-info">Em breve</span>
+                    </li>
+                    <li>
+                        <div>
+                            <p class="font-medium">Enviar newsletter temática</p>
+                            <p class="text-xs" style="color: var(--neutral-100)">Destacar lançamentos da linha autoral</p>
+                        </div>
+                        <span class="dashboard-chip">Amanhã</span>
+                    </li>
+                </ul>
+                <div class="glass-surface rounded-lg p-4 border border-white/10 dashboard-hint">
+                    <div class="flex items-start gap-3">
+                        <div class="w-9 h-9 rounded-full flex items-center justify-center" style="background: rgba(182, 160, 62, 0.12); color: var(--color-primary)">
+                            <i class="fas fa-wand-magic-sparkles"></i>
+                        </div>
+                        <div class="text-sm space-y-1">
+                            <p class="font-medium text-white">Integrações em andamento</p>
+                            <p style="color: var(--neutral-100)">Este painel é ilustrativo e aguarda conexão com os dados reais do sistema.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

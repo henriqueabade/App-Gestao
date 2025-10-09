@@ -19,6 +19,33 @@ const MODULES_WITHOUT_SCROLL = new Set([
     'usuarios'
 ]);
 
+const MODULE_LABELS = {
+    dashboard: 'Dashboard',
+    'materia-prima': 'Matéria Prima',
+    produtos: 'Produtos',
+    orcamentos: 'Orçamentos',
+    pedidos: 'Pedidos',
+    clientes: 'Clientes',
+    prospeccoes: 'Prospecções',
+    contatos: 'Contatos',
+    calendario: 'Calendário',
+    tarefas: 'Tarefas',
+    usuarios: 'Usuários',
+    financeiro: 'Financeiro',
+    relatorios: 'Relatórios',
+    ia: 'IA',
+    configuracoes: 'Configurações'
+};
+
+function getModuleTitle(page) {
+    if (!page) return 'módulo';
+    if (MODULE_LABELS[page]) return MODULE_LABELS[page];
+    return page
+        .split('-')
+        .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+        .join(' ');
+}
+
 function applyModuleScrollBehavior(page) {
     const content = document.getElementById('content');
     if (!content) return;
@@ -2196,12 +2223,35 @@ AppUpdates.init();
 
 // Carrega páginas modulares dentro da div#content
 // Remove estilos e scripts antigos e executa o novo script em escopo isolado
-async function loadPage(page) {
+async function loadPage(page, options = {}) {
     const content = document.getElementById('content');
-    if (!content) return;
+    if (!content || !page) return;
+
+    if (!options.skipNavigationUpdate) {
+        setActiveNavigation(page);
+    }
+
+    const moduleTitle = getModuleTitle(page);
+
+    content.dataset.activePage = page;
+    content.innerHTML = `
+        <div class="modulo-container flex flex-col items-center justify-center py-24 text-center space-y-6">
+            <div class="w-12 h-12 border-4 border-white/10 border-t-[var(--color-primary)] rounded-full animate-spin"></div>
+            <div>
+                <p class="text-lg font-semibold text-white">Carregando ${moduleTitle}</p>
+                <p class="text-sm" style="color: var(--color-violet)">Preparando a experiência...</p>
+            </div>
+        </div>
+    `;
+
+    document.getElementById('page-style')?.remove();
+    document.getElementById('page-script')?.remove();
 
     try {
-        const resp = await fetch(`../html/${page}.html`);
+        const resp = await fetch(`../html/${page}.html`, { cache: 'no-store' });
+        if (!resp.ok) {
+            throw new Error(`Resposta inválida (${resp.status})`);
+        }
         const rawHtml = await resp.text();
 
         const parser = new DOMParser();
@@ -2219,8 +2269,6 @@ async function loadPage(page) {
             module = content.querySelector('.modulo-container');
         }
 
-        applyModuleScrollBehavior(page);
-
         if (module) {
             module.dataset.page = page;
             module.classList.add('module-enter');
@@ -2228,32 +2276,76 @@ async function loadPage(page) {
                 module.classList.remove('module-enter');
             }, { once: true });
         }
-        document.dispatchEvent(new Event('module-change'));
-
-        document.getElementById('page-style')?.remove();
-        document.getElementById('page-script')?.remove();
 
         const style = document.createElement('link');
         style.id = 'page-style';
         style.rel = 'stylesheet';
         style.href = `../css/${page}.css`;
+        style.dataset.page = page;
         document.head.appendChild(style);
 
-        const script = document.createElement('script');
-        script.id = 'page-script';
-        const jsResp = await fetch(`../js/${page}.js`);
-        const jsText = await jsResp.text();
-        script.textContent = `(function(){\n${jsText}\n})();`;
-        document.body.appendChild(script);
-        document.dispatchEvent(new Event('module-change'));
+        try {
+            const jsResp = await fetch(`../js/${page}.js`, { cache: 'no-store' });
+            if (jsResp.ok) {
+                const jsText = await jsResp.text();
+                if (jsText.trim().length) {
+                    const script = document.createElement('script');
+                    script.id = 'page-script';
+                    script.dataset.page = page;
+                    script.textContent = `(function(){\n${jsText}\n})();`;
+                    document.body.appendChild(script);
+                }
+            }
+        } catch (scriptErr) {
+            console.warn(`Script do módulo ${page} indisponível`, scriptErr);
+        }
     } catch (err) {
         console.error('Erro ao carregar página', page, err);
+        content.innerHTML = `
+            <div class="modulo-container flex flex-col items-center justify-center py-20 text-center space-y-4">
+                <div class="w-12 h-12 rounded-full border border-dashed border-white/20 flex items-center justify-center">
+                    <i class="fas fa-triangle-exclamation text-xl" style="color: var(--color-bordeaux)"></i>
+                </div>
+                <div>
+                    <p class="text-lg font-semibold text-white">Não foi possível abrir ${moduleTitle}</p>
+                    <p class="text-sm" style="color: var(--neutral-100)">Verifique se o módulo está disponível e tente novamente.</p>
+                </div>
+            </div>
+        `;
+    } finally {
+        applyModuleScrollBehavior(page);
+        document.dispatchEvent(new CustomEvent('module-change', { detail: { page } }));
     }
 }
 window.loadPage = loadPage;
 
 let sidebarExpanded = false;
 let crmExpanded = false;
+
+function setActiveNavigation(page) {
+    const items = document.querySelectorAll('.sidebar-item, .submenu-item');
+    items.forEach(item => item.classList.remove('active'));
+
+    const target = document.querySelector(`.sidebar-item[data-page="${page}"]`) ||
+        document.querySelector(`.submenu-item[data-page="${page}"]`);
+
+    if (!target) {
+        return;
+    }
+
+    target.classList.add('active');
+
+    const insideCrm = target.closest('#crmSubmenu');
+    if (insideCrm) {
+        crmSubmenu.classList.add('open');
+        chevron.classList.add('rotated');
+        crmExpanded = true;
+    } else if (crmExpanded) {
+        crmSubmenu.classList.remove('open');
+        chevron.classList.remove('rotated');
+        crmExpanded = false;
+    }
+}
 
 // Expande a sidebar quando necessário
 function expandSidebar() {
@@ -2342,47 +2434,17 @@ crmToggle.addEventListener('click', toggleCrmSubmenu);
 
 // Navegação interna
 document.querySelectorAll('.sidebar-item[data-page], .submenu-item[data-page]').forEach(item => {
-    item.addEventListener('click', function (e) {
-        e.stopPropagation();
-        // Remove destaque de todos os itens antes de aplicar ao clicado
-
-        document.querySelectorAll('.sidebar-item, .submenu-item').forEach(i => i.classList.remove('active'));
-        // Marca item clicado como ativo para aplicar o estilo de destaque
-
-        this.classList.add('active');
-
-        // Fecha submenu do CRM ao navegar para outros módulos
-        const insideCrm = this.closest('#crmSubmenu');
-        if (!insideCrm && crmExpanded) {
-            crmSubmenu.classList.remove('open');
-            chevron.classList.remove('rotated');
-            crmExpanded = false;
-        }
-        // Mantém submenu aberto se o clique for em um item do CRM
-        if (insideCrm && !crmExpanded) {
-            crmSubmenu.classList.add('open');
-            chevron.classList.add('rotated');
-            crmExpanded = true;
-        }
-
-        const page = this.dataset.page;
-        if (page === 'dashboard') {
-            window.location.reload();
-        } else if (page) {
-            loadPage(page);
-        }
+    item.addEventListener('click', (event) => {
+        event.stopPropagation();
+        const page = item.dataset.page;
+        if (!page) return;
+        loadPage(page);
         collapseSidebar();
     });
 });
 
-// Animação inicial dos cards
 window.addEventListener('load', () => {
-    document.querySelectorAll('.animate-fade-in-up').forEach((el, index) => {
-        setTimeout(() => {
-            el.style.opacity = '1';
-            el.style.transform = 'translateY(0)';
-        }, index * 100);
-    });
+    loadPage('dashboard');
 });
 
 // Ajustes responsivos ao redimensionar
