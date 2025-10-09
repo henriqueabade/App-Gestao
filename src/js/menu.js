@@ -1707,22 +1707,56 @@ const AppUpdates = (() => {
             return;
         }
         if (state.supAdmin.mode === 'publishing') return;
-        await runAutomaticCheck({ silent: true });
-        const hasPending = computePublishAvailability();
-        if (!hasPending) {
-            setSupAdminMode('idle', { panelOpen: false });
-            const message = 'Não há atualizações para publicar. Todas já foram publicadas.';
-            await showStandardDialog({
-                title: 'Atualizações',
-                message,
-                confirmLabel: 'Entendi',
-                variant: 'info'
-            });
+
+        const wasOpen = Boolean(state.supAdmin.panelOpen);
+        const willOpen = !wasOpen;
+        const hadPendingBefore = computePublishAvailability();
+
+        if (wasOpen) {
+            setSupAdminMode(hadPendingBefore ? 'available' : 'idle', { panelOpen: false });
+        } else if (hadPendingBefore) {
+            setSupAdminMode('available', { panelOpen: true });
+        }
+
+        let checkError = null;
+        try {
+            const result = runAutomaticCheck({ silent: true });
+            if (result && typeof result.then === 'function') {
+                await result;
+            }
+        } catch (err) {
+            checkError = err;
+        }
+
+        const hasPendingAfter = computePublishAvailability();
+        if (hasPendingAfter) {
+            if (willOpen && !hadPendingBefore) {
+                setSupAdminMode('available', { panelOpen: true });
+            }
             return;
         }
 
-        const nextOpen = !state.supAdmin.panelOpen;
-        setSupAdminMode('available', { panelOpen: nextOpen });
+        setSupAdminMode('idle', { panelOpen: false });
+
+        if (!willOpen) {
+            return;
+        }
+
+        if (checkError) {
+            const message = checkError?.message || 'Não foi possível verificar atualizações.';
+            if (window.showToast) {
+                window.showToast(message, 'error');
+            }
+            return;
+        }
+
+        const message = 'Não há atualizações para publicar. Todas já foram publicadas.';
+        await showStandardDialog({
+            title: 'Atualizações',
+            message,
+            confirmLabel: 'Entendi',
+            variant: 'info'
+        });
     }
 
     async function handleSupAdminPublish() {

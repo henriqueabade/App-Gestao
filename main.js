@@ -290,7 +290,12 @@ function categorizeChangedFiles(files) {
     assets: new Set(),
     database: new Set(),
     scripts: new Set(),
-    other: new Set()
+    other: new Set(),
+    frontendDetails: {
+      styles: new Set(),
+      layouts: new Set(),
+      logic: new Set()
+    }
   };
 
   files.forEach(file => {
@@ -311,8 +316,32 @@ function categorizeChangedFiles(files) {
     const isDatabase = /^(data\/|migrations?\/)/.test(lower) || /\.sql$/i.test(baseName);
     const isScript = lower.startsWith('scripts/') || lower.startsWith('tools/');
 
+    const ext = path.extname(baseName).toLowerCase();
+
     if (normalized.startsWith('src/') || normalized.startsWith('manual-tests/') || normalized.startsWith('public/')) {
       categories.frontend.add(display);
+
+      const isStyleFile =
+        [
+          '.css',
+          '.scss',
+          '.sass',
+          '.less',
+          '.styl'
+        ].includes(ext) ||
+        /\b(styles|css)\b/.test(normalized);
+      const isLayoutFile = ['.html', '.hbs', '.ejs', '.pug', '.vue'].includes(ext);
+      const isLogicFile =
+        ['.js', '.ts', '.tsx', '.jsx'].includes(ext) ||
+        /\b(js|ts)\b/.test(path.dirname(normalized));
+
+      if (isStyleFile) {
+        categories.frontendDetails.styles.add(display);
+      } else if (isLayoutFile) {
+        categories.frontendDetails.layouts.add(display);
+      } else if (isLogicFile) {
+        categories.frontendDetails.logic.add(display);
+      }
     } else if (normalized.startsWith('backend/')) {
       categories.backend.add(display);
     } else if (isTest) {
@@ -354,12 +383,32 @@ function summarizeChangedFiles(files) {
   const categories = categorizeChangedFiles(files);
   const impactMessages = [];
 
+  const frontendDetails = categories.frontendDetails || { styles: new Set(), layouts: new Set(), logic: new Set() };
+
+  const styleList = formatFileList(frontendDetails.styles, 3);
+  if (styleList) {
+    impactMessages.push(
+      `Atualiza a paleta de cores e os contrastes das telas (${styleList}), aplicando o novo visual assim que a atualização for instalada.`
+    );
+  }
+
+  const layoutList = formatFileList(frontendDetails.layouts, 3);
+  if (layoutList) {
+    impactMessages.push(
+      `Reorganiza a estrutura e os componentes visuais (${layoutList}), deixando a navegação mais clara para a equipe.`
+    );
+  }
+
+  const logicList = formatFileList(frontendDetails.logic, 3);
+  if (logicList) {
+    const touchesMenu = frontendDetails.logic.has('js/menu.js');
+    const message = touchesMenu
+      ? `Torna imediata a abertura e o fechamento do painel "Atualizações" (${logicList}), eliminando travamentos ao clicar no botão.`
+      : `Ajusta os comportamentos interativos das telas (${logicList}), garantindo respostas mais rápidas durante o uso.`;
+    impactMessages.push(message);
+  }
+
   const CATEGORY_BUILDERS = [
-    {
-      items: categories.frontend,
-      build: list =>
-        `Refina as telas utilizadas pela equipe, ajustando layout, espaçamentos e respostas de interação nos arquivos (${list}) para deixar o fluxo diário mais claro.`
-    },
     {
       items: categories.backend,
       build: list =>
@@ -410,9 +459,12 @@ function summarizeChangedFiles(files) {
 
   const otherList = formatFileList(categories.other, impactMessages.length ? 2 : 3);
   if (otherList) {
-    const message = impactMessages.length
-      ? `Completa a entrega com ajustes pontuais em componentes adicionais (${otherList}), deixando o pacote coerente.`
-      : `Inclui melhorias complementares em arquivos variados (${otherList}) para dar suporte às demais mudanças.`;
+    const touchesMainAutomation = categories.other.has('main.js');
+    const message = touchesMainAutomation
+      ? `Aprimora a geração automática das notas de versão (${otherList}), descrevendo com clareza o que muda para quem aplica a atualização.`
+      : impactMessages.length
+          ? `Completa a entrega com ajustes pontuais em componentes adicionais (${otherList}), deixando o pacote coerente.`
+          : `Inclui melhorias complementares em arquivos variados (${otherList}) para dar suporte às demais mudanças.`;
     impactMessages.push(message);
   }
 
