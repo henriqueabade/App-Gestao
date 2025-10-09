@@ -245,18 +245,33 @@ async function carregarOrcamentos() {
             });
         });
         tbody.querySelectorAll('.fa-download').forEach(icon => {
-            icon.addEventListener('click', e => {
+            icon.addEventListener('click', async e => {
                 e.stopPropagation();
                 const tr = e.currentTarget.closest('tr');
                 const id = tr.dataset.id;
                 const status = tr.cells[5]?.innerText.trim();
                 if (status === 'Rascunho') {
                     showPdfUnavailableDialog(id);
-                } else {
-                    if (window.electronAPI?.openPdf) {
-                        window.notifyPdfGeneration?.();
-                        window.electronAPI.openPdf(id, 'orcamento');
+                    return;
+                }
+
+                if (!window.electronAPI?.openPdf) return;
+
+                window.notifyPdfGeneration?.();
+                try {
+                    const result = await window.electronAPI.openPdf(id, 'orcamento');
+                    if (result?.success) {
+                        window.showToast?.('PDF salvo com sucesso!', 'success');
+                    } else if (result?.canceled) {
+                        window.showToast?.('Geração de PDF cancelada.', 'info');
+                    } else {
+                        const message = result?.message || 'Não foi possível gerar o PDF.';
+                        window.showToast?.(message, 'error');
                     }
+                } catch (err) {
+                    console.error('Erro ao gerar PDF de orçamento', err);
+                    const message = err?.message || 'Erro inesperado ao gerar PDF.';
+                    window.showToast?.(`Erro ao gerar PDF: ${message}`, 'error');
                 }
             });
         });

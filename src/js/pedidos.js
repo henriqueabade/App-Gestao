@@ -53,6 +53,22 @@ function showFunctionUnavailableDialog(message) {
     overlay.querySelector('#funcUnavailableOk').addEventListener('click', () => overlay.remove());
 }
 
+function showPdfUnavailableDialog() {
+    const overlay = document.createElement('div');
+    overlay.className = 'fixed inset-0 bg-black/50 flex items-center justify-center p-4';
+    overlay.innerHTML = `<div class="max-w-sm w-full glass-surface backdrop-blur-xl rounded-2xl border border-red-500/20 ring-1 ring-red-500/30 shadow-2xl/40 animate-modalFade">
+        <div class="p-6 text-center">
+            <h3 class="text-lg font-semibold mb-4 text-red-400">Função Indisponível</h3>
+            <p class="text-sm text-gray-300 mb-6">Não é possível gerar PDF para pedidos em RASCUNHO!</p>
+            <div class="flex justify-center">
+                <button id="pdfUnavailableOk" class="btn-neutral px-4 py-2 rounded-lg text-white font-medium">OK</button>
+            </div>
+        </div>
+    </div>`;
+    document.body.appendChild(overlay);
+    overlay.querySelector('#pdfUnavailableOk').addEventListener('click', () => overlay.remove());
+}
+
 function showStatusConfirmDialog(message, cb) {
     const overlay = document.createElement('div');
     overlay.className = 'fixed inset-0 bg-black/50 flex items-center justify-center p-4';
@@ -218,16 +234,33 @@ async function carregarPedidos() {
             });
         });
         tbody.querySelectorAll('.fa-download').forEach(icon => {
-            icon.addEventListener('click', e => {
+            icon.addEventListener('click', async e => {
                 e.stopPropagation();
                 const tr = e.currentTarget.closest('tr');
                 const id = tr.dataset.id;
                 const status = tr.cells[5]?.innerText.trim();
                 if (status === 'Rascunho') {
                     showPdfUnavailableDialog();
-                } else if (window.electronAPI?.openPdf) {
-                    window.notifyPdfGeneration?.();
-                    window.electronAPI.openPdf(id, 'pedido');
+                    return;
+                }
+
+                if (!window.electronAPI?.openPdf) return;
+
+                window.notifyPdfGeneration?.();
+                try {
+                    const result = await window.electronAPI.openPdf(id, 'pedido');
+                    if (result?.success) {
+                        window.showToast?.('PDF salvo com sucesso!', 'success');
+                    } else if (result?.canceled) {
+                        window.showToast?.('Geração de PDF cancelada.', 'info');
+                    } else {
+                        const message = result?.message || 'Não foi possível gerar o PDF.';
+                        window.showToast?.(message, 'error');
+                    }
+                } catch (err) {
+                    console.error('Erro ao gerar PDF de pedido', err);
+                    const message = err?.message || 'Erro inesperado ao gerar PDF.';
+                    window.showToast?.(`Erro ao gerar PDF: ${message}`, 'error');
                 }
             });
         });

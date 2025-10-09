@@ -118,6 +118,7 @@ let currentUserSession = null;
 let isSupAdmin = false;
 let lastRecordedAction = null;
 let isPersistingExit = false;
+let apiServerInstance = null;
 let closingDashboardWindow = false;
 let quittingApp = false;
 const localAppVersion = app.getVersion();
@@ -1410,11 +1411,30 @@ async function persistUserExit(reason) {
   isPersistingExit = false;
 }
 
+function closeApiServer() {
+  if (!apiServerInstance) {
+    return Promise.resolve();
+  }
+
+  const server = apiServerInstance;
+  apiServerInstance = null;
+
+  return new Promise((resolve) => {
+    server.close((err) => {
+      if (err) {
+        console.error('Failed to close API server', err);
+      }
+      resolve();
+    });
+  });
+}
+
 async function flushAndQuit(reason) {
   if (!quittingApp) {
     quittingApp = true;
     await persistUserExit(reason);
   }
+  await closeApiServer();
   app.quit();
 }
 
@@ -1602,8 +1622,17 @@ app.whenReady().then(() => {
   if (!process.env.API_PORT) {
     console.warn('API_PORT not set, defaulting to 3000');
   }
-  apiServer.listen(apiPort, () => {
+  apiServerInstance = apiServer.listen(apiPort, () => {
     if (DEBUG) console.log(`API server running on port ${apiPort}`);
+  });
+
+  apiServerInstance.on('error', (err) => {
+    console.error(`Erro ao iniciar o servidor da API na porta ${apiPort}`, err);
+    dialog.showErrorBox(
+      'Erro ao iniciar servidor',
+      `Não foi possível iniciar o servidor interno na porta ${apiPort}.` +
+        '\nVerifique se outra aplicação está utilizando essa porta.'
+    );
   });
 
   // Cria a janela de login sem exibí-la imediatamente.
@@ -1637,6 +1666,19 @@ app.on('before-quit', (event) => {
     event.preventDefault();
     flushAndQuit('before-quit');
   }
+});
+
+app.on('will-quit', () => {
+  // Garantimos que o servidor da API seja finalizado mesmo em encerramentos atípicos
+  closeApiServer();
+});
+
+['SIGINT', 'SIGTERM'].forEach((signal) => {
+  process.on(signal, () => {
+    closeApiServer().finally(() => {
+      process.exit();
+    });
+  });
 });
 
 ipcMain.handle('registrar-usuario', async (_event, dados) => {
@@ -2330,7 +2372,7 @@ ipcMain.handle('get-saved-display', () => {
 
 ipcMain.handle('open-pdf', async (_event, { id, tipo }) => {
   if (!id) {
-    return false;
+    return { success: false, message: 'Documento inválido para geração de PDF.' };
   }
 
   const url = new URL('http://localhost:3000/pdf');
@@ -2349,27 +2391,50 @@ ipcMain.handle('open-pdf', async (_event, { id, tipo }) => {
   try {
     await pdfWindow.loadURL(url.toString());
 
-    await pdfWindow.webContents.executeJavaScript(`
-      (function waitForPdfReady() {
-        if (typeof window === 'undefined') {
-          return true;
-        }
-        if (window.pdfBuildError) {
-          throw new Error(window.pdfBuildError);
-        }
-        if (window.pdfBuildReady) {
-          return true;
-        }
-        return new Promise((resolve, reject) => {
-          window.addEventListener('pdf-build-ready', () => resolve(true), { once: true });
-          window.addEventListener('pdf-build-error', (event) => {
-            const detail = event?.detail || 'Erro ao gerar PDF';
-            reject(new Error(detail));
-          }, { once: true });
-          setTimeout(() => resolve(true), 5000);
-        });
-      })();
-    `, true);
+    await pdfWindow.webContents.executeJavaScript(
+      `
+        (function waitForPdfReady() {
+          if (typeof window === 'undefined') {
+            return true;
+          }
+
+          if (window.pdfBuildError) {
+            throw new Error(window.pdfBuildError);
+          }
+
+          if (window.pdfBuildReady) {
+            return true;
+          }
+
+          return new Promise((resolve, reject) => {
+            const finalize = (handler, value) => {
+              clearTimeout(timeoutId);
+              handler(value);
+            };
+
+            const timeoutId = setTimeout(() => {
+              finalize(reject, new Error('Tempo limite ao montar o documento para PDF.'));
+            }, 20000);
+
+            window.addEventListener(
+              'pdf-build-ready',
+              () => finalize(resolve, true),
+              { once: true }
+            );
+
+            window.addEventListener(
+              'pdf-build-error',
+              (event) => {
+                const detail = event?.detail || 'Erro ao gerar PDF';
+                finalize(reject, new Error(detail));
+              },
+              { once: true }
+            );
+          });
+        })();
+      `,
+      true
+    );
 
     const meta = await pdfWindow.webContents
       .executeJavaScript('window.generatedPdfMeta || {};', true)
@@ -2389,7 +2454,8 @@ ipcMain.handle('open-pdf', async (_event, { id, tipo }) => {
       printBackground: true,
       pageSize: 'A4',
       landscape: false,
-      marginsType: 0
+      marginsType: 0,
+      preferCSSPageSize: true
     });
 
     const { canceled, filePath } = await dialog.showSaveDialog({
@@ -2399,14 +2465,15 @@ ipcMain.handle('open-pdf', async (_event, { id, tipo }) => {
     });
 
     if (canceled || !filePath) {
-      return false;
+      return { success: false, canceled: true };
     }
 
+    await fs.promises.mkdir(path.dirname(filePath), { recursive: true });
     await fs.promises.writeFile(filePath, pdfData);
-    return true;
+    return { success: true, filePath };
   } catch (error) {
     console.error('Erro ao gerar PDF', error);
-    return false;
+    return { success: false, message: error?.message || 'Erro ao gerar PDF.' };
   } finally {
     if (!pdfWindow.isDestroyed()) {
       pdfWindow.close();
