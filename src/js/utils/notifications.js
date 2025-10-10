@@ -96,7 +96,10 @@ function notifyPdfGeneration(message = 'Gerando PDF...') {
   setTimeout(() => fallback.remove(), 3000);
 }
 
-function notifyDesktopOnlyPdf(id, { message = 'Disponível apenas no aplicativo desktop' } = {}) {
+async function notifyDesktopOnlyPdf(
+  id,
+  { message = 'Disponível apenas no aplicativo desktop', type } = {},
+) {
   try {
     showToast(message, 'error');
   } catch (err) {
@@ -109,10 +112,38 @@ function notifyDesktopOnlyPdf(id, { message = 'Disponível apenas no aplicativo 
   if (!id) return;
 
   try {
-    const pdfUrl = `http://localhost:3000/pdf?id=${encodeURIComponent(id)}`;
-    window.open(pdfUrl, '_blank', 'noopener,noreferrer');
+    const fallbackBaseUrl = 'http://localhost:3000';
+    let apiBaseUrl;
+
+    try {
+      apiBaseUrl = await window.apiConfig?.getApiBaseUrl?.();
+    } catch (err) {
+      console.warn('Não foi possível recuperar a base da API.', err);
+    }
+
+    const normalizedBaseUrl =
+      typeof apiBaseUrl === 'string' && apiBaseUrl.trim().length > 0
+        ? apiBaseUrl
+        : fallbackBaseUrl;
+
+    const pdfUrl = new URL('/pdf', normalizedBaseUrl);
+    pdfUrl.searchParams.set('id', String(id));
+    if (type) {
+      pdfUrl.searchParams.set('tipo', String(type));
+    }
+    pdfUrl.searchParams.set('apiBaseUrl', normalizedBaseUrl);
+
+    window.open(pdfUrl.toString(), '_blank', 'noopener,noreferrer');
   } catch (err) {
     console.warn('Não foi possível abrir o PDF no navegador.', err);
+    try {
+      showToast('Não foi possível abrir o PDF no navegador.', 'error');
+    } catch (toastErr) {
+      console.warn('Não foi possível exibir toast de erro.', toastErr);
+      if (typeof alert === 'function') {
+        alert('Não foi possível abrir o PDF no navegador.'); // eslint-disable-line no-alert
+      }
+    }
   }
 }
 
