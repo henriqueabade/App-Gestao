@@ -1,5 +1,8 @@
 // Lógica de interação para o módulo de Relatórios
-const RELATORIOS_API_BASE_URL = 'http://localhost:3000';
+async function fetchFromApi(path, options) {
+    const baseUrl = await window.apiConfig.getApiBaseUrl();
+    return fetch(`${baseUrl}${path}`, options);
+}
 const BADGE_CLASS_MAP = {
     success: 'badge-success',
     warning: 'badge-warning',
@@ -881,8 +884,8 @@ function formatPhone(value) {
     return formatText(value, '—');
 }
 
-async function fetchJson(url) {
-    const response = await fetch(url);
+async function fetchJson(path, options) {
+    const response = await fetchFromApi(path, options);
     if (!response.ok) {
         const error = new Error(`Request failed with status ${response.status}`);
         error.status = response.status;
@@ -892,7 +895,7 @@ async function fetchJson(url) {
 }
 
 async function fetchContactsData() {
-    const data = await fetchJson(`${RELATORIOS_API_BASE_URL}/api/clientes/contatos`);
+    const data = await fetchJson('/api/clientes/contatos');
     if (!Array.isArray(data)) return [];
 
     return data
@@ -2598,7 +2601,7 @@ REPORT_CONFIGS.clientes = {
     errorMessage: 'Não foi possível carregar os clientes.',
     computeKpis: computeClientesKpis,
     async fetchData() {
-        const data = await fetchJson(`${RELATORIOS_API_BASE_URL}/api/clientes/lista`);
+        const data = await fetchJson('/api/clientes/lista');
         if (!Array.isArray(data)) return [];
         return data.sort((a, b) => normalizeText(a?.nome_fantasia).localeCompare(normalizeText(b?.nome_fantasia)));
     },
@@ -2757,7 +2760,7 @@ REPORT_CONFIGS.orcamentos = {
     errorMessage: 'Não foi possível carregar os orçamentos.',
     computeKpis: computeOrcamentosKpis,
     async fetchData() {
-        const data = await fetchJson(`${RELATORIOS_API_BASE_URL}/api/orcamentos`);
+        const data = await fetchJson('/api/orcamentos');
         if (!Array.isArray(data)) return [];
         return data.sort((a, b) => normalizeText(a?.numero).localeCompare(normalizeText(b?.numero)));
     },
@@ -2797,7 +2800,7 @@ REPORT_CONFIGS.pedidos = {
     errorMessage: 'Não foi possível carregar os pedidos.',
     computeKpis: computePedidosKpis,
     async fetchData() {
-        const data = await fetchJson(`${RELATORIOS_API_BASE_URL}/api/pedidos`);
+        const data = await fetchJson('/api/pedidos');
         if (!Array.isArray(data)) return [];
         return data.sort((a, b) => normalizeText(a?.numero).localeCompare(normalizeText(b?.numero)));
     },
@@ -2837,7 +2840,7 @@ REPORT_CONFIGS.usuarios = {
     errorMessage: 'Não foi possível carregar os usuários.',
     computeKpis: computeUsuariosKpis,
     async fetchData() {
-        const data = await fetchJson(`${RELATORIOS_API_BASE_URL}/api/usuarios/lista`);
+        const data = await fetchJson('/api/usuarios/lista');
         if (!Array.isArray(data)) return [];
         return data.sort((a, b) => normalizeText(a?.nome).localeCompare(normalizeText(b?.nome)));
     },

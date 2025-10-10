@@ -2,6 +2,11 @@
 window.customPeriodOrcamentos = null;
 let orcamentosDateRangeController = null;
 
+async function fetchApi(path, options) {
+    const baseUrl = await window.apiConfig.getApiBaseUrl();
+    return fetch(`${baseUrl}${path}`, options);
+}
+
 function parseIsoDateToLocal(iso) {
     if (!iso || typeof iso !== 'string' || !iso.includes('-')) return null;
     const [year, month, day] = iso.split('-').map(Number);
@@ -27,7 +32,7 @@ async function popularClientes() {
     const select = document.getElementById('filterClient');
     if (!select) return;
     try {
-        const resp = await fetch('http://localhost:3000/api/clientes/lista');
+        const resp = await fetchApi('/api/clientes/lista');
         const data = await resp.json();
         select.innerHTML = '<option value="">Todos os Clientes</option>' +
             data.map(c => `<option value="${c.nome_fantasia}">${c.nome_fantasia}</option>`).join('');
@@ -54,7 +59,7 @@ function showPdfUnavailableDialog(id) {
     overlay.querySelector('#pdfOk').addEventListener('click', () => overlay.remove());
     overlay.querySelector('#pdfConvert').addEventListener('click', async () => {
         try {
-            await fetch(`http://localhost:3000/api/orcamentos/${id}/status`, {
+            await fetchApi(`/api/orcamentos/${id}/status`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ situacao: 'Pendente' })
@@ -166,7 +171,7 @@ function openConversionFlow(id) {
 
 async function carregarOrcamentos() {
     try {
-        const resp = await fetch('http://localhost:3000/api/orcamentos');
+        const resp = await fetchApi('/api/orcamentos');
         const data = await resp.json();
         const tbody = document.getElementById('orcamentosTabela');
         tbody.innerHTML = '';

@@ -5,6 +5,11 @@ window.pdfBuildReady = false;
 window.pdfBuildError = null;
 window.generatedPdfMeta = null;
 
+async function fetchApi(path, options) {
+  const baseUrl = await window.apiConfig.getApiBaseUrl();
+  return fetch(`${baseUrl}${path}`, options);
+}
+
 function createPage() {
   const clone = template.content.cloneNode(true);
   const page = clone.querySelector('.page');
@@ -446,9 +451,9 @@ async function buildDocument() {
   if (!id) return;
   try {
     const endpoint = tipo === 'pedido' ? 'pedidos' : 'orcamentos';
-    const orc = await fetch(`http://localhost:3000/api/${endpoint}/${id}`).then(r => r.json());
+    const orc = await fetchApi(`/api/${endpoint}/${id}`).then(r => r.json());
     document.title = `${tipo === 'pedido' ? 'Pedido' : 'Orçamento'} – Barral & Santíssimo`;
-    const clienteResp = await fetch(`http://localhost:3000/api/clientes/${orc.cliente_id}`).then(r => r.json());
+    const clienteResp = await fetchApi(`/api/clientes/${orc.cliente_id}`).then(r => r.json());
     const cliente = clienteResp.cliente || clienteResp;
     const contatos = clienteResp.contatos || [];
     const contato = contatos.find(c => c.id === orc.contato_id) || contatos[0] || {};

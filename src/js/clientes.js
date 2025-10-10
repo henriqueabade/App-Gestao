@@ -1,11 +1,16 @@
 // Script principal do módulo Clientes (CRM)
 // Carrega lista de empresas e aplica interações básicas da tela
 
+async function fetchApi(path, options) {
+    const baseUrl = await window.apiConfig.getApiBaseUrl();
+    return fetch(`${baseUrl}${path}`, options);
+}
+
 let todosClientes = [];
 
 async function carregarClientes(preserveFilters = false) {
     try {
-        const resp = await fetch('http://localhost:3000/api/clientes/lista');
+        const resp = await fetchApi('/api/clientes/lista');
         const clientes = await resp.json();
         todosClientes = clientes;
         if (preserveFilters) {

@@ -1,6 +1,10 @@
 (async function(){
   const overlay = document.getElementById('editarClienteOverlay');
   if(!overlay) return;
+  async function fetchApi(path, options) {
+    const baseUrl = await window.apiConfig.getApiBaseUrl();
+    return fetch(`${baseUrl}${path}`, options);
+  }
   const close = () => Modal.close('editarCliente');
   overlay.addEventListener('click', e => { if(e.target === overlay) close(); });
   const voltar = document.getElementById('voltarEditarCliente');
@@ -28,7 +32,7 @@
     const titulo = document.getElementById('clienteEditarTitulo');
     if(titulo) titulo.textContent = `Editar – ${cliente.nome_fantasia || ''}`;
     try {
-      const res = await fetch(`http://localhost:3000/api/clientes/${cliente.id}`);
+      const res = await fetchApi(`/api/clientes/${cliente.id}`);
       const data = await res.json();
       if(data && data.cliente){
         await preencherDadosEmpresa(data.cliente);
@@ -153,7 +157,7 @@
     const donoSel = document.getElementById('empresaDono');
     if(donoSel){
       try{
-        const res = await fetch('http://localhost:3000/api/usuarios/lista');
+        const res = await fetchApi('/api/usuarios/lista');
         const usuarios = await res.json();
         donoSel.innerHTML = '<option value="">Selecione o dono</option>' +
           usuarios.map(u => `<option value="${u.nome}">${u.nome}</option>`).join('');
@@ -347,8 +351,8 @@
   async function carregarOrdens(id){
     try{
       const [pedidosRes, orcamentosRes] = await Promise.all([
-        fetch(`http://localhost:3000/api/pedidos?clienteId=${id}`),
-        fetch(`http://localhost:3000/api/orcamentos?clienteId=${id}`)
+        fetchApi(`/api/pedidos?clienteId=${id}`),
+        fetchApi(`/api/orcamentos?clienteId=${id}`)
       ]);
       const pedidos = await pedidosRes.json();
       const orcamentos = await orcamentosRes.json();
@@ -439,7 +443,7 @@
     salvarBtn.addEventListener('click', async () => {
       const dados = coletarDados();
       try{
-        const res = await fetch(`http://localhost:3000/api/clientes/${cliente.id}`, {
+        const res = await fetchApi(`/api/clientes/${cliente.id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(dados)

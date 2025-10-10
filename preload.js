@@ -60,10 +60,23 @@ function subscribeToChannel(channel, callback) {
   };
 }
 
+let runtimeConfigPromise = null;
+
+function getRuntimeConfigCached() {
+  if (!runtimeConfigPromise) {
+    runtimeConfigPromise = ipcRenderer.invoke('get-runtime-config').catch(err => {
+      runtimeConfigPromise = null;
+      throw err;
+    });
+  }
+  return runtimeConfigPromise;
+}
+
 contextBridge.exposeInMainWorld('electronAPI', {
   log: (msg) => {
     if (DEBUG) ipcRenderer.send('debug-log', msg);
   },
+  getRuntimeConfig: () => getRuntimeConfigCached(),
   login: (email, password, pin) => ipcRenderer.invoke('login-usuario', { email, password, pin }),
   register: async (name, email, password, pin) => {
     const result = await ipcRenderer.invoke('registrar-usuario', { name, email, password, pin });

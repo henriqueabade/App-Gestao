@@ -1,9 +1,10 @@
 // Script principal do módulo de Usuários
 // Controla carregamento da lista, edições e filtros
 
-// Endereço base da API. Como o frontend é servido via protocolo `file://`,
-// precisamos apontar explicitamente para o servidor HTTP.
-const API_URL = 'http://localhost:3000';
+async function fetchApi(path, options) {
+    const baseUrl = await window.apiConfig.getApiBaseUrl();
+    return fetch(`${baseUrl}${path}`, options);
+}
 
 // Cache local dos usuários carregados
 let usuariosCache = [];
@@ -669,7 +670,7 @@ function atualizarResumo() {
 
 async function carregarUsuarios() {
     try {
-        const resp = await fetch(`${API_URL}/api/usuarios/lista`);
+        const resp = await fetchApi('/api/usuarios/lista');
         usuariosCache = await resp.json();
         renderUsuarios(usuariosCache);
         atualizarResumo();

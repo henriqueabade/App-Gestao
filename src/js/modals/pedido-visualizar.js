@@ -2,6 +2,10 @@
   const overlayId = 'visualizarPedido';
   const overlay = document.getElementById('visualizarPedidoOverlay');
   if (!overlay) return;
+  async function fetchApi(path, options) {
+    const baseUrl = await window.apiConfig.getApiBaseUrl();
+    return fetch(`${baseUrl}${path}`, options);
+  }
 
   const escapeAttr = value => String(value ?? '')
     .replace(/&/g, '&amp;')
@@ -37,7 +41,7 @@
   window.cancelarPedidoContext = null;
 
   try {
-    const resp = await fetch(`http://localhost:3000/api/pedidos/${id}`);
+    const resp = await fetchApi(`/api/pedidos/${id}`);
     if (!resp.ok) throw new Error('Falha ao buscar pedido');
     const data = await resp.json();
 
@@ -46,7 +50,7 @@
     const filled = el => el?.setAttribute('data-filled', 'true');
 
     try {
-      const clientesResp = await fetch('http://localhost:3000/api/clientes/lista');
+      const clientesResp = await fetchApi('/api/clientes/lista');
       if (!clientesResp.ok) throw new Error();
       const clientes = await clientesResp.json();
       if (clienteSel) {
@@ -67,7 +71,7 @@
 
     try {
       if (data.cliente_id && contatoSel) {
-        const respContatos = await fetch(`http://localhost:3000/api/clientes/${data.cliente_id}`);
+        const respContatos = await fetchApi(`/api/clientes/${data.cliente_id}`);
         if (!respContatos.ok) throw new Error();
         const clienteData = await respContatos.json();
         const contatos = clienteData.contatos || [];
@@ -91,7 +95,7 @@
 
     try {
       if (transportadoraSel) {
-        const respTransportadoras = await fetch(`http://localhost:3000/api/transportadoras/${data.cliente_id}`);
+        const respTransportadoras = await fetchApi(`/api/transportadoras/${data.cliente_id}`);
         if (respTransportadoras.ok) {
           const transportadoras = await respTransportadoras.json();
           transportadoraSel.innerHTML = transportadoras.map(tp => `<option value="${tp.id}">${tp.nome}</option>`).join('');

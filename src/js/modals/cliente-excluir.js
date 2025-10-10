@@ -1,5 +1,9 @@
 (function(){
   const overlay = document.getElementById('excluirClienteOverlay');
+  async function fetchApi(path, options) {
+    const baseUrl = await window.apiConfig.getApiBaseUrl();
+    return fetch(`${baseUrl}${path}`, options);
+  }
   const close = () => Modal.close('excluirCliente');
   overlay.addEventListener('click', e => { if(e.target === overlay) close(); });
   document.getElementById('cancelarExcluirCliente').addEventListener('click', close);
@@ -8,7 +12,7 @@
     const cliente = window.clienteExcluir;
     if(!cliente) return;
     try{
-      const resp = await fetch(`http://localhost:3000/api/clientes/${cliente.id}`, { method: 'DELETE' });
+      const resp = await fetchApi(`/api/clientes/${cliente.id}`, { method: 'DELETE' });
       const data = await resp.json().catch(() => ({}));
       if(resp.ok){
         showToast('Cliente excluído com sucesso!', 'success');

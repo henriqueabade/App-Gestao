@@ -3,6 +3,11 @@
   const overlay = document.getElementById('cancelarPedidoOverlay');
   if (!overlay) return;
 
+  async function fetchApi(path, options) {
+    const baseUrl = await window.apiConfig.getApiBaseUrl();
+    return fetch(`${baseUrl}${path}`, options);
+  }
+
   let readyMarked = false;
   const markReady = (reveal = true) => {
     if (!overlay || !overlay.classList) {
@@ -1220,7 +1225,7 @@
       let list = Array.isArray(availableOrders) ? [...availableOrders] : [];
       if (!list.length) {
         try {
-          const resp = await fetch('http://localhost:3000/api/pedidos');
+          const resp = await fetchApi('/api/pedidos');
           if (resp.ok) {
             list = await resp.json();
           }
@@ -1240,7 +1245,7 @@
         const order = { ...raw };
         if (!Array.isArray(order.itens)) {
           try {
-            const resp = await fetch(`http://localhost:3000/api/pedidos/${order.id}`);
+            const resp = await fetchApi(`/api/pedidos/${order.id}`);
             if (resp.ok) {
               const details = await resp.json();
               order.itens = Array.isArray(details.itens) ? details.itens : [];
@@ -1338,7 +1343,7 @@
     confirmBtn.textContent = 'Cancelando...';
 
     try {
-      const resp = await fetch(`http://localhost:3000/api/pedidos/${pedidoId}/status`, {
+      const resp = await fetchApi(`/api/pedidos/${pedidoId}/status`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: 'Cancelado', acoes: actions })

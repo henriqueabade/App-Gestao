@@ -18,6 +18,11 @@ let currentPinPopup = null;
 let pinErrorShown = false;
 let offlineErrorShown = false;
 
+async function fetchApi(path, options) {
+  const baseUrl = await window.apiConfig.getApiBaseUrl();
+  return fetch(`${baseUrl}${path}`, options);
+}
+
 async function cacheUpdateStatus() {
   if (typeof sessionStorage === 'undefined') return;
   if (!window.electronAPI?.getUpdateStatus) {
@@ -497,7 +502,7 @@ if (intro) {
     e.preventDefault();
     const emailReset = document.getElementById('resetEmail').value;
     try {
-      const resp = await fetch('http://localhost:3000/password-reset-request', {
+      const resp = await fetchApi('/password-reset-request', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: emailReset })

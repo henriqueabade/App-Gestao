@@ -3,6 +3,10 @@
   const overlay = document.getElementById('novoOrcamentoOverlay');
   // Scroll do Novo Orçamento restrito ao corpo (entre header e footer), igual Editar Orçamento.
   if (!overlay) return;
+  async function fetchApi(path, options) {
+    const baseUrl = await window.apiConfig.getApiBaseUrl();
+    return fetch(`${baseUrl}${path}`, options);
+  }
   const escapeAttr = value => String(value ?? '')
     .replace(/&/g, '&amp;')
     .replace(/"/g, '&quot;')
@@ -119,7 +123,7 @@
 
   async function carregarClientes(){
     try {
-      const resp = await fetch('http://localhost:3000/api/clientes/lista');
+      const resp = await fetchApi('/api/clientes/lista');
       const data = await resp.json();
       clienteSelect.innerHTML = '<option value="" disabled selected hidden></option>' +
         data.map(c => `<option value="${c.id}">${c.nome_fantasia}</option>`).join('');
@@ -130,7 +134,7 @@
 
   async function carregarUsuarios(){
     try {
-      const resp = await fetch('http://localhost:3000/api/usuarios/lista');
+      const resp = await fetchApi('/api/usuarios/lista');
       const data = await resp.json();
       donoSelect.innerHTML = '<option value="" disabled selected hidden></option>' +
         data.map(u => `<option value="${u.nome}">${u.nome}</option>`).join('');
@@ -143,7 +147,7 @@
     contatoSelect.setAttribute('data-filled', 'false');
     if(!clienteId) return;
     try {
-      const resp = await fetch(`http://localhost:3000/api/clientes/${clienteId}`);
+      const resp = await fetchApi(`/api/clientes/${clienteId}`);
       const data = await resp.json();
       (data.contatos || []).forEach(ct => {
         const opt = document.createElement('option');
@@ -159,7 +163,7 @@
     transportadoraSelect.setAttribute('data-filled', 'false');
     if(!clienteId) return;
     try {
-      const resp = await fetch(`http://localhost:3000/api/transportadoras/${clienteId}`);
+      const resp = await fetchApi(`/api/transportadoras/${clienteId}`);
       const data = await resp.json();
       data.forEach(tp => {
         const opt = document.createElement('option');
@@ -540,7 +544,7 @@
           itens,
           parcelas_detalhes: parcelasDetalhes
         };
-        const resp = await fetch('http://localhost:3000/api/orcamentos', {
+        const resp = await fetchApi('/api/orcamentos', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(body)

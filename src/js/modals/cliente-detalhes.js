@@ -1,6 +1,10 @@
 (async function(){
   const overlay = document.getElementById('detalhesClienteOverlay');
   if(!overlay) return;
+  async function fetchApi(path, options) {
+    const baseUrl = await window.apiConfig.getApiBaseUrl();
+    return fetch(`${baseUrl}${path}`, options);
+  }
   const close = () => Modal.close('detalhesCliente');
   overlay.addEventListener('click', e => { if(e.target === overlay) close(); });
   const voltar = document.getElementById('voltarDetalhesCliente');
@@ -21,7 +25,7 @@
     const titulo = document.getElementById('clienteDetalhesTitulo');
     if(titulo) titulo.textContent = `Detalhes – ${cliente.nome_fantasia || ''}`;
     try {
-      const res = await fetch(`http://localhost:3000/api/clientes/${cliente.id}`);
+      const res = await fetchApi(`/api/clientes/${cliente.id}`);
       const data = await res.json();
       if(data && data.cliente){
         preencherDadosEmpresa(data.cliente);
@@ -293,8 +297,8 @@
   async function carregarOrdens(id){
     try{
       const [pedidosRes, orcamentosRes] = await Promise.all([
-        fetch(`http://localhost:3000/api/pedidos?clienteId=${id}`),
-        fetch(`http://localhost:3000/api/orcamentos?clienteId=${id}`)
+        fetchApi(`/api/pedidos?clienteId=${id}`),
+        fetchApi(`/api/orcamentos?clienteId=${id}`)
       ]);
       const pedidos = await pedidosRes.json();
       const orcamentos = await orcamentosRes.json();

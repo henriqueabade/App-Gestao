@@ -1,6 +1,10 @@
 (async function(){
   const overlay = document.getElementById('novoClienteOverlay');
   if(!overlay) return;
+  async function fetchApi(path, options) {
+    const baseUrl = await window.apiConfig.getApiBaseUrl();
+    return fetch(`${baseUrl}${path}`, options);
+  }
   const close = () => Modal.close('novoCliente');
   overlay.addEventListener('click', e => { if(e.target === overlay) close(); });
   document.getElementById('voltarNovoCliente')?.addEventListener('click', close);
@@ -107,7 +111,7 @@
 
   async function carregarUsuarios(){
     try {
-      const res = await fetch('http://localhost:3000/api/usuarios/lista');
+      const res = await fetchApi('/api/usuarios/lista');
       const usuarios = await res.json();
       const sel = document.getElementById('empresaDono');
       if(sel){
@@ -283,7 +287,7 @@
     const dados = coletarDados();
     if(!dados) return;
     try{
-      const res = await fetch('http://localhost:3000/api/clientes', {
+      const res = await fetchApi('/api/clientes', {
         method:'POST',
         headers:{'Content-Type':'application/json'},
         body: JSON.stringify(dados)

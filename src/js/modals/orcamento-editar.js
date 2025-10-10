@@ -2,6 +2,10 @@
   const overlayId = 'editarOrcamento';
   const overlay = document.getElementById('editarOrcamentoOverlay');
   if (!overlay) return;
+  async function fetchApi(path, options) {
+    const baseUrl = await window.apiConfig.getApiBaseUrl();
+    return fetch(`${baseUrl}${path}`, options);
+  }
   const escapeAttr = value => String(value ?? '')
     .replace(/&/g, '&amp;')
     .replace(/"/g, '&quot;')
@@ -18,7 +22,7 @@
   let data = window.quoteData || {};
   if (id && (!data.itens || !data.itens.length)) {
     try {
-      const resp = await fetch(`http://localhost:3000/api/orcamentos/${id}`);
+      const resp = await fetchApi(`/api/orcamentos/${id}`);
       data = await resp.json();
     } catch (err) {
       console.error('Erro ao carregar orçamento', err);
@@ -147,7 +151,7 @@
 
   async function carregarClientes(){
     try {
-      const resp = await fetch('http://localhost:3000/api/clientes/lista');
+      const resp = await fetchApi('/api/clientes/lista');
       const data = await resp.json();
       editarCliente.innerHTML = '<option value="" disabled selected hidden></option>' +
         data.map(c => `<option value="${c.id}">${c.nome_fantasia}</option>`).join('');
@@ -157,7 +161,7 @@
 
   async function carregarUsuarios(){
     try {
-      const resp = await fetch('http://localhost:3000/api/usuarios/lista');
+      const resp = await fetchApi('/api/usuarios/lista');
       const data = await resp.json();
       donoSelect.innerHTML = '<option value="" disabled selected hidden></option>' +
         data.map(u => `<option value="${u.nome}">${u.nome}</option>`).join('');
@@ -170,7 +174,7 @@
     editarContato.setAttribute('data-filled','false');
     if(!clienteId) return;
     try {
-      const resp = await fetch(`http://localhost:3000/api/clientes/${clienteId}`);
+      const resp = await fetchApi(`/api/clientes/${clienteId}`);
       const data = await resp.json();
       (data.contatos || []).forEach(ct => {
         const opt = document.createElement('option');
@@ -186,7 +190,7 @@
     editarTransportadora.setAttribute('data-filled','false');
     if(!clienteId) return;
     try {
-      const resp = await fetch(`http://localhost:3000/api/transportadoras/${clienteId}`);
+      const resp = await fetchApi(`/api/transportadoras/${clienteId}`);
       const data = await resp.json();
       data.forEach(tp => {
         const opt = document.createElement('option');
@@ -704,7 +708,7 @@
       parcelas_detalhes: parcelasDetalhes
     };
     try {
-      const resp = await fetch(`http://localhost:3000/api/orcamentos/${id}`, {
+      const resp = await fetchApi(`/api/orcamentos/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body)
@@ -844,7 +848,7 @@
     spinner.innerHTML = '<div class="w-16 h-16 border-4 border-[#b6a03e] border-t-transparent rounded-full animate-spin"></div>';
     document.body.appendChild(spinner);
     try {
-      const resp = await fetch(`http://localhost:3000/api/orcamentos/${id}/clone`, { method: 'POST' });
+      const resp = await fetchApi(`/api/orcamentos/${id}/clone`, { method: 'POST' });
       if (!resp.ok) throw new Error('Erro');
       const clone = await resp.json();
       if (window.reloadOrcamentos) await window.reloadOrcamentos();

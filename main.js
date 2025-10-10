@@ -121,6 +121,10 @@ let lastRecordedAction = null;
 let isPersistingExit = false;
 let apiServerInstance = null;
 let currentApiPort = null;
+ipcMain.handle('get-runtime-config', () => {
+  const port = currentApiPort ?? configuredApiPort ?? DEFAULT_API_PORT;
+  return { apiBaseUrl: `http://localhost:${port}` };
+});
 let closingDashboardWindow = false;
 let quittingApp = false;
 const localAppVersion = app.getVersion();
@@ -2510,7 +2514,8 @@ ipcMain.handle('open-pdf', async (_event, { id, tipo }) => {
     return { success: false, message: 'Documento inválido para geração de PDF.' };
   }
 
-  const url = new URL('http://localhost:3000/pdf');
+  const apiBaseUrl = `http://localhost:${currentApiPort ?? configuredApiPort ?? DEFAULT_API_PORT}`;
+  const url = new URL('/pdf', apiBaseUrl);
   url.searchParams.set('id', id);
   if (tipo) url.searchParams.set('tipo', tipo);
 

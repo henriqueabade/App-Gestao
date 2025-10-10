@@ -2,6 +2,10 @@
   const overlayId = 'visualizarOrcamento';
   const overlay = document.getElementById('visualizarOrcamentoOverlay');
   if (!overlay) return;
+  async function fetchApi(path, options) {
+    const baseUrl = await window.apiConfig.getApiBaseUrl();
+    return fetch(`${baseUrl}${path}`, options);
+  }
   const escapeAttr = value => String(value ?? '')
     .replace(/&/g, '&amp;')
     .replace(/"/g, '&quot;')
@@ -18,7 +22,7 @@
   const id = window.selectedQuoteId;
   if (!id) return;
   try {
-    const resp = await fetch(`http://localhost:3000/api/orcamentos/${id}`);
+    const resp = await fetchApi(`/api/orcamentos/${id}`);
     const data = await resp.json();
 
     document.getElementById('tituloVisualizarOrcamento').textContent = `VISUALIZAR ORÇAMENTO ${data.numero}`;
@@ -34,20 +38,20 @@
     const itensTbody = document.querySelector('#orcamentoItens tbody');
 
     // carregar nomes de cliente e contatos
-    const clientesResp = await fetch('http://localhost:3000/api/clientes/lista');
+    const clientesResp = await fetchApi('/api/clientes/lista');
     const clientes = await clientesResp.json();
     clienteSel.innerHTML = clientes.map(c => `<option value="${c.id}">${c.nome_fantasia}</option>`).join('');
     clienteSel.value = data.cliente_id;
     clienteSel.setAttribute('data-filled', 'true');
 
-    const contatosResp = await fetch(`http://localhost:3000/api/clientes/${data.cliente_id}`);
+    const contatosResp = await fetchApi(`/api/clientes/${data.cliente_id}`);
     const clienteData = await contatosResp.json();
     const contatos = clienteData.contatos || [];
     contatoSel.innerHTML = contatos.map(ct => `<option value="${ct.id}">${ct.nome}</option>`).join('');
     contatoSel.value = data.contato_id;
     contatoSel.setAttribute('data-filled', 'true');
 
-    const transpResp = await fetch(`http://localhost:3000/api/transportadoras/${data.cliente_id}`);
+    const transpResp = await fetchApi(`/api/transportadoras/${data.cliente_id}`);
     const transportadoras = await transpResp.json();
     transportadoraSel.innerHTML = transportadoras.map(tp => `<option value="${tp.id}">${tp.nome}</option>`).join('');
     const tpOpt = Array.from(transportadoraSel.options).find(o => o.textContent === data.transportadora);
@@ -167,7 +171,7 @@
     spinner.innerHTML = '<div class="w-16 h-16 border-4 border-[#b6a03e] border-t-transparent rounded-full animate-spin"></div>';
     document.body.appendChild(spinner);
     try {
-      const resp = await fetch(`http://localhost:3000/api/orcamentos/${id}/clone`, { method: 'POST' });
+      const resp = await fetchApi(`/api/orcamentos/${id}/clone`, { method: 'POST' });
       if (!resp.ok) throw new Error('Erro');
       const clone = await resp.json();
       if (window.reloadOrcamentos) await window.reloadOrcamentos();

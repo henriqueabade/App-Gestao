@@ -2,6 +2,11 @@
 window.customPeriodPedidos = null;
 let pedidosDateRangeController = null;
 
+async function fetchApi(path, options) {
+    const baseUrl = await window.apiConfig.getApiBaseUrl();
+    return fetch(`${baseUrl}${path}`, options);
+}
+
 function parseIsoDateToLocal(iso) {
     if (!iso || typeof iso !== 'string' || !iso.includes('-')) return null;
     const [year, month, day] = iso.split('-').map(Number);
@@ -28,7 +33,7 @@ async function popularClientes() {
     const select = document.getElementById('filterClient');
     if (!select) return;
     try {
-        const resp = await fetch('http://localhost:3000/api/clientes/lista');
+        const resp = await fetchApi('/api/clientes/lista');
         const data = await resp.json();
         select.innerHTML = '<option value="">Todos os Clientes</option>' +
             data.map(c => `<option value="${c.nome_fantasia}">${c.nome_fantasia}</option>`).join('');
@@ -146,7 +151,7 @@ function openVisualizarPedidoModal(id) {
 }
 async function carregarPedidos() {
     try {
-        const resp = await fetch('http://localhost:3000/api/pedidos');
+        const resp = await fetchApi('/api/pedidos');
         const data = await resp.json();
         const tbody = document.getElementById('pedidosTabela');
         tbody.innerHTML = '';
@@ -198,7 +203,7 @@ async function carregarPedidos() {
                     showStatusConfirmDialog(`Deseja alterar o status para "${nextStatus}"?`, async ok => {
                         if (!ok) return;
                         try {
-                            await fetch(`http://localhost:3000/api/pedidos/${p.id}/status`, {
+                            await fetchApi(`/api/pedidos/${p.id}/status`, {
                                 method: 'PUT',
                                 headers: { 'Content-Type': 'application/json' },
                                 body: JSON.stringify({ status: nextStatus })
