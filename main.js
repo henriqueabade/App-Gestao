@@ -18,6 +18,7 @@ const {
 const { registrarUltimaSaida, registrarUltimaEntrada } = require('./backend/userActivity');
 const db = require('./backend/db');
 const fs = require('fs');
+const net = require('net');
 const {
   listarMaterias,
   adicionarMateria,
@@ -119,11 +120,16 @@ let isSupAdmin = false;
 let lastRecordedAction = null;
 let isPersistingExit = false;
 let apiServerInstance = null;
+let currentApiPort = null;
 let closingDashboardWindow = false;
 let quittingApp = false;
 const localAppVersion = app.getVersion();
 const initialPublishing = publisher.isPublishing();
 const projectRoot = path.resolve(__dirname);
+
+const DEFAULT_API_PORT = 3000;
+const MAX_PORT = 65535;
+let configuredApiPort = DEFAULT_API_PORT;
 
 let publishState = {
   publishing: initialPublishing,
@@ -1411,6 +1417,114 @@ async function persistUserExit(reason) {
   isPersistingExit = false;
 }
 
+function checkPortAvailability(port) {
+  return new Promise((resolve, reject) => {
+    const tester = net.createServer();
+    tester.unref();
+
+    const handleError = (err) => {
+      tester.removeListener('listening', handleListening);
+      if (err.code === 'EADDRINUSE' || err.code === 'EACCES') {
+        resolve(false);
+      } else {
+        reject(err);
+      }
+    };
+
+    const handleListening = () => {
+      tester.removeListener('error', handleError);
+      tester.close(() => resolve(true));
+    };
+
+    tester.once('error', handleError);
+    tester.once('listening', handleListening);
+    tester.listen({ port, host: '0.0.0.0' });
+  });
+}
+
+async function findAvailablePort(startPort) {
+  const initialPort = Number.isInteger(startPort) && startPort > 0 ? startPort : DEFAULT_API_PORT;
+
+  for (let port = initialPort; port <= MAX_PORT; port += 1) {
+    // eslint-disable-next-line no-await-in-loop
+    const available = await checkPortAvailability(port);
+    if (available) {
+      return port;
+    }
+  }
+
+  throw new Error(`Não há portas disponíveis a partir da porta ${initialPort}.`);
+}
+
+async function startApiServerOnPort(port) {
+  await closeApiServer();
+
+  return new Promise((resolve, reject) => {
+    const server = apiServer.listen(port);
+
+    const cleanup = () => {
+      server.removeListener('error', onError);
+      server.removeListener('listening', onListening);
+    };
+
+    const onListening = () => {
+      cleanup();
+      apiServerInstance = server;
+      currentApiPort = port;
+      apiServerInstance.on('error', handleApiServerError);
+      if (DEBUG) {
+        console.log(`API server running on port ${currentApiPort}`);
+      }
+      resolve(apiServerInstance);
+    };
+
+    const onError = (err) => {
+      cleanup();
+      if (apiServerInstance === server) {
+        apiServerInstance = null;
+      }
+      reject(err);
+    };
+
+    server.once('error', onError);
+    server.once('listening', onListening);
+  });
+}
+
+async function handleApiServerError(err) {
+  if (err && err.code === 'EADDRINUSE') {
+    const previousPort = currentApiPort;
+    try {
+      await closeApiServer();
+      const fallbackStart = previousPort ? previousPort + 1 : configuredApiPort;
+      const newPort = await findAvailablePort(fallbackStart);
+      await startApiServerOnPort(newPort);
+      console.warn(
+        `Port ${previousPort ?? configuredApiPort} in use. API server restarted on port ${newPort}.`
+      );
+      return;
+    } catch (fallbackErr) {
+      console.error('Falha ao tentar iniciar o servidor da API em porta alternativa.', fallbackErr);
+      dialog.showErrorBox(
+        'Erro ao iniciar servidor',
+        `Não foi possível iniciar o servidor interno nas portas a partir de ${previousPort ?? configuredApiPort}.` +
+          '\nVerifique se outra aplicação está utilizando essas portas.'
+      );
+      return;
+    }
+  }
+
+  console.error(
+    `Erro ao iniciar o servidor da API na porta ${currentApiPort ?? configuredApiPort}`,
+    err
+  );
+  dialog.showErrorBox(
+    'Erro ao iniciar servidor',
+    `Não foi possível iniciar o servidor interno na porta ${currentApiPort ?? configuredApiPort}.` +
+      '\nVerifique se outra aplicação está utilizando essa porta.'
+  );
+}
+
 function closeApiServer() {
   if (!apiServerInstance) {
     return Promise.resolve();
@@ -1418,6 +1532,7 @@ function closeApiServer() {
 
   const server = apiServerInstance;
   apiServerInstance = null;
+  server.removeListener('error', handleApiServerError);
 
   return new Promise((resolve) => {
     server.close((err) => {
@@ -1607,7 +1722,7 @@ function createDashboardWindow(show = true) {
   });
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   const userDataPath = path.join(app.getPath('appData'), 'santissimo-decor');
   app.setPath('userData', userDataPath);
   try {
@@ -1618,22 +1733,42 @@ app.whenReady().then(() => {
   stateFile = path.join(app.getPath('userData'), 'session-state.json');
   displayFile = path.join(app.getPath('userData'), 'display.json');
 
-  const apiPort = process.env.API_PORT || 3000;
-  if (!process.env.API_PORT) {
-    console.warn('API_PORT not set, defaulting to 3000');
+  const envPortValue = process.env.API_PORT;
+  if (!envPortValue) {
+    console.warn(`API_PORT not set, defaulting to ${DEFAULT_API_PORT}`);
   }
-  apiServerInstance = apiServer.listen(apiPort, () => {
-    if (DEBUG) console.log(`API server running on port ${apiPort}`);
-  });
 
-  apiServerInstance.on('error', (err) => {
-    console.error(`Erro ao iniciar o servidor da API na porta ${apiPort}`, err);
+  const parsedPort = Number(envPortValue);
+  if (envPortValue && (!Number.isInteger(parsedPort) || parsedPort <= 0)) {
+    console.warn(
+      `API_PORT value "${envPortValue}" is invalid. Defaulting to ${DEFAULT_API_PORT}.`
+    );
+    configuredApiPort = DEFAULT_API_PORT;
+  } else if (envPortValue) {
+    configuredApiPort = parsedPort;
+  } else {
+    configuredApiPort = DEFAULT_API_PORT;
+  }
+
+  let availablePort = null;
+  try {
+    availablePort = await findAvailablePort(configuredApiPort);
+  } catch (err) {
+    console.error('Não foi possível localizar uma porta livre para o servidor da API.', err);
     dialog.showErrorBox(
       'Erro ao iniciar servidor',
-      `Não foi possível iniciar o servidor interno na porta ${apiPort}.` +
-        '\nVerifique se outra aplicação está utilizando essa porta.'
+      `Não foi possível localizar uma porta livre a partir da porta ${configuredApiPort}.` +
+        '\nVerifique se outra aplicação está utilizando essas portas.'
     );
-  });
+  }
+
+  if (availablePort !== null) {
+    try {
+      await startApiServerOnPort(availablePort);
+    } catch (err) {
+      await handleApiServerError(err);
+    }
+  }
 
   // Cria a janela de login sem exibí-la imediatamente.
   // Ela será mostrada somente após o carregamento completo do conteúdo
