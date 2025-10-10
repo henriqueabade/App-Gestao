@@ -5,9 +5,43 @@ window.pdfBuildReady = false;
 window.pdfBuildError = null;
 window.generatedPdfMeta = null;
 
+let apiBaseUrlPromise = null;
+
+async function getApiBaseUrl() {
+  if (!apiBaseUrlPromise) {
+    apiBaseUrlPromise = (async () => {
+      const params = new URLSearchParams(window.location.search);
+      const fromQuery = params.get('apiBaseUrl');
+      if (fromQuery) {
+        return fromQuery;
+      }
+
+      if (window.apiConfig?.getApiBaseUrl) {
+        return window.apiConfig.getApiBaseUrl();
+      }
+
+      throw new Error('Configuração de API indisponível para geração de PDF.');
+    })().catch(err => {
+      apiBaseUrlPromise = null;
+      throw err;
+    });
+  }
+
+  return apiBaseUrlPromise;
+}
+
 async function fetchApi(path, options) {
-  const baseUrl = await window.apiConfig.getApiBaseUrl();
-  return fetch(`${baseUrl}${path}`, options);
+  const baseUrl = await getApiBaseUrl();
+  const url = new URL(path, baseUrl);
+  const response = await fetch(url.toString(), options);
+
+  if (!response.ok) {
+    const error = new Error(`Falha ao consultar a API (${response.status || 'desconhecido'})`);
+    error.status = response.status;
+    throw error;
+  }
+
+  return response;
 }
 
 function createPage() {

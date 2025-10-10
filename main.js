@@ -2763,6 +2763,7 @@ ipcMain.handle('open-pdf', async (_event, { id, tipo }) => {
   const url = new URL('/pdf', apiBaseUrl);
   url.searchParams.set('id', id);
   if (tipo) url.searchParams.set('tipo', tipo);
+  url.searchParams.set('apiBaseUrl', apiBaseUrl);
 
   const pdfWindow = new BrowserWindow({
     show: false,
