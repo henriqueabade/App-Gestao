@@ -1,7 +1,7 @@
 
 const { app, BrowserWindow, ipcMain, screen, shell, dialog } = require('electron');
 const path = require('path');
-const { spawnSync } = require('child_process');
+const { execFile } = require('child_process');
 const { pathToFileURL } = require('url');
 const DEBUG = process.env.DEBUG === 'true';
 const { autoUpdater } = require('electron-updater');
@@ -145,6 +145,25 @@ let publishState = {
 };
 
 let gitUnavailable = false;
+const gitCommandTimeout = Number.parseInt(process.env.GIT_COMMAND_TIMEOUT_MS || '', 10);
+let headCommitState = {
+  promise: null,
+  value: null,
+  timestamp: 0
+};
+let pendingChangesRefreshPromise = null;
+let lastPendingChangesContext = {
+  head: null,
+  reference: null
+};
+let publishStateInitializationPromise = null;
+const updateStatusCache = {
+  promise: null,
+  value: null,
+  timestamp: 0,
+  refreshInFlight: false
+};
+const UPDATE_STATUS_CACHE_TTL = 1500;
 
 let publishStateFilePath;
 
@@ -201,11 +220,6 @@ if (persistedPublishState) {
   }
 }
 
-if (!publishState.lastPublishedCommit) {
-  publishState.lastPublishedCommit = getHeadCommitHash();
-}
-refreshPendingChanges();
-
 function getPublishLogPath() {
   return path.join(__dirname, 'publish-audit.log');
 }
@@ -225,39 +239,101 @@ function recordPublishAudit(event, extra = {}) {
   }
 }
 
-function runGitCommand(args) {
-  if (gitUnavailable) return null;
-  try {
-    const result = spawnSync('git', args, {
-      cwd: projectRoot,
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'pipe']
-    });
-    if (result.error) throw result.error;
-    if (typeof result.status === 'number' && result.status !== 0) {
-      if (DEBUG) {
-        const stderr = (result.stderr || '').toString().trim();
-        console.warn('git command failed:', ['git', ...args].join(' '), stderr);
-      }
-      return null;
-    }
-    return result.stdout || '';
-  } catch (err) {
-    if (err && err.code === 'ENOENT') {
-      gitUnavailable = true;
-    }
-    if (DEBUG) {
-      console.warn('git command failed:', err);
-    }
-    return null;
+function runGitCommand(args = []) {
+  if (gitUnavailable) {
+    return Promise.resolve(null);
   }
+
+  const command = ['git', ...(Array.isArray(args) ? args : [])].join(' ');
+  const options = {
+    cwd: projectRoot,
+    encoding: 'utf8',
+    maxBuffer: 10 * 1024 * 1024,
+    windowsHide: true
+  };
+
+  if (Number.isFinite(gitCommandTimeout) && gitCommandTimeout > 0) {
+    options.timeout = gitCommandTimeout;
+  }
+
+  return new Promise(resolve => {
+    const child = execFile('git', args, options, (error, stdout = '', stderr = '') => {
+      if (error) {
+        if (error && error.code === 'ENOENT') {
+          gitUnavailable = true;
+        }
+        if (DEBUG) {
+          const errorMessage = stderr ? stderr.toString().trim() : error.message;
+          console.warn('git command failed:', command, errorMessage);
+        }
+        resolve(null);
+        return;
+      }
+      resolve(stdout || '');
+    });
+
+    child.on('error', err => {
+      if (err && err.code === 'ENOENT') {
+        gitUnavailable = true;
+      }
+      if (DEBUG) {
+        console.warn('git command failed:', command, err);
+      }
+      resolve(null);
+    });
+  });
 }
 
-function getHeadCommitHash() {
-  const output = runGitCommand(['rev-parse', 'HEAD']);
-  if (!output) return null;
-  const value = output.trim();
-  return value || null;
+async function getHeadCommitHash(options = {}) {
+  if (gitUnavailable) {
+    return null;
+  }
+
+  const { force = false } = options;
+  const now = Date.now();
+
+  if (!force && headCommitState.value && now - headCommitState.timestamp < 2000) {
+    return headCommitState.value;
+  }
+
+  if (!force && headCommitState.promise) {
+    return headCommitState.promise;
+  }
+
+  const execution = (async () => {
+    const output = await runGitCommand(['rev-parse', 'HEAD']);
+    if (!output) return null;
+    const value = output.trim();
+    return value || null;
+  })();
+
+  headCommitState.promise = execution
+    .then(value => {
+      headCommitState.value = value;
+      headCommitState.timestamp = Date.now();
+      return value;
+    })
+    .catch(err => {
+      if (DEBUG) {
+        console.warn('Falha ao obter HEAD do Git:', err);
+      }
+      return null;
+    })
+    .finally(() => {
+      if (headCommitState.promise === execution) {
+        headCommitState.promise = null;
+      }
+    });
+
+  return headCommitState.promise;
+}
+
+function invalidateHeadCommitCache() {
+  headCommitState = {
+    promise: null,
+    value: null,
+    timestamp: 0
+  };
 }
 
 function deriveSummaryFromSubject(subject) {
@@ -269,9 +345,9 @@ function deriveSummaryFromSubject(subject) {
   return /[.!?…]$/.test(sentence) ? sentence : `${sentence}.`;
 }
 
-function getChangedFilesForCommit(hash) {
+async function getChangedFilesForCommit(hash) {
   if (!hash) return [];
-  const output = runGitCommand(['show', '--pretty=format:', '--name-only', hash]);
+  const output = await runGitCommand(['show', '--pretty=format:', '--name-only', hash]);
   if (!output) return [];
   return output
     .split('\n')
@@ -482,12 +558,17 @@ function summarizeChangedFiles(files) {
   return impactMessages.join(' ');
 }
 
-function collectPendingChangesSince(referenceCommit, headCommit = getHeadCommitHash()) {
-  if (!referenceCommit || !headCommit || referenceCommit === headCommit) {
+async function collectPendingChangesSince(referenceCommit, headCommitOverride) {
+  if (!referenceCommit) {
     return [];
   }
 
-  const output = runGitCommand([
+  const headCommit = headCommitOverride || (await getHeadCommitHash());
+  if (!headCommit || referenceCommit === headCommit) {
+    return [];
+  }
+
+  const output = await runGitCommand([
     'log',
     '--date=iso-strict',
     '--pretty=format:%H%x1f%an%x1f%ad%x1f%s%x1f%b%x1e',
@@ -497,71 +578,169 @@ function collectPendingChangesSince(referenceCommit, headCommit = getHeadCommitH
 
   if (!output) return [];
 
-  return output
+  const entries = [];
+  const rawEntries = output
     .split('\x1e')
     .map(entry => entry.trim())
-    .filter(Boolean)
-    .map(raw => {
-      const [hash, author, date, subject, body] = raw.split('\x1f');
-      const normalizedBody = (body || '').replace(/\r/g, '').trim();
-      const bodyLines = normalizedBody
-        ? normalizedBody
-            .split('\n')
-            .map(line => line.trim())
-            .filter(Boolean)
-        : [];
-      const highlightLines = bodyLines
-        .filter(line => /^[-*•]/.test(line))
-        .map(line => line.replace(/^[-*•]+\s*/, '').trim())
-        .filter(Boolean);
-      const detailLines = bodyLines.filter(line => !/^[-*•]/.test(line));
-      const summaryText = detailLines.join('\n').trim();
-      const changedFiles = getChangedFilesForCommit(hash);
-      const fileSummary = summarizeChangedFiles(changedFiles);
-      let derivedSummary = summaryText;
-      if (fileSummary) {
-        derivedSummary = derivedSummary ? `${derivedSummary} ${fileSummary}` : fileSummary;
-      }
-      if (!derivedSummary) {
-        derivedSummary = deriveSummaryFromSubject(subject);
-      }
+    .filter(Boolean);
 
-      return {
-        id: hash,
-        title: subject || (hash ? `Alteração ${hash.slice(0, 7)}` : 'Alteração pendente'),
-        version: null,
-        date: date || null,
-        author: author || null,
-        highlights: highlightLines,
-        items: highlightLines,
-        summary: derivedSummary,
-        details: normalizedBody,
-        files: changedFiles
-      };
+  for (const raw of rawEntries) {
+    const [hash, author, date, subject, body] = raw.split('\x1f');
+    const normalizedBody = (body || '').replace(/\r/g, '').trim();
+    const bodyLines = normalizedBody
+      ? normalizedBody
+          .split('\n')
+          .map(line => line.trim())
+          .filter(Boolean)
+      : [];
+    const highlightLines = bodyLines
+      .filter(line => /^[-*•]/.test(line))
+      .map(line => line.replace(/^[-*•]+\s*/, '').trim())
+      .filter(Boolean);
+    const detailLines = bodyLines.filter(line => !/^[-*•]/.test(line));
+    const summaryText = detailLines.join('\n').trim();
+    const changedFiles = await getChangedFilesForCommit(hash);
+    const fileSummary = summarizeChangedFiles(changedFiles);
+    let derivedSummary = summaryText;
+    if (fileSummary) {
+      derivedSummary = derivedSummary ? `${derivedSummary} ${fileSummary}` : fileSummary;
+    }
+    if (!derivedSummary) {
+      derivedSummary = deriveSummaryFromSubject(subject);
+    }
+
+    entries.push({
+      id: hash,
+      title: subject || (hash ? `Alteração ${hash.slice(0, 7)}` : 'Alteração pendente'),
+      version: null,
+      date: date || null,
+      author: author || null,
+      highlights: highlightLines,
+      items: highlightLines,
+      summary: derivedSummary,
+      details: normalizedBody,
+      files: changedFiles
     });
+  }
+
+  return entries;
 }
 
-function refreshPendingChanges() {
+async function refreshPendingChanges(options = {}) {
+  const { force = false } = options;
+
   if (gitUnavailable) {
     publishState.pendingChanges = [];
     return publishState.pendingChanges;
   }
 
-  const headCommit = getHeadCommitHash();
-  if (!headCommit) {
-    publishState.pendingChanges = [];
-    return publishState.pendingChanges;
+  if (pendingChangesRefreshPromise) {
+    if (!force) {
+      return pendingChangesRefreshPromise;
+    }
+    try {
+      await pendingChangesRefreshPromise;
+    } catch (err) {
+      if (DEBUG) {
+        console.warn('Falha anterior ao atualizar alterações pendentes:', err);
+      }
+    }
   }
 
-  if (!publishState.lastPublishedCommit) {
-    publishState.lastPublishedCommit = headCommit;
-    publishState.pendingChanges = [];
+  const execution = (async () => {
+    if (gitUnavailable) {
+      publishState.pendingChanges = [];
+      return publishState.pendingChanges;
+    }
+
+    const referenceCommit = publishState.lastPublishedCommit;
+    const headCommit = await getHeadCommitHash({ force });
+
+    if (!headCommit) {
+      publishState.pendingChanges = [];
+      lastPendingChangesContext = { head: null, reference: null };
+      return publishState.pendingChanges;
+    }
+
+    if (!referenceCommit) {
+      publishState.lastPublishedCommit = headCommit;
+      publishState.pendingChanges = [];
+      lastPendingChangesContext = { head: headCommit, reference: headCommit };
+      return publishState.pendingChanges;
+    }
+
+    if (!force && lastPendingChangesContext.head === headCommit && lastPendingChangesContext.reference === referenceCommit) {
+      return publishState.pendingChanges;
+    }
+
+    const entries = await collectPendingChangesSince(referenceCommit, headCommit);
+    publishState.pendingChanges = Array.isArray(entries) ? entries : [];
+    lastPendingChangesContext = { head: headCommit, reference: referenceCommit };
     return publishState.pendingChanges;
+  })();
+
+  const trackedPromise = execution
+    .catch(err => {
+      if (DEBUG) {
+        console.warn('Falha ao atualizar alterações pendentes:', err);
+      }
+      return publishState.pendingChanges;
+    })
+    .finally(() => {
+      if (pendingChangesRefreshPromise === trackedPromise) {
+        pendingChangesRefreshPromise = null;
+      }
+    });
+
+  pendingChangesRefreshPromise = trackedPromise;
+  return trackedPromise;
+}
+
+function ensurePublishStateInitialized() {
+  if (!publishStateInitializationPromise) {
+    publishStateInitializationPromise = (async () => {
+      if (!publishState.lastPublishedCommit) {
+        const head = await getHeadCommitHash();
+        if (head) {
+          publishState.lastPublishedCommit = head;
+        }
+      }
+      await refreshPendingChanges();
+      return publishState.pendingChanges;
+    })().catch(err => {
+      if (DEBUG) {
+        console.warn('Falha ao inicializar estado de publicação:', err);
+      }
+      return publishState.pendingChanges;
+    });
   }
 
-  const entries = collectPendingChangesSince(publishState.lastPublishedCommit, headCommit);
-  publishState.pendingChanges = Array.isArray(entries) ? entries : [];
-  return publishState.pendingChanges;
+  return publishStateInitializationPromise;
+}
+
+ensurePublishStateInitialized();
+
+async function buildUpdateStatusPayload({ refresh = false } = {}) {
+  if (refresh) {
+    await updateService.checkForUpdates({ silent: true });
+  }
+
+  await ensurePublishStateInitialized();
+  await refreshPendingChanges({ force: refresh });
+
+  const status = updateService.getUpdateStatus();
+  const payload = {
+    ...status,
+    canPublish: publishState.canPublish,
+    latestPublishedVersion: publishState.latestPublishedVersion,
+    localVersion: publishState.localVersion,
+    publishState: { ...publishState }
+  };
+
+  updateStatusCache.value = payload;
+  updateStatusCache.timestamp = Date.now();
+
+  return payload;
 }
 
 function broadcastPublishEvent(channel, payload = {}) {
@@ -574,7 +753,9 @@ function broadcastPublishEvent(channel, payload = {}) {
   });
 }
 
-function updatePublishState(partial = {}) {
+async function updatePublishState(partial = {}) {
+  await ensurePublishStateInitialized();
+
   const hasOwn = key => Object.prototype.hasOwnProperty.call(partial, key);
   const pipelineActive = publisher.isPublishing();
 
@@ -595,7 +776,10 @@ function updatePublishState(partial = {}) {
   if (hasOwn('lastPublishedCommit')) {
     publishState.lastPublishedCommit = partial.lastPublishedCommit || null;
   } else if (!publishState.lastPublishedCommit) {
-    publishState.lastPublishedCommit = getHeadCommitHash();
+    const head = await getHeadCommitHash();
+    if (head) {
+      publishState.lastPublishedCommit = head;
+    }
   }
 
   let nextCanPublish;
@@ -613,10 +797,21 @@ function updatePublishState(partial = {}) {
 
   const versionChanged = hasOwn('latestPublishedVersion') || hasOwn('localVersion');
   const commitChanged = hasOwn('lastPublishedCommit');
-  refreshPendingChanges();
+  await refreshPendingChanges({ force: versionChanged || commitChanged });
 
   if (versionChanged || commitChanged) {
     persistPublishStateSnapshot();
+  }
+
+  if (updateStatusCache.value) {
+    updateStatusCache.value = {
+      ...updateStatusCache.value,
+      canPublish: publishState.canPublish,
+      latestPublishedVersion: publishState.latestPublishedVersion,
+      localVersion: publishState.localVersion,
+      publishState: { ...publishState }
+    };
+    updateStatusCache.timestamp = Date.now();
   }
 
   return { ...publishState };
@@ -1891,7 +2086,7 @@ ipcMain.handle('publish-update', async (_event, payload) => {
   const previousLocalVersion = publishState.localVersion;
   const previousPublishedVersion = publishState.latestPublishedVersion;
 
-  const startState = updatePublishState({ publishing: true, canPublish: false });
+  const startState = await updatePublishState({ publishing: true, canPublish: false });
   const startMessage = `Iniciando publicação da versão ${sanitizedVersion}...`;
   broadcastPublishEvent('publish-progress', {
     ...startState,
@@ -1915,7 +2110,7 @@ ipcMain.handle('publish-update', async (_event, payload) => {
       onProgress: progressHandler,
       version: sanitizedVersion
     });
-    const gitResult = performReleaseCommit({
+    const gitResult = await performReleaseCommit({
       runGitCommand,
       version: sanitizedVersion,
       logger: console
@@ -1930,12 +2125,12 @@ ipcMain.handle('publish-update', async (_event, payload) => {
       throw gitError;
     }
 
-    const headAfterPush = getHeadCommitHash();
+    const headAfterPush = await getHeadCommitHash({ force: true });
     const nextHeadCommit = headAfterPush || publishState.lastPublishedCommit;
     if (!headAfterPush) {
       console.warn('Não foi possível obter o commit HEAD após o push. Mantendo último commit conhecido.');
     }
-    const successState = updatePublishState({
+    const successState = await updatePublishState({
       publishing: false,
       canPublish: true,
       latestPublishedVersion: sanitizedVersion,
@@ -1956,7 +2151,7 @@ ipcMain.handle('publish-update', async (_event, payload) => {
         revertVersionChange = null;
       }
     }
-    const errorState = updatePublishState({ publishing: false, canPublish: true });
+    const errorState = await updatePublishState({ publishing: false, canPublish: true });
     const isGitFailure = Boolean(err?.isGitAutomationError || (err?.code && String(err.code).startsWith('git-')));
     let message;
     if (gitUnavailable) {
@@ -1974,7 +2169,7 @@ ipcMain.handle('publish-update', async (_event, payload) => {
       targetVersion: sanitizedVersion
     });
     recordPublishAudit('publish-failure', { error: message, version: sanitizedVersion });
-    const restoredState = updatePublishState({
+    const restoredState = await updatePublishState({
       latestPublishedVersion: previousPublishedVersion,
       localVersion: previousLocalVersion
     });
@@ -1984,18 +2179,68 @@ ipcMain.handle('publish-update', async (_event, payload) => {
 
 ipcMain.handle('get-update-status', async (_event, options = {}) => {
   const refresh = Boolean(options?.refresh);
+
   if (refresh) {
-    await updateService.checkForUpdates({ silent: true });
+    if (updateStatusCache.promise && updateStatusCache.refreshInFlight) {
+      return updateStatusCache.promise;
+    }
+    if (updateStatusCache.promise) {
+      try {
+        await updateStatusCache.promise;
+      } catch (err) {
+        if (DEBUG) {
+          console.warn('Falha em consulta anterior de status de atualização:', err);
+        }
+      }
+    }
+
+    updateStatusCache.refreshInFlight = true;
+    const promise = buildUpdateStatusPayload({ refresh: true })
+      .catch(err => {
+        if (DEBUG) {
+          console.warn('Falha ao atualizar status de atualização (refresh):', err);
+        }
+        throw err;
+      })
+      .finally(() => {
+        if (updateStatusCache.promise === promise) {
+          updateStatusCache.promise = null;
+        }
+        updateStatusCache.refreshInFlight = false;
+      });
+    updateStatusCache.promise = promise;
+    return promise;
   }
-  refreshPendingChanges();
-  const status = updateService.getUpdateStatus();
-  return {
-    ...status,
-    canPublish: publishState.canPublish,
-    latestPublishedVersion: publishState.latestPublishedVersion,
-    localVersion: publishState.localVersion,
-    publishState: { ...publishState }
-  };
+
+  const now = Date.now();
+  if (
+    updateStatusCache.value &&
+    now - updateStatusCache.timestamp < UPDATE_STATUS_CACHE_TTL
+  ) {
+    return updateStatusCache.value;
+  }
+
+  if (updateStatusCache.promise) {
+    return updateStatusCache.promise;
+  }
+
+  updateStatusCache.refreshInFlight = false;
+  const promise = buildUpdateStatusPayload({ refresh: false })
+    .catch(err => {
+      if (DEBUG) {
+        console.warn('Falha ao obter status de atualização:', err);
+      }
+      throw err;
+    })
+    .finally(() => {
+      if (updateStatusCache.promise === promise) {
+        updateStatusCache.promise = null;
+      }
+      updateStatusCache.refreshInFlight = false;
+    });
+
+  updateStatusCache.promise = promise;
+  return promise;
 });
 
 ipcMain.handle('check-for-updates', async () => {

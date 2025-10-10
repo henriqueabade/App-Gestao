@@ -138,6 +138,14 @@ const AppUpdates = (() => {
         }
     };
 
+    const UPDATE_STATUS_REQUEST_TTL = 1500;
+    const updateStatusRequest = {
+        promise: null,
+        lastResult: null,
+        lastUpdatedAt: 0,
+        refreshInFlight: false
+    };
+
     let publishStartToastShown = false;
     let eventsAttached = false;
     let scheduledAutoCheckHandle = null;
@@ -1677,12 +1685,71 @@ const AppUpdates = (() => {
         applySupAdminState();
     }
 
+    function cacheUpdateStatusResult(result) {
+        if (!result || typeof result !== 'object') return;
+        const cached = { ...result };
+        if (result.publishState && typeof result.publishState === 'object') {
+            cached.publishState = { ...result.publishState };
+        }
+        updateStatusRequest.lastResult = cached;
+        updateStatusRequest.lastUpdatedAt = Date.now();
+    }
+
+    async function requestUpdateStatus(options = {}) {
+        if (!window.electronAPI?.getUpdateStatus) return null;
+
+        const refresh = Boolean(options.refresh);
+        const now = Date.now();
+
+        if (
+            !refresh &&
+            updateStatusRequest.lastResult &&
+            now - updateStatusRequest.lastUpdatedAt < UPDATE_STATUS_REQUEST_TTL
+        ) {
+            return updateStatusRequest.lastResult;
+        }
+
+        if (updateStatusRequest.promise) {
+            if (refresh && !updateStatusRequest.refreshInFlight) {
+                try {
+                    await updateStatusRequest.promise;
+                } catch (err) {
+                    if (window?.console?.warn) {
+                        console.warn('Falha em verificação anterior de atualização:', err);
+                    }
+                }
+            } else {
+                return updateStatusRequest.promise;
+            }
+        }
+
+        updateStatusRequest.refreshInFlight = refresh;
+
+        const promise = window.electronAPI
+            .getUpdateStatus({ refresh })
+            .then(result => {
+                cacheUpdateStatusResult(result);
+                return result;
+            })
+            .finally(() => {
+                if (updateStatusRequest.promise === promise) {
+                    updateStatusRequest.promise = null;
+                    updateStatusRequest.refreshInFlight = false;
+                }
+            });
+
+        updateStatusRequest.promise = promise;
+        return promise;
+    }
+
     async function runAutomaticCheck({ silent = true, userInitiated = false } = {}) {
         if (!window.electronAPI?.getUpdateStatus) return null;
-        if (state.autoCheckPending) return null;
+        if (state.autoCheckPending) {
+            return updateStatusRequest.promise ?? updateStatusRequest.lastResult ?? null;
+        }
         state.autoCheckPending = true;
         try {
-            const result = await window.electronAPI.getUpdateStatus({ refresh: true });
+            const result = await requestUpdateStatus({ refresh: true });
             if (result && typeof result === 'object') {
                 setUpdateStatus(result, { silent, userInitiatedUpdate: userInitiated });
                 if (result.publishState) {
@@ -2126,12 +2193,46 @@ const AppUpdates = (() => {
         applyUserState();
         refreshUpdateSummaries();
         persistState();
+
+        const applyResult = result => {
+            if (!result || typeof result !== 'object') return;
+            setUpdateStatus(result, { silent: true });
+            if (result.publishState) {
+                setPublishState(result.publishState, { silent: true });
+            }
+        };
+
+        if (updateStatusRequest.promise) {
+            updateStatusRequest.promise
+                .then(applyResult)
+                .catch(err => {
+                    if (window?.console?.warn) {
+                        console.warn('Falha ao reutilizar verificação de atualização ativa:', err);
+                    }
+                });
+        } else if (updateStatusRequest.lastResult) {
+            applyResult(updateStatusRequest.lastResult);
+        } else if (window.electronAPI?.getUpdateStatus) {
+            requestUpdateStatus({ refresh: false })
+                .then(applyResult)
+                .catch(err => {
+                    if (window?.console?.warn) {
+                        console.warn('Falha ao obter status de atualização após definir usuário:', err);
+                    }
+                });
+        }
     }
 
     function setUpdateStatus(newStatus, options = {}) {
         const { silent = false, userInitiatedUpdate = false } = options;
         const previousState = state.updateStatus ? { ...state.updateStatus } : null;
         state.updateStatus = newStatus ? { ...newStatus } : null;
+        if (state.updateStatus) {
+            cacheUpdateStatusResult(state.updateStatus);
+        } else {
+            updateStatusRequest.lastResult = null;
+            updateStatusRequest.lastUpdatedAt = 0;
+        }
         if (newStatus?.localVersion) state.localVersion = newStatus.localVersion;
         if (newStatus?.latestPublishedVersion) state.latestPublishedVersion = newStatus.latestPublishedVersion;
         if (newStatus?.latestVersion) state.availableVersion = newStatus.latestVersion;

@@ -9,7 +9,7 @@ function log(logger, level, message) {
   fn.call(targetLogger, message);
 }
 
-function performReleaseCommit({ runGitCommand, version, logger }) {
+async function performReleaseCommit({ runGitCommand, version, logger }) {
   if (typeof runGitCommand !== 'function') {
     throw new Error('runGitCommand function is required');
   }
@@ -20,7 +20,7 @@ function performReleaseCommit({ runGitCommand, version, logger }) {
   const activeLogger = getLogger(logger);
   const commitMessage = `Publicação: versão ${version}`;
 
-  const statusOutput = runGitCommand(['status', '--porcelain']);
+  const statusOutput = await runGitCommand(['status', '--porcelain']);
   if (statusOutput === null) {
     log(activeLogger, 'error', 'Falha ao executar "git status --porcelain".');
     return { success: false, code: 'git-status-failed', message: 'Falha ao verificar alterações no repositório.' };
@@ -34,20 +34,20 @@ function performReleaseCommit({ runGitCommand, version, logger }) {
   const filesToAdd = ['package.json', 'package-lock.json'];
   const addArgs = ['add', ...filesToAdd];
   const addCommand = ['git', ...addArgs].join(' ');
-  const addResult = runGitCommand(addArgs);
+  const addResult = await runGitCommand(addArgs);
   if (addResult === null) {
     log(activeLogger, 'error', `Falha ao executar "${addCommand}".`);
     return { success: false, code: 'git-add-failed', message: 'Falha ao preparar arquivos para commit.' };
   }
 
-  const commitResult = runGitCommand(['commit', '-m', commitMessage]);
+  const commitResult = await runGitCommand(['commit', '-m', commitMessage]);
   if (commitResult === null) {
     log(activeLogger, 'error', `Falha ao executar "git commit" com mensagem "${commitMessage}".`);
     return { success: false, code: 'git-commit-failed', message: 'Não foi possível criar o commit de release.' };
   }
   log(activeLogger, 'log', `Commit criado com sucesso: ${commitMessage}`);
 
-  const pushResult = runGitCommand(['push']);
+  const pushResult = await runGitCommand(['push']);
   if (pushResult === null) {
     log(activeLogger, 'error', 'Falha ao executar "git push".');
     return { success: false, code: 'git-push-failed', message: 'Não foi possível enviar o commit de release.' };
