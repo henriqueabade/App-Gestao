@@ -1537,7 +1537,7 @@ const AppUpdates = (() => {
         markUserInitiatedUpdate();
         setUserMode(mode, { panelOpen: true });
 
-        if (mode === 'available' || state.actionBusy) {
+        if (state.actionBusy) {
             return;
         }
 
