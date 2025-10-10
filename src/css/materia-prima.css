@@ -14,6 +14,7 @@
     --neutral-500: #6b7280;
 }
 
+
 body {
     background: linear-gradient(135deg, var(--color-bg-deep) 0%, #1a0009 100%);
     min-height: 100vh;
