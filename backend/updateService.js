@@ -159,12 +159,24 @@ function getChannel() {
 }
 
 function setStatus(update = {}) {
-  latestVersion = update.latestVersion ?? latestVersion;
-  downloadProgress = update.downloadProgress ?? downloadProgress;
-  statusMessage = update.statusMessage ?? statusMessage;
-  status = update.status ?? status;
-  lastCheckAt = update.lastCheckAt ?? lastCheckAt;
-  lastError = update.error ?? lastError;
+  if (Object.prototype.hasOwnProperty.call(update, 'latestVersion')) {
+    latestVersion = update.latestVersion;
+  }
+  if (Object.prototype.hasOwnProperty.call(update, 'downloadProgress')) {
+    downloadProgress = update.downloadProgress;
+  }
+  if (Object.prototype.hasOwnProperty.call(update, 'statusMessage')) {
+    statusMessage = update.statusMessage;
+  }
+  if (Object.prototype.hasOwnProperty.call(update, 'status')) {
+    status = update.status;
+  }
+  if (Object.prototype.hasOwnProperty.call(update, 'lastCheckAt')) {
+    lastCheckAt = update.lastCheckAt;
+  }
+  if (Object.prototype.hasOwnProperty.call(update, 'error')) {
+    lastError = update.error;
+  }
   if (Object.prototype.hasOwnProperty.call(update, 'releaseNotes')) {
     releaseNotes = Array.isArray(update.releaseNotes) ? update.releaseNotes : [];
   }
@@ -340,6 +352,8 @@ async function checkForUpdates({ silent = false } = {}) {
       setStatus({
         status: 'up-to-date',
         statusMessage: 'Aplicativo já está na versão mais recente.',
+        latestVersion: null,
+        downloadProgress: null,
         ...getReleaseMetadata()
       });
     }
@@ -434,6 +448,8 @@ autoUpdater.on('update-not-available', () => {
   setStatus({
     status: 'up-to-date',
     statusMessage: 'Aplicativo já está na versão mais recente.',
+    latestVersion: null,
+    downloadProgress: null,
     ...getReleaseMetadata()
   });
 });
