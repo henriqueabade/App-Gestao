@@ -2767,6 +2767,7 @@ ipcMain.handle('open-pdf', async (_event, { id, tipo }) => {
   const pdfWindow = new BrowserWindow({
     show: false,
     webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
       sandbox: false,
       nodeIntegration: false,
       contextIsolation: true
