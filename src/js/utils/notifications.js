@@ -96,6 +96,26 @@ function notifyPdfGeneration(message = 'Gerando PDF...') {
   setTimeout(() => fallback.remove(), 3000);
 }
 
+function notifyDesktopOnlyPdf(id, { message = 'Disponível apenas no aplicativo desktop' } = {}) {
+  try {
+    showToast(message, 'error');
+  } catch (err) {
+    console.warn('Não foi possível exibir toast padrão, usando alerta simples.', err);
+    if (typeof alert === 'function') {
+      alert(message); // eslint-disable-line no-alert
+    }
+  }
+
+  if (!id) return;
+
+  try {
+    const pdfUrl = `http://localhost:3000/pdf?id=${encodeURIComponent(id)}`;
+    window.open(pdfUrl, '_blank', 'noopener,noreferrer');
+  } catch (err) {
+    console.warn('Não foi possível abrir o PDF no navegador.', err);
+  }
+}
+
 /**
  * Create and position a popup relative to a target element.
  * @param {HTMLElement} target anchor element
@@ -147,6 +167,12 @@ function createPopup(target, html, { margin = 8, onHide } = {}) {
 window.showToast = window.showToast || showToast;
 window.createPopup = window.createPopup || createPopup;
 window.notifyPdfGeneration = window.notifyPdfGeneration || notifyPdfGeneration;
-window.Notifications = window.Notifications || { showToast, createPopup, notifyPdfGeneration };
+window.notifyDesktopOnlyPdf = window.notifyDesktopOnlyPdf || notifyDesktopOnlyPdf;
+window.Notifications = window.Notifications || {
+  showToast,
+  createPopup,
+  notifyPdfGeneration,
+  notifyDesktopOnlyPdf,
+};
 
 

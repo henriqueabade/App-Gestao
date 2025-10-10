@@ -249,7 +249,10 @@ async function carregarPedidos() {
                     return;
                 }
 
-                if (!window.electronAPI?.openPdf) return;
+                if (!window.electronAPI?.openPdf) {
+                    window.notifyDesktopOnlyPdf?.(id);
+                    return;
+                }
 
                 window.notifyPdfGeneration?.();
                 try {
