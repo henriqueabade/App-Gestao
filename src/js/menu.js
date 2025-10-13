@@ -164,6 +164,153 @@ const AppUpdates = (() => {
 
     const USER_INITIATED_PROGRESS_STATUSES = new Set(['checking', 'downloading', 'installing']);
 
+    function normalizeVersionString(value) {
+        if (value === null || value === undefined) return null;
+        const stringValue = String(value).trim();
+        if (!stringValue) return null;
+        return stringValue.replace(/^v(?=\d)/i, '');
+    }
+
+    function parseVersionParts(value) {
+        const normalized = normalizeVersionString(value);
+        if (!normalized) return null;
+
+        const [withoutBuild] = normalized.split('+', 2);
+        const [core, preRelease = ''] = withoutBuild.split('-', 2);
+
+        const coreParts = core.split('.').map(part => {
+            if (!/^\d+$/.test(part)) {
+                return Number.NaN;
+            }
+            return Number.parseInt(part, 10);
+        });
+
+        if (coreParts.some(Number.isNaN)) {
+            return null;
+        }
+
+        const preParts = preRelease
+            ? preRelease
+                  .split('.')
+                  .map(part => part.trim())
+                  .filter(Boolean)
+            : [];
+
+        return {
+            original: normalized,
+            core: coreParts,
+            pre: preParts,
+            hasPreRelease: preRelease.length > 0
+        };
+    }
+
+    function compareSemanticVersions(a, b) {
+        const parsedA = parseVersionParts(a);
+        const parsedB = parseVersionParts(b);
+        if (!parsedA || !parsedB) return null;
+
+        const length = Math.max(parsedA.core.length, parsedB.core.length);
+        for (let index = 0; index < length; index += 1) {
+            const partA = parsedA.core[index] ?? 0;
+            const partB = parsedB.core[index] ?? 0;
+            if (partA > partB) return 1;
+            if (partA < partB) return -1;
+        }
+
+        const aHasPre = parsedA.hasPreRelease;
+        const bHasPre = parsedB.hasPreRelease;
+        if (aHasPre && !bHasPre) return -1;
+        if (!aHasPre && bHasPre) return 1;
+
+        if (aHasPre && bHasPre) {
+            const limit = Math.max(parsedA.pre.length, parsedB.pre.length);
+            for (let index = 0; index < limit; index += 1) {
+                const idA = parsedA.pre[index];
+                const idB = parsedB.pre[index];
+                if (idA === undefined) return -1;
+                if (idB === undefined) return 1;
+
+                const idANumeric = /^\d+$/.test(idA) ? Number.parseInt(idA, 10) : Number.NaN;
+                const idBNumeric = /^\d+$/.test(idB) ? Number.parseInt(idB, 10) : Number.NaN;
+                const aIsNumeric = !Number.isNaN(idANumeric);
+                const bIsNumeric = !Number.isNaN(idBNumeric);
+
+                if (aIsNumeric && bIsNumeric) {
+                    if (idANumeric > idBNumeric) return 1;
+                    if (idANumeric < idBNumeric) return -1;
+                    continue;
+                }
+
+                if (aIsNumeric !== bIsNumeric) {
+                    return aIsNumeric ? -1 : 1;
+                }
+
+                if (idA > idB) return 1;
+                if (idA < idB) return -1;
+            }
+        }
+
+        return 0;
+    }
+
+    function normalizeUpdateStatusPayload(payload) {
+        if (!payload || typeof payload !== 'object') return payload;
+
+        const normalized = { ...payload };
+        if (normalized.latestVersion) {
+            const sanitizedLatest = normalizeVersionString(normalized.latestVersion);
+            if (sanitizedLatest) {
+                normalized.latestVersion = sanitizedLatest;
+            }
+        }
+        if (normalized.localVersion) {
+            const sanitizedLocal = normalizeVersionString(normalized.localVersion);
+            if (sanitizedLocal) {
+                normalized.localVersion = sanitizedLocal;
+            }
+        }
+
+        const availableVersion = normalized.latestVersion || null;
+        const localVersion =
+            normalized.localVersion ||
+            state.localVersion ||
+            state.publishState?.localVersion ||
+            state.publishState?.latestPublishedVersion ||
+            null;
+
+        if (
+            availableVersion &&
+            localVersion &&
+            (normalized.status === 'update-available' || normalized.status === 'downloaded')
+        ) {
+            let comparison = compareSemanticVersions(availableVersion, localVersion);
+            if (comparison === null && normalizeVersionString(availableVersion) === normalizeVersionString(localVersion)) {
+                comparison = 0;
+            }
+
+            if (comparison !== null && comparison <= 0) {
+                const localForMessage = normalizeVersionString(localVersion) || localVersion;
+                const availableForMessage = normalizeVersionString(availableVersion) || availableVersion;
+                normalized.status = 'up-to-date';
+                normalized.latestVersion = null;
+                normalized.downloadProgress = null;
+                normalized.releaseNotes = [];
+                normalized.releaseName = null;
+                normalized.releaseDate = null;
+
+                if (comparison < 0) {
+                    normalized.statusMessage = `Aplicativo está na versão ${localForMessage}, mais recente que a disponível ${availableForMessage}.`;
+                } else {
+                    normalized.statusMessage = localForMessage
+                        ? `Aplicativo já está na versão ${localForMessage}.`
+                        : 'Aplicativo já está na versão mais recente.';
+                }
+            }
+        }
+
+        return normalized;
+    }
+
     function setElementHidden(el, hidden) {
         if (!el) return;
         if (hidden) {
@@ -1686,13 +1833,15 @@ const AppUpdates = (() => {
     }
 
     function cacheUpdateStatusResult(result) {
-        if (!result || typeof result !== 'object') return;
-        const cached = { ...result };
-        if (result.publishState && typeof result.publishState === 'object') {
-            cached.publishState = { ...result.publishState };
+        if (!result || typeof result !== 'object') return result;
+        const normalized = normalizeUpdateStatusPayload(result);
+        const cached = { ...normalized };
+        if (normalized.publishState && typeof normalized.publishState === 'object') {
+            cached.publishState = { ...normalized.publishState };
         }
         updateStatusRequest.lastResult = cached;
         updateStatusRequest.lastUpdatedAt = Date.now();
+        return normalized;
     }
 
     async function requestUpdateStatus(options = {}) {
@@ -1727,10 +1876,7 @@ const AppUpdates = (() => {
 
         const promise = window.electronAPI
             .getUpdateStatus({ refresh })
-            .then(result => {
-                cacheUpdateStatusResult(result);
-                return result;
-            })
+            .then(result => cacheUpdateStatusResult(result))
             .finally(() => {
                 if (updateStatusRequest.promise === promise) {
                     updateStatusRequest.promise = null;
@@ -2225,29 +2371,44 @@ const AppUpdates = (() => {
 
     function setUpdateStatus(newStatus, options = {}) {
         const { silent = false, userInitiatedUpdate = false } = options;
+        const normalizedStatus = newStatus ? normalizeUpdateStatusPayload(newStatus) : null;
         const previousState = state.updateStatus ? { ...state.updateStatus } : null;
-        state.updateStatus = newStatus ? { ...newStatus } : null;
-        if (state.updateStatus) {
-            cacheUpdateStatusResult(state.updateStatus);
+        state.updateStatus = normalizedStatus ? { ...normalizedStatus } : null;
+        const effectiveStatus = state.updateStatus;
+        if (effectiveStatus) {
+            cacheUpdateStatusResult(effectiveStatus);
         } else {
             updateStatusRequest.lastResult = null;
             updateStatusRequest.lastUpdatedAt = 0;
+            state.availableVersion = null;
         }
-        if (newStatus?.localVersion) state.localVersion = newStatus.localVersion;
-        if (newStatus?.latestPublishedVersion) state.latestPublishedVersion = newStatus.latestPublishedVersion;
-        if (newStatus?.latestVersion) state.availableVersion = newStatus.latestVersion;
-        if (newStatus?.canPublish !== undefined) {
-            state.publishState = { ...(state.publishState || {}), canPublish: newStatus.canPublish };
+
+        if (effectiveStatus?.localVersion) {
+            state.localVersion = normalizeVersionString(effectiveStatus.localVersion) || effectiveStatus.localVersion;
+        }
+        if (effectiveStatus?.latestPublishedVersion) {
+            state.latestPublishedVersion = effectiveStatus.latestPublishedVersion;
+        }
+        if (effectiveStatus?.latestVersion) {
+            state.availableVersion = effectiveStatus.latestVersion;
+        } else if (
+            !effectiveStatus ||
+            (effectiveStatus.status !== 'update-available' && effectiveStatus.status !== 'downloaded')
+        ) {
+            state.availableVersion = null;
+        }
+        if (effectiveStatus?.canPublish !== undefined) {
+            state.publishState = { ...(state.publishState || {}), canPublish: effectiveStatus.canPublish };
         }
 
         updateBadge();
         applySupAdminState();
         updateUserControlFromStatus();
         if (!silent && userInitiatedUpdate) {
-            handleUpdateToasts(previousState, newStatus, { userInitiated: true });
+            handleUpdateToasts(previousState, effectiveStatus, { userInitiated: true });
         }
-        updateUserInitiatedFromStatus(newStatus?.status || null);
-        state.lastStatus = newStatus?.status || null;
+        updateUserInitiatedFromStatus(effectiveStatus?.status || null);
+        state.lastStatus = effectiveStatus?.status || null;
         refreshUpdateSummaries();
         persistState();
     }
