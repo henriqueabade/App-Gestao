@@ -27,6 +27,21 @@ const STATUS_BADGE_MAP = {
     nao_confirmado: 'badge-warning'
 };
 
+function normalizarBoolean(valor) {
+    if (typeof valor === 'boolean') {
+        return valor;
+    }
+    if (typeof valor === 'number') {
+        return Number.isFinite(valor) && valor !== 0;
+    }
+    if (typeof valor === 'string') {
+        const normalizado = valor.trim().toLowerCase();
+        if (!normalizado) return false;
+        return ['true', 't', '1', 'sim', 'yes', 'y', 'ativo', 'confirmado', 'aguardando_aprovacao'].includes(normalizado);
+    }
+    return false;
+}
+
 function normalizarStatusInternoValor(valor) {
     if (!valor) return '';
     const normalizado = String(valor)
@@ -81,16 +96,27 @@ function obterStatusInterno(usuario) {
         if (normalizado) return normalizado;
     }
 
+    const confirmacaoOrigem = Object.prototype.hasOwnProperty.call(usuario, 'confirmacao')
+        ? usuario.confirmacao
+        : Object.prototype.hasOwnProperty.call(usuario, 'emailConfirmado')
+            ? usuario.emailConfirmado
+            : usuario.email_confirmado;
+    const confirmacao = normalizarBoolean(confirmacaoOrigem);
+
     if (typeof usuario.confirmado === 'boolean') {
         if (usuario.confirmado) return 'ativo';
-        if (usuario.emailConfirmado || usuario.email_confirmado) return 'aguardando_aprovacao';
+        if (confirmacao) return 'aguardando_aprovacao';
         return 'nao_confirmado';
     }
 
     if (typeof usuario.verificado === 'boolean') {
         if (usuario.verificado) return 'ativo';
-        if (usuario.emailConfirmado || usuario.email_confirmado) return 'aguardando_aprovacao';
+        if (confirmacao) return 'aguardando_aprovacao';
         return 'nao_confirmado';
+    }
+
+    if (typeof usuario.confirmacao === 'boolean' || confirmacaoOrigem !== undefined) {
+        return confirmacao ? 'aguardando_aprovacao' : 'nao_confirmado';
     }
 
     return '';

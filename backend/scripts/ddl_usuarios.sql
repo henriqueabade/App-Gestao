@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS usuarios (
 );
 
 ALTER TABLE usuarios
+  ADD COLUMN IF NOT EXISTS confirmacao BOOLEAN DEFAULT false,
   ADD COLUMN IF NOT EXISTS email_confirmado BOOLEAN DEFAULT false,
   ADD COLUMN IF NOT EXISTS email_confirmado_em TIMESTAMPTZ,
   ADD COLUMN IF NOT EXISTS confirmacao_token TEXT,
@@ -46,12 +47,19 @@ UPDATE usuarios
     OR status NOT IN ('nao_confirmado', 'aguardando_aprovacao', 'ativo');
 
 UPDATE usuarios
-   SET email_confirmado = COALESCE(email_confirmado, verificado),
-       email_confirmado_em = CASE
-         WHEN email_confirmado IS TRUE AND email_confirmado_em IS NULL THEN NOW()
+   SET confirmacao = COALESCE(confirmacao, email_confirmado, verificado, false)
+ WHERE confirmacao IS NULL;
+
+UPDATE usuarios
+   SET email_confirmado = confirmacao
+ WHERE email_confirmado IS DISTINCT FROM confirmacao;
+
+UPDATE usuarios
+   SET email_confirmado_em = CASE
+         WHEN confirmacao IS TRUE AND email_confirmado_em IS NULL THEN NOW()
          ELSE email_confirmado_em
        END
- WHERE email_confirmado IS NULL;
+ WHERE confirmacao IS TRUE;
 
 -- Para usuários já ativados, garanta que verificado acompanhe o status
 UPDATE usuarios

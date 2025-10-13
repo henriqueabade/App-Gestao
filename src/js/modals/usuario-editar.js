@@ -311,10 +311,32 @@
       return formatarTitulo(usuario.status.trim());
     }
 
+    const confirmacaoOrigem = Object.prototype.hasOwnProperty.call(usuario, 'confirmacao')
+      ? usuario.confirmacao
+      : Object.prototype.hasOwnProperty.call(usuario, 'emailConfirmado')
+        ? usuario.emailConfirmado
+        : usuario.email_confirmado;
+    const confirmacao = (() => {
+      if (typeof confirmacaoOrigem === 'boolean') return confirmacaoOrigem;
+      if (typeof confirmacaoOrigem === 'number') {
+        return Number.isFinite(confirmacaoOrigem) && confirmacaoOrigem !== 0;
+      }
+      if (typeof confirmacaoOrigem === 'string') {
+        const normalizado = confirmacaoOrigem.trim().toLowerCase();
+        if (!normalizado) return false;
+        return ['true', 't', '1', 'sim', 'yes', 'y', 'aguardando_aprovacao', 'confirmado'].includes(normalizado);
+      }
+      return false;
+    })();
+
     if (typeof usuario.verificado === 'boolean') {
       if (usuario.verificado) return 'Ativo';
-      if (usuario.emailConfirmado || usuario.email_confirmado) return 'Inativo';
+      if (confirmacao) return 'Inativo';
       return 'Não confirmado';
+    }
+
+    if (typeof usuario.confirmacao === 'boolean' || confirmacaoOrigem !== undefined) {
+      return confirmacao ? 'Inativo' : 'Não confirmado';
     }
 
     return 'Aguardando';

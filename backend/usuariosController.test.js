@@ -19,6 +19,7 @@ function setup() {
     foto_usuario bytea,
     verificado boolean default false,
     status text default 'nao_confirmado',
+    confirmacao boolean default false,
     email_confirmado boolean default false,
     email_confirmado_em timestamp,
     confirmacao_token text,
@@ -345,8 +346,9 @@ test('GET /api/usuarios/confirm-email aplica novo e-mail confirmado', async () =
     const corpo = await resposta.text();
     assert.ok(corpo.includes('E-mail atualizado'));
 
-    const usuario = await pool.query('SELECT email, email_confirmado FROM usuarios WHERE id = $1', [1]);
+    const usuario = await pool.query('SELECT email, confirmacao, email_confirmado FROM usuarios WHERE id = $1', [1]);
     assert.strictEqual(usuario.rows[0].email, 'confirmado@example.com');
+    assert.strictEqual(usuario.rows[0].confirmacao, true);
     assert.strictEqual(usuario.rows[0].email_confirmado, true);
 
     const registro = await pool.query(

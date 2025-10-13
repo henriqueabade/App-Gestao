@@ -63,7 +63,7 @@ async function registrarUsuario(nome, email, senha, pin) {
           senha,
           verificado,
           status,
-          email_confirmado,
+          confirmacao,
           confirmacao_token,
           confirmacao_token_gerado_em,
           confirmacao_token_expira_em,

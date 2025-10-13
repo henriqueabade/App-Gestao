@@ -14,6 +14,7 @@ function createTable(db) {
     senha text,
     verificado boolean default false,
     status text default 'nao_confirmado',
+    confirmacao boolean default false,
     email_confirmado boolean default false,
     email_confirmado_em timestamp,
     confirmacao_token text,
@@ -152,6 +153,7 @@ test('registrarUsuario cria token e envia e-mail de confirmação', async () => 
     const usuario = registro.rows[0];
     assert.strictEqual(usuario.email, 'fulano@example.com');
     assert.strictEqual(usuario.status, 'nao_confirmado');
+    assert.strictEqual(usuario.confirmacao, false);
     assert.strictEqual(usuario.email_confirmado, false);
     assert.ok(typeof usuario.confirmacao_token === 'string' && usuario.confirmacao_token.length > 20);
     assert.ok(usuario.confirmacao_token_expira_em instanceof Date);
@@ -184,10 +186,11 @@ test('GET /api/usuarios/confirmar-email valida token e atualiza status', async (
       assert.ok(corpo.includes('Confirmação registrada'));
 
       const registro = await pool.query(
-        'SELECT email_confirmado, status, confirmacao_token FROM usuarios WHERE email = $1',
+        'SELECT confirmacao, email_confirmado, status, confirmacao_token FROM usuarios WHERE email = $1',
         ['joana@example.com']
       );
       const usuario = registro.rows[0];
+      assert.strictEqual(usuario.confirmacao, true);
       assert.strictEqual(usuario.email_confirmado, true);
       assert.strictEqual(usuario.status, 'aguardando_aprovacao');
       assert.strictEqual(usuario.confirmacao_token, null);
@@ -207,8 +210,8 @@ test('GET /api/usuarios/reportar-email-incorreto revoga token e alerta Sup Admin
   const token = 'token-reporte';
   try {
     await pool.query(
-      `INSERT INTO usuarios (nome, email, senha, status, email_confirmado, confirmacao_token, confirmacao_token_expira_em)
-       VALUES ($1, $2, $3, 'nao_confirmado', false, $4, $5)`,
+      `INSERT INTO usuarios (nome, email, senha, status, confirmacao, email_confirmado, confirmacao_token, confirmacao_token_expira_em)
+       VALUES ($1, $2, $3, 'nao_confirmado', false, false, $4, $5)`,
       ['Carlos', 'carlos@example.com', 'hash', token, new Date(Date.now() + 60 * 60 * 1000)]
     );
 
@@ -222,10 +225,11 @@ test('GET /api/usuarios/reportar-email-incorreto revoga token e alerta Sup Admin
       assert.ok(corpo.includes('Relato registrado'));
 
       const registro = await pool.query(
-        'SELECT email_confirmado, status, confirmacao_token FROM usuarios WHERE email = $1',
+        'SELECT confirmacao, email_confirmado, status, confirmacao_token FROM usuarios WHERE email = $1',
         ['carlos@example.com']
       );
       const usuario = registro.rows[0];
+      assert.strictEqual(usuario.confirmacao, false);
       assert.strictEqual(usuario.email_confirmado, false);
       assert.strictEqual(usuario.status, 'nao_confirmado');
       assert.strictEqual(usuario.confirmacao_token, null);
@@ -245,14 +249,14 @@ test('POST /api/usuarios/aprovar exige Sup Admin e envia e-mail de ativação', 
   try {
     const senhaSupAdmin = await bcrypt.hash('senhaSupAdmin', 10);
     await pool.query(
-      `INSERT INTO usuarios (nome, email, senha, perfil, status, verificado, email_confirmado)
-       VALUES ('Administrador', 'admin@example.com', $1, 'Sup Admin', 'ativo', true, true)`,
+      `INSERT INTO usuarios (nome, email, senha, perfil, status, verificado, confirmacao, email_confirmado)
+       VALUES ('Administrador', 'admin@example.com', $1, 'Sup Admin', 'ativo', true, true, true)`,
       [senhaSupAdmin]
     );
 
     await pool.query(
-      `INSERT INTO usuarios (nome, email, senha, status, email_confirmado, confirmacao_token)
-       VALUES ('Beatriz', 'bia@example.com', 'hash', 'aguardando_aprovacao', true, 'token-aprovar')`
+      `INSERT INTO usuarios (nome, email, senha, status, confirmacao, email_confirmado, confirmacao_token)
+       VALUES ('Beatriz', 'bia@example.com', 'hash', 'aguardando_aprovacao', true, true, 'token-aprovar')`
     );
 
     const { listen, close } = createServer();
@@ -275,12 +279,13 @@ test('POST /api/usuarios/aprovar exige Sup Admin e envia e-mail de ativação', 
       assert.strictEqual(corpo.usuario.statusInterno, 'ativo');
 
       const registro = await pool.query(
-        'SELECT status, verificado, email_confirmado, hora_ativacao FROM usuarios WHERE email = $1',
+        'SELECT status, verificado, confirmacao, email_confirmado, hora_ativacao FROM usuarios WHERE email = $1',
         ['bia@example.com']
       );
       const usuario = registro.rows[0];
       assert.strictEqual(usuario.status, 'ativo');
       assert.strictEqual(usuario.verificado, true);
+      assert.strictEqual(usuario.confirmacao, true);
       assert.strictEqual(usuario.email_confirmado, true);
       assert.ok(usuario.hora_ativacao instanceof Date);
 

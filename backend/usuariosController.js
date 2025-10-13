@@ -944,6 +944,7 @@ router.post('/me/email-confirmation', autenticarUsuario, async (req, res) => {
   try {
     const colunas = await getUsuarioColumns();
     const atualizacoes = [];
+    if (colunas.has('confirmacao')) atualizacoes.push('confirmacao = false');
     if (colunas.has('email_confirmado')) atualizacoes.push('email_confirmado = false');
     if (colunas.has('email_confirmado_em')) atualizacoes.push('email_confirmado_em = NULL');
     if (atualizacoes.length) {
@@ -1005,6 +1006,7 @@ async function confirmarAlteracaoEmail(req, res) {
 
     const colunas = await getUsuarioColumns();
     const sets = ['email = $1'];
+    if (colunas.has('confirmacao')) sets.push('confirmacao = true');
     if (colunas.has('email_confirmado')) sets.push('email_confirmado = true');
     if (colunas.has('email_confirmado_em')) sets.push('email_confirmado_em = NOW()');
     if (colunas.has('verificado')) sets.push('verificado = true');
@@ -1085,7 +1087,12 @@ router.get('/lista', async (_req, res) => {
 
     garantirColuna('hora_ativacao', 'hora_ativacao');
     garantirColuna('status', 'status');
-    garantirColuna('email_confirmado', 'email_confirmado');
+    const possuiConfirmacao = garantirColuna('confirmacao', 'confirmacao');
+    if (!possuiConfirmacao) {
+      garantirColuna('email_confirmado', 'confirmacao');
+    } else {
+      garantirColuna('email_confirmado', 'email_confirmado');
+    }
     garantirColuna('email_confirmado_em', 'email_confirmado_em');
     garantirColuna('status_atualizado_em', 'status_atualizado_em');
 
@@ -1199,18 +1206,37 @@ const normalizarStatus = body => {
     }
   }
 
-  if (typeof body.email_confirmado === 'boolean' || typeof body.emailConfirmado === 'boolean') {
-    const confirmado =
-      typeof body.email_confirmado === 'boolean' ? body.email_confirmado : body.emailConfirmado;
-    return confirmado ? 'aguardando_aprovacao' : 'nao_confirmado';
+  const confirmacaoInput = getFirstDefined(body, ['confirmacao', 'email_confirmado', 'emailConfirmado']);
+  const isExplicitFalse = valor => {
+    if (typeof valor === 'boolean') return valor === false;
+    if (typeof valor === 'number' && Number.isFinite(valor)) return valor <= 0;
+    if (typeof valor === 'string' && valor.trim()) {
+      const normalizado = normalizarTexto(valor);
+      return ['false', 'f', 'nao', 'nao_confirmado', 'naoconfirmado', 'no', 'n', '0'].includes(normalizado);
+    }
+    return false;
+  };
+
+  if (confirmacaoInput !== undefined) {
+    if (parseBoolean(confirmacaoInput)) {
+      return 'aguardando_aprovacao';
+    }
+    if (isExplicitFalse(confirmacaoInput)) {
+      return 'nao_confirmado';
+    }
   }
 
   if (typeof body.verificado === 'boolean') {
     if (body.verificado) {
       return 'ativo';
     }
-    if (body.email_confirmado === false || body.emailConfirmado === false) {
-      return 'nao_confirmado';
+    if (confirmacaoInput !== undefined) {
+      if (parseBoolean(confirmacaoInput)) {
+        return 'aguardando_aprovacao';
+      }
+      if (isExplicitFalse(confirmacaoInput)) {
+        return 'nao_confirmado';
+      }
     }
     return 'aguardando_aprovacao';
   }
@@ -1288,15 +1314,29 @@ router.patch('/:id/status', async (req, res) => {
 
     const novoVerificado = novoStatus === 'ativo';
 
+    const colunas = await getUsuarioColumns();
+    const camposAtualizacao = [
+      'status = $1',
+      'verificado = $2',
+      'status_atualizado_em = NOW()',
+      "hora_ativacao = CASE WHEN $1 = 'ativo' THEN NOW() ELSE hora_ativacao END"
+    ];
+    if (colunas.has('confirmacao')) {
+      camposAtualizacao.push(
+        "confirmacao = CASE WHEN $1 = 'ativo' THEN true ELSE confirmacao END"
+      );
+    }
+    if (colunas.has('email_confirmado')) {
+      camposAtualizacao.push(
+        "email_confirmado = CASE WHEN $1 = 'ativo' THEN true ELSE email_confirmado END"
+      );
+    }
+
     const result = await pool.query(
       `UPDATE usuarios
-          SET status = $1,
-              verificado = $2,
-              email_confirmado = CASE WHEN $1 = 'ativo' THEN true ELSE email_confirmado END,
-              status_atualizado_em = NOW(),
-              hora_ativacao = CASE WHEN $1 = 'ativo' THEN NOW() ELSE hora_ativacao END
+          SET ${camposAtualizacao.join(', ')}
         WHERE id = $3
-      RETURNING id, nome, email, perfil, verificado, hora_ativacao, status, email_confirmado, email_confirmado_em, status_atualizado_em`,
+      RETURNING *`,
       [novoStatus, novoVerificado, id]
     );
 
@@ -1329,7 +1369,7 @@ async function confirmarEmail(req, res) {
 
   try {
     const resultado = await pool.query(
-      `SELECT id, nome, email, email_confirmado, confirmacao_token_expira_em
+      `SELECT id, nome, email, confirmacao, email_confirmado, confirmacao_token_expira_em
          FROM usuarios
         WHERE confirmacao_token = $1`,
       [token]
@@ -1351,7 +1391,7 @@ async function confirmarEmail(req, res) {
       );
     }
 
-    if (usuario.email_confirmado) {
+    if (parseBoolean(usuario.confirmacao ?? usuario.email_confirmado)) {
       return responder(
         req,
         res,
@@ -1361,16 +1401,24 @@ async function confirmarEmail(req, res) {
       );
     }
 
+    const colunasTabela = await getUsuarioColumns();
+    const atualizacoes = [
+      "status = 'aguardando_aprovacao'",
+      'status_atualizado_em = NOW()',
+      'confirmacao_token = NULL'
+    ];
+    if (colunasTabela.has('confirmacao')) atualizacoes.unshift('confirmacao = true');
+    if (colunasTabela.has('email_confirmado')) atualizacoes.push('email_confirmado = true');
+    if (colunasTabela.has('email_confirmado_em')) atualizacoes.push('email_confirmado_em = NOW()');
+    if (colunasTabela.has('confirmacao_token_revogado_em')) {
+      atualizacoes.push('confirmacao_token_revogado_em = NOW()');
+    }
+
     const atualizado = await pool.query(
       `UPDATE usuarios
-          SET email_confirmado = true,
-              email_confirmado_em = NOW(),
-              status = 'aguardando_aprovacao',
-              status_atualizado_em = NOW(),
-              confirmacao_token = NULL,
-              confirmacao_token_revogado_em = NOW()
+          SET ${atualizacoes.join(', ')}
         WHERE id = $1
-      RETURNING id, nome, email, perfil, status, verificado, hora_ativacao, email_confirmado, email_confirmado_em, status_atualizado_em`,
+      RETURNING *`,
       [usuario.id]
     );
 
@@ -1444,17 +1492,25 @@ async function reportarEmailIncorreto(req, res) {
       );
     }
 
+    const colunasTabela = await getUsuarioColumns();
+    const atualizacoes = [
+      'verificado = false',
+      "status = 'nao_confirmado'",
+      'status_atualizado_em = NOW()',
+      'confirmacao_token = NULL'
+    ];
+    if (colunasTabela.has('confirmacao')) atualizacoes.unshift('confirmacao = false');
+    if (colunasTabela.has('email_confirmado')) atualizacoes.push('email_confirmado = false');
+    if (colunasTabela.has('email_confirmado_em')) atualizacoes.push('email_confirmado_em = NULL');
+    if (colunasTabela.has('confirmacao_token_revogado_em')) {
+      atualizacoes.push('confirmacao_token_revogado_em = NOW()');
+    }
+
     const atualizado = await pool.query(
       `UPDATE usuarios
-          SET email_confirmado = false,
-              email_confirmado_em = NULL,
-              verificado = false,
-              status = 'nao_confirmado',
-              status_atualizado_em = NOW(),
-              confirmacao_token = NULL,
-              confirmacao_token_revogado_em = NOW()
+          SET ${atualizacoes.join(', ')}
         WHERE id = $1
-      RETURNING id, nome, email, perfil, status, verificado, hora_ativacao, email_confirmado, email_confirmado_em, status_atualizado_em`,
+      RETURNING *`,
       [usuario.id]
     );
 
@@ -1534,18 +1590,28 @@ router.post('/aprovar', async (req, res) => {
       return res.status(403).json({ error: 'Credenciais inválidas.' });
     }
 
+    const colunas = await getUsuarioColumns();
+    const camposAtualizacao = [
+      "status = 'ativo'",
+      'verificado = true',
+      'status_atualizado_em = NOW()',
+      'hora_ativacao = NOW()',
+      'confirmacao_token = NULL'
+    ];
+    if (colunas.has('confirmacao')) camposAtualizacao.push('confirmacao = true');
+    if (colunas.has('email_confirmado')) camposAtualizacao.push('email_confirmado = true');
+    if (colunas.has('email_confirmado_em')) {
+      camposAtualizacao.push('email_confirmado_em = COALESCE(email_confirmado_em, NOW())');
+    }
+    if (colunas.has('confirmacao_token_revogado_em')) {
+      camposAtualizacao.push('confirmacao_token_revogado_em = NOW()');
+    }
+
     const atualizado = await pool.query(
       `UPDATE usuarios
-          SET status = 'ativo',
-              verificado = true,
-              email_confirmado = true,
-              email_confirmado_em = COALESCE(email_confirmado_em, NOW()),
-              status_atualizado_em = NOW(),
-              hora_ativacao = NOW(),
-              confirmacao_token = NULL,
-              confirmacao_token_revogado_em = NOW()
+          SET ${camposAtualizacao.join(', ')}
         WHERE id = $1
-      RETURNING id, nome, email, perfil, status, verificado, hora_ativacao, email_confirmado, email_confirmado_em, status_atualizado_em`,
+      RETURNING *`,
       [usuarioId]
     );
 
@@ -1669,12 +1735,18 @@ function formatarUsuario(u) {
     return mapa[normalizado] || normalizado;
   };
 
+  const confirmacaoBruta = Object.prototype.hasOwnProperty.call(u, 'confirmacao')
+    ? u.confirmacao
+    : undefined;
+  const confirmacaoNormalizada =
+    confirmacaoBruta !== undefined ? parseBoolean(confirmacaoBruta) : parseBoolean(u.email_confirmado);
+
   const statusPersistido = typeof u.status === 'string' ? u.status : '';
   let statusInterno = normalizarStatusInterno(statusPersistido);
   if (!statusInterno) {
     if (u.verificado) {
       statusInterno = 'ativo';
-    } else if (u.email_confirmado) {
+    } else if (confirmacaoNormalizada) {
       statusInterno = 'aguardando_aprovacao';
     } else {
       statusInterno = 'nao_confirmado';
@@ -1706,7 +1778,9 @@ function formatarUsuario(u) {
     statusBadge,
     confirmado: Boolean(u.verificado),
     confirmadoEm: serializar(horaAtivacao),
-    emailConfirmado: Boolean(u.email_confirmado),
+    confirmacao: confirmacaoNormalizada,
+    confirmacaoEm: serializar(parseDate(u.confirmacao_em || u.email_confirmado_em)),
+    emailConfirmado: confirmacaoNormalizada,
     emailConfirmadoEm: serializar(parseDate(u.email_confirmado_em)),
     statusAtualizadoEm: serializar(parseDate(u.status_atualizado_em)),
     online,
