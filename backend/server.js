@@ -25,6 +25,8 @@ app.use('/api/pedidos', pedidosRouter);
 app.use('/api/notifications', notificationsRouter);
 app.use(passwordResetRouter);
 app.use('/pdf', express.static(path.join(__dirname, '../src/pdf')));
+app.use('/styles', express.static(path.join(__dirname, '../src/styles')));
+app.use('/js', express.static(path.join(__dirname, '../src/js')));
 
 // Endpoint simples para verificar a disponibilidade do servidor
 app.get('/status', (_req, res) => {

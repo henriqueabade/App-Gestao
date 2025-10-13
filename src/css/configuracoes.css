@@ -13,6 +13,18 @@
     --neutral-500: #6b7280;
 }
 
+.sr-only {
+    position: absolute !important;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
 body {
     background: linear-gradient(135deg, var(--color-bg-deep) 0%, #1a0009 100%);
     min-height: 100vh;
@@ -75,6 +87,11 @@ body {
     display: flex;
     flex-direction: column;
     gap: clamp(1.1rem, 0.8rem + 0.8vw, 2rem);
+}
+
+#personalDataSettings {
+    position: relative;
+    overflow: hidden;
 }
 
 .settings-card-header {
@@ -181,6 +198,257 @@ body {
     cursor: not-allowed;
 }
 
+.personal-data-form {
+    display: flex;
+    flex-direction: column;
+    gap: clamp(1.25rem, 0.8rem + 1vw, 2rem);
+}
+
+.personal-data-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 220px) minmax(0, 1fr);
+    gap: clamp(1.5rem, 1rem + 1vw, 2.5rem);
+    align-items: start;
+}
+
+.personal-avatar-block {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.personal-avatar-preview {
+    width: clamp(120px, 16vw, 160px);
+    height: clamp(120px, 16vw, 160px);
+    border-radius: 50%;
+    border: 2px solid rgba(255, 255, 255, 0.35);
+    background: rgba(255, 255, 255, 0.08);
+    --avatar-preview-image: none;
+    display: grid;
+    place-items: center;
+    color: white;
+    font-size: clamp(2rem, 3vw, 2.75rem);
+    font-weight: 600;
+    position: relative;
+    overflow: hidden;
+    transition: border-color 200ms ease, transform 200ms ease;
+}
+
+.personal-avatar-preview.has-image::after,
+.personal-avatar-preview::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background-image: var(--avatar-preview-image);
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    opacity: 0;
+    transition: opacity 200ms ease;
+}
+
+.personal-avatar-preview.has-image::after {
+    opacity: 1;
+}
+
+.personal-avatar-initials {
+    position: relative;
+    z-index: 1;
+    letter-spacing: 0.05em;
+}
+
+.personal-avatar-preview.is-loading {
+    opacity: 0.6;
+}
+
+.personal-avatar-upload {
+    width: 100%;
+}
+
+.personal-avatar-upload-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    width: 100%;
+    padding: 0.65rem 1rem;
+    border-radius: 9999px;
+    border: 1px dashed rgba(255, 255, 255, 0.4);
+    color: rgba(255, 255, 255, 0.85);
+    background: rgba(255, 255, 255, 0.05);
+    cursor: pointer;
+    transition: all 200ms ease;
+    font-size: 0.95rem;
+    font-weight: 500;
+}
+
+.personal-avatar-upload-button i {
+    font-size: 1.1rem;
+}
+
+.personal-avatar-upload-button:hover,
+.personal-avatar-upload-button:focus-visible {
+    border-color: rgba(255, 255, 255, 0.75);
+    background: rgba(255, 255, 255, 0.12);
+    transform: translateY(-1px);
+}
+
+.personal-avatar-upload-button:active {
+    transform: translateY(0);
+}
+
+.personal-avatar-hint {
+    font-size: 0.8rem;
+    color: rgba(255, 255, 255, 0.55);
+    text-align: center;
+}
+
+.personal-data-fields {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 1.25rem;
+}
+
+.personal-data-field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.personal-data-label {
+    font-size: 0.9rem;
+    color: rgba(255, 255, 255, 0.7);
+    font-weight: 500;
+}
+
+.personal-data-input {
+    width: 100%;
+    padding: 0.75rem 1rem;
+    border-radius: 0.75rem;
+    color: white;
+}
+
+.personal-data-field.has-error .personal-data-input {
+    border-color: var(--color-red);
+}
+
+.personal-field-error {
+    min-height: 1.1rem;
+    font-size: 0.8rem;
+    color: var(--color-red);
+}
+
+.personal-feedback {
+    min-height: 1.25rem;
+    font-size: 0.9rem;
+    color: rgba(255, 255, 255, 0.75);
+}
+
+.personal-feedback--error {
+    color: var(--color-red);
+}
+
+.personal-feedback--success {
+    color: var(--color-green);
+}
+
+.personal-data-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    justify-content: flex-end;
+}
+
+.personal-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    border-radius: 9999px;
+    padding: 0.75rem 1.75rem;
+    font-size: 0.95rem;
+    font-weight: 600;
+    cursor: pointer;
+    border: 1px solid transparent;
+    transition: transform 150ms ease, box-shadow 150ms ease, background 150ms ease;
+}
+
+.personal-button:disabled {
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+
+.personal-button--primary {
+    background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-dark) 100%);
+    color: #1b0b00;
+    box-shadow: 0 12px 24px rgba(0, 0, 0, 0.35);
+}
+
+.personal-button--primary:hover:not(:disabled),
+.personal-button--primary:focus-visible:not(:disabled) {
+    transform: translateY(-1px);
+    box-shadow: 0 16px 28px rgba(0, 0, 0, 0.4);
+}
+
+.personal-button--ghost {
+    background: transparent;
+    border-color: rgba(255, 255, 255, 0.25);
+    color: rgba(255, 255, 255, 0.85);
+}
+
+.personal-button--ghost:hover:not(:disabled),
+.personal-button--ghost:focus-visible:not(:disabled) {
+    border-color: rgba(255, 255, 255, 0.5);
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.personal-button-spinner {
+    width: 1.1rem;
+    height: 1.1rem;
+    border-radius: 50%;
+    border: 2px solid rgba(27, 11, 0, 0.25);
+    border-top-color: rgba(27, 11, 0, 0.75);
+    animation: personal-spin 750ms linear infinite;
+    opacity: 0;
+    transform: scale(0.5);
+    transition: opacity 150ms ease, transform 150ms ease;
+}
+
+.personal-button.is-loading .personal-button-spinner {
+    opacity: 1;
+    transform: scale(1);
+}
+
+.personal-button.is-loading .personal-button-label {
+    opacity: 0.75;
+}
+
+.personal-data-form.is-loading {
+    opacity: 0.6;
+    pointer-events: none;
+}
+
+.personal-avatar-preview[data-has-image="true"] .personal-avatar-initials {
+    opacity: 0;
+}
+
+#personalDataSettings.is-loading::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: rgba(0, 0, 0, 0.25);
+    backdrop-filter: blur(2px);
+    -webkit-backdrop-filter: blur(2px);
+}
+
+@keyframes personal-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
 @media (max-width: 640px) {
     .settings-card {
         padding: 1.5rem;
@@ -193,5 +461,20 @@ body {
 
     .toggle {
         align-self: flex-end;
+    }
+
+    .personal-data-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .personal-avatar-block {
+        flex-direction: row;
+        justify-content: flex-start;
+        align-items: center;
+        gap: 1rem;
+    }
+
+    .personal-avatar-upload {
+        max-width: 200px;
     }
 }

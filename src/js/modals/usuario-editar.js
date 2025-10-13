@@ -265,14 +265,58 @@
     });
   }
 
+  function normalizarStatusInterno(valor) {
+    if (!valor) return '';
+    const normalizado = String(valor)
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-zA-Z0-9]+/g, '_')
+      .replace(/_{2,}/g, '_')
+      .replace(/^_|_$/g, '')
+      .toLowerCase();
+
+    const mapa = {
+      ativo: 'ativo',
+      active: 'ativo',
+      aguardando: 'aguardando_aprovacao',
+      aguardando_aprovacao: 'aguardando_aprovacao',
+      inativo: 'aguardando_aprovacao',
+      pendente: 'aguardando_aprovacao',
+      pending: 'aguardando_aprovacao',
+      naoconfirmado: 'nao_confirmado',
+      nao_confirmado: 'nao_confirmado',
+      nao_confirmada: 'nao_confirmado',
+      unconfirmed: 'nao_confirmado',
+      aguardando_confirmacao: 'nao_confirmado'
+    };
+
+    return mapa[normalizado] || normalizado;
+  }
+
   function derivarStatus(usuario) {
     if (!usuario) return 'Aguardando';
+
+    if (typeof usuario.statusInterno === 'string' && usuario.statusInterno.trim()) {
+      const interno = normalizarStatusInterno(usuario.statusInterno);
+      if (interno === 'ativo') return 'Ativo';
+      if (interno === 'nao_confirmado') return 'Não confirmado';
+      if (interno === 'aguardando_aprovacao') return 'Inativo';
+    }
+
     if (typeof usuario.status === 'string' && usuario.status.trim()) {
+      const normalizado = normalizarStatusInterno(usuario.status);
+      if (normalizado === 'ativo') return 'Ativo';
+      if (normalizado === 'nao_confirmado') return 'Não confirmado';
+      if (normalizado === 'aguardando_aprovacao') return 'Inativo';
       return formatarTitulo(usuario.status.trim());
     }
+
     if (typeof usuario.verificado === 'boolean') {
-      return usuario.verificado ? 'Ativo' : 'Inativo';
+      if (usuario.verificado) return 'Ativo';
+      if (usuario.emailConfirmado || usuario.email_confirmado) return 'Inativo';
+      return 'Não confirmado';
     }
+
     return 'Aguardando';
   }
 
@@ -282,6 +326,7 @@
     const mapa = {
       Ativo: 'badge-success',
       Inativo: 'badge-danger',
+      'Não confirmado': 'badge-warning',
       Aguardando: 'badge-warning',
     };
     badge.className = `text-xs px-3 py-1 rounded-full uppercase tracking-wide ${mapa[status] || 'badge-primary'}`;

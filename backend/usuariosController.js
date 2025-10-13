@@ -911,23 +911,108 @@ const normalizarStatus = body => {
     return undefined;
   }
 
-  if (typeof body.status === 'string') {
-    const valor = body.status.trim().toLowerCase();
-    if (valor === 'ativo') return 'ativo';
-    if (valor === 'inativo' || valor === 'não confirmado' || valor === 'nao_confirmado') {
-      return 'nao_confirmado';
+  const normalizarTexto = valor =>
+    String(valor)
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-zA-Z0-9]+/g, '_')
+      .replace(/_{2,}/g, '_')
+      .replace(/^_|_$/g, '')
+      .toLowerCase();
+
+  const mapearValor = valor => {
+    if (typeof valor === 'boolean') {
+      return valor ? 'ativo' : 'aguardando_aprovacao';
     }
-    if (valor === 'aguardando aprovação' || valor === 'aguardando_aprovacao') {
-      return 'aguardando_aprovacao';
+
+    if (typeof valor === 'number' && Number.isFinite(valor)) {
+      return valor > 0 ? 'ativo' : 'aguardando_aprovacao';
     }
+
+    if (typeof valor === 'string' && valor.trim()) {
+      const normalizado = normalizarTexto(valor);
+      if (!normalizado) {
+        return undefined;
+      }
+
+      const mapa = {
+        ativo: 'ativo',
+        active: 'ativo',
+        habilitado: 'ativo',
+        habilitada: 'ativo',
+        enabled: 'ativo',
+        enable: 'ativo',
+        ligado: 'ativo',
+        ligado_em: 'ativo',
+        on: 'ativo',
+        sim: 'ativo',
+        yes: 'ativo',
+        y: 'ativo',
+        '1': 'ativo',
+
+        aguardando: 'aguardando_aprovacao',
+        aguardando_aprovacao: 'aguardando_aprovacao',
+        aguardandoaprovacao: 'aguardando_aprovacao',
+        pendente: 'aguardando_aprovacao',
+        pending: 'aguardando_aprovacao',
+        revisao: 'aguardando_aprovacao',
+        review: 'aguardando_aprovacao',
+        inativo: 'aguardando_aprovacao',
+        inativado: 'aguardando_aprovacao',
+        desativado: 'aguardando_aprovacao',
+        desativada: 'aguardando_aprovacao',
+        desativadao: 'aguardando_aprovacao',
+        desabilitado: 'aguardando_aprovacao',
+        desabilitada: 'aguardando_aprovacao',
+        desligado: 'aguardando_aprovacao',
+        off: 'aguardando_aprovacao',
+        '0': 'aguardando_aprovacao',
+        nao: 'aguardando_aprovacao',
+        n: 'aguardando_aprovacao',
+
+        nao_confirmado: 'nao_confirmado',
+        nao_confirmada: 'nao_confirmado',
+        naoconfirmado: 'nao_confirmado',
+        naoconfirmada: 'nao_confirmado',
+        unconfirmed: 'nao_confirmado',
+        email_nao_confirmado: 'nao_confirmado',
+        pendente_confirmacao: 'nao_confirmado',
+        aguardando_confirmacao: 'nao_confirmado'
+      };
+
+      return mapa[normalizado];
+    }
+
+    return undefined;
+  };
+
+  const candidatos = [body.status, body.statusInterno, body.novoStatus];
+
+  for (const candidato of candidatos) {
+    const mapeado = mapearValor(candidato);
+    if (mapeado) {
+      return mapeado;
+    }
+  }
+
+  if (typeof body.email_confirmado === 'boolean' || typeof body.emailConfirmado === 'boolean') {
+    const confirmado =
+      typeof body.email_confirmado === 'boolean' ? body.email_confirmado : body.emailConfirmado;
+    return confirmado ? 'aguardando_aprovacao' : 'nao_confirmado';
   }
 
   if (typeof body.verificado === 'boolean') {
-    return body.verificado ? 'ativo' : 'nao_confirmado';
+    if (body.verificado) {
+      return 'ativo';
+    }
+    if (body.email_confirmado === false || body.emailConfirmado === false) {
+      return 'nao_confirmado';
+    }
+    return 'aguardando_aprovacao';
   }
 
   if (typeof body.ativo === 'boolean') {
-    return body.ativo ? 'ativo' : 'nao_confirmado';
+    return body.ativo ? 'ativo' : 'aguardando_aprovacao';
   }
 
   return undefined;
@@ -1343,20 +1428,69 @@ function formatarUsuario(u) {
 
   const ultimaAlteracaoDescricao = formatarDescricaoAlteracao();
 
-  const statusRaw = typeof u.status === 'string' ? u.status.trim().toLowerCase() : '';
-  const statusInterno = statusRaw || (u.verificado ? 'ativo' : 'nao_confirmado');
-  const statusLabel = (() => {
-    switch (statusInterno) {
-      case 'ativo':
-        return 'Ativo';
-      case 'aguardando_aprovacao':
-        return 'Aguardando aprovação';
-      case 'nao_confirmado':
-        return 'Não confirmado';
-      default:
-        return u.verificado ? 'Ativo' : 'Inativo';
+  const normalizarStatusInterno = valor => {
+    if (!valor) return '';
+    const normalizado = String(valor)
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-zA-Z0-9]+/g, '_')
+      .replace(/_{2,}/g, '_')
+      .replace(/^_|_$/g, '')
+      .toLowerCase();
+
+    const mapa = {
+      ativo: 'ativo',
+      active: 'ativo',
+      habilitado: 'ativo',
+      aguardando: 'aguardando_aprovacao',
+      aguardando_aprovacao: 'aguardando_aprovacao',
+      aguardandoaprovacao: 'aguardando_aprovacao',
+      pendente: 'aguardando_aprovacao',
+      pending: 'aguardando_aprovacao',
+      inativo: 'aguardando_aprovacao',
+      desativado: 'aguardando_aprovacao',
+      desativada: 'aguardando_aprovacao',
+      desativadao: 'aguardando_aprovacao',
+      desabilitado: 'aguardando_aprovacao',
+      desabilitada: 'aguardando_aprovacao',
+      naoconfirmado: 'nao_confirmado',
+      nao_confirmado: 'nao_confirmado',
+      nao_confirmada: 'nao_confirmado',
+      unconfirmed: 'nao_confirmado',
+      email_nao_confirmado: 'nao_confirmado',
+      aguardando_confirmacao: 'nao_confirmado',
+      pendente_confirmacao: 'nao_confirmado'
+    };
+
+    return mapa[normalizado] || normalizado;
+  };
+
+  const statusPersistido = typeof u.status === 'string' ? u.status : '';
+  let statusInterno = normalizarStatusInterno(statusPersistido);
+  if (!statusInterno) {
+    if (u.verificado) {
+      statusInterno = 'ativo';
+    } else if (u.email_confirmado) {
+      statusInterno = 'aguardando_aprovacao';
+    } else {
+      statusInterno = 'nao_confirmado';
     }
-  })();
+  }
+
+  const statusLabelMapa = {
+    ativo: 'Ativo',
+    aguardando_aprovacao: 'Inativo',
+    nao_confirmado: 'Não confirmado'
+  };
+
+  const statusBadgeMapa = {
+    ativo: 'badge-success',
+    aguardando_aprovacao: 'badge-danger',
+    nao_confirmado: 'badge-warning'
+  };
+
+  const statusLabel = statusLabelMapa[statusInterno] || (u.verificado ? 'Ativo' : 'Inativo');
+  const statusBadge = statusBadgeMapa[statusInterno] || 'badge-secondary';
 
   return {
     id: u.id,
@@ -1365,6 +1499,9 @@ function formatarUsuario(u) {
     perfil: u.perfil,
     status: statusLabel,
     statusInterno,
+    statusBadge,
+    confirmado: Boolean(u.verificado),
+    confirmadoEm: serializar(horaAtivacao),
     emailConfirmado: Boolean(u.email_confirmado),
     emailConfirmadoEm: serializar(parseDate(u.email_confirmado_em)),
     statusAtualizadoEm: serializar(parseDate(u.status_atualizado_em)),
