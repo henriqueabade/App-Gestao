@@ -51,6 +51,12 @@ node backend/server.js
 ```
 A aplicação Electron se comunica com essa API durante o desenvolvimento.
 
+## Padrões de Interface
+
+- **Títulos principais de módulos**: utilize `text-2xl font-semibold mb-2` no elemento `<h1>` do cabeçalho de cada página.
+  O texto deve seguir o formato _Contexto + Nome do módulo_, por exemplo `Estoque de Matéria-Prima`, mantendo apenas a primeira
+  letra de cada palavra em maiúsculo.
+
 ## Geração de instalador
 
 Para criar um instalador execute:
