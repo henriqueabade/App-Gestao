@@ -32,7 +32,8 @@ function setup() {
     ultima_atividade_em timestamp,
     ultima_acao_em timestamp,
     ultima_entrada timestamp,
-    ultima_saida timestamp
+    ultima_saida timestamp,
+    permissoes jsonb default '{}'::jsonb
   );`);
   db.public.none(`CREATE TABLE usuarios_login_cache (
     usuario_id integer primary key,
@@ -48,6 +49,9 @@ function setup() {
   db.public.none(
     "INSERT INTO usuarios (nome, email, perfil, verificado, telefone) VALUES ('Maria', 'maria@example.com', 'admin', false, '(11) 4000-0000');"
   );
+  db.public.none(
+    "INSERT INTO usuarios (nome, email, perfil, verificado, telefone, permissoes) VALUES ('Supervisor', 'sup@example.com', 'Sup Admin', true, '(11) 5000-0000', '{\"usuarios\":{\"permissoes\":{\"permitido\":true}}}');"
+  );
 
   const { Pool } = db.adapters.createPg();
   const pool = new Pool();
@@ -59,6 +63,10 @@ function setup() {
       query: (text, params) => pool.query(text, params)
     }
   };
+
+  const userActivityPath = require.resolve('./userActivity');
+  const originalUserActivityModule = require.cache[userActivityPath];
+  delete require.cache[userActivityPath];
 
   const emailChangeModulePath = require.resolve('../src/email/sendEmailChangeConfirmation');
   const originalEmailChangeModule = require.cache[emailChangeModulePath];
@@ -94,6 +102,11 @@ function setup() {
     } else {
       delete require.cache[dbModulePath];
     }
+    if (originalUserActivityModule) {
+      require.cache[userActivityPath] = originalUserActivityModule;
+    } else {
+      delete require.cache[userActivityPath];
+    }
     if (originalEmailChangeModule) {
       require.cache[emailChangeModulePath] = originalEmailChangeModule;
     } else {
@@ -107,9 +120,10 @@ function setup() {
 
 async function authenticatedFetch(port, path, options = {}) {
   const headers = new Headers(options.headers || {});
-  headers.set('authorization', 'Bearer 1');
+  const { usuarioId = 1, ...rest } = options;
+  headers.set('authorization', `Bearer ${usuarioId}`);
   return fetch(`http://127.0.0.1:${port}${path}`, {
-    ...options,
+    ...rest,
     headers
   });
 }
@@ -360,6 +374,134 @@ test('GET /api/usuarios/confirm-email aplica novo e-mail confirmado', async () =
 
     const cache = await pool.query('SELECT email FROM usuarios_login_cache WHERE usuario_id = $1', [1]);
     assert.strictEqual(cache.rows[0].email, 'confirmado@example.com');
+  } finally {
+    await close();
+  }
+});
+
+test('GET /api/usuarios/:id permite Sup Admin visualizar dados completos', async () => {
+  const { listen, close } = setup();
+  const port = await listen();
+  try {
+    const resposta = await authenticatedFetch(port, '/api/usuarios/1', { usuarioId: 2 });
+    assert.strictEqual(resposta.status, 200);
+    const corpo = await resposta.json();
+    assert.strictEqual(corpo.id, 1);
+    assert.ok(Array.isArray(corpo.permissoesResumo));
+    assert.ok(Object.prototype.hasOwnProperty.call(corpo, 'permissoes'));
+    assert.deepStrictEqual(corpo.permissoes, {});
+  } finally {
+    await close();
+  }
+});
+
+test('GET /api/usuarios/:id impede acesso a dados de terceiros sem privilégio', async () => {
+  const { listen, close } = setup();
+  const port = await listen();
+  try {
+    const resposta = await authenticatedFetch(port, '/api/usuarios/2');
+    assert.strictEqual(resposta.status, 403);
+  } finally {
+    await close();
+  }
+});
+
+test('PATCH /api/usuarios/:id permite atualização de dados pessoais autorizados', async () => {
+  const { listen, close, pool } = setup();
+  const port = await listen();
+  try {
+    const resposta = await authenticatedFetch(port, '/api/usuarios/1', {
+      method: 'PATCH',
+      usuarioId: 2,
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        nome: 'Maria Ajustada',
+        telefone: '(11) 4123-4567',
+        whatsapp: '(11) 4555-7788',
+        descricao: 'Perfil atualizado pelo Sup Admin'
+      })
+    });
+
+    assert.strictEqual(resposta.status, 200);
+    const corpo = await resposta.json();
+    assert.strictEqual(corpo.nome, 'Maria Ajustada');
+    assert.strictEqual(corpo.telefone, '(11) 4123-4567');
+    assert.strictEqual(corpo.whatsapp, '(11) 4555-7788');
+    assert.strictEqual(corpo.descricao, 'Perfil atualizado pelo Sup Admin');
+
+    const registro = await pool.query(
+      'SELECT nome, telefone, whatsapp, descricao FROM usuarios WHERE id = $1',
+      [1]
+    );
+    assert.strictEqual(registro.rows[0].nome, 'Maria Ajustada');
+    assert.strictEqual(registro.rows[0].telefone, '(11) 4123-4567');
+    assert.strictEqual(registro.rows[0].whatsapp, '(11) 4555-7788');
+    assert.strictEqual(registro.rows[0].descricao, 'Perfil atualizado pelo Sup Admin');
+  } finally {
+    await close();
+  }
+});
+
+test('PUT /api/usuarios/:id/permissoes atualiza permissões granuladas', async () => {
+  const { listen, close, pool } = setup();
+  const port = await listen();
+  try {
+    const payload = {
+      permissoes: {
+        usuarios: {
+          permissoes: true,
+          editar: false
+        },
+        pedidos: {
+          visualizar: { permitido: true },
+          editar: {
+            permitido: true,
+            campos: {
+              valor_total: { visualizar: true, editar: false }
+            }
+          }
+        }
+      }
+    };
+
+    const resposta = await authenticatedFetch(port, '/api/usuarios/1/permissoes', {
+      method: 'PUT',
+      usuarioId: 2,
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+
+    assert.strictEqual(resposta.status, 200);
+    const corpo = await resposta.json();
+    assert.strictEqual(corpo.permissoes.usuarios.permissoes.permitido, true);
+    assert.strictEqual(corpo.permissoes.pedidos.editar.permitido, true);
+    assert.strictEqual(
+      corpo.permissoes.pedidos.editar.campos.valor_total.visualizar,
+      true
+    );
+    assert.strictEqual(
+      corpo.permissoes.pedidos.editar.campos.valor_total.editar,
+      false
+    );
+    assert.ok(Array.isArray(corpo.permissoesResumo));
+
+    const registro = await pool.query('SELECT permissoes FROM usuarios WHERE id = $1', [1]);
+    assert.deepStrictEqual(registro.rows[0].permissoes, corpo.permissoes);
+  } finally {
+    await close();
+  }
+});
+
+test('PUT /api/usuarios/:id/permissoes bloqueia usuários sem privilégio de Sup Admin', async () => {
+  const { listen, close } = setup();
+  const port = await listen();
+  try {
+    const resposta = await authenticatedFetch(port, '/api/usuarios/2/permissoes', {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ permissoes: { usuarios: { permissoes: true } } })
+    });
+    assert.strictEqual(resposta.status, 403);
   } finally {
     await close();
   }

@@ -20,7 +20,8 @@ ALTER TABLE usuarios
   ADD COLUMN IF NOT EXISTS confirmacao_token_expira_em TIMESTAMPTZ,
   ADD COLUMN IF NOT EXISTS confirmacao_token_revogado_em TIMESTAMPTZ,
   ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'nao_confirmado',
-  ADD COLUMN IF NOT EXISTS status_atualizado_em TIMESTAMPTZ;
+  ADD COLUMN IF NOT EXISTS status_atualizado_em TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS permissoes JSONB NOT NULL DEFAULT '{}'::jsonb;
 
 DO $$
 BEGIN
@@ -66,3 +67,7 @@ UPDATE usuarios
    SET verificado = CASE WHEN status = 'ativo' THEN true ELSE false END
  WHERE (status = 'ativo' AND verificado IS DISTINCT FROM true)
     OR (status <> 'ativo' AND verificado IS DISTINCT FROM false);
+
+UPDATE usuarios
+   SET permissoes = '{}'::jsonb
+ WHERE permissoes IS NULL;

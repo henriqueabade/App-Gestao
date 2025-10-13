@@ -51,6 +51,48 @@ node backend/server.js
 ```
 A aplicação Electron se comunica com essa API durante o desenvolvimento.
 
+## Permissões Granulares de Usuários
+
+### Estrutura de dados
+
+- A tabela `usuarios` possui a coluna `permissoes` (`JSONB`, padrão `{}`) utilizada para registrar o acesso por módulo, ação e
+  escopo.
+- Cada módulo conhecido (`clientes`, `pedidos`, `orcamentos`, `produtos`, `financeiro`, `relatorios`, `usuarios`) mapeia para um
+  objeto cujas chaves representam as ações liberadas (`visualizar`, `editar`, `criar`, `inserir`, `cancelar`, `exportar`,
+  `permissoes`, etc.).
+- O valor da ação é normalizado no formato:
+  ```json
+  {
+    "permitido": true,
+    "escopos": {
+      "visualizar": true,
+      "editar": false
+    },
+    "campos": {
+      "valor_total": {
+        "visualizar": true,
+        "editar": false
+      }
+    }
+  }
+  ```
+  - `escopos` contém os subníveis habilitados para a ação (`visualizar`, `editar`, `inserir`, `remover`, `cancelar`, `aprovar`,
+    `exportar`, `listar`).
+  - `campos` permite restringir colunas específicas, utilizando as mesmas chaves de escopo.
+  - É possível enviar valores booleanos simples ou objetos contendo `permitido`, `enabled`, `allowed`, etc.; a API converte para o
+    formato acima.
+
+### Endpoints
+
+| Método e rota | Descrição | Segurança |
+| --- | --- | --- |
+| `GET /api/usuarios/:id` | Retorna os dados detalhados do usuário solicitado, incluindo `permissoes` completas e o resumo `permissoesResumo`. | Disponível para o próprio usuário ou para perfis com `Sup Admin`. |
+| `PATCH /api/usuarios/:id` | Atualiza campos pessoais autorizados (`nome`, `email`, telefones, `descricao`). Valida os dados e aplica as mudanças utilizando a infraestrutura de cache existente. | Disponível para o próprio usuário ou para `Sup Admin`. |
+| `PUT /api/usuarios/:id/permissoes` | Substitui o objeto de permissões granular do usuário. A API valida módulos e ações conhecidos antes de persistir o JSON normalizado. | Restrito a perfis `Sup Admin`. |
+
+As respostas dos endpoints retornam sempre os dados normalizados, garantindo que o front-end visualize o mesmo formato salvo no
+banco de dados.
+
 ## Padrões de Interface
 
 - **Títulos principais de módulos**: utilize `text-2xl font-semibold mb-2` no elemento `<h1>` do cabeçalho de cada página.

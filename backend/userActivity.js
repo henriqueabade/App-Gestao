@@ -27,7 +27,7 @@ async function updateUsuarioCampos(id, campos) {
   if (!id) return false;
   const colunas = await getUsuarioColumns();
   const entries = Object.entries(campos || {})
-    .filter(([col, valor]) => colunas.has(col) && valor !== undefined && valor !== null);
+    .filter(([col, valor]) => colunas.has(col) && valor !== undefined);
   if (!entries.length) return false;
 
   const sets = entries.map(([col], idx) => `${col} = $${idx + 2}`);
@@ -76,5 +76,6 @@ async function registrarUltimaSaida(usuarioId, info = {}) {
 
 module.exports = {
   registrarUltimaEntrada,
-  registrarUltimaSaida
+  registrarUltimaSaida,
+  updateUsuarioCampos
 };

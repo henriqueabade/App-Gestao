@@ -2,6 +2,7 @@ const crypto = require('crypto');
 const express = require('express');
 const bcrypt = require('bcrypt');
 const pool = require('./db');
+const { updateUsuarioCampos } = require('./userActivity');
 const { sendSupAdminReviewNotification } = require('../src/email/sendSupAdminReviewNotification');
 const { sendUserActivationNotice } = require('../src/email/sendUserActivationNotice');
 const { sendEmailChangeConfirmation } = require('../src/email/sendEmailChangeConfirmation');
@@ -228,6 +229,568 @@ let emailChangeTableEnsured = false;
 const telefoneColunasPreferidas = ['telefone', 'telefone_usuario', 'telefone_principal'];
 const celularColunasPreferidas = ['telefone_celular', 'celular', 'celular_usuario'];
 const whatsappColunasPreferidas = ['whatsapp', 'whatsapp_usuario'];
+
+const PERMISSOES_CATALOGO = {
+  clientes: {
+    label: 'Clientes',
+    aliases: ['cliente'],
+    acoes: {
+      visualizar: { label: 'Visualizar', aliases: ['ver', 'view', 'read', 'ler'] },
+      editar: { label: 'Editar', aliases: ['edit', 'write', 'atualizar', 'update'] },
+      inserir: { label: 'Inserir', aliases: ['criar', 'create', 'add', 'adicionar', 'incluir'] },
+      excluir: { label: 'Excluir', aliases: ['remover', 'delete', 'remove', 'apagar'] },
+      exportar: { label: 'Exportar', aliases: ['export'] }
+    }
+  },
+  pedidos: {
+    label: 'Pedidos',
+    aliases: ['pedido'],
+    acoes: {
+      visualizar: { label: 'Visualizar', aliases: ['ver', 'view', 'read', 'ler'] },
+      editar: { label: 'Editar', aliases: ['edit', 'write', 'atualizar', 'update'] },
+      criar: { label: 'Criar', aliases: ['inserir', 'create', 'add', 'adicionar', 'incluir'] },
+      cancelar: { label: 'Cancelar', aliases: ['cancel'] },
+      exportar: { label: 'Exportar', aliases: ['export'] }
+    }
+  },
+  orcamentos: {
+    label: 'Orçamentos',
+    aliases: ['orcamento', 'cotacoes', 'cotacao'],
+    acoes: {
+      visualizar: { label: 'Visualizar', aliases: ['ver', 'view', 'read', 'ler'] },
+      editar: { label: 'Editar', aliases: ['edit', 'write', 'atualizar', 'update'] },
+      criar: { label: 'Criar', aliases: ['inserir', 'create', 'add', 'adicionar', 'incluir'] },
+      aprovar: { label: 'Aprovar', aliases: ['approve'] },
+      enviar: { label: 'Enviar', aliases: ['send'] }
+    }
+  },
+  produtos: {
+    label: 'Produtos',
+    aliases: ['produto', 'itens', 'item'],
+    acoes: {
+      visualizar: { label: 'Visualizar', aliases: ['ver', 'view', 'read', 'ler'] },
+      editar: { label: 'Editar', aliases: ['edit', 'write', 'atualizar', 'update'] },
+      inserir: { label: 'Inserir', aliases: ['criar', 'create', 'add', 'adicionar', 'incluir'] },
+      inativar: { label: 'Inativar', aliases: ['desativar', 'disable'] },
+      exportar: { label: 'Exportar', aliases: ['export'] }
+    }
+  },
+  financeiro: {
+    label: 'Financeiro',
+    aliases: ['financeiro', 'finance'],
+    acoes: {
+      visualizar: { label: 'Visualizar', aliases: ['ver', 'view', 'read', 'ler'] },
+      editar: { label: 'Editar', aliases: ['edit', 'write', 'atualizar', 'update'] },
+      aprovar: { label: 'Aprovar', aliases: ['approve'] },
+      exportar: { label: 'Exportar', aliases: ['export'] }
+    }
+  },
+  relatorios: {
+    label: 'Relatórios',
+    aliases: ['relatorio', 'reports', 'report'],
+    acoes: {
+      visualizar: { label: 'Visualizar', aliases: ['ver', 'view', 'read', 'ler'] },
+      exportar: { label: 'Exportar', aliases: ['export'] }
+    }
+  },
+  usuarios: {
+    label: 'Usuários',
+    aliases: ['usuario', 'users', 'user'],
+    acoes: {
+      visualizar: { label: 'Visualizar', aliases: ['ver', 'view', 'read', 'ler'] },
+      editar: { label: 'Editar', aliases: ['edit', 'write', 'atualizar', 'update'] },
+      permissoes: { label: 'Gerenciar permissões', aliases: ['permissoes', 'permissions', 'permissao', 'permission', 'roles'] },
+      aprovar: { label: 'Aprovar', aliases: ['approve'] }
+    }
+  }
+};
+
+const ESCOPO_ALIASES = new Map([
+  ['ver', 'visualizar'],
+  ['visualizar', 'visualizar'],
+  ['view', 'visualizar'],
+  ['read', 'visualizar'],
+  ['ler', 'visualizar'],
+  ['listar', 'listar'],
+  ['list', 'listar'],
+  ['editar', 'editar'],
+  ['edit', 'editar'],
+  ['write', 'editar'],
+  ['atualizar', 'editar'],
+  ['update', 'editar'],
+  ['inserir', 'inserir'],
+  ['criar', 'inserir'],
+  ['create', 'inserir'],
+  ['add', 'inserir'],
+  ['adicionar', 'inserir'],
+  ['incluir', 'inserir'],
+  ['remover', 'remover'],
+  ['remove', 'remover'],
+  ['delete', 'remover'],
+  ['excluir', 'remover'],
+  ['apagar', 'remover'],
+  ['cancelar', 'cancelar'],
+  ['cancel', 'cancelar'],
+  ['aprovar', 'aprovar'],
+  ['approve', 'aprovar'],
+  ['exportar', 'exportar'],
+  ['export', 'exportar']
+]);
+
+const ACTION_SCOPE_ALLOWED = new Set(['visualizar', 'listar', 'editar', 'inserir', 'remover', 'cancelar', 'aprovar', 'exportar']);
+const FIELD_SCOPE_ALLOWED = new Set(['visualizar', 'editar', 'inserir']);
+
+const ESCOPOS_IGNORE_KEYS = new Set([
+  'permitido',
+  'allowed',
+  'habilitado',
+  'enabled',
+  'valor',
+  'value',
+  'acesso',
+  'access',
+  'ativo',
+  'active',
+  'campos',
+  'fields',
+  'colunas',
+  'columns',
+  'permissoes',
+  'acoes',
+  'scopes',
+  'escopos',
+  'nome',
+  'acao',
+  'label',
+  'id',
+  'modulo',
+  'module',
+  'action'
+]);
+
+const PERMISSOES_MODULO_MAP = new Map();
+const PERMISSOES_ACAO_MAP = new Map();
+
+for (const [modulo, config] of Object.entries(PERMISSOES_CATALOGO)) {
+  const moduloNormalized = normalizeKey(modulo);
+  PERMISSOES_MODULO_MAP.set(moduloNormalized, modulo);
+  if (Array.isArray(config.aliases)) {
+    for (const alias of config.aliases) {
+      PERMISSOES_MODULO_MAP.set(normalizeKey(alias), modulo);
+    }
+  }
+
+  const acaoMap = new Map();
+  for (const [acao, detalhes] of Object.entries(config.acoes)) {
+    acaoMap.set(normalizeKey(acao), acao);
+    if (Array.isArray(detalhes.aliases)) {
+      for (const alias of detalhes.aliases) {
+        acaoMap.set(normalizeKey(alias), acao);
+      }
+    }
+  }
+  PERMISSOES_ACAO_MAP.set(modulo, acaoMap);
+}
+
+function normalizeKey(value) {
+  if (value === null || value === undefined) return '';
+  return String(value)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9]+/g, '_')
+    .replace(/_{2,}/g, '_')
+    .replace(/^_|_$/g, '')
+    .toLowerCase();
+}
+
+function booleanFromValue(value) {
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'number') return value !== 0;
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (!normalized) return false;
+    return ['1', 'true', 'yes', 'y', 'sim', 'on', 'permitido', 'habilitado', 'enabled', 'ativo', 'active'].includes(
+      normalized
+    );
+  }
+  if (value instanceof Date) {
+    return !Number.isNaN(value.getTime());
+  }
+  return Boolean(value);
+}
+
+function mapScopeKey(rawKey, allowedSet) {
+  const normalized = normalizeKey(rawKey);
+  if (!normalized) return null;
+  const canonical = ESCOPO_ALIASES.get(normalized) || normalized;
+  if (!allowedSet.has(canonical)) {
+    return null;
+  }
+  return canonical;
+}
+
+function extrairEscoposGenericos(source, allowedSet) {
+  if (!source || typeof source !== 'object') return undefined;
+  const resultado = {};
+  for (const [key, valor] of Object.entries(source)) {
+    const normalizedKey = normalizeKey(key);
+    if (!normalizedKey || ESCOPOS_IGNORE_KEYS.has(normalizedKey)) {
+      continue;
+    }
+    const canonical = mapScopeKey(key, allowedSet);
+    if (!canonical) continue;
+    resultado[canonical] = booleanFromValue(valor);
+  }
+  return Object.keys(resultado).length ? resultado : undefined;
+}
+
+function extrairCamposPermissoes(rawCampos, { strict = false } = {}) {
+  if (!rawCampos || (typeof rawCampos !== 'object' && !Array.isArray(rawCampos))) {
+    return undefined;
+  }
+
+  const resultado = {};
+
+  const adicionarCampo = (nomeCampo, valor) => {
+    const chaveNormalizada = normalizeKey(nomeCampo);
+    if (!chaveNormalizada) {
+      return;
+    }
+
+    if (valor === undefined) {
+      return;
+    }
+
+    if (typeof valor === 'boolean' || typeof valor === 'number' || typeof valor === 'string') {
+      const permitido = booleanFromValue(valor);
+      resultado[chaveNormalizada] = { visualizar: permitido, editar: permitido };
+      return;
+    }
+
+    if (Array.isArray(valor)) {
+      const escopos = {};
+      for (const item of valor) {
+        const canonical = mapScopeKey(item, FIELD_SCOPE_ALLOWED);
+        if (!canonical) continue;
+        escopos[canonical] = true;
+      }
+      if (Object.keys(escopos).length) {
+        if (!Object.prototype.hasOwnProperty.call(escopos, 'visualizar')) {
+          escopos.visualizar = true;
+        }
+        resultado[chaveNormalizada] = escopos;
+      }
+      return;
+    }
+
+    if (valor && typeof valor === 'object') {
+      const copia = { ...valor };
+      delete copia.nome;
+      delete copia.campo;
+      delete copia.coluna;
+      delete copia.label;
+      delete copia.id;
+
+      let permitidoBase;
+      for (const key of ['permitido', 'allowed', 'habilitado', 'enabled', 'valor', 'value', 'ativo', 'active']) {
+        if (Object.prototype.hasOwnProperty.call(copia, key)) {
+          permitidoBase = booleanFromValue(copia[key]);
+          delete copia[key];
+          break;
+        }
+      }
+
+      const escopos = extrairEscoposGenericos(copia, FIELD_SCOPE_ALLOWED);
+      if (!escopos && permitidoBase === undefined) {
+        if (strict) {
+          throw new Error(`Campo ${nomeCampo} não possui escopos válidos.`);
+        }
+        return;
+      }
+
+      const final = escopos ? { ...escopos } : {};
+      if (permitidoBase !== undefined) {
+        if (!Object.prototype.hasOwnProperty.call(final, 'visualizar')) {
+          final.visualizar = Boolean(permitidoBase);
+        }
+        if (!Object.prototype.hasOwnProperty.call(final, 'editar')) {
+          final.editar = Boolean(permitidoBase);
+        }
+      }
+
+      if (Object.keys(final).length) {
+        resultado[chaveNormalizada] = final;
+      }
+      return;
+    }
+  };
+
+  if (Array.isArray(rawCampos)) {
+    rawCampos.forEach((item, index) => {
+      if (item === null || item === undefined) return;
+      if (typeof item === 'object' && !Array.isArray(item)) {
+        const nome = item.nome ?? item.campo ?? item.coluna ?? `campo_${index + 1}`;
+        const detalhe = { ...item };
+        delete detalhe.nome;
+        delete detalhe.campo;
+        delete detalhe.coluna;
+        delete detalhe.label;
+        delete detalhe.id;
+        adicionarCampo(nome, Object.keys(detalhe).length ? detalhe : item.valor ?? item.value ?? item.permitido ?? true);
+      } else {
+        adicionarCampo(item, true);
+      }
+    });
+  } else {
+    Object.entries(rawCampos).forEach(([nome, valor]) => adicionarCampo(nome, valor));
+  }
+
+  return Object.keys(resultado).length ? resultado : undefined;
+}
+
+function prepararValorAcao(valor) {
+  if (valor === null || valor === undefined) return undefined;
+  if (typeof valor === 'object' && !Array.isArray(valor)) {
+    if (Object.prototype.hasOwnProperty.call(valor, 'permissoes')) {
+      return valor.permissoes;
+    }
+    if (Object.prototype.hasOwnProperty.call(valor, 'acoes')) {
+      return valor.acoes;
+    }
+    const copia = { ...valor };
+    delete copia.nome;
+    delete copia.acao;
+    delete copia.action;
+    delete copia.label;
+    delete copia.id;
+    delete copia.modulo;
+    delete copia.module;
+    if (Object.keys(copia).length === 0) {
+      if (Object.prototype.hasOwnProperty.call(valor, 'permitido')) {
+        return Boolean(valor.permitido);
+      }
+      if (Object.prototype.hasOwnProperty.call(valor, 'valor')) {
+        return valor.valor;
+      }
+    }
+    return copia;
+  }
+  return valor;
+}
+
+function parseActionValue(rawValor) {
+  if (rawValor === undefined) return null;
+
+  if (typeof rawValor === 'boolean' || typeof rawValor === 'number' || typeof rawValor === 'string') {
+    return { permitido: booleanFromValue(rawValor) };
+  }
+
+  if (Array.isArray(rawValor)) {
+    const escopos = {};
+    for (const item of rawValor) {
+      const canonical = mapScopeKey(item, ACTION_SCOPE_ALLOWED);
+      if (!canonical) continue;
+      escopos[canonical] = true;
+    }
+    const permitido = Object.values(escopos).some(Boolean);
+    return permitido || Object.keys(escopos).length
+      ? { permitido, escopos: Object.keys(escopos).length ? escopos : undefined }
+      : { permitido: false };
+  }
+
+  if (rawValor && typeof rawValor === 'object') {
+    const copia = { ...rawValor };
+    let permitido;
+    for (const key of ['permitido', 'allowed', 'habilitado', 'enabled', 'valor', 'value', 'acesso', 'access', 'ativo', 'active']) {
+      if (Object.prototype.hasOwnProperty.call(copia, key)) {
+        permitido = booleanFromValue(copia[key]);
+        delete copia[key];
+        break;
+      }
+    }
+
+    const camposRaw = copia.campos ?? copia.fields ?? copia.colunas ?? copia.columns;
+    if (camposRaw !== undefined) {
+      delete copia.campos;
+      delete copia.fields;
+      delete copia.colunas;
+      delete copia.columns;
+    }
+
+    const escopos = extrairEscoposGenericos(copia, ACTION_SCOPE_ALLOWED);
+    const campos = extrairCamposPermissoes(camposRaw, { strict: false });
+
+    if (permitido === undefined) {
+      if (escopos) {
+        permitido = Object.values(escopos).some(Boolean);
+      } else if (campos) {
+        permitido = Object.values(campos).some(campo =>
+          campo && typeof campo === 'object' && Object.values(campo).some(Boolean)
+        );
+      } else {
+        permitido = false;
+      }
+    }
+
+    const resposta = { permitido: Boolean(permitido) };
+    if (escopos && Object.keys(escopos).length) {
+      resposta.escopos = escopos;
+    }
+    if (campos && Object.keys(campos).length) {
+      resposta.campos = campos;
+    }
+    return resposta;
+  }
+
+  return { permitido: booleanFromValue(rawValor) };
+}
+
+function normalizarPermissoesEstrutura(origem, { strict = true } = {}) {
+  if (origem === undefined || origem === null) return {};
+
+  let input = origem;
+  if (typeof input === 'string') {
+    const trimmed = input.trim();
+    if (!trimmed) return {};
+    try {
+      input = JSON.parse(trimmed);
+    } catch (err) {
+      throw new Error('Permissões devem ser fornecidas como JSON válido.');
+    }
+  }
+
+  if (!Array.isArray(input) && typeof input !== 'object') {
+    throw new Error('Formato de permissões inválido. Use objeto ou array.');
+  }
+
+  const resultado = {};
+
+  const processarModulo = (identificador, valor) => {
+    const moduloKey = PERMISSOES_MODULO_MAP.get(normalizeKey(identificador));
+    if (!moduloKey) {
+      if (strict) {
+        throw new Error(`Módulo desconhecido: ${identificador}`);
+      }
+      return;
+    }
+
+    const acoesPermitidas = PERMISSOES_ACAO_MAP.get(moduloKey) || new Map();
+    const moduloResultado = resultado[moduloKey] || {};
+
+    const adicionarAcao = (acaoIdentificador, acaoValor) => {
+      const acaoKey = acoesPermitidas.get(normalizeKey(acaoIdentificador));
+      if (!acaoKey) {
+        if (strict) {
+          throw new Error(`Ação desconhecida para ${moduloKey}: ${acaoIdentificador}`);
+        }
+        return;
+      }
+
+      const preparado = prepararValorAcao(acaoValor);
+      const parsed = parseActionValue(preparado);
+      if (!parsed) return;
+      moduloResultado[acaoKey] = parsed;
+    };
+
+    if (Array.isArray(valor)) {
+      valor.forEach((item, index) => {
+        if (item === null || item === undefined) return;
+        if (typeof item === 'object' && !Array.isArray(item)) {
+          const nome = item.acao ?? item.nome ?? item.id ?? item.action ?? `acao_${index + 1}`;
+          adicionarAcao(nome, item);
+        } else {
+          adicionarAcao(item, true);
+        }
+      });
+    } else if (valor && typeof valor === 'object') {
+      for (const [acaoNome, acaoValor] of Object.entries(valor)) {
+        adicionarAcao(acaoNome, acaoValor);
+      }
+    } else if (valor !== undefined) {
+      adicionarAcao('visualizar', valor);
+    }
+
+    if (Object.keys(moduloResultado).length) {
+      resultado[moduloKey] = moduloResultado;
+    }
+  };
+
+  if (Array.isArray(input)) {
+    input.forEach((item, index) => {
+      if (!item) return;
+      if (typeof item === 'object' && !Array.isArray(item)) {
+        const moduloId = item.modulo ?? item.module ?? item.nome ?? item.id ?? `modulo_${index + 1}`;
+        const permissoesValor =
+          item.permissoes ?? item.acoes ?? item.actions ?? item.scopes ?? prepararValorAcao(item);
+        processarModulo(moduloId, permissoesValor);
+      }
+    });
+  } else {
+    for (const [modulo, valor] of Object.entries(input)) {
+      processarModulo(modulo, valor);
+    }
+  }
+
+  return resultado;
+}
+
+function construirResumoPermissoes(permissoes) {
+  if (!permissoes || typeof permissoes !== 'object') {
+    return [];
+  }
+
+  const resumo = [];
+
+  for (const [modulo, acoes] of Object.entries(permissoes)) {
+    if (!acoes || typeof acoes !== 'object') continue;
+    const permitidas = [];
+    for (const [acao, detalhes] of Object.entries(acoes)) {
+      if (!detalhes) continue;
+      if (typeof detalhes === 'boolean') {
+        if (detalhes) permitidas.push(acao);
+        continue;
+      }
+      const permitido = typeof detalhes.permitido === 'boolean' ? detalhes.permitido : booleanFromValue(detalhes.permitido);
+      if (permitido) {
+        permitidas.push(acao);
+        continue;
+      }
+      const escoposPermitidos = detalhes.escopos && typeof detalhes.escopos === 'object'
+        ? Object.values(detalhes.escopos).some(Boolean)
+        : false;
+      const camposPermitidos = detalhes.campos && typeof detalhes.campos === 'object'
+        ? Object.values(detalhes.campos).some(campo => campo && typeof campo === 'object' && Object.values(campo).some(Boolean))
+        : false;
+      if (escoposPermitidos || camposPermitidos) {
+        permitidas.push(acao);
+      }
+    }
+    if (permitidas.length) {
+      permitidas.sort();
+      resumo.push({ modulo, acoes: permitidas });
+    }
+  }
+
+  return resumo;
+}
+
+function obterPermissoesDoUsuario(row) {
+  if (!row || !Object.prototype.hasOwnProperty.call(row, 'permissoes')) {
+    return {};
+  }
+
+  try {
+    return normalizarPermissoesEstrutura(row.permissoes, { strict: false });
+  } catch (err) {
+    console.error('Falha ao normalizar permissões do usuário:', err);
+    return {};
+  }
+}
+
+function isSupAdminPerfil(perfil) {
+  if (typeof perfil !== 'string') return false;
+  return perfil.toLowerCase().includes('sup admin');
+}
 
 function parsePositiveInteger(value) {
   if (value === null || value === undefined) return null;
@@ -633,6 +1196,10 @@ function formatarUsuarioDetalhado(row) {
   const base = formatarUsuario(row);
   const resultado = { ...base };
 
+  const permissoes = obterPermissoesDoUsuario(row);
+  resultado.permissoes = permissoes;
+  resultado.permissoesResumo = construirResumoPermissoes(permissoes);
+
   const telefone = extrairPrimeiroValor(row, telefoneColunasPreferidas);
   if (telefone !== undefined) {
     resultado.telefone = telefone;
@@ -971,6 +1538,255 @@ router.post('/me/email-confirmation', autenticarUsuario, async (req, res) => {
     message: 'Enviamos um link para o novo e-mail. Confirme o endereço para concluir a alteração.',
     expiraEm: expiraEm.toISOString()
   });
+});
+
+router.patch('/:id', autenticarUsuario, async (req, res) => {
+  const alvoId = parsePositiveInteger(req.params.id);
+  if (!alvoId) {
+    return res.status(400).json({ error: 'Identificador de usuário inválido.' });
+  }
+
+  let solicitante;
+  let alvo;
+  try {
+    [solicitante, alvo] = await Promise.all([
+      carregarUsuarioRaw(req.usuarioAutenticadoId),
+      carregarUsuarioRaw(alvoId)
+    ]);
+  } catch (err) {
+    console.error('Erro ao carregar dados para atualização de usuário:', err);
+    return res.status(500).json({ error: 'Erro ao carregar dados do usuário.' });
+  }
+
+  if (!solicitante) {
+    return res.status(401).json({ error: 'Usuário autenticado não encontrado.' });
+  }
+
+  if (!alvo) {
+    return res.status(404).json({ error: 'Usuário não encontrado.' });
+  }
+
+  const solicitanteSupAdmin = isSupAdminPerfil(solicitante.perfil);
+  if (!solicitanteSupAdmin && solicitante.id !== alvoId) {
+    return res.status(403).json({ error: 'Acesso negado.' });
+  }
+
+  const body = req.body && typeof req.body === 'object' ? req.body : {};
+
+  let nomeSanitizado;
+  try {
+    const nomeBruto = getFirstDefined(body, ['nome', 'name']);
+    if (nomeBruto !== undefined) {
+      nomeSanitizado = sanitizeNome(nomeBruto);
+    }
+  } catch (err) {
+    return res.status(400).json({ error: err.message });
+  }
+
+  let emailSanitizado;
+  try {
+    const emailBruto = getFirstDefined(body, ['email']);
+    if (emailBruto !== undefined) {
+      emailSanitizado = sanitizeEmail(emailBruto);
+    }
+  } catch (err) {
+    return res.status(400).json({ error: err.message });
+  }
+
+  let telefoneSanitizado;
+  let celularSanitizado;
+  let whatsappSanitizado;
+  let descricaoSanitizada;
+
+  try {
+    const telefoneBruto = getFirstDefined(body, ['telefone', 'telefonePrincipal', 'phone']);
+    telefoneSanitizado = sanitizeTelefone(telefoneBruto, 'Telefone');
+
+    const celularBruto = getFirstDefined(body, ['celular', 'telefone_celular', 'mobile']);
+    celularSanitizado = sanitizeTelefone(celularBruto, 'Celular');
+
+    const whatsappBruto = getFirstDefined(body, ['whatsapp', 'whatsApp']);
+    whatsappSanitizado = sanitizeTelefone(whatsappBruto, 'WhatsApp');
+
+    const descricaoBruta = getFirstDefined(body, ['descricao', 'bio', 'sobre', 'observacoes']);
+    descricaoSanitizada = sanitizeOptionalString(descricaoBruta, 'Descrição', 500);
+  } catch (err) {
+    return res.status(400).json({ error: err.message });
+  }
+
+  if (emailSanitizado !== undefined) {
+    const emailAtual = typeof alvo.email === 'string' ? alvo.email.trim().toLowerCase() : '';
+    if (emailSanitizado === emailAtual) {
+      emailSanitizado = undefined;
+    } else {
+      try {
+        const existente = await pool.query(
+          'SELECT id FROM usuarios WHERE lower(email) = $1 AND id <> $2',
+          [emailSanitizado, alvoId]
+        );
+        if (existente.rows.length > 0) {
+          return res.status(409).json({ error: 'E-mail já está em uso por outro usuário.' });
+        }
+      } catch (err) {
+        console.error('Erro ao validar e-mail durante atualização de usuário:', err);
+        return res.status(500).json({ error: 'Erro ao validar o e-mail informado.' });
+      }
+    }
+  }
+
+  let colunas;
+  try {
+    colunas = await getUsuarioColumns();
+  } catch (err) {
+    console.error('Erro ao carregar metadados da tabela de usuários:', err);
+    colunas = new Set();
+  }
+
+  const camposAtualizar = {};
+
+  if (nomeSanitizado !== undefined && colunas.has('nome') && nomeSanitizado !== alvo.nome) {
+    camposAtualizar.nome = nomeSanitizado;
+  }
+
+  if (emailSanitizado !== undefined && colunas.has('email')) {
+    camposAtualizar.email = emailSanitizado;
+  }
+
+  const telefoneAtual = extrairPrimeiroValor(alvo, telefoneColunasPreferidas);
+  const colunaTelefone = telefoneSanitizado !== undefined ? findAvailableColumn(colunas, telefoneColunasPreferidas) : null;
+  if (colunaTelefone && telefoneSanitizado !== telefoneAtual) {
+    camposAtualizar[colunaTelefone] = telefoneSanitizado;
+  }
+
+  const celularAtual = extrairPrimeiroValor(alvo, celularColunasPreferidas);
+  const colunaCelular = celularSanitizado !== undefined ? findAvailableColumn(colunas, celularColunasPreferidas) : null;
+  if (colunaCelular && celularSanitizado !== celularAtual) {
+    camposAtualizar[colunaCelular] = celularSanitizado;
+  }
+
+  const whatsappAtual = extrairPrimeiroValor(alvo, whatsappColunasPreferidas);
+  const colunaWhatsapp = whatsappSanitizado !== undefined ? findAvailableColumn(colunas, whatsappColunasPreferidas) : null;
+  if (colunaWhatsapp && whatsappSanitizado !== whatsappAtual) {
+    camposAtualizar[colunaWhatsapp] = whatsappSanitizado;
+  }
+
+  const colunaDescricao = colunas.has('descricao') ? 'descricao' : colunas.has('bio') ? 'bio' : null;
+  if (colunaDescricao && descricaoSanitizada !== undefined && descricaoSanitizada !== alvo[colunaDescricao]) {
+    camposAtualizar[colunaDescricao] = descricaoSanitizada;
+  }
+
+  if (!Object.keys(camposAtualizar).length) {
+    return res.json(formatarUsuarioDetalhado(alvo));
+  }
+
+  const agora = new Date();
+  if (colunas.has('ultima_alteracao')) camposAtualizar.ultima_alteracao = agora;
+  if (colunas.has('ultima_alteracao_em')) camposAtualizar.ultima_alteracao_em = agora;
+  if (colunas.has('ultima_atividade_em')) camposAtualizar.ultima_atividade_em = agora;
+  if (colunas.has('ultima_acao_em')) camposAtualizar.ultima_acao_em = agora;
+
+  let atualizadoComSucesso = false;
+  try {
+    atualizadoComSucesso = await updateUsuarioCampos(alvoId, camposAtualizar);
+  } catch (err) {
+    console.error('Falha ao atualizar dados pessoais do usuário:', err);
+    return res.status(500).json({ error: 'Erro ao atualizar dados do usuário.' });
+  }
+
+  if (!atualizadoComSucesso) {
+    return res.status(500).json({ error: 'Não foi possível atualizar os dados do usuário.' });
+  }
+
+  let atualizado;
+  try {
+    atualizado = await carregarUsuarioRaw(alvoId);
+  } catch (err) {
+    console.error('Erro ao recarregar usuário após atualização:', err);
+    return res.status(500).json({ error: 'Erro ao carregar usuário atualizado.' });
+  }
+
+  try {
+    await atualizarCacheLogin(alvoId, atualizado);
+  } catch (err) {
+    console.error('Falha ao atualizar cache de login após alteração de dados pessoais:', err);
+  }
+
+  return res.json(formatarUsuarioDetalhado(atualizado));
+});
+
+router.put('/:id/permissoes', autenticarUsuario, async (req, res) => {
+  const alvoId = parsePositiveInteger(req.params.id);
+  if (!alvoId) {
+    return res.status(400).json({ error: 'Identificador de usuário inválido.' });
+  }
+
+  let solicitante;
+  let alvo;
+  try {
+    [solicitante, alvo] = await Promise.all([
+      carregarUsuarioRaw(req.usuarioAutenticadoId),
+      carregarUsuarioRaw(alvoId)
+    ]);
+  } catch (err) {
+    console.error('Erro ao carregar dados para atualização de permissões:', err);
+    return res.status(500).json({ error: 'Erro ao carregar dados do usuário.' });
+  }
+
+  if (!solicitante) {
+    return res.status(401).json({ error: 'Usuário autenticado não encontrado.' });
+  }
+
+  if (!isSupAdminPerfil(solicitante.perfil)) {
+    return res.status(403).json({ error: 'Apenas Sup Admin pode atualizar permissões.' });
+  }
+
+  if (!alvo) {
+    return res.status(404).json({ error: 'Usuário não encontrado.' });
+  }
+
+  const body = req.body && typeof req.body === 'object' ? req.body : {};
+  let permissoesPayload = body;
+  if (Object.prototype.hasOwnProperty.call(body, 'permissoes')) {
+    permissoesPayload = body.permissoes;
+  } else if (Object.prototype.hasOwnProperty.call(body, 'permissions')) {
+    permissoesPayload = body.permissions;
+  }
+
+  if (permissoesPayload === undefined) {
+    return res.status(400).json({ error: 'Informe as permissões desejadas.' });
+  }
+
+  let permissoesNormalizadas;
+  try {
+    permissoesNormalizadas = normalizarPermissoesEstrutura(permissoesPayload, { strict: true });
+  } catch (err) {
+    return res.status(400).json({ error: err.message });
+  }
+
+  let atualizacaoOk = false;
+  try {
+    atualizacaoOk = await updateUsuarioCampos(alvoId, { permissoes: permissoesNormalizadas });
+  } catch (err) {
+    console.error('Erro ao atualizar permissões do usuário:', err);
+    return res.status(500).json({ error: 'Erro ao atualizar permissões do usuário.' });
+  }
+
+  if (!atualizacaoOk) {
+    return res.status(500).json({ error: 'Não foi possível atualizar as permissões do usuário.' });
+  }
+
+  let atualizado;
+  try {
+    atualizado = await carregarUsuarioRaw(alvoId);
+  } catch (err) {
+    console.error('Erro ao recarregar usuário após atualização de permissões:', err);
+    return res.status(500).json({ error: 'Erro ao carregar usuário atualizado.' });
+  }
+
+  const permissoes = obterPermissoesDoUsuario(atualizado);
+  const resumo = construirResumoPermissoes(permissoes);
+
+  return res.json({ permissoes, permissoesResumo: resumo });
 });
 
 async function confirmarAlteracaoEmail(req, res) {
@@ -1558,6 +2374,40 @@ router.post('/confirmar-email', confirmarEmail);
 router.get('/reportar-email-incorreto', reportarEmailIncorreto);
 router.post('/reportar-email-incorreto', reportarEmailIncorreto);
 
+router.get('/:id', autenticarUsuario, async (req, res) => {
+  const alvoId = parsePositiveInteger(req.params.id);
+  if (!alvoId) {
+    return res.status(400).json({ error: 'Identificador de usuário inválido.' });
+  }
+
+  let solicitante;
+  let alvo;
+  try {
+    [solicitante, alvo] = await Promise.all([
+      carregarUsuarioRaw(req.usuarioAutenticadoId),
+      carregarUsuarioRaw(alvoId)
+    ]);
+  } catch (err) {
+    console.error('Erro ao carregar dados para consulta de usuário:', err);
+    return res.status(500).json({ error: 'Erro ao carregar dados do usuário.' });
+  }
+
+  if (!solicitante) {
+    return res.status(401).json({ error: 'Usuário autenticado não encontrado.' });
+  }
+
+  if (!alvo) {
+    return res.status(404).json({ error: 'Usuário não encontrado.' });
+  }
+
+  const solicitanteSupAdmin = isSupAdminPerfil(solicitante.perfil);
+  if (!solicitanteSupAdmin && solicitante.id !== alvoId) {
+    return res.status(403).json({ error: 'Acesso negado.' });
+  }
+
+  return res.json(formatarUsuarioDetalhado(alvo));
+});
+
 router.post('/aprovar', async (req, res) => {
   const usuarioId = Number(req.body?.usuarioId);
   const supAdminEmail = typeof req.body?.supAdminEmail === 'string' ? req.body.supAdminEmail.trim() : '';
@@ -1646,6 +2496,9 @@ function formatarUsuario(u) {
     const data = valor instanceof Date ? valor : new Date(valor);
     return Number.isNaN(data.getTime()) ? null : data;
   };
+
+  const permissoes = obterPermissoesDoUsuario(u);
+  const permissoesResumo = construirResumoPermissoes(permissoes);
 
   const ultimoLogin = parseDate(u.ultimo_login_em);
   const ultimaAtividade = parseDate(u.ultima_atividade_em);
@@ -1793,7 +2646,8 @@ function formatarUsuario(u) {
     hora_ativacao: serializar(horaAtivacao),
     ultimaAlteracaoDescricao: ultimaAlteracaoDescricao || null,
     localUltimaAlteracao: ultimaAcaoLocal || null,
-    especificacaoUltimaAlteracao: especificacaoUltimaAcao || null
+    especificacaoUltimaAlteracao: especificacaoUltimaAcao || null,
+    permissoesResumo
   };
 }
 
