@@ -305,43 +305,70 @@ window.addEventListener('DOMContentLoaded', () => {
       return [];
     }
 
-    const url = new URL('/api/notifications/menu', baseUrl).toString();
-    let attempt = 0;
-    while (attempt <= maxRetries) {
-      try {
-        const response = await fetch(url, {
-          headers: { Accept: 'application/json' },
-          credentials: 'include',
-        });
-        if (!response.ok) {
-          throw new Error(`Falha ao carregar notificações (${response.status})`);
-        }
-        let data;
-        try {
-          data = await response.json();
-        } catch (err) {
-          console.warn('Resposta de notificações não é JSON válido.', err);
-          return [];
-        }
+    const endpoints = ['/api/notifications/menu', '/api/notifications'];
+    for (const endpoint of endpoints) {
+      const url = new URL(endpoint, baseUrl).toString();
+      let attempt = 0;
 
-        if (!data) return [];
-        if (Array.isArray(data)) return data;
-        if (Array.isArray(data?.notifications)) return data.notifications;
-        if (Array.isArray(data?.data)) return data.data;
-        return [];
-      } catch (error) {
-        attempt += 1;
-        const offline = typeof navigator !== 'undefined' && navigator.onLine === false;
-        console.warn('Erro ao carregar notificações do menu.', { error, attempt, offline });
-        if (attempt > maxRetries || offline) {
+      while (attempt <= maxRetries) {
+        try {
+          const response = await fetch(url, {
+            headers: { Accept: 'application/json' },
+            credentials: 'include',
+          });
+          if (!response.ok) {
+            const statusError = new Error(
+              `Falha ao carregar notificações (${response.status})`,
+            );
+            statusError.status = response.status;
+            throw statusError;
+          }
+
+          let data;
+          try {
+            data = await response.json();
+          } catch (err) {
+            console.warn('Resposta de notificações não é JSON válido.', err);
+            return [];
+          }
+
+          if (!data) return [];
+          if (Array.isArray(data)) return data;
+          if (Array.isArray(data?.notifications)) return data.notifications;
+          if (Array.isArray(data?.data)) return data.data;
           return [];
+        } catch (error) {
+          attempt += 1;
+          const offline = typeof navigator !== 'undefined' && navigator.onLine === false;
+          console.warn('Erro ao carregar notificações do menu.', {
+            error,
+            attempt,
+            offline,
+            endpoint,
+          });
+
+          if (offline) {
+            return [];
+          }
+
+          if (error?.status === 404) {
+            break;
+          }
+
+          if (attempt > maxRetries) {
+            break;
+          }
+
+          const delay = Math.min(4000, 1000 * attempt);
+          await new Promise((resolve) => setTimeout(resolve, delay));
         }
-        const delay = Math.min(4000, 1000 * attempt);
-        await new Promise((resolve) => setTimeout(resolve, delay));
       }
     }
     return [];
   }
+
+  window.__notificationsInternals = window.__notificationsInternals || {};
+  window.__notificationsInternals.fetchNotificationsWithRetry = fetchNotificationsWithRetry;
 
   function upsertNotifications(items) {
     if (!Array.isArray(items) || items.length === 0) return;
