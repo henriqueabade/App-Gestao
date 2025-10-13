@@ -81,6 +81,13 @@ if (!gotTheLock) {
 
 // Garante que qualquer janela criada permaneça em tela cheia
 app.on('browser-window-created', (_event, win) => {
+  const webPreferences =
+    typeof win.webContents.getWebPreferences === 'function'
+      ? win.webContents.getWebPreferences()
+      : {};
+  if (webPreferences.sandbox) {
+    return;
+  }
   win.setFullScreen(true);
   win.setResizable(false);
   win.setMaximizable(false);
