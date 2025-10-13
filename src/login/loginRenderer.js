@@ -14,6 +14,10 @@ function showToast(message, type = "info") {
   }, 3000);
 }
 
+function showInactiveUserWarning() {
+  showToast('Seu usuário está inativo. Solicite ao administrador a ativação do seu acesso.', 'error');
+}
+
 let currentPinPopup = null;
 let pinErrorShown = false;
 let offlineErrorShown = false;
@@ -382,77 +386,85 @@ if (intro) {
       return;
     }
     const result   = await window.electronAPI.login(email, password, pin);
-    if (!result.success) showToast(result.message, 'error');
-    else {
-      showToast('Login realizado com sucesso!', 'success');
-      const remember = document.getElementById('remember').checked;
-      if (result.user) localStorage.setItem('user', JSON.stringify(result.user));
-      localStorage.setItem('rememberUser', remember ? '1' : '0');
-      localStorage.setItem('pin', pin);
-      sessionStorage.setItem('currentUser', JSON.stringify(result.user));
-      await cacheUpdateStatus();
-
-      if (pinInput) {
-        pinInput.value = pin;
-        pinInput.readOnly = true;
-        pinInput.classList.add('text-gray-400');
+    if (!result.success) {
+      const message = typeof result.message === 'string' ? result.message : '';
+      if (
+        result.code === 'inactive-user' ||
+        message.toLowerCase().includes('inativo')
+      ) {
+        showInactiveUserWarning();
+      } else {
+        showToast(message || 'Erro ao realizar login', 'error');
       }
-      if (registerPinInput) {
-        registerPinInput.value = pin;
-        registerPinInput.readOnly = true;
-        registerPinInput.classList.add('text-gray-400');
-      }
+      return;
+    }
 
-      let savedState = localStorage.getItem('savedState');
-      if (!savedState) {
-        const diskState = await window.electronAPI.loadState();
-        if (diskState) {
-          try {
-            const savedUser = diskState.storage && diskState.storage.user
-              ? JSON.parse(diskState.storage.user)
-              : null;
-            if (
-              savedUser &&
-              savedUser.id === result.user.id &&
-              diskState.sectionId &&
-              diskState.sectionId !== 'dashboard'
-            ) {
-              localStorage.setItem('savedState', JSON.stringify(diskState));
-              await window.electronAPI.clearState();
-            } else {
-              await window.electronAPI.clearState();
-              localStorage.removeItem('savedState');
-            }
-          } catch (err) {
+    showToast('Login realizado com sucesso!', 'success');
+    const remember = document.getElementById('remember').checked;
+    if (result.user) localStorage.setItem('user', JSON.stringify(result.user));
+    localStorage.setItem('rememberUser', remember ? '1' : '0');
+    localStorage.setItem('pin', pin);
+    sessionStorage.setItem('currentUser', JSON.stringify(result.user));
+    await cacheUpdateStatus();
+
+    if (pinInput) {
+      pinInput.value = pin;
+      pinInput.readOnly = true;
+      pinInput.classList.add('text-gray-400');
+    }
+    if (registerPinInput) {
+      registerPinInput.value = pin;
+      registerPinInput.readOnly = true;
+      registerPinInput.classList.add('text-gray-400');
+    }
+
+    let savedState = localStorage.getItem('savedState');
+    if (!savedState) {
+      const diskState = await window.electronAPI.loadState();
+      if (diskState) {
+        try {
+          const savedUser = diskState.storage && diskState.storage.user
+            ? JSON.parse(diskState.storage.user)
+            : null;
+          if (
+            savedUser &&
+            savedUser.id === result.user.id &&
+            diskState.sectionId &&
+            diskState.sectionId !== 'dashboard'
+          ) {
+            localStorage.setItem('savedState', JSON.stringify(diskState));
+            await window.electronAPI.clearState();
+          } else {
             await window.electronAPI.clearState();
             localStorage.removeItem('savedState');
           }
-        } else {
+        } catch (err) {
+          await window.electronAPI.clearState();
           localStorage.removeItem('savedState');
         }
+      } else {
+        localStorage.removeItem('savedState');
       }
-
-      window.electronAPI.openDashboard();
-      const overlay = document.getElementById('loadingOverlay');
-      if (overlay) {
-        overlay.classList.remove('hidden');
-        overlay.classList.add('visible');
-      }
-      const network = document.getElementById('bg-network');
-      if (network) {
-        network.classList.remove('visible');
-        network.classList.add('network-fade-out');
-      }
-      setTimeout(() => {
-        if (overlay) overlay.classList.remove('visible');
-        document.body.classList.add('fade-out');
-        setTimeout(() => {
-          window.electronAPI.closeLogin();
-        }, 500);
-      }, 4000);
-
-
     }
+
+    window.electronAPI.openDashboard();
+    const overlay = document.getElementById('loadingOverlay');
+    if (overlay) {
+      overlay.classList.remove('hidden');
+      overlay.classList.add('visible');
+    }
+    const network = document.getElementById('bg-network');
+    if (network) {
+      network.classList.remove('visible');
+      network.classList.add('network-fade-out');
+    }
+    setTimeout(() => {
+      if (overlay) overlay.classList.remove('visible');
+      document.body.classList.add('fade-out');
+      setTimeout(() => {
+        window.electronAPI.closeLogin();
+      }, 500);
+    }, 4000);
   });
 
   // === 7) Envio do formulário de Cadastro ===

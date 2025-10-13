@@ -92,6 +92,40 @@ async function loginUsuario(email, senha, pin) {
     const usuario = resultado.rows[0];
     if (!usuario) throw new Error('Usuário não encontrado');
 
+    const hasVerificado = Object.prototype.hasOwnProperty.call(usuario, 'verificado');
+    let usuarioAtivo = true;
+    if (hasVerificado) {
+      const valor = usuario.verificado;
+      if (typeof valor === 'boolean') {
+        usuarioAtivo = valor;
+      } else if (typeof valor === 'number') {
+        usuarioAtivo = valor === 1;
+      } else if (valor === null || valor === undefined) {
+        usuarioAtivo = false;
+      } else {
+        const normalized = String(valor).trim().toLowerCase();
+        usuarioAtivo = ['true', 't', '1', 'ativo', 'active'].includes(normalized);
+      }
+    } else if (Object.prototype.hasOwnProperty.call(usuario, 'status')) {
+      const statusValor = usuario.status;
+      if (typeof statusValor === 'boolean') {
+        usuarioAtivo = statusValor;
+      } else if (typeof statusValor === 'number') {
+        usuarioAtivo = statusValor === 1;
+      } else if (statusValor === null || statusValor === undefined) {
+        usuarioAtivo = true;
+      } else {
+        const normalized = String(statusValor).trim().toLowerCase();
+        usuarioAtivo = normalized === 'ativo' || normalized === 'active' || normalized === '1';
+      }
+    }
+
+    if (!usuarioAtivo) {
+      const error = new Error('Usuário inativo. Solicite ao administrador a ativação do seu acesso.');
+      error.code = 'inactive-user';
+      throw error;
+    }
+
     const senhaCorreta = await bcrypt.compare(senha, usuario.senha);
     if (!senhaCorreta) throw new Error('Senha incorreta');
 

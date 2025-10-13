@@ -2030,7 +2030,7 @@ ipcMain.handle('login-usuario', async (event, dados) => {
     setCurrentUserSession(user);
     return { success: true, user };
   } catch (err) {
-    return { success: false, message: err.message };
+    return { success: false, message: err.message, code: err.code };
   }
 });
 
