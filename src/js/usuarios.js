@@ -672,18 +672,22 @@ function renderUsuarios(lista) {
         toggleBtn.className = 'usuario-acao-botao usuario-acao-botao--toggle';
         toggleBtn.dataset.usuarioId = u.id;
         toggleBtn.dataset.usuarioStatus = u.status || 'Inativo';
-        toggleBtn.setAttribute('aria-label', `${u.status === 'Ativo' ? 'Desativar' : 'Ativar'} ${nome}`);
+        const isAtivo = (u.status || '').toLowerCase() === 'ativo';
+        toggleBtn.setAttribute('aria-label', `${isAtivo ? 'Desativar' : 'Ativar'} ${nome}`);
+        if (isAtivo) {
+            toggleBtn.classList.add('usuario-acao-botao--ativo');
+        }
         const toggleIcon = document.createElement('i');
-        toggleIcon.classList.add('fas', u.status === 'Ativo' ? 'fa-plug-circle' : 'fa-plug', 'usuario-acao-icone');
-        toggleIcon.classList.add(u.status === 'Ativo' ? 'usuario-acao-icone--on' : 'usuario-acao-icone--off');
+        toggleIcon.classList.add('fas', 'fa-plug', 'usuario-acao-icone');
+        toggleIcon.classList.add(isAtivo ? 'usuario-acao-icone--on' : 'usuario-acao-icone--off');
         toggleBtn.appendChild(toggleIcon);
         if (horaAtivacaoTexto && horaAtivacaoTexto !== 'Sem registro') {
             toggleBtn.title =
-                u.status === 'Ativo'
+                isAtivo
                     ? `Desativar acesso (ativado em ${horaAtivacaoTexto})`
                     : `Ativar acesso (última ativação em ${horaAtivacaoTexto})`;
         } else {
-            toggleBtn.title = u.status === 'Ativo' ? 'Desativar acesso' : 'Ativar acesso';
+            toggleBtn.title = isAtivo ? 'Desativar acesso' : 'Ativar acesso';
         }
 
         if (!permissoes.podeAtivar || permissoes.colunaDesabilitada) {

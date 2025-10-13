@@ -161,16 +161,25 @@ body {
     transition: color 150ms ease;
 }
 
+/*.usuario-acao-icone--on indica botão de ativação em estado ligado */
 .usuario-acao-icone--on {
-    color: var(--color-green);
+    color: #22c55e;
 }
 
 .usuario-acao-icone--off {
     color: var(--color-blue);
 }
 
+.usuario-acao-botao--ativo {
+    background: rgba(34, 197, 94, 0.12);
+}
+
 .usuario-acao-botao:hover .usuario-acao-icone--on {
-    color: #8cf090;
+    color: #16a34a;
+}
+
+.usuario-acao-botao--ativo:hover {
+    background: rgba(34, 197, 94, 0.18);
 }
 
 .usuario-acao-botao:hover .usuario-acao-icone--off {
