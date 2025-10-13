@@ -1,7 +1,7 @@
 .dashboard-module {
     display: flex;
     flex-direction: column;
-    gap: 2.5rem;
+    gap: clamp(1.25rem, 1vw + 0.75rem, 2rem);
 }
 
 .dashboard-card {

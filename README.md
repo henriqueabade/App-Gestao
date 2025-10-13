@@ -56,6 +56,15 @@ A aplicação Electron se comunica com essa API durante o desenvolvimento.
 - **Títulos principais de módulos**: utilize `text-2xl font-semibold mb-2` no elemento `<h1>` do cabeçalho de cada página.
   O texto deve seguir o formato _Contexto + Nome do módulo_, por exemplo `Estoque de Matéria-Prima`, mantendo apenas a primeira
   letra de cada palavra em maiúsculo.
+- **Subtítulos e descrições**: aplique a cor `var(--color-violet)` com a fonte base (`text-base` sem variações de peso) aos
+  elementos imediatamente abaixo do `<h1>`, reproduzindo o comportamento adotado em Matéria-Prima. Evite reduzir o corpo do
+  texto para preservar legibilidade e contraste nas páginas herdadas.
+- **Espaçamento do cabeçalho**: envolva o cabeçalho dos módulos em um contêiner com `mb-8`, mantendo o espaçamento vertical
+  antes do conteúdo principal. Dentro desse bloco, respeite o `gap` padrão definido para o módulo (o mesmo aplicado em
+  Matéria-Prima) para garantir alinhamento consistente entre título, subtítulo e ações contextuais.
+- **Aplicação obrigatória**: replique essas regras em seções já existentes, como **Dashboard** e **Configurações**, e em novos
+  módulos criados. Ao revisar interfaces, use Matéria-Prima como checklist visual para validar cor, espaçamento e hierarquia
+  tipográfica.
 
 ### Matéria-Prima como referência visual
 

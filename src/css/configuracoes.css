@@ -41,7 +41,7 @@ body {
     flex-direction: column;
     gap: clamp(1.25rem, 1vw + 0.75rem, 2rem);
     min-height: var(--module-height);
-    padding: clamp(1.25rem, 1vw + 0.75rem, 2rem) clamp(1.5rem, 2vw, 3rem) clamp(1.75rem, 1.5rem + 1vw, 3rem);
+    padding-right: clamp(1.5rem, 2vw, 3rem);
     box-sizing: border-box;
 }
 
@@ -56,14 +56,15 @@ body {
 }
 
 .settings-title {
-    font-size: 2rem;
+    font-size: 1.5rem;
     font-weight: 600;
+    color: var(--color-violet);
 }
 
 .settings-subtitle {
     margin-top: 0.5rem;
-    font-size: 0.95rem;
-    color: rgba(255, 255, 255, 0.7);
+    font-size: 1rem;
+    color: var(--color-violet);
 }
 
 .settings-card {
