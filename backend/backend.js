@@ -46,11 +46,120 @@ async function usuarioExiste(email) {
   return res.rows.length > 0;
 }
 
+let ensureUsuariosSchemaPromise = null;
+
+async function ensureUsuariosSchema() {
+  if (ensureUsuariosSchemaPromise) return ensureUsuariosSchemaPromise;
+
+  ensureUsuariosSchemaPromise = (async () => {
+    const client = await pool.connect();
+
+    try {
+      await client.query('BEGIN');
+
+      const { rowCount: tabelaExiste } = await client.query(
+        `SELECT 1 FROM information_schema.tables
+          WHERE table_schema = current_schema()
+            AND table_name = 'usuarios'
+          LIMIT 1`
+      );
+
+      if (!tabelaExiste) {
+        await client.query(`
+          CREATE TABLE usuarios (
+            id SERIAL PRIMARY KEY,
+            nome TEXT,
+            email TEXT UNIQUE,
+            senha TEXT,
+            perfil TEXT,
+            verificado BOOLEAN DEFAULT false,
+            hora_ativacao TIMESTAMPTZ
+          )
+        `);
+      }
+
+      const { rows } = await client.query(
+        `SELECT column_name FROM information_schema.columns
+          WHERE table_schema = current_schema()
+            AND table_name = 'usuarios'`
+      );
+      const colunas = new Set(rows.map(row => row.column_name));
+
+      const alteracoes = [];
+
+      if (!colunas.has('confirmacao')) {
+        alteracoes.push("ALTER TABLE usuarios ADD COLUMN confirmacao BOOLEAN DEFAULT false");
+      }
+      if (!colunas.has('email_confirmado')) {
+        alteracoes.push("ALTER TABLE usuarios ADD COLUMN email_confirmado BOOLEAN DEFAULT false");
+      }
+      if (!colunas.has('email_confirmado_em')) {
+        alteracoes.push("ALTER TABLE usuarios ADD COLUMN email_confirmado_em TIMESTAMPTZ");
+      }
+      if (!colunas.has('confirmacao_token')) {
+        alteracoes.push("ALTER TABLE usuarios ADD COLUMN confirmacao_token TEXT");
+      }
+      if (!colunas.has('confirmacao_token_gerado_em')) {
+        alteracoes.push("ALTER TABLE usuarios ADD COLUMN confirmacao_token_gerado_em TIMESTAMPTZ");
+      }
+      if (!colunas.has('confirmacao_token_expira_em')) {
+        alteracoes.push("ALTER TABLE usuarios ADD COLUMN confirmacao_token_expira_em TIMESTAMPTZ");
+      }
+      if (!colunas.has('confirmacao_token_revogado_em')) {
+        alteracoes.push("ALTER TABLE usuarios ADD COLUMN confirmacao_token_revogado_em TIMESTAMPTZ");
+      }
+      if (!colunas.has('status')) {
+        alteracoes.push("ALTER TABLE usuarios ADD COLUMN status TEXT NOT NULL DEFAULT 'nao_confirmado'");
+      }
+      if (!colunas.has('status_atualizado_em')) {
+        alteracoes.push("ALTER TABLE usuarios ADD COLUMN status_atualizado_em TIMESTAMPTZ");
+      }
+
+      for (const comando of alteracoes) {
+        await client.query(comando);
+      }
+
+      const { rowCount: constraintExists } = await client.query(
+        `SELECT 1 FROM information_schema.constraint_column_usage
+          WHERE table_name = 'usuarios'
+            AND constraint_name = 'usuarios_status_check'`
+      );
+
+      if (!constraintExists) {
+        await client.query(
+          "ALTER TABLE usuarios ADD CONSTRAINT usuarios_status_check CHECK (status IN ('nao_confirmado', 'aguardando_aprovacao', 'ativo'))"
+        );
+      }
+
+      await client.query(
+        'CREATE UNIQUE INDEX IF NOT EXISTS usuarios_email_unq ON usuarios (lower(email))'
+      );
+
+      await client.query('COMMIT');
+    } catch (err) {
+      try {
+        await client.query('ROLLBACK');
+      } catch (rollbackErr) {
+        console.error('Erro ao executar ROLLBACK após falha na migração de usuarios:', rollbackErr);
+      }
+      throw err;
+    } finally {
+      client.release();
+    }
+  })().catch(err => {
+    ensureUsuariosSchemaPromise = null;
+    throw err;
+  });
+
+  return ensureUsuariosSchemaPromise;
+}
+
 // Cadastro de usuário (corrigido)
 async function registrarUsuario(nome, email, senha, pin) {
   const senhaCriptografada = await bcrypt.hash(senha, 10);
   try {
     pool.init(pin);
+    await ensureUsuariosSchema();
     if (await usuarioExiste(email)) {
       throw new Error('Usuário já cadastrado');
     }
@@ -99,6 +208,7 @@ async function registrarUsuario(nome, email, senha, pin) {
 async function loginUsuario(email, senha, pin) {
   try {
     pool.init(pin);
+    await ensureUsuariosSchema();
     const resultado = await pool.query(
       'SELECT * FROM usuarios WHERE lower(email) = lower($1)',
       [email.trim()]
