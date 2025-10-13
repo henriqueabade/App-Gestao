@@ -1,3 +1,8 @@
+const LOG_PREFIX = '[pdf:renderer]';
+const logInfo = (...args) => console.info(LOG_PREFIX, ...args);
+const logWarn = (...args) => console.warn(LOG_PREFIX, ...args);
+const logError = (...args) => console.error(LOG_PREFIX, ...args);
+
 const docContainer = document.getElementById('doc-container');
 const template = document.getElementById('page-template');
 
@@ -40,9 +45,13 @@ function renderErrorFeedback(title, message, details) {
   renderStatusCard({ title, message, details, variant: 'error' });
 }
 
+window.__pdf_montado = false;
+window.__pdf_erro = null;
+window.__dados_carregados = false;
 window.pdfBuildReady = false;
 window.pdfBuildError = null;
 window.generatedPdfMeta = null;
+logInfo('Renderer de PDF inicializado.');
 
 let apiBaseUrlPromise = null;
 
@@ -72,6 +81,7 @@ async function getApiBaseUrl() {
 async function fetchApi(path, options) {
   const baseUrl = await getApiBaseUrl();
   const url = new URL(path, baseUrl);
+  logInfo('Consultando API.', { url: url.toString(), method: options?.method || 'GET' });
   const response = await fetch(url.toString(), options);
 
   if (!response.ok) {
@@ -79,7 +89,7 @@ async function fetchApi(path, options) {
     try {
       responseText = await response.text();
     } catch (textErr) {
-      console.warn('Não foi possível ler a resposta de erro da API.', textErr);
+      logWarn('Não foi possível ler a resposta de erro da API.', textErr);
     }
 
     let parsedMessage = '';
@@ -89,7 +99,7 @@ async function fetchApi(path, options) {
         parsedMessage = parsed?.message || parsed?.error || '';
       } catch (jsonErr) {
         if (!(jsonErr instanceof SyntaxError)) {
-          console.warn('Não foi possível converter resposta de erro em JSON.', jsonErr);
+          logWarn('Não foi possível converter resposta de erro em JSON.', jsonErr);
         }
       }
     }
@@ -598,14 +608,105 @@ function extractHelpfulDetails(err) {
   return null;
 }
 
+function waitForWindowLoad() {
+  if (document.readyState === 'complete') {
+    logInfo('Evento window.load já ocorreu.');
+    return Promise.resolve();
+  }
+
+  logInfo('Aguardando evento window.load.');
+  return new Promise(resolve => {
+    window.addEventListener(
+      'load',
+      () => {
+        logInfo('Evento window.load capturado.');
+        resolve();
+      },
+      { once: true }
+    );
+  });
+}
+
+async function waitForFontsReady() {
+  if (!document.fonts || typeof document.fonts.ready?.then !== 'function') {
+    logInfo('API document.fonts indisponível. Prosseguindo sem aguardar fontes.');
+    return;
+  }
+
+  logInfo('Aguardando carregamento das fontes.');
+  try {
+    await document.fonts.ready;
+    logInfo('Carregamento das fontes concluído.');
+  } catch (err) {
+    logError('Erro ao aguardar carregamento das fontes.', err);
+    throw new Error('Falha ao carregar fontes do documento.');
+  }
+}
+
+async function waitForImagesToLoad() {
+  const images = Array.from(document.querySelectorAll('img[src]'));
+  if (!images.length) {
+    logInfo('Nenhuma imagem encontrada para aguardar.');
+    return;
+  }
+
+  logInfo(`Aguardando carregamento de ${images.length} imagem(ns).`);
+  await Promise.all(
+    images.map(
+      (img) =>
+        new Promise((resolve, reject) => {
+          const cleanup = () => {
+            img.removeEventListener('load', onLoad);
+            img.removeEventListener('error', onError);
+          };
+
+          const onLoad = () => {
+            cleanup();
+            resolve();
+          };
+
+          const onError = () => {
+            cleanup();
+            const src = img.currentSrc || img.src || '';
+            const truncatedSrc = src.length > 120 ? `${src.slice(0, 117)}...` : src;
+            reject(new Error(`Falha ao carregar imagem (${truncatedSrc || 'origem desconhecida'}).`));
+          };
+
+          if (img.complete) {
+            if (img.naturalWidth && img.naturalHeight) {
+              resolve();
+            } else {
+              onError();
+            }
+            return;
+          }
+
+          img.addEventListener('load', onLoad, { once: true });
+          img.addEventListener('error', onError, { once: true });
+        })
+    )
+  );
+  logInfo('Todas as imagens foram carregadas com sucesso.');
+}
+
 async function buildDocument() {
   const params = new URLSearchParams(window.location.search);
   const id = params.get('id');
   const tipo = params.get('tipo') || 'orcamento';
+  window.__pdf_montado = false;
+  window.__pdf_erro = null;
+  window.__dados_carregados = false;
+  window.pdfBuildReady = false;
+  window.pdfBuildError = null;
+  window.generatedPdfMeta = null;
+  logInfo('Iniciando montagem do documento.', { id, tipo });
   if (!id) {
     const message = 'Inclua o parâmetro "id" na URL para que o documento possa ser gerado.';
+    logError('Parâmetro "id" ausente na URL do PDF.');
     renderErrorFeedback('Documento não especificado', message);
+    window.__pdf_erro = message;
     window.pdfBuildError = message;
+    window.pdfBuildReady = false;
     window.dispatchEvent(new CustomEvent('pdf-build-error', { detail: window.pdfBuildError }));
     return;
   }
@@ -617,8 +718,11 @@ async function buildDocument() {
   });
   try {
     const endpoint = tipo === 'pedido' ? 'pedidos' : 'orcamentos';
+    logInfo('Buscando dados do documento na API.', { endpoint, id });
     const orc = await fetchApi(`/api/${endpoint}/${id}`).then(r => r.json());
+    logInfo('Dados do documento recebidos.', { numero: orc?.numero, situacao: orc?.situacao });
     document.title = `${tipo === 'pedido' ? 'Pedido' : 'Orçamento'} – Barral & Santíssimo`;
+    logInfo('Buscando dados do cliente relacionado.', { clienteId: orc?.cliente_id });
     const clienteResp = await fetchApi(`/api/clientes/${orc.cliente_id}`).then(r => r.json());
     const cliente = clienteResp.cliente || clienteResp;
     const contatos = clienteResp.contatos || [];
@@ -668,15 +772,25 @@ async function buildDocument() {
       endCobrancaStr,
       endRegistroStr
     });
+    logInfo('DOM preenchido com dados do documento.');
+    window.__dados_carregados = true;
 
+    logInfo('Aguardando fontes, imagens e evento window.load antes de sinalizar prontidão.');
+    await Promise.all([waitForFontsReady(), waitForImagesToLoad(), waitForWindowLoad()]);
+
+    window.__pdf_montado = true;
     window.pdfBuildReady = true;
+    logInfo('Documento pronto para impressão.');
     window.dispatchEvent(new Event('pdf-build-ready'));
   } catch (err) {
-    console.error('Erro ao gerar documento', err);
-    window.pdfBuildError = err?.message || 'Erro ao gerar documento';
+    logError('Erro ao gerar documento.', err);
+    window.__pdf_montado = false;
+    window.__pdf_erro = err?.message || 'Erro ao gerar documento';
+    window.pdfBuildError = window.__pdf_erro;
+    window.pdfBuildReady = false;
     window.dispatchEvent(new CustomEvent('pdf-build-error', { detail: window.pdfBuildError }));
     const errorDetails = extractHelpfulDetails(err);
-    renderErrorFeedback('Erro ao gerar documento', window.pdfBuildError, errorDetails);
+    renderErrorFeedback('Erro ao gerar documento', window.__pdf_erro, errorDetails);
   }
 }
 

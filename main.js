@@ -2778,9 +2778,10 @@ ipcMain.handle('open-pdf', async (_event, { id, tipo }) => {
     show: false,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
-      sandbox: false,
+      sandbox: true,
       nodeIntegration: false,
-      contextIsolation: true
+      contextIsolation: true,
+      backgroundThrottling: false
     }
   });
 
@@ -2826,54 +2827,52 @@ ipcMain.handle('open-pdf', async (_event, { id, tipo }) => {
   try {
     logInfo('Carregando URL da visualização oculta do PDF.');
     await webContents.loadURL(url.toString());
-    logInfo('URL carregada, aguardando que o PDF seja montado no renderer.');
+    logInfo('URL carregada. Aguardando montagem completa do documento no renderer.', {
+      timeoutMs: 20000
+    });
 
-    await webContents.executeJavaScript(
-      `
-        (function waitForPdfReady() {
-          if (typeof window === 'undefined') {
-            return true;
-          }
+    const timeoutMs = 20000;
+    const pollIntervalMs = 100;
+    const waitStart = Date.now();
+    let rendererState = { pronto: false, erro: null, dadosCarregados: false };
+    let dadosCarregadosLogEmitted = false;
 
-          if (window.pdfBuildError) {
-            throw new Error(window.pdfBuildError);
-          }
+    while (Date.now() - waitStart < timeoutMs) {
+      try {
+        rendererState = await webContents.executeJavaScript(
+          `(() => ({
+              pronto: Boolean(window.__pdf_montado),
+              erro: window.__pdf_erro || null,
+              dadosCarregados: Boolean(window.__dados_carregados)
+            }))();`,
+          true
+        );
+      } catch (pollError) {
+        logWarn('Falha ao consultar estado do renderer durante a geração de PDF.', pollError);
+        rendererState = rendererState || { pronto: false, erro: null, dadosCarregados: false };
+      }
 
-          if (window.pdfBuildReady) {
-            return true;
-          }
+      if (rendererState?.erro) {
+        throw new Error(rendererState.erro);
+      }
 
-          return new Promise((resolve, reject) => {
-            const finalize = (handler, value) => {
-              clearTimeout(timeoutId);
-              handler(value);
-            };
+      if (rendererState?.dadosCarregados && !dadosCarregadosLogEmitted) {
+        dadosCarregadosLogEmitted = true;
+        logInfo('Renderer sinalizou dados carregados. Aguardando fontes/imagens e evento de load.');
+      }
 
-            const timeoutId = setTimeout(() => {
-              finalize(reject, new Error('Tempo limite ao montar o documento para PDF.'));
-            }, 20000);
+      if (rendererState?.pronto) {
+        break;
+      }
 
-            window.addEventListener(
-              'pdf-build-ready',
-              () => finalize(resolve, true),
-              { once: true }
-            );
+      await new Promise(resolve => setTimeout(resolve, pollIntervalMs));
+    }
 
-            window.addEventListener(
-              'pdf-build-error',
-              (event) => {
-                const detail = event?.detail || 'Erro ao gerar PDF';
-                finalize(reject, new Error(detail));
-              },
-              { once: true }
-            );
-          });
-        })();
-      `,
-      true
-    );
+    if (!rendererState?.pronto) {
+      throw new Error('Timeout esperando a montagem do PDF.');
+    }
 
-    logInfo('PDF sinalizou pronto. Recuperando metadados gerados.');
+    logInfo('Renderer confirmou montagem completa do PDF. Recuperando metadados.');
 
     const meta = await webContents
       .executeJavaScript('window.generatedPdfMeta || {};', true)
@@ -2894,17 +2893,15 @@ ipcMain.handle('open-pdf', async (_event, { id, tipo }) => {
       .replace(/-+/g, '-')
       .replace(/^-|-$/g, '') || 'documento';
 
-    logInfo('Iniciando renderização para PDF nativo.');
+    logInfo('Iniciando renderização nativa para PDF.');
 
     const pdfData = await webContents.printToPDF({
       printBackground: true,
       pageSize: 'A4',
-      landscape: false,
-      marginsType: 0,
-      preferCSSPageSize: true
+      marginsType: 0
     });
 
-    logInfo('Arquivo PDF gerado em memória. Exibindo diálogo de salvamento padrão.', {
+    logInfo('PDF gerado em memória. Exibindo diálogo de salvamento padrão.', {
       suggestedName: `${sanitizedBaseName}.pdf`
     });
 
