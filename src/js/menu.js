@@ -1,5 +1,75 @@
 // Lógica de interação do menu principal
 
+const MENU_THEME_STORAGE_KEY = 'menu.theme';
+const MENU_THEME_DEFAULT = 'dark';
+const VALID_MENU_THEMES = new Set(['light', 'dark']);
+
+function normalizeMenuTheme(theme) {
+    if (!theme || typeof theme !== 'string') {
+        return MENU_THEME_DEFAULT;
+    }
+    const normalized = theme.toLowerCase();
+    return VALID_MENU_THEMES.has(normalized) ? normalized : MENU_THEME_DEFAULT;
+}
+
+function readStoredMenuTheme() {
+    if (typeof localStorage === 'undefined') {
+        return null;
+    }
+    try {
+        const stored = localStorage.getItem(MENU_THEME_STORAGE_KEY);
+        return stored ? stored : null;
+    } catch (error) {
+        console.warn('Não foi possível ler o tema do menu no localStorage', error);
+        return null;
+    }
+}
+
+function persistMenuTheme(theme) {
+    if (typeof localStorage === 'undefined') {
+        return;
+    }
+    try {
+        localStorage.setItem(MENU_THEME_STORAGE_KEY, theme);
+    } catch (error) {
+        console.warn('Não foi possível salvar o tema do menu no localStorage', error);
+    }
+}
+
+function dispatchMenuThemeChange(theme) {
+    window.dispatchEvent(new CustomEvent('menu-theme-change', { detail: { theme } }));
+}
+
+function applyMenuTheme(theme, { persist = false } = {}) {
+    const normalizedTheme = normalizeMenuTheme(theme);
+    const currentTheme = document.documentElement.dataset.menuTheme;
+
+    if (currentTheme !== normalizedTheme) {
+        document.documentElement.dataset.menuTheme = normalizedTheme;
+        dispatchMenuThemeChange(normalizedTheme);
+    }
+
+    if (persist) {
+        persistMenuTheme(normalizedTheme);
+    }
+
+    return normalizedTheme;
+}
+
+const initialMenuTheme = applyMenuTheme(readStoredMenuTheme() || document.documentElement.dataset.menuTheme || MENU_THEME_DEFAULT);
+
+const MenuThemeController = {
+    getTheme() {
+        return normalizeMenuTheme(document.documentElement.dataset.menuTheme || readStoredMenuTheme() || MENU_THEME_DEFAULT);
+    },
+    setTheme(theme) {
+        const normalizedTheme = applyMenuTheme(theme, { persist: true });
+        return normalizedTheme;
+    }
+};
+
+window.MenuTheme = MenuThemeController;
+
 // Elementos da página
 const sidebar = document.getElementById('sidebar');
 const mainContent = document.getElementById('mainContent');

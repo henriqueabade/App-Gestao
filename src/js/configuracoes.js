@@ -85,24 +85,104 @@ const NotificationPreferences = (() => {
     };
 })();
 
+const MenuThemePreferences = (() => {
+    const STORAGE_KEY = 'menu.theme';
+    const DEFAULT_THEME = 'dark';
+    const VALID_THEMES = new Set(['light', 'dark']);
+
+    function normalize(theme) {
+        if (!theme || typeof theme !== 'string') {
+            return DEFAULT_THEME;
+        }
+        const normalized = theme.toLowerCase();
+        return VALID_THEMES.has(normalized) ? normalized : DEFAULT_THEME;
+    }
+
+    function readFromStorage() {
+        if (typeof localStorage === 'undefined') {
+            return null;
+        }
+        try {
+            const stored = localStorage.getItem(STORAGE_KEY);
+            return stored ? normalize(stored) : null;
+        } catch (error) {
+            console.warn('Não foi possível ler o tema do menu do localStorage', error);
+            return null;
+        }
+    }
+
+    function saveToStorage(theme) {
+        if (typeof localStorage === 'undefined') {
+            return;
+        }
+        try {
+            localStorage.setItem(STORAGE_KEY, normalize(theme));
+        } catch (error) {
+            console.warn('Não foi possível salvar o tema do menu do localStorage', error);
+        }
+    }
+
+    function dispatchThemeChange(theme) {
+        window.dispatchEvent(new CustomEvent('menu-theme-change', { detail: { theme } }));
+    }
+
+    function apply(theme) {
+        const normalizedTheme = normalize(theme);
+        if (window.MenuTheme && typeof window.MenuTheme.setTheme === 'function') {
+            window.MenuTheme.setTheme(normalizedTheme);
+        } else {
+            document.documentElement.dataset.menuTheme = normalizedTheme;
+            saveToStorage(normalizedTheme);
+            dispatchThemeChange(normalizedTheme);
+        }
+        return normalizedTheme;
+    }
+
+    function getCurrent() {
+        if (window.MenuTheme && typeof window.MenuTheme.getTheme === 'function') {
+            return normalize(window.MenuTheme.getTheme());
+        }
+        const datasetTheme = document.documentElement?.dataset?.menuTheme;
+        const stored = readFromStorage();
+        return normalize(stored || datasetTheme || DEFAULT_THEME);
+    }
+
+    return {
+        STORAGE_KEY,
+        DEFAULT_THEME,
+        normalize,
+        apply,
+        getCurrent
+    };
+})();
+
 (function initialiseConfigurationsPage() {
     const PAGE_ID = 'configuracoes';
     const MODULE_SELECTOR = `.modulo-container[data-page="${PAGE_ID}"]`;
 
     let currentState = NotificationPreferences.load();
+    let currentTheme = MenuThemePreferences.getCurrent();
     let moduleElement = null;
 
     const dom = {
         toggle: null,
         status: null,
         categoryInputs: [],
-        summary: null
+        summary: null,
+        menuThemeToggle: null,
+        menuThemeStatus: null
     };
 
     function formatStatus(enabled) {
         return enabled
             ? 'As notificações do menu estão ativas. Novos alertas serão exibidos no sino superior.'
             : 'As notificações do menu estão desativadas. Você pode reativá-las quando desejar.';
+    }
+
+    function formatThemeStatus(theme) {
+        return theme === 'dark'
+            ? 'Tema escuro ativo. O menu utiliza tons escuros com alto contraste.'
+            : 'Tema claro ativo. O menu utiliza tons claros e textos em destaque.';
     }
 
     function formatSummary(state) {
@@ -149,6 +229,7 @@ const NotificationPreferences = (() => {
         if (dom.summary) {
             dom.summary.textContent = formatSummary(currentState);
         }
+        applyThemeToUI(currentTheme);
     }
 
     function handleToggleChange(event) {
@@ -157,11 +238,29 @@ const NotificationPreferences = (() => {
         NotificationPreferences.save(currentState);
     }
 
+    function applyThemeToUI(theme) {
+        if (!moduleElement) return;
+        const normalizedTheme = MenuThemePreferences.normalize(theme);
+        currentTheme = normalizedTheme;
+        if (dom.menuThemeToggle) {
+            dom.menuThemeToggle.checked = normalizedTheme === 'dark';
+        }
+        if (dom.menuThemeStatus) {
+            dom.menuThemeStatus.textContent = formatThemeStatus(normalizedTheme);
+        }
+    }
+
     function handleCategoryChange(event) {
         const key = event.target.value;
         currentState.categories[key] = event.target.checked;
         applyStateToUI();
         NotificationPreferences.save(currentState);
+    }
+
+    function handleMenuThemeToggleChange(event) {
+        const selectedTheme = event.target.checked ? 'dark' : 'light';
+        currentTheme = MenuThemePreferences.apply(selectedTheme);
+        applyThemeToUI(currentTheme);
     }
 
     function bindDom() {
@@ -175,6 +274,8 @@ const NotificationPreferences = (() => {
         dom.status = moduleElement.querySelector('#notificationStatus');
         dom.summary = moduleElement.querySelector('#categorySummary');
         dom.categoryInputs = Array.from(moduleElement.querySelectorAll('.category-input'));
+        dom.menuThemeToggle = moduleElement.querySelector('#menu-theme-toggle');
+        dom.menuThemeStatus = moduleElement.querySelector('#menuThemeStatus');
 
         if (dom.toggle) {
             dom.toggle.addEventListener('change', handleToggleChange);
@@ -182,6 +283,9 @@ const NotificationPreferences = (() => {
         dom.categoryInputs.forEach(input => {
             input.addEventListener('change', handleCategoryChange);
         });
+        if (dom.menuThemeToggle) {
+            dom.menuThemeToggle.addEventListener('change', handleMenuThemeToggleChange);
+        }
 
         applyStateToUI();
         return true;
@@ -189,6 +293,7 @@ const NotificationPreferences = (() => {
 
     function init() {
         currentState = NotificationPreferences.load();
+        currentTheme = MenuThemePreferences.getCurrent();
         bindDom();
     }
 
@@ -198,6 +303,11 @@ const NotificationPreferences = (() => {
         if (event?.detail?.page === PAGE_ID) {
             init();
         }
+    });
+
+    window.addEventListener('menu-theme-change', (event) => {
+        const theme = MenuThemePreferences.normalize(event?.detail?.theme);
+        applyThemeToUI(theme);
     });
 
     window.setMenuNotifications = function setMenuNotifications(update = {}) {

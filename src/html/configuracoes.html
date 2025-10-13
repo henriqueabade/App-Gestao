@@ -15,9 +15,24 @@
         <header class="settings-header">
             <div>
                 <h1 class="settings-title">Configurações</h1>
-                <p class="settings-subtitle">Personalize as notificações exibidas no menu principal</p>
+                <p class="settings-subtitle">Personalize o tema e as notificações exibidas no menu principal</p>
             </div>
         </header>
+
+        <section class="settings-card">
+            <div class="settings-card-header">
+                <div>
+                    <h2 class="settings-card-title">Tema do menu</h2>
+                    <p class="settings-card-description">Escolha entre o tema claro ou escuro para o menu lateral.</p>
+                </div>
+                <label class="toggle" for="menu-theme-toggle">
+                    <input type="checkbox" id="menu-theme-toggle" class="toggle-input">
+                    <span class="toggle-track" aria-hidden="true"></span>
+                    <span class="sr-only">Alternar entre os temas claro e escuro</span>
+                </label>
+            </div>
+            <p id="menuThemeStatus" class="settings-status"></p>
+        </section>
 
         <section class="settings-card">
             <div class="settings-card-header">
