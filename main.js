@@ -2316,13 +2316,13 @@ ipcMain.handle('excluir-materia-prima', async (_e, info) => {
   }
 });
 ipcMain.handle('registrar-entrada-materia-prima', async (_e, { id, quantidade }) => {
-  return registrarEntrada(id, quantidade);
+  return registrarEntrada(id, quantidade, currentUserSession?.id ?? null);
 });
 ipcMain.handle('registrar-saida-materia-prima', async (_e, { id, quantidade }) => {
-  return registrarSaida(id, quantidade);
+  return registrarSaida(id, quantidade, currentUserSession?.id ?? null);
 });
 ipcMain.handle('atualizar-preco-materia-prima', async (_e, { id, preco }) => {
-  return atualizarPreco(id, preco);
+  return atualizarPreco(id, preco, currentUserSession?.id ?? null);
 });
 ipcMain.handle('listar-categorias', async () => {
   try {

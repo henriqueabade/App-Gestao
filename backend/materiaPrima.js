@@ -103,13 +103,106 @@ async function excluirMateria(id) {
   await pool.query('DELETE FROM materia_prima WHERE id=$1', [id]);
 }
 
-async function registrarEntrada(id, quantidade) {
+let movimentacoesTablePromise = null;
+
+async function ensureMovimentacoesTable() {
+  if (!movimentacoesTablePromise) {
+    movimentacoesTablePromise = (async () => {
+      try {
+        await pool.query(
+          `CREATE TABLE IF NOT EXISTS materia_prima_movimentacoes (
+            id serial PRIMARY KEY,
+            insumo_id integer NOT NULL,
+            tipo text NOT NULL,
+            quantidade numeric,
+            quantidade_anterior numeric,
+            quantidade_atual numeric,
+            preco_anterior numeric,
+            preco_atual numeric,
+            usuario_id integer,
+            criado_em timestamp WITHOUT TIME ZONE
+          )`
+        );
+      } catch (err) {
+        const message = typeof err?.message === 'string' ? err.message : '';
+        const isNotSupported = message.includes('Not supported');
+        if (isNotSupported) {
+          try {
+            await pool.query('SELECT 1 FROM materia_prima_movimentacoes LIMIT 1');
+            return;
+          } catch (inner) {
+            throw err;
+          }
+        }
+        throw err;
+      }
+    })().catch(err => {
+      movimentacoesTablePromise = null;
+      throw err;
+    });
+  }
+  return movimentacoesTablePromise;
+}
+
+async function registrarMovimentacao({
+  insumoId,
+  tipo,
+  quantidadeAlterada = null,
+  quantidadeAnterior = null,
+  quantidadeAtual = null,
+  precoAnterior = null,
+  precoAtual = null,
+  usuarioId = null
+}) {
+  if (!insumoId || !tipo) return;
+  await ensureMovimentacoesTable();
+  try {
+    await pool.query(
+      `INSERT INTO materia_prima_movimentacoes
+        (insumo_id, tipo, quantidade, quantidade_anterior, quantidade_atual,
+         preco_anterior, preco_atual, usuario_id, criado_em)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+      [
+        insumoId,
+        tipo,
+        quantidadeAlterada,
+        quantidadeAnterior,
+        quantidadeAtual,
+        precoAnterior,
+        precoAtual,
+        usuarioId,
+        new Date()
+      ]
+    );
+  } catch (err) {
+    console.error('Erro ao registrar movimentação de matéria-prima:', err.message);
+  }
+}
+
+async function registrarEntrada(id, quantidade, usuarioId = null) {
+  const { rows: existentes } = await pool.query(
+    'SELECT quantidade FROM materia_prima WHERE id=$1',
+    [id]
+  );
+  const quantidadeAnterior = existentes.length ? Number(existentes[0].quantidade) || 0 : 0;
   const res = await pool.query(
     `UPDATE materia_prima SET quantidade = quantidade + $1, data_estoque = NOW()
      WHERE id=$2 RETURNING *`,
     [quantidade, id]
   );
-  return res.rows[0];
+  const materia = res.rows[0] || null;
+  if (materia) {
+    const quantidadeAtual = Number(materia.quantidade) || 0;
+    await registrarMovimentacao({
+      insumoId: id,
+      tipo: 'entrada',
+      quantidadeAlterada: quantidade,
+      quantidadeAnterior,
+      quantidadeAtual,
+      usuarioId
+    });
+  }
+  return materia;
 }
 
 async function atualizarProdutosComInsumo(insumoId) {
@@ -151,23 +244,56 @@ async function atualizarProdutosComInsumo(insumoId) {
   }
 }
 
-async function registrarSaida(id, quantidade) {
+async function registrarSaida(id, quantidade, usuarioId = null) {
+  const { rows: existentes } = await pool.query(
+    'SELECT quantidade FROM materia_prima WHERE id=$1',
+    [id]
+  );
+  const quantidadeAnterior = existentes.length ? Number(existentes[0].quantidade) || 0 : 0;
   const res = await pool.query(
     `UPDATE materia_prima SET quantidade = quantidade - $1, data_estoque = NOW()
      WHERE id=$2 RETURNING *`,
     [quantidade, id]
   );
-  return res.rows[0];
+  const materia = res.rows[0] || null;
+  if (materia) {
+    const quantidadeAtual = Number(materia.quantidade) || 0;
+    await registrarMovimentacao({
+      insumoId: id,
+      tipo: 'saida',
+      quantidadeAlterada: quantidade,
+      quantidadeAnterior,
+      quantidadeAtual,
+      usuarioId
+    });
+  }
+  return materia;
 }
 
-async function atualizarPreco(id, preco) {
+async function atualizarPreco(id, preco, usuarioId = null) {
+  const { rows: existentes } = await pool.query(
+    'SELECT preco_unitario FROM materia_prima WHERE id=$1',
+    [id]
+  );
+  const precoAnterior = existentes.length ? Number(existentes[0].preco_unitario) || 0 : null;
   const res = await pool.query(
     `UPDATE materia_prima SET preco_unitario=$1, data_preco = NOW()
      WHERE id=$2 RETURNING *`,
     [preco, id]
   );
+  const materia = res.rows[0] || null;
+  if (materia) {
+    const precoAtual = Number(materia.preco_unitario) || 0;
+    await registrarMovimentacao({
+      insumoId: id,
+      tipo: 'preco',
+      precoAnterior,
+      precoAtual,
+      usuarioId
+    });
+  }
   await atualizarProdutosComInsumo(id);
-  return res.rows[0];
+  return materia;
 }
 
 async function listarCategorias() {
@@ -196,6 +322,32 @@ async function adicionarUnidade(tipo) {
     [tipo]
   );
   return res.rows[0]?.tipo;
+}
+
+async function obterMovimentacoesRecentes({ tipos = null, desde = null, limite = null } = {}) {
+  await ensureMovimentacoesTable();
+  const condicoes = [];
+  const valores = [];
+  if (Array.isArray(tipos) && tipos.length) {
+    valores.push(tipos);
+    condicoes.push(`tipo = ANY($${valores.length}::text[])`);
+  }
+  if (desde instanceof Date) {
+    valores.push(desde);
+    condicoes.push(`criado_em >= $${valores.length}`);
+  }
+  const where = condicoes.length ? `WHERE ${condicoes.join(' AND ')}` : '';
+  const limitClause = Number.isInteger(limite) && limite > 0 ? `LIMIT ${limite}` : '';
+  const { rows } = await pool.query(
+    `SELECT id, insumo_id, tipo, quantidade, quantidade_anterior, quantidade_atual,
+            preco_anterior, preco_atual, usuario_id, criado_em
+       FROM materia_prima_movimentacoes
+       ${where}
+       ORDER BY criado_em DESC, id DESC
+       ${limitClause}`,
+    valores
+  );
+  return rows;
 }
 
 async function removerCategoria(nome) {
@@ -262,6 +414,7 @@ module.exports = {
   listarUnidades,
   adicionarCategoria,
   adicionarUnidade,
+  obterMovimentacoesRecentes,
   removerCategoria,
   removerUnidade,
   categoriaTemDependencias,
