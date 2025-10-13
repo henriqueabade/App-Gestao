@@ -23,12 +23,14 @@
   "dependencies": {
     "bcrypt": "^6.0.0",
     "body-parser": "^2.2.0",
+    "core-util-is": "^1.0.3",
     "cors": "^2.8.5",
     "dotenv": "^17.0.1",
+    "electron-updater": "^6.6.2",
     "express": "^5.1.0",
+    "multer": "^1.4.5-lts.1",
     "nodemailer": "^7.0.5",
-    "pg": "^8.16.0",
-    "electron-updater": "^6.6.2"
+    "pg": "^8.16.0"
   },
   "type": "commonjs",
   "build": {

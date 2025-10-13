@@ -1,10 +1,847 @@
+const crypto = require('crypto');
 const express = require('express');
 const bcrypt = require('bcrypt');
+const multer = require('multer');
 const pool = require('./db');
 const { sendSupAdminReviewNotification } = require('../src/email/sendSupAdminReviewNotification');
 const { sendUserActivationNotice } = require('../src/email/sendUserActivationNotice');
+const { sendEmailChangeConfirmation } = require('../src/email/sendEmailChangeConfirmation');
 
 const router = express.Router();
+
+const MAX_IMAGE_SIZE = 2 * 1024 * 1024;
+const EMAIL_CONFIRMATION_TTL_MS = 48 * 60 * 60 * 1000;
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: MAX_IMAGE_SIZE }
+});
+
+let usuarioColunasCache = null;
+let loginCacheMeta = null;
+let emailChangeTableEnsured = false;
+
+const telefoneColunasPreferidas = ['telefone', 'telefone_usuario', 'telefone_principal'];
+const celularColunasPreferidas = ['telefone_celular', 'celular', 'celular_usuario'];
+const whatsappColunasPreferidas = ['whatsapp', 'whatsapp_usuario'];
+
+function parsePositiveInteger(value) {
+  if (value === null || value === undefined) return null;
+  const numeric = Number(value);
+  if (Number.isInteger(numeric) && numeric > 0) {
+    return numeric;
+  }
+  return null;
+}
+
+function extrairUsuarioId(req) {
+  const headerCandidates = [
+    req.headers['x-usuario-id'],
+    req.headers['x-user-id'],
+    req.headers['x-usuario'],
+    req.headers['x-user']
+  ];
+
+  for (const candidate of headerCandidates) {
+    const value = Array.isArray(candidate) ? candidate[0] : candidate;
+    const parsed = parsePositiveInteger(value);
+    if (parsed) {
+      return parsed;
+    }
+  }
+
+  const authorization = typeof req.headers.authorization === 'string' ? req.headers.authorization.trim() : '';
+  if (authorization.toLowerCase().startsWith('bearer ')) {
+    const token = authorization.slice(7).trim();
+    const match = token.match(/(\d+)/);
+    if (match) {
+      const parsed = parsePositiveInteger(match[1]);
+      if (parsed) {
+        return parsed;
+      }
+    }
+  }
+
+  if (req.body && typeof req.body === 'object' && req.body !== null) {
+    const candidate = parsePositiveInteger(req.body.usuarioId ?? req.body.userId);
+    if (candidate) return candidate;
+  }
+
+  if (req.query && typeof req.query === 'object' && req.query !== null) {
+    const candidate = parsePositiveInteger(req.query.usuarioId ?? req.query.userId);
+    if (candidate) return candidate;
+  }
+
+  return null;
+}
+
+function autenticarUsuario(req, res, next) {
+  const usuarioId = extrairUsuarioId(req);
+  if (!usuarioId) {
+    return res.status(401).json({ error: 'Usuário não autenticado.' });
+  }
+  req.usuarioAutenticadoId = usuarioId;
+  return next();
+}
+
+function shouldParseMultipart(req) {
+  const contentType = typeof req.headers['content-type'] === 'string' ? req.headers['content-type'] : '';
+  return contentType.includes('multipart/form-data');
+}
+
+function parseMultipartIfNeeded(req, res, next) {
+  if (!shouldParseMultipart(req)) {
+    return next();
+  }
+
+  return upload.single('foto')(req, res, err => {
+    if (!err) {
+      return next();
+    }
+
+    if (err instanceof multer.MulterError && err.code === 'LIMIT_FILE_SIZE') {
+      return res.status(400).json({ error: 'Foto de perfil deve ter no máximo 2 MB.' });
+    }
+
+    console.error('Falha ao processar upload multipart:', err);
+    return res.status(400).json({ error: 'Não foi possível processar o upload da foto.' });
+  });
+}
+
+async function getUsuarioColumns() {
+  if (usuarioColunasCache) {
+    return usuarioColunasCache;
+  }
+
+  try {
+    const { rows } = await pool.query(
+      `SELECT column_name
+         FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'usuarios'`
+    );
+    usuarioColunasCache = new Set(rows.map(row => row.column_name));
+  } catch (err) {
+    console.error('Falha ao carregar metadados de colunas da tabela usuarios:', err);
+    usuarioColunasCache = new Set();
+  }
+
+  return usuarioColunasCache;
+}
+
+async function getLoginCacheMeta() {
+  if (loginCacheMeta) {
+    return loginCacheMeta;
+  }
+
+  try {
+    const { rows } = await pool.query(
+      `SELECT column_name
+         FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'usuarios_login_cache'`
+    );
+
+    if (!rows.length) {
+      loginCacheMeta = { exists: false, columns: new Set() };
+    } else {
+      loginCacheMeta = { exists: true, columns: new Set(rows.map(row => row.column_name)) };
+    }
+  } catch (err) {
+    console.error('Falha ao carregar metadados da tabela usuarios_login_cache:', err);
+    loginCacheMeta = { exists: false, columns: new Set() };
+  }
+
+  return loginCacheMeta;
+}
+
+async function ensureEmailChangeTable() {
+  if (emailChangeTableEnsured) {
+    return;
+  }
+
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS usuarios_confirmacoes_email (
+        id serial PRIMARY KEY,
+        usuario_id integer NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+        email text NOT NULL,
+        token text,
+        expira_em timestamptz NOT NULL,
+        criado_em timestamptz NOT NULL DEFAULT NOW(),
+        confirmado_em timestamptz,
+        cancelado_em timestamptz
+      )
+    `);
+    try {
+      await pool.query('ALTER TABLE usuarios_confirmacoes_email ALTER COLUMN token DROP NOT NULL');
+    } catch (err) {
+      /* ignore constraint change failures */
+    }
+    await pool.query(
+      'CREATE UNIQUE INDEX IF NOT EXISTS usuarios_confirmacoes_email_usuario_idx ON usuarios_confirmacoes_email (usuario_id)'
+    );
+    await pool.query(
+      'CREATE UNIQUE INDEX IF NOT EXISTS usuarios_confirmacoes_email_token_idx ON usuarios_confirmacoes_email (token)'
+    );
+    emailChangeTableEnsured = true;
+  } catch (err) {
+    console.error('Falha ao garantir tabela de confirmações de e-mail:', err);
+    throw err;
+  }
+}
+
+function extrairPrimeiroValor(row, colunas) {
+  if (!row || !colunas || !colunas.length) return undefined;
+  for (const coluna of colunas) {
+    if (Object.prototype.hasOwnProperty.call(row, coluna)) {
+      return row[coluna];
+    }
+  }
+  return undefined;
+}
+
+function getFirstDefined(source, keys) {
+  if (!source || typeof source !== 'object') return undefined;
+  for (const key of keys) {
+    if (Object.prototype.hasOwnProperty.call(source, key)) {
+      return source[key];
+    }
+  }
+  return undefined;
+}
+
+function findAvailableColumn(columns, candidates) {
+  if (!columns || !candidates) return null;
+  for (const candidate of candidates) {
+    if (columns.has(candidate)) {
+      return candidate;
+    }
+  }
+  return null;
+}
+
+function sanitizeNome(valor) {
+  if (valor === undefined) return undefined;
+  if (valor === null) {
+    throw new Error('Nome não pode ser vazio.');
+  }
+  if (typeof valor !== 'string') {
+    throw new Error('Nome deve ser uma string.');
+  }
+  const trimmed = valor.trim();
+  if (!trimmed) {
+    throw new Error('Nome não pode ser vazio.');
+  }
+  if (trimmed.length > 120) {
+    throw new Error('Nome deve ter no máximo 120 caracteres.');
+  }
+  return trimmed;
+}
+
+function sanitizeTelefone(valor, label) {
+  if (valor === undefined) return undefined;
+  if (valor === null) return null;
+  if (typeof valor !== 'string') {
+    throw new Error(`${label} deve ser uma string.`);
+  }
+  const trimmed = valor.trim();
+  if (!trimmed || trimmed.toLowerCase() === 'null' || trimmed.toLowerCase() === 'undefined') {
+    return null;
+  }
+  if (trimmed.length > 60) {
+    throw new Error(`${label} deve ter no máximo 60 caracteres.`);
+  }
+  if (!/^[-+()\d\s]+$/.test(trimmed)) {
+    throw new Error(`${label} possui caracteres inválidos.`);
+  }
+  return trimmed.replace(/\s+/g, ' ').trim();
+}
+
+function sanitizeOptionalString(valor, label, maxLength = 120) {
+  if (valor === undefined) return undefined;
+  if (valor === null) return null;
+  if (typeof valor !== 'string') {
+    throw new Error(`${label} deve ser uma string.`);
+  }
+  const trimmed = valor.trim();
+  if (!trimmed || trimmed.toLowerCase() === 'null' || trimmed.toLowerCase() === 'undefined') {
+    return null;
+  }
+  if (trimmed.length > maxLength) {
+    throw new Error(`${label} deve ter no máximo ${maxLength} caracteres.`);
+  }
+  return trimmed;
+}
+
+function sanitizeEmail(valor) {
+  if (valor === undefined || valor === null) {
+    throw new Error('Informe o e-mail desejado.');
+  }
+  if (typeof valor !== 'string') {
+    throw new Error('E-mail deve ser uma string.');
+  }
+  const trimmed = valor.trim();
+  if (!trimmed) {
+    throw new Error('Informe o e-mail desejado.');
+  }
+  const normalized = trimmed.toLowerCase();
+  const regex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!regex.test(normalized)) {
+    throw new Error('E-mail inválido.');
+  }
+  return normalized;
+}
+
+function parseBoolean(valor) {
+  if (valor === undefined) return false;
+  if (typeof valor === 'boolean') return valor;
+  if (typeof valor === 'number') return valor !== 0;
+  if (typeof valor === 'string') {
+    const normalized = valor.trim().toLowerCase();
+    return ['1', 'true', 'sim', 'yes', 'y'].includes(normalized);
+  }
+  return false;
+}
+
+function parseBase64Image(input) {
+  if (typeof input !== 'string') return null;
+  const trimmed = input.trim();
+  if (!trimmed) return null;
+  const dataUrlMatch = /^data:(image\/[a-z0-9.+-]+);base64,(.+)$/i.exec(trimmed);
+  let base64Content = trimmed;
+  if (dataUrlMatch) {
+    base64Content = dataUrlMatch[2];
+  }
+  const sanitized = base64Content.replace(/\s+/g, '');
+  if (!sanitized) return null;
+  try {
+    const buffer = Buffer.from(sanitized, 'base64');
+    if (!buffer || !buffer.length) {
+      return null;
+    }
+    return buffer;
+  } catch (err) {
+    return null;
+  }
+}
+
+async function carregarUsuarioRaw(id) {
+  const { rows } = await pool.query('SELECT * FROM usuarios WHERE id = $1', [id]);
+  return rows[0] || null;
+}
+
+function normalizarFotoParaResposta(valor) {
+  if (valor === undefined) return undefined;
+  if (valor === null) return null;
+  if (Buffer.isBuffer(valor)) {
+    return valor.length ? valor.toString('base64') : null;
+  }
+  if (valor instanceof Uint8Array) {
+    const buffer = Buffer.from(valor);
+    return buffer.length ? buffer.toString('base64') : null;
+  }
+  if (typeof valor === 'string') {
+    const trimmed = valor.trim();
+    return trimmed || null;
+  }
+  return null;
+}
+
+async function atualizarCacheLogin(usuarioId, usuarioRow) {
+  if (!usuarioId || !usuarioRow) return false;
+  const meta = await getLoginCacheMeta();
+  if (!meta.exists || !meta.columns.has('usuario_id')) {
+    return false;
+  }
+
+  const colunas = meta.columns;
+  const valores = [usuarioId];
+  const nomes = ['usuario_id'];
+  const placeholders = ['$1'];
+
+  const adicionarCampo = (coluna, valor) => {
+    if (!colunas.has(coluna)) return;
+    valores.push(valor === undefined ? null : valor);
+    nomes.push(coluna);
+    placeholders.push(`$${valores.length}`);
+  };
+
+  adicionarCampo('nome', usuarioRow.nome ?? null);
+  adicionarCampo('email', usuarioRow.email ?? null);
+  adicionarCampo('perfil', usuarioRow.perfil ?? null);
+
+  if (colunas.has('telefone')) {
+    adicionarCampo('telefone', extrairPrimeiroValor(usuarioRow, telefoneColunasPreferidas) ?? null);
+  }
+  if (colunas.has('telefone_celular')) {
+    adicionarCampo('telefone_celular', extrairPrimeiroValor(usuarioRow, celularColunasPreferidas) ?? null);
+  }
+  if (colunas.has('whatsapp')) {
+    adicionarCampo('whatsapp', extrairPrimeiroValor(usuarioRow, whatsappColunasPreferidas) ?? null);
+  }
+
+  if (colunas.has('foto_usuario')) {
+    const origem = extrairPrimeiroValor(usuarioRow, ['foto_usuario', 'foto', 'avatar', 'avatar_url']);
+    let fotoBuffer = null;
+    if (Buffer.isBuffer(origem)) {
+      fotoBuffer = origem;
+    } else if (origem instanceof Uint8Array) {
+      fotoBuffer = Buffer.from(origem);
+    } else if (typeof origem === 'string') {
+      const trimmed = origem.trim();
+      if (trimmed) {
+        const conteudo = trimmed.includes(',') ? trimmed.slice(trimmed.indexOf(',') + 1) : trimmed;
+        try {
+          fotoBuffer = Buffer.from(conteudo, 'base64');
+        } catch (err) {
+          fotoBuffer = null;
+        }
+      }
+    }
+    adicionarCampo('foto_usuario', fotoBuffer);
+  }
+
+  if (colunas.has('atualizado_em')) {
+    adicionarCampo('atualizado_em', new Date());
+  }
+
+  try {
+    await pool.query('DELETE FROM usuarios_login_cache WHERE usuario_id = $1', [usuarioId]);
+  } catch (err) {
+    console.error('Falha ao limpar cache de login do usuário:', err);
+  }
+
+  try {
+    await pool.query(
+      `INSERT INTO usuarios_login_cache (${nomes.join(', ')}) VALUES (${placeholders.join(', ')})`,
+      valores
+    );
+    return true;
+  } catch (err) {
+    console.error('Falha ao atualizar cache de login do usuário:', err);
+    return false;
+  }
+}
+
+function formatarUsuarioDetalhado(row) {
+  if (!row) return null;
+  const base = formatarUsuario(row);
+  const resultado = { ...base };
+
+  const telefone = extrairPrimeiroValor(row, telefoneColunasPreferidas);
+  if (telefone !== undefined) {
+    resultado.telefone = telefone;
+  }
+
+  const celular = extrairPrimeiroValor(row, celularColunasPreferidas);
+  if (celular !== undefined) {
+    resultado.celular = celular;
+  }
+
+  const whatsapp = extrairPrimeiroValor(row, whatsappColunasPreferidas);
+  if (whatsapp !== undefined) {
+    resultado.whatsapp = whatsapp;
+  }
+
+  const foto = normalizarFotoParaResposta(extrairPrimeiroValor(row, ['foto_usuario', 'foto', 'avatar', 'avatar_url']));
+  if (foto !== undefined) {
+    resultado.fotoUsuario = foto;
+    resultado.foto_usuario = foto;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(row, 'descricao')) {
+    resultado.descricao = row.descricao;
+  }
+
+  return resultado;
+}
+
+router.get('/me', autenticarUsuario, async (req, res) => {
+  try {
+    const usuario = await carregarUsuarioRaw(req.usuarioAutenticadoId);
+    if (!usuario) {
+      return res.status(404).json({ error: 'Usuário não encontrado' });
+    }
+    return res.json(formatarUsuarioDetalhado(usuario));
+  } catch (err) {
+    console.error('Erro ao obter dados do usuário autenticado:', err);
+    return res.status(500).json({ error: 'Erro ao carregar dados do usuário.' });
+  }
+});
+
+router.put('/me', autenticarUsuario, parseMultipartIfNeeded, async (req, res) => {
+  const usuarioId = req.usuarioAutenticadoId;
+  let usuarioAtual;
+  try {
+    usuarioAtual = await carregarUsuarioRaw(usuarioId);
+  } catch (err) {
+    console.error('Erro ao carregar usuário antes da atualização:', err);
+    return res.status(500).json({ error: 'Erro ao carregar dados do usuário.' });
+  }
+
+  if (!usuarioAtual) {
+    return res.status(404).json({ error: 'Usuário não encontrado' });
+  }
+
+  const body = req.body && typeof req.body === 'object' ? req.body : {};
+
+  let nomeSanitizado;
+  try {
+    const nomeBruto = getFirstDefined(body, ['nome', 'name']);
+    if (nomeBruto !== undefined) {
+      nomeSanitizado = sanitizeNome(nomeBruto);
+    }
+  } catch (err) {
+    return res.status(400).json({ error: err.message });
+  }
+
+  let telefoneSanitizado;
+  let celularSanitizado;
+  let whatsappSanitizado;
+  let descricaoSanitizada;
+
+  try {
+    const telefoneBruto = getFirstDefined(body, ['telefone', 'telefonePrincipal', 'phone']);
+    telefoneSanitizado = sanitizeTelefone(telefoneBruto, 'Telefone');
+
+    const celularBruto = getFirstDefined(body, ['celular', 'telefone_celular', 'mobile']);
+    celularSanitizado = sanitizeTelefone(celularBruto, 'Celular');
+
+    const whatsappBruto = getFirstDefined(body, ['whatsapp', 'whatsApp']);
+    whatsappSanitizado = sanitizeTelefone(whatsappBruto, 'WhatsApp');
+
+    const descricaoBruta = getFirstDefined(body, ['descricao', 'bio', 'sobre']);
+    descricaoSanitizada = sanitizeOptionalString(descricaoBruta, 'Descrição', 500);
+  } catch (err) {
+    return res.status(400).json({ error: err.message });
+  }
+
+  const emailInformado = getFirstDefined(body, ['email', 'novoEmail', 'novo_email']);
+  if (emailInformado !== undefined) {
+    try {
+      const emailNormalizado = sanitizeEmail(emailInformado);
+      const emailAtual = typeof usuarioAtual.email === 'string' ? usuarioAtual.email.trim().toLowerCase() : '';
+      if (emailNormalizado !== emailAtual) {
+        return res.status(400).json({
+          error: 'Use a confirmação de e-mail para alterar o endereço. Envie a solicitação pela rota apropriada.'
+        });
+      }
+    } catch (err) {
+      return res.status(400).json({ error: err.message });
+    }
+  }
+
+  let fotoAcao = 'manter';
+  let fotoBuffer = null;
+
+  if (parseBoolean(getFirstDefined(body, ['removerFoto', 'remover_foto']))) {
+    fotoAcao = 'remover';
+  }
+
+  if (fotoAcao === 'manter' && req.file && req.file.buffer) {
+    if (req.file.mimetype && !req.file.mimetype.startsWith('image/')) {
+      return res.status(400).json({ error: 'Foto de perfil deve ser um arquivo de imagem.' });
+    }
+    if (!req.file.buffer.length) {
+      return res.status(400).json({ error: 'Foto de perfil inválida.' });
+    }
+    fotoBuffer = req.file.buffer;
+    fotoAcao = 'atualizar';
+  }
+
+  if (fotoAcao === 'manter') {
+    const candidatos = [body.foto, body.fotoBase64, body.foto_usuario, body.avatar];
+    for (const valor of candidatos) {
+      if (valor === undefined) continue;
+      if (valor === null) {
+        fotoAcao = 'remover';
+        break;
+      }
+      if (typeof valor !== 'string') {
+        return res.status(400).json({ error: 'Foto de perfil inválida.' });
+      }
+      const trimmed = valor.trim();
+      if (!trimmed) {
+        fotoAcao = 'remover';
+        break;
+      }
+      const buffer = parseBase64Image(trimmed);
+      if (!buffer) {
+        return res.status(400).json({ error: 'Foto de perfil deve estar em formato base64 válido.' });
+      }
+      fotoBuffer = buffer;
+      fotoAcao = 'atualizar';
+      break;
+    }
+  }
+
+  if (fotoAcao === 'atualizar' && fotoBuffer && fotoBuffer.length > MAX_IMAGE_SIZE) {
+    return res.status(400).json({ error: 'Foto de perfil deve ter no máximo 2 MB.' });
+  }
+
+  let colunas;
+  try {
+    colunas = await getUsuarioColumns();
+  } catch (err) {
+    console.error('Erro ao carregar metadados de usuários:', err);
+    colunas = new Set();
+  }
+
+  const updates = [];
+  const valores = [];
+
+  const adicionarSet = (coluna, valor) => {
+    updates.push(`${coluna} = $${valores.length + 1}`);
+    valores.push(valor);
+  };
+
+  if (nomeSanitizado !== undefined && colunas.has('nome') && nomeSanitizado !== usuarioAtual.nome) {
+    adicionarSet('nome', nomeSanitizado);
+  }
+
+  const colunaTelefone = telefoneSanitizado !== undefined ? findAvailableColumn(colunas, telefoneColunasPreferidas) : null;
+  if (telefoneSanitizado !== undefined && colunaTelefone) {
+    adicionarSet(colunaTelefone, telefoneSanitizado);
+  }
+
+  const colunaCelular = celularSanitizado !== undefined ? findAvailableColumn(colunas, celularColunasPreferidas) : null;
+  if (celularSanitizado !== undefined && colunaCelular) {
+    adicionarSet(colunaCelular, celularSanitizado);
+  }
+
+  const colunaWhatsapp = whatsappSanitizado !== undefined ? findAvailableColumn(colunas, whatsappColunasPreferidas) : null;
+  if (whatsappSanitizado !== undefined && colunaWhatsapp) {
+    adicionarSet(colunaWhatsapp, whatsappSanitizado);
+  }
+
+  const colunaDescricao = colunas.has('descricao') ? 'descricao' : colunas.has('bio') ? 'bio' : null;
+  if (descricaoSanitizada !== undefined && colunaDescricao) {
+    adicionarSet(colunaDescricao, descricaoSanitizada);
+  }
+
+  if (fotoAcao === 'atualizar') {
+    if (colunas.has('foto_usuario')) {
+      adicionarSet('foto_usuario', fotoBuffer);
+    } else {
+      console.warn('Foto de perfil enviada, mas coluna foto_usuario não existe na tabela.');
+    }
+  } else if (fotoAcao === 'remover' && colunas.has('foto_usuario')) {
+    updates.push('foto_usuario = NULL');
+  }
+
+  if (!updates.length) {
+    return res.json(formatarUsuarioDetalhado(usuarioAtual));
+  }
+
+  if (colunas.has('ultima_alteracao')) {
+    updates.push('ultima_alteracao = NOW()');
+  }
+  if (colunas.has('ultima_alteracao_em')) {
+    updates.push('ultima_alteracao_em = NOW()');
+  }
+  if (colunas.has('ultima_atividade_em')) {
+    updates.push('ultima_atividade_em = NOW()');
+  }
+  if (colunas.has('ultima_acao_em')) {
+    updates.push('ultima_acao_em = NOW()');
+  }
+
+  valores.push(usuarioId);
+
+  let atualizado;
+  try {
+    const { rows } = await pool.query(
+      `UPDATE usuarios SET ${updates.join(', ')} WHERE id = $${valores.length} RETURNING *`,
+      valores
+    );
+    atualizado = rows[0];
+  } catch (err) {
+    console.error('Erro ao atualizar dados do usuário logado:', err);
+    return res.status(500).json({ error: 'Erro ao atualizar dados do usuário.' });
+  }
+
+  try {
+    await atualizarCacheLogin(usuarioId, atualizado);
+  } catch (err) {
+    console.error('Falha ao atualizar cache de login após alteração de perfil:', err);
+  }
+
+  return res.json(formatarUsuarioDetalhado(atualizado));
+});
+
+router.post('/me/email-confirmation', autenticarUsuario, async (req, res) => {
+  const usuarioId = req.usuarioAutenticadoId;
+  let usuario;
+  try {
+    usuario = await carregarUsuarioRaw(usuarioId);
+  } catch (err) {
+    console.error('Erro ao carregar usuário para confirmação de e-mail:', err);
+    return res.status(500).json({ error: 'Erro ao carregar dados do usuário.' });
+  }
+
+  if (!usuario) {
+    return res.status(404).json({ error: 'Usuário não encontrado' });
+  }
+
+  const corpo = req.body && typeof req.body === 'object' ? req.body : {};
+  let novoEmail;
+  try {
+    novoEmail = sanitizeEmail(getFirstDefined(corpo, ['email', 'novoEmail', 'novo_email']));
+  } catch (err) {
+    return res.status(400).json({ error: err.message });
+  }
+
+  const emailAtual = typeof usuario.email === 'string' ? usuario.email.trim().toLowerCase() : '';
+  if (novoEmail === emailAtual) {
+    return res.status(400).json({ error: 'Informe um e-mail diferente do atual.' });
+  }
+
+  try {
+    const existente = await pool.query(
+      'SELECT id FROM usuarios WHERE lower(email) = $1 AND id <> $2',
+      [novoEmail, usuarioId]
+    );
+    if (existente.rows.length > 0) {
+      return res.status(409).json({ error: 'E-mail já está em uso por outro usuário.' });
+    }
+  } catch (err) {
+    console.error('Erro ao verificar existência de e-mail:', err);
+    return res.status(500).json({ error: 'Erro ao validar o novo e-mail.' });
+  }
+
+  try {
+    await ensureEmailChangeTable();
+  } catch (err) {
+    return res.status(500).json({ error: 'Erro ao preparar confirmação de e-mail.' });
+  }
+
+  const token = crypto.randomBytes(32).toString('hex');
+  const expiraEm = new Date(Date.now() + EMAIL_CONFIRMATION_TTL_MS);
+
+  try {
+    await pool.query(
+      `INSERT INTO usuarios_confirmacoes_email (usuario_id, email, token, expira_em, criado_em, confirmado_em, cancelado_em)
+         VALUES ($1, $2, $3, $4, NOW(), NULL, NULL)
+       ON CONFLICT (usuario_id)
+         DO UPDATE SET email = EXCLUDED.email,
+                       token = EXCLUDED.token,
+                       expira_em = EXCLUDED.expira_em,
+                       criado_em = NOW(),
+                       confirmado_em = NULL,
+                       cancelado_em = NULL`,
+      [usuarioId, novoEmail, token, expiraEm]
+    );
+  } catch (err) {
+    console.error('Erro ao registrar solicitação de novo e-mail:', err);
+    return res.status(500).json({ error: 'Erro ao registrar solicitação de novo e-mail.' });
+  }
+
+  try {
+    const colunas = await getUsuarioColumns();
+    const atualizacoes = [];
+    if (colunas.has('email_confirmado')) atualizacoes.push('email_confirmado = false');
+    if (colunas.has('email_confirmado_em')) atualizacoes.push('email_confirmado_em = NULL');
+    if (atualizacoes.length) {
+      if (colunas.has('ultima_alteracao')) atualizacoes.push('ultima_alteracao = NOW()');
+      if (colunas.has('ultima_alteracao_em')) atualizacoes.push('ultima_alteracao_em = NOW()');
+      await pool.query(`UPDATE usuarios SET ${atualizacoes.join(', ')} WHERE id = $1`, [usuarioId]);
+    }
+  } catch (err) {
+    console.error('Falha ao atualizar flags de confirmação do usuário:', err);
+  }
+
+  try {
+    await sendEmailChangeConfirmation({
+      to: novoEmail,
+      nome: usuario.nome,
+      token,
+      emailAtual: usuario.email
+    });
+  } catch (err) {
+    console.error('sendEmailChangeConfirmation error', err);
+  }
+
+  return res.json({
+    message: 'Enviamos um link para o novo e-mail. Confirme o endereço para concluir a alteração.',
+    expiraEm: expiraEm.toISOString()
+  });
+});
+
+async function confirmarAlteracaoEmail(req, res) {
+  const token = extrairToken(req);
+  if (!token) {
+    return responder(req, res, 400, 'Token inválido', 'Token de confirmação não informado.');
+  }
+
+  try {
+    await ensureEmailChangeTable();
+  } catch (err) {
+    return responder(req, res, 500, 'Erro interno', 'Não foi possível validar o token informado.');
+  }
+
+  try {
+    const { rows } = await pool.query(
+      `SELECT c.usuario_id, c.email AS novo_email, c.expira_em, u.nome, u.email
+         FROM usuarios_confirmacoes_email c
+         JOIN usuarios u ON u.id = c.usuario_id
+        WHERE c.token = $1`,
+      [token]
+    );
+
+    if (!rows.length) {
+      return responder(req, res, 404, 'Token inválido', 'Solicitação de alteração não encontrada ou já utilizada.');
+    }
+
+    const registro = rows[0];
+    const expiraEm = registro.expira_em instanceof Date ? registro.expira_em : new Date(registro.expira_em);
+    if (Number.isNaN(expiraEm.getTime()) || expiraEm.getTime() < Date.now()) {
+      return responder(req, res, 410, 'Token expirado', 'O link de confirmação expirou. Solicite uma nova alteração de e-mail.');
+    }
+
+    const colunas = await getUsuarioColumns();
+    const sets = ['email = $1'];
+    if (colunas.has('email_confirmado')) sets.push('email_confirmado = true');
+    if (colunas.has('email_confirmado_em')) sets.push('email_confirmado_em = NOW()');
+    if (colunas.has('verificado')) sets.push('verificado = true');
+    if (colunas.has('ultima_alteracao')) sets.push('ultima_alteracao = NOW()');
+    if (colunas.has('ultima_alteracao_em')) sets.push('ultima_alteracao_em = NOW()');
+
+    const { rows: atualizados } = await pool.query(
+      `UPDATE usuarios SET ${sets.join(', ')} WHERE id = $2 RETURNING *`,
+      [registro.novo_email.trim().toLowerCase(), registro.usuario_id]
+    );
+
+    const usuarioAtualizado = atualizados[0];
+
+    await pool.query(
+      `UPDATE usuarios_confirmacoes_email
+          SET confirmado_em = NOW(), token = NULL
+        WHERE usuario_id = $1`,
+      [registro.usuario_id]
+    );
+
+    try {
+      await atualizarCacheLogin(registro.usuario_id, usuarioAtualizado);
+    } catch (err) {
+      console.error('Falha ao atualizar cache de login após confirmação de novo e-mail:', err);
+    }
+
+    return responder(
+      req,
+      res,
+      200,
+      'E-mail atualizado',
+      'Seu novo e-mail foi confirmado com sucesso.',
+      { usuario: formatarUsuarioDetalhado(usuarioAtualizado) }
+    );
+  } catch (err) {
+    console.error('Erro ao confirmar novo e-mail:', err);
+    return responder(req, res, 500, 'Erro interno', 'Não foi possível confirmar o novo e-mail.');
+  }
+}
+
+router.get('/confirm-email', confirmarAlteracaoEmail);
 
 // GET /api/usuarios/lista
 router.get('/lista', async (_req, res) => {
@@ -178,7 +1015,14 @@ router.patch('/:id/status', async (req, res) => {
       return res.status(404).json({ error: 'Usuário não encontrado' });
     }
 
-    const usuario = formatarUsuario(result.rows[0]);
+    const linhaAtualizada = result.rows[0];
+    try {
+      await atualizarCacheLogin(linhaAtualizada.id, linhaAtualizada);
+    } catch (err) {
+      console.error('Falha ao atualizar cache de login após alteração de status:', err);
+    }
+
+    const usuario = formatarUsuario(linhaAtualizada);
 
     res.json(usuario);
   } catch (err) {
@@ -242,6 +1086,12 @@ async function confirmarEmail(req, res) {
     );
 
     const usuarioAtualizado = atualizado.rows[0];
+
+    try {
+      await atualizarCacheLogin(usuarioAtualizado.id, usuarioAtualizado);
+    } catch (err) {
+      console.error('Falha ao atualizar cache de login após confirmação de e-mail:', err);
+    }
 
     try {
       await sendSupAdminReviewNotification({
@@ -320,6 +1170,12 @@ async function reportarEmailIncorreto(req, res) {
     );
 
     const usuarioAtualizado = atualizado.rows[0];
+
+    try {
+      await atualizarCacheLogin(usuarioAtualizado.id, usuarioAtualizado);
+    } catch (err) {
+      console.error('Falha ao atualizar cache de login após relato de e-mail incorreto:', err);
+    }
 
     try {
       await sendSupAdminReviewNotification({
@@ -409,6 +1265,12 @@ router.post('/aprovar', async (req, res) => {
     }
 
     const usuario = atualizado.rows[0];
+
+    try {
+      await atualizarCacheLogin(usuario.id, usuario);
+    } catch (err) {
+      console.error('Falha ao atualizar cache de login após aprovação de usuário:', err);
+    }
 
     try {
       await sendUserActivationNotice({ to: usuario.email, nome: usuario.nome });

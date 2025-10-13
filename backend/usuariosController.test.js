@@ -12,6 +12,11 @@ function setup() {
     email text,
     perfil text,
     senha text,
+    telefone text,
+    telefone_celular text,
+    whatsapp text,
+    descricao text,
+    foto_usuario bytea,
     verificado boolean default false,
     status text default 'nao_confirmado',
     email_confirmado boolean default false,
@@ -20,10 +25,27 @@ function setup() {
     confirmacao_token_gerado_em timestamp,
     confirmacao_token_expira_em timestamp,
     status_atualizado_em timestamp,
-    hora_ativacao timestamptz
+    hora_ativacao timestamptz,
+    ultima_alteracao timestamp,
+    ultima_alteracao_em timestamp,
+    ultima_atividade_em timestamp,
+    ultima_acao_em timestamp,
+    ultima_entrada timestamp,
+    ultima_saida timestamp
+  );`);
+  db.public.none(`CREATE TABLE usuarios_login_cache (
+    usuario_id integer primary key,
+    nome text,
+    email text,
+    perfil text,
+    telefone text,
+    telefone_celular text,
+    whatsapp text,
+    foto_usuario bytea,
+    atualizado_em timestamp
   );`);
   db.public.none(
-    "INSERT INTO usuarios (nome, email, perfil, verificado) VALUES ('Maria', 'maria@example.com', 'admin', false);"
+    "INSERT INTO usuarios (nome, email, perfil, verificado, telefone) VALUES ('Maria', 'maria@example.com', 'admin', false, '(11) 4000-0000');"
   );
 
   const { Pool } = db.adapters.createPg();
@@ -34,6 +56,17 @@ function setup() {
   require.cache[dbModulePath] = {
     exports: {
       query: (text, params) => pool.query(text, params)
+    }
+  };
+
+  const emailChangeModulePath = require.resolve('../src/email/sendEmailChangeConfirmation');
+  const originalEmailChangeModule = require.cache[emailChangeModulePath];
+  const emailChangeRequests = [];
+  require.cache[emailChangeModulePath] = {
+    exports: {
+      sendEmailChangeConfirmation: async payload => {
+        emailChangeRequests.push(payload);
+      }
     }
   };
 
@@ -60,10 +93,24 @@ function setup() {
     } else {
       delete require.cache[dbModulePath];
     }
+    if (originalEmailChangeModule) {
+      require.cache[emailChangeModulePath] = originalEmailChangeModule;
+    } else {
+      delete require.cache[emailChangeModulePath];
+    }
     delete require.cache[usuariosControllerPath];
   }
 
-  return { pool, listen, close };
+  return { pool, listen, close, emailChangeRequests };
+}
+
+async function authenticatedFetch(port, path, options = {}) {
+  const headers = new Headers(options.headers || {});
+  headers.set('authorization', 'Bearer 1');
+  return fetch(`http://127.0.0.1:${port}${path}`, {
+    ...options,
+    headers
+  });
 }
 
 test('PATCH /api/usuarios/:id/status alterna verificado e atualiza hora_ativacao', async () => {
@@ -113,6 +160,198 @@ test('PATCH /api/usuarios/:id/status alterna verificado e atualiza hora_ativacao
     assert.strictEqual(segundoRegistro.rows[0].status, 'nao_confirmado');
     assert.ok(segundoRegistro.rows[0].hora_ativacao instanceof Date);
     assert.ok(segundoRegistro.rows[0].hora_ativacao.getTime() >= primeiraAtivacao.getTime());
+  } finally {
+    await close();
+  }
+});
+
+test('GET /api/usuarios/me exige autenticação', async () => {
+  const { listen, close } = setup();
+  const port = await listen();
+  try {
+    const resposta = await fetch(`http://127.0.0.1:${port}/api/usuarios/me`);
+    assert.strictEqual(resposta.status, 401);
+  } finally {
+    await close();
+  }
+});
+
+test('GET /api/usuarios/me retorna dados do usuário autenticado', async () => {
+  const { listen, close } = setup();
+  const port = await listen();
+  try {
+    const resposta = await authenticatedFetch(port, '/api/usuarios/me');
+    assert.strictEqual(resposta.status, 200);
+    const corpo = await resposta.json();
+    assert.strictEqual(corpo.nome, 'Maria');
+    assert.strictEqual(corpo.email, 'maria@example.com');
+    assert.strictEqual(corpo.telefone, '(11) 4000-0000');
+  } finally {
+    await close();
+  }
+});
+
+test('PUT /api/usuarios/me atualiza dados textuais e foto em base64', async () => {
+  const { listen, close, pool } = setup();
+  const port = await listen();
+  const tinyPng = Buffer.from(
+    '89504E470D0A1A0A0000000D49484452000000010000000108020000009077053E0000000A49444154789C6360000002000100FFFF03000006000557BF0000000049454E44AE426082',
+    'hex'
+  );
+
+  try {
+    const resposta = await authenticatedFetch(port, '/api/usuarios/me', {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        nome: 'Maria Atualizada',
+        telefone: '(11) 98888-0000',
+        whatsapp: '(11) 91111-2222',
+        foto: `data:image/png;base64,${tinyPng.toString('base64')}`
+      })
+    });
+
+    assert.strictEqual(resposta.status, 200);
+    const corpo = await resposta.json();
+    assert.strictEqual(corpo.nome, 'Maria Atualizada');
+    assert.strictEqual(corpo.telefone, '(11) 98888-0000');
+    assert.ok(typeof corpo.fotoUsuario === 'string' && corpo.fotoUsuario.length > 10);
+
+    const registro = await pool.query(
+      'SELECT nome, telefone, whatsapp, foto_usuario FROM usuarios WHERE id = $1',
+      [1]
+    );
+    assert.strictEqual(registro.rows[0].nome, 'Maria Atualizada');
+    assert.strictEqual(registro.rows[0].telefone, '(11) 98888-0000');
+    assert.strictEqual(registro.rows[0].whatsapp, '(11) 91111-2222');
+    assert.ok(Buffer.isBuffer(registro.rows[0].foto_usuario));
+
+    const cache = await pool.query(
+      'SELECT nome, telefone, foto_usuario FROM usuarios_login_cache WHERE usuario_id = $1',
+      [1]
+    );
+    assert.strictEqual(cache.rows.length, 1);
+    assert.strictEqual(cache.rows[0].nome, 'Maria Atualizada');
+    assert.strictEqual(cache.rows[0].telefone, '(11) 98888-0000');
+    assert.ok(Buffer.isBuffer(cache.rows[0].foto_usuario));
+  } finally {
+    await close();
+  }
+});
+
+test('PUT /api/usuarios/me aceita upload multipart de foto', async () => {
+  const { listen, close, pool } = setup();
+  const port = await listen();
+  const tinyPng = Buffer.from(
+    '89504E470D0A1A0A0000000D49484452000000010000000108020000009077053E0000000A49444154789C6360000002000100FFFF03000006000557BF0000000049454E44AE426082',
+    'hex'
+  );
+
+  try {
+    const form = new FormData();
+    form.append('nome', 'Maria Upload');
+    form.append('foto', new Blob([tinyPng], { type: 'image/png' }), 'avatar.png');
+
+    const resposta = await authenticatedFetch(port, '/api/usuarios/me', {
+      method: 'PUT',
+      body: form
+    });
+
+    assert.strictEqual(resposta.status, 200);
+    const corpo = await resposta.json();
+    assert.strictEqual(corpo.nome, 'Maria Upload');
+    assert.ok(typeof corpo.fotoUsuario === 'string');
+
+    const registro = await pool.query('SELECT nome, foto_usuario FROM usuarios WHERE id = $1', [1]);
+    assert.strictEqual(registro.rows[0].nome, 'Maria Upload');
+    assert.ok(Buffer.isBuffer(registro.rows[0].foto_usuario));
+  } finally {
+    await close();
+  }
+});
+
+test('PUT /api/usuarios/me rejeita alteração direta de e-mail', async () => {
+  const { listen, close } = setup();
+  const port = await listen();
+  try {
+    const resposta = await authenticatedFetch(port, '/api/usuarios/me', {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ email: 'outra@example.com' })
+    });
+    assert.strictEqual(resposta.status, 400);
+  } finally {
+    await close();
+  }
+});
+
+test('POST /api/usuarios/me/email-confirmation cria token e envia e-mail', async () => {
+  const { listen, close, pool, emailChangeRequests } = setup();
+  const port = await listen();
+  try {
+    const resposta = await authenticatedFetch(port, '/api/usuarios/me/email-confirmation', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ email: 'novo@example.com' })
+    });
+
+    assert.strictEqual(resposta.status, 200);
+    const corpo = await resposta.json();
+    assert.ok(typeof corpo.expiraEm === 'string');
+
+    const registro = await pool.query(
+      'SELECT email, token, expira_em FROM usuarios_confirmacoes_email WHERE usuario_id = $1',
+      [1]
+    );
+    assert.strictEqual(registro.rows.length, 1);
+    assert.strictEqual(registro.rows[0].email, 'novo@example.com');
+    assert.ok(typeof registro.rows[0].token === 'string' && registro.rows[0].token.length > 10);
+    assert.ok(registro.rows[0].expira_em instanceof Date);
+
+    assert.strictEqual(emailChangeRequests.length, 1);
+    assert.strictEqual(emailChangeRequests[0].to, 'novo@example.com');
+    assert.strictEqual(emailChangeRequests[0].token, registro.rows[0].token);
+  } finally {
+    await close();
+  }
+});
+
+test('GET /api/usuarios/confirm-email aplica novo e-mail confirmado', async () => {
+  const { listen, close, pool } = setup();
+  const port = await listen();
+  try {
+    const iniciar = await authenticatedFetch(port, '/api/usuarios/me/email-confirmation', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ email: 'confirmado@example.com' })
+    });
+    assert.strictEqual(iniciar.status, 200);
+
+    const dados = await pool.query(
+      'SELECT token FROM usuarios_confirmacoes_email WHERE usuario_id = $1',
+      [1]
+    );
+    const token = dados.rows[0].token;
+    assert.ok(token);
+
+    const resposta = await fetch(`http://127.0.0.1:${port}/api/usuarios/confirm-email?token=${token}`);
+    assert.strictEqual(resposta.status, 200);
+    const corpo = await resposta.text();
+    assert.ok(corpo.includes('E-mail atualizado'));
+
+    const usuario = await pool.query('SELECT email, email_confirmado FROM usuarios WHERE id = $1', [1]);
+    assert.strictEqual(usuario.rows[0].email, 'confirmado@example.com');
+    assert.strictEqual(usuario.rows[0].email_confirmado, true);
+
+    const registro = await pool.query(
+      'SELECT token, confirmado_em FROM usuarios_confirmacoes_email WHERE usuario_id = $1',
+      [1]
+    );
+    assert.strictEqual(registro.rows[0].token, null);
+    assert.ok(registro.rows[0].confirmado_em instanceof Date);
+
+    const cache = await pool.query('SELECT email FROM usuarios_login_cache WHERE usuario_id = $1', [1]);
+    assert.strictEqual(cache.rows[0].email, 'confirmado@example.com');
   } finally {
     await close();
   }
