@@ -1,17 +1,40 @@
 :root {
-    --settings-card-bg: rgba(20, 8, 37, 0.65);
-    --settings-card-border: rgba(255, 255, 255, 0.08);
-    --settings-card-hover: rgba(255, 255, 255, 0.12);
+    --color-primary: #b6a03e;
+    --color-primary-light: #d4c169;
+    --color-primary-dark: #7f6a27;
+    --color-violet: #A394A7;
+    --color-bordeaux: #6a152c;
+    --color-bg-deep: #310017;
+    --color-surface: rgba(255, 255, 255, 0.08);
+    --color-green: #a2ffa6;
+    --color-red: #ff5858;
+    --color-blue: #8aa7f3;
+    --neutral-100: #f9fafb;
+    --neutral-500: #6b7280;
 }
 
-.modulo-container {
-    width: 100%;
-    max-width: 960px;
-    margin: 0 auto;
-    padding: 2.5rem 1.5rem 3.5rem;
+body {
+    background: linear-gradient(135deg, var(--color-bg-deep) 0%, #1a0009 100%);
+    min-height: 100vh;
+}
+
+.glass-surface {
+    background: var(--color-surface);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+}
+
+.configuracoes-module {
     display: flex;
     flex-direction: column;
-    gap: 2rem;
+    gap: clamp(1.25rem, 1vw + 0.75rem, 2rem);
+    min-height: var(--module-height);
+    padding: clamp(1.25rem, 1vw + 0.75rem, 2rem) clamp(1.5rem, 2vw, 3rem) clamp(1.75rem, 1.5rem + 1vw, 3rem);
+    box-sizing: border-box;
+}
+
+.configuracoes-module > * {
+    flex-shrink: 0;
 }
 
 .settings-header {
@@ -32,15 +55,13 @@
 }
 
 .settings-card {
-    background: var(--settings-card-bg);
-    border: 1px solid var(--settings-card-border);
     border-radius: 1rem;
-    padding: 1.75rem;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    padding: clamp(1.5rem, 1.1rem + 1vw, 2.25rem);
     box-shadow: 0 24px 64px rgba(0, 0, 0, 0.35);
     display: flex;
     flex-direction: column;
-    gap: 1.5rem;
-    backdrop-filter: blur(20px);
+    gap: clamp(1.1rem, 0.8rem + 0.8vw, 2rem);
 }
 
 .settings-card-header {
