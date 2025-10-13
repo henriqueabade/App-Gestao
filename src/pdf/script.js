@@ -1,6 +1,45 @@
 const docContainer = document.getElementById('doc-container');
 const template = document.getElementById('page-template');
 
+function ensureDocContainer() {
+  if (!docContainer) {
+    throw new Error('Container principal do documento não encontrado.');
+  }
+  return docContainer;
+}
+
+function renderStatusCard({ title, message, details, variant = 'info' }) {
+  const container = ensureDocContainer();
+  container.innerHTML = '';
+
+  const wrapper = document.createElement('div');
+  wrapper.className = `doc-status doc-status--${variant}`;
+
+  if (title) {
+    const heading = document.createElement('h1');
+    heading.textContent = title;
+    wrapper.appendChild(heading);
+  }
+
+  if (message) {
+    const paragraph = document.createElement('p');
+    paragraph.textContent = message;
+    wrapper.appendChild(paragraph);
+  }
+
+  if (details) {
+    const detailBlock = document.createElement('pre');
+    detailBlock.textContent = details;
+    wrapper.appendChild(detailBlock);
+  }
+
+  container.appendChild(wrapper);
+}
+
+function renderErrorFeedback(title, message, details) {
+  renderStatusCard({ title, message, details, variant: 'error' });
+}
+
 window.pdfBuildReady = false;
 window.pdfBuildError = null;
 window.generatedPdfMeta = null;
@@ -36,8 +75,32 @@ async function fetchApi(path, options) {
   const response = await fetch(url.toString(), options);
 
   if (!response.ok) {
-    const error = new Error(`Falha ao consultar a API (${response.status || 'desconhecido'})`);
+    let responseText = '';
+    try {
+      responseText = await response.text();
+    } catch (textErr) {
+      console.warn('Não foi possível ler a resposta de erro da API.', textErr);
+    }
+
+    let parsedMessage = '';
+    if (responseText) {
+      try {
+        const parsed = JSON.parse(responseText);
+        parsedMessage = parsed?.message || parsed?.error || '';
+      } catch (jsonErr) {
+        if (!(jsonErr instanceof SyntaxError)) {
+          console.warn('Não foi possível converter resposta de erro em JSON.', jsonErr);
+        }
+      }
+    }
+
+    const baseMessage = `Falha ao consultar a API (${response.status || 'desconhecido'})`;
+    const errorMessage = parsedMessage ? `${baseMessage}: ${parsedMessage}` : baseMessage;
+    const error = new Error(errorMessage);
     error.status = response.status;
+    if (responseText) {
+      error.details = parsedMessage ? responseText : responseText.slice(0, 1200);
+    }
     throw error;
   }
 
@@ -51,7 +114,7 @@ function createPage() {
   if (content) {
     content.innerHTML = '';
   }
-  docContainer.appendChild(clone);
+  ensureDocContainer().appendChild(clone);
   return page;
 }
 
@@ -478,11 +541,45 @@ function buildPages(context) {
   }
 }
 
+function extractHelpfulDetails(err) {
+  if (!err) return null;
+
+  if (err.details) {
+    return typeof err.details === 'string' ? err.details : JSON.stringify(err.details, null, 2);
+  }
+
+  if (err.status === 404) {
+    return 'O documento solicitado não foi encontrado. Verifique se o número informado ainda existe na base.';
+  }
+
+  if (err.status === 401 || err.status === 403) {
+    return 'A API retornou um erro de autorização. Confirme suas credenciais ou permissões.';
+  }
+
+  if (err instanceof TypeError && /fetch/i.test(err.message)) {
+    return 'Não foi possível conectar-se à API. Verifique se o servidor está em execução e acessível.';
+  }
+
+  return null;
+}
+
 async function buildDocument() {
   const params = new URLSearchParams(window.location.search);
   const id = params.get('id');
   const tipo = params.get('tipo') || 'orcamento';
-  if (!id) return;
+  if (!id) {
+    const message = 'Inclua o parâmetro "id" na URL para que o documento possa ser gerado.';
+    renderErrorFeedback('Documento não especificado', message);
+    window.pdfBuildError = message;
+    window.dispatchEvent(new CustomEvent('pdf-build-error', { detail: window.pdfBuildError }));
+    return;
+  }
+
+  renderStatusCard({
+    title: 'Gerando documento',
+    message: 'Buscando informações na API. Aguarde...',
+    variant: 'info'
+  });
   try {
     const endpoint = tipo === 'pedido' ? 'pedidos' : 'orcamentos';
     const orc = await fetchApi(`/api/${endpoint}/${id}`).then(r => r.json());
@@ -524,7 +621,7 @@ async function buildDocument() {
       formatCurrency(it.valor_total)
     ]));
 
-    docContainer.innerHTML = '';
+    ensureDocContainer().innerHTML = '';
     buildPages({
       items,
       orc,
@@ -543,6 +640,8 @@ async function buildDocument() {
     console.error('Erro ao gerar documento', err);
     window.pdfBuildError = err?.message || 'Erro ao gerar documento';
     window.dispatchEvent(new CustomEvent('pdf-build-error', { detail: window.pdfBuildError }));
+    const errorDetails = extractHelpfulDetails(err);
+    renderErrorFeedback('Erro ao gerar documento', window.pdfBuildError, errorDetails);
   }
 }
 

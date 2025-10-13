@@ -18,6 +18,55 @@ body {
   width: 100%;
 }
 
+.doc-status {
+  max-width: 720px;
+  margin: 4rem auto;
+  padding: 2.5rem 2rem;
+  border-radius: 1rem;
+  border: 1px solid #d1d5db;
+  background: #f9fafb;
+  color: #111827;
+  box-shadow: 0 10px 35px rgba(15, 23, 42, 0.08);
+  font-size: 1rem;
+  line-height: 1.6;
+  text-align: center;
+  white-space: normal;
+}
+
+.doc-status h1 {
+  margin: 0 0 1rem;
+  font-size: 1.35rem;
+  font-weight: 700;
+}
+
+.doc-status p {
+  margin: 0 0 1.25rem;
+}
+
+.doc-status pre {
+  margin: 0;
+  padding: 1rem 1.25rem;
+  background: rgba(15, 23, 42, 0.05);
+  border-radius: 0.75rem;
+  text-align: left;
+  font-size: 0.85rem;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.doc-status--info {
+  border-color: #bfdbfe;
+  background: #eff6ff;
+  color: #1e3a8a;
+}
+
+.doc-status--error {
+  border-color: #fecaca;
+  background: #fef2f2;
+  color: #991b1b;
+}
+
 /* Cada página */
 .page {
   position: relative;
