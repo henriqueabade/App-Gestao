@@ -9,10 +9,55 @@ async function fetchApi(path, options) {
 // Cache local dos usuários carregados
 let usuariosCache = [];
 let usuarioPopoverAtual = null;
+let usuarioLogado = null;
 
 const USUARIO_TRIGGER_ACTIVE_CLASS = 'usuario-detalhes-trigger--active';
 
 const ONLINE_LIMITE_MINUTOS = 5;
+
+function carregarUsuarioLogado() {
+    try {
+        const sessionStore = typeof sessionStorage !== 'undefined' ? sessionStorage : null;
+        const localStore = typeof localStorage !== 'undefined' ? localStorage : null;
+        const stored = sessionStore?.getItem('currentUser') || localStore?.getItem('user');
+        usuarioLogado = stored ? JSON.parse(stored) : null;
+    } catch (err) {
+        console.error('Erro ao recuperar usuário logado', err);
+        usuarioLogado = null;
+    }
+    return usuarioLogado;
+}
+
+function obterPermissoesUsuario() {
+    const perfil = usuarioLogado?.perfil;
+    const isSupAdmin = perfil === 'Sup Admin';
+    const isAdmin = perfil === 'Admin';
+
+    if (isSupAdmin) {
+        return {
+            podeEditar: true,
+            podeExcluir: true,
+            podeAtivar: true,
+            colunaDesabilitada: false
+        };
+    }
+
+    if (isAdmin) {
+        return {
+            podeEditar: false,
+            podeExcluir: false,
+            podeAtivar: true,
+            colunaDesabilitada: false
+        };
+    }
+
+    return {
+        podeEditar: false,
+        podeExcluir: false,
+        podeAtivar: false,
+        colunaDesabilitada: true
+    };
+}
 
 function obterPrimeiroValor(obj, chaves) {
     if (!obj) return null;
@@ -314,7 +359,15 @@ function coletarFiltros() {
     };
 }
 
+function temFiltrosAplicados() {
+    const filtros = coletarFiltros();
+    if (filtros.busca && filtros.busca.trim()) return true;
+    if (filtros.perfil && filtros.perfil.trim()) return true;
+    return Array.isArray(filtros.status) && filtros.status.length > 0;
+}
+
 function initUsuarios() {
+    carregarUsuarioLogado();
     // animação de entrada
     document.querySelectorAll('.animate-fade-in-up').forEach((el, index) => {
         setTimeout(() => {
@@ -459,6 +512,8 @@ function renderUsuarios(lista) {
     if (!tbody) return;
     fecharPopoversUsuarios();
     tbody.innerHTML = '';
+    const permissoes = obterPermissoesUsuario();
+
     lista.forEach(u => {
         const tr = document.createElement('tr');
         tr.classList.add('table-row');
@@ -538,6 +593,13 @@ function renderUsuarios(lista) {
             localUltimaAlteracao,
             especificacaoUltimaAlteracao
         );
+        const horaAtivacaoValor = obterPrimeiroValor(u, [
+            'horaAtivacaoEm',
+            'hora_ativacao',
+            'horaAtivacao'
+        ]);
+        const horaAtivacaoTexto = formatarDataHoraCompleta(horaAtivacaoValor);
+
         tr.innerHTML = `
             <td class="px-6 py-4">
                 <div class="w-9 h-9 rounded-full flex items-center justify-center text-white font-medium text-sm" style="background: var(--color-primary)">${iniciais}</div>
@@ -595,26 +657,86 @@ function renderUsuarios(lista) {
             </td>
             <td class="px-6 py-4">
                 <span class="${u.status === 'Ativo' ? 'badge-success' : 'badge-danger'} px-2 py-1 rounded-full text-xs font-medium">${u.status}</span>
-            </td>
-            <td class="px-6 py-4">
-                <div class="flex items-center gap-2">
-                    <i class="fas fa-edit w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" data-acao="editar" style="color: var(--color-primary)" title="Editar"></i>
-                    <i class="fas fa-trash w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" data-acao="remover" style="color: var(--color-red)" title="Excluir"></i>
-                </div>
             </td>`;
+
+        const actionsTd = document.createElement('td');
+        actionsTd.className = 'px-6 py-4';
+        const actionsWrapper = document.createElement('div');
+        actionsWrapper.className = 'flex items-center gap-2 usuario-acoes';
+        if (permissoes.colunaDesabilitada) {
+            actionsWrapper.classList.add('usuario-acoes--desabilitadas');
+        }
+
+        const toggleBtn = document.createElement('button');
+        toggleBtn.type = 'button';
+        toggleBtn.className = 'usuario-acao-botao usuario-acao-botao--toggle';
+        toggleBtn.dataset.usuarioId = u.id;
+        toggleBtn.dataset.usuarioStatus = u.status || 'Inativo';
+        toggleBtn.setAttribute('aria-label', `${u.status === 'Ativo' ? 'Desativar' : 'Ativar'} ${nome}`);
+        const toggleIcon = document.createElement('i');
+        toggleIcon.classList.add('fas', u.status === 'Ativo' ? 'fa-plug-circle' : 'fa-plug', 'usuario-acao-icone');
+        toggleIcon.classList.add(u.status === 'Ativo' ? 'usuario-acao-icone--on' : 'usuario-acao-icone--off');
+        toggleBtn.appendChild(toggleIcon);
+        if (horaAtivacaoTexto && horaAtivacaoTexto !== 'Sem registro') {
+            toggleBtn.title =
+                u.status === 'Ativo'
+                    ? `Desativar acesso (ativado em ${horaAtivacaoTexto})`
+                    : `Ativar acesso (última ativação em ${horaAtivacaoTexto})`;
+        } else {
+            toggleBtn.title = u.status === 'Ativo' ? 'Desativar acesso' : 'Ativar acesso';
+        }
+
+        if (!permissoes.podeAtivar || permissoes.colunaDesabilitada) {
+            toggleBtn.classList.add('usuario-acao-botao--disabled');
+            toggleBtn.disabled = true;
+        } else {
+            toggleBtn.addEventListener('click', () => alternarStatusUsuario(toggleBtn));
+        }
+
+        const editBtn = document.createElement('button');
+        editBtn.type = 'button';
+        editBtn.className = 'usuario-acao-botao';
+        editBtn.dataset.acao = 'editar';
+        editBtn.title = `Editar ${nome}`;
+        const editIcon = document.createElement('i');
+        editIcon.classList.add('fas', 'fa-edit', 'usuario-acao-icone');
+        editIcon.style.color = 'var(--color-primary)';
+        editBtn.appendChild(editIcon);
+        if (!permissoes.podeEditar || permissoes.colunaDesabilitada) {
+            editBtn.classList.add('usuario-acao-botao--disabled');
+            editBtn.disabled = true;
+            editIcon.style.color = 'rgba(255, 255, 255, 0.45)';
+        } else {
+            editBtn.addEventListener('click', () => {
+                console.log('Editar usuário');
+            });
+        }
+
+        const deleteBtn = document.createElement('button');
+        deleteBtn.type = 'button';
+        deleteBtn.className = 'usuario-acao-botao';
+        deleteBtn.dataset.acao = 'remover';
+        deleteBtn.title = `Excluir ${nome}`;
+        const deleteIcon = document.createElement('i');
+        deleteIcon.classList.add('fas', 'fa-trash', 'usuario-acao-icone');
+        deleteIcon.style.color = 'var(--color-red)';
+        deleteBtn.appendChild(deleteIcon);
+        if (!permissoes.podeExcluir || permissoes.colunaDesabilitada) {
+            deleteBtn.classList.add('usuario-acao-botao--disabled');
+            deleteBtn.disabled = true;
+            deleteIcon.style.color = 'rgba(255, 255, 255, 0.45)';
+        } else {
+            deleteBtn.addEventListener('click', () => {
+                console.log('Remover usuário');
+            });
+        }
+
+        actionsWrapper.appendChild(toggleBtn);
+        actionsWrapper.appendChild(editBtn);
+        actionsWrapper.appendChild(deleteBtn);
+        actionsTd.appendChild(actionsWrapper);
+        tr.appendChild(actionsTd);
         tbody.appendChild(tr);
-    });
-
-    document.querySelectorAll('[data-acao="editar"]').forEach(btn => {
-        btn.addEventListener('click', () => {
-            console.log('Editar usuário');
-        });
-    });
-
-    document.querySelectorAll('[data-acao="remover"]').forEach(btn => {
-        btn.addEventListener('click', () => {
-            console.log('Remover usuário');
-        });
     });
 
     prepararPopoversUsuarios();
@@ -666,6 +788,58 @@ function atualizarResumo() {
         div.textContent = `• ${count} ${label}`;
         perfisEl.appendChild(div);
     });
+}
+
+function refreshUsuariosAposAtualizacao() {
+    if (temFiltrosAplicados()) {
+        aplicarFiltros();
+    } else {
+        renderUsuarios(usuariosCache);
+    }
+    atualizarResumo();
+}
+
+async function alternarStatusUsuario(botao) {
+    if (!botao || botao.disabled) return;
+    const usuarioId = Number(botao.dataset.usuarioId);
+    if (!usuarioId) return;
+    const statusAtual = botao.dataset.usuarioStatus || 'Inativo';
+    const novoStatus = statusAtual === 'Ativo' ? 'Inativo' : 'Ativo';
+
+    botao.disabled = true;
+    botao.classList.add('usuario-acao-botao--loading');
+
+    try {
+        const resp = await fetchApi(`/api/usuarios/${usuarioId}/status`, {
+            method: 'PATCH',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ status: novoStatus })
+        });
+
+        if (!resp.ok) {
+            const texto = await resp.text();
+            throw new Error(texto || 'Falha ao atualizar status');
+        }
+
+        const atualizado = await resp.json();
+        const idx = usuariosCache.findIndex(user => Number(user.id) === Number(atualizado.id || usuarioId));
+        if (idx !== -1) {
+            usuariosCache[idx] = {
+                ...usuariosCache[idx],
+                ...atualizado
+            };
+        }
+
+        botao.dataset.usuarioStatus = atualizado.status || novoStatus;
+        refreshUsuariosAposAtualizacao();
+    } catch (err) {
+        console.error('Erro ao alternar status do usuário:', err);
+    } finally {
+        botao.disabled = false;
+        botao.classList.remove('usuario-acao-botao--loading');
+    }
 }
 
 async function carregarUsuarios() {

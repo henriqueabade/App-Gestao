@@ -124,6 +124,76 @@ body {
     transform: scale(1.1);
 }
 
+.usuario-acoes {
+    gap: 0.5rem;
+}
+
+.usuario-acao-botao {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    border: none;
+    border-radius: 8px;
+    background: transparent;
+    padding: 0;
+    cursor: pointer;
+    transition: background 150ms ease, transform 150ms ease, opacity 150ms ease;
+}
+
+.usuario-acao-botao:hover {
+    background: rgba(255, 255, 255, 0.08);
+    transform: translateY(-1px);
+}
+
+.usuario-acao-botao:focus-visible {
+    outline: 2px solid rgba(255, 255, 255, 0.4);
+    outline-offset: 2px;
+}
+
+.usuario-acao-botao--toggle .usuario-acao-icone {
+    font-size: 1.125rem;
+}
+
+.usuario-acao-icone {
+    pointer-events: none;
+    transition: color 150ms ease;
+}
+
+.usuario-acao-icone--on {
+    color: var(--color-green);
+}
+
+.usuario-acao-icone--off {
+    color: var(--color-blue);
+}
+
+.usuario-acao-botao:hover .usuario-acao-icone--on {
+    color: #8cf090;
+}
+
+.usuario-acao-botao:hover .usuario-acao-icone--off {
+    color: #b1c7ff;
+}
+
+.usuario-acao-botao--disabled,
+.usuario-acoes--desabilitadas .usuario-acao-botao {
+    opacity: 0.45;
+    cursor: not-allowed;
+    pointer-events: none;
+}
+
+.usuario-acao-botao--loading {
+    opacity: 0.6;
+    pointer-events: none;
+}
+
+.usuario-acoes--desabilitadas {
+    pointer-events: none;
+    opacity: 0.35;
+}
+
 .checkbox-custom {
     appearance: none;
     width: 16px;
