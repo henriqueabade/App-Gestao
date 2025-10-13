@@ -215,7 +215,7 @@ test('GET /api/notifications expõe alertas das regras configuradas', async () =
   );
   await pool.query(
     `INSERT INTO pedidos (id, numero, situacao, data_emissao, data_aprovacao, orcamento_id)
-     VALUES (105, 'P-005', 'Produção', NOW() - INTERVAL '1 day', NOW() - INTERVAL '1 day', $1)` ,
+     VALUES ($1, 'P-005', 'Produção', NOW() - INTERVAL '1 day', NOW() - INTERVAL '1 day', $1)` ,
     [orcamentoAprovadoComPedido.rows[0].id]
   );
 

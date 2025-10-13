@@ -59,6 +59,29 @@ async function safeQuery(sql, params = []) {
   }
 }
 
+const columnExistenceCache = new Map();
+
+async function hasColumn(tableName, columnName) {
+  const key = `${tableName}.${columnName}`;
+  if (columnExistenceCache.has(key)) {
+    return columnExistenceCache.get(key);
+  }
+
+  const { rows } = await safeQuery(
+    `SELECT 1
+       FROM information_schema.columns
+      WHERE table_schema = current_schema()
+        AND table_name = $1
+        AND column_name = $2
+      LIMIT 1`,
+    [tableName, columnName]
+  );
+
+  const exists = rows.length > 0;
+  columnExistenceCache.set(key, exists);
+  return exists;
+}
+
 function toDate(value) {
   if (!value) return null;
   const d = value instanceof Date ? value : new Date(value);
@@ -303,16 +326,37 @@ async function getBudgetNotifications() {
     [expiracaoLimite, agora]
   );
   const aprovadoLimite = daysAgo(APPROVED_WITHOUT_ORDER_DAYS);
-  const { rows: aprovados } = await safeQuery(
+  const { rows: aprovadosBase } = await safeQuery(
     `SELECT o.id, o.numero, o.data_aprovacao
        FROM orcamentos o
-       LEFT JOIN pedidos p ON p.orcamento_id = o.id OR p.id = o.id
+       LEFT JOIN pedidos p ON p.id = o.id
       WHERE o.situacao::text ILIKE 'aprovado%'
         AND o.data_aprovacao IS NOT NULL
         AND o.data_aprovacao <= $1
         AND p.id IS NULL`,
     [aprovadoLimite]
   );
+
+  let aprovados = aprovadosBase;
+  if (aprovados.length && (await hasColumn('pedidos', 'orcamento_id'))) {
+    const aprovadosIds = aprovados.map(row => Number(row.id)).filter(Number.isFinite);
+    if (aprovadosIds.length) {
+      const { rows: relacionados } = await safeQuery(
+        `SELECT DISTINCT orcamento_id
+           FROM pedidos
+          WHERE orcamento_id = ANY($1::int[])`,
+        [aprovadosIds]
+      );
+      if (relacionados.length) {
+        const relacionadosIds = new Set(
+          relacionados
+            .map(row => Number(row.orcamento_id))
+            .filter(Number.isFinite)
+        );
+        aprovados = aprovados.filter(row => !relacionadosIds.has(Number(row.id)));
+      }
+    }
+  }
 
   const items = [];
   for (const row of expirando) {
