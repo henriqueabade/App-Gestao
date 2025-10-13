@@ -96,6 +96,15 @@ async function ensureUsuariosSchema() {
       if (!colunas.has('email_confirmado_em')) {
         alteracoes.push("ALTER TABLE usuarios ADD COLUMN email_confirmado_em TIMESTAMPTZ");
       }
+      if (!colunas.has('aprovacao_token')) {
+        alteracoes.push('ALTER TABLE usuarios ADD COLUMN aprovacao_token TEXT');
+      }
+      if (!colunas.has('aprovacao_token_gerado_em')) {
+        alteracoes.push('ALTER TABLE usuarios ADD COLUMN aprovacao_token_gerado_em TIMESTAMPTZ');
+      }
+      if (!colunas.has('aprovacao_token_expira_em')) {
+        alteracoes.push('ALTER TABLE usuarios ADD COLUMN aprovacao_token_expira_em TIMESTAMPTZ');
+      }
       if (!colunas.has('confirmacao_token')) {
         alteracoes.push("ALTER TABLE usuarios ADD COLUMN confirmacao_token TEXT");
       }

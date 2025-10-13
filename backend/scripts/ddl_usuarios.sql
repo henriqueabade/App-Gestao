@@ -19,6 +19,9 @@ ALTER TABLE usuarios
   ADD COLUMN IF NOT EXISTS confirmacao_token_gerado_em TIMESTAMPTZ,
   ADD COLUMN IF NOT EXISTS confirmacao_token_expira_em TIMESTAMPTZ,
   ADD COLUMN IF NOT EXISTS confirmacao_token_revogado_em TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS aprovacao_token TEXT,
+  ADD COLUMN IF NOT EXISTS aprovacao_token_gerado_em TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS aprovacao_token_expira_em TIMESTAMPTZ,
   ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'nao_confirmado',
   ADD COLUMN IF NOT EXISTS status_atualizado_em TIMESTAMPTZ,
   ADD COLUMN IF NOT EXISTS permissoes JSONB NOT NULL DEFAULT '{}'::jsonb;

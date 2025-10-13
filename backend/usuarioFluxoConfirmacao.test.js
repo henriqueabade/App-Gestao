@@ -17,6 +17,9 @@ function createTable(db) {
     confirmacao boolean default false,
     email_confirmado boolean default false,
     email_confirmado_em timestamp,
+    aprovacao_token text,
+    aprovacao_token_gerado_em timestamp,
+    aprovacao_token_expira_em timestamp,
     confirmacao_token text,
     confirmacao_token_gerado_em timestamp,
     confirmacao_token_expira_em timestamp,
@@ -186,7 +189,7 @@ test('GET /api/usuarios/confirmar-email valida token e atualiza status', async (
       assert.ok(corpo.includes('Confirmação registrada'));
 
       const registro = await pool.query(
-        'SELECT confirmacao, email_confirmado, status, confirmacao_token FROM usuarios WHERE email = $1',
+        'SELECT confirmacao, email_confirmado, status, confirmacao_token, aprovacao_token FROM usuarios WHERE email = $1',
         ['joana@example.com']
       );
       const usuario = registro.rows[0];
@@ -194,9 +197,11 @@ test('GET /api/usuarios/confirmar-email valida token e atualiza status', async (
       assert.strictEqual(usuario.email_confirmado, true);
       assert.strictEqual(usuario.status, 'aguardando_aprovacao');
       assert.strictEqual(usuario.confirmacao_token, null);
+      assert.ok(typeof usuario.aprovacao_token === 'string' && usuario.aprovacao_token.length > 20);
 
       assert.strictEqual(supAdminEmails.length, 1);
       assert.strictEqual(supAdminEmails[0].usuarioEmail, 'joana@example.com');
+      assert.strictEqual(supAdminEmails[0].tokenAprovacao, usuario.aprovacao_token);
     } finally {
       await close();
     }
@@ -225,7 +230,7 @@ test('GET /api/usuarios/reportar-email-incorreto revoga token e alerta Sup Admin
       assert.ok(corpo.includes('Relato registrado'));
 
       const registro = await pool.query(
-        'SELECT confirmacao, email_confirmado, status, confirmacao_token FROM usuarios WHERE email = $1',
+        'SELECT confirmacao, email_confirmado, status, confirmacao_token, aprovacao_token FROM usuarios WHERE email = $1',
         ['carlos@example.com']
       );
       const usuario = registro.rows[0];
@@ -233,9 +238,51 @@ test('GET /api/usuarios/reportar-email-incorreto revoga token e alerta Sup Admin
       assert.strictEqual(usuario.email_confirmado, false);
       assert.strictEqual(usuario.status, 'nao_confirmado');
       assert.strictEqual(usuario.confirmacao_token, null);
+      assert.strictEqual(usuario.aprovacao_token, null);
 
       assert.strictEqual(supAdminEmails.length, 1);
       assert.strictEqual(supAdminEmails[0].usuarioEmail, 'carlos@example.com');
+      assert.strictEqual(supAdminEmails[0].tokenAprovacao, undefined);
+    } finally {
+      await close();
+    }
+  } finally {
+    await cleanup();
+  }
+});
+
+test('GET /api/usuarios/aprovar com token ativa usuário automaticamente', async () => {
+  const { pool, cleanup, activationEmails } = setupEnvironment();
+  try {
+    await pool.query(
+      `INSERT INTO usuarios (nome, email, senha, status, confirmacao, email_confirmado, aprovacao_token, aprovacao_token_expira_em)
+       VALUES ('Diego', 'diego@example.com', 'hash', 'aguardando_aprovacao', true, true, $1, $2)`,
+      ['token-aprovacao', new Date(Date.now() + 60 * 60 * 1000)]
+    );
+
+    const { listen, close } = createServer();
+    const port = await listen();
+
+    try {
+      const resposta = await fetch(`http://127.0.0.1:${port}/api/usuarios/aprovar?token=token-aprovacao`);
+      assert.strictEqual(resposta.status, 200);
+      const corpo = await resposta.text();
+      assert.ok(corpo.includes('Usuário ativado'));
+
+      const registro = await pool.query(
+        'SELECT status, verificado, confirmacao, email_confirmado, hora_ativacao, aprovacao_token FROM usuarios WHERE email = $1',
+        ['diego@example.com']
+      );
+      const usuario = registro.rows[0];
+      assert.strictEqual(usuario.status, 'ativo');
+      assert.strictEqual(usuario.verificado, true);
+      assert.strictEqual(usuario.confirmacao, true);
+      assert.strictEqual(usuario.email_confirmado, true);
+      assert.ok(usuario.hora_ativacao instanceof Date);
+      assert.strictEqual(usuario.aprovacao_token, null);
+
+      assert.strictEqual(activationEmails.length, 1);
+      assert.strictEqual(activationEmails[0].to, 'diego@example.com');
     } finally {
       await close();
     }
@@ -279,7 +326,7 @@ test('POST /api/usuarios/aprovar exige Sup Admin e envia e-mail de ativação', 
       assert.strictEqual(corpo.usuario.statusInterno, 'ativo');
 
       const registro = await pool.query(
-        'SELECT status, verificado, confirmacao, email_confirmado, hora_ativacao FROM usuarios WHERE email = $1',
+        'SELECT status, verificado, confirmacao, email_confirmado, hora_ativacao, aprovacao_token FROM usuarios WHERE email = $1',
         ['bia@example.com']
       );
       const usuario = registro.rows[0];
@@ -288,6 +335,7 @@ test('POST /api/usuarios/aprovar exige Sup Admin e envia e-mail de ativação', 
       assert.strictEqual(usuario.confirmacao, true);
       assert.strictEqual(usuario.email_confirmado, true);
       assert.ok(usuario.hora_ativacao instanceof Date);
+      assert.strictEqual(usuario.aprovacao_token, null);
 
       assert.strictEqual(activationEmails.length, 1);
       assert.strictEqual(activationEmails[0].to, 'bia@example.com');

@@ -11,6 +11,7 @@ const router = express.Router();
 
 const MAX_IMAGE_SIZE = 2 * 1024 * 1024;
 const EMAIL_CONFIRMATION_TTL_MS = 48 * 60 * 60 * 1000;
+const SUP_ADMIN_APPROVAL_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 let multer = null;
 let MulterError = null;
 let upload = null;
@@ -2230,15 +2231,39 @@ async function confirmarEmail(req, res) {
       atualizacoes.push('confirmacao_token_revogado_em = NOW()');
     }
 
+    const valoresAtualizacao = [usuario.id];
+    let placeholderIndex = 2;
+    let tokenAprovacao = null;
+
+    if (colunasTabela.has('aprovacao_token')) {
+      tokenAprovacao = crypto.randomBytes(32).toString('hex');
+      atualizacoes.push(`aprovacao_token = $${placeholderIndex}`);
+      valoresAtualizacao.push(tokenAprovacao);
+      placeholderIndex += 1;
+
+      if (colunasTabela.has('aprovacao_token_gerado_em')) {
+        atualizacoes.push(`aprovacao_token_gerado_em = $${placeholderIndex}`);
+        valoresAtualizacao.push(new Date());
+        placeholderIndex += 1;
+      }
+
+      if (colunasTabela.has('aprovacao_token_expira_em')) {
+        atualizacoes.push(`aprovacao_token_expira_em = $${placeholderIndex}`);
+        valoresAtualizacao.push(new Date(Date.now() + SUP_ADMIN_APPROVAL_TTL_MS));
+        placeholderIndex += 1;
+      }
+    }
+
     const atualizado = await pool.query(
       `UPDATE usuarios
           SET ${atualizacoes.join(', ')}
         WHERE id = $1
       RETURNING *`,
-      [usuario.id]
+      valoresAtualizacao
     );
 
     const usuarioAtualizado = atualizado.rows[0];
+    const tokenParaEmail = usuarioAtualizado?.aprovacao_token || tokenAprovacao || undefined;
 
     try {
       await atualizarCacheLogin(usuarioAtualizado.id, usuarioAtualizado);
@@ -2251,7 +2276,8 @@ async function confirmarEmail(req, res) {
         usuarioNome: usuarioAtualizado.nome,
         usuarioEmail: usuarioAtualizado.email,
         motivo: 'Usuário confirmou o e-mail.',
-        acaoRecomendada: 'Acesse o painel e realize a aprovação do cadastro.'
+        acaoRecomendada: 'Acesse o painel e realize a aprovação do cadastro.',
+        tokenAprovacao: tokenParaEmail
       });
     } catch (err) {
       console.error('sendSupAdminReviewNotification error', err);
@@ -2321,6 +2347,13 @@ async function reportarEmailIncorreto(req, res) {
     if (colunasTabela.has('confirmacao_token_revogado_em')) {
       atualizacoes.push('confirmacao_token_revogado_em = NOW()');
     }
+    if (colunasTabela.has('aprovacao_token')) atualizacoes.push('aprovacao_token = NULL');
+    if (colunasTabela.has('aprovacao_token_gerado_em')) {
+      atualizacoes.push('aprovacao_token_gerado_em = NULL');
+    }
+    if (colunasTabela.has('aprovacao_token_expira_em')) {
+      atualizacoes.push('aprovacao_token_expira_em = NULL');
+    }
 
     const atualizado = await pool.query(
       `UPDATE usuarios
@@ -2373,6 +2406,103 @@ router.get('/confirmar-email', confirmarEmail);
 router.post('/confirmar-email', confirmarEmail);
 router.get('/reportar-email-incorreto', reportarEmailIncorreto);
 router.post('/reportar-email-incorreto', reportarEmailIncorreto);
+
+router.get('/aprovar', async (req, res) => {
+  const token = typeof req.query?.token === 'string' ? req.query.token.trim() : '';
+
+  if (!token) {
+    return responder(req, res, 400, 'Token inválido', 'Token de aprovação não informado.');
+  }
+
+  try {
+    const resultado = await pool.query(
+      `SELECT id, nome, email, aprovacao_token_expira_em
+         FROM usuarios
+        WHERE aprovacao_token = $1`,
+      [token]
+    );
+
+    if (resultado.rows.length === 0) {
+      return responder(req, res, 404, 'Token inválido', 'Este link de aprovação não é mais válido.');
+    }
+
+    const usuario = resultado.rows[0];
+
+    if (usuario.aprovacao_token_expira_em) {
+      const expira =
+        usuario.aprovacao_token_expira_em instanceof Date
+          ? usuario.aprovacao_token_expira_em
+          : new Date(usuario.aprovacao_token_expira_em);
+      if (!Number.isNaN(expira.getTime()) && expira.getTime() < Date.now()) {
+        return responder(req, res, 410, 'Link expirado', 'Este link de aprovação expirou. Solicite uma nova confirmação.');
+      }
+    }
+
+    const colunas = await getUsuarioColumns();
+    const camposAtualizacao = [
+      "status = 'ativo'",
+      'verificado = true',
+      'status_atualizado_em = NOW()',
+      'hora_ativacao = NOW()',
+      'confirmacao_token = NULL'
+    ];
+    if (colunas.has('confirmacao')) camposAtualizacao.push('confirmacao = true');
+    if (colunas.has('email_confirmado')) camposAtualizacao.push('email_confirmado = true');
+    if (colunas.has('email_confirmado_em')) {
+      camposAtualizacao.push('email_confirmado_em = COALESCE(email_confirmado_em, NOW())');
+    }
+    if (colunas.has('confirmacao_token_revogado_em')) {
+      camposAtualizacao.push('confirmacao_token_revogado_em = NOW()');
+    }
+    if (colunas.has('aprovacao_token')) camposAtualizacao.push('aprovacao_token = NULL');
+    if (colunas.has('aprovacao_token_gerado_em')) {
+      camposAtualizacao.push('aprovacao_token_gerado_em = NULL');
+    }
+    if (colunas.has('aprovacao_token_expira_em')) {
+      camposAtualizacao.push('aprovacao_token_expira_em = NULL');
+    }
+
+    const atualizado = await pool.query(
+      `UPDATE usuarios
+          SET ${camposAtualizacao.join(', ')}
+        WHERE id = $1
+      RETURNING *`,
+      [usuario.id]
+    );
+
+    if (atualizado.rows.length === 0) {
+      return responder(req, res, 404, 'Usuário não encontrado', 'Não foi possível localizar o usuário para aprovação.');
+    }
+
+    const usuarioAtualizado = atualizado.rows[0];
+
+    try {
+      await atualizarCacheLogin(usuarioAtualizado.id, usuarioAtualizado);
+    } catch (err) {
+      console.error('Falha ao atualizar cache de login após aprovação automática de usuário:', err);
+    }
+
+    try {
+      if (usuarioAtualizado.email) {
+        await sendUserActivationNotice({ to: usuarioAtualizado.email, nome: usuarioAtualizado.nome });
+      }
+    } catch (err) {
+      console.error('sendUserActivationNotice error', err);
+    }
+
+    return responder(
+      req,
+      res,
+      200,
+      'Usuário ativado',
+      'O usuário foi ativado com sucesso.',
+      { usuario: formatarUsuario(usuarioAtualizado) }
+    );
+  } catch (err) {
+    console.error('Erro ao aprovar usuário com token:', err);
+    return responder(req, res, 500, 'Erro interno', 'Não foi possível aprovar o usuário.');
+  }
+});
 
 router.get('/:id', autenticarUsuario, async (req, res) => {
   const alvoId = parsePositiveInteger(req.params.id);
