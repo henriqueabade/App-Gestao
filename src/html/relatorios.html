@@ -863,71 +863,13 @@
                 <div id="relatoriosDetailView" class="relatorios-result-content hidden">
                     <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
                         <section class="lg:col-span-1">
-                            <h3 class="chart-title">Itens de Estoque</h3>
-                            <div class="space-y-2 max-h-96 overflow-y-auto">
-                                <article class="relatorios-master-item">
-                                    <p class="text-white font-medium">Parafuso 5mm</p>
-                                    <p class="text-gray-400 text-sm">Metal • 150 un</p>
-                                </article>
-                                <article class="relatorios-master-item">
-                                    <p class="text-white font-medium">Madeira Pinus 2x4</p>
-                                    <p class="text-gray-400 text-sm">Madeira • 25 m</p>
-                                </article>
-                                <article class="relatorios-master-item">
-                                    <p class="text-white font-medium">Verniz Premium</p>
-                                    <p class="text-gray-400 text-sm">Químico • ∞ L</p>
-                                </article>
-                            </div>
+                            <h3 class="chart-title">Registros</h3>
+                            <div class="space-y-2 max-h-96 overflow-y-auto" data-relatorios-master-list></div>
                         </section>
 
                         <section class="lg:col-span-2">
-                            <h3 class="chart-title">Detalhes do Item</h3>
-                            <div class="relatorios-detail-card">
-                                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                    <div>
-                                        <h4 class="detail-subtitle">Informações Gerais</h4>
-                                        <dl class="relatorios-detail-list">
-                                            <div>
-                                                <dt>Nome:</dt>
-                                                <dd>Parafuso 5mm</dd>
-                                            </div>
-                                            <div>
-                                                <dt>Categoria:</dt>
-                                                <dd>Metal</dd>
-                                            </div>
-                                            <div>
-                                                <dt>Unidade:</dt>
-                                                <dd>un</dd>
-                                            </div>
-                                            <div>
-                                                <dt>Preço:</dt>
-                                                <dd>R$ 0,25</dd>
-                                            </div>
-                                        </dl>
-                                    </div>
-                                    <div>
-                                        <h4 class="detail-subtitle">Estoque &amp; Processo</h4>
-                                        <dl class="relatorios-detail-list">
-                                            <div>
-                                                <dt>Quantidade:</dt>
-                                                <dd>150</dd>
-                                            </div>
-                                            <div>
-                                                <dt>Mínimo:</dt>
-                                                <dd>50</dd>
-                                            </div>
-                                            <div>
-                                                <dt>Processo:</dt>
-                                                <dd>Montagem</dd>
-                                            </div>
-                                            <div class="flex items-center justify-between gap-4">
-                                                <dt>Status:</dt>
-                                                <dd><span class="badge-success px-3 py-1 rounded-full text-xs font-medium">Disponível</span></dd>
-                                            </div>
-                                        </dl>
-                                    </div>
-                                </div>
-                            </div>
+                            <h3 class="chart-title">Detalhes</h3>
+                            <div class="relatorios-detail-card" data-relatorios-detail></div>
                         </section>
                     </div>
                 </div>

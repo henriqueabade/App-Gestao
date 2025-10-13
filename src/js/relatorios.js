@@ -49,6 +49,7 @@ const reportVisibleColumns = new Map();
 const COLUMN_VISIBILITY_STORAGE_PREFIX = 'relatorios-visible-columns';
 let relatoriosKpiManager = null;
 let relatoriosChartManager = null;
+let relatoriosMasterDetail = null;
 let jsPdfLoaderPromise = null;
 
 function showRelatoriosToast(message, type = 'info') {
@@ -2913,6 +2914,377 @@ function createChartManager(root, options = {}) {
     };
 }
 
+function createMasterDetailManager(root, options = {}) {
+    if (!root) return null;
+    const listRoot = root.querySelector('[data-relatorios-master-list]');
+    const detailRoot = root.querySelector('[data-relatorios-detail]');
+    if (!listRoot || !detailRoot) return null;
+
+    const { getActiveTab } = options;
+
+    const state = {
+        activeTab: null,
+        baseOrder: new Map(),
+        itemMap: new Map(),
+        selection: new Map(),
+        selectionOrder: new Map(),
+        preview: new Map()
+    };
+
+    const resolveId = (key, item, index) => {
+        const config = MASTER_DETAIL_CONFIGS[key];
+        if (config?.getId) {
+            try {
+                const candidate = config.getId(item, key);
+                if (candidate !== undefined && candidate !== null) {
+                    return String(candidate);
+                }
+            } catch (error) {
+                console.error(`Erro ao resolver identificador do item em "${key}"`, error);
+            }
+        }
+        const fallbackFields = ['id', 'uuid', 'codigo', 'numero', 'email'];
+        for (const field of fallbackFields) {
+            const value = item?.[field];
+            if (value !== undefined && value !== null && value !== '') {
+                return String(value);
+            }
+        }
+        return `${key || 'item'}-${index}`;
+    };
+
+    const normalizeSummary = (key, item) => {
+        const config = MASTER_DETAIL_CONFIGS[key];
+        if (config?.getCardSummary) {
+            try {
+                const summary = config.getCardSummary(item) || {};
+                return {
+                    title: summary.title || formatText(item?.nome ?? item?.titulo ?? item?.id ?? '', '—'),
+                    subtitle: summary.subtitle || '',
+                    badges: Array.isArray(summary.badges) ? summary.badges.filter(Boolean) : [],
+                    meta: Array.isArray(summary.meta) ? summary.meta.filter(Boolean) : []
+                };
+            } catch (error) {
+                console.error(`Erro ao montar resumo do item em "${key}"`, error, item);
+            }
+        }
+        return {
+            title: formatText(item?.nome ?? item?.titulo ?? item?.id ?? '', '—'),
+            subtitle: '',
+            badges: [],
+            meta: []
+        };
+    };
+
+    const normalizeDetail = (key, item) => {
+        const config = MASTER_DETAIL_CONFIGS[key];
+        if (config?.getDetail) {
+            try {
+                const detail = config.getDetail(item) || {};
+                return {
+                    title: detail.title || formatText(item?.nome ?? item?.titulo ?? item?.id ?? '', '—'),
+                    subtitle: detail.subtitle || '',
+                    sections: Array.isArray(detail.sections) ? detail.sections.filter(Boolean) : []
+                };
+            } catch (error) {
+                console.error(`Erro ao montar detalhes do item em "${key}"`, error, item);
+            }
+        }
+        return {
+            title: formatText(item?.nome ?? item?.titulo ?? item?.id ?? '', '—'),
+            subtitle: '',
+            sections: []
+        };
+    };
+
+    const getAvailableIds = key => {
+        const base = state.baseOrder.get(key);
+        return Array.isArray(base) ? base.filter(id => state.itemMap.get(key)?.has(id)) : [];
+    };
+
+    const renderDetail = (key, id) => {
+        if (!detailRoot || state.activeTab !== key) return;
+        const items = state.itemMap.get(key);
+        detailRoot.innerHTML = '';
+        if (!items || !items.size || !id || !items.has(id)) {
+            detailRoot.innerHTML = '<p class="relatorios-detail-placeholder">Selecione um item para visualizar os detalhes.</p>';
+            return;
+        }
+
+        const item = items.get(id);
+        const detail = normalizeDetail(key, item);
+        const sections = Array.isArray(detail.sections) ? detail.sections : [];
+
+        const sectionHtml = sections.length
+            ? sections.map(section => {
+                const rows = Array.isArray(section.rows) ? section.rows : [];
+                const rowsHtml = rows.length
+                    ? rows.map(row => {
+                        const label = escapeHtml(row?.label ?? '');
+                        const rawValue = row?.value ?? '—';
+                        const value = row?.allowHtml ? (rawValue || '—') : escapeHtml(rawValue ?? '—');
+                        return `<div><dt>${label}</dt><dd>${value}</dd></div>`;
+                    }).join('')
+                    : '<div><dt>—</dt><dd>—</dd></div>';
+                const title = section?.title ? `<h4 class="detail-subtitle">${escapeHtml(section.title)}</h4>` : '';
+                return `<div>${title}<dl class="relatorios-detail-list">${rowsHtml}</dl></div>`;
+            }).join('')
+            : '<div class="relatorios-detail-placeholder">Nenhum detalhe disponível.</div>';
+
+        detailRoot.innerHTML = `
+            <div class="space-y-6">
+                <div class="space-y-1">
+                    <h4 class="text-lg font-semibold text-white leading-tight">${detail.title}</h4>
+                    ${detail.subtitle ? `<p class="text-white/70 text-sm">${detail.subtitle}</p>` : ''}
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    ${sectionHtml}
+                </div>
+            </div>
+        `;
+    };
+
+    const buildCard = (key, id, item, { selected, active }) => {
+        const summary = normalizeSummary(key, item);
+        const article = document.createElement('article');
+        article.className = 'relatorios-master-item';
+        if (selected) {
+            article.classList.add('relatorios-master-item--selected');
+        }
+        if (active) {
+            article.classList.add('relatorios-master-item--active');
+        }
+
+        const wrapper = document.createElement('div');
+        wrapper.className = 'flex items-start gap-3';
+
+        const checkboxWrapper = document.createElement('div');
+        checkboxWrapper.className = 'pt-1';
+
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.className = 'relatorios-master-checkbox';
+        checkbox.checked = Boolean(selected);
+        checkbox.addEventListener('click', event => event.stopPropagation());
+        checkbox.addEventListener('change', () => toggleSelection(key, id, checkbox.checked));
+
+        checkboxWrapper.appendChild(checkbox);
+
+        const info = document.createElement('div');
+        info.className = 'flex-1 min-w-0';
+
+        const title = document.createElement('p');
+        title.className = 'text-white font-medium truncate';
+        title.innerHTML = summary.title || '—';
+        info.appendChild(title);
+
+        if (summary.subtitle) {
+            const subtitle = document.createElement('p');
+            subtitle.className = 'text-gray-400 text-sm truncate';
+            subtitle.innerHTML = summary.subtitle;
+            info.appendChild(subtitle);
+        }
+
+        if ((summary.badges && summary.badges.length) || (summary.meta && summary.meta.length)) {
+            const metaContainer = document.createElement('div');
+            metaContainer.className = 'flex flex-wrap items-center gap-2 mt-2';
+            (summary.badges || []).forEach(content => {
+                if (!content) return;
+                const span = document.createElement('span');
+                span.innerHTML = content;
+                metaContainer.appendChild(span);
+            });
+            (summary.meta || []).forEach(content => {
+                if (!content) return;
+                const span = document.createElement('span');
+                span.className = 'text-xs text-white/70';
+                span.innerHTML = content;
+                metaContainer.appendChild(span);
+            });
+            info.appendChild(metaContainer);
+        }
+
+        wrapper.appendChild(checkboxWrapper);
+        wrapper.appendChild(info);
+        article.appendChild(wrapper);
+
+        article.addEventListener('click', () => setPreview(key, id));
+
+        return article;
+    };
+
+    const renderList = key => {
+        if (!listRoot || state.activeTab !== key) return;
+        const items = state.itemMap.get(key);
+        const baseOrder = getAvailableIds(key);
+        if (!items || !items.size || !baseOrder.length) {
+            listRoot.innerHTML = '<p class="relatorios-master-empty">Nenhum registro disponível.</p>';
+            state.preview.set(key, null);
+            renderDetail(key, null);
+            return;
+        }
+
+        const selection = state.selection.get(key) || new Set();
+        const selectionOrder = state.selectionOrder.get(key) || [];
+        const selectedIds = selectionOrder.filter(id => selection.has(id) && items.has(id));
+        const unselectedIds = baseOrder.filter(id => !selection.has(id));
+        const ordered = selection.size ? [...selectedIds, ...unselectedIds] : baseOrder.slice();
+
+        let activeId = state.preview.get(key);
+        if (!activeId || !items.has(activeId)) {
+            activeId = selection.size ? selectedIds[0] : ordered[0];
+            state.preview.set(key, activeId ?? null);
+        }
+
+        const previousScroll = listRoot.scrollTop;
+        listRoot.innerHTML = '';
+
+        ordered.forEach(id => {
+            const item = items.get(id);
+            if (!item) return;
+            listRoot.appendChild(buildCard(key, id, item, {
+                selected: selection.has(id),
+                active: id === activeId
+            }));
+        });
+
+        listRoot.scrollTop = previousScroll;
+        renderDetail(key, activeId);
+    };
+
+    const setPreview = (key, id) => {
+        if (!id) return;
+        const items = state.itemMap.get(key);
+        if (!items || !items.has(id)) return;
+        state.preview.set(key, id);
+        if (state.activeTab === key) {
+            renderList(key);
+        }
+    };
+
+    const toggleSelection = (key, id, shouldSelect) => {
+        const items = state.itemMap.get(key);
+        if (!items || !items.has(id)) return;
+        const selection = new Set(state.selection.get(key) || []);
+        const order = Array.from(state.selectionOrder.get(key) || []);
+
+        if (shouldSelect) {
+            if (!selection.has(id)) {
+                selection.add(id);
+                order.push(id);
+            }
+        } else {
+            if (selection.has(id)) {
+                selection.delete(id);
+            }
+            const index = order.indexOf(id);
+            if (index !== -1) {
+                order.splice(index, 1);
+            }
+        }
+
+        state.selection.set(key, selection);
+        state.selectionOrder.set(key, order);
+
+        if (!selection.size) {
+            const base = getAvailableIds(key);
+            state.preview.set(key, base[0] || null);
+        } else if (!selection.has(state.preview.get(key))) {
+            state.preview.set(key, order[0] || Array.from(selection)[0] || null);
+        }
+
+        if (state.activeTab === key) {
+            renderList(key);
+        }
+    };
+
+    const setItems = (key, items = []) => {
+        const array = Array.isArray(items) ? items : [];
+        const map = new Map();
+        const order = [];
+        array.forEach((item, index) => {
+            const id = resolveId(key, item, index);
+            if (!id || map.has(id)) return;
+            map.set(id, item);
+            order.push(id);
+        });
+
+        state.baseOrder.set(key, order);
+        state.itemMap.set(key, map);
+
+        const selection = state.selection.get(key) || new Set();
+        const selectionOrder = state.selectionOrder.get(key) || [];
+        const available = new Set(order);
+        const nextSelection = new Set();
+        const nextOrder = [];
+        selectionOrder.forEach(id => {
+            if (available.has(id) && selection.has(id)) {
+                nextSelection.add(id);
+                nextOrder.push(id);
+            }
+        });
+        state.selection.set(key, nextSelection);
+        state.selectionOrder.set(key, nextOrder);
+
+        if (!nextSelection.size) {
+            state.preview.set(key, order[0] || null);
+        } else if (!nextSelection.has(state.preview.get(key))) {
+            state.preview.set(key, nextOrder[0] || Array.from(nextSelection)[0] || null);
+        }
+
+        if (state.activeTab === key) {
+            renderList(key);
+        }
+    };
+
+    const setActiveTab = (key, options = {}) => {
+        if (!key) {
+            state.activeTab = null;
+            listRoot.innerHTML = '<p class="relatorios-master-empty">Nenhum registro disponível.</p>';
+            detailRoot.innerHTML = '<p class="relatorios-detail-placeholder">Selecione um item para visualizar os detalhes.</p>';
+            return;
+        }
+        state.activeTab = key;
+        if (options?.resetSelection) {
+            state.selection.delete(key);
+            state.selectionOrder.delete(key);
+            const base = state.baseOrder.get(key) || [];
+            state.preview.set(key, base[0] || null);
+        }
+        if (!state.baseOrder.has(key)) {
+            state.baseOrder.set(key, []);
+            state.itemMap.set(key, new Map());
+        }
+        if (!state.preview.has(key)) {
+            const base = state.baseOrder.get(key) || [];
+            state.preview.set(key, base[0] || null);
+        }
+        renderList(key);
+    };
+
+    return {
+        setItems,
+        setActiveTab,
+        resetTab: key => {
+            state.baseOrder.delete(key);
+            state.itemMap.delete(key);
+            state.selection.delete(key);
+            state.selectionOrder.delete(key);
+            state.preview.delete(key);
+            if (state.activeTab === key) {
+                listRoot.innerHTML = '<p class="relatorios-master-empty">Nenhum registro disponível.</p>';
+                detailRoot.innerHTML = '<p class="relatorios-detail-placeholder">Selecione um item para visualizar os detalhes.</p>';
+            }
+        },
+        refresh: key => {
+            const target = key || state.activeTab || (typeof getActiveTab === 'function' ? getActiveTab() : null);
+            if (target) {
+                renderList(target);
+            }
+        }
+    };
+}
+
 function computeMateriaPrimaKpis(items = []) {
     const list = Array.isArray(items) ? items : [];
     const total = list.length;
@@ -3257,6 +3629,74 @@ function computeUsuariosKpis(items = []) {
     ];
 }
 
+const MASTER_DETAIL_CONFIGS = {};
+
+MASTER_DETAIL_CONFIGS['materia-prima'] = {
+    getId: item => item?.id ?? item?.uuid ?? item?.codigo ?? null,
+    getCardSummary: item => {
+        const nome = formatText(item?.nome, '—');
+        const categoria = item?.categoria ? formatText(item.categoria, '—') : '';
+        const unidade = item?.unidade ? formatText(item.unidade, '—') : '';
+        const quantidadeRaw = item?.infinito
+            ? '∞'
+            : formatNumber(item?.quantidade, { fallback: '0' });
+        const quantidade = unidade
+            ? `${escapeHtml(quantidadeRaw)} ${unidade}`
+            : escapeHtml(quantidadeRaw);
+        const subtitleParts = [];
+        if (categoria) subtitleParts.push(categoria);
+        subtitleParts.push(quantidade);
+        const status = getRawMaterialStatus(item);
+        return {
+            title: nome,
+            subtitle: subtitleParts.join(' • '),
+            badges: [createBadge(status.label, status.variant, { size: 'sm' })]
+        };
+    },
+    getDetail: item => {
+        const status = getRawMaterialStatus(item);
+        const precoRaw = item?.preco_unitario ?? item?.precoUnitario;
+        const unidade = item?.unidade ? formatText(item.unidade, '—') : '';
+        const quantidadeRaw = item?.infinito
+            ? '∞'
+            : formatNumber(item?.quantidade, { fallback: '0' });
+        const quantidade = unidade
+            ? `${escapeHtml(quantidadeRaw)} ${unidade}`
+            : escapeHtml(quantidadeRaw);
+        const minimo = getStockMinimum(item);
+        const minimoValue = minimo !== null && minimo !== undefined
+            ? escapeHtml(formatNumber(minimo, { fallback: '—' }))
+            : '—';
+        const precoValue = precoRaw !== undefined && precoRaw !== null
+            ? escapeHtml(formatCurrency(precoRaw))
+            : '—';
+        return {
+            title: formatText(item?.nome, '—'),
+            subtitle: item?.categoria ? formatText(item.categoria, '—') : '',
+            sections: [
+                {
+                    title: 'Informações Gerais',
+                    rows: [
+                        { label: 'Nome', value: formatText(item?.nome, '—'), allowHtml: true },
+                        { label: 'Categoria', value: item?.categoria ? formatText(item.categoria, '—') : '—', allowHtml: true },
+                        { label: 'Unidade', value: unidade || '—', allowHtml: true },
+                        { label: 'Processo', value: item?.processo ? formatText(item.processo, '—') : '—', allowHtml: true }
+                    ]
+                },
+                {
+                    title: 'Estoque & Preço',
+                    rows: [
+                        { label: 'Quantidade', value: quantidade, allowHtml: true },
+                        { label: 'Mínimo', value: minimoValue, allowHtml: true },
+                        { label: 'Preço Unitário', value: precoValue, allowHtml: true },
+                        { label: 'Status', value: createBadge(status.label, status.variant, { size: 'sm' }), allowHtml: true }
+                    ]
+                }
+            ]
+        };
+    }
+};
+
 const REPORT_CONFIGS = {};
 
 REPORT_CONFIGS['materia-prima'] = {
@@ -3301,6 +3741,66 @@ REPORT_CONFIGS['materia-prima'] = {
                 <td data-column-key="status" class="px-6 py-4 whitespace-nowrap text-left text-sm">${statusBadge}</td>
             </tr>
         `;
+    }
+};
+
+MASTER_DETAIL_CONFIGS.produtos = {
+    getId: item => item?.id ?? item?.codigo ?? item?.uuid ?? null,
+    getCardSummary: item => {
+        const nome = formatText(item?.nome, '—');
+        const codigo = item?.codigo ? formatText(item.codigo, '—') : '';
+        const precoVenda = item?.preco_venda !== undefined && item?.preco_venda !== null
+            ? escapeHtml(formatCurrency(item.preco_venda))
+            : '';
+        const estoque = escapeHtml(formatNumber(item?.quantidade_total, { fallback: '0' }));
+        const statusLabel = item?.status ? String(item.status) : '';
+        const badges = [];
+        if (statusLabel) {
+            badges.push(createBadge(statusLabel, getProductStatusVariant(item?.status), { size: 'sm' }));
+        }
+        return {
+            title: nome,
+            subtitle: [codigo, precoVenda].filter(Boolean).join(' • '),
+            badges,
+            meta: [`Estoque: ${estoque}`]
+        };
+    },
+    getDetail: item => {
+        const precoVenda = item?.preco_venda !== undefined && item?.preco_venda !== null
+            ? escapeHtml(formatCurrency(item.preco_venda))
+            : '—';
+        const margem = Number.isFinite(Number(item?.pct_markup))
+            ? escapeHtml(formatPercent(Number(item.pct_markup)))
+            : '—';
+        const estoque = escapeHtml(formatNumber(item?.quantidade_total, { fallback: '0' }));
+        const statusLabel = item?.status ? String(item.status) : '';
+        const statusBadge = statusLabel
+            ? createBadge(statusLabel, getProductStatusVariant(item?.status), { size: 'sm' })
+            : '—';
+        const colecao = item?.colecao ?? item?.categoria ?? item?.linha ?? '';
+        return {
+            title: formatText(item?.nome, '—'),
+            subtitle: item?.codigo ? formatText(item.codigo, '—') : '',
+            sections: [
+                {
+                    title: 'Informações Gerais',
+                    rows: [
+                        { label: 'Código', value: item?.codigo ? formatText(item.codigo, '—') : '—', allowHtml: true },
+                        { label: 'Nome', value: formatText(item?.nome, '—'), allowHtml: true },
+                        { label: 'Coleção', value: colecao ? formatText(colecao, '—') : '—', allowHtml: true },
+                        { label: 'Status', value: statusBadge, allowHtml: true }
+                    ]
+                },
+                {
+                    title: 'Estoque & Preço',
+                    rows: [
+                        { label: 'Quantidade Total', value: estoque, allowHtml: true },
+                        { label: 'Preço de Venda', value: precoVenda, allowHtml: true },
+                        { label: 'Margem', value: margem, allowHtml: true }
+                    ]
+                }
+            ]
+        };
     }
 };
 
@@ -3356,6 +3856,65 @@ REPORT_CONFIGS.produtos = {
     }
 };
 
+MASTER_DETAIL_CONFIGS.clientes = {
+    getId: item => item?.id ?? item?.id_cliente ?? item?.clienteId ?? item?.cnpj ?? null,
+    getCardSummary: item => {
+        const nome = formatText(item?.nome_fantasia ?? item?.cliente, '—');
+        const cnpj = item?.cnpj ? formatText(item.cnpj, '—') : '';
+        const locationParts = [item?.cidade, item?.estado, item?.pais]
+            .map(value => (value ? formatText(value, '—') : ''))
+            .filter(Boolean);
+        const location = locationParts.join(' / ');
+        const owner = item?.dono_cliente ?? item?.dono ?? '';
+        const statusLabel = item?.status_cliente ? String(item.status_cliente) : '';
+        const badges = statusLabel
+            ? [createBadge(statusLabel, getClientStatusVariant(item?.status_cliente), { size: 'sm' })]
+            : [];
+        const subtitle = [cnpj, location].filter(Boolean).join(' • ');
+        const meta = owner ? [`Responsável: ${escapeHtml(String(owner))}`] : [];
+        return {
+            title: nome,
+            subtitle,
+            badges,
+            meta
+        };
+    },
+    getDetail: item => {
+        const nome = formatText(item?.nome_fantasia ?? item?.cliente, '—');
+        const statusLabel = item?.status_cliente ? String(item.status_cliente) : '';
+        const owner = item?.dono_cliente ?? item?.dono ?? '';
+        const telefone = item?.telefone_principal ?? item?.telefone ?? item?.telefone1 ?? item?.telefone_comercial ?? '';
+        return {
+            title: nome,
+            subtitle: item?.cnpj ? formatText(item.cnpj, '—') : '',
+            sections: [
+                {
+                    title: 'Dados da Empresa',
+                    rows: [
+                        { label: 'Nome Fantasia', value: nome, allowHtml: true },
+                        { label: 'CNPJ', value: item?.cnpj ? formatText(item.cnpj, '—') : '—', allowHtml: true },
+                        { label: 'País', value: item?.pais ? formatText(item.pais, '—') : '—', allowHtml: true },
+                        { label: 'Estado', value: item?.estado ? formatText(item.estado, '—') : '—', allowHtml: true }
+                    ]
+                },
+                {
+                    title: 'Relacionamento',
+                    rows: [
+                        { label: 'Responsável', value: owner ? escapeHtml(String(owner)) : '—', allowHtml: true },
+                        {
+                            label: 'Status',
+                            value: statusLabel ? createBadge(statusLabel, getClientStatusVariant(item?.status_cliente), { size: 'sm' }) : '—',
+                            allowHtml: true
+                        },
+                        { label: 'E-mail', value: item?.email ? formatText(item.email, '—') : '—', allowHtml: true },
+                        { label: 'Telefone', value: telefone ? formatText(telefone, '—') : '—', allowHtml: true }
+                    ]
+                }
+            ]
+        };
+    }
+};
+
 REPORT_CONFIGS.clientes = {
     columns: [
         { key: 'nome', label: 'Nome' },
@@ -3393,6 +3952,62 @@ REPORT_CONFIGS.clientes = {
                 <td data-column-key="dono" class="px-6 py-4 whitespace-normal break-words text-left text-sm text-gray-300">${dono}</td>
             </tr>
         `;
+    }
+};
+
+MASTER_DETAIL_CONFIGS.contatos = {
+    getId: item => item?.id ?? item?.id_contato ?? item?.uuid ?? null,
+    getCardSummary: item => {
+        const nome = formatText(item?.nome, '—');
+        const empresa = item?.cliente ? formatText(item.cliente, '—') : '';
+        const cargoLabel = item?.cargo ? String(item.cargo) : '';
+        const statusLabel = item?.status_cliente ? String(item.status_cliente) : '';
+        const badges = [];
+        if (cargoLabel) {
+            badges.push(createBadge(cargoLabel, getContactTypeVariant(item?.cargo), { size: 'sm' }));
+        }
+        if (statusLabel) {
+            badges.push(createBadge(statusLabel, getClientStatusVariant(statusLabel), { size: 'sm' }));
+        }
+        const celular = item?.telefone_celular ? formatPhone(item.telefone_celular) : '';
+        const meta = celular ? [`Celular: ${celular}`] : [];
+        return {
+            title: nome,
+            subtitle: empresa,
+            badges,
+            meta
+        };
+    },
+    getDetail: item => {
+        const statusLabel = item?.status_cliente ? String(item.status_cliente) : '';
+        const responsavel = item?.dono ?? item?.dono_cliente ?? '';
+        return {
+            title: formatText(item?.nome, '—'),
+            subtitle: item?.cliente ? formatText(item.cliente, '—') : '',
+            sections: [
+                {
+                    title: 'Contato',
+                    rows: [
+                        { label: 'E-mail', value: item?.email ? formatText(item.email, '—') : '—', allowHtml: true },
+                        { label: 'Celular', value: formatPhone(item?.telefone_celular), allowHtml: true },
+                        { label: 'Telefone', value: formatPhone(item?.telefone_fixo), allowHtml: true }
+                    ]
+                },
+                {
+                    title: 'Relacionamento',
+                    rows: [
+                        { label: 'Empresa', value: item?.cliente ? formatText(item.cliente, '—') : '—', allowHtml: true },
+                        { label: 'Cargo', value: item?.cargo ? formatText(item.cargo, '—') : '—', allowHtml: true },
+                        { label: 'Responsável', value: responsavel ? escapeHtml(String(responsavel)) : '—', allowHtml: true },
+                        {
+                            label: 'Status do Cliente',
+                            value: statusLabel ? createBadge(statusLabel, getClientStatusVariant(statusLabel), { size: 'sm' }) : '—',
+                            allowHtml: true
+                        }
+                    ]
+                }
+            ]
+        };
     }
 };
 
@@ -3442,6 +4057,55 @@ REPORT_CONFIGS.contatos = {
                 <td data-column-key="email" class="px-6 py-4 whitespace-normal break-words text-left text-sm text-gray-300">${email}</td>
             </tr>
         `;
+    }
+};
+
+MASTER_DETAIL_CONFIGS.prospeccoes = {
+    getId: item => item?.id ?? item?.clienteId ?? item?.uuid ?? item?.email ?? null,
+    getCardSummary: item => {
+        const nome = formatText(item?.nome, '—');
+        const empresa = item?.empresa ? formatText(item.empresa, '—') : '';
+        const statusLabel = item?.status ? String(item.status) : '';
+        const badges = statusLabel ? [createBadge(statusLabel, getClientStatusVariant(statusLabel), { size: 'sm' })] : [];
+        const responsavel = item?.responsavel ? `Responsável: ${escapeHtml(String(item.responsavel))}` : '';
+        const meta = responsavel ? [responsavel] : [];
+        return {
+            title: nome,
+            subtitle: empresa,
+            badges,
+            meta
+        };
+    },
+    getDetail: item => {
+        const statusLabel = item?.status ? String(item.status) : '';
+        const responsavel = item?.responsavel ? escapeHtml(String(item.responsavel)) : '—';
+        return {
+            title: formatText(item?.nome, '—'),
+            subtitle: item?.empresa ? formatText(item.empresa, '—') : '',
+            sections: [
+                {
+                    title: 'Lead',
+                    rows: [
+                        { label: 'Nome', value: formatText(item?.nome, '—'), allowHtml: true },
+                        { label: 'Empresa', value: item?.empresa ? formatText(item.empresa, '—') : '—', allowHtml: true },
+                        { label: 'E-mail', value: item?.email ? formatText(item.email, '—') : '—', allowHtml: true },
+                        { label: 'Telefone', value: formatPhone(item?.telefone), allowHtml: true },
+                        { label: 'Celular', value: formatPhone(item?.celular), allowHtml: true }
+                    ]
+                },
+                {
+                    title: 'Status',
+                    rows: [
+                        { label: 'Responsável', value: responsavel, allowHtml: true },
+                        {
+                            label: 'Status',
+                            value: statusLabel ? createBadge(statusLabel, getClientStatusVariant(statusLabel), { size: 'sm' }) : '—',
+                            allowHtml: true
+                        }
+                    ]
+                }
+            ]
+        };
     }
 };
 
@@ -3515,6 +4179,66 @@ REPORT_CONFIGS.prospeccoes = {
     }
 };
 
+MASTER_DETAIL_CONFIGS.orcamentos = {
+    getId: item => item?.id ?? item?.numero ?? item?.codigo ?? null,
+    getCardSummary: item => {
+        const codigo = formatText(item?.numero ?? item?.codigo, '—');
+        const cliente = item?.cliente ? formatText(item.cliente, '—') : '';
+        const valor = item?.valor_final !== undefined && item?.valor_final !== null
+            ? escapeHtml(formatCurrency(item.valor_final))
+            : '';
+        const statusLabel = item?.situacao ? String(item.situacao) : '';
+        const badges = statusLabel ? [createBadge(statusLabel, getQuoteStatusVariant(statusLabel), { size: 'sm' })] : [];
+        const meta = valor ? [`Valor: ${valor}`] : [];
+        return {
+            title: codigo,
+            subtitle: cliente,
+            badges,
+            meta
+        };
+    },
+    getDetail: item => {
+        const condicoesRaw = getPaymentConditionLabels(item);
+        const condicoes = condicoesRaw.length
+            ? escapeHtml(condicoesRaw.map(label => String(label).trim()).filter(Boolean).join(', '))
+            : '';
+        const parcelas = Number.parseInt(item?.parcelas, 10);
+        const parcelasLabel = Number.isFinite(parcelas) && parcelas > 1 ? `${parcelas}x` : 'À vista';
+        const valor = item?.valor_final !== undefined && item?.valor_final !== null
+            ? escapeHtml(formatCurrency(item.valor_final))
+            : '—';
+        const statusLabel = item?.situacao ? String(item.situacao) : '';
+        const condicaoDisplay = condicoes || escapeHtml(parcelasLabel);
+        return {
+            title: formatText(item?.numero ?? item?.codigo, '—'),
+            subtitle: item?.cliente ? formatText(item.cliente, '—') : '',
+            sections: [
+                {
+                    title: 'Detalhes do Orçamento',
+                    rows: [
+                        { label: 'Código', value: formatText(item?.numero ?? item?.codigo, '—'), allowHtml: true },
+                        { label: 'Cliente', value: item?.cliente ? formatText(item.cliente, '—') : '—', allowHtml: true },
+                        { label: 'Data', value: escapeHtml(formatDate(item?.data_emissao)), allowHtml: true },
+                        { label: 'Condição', value: condicaoDisplay, allowHtml: true },
+                        { label: 'Parcelas', value: escapeHtml(parcelasLabel), allowHtml: true },
+                        { label: 'Valor Total', value: valor, allowHtml: true }
+                    ]
+                },
+                {
+                    title: 'Status',
+                    rows: [
+                        {
+                            label: 'Situação',
+                            value: statusLabel ? createBadge(statusLabel, getQuoteStatusVariant(statusLabel), { size: 'sm' }) : '—',
+                            allowHtml: true
+                        }
+                    ]
+                }
+            ]
+        };
+    }
+};
+
 REPORT_CONFIGS.orcamentos = {
     columns: [
         { key: 'codigo', label: 'Código' },
@@ -3555,6 +4279,60 @@ REPORT_CONFIGS.orcamentos = {
     }
 };
 
+MASTER_DETAIL_CONFIGS.pedidos = {
+    getId: item => item?.id ?? item?.numero ?? item?.codigo ?? null,
+    getCardSummary: item => {
+        const codigo = formatText(item?.numero ?? item?.codigo, '—');
+        const cliente = item?.cliente ? formatText(item.cliente, '—') : '';
+        const valor = item?.valor_final !== undefined && item?.valor_final !== null
+            ? escapeHtml(formatCurrency(item.valor_final))
+            : '';
+        const statusLabel = item?.situacao ? String(item.situacao) : '';
+        const badges = statusLabel ? [createBadge(statusLabel, getOrderStatusVariant(statusLabel), { size: 'sm' })] : [];
+        const meta = valor ? [`Valor: ${valor}`] : [];
+        return {
+            title: codigo,
+            subtitle: cliente,
+            badges,
+            meta
+        };
+    },
+    getDetail: item => {
+        const parcelas = Number.parseInt(item?.parcelas, 10);
+        const parcelasLabel = Number.isFinite(parcelas) && parcelas > 1 ? `${parcelas}x` : 'À vista';
+        const valor = item?.valor_final !== undefined && item?.valor_final !== null
+            ? escapeHtml(formatCurrency(item.valor_final))
+            : '—';
+        const statusLabel = item?.situacao ? String(item.situacao) : '';
+        return {
+            title: formatText(item?.numero ?? item?.codigo, '—'),
+            subtitle: item?.cliente ? formatText(item.cliente, '—') : '',
+            sections: [
+                {
+                    title: 'Detalhes do Pedido',
+                    rows: [
+                        { label: 'Código', value: formatText(item?.numero ?? item?.codigo, '—'), allowHtml: true },
+                        { label: 'Cliente', value: item?.cliente ? formatText(item.cliente, '—') : '—', allowHtml: true },
+                        { label: 'Data', value: escapeHtml(formatDate(item?.data_emissao)), allowHtml: true },
+                        { label: 'Condição', value: escapeHtml(parcelasLabel), allowHtml: true },
+                        { label: 'Valor Total', value: valor, allowHtml: true }
+                    ]
+                },
+                {
+                    title: 'Status',
+                    rows: [
+                        {
+                            label: 'Situação',
+                            value: statusLabel ? createBadge(statusLabel, getOrderStatusVariant(statusLabel), { size: 'sm' }) : '—',
+                            allowHtml: true
+                        }
+                    ]
+                }
+            ]
+        };
+    }
+};
+
 REPORT_CONFIGS.pedidos = {
     columns: [
         { key: 'codigo', label: 'Código' },
@@ -3592,6 +4370,65 @@ REPORT_CONFIGS.pedidos = {
                 <td data-column-key="status" class="px-6 py-4 whitespace-nowrap text-left text-sm">${statusBadge}</td>
             </tr>
         `;
+    }
+};
+
+MASTER_DETAIL_CONFIGS.usuarios = {
+    getId: item => item?.id ?? item?.uuid ?? item?.email ?? null,
+    getCardSummary: item => {
+        const nome = formatText(item?.nome, '—');
+        const email = item?.email ? formatText(item.email, '—') : '';
+        const perfilLabel = item?.perfil ? String(item.perfil) : '';
+        const statusLabel = item?.status ? String(item.status) : '';
+        const badges = [];
+        if (perfilLabel) {
+            badges.push(createBadge(perfilLabel, 'info', { size: 'sm' }));
+        }
+        if (statusLabel) {
+            badges.push(createBadge(statusLabel, getUserStatusVariant(item?.status), { size: 'sm' }));
+        }
+        badges.push(item?.online ? createBadge('Online', 'success', { size: 'sm' }) : createBadge('Offline', 'danger', { size: 'sm' }));
+        return {
+            title: nome,
+            subtitle: email,
+            badges
+        };
+    },
+    getDetail: item => {
+        const statusLabel = item?.status ? String(item.status) : '';
+        const ultimoLogin = item?.ultimoLoginEm
+            ? formatDate(item.ultimoLoginEm)
+            : (item?.ultimaAtividadeEm ? formatDate(item.ultimaAtividadeEm) : '—');
+        return {
+            title: formatText(item?.nome, '—'),
+            subtitle: item?.email ? formatText(item.email, '—') : '',
+            sections: [
+                {
+                    title: 'Perfil',
+                    rows: [
+                        { label: 'Nome', value: formatText(item?.nome, '—'), allowHtml: true },
+                        { label: 'E-mail', value: item?.email ? formatText(item.email, '—') : '—', allowHtml: true },
+                        { label: 'Perfil', value: item?.perfil ? formatText(item.perfil, '—') : '—', allowHtml: true }
+                    ]
+                },
+                {
+                    title: 'Status & Acesso',
+                    rows: [
+                        {
+                            label: 'Situação',
+                            value: statusLabel ? createBadge(statusLabel, getUserStatusVariant(item?.status), { size: 'sm' }) : '—',
+                            allowHtml: true
+                        },
+                        {
+                            label: 'Conexão',
+                            value: item?.online ? createBadge('Online', 'success', { size: 'sm' }) : createBadge('Offline', 'danger', { size: 'sm' }),
+                            allowHtml: true
+                        },
+                        { label: 'Último acesso', value: ultimoLogin ? escapeHtml(ultimoLogin) : '—', allowHtml: true }
+                    ]
+                }
+            ]
+        };
     }
 };
 
@@ -3651,6 +4488,7 @@ function initRelatoriosModule() {
     if (!container) {
         relatoriosKpiManager = null;
         relatoriosChartManager = null;
+        relatoriosMasterDetail = null;
         return;
     }
 
@@ -3665,10 +4503,14 @@ function initRelatoriosModule() {
 
     relatoriosKpiManager = createKpiManager(container, { initialTab: initialTabKey });
     relatoriosChartManager = createChartManager(container, { initialTab: initialTabKey });
+    let tabController = null;
+    relatoriosMasterDetail = createMasterDetailManager(container, {
+        getActiveTab: () => tabController?.getActiveTab?.() || initialTabKey
+    });
     const loadTableForTab = setupReportTables(container);
     initializeAllReportColumns();
     const columnControl = setupColumnVisibilityControl(container);
-    const tabController = setupCategoryTabs(container, {
+    tabController = setupCategoryTabs(container, {
         onTabChange: (tab, button, previousTab) => {
             if (columnControl && previousTab) {
                 columnControl.resetReport(previousTab);
@@ -3678,6 +4520,9 @@ function initRelatoriosModule() {
             }
             if (loadTableForTab) {
                 loadTableForTab(tab);
+            }
+            if (relatoriosMasterDetail) {
+                relatoriosMasterDetail.setActiveTab(tab, { resetSelection: true });
             }
         }
     });
@@ -3695,6 +4540,9 @@ function initRelatoriosModule() {
     const activeTabKey = tabController?.getActiveTab?.() || initialTabKey;
     if (columnControl && activeTabKey) {
         columnControl.setActiveReport(activeTabKey);
+    }
+    if (relatoriosMasterDetail && activeTabKey) {
+        relatoriosMasterDetail.setActiveTab(activeTabKey, { resetSelection: true });
     }
 
     if (initialTabKey && loadTableForTab) {
@@ -3891,6 +4739,9 @@ async function populateReportTable(key, container) {
         syncFilterOptions(key, data, moduleRoot);
 
         if (!Array.isArray(data) || data.length === 0) {
+            if (relatoriosMasterDetail) {
+                relatoriosMasterDetail.setItems(key, []);
+            }
             const renderEmpty = () => {
                 showMessage(config.emptyMessage || 'Nenhum registro encontrado.');
                 if (relatoriosChartManager) {
@@ -3905,6 +4756,9 @@ async function populateReportTable(key, container) {
         const render = () => {
             const filtered = applyReportFilters(key, data, moduleRoot);
             if (!Array.isArray(filtered) || filtered.length === 0) {
+                if (relatoriosMasterDetail) {
+                    relatoriosMasterDetail.setItems(key, []);
+                }
                 tbody.innerHTML = createMessageRow(table, config.filteredEmptyMessage || FILTERED_EMPTY_MESSAGE);
                 applyColumns();
                 if (relatoriosChartManager) {
@@ -3915,6 +4769,10 @@ async function populateReportTable(key, container) {
 
             if (relatoriosChartManager) {
                 relatoriosChartManager.setData(key, filtered);
+            }
+
+            if (relatoriosMasterDetail) {
+                relatoriosMasterDetail.setItems(key, filtered);
             }
 
             const rows = filtered
@@ -3930,6 +4788,9 @@ async function populateReportTable(key, container) {
                 .join('');
 
             if (!rows) {
+                if (relatoriosMasterDetail) {
+                    relatoriosMasterDetail.setItems(key, []);
+                }
                 tbody.innerHTML = createMessageRow(table, config.filteredEmptyMessage || config.emptyMessage || FILTERED_EMPTY_MESSAGE);
                 applyColumns();
                 return;
@@ -3948,6 +4809,9 @@ async function populateReportTable(key, container) {
         }
         if (relatoriosChartManager) {
             relatoriosChartManager.setError(key, config.errorMessage || 'Não foi possível carregar os dados.');
+        }
+        if (relatoriosMasterDetail) {
+            relatoriosMasterDetail.setItems(key, []);
         }
         if (container.dataset.currentTab !== key) {
             return;

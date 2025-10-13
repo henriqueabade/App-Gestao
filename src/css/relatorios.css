@@ -832,6 +832,36 @@ body {
     border-color: rgba(255, 255, 255, 0.2);
 }
 
+.relatorios-module .relatorios-master-item--selected {
+    background: rgba(59, 130, 246, 0.2);
+    border-color: rgba(59, 130, 246, 0.55);
+}
+
+.relatorios-module .relatorios-master-item--active {
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 1px rgba(99, 102, 241, 0.35);
+}
+
+.relatorios-module .relatorios-master-checkbox {
+    width: 1rem;
+    height: 1rem;
+    accent-color: var(--color-primary);
+    flex-shrink: 0;
+}
+
+.relatorios-module .relatorios-master-empty {
+    color: rgba(255, 255, 255, 0.65);
+    font-size: 0.9rem;
+    padding: 0.75rem 0.5rem;
+}
+
+.relatorios-module .relatorios-detail-placeholder {
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 0.95rem;
+    text-align: center;
+    padding: 1.5rem 1rem;
+}
+
 .relatorios-module .relatorios-detail-card {
     background: rgba(17, 24, 39, 0.45);
     border: 1px solid rgba(255, 255, 255, 0.12);
