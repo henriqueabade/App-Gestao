@@ -426,6 +426,31 @@ function buildFinalBlock(tipo, orc, contatoNome = '') {
   `;
 }
 
+function convertToHeaderContinuationPage(page, content, table, tail) {
+  if (table) {
+    const parent = table.parentNode;
+    if (parent) {
+      parent.removeChild(table);
+    }
+  }
+
+  if (tail) {
+    const tailParent = tail.parentNode;
+    if (tailParent) {
+      tailParent.removeChild(tail);
+    }
+  }
+
+  if (!content.querySelector('.header-only-note')) {
+    const continuation = document.createElement('p');
+    continuation.className = 'header-only-note';
+    continuation.textContent = 'Os itens deste documento continuam na proxima pagina.';
+    content.appendChild(continuation);
+  }
+
+  page.classList.add('page--header-only');
+}
+
 function buildPages(context) {
   const { items, orc, tipo, contatoNomeAssinatura = '' } = context;
   const remaining = items.slice();
@@ -524,7 +549,12 @@ function buildPages(context) {
         ensureTableFits(page);
 
         if (tbody.rows.length === 0) {
-          page.remove();
+          if (isFirst) {
+            convertToHeaderContinuationPage(page, content, table, tail);
+          } else {
+            page.remove();
+          }
+          pageIndex += 1;
           continue;
         }
       } else if (!pageRows.length) {
@@ -533,7 +563,12 @@ function buildPages(context) {
     }
 
     if (tbody.rows.length === 0 && !isLastPage) {
-      page.remove();
+      if (isFirst) {
+        convertToHeaderContinuationPage(page, content, table, tail);
+      } else {
+        page.remove();
+      }
+      pageIndex += 1;
       continue;
     }
 

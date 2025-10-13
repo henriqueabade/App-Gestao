@@ -126,6 +126,13 @@ body {
   margin: 0;
 }
 
+.header-only-note {
+  margin-top: clamp(6mm, 1.5vw, 10mm);
+  font-size: 0.78rem;
+  font-style: italic;
+  color: #4b5563;
+}
+
 /* Tabela ocupa 100%, colunas fixas e fonte reduzida */
 .items-table {
   width: 100%;
