@@ -336,6 +336,7 @@ window.addEventListener('DOMContentLoaded', () => {
           if (Array.isArray(data)) return data;
           if (Array.isArray(data?.notifications)) return data.notifications;
           if (Array.isArray(data?.data)) return data.data;
+          if (Array.isArray(data?.items)) return data.items;
           return [];
         } catch (error) {
           attempt += 1;
