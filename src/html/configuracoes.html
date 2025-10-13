@@ -19,6 +19,71 @@
             </div>
         </header>
 
+        <section id="personalDataSettings" class="settings-card glass-surface rounded-xl">
+            <div class="settings-card-header">
+                <div>
+                    <h2 class="settings-card-title">Dados pessoais</h2>
+                    <p class="settings-card-description">Atualize suas informações de contato e a foto exibida no menu do usuário.</p>
+                </div>
+            </div>
+
+            <form id="personalDataForm" class="personal-data-form" novalidate>
+                <div class="personal-data-grid">
+                    <div class="personal-avatar-block">
+                        <div id="personalAvatarPreview" class="personal-avatar-preview" aria-live="polite">
+                            <span class="personal-avatar-initials" id="personalAvatarInitials"></span>
+                        </div>
+                        <label for="personalAvatarInput" class="personal-avatar-upload">
+                            <input type="file" id="personalAvatarInput" accept="image/*" class="sr-only">
+                            <span class="personal-avatar-upload-button">
+                                <i class="fa-solid fa-camera"></i>
+                                <span>Atualizar foto</span>
+                            </span>
+                        </label>
+                        <p class="personal-avatar-hint">Formatos JPG ou PNG, até 2&nbsp;MB.</p>
+                    </div>
+
+                    <div class="personal-data-fields">
+                        <div class="personal-data-field" data-field="nome">
+                            <label for="personalDataName" class="personal-data-label">Nome completo</label>
+                            <input type="text" id="personalDataName" class="input-glass personal-data-input" placeholder="Seu nome" autocomplete="name" required>
+                            <p class="personal-field-error" id="personalDataNameError"></p>
+                        </div>
+                        <div class="personal-data-field" data-field="email">
+                            <label for="personalDataEmail" class="personal-data-label">E-mail</label>
+                            <input type="email" id="personalDataEmail" class="input-glass personal-data-input" placeholder="voce@empresa.com" autocomplete="email" required>
+                            <p class="personal-field-error" id="personalDataEmailError"></p>
+                        </div>
+                        <div class="personal-data-field" data-field="telefone">
+                            <label for="personalDataPhone" class="personal-data-label">Telefone</label>
+                            <input type="tel" id="personalDataPhone" class="input-glass personal-data-input" placeholder="(00) 00000-0000" autocomplete="tel">
+                            <p class="personal-field-error" id="personalDataPhoneError"></p>
+                        </div>
+                        <div class="personal-data-field" data-field="senha">
+                            <label for="personalDataPassword" class="personal-data-label">Nova senha</label>
+                            <input type="password" id="personalDataPassword" class="input-glass personal-data-input" placeholder="Deixe em branco para manter" autocomplete="new-password">
+                            <p class="personal-field-error" id="personalDataPasswordError"></p>
+                        </div>
+                        <div class="personal-data-field" data-field="confirmacao">
+                            <label for="personalDataPasswordConfirm" class="personal-data-label">Confirmar nova senha</label>
+                            <input type="password" id="personalDataPasswordConfirm" class="input-glass personal-data-input" placeholder="Repita a nova senha" autocomplete="new-password">
+                            <p class="personal-field-error" id="personalDataPasswordConfirmError"></p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="personal-feedback" id="personalDataFeedback" role="status" aria-live="polite"></div>
+
+                <div class="personal-data-actions">
+                    <button type="submit" id="personalDataSubmit" class="personal-button personal-button--primary">
+                        <span class="personal-button-label">Salvar alterações</span>
+                        <span class="personal-button-spinner" aria-hidden="true"></span>
+                    </button>
+                    <button type="button" id="personalDataReset" class="personal-button personal-button--ghost">Cancelar</button>
+                </div>
+            </form>
+        </section>
+
         <section class="settings-card glass-surface rounded-xl">
             <div class="settings-card-header">
                 <div>

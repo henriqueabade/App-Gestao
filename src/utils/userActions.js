@@ -4,6 +4,7 @@ window.addEventListener('DOMContentLoaded', () => {
   const avatarEl = document.getElementById('userAvatar');
   const summaryEl = document.getElementById('userSummary');
   const appUpdates = window.AppUpdates || null;
+  const usuariosMenuItem = document.querySelector('[data-page="usuarios"]');
 
   const QUICK_ACTIONS_STORAGE_KEY = 'menu.quickActions';
   const QUICK_ACTIONS_EVENT = 'menu-quick-actions-changed';
@@ -17,6 +18,67 @@ window.addEventListener('DOMContentLoaded', () => {
     },
     showAvatar: true,
     showName: true,
+  };
+
+  const getInitials = name => {
+    if (!name) return '';
+    return String(name)
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map(part => part[0])
+      .join('')
+      .toUpperCase();
+  };
+
+  const applyUserProfile = userData => {
+    const user = userData && typeof userData === 'object' ? userData : {};
+    const nome = user.nome || '';
+    const perfil = user.perfil || '';
+    const isSupAdmin = perfil === 'Sup Admin';
+    const isAdmin = perfil === 'Admin';
+    const hasAdminAccess = isSupAdmin || isAdmin;
+
+    if (usuariosMenuItem) {
+      if (hasAdminAccess) {
+        usuariosMenuItem.classList.remove('hidden');
+        usuariosMenuItem.removeAttribute('aria-hidden');
+      } else {
+        usuariosMenuItem.classList.add('hidden');
+        usuariosMenuItem.setAttribute('aria-hidden', 'true');
+      }
+    }
+
+    if (nameEl) nameEl.textContent = nome;
+    if (profileEl) profileEl.textContent = perfil || 'Sem Perfil';
+
+    if (avatarEl) {
+      const avatarUrl = user.avatarUrl || user.fotoUrl || user.foto || null;
+      const initials = getInitials(nome);
+
+      if (avatarUrl) {
+        const safeUrl = String(avatarUrl).replace(/"/g, '\\"');
+        avatarEl.style.backgroundImage = `url("${safeUrl}")`;
+        avatarEl.classList.add('has-image');
+        avatarEl.textContent = '';
+        avatarEl.classList.remove('hidden');
+      } else if (initials) {
+        avatarEl.style.removeProperty('background-image');
+        avatarEl.classList.remove('has-image');
+        avatarEl.textContent = initials;
+        avatarEl.classList.remove('hidden');
+      } else {
+        avatarEl.style.removeProperty('background-image');
+        avatarEl.classList.remove('has-image');
+        avatarEl.textContent = '';
+        avatarEl.classList.add('hidden');
+      }
+    }
+
+    if (appUpdates && typeof appUpdates.setUserProfile === 'function') {
+      appUpdates.setUserProfile(user);
+    }
   };
 
   const cloneQuickActions = value => {
@@ -115,52 +177,8 @@ window.addEventListener('DOMContentLoaded', () => {
     const user = stored ? JSON.parse(stored) : {};
     const isSupAdmin = user.perfil === 'Sup Admin';
     const isAdmin = user.perfil === 'Admin';
-    const hasAdminAccess = isSupAdmin || isAdmin;
 
-    const usuariosMenuItem = document.querySelector('[data-page="usuarios"]');
-    if (usuariosMenuItem) {
-      if (hasAdminAccess) {
-        usuariosMenuItem.classList.remove('hidden');
-        usuariosMenuItem.removeAttribute('aria-hidden');
-      } else {
-        usuariosMenuItem.classList.add('hidden');
-        usuariosMenuItem.setAttribute('aria-hidden', 'true');
-      }
-    }
-    if (nameEl) nameEl.textContent = user.nome || '';
-    if (profileEl) profileEl.textContent = user.perfil || 'Sem Perfil';
-    if (avatarEl) {
-      const avatarUrl = user.avatarUrl || user.fotoUrl || user.foto || null;
-      const initials = (user.nome || '')
-        .trim()
-        .split(/\s+/)
-        .filter(Boolean)
-        .slice(0, 2)
-        .map(part => part[0])
-        .join('')
-        .toUpperCase();
-
-      if (avatarUrl) {
-        const safeUrl = String(avatarUrl).replace(/"/g, '\\"');
-        avatarEl.style.backgroundImage = `url("${safeUrl}")`;
-        avatarEl.classList.add('has-image');
-        avatarEl.textContent = '';
-        avatarEl.classList.remove('hidden');
-      } else if (initials) {
-        avatarEl.style.removeProperty('background-image');
-        avatarEl.classList.remove('has-image');
-        avatarEl.textContent = initials;
-        avatarEl.classList.remove('hidden');
-      } else {
-        avatarEl.style.removeProperty('background-image');
-        avatarEl.classList.remove('has-image');
-        avatarEl.textContent = '';
-        avatarEl.classList.add('hidden');
-      }
-    }
-    if (appUpdates && typeof appUpdates.setUserProfile === 'function') {
-      appUpdates.setUserProfile(user);
-    }
+    applyUserProfile(user);
 
     let pendingUpdate = null;
     const rawPendingUpdate = sessionStorage.getItem('pendingUpdate');
@@ -203,6 +221,12 @@ window.addEventListener('DOMContentLoaded', () => {
   } catch (e) {
     /* ignore */
   }
+
+  window.addEventListener('user-profile-updated', event => {
+    const updatedUser = event?.detail?.user;
+    if (!updatedUser) return;
+    applyUserProfile(updatedUser);
+  });
 
   btn = document.getElementById('user-actions-btn');
   menu = document.getElementById('user-actions-menu');

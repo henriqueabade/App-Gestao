@@ -415,8 +415,489 @@ const MenuStartupPreferences = (() => {
         quickActionsStatus: null,
         quickActionShowAvatar: null,
         quickActionShowName: null,
-        quickIdentityStatus: null
+        quickIdentityStatus: null,
+        profile: {
+            section: null,
+            form: null,
+            name: null,
+            email: null,
+            phone: null,
+            password: null,
+            confirmPassword: null,
+            feedback: null,
+            submit: null,
+            reset: null,
+            avatarInput: null,
+            avatarPreview: null,
+            avatarInitials: null,
+            fields: {},
+            errors: {}
+        }
     };
+
+    const USER_PROFILE_EVENT = 'user-profile-updated';
+    const API_PROFILE_ENDPOINT = '/api/usuarios/me';
+    const MAX_AVATAR_SIZE = 2 * 1024 * 1024;
+    const PROFILE_FIELD_KEYS = ['nome', 'email', 'telefone', 'senha', 'confirmacao'];
+
+    const profileState = {
+        loading: false,
+        saving: false,
+        data: null,
+        initialData: null,
+        avatarDataUrl: null,
+        avatarObjectUrl: null,
+        avatarChanged: false
+    };
+
+    async function fetchApi(path, options = {}) {
+        if (!window.apiConfig || typeof window.apiConfig.getApiBaseUrl !== 'function') {
+            throw new Error('Configuração da API não disponível.');
+        }
+        const baseUrl = await window.apiConfig.getApiBaseUrl();
+        return fetch(`${baseUrl}${path}`, options);
+    }
+
+    function normalizeUserProfile(raw) {
+        const source = raw && typeof raw === 'object' ? raw : {};
+        const nome = source.nome ?? source.name ?? '';
+        const email = source.email ?? source.mail ?? '';
+        const telefoneFonte =
+            source.telefone ??
+            source.phone ??
+            source.celular ??
+            source.telefoneContato ??
+            source.telefone_contato ??
+            '';
+        const telefone = telefoneFonte ? String(telefoneFonte).trim() : '';
+        const perfil = source.perfil ?? source.role ?? source.tipo ?? '';
+        const avatar =
+            source.avatarUrl ??
+            source.fotoUrl ??
+            source.foto ??
+            source.avatar ??
+            source.imagem ??
+            source.image ??
+            null;
+
+        return {
+            ...source,
+            nome: nome ? String(nome).trim() : '',
+            email: email ? String(email).trim() : '',
+            telefone,
+            perfil: perfil ? String(perfil).trim() : '',
+            avatarUrl: avatar ? String(avatar).trim() : null
+        };
+    }
+
+    function getInitialsFromName(name) {
+        if (!name) return '';
+        return String(name)
+            .trim()
+            .split(/\s+/)
+            .filter(Boolean)
+            .slice(0, 2)
+            .map(part => part[0])
+            .join('')
+            .toUpperCase();
+    }
+
+    function updateAvatarPreview(sourceUrl, fallbackName) {
+        const previewEl = dom.profile.avatarPreview;
+        const initialsEl = dom.profile.avatarInitials;
+        if (!previewEl) return;
+
+        const sanitizedUrl = sourceUrl ? `url("${String(sourceUrl).replace(/"/g, '\\"')}")` : 'none';
+        previewEl.style.setProperty('--avatar-preview-image', sanitizedUrl);
+        const hasImage = Boolean(sourceUrl);
+        previewEl.classList.toggle('has-image', hasImage);
+        previewEl.dataset.hasImage = hasImage ? 'true' : 'false';
+
+        if (initialsEl) {
+            initialsEl.textContent = getInitialsFromName(fallbackName);
+        }
+    }
+
+    function setProfileFeedback(message, type = 'info') {
+        const feedbackEl = dom.profile.feedback;
+        if (!feedbackEl) return;
+        feedbackEl.textContent = message || '';
+        feedbackEl.classList.remove('personal-feedback--error', 'personal-feedback--success');
+        if (type === 'error') {
+            feedbackEl.classList.add('personal-feedback--error');
+        } else if (type === 'success') {
+            feedbackEl.classList.add('personal-feedback--success');
+        }
+    }
+
+    function clearSingleProfileError(key) {
+        const fieldWrapper = dom.profile.fields?.[key];
+        const errorEl = dom.profile.errors?.[key];
+        if (fieldWrapper) {
+            fieldWrapper.classList.remove('has-error');
+        }
+        if (errorEl) {
+            errorEl.textContent = '';
+        }
+    }
+
+    function clearProfileErrors() {
+        PROFILE_FIELD_KEYS.forEach(clearSingleProfileError);
+    }
+
+    function applyProfileErrors(errors) {
+        if (!errors) return;
+        Object.entries(errors).forEach(([key, message]) => {
+            const fieldWrapper = dom.profile.fields?.[key];
+            const errorEl = dom.profile.errors?.[key];
+            if (fieldWrapper) {
+                fieldWrapper.classList.add('has-error');
+            }
+            if (errorEl) {
+                errorEl.textContent = message;
+            }
+        });
+    }
+
+    function collectProfileFormValues() {
+        return {
+            nome: dom.profile.name ? dom.profile.name.value.trim() : '',
+            email: dom.profile.email ? dom.profile.email.value.trim() : '',
+            telefone: dom.profile.phone ? dom.profile.phone.value.trim() : '',
+            senha: dom.profile.password ? dom.profile.password.value : '',
+            confirmacao: dom.profile.confirmPassword ? dom.profile.confirmPassword.value : ''
+        };
+    }
+
+    function isValidEmail(value) {
+        if (!value) return false;
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        return emailRegex.test(value);
+    }
+
+    function isValidPhone(value) {
+        if (!value) return true;
+        const digits = value.replace(/\D/g, '');
+        return digits.length >= 10 && digits.length <= 15;
+    }
+
+    function validateProfileForm(values) {
+        const errors = {};
+        if (!values.nome) {
+            errors.nome = 'Informe o nome completo.';
+        }
+        if (!values.email) {
+            errors.email = 'Informe um e-mail válido.';
+        } else if (!isValidEmail(values.email)) {
+            errors.email = 'O e-mail informado não é válido.';
+        }
+        if (values.telefone && !isValidPhone(values.telefone)) {
+            errors.telefone = 'Informe um telefone válido (DDD + número).';
+        }
+        if (values.senha && values.senha.length < 6) {
+            errors.senha = 'A nova senha deve ter pelo menos 6 caracteres.';
+        }
+        if (values.confirmacao) {
+            if (!values.senha) {
+                errors.confirmacao = 'Preencha a nova senha para confirmar.';
+            } else if (values.confirmacao !== values.senha) {
+                errors.confirmacao = 'As senhas informadas não coincidem.';
+            }
+        }
+        return errors;
+    }
+
+    function setFormDisabled(disabled) {
+        if (!dom.profile.form) return;
+        const elements = dom.profile.form.querySelectorAll('input, button');
+        elements.forEach(el => {
+            el.disabled = disabled;
+        });
+    }
+
+    function setProfileLoading(isLoading) {
+        profileState.loading = isLoading;
+        if (dom.profile.section) {
+            dom.profile.section.classList.toggle('is-loading', isLoading);
+        }
+        if (dom.profile.form) {
+            dom.profile.form.classList.toggle('is-loading', isLoading);
+        }
+        setFormDisabled(isLoading || profileState.saving);
+    }
+
+    function setProfileSaving(isSaving) {
+        profileState.saving = isSaving;
+        if (dom.profile.submit) {
+            dom.profile.submit.classList.toggle('is-loading', isSaving);
+        }
+        setFormDisabled(isSaving || profileState.loading);
+    }
+
+    function renderProfileData() {
+        if (!dom.profile.form) return;
+        const data = profileState.data || {};
+        if (dom.profile.name) {
+            dom.profile.name.value = data.nome || '';
+        }
+        if (dom.profile.email) {
+            dom.profile.email.value = data.email || '';
+        }
+        if (dom.profile.phone) {
+            dom.profile.phone.value = data.telefone || '';
+        }
+        if (dom.profile.password) {
+            dom.profile.password.value = '';
+        }
+        if (dom.profile.confirmPassword) {
+            dom.profile.confirmPassword.value = '';
+        }
+        if (dom.profile.avatarInput) {
+            dom.profile.avatarInput.value = '';
+        }
+        updateAvatarPreview(profileState.avatarObjectUrl || data.avatarUrl, data.nome || '');
+    }
+
+    function readStoredUser() {
+        try {
+            const stored = sessionStorage.getItem('currentUser') || localStorage.getItem('user');
+            return stored ? JSON.parse(stored) : null;
+        } catch (error) {
+            return null;
+        }
+    }
+
+    function prefillProfileFromStorage() {
+        const stored = readStoredUser();
+        if (!stored) return;
+        const normalized = normalizeUserProfile(stored);
+        profileState.data = { ...normalized };
+        profileState.initialData = { ...normalized };
+        profileState.avatarChanged = false;
+        profileState.avatarDataUrl = null;
+        revokeAvatarObjectUrl();
+        renderProfileData();
+        clearProfileErrors();
+    }
+
+    function revokeAvatarObjectUrl() {
+        if (profileState.avatarObjectUrl) {
+            URL.revokeObjectURL(profileState.avatarObjectUrl);
+            profileState.avatarObjectUrl = null;
+        }
+    }
+
+    function readFileAsDataUrl(file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result);
+            reader.onerror = () => reject(reader.error || new Error('Falha ao ler arquivo.'));
+            reader.readAsDataURL(file);
+        });
+    }
+
+    async function handleAvatarInputChange(event) {
+        const file = event?.target?.files?.[0];
+        if (!file) {
+            profileState.avatarChanged = false;
+            profileState.avatarDataUrl = null;
+            revokeAvatarObjectUrl();
+            updateAvatarPreview(profileState.data?.avatarUrl || null, collectProfileFormValues().nome || profileState.data?.nome || '');
+            return;
+        }
+
+        if (file.size > MAX_AVATAR_SIZE) {
+            setProfileFeedback('A imagem selecionada excede o limite de 2 MB. Escolha um arquivo menor.', 'error');
+            event.target.value = '';
+            return;
+        }
+
+        const mimeType = (file.type || '').toLowerCase();
+        if (mimeType && !mimeType.startsWith('image/')) {
+            setProfileFeedback('Escolha um arquivo de imagem nos formatos JPG ou PNG.', 'error');
+            event.target.value = '';
+            return;
+        }
+
+        revokeAvatarObjectUrl();
+        profileState.avatarObjectUrl = URL.createObjectURL(file);
+        profileState.avatarChanged = true;
+        updateAvatarPreview(profileState.avatarObjectUrl, collectProfileFormValues().nome || profileState.data?.nome || '');
+        setProfileFeedback('Pré-visualização atualizada. Salve para confirmar a nova foto.', 'info');
+
+        try {
+            const dataUrl = await readFileAsDataUrl(file);
+            profileState.avatarDataUrl = dataUrl;
+        } catch (error) {
+            console.error('Erro ao ler imagem selecionada:', error);
+            setProfileFeedback('Não foi possível carregar a imagem selecionada.', 'error');
+        }
+    }
+
+    function persistUserToStorage(user) {
+        if (!user || typeof user !== 'object') {
+            return;
+        }
+        const payload = { ...user };
+        if (payload.avatarUrl) {
+            payload.fotoUrl = payload.fotoUrl || payload.avatarUrl;
+            payload.foto = payload.foto || payload.avatarUrl;
+        }
+        try {
+            sessionStorage.setItem('currentUser', JSON.stringify(payload));
+        } catch (error) {
+            console.warn('Não foi possível atualizar o usuário na sessão', error);
+        }
+        try {
+            if (localStorage.getItem('rememberUser') === '1') {
+                localStorage.setItem('user', JSON.stringify(payload));
+            }
+        } catch (error) {
+            console.warn('Não foi possível atualizar o usuário salvo localmente', error);
+        }
+    }
+
+    function dispatchUserProfileUpdated(user) {
+        window.dispatchEvent(new CustomEvent(USER_PROFILE_EVENT, { detail: { user } }));
+    }
+
+    async function loadProfileData() {
+        if (!dom.profile.section || profileState.loading) {
+            return;
+        }
+        setProfileFeedback('Carregando suas informações...', 'info');
+        setProfileLoading(true);
+        try {
+            const response = await fetchApi(API_PROFILE_ENDPOINT, { credentials: 'include' });
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => null);
+                const message = errorData?.error || errorData?.message || 'Não foi possível carregar seus dados.';
+                throw new Error(message);
+            }
+            const payload = await response.json();
+            const normalized = normalizeUserProfile(payload);
+            profileState.data = { ...normalized };
+            profileState.initialData = { ...normalized };
+            profileState.avatarChanged = false;
+            profileState.avatarDataUrl = null;
+            revokeAvatarObjectUrl();
+            renderProfileData();
+            clearProfileErrors();
+            setProfileFeedback('', 'info');
+        } catch (error) {
+            console.error('Falha ao carregar perfil do usuário:', error);
+            setProfileFeedback(error.message || 'Não foi possível carregar seus dados no momento.', 'error');
+        } finally {
+            setProfileLoading(false);
+        }
+    }
+
+    function handleProfileReset() {
+        if (!dom.profile.form) return;
+        if (profileState.initialData) {
+            profileState.data = { ...profileState.initialData };
+        }
+        profileState.avatarChanged = false;
+        profileState.avatarDataUrl = null;
+        revokeAvatarObjectUrl();
+        renderProfileData();
+        clearProfileErrors();
+        setProfileFeedback('Alterações descartadas.', 'info');
+    }
+
+    async function handleProfileSubmit(event) {
+        if (event) {
+            event.preventDefault();
+        }
+        if (!dom.profile.form || profileState.saving) {
+            return;
+        }
+
+        clearProfileErrors();
+        const values = collectProfileFormValues();
+        const errors = validateProfileForm(values);
+        if (Object.keys(errors).length > 0) {
+            applyProfileErrors(errors);
+            setProfileFeedback('Revise os campos destacados antes de continuar.', 'error');
+            return;
+        }
+
+        const payload = {
+            nome: values.nome,
+            email: values.email,
+            telefone: values.telefone || null
+        };
+        if (values.senha) {
+            payload.senha = values.senha;
+        }
+        if (profileState.avatarChanged && profileState.avatarDataUrl) {
+            payload.avatar = profileState.avatarDataUrl;
+        }
+
+        setProfileSaving(true);
+        setProfileFeedback('Salvando alterações...', 'info');
+
+        try {
+            const response = await fetchApi(API_PROFILE_ENDPOINT, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(payload),
+                credentials: 'include'
+            });
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => null);
+                const message = errorData?.error || errorData?.message || 'Não foi possível salvar as alterações.';
+                throw new Error(message);
+            }
+            const result = await response.json();
+            const normalized = normalizeUserProfile({ ...profileState.data, ...result });
+            profileState.data = { ...normalized };
+            profileState.initialData = { ...normalized };
+            profileState.avatarChanged = false;
+            profileState.avatarDataUrl = null;
+            revokeAvatarObjectUrl();
+            renderProfileData();
+            setProfileFeedback('Dados atualizados com sucesso!', 'success');
+            persistUserToStorage(profileState.data);
+            dispatchUserProfileUpdated(profileState.data);
+        } catch (error) {
+            console.error('Falha ao salvar dados pessoais:', error);
+            setProfileFeedback(error.message || 'Não foi possível salvar as alterações.', 'error');
+        } finally {
+            setProfileSaving(false);
+        }
+    }
+
+    function bindProfileFieldListeners() {
+        if (!dom.profile.form) {
+            return;
+        }
+        const nameInput = dom.profile.name;
+        if (nameInput) {
+            nameInput.addEventListener('input', () => clearSingleProfileError('nome'));
+        }
+        if (dom.profile.email) {
+            dom.profile.email.addEventListener('input', () => clearSingleProfileError('email'));
+        }
+        if (dom.profile.phone) {
+            dom.profile.phone.addEventListener('input', () => clearSingleProfileError('telefone'));
+        }
+        if (dom.profile.password) {
+            dom.profile.password.addEventListener('input', () => clearSingleProfileError('senha'));
+        }
+        if (dom.profile.confirmPassword) {
+            dom.profile.confirmPassword.addEventListener('input', () => clearSingleProfileError('confirmacao'));
+        }
+    }
+
+    function initProfileSection() {
+        if (!dom.profile.section) return;
+        prefillProfileFromStorage();
+        loadProfileData();
+    }
+
 
     function formatStatus(enabled) {
         return enabled
@@ -668,6 +1149,33 @@ const MenuStartupPreferences = (() => {
         dom.quickActionShowAvatar = moduleElement.querySelector('#quickAction-showAvatar');
         dom.quickActionShowName = moduleElement.querySelector('#quickAction-showName');
         dom.quickIdentityStatus = moduleElement.querySelector('#quickIdentityStatus');
+        dom.profile.section = moduleElement.querySelector('#personalDataSettings');
+        dom.profile.form = moduleElement.querySelector('#personalDataForm');
+        dom.profile.name = moduleElement.querySelector('#personalDataName');
+        dom.profile.email = moduleElement.querySelector('#personalDataEmail');
+        dom.profile.phone = moduleElement.querySelector('#personalDataPhone');
+        dom.profile.password = moduleElement.querySelector('#personalDataPassword');
+        dom.profile.confirmPassword = moduleElement.querySelector('#personalDataPasswordConfirm');
+        dom.profile.feedback = moduleElement.querySelector('#personalDataFeedback');
+        dom.profile.submit = moduleElement.querySelector('#personalDataSubmit');
+        dom.profile.reset = moduleElement.querySelector('#personalDataReset');
+        dom.profile.avatarInput = moduleElement.querySelector('#personalAvatarInput');
+        dom.profile.avatarPreview = moduleElement.querySelector('#personalAvatarPreview');
+        dom.profile.avatarInitials = moduleElement.querySelector('#personalAvatarInitials');
+        dom.profile.fields = {
+            nome: moduleElement.querySelector('[data-field="nome"]'),
+            email: moduleElement.querySelector('[data-field="email"]'),
+            telefone: moduleElement.querySelector('[data-field="telefone"]'),
+            senha: moduleElement.querySelector('[data-field="senha"]'),
+            confirmacao: moduleElement.querySelector('[data-field="confirmacao"]')
+        };
+        dom.profile.errors = {
+            nome: moduleElement.querySelector('#personalDataNameError'),
+            email: moduleElement.querySelector('#personalDataEmailError'),
+            telefone: moduleElement.querySelector('#personalDataPhoneError'),
+            senha: moduleElement.querySelector('#personalDataPasswordError'),
+            confirmacao: moduleElement.querySelector('#personalDataPasswordConfirmError')
+        };
 
         if (dom.toggle) {
             dom.toggle.addEventListener('change', handleToggleChange);
@@ -693,8 +1201,18 @@ const MenuStartupPreferences = (() => {
         if (dom.quickActionShowName) {
             dom.quickActionShowName.addEventListener('change', handleQuickIdentityChange);
         }
+        if (dom.profile.form) {
+            dom.profile.form.addEventListener('submit', handleProfileSubmit);
+        }
+        if (dom.profile.reset) {
+            dom.profile.reset.addEventListener('click', handleProfileReset);
+        }
+        if (dom.profile.avatarInput) {
+            dom.profile.avatarInput.addEventListener('change', handleAvatarInputChange);
+        }
 
-        applyStateToUI();
+        bindProfileFieldListeners();
+
         return true;
     }
 
@@ -704,6 +1222,8 @@ const MenuStartupPreferences = (() => {
         startupPreferences = MenuStartupPreferences.load();
         quickActionsPreferences = MenuQuickActionsPreferences.load();
         bindDom();
+        initProfileSection();
+        applyStateToUI();
     }
 
     init();
