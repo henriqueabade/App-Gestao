@@ -30,7 +30,7 @@
             <div class="space-y-6 mt-6">
                 <div>
                     <label for="defaultModuleSelect" class="block text-sm font-medium text-white/80">Módulo inicial</label>
-                    <select id="defaultModuleSelect" class="mt-2 w-full bg-white/10 text-white border border-white/20 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]">
+                    <select id="defaultModuleSelect" class="mt-2 w-full input-glass text-white rounded-md px-4 py-3">
                         <option value="last">Retomar última tela</option>
                         <option value="dashboard">Dashboard</option>
                         <option value="materia-prima">Matéria Prima</option>
@@ -52,9 +52,9 @@
                 </div>
 
                 <div>
-                    <label class="flex items-center gap-3 text-sm text-white/80" for="crmExpandedToggle">
-                        <input type="checkbox" id="crmExpandedToggle" class="h-4 w-4 rounded border border-white/30 bg-transparent accent-[var(--color-primary)]">
-                        Manter CRM expandido
+                    <label class="flex items-center justify-between gap-3 text-sm text-white/80" for="crmExpandedToggle">
+                        <span>Manter CRM expandido</span>
+                        <input type="checkbox" id="crmExpandedToggle" class="toggle">
                     </label>
                     <p id="crmExpandedStatus" class="settings-status mt-2"></p>
                 </div>
@@ -67,11 +67,7 @@
                     <h2 class="settings-card-title">Tema do menu</h2>
                     <p class="settings-card-description">Escolha entre o tema claro ou escuro para o menu lateral.</p>
                 </div>
-                <label class="toggle" for="menu-theme-toggle">
-                    <input type="checkbox" id="menu-theme-toggle" class="toggle-input">
-                    <span class="toggle-track" aria-hidden="true"></span>
-                    <span class="sr-only">Alternar entre os temas claro e escuro</span>
-                </label>
+                <input type="checkbox" id="menu-theme-toggle" class="toggle" aria-label="Alternar entre os temas claro e escuro">
             </div>
             <p id="menuThemeStatus" class="settings-status"></p>
         </section>
@@ -82,11 +78,7 @@
                     <h2 class="settings-card-title">Notificações no menu</h2>
                     <p class="settings-card-description">Ative ou desative os alertas exibidos no sino do menu lateral.</p>
                 </div>
-                <label class="toggle" for="notificationToggle">
-                    <input type="checkbox" id="notificationToggle" class="toggle-input">
-                    <span class="toggle-track" aria-hidden="true"></span>
-                    <span class="sr-only">Ativar notificações</span>
-                </label>
+                <input type="checkbox" id="notificationToggle" class="toggle" aria-label="Ativar notificações">
             </div>
             <p id="notificationStatus" class="settings-status"></p>
         </section>

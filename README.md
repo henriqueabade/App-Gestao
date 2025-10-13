@@ -57,6 +57,36 @@ A aplicação Electron se comunica com essa API durante o desenvolvimento.
   O texto deve seguir o formato _Contexto + Nome do módulo_, por exemplo `Estoque de Matéria-Prima`, mantendo apenas a primeira
   letra de cada palavra em maiúsculo.
 
+### Matéria-Prima como referência visual
+
+- O módulo **Matéria-Prima** estabelece a paleta, gradientes e utilitários que devem ser reaproveitados em novos fluxos. Consulte o arquivo [`src/css/materia-prima.css`](src/css/materia-prima.css) quando surgir dúvida de nomenclatura ou comportamento.
+
+#### Paleta base
+
+| Token CSS | Descrição | Valor |
+| --- | --- | --- |
+| `--color-primary` | Dourado principal aplicado em botões de destaque e estados ativos. | `#b6a03e` |
+| `--color-primary-light` | Variação clara usada em `hover` ou superfícies mais suaves. | `#d4c169` |
+| `--color-primary-dark` | Contraste para títulos ou ícones sobre fundos claros. | `#7f6a27` |
+| `--color-violet` | Roxo neutro para badges informativas. | `#A394A7` |
+| `--color-bordeaux` | Tom vinho utilizado em avisos e botões de alerta. | `#6a152c` |
+| `--color-bg-deep` | Base do gradiente de tela cheia. | `#310017` |
+| `--color-surface` | Transparência aplicada a cartões com efeito glass. | `rgba(255,255,255,0.08)` |
+| `--color-green` | Status positivos, sucesso e indicadores “ok”. | `#a2ffa6` |
+| `--color-red` | Erros, estados críticos e botões destrutivos. | `#ff5858` |
+| `--color-blue` | Ações secundárias e badges de embalagem. | `#8aa7f3` |
+| `--neutral-100` / `--neutral-500` | Textos e fundos neutros de apoio. | `#f9fafb` / `#6b7280` |
+
+- **Gradiente de fundo padrão**: `linear-gradient(135deg, var(--color-bg-deep) 0%, #1a0009 100%)`. Reaproveite-o em páginas que compartilhem o mesmo tema visual.
+
+#### Classes utilitárias e componentes
+
+- **Superfícies**: use `glass-surface` para painéis translúcidos e `input-glass` em campos que precisam efeito vidro + foco dourado.
+- **Botões**: aplique `btn-primary` para ações principais (confirmar, salvar), `btn-secondary` para alternativas neutras, `btn-success` para finalizações positivas, `btn-warning` quando houver risco/atenção e `btn-danger` em ações destrutivas. O estilo `btn-neutral` atende botões fantasma/icon-only.
+- **Badges**: prefira `badge-success`, `badge-danger` e `badge-neutral` para estados genéricos. Para categorias específicas já mapeadas, reutilize `badge-acabamento`, `badge-embalagem`, `badge-marcenaria` e `badge-montagem`.
+- **Toggles**: `toggle` é indicado para switches tradicionais em formulários; `component-toggle` atende variantes compactas dentro de cards ou listas. Ambos alteram a cor para `--color-primary` quando marcados.
+- **Animações e feedback**: `animate-fade-in-up`, `animate-modalFade`, `slide-in` e utilitários de toast (`toast-*`) podem ser replicados para manter consistência de entrada e mensagens.
+
 ## Geração de instalador
 
 Para criar um instalador execute:
