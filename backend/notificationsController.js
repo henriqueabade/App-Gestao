@@ -262,7 +262,7 @@ async function getOrderNotifications() {
   const { rows: producao } = await safeQuery(
     `SELECT id, numero, situacao, COALESCE(data_aprovacao, data_emissao) AS referencia
        FROM pedidos
-      WHERE situacao ILIKE '%produ%'
+      WHERE situacao::text ILIKE '%produ%'
         AND COALESCE(data_aprovacao, data_emissao) <= $1`,
     [stuckSince]
   );
@@ -270,7 +270,7 @@ async function getOrderNotifications() {
   const { rows: envio } = await safeQuery(
     `SELECT id, numero, situacao, data_envio
        FROM pedidos
-      WHERE situacao ILIKE 'enviado%'
+      WHERE situacao::text ILIKE 'enviado%'
         AND data_envio IS NOT NULL
         AND data_entrega IS NULL
         AND data_envio <= $1`,
