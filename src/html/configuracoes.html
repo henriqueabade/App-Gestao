@@ -86,6 +86,57 @@
         <section class="settings-card glass-surface rounded-xl">
             <div class="settings-card-header">
                 <div>
+                    <h2 class="settings-card-title">Ações rápidas do usuário</h2>
+                    <p class="settings-card-description">Controle quais atalhos ficam disponíveis no menu do usuário e como as informações são exibidas.</p>
+                </div>
+            </div>
+
+            <div class="space-y-6 mt-6">
+                <div>
+                    <p id="quickActionsGroupLabel" class="text-sm text-white/80 mb-3">Escolha as ações que devem aparecer no menu de usuário.</p>
+                    <div class="space-y-2" role="group" aria-labelledby="quickActionsGroupLabel">
+                        <label class="flex items-center gap-3 text-sm text-white/80" for="quickAction-logout">
+                            <input type="checkbox" id="quickAction-logout" data-quick-action="logout" class="h-4 w-4 rounded border border-white/30 bg-transparent accent-[var(--color-primary)]">
+                            Sair do sistema
+                        </label>
+                        <label class="flex items-center gap-3 text-sm text-white/80" for="quickAction-minimize">
+                            <input type="checkbox" id="quickAction-minimize" data-quick-action="minimize" class="h-4 w-4 rounded border border-white/30 bg-transparent accent-[var(--color-primary)]">
+                            Minimizar janela
+                        </label>
+                        <label class="flex items-center gap-3 text-sm text-white/80" for="quickAction-reload">
+                            <input type="checkbox" id="quickAction-reload" data-quick-action="reload" class="h-4 w-4 rounded border border-white/30 bg-transparent accent-[var(--color-primary)]">
+                            Recarregar aplicação
+                        </label>
+                        <label class="flex items-center gap-3 text-sm text-white/80" for="quickAction-selectDisplay">
+                            <input type="checkbox" id="quickAction-selectDisplay" data-quick-action="select-display" class="h-4 w-4 rounded border border-white/30 bg-transparent accent-[var(--color-primary)]">
+                            Escolher tela
+                        </label>
+                        <label class="flex items-center gap-3 text-sm text-white/80" for="quickAction-close">
+                            <input type="checkbox" id="quickAction-close" data-quick-action="close" class="h-4 w-4 rounded border border-white/30 bg-transparent accent-[var(--color-primary)]">
+                            Fechar aplicação
+                        </label>
+                    </div>
+                    <p id="quickActionsStatus" class="settings-status mt-2"></p>
+                </div>
+
+                <div class="pt-4 border-t border-white/10">
+                    <p class="text-sm text-white/80 mb-3">Personalize como os dados do usuário são apresentados.</p>
+                    <label class="flex items-center gap-3 text-sm text-white/80" for="quickAction-showAvatar">
+                        <input type="checkbox" id="quickAction-showAvatar" class="h-4 w-4 rounded border border-white/30 bg-transparent accent-[var(--color-primary)]">
+                        Exibir avatar do usuário
+                    </label>
+                    <label class="flex items-center gap-3 text-sm text-white/80 mt-2" for="quickAction-showName">
+                        <input type="checkbox" id="quickAction-showName" class="h-4 w-4 rounded border border-white/30 bg-transparent accent-[var(--color-primary)]">
+                        Exibir nome e perfil
+                    </label>
+                    <p id="quickIdentityStatus" class="settings-status mt-2"></p>
+                </div>
+            </div>
+        </section>
+
+        <section class="settings-card">
+            <div class="settings-card-header">
+                <div>
                     <h2 class="settings-card-title">Categorias relevantes</h2>
                     <p class="settings-card-description">Escolha os tipos de alerta que deseja receber quando as notificações estiverem ativas.</p>
                 </div>

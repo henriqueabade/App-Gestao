@@ -608,6 +608,15 @@ body.text-white {
     text-indent: -9999px;
 }
 
+#userSummary.user-summary--hide-avatar #userAvatar {
+    display: none !important;
+}
+
+#userSummary.user-summary--hide-name #userName,
+#userSummary.user-summary--hide-name #userProfile {
+    display: none !important;
+}
+
 .app-update-container.hidden {
     display: none !important;
 }

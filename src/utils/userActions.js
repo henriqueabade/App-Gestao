@@ -2,7 +2,106 @@ window.addEventListener('DOMContentLoaded', () => {
   const nameEl = document.getElementById('userName');
   const profileEl = document.getElementById('userProfile');
   const avatarEl = document.getElementById('userAvatar');
+  const summaryEl = document.getElementById('userSummary');
   const appUpdates = window.AppUpdates || null;
+
+  const QUICK_ACTIONS_STORAGE_KEY = 'menu.quickActions';
+  const QUICK_ACTIONS_EVENT = 'menu-quick-actions-changed';
+  const QUICK_ACTIONS_DEFAULT = {
+    actions: {
+      logout: true,
+      minimize: true,
+      reload: true,
+      'select-display': true,
+      close: true,
+    },
+    showAvatar: true,
+    showName: true,
+  };
+
+  const cloneQuickActions = value => {
+    if (typeof structuredClone === 'function') {
+      try {
+        return structuredClone(value);
+      } catch (error) {
+        /* ignore structured clone failures */
+      }
+    }
+    try {
+      return JSON.parse(JSON.stringify(value));
+    } catch (error) {
+      return value;
+    }
+  };
+
+  const normalizeQuickActions = source => {
+    const normalized = {
+      actions: { ...QUICK_ACTIONS_DEFAULT.actions },
+      showAvatar: QUICK_ACTIONS_DEFAULT.showAvatar,
+      showName: QUICK_ACTIONS_DEFAULT.showName,
+    };
+
+    if (!source || typeof source !== 'object') {
+      return normalized;
+    }
+
+    if (source.actions && typeof source.actions === 'object') {
+      Object.entries(source.actions).forEach(([key, enabled]) => {
+        if (key in normalized.actions) {
+          normalized.actions[key] = Boolean(enabled);
+        }
+      });
+    }
+
+    if (Array.isArray(source.actions)) {
+      Object.keys(normalized.actions).forEach(key => {
+        normalized.actions[key] = source.actions.includes(key);
+      });
+    }
+
+    if (typeof source.showAvatar === 'boolean') {
+      normalized.showAvatar = source.showAvatar;
+    }
+    if (typeof source.showName === 'boolean') {
+      normalized.showName = source.showName;
+    }
+
+    return normalized;
+  };
+
+  const readQuickActionsFromStorage = () => {
+    if (typeof localStorage === 'undefined') {
+      return cloneQuickActions(QUICK_ACTIONS_DEFAULT);
+    }
+    try {
+      const stored = localStorage.getItem(QUICK_ACTIONS_STORAGE_KEY);
+      const parsed = stored ? JSON.parse(stored) : null;
+      return normalizeQuickActions(parsed);
+    } catch (error) {
+      return cloneQuickActions(QUICK_ACTIONS_DEFAULT);
+    }
+  };
+
+  let quickActionsPreferences = readQuickActionsFromStorage();
+  let btn = null;
+  let menu = null;
+
+  const applyQuickActionsPreferences = () => {
+    if (summaryEl) {
+      summaryEl.classList.toggle('user-summary--hide-avatar', !quickActionsPreferences.showAvatar);
+      summaryEl.classList.toggle('user-summary--hide-name', !quickActionsPreferences.showName);
+    }
+    if (!menu) return;
+    Object.entries(quickActionsPreferences.actions).forEach(([key, enabled]) => {
+      const el = menu.querySelector(`[data-action="${key}"]`);
+      if (!el) return;
+      el.classList.toggle('hidden', !enabled);
+      el.setAttribute('aria-hidden', enabled ? 'false' : 'true');
+      el.tabIndex = enabled ? 0 : -1;
+      el.disabled = !enabled;
+    });
+  };
+
   try {
     const storedSession = sessionStorage.getItem('currentUser');
     let stored = storedSession || localStorage.getItem('user');
@@ -92,8 +191,14 @@ window.addEventListener('DOMContentLoaded', () => {
     /* ignore */
   }
 
-  const btn = document.getElementById('user-actions-btn');
-  const menu = document.getElementById('user-actions-menu');
+  btn = document.getElementById('user-actions-btn');
+  menu = document.getElementById('user-actions-menu');
+  applyQuickActionsPreferences();
+  window.addEventListener(QUICK_ACTIONS_EVENT, event => {
+    const updated = normalizeQuickActions(event?.detail?.preferences);
+    quickActionsPreferences = updated;
+    applyQuickActionsPreferences();
+  });
   if (!btn || !menu) return;
 
   const positionMenu = () => {
@@ -125,10 +230,15 @@ window.addEventListener('DOMContentLoaded', () => {
 
   const action = (name, fn) => {
     const el = menu.querySelector(`[data-action="${name}"]`);
-    if (el) el.addEventListener('click', () => {
-      menu.classList.add('hidden');
-      fn();
-    });
+    if (!el) return;
+    if (!el.dataset.actionHandlerBound) {
+      el.addEventListener('click', () => {
+        if (!quickActionsPreferences.actions[name]) return;
+        menu.classList.add('hidden');
+        fn();
+      });
+      el.dataset.actionHandlerBound = 'true';
+    }
   };
 
   

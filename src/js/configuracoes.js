@@ -85,6 +85,113 @@ const NotificationPreferences = (() => {
     };
 })();
 
+const MenuQuickActionsPreferences = (() => {
+    const STORAGE_KEY = 'menu.quickActions';
+    const EVENT_NAME = 'menu-quick-actions-changed';
+
+    const DEFAULT_STATE = {
+        actions: {
+            logout: true,
+            minimize: true,
+            reload: true,
+            'select-display': true,
+            close: true
+        },
+        showAvatar: true,
+        showName: true
+    };
+
+    const clone = (value) => {
+        if (typeof structuredClone === 'function') {
+            try {
+                return structuredClone(value);
+            } catch (error) {
+                // ignore structured clone failures and fallback to JSON
+            }
+        }
+        try {
+            return JSON.parse(JSON.stringify(value));
+        } catch (error) {
+            console.warn('Não foi possível clonar preferências do menu.quickActions', error);
+            return value;
+        }
+    };
+
+    function normalize(raw) {
+        const normalized = {
+            actions: { ...DEFAULT_STATE.actions },
+            showAvatar: DEFAULT_STATE.showAvatar,
+            showName: DEFAULT_STATE.showName
+        };
+
+        if (!raw || typeof raw !== 'object') {
+            return normalized;
+        }
+
+        if (raw.actions && typeof raw.actions === 'object') {
+            Object.entries(raw.actions).forEach(([key, enabled]) => {
+                if (key in normalized.actions) {
+                    normalized.actions[key] = Boolean(enabled);
+                }
+            });
+        }
+
+        if (Array.isArray(raw.actions)) {
+            Object.keys(normalized.actions).forEach(key => {
+                normalized.actions[key] = raw.actions.includes(key);
+            });
+        }
+
+        if (typeof raw.showAvatar === 'boolean') {
+            normalized.showAvatar = raw.showAvatar;
+        }
+        if (typeof raw.showName === 'boolean') {
+            normalized.showName = raw.showName;
+        }
+
+        return normalized;
+    }
+
+    function load() {
+        if (typeof localStorage === 'undefined') {
+            return clone(DEFAULT_STATE);
+        }
+        try {
+            const stored = localStorage.getItem(STORAGE_KEY);
+            const parsed = stored ? JSON.parse(stored) : null;
+            return clone(normalize(parsed));
+        } catch (error) {
+            console.warn('Não foi possível ler preferências do menu.quickActions', error);
+            return clone(DEFAULT_STATE);
+        }
+    }
+
+    function save(state) {
+        const normalized = normalize(state);
+        if (typeof localStorage !== 'undefined') {
+            try {
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(normalized));
+            } catch (error) {
+                console.warn('Não foi possível salvar preferências do menu.quickActions', error);
+            }
+        }
+        if (state && typeof state === 'object') {
+            Object.assign(state, normalized);
+        }
+        window.dispatchEvent(new CustomEvent(EVENT_NAME, { detail: { preferences: clone(normalized) } }));
+        return normalized;
+    }
+
+    return {
+        EVENT_NAME,
+        clone,
+        normalize,
+        load,
+        save,
+        getDefault: () => clone(DEFAULT_STATE)
+    };
+})();
+
 const MenuThemePreferences = (() => {
     const STORAGE_KEY = 'menu.theme';
     const DEFAULT_THEME = 'dark';
@@ -291,6 +398,7 @@ const MenuStartupPreferences = (() => {
     let currentTheme = MenuThemePreferences.getCurrent();
     let startupPreferences = MenuStartupPreferences.load();
     let moduleElement = null;
+    let quickActionsPreferences = MenuQuickActionsPreferences.load();
 
     const dom = {
         toggle: null,
@@ -302,7 +410,12 @@ const MenuStartupPreferences = (() => {
         defaultPageSelect: null,
         defaultPageStatus: null,
         crmExpandedToggle: null,
-        crmExpandedStatus: null
+        crmExpandedStatus: null,
+        quickActionInputs: [],
+        quickActionsStatus: null,
+        quickActionShowAvatar: null,
+        quickActionShowName: null,
+        quickIdentityStatus: null
     };
 
     function formatStatus(enabled) {
@@ -363,6 +476,7 @@ const MenuStartupPreferences = (() => {
         }
         applyThemeToUI(currentTheme);
         applyStartupPreferencesToUI();
+        applyQuickActionsToUI();
     }
 
     function handleToggleChange(event) {
@@ -406,11 +520,51 @@ const MenuStartupPreferences = (() => {
         applyStartupPreferencesToUI();
     }
 
+    function applyQuickActionsToUI() {
+        if (!moduleElement) return;
+        dom.quickActionInputs.forEach(input => {
+            const key = input.dataset.quickAction;
+            if (!key) return;
+            input.checked = Boolean(quickActionsPreferences.actions[key]);
+        });
+        if (dom.quickActionsStatus) {
+            dom.quickActionsStatus.textContent = formatQuickActionsStatus(quickActionsPreferences);
+        }
+        if (dom.quickActionShowAvatar) {
+            dom.quickActionShowAvatar.checked = !!quickActionsPreferences.showAvatar;
+        }
+        if (dom.quickActionShowName) {
+            dom.quickActionShowName.checked = !!quickActionsPreferences.showName;
+        }
+        if (dom.quickIdentityStatus) {
+            dom.quickIdentityStatus.textContent = formatQuickIdentityStatus(quickActionsPreferences);
+        }
+    }
+
     function handleCrmExpandedChange(event) {
         const expanded = event.target.checked;
         startupPreferences.crmExpanded = expanded;
         MenuStartupPreferences.saveCrmExpanded(expanded);
         applyStartupPreferencesToUI();
+    }
+
+    function handleQuickActionChange(event) {
+        const key = event.target.dataset.quickAction;
+        if (!key) return;
+        quickActionsPreferences.actions[key] = event.target.checked;
+        applyQuickActionsToUI();
+        MenuQuickActionsPreferences.save(quickActionsPreferences);
+    }
+
+    function handleQuickIdentityChange(event) {
+        const targetId = event.target.id;
+        if (targetId === 'quickAction-showAvatar') {
+            quickActionsPreferences.showAvatar = event.target.checked;
+        } else if (targetId === 'quickAction-showName') {
+            quickActionsPreferences.showName = event.target.checked;
+        }
+        applyQuickActionsToUI();
+        MenuQuickActionsPreferences.save(quickActionsPreferences);
     }
 
     function formatDefaultPageStatus(page) {
@@ -431,6 +585,52 @@ const MenuStartupPreferences = (() => {
         return expanded
             ? 'O submenu do CRM permanecerá expandido ao abrir o menu.'
             : 'O submenu do CRM será exibido recolhido por padrão.';
+    }
+
+    function formatQuickActionsStatus(state) {
+        const enabledActions = Object.entries(state.actions)
+            .filter(([, enabled]) => enabled)
+            .map(([key]) => getQuickActionLabel(key));
+
+        if (enabledActions.length === 0) {
+            return 'Nenhuma ação rápida está visível no momento. O menu exibirá apenas o ícone sem opções.';
+        }
+
+        if (enabledActions.length === Object.keys(state.actions).length) {
+            return 'Todas as ações rápidas estão disponíveis no menu do usuário.';
+        }
+
+        return `Ações exibidas: ${enabledActions.join(', ')}.`;
+    }
+
+    function formatQuickIdentityStatus(state) {
+        if (state.showAvatar && state.showName) {
+            return 'Avatar, nome e perfil do usuário serão apresentados no topo do menu.';
+        }
+        if (state.showAvatar && !state.showName) {
+            return 'Apenas o avatar será apresentado; nome e perfil ficarão ocultos.';
+        }
+        if (!state.showAvatar && state.showName) {
+            return 'Somente o nome e o perfil serão exibidos; o avatar permanecerá oculto.';
+        }
+        return 'As informações do usuário ficarão ocultas. Apenas o ícone de ações rápidas será exibido.';
+    }
+
+    function getQuickActionLabel(key) {
+        switch (key) {
+            case 'logout':
+                return 'Sair do sistema';
+            case 'minimize':
+                return 'Minimizar janela';
+            case 'reload':
+                return 'Recarregar aplicação';
+            case 'select-display':
+                return 'Escolher tela';
+            case 'close':
+                return 'Fechar aplicação';
+            default:
+                return key;
+        }
     }
 
     function handleCategoryChange(event) {
@@ -463,6 +663,11 @@ const MenuStartupPreferences = (() => {
         dom.defaultPageStatus = moduleElement.querySelector('#defaultModuleStatus');
         dom.crmExpandedToggle = moduleElement.querySelector('#crmExpandedToggle');
         dom.crmExpandedStatus = moduleElement.querySelector('#crmExpandedStatus');
+        dom.quickActionInputs = Array.from(moduleElement.querySelectorAll('[data-quick-action]'));
+        dom.quickActionsStatus = moduleElement.querySelector('#quickActionsStatus');
+        dom.quickActionShowAvatar = moduleElement.querySelector('#quickAction-showAvatar');
+        dom.quickActionShowName = moduleElement.querySelector('#quickAction-showName');
+        dom.quickIdentityStatus = moduleElement.querySelector('#quickIdentityStatus');
 
         if (dom.toggle) {
             dom.toggle.addEventListener('change', handleToggleChange);
@@ -479,6 +684,15 @@ const MenuStartupPreferences = (() => {
         if (dom.crmExpandedToggle) {
             dom.crmExpandedToggle.addEventListener('change', handleCrmExpandedChange);
         }
+        dom.quickActionInputs.forEach(input => {
+            input.addEventListener('change', handleQuickActionChange);
+        });
+        if (dom.quickActionShowAvatar) {
+            dom.quickActionShowAvatar.addEventListener('change', handleQuickIdentityChange);
+        }
+        if (dom.quickActionShowName) {
+            dom.quickActionShowName.addEventListener('change', handleQuickIdentityChange);
+        }
 
         applyStateToUI();
         return true;
@@ -488,6 +702,7 @@ const MenuStartupPreferences = (() => {
         currentState = NotificationPreferences.load();
         currentTheme = MenuThemePreferences.getCurrent();
         startupPreferences = MenuStartupPreferences.load();
+        quickActionsPreferences = MenuQuickActionsPreferences.load();
         bindDom();
     }
 
