@@ -15,6 +15,111 @@ const USUARIO_TRIGGER_ACTIVE_CLASS = 'usuario-detalhes-trigger--active';
 
 const ONLINE_LIMITE_MINUTOS = 5;
 
+const STATUS_LABEL_MAP = {
+    ativo: 'Ativo',
+    aguardando_aprovacao: 'Inativo',
+    nao_confirmado: 'Não confirmado'
+};
+
+const STATUS_BADGE_MAP = {
+    ativo: 'badge-success',
+    aguardando_aprovacao: 'badge-danger',
+    nao_confirmado: 'badge-warning'
+};
+
+function normalizarStatusInternoValor(valor) {
+    if (!valor) return '';
+    const normalizado = String(valor)
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-zA-Z0-9]+/g, '_')
+        .replace(/_{2,}/g, '_')
+        .replace(/^_|_$/g, '')
+        .toLowerCase();
+
+    const mapa = {
+        ativo: 'ativo',
+        active: 'ativo',
+        habilitado: 'ativo',
+        habilitada: 'ativo',
+        aguardando: 'aguardando_aprovacao',
+        aguardando_aprovacao: 'aguardando_aprovacao',
+        aguardandoaprovacao: 'aguardando_aprovacao',
+        pendente: 'aguardando_aprovacao',
+        pending: 'aguardando_aprovacao',
+        inativo: 'aguardando_aprovacao',
+        inativado: 'aguardando_aprovacao',
+        desativado: 'aguardando_aprovacao',
+        desativada: 'aguardando_aprovacao',
+        desativadao: 'aguardando_aprovacao',
+        desabilitado: 'aguardando_aprovacao',
+        desabilitada: 'aguardando_aprovacao',
+        nao_confirmado: 'nao_confirmado',
+        nao_confirmada: 'nao_confirmado',
+        naoconfirmado: 'nao_confirmado',
+        naoconfirmada: 'nao_confirmado',
+        nao_confirmados: 'nao_confirmado',
+        nao_confirmadas: 'nao_confirmado',
+        unconfirmed: 'nao_confirmado',
+        aguardando_confirmacao: 'nao_confirmado',
+        pendente_confirmacao: 'nao_confirmado',
+        email_nao_confirmado: 'nao_confirmado'
+    };
+
+    return mapa[normalizado] || normalizado;
+}
+
+function obterStatusInterno(usuario) {
+    if (!usuario || typeof usuario !== 'object') return '';
+    if (typeof usuario.statusInterno === 'string' && usuario.statusInterno.trim()) {
+        const normalizado = normalizarStatusInternoValor(usuario.statusInterno);
+        if (normalizado) return normalizado;
+    }
+
+    if (typeof usuario.status === 'string' && usuario.status.trim()) {
+        const normalizado = normalizarStatusInternoValor(usuario.status);
+        if (normalizado) return normalizado;
+    }
+
+    if (typeof usuario.confirmado === 'boolean') {
+        if (usuario.confirmado) return 'ativo';
+        if (usuario.emailConfirmado || usuario.email_confirmado) return 'aguardando_aprovacao';
+        return 'nao_confirmado';
+    }
+
+    if (typeof usuario.verificado === 'boolean') {
+        if (usuario.verificado) return 'ativo';
+        if (usuario.emailConfirmado || usuario.email_confirmado) return 'aguardando_aprovacao';
+        return 'nao_confirmado';
+    }
+
+    return '';
+}
+
+function obterStatusLabel(usuario, statusInterno) {
+    const interno = statusInterno || obterStatusInterno(usuario);
+    if (usuario && typeof usuario.status === 'string' && usuario.status.trim()) {
+        const normalizado = normalizarStatusInternoValor(usuario.status);
+        if (STATUS_LABEL_MAP[normalizado]) {
+            return STATUS_LABEL_MAP[normalizado];
+        }
+        return usuario.status;
+    }
+    return STATUS_LABEL_MAP[interno] || 'Inativo';
+}
+
+function obterStatusBadge(usuario, statusInterno) {
+    if (usuario && typeof usuario.statusBadge === 'string' && usuario.statusBadge.trim()) {
+        return usuario.statusBadge;
+    }
+    const interno = statusInterno || obterStatusInterno(usuario);
+    return STATUS_BADGE_MAP[interno] || 'badge-secondary';
+}
+
+function statusPodeSerAlternado(statusInterno) {
+    return statusInterno !== 'nao_confirmado' && statusInterno !== '';
+}
+
 function carregarUsuarioLogado() {
     try {
         const sessionStore = typeof sessionStorage !== 'undefined' ? sessionStorage : null;
@@ -483,7 +588,7 @@ function aplicarFiltros() {
     const perfilFiltro = normalizarParaComparacao(filtros.perfil);
     const statusFiltros = new Set(
         filtros.status
-            .map(status => normalizarParaComparacao(status))
+            .map(status => normalizarStatusInternoValor(status))
             .filter(Boolean)
     );
 
@@ -503,7 +608,7 @@ function aplicarFiltros() {
         }
 
         if (statusFiltros.size > 0) {
-            const statusUsuario = normalizarParaComparacao(u.status);
+            const statusUsuario = obterStatusInterno(u);
             if (!statusUsuario || !statusFiltros.has(statusUsuario)) {
                 return false;
             }
@@ -605,6 +710,10 @@ function renderUsuarios(lista) {
             'horaAtivacao'
         ]);
         const horaAtivacaoTexto = formatarDataHoraCompleta(horaAtivacaoValor);
+        const statusInterno = obterStatusInterno(u) || 'aguardando_aprovacao';
+        const statusRotulo = obterStatusLabel(u, statusInterno);
+        const statusBadgeClasse = obterStatusBadge(u, statusInterno);
+        const podeAlternarStatus = statusPodeSerAlternado(statusInterno);
 
         tr.innerHTML = `
             <td class="px-6 py-4">
@@ -662,7 +771,7 @@ function renderUsuarios(lista) {
                 </span>
             </td>
             <td class="px-6 py-4">
-                <span class="${u.status === 'Ativo' ? 'badge-success' : 'badge-danger'} px-2 py-1 rounded-full text-xs font-medium">${u.status}</span>
+                <span class="${statusBadgeClasse} px-2 py-1 rounded-full text-xs font-medium">${escapeHtml(statusRotulo)}</span>
             </td>`;
 
         const actionsTd = document.createElement('td');
@@ -677,8 +786,9 @@ function renderUsuarios(lista) {
         toggleBtn.type = 'button';
         toggleBtn.className = 'usuario-acao-botao usuario-acao-botao--toggle';
         toggleBtn.dataset.usuarioId = u.id;
-        toggleBtn.dataset.usuarioStatus = u.status || 'Inativo';
-        const isAtivo = (u.status || '').toLowerCase() === 'ativo';
+        toggleBtn.dataset.usuarioStatus = statusInterno;
+        const isAtivo = statusInterno === 'ativo';
+        const isNaoConfirmado = statusInterno === 'nao_confirmado';
         toggleBtn.setAttribute('aria-label', `${isAtivo ? 'Desativar' : 'Ativar'} ${nome}`);
         if (isAtivo) {
             toggleBtn.classList.add('usuario-acao-botao--ativo');
@@ -687,7 +797,9 @@ function renderUsuarios(lista) {
         toggleIcon.classList.add('fas', 'fa-plug', 'usuario-acao-icone');
         toggleIcon.classList.add(isAtivo ? 'usuario-acao-icone--on' : 'usuario-acao-icone--off');
         toggleBtn.appendChild(toggleIcon);
-        if (horaAtivacaoTexto && horaAtivacaoTexto !== 'Sem registro') {
+        if (isNaoConfirmado) {
+            toggleBtn.title = 'Confirmação de e-mail pendente';
+        } else if (horaAtivacaoTexto && horaAtivacaoTexto !== 'Sem registro') {
             toggleBtn.title =
                 isAtivo
                     ? `Desativar acesso (ativado em ${horaAtivacaoTexto})`
@@ -696,10 +808,15 @@ function renderUsuarios(lista) {
             toggleBtn.title = isAtivo ? 'Desativar acesso' : 'Ativar acesso';
         }
 
-        if (!permissoes.podeAtivar || permissoes.colunaDesabilitada) {
+        const podeAlternar =
+            podeAlternarStatus && permissoes.podeAtivar && !permissoes.colunaDesabilitada;
+
+        if (!podeAlternar) {
             toggleBtn.classList.add('usuario-acao-botao--disabled');
             toggleBtn.disabled = true;
-        } else {
+        }
+
+        if (podeAlternar) {
             toggleBtn.addEventListener('click', () => alternarStatusUsuario(toggleBtn));
         }
 
@@ -762,18 +879,18 @@ function atualizarResumo() {
     totalEl.textContent = usuariosCache.length;
 
     const statusCounts = usuariosCache.reduce((acc, u) => {
-        const key = (u.status || 'Aguardando').toLowerCase();
+        const key = obterStatusInterno(u) || 'desconhecido';
         acc[key] = (acc[key] || 0) + 1;
         return acc;
     }, {});
     statusEl.innerHTML = '';
     const statusConfig = {
-        ativo: { class: 'badge-success', label: 'Ativos' },
-        inativo: { class: 'badge-danger', label: 'Inativos' },
-        aguardando: { class: 'badge-warning', label: 'Aguardando' }
+        ativo: { class: STATUS_BADGE_MAP.ativo, label: 'Ativos' },
+        aguardando_aprovacao: { class: STATUS_BADGE_MAP.aguardando_aprovacao, label: 'Inativos' },
+        nao_confirmado: { class: STATUS_BADGE_MAP.nao_confirmado, label: 'Não confirmados' }
     };
     Object.entries(statusCounts).forEach(([status, count]) => {
-        const cfg = statusConfig[status] || { class: 'badge-secondary', label: status };
+        const cfg = statusConfig[status] || { class: 'badge-secondary', label: STATUS_LABEL_MAP[status] || status };
         const span = document.createElement('span');
         span.className = `${cfg.class} px-3 py-1 rounded-full text-xs font-medium`;
         span.textContent = `${count} ${cfg.label}`;
@@ -870,8 +987,8 @@ async function alternarStatusUsuario(botao) {
     if (!botao || botao.disabled) return;
     const usuarioId = Number(botao.dataset.usuarioId);
     if (!usuarioId) return;
-    const statusAtual = botao.dataset.usuarioStatus || 'Inativo';
-    const novoStatus = statusAtual === 'Ativo' ? 'Inativo' : 'Ativo';
+    const statusAtualInterno = normalizarStatusInternoValor(botao.dataset.usuarioStatus) || 'aguardando_aprovacao';
+    const novoStatusInterno = statusAtualInterno === 'ativo' ? 'aguardando_aprovacao' : 'ativo';
 
     botao.disabled = true;
     botao.classList.add('usuario-acao-botao--loading');
@@ -882,7 +999,7 @@ async function alternarStatusUsuario(botao) {
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify({ status: novoStatus })
+            body: JSON.stringify({ status: novoStatusInterno })
         });
 
         if (!resp.ok) {
@@ -899,7 +1016,7 @@ async function alternarStatusUsuario(botao) {
             };
         }
 
-        botao.dataset.usuarioStatus = atualizado.status || novoStatus;
+        botao.dataset.usuarioStatus = atualizado.statusInterno || novoStatusInterno;
         refreshUsuariosAposAtualizacao();
     } catch (err) {
         console.error('Erro ao alternar status do usuário:', err);

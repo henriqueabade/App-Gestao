@@ -82,7 +82,10 @@ test('PATCH /api/usuarios/:id/status alterna verificado e atualiza hora_ativacao
     const primeiroUsuario = await primeiraResposta.json();
     assert.strictEqual(primeiroUsuario.status, 'Ativo');
     assert.strictEqual(primeiroUsuario.statusInterno, 'ativo');
+    assert.strictEqual(primeiroUsuario.statusBadge, 'badge-success');
+    assert.strictEqual(primeiroUsuario.confirmado, true);
     assert.strictEqual(primeiroUsuario.hora_ativacao !== null, true);
+    assert.ok(primeiroUsuario.confirmadoEm);
 
     const primeiroRegistro = await pool.query(
       'SELECT verificado, hora_ativacao, status FROM usuarios WHERE id = 1'
@@ -102,17 +105,46 @@ test('PATCH /api/usuarios/:id/status alterna verificado e atualiza hora_ativacao
 
     assert.strictEqual(segundaResposta.status, 200);
     const segundoUsuario = await segundaResposta.json();
-    assert.strictEqual(segundoUsuario.status, 'Não confirmado');
-    assert.strictEqual(segundoUsuario.statusInterno, 'nao_confirmado');
+    assert.strictEqual(segundoUsuario.status, 'Inativo');
+    assert.strictEqual(segundoUsuario.statusInterno, 'aguardando_aprovacao');
+    assert.strictEqual(segundoUsuario.statusBadge, 'badge-danger');
+    assert.strictEqual(segundoUsuario.confirmado, false);
     assert.ok(segundoUsuario.hora_ativacao);
+    assert.ok(segundoUsuario.confirmadoEm);
 
     const segundoRegistro = await pool.query(
       'SELECT verificado, hora_ativacao, status FROM usuarios WHERE id = 1'
     );
     assert.strictEqual(segundoRegistro.rows[0].verificado, false);
-    assert.strictEqual(segundoRegistro.rows[0].status, 'nao_confirmado');
+    assert.strictEqual(segundoRegistro.rows[0].status, 'aguardando_aprovacao');
     assert.ok(segundoRegistro.rows[0].hora_ativacao instanceof Date);
     assert.ok(segundoRegistro.rows[0].hora_ativacao.getTime() >= primeiraAtivacao.getTime());
+  } finally {
+    await close();
+  }
+});
+
+test('GET /api/usuarios/lista mapeia status e badges corretamente', async () => {
+  const { listen, close, pool } = setup();
+  const port = await listen();
+
+  try {
+    await pool.query(
+      `INSERT INTO usuarios (nome, email, perfil, verificado, status, email_confirmado)
+         VALUES ('Carlos', 'carlos@example.com', 'operacional', false, 'nao_confirmado', false)`
+    );
+
+    const resposta = await fetch(`http://127.0.0.1:${port}/api/usuarios/lista`);
+    assert.strictEqual(resposta.status, 200);
+
+    const usuarios = await resposta.json();
+    const carlos = usuarios.find(u => u.email === 'carlos@example.com');
+    assert.ok(carlos, 'Usuário Carlos deve existir na lista');
+    assert.strictEqual(carlos.statusInterno, 'nao_confirmado');
+    assert.strictEqual(carlos.status, 'Não confirmado');
+    assert.strictEqual(carlos.statusBadge, 'badge-warning');
+    assert.strictEqual(carlos.confirmado, false);
+    assert.strictEqual(carlos.emailConfirmado, false);
   } finally {
     await close();
   }
