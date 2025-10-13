@@ -2755,7 +2755,14 @@ ipcMain.handle('get-saved-display', () => {
 });
 
 ipcMain.handle('open-pdf', async (_event, { id, tipo }) => {
+  const requestId = `req-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+  const prefix = `[pdf:${requestId}]`;
+  const logInfo = (...args) => console.info(prefix, ...args);
+  const logWarn = (...args) => console.warn(prefix, ...args);
+  const logError = (...args) => console.error(prefix, ...args);
+
   if (!id) {
+    logWarn('Tentativa de gerar PDF sem um identificador válido.');
     return { success: false, message: 'Documento inválido para geração de PDF.' };
   }
 
@@ -2764,6 +2771,8 @@ ipcMain.handle('open-pdf', async (_event, { id, tipo }) => {
   url.searchParams.set('id', id);
   if (tipo) url.searchParams.set('tipo', tipo);
   url.searchParams.set('apiBaseUrl', apiBaseUrl);
+
+  logInfo('Iniciando geração de PDF.', { id, tipo: tipo || 'orcamento', apiBaseUrl, url: url.toString() });
 
   const pdfWindow = new BrowserWindow({
     show: false,
@@ -2775,10 +2784,51 @@ ipcMain.handle('open-pdf', async (_event, { id, tipo }) => {
     }
   });
 
-  try {
-    await pdfWindow.loadURL(url.toString());
+  const { webContents } = pdfWindow;
 
-    await pdfWindow.webContents.executeJavaScript(
+  const logConsoleMessage = (_event, level, message, line, sourceId) => {
+    const levelMap = {
+      0: 'log',
+      1: 'warn',
+      2: 'error',
+      3: 'info',
+      4: 'debug'
+    };
+    const label = levelMap[level] || `level-${level}`;
+    console.info(`${prefix} [renderer:${label}] ${message} (${sourceId}:${line})`);
+  };
+
+  webContents.on('console-message', logConsoleMessage);
+  webContents.on('did-start-navigation', (_event, navigationUrl, isInPlace, isMainFrame) => {
+    logInfo('Iniciou navegação.', { navigationUrl, isInPlace, isMainFrame });
+  });
+  webContents.on('did-finish-load', () => {
+    logInfo('Carregamento inicial concluído.');
+  });
+  webContents.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
+    logError('Falha ao carregar conteúdo do PDF.', {
+      errorCode,
+      errorDescription,
+      validatedURL,
+      isMainFrame
+    });
+  });
+  webContents.on('render-process-gone', (_event, details) => {
+    logError('Processo de renderização finalizado inesperadamente.', details);
+  });
+  webContents.on('unresponsive', () => {
+    logWarn('Janela de PDF ficou sem resposta.');
+  });
+  webContents.on('responsive', () => {
+    logInfo('Janela de PDF voltou a responder.');
+  });
+
+  try {
+    logInfo('Carregando URL da visualização oculta do PDF.');
+    await webContents.loadURL(url.toString());
+    logInfo('URL carregada, aguardando que o PDF seja montado no renderer.');
+
+    await webContents.executeJavaScript(
       `
         (function waitForPdfReady() {
           if (typeof window === 'undefined') {
@@ -2823,9 +2873,16 @@ ipcMain.handle('open-pdf', async (_event, { id, tipo }) => {
       true
     );
 
-    const meta = await pdfWindow.webContents
+    logInfo('PDF sinalizou pronto. Recuperando metadados gerados.');
+
+    const meta = await webContents
       .executeJavaScript('window.generatedPdfMeta || {};', true)
-      .catch(() => ({}));
+      .catch((err) => {
+        logWarn('Não foi possível obter metadados do documento.', err);
+        return {};
+      });
+
+    logInfo('Metadados coletados.', meta);
 
     const docType = (meta?.tipo || tipo || 'documento').toString();
     const docNumber = (meta?.numero || id || '').toString();
@@ -2837,12 +2894,18 @@ ipcMain.handle('open-pdf', async (_event, { id, tipo }) => {
       .replace(/-+/g, '-')
       .replace(/^-|-$/g, '') || 'documento';
 
-    const pdfData = await pdfWindow.webContents.printToPDF({
+    logInfo('Iniciando renderização para PDF nativo.');
+
+    const pdfData = await webContents.printToPDF({
       printBackground: true,
       pageSize: 'A4',
       landscape: false,
       marginsType: 0,
       preferCSSPageSize: true
+    });
+
+    logInfo('Arquivo PDF gerado em memória. Exibindo diálogo de salvamento padrão.', {
+      suggestedName: `${sanitizedBaseName}.pdf`
     });
 
     const { canceled, filePath } = await dialog.showSaveDialog({
@@ -2852,17 +2915,26 @@ ipcMain.handle('open-pdf', async (_event, { id, tipo }) => {
     });
 
     if (canceled || !filePath) {
+      logWarn('Usuário cancelou a geração ou nenhum caminho foi informado.', { canceled, filePath });
       return { success: false, canceled: true };
     }
 
+    logInfo('Salvando arquivo PDF no destino escolhido.', { filePath });
+
     await fs.promises.mkdir(path.dirname(filePath), { recursive: true });
     await fs.promises.writeFile(filePath, pdfData);
+
+    logInfo('Arquivo PDF salvo com sucesso.', { filePath });
     return { success: true, filePath };
   } catch (error) {
-    console.error('Erro ao gerar PDF', error);
+    logError('Erro durante o fluxo de geração de PDF.', error);
     return { success: false, message: error?.message || 'Erro ao gerar PDF.' };
   } finally {
+    if (!webContents.isDestroyed()) {
+      webContents.removeListener('console-message', logConsoleMessage);
+    }
     if (!pdfWindow.isDestroyed()) {
+      logInfo('Encerrando janela oculta de PDF.');
       pdfWindow.close();
     }
   }
