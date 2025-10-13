@@ -114,6 +114,19 @@ window.addEventListener('DOMContentLoaded', () => {
     }
     const user = stored ? JSON.parse(stored) : {};
     const isSupAdmin = user.perfil === 'Sup Admin';
+    const isAdmin = user.perfil === 'Admin';
+    const hasAdminAccess = isSupAdmin || isAdmin;
+
+    const usuariosMenuItem = document.querySelector('[data-page="usuarios"]');
+    if (usuariosMenuItem) {
+      if (hasAdminAccess) {
+        usuariosMenuItem.classList.remove('hidden');
+        usuariosMenuItem.removeAttribute('aria-hidden');
+      } else {
+        usuariosMenuItem.classList.add('hidden');
+        usuariosMenuItem.setAttribute('aria-hidden', 'true');
+      }
+    }
     if (nameEl) nameEl.textContent = user.nome || '';
     if (profileEl) profileEl.textContent = user.perfil || 'Sem Perfil';
     if (avatarEl) {

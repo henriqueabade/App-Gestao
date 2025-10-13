@@ -115,6 +115,27 @@ const MODULE_LABELS = {
     configuracoes: 'Configurações'
 };
 
+function getCurrentUserFromStorage() {
+    let stored = null;
+    try {
+        if (typeof sessionStorage !== 'undefined') {
+            stored = sessionStorage.getItem('currentUser');
+        }
+        if (!stored && typeof localStorage !== 'undefined') {
+            stored = localStorage.getItem('user');
+        }
+        return stored ? JSON.parse(stored) : null;
+    } catch (error) {
+        console.warn('Não foi possível recuperar o usuário logado', error);
+        return null;
+    }
+}
+
+function canAccessUsuariosModule() {
+    const perfil = getCurrentUserFromStorage()?.perfil;
+    return perfil === 'Sup Admin' || perfil === 'Admin';
+}
+
 const MENU_DEFAULT_PAGE_KEY = 'menu.defaultPage';
 const MENU_LAST_PAGE_KEY = 'menu.lastPage';
 const MENU_CRM_EXPANDED_KEY = 'menu.crmExpanded';
@@ -2723,6 +2744,34 @@ AppUpdates.init();
 async function loadPage(page, options = {}) {
     const content = document.getElementById('content');
     if (!content || !page) return;
+
+    if (page === 'usuarios' && !canAccessUsuariosModule()) {
+        console.warn('Usuário sem permissão para acessar o módulo de Usuários. Redirecionando.');
+        const fallbackPage = options?.fallbackPage && options.fallbackPage !== 'usuarios'
+            ? options.fallbackPage
+            : MENU_DEFAULT_PAGE_FALLBACK;
+
+        if (fallbackPage && fallbackPage !== page) {
+            const fallbackOptions = { ...(options || {}) };
+            delete fallbackOptions.fallbackPage;
+            fallbackOptions.skipNavigationUpdate = false;
+            return loadPage(fallbackPage, fallbackOptions);
+        } else {
+            content.dataset.activePage = fallbackPage || MENU_DEFAULT_PAGE_FALLBACK;
+            content.innerHTML = `
+                <div class="modulo-container flex flex-col items-center justify-center py-24 text-center space-y-6">
+                    <div class="w-12 h-12 rounded-full border border-dashed border-white/20 flex items-center justify-center">
+                        <i class="fas fa-user-lock text-xl" style="color: var(--color-bordeaux)"></i>
+                    </div>
+                    <div>
+                        <p class="text-lg font-semibold text-white">Você não tem permissão para acessar esta área.</p>
+                        <p class="text-sm" style="color: var(--neutral-100)">Entre em contato com um administrador para solicitar acesso.</p>
+                    </div>
+                </div>
+            `;
+        }
+        return;
+    }
 
     if (!options.skipNavigationUpdate) {
         setActiveNavigation(page);
