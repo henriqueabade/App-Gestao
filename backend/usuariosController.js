@@ -1,5 +1,8 @@
 const express = require('express');
+const bcrypt = require('bcrypt');
 const pool = require('./db');
+const { sendSupAdminReviewNotification } = require('../src/email/sendSupAdminReviewNotification');
+const { sendUserActivationNotice } = require('../src/email/sendUserActivationNotice');
 
 const router = express.Router();
 
@@ -40,6 +43,10 @@ router.get('/lista', async (_req, res) => {
       garantirColuna('ultima_saida_em', 'ultima_saida');
 
     garantirColuna('hora_ativacao', 'hora_ativacao');
+    garantirColuna('status', 'status');
+    garantirColuna('email_confirmado', 'email_confirmado');
+    garantirColuna('email_confirmado_em', 'email_confirmado_em');
+    garantirColuna('status_atualizado_em', 'status_atualizado_em');
 
     garantirColuna('local_ultima_acao', 'local_ultima_acao') ||
       garantirColuna('local_ultima_alteracao', 'local_ultima_acao');
@@ -67,60 +74,105 @@ const normalizarStatus = body => {
     return undefined;
   }
 
+  if (typeof body.status === 'string') {
+    const valor = body.status.trim().toLowerCase();
+    if (valor === 'ativo') return 'ativo';
+    if (valor === 'inativo' || valor === 'não confirmado' || valor === 'nao_confirmado') {
+      return 'nao_confirmado';
+    }
+    if (valor === 'aguardando aprovação' || valor === 'aguardando_aprovacao') {
+      return 'aguardando_aprovacao';
+    }
+  }
+
   if (typeof body.verificado === 'boolean') {
-    return body.verificado;
+    return body.verificado ? 'ativo' : 'nao_confirmado';
   }
 
   if (typeof body.ativo === 'boolean') {
-    return body.ativo;
-  }
-
-  if (typeof body.status === 'string') {
-    const valor = body.status.trim().toLowerCase();
-    if (valor === 'ativo') return true;
-    if (valor === 'inativo') return false;
+    return body.ativo ? 'ativo' : 'nao_confirmado';
   }
 
   return undefined;
+};
+
+const renderMensagemHtml = (titulo, mensagem) => `<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <title>${titulo}</title>
+    <style>
+      body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0f172a; color: #e2e8f0; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; }
+      .card { background: rgba(15, 23, 42, 0.85); border-radius: 12px; padding: 32px; max-width: 420px; text-align: center; box-shadow: 0 20px 45px rgba(15, 23, 42, 0.6); }
+      h1 { font-size: 24px; margin-bottom: 16px; }
+      p { line-height: 1.5; }
+    </style>
+  </head>
+  <body>
+    <main class="card">
+      <h1>${titulo}</h1>
+      <p>${mensagem}</p>
+    </main>
+  </body>
+</html>`;
+
+const responder = (req, res, status, titulo, mensagem, payload = {}) => {
+  if (req.method === 'GET') {
+    res.status(status).send(renderMensagemHtml(titulo, mensagem));
+  } else {
+    res.status(status).json({ message: mensagem, titulo, ...payload });
+  }
+};
+
+const extrairToken = req => {
+  if (req.method === 'GET') {
+    const token = typeof req.query.token === 'string' ? req.query.token : Array.isArray(req.query.token) ? req.query.token[0] : '';
+    return (token || '').trim();
+  }
+  if (!req.body || typeof req.body !== 'object') {
+    return '';
+  }
+  const token = req.body.token;
+  return typeof token === 'string' ? token.trim() : '';
+};
+
+const tokenExpirado = usuario => {
+  if (!usuario.confirmacao_token_expira_em) return false;
+  const data = usuario.confirmacao_token_expira_em instanceof Date
+    ? usuario.confirmacao_token_expira_em
+    : new Date(usuario.confirmacao_token_expira_em);
+  if (Number.isNaN(data.getTime())) return false;
+  return data.getTime() < Date.now();
 };
 
 router.patch('/:id/status', async (req, res) => {
   const { id } = req.params;
   const novoStatus = normalizarStatus(req.body);
 
-  if (typeof novoStatus !== 'boolean') {
+  if (typeof novoStatus !== 'string') {
     return res.status(400).json({ error: 'Estado inválido' });
   }
 
   try {
-    const estadoAtual = await pool.query('SELECT verificado FROM usuarios WHERE id = $1', [id]);
+    const estadoAtual = await pool.query('SELECT 1 FROM usuarios WHERE id = $1', [id]);
 
     if (estadoAtual.rows.length === 0) {
       return res.status(404).json({ error: 'Usuário não encontrado' });
     }
 
-    const verificadoAtual = estadoAtual.rows[0].verificado;
-    const mudouStatus = verificadoAtual === null ? true : verificadoAtual !== novoStatus;
+    const novoVerificado = novoStatus === 'ativo';
 
-    let result;
-    if (mudouStatus) {
-      result = await pool.query(
-        `UPDATE usuarios
-            SET verificado = $1,
-                hora_ativacao = NOW()
-          WHERE id = $2
-        RETURNING id, nome, email, perfil, verificado, hora_ativacao`,
-        [novoStatus, id]
-      );
-    } else {
-      result = await pool.query(
-        `UPDATE usuarios
-            SET verificado = $1
-          WHERE id = $2
-        RETURNING id, nome, email, perfil, verificado, hora_ativacao`,
-        [novoStatus, id]
-      );
-    }
+    const result = await pool.query(
+      `UPDATE usuarios
+          SET status = $1,
+              verificado = $2,
+              email_confirmado = CASE WHEN $1 = 'ativo' THEN true ELSE email_confirmado END,
+              status_atualizado_em = NOW(),
+              hora_ativacao = CASE WHEN $1 = 'ativo' THEN NOW() ELSE hora_ativacao END
+        WHERE id = $3
+      RETURNING id, nome, email, perfil, verificado, hora_ativacao, status, email_confirmado, email_confirmado_em, status_atualizado_em`,
+      [novoStatus, novoVerificado, id]
+    );
 
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Usuário não encontrado' });
@@ -132,6 +184,242 @@ router.patch('/:id/status', async (req, res) => {
   } catch (err) {
     console.error('Erro ao atualizar status do usuário:', err);
     res.status(500).json({ error: 'Erro ao atualizar status do usuário' });
+  }
+});
+
+async function confirmarEmail(req, res) {
+  const token = extrairToken(req);
+
+  if (!token) {
+    return responder(req, res, 400, 'Token inválido', 'Token de confirmação não informado.');
+  }
+
+  try {
+    const resultado = await pool.query(
+      `SELECT id, nome, email, email_confirmado, confirmacao_token_expira_em
+         FROM usuarios
+        WHERE confirmacao_token = $1`,
+      [token]
+    );
+
+    if (resultado.rows.length === 0) {
+      return responder(req, res, 404, 'Token inválido', 'Não encontramos uma solicitação válida para este link.');
+    }
+
+    const usuario = resultado.rows[0];
+
+    if (tokenExpirado(usuario)) {
+      return responder(
+        req,
+        res,
+        410,
+        'Token expirado',
+        'O link de confirmação expirou. Solicite um novo cadastro.'
+      );
+    }
+
+    if (usuario.email_confirmado) {
+      return responder(
+        req,
+        res,
+        200,
+        'E-mail já confirmado',
+        'Você já havia confirmado este e-mail. Aguarde a aprovação do Sup Admin.'
+      );
+    }
+
+    const atualizado = await pool.query(
+      `UPDATE usuarios
+          SET email_confirmado = true,
+              email_confirmado_em = NOW(),
+              status = 'aguardando_aprovacao',
+              status_atualizado_em = NOW(),
+              confirmacao_token = NULL,
+              confirmacao_token_revogado_em = NOW()
+        WHERE id = $1
+      RETURNING id, nome, email, perfil, status, verificado, hora_ativacao, email_confirmado, email_confirmado_em, status_atualizado_em`,
+      [usuario.id]
+    );
+
+    const usuarioAtualizado = atualizado.rows[0];
+
+    try {
+      await sendSupAdminReviewNotification({
+        usuarioNome: usuarioAtualizado.nome,
+        usuarioEmail: usuarioAtualizado.email,
+        motivo: 'Usuário confirmou o e-mail.',
+        acaoRecomendada: 'Acesse o painel e realize a aprovação do cadastro.'
+      });
+    } catch (err) {
+      console.error('sendSupAdminReviewNotification error', err);
+    }
+
+    return responder(
+      req,
+      res,
+      200,
+      'Confirmação registrada',
+      'Obrigado! Sua confirmação foi recebida e o Sup Admin foi notificado.',
+      { usuario: formatarUsuario(usuarioAtualizado) }
+    );
+  } catch (err) {
+    console.error('Erro ao confirmar e-mail do usuário:', err);
+    return responder(
+      req,
+      res,
+      500,
+      'Erro interno',
+      'Não foi possível confirmar seu e-mail. Tente novamente mais tarde.'
+    );
+  }
+}
+
+async function reportarEmailIncorreto(req, res) {
+  const token = extrairToken(req);
+
+  if (!token) {
+    return responder(req, res, 400, 'Token inválido', 'Token de confirmação não informado.');
+  }
+
+  try {
+    const resultado = await pool.query(
+      `SELECT id, nome, email, confirmacao_token_expira_em
+         FROM usuarios
+        WHERE confirmacao_token = $1`,
+      [token]
+    );
+
+    if (resultado.rows.length === 0) {
+      return responder(req, res, 404, 'Token inválido', 'Não encontramos uma solicitação válida para este link.');
+    }
+
+    const usuario = resultado.rows[0];
+
+    if (tokenExpirado(usuario)) {
+      return responder(
+        req,
+        res,
+        410,
+        'Token expirado',
+        'O link de confirmação expirou. Caso o cadastro tenha sido indevido, entre em contato com o suporte.'
+      );
+    }
+
+    const atualizado = await pool.query(
+      `UPDATE usuarios
+          SET email_confirmado = false,
+              email_confirmado_em = NULL,
+              verificado = false,
+              status = 'nao_confirmado',
+              status_atualizado_em = NOW(),
+              confirmacao_token = NULL,
+              confirmacao_token_revogado_em = NOW()
+        WHERE id = $1
+      RETURNING id, nome, email, perfil, status, verificado, hora_ativacao, email_confirmado, email_confirmado_em, status_atualizado_em`,
+      [usuario.id]
+    );
+
+    const usuarioAtualizado = atualizado.rows[0];
+
+    try {
+      await sendSupAdminReviewNotification({
+        usuarioNome: usuarioAtualizado.nome,
+        usuarioEmail: usuarioAtualizado.email,
+        motivo: 'O destinatário informou que não reconhece o cadastro.',
+        acaoRecomendada: 'Investigue o caso e, se necessário, bloqueie o acesso.'
+      });
+    } catch (err) {
+      console.error('sendSupAdminReviewNotification error', err);
+    }
+
+    return responder(
+      req,
+      res,
+      200,
+      'Relato registrado',
+      'Obrigado por nos avisar. Nossa equipe foi notificada e investigará o caso.',
+      { usuario: formatarUsuario(usuarioAtualizado) }
+    );
+  } catch (err) {
+    console.error('Erro ao reportar e-mail incorreto:', err);
+    return responder(
+      req,
+      res,
+      500,
+      'Erro interno',
+      'Não foi possível registrar o relato. Tente novamente mais tarde.'
+    );
+  }
+}
+
+router.get('/confirmar-email', confirmarEmail);
+router.post('/confirmar-email', confirmarEmail);
+router.get('/reportar-email-incorreto', reportarEmailIncorreto);
+router.post('/reportar-email-incorreto', reportarEmailIncorreto);
+
+router.post('/aprovar', async (req, res) => {
+  const usuarioId = Number(req.body?.usuarioId);
+  const supAdminEmail = typeof req.body?.supAdminEmail === 'string' ? req.body.supAdminEmail.trim() : '';
+  const supAdminSenha = typeof req.body?.supAdminSenha === 'string' ? req.body.supAdminSenha : '';
+
+  if (!usuarioId || !supAdminEmail || !supAdminSenha) {
+    return res.status(400).json({ error: 'Dados insuficientes para aprovação.' });
+  }
+
+  try {
+    const credenciais = await pool.query(
+      `SELECT id, senha, perfil
+         FROM usuarios
+        WHERE lower(email) = lower($1)`,
+      [supAdminEmail]
+    );
+
+    if (credenciais.rows.length === 0) {
+      return res.status(403).json({ error: 'Credenciais inválidas.' });
+    }
+
+    const supAdmin = credenciais.rows[0];
+    const perfil = (supAdmin.perfil || '').toLowerCase();
+    if (!perfil.includes('sup admin')) {
+      return res.status(403).json({ error: 'Apenas Sup Admin pode aprovar usuários.' });
+    }
+
+    const senhaValida = await bcrypt.compare(supAdminSenha, supAdmin.senha || '');
+    if (!senhaValida) {
+      return res.status(403).json({ error: 'Credenciais inválidas.' });
+    }
+
+    const atualizado = await pool.query(
+      `UPDATE usuarios
+          SET status = 'ativo',
+              verificado = true,
+              email_confirmado = true,
+              email_confirmado_em = COALESCE(email_confirmado_em, NOW()),
+              status_atualizado_em = NOW(),
+              hora_ativacao = NOW(),
+              confirmacao_token = NULL,
+              confirmacao_token_revogado_em = NOW()
+        WHERE id = $1
+      RETURNING id, nome, email, perfil, status, verificado, hora_ativacao, email_confirmado, email_confirmado_em, status_atualizado_em`,
+      [usuarioId]
+    );
+
+    if (atualizado.rows.length === 0) {
+      return res.status(404).json({ error: 'Usuário não encontrado.' });
+    }
+
+    const usuario = atualizado.rows[0];
+
+    try {
+      await sendUserActivationNotice({ to: usuario.email, nome: usuario.nome });
+    } catch (err) {
+      console.error('sendUserActivationNotice error', err);
+    }
+
+    res.json({ message: 'Usuário aprovado com sucesso.', usuario: formatarUsuario(usuario) });
+  } catch (err) {
+    console.error('Erro ao aprovar usuário:', err);
+    res.status(500).json({ error: 'Erro ao aprovar usuário.' });
   }
 });
 
@@ -193,12 +481,31 @@ function formatarUsuario(u) {
 
   const ultimaAlteracaoDescricao = formatarDescricaoAlteracao();
 
+  const statusRaw = typeof u.status === 'string' ? u.status.trim().toLowerCase() : '';
+  const statusInterno = statusRaw || (u.verificado ? 'ativo' : 'nao_confirmado');
+  const statusLabel = (() => {
+    switch (statusInterno) {
+      case 'ativo':
+        return 'Ativo';
+      case 'aguardando_aprovacao':
+        return 'Aguardando aprovação';
+      case 'nao_confirmado':
+        return 'Não confirmado';
+      default:
+        return u.verificado ? 'Ativo' : 'Inativo';
+    }
+  })();
+
   return {
     id: u.id,
     nome: u.nome,
     email: u.email,
     perfil: u.perfil,
-    status: u.verificado ? 'Ativo' : 'Inativo',
+    status: statusLabel,
+    statusInterno,
+    emailConfirmado: Boolean(u.email_confirmado),
+    emailConfirmadoEm: serializar(parseDate(u.email_confirmado_em)),
+    statusAtualizadoEm: serializar(parseDate(u.status_atualizado_em)),
     online,
     ultimoLoginEm: serializar(ultimaEntrada || ultimoLogin),
     ultimaAtividadeEm: serializar(ultimaAtividade),

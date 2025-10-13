@@ -1,6 +1,7 @@
+const crypto = require('crypto');
 const pool = require('./db');
 const bcrypt = require('bcrypt');
-const { sendRegistrationEmail } = require("../src/email/sendRegistrationEmail");
+const { sendEmailConfirmationRequest } = require('../src/email/sendEmailConfirmationRequest');
 const { registrarUltimaEntrada } = require('./userActivity');
 
 // Track failed PIN attempts across session
@@ -54,14 +55,28 @@ async function registrarUsuario(nome, email, senha, pin) {
       throw new Error('Usuário já cadastrado');
     }
     const normalized = (email || '').trim().toLowerCase();
+    const token = crypto.randomBytes(32).toString('hex');
     const resultado = await pool.query(
-      'INSERT INTO usuarios (nome, email, senha, verificado) VALUES ($1, $2, $3, false) RETURNING id',
-      [nome, normalized, senhaCriptografada]
+      `INSERT INTO usuarios (
+          nome,
+          email,
+          senha,
+          verificado,
+          status,
+          email_confirmado,
+          confirmacao_token,
+          confirmacao_token_gerado_em,
+          confirmacao_token_expira_em,
+          status_atualizado_em
+        )
+        VALUES ($1, $2, $3, false, 'nao_confirmado', false, $4, NOW(), NOW() + INTERVAL '48 hours', NOW())
+        RETURNING id`,
+      [nome, normalized, senhaCriptografada, token]
     );
     try {
-      await sendRegistrationEmail(email, nome);
+      await sendEmailConfirmationRequest({ to: email, nome, token });
     } catch (e) {
-      console.error('sendRegistrationEmail error', e);
+      console.error('sendEmailConfirmationRequest error', e);
     }
     pinErrorAttempts = 0; // reset after successful operation
     return resultado.rows[0];
@@ -92,36 +107,27 @@ async function loginUsuario(email, senha, pin) {
     const usuario = resultado.rows[0];
     if (!usuario) throw new Error('Usuário não encontrado');
 
-    const hasVerificado = Object.prototype.hasOwnProperty.call(usuario, 'verificado');
-    let usuarioAtivo = true;
-    if (hasVerificado) {
-      const valor = usuario.verificado;
-      if (typeof valor === 'boolean') {
-        usuarioAtivo = valor;
-      } else if (typeof valor === 'number') {
-        usuarioAtivo = valor === 1;
-      } else if (valor === null || valor === undefined) {
-        usuarioAtivo = false;
-      } else {
-        const normalized = String(valor).trim().toLowerCase();
-        usuarioAtivo = ['true', 't', '1', 'ativo', 'active'].includes(normalized);
-      }
-    } else if (Object.prototype.hasOwnProperty.call(usuario, 'status')) {
-      const statusValor = usuario.status;
-      if (typeof statusValor === 'boolean') {
-        usuarioAtivo = statusValor;
-      } else if (typeof statusValor === 'number') {
-        usuarioAtivo = statusValor === 1;
-      } else if (statusValor === null || statusValor === undefined) {
-        usuarioAtivo = true;
-      } else {
-        const normalized = String(statusValor).trim().toLowerCase();
-        usuarioAtivo = normalized === 'ativo' || normalized === 'active' || normalized === '1';
-      }
-    }
+    const statusValor = typeof usuario.status === 'string' ? usuario.status.trim().toLowerCase() : '';
+    const possuiVerificado = Object.prototype.hasOwnProperty.call(usuario, 'verificado');
+    const verificadoBruto = possuiVerificado ? usuario.verificado : undefined;
 
-    if (!usuarioAtivo) {
-      const error = new Error('Usuário inativo. Solicite ao administrador a ativação do seu acesso.');
+    const estaAtivo = () => {
+      if (statusValor) {
+        return statusValor === 'ativo';
+      }
+      if (typeof verificadoBruto === 'boolean') return verificadoBruto;
+      if (typeof verificadoBruto === 'number') return verificadoBruto === 1;
+      if (verificadoBruto === null || verificadoBruto === undefined) return false;
+      const normalized = String(verificadoBruto).trim().toLowerCase();
+      return ['true', 't', '1', 'ativo', 'active'].includes(normalized);
+    };
+
+    if (!estaAtivo()) {
+      const mensagens = {
+        nao_confirmado: 'Confirme seu e-mail para concluir o cadastro.',
+        aguardando_aprovacao: 'Aguarde a aprovação do Sup Admin para acessar o sistema.'
+      };
+      const error = new Error(mensagens[statusValor] || 'Usuário inativo. Solicite ao administrador a ativação do seu acesso.');
       error.code = 'inactive-user';
       throw error;
     }

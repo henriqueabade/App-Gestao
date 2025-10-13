@@ -11,8 +11,16 @@ function setup() {
     nome text,
     email text,
     perfil text,
+    senha text,
     verificado boolean default false,
-    hora_ativacao timestamp
+    status text default 'nao_confirmado',
+    email_confirmado boolean default false,
+    email_confirmado_em timestamp,
+    confirmacao_token text,
+    confirmacao_token_gerado_em timestamp,
+    confirmacao_token_expira_em timestamp,
+    status_atualizado_em timestamp,
+    hora_ativacao timestamptz
   );`);
   db.public.none(
     "INSERT INTO usuarios (nome, email, perfil, verificado) VALUES ('Maria', 'maria@example.com', 'admin', false);"
@@ -73,12 +81,14 @@ test('PATCH /api/usuarios/:id/status alterna verificado e atualiza hora_ativacao
     assert.strictEqual(primeiraResposta.status, 200);
     const primeiroUsuario = await primeiraResposta.json();
     assert.strictEqual(primeiroUsuario.status, 'Ativo');
+    assert.strictEqual(primeiroUsuario.statusInterno, 'ativo');
     assert.strictEqual(primeiroUsuario.hora_ativacao !== null, true);
 
     const primeiroRegistro = await pool.query(
-      'SELECT verificado, hora_ativacao FROM usuarios WHERE id = 1'
+      'SELECT verificado, hora_ativacao, status FROM usuarios WHERE id = 1'
     );
     assert.strictEqual(primeiroRegistro.rows[0].verificado, true);
+    assert.strictEqual(primeiroRegistro.rows[0].status, 'ativo');
     const primeiraAtivacao = primeiroRegistro.rows[0].hora_ativacao;
     assert.ok(primeiraAtivacao instanceof Date);
 
@@ -92,13 +102,15 @@ test('PATCH /api/usuarios/:id/status alterna verificado e atualiza hora_ativacao
 
     assert.strictEqual(segundaResposta.status, 200);
     const segundoUsuario = await segundaResposta.json();
-    assert.strictEqual(segundoUsuario.status, 'Inativo');
+    assert.strictEqual(segundoUsuario.status, 'Não confirmado');
+    assert.strictEqual(segundoUsuario.statusInterno, 'nao_confirmado');
     assert.ok(segundoUsuario.hora_ativacao);
 
     const segundoRegistro = await pool.query(
-      'SELECT verificado, hora_ativacao FROM usuarios WHERE id = 1'
+      'SELECT verificado, hora_ativacao, status FROM usuarios WHERE id = 1'
     );
     assert.strictEqual(segundoRegistro.rows[0].verificado, false);
+    assert.strictEqual(segundoRegistro.rows[0].status, 'nao_confirmado');
     assert.ok(segundoRegistro.rows[0].hora_ativacao instanceof Date);
     assert.ok(segundoRegistro.rows[0].hora_ativacao.getTime() >= primeiraAtivacao.getTime());
   } finally {
