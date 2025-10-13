@@ -50,61 +50,6 @@ router.get('/lista', async (_req, res) => {
       garantirColuna('ultima_alteracao_descricao', 'especificacao_ultima_acao') ||
       garantirColuna('ultima_acao', 'especificacao_ultima_acao');
 
-    const garantirPrimeiraColuna = (alias, candidatos) => {
-      for (const nome of candidatos) {
-        if (garantirColuna(nome, alias)) {
-          return alias;
-        }
-      }
-      return null;
-    };
-
-    const statusTextoAlias = garantirPrimeiraColuna('status_texto', [
-      'status',
-      'status_usuario',
-      'status_atual',
-      'status_usuario_atual',
-      'status_conta',
-      'status_registro',
-      'status_texto',
-      'situacao',
-      'situacao_usuario',
-      'situacao_atual',
-      'situacao_cadastro',
-      'situacao_texto',
-      'situacao_registro',
-      'estado',
-      'estado_usuario'
-    ]);
-
-    const aguardandoAlias = garantirPrimeiraColuna('aguardando_flag', [
-      'aguardando',
-      'aguardando_ativacao',
-      'aguardando_confirmacao',
-      'pendente',
-      'pendente_validacao',
-      'pendente_confirmacao'
-    ]);
-
-    const ativoAlias = garantirPrimeiraColuna('ativo_flag', [
-      'ativo',
-      'esta_ativo',
-      'is_ativo',
-      'ativo_flag',
-      'habilitado',
-      'enabled'
-    ]);
-
-    const inativoAlias = garantirPrimeiraColuna('inativo_flag', [
-      'inativo',
-      'esta_inativo',
-      'is_inativo',
-      'inativo_flag',
-      'desativado',
-      'bloqueado',
-      'disabled'
-    ]);
-
     const query = `SELECT ${selecionar.join(', ')} FROM usuarios u ORDER BY u.nome`;
     const result = await pool.query(query);
 
@@ -246,131 +191,26 @@ function formatarUsuario(u) {
     return '';
   };
 
-      const ultimaAlteracaoDescricao = formatarDescricaoAlteracao();
+  const ultimaAlteracaoDescricao = formatarDescricaoAlteracao();
 
-      const parseBoolean = valor => {
-        if (valor === null || valor === undefined) return null;
-        if (typeof valor === 'boolean') return valor;
-        if (typeof valor === 'number') return valor !== 0;
-        const texto = String(valor).trim().toLowerCase();
-        if (!texto) return null;
-        if (['1', 'true', 't', 'y', 'yes', 'sim', 's', 'ativo', 'active', 'habilitado', 'enabled'].includes(texto)) {
-          return true;
-        }
-        if (
-          [
-            '0',
-            'false',
-            'f',
-            'n',
-            'no',
-            'nao',
-            'não',
-            'inativo',
-            'inactive',
-            'desativado',
-            'bloqueado',
-            'disabled'
-          ].includes(texto)
-        ) {
-          return false;
-        }
-        return null;
-      };
-
-      const formatarStatus = valor => {
-        if (valor === null || valor === undefined) return '';
-        if (typeof valor === 'boolean') {
-          return valor ? 'Ativo' : 'Inativo';
-        }
-        if (typeof valor === 'number') {
-          if (valor === 1) return 'Ativo';
-          if (valor === 0) return 'Inativo';
-        }
-        const textoOriginal = String(valor).trim();
-        if (!textoOriginal) return '';
-        const texto = textoOriginal.toLowerCase();
-        if (['1', 'true', 't', 'y', 'yes', 'sim', 's', 'ativo', 'active', 'habilitado', 'enabled'].includes(texto)) {
-          return 'Ativo';
-        }
-        if (
-          [
-            '0',
-            'false',
-            'f',
-            'n',
-            'no',
-            'nao',
-            'não',
-            'inativo',
-            'inactive',
-            'desativado',
-            'bloqueado',
-            'disabled'
-          ].includes(texto)
-        ) {
-          return 'Inativo';
-        }
-        if (texto.includes('aguard') || texto.includes('pend')) {
-          return 'Aguardando';
-        }
-        if (texto.includes('inativ') || texto.includes('desativ') || texto.includes('bloque')) {
-          return 'Inativo';
-        }
-        if (texto.includes('ativo') || texto.includes('habilit') || texto.includes('liberado')) {
-          return 'Ativo';
-        }
-        return textoOriginal
-          .toLowerCase()
-          .split(/\s+/)
-          .map(parte => (parte ? parte.charAt(0).toUpperCase() + parte.slice(1) : ''))
-          .join(' ');
-      };
-
-      const aguardando = aguardandoAlias ? parseBoolean(u[aguardandoAlias]) : null;
-      const ativo = ativoAlias ? parseBoolean(u[ativoAlias]) : null;
-      const inativo = inativoAlias ? parseBoolean(u[inativoAlias]) : null;
-
-      const candidatosStatus = [];
-      if (statusTextoAlias && u[statusTextoAlias] !== undefined) {
-        candidatosStatus.push(formatarStatus(u[statusTextoAlias]));
-      }
-      if (aguardando === true) {
-        candidatosStatus.push('Aguardando');
-      }
-      if (ativo !== null) {
-        candidatosStatus.push(ativo ? 'Ativo' : 'Inativo');
-      }
-      if (inativo !== null) {
-        candidatosStatus.push(inativo ? 'Inativo' : 'Ativo');
-      }
-      candidatosStatus.push(u.verificado ? 'Ativo' : 'Inativo');
-
-      const status = candidatosStatus.find(valor => typeof valor === 'string' && valor.trim().length > 0) || 'Inativo';
-
-      return {
-        id: u.id,
-        nome: u.nome,
-        email: u.email,
-        perfil: u.perfil,
-        status,
-        online,
-        ultimoLoginEm: serializar(ultimaEntrada || ultimoLogin),
-        ultimaAtividadeEm: serializar(ultimaAtividade),
-        ultimaAlteracaoEm: serializar(ultimaAlteracao),
-        ultimaEntradaEm: serializar(ultimaEntrada),
-        ultimaSaidaEm: serializar(ultimaSaida),
-        ultimaAlteracaoDescricao: ultimaAlteracaoDescricao || null,
-        localUltimaAlteracao: ultimaAcaoLocal || null,
-        especificacaoUltimaAlteracao: especificacaoUltimaAcao || null
-      };
-    });
-
-    res.json(usuarios);
-  } catch (err) {
-    console.error('Erro ao listar usuários:', err);
-    res.status(500).json({ error: 'Erro ao listar usuários' });
-  }
-});
+  return {
+    id: u.id,
+    nome: u.nome,
+    email: u.email,
+    perfil: u.perfil,
+    status: u.verificado ? 'Ativo' : 'Inativo',
+    online,
+    ultimoLoginEm: serializar(ultimaEntrada || ultimoLogin),
+    ultimaAtividadeEm: serializar(ultimaAtividade),
+    ultimaAlteracaoEm: serializar(ultimaAlteracao),
+    ultimaEntradaEm: serializar(ultimaEntrada),
+    ultimaSaidaEm: serializar(ultimaSaida),
+    horaAtivacaoEm: serializar(horaAtivacao),
+    hora_ativacao: serializar(horaAtivacao),
+    ultimaAlteracaoDescricao: ultimaAlteracaoDescricao || null,
+    localUltimaAlteracao: ultimaAcaoLocal || null,
+    especificacaoUltimaAlteracao: especificacaoUltimaAcao || null
+  };
+}
 
 module.exports = router;
