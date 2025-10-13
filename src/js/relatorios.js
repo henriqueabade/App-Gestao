@@ -216,6 +216,28 @@ function normalizeText(value) {
         .trim();
 }
 
+function classifyUserStatus(status) {
+    if (status === null || status === undefined) return null;
+    const normalized = normalizeText(status);
+    if (!normalized) return null;
+
+    const includes = substring => normalized.includes(substring);
+
+    if (['inativ', 'desativ', 'deslig', 'suspens', 'bloquead'].some(includes)) {
+        return 'Inativo';
+    }
+
+    if (['aguard', 'pend'].some(includes)) {
+        return 'Aguardando';
+    }
+
+    if (['ativad', 'ativo'].some(includes)) {
+        return 'Ativo';
+    }
+
+    return null;
+}
+
 function formatText(value, fallback = '—') {
     if (value === null || value === undefined) return fallback;
     const text = String(value).trim();
@@ -2786,11 +2808,8 @@ function buildUsuariosCharts(data = []) {
     const charts = [];
 
     const statusSeries = countByLabel(list, usuario => {
-        const status = normalizeText(usuario?.status);
-        if (!status) return usuario?.status ?? 'Sem status';
-        if (status.includes('ativo')) return 'Ativo';
-        if (status.includes('inativ')) return 'Inativo';
-        if (status.includes('aguard')) return 'Aguardando';
+        const classified = classifyUserStatus(usuario?.status);
+        if (classified) return classified;
         return usuario?.status ?? 'Sem status';
     }, {
         fallback: 'Sem status',
@@ -3198,7 +3217,7 @@ function computePedidosKpis(items = []) {
 function computeUsuariosKpis(items = []) {
     const list = Array.isArray(items) ? items : [];
     const total = list.length;
-    const active = list.filter(usuario => normalizeText(usuario?.status) === 'ativo').length;
+    const active = list.filter(usuario => classifyUserStatus(usuario?.status) === 'Ativo').length;
     const online = list.filter(usuario => Boolean(usuario?.online)).length;
     const profiles = new Set();
     list.forEach(usuario => {
