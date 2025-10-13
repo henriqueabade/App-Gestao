@@ -1,0 +1,86 @@
+<!-- Módulo de Configurações -->
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Configurações - Santíssimo Decor</title>
+    <link rel="stylesheet" href="../styles/tailwind-offline.css" />
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="../css/configuracoes.css">
+    <link rel="stylesheet" href="../styles/scroll.css">
+</head>
+<body class="text-white">
+    <div class="modulo-container" data-module="configuracoes">
+        <header class="settings-header">
+            <div>
+                <h1 class="settings-title">Configurações</h1>
+                <p class="settings-subtitle">Personalize as notificações exibidas no menu principal</p>
+            </div>
+        </header>
+
+        <section class="settings-card">
+            <div class="settings-card-header">
+                <div>
+                    <h2 class="settings-card-title">Notificações no menu</h2>
+                    <p class="settings-card-description">Ative ou desative os alertas exibidos no sino do menu lateral.</p>
+                </div>
+                <label class="toggle" for="notificationToggle">
+                    <input type="checkbox" id="notificationToggle" class="toggle-input">
+                    <span class="toggle-track" aria-hidden="true"></span>
+                    <span class="sr-only">Ativar notificações</span>
+                </label>
+            </div>
+            <p id="notificationStatus" class="settings-status"></p>
+        </section>
+
+        <section class="settings-card">
+            <div class="settings-card-header">
+                <div>
+                    <h2 class="settings-card-title">Categorias relevantes</h2>
+                    <p class="settings-card-description">Escolha os tipos de alerta que deseja receber quando as notificações estiverem ativas.</p>
+                </div>
+            </div>
+            <div class="category-grid" role="group" aria-labelledby="notificationCategories">
+                <label class="category-card" for="category-system">
+                    <div class="category-header">
+                        <div>
+                            <span class="category-title">Atualizações do sistema</span>
+                            <p class="category-description">Avisos sobre novidades, correções e melhorias liberadas.</p>
+                        </div>
+                        <input type="checkbox" id="category-system" class="category-input" value="system">
+                    </div>
+                </label>
+                <label class="category-card" for="category-tasks">
+                    <div class="category-header">
+                        <div>
+                            <span class="category-title">Tarefas e lembretes</span>
+                            <p class="category-description">Alertas sobre tarefas pendentes, compromissos e follow-ups.</p>
+                        </div>
+                        <input type="checkbox" id="category-tasks" class="category-input" value="tasks">
+                    </div>
+                </label>
+                <label class="category-card" for="category-sales">
+                    <div class="category-header">
+                        <div>
+                            <span class="category-title">Vendas e pedidos</span>
+                            <p class="category-description">Notificações sobre novos pedidos e movimentações comerciais.</p>
+                        </div>
+                        <input type="checkbox" id="category-sales" class="category-input" value="sales">
+                    </div>
+                </label>
+                <label class="category-card" for="category-finance">
+                    <div class="category-header">
+                        <div>
+                            <span class="category-title">Financeiro</span>
+                            <p class="category-description">Alertas de cobranças, faturamentos e vencimentos próximos.</p>
+                        </div>
+                        <input type="checkbox" id="category-finance" class="category-input" value="finance">
+                    </div>
+                </label>
+            </div>
+            <p id="categorySummary" class="settings-status"></p>
+        </section>
+    </div>
+</body>
+</html>
