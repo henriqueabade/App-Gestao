@@ -156,12 +156,140 @@ const MenuThemePreferences = (() => {
     };
 })();
 
+const MenuStartupPreferences = (() => {
+    const STORAGE_KEYS = {
+        defaultPage: 'menu.defaultPage',
+        crmExpanded: 'menu.crmExpanded',
+        lastPage: 'menu.lastPage'
+    };
+
+    const DEFAULT_STATE = {
+        defaultPage: 'dashboard',
+        crmExpanded: false
+    };
+
+    const PAGE_LABELS = {
+        dashboard: 'Dashboard',
+        'materia-prima': 'Matéria Prima',
+        produtos: 'Produtos',
+        orcamentos: 'Orçamentos',
+        pedidos: 'Pedidos',
+        clientes: 'Clientes',
+        prospeccoes: 'Prospecções',
+        contatos: 'Contatos',
+        calendario: 'Calendário',
+        tarefas: 'Tarefas',
+        ia: 'IA',
+        usuarios: 'Usuários',
+        financeiro: 'Financeiro',
+        relatorios: 'Relatórios',
+        configuracoes: 'Configurações'
+    };
+
+    const VALID_PAGES = new Set(Object.keys(PAGE_LABELS));
+
+    function normalizeDefaultPage(value) {
+        if (!value || typeof value !== 'string') {
+            return DEFAULT_STATE.defaultPage;
+        }
+        const normalized = value.toLowerCase();
+        if (normalized === 'last') {
+            return 'last';
+        }
+        return VALID_PAGES.has(normalized) ? normalized : DEFAULT_STATE.defaultPage;
+    }
+
+    function readDefaultPage() {
+        if (typeof localStorage === 'undefined') {
+            return DEFAULT_STATE.defaultPage;
+        }
+        try {
+            const stored = localStorage.getItem(STORAGE_KEYS.defaultPage);
+            return normalizeDefaultPage(stored);
+        } catch (error) {
+            console.warn('Não foi possível ler a página padrão do menu', error);
+            return DEFAULT_STATE.defaultPage;
+        }
+    }
+
+    function readCrmExpanded() {
+        if (typeof localStorage === 'undefined') {
+            return DEFAULT_STATE.crmExpanded;
+        }
+        try {
+            return localStorage.getItem(STORAGE_KEYS.crmExpanded) === '1';
+        } catch (error) {
+            console.warn('Não foi possível ler a preferência de expansão do CRM', error);
+            return DEFAULT_STATE.crmExpanded;
+        }
+    }
+
+    function readLastVisitedPage() {
+        if (typeof localStorage === 'undefined') {
+            return null;
+        }
+        try {
+            const stored = localStorage.getItem(STORAGE_KEYS.lastPage);
+            const normalized = normalizeDefaultPage(stored);
+            return normalized === 'last' ? null : normalized;
+        } catch (error) {
+            console.warn('Não foi possível ler o último módulo visitado', error);
+            return null;
+        }
+    }
+
+    function saveDefaultPage(page) {
+        if (typeof localStorage === 'undefined') {
+            return;
+        }
+        try {
+            localStorage.setItem(STORAGE_KEYS.defaultPage, normalizeDefaultPage(page));
+        } catch (error) {
+            console.warn('Não foi possível salvar a página padrão do menu', error);
+        }
+    }
+
+    function saveCrmExpanded(expanded) {
+        if (typeof localStorage === 'undefined') {
+            return;
+        }
+        try {
+            localStorage.setItem(STORAGE_KEYS.crmExpanded, expanded ? '1' : '0');
+        } catch (error) {
+            console.warn('Não foi possível salvar a preferência de expansão do CRM', error);
+        }
+    }
+
+    function getPageLabel(page) {
+        return PAGE_LABELS[page] || page;
+    }
+
+    function load() {
+        return {
+            defaultPage: readDefaultPage(),
+            crmExpanded: readCrmExpanded()
+        };
+    }
+
+    return {
+        STORAGE_KEYS,
+        DEFAULT_STATE,
+        normalizeDefaultPage,
+        getPageLabel,
+        load,
+        saveDefaultPage,
+        saveCrmExpanded,
+        readLastVisitedPage
+    };
+})();
+
 (function initialiseConfigurationsPage() {
     const PAGE_ID = 'configuracoes';
     const MODULE_SELECTOR = `.modulo-container[data-page="${PAGE_ID}"]`;
 
     let currentState = NotificationPreferences.load();
     let currentTheme = MenuThemePreferences.getCurrent();
+    let startupPreferences = MenuStartupPreferences.load();
     let moduleElement = null;
 
     const dom = {
@@ -170,7 +298,11 @@ const MenuThemePreferences = (() => {
         categoryInputs: [],
         summary: null,
         menuThemeToggle: null,
-        menuThemeStatus: null
+        menuThemeStatus: null,
+        defaultPageSelect: null,
+        defaultPageStatus: null,
+        crmExpandedToggle: null,
+        crmExpandedStatus: null
     };
 
     function formatStatus(enabled) {
@@ -230,6 +362,7 @@ const MenuThemePreferences = (() => {
             dom.summary.textContent = formatSummary(currentState);
         }
         applyThemeToUI(currentTheme);
+        applyStartupPreferencesToUI();
     }
 
     function handleToggleChange(event) {
@@ -248,6 +381,56 @@ const MenuThemePreferences = (() => {
         if (dom.menuThemeStatus) {
             dom.menuThemeStatus.textContent = formatThemeStatus(normalizedTheme);
         }
+    }
+
+    function applyStartupPreferencesToUI() {
+        if (!moduleElement) return;
+        if (dom.defaultPageSelect) {
+            dom.defaultPageSelect.value = startupPreferences.defaultPage;
+        }
+        if (dom.defaultPageStatus) {
+            dom.defaultPageStatus.textContent = formatDefaultPageStatus(startupPreferences.defaultPage);
+        }
+        if (dom.crmExpandedToggle) {
+            dom.crmExpandedToggle.checked = !!startupPreferences.crmExpanded;
+        }
+        if (dom.crmExpandedStatus) {
+            dom.crmExpandedStatus.textContent = formatCrmExpandedStatus(startupPreferences.crmExpanded);
+        }
+    }
+
+    function handleDefaultPageChange(event) {
+        const normalized = MenuStartupPreferences.normalizeDefaultPage(event.target.value);
+        startupPreferences.defaultPage = normalized;
+        MenuStartupPreferences.saveDefaultPage(normalized);
+        applyStartupPreferencesToUI();
+    }
+
+    function handleCrmExpandedChange(event) {
+        const expanded = event.target.checked;
+        startupPreferences.crmExpanded = expanded;
+        MenuStartupPreferences.saveCrmExpanded(expanded);
+        applyStartupPreferencesToUI();
+    }
+
+    function formatDefaultPageStatus(page) {
+        if (page === 'last') {
+            const lastVisited = MenuStartupPreferences.readLastVisitedPage();
+            if (lastVisited) {
+                const label = MenuStartupPreferences.getPageLabel(lastVisited);
+                return `O sistema abrirá a última tela visitada (${label}).`;
+            }
+            return 'O sistema tentará retomar a última tela visitada. Caso não haja histórico, o Dashboard será exibido.';
+        }
+
+        const label = MenuStartupPreferences.getPageLabel(page);
+        return `O sistema abrirá o módulo ${label} ao iniciar.`;
+    }
+
+    function formatCrmExpandedStatus(expanded) {
+        return expanded
+            ? 'O submenu do CRM permanecerá expandido ao abrir o menu.'
+            : 'O submenu do CRM será exibido recolhido por padrão.';
     }
 
     function handleCategoryChange(event) {
@@ -276,6 +459,10 @@ const MenuThemePreferences = (() => {
         dom.categoryInputs = Array.from(moduleElement.querySelectorAll('.category-input'));
         dom.menuThemeToggle = moduleElement.querySelector('#menu-theme-toggle');
         dom.menuThemeStatus = moduleElement.querySelector('#menuThemeStatus');
+        dom.defaultPageSelect = moduleElement.querySelector('#defaultModuleSelect');
+        dom.defaultPageStatus = moduleElement.querySelector('#defaultModuleStatus');
+        dom.crmExpandedToggle = moduleElement.querySelector('#crmExpandedToggle');
+        dom.crmExpandedStatus = moduleElement.querySelector('#crmExpandedStatus');
 
         if (dom.toggle) {
             dom.toggle.addEventListener('change', handleToggleChange);
@@ -286,6 +473,12 @@ const MenuThemePreferences = (() => {
         if (dom.menuThemeToggle) {
             dom.menuThemeToggle.addEventListener('change', handleMenuThemeToggleChange);
         }
+        if (dom.defaultPageSelect) {
+            dom.defaultPageSelect.addEventListener('change', handleDefaultPageChange);
+        }
+        if (dom.crmExpandedToggle) {
+            dom.crmExpandedToggle.addEventListener('change', handleCrmExpandedChange);
+        }
 
         applyStateToUI();
         return true;
@@ -294,6 +487,7 @@ const MenuThemePreferences = (() => {
     function init() {
         currentState = NotificationPreferences.load();
         currentTheme = MenuThemePreferences.getCurrent();
+        startupPreferences = MenuStartupPreferences.load();
         bindDom();
     }
 

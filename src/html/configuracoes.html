@@ -22,6 +22,48 @@
         <section class="settings-card">
             <div class="settings-card-header">
                 <div>
+                    <h2 class="settings-card-title">Comportamento inicial do menu</h2>
+                    <p class="settings-card-description">Defina o módulo exibido ao iniciar o sistema e como o submenu do CRM deve se comportar.</p>
+                </div>
+            </div>
+
+            <div class="space-y-6 mt-6">
+                <div>
+                    <label for="defaultModuleSelect" class="block text-sm font-medium text-white/80">Módulo inicial</label>
+                    <select id="defaultModuleSelect" class="mt-2 w-full bg-white/10 text-white border border-white/20 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]">
+                        <option value="last">Retomar última tela</option>
+                        <option value="dashboard">Dashboard</option>
+                        <option value="materia-prima">Matéria Prima</option>
+                        <option value="produtos">Produtos</option>
+                        <option value="orcamentos">Orçamentos</option>
+                        <option value="pedidos">Pedidos</option>
+                        <option value="clientes">Clientes</option>
+                        <option value="prospeccoes">Prospecções</option>
+                        <option value="contatos">Contatos</option>
+                        <option value="calendario">Calendário</option>
+                        <option value="tarefas">Tarefas</option>
+                        <option value="ia">IA</option>
+                        <option value="usuarios">Usuários</option>
+                        <option value="financeiro">Financeiro</option>
+                        <option value="relatorios">Relatórios</option>
+                        <option value="configuracoes">Configurações</option>
+                    </select>
+                    <p id="defaultModuleStatus" class="settings-status mt-2"></p>
+                </div>
+
+                <div>
+                    <label class="flex items-center gap-3 text-sm text-white/80" for="crmExpandedToggle">
+                        <input type="checkbox" id="crmExpandedToggle" class="h-4 w-4 rounded border border-white/30 bg-transparent accent-[var(--color-primary)]">
+                        Manter CRM expandido
+                    </label>
+                    <p id="crmExpandedStatus" class="settings-status mt-2"></p>
+                </div>
+            </div>
+        </section>
+
+        <section class="settings-card">
+            <div class="settings-card-header">
+                <div>
                     <h2 class="settings-card-title">Tema do menu</h2>
                     <p class="settings-card-description">Escolha entre o tema claro ou escuro para o menu lateral.</p>
                 </div>

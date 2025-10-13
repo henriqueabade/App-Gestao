@@ -89,6 +89,14 @@ const MODULES_WITHOUT_SCROLL = new Set([
     'usuarios'
 ]);
 
+const CRM_SUBMODULES = new Set([
+    'clientes',
+    'prospeccoes',
+    'contatos',
+    'calendario',
+    'tarefas'
+]);
+
 const MODULE_LABELS = {
     dashboard: 'Dashboard',
     'materia-prima': 'Matéria Prima',
@@ -106,6 +114,91 @@ const MODULE_LABELS = {
     ia: 'IA',
     configuracoes: 'Configurações'
 };
+
+const MENU_DEFAULT_PAGE_KEY = 'menu.defaultPage';
+const MENU_LAST_PAGE_KEY = 'menu.lastPage';
+const MENU_CRM_EXPANDED_KEY = 'menu.crmExpanded';
+const MENU_DEFAULT_PAGE_FALLBACK = 'dashboard';
+
+function normalizeModulePage(page) {
+    if (!page || typeof page !== 'string') {
+        return null;
+    }
+    const normalized = page.toLowerCase();
+    return MODULE_LABELS[normalized] ? normalized : null;
+}
+
+function readStoredDefaultPage() {
+    if (typeof localStorage === 'undefined') {
+        return MENU_DEFAULT_PAGE_FALLBACK;
+    }
+    try {
+        const stored = localStorage.getItem(MENU_DEFAULT_PAGE_KEY);
+        if (!stored) {
+            return MENU_DEFAULT_PAGE_FALLBACK;
+        }
+        const normalized = stored.toLowerCase();
+        if (normalized === 'last') {
+            return 'last';
+        }
+        return normalizeModulePage(normalized) || MENU_DEFAULT_PAGE_FALLBACK;
+    } catch (error) {
+        console.warn('Não foi possível ler a página padrão do menu', error);
+        return MENU_DEFAULT_PAGE_FALLBACK;
+    }
+}
+
+function readStoredLastPage() {
+    if (typeof localStorage === 'undefined') {
+        return null;
+    }
+    try {
+        const stored = localStorage.getItem(MENU_LAST_PAGE_KEY);
+        return normalizeModulePage(stored);
+    } catch (error) {
+        console.warn('Não foi possível ler o último módulo visitado', error);
+        return null;
+    }
+}
+
+function shouldKeepCrmExpanded() {
+    if (typeof localStorage === 'undefined') {
+        return false;
+    }
+    try {
+        return localStorage.getItem(MENU_CRM_EXPANDED_KEY) === '1';
+    } catch (error) {
+        console.warn('Não foi possível ler a preferência de expansão do CRM', error);
+        return false;
+    }
+}
+
+function shouldPersistLastVisitedPage() {
+    if (typeof localStorage === 'undefined') {
+        return false;
+    }
+    try {
+        return localStorage.getItem(MENU_DEFAULT_PAGE_KEY) === 'last';
+    } catch (error) {
+        console.warn('Não foi possível ler a preferência de retomada de tela', error);
+        return false;
+    }
+}
+
+function persistLastVisitedPage(page) {
+    if (typeof localStorage === 'undefined') {
+        return;
+    }
+    const normalized = normalizeModulePage(page);
+    if (!normalized) {
+        return;
+    }
+    try {
+        localStorage.setItem(MENU_LAST_PAGE_KEY, normalized);
+    } catch (error) {
+        console.warn('Não foi possível salvar o último módulo visitado', error);
+    }
+}
 
 function getModuleTitle(page) {
     if (!page) return 'módulo';
@@ -2740,14 +2833,19 @@ function setActiveNavigation(page) {
     target.classList.add('active');
 
     const insideCrm = target.closest('#crmSubmenu');
+    const keepCrmExpanded = shouldKeepCrmExpanded();
     if (insideCrm) {
         crmSubmenu.classList.add('open');
         chevron.classList.add('rotated');
         crmExpanded = true;
-    } else if (crmExpanded) {
+    } else if (crmExpanded && !keepCrmExpanded) {
         crmSubmenu.classList.remove('open');
         chevron.classList.remove('rotated');
         crmExpanded = false;
+    }
+
+    if (shouldPersistLastVisitedPage()) {
+        persistLastVisitedPage(page);
     }
 }
 
@@ -2848,7 +2946,21 @@ document.querySelectorAll('.sidebar-item[data-page], .submenu-item[data-page]').
 });
 
 window.addEventListener('load', () => {
-    loadPage('dashboard');
+    const defaultPagePreference = readStoredDefaultPage();
+    const lastVisitedPage = readStoredLastPage();
+    const pageToLoad = defaultPagePreference === 'last'
+        ? (lastVisitedPage || MENU_DEFAULT_PAGE_FALLBACK)
+        : defaultPagePreference;
+
+    loadPage(pageToLoad);
+
+    const keepCrmExpanded = shouldKeepCrmExpanded();
+    const isCrmModule = CRM_SUBMODULES.has(pageToLoad);
+    if (keepCrmExpanded && !crmExpanded) {
+        toggleCrmSubmenu();
+    } else if (!keepCrmExpanded && crmExpanded && !isCrmModule) {
+        toggleCrmSubmenu();
+    }
 });
 
 // Ajustes responsivos ao redimensionar
