@@ -1,5 +1,6 @@
 // src/email/sendResetEmail.js
 const transporter = require('./transporter'); // usamos o mesmo transporter verificado
+const { getLogoAttachment, renderLogoImage } = require('./logo');
 
 /**
  * Envia o e-mail de redefinição de senha
@@ -15,10 +16,14 @@ async function sendResetEmail(to, token) {
     to,
     subject: 'Redefinição de senha',
     html: `
-      <p>Você solicitou a redefinição de sua senha.</p>
-      <p>Clique no link abaixo para criar uma nova senha. O link expira em 30 minutos.</p>
-      <p><a href="${resetLink}">${resetLink}</a></p>
-    `
+      <div style="font-family: 'Segoe UI', Tahoma, sans-serif; color: #1f2937; line-height: 1.6;">
+        ${renderLogoImage()}
+        <p>Você solicitou a redefinição de sua senha.</p>
+        <p>Clique no link abaixo para criar uma nova senha. O link expira em 30 minutos.</p>
+        <p><a href="${resetLink}" style="color: #b6a03e;">${resetLink}</a></p>
+      </div>
+    `,
+    attachments: [getLogoAttachment()]
   });
 }
 
