@@ -321,6 +321,19 @@ function sanitizeTableCellText(value) {
     return String(value).replace(/\s+/g, ' ').trim();
 }
 
+function extractPlainTextFromHtml(value) {
+    if (value === null || value === undefined) return '';
+    const stringValue = String(value);
+    if (!stringValue) return '';
+    if (typeof window !== 'undefined' && window.document && typeof window.document.createElement === 'function') {
+        const container = window.document.createElement('div');
+        container.innerHTML = stringValue;
+        const textContent = container.textContent || container.innerText || '';
+        return sanitizeTableCellText(textContent);
+    }
+    return sanitizeTableCellText(stringValue.replace(/<[^>]+>/g, ' '));
+}
+
 function collectTableDataForExport(root, key) {
     if (!root || !key) return null;
     const tableContainer = root.querySelector('#relatoriosTableContainer');
@@ -855,6 +868,279 @@ async function exportReportAsPdf(title, headers, rows, filename) {
     } else {
         normalizedRows.forEach(row => drawBodyRow(row));
     }
+
+    doc.save(filename);
+}
+
+function buildMasterDetailDetail(key, item) {
+    if (!key) {
+        return {
+            title: '',
+            subtitle: '',
+            sections: []
+        };
+    }
+    const config = MASTER_DETAIL_CONFIGS?.[key];
+    if (config?.getDetail) {
+        try {
+            const detail = config.getDetail(item, key);
+            if (detail && typeof detail === 'object') {
+                return detail;
+            }
+        } catch (error) {
+            console.error(`Erro ao montar detalhes do item para exportação (${key})`, error, item);
+        }
+    }
+    return {
+        title: formatText(item?.nome ?? item?.titulo ?? item?.id ?? '', '—'),
+        subtitle: '',
+        sections: []
+    };
+}
+
+function normalizeMasterDetailEntryForPdf(entry, fallbackKey) {
+    if (!entry) return null;
+    const key = entry.key || fallbackKey || null;
+    const sourceDetail = entry.detail && typeof entry.detail === 'object'
+        ? entry.detail
+        : buildMasterDetailDetail(key, entry.item);
+    const detail = sourceDetail && typeof sourceDetail === 'object' ? sourceDetail : {};
+    const rawSections = Array.isArray(detail.sections) ? detail.sections : [];
+    const normalizedSections = rawSections
+        .map(section => {
+            const sectionTitle = sanitizeTableCellText(section?.title ?? '');
+            const rows = Array.isArray(section?.rows) ? section.rows : [];
+            const normalizedRows = rows
+                .map(row => {
+                    const label = sanitizeTableCellText(row?.label ?? '');
+                    const baseValue = row?.allowHtml
+                        ? extractPlainTextFromHtml(row?.value)
+                        : sanitizeTableCellText(row?.value ?? '');
+                    const value = baseValue || '—';
+                    if (!label && !value) {
+                        return null;
+                    }
+                    return { label, value };
+                })
+                .filter(Boolean);
+            if (!sectionTitle && !normalizedRows.length) {
+                return null;
+            }
+            return { title: sectionTitle, rows: normalizedRows };
+        })
+        .filter(Boolean);
+
+    return {
+        id: entry.id ?? null,
+        key,
+        original: entry.item ?? null,
+        title: sanitizeTableCellText(detail.title ?? ''),
+        subtitle: sanitizeTableCellText(detail.subtitle ?? ''),
+        sections: normalizedSections
+    };
+}
+
+async function exportMasterDetailAsPdf(title, selectionItems, filename, options = {}) {
+    const entries = Array.isArray(selectionItems) ? selectionItems : [];
+    if (!entries.length) {
+        throw new Error('Nenhum item selecionado para exportar.');
+    }
+
+    const jsPDFConstructor = await loadJsPdfLibrary();
+    const doc = new jsPDFConstructor({ orientation: 'portrait', unit: 'pt', format: 'a4' });
+
+    const fallbackKey = options?.reportKey || entries[0]?.key || null;
+    const normalizedItems = entries
+        .map(entry => normalizeMasterDetailEntryForPdf(entry, fallbackKey))
+        .filter(item => item && (item.title || item.subtitle || (item.sections && item.sections.length)));
+
+    if (!normalizedItems.length) {
+        throw new Error('Não foi possível preparar os detalhes selecionados para exportação.');
+    }
+
+    const margin = 48;
+    const headerFontSize = 16;
+    const itemTitleSize = 14;
+    const subtitleSize = 11;
+    const sectionTitleSize = 12;
+    const labelSize = 10;
+    const valueSize = 12;
+    const titleLineHeight = 1.35;
+    const subtitleLineHeight = 1.35;
+    const sectionTitleLineHeight = 1.3;
+    const labelLineHeight = 1.2;
+    const valueLineHeight = 1.4;
+    const itemPadding = 16;
+    const itemSpacing = 20;
+    const sectionSpacing = 14;
+    const sectionTitleSpacing = 6;
+    const subtitleSpacing = 6;
+    const labelValueSpacing = 3;
+    const rowSpacing = 12;
+    const defaultTextColor = { r: 17, g: 17, b: 17 };
+    const subtitleColor = { r: 120, g: 120, b: 120 };
+    const labelColor = { r: 130, g: 130, b: 130 };
+
+    let pageWidth = doc.internal.pageSize.getWidth();
+    let pageHeight = doc.internal.pageSize.getHeight();
+    let contentWidth = pageWidth - margin * 2;
+
+    const refreshPageMetrics = () => {
+        pageWidth = doc.internal.pageSize.getWidth();
+        pageHeight = doc.internal.pageSize.getHeight();
+        contentWidth = pageWidth - margin * 2;
+    };
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(valueSize);
+
+    const measureBlock = (text, fontSize, lineHeightFactor, fontStyle = 'normal') => {
+        if (!text) return 0;
+        doc.setFont('helvetica', fontStyle);
+        doc.setFontSize(fontSize);
+        const lines = doc.splitTextToSize(text, contentWidth);
+        return lines.length * fontSize * lineHeightFactor;
+    };
+
+    const measureItem = item => {
+        let height = itemPadding * 2;
+        if (item.title) {
+            height += measureBlock(item.title, itemTitleSize, titleLineHeight, 'bold');
+        }
+        if (item.subtitle) {
+            height += subtitleSpacing;
+            height += measureBlock(item.subtitle, subtitleSize, subtitleLineHeight, 'normal');
+        }
+        item.sections.forEach(section => {
+            const rows = Array.isArray(section.rows) ? section.rows : [];
+            if (!section.title && !rows.length) {
+                return;
+            }
+            height += sectionSpacing;
+            if (section.title) {
+                height += measureBlock(section.title, sectionTitleSize, sectionTitleLineHeight, 'bold');
+                height += sectionTitleSpacing;
+            }
+            let hasRows = false;
+            rows.forEach(row => {
+                const label = row?.label || '';
+                const value = row?.value || '—';
+                if (label) {
+                    height += measureBlock(label, labelSize, labelLineHeight, 'bold');
+                    height += labelValueSpacing;
+                }
+                height += measureBlock(value, valueSize, valueLineHeight, 'normal');
+                height += rowSpacing;
+                hasRows = true;
+            });
+            if (hasRows) {
+                height -= rowSpacing;
+            }
+        });
+        return height;
+    };
+
+    const measuredItems = normalizedItems.map(item => ({ item, height: measureItem(item) }));
+
+    let currentY = 0;
+
+    const setTextColor = color => {
+        doc.setTextColor(color.r, color.g, color.b);
+    };
+
+    const writeHeader = () => {
+        setTextColor(defaultTextColor);
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(headerFontSize);
+        doc.text(title, pageWidth / 2, margin, { align: 'center' });
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(valueSize);
+        currentY = margin + headerFontSize * 1.6;
+    };
+
+    const renderItem = (entry, height) => {
+        doc.setDrawColor(225, 225, 225);
+        doc.setFillColor(252, 252, 252);
+        doc.roundedRect(margin - 6, currentY, contentWidth + 12, height, 8, 8, 'FD');
+
+        let cursorY = currentY + itemPadding;
+
+        setTextColor(defaultTextColor);
+        if (entry.title) {
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(itemTitleSize);
+            const lines = doc.splitTextToSize(entry.title, contentWidth);
+            doc.text(lines, margin, cursorY, { lineHeightFactor: titleLineHeight });
+            cursorY += lines.length * itemTitleSize * titleLineHeight;
+        }
+
+        if (entry.subtitle) {
+            cursorY += subtitleSpacing;
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(subtitleSize);
+            setTextColor(subtitleColor);
+            const lines = doc.splitTextToSize(entry.subtitle, contentWidth);
+            doc.text(lines, margin, cursorY, { lineHeightFactor: subtitleLineHeight });
+            cursorY += lines.length * subtitleSize * subtitleLineHeight;
+            setTextColor(defaultTextColor);
+        }
+
+        entry.sections.forEach(section => {
+            const rows = Array.isArray(section.rows) ? section.rows : [];
+            if (!section.title && !rows.length) {
+                return;
+            }
+            cursorY += sectionSpacing;
+            if (section.title) {
+                doc.setFont('helvetica', 'bold');
+                doc.setFontSize(sectionTitleSize);
+                const sectionLines = doc.splitTextToSize(section.title, contentWidth);
+                doc.text(sectionLines, margin, cursorY, { lineHeightFactor: sectionTitleLineHeight });
+                cursorY += sectionLines.length * sectionTitleSize * sectionTitleLineHeight;
+                cursorY += sectionTitleSpacing;
+            }
+            rows.forEach(row => {
+                const label = row?.label || '';
+                const value = row?.value || '—';
+                if (label) {
+                    doc.setFont('helvetica', 'bold');
+                    doc.setFontSize(labelSize);
+                    setTextColor(labelColor);
+                    const labelLines = doc.splitTextToSize(label, contentWidth);
+                    doc.text(labelLines, margin, cursorY, { lineHeightFactor: labelLineHeight });
+                    cursorY += labelLines.length * labelSize * labelLineHeight;
+                    setTextColor(defaultTextColor);
+                    cursorY += labelValueSpacing;
+                }
+                doc.setFont('helvetica', 'normal');
+                doc.setFontSize(valueSize);
+                const valueLines = doc.splitTextToSize(value, contentWidth);
+                doc.text(valueLines, margin, cursorY, { lineHeightFactor: valueLineHeight });
+                cursorY += valueLines.length * valueSize * valueLineHeight;
+                cursorY += rowSpacing;
+            });
+            if (rows.length) {
+                cursorY -= rowSpacing;
+            }
+        });
+
+        currentY += height + itemSpacing;
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(valueSize);
+        setTextColor(defaultTextColor);
+    };
+
+    refreshPageMetrics();
+    writeHeader();
+
+    measuredItems.forEach(({ item, height }) => {
+        if (currentY + height > pageHeight - margin) {
+            doc.addPage();
+            refreshPageMetrics();
+            writeHeader();
+        }
+        renderItem(item, height);
+    });
 
     doc.save(filename);
 }
@@ -3262,9 +3548,40 @@ function createMasterDetailManager(root, options = {}) {
         renderList(key);
     };
 
+    const getSelectionSnapshot = (targetKey = null) => {
+        const key = targetKey || state.activeTab || (typeof getActiveTab === 'function' ? getActiveTab() : null);
+        if (!key) {
+            return { key: null, items: [] };
+        }
+        const items = state.itemMap.get(key);
+        if (!items || !items.size) {
+            return { key, items: [] };
+        }
+        const selection = state.selection.get(key) || new Set();
+        const order = state.selectionOrder.get(key) || [];
+        const orderedIds = (order.length ? order : Array.from(selection))
+            .filter(id => selection.has(id) && items.has(id));
+        const normalized = orderedIds.map(id => {
+            const item = items.get(id);
+            return {
+                id,
+                key,
+                item,
+                detail: normalizeDetail(key, item),
+                summary: normalizeSummary(key, item)
+            };
+        });
+        return { key, items: normalized };
+    };
+
     return {
         setItems,
         setActiveTab,
+        getSelectionSnapshot,
+        getSelectedItems: targetKey => {
+            const snapshot = getSelectionSnapshot(targetKey);
+            return Array.isArray(snapshot?.items) ? snapshot.items : [];
+        },
         resetTab: key => {
             state.baseOrder.delete(key);
             state.itemMap.delete(key);
@@ -4915,6 +5232,63 @@ function setupDropdowns(root) {
 }
 
 async function handleReportExport(root, key, type) {
+    const title = createReportTitle(root, key);
+
+    if (type === 'pdf-master') {
+        if (!relatoriosMasterDetail || typeof relatoriosMasterDetail.getSelectionSnapshot !== 'function') {
+            showRelatoriosToast('A exportação Master-Detail está indisponível no momento.', 'warning');
+            return;
+        }
+
+        const snapshot = relatoriosMasterDetail.getSelectionSnapshot(key);
+        const items = Array.isArray(snapshot?.items) ? snapshot.items : [];
+        if (!items.length) {
+            showRelatoriosToast('Selecione ao menos um registro na visão Master-Detail para exportar.', 'info');
+            return;
+        }
+
+        const showLoadingFn = typeof window !== 'undefined' && typeof window.showLoading === 'function'
+            ? window.showLoading.bind(window)
+            : null;
+        const hideLoadingFn = typeof window !== 'undefined' && typeof window.hideLoading === 'function'
+            ? window.hideLoading.bind(window)
+            : null;
+
+        if (showLoadingFn) {
+            try {
+                showLoadingFn('Gerando PDF dos detalhes selecionados...');
+            } catch (error) {
+                console.warn('Não foi possível exibir o indicador de carregamento da exportação.', error);
+            }
+        }
+
+        const countLabel = items.length === 1
+            ? '1 registro'
+            : `${items.length} registros`;
+        showRelatoriosToast(`Gerando PDF com detalhes de ${countLabel}...`, 'info');
+
+        try {
+            const filename = createReportFileName(key, `${title} Master-Detail`, 'pdf');
+            await exportMasterDetailAsPdf(title, items, filename, { reportKey: snapshot?.key || key });
+            showRelatoriosToast('Detalhes exportados em PDF.', 'success');
+        } catch (error) {
+            showRelatoriosToast('Não foi possível gerar o PDF com os detalhes selecionados.', 'error');
+            if (error && typeof error === 'object') {
+                error.__relatoriosHandled = true;
+            }
+            throw error;
+        } finally {
+            if (hideLoadingFn) {
+                try {
+                    hideLoadingFn();
+                } catch (error) {
+                    console.warn('Não foi possível ocultar o indicador de carregamento da exportação.', error);
+                }
+            }
+        }
+        return;
+    }
+
     const data = collectTableDataForExport(root, key);
     if (!data) {
         showRelatoriosToast('Tabela não disponível para exportação.', 'warning');
@@ -4931,8 +5305,6 @@ async function handleReportExport(root, key, type) {
         }
         return;
     }
-
-    const title = createReportTitle(root, key);
 
     if (type === 'csv') {
         const content = createCsvContent(headers, rows);
@@ -5010,7 +5382,9 @@ function setupExportActions(root, options = {}) {
 
             handleReportExport(root, key, type).catch(error => {
                 console.error(`Erro ao exportar relatório (${type})`, error);
-                showRelatoriosToast('Não foi possível exportar o relatório.', 'error');
+                if (!error || !error.__relatoriosHandled) {
+                    showRelatoriosToast('Não foi possível exportar o relatório.', 'error');
+                }
             });
         });
     });
