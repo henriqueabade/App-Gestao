@@ -39,6 +39,8 @@ router.get('/lista', async (_req, res) => {
     garantirColuna('ultima_saida', 'ultima_saida') ||
       garantirColuna('ultima_saida_em', 'ultima_saida');
 
+    garantirColuna('hora_ativacao', 'hora_ativacao');
+
     garantirColuna('local_ultima_acao', 'local_ultima_acao') ||
       garantirColuna('local_ultima_alteracao', 'local_ultima_acao');
 
@@ -51,80 +53,7 @@ router.get('/lista', async (_req, res) => {
     const query = `SELECT ${selecionar.join(', ')} FROM usuarios u ORDER BY u.nome`;
     const result = await pool.query(query);
 
-    const usuarios = result.rows.map(u => {
-      const parseDate = valor => {
-        if (!valor) return null;
-        const data = valor instanceof Date ? valor : new Date(valor);
-        return Number.isNaN(data.getTime()) ? null : data;
-      };
-
-      const ultimoLogin = parseDate(u.ultimo_login_em);
-      const ultimaAtividade = parseDate(u.ultima_atividade_em);
-      const ultimaEntrada = parseDate(u.ultima_entrada || u.ultima_entrada_em || u.ultimo_login_em);
-      const ultimaAlteracao = parseDate(u.ultima_alteracao) || ultimaAtividade;
-      const ultimaSaida = parseDate(u.ultima_saida || u.ultima_saida_em);
-      const ultimaAcaoLocal =
-        u.local_ultima_alteracao || u.local_ultima_acao || u.local_ultima_atividade || null;
-      const especificacaoUltimaAcao =
-        u.especificacao_ultima_alteracao ||
-        u.especificacao_ultima_acao ||
-        u.ultima_acao_descricao ||
-        u.ultima_alteracao_descricao ||
-        u.ultima_acao ||
-        null;
-
-      let online;
-      if (ultimaEntrada || ultimaSaida) {
-        if (!ultimaSaida) {
-          online = Boolean(ultimaEntrada);
-        } else if (!ultimaEntrada) {
-          online = false;
-        } else {
-          online = ultimaSaida.getTime() < ultimaEntrada.getTime();
-        }
-      } else {
-        const ONLINE_LIMITE_MINUTOS = 5;
-        online = ultimaAtividade
-          ? Date.now() - ultimaAtividade.getTime() <= ONLINE_LIMITE_MINUTOS * 60 * 1000
-          : false;
-      }
-
-      const serializar = data => (data ? data.toISOString() : null);
-
-      const formatarDescricaoAlteracao = () => {
-        const local = (ultimaAcaoLocal || '').trim();
-        const especificacao = (especificacaoUltimaAcao || '').trim();
-        if (local && especificacao) {
-          return `Usuário alterou o módulo ${local}, mudando ${especificacao}`;
-        }
-        if (local) {
-          return `Usuário alterou o módulo ${local}`;
-        }
-        if (especificacao) {
-          return `Usuário alterou ${especificacao}`;
-        }
-        return '';
-      };
-
-      const ultimaAlteracaoDescricao = formatarDescricaoAlteracao();
-
-      return {
-        id: u.id,
-        nome: u.nome,
-        email: u.email,
-        perfil: u.perfil,
-        status: u.verificado ? 'Ativo' : 'Inativo',
-        online,
-        ultimoLoginEm: serializar(ultimaEntrada || ultimoLogin),
-        ultimaAtividadeEm: serializar(ultimaAtividade),
-        ultimaAlteracaoEm: serializar(ultimaAlteracao),
-        ultimaEntradaEm: serializar(ultimaEntrada),
-        ultimaSaidaEm: serializar(ultimaSaida),
-        ultimaAlteracaoDescricao: ultimaAlteracaoDescricao || null,
-        localUltimaAlteracao: ultimaAcaoLocal || null,
-        especificacaoUltimaAlteracao: especificacaoUltimaAcao || null
-      };
-    });
+    const usuarios = result.rows.map(formatarUsuario);
 
     res.json(usuarios);
   } catch (err) {
@@ -132,5 +61,156 @@ router.get('/lista', async (_req, res) => {
     res.status(500).json({ error: 'Erro ao listar usuários' });
   }
 });
+
+const normalizarStatus = body => {
+  if (!body || typeof body !== 'object') {
+    return undefined;
+  }
+
+  if (typeof body.verificado === 'boolean') {
+    return body.verificado;
+  }
+
+  if (typeof body.ativo === 'boolean') {
+    return body.ativo;
+  }
+
+  if (typeof body.status === 'string') {
+    const valor = body.status.trim().toLowerCase();
+    if (valor === 'ativo') return true;
+    if (valor === 'inativo') return false;
+  }
+
+  return undefined;
+};
+
+router.patch('/:id/status', async (req, res) => {
+  const { id } = req.params;
+  const novoStatus = normalizarStatus(req.body);
+
+  if (typeof novoStatus !== 'boolean') {
+    return res.status(400).json({ error: 'Estado inválido' });
+  }
+
+  try {
+    const estadoAtual = await pool.query('SELECT verificado FROM usuarios WHERE id = $1', [id]);
+
+    if (estadoAtual.rows.length === 0) {
+      return res.status(404).json({ error: 'Usuário não encontrado' });
+    }
+
+    const verificadoAtual = estadoAtual.rows[0].verificado;
+    const mudouStatus = verificadoAtual === null ? true : verificadoAtual !== novoStatus;
+
+    let result;
+    if (mudouStatus) {
+      result = await pool.query(
+        `UPDATE usuarios
+            SET verificado = $1,
+                hora_ativacao = NOW()
+          WHERE id = $2
+        RETURNING id, nome, email, perfil, verificado, hora_ativacao`,
+        [novoStatus, id]
+      );
+    } else {
+      result = await pool.query(
+        `UPDATE usuarios
+            SET verificado = $1
+          WHERE id = $2
+        RETURNING id, nome, email, perfil, verificado, hora_ativacao`,
+        [novoStatus, id]
+      );
+    }
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Usuário não encontrado' });
+    }
+
+    const usuario = formatarUsuario(result.rows[0]);
+
+    res.json(usuario);
+  } catch (err) {
+    console.error('Erro ao atualizar status do usuário:', err);
+    res.status(500).json({ error: 'Erro ao atualizar status do usuário' });
+  }
+});
+
+function formatarUsuario(u) {
+  const parseDate = valor => {
+    if (!valor) return null;
+    const data = valor instanceof Date ? valor : new Date(valor);
+    return Number.isNaN(data.getTime()) ? null : data;
+  };
+
+  const ultimoLogin = parseDate(u.ultimo_login_em);
+  const ultimaAtividade = parseDate(u.ultima_atividade_em);
+  const ultimaEntrada = parseDate(u.ultima_entrada || u.ultima_entrada_em || u.ultimo_login_em);
+  const ultimaAlteracao = parseDate(u.ultima_alteracao) || ultimaAtividade;
+  const ultimaSaida = parseDate(u.ultima_saida || u.ultima_saida_em);
+  const horaAtivacao = parseDate(u.hora_ativacao);
+  const ultimaAcaoLocal =
+    u.local_ultima_alteracao || u.local_ultima_acao || u.local_ultima_atividade || null;
+  const especificacaoUltimaAcao =
+    u.especificacao_ultima_alteracao ||
+    u.especificacao_ultima_acao ||
+    u.ultima_acao_descricao ||
+    u.ultima_alteracao_descricao ||
+    u.ultima_acao ||
+    null;
+
+  let online;
+  if (ultimaEntrada || ultimaSaida) {
+    if (!ultimaSaida) {
+      online = Boolean(ultimaEntrada);
+    } else if (!ultimaEntrada) {
+      online = false;
+    } else {
+      online = ultimaSaida.getTime() < ultimaEntrada.getTime();
+    }
+  } else {
+    const ONLINE_LIMITE_MINUTOS = 5;
+    online = ultimaAtividade
+      ? Date.now() - ultimaAtividade.getTime() <= ONLINE_LIMITE_MINUTOS * 60 * 1000
+      : false;
+  }
+
+  const serializar = data => (data ? data.toISOString() : null);
+
+  const formatarDescricaoAlteracao = () => {
+    const local = (ultimaAcaoLocal || '').trim();
+    const especificacao = (especificacaoUltimaAcao || '').trim();
+    if (local && especificacao) {
+      return `Usuário alterou o módulo ${local}, mudando ${especificacao}`;
+    }
+    if (local) {
+      return `Usuário alterou o módulo ${local}`;
+    }
+    if (especificacao) {
+      return `Usuário alterou ${especificacao}`;
+    }
+    return '';
+  };
+
+  const ultimaAlteracaoDescricao = formatarDescricaoAlteracao();
+
+  return {
+    id: u.id,
+    nome: u.nome,
+    email: u.email,
+    perfil: u.perfil,
+    status: u.verificado ? 'Ativo' : 'Inativo',
+    online,
+    ultimoLoginEm: serializar(ultimaEntrada || ultimoLogin),
+    ultimaAtividadeEm: serializar(ultimaAtividade),
+    ultimaAlteracaoEm: serializar(ultimaAlteracao),
+    ultimaEntradaEm: serializar(ultimaEntrada),
+    ultimaSaidaEm: serializar(ultimaSaida),
+    horaAtivacaoEm: serializar(horaAtivacao),
+    hora_ativacao: serializar(horaAtivacao),
+    ultimaAlteracaoDescricao: ultimaAlteracaoDescricao || null,
+    localUltimaAlteracao: ultimaAcaoLocal || null,
+    especificacaoUltimaAlteracao: especificacaoUltimaAcao || null
+  };
+}
 
 module.exports = router;
