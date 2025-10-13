@@ -131,6 +131,16 @@ body.fade-out {
   height: 2.5rem;
   animation: spinner 1s linear infinite;
 }
+.button-spinner {
+  display: inline-block;
+  width: 1rem;
+  height: 1rem;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  border-top-color: #ffffff;
+  border-radius: 9999px;
+  vertical-align: middle;
+  animation: spinner 0.75s linear infinite;
+}
 @keyframes spinner {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }

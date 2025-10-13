@@ -329,6 +329,28 @@ if (intro) {
   const registerTab  = document.getElementById('registerTab');
   const loginForm    = document.getElementById('loginForm');
   const registerForm = document.getElementById('registerForm');
+  const registerSubmitButton = registerForm?.querySelector('button[type="submit"]');
+
+  function setRegisterButtonLoading(isLoading) {
+    if (!registerSubmitButton) return;
+    registerSubmitButton.setAttribute('aria-busy', isLoading ? 'true' : 'false');
+    if (isLoading) {
+      if (!registerSubmitButton.dataset.originalContent) {
+        registerSubmitButton.dataset.originalContent = registerSubmitButton.innerHTML;
+      }
+      registerSubmitButton.disabled = true;
+      registerSubmitButton.classList.add('cursor-not-allowed', 'opacity-80');
+      registerSubmitButton.innerHTML = '<span class="button-spinner" aria-hidden="true"></span><span class="ml-2">Cadastrando...</span>';
+    } else {
+      const original = registerSubmitButton.dataset.originalContent;
+      if (original) {
+        registerSubmitButton.innerHTML = original;
+      }
+      registerSubmitButton.disabled = false;
+      registerSubmitButton.classList.remove('cursor-not-allowed', 'opacity-80');
+      delete registerSubmitButton.dataset.originalContent;
+    }
+  }
   loginTab.addEventListener('click', () => {
     loginForm.classList.remove('hidden');
     registerForm.classList.add('hidden');
@@ -485,28 +507,29 @@ if (intro) {
       showToast('As senhas não coincidem!', 'error');
       return;
     }
-    let result;
+    setRegisterButtonLoading(true);
     try {
-      result = await window.electronAPI.register(
+      const result = await window.electronAPI.register(
         name,
         emailReg,
         passwordReg,
         pinReg
       );
+      if (!result.success) {
+        showToast(result.message || 'PIN incorreto', 'error');
+        return;
+      }
+
+      showToast(result.message, 'success');
+      localStorage.setItem('pin', pinReg);
+      registerForm.reset();
+      applyStoredPin(registerPinInput);
+      loginTab.click();
     } catch (err) {
       showToast(err.message || 'PIN incorreto', 'error');
-      return;
+    } finally {
+      setRegisterButtonLoading(false);
     }
-    if (!result.success) {
-      showToast(result.message || 'PIN incorreto', 'error');
-      return;
-    }
-
-    showToast(result.message, 'success');
-    localStorage.setItem('pin', pinReg);
-    registerForm.reset();
-    applyStoredPin(registerPinInput);
-    loginTab.click();
   });
 
   // === 8) Envio do formulário de Recuperação de Senha ===
