@@ -1,7 +1,6 @@
 const crypto = require('crypto');
 const express = require('express');
 const bcrypt = require('bcrypt');
-const multer = require('multer');
 const pool = require('./db');
 const { sendSupAdminReviewNotification } = require('../src/email/sendSupAdminReviewNotification');
 const { sendUserActivationNotice } = require('../src/email/sendUserActivationNotice');
@@ -11,11 +10,216 @@ const router = express.Router();
 
 const MAX_IMAGE_SIZE = 2 * 1024 * 1024;
 const EMAIL_CONFIRMATION_TTL_MS = 48 * 60 * 60 * 1000;
+let multer = null;
+let MulterError = null;
+let upload = null;
 
-const upload = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: MAX_IMAGE_SIZE }
-});
+try {
+  // Carregamento lazy para que o aplicativo possa iniciar mesmo sem a
+  // dependência instalada (ex.: builds antigas).
+  // eslint-disable-next-line global-require
+  multer = require('multer');
+  MulterError = multer.MulterError;
+  upload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: MAX_IMAGE_SIZE }
+  });
+} catch (err) {
+  console.warn('Multer não está disponível. Usando analisador multipart simplificado.', err);
+  MulterError = class SimpleMulterError extends Error {
+    constructor(code, message) {
+      super(message);
+      this.name = 'MulterError';
+      this.code = code;
+    }
+  };
+  upload = createFallbackUpload();
+}
+
+function isPlainObject(value) {
+  return value !== null && typeof value === 'object' && value.constructor === Object;
+}
+
+function extractBoundary(contentType) {
+  if (typeof contentType !== 'string') {
+    return null;
+  }
+
+  const match = contentType.match(/boundary=(?:"([^"]+)"|([^;]+))/i);
+  if (!match) {
+    return null;
+  }
+
+  return match[1] || match[2];
+}
+
+function parseMultipartBody(buffer, boundary) {
+  const boundaryText = `--${boundary}`;
+  const raw = buffer.toString('latin1');
+  const segments = raw.split(boundaryText);
+  const fields = {};
+  const files = {};
+
+  for (const segment of segments) {
+    if (!segment) continue;
+
+    let working = segment;
+    if (working.startsWith('\r\n')) {
+      working = working.slice(2);
+    }
+
+    working = working.trimEnd();
+    if (!working || working === '--') {
+      continue;
+    }
+
+    const headerEndIndex = working.indexOf('\r\n\r\n');
+    if (headerEndIndex === -1) {
+      continue;
+    }
+
+    const headerBlock = working.slice(0, headerEndIndex);
+    let bodyPart = working.slice(headerEndIndex + 4);
+
+    if (bodyPart.endsWith('\r\n')) {
+      bodyPart = bodyPart.slice(0, -2);
+    }
+
+    const headers = headerBlock.split('\r\n');
+    let fieldName = null;
+    let filename = null;
+    let contentType = 'application/octet-stream';
+
+    for (const header of headers) {
+      const [rawKey, ...rawRest] = header.split(':');
+      if (!rawKey || !rawRest.length) continue;
+      const key = rawKey.trim().toLowerCase();
+      const value = rawRest.join(':').trim();
+
+      if (key === 'content-disposition') {
+        const parts = value.split(';').map(part => part.trim());
+        for (const part of parts) {
+          if (part.startsWith('name=')) {
+            fieldName = part.slice(5).replace(/^"|"$/g, '');
+          } else if (part.startsWith('filename=')) {
+            filename = part.slice(9).replace(/^"|"$/g, '');
+          }
+        }
+      } else if (key === 'content-type') {
+        contentType = value;
+      }
+    }
+
+    if (!fieldName) {
+      continue;
+    }
+
+    const bodyBuffer = Buffer.from(bodyPart, 'latin1');
+
+    if (filename !== null) {
+      files[fieldName] = {
+        filename: filename || 'file',
+        contentType,
+        data: bodyBuffer
+      };
+    } else {
+      const value = bodyBuffer.toString('utf8');
+      if (Object.prototype.hasOwnProperty.call(fields, fieldName)) {
+        const existing = fields[fieldName];
+        if (Array.isArray(existing)) {
+          existing.push(value);
+        } else {
+          fields[fieldName] = [existing, value];
+        }
+      } else {
+        fields[fieldName] = value;
+      }
+    }
+  }
+
+  return { fields, files };
+}
+
+function createFallbackUpload() {
+  return {
+    single(fieldName) {
+      return (req, res, next) => {
+        const boundary = extractBoundary(req.headers['content-type']);
+        if (!boundary) {
+          return next(new Error('Formato multipart inválido: boundary ausente.'));
+        }
+
+        const chunks = [];
+        let hasError = false;
+
+        const cleanup = () => {
+          req.removeListener('data', onData);
+          req.removeListener('end', onEnd);
+          req.removeListener('error', onError);
+          req.removeListener('aborted', onAborted);
+        };
+
+        const onError = err => {
+          if (hasError) return;
+          hasError = true;
+          cleanup();
+          next(err);
+        };
+
+        const onAborted = () => {
+          if (hasError) return;
+          hasError = true;
+          cleanup();
+          next(new Error('Requisição abortada durante upload.'));
+        };
+
+        const onData = chunk => {
+          chunks.push(chunk);
+        };
+
+        const onEnd = () => {
+          if (hasError) return;
+          cleanup();
+
+          try {
+            const buffer = Buffer.concat(chunks);
+            const { fields, files } = parseMultipartBody(buffer, boundary);
+
+            const baseBody = isPlainObject(req.body) ? req.body : {};
+            req.body = { ...baseBody, ...fields };
+
+            const file = files[fieldName];
+            if (file) {
+              if (file.data.length > MAX_IMAGE_SIZE) {
+                throw new MulterError('LIMIT_FILE_SIZE', 'File too large');
+              }
+
+              req.file = {
+                fieldname: fieldName,
+                originalname: file.filename,
+                mimetype: file.contentType,
+                buffer: file.data,
+                size: file.data.length
+              };
+            } else {
+              req.file = undefined;
+            }
+
+            next();
+          } catch (err) {
+            hasError = true;
+            next(err);
+          }
+        };
+
+        req.on('data', onData);
+        req.once('end', onEnd);
+        req.once('error', onError);
+        req.once('aborted', onAborted);
+      };
+    }
+  };
+}
 
 let usuarioColunasCache = null;
 let loginCacheMeta = null;
@@ -99,7 +303,7 @@ function parseMultipartIfNeeded(req, res, next) {
       return next();
     }
 
-    if (err instanceof multer.MulterError && err.code === 'LIMIT_FILE_SIZE') {
+    if (MulterError && err instanceof MulterError && err.code === 'LIMIT_FILE_SIZE') {
       return res.status(400).json({ error: 'Foto de perfil deve ter no máximo 2 MB.' });
     }
 
