@@ -195,7 +195,7 @@ async function getPriceChangeNotifications() {
 async function getProductAvailabilityNotifications() {
   const { rows } = await safeQuery(
     `SELECT p.id, p.nome, p.status, COALESCE(SUM(pe.quantidade), 0) AS quantidade_total,
-            MAX(pe.data_atualizacao) AS ultima_movimentacao
+            MAX(pe.data_hora_completa) AS ultima_movimentacao
        FROM produtos p
        LEFT JOIN produtos_em_cada_ponto pe ON pe.produto_id = p.id
       GROUP BY p.id, p.nome, p.status`
@@ -307,7 +307,7 @@ async function getBudgetNotifications() {
     `SELECT o.id, o.numero, o.data_aprovacao
        FROM orcamentos o
        LEFT JOIN pedidos p ON p.orcamento_id = o.id OR p.id = o.id
-      WHERE o.situacao ILIKE 'aprovado%'
+      WHERE o.situacao::text ILIKE 'aprovado%'
         AND o.data_aprovacao IS NOT NULL
         AND o.data_aprovacao <= $1
         AND p.id IS NULL`,

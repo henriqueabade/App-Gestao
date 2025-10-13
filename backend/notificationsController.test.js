@@ -36,7 +36,8 @@ function setup() {
     id serial primary key,
     produto_id integer,
     quantidade numeric,
-    data_atualizacao timestamp
+    data_atualizacao timestamp,
+    data_hora_completa timestamp
   );`);
   db.public.none(`CREATE TABLE pedidos (
     id serial primary key,
@@ -169,12 +170,12 @@ test('GET /api/notifications expõe alertas das regras configuradas', async () =
     "INSERT INTO produtos (nome, status) VALUES ('Produto OK', 'ativo') RETURNING id"
   );
   await pool.query(
-    `INSERT INTO produtos_em_cada_ponto (produto_id, quantidade, data_atualizacao)
+    `INSERT INTO produtos_em_cada_ponto (produto_id, quantidade, data_hora_completa)
      VALUES ($1, 15, NOW())`,
     [produtoOk.rows[0].id]
   );
   await pool.query(
-    `INSERT INTO produtos_em_cada_ponto (produto_id, quantidade, data_atualizacao)
+    `INSERT INTO produtos_em_cada_ponto (produto_id, quantidade, data_hora_completa)
      VALUES ($1, 5, NOW())`,
     [produtoOffline.rows[0].id]
   );
