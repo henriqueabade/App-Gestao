@@ -2745,6 +2745,18 @@ async function loadPage(page, options = {}) {
     const content = document.getElementById('content');
     if (!content || !page) return;
 
+    const forceReload = Boolean(options.forceReload);
+    const isSamePage = content.dataset.activePage === page;
+
+    if (isSamePage && !forceReload) {
+        if (!options.skipNavigationUpdate) {
+            setActiveNavigation(page);
+        }
+        applyModuleScrollBehavior(page);
+        document.dispatchEvent(new CustomEvent('module-change', { detail: { page } }));
+        return;
+    }
+
     if (page === 'usuarios' && !canAccessUsuariosModule()) {
         console.warn('Usuário sem permissão para acessar o módulo de Usuários. Redirecionando.');
         const fallbackPage = options?.fallbackPage && options.fallbackPage !== 'usuarios'

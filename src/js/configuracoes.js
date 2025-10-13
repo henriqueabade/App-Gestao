@@ -393,6 +393,8 @@ const MenuStartupPreferences = (() => {
 (function initialiseConfigurationsPage() {
     const PAGE_ID = 'configuracoes';
     const MODULE_SELECTOR = `.modulo-container[data-page="${PAGE_ID}"]`;
+    const PERSONAL_DATA_FOCUS_STORAGE_KEY = 'configuracoesFocus';
+    const PERSONAL_DATA_FOCUS_TARGET = 'personal-data';
 
     let currentState = NotificationPreferences.load();
     let currentTheme = MenuThemePreferences.getCurrent();
@@ -434,6 +436,138 @@ const MenuStartupPreferences = (() => {
             errors: {}
         }
     };
+
+    const PERSONAL_DATA_FOCUSABLE_SELECTOR = [
+        'input:not([disabled]):not([tabindex="-1"])',
+        'select:not([disabled]):not([tabindex="-1"])',
+        'textarea:not([disabled]):not([tabindex="-1"])',
+        'button:not([disabled]):not([tabindex="-1"])'
+    ].join(', ');
+
+    function hasPendingPersonalDataFocus() {
+        if (typeof sessionStorage === 'undefined') {
+            return false;
+        }
+        try {
+            return sessionStorage.getItem(PERSONAL_DATA_FOCUS_STORAGE_KEY) === PERSONAL_DATA_FOCUS_TARGET;
+        } catch (error) {
+            console.warn('Não foi possível verificar indicador de foco das configurações', error);
+            return false;
+        }
+    }
+
+    function clearPendingPersonalDataFocus() {
+        if (typeof sessionStorage === 'undefined') {
+            return;
+        }
+        try {
+            sessionStorage.removeItem(PERSONAL_DATA_FOCUS_STORAGE_KEY);
+        } catch (error) {
+            console.warn('Não foi possível limpar indicador de foco das configurações', error);
+        }
+    }
+
+    function ensurePersonalDataDom() {
+        if (!moduleElement) {
+            moduleElement = document.querySelector(MODULE_SELECTOR) || document.querySelector('[data-module="configuracoes"]');
+        }
+        if (!moduleElement) {
+            return false;
+        }
+
+        if (!dom.profile.section) {
+            dom.profile.section = moduleElement.querySelector('#personalDataSettings');
+        }
+        if (!dom.profile.form) {
+            dom.profile.form = moduleElement.querySelector('#personalDataForm');
+        }
+        if (!dom.profile.name) {
+            dom.profile.name = moduleElement.querySelector('#personalDataName');
+        }
+        if (!dom.profile.email) {
+            dom.profile.email = moduleElement.querySelector('#personalDataEmail');
+        }
+        if (!dom.profile.phone) {
+            dom.profile.phone = moduleElement.querySelector('#personalDataPhone');
+        }
+        if (!dom.profile.password) {
+            dom.profile.password = moduleElement.querySelector('#personalDataPassword');
+        }
+        if (!dom.profile.confirmPassword) {
+            dom.profile.confirmPassword = moduleElement.querySelector('#personalDataPasswordConfirm');
+        }
+
+        return Boolean(dom.profile.section);
+    }
+
+    function focusPersonalDataSettings(options = {}) {
+        const { scrollBehavior = 'smooth', preserveFlag = false } = options || {};
+        if (!ensurePersonalDataDom()) {
+            if (!preserveFlag) {
+                clearPendingPersonalDataFocus();
+            }
+            return false;
+        }
+
+        const section = dom.profile.section;
+        const form = dom.profile.form;
+
+        if (section && typeof section.scrollIntoView === 'function') {
+            try {
+                section.scrollIntoView({ behavior: scrollBehavior, block: 'start', inline: 'nearest' });
+            } catch (error) {
+                section.scrollIntoView({ behavior: scrollBehavior });
+            }
+        }
+
+        let focusTarget = null;
+        if (form) {
+            focusTarget = form.querySelector(PERSONAL_DATA_FOCUSABLE_SELECTOR);
+        }
+
+        if (!focusTarget) {
+            focusTarget = section;
+        }
+
+        const applyFocus = element => {
+            if (!element) {
+                return false;
+            }
+
+            if (element === section && !element.hasAttribute('tabindex')) {
+                element.setAttribute('tabindex', '-1');
+                element.addEventListener('blur', () => {
+                    element.removeAttribute('tabindex');
+                }, { once: true });
+            }
+
+            try {
+                element.focus({ preventScroll: true });
+            } catch (error) {
+                element.focus();
+            }
+
+            return true;
+        };
+
+        const focused = applyFocus(focusTarget);
+
+        if (!preserveFlag) {
+            clearPendingPersonalDataFocus();
+        }
+
+        return focused;
+    }
+
+    function handlePendingPersonalDataFocus() {
+        if (!hasPendingPersonalDataFocus()) {
+            return;
+        }
+
+        requestAnimationFrame(() => {
+            focusPersonalDataSettings({ scrollBehavior: 'smooth' });
+        });
+    }
 
     const USER_PROFILE_EVENT = 'user-profile-updated';
     const API_PROFILE_ENDPOINT = '/api/usuarios/me';
@@ -1224,6 +1358,7 @@ const MenuStartupPreferences = (() => {
         bindDom();
         initProfileSection();
         applyStateToUI();
+        handlePendingPersonalDataFocus();
     }
 
     init();
@@ -1255,4 +1390,6 @@ const MenuStartupPreferences = (() => {
         NotificationPreferences.save(currentState);
         return NotificationPreferences.clone(currentState);
     };
+
+    window.focusPersonalDataSettings = focusPersonalDataSettings;
 })();

@@ -2,7 +2,8 @@ window.addEventListener('DOMContentLoaded', () => {
   const nameEl = document.getElementById('userName');
   const profileEl = document.getElementById('userProfile');
   const avatarEl = document.getElementById('userAvatar');
-  const summaryEl = document.getElementById('userSummary');
+  const summaryButton = document.getElementById('userSummary');
+  const identityContainer = document.getElementById('userIdentity');
   const appUpdates = window.AppUpdates || null;
   const usuariosMenuItem = document.querySelector('[data-page="usuarios"]');
 
@@ -19,6 +20,94 @@ window.addEventListener('DOMContentLoaded', () => {
     showAvatar: true,
     showName: true,
   };
+
+  const CONFIG_FOCUS_STORAGE_KEY = 'configuracoesFocus';
+  const CONFIG_FOCUS_TARGET = 'personal-data';
+
+  const setConfiguracoesFocusFlag = () => {
+    if (typeof sessionStorage === 'undefined') {
+      return;
+    }
+    try {
+      sessionStorage.setItem(CONFIG_FOCUS_STORAGE_KEY, CONFIG_FOCUS_TARGET);
+    } catch (error) {
+      /* ignore storage write failures */
+    }
+  };
+
+  const clearConfiguracoesFocusFlag = () => {
+    if (typeof sessionStorage === 'undefined') {
+      return;
+    }
+    try {
+      sessionStorage.removeItem(CONFIG_FOCUS_STORAGE_KEY);
+    } catch (error) {
+      /* ignore storage cleanup failures */
+    }
+  };
+
+  const tryFocusPersonalDataSettings = () => {
+    if (typeof window.focusPersonalDataSettings !== 'function') {
+      return false;
+    }
+    const didFocus = Boolean(window.focusPersonalDataSettings({ scrollBehavior: 'smooth' }));
+    if (didFocus) {
+      clearConfiguracoesFocusFlag();
+    }
+    return didFocus;
+  };
+
+  const keyboardNavigationMemory = new WeakSet();
+
+  const navigateToConfiguracoes = () => {
+    setConfiguracoesFocusFlag();
+
+    const content = document.getElementById('content');
+    const currentPage = content?.dataset?.activePage;
+    const alreadyOnConfiguracoes = currentPage === 'configuracoes';
+
+    if (typeof window.loadPage === 'function') {
+      window.loadPage('configuracoes');
+    }
+
+    if (alreadyOnConfiguracoes) {
+      tryFocusPersonalDataSettings();
+    }
+  };
+
+  const handleConfiguracoesKeyDown = event => {
+    if (!event) return;
+    const { key } = event;
+    if (key !== 'Enter' && key !== ' ' && key !== 'Spacebar') {
+      return;
+    }
+    event.preventDefault();
+    if (event.currentTarget) {
+      keyboardNavigationMemory.add(event.currentTarget);
+    }
+    navigateToConfiguracoes();
+  };
+
+  const handleConfiguracoesClick = event => {
+    if (event?.currentTarget && keyboardNavigationMemory.has(event.currentTarget)) {
+      keyboardNavigationMemory.delete(event.currentTarget);
+      return;
+    }
+    navigateToConfiguracoes();
+  };
+
+  const attachIdentityTriggers = () => {
+    const triggers = [summaryButton, avatarEl].filter(Boolean);
+    if (!triggers.length) {
+      return;
+    }
+    triggers.forEach(trigger => {
+      trigger.addEventListener('click', handleConfiguracoesClick);
+      trigger.addEventListener('keydown', handleConfiguracoesKeyDown);
+    });
+  };
+
+  attachIdentityTriggers();
 
   const getInitials = name => {
     if (!name) return '';
@@ -63,16 +152,19 @@ window.addEventListener('DOMContentLoaded', () => {
         avatarEl.classList.add('has-image');
         avatarEl.textContent = '';
         avatarEl.classList.remove('hidden');
+        avatarEl.setAttribute('aria-hidden', 'false');
       } else if (initials) {
         avatarEl.style.removeProperty('background-image');
         avatarEl.classList.remove('has-image');
         avatarEl.textContent = initials;
         avatarEl.classList.remove('hidden');
+        avatarEl.setAttribute('aria-hidden', 'false');
       } else {
         avatarEl.style.removeProperty('background-image');
         avatarEl.classList.remove('has-image');
         avatarEl.textContent = '';
         avatarEl.classList.add('hidden');
+        avatarEl.setAttribute('aria-hidden', 'true');
       }
     }
 
@@ -149,9 +241,9 @@ window.addEventListener('DOMContentLoaded', () => {
   let menu = null;
 
   const applyQuickActionsPreferences = () => {
-    if (summaryEl) {
-      summaryEl.classList.toggle('user-summary--hide-avatar', !quickActionsPreferences.showAvatar);
-      summaryEl.classList.toggle('user-summary--hide-name', !quickActionsPreferences.showName);
+    if (identityContainer) {
+      identityContainer.classList.toggle('user-summary--hide-avatar', !quickActionsPreferences.showAvatar);
+      identityContainer.classList.toggle('user-summary--hide-name', !quickActionsPreferences.showName);
     }
     if (!menu) return;
     Object.entries(quickActionsPreferences.actions).forEach(([key, enabled]) => {

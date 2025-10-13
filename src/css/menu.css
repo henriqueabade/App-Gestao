@@ -578,6 +578,32 @@ body.text-white {
     }
 }
 
+.user-identity-trigger {
+    background: transparent;
+    border: none;
+    color: inherit;
+    padding: 0;
+    margin: 0;
+    cursor: pointer;
+}
+
+.user-identity-trigger:focus-visible {
+    outline: 2px solid var(--color-primary-light);
+    outline-offset: 2px;
+}
+
+#userSummary {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    text-align: right;
+    gap: 0.1rem;
+}
+
+#userSummary span {
+    display: block;
+}
+
 .user-avatar {
     width: 2.4rem;
     height: 2.4rem;
@@ -593,6 +619,7 @@ body.text-white {
     text-transform: uppercase;
     letter-spacing: 0.03em;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    padding: 0;
 }
 
 .user-avatar.hidden {
@@ -608,12 +635,12 @@ body.text-white {
     text-indent: -9999px;
 }
 
-#userSummary.user-summary--hide-avatar #userAvatar {
+#userIdentity.user-summary--hide-avatar #userAvatar {
     display: none !important;
 }
 
-#userSummary.user-summary--hide-name #userName,
-#userSummary.user-summary--hide-name #userProfile {
+#userIdentity.user-summary--hide-name #userName,
+#userIdentity.user-summary--hide-name #userProfile {
     display: none !important;
 }
 
