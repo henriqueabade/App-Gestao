@@ -633,14 +633,189 @@ body {
     margin-bottom: 1rem;
 }
 
-.relatorios-module .relatorios-chart-placeholder {
-    height: 16rem;
+.relatorios-module .relatorios-charts-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 1.5rem;
+}
+
+.relatorios-module .relatorios-chart-empty {
+    min-height: 12rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 0.95rem;
+    padding: 1rem;
+}
+
+.relatorios-module .relatorios-chart-loading {
+    min-height: 12rem;
+    display: grid;
+    place-items: center;
+    gap: 1rem;
+}
+
+.relatorios-module .relatorios-chart-loading .skeleton {
+    width: 100%;
+    height: 2.75rem;
+    border-radius: 1rem;
+}
+
+.relatorios-module .relatorios-chart-loading .skeleton:first-child {
+    height: 9rem;
+}
+
+.relatorios-module .chart-description {
+    color: rgba(255, 255, 255, 0.65);
+    font-size: 0.85rem;
+    margin-bottom: 1rem;
+}
+
+.relatorios-module .chart-donut {
+    display: flex;
+    gap: 1.5rem;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+}
+
+.relatorios-module .chart-donut-figure {
+    position: relative;
+    width: 160px;
+    height: 160px;
+    flex-shrink: 0;
+}
+
+.relatorios-module .chart-donut-figure svg {
+    transform: rotate(-90deg);
+}
+
+.relatorios-module .chart-donut-figure circle {
+    fill: transparent;
+    stroke-width: 8;
+    transition: stroke-dasharray 200ms ease, stroke-dashoffset 200ms ease;
+}
+
+.relatorios-module .chart-donut-total {
+    position: absolute;
+    inset: 0;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    color: #9ca3af;
-    text-align: center;
+    font-size: 1.2rem;
+    font-weight: 600;
+    color: #fff;
+}
+
+.relatorios-module .chart-donut-total span {
+    font-size: 0.8rem;
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.6);
+}
+
+.relatorios-module .chart-legend {
+    display: grid;
+    gap: 0.65rem;
+    min-width: 200px;
+}
+
+.relatorios-module .chart-legend-item {
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+    font-size: 0.85rem;
+    color: rgba(255, 255, 255, 0.85);
+}
+
+.relatorios-module .chart-legend-color {
+    width: 12px;
+    height: 12px;
+    border-radius: 0.35rem;
+    flex-shrink: 0;
+}
+
+.relatorios-module .chart-legend-value {
+    margin-left: auto;
+    font-weight: 600;
+    color: #fff;
+    font-size: 0.8rem;
+}
+
+.relatorios-module .chart-bars {
+    display: grid;
+    gap: 0.75rem;
+}
+
+.relatorios-module .chart-bar-row {
+    display: grid;
+    gap: 0.35rem;
+}
+
+.relatorios-module .chart-bar-label {
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.75);
+}
+
+.relatorios-module .chart-bar {
+    position: relative;
+    height: 0.75rem;
+    border-radius: 9999px;
+    background: rgba(255, 255, 255, 0.08);
+    overflow: hidden;
+}
+
+.relatorios-module .chart-bar-fill {
+    position: absolute;
+    inset: 0;
+    border-radius: 9999px;
+    transition: width 200ms ease;
+}
+
+.relatorios-module .chart-bar-value {
+    position: absolute;
+    right: 0.5rem;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #111827;
+    background: rgba(255, 255, 255, 0.85);
+    padding: 0 0.4rem;
+    border-radius: 0.5rem;
+}
+
+.relatorios-module .chart-bar-value.is-outside {
+    color: rgba(255, 255, 255, 0.9);
+    background: transparent;
+    right: auto;
+    left: calc(100% + 0.5rem);
+}
+
+.relatorios-module .chart-bar-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.relatorios-module .chart-bar-wrapper .chart-bar {
+    flex: 1;
+}
+
+.relatorios-module .chart-bar-wrapper .chart-bar-value {
+    position: static;
+    transform: none;
+    background: transparent;
+    color: rgba(255, 255, 255, 0.85);
+    padding: 0;
+}
+
+.relatorios-module .chart-bar-wrapper .chart-bar-value strong {
+    font-weight: 600;
 }
 
 .relatorios-module .relatorios-master-item {

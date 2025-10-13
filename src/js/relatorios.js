@@ -28,6 +28,19 @@ const AVATAR_COLORS = [
     '#f59e0b'
 ];
 
+const CHART_COLORS = [
+    'var(--color-primary)',
+    '#6366f1',
+    '#10b981',
+    '#f97316',
+    '#a855f7',
+    '#ec4899',
+    '#14b8a6',
+    '#facc15',
+    '#22d3ee',
+    '#fb7185'
+];
+
 const reportDataCache = new Map();
 const reportDataPromises = new Map();
 const reportTableRenderers = new Map();
@@ -35,6 +48,7 @@ const filterDefaults = new Map();
 const reportVisibleColumns = new Map();
 const COLUMN_VISIBILITY_STORAGE_PREFIX = 'relatorios-visible-columns';
 let relatoriosKpiManager = null;
+let relatoriosChartManager = null;
 let jsPdfLoaderPromise = null;
 
 function showRelatoriosToast(message, type = 'info') {
@@ -2143,6 +2157,743 @@ function createKpiManager(root, options = {}) {
     };
 }
 
+function toTitleCase(value) {
+    if (value === null || value === undefined) return '';
+    const text = String(value).trim();
+    if (!text) return '';
+    return text
+        .toLowerCase()
+        .split(/\s+/)
+        .map(word => (word ? word.charAt(0).toUpperCase() + word.slice(1) : ''))
+        .join(' ');
+}
+
+function normalizeLabel(value, fallback = 'Outros') {
+    if (value === null || value === undefined) return fallback;
+    const text = String(value).trim();
+    return text || fallback;
+}
+
+function normalizeSeries(series, { fallbackLabel = 'Outros' } = {}) {
+    if (!Array.isArray(series)) return [];
+    return series
+        .map(item => ({
+            label: normalizeLabel(item?.label, fallbackLabel),
+            value: Math.max(0, Number(item?.value) || 0)
+        }))
+        .filter(item => item.value > 0);
+}
+
+function hasSeriesValues(series) {
+    return Array.isArray(series) && series.some(item => Number(item?.value) > 0);
+}
+
+function limitSeries(series, limit, othersLabel = 'Outros') {
+    if (!Array.isArray(series) || !Number.isFinite(limit) || limit <= 0) {
+        return Array.isArray(series) ? series.slice() : [];
+    }
+    if (series.length <= limit) {
+        return series.slice();
+    }
+    const top = series.slice(0, limit);
+    const remainder = series.slice(limit);
+    const remainingTotal = remainder.reduce((sum, item) => sum + Number(item?.value || 0), 0);
+    if (remainingTotal > 0) {
+        top.push({ label: othersLabel, value: remainingTotal });
+    }
+    return top;
+}
+
+function countByLabel(list, getter, options = {}) {
+    const { fallback = 'Outros', transform = toTitleCase } = options;
+    const map = new Map();
+    (Array.isArray(list) ? list : []).forEach(item => {
+        const rawLabel = getter(item);
+        let label = normalizeLabel(rawLabel, fallback);
+        if (typeof transform === 'function') {
+            label = transform(label);
+        }
+        label = normalizeLabel(label, fallback);
+        if (!label) return;
+        map.set(label, (map.get(label) || 0) + 1);
+    });
+    return Array.from(map.entries())
+        .map(([label, value]) => ({ label, value }))
+        .sort((a, b) => b.value - a.value);
+}
+
+function sumByLabel(list, getter, valueGetter, options = {}) {
+    const { fallback = 'Outros', transform = toTitleCase } = options;
+    const map = new Map();
+    (Array.isArray(list) ? list : []).forEach(item => {
+        const rawLabel = getter(item);
+        let label = normalizeLabel(rawLabel, fallback);
+        if (typeof transform === 'function') {
+            label = transform(label);
+        }
+        label = normalizeLabel(label, fallback);
+        if (!label) return;
+        const value = Number(valueGetter(item));
+        if (!Number.isFinite(value) || value <= 0) return;
+        map.set(label, (map.get(label) || 0) + value);
+    });
+    return Array.from(map.entries())
+        .map(([label, value]) => ({ label, value }))
+        .sort((a, b) => b.value - a.value);
+}
+
+function parseDateInput(value) {
+    if (!value) return null;
+    if (value instanceof Date) {
+        return Number.isNaN(value.getTime()) ? null : value;
+    }
+    if (typeof value === 'string') {
+        const trimmed = value.trim();
+        if (!trimmed) return null;
+        const brazilian = trimmed.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+        if (brazilian) {
+            const [, day, month, year] = brazilian;
+            const parsed = new Date(`${year}-${month}-${day}T00:00:00`);
+            if (!Number.isNaN(parsed.getTime())) {
+                return parsed;
+            }
+        }
+        const parsed = new Date(trimmed);
+        if (!Number.isNaN(parsed.getTime())) {
+            return parsed;
+        }
+        return null;
+    }
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function buildMonthlySeries(list, getDate, getValue, options = {}) {
+    const { limit = 6 } = options;
+    const buckets = new Map();
+    (Array.isArray(list) ? list : []).forEach(item => {
+        const date = getDate(item);
+        if (!(date instanceof Date) || Number.isNaN(date.getTime())) return;
+        const value = Number(getValue(item));
+        if (!Number.isFinite(value) || value <= 0) return;
+        const year = date.getFullYear();
+        const month = date.getMonth();
+        const key = `${year}-${month}`;
+        buckets.set(key, (buckets.get(key) || 0) + value);
+    });
+
+    const entries = Array.from(buckets.entries())
+        .map(([key, value]) => {
+            const [yearStr, monthStr] = key.split('-');
+            const year = Number(yearStr);
+            const month = Number(monthStr);
+            return {
+                order: year * 12 + month,
+                label: `${String(month + 1).padStart(2, '0')}/${year}`,
+                value
+            };
+        })
+        .sort((a, b) => a.order - b.order);
+
+    const limited = Number.isFinite(limit) && limit > 0 ? entries.slice(-limit) : entries;
+    return limited.map(item => ({ label: item.label, value: item.value }));
+}
+
+function createDonutChartConfig(title, series, options = {}) {
+    const normalizedSeries = normalizeSeries(series, { fallbackLabel: options.fallbackLabel || 'Outros' });
+    if (!normalizedSeries.length) return null;
+    const limitedSeries = Number.isFinite(options.limit) && options.limit > 0
+        ? limitSeries(normalizedSeries, options.limit, options.othersLabel || 'Outros')
+        : normalizedSeries;
+    if (!limitedSeries.length) return null;
+    return {
+        type: 'donut',
+        title,
+        series: limitedSeries,
+        valueFormatter: options.valueFormatter,
+        totalFormatter: options.totalFormatter,
+        legendFormatter: options.legendFormatter,
+        totalLabel: options.totalLabel,
+        description: options.description,
+        colors: options.colors
+    };
+}
+
+function createBarChartConfig(title, series, options = {}) {
+    const normalizedSeries = normalizeSeries(series, { fallbackLabel: options.fallbackLabel || 'Outros' });
+    if (!normalizedSeries.length) return null;
+    const limitedSeries = Number.isFinite(options.limit) && options.limit > 0
+        ? limitSeries(normalizedSeries, options.limit, options.othersLabel || 'Outros')
+        : normalizedSeries;
+    if (!limitedSeries.length) return null;
+    return {
+        type: 'bar',
+        title,
+        series: limitedSeries,
+        valueFormatter: options.valueFormatter,
+        description: options.description,
+        colors: options.colors
+    };
+}
+
+function createChartMessageCard(message) {
+    return `<article class="relatorios-chart-card"><div class="relatorios-chart-empty">${escapeHtml(String(message))}</div></article>`;
+}
+
+function createChartLoadingContent() {
+    return Array.from({ length: 2 })
+        .map(() => `
+            <article class="relatorios-chart-card">
+                <div class="relatorios-chart-loading">
+                    <div class="skeleton"></div>
+                    <div class="skeleton"></div>
+                    <div class="skeleton"></div>
+                </div>
+            </article>
+        `)
+        .join('');
+}
+
+function renderChartCards(charts) {
+    if (!Array.isArray(charts)) return '';
+    return charts
+        .map(chart => renderChartCard(chart))
+        .filter(Boolean)
+        .join('');
+}
+
+function renderChartCard(chart) {
+    if (!chart || !Array.isArray(chart.series) || !chart.series.length) return '';
+    let content = '';
+    if (chart.type === 'donut') {
+        content = renderDonutChart(chart);
+    } else if (chart.type === 'bar') {
+        content = renderBarChart(chart);
+    } else {
+        return '';
+    }
+    if (!content) return '';
+    const title = chart.title ? escapeHtml(String(chart.title)) : 'Gráfico';
+    const description = chart.description
+        ? `<p class="chart-description">${escapeHtml(String(chart.description))}</p>`
+        : '';
+    return `
+        <article class="relatorios-chart-card animate-fade-in-up">
+            <h3 class="chart-title">${title}</h3>
+            ${description}
+            ${content}
+        </article>
+    `;
+}
+
+function renderDonutChart(chart) {
+    const series = Array.isArray(chart.series) ? chart.series : [];
+    if (!series.length || !hasSeriesValues(series)) return '';
+    const total = series.reduce((sum, item) => sum + Number(item.value || 0), 0);
+    if (!Number.isFinite(total) || total <= 0) return '';
+
+    const valueFormatter = typeof chart.valueFormatter === 'function'
+        ? chart.valueFormatter
+        : value => formatNumber(value, { fallback: '0' });
+    const totalFormatter = typeof chart.totalFormatter === 'function'
+        ? chart.totalFormatter
+        : valueFormatter;
+    const legendFormatter = typeof chart.legendFormatter === 'function'
+        ? chart.legendFormatter
+        : (item, context) => `${context.valueLabel} • ${context.percentLabel}`;
+
+    const radius = 15.915;
+    let cumulativePercent = 0;
+    const segments = series.map((item, index) => {
+        const value = Number(item.value || 0);
+        const percent = total === 0 ? 0 : (value / total) * 100;
+        const dasharray = `${percent.toFixed(4)} ${(100 - percent).toFixed(4)}`;
+        const dashoffset = (25 - cumulativePercent).toFixed(4);
+        cumulativePercent += percent;
+        const color = chart.colors?.[index] || CHART_COLORS[index % CHART_COLORS.length];
+        return `<circle r="${radius}" cx="21" cy="21" stroke="${color}" stroke-dasharray="${dasharray}" stroke-dashoffset="${dashoffset}" stroke-linecap="round"></circle>`;
+    }).join('');
+
+    const totalLabel = chart.totalLabel ? escapeHtml(String(chart.totalLabel)) : 'Total';
+    const totalValue = escapeHtml(String(totalFormatter(total)));
+
+    const legendItems = series.map((item, index) => {
+        const color = chart.colors?.[index] || CHART_COLORS[index % CHART_COLORS.length];
+        const valueLabel = String(valueFormatter(item.value, item));
+        const percentValue = total === 0 ? 0 : (Number(item.value || 0) / total) * 100;
+        const percentLabel = `${percentFormatter.format(percentValue)}%`;
+        const legendValue = legendFormatter(item, {
+            value: Number(item.value || 0),
+            valueLabel,
+            percent: percentValue,
+            percentLabel
+        });
+        return `
+            <div class="chart-legend-item">
+                <span class="chart-legend-color" style="background:${color};"></span>
+                <span>${escapeHtml(item.label)}</span>
+                <span class="chart-legend-value">${escapeHtml(String(legendValue))}</span>
+            </div>
+        `;
+    }).join('');
+
+    return `
+        <div class="chart-donut">
+            <div class="chart-donut-figure">
+                <svg viewBox="0 0 42 42" xmlns="http://www.w3.org/2000/svg">
+                    <circle r="15.915" cx="21" cy="21" stroke="rgba(255, 255, 255, 0.08)"></circle>
+                    ${segments}
+                </svg>
+                <div class="chart-donut-total">
+                    <strong>${totalValue}</strong>
+                    <span>${totalLabel}</span>
+                </div>
+            </div>
+            <div class="chart-legend">
+                ${legendItems}
+            </div>
+        </div>
+    `;
+}
+
+function renderBarChart(chart) {
+    const series = Array.isArray(chart.series) ? chart.series : [];
+    if (!series.length || !hasSeriesValues(series)) return '';
+    const valueFormatter = typeof chart.valueFormatter === 'function'
+        ? chart.valueFormatter
+        : value => formatNumber(value, { fallback: '0' });
+
+    const maxValue = Math.max(...series.map(item => Number(item.value || 0)));
+    if (!Number.isFinite(maxValue) || maxValue <= 0) return '';
+
+    const rows = series.map((item, index) => {
+        const value = Number(item.value || 0);
+        const rawPercent = maxValue === 0 ? 0 : (value / maxValue) * 100;
+        const percent = rawPercent <= 0 ? 0 : Math.max(rawPercent, 6);
+        const width = Math.min(percent, 100);
+        const color = chart.colors?.[index] || CHART_COLORS[index % CHART_COLORS.length];
+        const valueLabel = escapeHtml(String(valueFormatter(value, item)));
+        const isOutside = rawPercent < 15;
+        const barValueClass = `chart-bar-value${isOutside ? ' is-outside' : ''}`;
+        return `
+            <div class="chart-bar-row">
+                <div class="chart-bar-label">${escapeHtml(item.label)}</div>
+                <div class="chart-bar">
+                    <div class="chart-bar-fill" style="width:${width.toFixed(2)}%;background:${color};"></div>
+                    <span class="${barValueClass}">${valueLabel}</span>
+                </div>
+            </div>
+        `;
+    }).join('');
+
+    return `<div class="chart-bars">${rows}</div>`;
+}
+
+function buildChartsForReport(key, data, config) {
+    switch (key) {
+        case 'materia-prima':
+            return buildMateriaPrimaCharts(data);
+        case 'produtos':
+            return buildProdutosCharts(data);
+        case 'clientes':
+            return buildClientesCharts(data);
+        case 'contatos':
+            return buildContatosCharts(data);
+        case 'prospeccoes':
+            return buildProspeccoesCharts(data);
+        case 'orcamentos':
+            return buildOrcamentosCharts(data);
+        case 'pedidos':
+            return buildPedidosCharts(data);
+        case 'usuarios':
+            return buildUsuariosCharts(data);
+        default:
+            return [];
+    }
+}
+
+function buildMateriaPrimaCharts(data = []) {
+    const list = Array.isArray(data) ? data : [];
+    if (!list.length) return [];
+
+    const statusSeries = countByLabel(list, item => {
+        const status = getRawMaterialStatus(item);
+        return status?.label || 'Sem status';
+    }, {
+        fallback: 'Sem status',
+        transform: toTitleCase
+    });
+
+    const categorySeriesRaw = sumByLabel(list, item => item?.categoria, item => (item?.infinito ? 0 : safeNumber(item?.quantidade)), {
+        fallback: 'Sem categoria',
+        transform: toTitleCase
+    });
+
+    const charts = [];
+
+    const statusChart = createDonutChartConfig('Distribuição por Status', statusSeries, {
+        totalLabel: 'Itens',
+        valueFormatter: value => formatNumber(value, { fallback: '0' }),
+        legendFormatter: (item, context) => `${formatNumber(item.value, { fallback: '0' })} • ${context.percentLabel}`
+    });
+    if (statusChart) {
+        charts.push(statusChart);
+    }
+
+    const categoryChart = createBarChartConfig('Top Categorias por Quantidade', limitSeries(categorySeriesRaw, 5, 'Outras categorias'), {
+        valueFormatter: value => formatNumber(value, { fallback: '0' })
+    });
+    if (categoryChart) {
+        charts.push(categoryChart);
+    }
+
+    return charts;
+}
+
+function buildProdutosCharts(data = []) {
+    const list = Array.isArray(data) ? data : [];
+    if (!list.length) return [];
+
+    const charts = [];
+
+    const statusSeries = countByLabel(list, produto => produto?.status ?? 'Sem status', {
+        fallback: 'Sem status',
+        transform: toTitleCase
+    });
+
+    const statusChart = createDonutChartConfig('Produtos por Status', statusSeries, {
+        totalLabel: 'Produtos',
+        valueFormatter: value => formatNumber(value, { fallback: '0' })
+    });
+    if (statusChart) {
+        charts.push(statusChart);
+    }
+
+    const collectionSeriesRaw = sumByLabel(list, produto => produto?.colecao ?? produto?.categoria ?? produto?.linha, produto => {
+        const quantidade = safeNumber(produto?.quantidade_total);
+        const preco = safeNumber(produto?.preco_venda);
+        return quantidade * preco;
+    }, {
+        fallback: 'Sem coleção',
+        transform: toTitleCase
+    });
+
+    const collectionChart = createBarChartConfig('Valor em Estoque por Coleção', limitSeries(collectionSeriesRaw, 5, 'Outras coleções'), {
+        valueFormatter: value => formatCurrency(value, { fallback: 'R$ 0,00' })
+    });
+    if (collectionChart) {
+        charts.push(collectionChart);
+    }
+
+    return charts;
+}
+
+function resolveClienteState(cliente) {
+    return cliente?.estado
+        ?? cliente?.estado_nome
+        ?? cliente?.estadoDescricao
+        ?? cliente?.estadoCompleto
+        ?? cliente?.uf
+        ?? '';
+}
+
+function buildClientesCharts(data = []) {
+    const list = Array.isArray(data) ? data : [];
+    if (!list.length) return [];
+
+    const charts = [];
+
+    const statusSeries = countByLabel(list, cliente => cliente?.status_cliente ?? 'Sem status', {
+        fallback: 'Sem status',
+        transform: toTitleCase
+    });
+
+    const statusChart = createDonutChartConfig('Clientes por Status', statusSeries, {
+        totalLabel: 'Clientes',
+        valueFormatter: value => formatNumber(value, { fallback: '0' })
+    });
+    if (statusChart) {
+        charts.push(statusChart);
+    }
+
+    const stateSeriesRaw = countByLabel(list, resolveClienteState, {
+        fallback: 'Sem estado',
+        transform: value => {
+            const normalized = normalizeLabel(value, 'Sem estado');
+            if (normalized.length <= 2) {
+                return normalized.toUpperCase();
+            }
+            return toTitleCase(normalized);
+        }
+    });
+
+    const stateChart = createBarChartConfig('Clientes por Estado', limitSeries(stateSeriesRaw, 6, 'Outros estados'), {
+        valueFormatter: value => formatNumber(value, { fallback: '0' })
+    });
+    if (stateChart) {
+        charts.push(stateChart);
+    }
+
+    return charts;
+}
+
+function buildContatosCharts(data = []) {
+    const list = Array.isArray(data) ? data : [];
+    if (!list.length) return [];
+
+    const charts = [];
+
+    const channelSeries = countByLabel(list, contato => {
+        const email = (contato?.email || '').trim();
+        const phone = sanitizeDigits(contato?.telefone_fixo ?? contato?.telefone ?? '');
+        const mobile = sanitizeDigits(contato?.telefone_celular ?? contato?.celular ?? '');
+        const hasEmail = Boolean(email);
+        const hasPhone = Boolean(phone || mobile);
+        if (hasEmail && hasPhone) return 'E-mail e telefone';
+        if (hasEmail) return 'Somente e-mail';
+        if (hasPhone) return 'Somente telefone';
+        return 'Sem contato direto';
+    }, {
+        fallback: 'Sem contato direto',
+        transform: value => value
+    });
+
+    const channelChart = createDonutChartConfig('Canais de Contato Disponíveis', channelSeries, {
+        totalLabel: 'Contatos',
+        valueFormatter: value => formatNumber(value, { fallback: '0' })
+    });
+    if (channelChart) {
+        charts.push(channelChart);
+    }
+
+    const ownerSeriesRaw = countByLabel(list, contato => {
+        return contato?.dono ?? contato?.dono_cliente ?? contato?.responsavel ?? '';
+    }, {
+        fallback: 'Sem responsável',
+        transform: toTitleCase
+    });
+
+    const ownerChart = createBarChartConfig('Responsáveis com Mais Contatos', limitSeries(ownerSeriesRaw, 6, 'Outros responsáveis'), {
+        valueFormatter: value => formatNumber(value, { fallback: '0' })
+    });
+    if (ownerChart) {
+        charts.push(ownerChart);
+    }
+
+    return charts;
+}
+
+function buildProspeccoesCharts(data = []) {
+    const list = Array.isArray(data) ? data : [];
+    if (!list.length) return [];
+
+    const charts = [];
+
+    const statusSeries = countByLabel(list, prospeccao => prospeccao?.status ?? 'Sem status', {
+        fallback: 'Sem status',
+        transform: toTitleCase
+    });
+
+    const statusChart = createDonutChartConfig('Leads por Status', statusSeries, {
+        totalLabel: 'Leads',
+        valueFormatter: value => formatNumber(value, { fallback: '0' })
+    });
+    if (statusChart) {
+        charts.push(statusChart);
+    }
+
+    const ownerSeriesRaw = countByLabel(list, prospeccao => prospeccao?.responsavel ?? '', {
+        fallback: 'Sem responsável',
+        transform: toTitleCase
+    });
+
+    const ownerChart = createBarChartConfig('Leads por Responsável', limitSeries(ownerSeriesRaw, 6, 'Outros responsáveis'), {
+        valueFormatter: value => formatNumber(value, { fallback: '0' })
+    });
+    if (ownerChart) {
+        charts.push(ownerChart);
+    }
+
+    return charts;
+}
+
+function buildOrcamentosCharts(data = []) {
+    const list = Array.isArray(data) ? data : [];
+    if (!list.length) return [];
+
+    const charts = [];
+
+    const statusSeries = countByLabel(list, orcamento => orcamento?.situacao ?? 'Sem status', {
+        fallback: 'Sem status',
+        transform: toTitleCase
+    });
+
+    const statusChart = createDonutChartConfig('Orçamentos por Status', statusSeries, {
+        totalLabel: 'Orçamentos',
+        valueFormatter: value => formatNumber(value, { fallback: '0' })
+    });
+    if (statusChart) {
+        charts.push(statusChart);
+    }
+
+    const monthlySeries = buildMonthlySeries(list, orcamento => parseDateInput(orcamento?.data_emissao ?? orcamento?.data), orcamento => safeNumber(orcamento?.valor_final), { limit: 6 });
+
+    const monthlyChart = createBarChartConfig('Valor Emitido (últimos meses)', monthlySeries, {
+        valueFormatter: value => formatCurrency(value, { fallback: 'R$ 0,00' })
+    });
+    if (monthlyChart) {
+        charts.push(monthlyChart);
+    }
+
+    return charts;
+}
+
+function buildPedidosCharts(data = []) {
+    const list = Array.isArray(data) ? data : [];
+    if (!list.length) return [];
+
+    const charts = [];
+
+    const statusSeries = countByLabel(list, pedido => pedido?.situacao ?? 'Sem status', {
+        fallback: 'Sem status',
+        transform: toTitleCase
+    });
+
+    const statusChart = createDonutChartConfig('Pedidos por Status', statusSeries, {
+        totalLabel: 'Pedidos',
+        valueFormatter: value => formatNumber(value, { fallback: '0' })
+    });
+    if (statusChart) {
+        charts.push(statusChart);
+    }
+
+    const monthlySeries = buildMonthlySeries(list, pedido => parseDateInput(pedido?.data_emissao ?? pedido?.data), pedido => safeNumber(pedido?.valor_final), { limit: 6 });
+
+    const monthlyChart = createBarChartConfig('Valor Faturado (últimos meses)', monthlySeries, {
+        valueFormatter: value => formatCurrency(value, { fallback: 'R$ 0,00' })
+    });
+    if (monthlyChart) {
+        charts.push(monthlyChart);
+    }
+
+    return charts;
+}
+
+function buildUsuariosCharts(data = []) {
+    const list = Array.isArray(data) ? data : [];
+    if (!list.length) return [];
+
+    const charts = [];
+
+    const statusSeries = countByLabel(list, usuario => {
+        const status = normalizeText(usuario?.status);
+        if (!status) return usuario?.status ?? 'Sem status';
+        if (status.includes('ativo')) return 'Ativo';
+        if (status.includes('inativ')) return 'Inativo';
+        if (status.includes('aguard')) return 'Aguardando';
+        return usuario?.status ?? 'Sem status';
+    }, {
+        fallback: 'Sem status',
+        transform: toTitleCase
+    });
+
+    const statusChart = createDonutChartConfig('Usuários por Situação', statusSeries, {
+        totalLabel: 'Usuários',
+        valueFormatter: value => formatNumber(value, { fallback: '0' })
+    });
+    if (statusChart) {
+        charts.push(statusChart);
+    }
+
+    const profileSeriesRaw = countByLabel(list, usuario => usuario?.perfil ?? '', {
+        fallback: 'Sem perfil',
+        transform: toTitleCase
+    });
+
+    const profileChart = createBarChartConfig('Distribuição por Perfil', limitSeries(profileSeriesRaw, 6, 'Outros perfis'), {
+        valueFormatter: value => formatNumber(value, { fallback: '0' })
+    });
+    if (profileChart) {
+        charts.push(profileChart);
+    }
+
+    return charts;
+}
+
+function createChartManager(root, options = {}) {
+    const { initialTab = null } = options;
+    const view = root.querySelector('#relatoriosChartsView');
+    const container = view?.querySelector('[data-relatorios-charts]');
+    if (!view || !container) return null;
+
+    let activeKey = null;
+
+    const setContent = html => {
+        container.innerHTML = html;
+    };
+
+    const showMessage = message => {
+        setContent(createChartMessageCard(message));
+    };
+
+    const showLoading = () => {
+        setContent(createChartLoadingContent());
+    };
+
+    if (initialTab) {
+        activeKey = initialTab;
+        showMessage('Carregando gráficos...');
+    } else {
+        showMessage('Selecione um relatório para visualizar gráficos.');
+    }
+
+    return {
+        setActiveKey(key) {
+            if (!key) {
+                activeKey = null;
+                showMessage('Selecione um relatório para visualizar gráficos.');
+                return;
+            }
+            activeKey = key;
+            showMessage('Carregando gráficos...');
+        },
+        setLoading(key) {
+            if (activeKey !== key) return;
+            showLoading();
+        },
+        setUnavailable(key) {
+            if (activeKey !== key) return;
+            showMessage('Gráficos não disponíveis para esta categoria.');
+        },
+        setEmpty(key) {
+            if (activeKey !== key) return;
+            showMessage('Nenhum dado disponível para gerar gráficos.');
+        },
+        setFilteredEmpty(key) {
+            if (activeKey !== key) return;
+            showMessage('Nenhum dado encontrado com os filtros aplicados.');
+        },
+        setError(key, message) {
+            if (activeKey !== key) return;
+            showMessage(message || 'Não foi possível carregar os gráficos.');
+        },
+        setData(key, data) {
+            if (activeKey !== key) return;
+            const charts = buildChartsForReport(key, Array.isArray(data) ? data : []);
+            if (!Array.isArray(charts) || !charts.length) {
+                showMessage('Nenhum dado disponível para gerar gráficos.');
+                return;
+            }
+            const html = renderChartCards(charts);
+            if (!html) {
+                showMessage('Nenhum dado disponível para gerar gráficos.');
+                return;
+            }
+            setContent(html);
+        }
+    };
+}
+
 function computeMateriaPrimaKpis(items = []) {
     const list = Array.isArray(items) ? items : [];
     const total = list.length;
@@ -2880,6 +3631,7 @@ function initRelatoriosModule() {
     const container = document.querySelector('.relatorios-module');
     if (!container) {
         relatoriosKpiManager = null;
+        relatoriosChartManager = null;
         return;
     }
 
@@ -2893,6 +3645,7 @@ function initRelatoriosModule() {
     const initialTabKey = initialTabButton?.dataset?.relatoriosTab || null;
 
     relatoriosKpiManager = createKpiManager(container, { initialTab: initialTabKey });
+    relatoriosChartManager = createChartManager(container, { initialTab: initialTabKey });
     const loadTableForTab = setupReportTables(container);
     initializeAllReportColumns();
     const columnControl = setupColumnVisibilityControl(container);
@@ -2974,6 +3727,9 @@ function setupCategoryTabs(root, options = {}) {
         if (relatoriosKpiManager?.setActiveKey) {
             relatoriosKpiManager.setActiveKey(target);
         }
+        if (relatoriosChartManager?.setActiveKey) {
+            relatoriosChartManager.setActiveKey(target);
+        }
 
         if (emitEvent && typeof onTabChange === 'function') {
             onTabChange(target, button, previous);
@@ -2987,6 +3743,9 @@ function setupCategoryTabs(root, options = {}) {
         applyVisibility(activeTab);
         if (relatoriosKpiManager?.setActiveKey && activeTab) {
             relatoriosKpiManager.setActiveKey(activeTab);
+        }
+        if (relatoriosChartManager?.setActiveKey && activeTab) {
+            relatoriosChartManager.setActiveKey(activeTab);
         }
     }
 
@@ -3062,6 +3821,9 @@ async function populateReportTable(key, container) {
         if (relatoriosKpiManager) {
             relatoriosKpiManager.setUnavailable(key);
         }
+        if (relatoriosChartManager) {
+            relatoriosChartManager.setUnavailable(key);
+        }
         return;
     }
 
@@ -3073,6 +3835,9 @@ async function populateReportTable(key, container) {
         console.warn(`Estrutura de tabela ausente para o relatório "${key}".`);
         if (relatoriosKpiManager) {
             relatoriosKpiManager.setUnavailable(key);
+        }
+        if (relatoriosChartManager) {
+            relatoriosChartManager.setUnavailable(key);
         }
         return;
     }
@@ -3088,6 +3853,9 @@ async function populateReportTable(key, container) {
     showMessage(config.loadingMessage || 'Carregando dados...');
     if (relatoriosKpiManager) {
         relatoriosKpiManager.setLoading(key);
+    }
+    if (relatoriosChartManager) {
+        relatoriosChartManager.setLoading(key);
     }
 
     try {
@@ -3106,6 +3874,9 @@ async function populateReportTable(key, container) {
         if (!Array.isArray(data) || data.length === 0) {
             const renderEmpty = () => {
                 showMessage(config.emptyMessage || 'Nenhum registro encontrado.');
+                if (relatoriosChartManager) {
+                    relatoriosChartManager.setEmpty(key);
+                }
             };
             reportTableRenderers.set(key, renderEmpty);
             renderEmpty();
@@ -3117,7 +3888,14 @@ async function populateReportTable(key, container) {
             if (!Array.isArray(filtered) || filtered.length === 0) {
                 tbody.innerHTML = createMessageRow(table, config.filteredEmptyMessage || FILTERED_EMPTY_MESSAGE);
                 applyColumns();
+                if (relatoriosChartManager) {
+                    relatoriosChartManager.setFilteredEmpty(key);
+                }
                 return;
+            }
+
+            if (relatoriosChartManager) {
+                relatoriosChartManager.setData(key, filtered);
             }
 
             const rows = filtered
@@ -3148,6 +3926,9 @@ async function populateReportTable(key, container) {
         console.error(`Erro ao popular relatório "${key}"`, error);
         if (relatoriosKpiManager) {
             relatoriosKpiManager.setError(key, config.errorMessage || 'Não foi possível carregar os dados.');
+        }
+        if (relatoriosChartManager) {
+            relatoriosChartManager.setError(key, config.errorMessage || 'Não foi possível carregar os dados.');
         }
         if (container.dataset.currentTab !== key) {
             return;
