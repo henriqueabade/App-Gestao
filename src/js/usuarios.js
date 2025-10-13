@@ -36,6 +36,8 @@ function obterPermissoesUsuario() {
     if (isSupAdmin) {
         return {
             podeEditar: true,
+            podeEditarDados: true,
+            podeGerenciarPermissoes: true,
             podeExcluir: true,
             podeAtivar: true,
             colunaDesabilitada: false
@@ -44,7 +46,9 @@ function obterPermissoesUsuario() {
 
     if (isAdmin) {
         return {
-            podeEditar: false,
+            podeEditar: true,
+            podeEditarDados: true,
+            podeGerenciarPermissoes: false,
             podeExcluir: false,
             podeAtivar: true,
             colunaDesabilitada: false
@@ -53,6 +57,8 @@ function obterPermissoesUsuario() {
 
     return {
         podeEditar: false,
+        podeEditarDados: false,
+        podeGerenciarPermissoes: false,
         podeExcluir: false,
         podeAtivar: false,
         colunaDesabilitada: true
@@ -379,7 +385,7 @@ function initUsuarios() {
     carregarUsuarios();
 
     document.getElementById('btnNovoUsuario')?.addEventListener('click', () => {
-        console.log('Criar novo usuário');
+        abrirNovoUsuario();
     });
     document.getElementById('usuariosEmptyNew')?.addEventListener('click', () => {
         document.getElementById('btnNovoUsuario')?.click();
@@ -712,7 +718,7 @@ function renderUsuarios(lista) {
             editIcon.style.color = 'rgba(255, 255, 255, 0.45)';
         } else {
             editBtn.addEventListener('click', () => {
-                console.log('Editar usuário');
+                abrirEditarUsuario(u);
             });
         }
 
@@ -803,6 +809,63 @@ function refreshUsuariosAposAtualizacao() {
     atualizarResumo();
 }
 
+function openModalWithSpinner(htmlPath, scriptPath, overlayId) {
+    Modal.closeAll();
+    const spinner = document.createElement('div');
+    spinner.id = 'modalLoading';
+    spinner.className = 'fixed inset-0 z-[2000] bg-black/50 flex items-center justify-center';
+    spinner.innerHTML = '<div class="w-16 h-16 border-4 border-[#b6a03e] border-t-transparent rounded-full animate-spin"></div>';
+    document.body.appendChild(spinner);
+
+    const start = Date.now();
+
+    function handleLoaded(event) {
+        if (event.detail !== overlayId) return;
+        const overlay = document.getElementById(`${overlayId}Overlay`);
+        const elapsed = Date.now() - start;
+
+        const show = () => {
+            spinner.remove();
+            if (overlay) {
+                overlay.classList.remove('hidden');
+            }
+        };
+
+        if (elapsed < 3000) {
+            setTimeout(show, Math.max(0, 2000 - elapsed));
+        } else {
+            show();
+        }
+
+        window.removeEventListener('modalSpinnerLoaded', handleLoaded);
+    }
+
+    window.addEventListener('modalSpinnerLoaded', handleLoaded);
+    Modal.open(htmlPath, scriptPath, overlayId, true);
+}
+
+function abrirNovoUsuario() {
+    openModalWithSpinner('modals/usuarios/novo.html', '../js/modals/usuario-novo.js', 'novoUsuario');
+}
+
+function abrirEditarUsuario(usuario) {
+    if (!usuario) return;
+    const permissoes = obterPermissoesUsuario();
+    window.usuarioEditar = {
+        ...usuario,
+        podeEditarDados: Boolean(permissoes.podeEditarDados),
+        podeGerenciarPermissoes: Boolean(permissoes.podeGerenciarPermissoes)
+    };
+    window.usuarioEditarContext = {
+        podeEditarDados: Boolean(permissoes.podeEditarDados),
+        podeGerenciarPermissoes: Boolean(permissoes.podeGerenciarPermissoes)
+    };
+    openModalWithSpinner('modals/usuarios/editar.html', '../js/modals/usuario-editar.js', 'editarUsuario');
+}
+
+window.abrirEditarUsuario = abrirEditarUsuario;
+window.abrirNovoUsuario = abrirNovoUsuario;
+
 async function alternarStatusUsuario(botao) {
     if (!botao || botao.disabled) return;
     const usuarioId = Number(botao.dataset.usuarioId);
@@ -856,6 +919,8 @@ async function carregarUsuarios() {
         console.error('Erro ao carregar usuários:', err);
     }
 }
+
+window.addEventListener('usuarioAtualizado', () => carregarUsuarios());
 
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', initUsuarios);

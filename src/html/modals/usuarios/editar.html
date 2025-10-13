@@ -1,0 +1,100 @@
+<div id="editarUsuarioOverlay" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center p-4 pt-[4vw]">
+  <div class="w-full max-w-5xl max-h-[90vh] glass-surface backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade slide-in overflow-hidden flex flex-col">
+    <header class="grid grid-cols-3 items-center px-8 py-5 border-b border-white/10 flex-shrink-0">
+      <button id="voltarEditarUsuario" class="btn-neutral px-4 py-2 rounded-lg text-white font-medium flex items-center gap-2 justify-self-start">← Voltar</button>
+      <h2 id="usuarioEditarTitulo" class="text-lg font-semibold text-white text-center truncate">Editar usuário</h2>
+      <div class="flex items-center justify-end gap-3">
+        <span id="usuarioEditarStatusBadge" class="hidden text-xs px-3 py-1 rounded-full uppercase tracking-wide"></span>
+      </div>
+    </header>
+
+    <nav class="px-8 border-b border-white/10 flex-shrink-0" role="tablist">
+      <div class="usuario-modal-tablist overflow-x-auto scrollbar-hide">
+        <button id="tab-dados-usuario" role="tab" aria-selected="true" aria-controls="panel-dados-usuario" tabindex="0" class="usuario-modal-tab usuario-modal-tab--active">Dados Pessoais</button>
+        <template id="usuarioPermissoesTabTemplate">
+          <button id="tab-permissoes-usuario" role="tab" aria-selected="false" aria-controls="panel-permissoes-usuario" tabindex="-1" class="usuario-modal-tab">Permissões</button>
+        </template>
+      </div>
+    </nav>
+
+    <div class="flex-1 overflow-y-auto modal-scroll">
+      <section id="panel-dados-usuario" role="tabpanel" aria-labelledby="tab-dados-usuario" class="px-8 py-6 space-y-8">
+        <div class="grid grid-cols-1 md:grid-cols-12 gap-8">
+          <div class="md:col-span-3 flex flex-col items-center gap-4">
+            <div id="usuarioAvatar" class="w-28 h-28 rounded-full glass-surface border border-white/20 flex items-center justify-center text-3xl font-semibold text-primary"></div>
+            <div class="text-center text-sm text-gray-300 space-y-1">
+              <div id="usuarioUltimaAtividade"></div>
+              <div id="usuarioPerfilAtual"></div>
+            </div>
+          </div>
+          <div class="md:col-span-9">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <label for="usuarioNome" class="block text-sm font-medium text-gray-300 mb-2">Nome completo</label>
+                <input id="usuarioNome" type="text" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" placeholder="Nome do usuário" />
+              </div>
+              <div>
+                <label for="usuarioEmail" class="block text-sm font-medium text-gray-300 mb-2">E-mail</label>
+                <input id="usuarioEmail" type="email" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" placeholder="email@empresa.com" />
+              </div>
+              <div>
+                <label for="usuarioTelefone" class="block text-sm font-medium text-gray-300 mb-2">Telefone</label>
+                <input id="usuarioTelefone" type="tel" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" placeholder="(11) 99999-0000" />
+              </div>
+              <div>
+                <label for="usuarioPerfil" class="block text-sm font-medium text-gray-300 mb-2">Perfil</label>
+                <select id="usuarioPerfil" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition select-arrow appearance-none">
+                  <option value="">Selecione</option>
+                  <option value="Sup Admin">Sup Admin</option>
+                  <option value="Admin">Admin</option>
+                  <option value="Operacional">Operacional</option>
+                  <option value="Financeiro">Financeiro</option>
+                  <option value="Comercial">Comercial</option>
+                </select>
+              </div>
+              <div>
+                <label for="usuarioStatus" class="block text-sm font-medium text-gray-300 mb-2">Status de acesso</label>
+                <select id="usuarioStatus" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition select-arrow appearance-none">
+                  <option value="Ativo">Ativo</option>
+                  <option value="Inativo">Inativo</option>
+                  <option value="Aguardando">Aguardando</option>
+                </select>
+              </div>
+              <div>
+                <label for="usuarioObservacoes" class="block text-sm font-medium text-gray-300 mb-2">Observações</label>
+                <textarea id="usuarioObservacoes" rows="3" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition resize-none" placeholder="Notas internas sobre o usuário"></textarea>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+      <template id="usuarioPermissoesPanelTemplate">
+        <section id="panel-permissoes-usuario" role="tabpanel" aria-labelledby="tab-permissoes-usuario" class="px-8 py-6 hidden">
+          <div class="flex flex-col gap-6">
+            <header class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+              <div>
+                <h3 class="text-lg font-semibold text-white">Permissões por módulo</h3>
+                <p class="text-sm text-gray-300">Ative ou desative as ações que este usuário pode executar em cada módulo do sistema.</p>
+              </div>
+              <div id="usuarioPermissoesLegenda" class="flex items-center gap-3 text-xs text-gray-300">
+                <span class="usuario-toggle-legend usuario-toggle-legend--ativo">Ativo</span>
+                <span class="usuario-toggle-legend usuario-toggle-legend--inativo">Inativo</span>
+              </div>
+            </header>
+            <div id="usuarioPermissoesContainer" class="usuario-permissoes-grid"></div>
+          </div>
+        </section>
+      </template>
+    </div>
+
+    <footer class="px-8 py-5 border-t border-white/10 flex flex-col md:flex-row md:items-center md:justify-between gap-4 flex-shrink-0">
+      <div id="usuarioEditarMensagem" class="hidden text-sm"></div>
+      <div class="flex items-center gap-3 justify-end w-full md:w-auto">
+        <button id="cancelarEditarUsuario" class="btn-neutral px-4 py-2 rounded-lg text-white font-medium">Cancelar</button>
+        <button id="salvarEditarUsuario" class="btn-primary px-6 py-2.5 rounded-lg text-white font-semibold flex items-center gap-2">
+          <span>Salvar alterações</span>
+        </button>
+      </div>
+    </footer>
+  </div>
+</div>
