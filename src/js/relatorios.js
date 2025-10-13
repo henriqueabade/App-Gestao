@@ -1387,6 +1387,7 @@ const REPORT_FILTERS = {
 
         return list.filter(item => {
             const statusInfo = getRawMaterialStatus(item);
+            const statusLabel = normalizeText(statusInfo?.label);
             const searchValues = [
                 item?.nome,
                 item?.categoria,
@@ -1413,10 +1414,8 @@ const REPORT_FILTERS = {
             if (Number.isFinite(quantidadeMin) && quantidade < quantidadeMin) return false;
             if (Number.isFinite(quantidadeMax) && quantidade > quantidadeMax) return false;
 
-            const minimo = getStockMinimum(item);
             if (baixoEstoque) {
-                if (!Number.isFinite(minimo)) return false;
-                if (!(quantidade > 0 && quantidade < minimo)) return false;
+                if (statusLabel !== 'baixo') return false;
             }
 
             const preco = safeNumber(item?.preco_unitario ?? item?.precoUnitario);
