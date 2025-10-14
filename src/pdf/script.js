@@ -716,17 +716,67 @@ async function buildDocument() {
     message: 'Buscando informações na API. Aguarde...',
     variant: 'info'
   });
+  let dadosEssenciaisDisponiveis = false;
   try {
     const endpoint = tipo === 'pedido' ? 'pedidos' : 'orcamentos';
     logInfo('Buscando dados do documento na API.', { endpoint, id });
     const orc = await fetchApi(`/api/${endpoint}/${id}`).then(r => r.json());
     logInfo('Dados do documento recebidos.', { numero: orc?.numero, situacao: orc?.situacao });
+    if (!orc || !orc.id || !orc.numero) {
+      const error = new Error('Não foi possível obter os dados essenciais do documento.');
+      error.code = 'ESSENTIAL_DATA_MISSING';
+      throw error;
+    }
+    dadosEssenciaisDisponiveis = true;
     document.title = `${tipo === 'pedido' ? 'Pedido' : 'Orçamento'} – Barral & Santíssimo`;
     logInfo('Buscando dados do cliente relacionado.', { clienteId: orc?.cliente_id });
-    const clienteResp = await fetchApi(`/api/clientes/${orc.cliente_id}`).then(r => r.json());
-    const cliente = clienteResp.cliente || clienteResp;
-    const contatos = clienteResp.contatos || [];
-    const contato = contatos.find(c => c.id === orc.contato_id) || contatos[0] || {};
+    let cliente;
+    let contatos = [];
+    let contato = {};
+    let clienteEmFallback = false;
+    try {
+      const clienteResp = await fetchApi(`/api/clientes/${orc.cliente_id}`).then(r => r.json());
+      cliente = clienteResp.cliente || clienteResp;
+      contatos = clienteResp.contatos || [];
+      contato = contatos.find(c => c.id === orc.contato_id) || contatos[0] || {};
+    } catch (clienteErr) {
+      logWarn('Falha ao buscar dados do cliente. Utilizando dados do orçamento ou placeholders.', clienteErr);
+      clienteEmFallback = true;
+      const placeholder = 'Dados indisponíveis';
+      const fallbackNome = (orc?.cliente_nome || '').trim() || placeholder;
+      const parseEnderecoFallback = value => {
+        if (!value) return null;
+        if (typeof value === 'object') return value;
+        return {
+          rua: String(value),
+          numero: '',
+          bairro: '',
+          cidade: '',
+          estado: '',
+          cep: ''
+        };
+      };
+      cliente = {
+        nome_fantasia: fallbackNome,
+        razao_social: orc?.cliente_razao_social || fallbackNome,
+        cnpj: orc?.cliente_cnpj || placeholder,
+        inscricao_estadual: orc?.cliente_inscricao_estadual || placeholder,
+        telefone_fixo: orc?.cliente_telefone_fixo || '',
+        telefone_celular: orc?.cliente_telefone_celular || '',
+        email: orc?.cliente_email || '',
+        transportadora: orc?.transportadora || '',
+        endereco_entrega: parseEnderecoFallback(orc?.cliente_endereco_entrega),
+        endereco_cobranca: parseEnderecoFallback(orc?.cliente_endereco_cobranca),
+        endereco_registro: parseEnderecoFallback(orc?.cliente_endereco_registro),
+        comprador_nome: orc?.contato_nome || placeholder
+      };
+      contato = {
+        nome: (orc?.contato_nome || '').trim() || placeholder,
+        telefone_fixo: orc?.contato_telefone_fixo || '',
+        telefone_celular: orc?.contato_telefone_celular || '',
+        email: orc?.contato_email || ''
+      };
+    }
     const contatoNomeAssinatura = (contato?.nome || orc?.contato_nome || cliente?.comprador_nome || '').trim();
 
     window.generatedPdfMeta = {
@@ -740,15 +790,16 @@ async function buildDocument() {
     const endCobranca = cliente.endereco_cobranca;
     const endRegistro = cliente.endereco_registro;
 
-    const endEntregaStr = formatEndereco(endEntrega);
+    const enderecoIndisponivel = 'Dados indisponíveis';
+    const endEntregaStr = formatEndereco(endEntrega) || (clienteEmFallback ? enderecoIndisponivel : '');
     const endCobrancaStr = enderecosIguais(endCobranca, endEntrega)
       ? 'Igual Endereço de Entrega'
-      : formatEndereco(endCobranca);
+      : formatEndereco(endCobranca) || (clienteEmFallback ? enderecoIndisponivel : '');
     const endRegistroStr = enderecosIguais(endRegistro, endEntrega)
       ? 'Igual Endereço de Entrega'
       : enderecosIguais(endRegistro, endCobranca)
         ? 'Igual Endereço de Faturamento'
-        : formatEndereco(endRegistro);
+        : formatEndereco(endRegistro) || (clienteEmFallback ? enderecoIndisponivel : '');
 
     const items = (orc.itens || []).map(it => ([
       it.codigo ?? '',
@@ -785,12 +836,16 @@ async function buildDocument() {
   } catch (err) {
     logError('Erro ao gerar documento.', err);
     window.__pdf_montado = false;
-    window.__pdf_erro = err?.message || 'Erro ao gerar documento';
+    const essencialIndisponivel = err?.code === 'ESSENTIAL_DATA_MISSING' || !dadosEssenciaisDisponiveis;
+    window.__pdf_erro = essencialIndisponivel
+      ? 'Não foi possível gerar o documento porque faltam dados essenciais.'
+      : err?.message || 'Erro ao gerar documento';
     window.pdfBuildError = window.__pdf_erro;
     window.pdfBuildReady = false;
     window.dispatchEvent(new CustomEvent('pdf-build-error', { detail: window.pdfBuildError }));
     const errorDetails = extractHelpfulDetails(err);
-    renderErrorFeedback('Erro ao gerar documento', window.__pdf_erro, errorDetails);
+    const feedbackTitle = essencialIndisponivel ? 'Dados essenciais indisponíveis' : 'Erro ao gerar documento';
+    renderErrorFeedback(feedbackTitle, window.__pdf_erro, errorDetails);
   }
 }
 
