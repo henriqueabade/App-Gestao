@@ -2276,9 +2276,13 @@ const confirmarEmail = async (req, res) => {
       params: req.params,
       body: req.body
     });
-    // Aceita ?token=..., ?th=..., ou /confirmar-email/:token
-    const token =
-      (req.query.token || req.query.th || req.params?.token || '').trim();
+    // Aceita token enviado via query (?token=..., ?th=...), body ou params (/confirmar-email/:token)
+    const rawToken =
+      (req.query && (req.query.token || req.query.th)) ||
+      (req.body && (req.body.token || req.body.th)) ||
+      (req.params && (req.params.token || req.params.th));
+
+    const token = typeof rawToken === 'string' ? rawToken.trim() : '';
 
     if (!token) {
       return res.status(400).json({ ok: false, error: 'token ausente' });
