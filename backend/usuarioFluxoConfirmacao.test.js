@@ -32,8 +32,28 @@ function createTable(db) {
 function setupEnvironment() {
   const db = newDb();
   createTable(db);
-  const { Pool } = db.adapters.createPg();
+  const { Pool, Client } = db.adapters.createPg();
   const pool = new Pool();
+
+  const pgModulePath = require.resolve('pg');
+  const originalPgModule = require.cache[pgModulePath];
+  require.cache[pgModulePath] = {
+    exports: { Client, Pool }
+  };
+
+  const previousEnv = {
+    DB_HOST: process.env.DB_HOST,
+    DB_PORT: process.env.DB_PORT,
+    DB_NAME: process.env.DB_NAME,
+    DB_USER: process.env.DB_USER,
+    DB_PASSWORD: process.env.DB_PASSWORD
+  };
+
+  process.env.DB_HOST = previousEnv.DB_HOST || 'localhost';
+  process.env.DB_PORT = previousEnv.DB_PORT || '5432';
+  process.env.DB_NAME = previousEnv.DB_NAME || 'test';
+  process.env.DB_USER = previousEnv.DB_USER || 'test';
+  process.env.DB_PASSWORD = previousEnv.DB_PASSWORD || 'test';
 
   const dbModulePath = require.resolve('./db');
   const originalDbModule = require.cache[dbModulePath];
@@ -111,6 +131,20 @@ function setupEnvironment() {
     } else {
       delete require.cache[activationModulePath];
     }
+
+    if (originalPgModule) {
+      require.cache[pgModulePath] = originalPgModule;
+    } else {
+      delete require.cache[pgModulePath];
+    }
+
+    Object.entries(previousEnv).forEach(([key, value]) => {
+      if (typeof value === 'undefined') {
+        delete process.env[key];
+      } else {
+        process.env[key] = value;
+      }
+    });
   }
 
   return {
@@ -185,23 +219,27 @@ test('GET /api/usuarios/confirmar-email valida token e atualiza status', async (
     try {
       const resposta = await fetch(`http://127.0.0.1:${port}/api/usuarios/confirmar-email?token=${token}`);
       assert.strictEqual(resposta.status, 200);
-      const corpo = await resposta.text();
-      assert.ok(corpo.includes('Confirmação registrada'));
+      const corpo = await resposta.json();
+      assert.deepStrictEqual(corpo, {
+        ok: true,
+        message: 'e-mail confirmado com sucesso'
+      });
 
       const registro = await pool.query(
-        'SELECT confirmacao, email_confirmado, status, confirmacao_token, aprovacao_token FROM usuarios WHERE email = $1',
+        `SELECT email_confirmado, email_confirmado_em, confirmacao, status, confirmacao_token, confirmacao_token_revogado_em
+           FROM usuarios
+          WHERE email = $1`,
         ['joana@example.com']
       );
       const usuario = registro.rows[0];
-      assert.strictEqual(usuario.confirmacao, true);
       assert.strictEqual(usuario.email_confirmado, true);
-      assert.strictEqual(usuario.status, 'aguardando_aprovacao');
+      assert.ok(usuario.email_confirmado_em instanceof Date);
+      assert.strictEqual(usuario.confirmacao, false);
+      assert.strictEqual(usuario.status, 'nao_confirmado');
       assert.strictEqual(usuario.confirmacao_token, null);
-      assert.ok(typeof usuario.aprovacao_token === 'string' && usuario.aprovacao_token.length > 20);
+      assert.ok(usuario.confirmacao_token_revogado_em instanceof Date);
 
-      assert.strictEqual(supAdminEmails.length, 1);
-      assert.strictEqual(supAdminEmails[0].usuarioEmail, 'joana@example.com');
-      assert.strictEqual(supAdminEmails[0].tokenAprovacao, usuario.aprovacao_token);
+      assert.strictEqual(supAdminEmails.length, 0);
     } finally {
       await close();
     }

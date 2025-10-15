@@ -1,6 +1,7 @@
 const crypto = require('crypto');
 const express = require('express');
 const bcrypt = require('bcrypt');
+const { Client } = require('pg');
 const pool = require('./db');
 const { updateUsuarioCampos } = require('./userActivity');
 const { sendSupAdminReviewNotification } = require('../src/email/sendSupAdminReviewNotification');
@@ -2267,131 +2268,72 @@ router.patch('/:id/status', async (req, res) => {
   }
 });
 
-async function confirmarEmail(req, res) {
-  const token = extrairToken(req);
-
-  if (!token) {
-    return responder(req, res, 400, 'Token inválido', 'Token de confirmação não informado.');
-  }
-
+const confirmarEmail = async (req, res) => {
   try {
-    const resultado = await pool.query(
-      `SELECT id, nome, email, confirmacao, email_confirmado, confirmacao_token_expira_em
+    // Aceita ?token=..., ?th=..., ou /confirmar-email/:token
+    const token =
+      (req.query.token || req.query.th || req.params?.token || '').trim();
+
+    if (!token) {
+      return res.status(400).json({ ok: false, error: 'token ausente' });
+    }
+
+    const client = new Client({
+      host: process.env.DB_HOST,
+      port: Number(process.env.DB_PORT),
+      database: process.env.DB_NAME,
+      user: process.env.DB_USER,
+      password: process.env.DB_PASSWORD
+    });
+    await client.connect();
+
+    // Procura usuário com esse token e ainda não confirmado
+    const { rows } = await client.query(
+      `SELECT id, email_confirmado, confirmacao_token_expira_em
          FROM usuarios
-        WHERE confirmacao_token = $1`,
+        WHERE confirmacao_token = $1
+        LIMIT 1`,
       [token]
     );
 
-    if (resultado.rows.length === 0) {
-      return responder(req, res, 404, 'Token inválido', 'Não encontramos uma solicitação válida para este link.');
+    if (rows.length === 0) {
+      await client.end();
+      return res.status(400).json({ ok: false, error: 'token inválido' });
     }
 
-    const usuario = resultado.rows[0];
+    const u = rows[0];
 
-    if (tokenExpirado(usuario)) {
-      return responder(
-        req,
-        res,
-        410,
-        'Token expirado',
-        'O link de confirmação expirou. Solicite um novo cadastro.'
-      );
+    // Verifica expiração se existir
+    if (u.confirmacao_token_expira_em && new Date(u.confirmacao_token_expira_em) < new Date()) {
+      await client.end();
+      return res.status(400).json({ ok: false, error: 'token expirado' });
     }
 
-    if (parseBoolean(usuario.confirmacao ?? usuario.email_confirmado)) {
-      return responder(
-        req,
-        res,
-        200,
-        'E-mail já confirmado',
-        'Você já havia confirmado este e-mail. Aguarde a aprovação do Sup Admin.'
-      );
+    if (u.email_confirmado === true) {
+      await client.end();
+      return res.json({ ok: true, message: 'e-mail já confirmado' });
     }
 
-    const colunasTabela = await getUsuarioColumns();
-    const atualizacoes = [
-      "status = 'aguardando_aprovacao'",
-      'status_atualizado_em = NOW()',
-      'confirmacao_token = NULL'
-    ];
-    if (colunasTabela.has('confirmacao')) atualizacoes.unshift('confirmacao = true');
-    if (colunasTabela.has('email_confirmado')) atualizacoes.push('email_confirmado = true');
-    if (colunasTabela.has('email_confirmado_em')) atualizacoes.push('email_confirmado_em = NOW()');
-    if (colunasTabela.has('confirmacao_token_revogado_em')) {
-      atualizacoes.push('confirmacao_token_revogado_em = NOW()');
-    }
-
-    const valoresAtualizacao = [usuario.id];
-    let placeholderIndex = 2;
-    let tokenAprovacao = null;
-
-    if (colunasTabela.has('aprovacao_token')) {
-      tokenAprovacao = crypto.randomBytes(32).toString('hex');
-      atualizacoes.push(`aprovacao_token = $${placeholderIndex}`);
-      valoresAtualizacao.push(tokenAprovacao);
-      placeholderIndex += 1;
-
-      if (colunasTabela.has('aprovacao_token_gerado_em')) {
-        atualizacoes.push(`aprovacao_token_gerado_em = $${placeholderIndex}`);
-        valoresAtualizacao.push(new Date());
-        placeholderIndex += 1;
-      }
-
-      if (colunasTabela.has('aprovacao_token_expira_em')) {
-        atualizacoes.push(`aprovacao_token_expira_em = $${placeholderIndex}`);
-        valoresAtualizacao.push(new Date(Date.now() + SUP_ADMIN_APPROVAL_TTL_MS));
-        placeholderIndex += 1;
-      }
-    }
-
-    const atualizado = await pool.query(
+    // Confirma e invalida o token
+    await client.query(
       `UPDATE usuarios
-          SET ${atualizacoes.join(', ')}
-        WHERE id = $1
-      RETURNING *`,
-      valoresAtualizacao
+          SET email_confirmado = TRUE,
+              email_confirmado_em = NOW(),
+              confirmacao_token = NULL,
+              confirmacao_token_revogado_em = NOW()
+        WHERE id = $1`,
+      [u.id]
     );
 
-    const usuarioAtualizado = atualizado.rows[0];
-    const tokenParaEmail = usuarioAtualizado?.aprovacao_token || tokenAprovacao || undefined;
-
-    try {
-      await atualizarCacheLogin(usuarioAtualizado.id, usuarioAtualizado);
-    } catch (err) {
-      console.error('Falha ao atualizar cache de login após confirmação de e-mail:', err);
-    }
-
-    try {
-      await sendSupAdminReviewNotification({
-        usuarioNome: usuarioAtualizado.nome,
-        usuarioEmail: usuarioAtualizado.email,
-        motivo: 'Usuário confirmou o e-mail.',
-        acaoRecomendada: 'Acesse o painel e realize a aprovação do cadastro.',
-        tokenAprovacao: tokenParaEmail
-      });
-    } catch (err) {
-      console.error('sendSupAdminReviewNotification error', err);
-    }
-
-    return responder(
-      req,
-      res,
-      200,
-      'Confirmação registrada',
-      'Obrigado! Sua confirmação foi recebida e o Sup Admin foi notificado.',
-      { usuario: formatarUsuario(usuarioAtualizado) }
-    );
+    await client.end();
+    return res.json({ ok: true, message: 'e-mail confirmado com sucesso' });
   } catch (err) {
-    console.error('Erro ao confirmar e-mail do usuário:', err);
-    return responder(
-      req,
-      res,
-      500,
-      'Erro interno',
-      'Não foi possível confirmar seu e-mail. Tente novamente mais tarde.'
-    );
+    console.error('confirmarEmail erro:', err);
+    return res.status(500).json({ ok: false, error: 'erro interno' });
   }
-}
+};
+
+exports.confirmarEmail = confirmarEmail;
 
 async function reportarEmailIncorreto(req, res) {
   const token = extrairToken(req);
@@ -2492,7 +2434,10 @@ async function reportarEmailIncorreto(req, res) {
   }
 }
 
+router.get('/usuarios/confirmar-email', confirmarEmail);
+router.get('/usuarios/confirmar-email/:token', confirmarEmail);
 router.get('/confirmar-email', confirmarEmail);
+router.get('/confirmar-email/:token', confirmarEmail);
 router.post('/confirmar-email', confirmarEmail);
 router.get('/reportar-email-incorreto', reportarEmailIncorreto);
 router.post('/reportar-email-incorreto', reportarEmailIncorreto);
