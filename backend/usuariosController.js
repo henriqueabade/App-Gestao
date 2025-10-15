@@ -2270,6 +2270,12 @@ router.patch('/:id/status', async (req, res) => {
 
 const confirmarEmail = async (req, res) => {
   try {
+    console.log('[confirmar-email]', {
+      url: req.originalUrl,
+      query: req.query,
+      params: req.params,
+      body: req.body
+    });
     // Aceita ?token=..., ?th=..., ou /confirmar-email/:token
     const token =
       (req.query.token || req.query.th || req.params?.token || '').trim();
