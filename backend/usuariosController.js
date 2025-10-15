@@ -2104,17 +2104,95 @@ const obterPrimeiroTexto = valor => {
   return '';
 };
 
-const extrairToken = req => {
-  const fonte = req.method === 'GET' ? req.query : req.body;
-
-  if (!fonte || typeof fonte !== 'object') {
+const obterTokenDeObjeto = objeto => {
+  if (!objeto || typeof objeto !== 'object') {
     return '';
   }
 
-  const token = obterPrimeiroTexto(fonte.token);
-  const tokenHash = obterPrimeiroTexto(fonte.th);
+  const chavesPreferidas = ['token', 'th', 'code', 'codigo', 'hash'];
+  const entradas = Object.entries(objeto);
 
-  return (token || tokenHash || '').trim();
+  for (const chavePreferida of chavesPreferidas) {
+    for (const [chave, valor] of entradas) {
+      if (typeof chave === 'string' && chave.toLowerCase() === chavePreferida) {
+        const texto = obterPrimeiroTexto(valor).trim();
+        if (texto) {
+          return texto;
+        }
+      }
+    }
+  }
+
+  for (const [, valor] of entradas) {
+    const texto = obterPrimeiroTexto(valor).trim();
+    if (texto) {
+      return texto;
+    }
+  }
+
+  return '';
+};
+
+const obterTokenDeUrl = urlBruta => {
+  if (typeof urlBruta !== 'string' || !urlBruta.includes('?')) {
+    return '';
+  }
+
+  const [, query] = urlBruta.split('?', 2);
+  try {
+    const params = new URLSearchParams(query);
+    const possiveisChaves = ['token', 'th', 'code', 'codigo', 'hash'];
+    for (const chave of possiveisChaves) {
+      const valor = params.get(chave);
+      if (valor && valor.trim()) {
+        return valor.trim();
+      }
+    }
+    for (const valor of params.values()) {
+      if (valor && valor.trim()) {
+        return valor.trim();
+      }
+    }
+  } catch (err) {
+    console.warn('Não foi possível analisar parâmetros da URL para extração de token.', err);
+  }
+  return '';
+};
+
+const extrairToken = req => {
+  if (!req || typeof req !== 'object') {
+    return '';
+  }
+
+  const fontes = [];
+  if (req.method === 'GET') {
+    fontes.push(req.query);
+  } else {
+    fontes.push(req.body);
+  }
+
+  fontes.push(req.params);
+
+  if (req.headers && typeof req.headers === 'object') {
+    const cabecalhoAuth = obterPrimeiroTexto(req.headers.authorization).replace(/^Bearer\s+/i, '').trim();
+    if (cabecalhoAuth) {
+      return cabecalhoAuth;
+    }
+  }
+
+  for (const fonte of fontes) {
+    const token = obterTokenDeObjeto(fonte);
+    if (token) {
+      return token;
+    }
+  }
+
+  const tokenUrl = obterTokenDeUrl(req.originalUrl || req.url);
+  if (tokenUrl) {
+    return tokenUrl;
+  }
+
+  return '';
 };
 
 const tokenExpirado = usuario => {
