@@ -2093,16 +2093,28 @@ const responder = (req, res, status, titulo, mensagem, payload = {}) => {
   }
 };
 
-const extrairToken = req => {
-  if (req.method === 'GET') {
-    const token = typeof req.query.token === 'string' ? req.query.token : Array.isArray(req.query.token) ? req.query.token[0] : '';
-    return (token || '').trim();
+const obterPrimeiroTexto = valor => {
+  if (typeof valor === 'string') {
+    return valor;
   }
-  if (!req.body || typeof req.body !== 'object') {
+  if (Array.isArray(valor) && valor.length > 0) {
+    const primeiro = valor[0];
+    return typeof primeiro === 'string' ? primeiro : '';
+  }
+  return '';
+};
+
+const extrairToken = req => {
+  const fonte = req.method === 'GET' ? req.query : req.body;
+
+  if (!fonte || typeof fonte !== 'object') {
     return '';
   }
-  const token = req.body.token;
-  return typeof token === 'string' ? token.trim() : '';
+
+  const token = obterPrimeiroTexto(fonte.token);
+  const tokenHash = obterPrimeiroTexto(fonte.th);
+
+  return (token || tokenHash || '').trim();
 };
 
 const tokenExpirado = usuario => {
