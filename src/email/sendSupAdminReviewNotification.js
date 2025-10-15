@@ -1,4 +1,4 @@
-const transporter = require('./transporter');
+const { sendMail } = require('../lib/mail');
 
 function resolveSupAdminRecipient() {
   const recipients = [process.env.SUP_ADMIN_EMAIL, process.env.ADMIN_EMAIL];
@@ -55,9 +55,9 @@ async function sendSupAdminReviewNotification({ usuarioNome, usuarioEmail, motiv
     <p>Equipe Santíssimo Decor</p>
   `;
 
-  await transporter.sendMail({
+  await sendMail({
     envelope: { from: process.env.FROM_EMAIL, to },
-    from: `"Santíssimo Decor" <${process.env.FROM_EMAIL}>`,
+    fromOverride: `"Santíssimo Decor" <${process.env.FROM_EMAIL}>`,
     to,
     subject: 'Ação necessária - Revisão de cadastro de usuário',
     html

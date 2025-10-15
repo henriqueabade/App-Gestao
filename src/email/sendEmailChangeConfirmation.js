@@ -1,4 +1,4 @@
-const transporter = require('./transporter');
+const { sendMail } = require('../lib/mail');
 const { getLogoAttachment, renderLogoImage } = require('./logo');
 
 function buildLink(pathname, token) {
@@ -41,9 +41,9 @@ async function sendEmailChangeConfirmation({ to, nome, token, emailAtual }) {
     </div>
   `;
 
-  await transporter.sendMail({
+  await sendMail({
     envelope: { from: process.env.FROM_EMAIL, to },
-    from: `"Santíssimo Decor" <${process.env.FROM_EMAIL}>`,
+    fromOverride: `"Santíssimo Decor" <${process.env.FROM_EMAIL}>`,
     to,
     subject: 'Confirme seu novo e-mail',
     html,

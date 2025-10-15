@@ -1,4 +1,4 @@
-const transporter = require('./transporter');
+const { sendMail } = require('../lib/mail');
 
 async function sendUserActivationNotice({ to, nome }) {
   if (!to) {
@@ -13,9 +13,9 @@ async function sendUserActivationNotice({ to, nome }) {
     <p>Bom trabalho!<br>Equipe Santíssimo Decor</p>
   `;
 
-  await transporter.sendMail({
+  await sendMail({
     envelope: { from: process.env.FROM_EMAIL, to },
-    from: `"Santíssimo Decor" <${process.env.FROM_EMAIL}>`,
+    fromOverride: `"Santíssimo Decor" <${process.env.FROM_EMAIL}>`,
     to,
     subject: 'Seu acesso foi liberado',
     html

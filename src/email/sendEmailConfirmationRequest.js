@@ -1,4 +1,4 @@
-const transporter = require('./transporter');
+const { sendMail } = require('../lib/mail');
 
 function buildLink(pathname, token) {
   const bases = [process.env.APP_URL, process.env.API_URL, process.env.API_BASE_URL];
@@ -37,9 +37,9 @@ async function sendEmailConfirmationRequest({ to, nome, token }) {
     <p>Atenciosamente,<br>Equipe Santíssimo Decor</p>
   `;
 
-  await transporter.sendMail({
+  await sendMail({
     envelope: { from: process.env.FROM_EMAIL, to },
-    from: `"Santíssimo Decor" <${process.env.FROM_EMAIL}>`,
+    fromOverride: `"Santíssimo Decor" <${process.env.FROM_EMAIL}>`,
     to,
     subject: 'Confirme seu cadastro',
     html

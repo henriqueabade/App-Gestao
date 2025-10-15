@@ -1,5 +1,5 @@
 // src/email/sendResetEmail.js
-const transporter = require('./transporter'); // usamos o mesmo transporter verificado
+const { sendMail } = require('../lib/mail'); // usamos o mesmo transporte verificado
 const { getLogoAttachment, renderLogoImage } = require('./logo');
 
 /**
@@ -10,9 +10,9 @@ const { getLogoAttachment, renderLogoImage } = require('./logo');
 async function sendResetEmail(to, token) {
   const resetLink = `${process.env.APP_URL}/reset-password?token=${token}`;
 
-  await transporter.sendMail({
+  await sendMail({
     envelope: { from: process.env.FROM_EMAIL, to },
-    from: `"Santíssimo Decor" <${process.env.FROM_EMAIL}>`,
+    fromOverride: `"Santíssimo Decor" <${process.env.FROM_EMAIL}>`,
     to,
     subject: 'Redefinição de senha',
     html: `

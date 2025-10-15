@@ -1,4 +1,4 @@
-const transporter = require('./transporter');
+const { sendMail } = require('../lib/mail');
 const { getLogoAttachment, renderLogoImage } = require('./logo');
 
 /**
@@ -25,9 +25,9 @@ async function sendRegistrationEmail(to, nome) {
     </div>
   `;
 
-  await transporter.sendMail({
+  await sendMail({
     envelope: { from: process.env.FROM_EMAIL, to },
-    from: `"Santíssimo Decor" <${process.env.FROM_EMAIL}>`,
+    fromOverride: `"Santíssimo Decor" <${process.env.FROM_EMAIL}>`,
     to,
     subject: 'Cadastro registrado',
     html,
