@@ -40,6 +40,7 @@ body {
 
 .btn-bordo {
     background: var(--color-bordeaux);
+    color: #fff;
     transition: all 150ms ease;
     border: 1px solid rgba(255, 255, 255, 0.15);
 }
@@ -74,6 +75,7 @@ body {
 
 .btn-danger {
     background: rgba(255, 88, 88, 0.9);
+    color: #fff;
     border: 1px solid rgba(255, 88, 88, 0.35);
     transition: all 150ms ease;
 }
@@ -81,6 +83,21 @@ body {
 .btn-danger:hover {
     background: rgba(255, 88, 88, 1);
     transform: translateY(-1px);
+}
+
+.btn-success {
+    background: var(--color-green);
+    color: #062e0f;
+    transition: all 150ms ease;
+}
+
+.btn-success:hover {
+    background: rgba(162, 255, 166, 0.85);
+    transform: scale(1.05);
+}
+
+.btn-success:active {
+    transform: scale(0.95);
 }
 
 .btn-secondary {
@@ -320,6 +337,30 @@ body {
 .modelo-permissoes-toolbar__hint {
     font-size: 0.9rem;
     color: rgba(255, 255, 255, 0.65);
+}
+
+.modelo-permissoes-status {
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    color: rgba(255, 255, 255, 0.75);
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.25);
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    letter-spacing: 0.08em;
+    transition: all 150ms ease;
+}
+
+.modelo-permissoes-status--novo {
+    background: rgba(162, 255, 166, 0.18);
+    border-color: rgba(162, 255, 166, 0.35);
+    color: var(--color-green);
+}
+
+.modelo-permissoes-status--editando {
+    background: rgba(212, 193, 105, 0.18);
+    border-color: rgba(212, 193, 105, 0.35);
+    color: var(--color-primary);
 }
 
 .modelo-permissoes-input,

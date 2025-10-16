@@ -216,12 +216,15 @@
 
   function atualizarBadge() {
     if (!elementos.statusBadge) return;
+    elementos.statusBadge.classList.remove('modelo-permissoes-status--novo', 'modelo-permissoes-status--editando');
     if (state.modoNovo) {
       elementos.statusBadge.textContent = 'Novo Modelo';
       elementos.statusBadge.classList.remove('hidden');
+      elementos.statusBadge.classList.add('modelo-permissoes-status--novo');
     } else if (state.modeloAtual) {
       elementos.statusBadge.textContent = 'Editando';
       elementos.statusBadge.classList.remove('hidden');
+      elementos.statusBadge.classList.add('modelo-permissoes-status--editando');
     } else {
       elementos.statusBadge.textContent = '';
       elementos.statusBadge.classList.add('hidden');
