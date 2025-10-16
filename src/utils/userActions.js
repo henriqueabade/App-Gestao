@@ -380,6 +380,7 @@ action('logout', () => {
   if (window.stopServerCheck) window.stopServerCheck();
   localStorage.removeItem('offlineDisconnect');
   localStorage.removeItem('pinChanged');
+  localStorage.removeItem('userRemoved');
   // 0) garante que o "lembrar-me" não acione um auto login
 
   if (localStorage.getItem('user') !== null) {
@@ -423,6 +424,7 @@ action('logout', () => {
     if (window.stopServerCheck) window.stopServerCheck();
     localStorage.removeItem('offlineDisconnect');
     localStorage.removeItem('pinChanged');
+    localStorage.removeItem('userRemoved');
     const overlay = document.getElementById('exitOverlay');
     if (overlay) {
       overlay.classList.remove('hidden');

@@ -21,6 +21,7 @@ function showInactiveUserWarning() {
 let currentPinPopup = null;
 let pinErrorShown = false;
 let offlineErrorShown = false;
+let userRemovedErrorShown = false;
 
 async function fetchApi(path, options) {
   const baseUrl = await window.apiConfig.getApiBaseUrl();
@@ -143,6 +144,35 @@ function showOfflineError() {
   btn.addEventListener('click', () => overlay.remove());
 }
 
+function showUserRemovedError() {
+  if (userRemovedErrorShown) return;
+  userRemovedErrorShown = true;
+  const overlay = document.createElement('div');
+  overlay.className = 'warning-overlay';
+  overlay.innerHTML = `
+    <div class="warning-modal scale-95">
+      <div class="warning-icon">
+        <div class="warning-icon-circle">
+          <i data-feather="user-x"></i>
+        </div>
+      </div>
+      <h2 class="warning-title">Usuário Removido</h2>
+      <p class="warning-text">Seu usuário foi removido dos registros. Você foi desconectado por segurança.</p>
+      <hr class="warning-divider">
+      <p class="warning-text-small">Entre em contato com o suporte para restaurar o acesso e obter mais informações.</p>
+      <button id="userRemovedOk" class="warning-button pulse">OK</button>
+    </div>`;
+  document.body.appendChild(overlay);
+  feather.replace();
+  requestAnimationFrame(() => {
+    const modal = overlay.querySelector('div');
+    modal.classList.remove('scale-95');
+  });
+  const btn = overlay.querySelector('#userRemovedOk');
+  setTimeout(() => btn.classList.remove('pulse'), 1500);
+  btn.addEventListener('click', () => overlay.remove());
+}
+
 window.addEventListener("DOMContentLoaded", async () => {
   const intro = document.getElementById('introOverlay');
   const params = new URLSearchParams(window.location.search);
@@ -214,11 +244,14 @@ if (intro) {
     localStorage.removeItem('pin');
     if (result && result.reason === 'offline') {
       showOfflineError();
+    } else if (result && result.reason === 'user-removed') {
+      showUserRemovedError();
     } else {
       showPinError();
     }
     localStorage.removeItem('pinChanged');
     localStorage.removeItem('offlineDisconnect');
+    localStorage.removeItem('userRemoved');
   } else if (storedUser && !rememberUser) {
     localStorage.removeItem('user');
     localStorage.removeItem('rememberUser');
@@ -230,6 +263,10 @@ if (intro) {
   if (localStorage.getItem('offlineDisconnect')) {
     localStorage.removeItem('offlineDisconnect');
     showOfflineError();
+  }
+  if (localStorage.getItem('userRemoved')) {
+    localStorage.removeItem('userRemoved');
+    showUserRemovedError();
   }
   const pinInput = document.getElementById('pin');
   const registerPinInput = document.getElementById('registerPin');

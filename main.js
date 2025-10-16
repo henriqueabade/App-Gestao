@@ -2589,6 +2589,14 @@ ipcMain.handle('open-dashboard', async () => {
 ipcMain.handle('check-pin', async () => {
   try {
     await db.query('SELECT 1');
+    if (currentUserSession?.id) {
+      const { rows } = await db.query('SELECT 1 FROM usuarios WHERE id = $1 LIMIT 1', [
+        currentUserSession.id
+      ]);
+      if (!rows || rows.length === 0) {
+        return { success: false, reason: 'user-removed' };
+      }
+    }
     return { success: true };
   } catch (err) {
     if (isNetworkError(err)) {

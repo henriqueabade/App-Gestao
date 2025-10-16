@@ -35,6 +35,8 @@ async function handleDisconnect(reason) {
     localStorage.setItem('pinChanged', '1');
   } else if (reason === 'offline') {
     localStorage.setItem('offlineDisconnect', '1');
+  } else if (reason === 'user-removed') {
+    localStorage.setItem('userRemoved', '1');
   }
   if (window.collectState && window.electronAPI && window.electronAPI.saveState) {
     window.electronAPI.saveState(window.collectState());
@@ -65,7 +67,10 @@ async function verifyConnection() {
     const result = await window.electronAPI.checkPin();
     if (result && result.success) {
       showSuccess();
-    } else if (result && (result.reason === 'pin' || result.reason === 'offline')) {
+    } else if (
+      result &&
+      (result.reason === 'pin' || result.reason === 'offline' || result.reason === 'user-removed')
+    ) {
       await handleDisconnect(result.reason);
     } else {
       showFailure();
