@@ -32,8 +32,8 @@
               </div>
             </div>
             <div class="modelo-permissoes-toolbar__actions">
-              <button id="carregarModeloPermissao" type="button" class="btn-secondary px-4 py-2 rounded-lg text-white font-medium">Carregar</button>
-              <button id="novoModeloPermissao" type="button" class="btn-bordo px-4 py-2 rounded-lg text-white font-medium">Novo modelo</button>
+              <button id="carregarModeloPermissao" type="button" class="btn-secondary btn-modal-action text-white font-medium">Carregar</button>
+              <button id="novoModeloPermissao" type="button" class="btn-bordo btn-modal-action text-white font-medium">Novo modelo</button>
             </div>
           </div>
           <p class="modelo-permissoes-toolbar__hint">Dica: carregue um modelo existente ou crie um novo ajustando as permissões abaixo.</p>
@@ -47,12 +47,12 @@
       </section>
     </div>
 
-    <footer class="px-8 py-5 border-t border-white/10 flex flex-col items-end md:flex-row md:items-center md:justify-between gap-4 flex-shrink-0">
-      <div id="modeloPermissoesMensagem" class="hidden text-sm self-start md:self-center"></div>
-      <div class="flex items-center gap-3 justify-end w-full md:w-auto">
-        <button id="excluirModeloPermissao" type="button" class="btn-danger px-4 py-2 rounded-lg text-white font-medium hidden">Excluir</button>
-        <button id="cancelarModeloPermissao" type="button" class="btn-danger px-6 py-2.5 rounded-lg text-white font-medium">Cancelar</button>
-        <button id="salvarModeloPermissao" type="button" class="btn-success px-6 py-2.5 rounded-lg font-semibold flex items-center gap-2">
+    <footer class="modelo-permissoes-footer px-8 py-5 border-t border-white/10 flex-shrink-0">
+      <div id="modeloPermissoesMensagem" class="modelo-permissoes-footer__mensagem hidden text-sm"></div>
+      <div class="modelo-permissoes-footer__actions">
+        <button id="excluirModeloPermissao" type="button" class="btn-danger btn-modal-action text-white font-medium hidden">Excluir</button>
+        <button id="cancelarModeloPermissao" type="button" class="btn-danger btn-modal-action text-white font-medium">Cancelar</button>
+        <button id="salvarModeloPermissao" type="button" class="btn-success btn-modal-action font-semibold flex items-center gap-2">
           <span>Salvar</span>
         </button>
       </div>

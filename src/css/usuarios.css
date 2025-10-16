@@ -28,6 +28,30 @@ body {
     -webkit-backdrop-filter: blur(16px);
 }
 
+.usuarios-header {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1.5rem;
+}
+
+.usuarios-header__actions {
+    margin-left: auto;
+    align-self: flex-end;
+}
+
+@media (min-width: 768px) {
+    .usuarios-header {
+        flex-direction: row;
+        align-items: center;
+        justify-content: space-between;
+    }
+
+    .usuarios-header__actions {
+        align-self: auto;
+    }
+}
+
 .btn-primary {
     background: var(--color-primary);
     transition: all 150ms ease;
@@ -117,6 +141,17 @@ body {
 .btn-warning:hover {
     background: rgba(106, 21, 44, 0.8);
     transform: scale(1.05);
+}
+
+.btn-modal-action {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 0.5rem 1rem;
+    border-radius: 0.75rem;
+    min-height: 44px;
+    transition: all 150ms ease;
 }
 
 .input-glass {
@@ -337,6 +372,43 @@ body {
 .modelo-permissoes-toolbar__hint {
     font-size: 0.9rem;
     color: rgba(255, 255, 255, 0.65);
+}
+
+.modelo-permissoes-footer {
+    display: flex;
+    align-items: flex-start;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
+.modelo-permissoes-footer__mensagem {
+    color: rgba(255, 255, 255, 0.75);
+    min-height: 24px;
+    flex: 1 1 240px;
+}
+
+.modelo-permissoes-footer__actions {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+
+.modelo-permissoes-footer__actions .btn-modal-action {
+    white-space: nowrap;
+}
+
+@media (max-width: 767px) {
+    .modelo-permissoes-footer {
+        align-items: stretch;
+    }
+
+    .modelo-permissoes-footer__actions {
+        width: 100%;
+        justify-content: flex-end;
+    }
 }
 
 .modelo-permissoes-status {
