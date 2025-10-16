@@ -38,6 +38,51 @@ body {
     transform: scale(1.05);
 }
 
+.btn-bordo {
+    background: var(--color-bordeaux);
+    transition: all 150ms ease;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.btn-bordo:hover {
+    background: rgba(106, 21, 44, 0.85);
+    transform: translateY(-1px);
+}
+
+.btn-neutral {
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    transition: all 150ms ease;
+}
+
+.btn-neutral:hover {
+    background: rgba(255, 255, 255, 0.12);
+    border-color: rgba(255, 255, 255, 0.3);
+}
+
+.btn-outline {
+    background: transparent;
+    border: 1px solid var(--color-primary);
+    color: var(--color-primary);
+    transition: all 150ms ease;
+}
+
+.btn-outline:hover {
+    background: rgba(212, 193, 105, 0.12);
+    color: #fff;
+}
+
+.btn-danger {
+    background: rgba(255, 88, 88, 0.9);
+    border: 1px solid rgba(255, 88, 88, 0.35);
+    transition: all 150ms ease;
+}
+
+.btn-danger:hover {
+    background: rgba(255, 88, 88, 1);
+    transform: translateY(-1px);
+}
+
 .btn-secondary {
     background: var(--color-blue);
     transition: all 150ms ease;
@@ -240,6 +285,233 @@ body {
 .btn-loading {
     opacity: 0.75 !important;
     pointer-events: none;
+}
+
+.modelo-permissoes-toolbar {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 1.5rem;
+    padding: 1.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+}
+
+.modelo-permissoes-toolbar__selectors {
+    display: grid;
+    gap: 1.25rem;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    align-items: end;
+}
+
+.modelo-permissoes-toolbar__field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.modelo-permissoes-toolbar__actions {
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+}
+
+.modelo-permissoes-toolbar__hint {
+    font-size: 0.9rem;
+    color: rgba(255, 255, 255, 0.65);
+}
+
+.modelo-permissoes-input,
+.modelo-permissoes-select {
+    width: 100%;
+    height: 48px;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    border-radius: 0.85rem;
+    padding: 0 1rem;
+    color: #fff;
+    transition: all 150ms ease;
+}
+
+.modelo-permissoes-input:focus,
+.modelo-permissoes-select:focus {
+    outline: none;
+    background: rgba(255, 255, 255, 0.12);
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 2px rgba(182, 160, 62, 0.2);
+}
+
+.modelo-permissoes-select__chevron {
+    position: absolute;
+    right: 1rem;
+    top: 50%;
+    transform: translateY(-50%);
+    pointer-events: none;
+    color: rgba(255, 255, 255, 0.6);
+    font-size: 0.95rem;
+}
+
+.modelo-permissoes-grid {
+    display: grid;
+    gap: 1.5rem;
+}
+
+@media (min-width: 768px) {
+    .modelo-permissoes-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+.modelo-permissoes-modulo {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 1.5rem;
+    padding: 1.5rem;
+    box-shadow: 0 12px 35px rgba(0, 0, 0, 0.25);
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.modelo-permissoes-modulo__header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+}
+
+.modelo-permissoes-modulo__titulo {
+    font-size: 1.05rem;
+    font-weight: 600;
+    color: #fff;
+}
+
+.modelo-permissoes-modulo__descricao {
+    margin-top: 0.35rem;
+    font-size: 0.85rem;
+    color: rgba(255, 255, 255, 0.65);
+}
+
+.modelo-permissoes-modulo__meta {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 0.5rem;
+}
+
+.modelo-permissoes-modulo__contador {
+    font-size: 0.85rem;
+    color: rgba(255, 255, 255, 0.7);
+}
+
+.modelo-permissoes-toggle-todos {
+    background: rgba(255, 255, 255, 0.08);
+    color: #fff;
+    border: 1px solid transparent;
+    border-radius: 999px;
+    padding: 0.4rem 0.95rem;
+    font-size: 0.8rem;
+    font-weight: 600;
+    transition: all 150ms ease;
+}
+
+.modelo-permissoes-toggle-todos:hover {
+    border-color: rgba(255, 255, 255, 0.25);
+    background: rgba(255, 255, 255, 0.15);
+}
+
+.modelo-permissoes-lista {
+    display: flex;
+    flex-direction: column;
+    gap: 0.85rem;
+}
+
+.modelo-permissoes-acao {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.85rem;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 1rem;
+    padding: 0.85rem 1rem;
+    transition: border 150ms ease, background 150ms ease;
+}
+
+.modelo-permissoes-acao:hover {
+    border-color: rgba(255, 255, 255, 0.2);
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.modelo-permissoes-acao__checkbox {
+    margin-top: 0.2rem;
+    width: 18px;
+    height: 18px;
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    appearance: none;
+    cursor: pointer;
+    position: relative;
+    transition: all 150ms ease;
+}
+
+.modelo-permissoes-acao__checkbox:checked {
+    background: var(--color-primary);
+    border-color: var(--color-primary);
+}
+
+.modelo-permissoes-acao__checkbox:checked::after {
+    content: '\2713';
+    position: absolute;
+    color: #1f1230;
+    font-weight: 700;
+    font-size: 0.75rem;
+    top: 1px;
+    left: 4px;
+}
+
+.modelo-permissoes-acao__content {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.modelo-permissoes-acao__titulo {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: #fff;
+}
+
+.modelo-permissoes-acao__descricao {
+    font-size: 0.8rem;
+    color: rgba(255, 255, 255, 0.65);
+}
+
+.modelo-permissoes-empty {
+    text-align: center;
+    border: 1px dashed rgba(255, 255, 255, 0.2);
+    border-radius: 1.25rem;
+    padding: 2rem 1.5rem;
+    background: rgba(255, 255, 255, 0.03);
+    color: rgba(255, 255, 255, 0.7);
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    align-items: center;
+    justify-content: center;
+}
+
+.modelo-permissoes-empty__icon {
+    font-size: 2rem;
+}
+
+.modelo-permissoes-mensagem--erro {
+    color: #fca5a5;
+}
+
+.modelo-permissoes-mensagem--sucesso {
+    color: #a7f3d0;
 }
 
 .usuario-permissoes-grid {

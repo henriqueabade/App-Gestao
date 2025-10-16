@@ -505,6 +505,24 @@ function temFiltrosAplicados() {
 
 function initUsuarios() {
     carregarUsuarioLogado();
+
+    const btnModelosPermissao = document.getElementById('btnModelosPermissao');
+    const isSupAdmin = usuarioLogado?.perfil === 'Sup Admin';
+    if (btnModelosPermissao) {
+        if (isSupAdmin) {
+            btnModelosPermissao.classList.remove('hidden');
+            btnModelosPermissao.addEventListener('click', () => {
+                window.usuarioModelosPermissoesContext = { isSupAdmin: true };
+                openModalWithSpinner(
+                    'modals/usuarios/modelos-permissoes.html',
+                    '../js/modals/usuario-modelos-permissoes.js',
+                    'modelosPermissoes'
+                );
+            });
+        } else {
+            btnModelosPermissao.classList.add('hidden');
+        }
+    }
     // animação de entrada
     document.querySelectorAll('.animate-fade-in-up').forEach((el, index) => {
         setTimeout(() => {
@@ -1064,6 +1082,11 @@ async function carregarUsuarios() {
 }
 
 window.addEventListener('usuarioAtualizado', () => carregarUsuarios());
+window.addEventListener('usuariosModeloPermissaoAtualizado', (event) => {
+    if (event?.detail?.refresh) {
+        carregarUsuarios();
+    }
+});
 
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', initUsuarios);
