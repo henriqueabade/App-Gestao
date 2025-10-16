@@ -4,30 +4,57 @@ const bcrypt = require('bcrypt');
 const pool = require('./db');
 
 const { sendResetEmail } = require('../src/email/sendResetEmail');
+const { isPinError, isNetworkError } = require('./backend');
 
 
 const router = express.Router();
 
 router.post('/password-reset-request', async (req, res) => {
-  const { email } = req.body;
+  const { email, pin } = req.body;
+  const normalizedEmail = (email || '').trim();
+  const normalizedPin = typeof pin === 'string' ? pin.trim() : '';
+
+  if (!normalizedPin) {
+    return res.status(400).json({ error: 'PIN ausente. Solicitação não enviada.' });
+  }
+
+  if (!/^\d{5}$/.test(normalizedPin)) {
+    return res.status(400).json({ error: 'PIN inválido. Informe os 5 dígitos corretos.' });
+  }
+
   try {
-    const userRes = await pool.query('SELECT id FROM usuarios WHERE email = $1', [email]);
+    pool.init(normalizedPin);
+
+    const userRes = await pool.query('SELECT id FROM usuarios WHERE email = $1', [normalizedEmail]);
     if (userRes.rows.length === 0) {
-      return res.status(404).end();
+      return res.status(404).json({ error: 'E-mail não encontrado.' });
     }
+
     const userId = userRes.rows[0].id;
     const token = crypto.randomBytes(32).toString('hex');
     const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
     const expiresAt = new Date(Date.now() + 30 * 60 * 1000);
+
     await pool.query(
       'INSERT INTO password_reset_tokens (user_id, token_hash, expires_at, created_at) VALUES ($1,$2,$3,NOW())',
       [userId, tokenHash, expiresAt]
     );
-    await sendResetEmail(email, token);
-    res.sendStatus(200);
+
+    await sendResetEmail(normalizedEmail, token);
+
+    res.status(200).json({ success: true });
   } catch (err) {
     console.error('password-reset-request error', err);
-    res.status(500).end();
+
+    if (isPinError(err)) {
+      return res.status(400).json({ error: 'PIN incorreto. E-mail não enviado.' });
+    }
+
+    if (isNetworkError(err)) {
+      return res.status(503).json({ error: 'Sem conexão com internet.' });
+    }
+
+    res.status(500).json({ error: 'Erro ao solicitar redefinição de senha.' });
   }
 });
 

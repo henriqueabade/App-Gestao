@@ -536,18 +536,46 @@ if (intro) {
   document.getElementById('resetPasswordForm').addEventListener('submit', async e => {
     e.preventDefault();
     const emailReset = document.getElementById('resetEmail').value;
+    const pinInput = document.getElementById('pin');
+    const pinValue = pinInput ? pinInput.value.trim() : '';
+
+    if (!/^\d{5}$/.test(pinValue)) {
+      showToast('Informe o PIN de 5 dígitos para solicitar a redefinição.', 'error');
+      return;
+    }
+
     try {
       const resp = await fetchApi('/password-reset-request', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: emailReset })
+        body: JSON.stringify({ email: emailReset, pin: pinValue })
       });
-      if (resp.ok) showToast('E-mail enviado!', 'success');
-      else if (resp.status === 404) showToast('E-mail não encontrado!', 'error');
-      else showToast('Erro ao solicitar redefinição', 'error');
+
+      if (resp.ok) {
+        showToast('E-mail enviado!', 'success');
+      } else {
+        let errorMessage = '';
+        try {
+          const data = await resp.json();
+          if (data && typeof data.error === 'string') errorMessage = data.error;
+        } catch (_) {
+          errorMessage = '';
+        }
+
+        if (resp.status === 404) {
+          showToast(errorMessage || 'E-mail não encontrado!', 'error');
+        } else if (resp.status === 400) {
+          showToast(errorMessage || 'PIN incorreto ou ausente.', 'error');
+        } else if (resp.status === 503) {
+          showToast(errorMessage || 'Sem conexão com internet.', 'error');
+        } else {
+          showToast('Erro ao solicitar redefinição', 'error');
+        }
+      }
     } catch (err) {
       showToast('Erro ao solicitar redefinição', 'error');
+    } finally {
+      forgotPasswordModal.classList.add('hidden');
     }
-    forgotPasswordModal.classList.add('hidden');
   });
 });
