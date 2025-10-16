@@ -4,6 +4,14 @@ const bcrypt = require('bcrypt');
 const { Client } = require('pg');
 const pool = require('./db');
 const { updateUsuarioCampos } = require('./userActivity');
+const {
+  ModeloPermissoesError,
+  listModelosPermissoes,
+  getModeloPermissoesById,
+  createModeloPermissoes,
+  updateModeloPermissoes,
+  deleteModeloPermissoes
+} = require('./modelosPermissoesRepository');
 const { sendSupAdminReviewNotification } = require('../src/email/sendSupAdminReviewNotification');
 const { sendUserActivationNotice } = require('../src/email/sendUserActivationNotice');
 const { sendEmailChangeConfirmation } = require('../src/email/sendEmailChangeConfirmation');
@@ -853,6 +861,39 @@ function autenticarUsuario(req, res, next) {
   return next();
 }
 
+async function carregarUsuarioAutenticado(req) {
+  if (!req.usuarioAutenticadoId) {
+    return null;
+  }
+  try {
+    return await carregarUsuarioRaw(req.usuarioAutenticadoId);
+  } catch (err) {
+    console.error('Erro ao carregar usuário autenticado:', err);
+    throw err;
+  }
+}
+
+async function garantirSupAdmin(req, res) {
+  let solicitante;
+  try {
+    solicitante = await carregarUsuarioAutenticado(req);
+  } catch (err) {
+    return res.status(500).json({ error: 'Erro ao carregar dados do usuário autenticado.' });
+  }
+
+  if (!solicitante) {
+    res.status(401).json({ error: 'Usuário autenticado não encontrado.' });
+    return null;
+  }
+
+  if (!isSupAdminPerfil(solicitante.perfil)) {
+    res.status(403).json({ error: 'Apenas Sup Admin pode acessar este recurso.' });
+    return null;
+  }
+
+  return solicitante;
+}
+
 function shouldParseMultipart(req) {
   const contentType = typeof req.headers['content-type'] === 'string' ? req.headers['content-type'] : '';
   return contentType.includes('multipart/form-data');
@@ -1230,6 +1271,150 @@ function formatarUsuarioDetalhado(row) {
   return resultado;
 }
 
+function formatarModeloPermissoes(modelo) {
+  if (!modelo) return null;
+  let permissoesFormatadas = {};
+  try {
+    permissoesFormatadas = normalizarPermissoesEstrutura(modelo.permissoes, { strict: false });
+  } catch (err) {
+    console.warn('Modelo de permissões possui estrutura inválida, retornando conteúdo bruto.', err);
+    permissoesFormatadas = modelo.permissoes ?? {};
+  }
+
+  const parseData = valor => {
+    if (!valor) return null;
+    const data = valor instanceof Date ? valor : new Date(valor);
+    return Number.isNaN(data.getTime()) ? null : data.toISOString();
+  };
+
+  return {
+    id: modelo.id,
+    nome: modelo.nome,
+    permissoes: permissoesFormatadas,
+    criadoEm: parseData(modelo.criadoEm),
+    atualizadoEm: parseData(modelo.atualizadoEm)
+  };
+}
+
+router.get('/modelos-permissoes', autenticarUsuario, async (req, res) => {
+  const solicitante = await garantirSupAdmin(req, res);
+  if (!solicitante) {
+    return null;
+  }
+
+  try {
+    const modelos = await listModelosPermissoes();
+    return res.json({ modelos: modelos.map(formatarModeloPermissoes) });
+  } catch (err) {
+    console.error('Erro ao listar modelos de permissões:', err);
+    return res.status(500).json({ error: 'Erro ao listar modelos de permissões.' });
+  }
+});
+
+router.post('/modelos-permissoes', autenticarUsuario, async (req, res) => {
+  const solicitante = await garantirSupAdmin(req, res);
+  if (!solicitante) {
+    return null;
+  }
+
+  const body = req.body && typeof req.body === 'object' ? req.body : {};
+  const nome = body.nome ?? body.name;
+  const permissoesPayload = body.permissoes ?? body.permissions ?? {};
+
+  let permissoesNormalizadas;
+  try {
+    permissoesNormalizadas = normalizarPermissoesEstrutura(permissoesPayload, { strict: true });
+  } catch (err) {
+    return res.status(400).json({ error: err.message });
+  }
+
+  try {
+    const criado = await createModeloPermissoes({ nome, permissoes: permissoesNormalizadas });
+    return res.status(201).json({ modelo: formatarModeloPermissoes(criado) });
+  } catch (err) {
+    if (err instanceof ModeloPermissoesError) {
+      if (err.code === 'NOME_DUPLICADO') {
+        return res.status(409).json({ error: err.message });
+      }
+      return res.status(400).json({ error: err.message });
+    }
+    console.error('Erro ao criar modelo de permissões:', err);
+    return res.status(500).json({ error: 'Erro ao criar modelo de permissões.' });
+  }
+});
+
+router.patch('/modelos-permissoes/:id', autenticarUsuario, async (req, res) => {
+  const solicitante = await garantirSupAdmin(req, res);
+  if (!solicitante) {
+    return null;
+  }
+
+  const modeloId = parsePositiveInteger(req.params.id);
+  if (!modeloId) {
+    return res.status(400).json({ error: 'Identificador de modelo inválido.' });
+  }
+
+  const body = req.body && typeof req.body === 'object' ? req.body : {};
+  const nome = Object.prototype.hasOwnProperty.call(body, 'nome') ? body.nome : body.name;
+  const permissoesPayload = Object.prototype.hasOwnProperty.call(body, 'permissoes')
+    ? body.permissoes
+    : body.permissions;
+
+  let permissoesNormalizadas;
+  if (permissoesPayload !== undefined) {
+    try {
+      permissoesNormalizadas = normalizarPermissoesEstrutura(permissoesPayload, { strict: true });
+    } catch (err) {
+      return res.status(400).json({ error: err.message });
+    }
+  }
+
+  try {
+    const atualizado = await updateModeloPermissoes(modeloId, {
+      nome,
+      permissoes: permissoesNormalizadas
+    });
+
+    if (!atualizado) {
+      return res.status(404).json({ error: 'Modelo de permissões não encontrado.' });
+    }
+
+    return res.json({ modelo: formatarModeloPermissoes(atualizado) });
+  } catch (err) {
+    if (err instanceof ModeloPermissoesError) {
+      if (err.code === 'NOME_DUPLICADO') {
+        return res.status(409).json({ error: err.message });
+      }
+      return res.status(400).json({ error: err.message });
+    }
+    console.error('Erro ao atualizar modelo de permissões:', err);
+    return res.status(500).json({ error: 'Erro ao atualizar modelo de permissões.' });
+  }
+});
+
+router.delete('/modelos-permissoes/:id', autenticarUsuario, async (req, res) => {
+  const solicitante = await garantirSupAdmin(req, res);
+  if (!solicitante) {
+    return null;
+  }
+
+  const modeloId = parsePositiveInteger(req.params.id);
+  if (!modeloId) {
+    return res.status(400).json({ error: 'Identificador de modelo inválido.' });
+  }
+
+  try {
+    const removido = await deleteModeloPermissoes(modeloId);
+    if (!removido) {
+      return res.status(404).json({ error: 'Modelo de permissões não encontrado.' });
+    }
+    return res.status(204).send();
+  } catch (err) {
+    console.error('Erro ao remover modelo de permissões:', err);
+    return res.status(500).json({ error: 'Erro ao remover modelo de permissões.' });
+  }
+});
+
 router.get('/me', autenticarUsuario, async (req, res) => {
   try {
     const usuario = await carregarUsuarioRaw(req.usuarioAutenticadoId);
@@ -1575,6 +1760,106 @@ router.patch('/:id', autenticarUsuario, async (req, res) => {
 
   const body = req.body && typeof req.body === 'object' ? req.body : {};
 
+  const permissoesEntrada = Object.prototype.hasOwnProperty.call(body, 'permissoes')
+    ? body.permissoes
+    : Object.prototype.hasOwnProperty.call(body, 'permissions')
+    ? body.permissions
+    : undefined;
+  const rawModeloPermissoesId = getFirstDefined(body, ['modeloPermissoesId', 'modelo_permissoes_id']);
+  const aplicarModeloEntrada = getFirstDefined(body, [
+    'aplicarPermissoesDoModelo',
+    'sincronizarPermissoesDoModelo',
+    'sincronizarPermissoesModelo'
+  ]);
+
+  if (
+    !solicitanteSupAdmin &&
+    (permissoesEntrada !== undefined || rawModeloPermissoesId !== undefined || aplicarModeloEntrada !== undefined)
+  ) {
+    return res.status(403).json({ error: 'Apenas Sup Admin pode atualizar permissões ou modelos de permissões.' });
+  }
+
+  let permissoesNormalizadas;
+  let atualizarPermissoes = false;
+  if (permissoesEntrada !== undefined) {
+    try {
+      permissoesNormalizadas = normalizarPermissoesEstrutura(permissoesEntrada, { strict: true });
+      atualizarPermissoes = true;
+    } catch (err) {
+      return res.status(400).json({ error: err.message });
+    }
+  }
+
+  let modeloPermissoesIdAtualizacao;
+  if (rawModeloPermissoesId !== undefined) {
+    if (rawModeloPermissoesId === null || rawModeloPermissoesId === '') {
+      modeloPermissoesIdAtualizacao = null;
+    } else {
+      const parsedModeloId = parsePositiveInteger(rawModeloPermissoesId);
+      if (!parsedModeloId) {
+        return res.status(400).json({ error: 'Identificador de modelo inválido.' });
+      }
+      modeloPermissoesIdAtualizacao = parsedModeloId;
+    }
+  }
+
+  let aplicarModelo;
+  if (aplicarModeloEntrada !== undefined) {
+    aplicarModelo = parseBoolean(aplicarModeloEntrada);
+  }
+
+  if (aplicarModelo === undefined && rawModeloPermissoesId !== undefined && permissoesEntrada === undefined) {
+    aplicarModelo = modeloPermissoesIdAtualizacao !== null;
+  }
+
+  let modeloDestinoId = null;
+  if (modeloPermissoesIdAtualizacao !== undefined && modeloPermissoesIdAtualizacao !== null) {
+    modeloDestinoId = modeloPermissoesIdAtualizacao;
+  }
+
+  if (aplicarModelo) {
+    if (modeloPermissoesIdAtualizacao === null) {
+      return res.status(400).json({ error: 'Selecione um modelo válido para aplicar permissões.' });
+    }
+    if (!modeloDestinoId) {
+      const atual = parsePositiveInteger(alvo.modelo_permissoes_id);
+      if (!atual) {
+        return res
+          .status(400)
+          .json({ error: 'Não é possível aplicar permissões porque o usuário não possui um modelo associado.' });
+      }
+      modeloDestinoId = atual;
+    }
+  }
+
+  let modeloDestino = null;
+  if (modeloDestinoId) {
+    try {
+      modeloDestino = await getModeloPermissoesById(modeloDestinoId);
+    } catch (err) {
+      console.error('Erro ao carregar modelo de permissões:', err);
+      return res.status(500).json({ error: 'Erro ao carregar modelo de permissões.' });
+    }
+
+    if (!modeloDestino) {
+      return res.status(404).json({ error: 'Modelo de permissões não encontrado.' });
+    }
+  }
+
+  if (aplicarModelo) {
+    try {
+      permissoesNormalizadas = normalizarPermissoesEstrutura(modeloDestino?.permissoes ?? {}, { strict: true });
+      atualizarPermissoes = true;
+    } catch (err) {
+      console.error('Modelo de permissões inválido:', err);
+      return res.status(500).json({ error: 'Modelo de permissões inválido.' });
+    }
+
+    if (modeloPermissoesIdAtualizacao === undefined) {
+      modeloPermissoesIdAtualizacao = modeloDestinoId;
+    }
+  }
+
   let nomeSanitizado;
   try {
     const nomeBruto = getFirstDefined(body, ['nome', 'name']);
@@ -1675,6 +1960,17 @@ router.patch('/:id', autenticarUsuario, async (req, res) => {
   const colunaDescricao = colunas.has('descricao') ? 'descricao' : colunas.has('bio') ? 'bio' : null;
   if (colunaDescricao && descricaoSanitizada !== undefined && descricaoSanitizada !== alvo[colunaDescricao]) {
     camposAtualizar[colunaDescricao] = descricaoSanitizada;
+  }
+
+  if (modeloPermissoesIdAtualizacao !== undefined && colunas.has('modelo_permissoes_id')) {
+    const atual = alvo.modelo_permissoes_id ?? null;
+    if (modeloPermissoesIdAtualizacao !== atual) {
+      camposAtualizar.modelo_permissoes_id = modeloPermissoesIdAtualizacao;
+    }
+  }
+
+  if (atualizarPermissoes && colunas.has('permissoes')) {
+    camposAtualizar.permissoes = permissoesNormalizadas;
   }
 
   if (!Object.keys(camposAtualizar).length) {
@@ -2801,6 +3097,8 @@ function formatarUsuario(u) {
     nome: u.nome,
     email: u.email,
     perfil: u.perfil,
+    modeloPermissoesId: u.modelo_permissoes_id ?? null,
+    modelo_permissoes_id: u.modelo_permissoes_id ?? null,
     status: statusLabel,
     statusInterno,
     statusBadge,

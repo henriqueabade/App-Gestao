@@ -37,6 +37,7 @@ function setup() {
     ultima_entrada timestamp,
     ultima_saida timestamp,
     permissoes jsonb default '{}'::jsonb
+    ,modelo_permissoes_id integer
   );`);
   db.public.none(`CREATE TABLE usuarios_login_cache (
     usuario_id integer primary key,
@@ -48,6 +49,13 @@ function setup() {
     whatsapp text,
     foto_usuario bytea,
     atualizado_em timestamp
+  );`);
+  db.public.none(`CREATE TABLE modelos_permissoes (
+    id serial primary key,
+    nome text unique not null,
+    permissoes jsonb not null default '{}'::jsonb,
+    criado_em timestamp default NOW(),
+    atualizado_em timestamp default NOW()
   );`);
   db.public.none(
     "INSERT INTO usuarios (nome, email, perfil, verificado, telefone) VALUES ('Maria', 'maria@example.com', 'admin', false, '(11) 4000-0000');"
@@ -84,6 +92,9 @@ function setup() {
 
   const usuariosControllerPath = require.resolve('./usuariosController');
   delete require.cache[usuariosControllerPath];
+  const modelosPermissoesRepoPath = require.resolve('./modelosPermissoesRepository');
+  const originalModelosPermissoesRepo = require.cache[modelosPermissoesRepoPath];
+  delete require.cache[modelosPermissoesRepoPath];
   const usuariosController = require('./usuariosController');
 
   const app = express();
@@ -115,6 +126,11 @@ function setup() {
     } else {
       delete require.cache[emailChangeModulePath];
     }
+    if (originalModelosPermissoesRepo) {
+      require.cache[modelosPermissoesRepoPath] = originalModelosPermissoesRepo;
+    } else {
+      delete require.cache[modelosPermissoesRepoPath];
+    }
     delete require.cache[usuariosControllerPath];
   }
 
@@ -130,6 +146,100 @@ async function authenticatedFetch(port, path, options = {}) {
     headers
   });
 }
+
+test('modelos de permissões requerem Sup Admin', async () => {
+  const { listen, close } = setup();
+  const port = await listen();
+
+  try {
+    const lista = await authenticatedFetch(port, '/api/usuarios/modelos-permissoes');
+    assert.strictEqual(lista.status, 403);
+
+    const criacao = await authenticatedFetch(port, '/api/usuarios/modelos-permissoes', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ nome: 'Operações', permissoes: {} })
+    });
+    assert.strictEqual(criacao.status, 403);
+  } finally {
+    await close();
+  }
+});
+
+test('Sup Admin gerencia modelos de permissões e aplica em usuário', async () => {
+  const { listen, close, pool } = setup();
+  const port = await listen();
+
+  try {
+    const listaInicial = await authenticatedFetch(port, '/api/usuarios/modelos-permissoes', { usuarioId: 2 });
+    assert.strictEqual(listaInicial.status, 200);
+    const corpoListaInicial = await listaInicial.json();
+    assert.deepStrictEqual(corpoListaInicial.modelos, []);
+
+    const permissoesModelo = { usuarios: { permissoes: { permitido: true } } };
+    const criar = await authenticatedFetch(port, '/api/usuarios/modelos-permissoes', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      usuarioId: 2,
+      body: JSON.stringify({ nome: 'Financeiro', permissoes: permissoesModelo })
+    });
+    assert.strictEqual(criar.status, 201);
+    const { modelo } = await criar.json();
+    assert.ok(modelo.id);
+    assert.strictEqual(modelo.nome, 'Financeiro');
+    assert.deepStrictEqual(modelo.permissoes, permissoesModelo);
+
+    const duplicado = await authenticatedFetch(port, '/api/usuarios/modelos-permissoes', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      usuarioId: 2,
+      body: JSON.stringify({ nome: 'Financeiro', permissoes: {} })
+    });
+    assert.strictEqual(duplicado.status, 409);
+
+    const atualizar = await authenticatedFetch(port, `/api/usuarios/modelos-permissoes/${modelo.id}`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      usuarioId: 2,
+      body: JSON.stringify({ nome: 'Financeiro Corporativo', permissoes: { usuarios: { permissoes: { permitido: false } } } })
+    });
+    assert.strictEqual(atualizar.status, 200);
+    const { modelo: atualizado } = await atualizar.json();
+    assert.strictEqual(atualizado.nome, 'Financeiro Corporativo');
+    assert.strictEqual(atualizado.permissoes.usuarios.permissoes.permitido, false);
+
+    const aplicar = await authenticatedFetch(port, '/api/usuarios/1', {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      usuarioId: 2,
+      body: JSON.stringify({ modeloPermissoesId: atualizado.id, aplicarPermissoesDoModelo: true })
+    });
+    assert.strictEqual(aplicar.status, 200);
+    const usuarioAtualizado = await aplicar.json();
+    assert.strictEqual(usuarioAtualizado.modeloPermissoesId, atualizado.id);
+    assert.strictEqual(usuarioAtualizado.permissoes.usuarios.permissoes.permitido, false);
+
+    const registro = await pool.query(
+      'SELECT modelo_permissoes_id, permissoes FROM usuarios WHERE id = $1',
+      [1]
+    );
+    assert.strictEqual(registro.rows[0].modelo_permissoes_id, atualizado.id);
+    assert.strictEqual(registro.rows[0].permissoes.usuarios.permissoes.permitido, false);
+
+    const remover = await authenticatedFetch(port, `/api/usuarios/modelos-permissoes/${atualizado.id}`, {
+      method: 'DELETE',
+      usuarioId: 2
+    });
+    assert.strictEqual(remover.status, 204);
+
+    const listaFinal = await authenticatedFetch(port, '/api/usuarios/modelos-permissoes', { usuarioId: 2 });
+    assert.strictEqual(listaFinal.status, 200);
+    const { modelos: modelosFinais } = await listaFinal.json();
+    assert.deepStrictEqual(modelosFinais, []);
+  } finally {
+    await close();
+  }
+});
 
 test('PATCH /api/usuarios/:id/status alterna verificado e atualiza hora_ativacao', async () => {
   const { listen, close, pool } = setup();
