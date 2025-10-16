@@ -17,18 +17,18 @@
       <section class="px-8 py-6 space-y-6">
         <div class="modelo-permissoes-toolbar">
           <div class="modelo-permissoes-toolbar__selectors">
-            <div class="modelo-permissoes-toolbar__field">
-              <label for="modeloPermissaoBusca" class="block text-sm font-medium text-white/80 mb-2">Buscar</label>
+            <div class="modelo-permissoes-toolbar__field" id="modeloPermissaoBuscaField">
+              <label for="modeloPermissaoBusca" class="block text-sm font-medium text-white/80 mb-2" id="modeloPermissaoBuscaLabel">Buscar</label>
               <input id="modeloPermissaoBusca" type="search" placeholder="Filtrar por módulo ou permissão" class="modelo-permissoes-input" />
             </div>
-            <div class="modelo-permissoes-toolbar__field">
-              <label for="modeloPermissaoSelect" class="block text-sm font-medium text-white/80 mb-2">Modelos disponíveis</label>
+            <div class="modelo-permissoes-toolbar__field" id="modeloPermissaoSelectField">
+              <label for="modeloPermissaoSelect" class="block text-sm font-medium text-white/80 mb-2" id="modeloPermissaoSelectLabel">Modelos disponíveis</label>
               <div class="relative" id="modeloPermissaoSelectorWrapper">
                 <select id="modeloPermissaoSelect" class="modelo-permissoes-select select-arrow appearance-none pr-10">
                   <option value="">Selecione um modelo</option>
                 </select>
                 <input id="modeloPermissaoNomeInput" type="text" class="modelo-permissoes-input hidden" placeholder="Nome do novo modelo" />
-                <span class="modelo-permissoes-select__chevron" aria-hidden="true">⌄</span>
+                <span class="modelo-permissoes-select__chevron" id="modeloPermissaoSelectChevron" aria-hidden="true">⌄</span>
               </div>
             </div>
             <div class="modelo-permissoes-toolbar__actions">

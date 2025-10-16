@@ -37,7 +37,11 @@
   const elementos = {
     select: overlay.querySelector('#modeloPermissaoSelect'),
     nomeInput: overlay.querySelector('#modeloPermissaoNomeInput'),
+    buscaField: overlay.querySelector('#modeloPermissaoBuscaField'),
     selectorWrapper: overlay.querySelector('#modeloPermissaoSelectorWrapper'),
+    selectField: overlay.querySelector('#modeloPermissaoSelectField'),
+    selectLabel: overlay.querySelector('#modeloPermissaoSelectLabel'),
+    selectChevron: overlay.querySelector('#modeloPermissaoSelectChevron'),
     busca: overlay.querySelector('#modeloPermissaoBusca'),
     container: overlay.querySelector('#modeloPermissoesContainer'),
     empty: overlay.querySelector('#modeloPermissoesEmpty'),
@@ -233,30 +237,54 @@
 
   function atualizarBotaoNovo() {
     if (!elementos.novoBtn) return;
+    if (!state.modelos.length) {
+      elementos.novoBtn.textContent = 'Novo modelo';
+      return;
+    }
     elementos.novoBtn.textContent = state.modoNovo ? 'Cancelar novo' : 'Novo modelo';
+  }
+
+  function atualizarVisibilidadeExcluir() {
+    if (!elementos.excluirBtn) return;
+    const deveMostrar = !state.modoNovo && Boolean(state.modeloAtual) && state.modelos.length > 0;
+    elementos.excluirBtn.classList.toggle('hidden', !deveMostrar);
+  }
+
+  function atualizarToolbarLayout() {
+    const possuiModelos = state.modelos.length > 0;
+    const mostrarSelect = !state.modoNovo && possuiModelos;
+    const mostrarBusca = !state.modoNovo && possuiModelos;
+    const mostrarHint = !state.modoNovo && possuiModelos;
+
+    elementos.buscaField?.classList.toggle('hidden', !mostrarBusca);
+    elementos.toolbarHint?.classList.toggle('hidden', !mostrarHint);
+    elementos.carregarBtn?.classList.toggle('hidden', !mostrarSelect);
+    elementos.selectField?.classList.toggle('hidden', !mostrarSelect && !state.modoNovo);
+    elementos.select?.classList.toggle('hidden', !mostrarSelect);
+    elementos.selectChevron?.classList.toggle('hidden', !mostrarSelect);
+    elementos.nomeInput?.classList.toggle('hidden', !state.modoNovo);
+    if (elementos.selectLabel) {
+      elementos.selectLabel.textContent = state.modoNovo ? 'Nome do novo modelo' : 'Modelos disponíveis';
+    }
   }
 
   function alternarModoNovo(ativo) {
     state.modoNovo = ativo;
+    atualizarToolbarLayout();
     if (state.modoNovo) {
       if (state.modeloAtual?.id) {
         state.ultimoModeloSelecionado = state.modeloAtual.id;
       }
-      elementos.select?.classList.add('hidden');
-      elementos.nomeInput?.classList.remove('hidden');
       elementos.nomeInput.value = '';
-      elementos.excluirBtn?.classList.add('hidden');
       if (elementos.select) {
         elementos.select.value = '';
       }
       state.modeloAtual = null;
       state.permissoes = criarEstadoAPartirDaEstrutura();
       renderPermissoes();
+      requestAnimationFrame(() => elementos.nomeInput?.focus());
     } else {
-      elementos.select?.classList.remove('hidden');
-      elementos.nomeInput?.classList.add('hidden');
       elementos.nomeInput.value = '';
-      elementos.excluirBtn?.classList.toggle('hidden', !state.modeloAtual);
       if (state.modeloAtual) {
         state.permissoes = aplicarModeloNaEstruturaBase(state.modeloAtual.permissoes);
       } else {
@@ -266,6 +294,7 @@
     }
     atualizarBadge();
     atualizarBotaoNovo();
+    atualizarVisibilidadeExcluir();
     limparMensagem();
   }
 
@@ -494,10 +523,6 @@
     state.ultimoModeloSelecionado = modelo.id;
     state.permissoes = aplicarModeloNaEstruturaBase(modelo.permissoes);
     alternarModoNovo(false);
-    elementos.excluirBtn?.classList.remove('hidden');
-    atualizarBadge();
-    renderPermissoes();
-    limparMensagem();
   }
 
   elementos.carregarBtn?.addEventListener('click', () => {
@@ -514,8 +539,8 @@
       state.modeloAtual = null;
       state.permissoes = [];
       renderPermissoes();
-      elementos.excluirBtn?.classList.add('hidden');
       atualizarBadge();
+      atualizarVisibilidadeExcluir();
       return;
     }
     selecionarModeloPorId(elementos.select.value);
@@ -528,6 +553,9 @@
       }
       alternarModoNovo(true);
     } else {
+      if (!state.modelos.length) {
+        return;
+      }
       alternarModoNovo(false);
       if (state.ultimoModeloSelecionado) {
         elementos.select.value = String(state.ultimoModeloSelecionado);
