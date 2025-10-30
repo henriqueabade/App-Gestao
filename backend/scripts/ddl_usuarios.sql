@@ -22,9 +22,72 @@ ALTER TABLE usuarios
   ADD COLUMN IF NOT EXISTS aprovacao_token TEXT,
   ADD COLUMN IF NOT EXISTS aprovacao_token_gerado_em TIMESTAMPTZ,
   ADD COLUMN IF NOT EXISTS aprovacao_token_expira_em TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS foto_usuario BYTEA,
   ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'nao_confirmado',
   ADD COLUMN IF NOT EXISTS status_atualizado_em TIMESTAMPTZ,
   ADD COLUMN IF NOT EXISTS permissoes JSONB NOT NULL DEFAULT '{}'::jsonb;
+
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+      FROM information_schema.columns
+     WHERE table_schema = 'public'
+       AND table_name = 'usuarios'
+       AND column_name = 'foto_usuario'
+       AND data_type <> 'bytea'
+  ) THEN
+    EXECUTE $$
+      ALTER TABLE "public"."usuarios"
+        ALTER COLUMN foto_usuario TYPE bytea USING (
+          CASE
+            WHEN foto_usuario IS NULL THEN NULL
+            ELSE (
+              CASE
+                WHEN TRIM(COALESCE(foto_usuario::text, '')) = '' THEN NULL
+                WHEN foto_usuario::text ~ '^[A-Za-z0-9+/=\s]+$' THEN decode(regexp_replace(foto_usuario::text, '\s', '', 'g'), 'base64')
+                ELSE NULL
+              END
+            )
+          END
+        )
+    $$;
+  END IF;
+END$$;
+
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+      FROM information_schema.tables
+     WHERE table_schema = 'public'
+       AND table_name = 'usuarios_login_cache'
+  )
+  AND EXISTS (
+    SELECT 1
+      FROM information_schema.columns
+     WHERE table_schema = 'public'
+       AND table_name = 'usuarios_login_cache'
+       AND column_name = 'foto_usuario'
+       AND data_type <> 'bytea'
+  ) THEN
+    EXECUTE $$
+      ALTER TABLE "public"."usuarios_login_cache"
+        ALTER COLUMN foto_usuario TYPE bytea USING (
+          CASE
+            WHEN foto_usuario IS NULL THEN NULL
+            ELSE (
+              CASE
+                WHEN TRIM(COALESCE(foto_usuario::text, '')) = '' THEN NULL
+                WHEN foto_usuario::text ~ '^[A-Za-z0-9+/=\s]+$' THEN decode(regexp_replace(foto_usuario::text, '\s', '', 'g'), 'base64')
+                ELSE NULL
+              END
+            )
+          END
+        )
+    $$;
+  END IF;
+END$$;
 
 DO $$
 BEGIN

@@ -1,6 +1,7 @@
 const crypto = require('crypto');
 const pool = require('./db');
 const bcrypt = require('bcrypt');
+const { ensureFotoUsuarioColumn } = require('./fotoUsuarioBytea');
 const { sendEmailConfirmationRequest } = require('../src/email/sendEmailConfirmationRequest');
 const { registrarUltimaEntrada } = require('./userActivity');
 
@@ -79,11 +80,12 @@ async function ensureUsuariosSchema() {
       }
 
       const { rows } = await client.query(
-        `SELECT column_name FROM information_schema.columns
+        `SELECT column_name, data_type FROM information_schema.columns
           WHERE table_schema = current_schema()
             AND table_name = 'usuarios'`
       );
-      const colunas = new Set(rows.map(row => row.column_name));
+      const colunasInfo = new Map(rows.map(row => [row.column_name, row]));
+      const colunas = new Set(colunasInfo.keys());
 
       const alteracoes = [];
 
@@ -122,6 +124,11 @@ async function ensureUsuariosSchema() {
       }
       if (!colunas.has('status_atualizado_em')) {
         alteracoes.push("ALTER TABLE usuarios ADD COLUMN status_atualizado_em TIMESTAMPTZ");
+      }
+
+      const fotoResultado = await ensureFotoUsuarioColumn(client, 'usuarios', { createIfMissing: true });
+      if (fotoResultado.exists) {
+        colunas.add('foto_usuario');
       }
 
       for (const comando of alteracoes) {

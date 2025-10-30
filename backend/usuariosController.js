@@ -3,6 +3,7 @@ const express = require('express');
 const bcrypt = require('bcrypt');
 const { Client } = require('pg');
 const pool = require('./db');
+const { ensureFotoUsuarioColumn } = require('./fotoUsuarioBytea');
 const { updateUsuarioCampos } = require('./userActivity');
 const {
   ModeloPermissoesError,
@@ -1028,14 +1029,14 @@ async function getUsuarioColumns() {
   return usuarioColunasCache;
 }
 
-async function getLoginCacheMeta() {
-  if (loginCacheMeta) {
+async function getLoginCacheMeta(forceRefresh = false) {
+  if (loginCacheMeta && !forceRefresh) {
     return loginCacheMeta;
   }
 
   try {
     const { rows } = await pool.query(
-      `SELECT column_name
+      `SELECT column_name, data_type
          FROM information_schema.columns
         WHERE table_schema = 'public'
           AND table_name = 'usuarios_login_cache'`
@@ -1044,7 +1045,17 @@ async function getLoginCacheMeta() {
     if (!rows.length) {
       loginCacheMeta = { exists: false, columns: new Set() };
     } else {
-      loginCacheMeta = { exists: true, columns: new Set(rows.map(row => row.column_name)) };
+      const columns = new Map(rows.map(row => [row.column_name, row]));
+      const fotoInfo = columns.get('foto_usuario');
+      if (fotoInfo) {
+        const dataType = typeof fotoInfo.data_type === 'string' ? fotoInfo.data_type.toLowerCase() : '';
+        if (dataType !== 'bytea') {
+          await ensureFotoUsuarioColumn(pool, 'usuarios_login_cache');
+          return getLoginCacheMeta(true);
+        }
+      }
+
+      loginCacheMeta = { exists: true, columns: new Set(columns.keys()) };
     }
   } catch (err) {
     console.error('Falha ao carregar metadados da tabela usuarios_login_cache:', err);
