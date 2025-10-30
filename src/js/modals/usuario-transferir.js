@@ -12,9 +12,35 @@
     ? context.usuariosDisponiveis.filter((item) => item && item.id !== undefined && item.id !== null)
     : [];
 
-  async function fetchApi(path, options) {
+  async function fetchApi(path, options = {}) {
     const baseUrl = await window.apiConfig.getApiBaseUrl();
-    return fetch(`${baseUrl}${path}`, options);
+    const finalOptions = { credentials: 'include', ...options };
+    const headers = new Headers(options?.headers || {});
+
+    const usuarioAtual =
+      (typeof usuarioLogado !== 'undefined' && usuarioLogado) ||
+      (typeof carregarUsuarioLogado === 'function' ? carregarUsuarioLogado() : null);
+    const email = typeof usuarioAtual?.email === 'string' ? usuarioAtual.email.trim() : '';
+    const usuarioId =
+      typeof usuarioAtual?.id === 'number'
+        ? usuarioAtual.id
+        : Number.isFinite(Number(usuarioAtual?.id))
+        ? Number(usuarioAtual.id)
+        : null;
+
+    if (email) {
+      headers.set('x-usuario-email', email);
+    }
+    if (usuarioId && !headers.has('x-usuario-id')) {
+      headers.set('x-usuario-id', String(usuarioId));
+    }
+    if (usuarioId && !headers.has('authorization')) {
+      headers.set('authorization', `Bearer ${usuarioId}`);
+    }
+
+    finalOptions.headers = headers;
+
+    return fetch(`${baseUrl}${path}`, finalOptions);
   }
 
   const detalhesEl = overlay.querySelector('[data-transferencia-detalhes]');
