@@ -2087,6 +2087,381 @@ router.put('/:id/permissoes', autenticarUsuario, async (req, res) => {
   return res.json({ permissoes, permissoesResumo: resumo });
 });
 
+const USER_ASSOCIATION_SOURCES = [
+  { table: 'contatos_cliente', label: 'Contatos' },
+  { table: 'prospeccoes', label: 'Prospecções' },
+  { table: 'clientes', label: 'Clientes' },
+  { table: 'orcamentos', label: 'Orçamentos' },
+  { table: 'pedidos', label: 'Pedidos' }
+];
+
+const TEXTUAL_DATA_TYPES = new Set(['character varying', 'text', 'citext', 'varchar']);
+const NAME_COLUMN_KEYWORDS = ['dono', 'responsavel', 'usuario', 'vendedor', 'owner', 'consultor'];
+const EMAIL_COLUMN_KEYWORDS = ['email', 'mail'];
+
+function isValidIdentifier(identifier) {
+  return typeof identifier === 'string' && /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(identifier);
+}
+
+function quoteIdentifier(identifier) {
+  if (!isValidIdentifier(identifier)) {
+    throw new Error(`Identificador inválido: ${identifier}`);
+  }
+  return `"${identifier}"`;
+}
+
+function schemaQualifiedTable(table) {
+  return `${quoteIdentifier('public')}.${quoteIdentifier(table)}`;
+}
+
+async function tableExists(client, table) {
+  const { rows } = await client.query(
+    `SELECT 1
+       FROM information_schema.tables
+      WHERE table_schema = 'public'
+        AND table_name = $1
+      LIMIT 1`,
+    [table]
+  );
+  return rows.length > 0;
+}
+
+async function getTableColumnInfo(client, table) {
+  const { rows } = await client.query(
+    `SELECT column_name, data_type
+       FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name = $1`,
+    [table]
+  );
+  return rows;
+}
+
+function categorizeColumns(columns) {
+  const nameColumns = new Set();
+  const emailColumns = new Set();
+
+  for (const column of columns) {
+    const columnName = column.column_name;
+    if (!isValidIdentifier(columnName)) {
+      continue;
+    }
+
+    const dataType = typeof column.data_type === 'string' ? column.data_type.toLowerCase() : '';
+    if (!TEXTUAL_DATA_TYPES.has(dataType)) {
+      continue;
+    }
+
+    const normalized = columnName.toLowerCase();
+    if (NAME_COLUMN_KEYWORDS.some(keyword => normalized.includes(keyword))) {
+      nameColumns.add(columnName);
+    }
+
+    if (EMAIL_COLUMN_KEYWORDS.some(keyword => normalized.includes(keyword))) {
+      emailColumns.add(columnName);
+    }
+  }
+
+  return {
+    nameColumns: Array.from(nameColumns),
+    emailColumns: Array.from(emailColumns)
+  };
+}
+
+function normalizeUserField(value) {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+function buildColumnMatchExpression(column, paramIndex) {
+  const columnRef = quoteIdentifier(column);
+  return `LOWER(TRIM(COALESCE(${columnRef}::text, ''))) = $${paramIndex}`;
+}
+
+async function findUsuarioAssociacoes(client, usuario) {
+  const nome = normalizeUserField(usuario?.nome);
+  const email = normalizeUserField(usuario?.email);
+  const nomeLower = nome.toLowerCase();
+  const emailLower = email.toLowerCase();
+
+  if (!nomeLower && !emailLower) {
+    return [];
+  }
+
+  const associacoes = [];
+
+  for (const source of USER_ASSOCIATION_SOURCES) {
+    if (!isValidIdentifier(source.table)) {
+      continue;
+    }
+
+    if (!(await tableExists(client, source.table))) {
+      continue;
+    }
+
+    const columns = await getTableColumnInfo(client, source.table);
+    const { nameColumns, emailColumns } = categorizeColumns(columns);
+
+    const entries = [];
+    if (nomeLower) {
+      for (const column of nameColumns) {
+        entries.push({ column, type: 'nome', value: nomeLower });
+      }
+    }
+    if (emailLower) {
+      for (const column of emailColumns) {
+        entries.push({ column, type: 'email', value: emailLower });
+      }
+    }
+
+    if (!entries.length) {
+      continue;
+    }
+
+    const whereParts = entries.map((entry, index) => buildColumnMatchExpression(entry.column, index + 1));
+    const params = entries.map(entry => entry.value);
+    const tableRef = schemaQualifiedTable(source.table);
+
+    const totalQuery = `SELECT COUNT(*)::int AS total FROM ${tableRef} WHERE ${whereParts.join(' OR ')}`;
+    const totalResult = await client.query(totalQuery, params);
+    const total = Number(totalResult.rows[0]?.total ?? 0);
+
+    if (!total) {
+      continue;
+    }
+
+    const columnMatches = [];
+    const processed = new Set();
+
+    for (const entry of entries) {
+      const key = `${entry.column}:${entry.type}`;
+      if (processed.has(key)) {
+        continue;
+      }
+      processed.add(key);
+
+      const specificQuery = `SELECT COUNT(*)::int AS total FROM ${tableRef} WHERE ${buildColumnMatchExpression(
+        entry.column,
+        1
+      )}`;
+      const specificResult = await client.query(specificQuery, [entry.value]);
+      const specificTotal = Number(specificResult.rows[0]?.total ?? 0);
+      if (specificTotal > 0) {
+        columnMatches.push({ column: entry.column, type: entry.type, total: specificTotal });
+      }
+    }
+
+    associacoes.push({
+      table: source.table,
+      label: source.label,
+      total,
+      columns: columnMatches
+    });
+  }
+
+  return associacoes;
+}
+
+async function transferirAssociacoesUsuario(client, associacoes, origem, destino) {
+  const origemNome = normalizeUserField(origem?.nome);
+  const origemEmail = normalizeUserField(origem?.email);
+  const destinoNome = normalizeUserField(destino?.nome);
+  const destinoEmail = normalizeUserField(destino?.email);
+  const origemNomeLower = origemNome.toLowerCase();
+  const origemEmailLower = origemEmail.toLowerCase();
+
+  for (const associacao of associacoes) {
+    if (!isValidIdentifier(associacao.table)) {
+      continue;
+    }
+    if (!(await tableExists(client, associacao.table))) {
+      continue;
+    }
+
+    const tableRef = schemaQualifiedTable(associacao.table);
+    for (const columnMatch of associacao.columns || []) {
+      if (!isValidIdentifier(columnMatch.column)) {
+        continue;
+      }
+
+      const columnRef = quoteIdentifier(columnMatch.column);
+      if (columnMatch.type === 'nome') {
+        if (!origemNomeLower || !destinoNome) {
+          continue;
+        }
+        const updateQuery = `UPDATE ${tableRef}
+            SET ${columnRef} = $1
+          WHERE ${buildColumnMatchExpression(columnMatch.column, 2)}`;
+        await client.query(updateQuery, [destinoNome, origemNomeLower]);
+      } else if (columnMatch.type === 'email') {
+        if (!origemEmailLower || !destinoEmail) {
+          continue;
+        }
+        const updateQuery = `UPDATE ${tableRef}
+            SET ${columnRef} = $1
+          WHERE ${buildColumnMatchExpression(columnMatch.column, 2)}`;
+        await client.query(updateQuery, [destinoEmail, origemEmailLower]);
+      }
+    }
+  }
+}
+
+async function removerUsuario(client, usuarioId) {
+  if (await tableExists(client, 'usuarios_login_cache')) {
+    await client.query('DELETE FROM usuarios_login_cache WHERE usuario_id = $1', [usuarioId]);
+  }
+
+  const resultado = await client.query('DELETE FROM usuarios WHERE id = $1', [usuarioId]);
+  return resultado.rowCount || 0;
+}
+
+router.delete('/:id', autenticarUsuario, async (req, res) => {
+  const usuarioId = parsePositiveInteger(req.params.id);
+  if (!usuarioId) {
+    return res.status(400).json({ error: 'Identificador de usuário inválido.' });
+  }
+
+  const solicitante = await garantirSupAdmin(req, res);
+  if (!solicitante) {
+    return undefined;
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const { rows } = await client.query('SELECT id, nome, email FROM usuarios WHERE id = $1', [usuarioId]);
+    if (!rows.length) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Usuário não encontrado.' });
+    }
+
+    const usuario = rows[0];
+    const associacoes = await findUsuarioAssociacoes(client, usuario);
+
+    if (associacoes.length) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({
+        error: 'Usuário possui dados vinculados.',
+        message: 'Não foi possível excluir o usuário pois existem dados atrelados a ele.',
+        associacoes,
+        usuario: { id: usuario.id, nome: usuario.nome, email: usuario.email }
+      });
+    }
+
+    const removidos = await removerUsuario(client, usuarioId);
+    await client.query('COMMIT');
+
+    if (!removidos) {
+      return res.status(404).json({ error: 'Usuário não encontrado.' });
+    }
+
+    return res.json({ message: 'Exclusão concluída com sucesso.' });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('Erro ao excluir usuário:', err);
+    return res.status(500).json({ error: 'Erro ao excluir usuário.' });
+  } finally {
+    client.release();
+  }
+});
+
+router.post('/:id/transferencia', autenticarUsuario, async (req, res) => {
+  const usuarioId = parsePositiveInteger(req.params.id);
+  if (!usuarioId) {
+    return res.status(400).json({ error: 'Identificador de usuário inválido.' });
+  }
+
+  const solicitante = await garantirSupAdmin(req, res);
+  if (!solicitante) {
+    return undefined;
+  }
+
+  const destinoRaw = getFirstDefined(req.body, ['destinoId', 'destino_id']);
+  const destinoId = parsePositiveInteger(destinoRaw);
+  if (!destinoId) {
+    return res.status(400).json({ error: 'Informe o usuário de destino para a transferência.' });
+  }
+
+  if (destinoId === usuarioId) {
+    return res.status(400).json({ error: 'Selecione um usuário de destino diferente.' });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const [origemResult, destinoResult] = await Promise.all([
+      client.query('SELECT id, nome, email FROM usuarios WHERE id = $1', [usuarioId]),
+      client.query('SELECT id, nome, email FROM usuarios WHERE id = $1', [destinoId])
+    ]);
+
+    if (!origemResult.rows.length) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Usuário não encontrado.' });
+    }
+
+    if (!destinoResult.rows.length) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Usuário de destino não encontrado.' });
+    }
+
+    const origem = origemResult.rows[0];
+    const destino = destinoResult.rows[0];
+
+    const associacoes = await findUsuarioAssociacoes(client, origem);
+    if (!associacoes.length) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({
+        error: 'Nenhum dado para transferir.',
+        message: 'Nenhuma associação foi encontrada para este usuário.',
+        associacoes: []
+      });
+    }
+
+    const exigeNome = associacoes.some(assoc => assoc.columns.some(col => col.type === 'nome'));
+    const exigeEmail = associacoes.some(assoc => assoc.columns.some(col => col.type === 'email'));
+
+    const destinoNome = normalizeUserField(destino.nome);
+    const destinoEmail = normalizeUserField(destino.email);
+
+    if (exigeNome && !destinoNome) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({
+        error: 'Usuário de destino sem nome.',
+        message: 'O usuário de destino precisa ter um nome cadastrado para receber os dados vinculados.'
+      });
+    }
+
+    if (exigeEmail && !destinoEmail) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({
+        error: 'Usuário de destino sem e-mail.',
+        message: 'O usuário de destino precisa ter um e-mail cadastrado para receber os dados vinculados.'
+      });
+    }
+
+    await transferirAssociacoesUsuario(client, associacoes, origem, destino);
+    const removidos = await removerUsuario(client, usuarioId);
+    await client.query('COMMIT');
+
+    if (!removidos) {
+      return res.status(404).json({ error: 'Usuário não encontrado.' });
+    }
+
+    return res.json({
+      message: 'Exclusão e transferência concluídas com sucesso.',
+      associacoes,
+      usuarioTransferido: { id: origem.id, nome: origem.nome, email: origem.email },
+      destino: { id: destino.id, nome: destino.nome, email: destino.email }
+    });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('Erro ao transferir dados do usuário:', err);
+    return res.status(500).json({ error: 'Erro ao transferir dados do usuário.' });
+  } finally {
+    client.release();
+  }
+});
+
 async function confirmarAlteracaoEmail(req, res) {
   const token = extrairToken(req);
   if (!token) {

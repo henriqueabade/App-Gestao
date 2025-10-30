@@ -27,6 +27,76 @@ const STATUS_BADGE_MAP = {
     nao_confirmado: 'badge-warning'
 };
 
+function showUsuariosConfirmDialog({
+    title = 'Tem certeza?',
+    message = '',
+    confirmLabel = 'Sim',
+    cancelLabel = 'Não'
+} = {}) {
+    return new Promise((resolve) => {
+        const overlay = document.createElement('div');
+        overlay.className = 'fixed inset-0 z-[2100] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4';
+        overlay.innerHTML = `
+            <div class="max-w-md w-full glass-surface backdrop-blur-xl rounded-2xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade">
+                <div class="p-6 text-center space-y-4">
+                    <h3 class="text-lg font-semibold text-white">${title}</h3>
+                    <p class="text-sm text-gray-300">${message}</p>
+                    <div class="flex justify-center gap-4">
+                        <button data-action="confirm" class="btn-success px-4 py-2 rounded-lg text-white font-medium min-w-[96px]">${confirmLabel}</button>
+                        <button data-action="cancel" class="btn-danger px-4 py-2 rounded-lg text-white font-medium min-w-[96px]">${cancelLabel}</button>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        const cleanup = (result) => {
+            document.removeEventListener('keydown', handleKeydown);
+            overlay.remove();
+            resolve(result);
+        };
+
+        const handleKeydown = (event) => {
+            if (event.key === 'Escape') {
+                event.preventDefault();
+                cleanup(false);
+            } else if (event.key === 'Enter') {
+                event.preventDefault();
+                cleanup(true);
+            }
+        };
+
+        overlay.addEventListener('click', (event) => {
+            if (event.target === overlay) {
+                cleanup(false);
+            }
+        });
+
+        overlay.querySelector('[data-action="confirm"]').addEventListener('click', () => cleanup(true));
+        overlay.querySelector('[data-action="cancel"]').addEventListener('click', () => cleanup(false));
+
+        document.addEventListener('keydown', handleKeydown);
+        document.body.appendChild(overlay);
+
+        const confirmButton = overlay.querySelector('[data-action="confirm"]');
+        setTimeout(() => confirmButton.focus(), 50);
+    });
+}
+
+window.usuariosShowConfirmDialog = showUsuariosConfirmDialog;
+
+function setAcaoBotaoLoading(botao, isLoading) {
+    if (!botao) return;
+    if (isLoading) {
+        botao.disabled = true;
+        botao.classList.add('usuario-acao-botao--loading');
+        botao.setAttribute('aria-busy', 'true');
+    } else {
+        botao.disabled = false;
+        botao.classList.remove('usuario-acao-botao--loading');
+        botao.removeAttribute('aria-busy');
+    }
+}
+
 function normalizarBoolean(valor) {
     if (typeof valor === 'boolean') {
         return valor;
@@ -887,6 +957,7 @@ function renderUsuarios(lista) {
         deleteBtn.type = 'button';
         deleteBtn.className = 'usuario-acao-botao';
         deleteBtn.dataset.acao = 'remover';
+        deleteBtn.dataset.usuarioId = String(u.id || '');
         deleteBtn.title = `Excluir ${nome}`;
         const deleteIcon = document.createElement('i');
         deleteIcon.classList.add('fas', 'fa-trash', 'usuario-acao-icone');
@@ -897,9 +968,7 @@ function renderUsuarios(lista) {
             deleteBtn.disabled = true;
             deleteIcon.style.color = 'rgba(255, 255, 255, 0.45)';
         } else {
-            deleteBtn.addEventListener('click', () => {
-                console.log('Remover usuário');
-            });
+            deleteBtn.addEventListener('click', () => handleRemoverUsuario(u, deleteBtn));
         }
 
         actionsWrapper.appendChild(toggleBtn);
@@ -912,6 +981,84 @@ function renderUsuarios(lista) {
 
     prepararPopoversUsuarios();
     updateEmptyStateUsuarios(lista.length > 0);
+}
+
+async function handleRemoverUsuario(usuario, botao) {
+    if (!usuario || !usuario.id || !botao || botao.disabled) return;
+
+    const nomeOuEmail = usuario.nome?.trim() || usuario.email?.trim() || 'este usuário';
+    const confirmou = await showUsuariosConfirmDialog({
+        title: 'Excluir usuário',
+        message: `Tem certeza de que deseja excluir ${nomeOuEmail}? Essa ação não poderá ser desfeita.`,
+        confirmLabel: 'Sim',
+        cancelLabel: 'Não'
+    });
+
+    if (!confirmou) {
+        return;
+    }
+
+    setAcaoBotaoLoading(botao, true);
+
+    try {
+        const resp = await fetchApi(`/api/usuarios/${encodeURIComponent(usuario.id)}`, {
+            method: 'DELETE'
+        });
+        let payload = {};
+        try {
+            payload = await resp.json();
+        } catch (err) {
+            payload = {};
+        }
+
+        if (resp.ok) {
+            usuariosCache = usuariosCache.filter((item) => Number(item.id) !== Number(usuario.id));
+            refreshUsuariosAposAtualizacao();
+            if (typeof window.showToast === 'function') {
+                window.showToast(payload.message || 'Exclusão concluída com sucesso.', 'success');
+            }
+            return;
+        }
+
+        if (resp.status === 409 && Array.isArray(payload.associacoes)) {
+            const desejaTransferir = await showUsuariosConfirmDialog({
+                title: 'Transferir dados do usuário',
+                message:
+                    payload.message ||
+                    'Não foi possível excluir este usuário pois existem dados atrelados a ele. Deseja transferir esses dados para outro usuário?',
+                confirmLabel: 'Sim',
+                cancelLabel: 'Não'
+            });
+
+            if (desejaTransferir) {
+                abrirTransferenciaUsuarioModal(usuario, payload.associacoes);
+            }
+        } else if (typeof window.showToast === 'function') {
+            window.showToast(payload.error || 'Erro ao excluir usuário.', 'error');
+        }
+    } catch (err) {
+        console.error('Erro ao excluir usuário:', err);
+        if (typeof window.showToast === 'function') {
+            window.showToast('Erro ao excluir usuário.', 'error');
+        }
+    } finally {
+        setAcaoBotaoLoading(botao, false);
+    }
+}
+
+function abrirTransferenciaUsuarioModal(usuario, associacoes) {
+    if (!usuario) return;
+    const usuariosDisponiveis = usuariosCache
+        .filter((item) => Number(item.id) !== Number(usuario.id))
+        .map((item) => ({ id: item.id, nome: item.nome, email: item.email }));
+
+    window.usuarioTransferenciaContext = {
+        usuario: { ...usuario },
+        associacoes,
+        usuariosDisponiveis
+    };
+
+    openModalWithSpinner('modals/usuarios/transferir.html', '../js/modals/usuario-transferir.js', 'transferirUsuario');
 }
 
 function atualizarResumo() {
@@ -1086,6 +1233,9 @@ window.addEventListener('usuariosModeloPermissaoAtualizado', (event) => {
     if (event?.detail?.refresh) {
         carregarUsuarios();
     }
+});
+window.addEventListener('usuarioTransferenciaConcluida', () => {
+    carregarUsuarios();
 });
 
 if (document.readyState === 'loading') {

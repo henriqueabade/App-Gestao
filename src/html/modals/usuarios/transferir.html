@@ -1,0 +1,30 @@
+<div id="transferirUsuarioOverlay" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center p-4">
+  <div role="dialog" aria-modal="true" aria-labelledby="transferirUsuarioTitulo" class="w-full max-w-2xl max-h-[90vh] glass-surface backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade overflow-hidden flex flex-col">
+    <header class="px-6 py-4 border-b border-white/10">
+      <h2 id="transferirUsuarioTitulo" class="text-lg font-semibold text-white">Transferir dados do usuário</h2>
+    </header>
+    <div class="flex-1 overflow-y-auto modal-scroll p-6 space-y-6">
+      <p class="text-sm text-gray-300" data-transferencia-resumo>
+        Existem dados vinculados a este usuário. Para concluir a exclusão, transfira-os para outro usuário ativo do sistema.
+      </p>
+      <div class="bg-black/20 border border-white/10 rounded-2xl px-5 py-4 text-sm text-gray-200 space-y-2" data-transferencia-detalhes>
+        <strong class="block text-white text-sm">Locais com dados vinculados</strong>
+        <p class="text-gray-300 text-sm">
+          Carregando informações vinculadas...
+        </p>
+      </div>
+      <div class="space-y-3">
+        <label for="transferirUsuarioDestino" class="block text-sm font-medium text-gray-200">Transferir dados para</label>
+        <select id="transferirUsuarioDestino" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition select-arrow appearance-none">
+          <option value="" disabled selected hidden>Selecione um usuário</option>
+        </select>
+        <div class="text-sm text-gray-400" data-transferir-usuario-email></div>
+      </div>
+      <div id="transferirUsuarioMensagem" class="hidden text-sm"></div>
+    </div>
+    <footer class="px-6 py-4 border-t border-white/10 flex justify-end gap-3">
+      <button type="button" data-action="cancelar" class="btn-danger px-4 py-2 rounded-lg text-white font-medium">Cancelar</button>
+      <button type="button" data-action="confirmar" class="btn-success px-4 py-2 rounded-lg text-white font-medium">Confirmar</button>
+    </footer>
+  </div>
+</div>

@@ -6,6 +6,12 @@ const { newDb } = require('pg-mem');
 
 function setup() {
   const db = newDb();
+  db.public.registerFunction({
+    name: 'trim',
+    args: ['text'],
+    returns: 'text',
+    implementation: value => (value == null ? null : String(value).trim())
+  });
   db.public.none(`CREATE TABLE usuarios (
     id serial primary key,
     nome text,
@@ -57,6 +63,34 @@ function setup() {
     criado_em timestamp default NOW(),
     atualizado_em timestamp default NOW()
   );`);
+  db.public.none(`CREATE TABLE clientes (
+    id serial primary key,
+    nome text,
+    dono_cliente text,
+    email text
+  );`);
+  db.public.none(`CREATE TABLE contatos_cliente (
+    id serial primary key,
+    nome text,
+    responsavel text,
+    responsavel_email text,
+    email text
+  );`);
+  db.public.none(`CREATE TABLE prospeccoes (
+    id serial primary key,
+    responsavel text,
+    email text
+  );`);
+  db.public.none(`CREATE TABLE orcamentos (
+    id serial primary key,
+    dono text,
+    email_responsavel text
+  );`);
+  db.public.none(`CREATE TABLE pedidos (
+    id serial primary key,
+    dono text,
+    email text
+  );`);
   db.public.none(
     "INSERT INTO usuarios (nome, email, perfil, verificado, telefone) VALUES ('Maria', 'maria@example.com', 'admin', false, '(11) 4000-0000');"
   );
@@ -71,7 +105,8 @@ function setup() {
   const originalModule = require.cache[dbModulePath];
   require.cache[dbModulePath] = {
     exports: {
-      query: (text, params) => pool.query(text, params)
+      query: (text, params) => pool.query(text, params),
+      connect: () => pool.connect()
     }
   };
 
@@ -615,6 +650,82 @@ test('PUT /api/usuarios/:id/permissoes bloqueia usuários sem privilégio de Sup
       body: JSON.stringify({ permissoes: { usuarios: { permissoes: true } } })
     });
     assert.strictEqual(resposta.status, 403);
+  } finally {
+    await close();
+  }
+});
+
+test('DELETE /api/usuarios/:id remove usuário sem vínculos', async () => {
+  const { listen, close, pool } = setup();
+  const port = await listen();
+  try {
+    const resposta = await authenticatedFetch(port, '/api/usuarios/1', {
+      method: 'DELETE',
+      usuarioId: 2
+    });
+    assert.strictEqual(resposta.status, 200);
+    const corpo = await resposta.json();
+    assert.strictEqual(corpo.message, 'Exclusão concluída com sucesso.');
+    const { rows } = await pool.query('SELECT COUNT(*)::int AS total FROM usuarios WHERE id = $1', [1]);
+    assert.strictEqual(rows[0].total, 0);
+  } finally {
+    await close();
+  }
+});
+
+test('DELETE /api/usuarios/:id retorna 409 quando existem associações', async () => {
+  const { listen, close, pool } = setup();
+  const port = await listen();
+  try {
+    await pool.query("INSERT INTO clientes (nome, dono_cliente, email) VALUES ('Alpha', 'Maria', 'alpha@empresa.com')");
+    await pool.query("INSERT INTO prospeccoes (responsavel, email) VALUES ('', 'maria@example.com')");
+
+    const resposta = await authenticatedFetch(port, '/api/usuarios/1', {
+      method: 'DELETE',
+      usuarioId: 2
+    });
+
+    assert.strictEqual(resposta.status, 409);
+    const corpo = await resposta.json();
+    assert.ok(Array.isArray(corpo.associacoes));
+    const labels = corpo.associacoes.map(item => item.label).sort();
+    assert.ok(labels.includes('Clientes'));
+    assert.ok(labels.includes('Prospecções'));
+  } finally {
+    await close();
+  }
+});
+
+test('POST /api/usuarios/:id/transferencia transfere dados e exclui usuário', async () => {
+  const { listen, close, pool } = setup();
+  const port = await listen();
+  try {
+    await pool.query(
+      "INSERT INTO clientes (nome, dono_cliente, email) VALUES ('Beta', 'Maria', 'maria@example.com')"
+    );
+    await pool.query(
+      "INSERT INTO orcamentos (dono, email_responsavel) VALUES ('Maria', 'maria@example.com')"
+    );
+
+    const resposta = await authenticatedFetch(port, '/api/usuarios/1/transferencia', {
+      method: 'POST',
+      usuarioId: 2,
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ destinoId: 2 })
+    });
+
+    assert.strictEqual(resposta.status, 200);
+    const corpo = await resposta.json();
+    assert.strictEqual(corpo.message, 'Exclusão e transferência concluídas com sucesso.');
+
+    const clientes = await pool.query('SELECT dono_cliente, email FROM clientes');
+    assert.deepStrictEqual(clientes.rows, [{ dono_cliente: 'Supervisor', email: 'sup@example.com' }]);
+
+    const orcamentos = await pool.query('SELECT dono, email_responsavel FROM orcamentos');
+    assert.deepStrictEqual(orcamentos.rows, [{ dono: 'Supervisor', email_responsavel: 'sup@example.com' }]);
+
+    const usuariosRestantes = await pool.query('SELECT COUNT(*)::int AS total FROM usuarios WHERE id = $1', [1]);
+    assert.strictEqual(usuariosRestantes.rows[0].total, 0);
   } finally {
     await close();
   }
