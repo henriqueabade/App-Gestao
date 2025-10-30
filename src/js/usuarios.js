@@ -1,9 +1,19 @@
 // Script principal do módulo de Usuários
 // Controla carregamento da lista, edições e filtros
 
-async function fetchApi(path, options) {
+async function fetchApi(path, options = {}) {
     const baseUrl = await window.apiConfig.getApiBaseUrl();
-    return fetch(`${baseUrl}${path}`, options);
+    const finalOptions = { ...options };
+    const headers = new Headers(options?.headers || {});
+
+    const usuarioAtual = usuarioLogado || carregarUsuarioLogado();
+    const email = typeof usuarioAtual?.email === 'string' ? usuarioAtual.email.trim() : '';
+    if (email) {
+        headers.set('x-usuario-email', email);
+    }
+
+    finalOptions.headers = headers;
+    return fetch(`${baseUrl}${path}`, finalOptions);
 }
 
 // Cache local dos usuários carregados

@@ -811,6 +811,23 @@ function parsePositiveInteger(value) {
   return null;
 }
 
+function parseEmail(value) {
+  if (value === null || value === undefined) return null;
+  const candidate = Array.isArray(value) ? value[0] : value;
+  if (typeof candidate !== 'string') return null;
+  const trimmed = candidate.trim().toLowerCase();
+  if (!trimmed || !trimmed.includes('@') || /\s/.test(trimmed)) {
+    return null;
+  }
+
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(trimmed)) {
+    return null;
+  }
+
+  return trimmed;
+}
+
 function extrairUsuarioId(req) {
   const headerCandidates = [
     req.headers['x-usuario-id'],
@@ -852,21 +869,93 @@ function extrairUsuarioId(req) {
   return null;
 }
 
-function autenticarUsuario(req, res, next) {
+function extrairUsuarioEmail(req) {
+  const headerCandidates = [
+    req.headers['x-usuario-email'],
+    req.headers['x-user-email'],
+    req.headers['x-email'],
+    req.headers.email
+  ];
+
+  for (const candidate of headerCandidates) {
+    const parsed = parseEmail(candidate);
+    if (parsed) {
+      return parsed;
+    }
+  }
+
+  if (req.body && typeof req.body === 'object' && req.body !== null) {
+    const parsed =
+      parseEmail(req.body.usuarioEmail) ||
+      parseEmail(req.body.userEmail) ||
+      parseEmail(req.body.email);
+    if (parsed) {
+      return parsed;
+    }
+  }
+
+  if (req.query && typeof req.query === 'object' && req.query !== null) {
+    const parsed =
+      parseEmail(req.query.usuarioEmail) ||
+      parseEmail(req.query.userEmail) ||
+      parseEmail(req.query.email);
+    if (parsed) {
+      return parsed;
+    }
+  }
+
+  return null;
+}
+
+async function autenticarUsuario(req, res, next) {
   const usuarioId = extrairUsuarioId(req);
-  if (!usuarioId) {
+  if (usuarioId) {
+    req.usuarioAutenticadoId = usuarioId;
+    return next();
+  }
+
+  const usuarioEmail = extrairUsuarioEmail(req);
+  if (!usuarioEmail) {
     return res.status(401).json({ error: 'Usuário não autenticado.' });
   }
-  req.usuarioAutenticadoId = usuarioId;
+
+  let usuario;
+  try {
+    usuario = await carregarUsuarioPorEmail(usuarioEmail);
+  } catch (err) {
+    console.error('Erro ao carregar usuário por e-mail:', err);
+    return res.status(500).json({ error: 'Erro ao carregar dados do usuário autenticado.' });
+  }
+
+  if (!usuario) {
+    return res.status(401).json({ error: 'Usuário não autenticado.' });
+  }
+
+  const parsedId = parsePositiveInteger(usuario.id);
+  if (!parsedId) {
+    console.error('Usuário autenticado localizado por e-mail sem ID válido.');
+    return res.status(401).json({ error: 'Usuário não autenticado.' });
+  }
+
+  req.usuarioAutenticadoId = parsedId;
+  req.usuarioAutenticadoEmail = typeof usuario.email === 'string' ? usuario.email.trim() : usuarioEmail;
+  req.usuarioAutenticadoCache = usuario;
   return next();
 }
 
 async function carregarUsuarioAutenticado(req) {
+  if (req.usuarioAutenticadoCache) {
+    return req.usuarioAutenticadoCache;
+  }
   if (!req.usuarioAutenticadoId) {
     return null;
   }
   try {
-    return await carregarUsuarioRaw(req.usuarioAutenticadoId);
+    const usuario = await carregarUsuarioRaw(req.usuarioAutenticadoId);
+    if (usuario) {
+      req.usuarioAutenticadoCache = usuario;
+    }
+    return usuario;
   } catch (err) {
     console.error('Erro ao carregar usuário autenticado:', err);
     throw err;
@@ -1138,6 +1227,20 @@ function parseBase64Image(input) {
 
 async function carregarUsuarioRaw(id) {
   const { rows } = await pool.query('SELECT * FROM usuarios WHERE id = $1', [id]);
+  return rows[0] || null;
+}
+
+async function carregarUsuarioPorEmail(email) {
+  if (!email) {
+    return null;
+  }
+
+  const normalizado = email.trim().toLowerCase();
+  if (!normalizado) {
+    return null;
+  }
+
+  const { rows } = await pool.query('SELECT * FROM usuarios WHERE LOWER(email) = $1 LIMIT 1', [normalizado]);
   return rows[0] || null;
 }
 
