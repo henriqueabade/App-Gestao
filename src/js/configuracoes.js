@@ -584,12 +584,55 @@ const MenuStartupPreferences = (() => {
         avatarChanged: false
     };
 
+    function getStoredUserId() {
+        const stored = readStoredUser();
+        if (!stored || typeof stored !== 'object') {
+            return null;
+        }
+
+        const idCandidates = [
+            stored.id,
+            stored.usuarioId,
+            stored.userId,
+            stored.usuario_id,
+            stored.user_id
+        ];
+
+        for (const candidate of idCandidates) {
+            const numeric = Number(candidate);
+            if (Number.isInteger(numeric) && numeric > 0) {
+                return numeric;
+            }
+        }
+
+        return null;
+    }
+
     async function fetchApi(path, options = {}) {
         if (!window.apiConfig || typeof window.apiConfig.getApiBaseUrl !== 'function') {
             throw new Error('Configuração da API não disponível.');
         }
+
         const baseUrl = await window.apiConfig.getApiBaseUrl();
-        return fetch(`${baseUrl}${path}`, options);
+        const finalOptions = { ...options };
+        const headers = new Headers(options.headers || {});
+        const storedUserId = getStoredUserId();
+
+        if (storedUserId && !headers.has('authorization')) {
+            headers.set('authorization', `Bearer ${storedUserId}`);
+        }
+
+        if (storedUserId && !headers.has('x-usuario-id')) {
+            headers.set('x-usuario-id', String(storedUserId));
+        }
+
+        finalOptions.headers = headers;
+
+        if (!finalOptions.credentials) {
+            finalOptions.credentials = 'include';
+        }
+
+        return fetch(`${baseUrl}${path}`, finalOptions);
     }
 
     function normalizeUserProfile(raw) {
