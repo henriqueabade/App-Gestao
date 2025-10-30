@@ -15,7 +15,7 @@ const notificationsRouter   = require('./notificationsController');
 
 const app = express();
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '3mb' }));
 
 app.use('/api/clientes', clientesRouter);
 app.use('/api/usuarios', usuariosRouter);
