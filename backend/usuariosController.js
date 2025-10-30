@@ -1272,6 +1272,171 @@ function normalizarFotoParaResposta(valor) {
   return null;
 }
 
+function inferirMimeTypeImagem(buffer) {
+  if (!buffer || !buffer.length) return null;
+  const assinatura = buffer.subarray(0, 12);
+
+  if (
+    assinatura.length >= 4 &&
+    assinatura[0] === 0x89 &&
+    assinatura[1] === 0x50 &&
+    assinatura[2] === 0x4e &&
+    assinatura[3] === 0x47
+  ) {
+    return 'image/png';
+  }
+
+  if (assinatura.length >= 3 && assinatura[0] === 0xff && assinatura[1] === 0xd8) {
+    return 'image/jpeg';
+  }
+
+  if (
+    assinatura.length >= 3 &&
+    String.fromCharCode(assinatura[0], assinatura[1], assinatura[2]) === 'GIF'
+  ) {
+    return 'image/gif';
+  }
+
+  if (
+    assinatura.length >= 12 &&
+    String.fromCharCode(assinatura[0], assinatura[1], assinatura[2], assinatura[3]) === 'RIFF' &&
+    String.fromCharCode(assinatura[8], assinatura[9], assinatura[10], assinatura[11]) === 'WEBP'
+  ) {
+    return 'image/webp';
+  }
+
+  if (
+    assinatura.length >= 4 &&
+    ((assinatura[0] === 0x49 && assinatura[1] === 0x49 && assinatura[2] === 0x2a && assinatura[3] === 0x00) ||
+      (assinatura[0] === 0x4d && assinatura[1] === 0x4d && assinatura[2] === 0x00 && assinatura[3] === 0x2a))
+  ) {
+    return 'image/tiff';
+  }
+
+  if (
+    assinatura.length >= 2 &&
+    assinatura[0] === 0x42 &&
+    assinatura[1] === 0x4d
+  ) {
+    return 'image/bmp';
+  }
+
+  return null;
+}
+
+function construirAvatarResposta(row) {
+  const origem = extrairPrimeiroValor(row, ['foto_usuario', 'foto', 'avatar', 'avatar_url']);
+
+  if (origem === undefined) {
+    return { foto: undefined, avatarUrl: undefined, fotoBase64: undefined };
+  }
+
+  const foto = normalizarFotoParaResposta(origem);
+
+  if (foto === null) {
+    return { foto: null, avatarUrl: null, fotoBase64: null };
+  }
+
+  const obterBuffer = () => {
+    if (Buffer.isBuffer(origem)) {
+      return origem.length ? origem : null;
+    }
+    if (origem instanceof Uint8Array) {
+      const buffer = Buffer.from(origem);
+      return buffer.length ? buffer : null;
+    }
+
+    if (typeof origem === 'string') {
+      const trimmed = origem.trim();
+      if (!trimmed) return null;
+      if (/^data:image\//i.test(trimmed)) {
+        const idx = trimmed.indexOf(',');
+        if (idx >= 0) {
+          const conteudo = trimmed.slice(idx + 1).replace(/\s+/g, '');
+          try {
+            const buffer = Buffer.from(conteudo, 'base64');
+            return buffer.length ? buffer : null;
+          } catch (err) {
+            return null;
+          }
+        }
+        return null;
+      }
+
+      if (/^(?:https?|blob|file):/i.test(trimmed) || trimmed.startsWith('/')) {
+        return null;
+      }
+
+      const sanitized = trimmed.replace(/\s+/g, '');
+      if (!sanitized) {
+        return null;
+      }
+      try {
+        const buffer = Buffer.from(sanitized, 'base64');
+        return buffer.length ? buffer : null;
+      } catch (err) {
+        return null;
+      }
+    }
+
+    if (typeof foto === 'string') {
+      const trimmed = foto.trim();
+      if (!trimmed) return null;
+      if (/^data:image\//i.test(trimmed)) {
+        const idx = trimmed.indexOf(',');
+        if (idx >= 0) {
+          const conteudo = trimmed.slice(idx + 1).replace(/\s+/g, '');
+          try {
+            const buffer = Buffer.from(conteudo, 'base64');
+            return buffer.length ? buffer : null;
+          } catch (err) {
+            return null;
+          }
+        }
+        return null;
+      }
+
+      const sanitized = trimmed.replace(/\s+/g, '');
+      if (!sanitized) return null;
+      try {
+        const buffer = Buffer.from(sanitized, 'base64');
+        return buffer.length ? buffer : null;
+      } catch (err) {
+        return null;
+      }
+    }
+
+    return null;
+  };
+
+  const tentarConstruirUrlDireta = valor => {
+    if (typeof valor !== 'string') return null;
+    const trimmed = valor.trim();
+    if (!trimmed) return null;
+    if (/^data:image\//i.test(trimmed)) return trimmed;
+    if (/^(?:https?|blob|file):/i.test(trimmed) || trimmed.startsWith('/')) return trimmed;
+    return null;
+  };
+
+  const urlDireta = tentarConstruirUrlDireta(origem) ?? tentarConstruirUrlDireta(foto);
+  const buffer = obterBuffer();
+
+  if (!buffer) {
+    const fotoBase64 = typeof foto === 'string' ? foto.trim() || null : null;
+    return { foto, avatarUrl: urlDireta ?? fotoBase64 ?? null, fotoBase64 };
+  }
+
+  const mimeType = inferirMimeTypeImagem(buffer) || 'image/png';
+  const base64 = buffer.toString('base64');
+  const dataUrl = `data:${mimeType};base64,${base64}`;
+
+  return {
+    foto,
+    avatarUrl: urlDireta ?? dataUrl,
+    fotoBase64: base64
+  };
+}
+
 async function atualizarCacheLogin(usuarioId, usuarioRow) {
   if (!usuarioId || !usuarioRow) return false;
   const meta = await getLoginCacheMeta();
@@ -1372,10 +1537,20 @@ function formatarUsuarioDetalhado(row) {
     resultado.whatsapp = whatsapp;
   }
 
-  const foto = normalizarFotoParaResposta(extrairPrimeiroValor(row, ['foto_usuario', 'foto', 'avatar', 'avatar_url']));
-  if (foto !== undefined) {
-    resultado.fotoUsuario = foto;
-    resultado.foto_usuario = foto;
+  const avatarResposta = construirAvatarResposta(row);
+  if (avatarResposta.foto !== undefined) {
+    resultado.fotoUsuario = avatarResposta.foto;
+    resultado.foto_usuario = avatarResposta.foto;
+  }
+
+  if (avatarResposta.avatarUrl !== undefined) {
+    resultado.avatarUrl = avatarResposta.avatarUrl;
+    resultado.foto = avatarResposta.avatarUrl;
+    resultado.fotoUrl = avatarResposta.avatarUrl;
+  }
+
+  if (avatarResposta.fotoBase64 !== undefined) {
+    resultado.fotoBase64 = avatarResposta.fotoBase64;
   }
 
   if (Object.prototype.hasOwnProperty.call(row, 'descricao')) {
@@ -3586,6 +3761,8 @@ function formatarUsuario(u) {
   const statusLabel = statusLabelMapa[statusInterno] || (u.verificado ? 'Ativo' : 'Inativo');
   const statusBadge = statusBadgeMapa[statusInterno] || 'badge-secondary';
 
+  const avatarResposta = construirAvatarResposta(u);
+
   return {
     id: u.id,
     nome: u.nome,
@@ -3614,8 +3791,18 @@ function formatarUsuario(u) {
     ultimaAlteracaoDescricao: ultimaAlteracaoDescricao || null,
     localUltimaAlteracao: ultimaAcaoLocal || null,
     especificacaoUltimaAlteracao: especificacaoUltimaAcao || null,
-    permissoesResumo
+    permissoesResumo,
+    ...(avatarResposta.foto !== undefined
+      ? { fotoUsuario: avatarResposta.foto, foto_usuario: avatarResposta.foto }
+      : {}),
+    ...(avatarResposta.avatarUrl !== undefined
+      ? { avatarUrl: avatarResposta.avatarUrl, foto: avatarResposta.avatarUrl, fotoUrl: avatarResposta.avatarUrl }
+      : {}),
+    ...(avatarResposta.fotoBase64 !== undefined ? { fotoBase64: avatarResposta.fotoBase64 } : {})
   };
 }
 
 module.exports = router;
+module.exports.formatarUsuario = formatarUsuario;
+module.exports.formatarUsuarioDetalhado = formatarUsuarioDetalhado;
+module.exports.construirAvatarResposta = construirAvatarResposta;

@@ -4,6 +4,7 @@ const bcrypt = require('bcrypt');
 const { ensureFotoUsuarioColumn } = require('./fotoUsuarioBytea');
 const { sendEmailConfirmationRequest } = require('../src/email/sendEmailConfirmationRequest');
 const { registrarUltimaEntrada } = require('./userActivity');
+const { formatarUsuario: formatarUsuarioResposta } = require('./usuariosController');
 
 // Track failed PIN attempts across session
 let pinErrorAttempts = 0;
@@ -267,7 +268,22 @@ async function loginUsuario(email, senha, pin) {
     } catch (err) {
       console.error('Falha ao registrar ultima entrada do usuário:', err);
     }
-    return { id: usuario.id, nome: usuario.nome, perfil: usuario.perfil };
+    let resposta = {
+      id: usuario.id,
+      nome: usuario.nome,
+      email: usuario.email,
+      perfil: usuario.perfil
+    };
+
+    if (typeof formatarUsuarioResposta === 'function') {
+      try {
+        resposta = { ...formatarUsuarioResposta(usuario) };
+      } catch (err) {
+        console.error('Falha ao formatar usuário para resposta de login:', err);
+      }
+    }
+
+    return resposta;
   } catch (err) {
     if (isNetworkError(err)) {
       throw new Error('Sem conexão com internet');

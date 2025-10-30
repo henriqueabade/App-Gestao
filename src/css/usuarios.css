@@ -28,6 +28,58 @@ body {
     -webkit-backdrop-filter: blur(16px);
 }
 
+.usuario-avatar {
+    width: 2.25rem;
+    height: 2.25rem;
+    border-radius: 9999px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--color-primary);
+    color: #fff;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    overflow: hidden;
+    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.08);
+}
+
+.usuario-avatar--list {
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+.usuario-avatar--has-image {
+    background: rgba(15, 23, 42, 0.45);
+}
+
+.usuario-avatar__image {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.usuario-avatar__initials {
+    font-size: 0.85rem;
+    text-transform: uppercase;
+}
+
+#usuarioAvatar {
+    overflow: hidden;
+}
+
+#usuarioAvatar.has-image {
+    background: rgba(15, 23, 42, 0.35);
+    color: transparent;
+    text-shadow: none;
+}
+
+#usuarioAvatar.has-image img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 9999px;
+    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.2);
+}
+
 .usuarios-header {
     display: flex;
     flex-direction: column;

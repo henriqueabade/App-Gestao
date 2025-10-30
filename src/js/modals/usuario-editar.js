@@ -2,6 +2,48 @@
   const overlay = document.getElementById('editarUsuarioOverlay');
   if (!overlay) return;
 
+  const escapeAttribute = value => {
+    if (value === null || value === undefined) return '';
+    return String(value)
+      .replace(/&/g, '&amp;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+  };
+
+  const obterAvatarUrl = usuario => {
+    if (!usuario || typeof usuario !== 'object') return null;
+    const candidatos = [
+      usuario.avatarUrl,
+      usuario.fotoUrl,
+      usuario.foto,
+      usuario.fotoUsuario,
+      usuario.foto_usuario,
+      usuario.avatar
+    ];
+
+    const isUrlPermitida = valor => /^(?:https?|blob|file):/i.test(valor) || valor.startsWith('/');
+
+    for (const candidato of candidatos) {
+      if (!candidato || typeof candidato !== 'string') continue;
+      const trimmed = candidato.trim();
+      if (!trimmed) continue;
+      if (/^data:image\//i.test(trimmed) || isUrlPermitida(trimmed)) {
+        return trimmed;
+      }
+      const base64Regex = /^[A-Za-z0-9+/=\s]+$/;
+      if (base64Regex.test(trimmed)) {
+        const sanitized = trimmed.replace(/\s+/g, '');
+        if (sanitized) {
+          return `data:image/png;base64,${sanitized}`;
+        }
+      }
+    }
+
+    return null;
+  };
+
   async function fetchApi(path, options) {
     const baseUrl = await window.apiConfig.getApiBaseUrl();
     return fetch(`${baseUrl}${path}`, options);
@@ -379,7 +421,13 @@
         .join('')
         .substring(0, 2)
         .toUpperCase();
-      avatar.textContent = iniciais || 'US';
+      const avatarUrl = obterAvatarUrl(usuario);
+      avatar.classList.toggle('has-image', Boolean(avatarUrl));
+      if (avatarUrl) {
+        avatar.innerHTML = `<img src="${escapeAttribute(avatarUrl)}" alt="${escapeAttribute(origem ? `Avatar de ${origem}` : 'Avatar do usuário')}" loading="lazy" />`;
+      } else {
+        avatar.textContent = iniciais || 'US';
+      }
     }
 
     const ultimaAtividade = usuario.ultima_atividade_em || usuario.ultimaAtividadeEm || usuario.ultimaAtividade;

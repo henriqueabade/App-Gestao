@@ -308,6 +308,49 @@ function escapeHtml(texto) {
         .replace(/'/g, '&#39;');
 }
 
+function escapeAttribute(valor) {
+    if (valor === null || valor === undefined) return '';
+    return String(valor)
+        .replace(/&/g, '&amp;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+}
+
+function obterAvatarUrl(usuario) {
+    if (!usuario || typeof usuario !== 'object') return null;
+    const candidatos = [
+        usuario.avatarUrl,
+        usuario.fotoUrl,
+        usuario.foto,
+        usuario.fotoUsuario,
+        usuario.foto_usuario,
+        usuario.avatar
+    ];
+
+    const isUrlPermitida = valor => /^(?:https?|blob|file):/i.test(valor) || valor.startsWith('/');
+
+    for (const candidato of candidatos) {
+        if (!candidato) continue;
+        if (typeof candidato !== 'string') continue;
+        const trimmed = candidato.trim();
+        if (!trimmed) continue;
+        if (/^data:image\//i.test(trimmed) || isUrlPermitida(trimmed)) {
+            return trimmed;
+        }
+        const base64Regex = /^[A-Za-z0-9+/=\s]+$/;
+        if (base64Regex.test(trimmed)) {
+            const sanitized = trimmed.replace(/\s+/g, '');
+            if (sanitized) {
+                return `data:image/png;base64,${sanitized}`;
+            }
+        }
+    }
+
+    return null;
+}
+
 function formatarDataHoraCompleta(valor) {
     if (!valor) return 'Sem registro';
     const data = valor instanceof Date ? valor : new Date(valor);
@@ -764,18 +807,27 @@ function renderUsuarios(lista) {
     lista.forEach(u => {
         const tr = document.createElement('tr');
         tr.classList.add('table-row');
-        const nome = escapeHtml(u.nome);
-        const iniciais = u.nome
+        const nomeOriginal = typeof u.nome === 'string' ? u.nome : '';
+        const nome = escapeHtml(nomeOriginal);
+        const baseParaIniciais = nomeOriginal || (typeof u.email === 'string' ? u.email : '');
+        const iniciais = baseParaIniciais
             .split(' ')
             .map(p => p[0])
             .join('')
             .substring(0, 2)
             .toUpperCase();
+        const iniciaisSeguro = escapeHtml(iniciais);
         const email = escapeHtml(u.email);
         const perfil = escapeHtml(u.perfil || '');
         const online = resolverStatusOnline(u);
         const sessaoClasse = online ? 'usuario-sessao-badge online' : 'usuario-sessao-badge offline';
         const sessaoRotulo = online ? 'Online' : 'Offline';
+        const avatarUrl = obterAvatarUrl(u);
+        const avatarAltTexto = nomeOriginal ? `Avatar de ${nomeOriginal}` : 'Avatar do usuário';
+        const avatarAlt = escapeAttribute(avatarAltTexto);
+        const avatarMarkup = avatarUrl
+            ? `<div class="usuario-avatar usuario-avatar--list usuario-avatar--has-image"><img src="${escapeAttribute(avatarUrl)}" alt="${avatarAlt}" class="usuario-avatar__image" loading="lazy" /></div>`
+            : `<div class="usuario-avatar usuario-avatar--list"><span class="usuario-avatar__initials">${iniciaisSeguro || 'US'}</span></div>`;
         const ultimaEntradaValor = obterPrimeiroValor(u, [
             'ultimaEntradaEm',
             'ultima_entrada_em',
@@ -853,7 +905,7 @@ function renderUsuarios(lista) {
 
         tr.innerHTML = `
             <td class="px-6 py-4">
-                <div class="w-9 h-9 rounded-full flex items-center justify-center text-white font-medium text-sm" style="background: var(--color-primary)">${iniciais}</div>
+                ${avatarMarkup}
             </td>
             <td class="px-6 py-4">
                 <div class="usuario-popover-container relative">
