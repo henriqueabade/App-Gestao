@@ -8,8 +8,20 @@ async function fetchApi(path, options = {}) {
 
     const usuarioAtual = usuarioLogado || carregarUsuarioLogado();
     const email = typeof usuarioAtual?.email === 'string' ? usuarioAtual.email.trim() : '';
+    const usuarioId =
+        typeof usuarioAtual?.id === 'number'
+            ? usuarioAtual.id
+            : Number.isFinite(Number(usuarioAtual?.id))
+                ? Number(usuarioAtual.id)
+                : null;
     if (email) {
         headers.set('x-usuario-email', email);
+    }
+    if (usuarioId && !headers.has('x-usuario-id')) {
+        headers.set('x-usuario-id', String(usuarioId));
+    }
+    if (usuarioId && !headers.has('authorization')) {
+        headers.set('authorization', `Bearer ${usuarioId}`);
     }
 
     finalOptions.headers = headers;
@@ -1046,6 +1058,10 @@ async function handleRemoverUsuario(usuario, botao) {
         } else if (typeof window.showToast === 'function') {
             window.showToast(payload.error || 'Erro ao excluir usuário.', 'error');
         }
+        console.error(
+            'Falha ao excluir usuário:',
+            Object.assign({ status: resp.status, statusText: resp.statusText }, payload || {})
+        );
     } catch (err) {
         console.error('Erro ao excluir usuário:', err);
         if (typeof window.showToast === 'function') {
