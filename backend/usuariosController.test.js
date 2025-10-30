@@ -201,6 +201,39 @@ test('modelos de permissões requerem Sup Admin', async () => {
   }
 });
 
+test('GET /api/usuarios/lista inclui avatarUrl quando foto_usuario está presente', async () => {
+  const { pool, listen, close } = setup();
+  const port = await listen();
+
+  try {
+    const fotoBuffer = Buffer.from(
+      '89504E470D0A1A0A0000000D49484452000000010000000108060000001F15C4890000000A49444154789C6360000002000181020DF66A0000000049454E44AE426082',
+      'hex'
+    );
+    await pool.query('UPDATE usuarios SET foto_usuario = $1 WHERE email = $2', [
+      fotoBuffer,
+      'maria@example.com'
+    ]);
+
+    const response = await authenticatedFetch(port, '/api/usuarios/lista');
+    assert.strictEqual(response.status, 200);
+
+    const usuarios = await response.json();
+    const maria = usuarios.find(usuario => usuario.email === 'maria@example.com');
+    assert.ok(maria, 'Usuária Maria deveria estar presente na lista.');
+    assert.ok(
+      typeof maria.avatarUrl === 'string' && maria.avatarUrl.startsWith('data:image/png;base64,'),
+      'avatarUrl deveria ser uma data URL PNG quando foto_usuario está presente'
+    );
+    assert.ok(
+      typeof maria.fotoUsuario === 'string' && maria.fotoUsuario.length > 0,
+      'fotoUsuario deveria conter a string base64 da imagem'
+    );
+  } finally {
+    await close();
+  }
+});
+
 test('Sup Admin gerencia modelos de permissões e aplica em usuário', async () => {
   const { listen, close, pool } = setup();
   const port = await listen();

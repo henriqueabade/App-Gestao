@@ -2888,10 +2888,19 @@ router.get('/lista', async (_req, res) => {
       garantirColuna('ultima_alteracao_descricao', 'especificacao_ultima_acao') ||
       garantirColuna('ultima_acao', 'especificacao_ultima_acao');
 
+    garantirColuna('foto_usuario', 'foto_usuario') ||
+      garantirColuna('foto', 'foto_usuario') ||
+      garantirColuna('avatar', 'foto_usuario') ||
+      garantirColuna('avatar_url', 'foto_usuario');
+
+    garantirColuna('foto', 'foto');
+    garantirColuna('avatar', 'avatar');
+    garantirColuna('avatar_url', 'avatar_url');
+
     const query = `SELECT ${selecionar.join(', ')} FROM usuarios u ORDER BY u.nome`;
     const result = await pool.query(query);
 
-    const usuarios = result.rows.map(formatarUsuario);
+    const usuarios = result.rows.map(row => formatarUsuario(row));
 
     res.json(usuarios);
   } catch (err) {
