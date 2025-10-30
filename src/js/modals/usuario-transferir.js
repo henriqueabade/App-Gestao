@@ -17,9 +17,18 @@
     const finalOptions = { credentials: 'include', ...options };
     const headers = new Headers(options?.headers || {});
 
-    const usuarioAtual =
+    let usuarioAtual =
       (typeof usuarioLogado !== 'undefined' && usuarioLogado) ||
       (typeof carregarUsuarioLogado === 'function' ? carregarUsuarioLogado() : null);
+
+    if (usuarioAtual && typeof usuarioAtual.then === 'function') {
+      try {
+        usuarioAtual = await usuarioAtual;
+      } catch (err) {
+        console.error('Erro ao carregar dados do usuário logado para transferência:', err);
+        usuarioAtual = null;
+      }
+    }
     const email = typeof usuarioAtual?.email === 'string' ? usuarioAtual.email.trim() : '';
     const usuarioId =
       typeof usuarioAtual?.id === 'number'

@@ -2569,7 +2569,12 @@ router.post('/:id/transferencia', autenticarUsuario, async (req, res) => {
     });
   } catch (err) {
     await client.query('ROLLBACK');
-    console.error('Erro ao transferir dados do usuário:', err);
+    console.error('Erro ao transferir dados do usuário:', {
+      message: err?.message,
+      code: err?.code,
+      detail: err?.detail,
+      stack: err?.stack
+    });
     return res.status(500).json({ error: 'Erro ao transferir dados do usuário.' });
   } finally {
     client.release();
