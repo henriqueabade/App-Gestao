@@ -6,6 +6,12 @@ const { sendEmailConfirmationRequest } = require('../src/email/sendEmailConfirma
 const { registrarUltimaEntrada } = require('./userActivity');
 const { formatarUsuario: formatarUsuarioResposta } = require('./usuariosController');
 
+const DEFAULT_PUBLIC_API_BASE_URL =
+  process.env.AVATAR_PUBLIC_BASE_URL ||
+  process.env.API_PUBLIC_BASE_URL ||
+  process.env.API_BASE_URL ||
+  null;
+
 // Track failed PIN attempts across session
 let pinErrorAttempts = 0;
 
@@ -125,6 +131,9 @@ async function ensureUsuariosSchema() {
       }
       if (!colunas.has('status_atualizado_em')) {
         alteracoes.push("ALTER TABLE usuarios ADD COLUMN status_atualizado_em TIMESTAMPTZ");
+      }
+      if (!colunas.has('foto_mime')) {
+        alteracoes.push("ALTER TABLE usuarios ADD COLUMN foto_mime TEXT");
       }
 
       const fotoResultado = await ensureFotoUsuarioColumn(client, 'usuarios', { createIfMissing: true });
@@ -277,7 +286,9 @@ async function loginUsuario(email, senha, pin) {
 
     if (typeof formatarUsuarioResposta === 'function') {
       try {
-        resposta = { ...formatarUsuarioResposta(usuario) };
+        resposta = {
+          ...formatarUsuarioResposta(usuario, { baseUrl: DEFAULT_PUBLIC_API_BASE_URL })
+        };
       } catch (err) {
         console.error('Falha ao formatar usuário para resposta de login:', err);
       }

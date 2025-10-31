@@ -49,6 +49,72 @@ const STATUS_BADGE_MAP = {
     nao_confirmado: 'badge-warning'
 };
 
+function normalizarValorVersao(valor) {
+    if (valor === null || valor === undefined) return null;
+    if (valor instanceof Date && !Number.isNaN(valor.getTime())) {
+        return String(valor.getTime());
+    }
+    if (typeof valor === 'number' && Number.isFinite(valor)) {
+        return String(Math.trunc(valor));
+    }
+    if (typeof valor === 'string') {
+        const trimmed = valor.trim();
+        if (!trimmed) return null;
+        if (/^\d+$/.test(trimmed)) {
+            return trimmed;
+        }
+        const parsed = Date.parse(trimmed);
+        if (!Number.isNaN(parsed)) {
+            return String(parsed);
+        }
+    }
+    return null;
+}
+
+function extrairAvatarVersao(usuario) {
+    if (!usuario || typeof usuario !== 'object') return null;
+    const candidatos = [
+        usuario.avatar_version,
+        usuario.avatarVersion,
+        usuario.avatar_updated_at,
+        usuario.avatarUpdatedAt,
+        usuario.atualizadoEm,
+        usuario.atualizado_em,
+        usuario.updatedAt,
+        usuario.updated_at,
+        usuario.ultimaAlteracaoEm,
+        usuario.ultima_alteracao_em,
+        usuario.ultimaAlteracao,
+        usuario.ultima_alteracao
+    ];
+    for (const candidato of candidatos) {
+        const normalizado = normalizarValorVersao(candidato);
+        if (normalizado) {
+            return normalizado;
+        }
+    }
+    return null;
+}
+
+function aplicarCacheBuster(url, versao) {
+    if (!url || !versao) return url;
+    if (typeof url !== 'string') return url;
+    if (/^data:/i.test(url)) return url;
+
+    const [base, fragmento] = url.split('#', 2);
+    const encoded = encodeURIComponent(versao);
+    let atualizado = base;
+
+    if (/(?:^|[?&])t=/.test(base)) {
+        atualizado = base.replace(/([?&])t=[^&]*/, `$1t=${encoded}`);
+    } else {
+        const separador = base.includes('?') ? '&' : '?';
+        atualizado = `${base}${separador}t=${encoded}`;
+    }
+
+    return fragmento !== undefined ? `${atualizado}#${fragmento}` : atualizado;
+}
+
 function showUsuariosConfirmDialog({
     title = 'Tem certeza?',
     message = '',
@@ -321,6 +387,7 @@ function escapeAttribute(valor) {
 function obterAvatarUrl(usuario) {
     if (!usuario || typeof usuario !== 'object') return null;
     const candidatos = [
+        usuario.avatar_url,
         usuario.avatarUrl,
         usuario.fotoUrl,
         usuario.foto,
@@ -330,6 +397,7 @@ function obterAvatarUrl(usuario) {
     ];
 
     const loadablePattern = /^(?:data:|blob:|file:|https?:|\/\/)/i;
+    const versao = extrairAvatarVersao(usuario);
 
     for (const candidato of candidatos) {
         if (!candidato) continue;
@@ -346,7 +414,7 @@ function obterAvatarUrl(usuario) {
             }
             const resolvedTrimmed = typeof resolved === 'string' ? resolved.trim() : '';
             if (resolvedTrimmed && loadablePattern.test(resolvedTrimmed)) {
-                return resolvedTrimmed;
+                return aplicarCacheBuster(resolvedTrimmed, versao);
             }
 
             const base64Regex = /^[A-Za-z0-9+/=\s]+$/;
@@ -987,6 +1055,26 @@ function renderUsuarios(lista) {
             <td class="px-6 py-4">
                 <span class="${statusBadgeClasse} px-2 py-1 rounded-full text-xs font-medium">${escapeHtml(statusRotulo)}</span>
             </td>`;
+
+        if (avatarUrl) {
+            const avatarContainer = tr.querySelector('.usuario-avatar');
+            const avatarImage = avatarContainer?.querySelector('img');
+            if (avatarContainer && avatarImage) {
+                const fallbackInitials = iniciais || 'US';
+                avatarImage.addEventListener(
+                    'error',
+                    () => {
+                        avatarContainer.classList.remove('usuario-avatar--has-image');
+                        avatarContainer.innerHTML = '';
+                        const initialsSpan = document.createElement('span');
+                        initialsSpan.className = 'usuario-avatar__initials';
+                        initialsSpan.textContent = fallbackInitials;
+                        avatarContainer.appendChild(initialsSpan);
+                    },
+                    { once: true }
+                );
+            }
+        }
 
         const actionsTd = document.createElement('td');
         actionsTd.className = 'px-6 py-4';

@@ -19,12 +19,298 @@ const { sendEmailChangeConfirmation } = require('../src/email/sendEmailChangeCon
 
 const router = express.Router();
 
+const DEFAULT_AVATAR_BASE_URL =
+  process.env.AVATAR_PUBLIC_BASE_URL ||
+  process.env.API_PUBLIC_BASE_URL ||
+  process.env.API_BASE_URL ||
+  null;
+
+const AVATAR_TIMESTAMP_CANDIDATES = [
+  'avatar_atualizado_em',
+  'avatarAtualizadoEm',
+  'avatar_updated_at',
+  'avatarUpdatedAt',
+  'foto_atualizado_em',
+  'fotoAtualizadoEm',
+  'atualizado_em',
+  'atualizadoEm',
+  'updated_at',
+  'updatedAt',
+  'ultima_alteracao',
+  'ultimaAlteracao',
+  'ultima_alteracao_em',
+  'ultimaAlteracaoEm',
+  'ultima_atividade_em',
+  'ultimaAtividadeEm',
+  'ultima_acao_em',
+  'ultimaAcaoEm'
+];
+
 const MAX_IMAGE_SIZE = 2 * 1024 * 1024;
 const EMAIL_CONFIRMATION_TTL_MS = 48 * 60 * 60 * 1000;
 const SUP_ADMIN_APPROVAL_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 let multer = null;
 let MulterError = null;
 let upload = null;
+
+const ABSOLUTE_URL_PATTERN = /^(?:[a-z][a-z0-9+.-]*:|\/\/)/i;
+
+function resolveRequestBaseUrl(req) {
+  if (!req || typeof req.get !== 'function') {
+    return DEFAULT_AVATAR_BASE_URL;
+  }
+
+  const forwardedProto = req.get('x-forwarded-proto');
+  const forwardedHost = req.get('x-forwarded-host');
+  const host = forwardedHost || req.get('host');
+  const protocol = forwardedProto || req.protocol || 'http';
+
+  if (host) {
+    return `${protocol}://${host}`;
+  }
+
+  return DEFAULT_AVATAR_BASE_URL;
+}
+
+function buildAvatarPath(usuarioId) {
+  if (usuarioId === undefined || usuarioId === null) {
+    return null;
+  }
+
+  const raw = typeof usuarioId === 'number' ? usuarioId : String(usuarioId).trim();
+  if (raw === '' || Number.isNaN(raw)) {
+    return null;
+  }
+
+  return `/users/${encodeURIComponent(String(raw))}/avatar`;
+}
+
+function buildAvatarUrl(usuarioId, baseUrl) {
+  const path = buildAvatarPath(usuarioId);
+  if (!path) {
+    return null;
+  }
+
+  if (!baseUrl) {
+    return path;
+  }
+
+  try {
+    return new URL(path, baseUrl).toString();
+  } catch (err) {
+    return path;
+  }
+}
+
+function tryDecodeBase64(content) {
+  if (typeof content !== 'string') {
+    return null;
+  }
+
+  const sanitized = content.replace(/\s+/g, '');
+  if (!sanitized) {
+    return null;
+  }
+
+  if (sanitized.length < 16 || sanitized.length % 4 !== 0) {
+    return null;
+  }
+
+  if (!/^[A-Za-z0-9+/=]+$/.test(sanitized)) {
+    return null;
+  }
+
+  try {
+    const buffer = Buffer.from(sanitized, 'base64');
+    return buffer.length ? buffer : null;
+  } catch (err) {
+    return null;
+  }
+}
+
+function getAvatarBufferFromValue(value) {
+  if (value === undefined || value === null) {
+    return null;
+  }
+
+  if (Buffer.isBuffer(value)) {
+    return value.length ? value : null;
+  }
+
+  if (value instanceof Uint8Array) {
+    const buffer = Buffer.from(value);
+    return buffer.length ? buffer : null;
+  }
+
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  if (/^data:image\//i.test(trimmed)) {
+    const commaIndex = trimmed.indexOf(',');
+    if (commaIndex >= 0) {
+      const base64Content = trimmed.slice(commaIndex + 1);
+      return tryDecodeBase64(base64Content);
+    }
+    return null;
+  }
+
+  return tryDecodeBase64(trimmed);
+}
+
+function extractAvatarSource(row) {
+  if (!row || typeof row !== 'object') {
+    return { buffer: null, directUrl: null };
+  }
+
+  const candidates = ['foto_usuario', 'foto', 'avatar', 'avatar_url'];
+  let buffer = null;
+  let directUrl = null;
+
+  for (const key of candidates) {
+    if (!Object.prototype.hasOwnProperty.call(row, key)) {
+      continue;
+    }
+
+    const value = row[key];
+    if (value === undefined || value === null) {
+      continue;
+    }
+
+    if (!buffer) {
+      buffer = getAvatarBufferFromValue(value);
+      if (buffer) {
+        continue;
+      }
+    }
+
+    if (!directUrl && typeof value === 'string') {
+      const trimmed = value.trim();
+      if (!trimmed) {
+        continue;
+      }
+
+      if (/^(?:https?|blob|file):/i.test(trimmed) || trimmed.startsWith('/')) {
+        directUrl = trimmed;
+      }
+    }
+  }
+
+  return {
+    buffer: buffer || null,
+    directUrl: directUrl || null
+  };
+}
+
+function normalizeAvatarVersionToken(value) {
+  if (value === undefined || value === null) {
+    return null;
+  }
+
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? null : String(value.getTime());
+  }
+
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value)) {
+      return null;
+    }
+    return String(Math.trunc(value));
+  }
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return null;
+    }
+    if (/^\d+$/.test(trimmed)) {
+      return trimmed;
+    }
+    const parsed = new Date(trimmed);
+    if (!Number.isNaN(parsed.getTime())) {
+      return String(parsed.getTime());
+    }
+    return trimmed;
+  }
+
+  return null;
+}
+
+function extractAvatarTimestamp(row) {
+  if (!row || typeof row !== 'object') {
+    return null;
+  }
+
+  for (const key of AVATAR_TIMESTAMP_CANDIDATES) {
+    if (!Object.prototype.hasOwnProperty.call(row, key)) {
+      continue;
+    }
+
+    const value = row[key];
+    if (value === undefined || value === null) {
+      continue;
+    }
+
+    if (value instanceof Date) {
+      if (!Number.isNaN(value.getTime())) {
+        return value;
+      }
+      continue;
+    }
+
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      const date = new Date(Math.trunc(value));
+      if (!Number.isNaN(date.getTime())) {
+        return date;
+      }
+      continue;
+    }
+
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      if (!trimmed) {
+        continue;
+      }
+      if (/^\d+$/.test(trimmed)) {
+        const numeric = Number.parseInt(trimmed, 10);
+        if (Number.isFinite(numeric)) {
+          const date = new Date(numeric);
+          if (!Number.isNaN(date.getTime())) {
+            return date;
+          }
+        }
+      }
+      const parsed = new Date(trimmed);
+      if (!Number.isNaN(parsed.getTime())) {
+        return parsed;
+      }
+    }
+  }
+
+  return null;
+}
+
+function computeAvatarVersion(row, buffer) {
+  const timestamp = extractAvatarTimestamp(row);
+  if (timestamp) {
+    return {
+      token: String(timestamp.getTime()),
+      updatedAt: timestamp.toISOString()
+    };
+  }
+
+  if (buffer && buffer.length) {
+    const hash = crypto.createHash('sha1').update(buffer).digest('hex');
+    return { token: hash, updatedAt: null };
+  }
+
+  return { token: null, updatedAt: null };
+}
 
 try {
   // Carregamento lazy para que o aplicativo possa iniciar mesmo sem a
@@ -1220,7 +1506,9 @@ function parseBase64Image(input) {
   if (!trimmed) return null;
   const dataUrlMatch = /^data:(image\/[a-z0-9.+-]+);base64,(.+)$/i.exec(trimmed);
   let base64Content = trimmed;
+  let mimeType = null;
   if (dataUrlMatch) {
+    mimeType = dataUrlMatch[1].toLowerCase();
     base64Content = dataUrlMatch[2];
   }
   const sanitized = base64Content.replace(/\s+/g, '');
@@ -1230,7 +1518,8 @@ function parseBase64Image(input) {
     if (!buffer || !buffer.length) {
       return null;
     }
-    return buffer;
+    const detectedMime = mimeType || inferirMimeTypeImagem(buffer) || null;
+    return { buffer, mimeType: detectedMime };
   } catch (err) {
     return null;
   }
@@ -1324,116 +1613,78 @@ function inferirMimeTypeImagem(buffer) {
   return null;
 }
 
-function construirAvatarResposta(row) {
-  const origem = extrairPrimeiroValor(row, ['foto_usuario', 'foto', 'avatar', 'avatar_url']);
-
-  if (origem === undefined) {
-    return { foto: undefined, avatarUrl: undefined, fotoBase64: undefined };
+function construirAvatarResposta(row, options = {}) {
+  if (row === undefined) {
+    return { foto: undefined, avatarUrl: undefined, avatar_url: undefined, fotoBase64: undefined };
   }
 
-  const foto = normalizarFotoParaResposta(origem);
+  const { buffer, directUrl } = extractAvatarSource(row);
+  const hasAvatar = Boolean(buffer || directUrl);
 
-  if (foto === null) {
-    return { foto: null, avatarUrl: null, fotoBase64: null };
+  if (!hasAvatar) {
+    return {
+      foto: null,
+      avatarUrl: null,
+      avatar_url: null,
+      avatarVersion: null,
+      avatar_version: null,
+      avatarUpdatedAt: null,
+      avatar_updated_at: null,
+      avatarMime: null,
+      avatar_mime: null,
+      fotoBase64: null,
+      hasAvatar: false
+    };
   }
 
-  const obterBuffer = () => {
-    if (Buffer.isBuffer(origem)) {
-      return origem.length ? origem : null;
-    }
-    if (origem instanceof Uint8Array) {
-      const buffer = Buffer.from(origem);
-      return buffer.length ? buffer : null;
-    }
+  const baseUrl = options.baseUrl || DEFAULT_AVATAR_BASE_URL;
+  const usuarioId = extrairPrimeiroValor(row, ['id', 'usuario_id', 'user_id']);
+  let url = null;
 
-    if (typeof origem === 'string') {
-      const trimmed = origem.trim();
-      if (!trimmed) return null;
-      if (/^data:image\//i.test(trimmed)) {
-        const idx = trimmed.indexOf(',');
-        if (idx >= 0) {
-          const conteudo = trimmed.slice(idx + 1).replace(/\s+/g, '');
-          try {
-            const buffer = Buffer.from(conteudo, 'base64');
-            return buffer.length ? buffer : null;
-          } catch (err) {
-            return null;
-          }
+  if (buffer && usuarioId !== undefined && usuarioId !== null) {
+    url = buildAvatarUrl(usuarioId, baseUrl);
+  } else if (typeof directUrl === 'string' && directUrl) {
+    const trimmed = directUrl.trim();
+    if (trimmed) {
+      if (ABSOLUTE_URL_PATTERN.test(trimmed)) {
+        url = trimmed;
+      } else if (baseUrl) {
+        try {
+          url = new URL(trimmed, baseUrl).toString();
+        } catch (err) {
+          url = trimmed;
         }
-        return null;
-      }
-
-      if (/^(?:https?|blob|file):/i.test(trimmed) || trimmed.startsWith('/')) {
-        return null;
-      }
-
-      const sanitized = trimmed.replace(/\s+/g, '');
-      if (!sanitized) {
-        return null;
-      }
-      try {
-        const buffer = Buffer.from(sanitized, 'base64');
-        return buffer.length ? buffer : null;
-      } catch (err) {
-        return null;
+      } else {
+        url = trimmed;
       }
     }
-
-    if (typeof foto === 'string') {
-      const trimmed = foto.trim();
-      if (!trimmed) return null;
-      if (/^data:image\//i.test(trimmed)) {
-        const idx = trimmed.indexOf(',');
-        if (idx >= 0) {
-          const conteudo = trimmed.slice(idx + 1).replace(/\s+/g, '');
-          try {
-            const buffer = Buffer.from(conteudo, 'base64');
-            return buffer.length ? buffer : null;
-          } catch (err) {
-            return null;
-          }
-        }
-        return null;
-      }
-
-      const sanitized = trimmed.replace(/\s+/g, '');
-      if (!sanitized) return null;
-      try {
-        const buffer = Buffer.from(sanitized, 'base64');
-        return buffer.length ? buffer : null;
-      } catch (err) {
-        return null;
-      }
-    }
-
-    return null;
-  };
-
-  const tentarConstruirUrlDireta = valor => {
-    if (typeof valor !== 'string') return null;
-    const trimmed = valor.trim();
-    if (!trimmed) return null;
-    if (/^data:image\//i.test(trimmed)) return trimmed;
-    if (/^(?:https?|blob|file):/i.test(trimmed) || trimmed.startsWith('/')) return trimmed;
-    return null;
-  };
-
-  const urlDireta = tentarConstruirUrlDireta(origem) ?? tentarConstruirUrlDireta(foto);
-  const buffer = obterBuffer();
-
-  if (!buffer) {
-    const fotoBase64 = typeof foto === 'string' ? foto.trim() || null : null;
-    return { foto, avatarUrl: urlDireta ?? fotoBase64 ?? null, fotoBase64 };
+  } else if (buffer && usuarioId === undefined) {
+    console.warn('Avatar encontrado sem identificador de usuário associado.');
   }
 
-  const mimeType = inferirMimeTypeImagem(buffer) || 'image/png';
-  const base64 = buffer.toString('base64');
-  const dataUrl = `data:${mimeType};base64,${base64}`;
+  const mimeCandidate = extrairPrimeiroValor(row, ['foto_mime', 'avatar_mime', 'fotoMime', 'avatarMime']);
+  let mimeType = typeof mimeCandidate === 'string' ? mimeCandidate.trim() : '';
+  if (!mimeType || !/^image\//i.test(mimeType)) {
+    mimeType = buffer ? inferirMimeTypeImagem(buffer) : null;
+  }
+  if (!mimeType) {
+    mimeType = 'image/jpeg';
+  }
+
+  const { token: versionToken, updatedAt } = computeAvatarVersion(row, buffer);
 
   return {
-    foto,
-    avatarUrl: urlDireta ?? dataUrl,
-    fotoBase64: base64
+    foto: undefined,
+    avatarUrl: url,
+    avatar_url: url,
+    avatarVersion: versionToken,
+    avatar_version: versionToken,
+    avatarUpdatedAt: updatedAt,
+    avatar_updated_at: updatedAt,
+    avatarMime: mimeType,
+    avatar_mime: mimeType,
+    fotoBase64: undefined,
+    hasAvatar: true
   };
 }
 
@@ -1489,6 +1740,16 @@ async function atualizarCacheLogin(usuarioId, usuarioRow) {
       }
     }
     adicionarCampo('foto_usuario', fotoBuffer);
+    if (colunas.has('foto_mime')) {
+      const mimeSource = extrairPrimeiroValor(usuarioRow, ['foto_mime', 'avatar_mime', 'fotoMime', 'avatarMime']);
+      let mimeValue = null;
+      if (typeof mimeSource === 'string' && mimeSource.trim()) {
+        mimeValue = mimeSource.trim();
+      } else if (fotoBuffer) {
+        mimeValue = inferirMimeTypeImagem(fotoBuffer) || null;
+      }
+      adicionarCampo('foto_mime', mimeValue);
+    }
   }
 
   if (colunas.has('atualizado_em')) {
@@ -1513,9 +1774,9 @@ async function atualizarCacheLogin(usuarioId, usuarioRow) {
   }
 }
 
-function formatarUsuarioDetalhado(row) {
+function formatarUsuarioDetalhado(row, options = {}) {
   if (!row) return null;
-  const base = formatarUsuario(row);
+  const base = formatarUsuario(row, options);
   const resultado = { ...base };
 
   const permissoes = obterPermissoesDoUsuario(row);
@@ -1537,20 +1798,32 @@ function formatarUsuarioDetalhado(row) {
     resultado.whatsapp = whatsapp;
   }
 
-  const avatarResposta = construirAvatarResposta(row);
-  if (avatarResposta.foto !== undefined) {
-    resultado.fotoUsuario = avatarResposta.foto;
-    resultado.foto_usuario = avatarResposta.foto;
-  }
-
+  const avatarResposta = construirAvatarResposta(row, options);
   if (avatarResposta.avatarUrl !== undefined) {
     resultado.avatarUrl = avatarResposta.avatarUrl;
+    resultado.avatar_url = avatarResposta.avatar_url;
     resultado.foto = avatarResposta.avatarUrl;
     resultado.fotoUrl = avatarResposta.avatarUrl;
   }
 
-  if (avatarResposta.fotoBase64 !== undefined) {
-    resultado.fotoBase64 = avatarResposta.fotoBase64;
+  if (avatarResposta.avatar_version !== undefined) {
+    resultado.avatarVersion = avatarResposta.avatar_version;
+    resultado.avatar_version = avatarResposta.avatar_version;
+  }
+
+  if (avatarResposta.avatar_updated_at !== undefined) {
+    resultado.avatarUpdatedAt = avatarResposta.avatar_updated_at;
+    resultado.avatar_updated_at = avatarResposta.avatar_updated_at;
+  }
+
+  if (avatarResposta.avatar_mime !== undefined) {
+    resultado.avatarMime = avatarResposta.avatar_mime;
+    resultado.avatar_mime = avatarResposta.avatar_mime;
+  }
+
+  if (avatarResposta.hasAvatar !== undefined) {
+    resultado.temAvatar = avatarResposta.hasAvatar;
+    resultado.hasAvatar = avatarResposta.hasAvatar;
   }
 
   if (Object.prototype.hasOwnProperty.call(row, 'descricao')) {
@@ -1710,7 +1983,8 @@ router.get('/me', autenticarUsuario, async (req, res) => {
     if (!usuario) {
       return res.status(404).json({ error: 'Usuário não encontrado' });
     }
-    return res.json(formatarUsuarioDetalhado(usuario));
+    const baseUrl = resolveRequestBaseUrl(req);
+    return res.json(formatarUsuarioDetalhado(usuario, { baseUrl }));
   } catch (err) {
     console.error('Erro ao obter dados do usuário autenticado:', err);
     return res.status(500).json({ error: 'Erro ao carregar dados do usuário.' });
@@ -1781,6 +2055,7 @@ router.put('/me', autenticarUsuario, parseMultipartIfNeeded, async (req, res) =>
 
   let fotoAcao = 'manter';
   let fotoBuffer = null;
+  let fotoMime = null;
 
   if (parseBoolean(getFirstDefined(body, ['removerFoto', 'remover_foto']))) {
     fotoAcao = 'remover';
@@ -1794,6 +2069,9 @@ router.put('/me', autenticarUsuario, parseMultipartIfNeeded, async (req, res) =>
       return res.status(400).json({ error: 'Foto de perfil inválida.' });
     }
     fotoBuffer = req.file.buffer;
+    if (req.file.mimetype && req.file.mimetype.startsWith('image/')) {
+      fotoMime = req.file.mimetype;
+    }
     fotoAcao = 'atualizar';
   }
 
@@ -1813,11 +2091,14 @@ router.put('/me', autenticarUsuario, parseMultipartIfNeeded, async (req, res) =>
         fotoAcao = 'remover';
         break;
       }
-      const buffer = parseBase64Image(trimmed);
-      if (!buffer) {
+      const parsed = parseBase64Image(trimmed);
+      if (!parsed || !parsed.buffer) {
         return res.status(400).json({ error: 'Foto de perfil deve estar em formato base64 válido.' });
       }
-      fotoBuffer = buffer;
+      fotoBuffer = parsed.buffer;
+      if (!fotoMime && parsed.mimeType) {
+        fotoMime = parsed.mimeType;
+      }
       fotoAcao = 'atualizar';
       break;
     }
@@ -1825,6 +2106,10 @@ router.put('/me', autenticarUsuario, parseMultipartIfNeeded, async (req, res) =>
 
   if (fotoAcao === 'atualizar' && fotoBuffer && fotoBuffer.length > MAX_IMAGE_SIZE) {
     return res.status(400).json({ error: 'Foto de perfil deve ter no máximo 2 MB.' });
+  }
+
+  if (fotoAcao === 'atualizar' && fotoBuffer && !fotoMime) {
+    fotoMime = inferirMimeTypeImagem(fotoBuffer) || 'image/jpeg';
   }
 
   let colunas;
@@ -1873,12 +2158,20 @@ router.put('/me', autenticarUsuario, parseMultipartIfNeeded, async (req, res) =>
     } else {
       console.warn('Foto de perfil enviada, mas coluna foto_usuario não existe na tabela.');
     }
+    if (colunas.has('foto_mime')) {
+      const mimeValue = fotoMime || (fotoBuffer ? inferirMimeTypeImagem(fotoBuffer) || 'image/jpeg' : null);
+      adicionarSet('foto_mime', mimeValue);
+    }
   } else if (fotoAcao === 'remover' && colunas.has('foto_usuario')) {
     updates.push('foto_usuario = NULL');
+    if (colunas.has('foto_mime')) {
+      updates.push('foto_mime = NULL');
+    }
   }
 
   if (!updates.length) {
-    return res.json(formatarUsuarioDetalhado(usuarioAtual));
+    const baseUrl = resolveRequestBaseUrl(req);
+    return res.json(formatarUsuarioDetalhado(usuarioAtual, { baseUrl }));
   }
 
   if (colunas.has('ultima_alteracao')) {
@@ -1914,7 +2207,8 @@ router.put('/me', autenticarUsuario, parseMultipartIfNeeded, async (req, res) =>
     console.error('Falha ao atualizar cache de login após alteração de perfil:', err);
   }
 
-  return res.json(formatarUsuarioDetalhado(atualizado));
+  const baseUrl = resolveRequestBaseUrl(req);
+  return res.json(formatarUsuarioDetalhado(atualizado, { baseUrl }));
 });
 
 router.post('/me/email-confirmation', autenticarUsuario, async (req, res) => {
@@ -2263,7 +2557,8 @@ router.patch('/:id', autenticarUsuario, async (req, res) => {
   }
 
   if (!Object.keys(camposAtualizar).length) {
-    return res.json(formatarUsuarioDetalhado(alvo));
+    const baseUrl = resolveRequestBaseUrl(req);
+    return res.json(formatarUsuarioDetalhado(alvo, { baseUrl }));
   }
 
   const agora = new Date();
@@ -2298,7 +2593,8 @@ router.patch('/:id', autenticarUsuario, async (req, res) => {
     console.error('Falha ao atualizar cache de login após alteração de dados pessoais:', err);
   }
 
-  return res.json(formatarUsuarioDetalhado(atualizado));
+  const baseUrl = resolveRequestBaseUrl(req);
+  return res.json(formatarUsuarioDetalhado(atualizado, { baseUrl }));
 });
 
 router.put('/:id/permissoes', autenticarUsuario, async (req, res) => {
@@ -2816,13 +3112,14 @@ async function confirmarAlteracaoEmail(req, res) {
       console.error('Falha ao atualizar cache de login após confirmação de novo e-mail:', err);
     }
 
+    const baseUrl = resolveRequestBaseUrl(req);
     return responder(
       req,
       res,
       200,
       'E-mail atualizado',
       'Seu novo e-mail foi confirmado com sucesso.',
-      { usuario: formatarUsuarioDetalhado(usuarioAtualizado) }
+      { usuario: formatarUsuarioDetalhado(usuarioAtualizado, { baseUrl }) }
     );
   } catch (err) {
     console.error('Erro ao confirmar novo e-mail:', err);
@@ -2833,7 +3130,7 @@ async function confirmarAlteracaoEmail(req, res) {
 router.get('/confirm-email', confirmarAlteracaoEmail);
 
 // GET /api/usuarios/lista
-router.get('/lista', async (_req, res) => {
+router.get('/lista', async (req, res) => {
   try {
     const meta = await pool.query(
       `SELECT column_name
@@ -2900,7 +3197,8 @@ router.get('/lista', async (_req, res) => {
     const query = `SELECT ${selecionar.join(', ')} FROM usuarios u ORDER BY u.nome`;
     const result = await pool.query(query);
 
-    const usuarios = result.rows.map(row => formatarUsuario(row));
+    const baseUrl = resolveRequestBaseUrl(req);
+    const usuarios = result.rows.map(row => formatarUsuario(row, { baseUrl }));
 
     res.json(usuarios);
   } catch (err) {
@@ -3233,7 +3531,8 @@ router.patch('/:id/status', async (req, res) => {
       console.error('Falha ao atualizar cache de login após alteração de status:', err);
     }
 
-    const usuario = formatarUsuario(linhaAtualizada);
+    const baseUrl = resolveRequestBaseUrl(req);
+    const usuario = formatarUsuario(linhaAtualizada, { baseUrl });
 
     res.json(usuario);
   } catch (err) {
@@ -3398,13 +3697,14 @@ async function reportarEmailIncorreto(req, res) {
       console.error('sendSupAdminReviewNotification error', err);
     }
 
+    const baseUrl = resolveRequestBaseUrl(req);
     return responder(
       req,
       res,
       200,
       'Relato registrado',
       'Obrigado por nos avisar. Nossa equipe foi notificada e investigará o caso.',
-      { usuario: formatarUsuario(usuarioAtualizado) }
+      { usuario: formatarUsuario(usuarioAtualizado, { baseUrl }) }
     );
   } catch (err) {
     console.error('Erro ao reportar e-mail incorreto:', err);
@@ -3509,13 +3809,14 @@ router.get('/aprovar', async (req, res) => {
       console.error('sendUserActivationNotice error', err);
     }
 
+    const baseUrl = resolveRequestBaseUrl(req);
     return responder(
       req,
       res,
       200,
       'Usuário ativado',
       'O usuário foi ativado com sucesso.',
-      { usuario: formatarUsuario(usuarioAtualizado) }
+      { usuario: formatarUsuario(usuarioAtualizado, { baseUrl }) }
     );
   } catch (err) {
     console.error('Erro ao aprovar usuário com token:', err);
@@ -3554,7 +3855,8 @@ router.get('/:id', autenticarUsuario, async (req, res) => {
     return res.status(403).json({ error: 'Acesso negado.' });
   }
 
-  return res.json(formatarUsuarioDetalhado(alvo));
+  const baseUrl = resolveRequestBaseUrl(req);
+  return res.json(formatarUsuarioDetalhado(alvo, { baseUrl }));
 });
 
 router.post('/aprovar', async (req, res) => {
@@ -3639,7 +3941,7 @@ router.post('/aprovar', async (req, res) => {
   }
 });
 
-function formatarUsuario(u) {
+function formatarUsuario(u, options = {}) {
   const parseDate = valor => {
     if (!valor) return null;
     const data = valor instanceof Date ? valor : new Date(valor);
@@ -3770,7 +4072,7 @@ function formatarUsuario(u) {
   const statusLabel = statusLabelMapa[statusInterno] || (u.verificado ? 'Ativo' : 'Inativo');
   const statusBadge = statusBadgeMapa[statusInterno] || 'badge-secondary';
 
-  const avatarResposta = construirAvatarResposta(u);
+  const avatarResposta = construirAvatarResposta(u, options);
 
   return {
     id: u.id,
@@ -3801,17 +4103,100 @@ function formatarUsuario(u) {
     localUltimaAlteracao: ultimaAcaoLocal || null,
     especificacaoUltimaAlteracao: especificacaoUltimaAcao || null,
     permissoesResumo,
-    ...(avatarResposta.foto !== undefined
-      ? { fotoUsuario: avatarResposta.foto, foto_usuario: avatarResposta.foto }
-      : {}),
     ...(avatarResposta.avatarUrl !== undefined
-      ? { avatarUrl: avatarResposta.avatarUrl, foto: avatarResposta.avatarUrl, fotoUrl: avatarResposta.avatarUrl }
+      ? {
+          avatarUrl: avatarResposta.avatarUrl,
+          avatar_url: avatarResposta.avatar_url,
+          foto: avatarResposta.avatarUrl,
+          fotoUrl: avatarResposta.avatarUrl
+        }
       : {}),
-    ...(avatarResposta.fotoBase64 !== undefined ? { fotoBase64: avatarResposta.fotoBase64 } : {})
+    ...(avatarResposta.avatar_version !== undefined
+      ? { avatarVersion: avatarResposta.avatar_version, avatar_version: avatarResposta.avatar_version }
+      : {}),
+    ...(avatarResposta.avatar_updated_at !== undefined
+      ? { avatarUpdatedAt: avatarResposta.avatar_updated_at, avatar_updated_at: avatarResposta.avatar_updated_at }
+      : {}),
+    ...(avatarResposta.avatar_mime !== undefined
+      ? { avatarMime: avatarResposta.avatar_mime, avatar_mime: avatarResposta.avatar_mime }
+      : {}),
+    ...(avatarResposta.hasAvatar !== undefined ? { temAvatar: avatarResposta.hasAvatar, hasAvatar: avatarResposta.hasAvatar } : {})
   };
+}
+
+async function handleAvatarRequest(req, res) {
+  const { id } = req.params || {};
+  const numericId = Number.parseInt(String(id ?? '').trim(), 10);
+
+  if (!Number.isInteger(numericId) || numericId <= 0) {
+    return res.status(404).end();
+  }
+
+  try {
+    const { rows } = await pool.query('SELECT * FROM usuarios WHERE id = $1 LIMIT 1', [numericId]);
+    if (!rows.length) {
+      return res.status(404).end();
+    }
+
+    const usuario = rows[0];
+    const { buffer } = extractAvatarSource(usuario);
+    const fotoBuffer = buffer;
+
+    if (!fotoBuffer || !fotoBuffer.length) {
+      return res.status(404).end();
+    }
+
+    const mimeCandidate = extrairPrimeiroValor(usuario, ['foto_mime', 'avatar_mime', 'fotoMime', 'avatarMime']);
+    let mimeType = typeof mimeCandidate === 'string' ? mimeCandidate.trim() : '';
+    if (!mimeType || !/^image\//i.test(mimeType)) {
+      mimeType = inferirMimeTypeImagem(fotoBuffer) || 'image/jpeg';
+    }
+
+    const { token: versionToken, updatedAt } = computeAvatarVersion(usuario, fotoBuffer);
+    const etagToken = versionToken || crypto.createHash('sha1').update(fotoBuffer).digest('hex');
+    const etag = `"${etagToken}"`;
+
+    const ifNoneMatch = req.headers['if-none-match'];
+    if (ifNoneMatch) {
+      const normalizedEtag = etag.replace(/^W\//, '').replace(/^"|"$/g, '');
+      const matches = ifNoneMatch
+        .split(',')
+        .map(tag => tag.trim())
+        .filter(Boolean)
+        .map(tag => tag.replace(/^W\//, '').replace(/^"|"$/g, ''));
+
+      if (matches.includes(normalizedEtag)) {
+        res.setHeader('ETag', etag);
+        if (updatedAt) {
+          const lastModified = new Date(updatedAt);
+          if (!Number.isNaN(lastModified.getTime())) {
+            res.setHeader('Last-Modified', lastModified.toUTCString());
+          }
+        }
+        return res.status(304).end();
+      }
+    }
+
+    res.setHeader('Content-Type', mimeType);
+    res.setHeader('Cache-Control', 'public, max-age=86400');
+    res.setHeader('ETag', etag);
+    if (updatedAt) {
+      const lastModified = new Date(updatedAt);
+      if (!Number.isNaN(lastModified.getTime())) {
+        res.setHeader('Last-Modified', lastModified.toUTCString());
+      }
+    }
+    res.setHeader('Content-Length', String(fotoBuffer.length));
+
+    return res.send(fotoBuffer);
+  } catch (err) {
+    console.error('Erro ao servir avatar do usuário:', { userId: numericId }, err);
+    return res.status(500).end();
+  }
 }
 
 module.exports = router;
 module.exports.formatarUsuario = formatarUsuario;
 module.exports.formatarUsuarioDetalhado = formatarUsuarioDetalhado;
 module.exports.construirAvatarResposta = construirAvatarResposta;
+module.exports.handleAvatarRequest = handleAvatarRequest;

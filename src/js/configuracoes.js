@@ -635,6 +635,72 @@ const MenuStartupPreferences = (() => {
         return fetch(`${baseUrl}${path}`, finalOptions);
     }
 
+    function normalizarValorVersao(valor) {
+        if (valor === null || valor === undefined) return null;
+        if (valor instanceof Date && !Number.isNaN(valor.getTime())) {
+            return String(valor.getTime());
+        }
+        if (typeof valor === 'number' && Number.isFinite(valor)) {
+            return String(Math.trunc(valor));
+        }
+        if (typeof valor === 'string') {
+            const trimmed = valor.trim();
+            if (!trimmed) return null;
+            if (/^\d+$/.test(trimmed)) {
+                return trimmed;
+            }
+            const parsed = Date.parse(trimmed);
+            if (!Number.isNaN(parsed)) {
+                return String(parsed);
+            }
+        }
+        return null;
+    }
+
+    function extrairAvatarVersao(usuario) {
+        if (!usuario || typeof usuario !== 'object') return null;
+        const candidatos = [
+            usuario.avatar_version,
+            usuario.avatarVersion,
+            usuario.avatar_updated_at,
+            usuario.avatarUpdatedAt,
+            usuario.atualizadoEm,
+            usuario.atualizado_em,
+            usuario.updatedAt,
+            usuario.updated_at,
+            usuario.ultimaAlteracaoEm,
+            usuario.ultima_alteracao_em,
+            usuario.ultimaAlteracao,
+            usuario.ultima_alteracao
+        ];
+        for (const candidato of candidatos) {
+            const normalizado = normalizarValorVersao(candidato);
+            if (normalizado) {
+                return normalizado;
+            }
+        }
+        return null;
+    }
+
+    function aplicarCacheBuster(url, versao) {
+        if (!url || !versao) return url;
+        if (typeof url !== 'string') return url;
+        if (/^data:/i.test(url)) return url;
+
+        const [base, fragmento] = url.split('#', 2);
+        const encoded = encodeURIComponent(versao);
+        let atualizado = base;
+
+        if (/(?:^|[?&])t=/.test(base)) {
+            atualizado = base.replace(/([?&])t=[^&]*/, `$1t=${encoded}`);
+        } else {
+            const separador = base.includes('?') ? '&' : '?';
+            atualizado = `${base}${separador}t=${encoded}`;
+        }
+
+        return fragmento !== undefined ? `${atualizado}#${fragmento}` : atualizado;
+    }
+
     function normalizeUserProfile(raw) {
         const source = raw && typeof raw === 'object' ? raw : {};
         const nome = source.nome ?? source.name ?? '';
@@ -648,25 +714,35 @@ const MenuStartupPreferences = (() => {
             '';
         const telefone = telefoneFonte ? String(telefoneFonte).trim() : '';
         const perfil = source.perfil ?? source.role ?? source.tipo ?? '';
-        const avatar =
-            source.avatarUrl ??
-            source.fotoUrl ??
-            source.foto ??
-            source.avatar ??
-            source.imagem ??
-            source.image ??
-            null;
+        const versaoAvatar = extrairAvatarVersao(source);
+        const avatarCandidatos = [
+            source.avatar_url,
+            source.avatarUrl,
+            source.fotoUrl,
+            source.foto,
+            source.avatar,
+            source.imagem,
+            source.image
+        ];
 
-        let avatarUrl = avatar ? String(avatar).trim() : '';
-        if (avatarUrl && typeof window.apiConfig?.resolveUrl === 'function') {
-            avatarUrl = window.apiConfig.resolveUrl(avatarUrl);
-            if (typeof avatarUrl === 'string') {
-                avatarUrl = avatarUrl.trim();
+        let avatarUrl = null;
+        for (const candidato of avatarCandidatos) {
+            if (!candidato || typeof candidato !== 'string') continue;
+            const trimmed = candidato.trim();
+            if (!trimmed) continue;
+            if (/^data:image\//i.test(trimmed)) {
+                avatarUrl = trimmed;
+                break;
             }
-        }
-
-        if (!avatarUrl) {
-            avatarUrl = null;
+            let resolved = trimmed;
+            if (typeof window.apiConfig?.resolveUrl === 'function') {
+                resolved = window.apiConfig.resolveUrl(trimmed);
+            }
+            const resolvedTrimmed = typeof resolved === 'string' ? resolved.trim() : '';
+            if (resolvedTrimmed) {
+                avatarUrl = aplicarCacheBuster(resolvedTrimmed, versaoAvatar);
+                break;
+            }
         }
 
         return {
@@ -675,7 +751,10 @@ const MenuStartupPreferences = (() => {
             email: email ? String(email).trim() : '',
             telefone,
             perfil: perfil ? String(perfil).trim() : '',
-            avatarUrl
+            avatarUrl,
+            avatar_url: avatarUrl,
+            avatarVersion: versaoAvatar,
+            avatar_version: versaoAvatar
         };
     }
 
@@ -691,7 +770,7 @@ const MenuStartupPreferences = (() => {
             .toUpperCase();
     }
 
-    function updateAvatarPreview(sourceUrl, fallbackName) {
+    function updateAvatarPreview(sourceUrl, fallbackName, versao) {
         const previewEl = dom.profile.avatarPreview;
         const initialsEl = dom.profile.avatarInitials;
         if (!previewEl) return;
@@ -728,7 +807,7 @@ const MenuStartupPreferences = (() => {
         const canLoadSync = resolvedTrimmed && loadablePattern.test(resolvedTrimmed);
 
         if (canLoadSync) {
-            applyPreview(resolvedTrimmed);
+            applyPreview(aplicarCacheBuster(resolvedTrimmed, versao));
         } else {
             previewEl.style.setProperty('--avatar-preview-image', 'none');
             previewEl.classList.remove('has-image');
@@ -759,7 +838,7 @@ const MenuStartupPreferences = (() => {
                 const finalUrl =
                     typeof resolvedAsync === 'string' ? resolvedAsync.trim() : resolvedAsync;
                 if (typeof finalUrl === 'string' && loadablePattern.test(finalUrl)) {
-                    applyPreview(finalUrl);
+                    applyPreview(aplicarCacheBuster(finalUrl, versao));
                 } else {
                     applyPreview(null);
                 }
@@ -909,7 +988,11 @@ const MenuStartupPreferences = (() => {
         if (dom.profile.avatarInput) {
             dom.profile.avatarInput.value = '';
         }
-        updateAvatarPreview(profileState.avatarObjectUrl || data.avatarUrl, data.nome || '');
+        updateAvatarPreview(
+            profileState.avatarObjectUrl || data.avatarUrl,
+            data.nome || '',
+            data.avatarVersion || data.avatar_version || null
+        );
     }
 
     function readStoredUser() {
@@ -956,7 +1039,11 @@ const MenuStartupPreferences = (() => {
             profileState.avatarChanged = false;
             profileState.avatarDataUrl = null;
             revokeAvatarObjectUrl();
-            updateAvatarPreview(profileState.data?.avatarUrl || null, collectProfileFormValues().nome || profileState.data?.nome || '');
+            updateAvatarPreview(
+                profileState.data?.avatarUrl || null,
+                collectProfileFormValues().nome || profileState.data?.nome || '',
+                profileState.data?.avatarVersion || profileState.data?.avatar_version || null
+            );
             return;
         }
 
@@ -976,7 +1063,11 @@ const MenuStartupPreferences = (() => {
         revokeAvatarObjectUrl();
         profileState.avatarObjectUrl = URL.createObjectURL(file);
         profileState.avatarChanged = true;
-        updateAvatarPreview(profileState.avatarObjectUrl, collectProfileFormValues().nome || profileState.data?.nome || '');
+        updateAvatarPreview(
+            profileState.avatarObjectUrl,
+            collectProfileFormValues().nome || profileState.data?.nome || '',
+            profileState.data?.avatarVersion || profileState.data?.avatar_version || null
+        );
         setProfileFeedback('Pré-visualização atualizada. Salve para confirmar a nova foto.', 'info');
 
         try {

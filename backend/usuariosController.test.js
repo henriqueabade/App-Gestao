@@ -201,7 +201,7 @@ test('modelos de permissões requerem Sup Admin', async () => {
   }
 });
 
-test('GET /api/usuarios/lista inclui avatarUrl quando foto_usuario está presente', async () => {
+test('GET /api/usuarios/lista inclui avatarUrl apontando para rota pública', async () => {
   const { pool, listen, close } = setup();
   const port = await listen();
 
@@ -222,13 +222,18 @@ test('GET /api/usuarios/lista inclui avatarUrl quando foto_usuario está present
     const maria = usuarios.find(usuario => usuario.email === 'maria@example.com');
     assert.ok(maria, 'Usuária Maria deveria estar presente na lista.');
     assert.ok(
-      typeof maria.avatarUrl === 'string' && maria.avatarUrl.startsWith('data:image/png;base64,'),
-      'avatarUrl deveria ser uma data URL PNG quando foto_usuario está presente'
+      typeof maria.avatarUrl === 'string' && /\/users\/\d+\/avatar/.test(maria.avatarUrl),
+      'avatarUrl deveria apontar para a rota pública de avatar'
     );
+    assert.strictEqual(maria.avatar_url, maria.avatarUrl);
+    assert.strictEqual(maria.foto, maria.avatarUrl);
+    assert.strictEqual(maria.fotoUrl, maria.avatarUrl);
     assert.ok(
-      typeof maria.fotoUsuario === 'string' && maria.fotoUsuario.length > 0,
-      'fotoUsuario deveria conter a string base64 da imagem'
+      typeof maria.avatarVersion === 'string' && maria.avatarVersion.length > 0,
+      'avatarVersion deveria conter um token de cache da imagem'
     );
+    assert.strictEqual(maria.avatarVersion, maria.avatar_version);
+    assert.ok(!('fotoUsuario' in maria), 'fotoUsuario não deve ser retornado no payload');
   } finally {
     await close();
   }
@@ -393,7 +398,7 @@ test('GET /api/usuarios/me retorna dados do usuário autenticado', async () => {
   }
 });
 
-test('PUT /api/usuarios/me atualiza dados textuais e foto em base64', async () => {
+test('PUT /api/usuarios/me atualiza dados textuais e foto via JSON', async () => {
   const { listen, close, pool } = setup();
   const port = await listen();
   const tinyPng = Buffer.from(
@@ -417,7 +422,16 @@ test('PUT /api/usuarios/me atualiza dados textuais e foto em base64', async () =
     const corpo = await resposta.json();
     assert.strictEqual(corpo.nome, 'Maria Atualizada');
     assert.strictEqual(corpo.telefone, '(11) 98888-0000');
-    assert.ok(typeof corpo.fotoUsuario === 'string' && corpo.fotoUsuario.length > 10);
+    assert.ok(
+      typeof corpo.avatarUrl === 'string' && corpo.avatarUrl.includes(`/users/${corpo.id}/avatar`),
+      'avatarUrl deveria apontar para a rota pública de avatar'
+    );
+    assert.strictEqual(corpo.avatar_url, corpo.avatarUrl);
+    assert.strictEqual(corpo.foto, corpo.avatarUrl);
+    assert.strictEqual(corpo.fotoUrl, corpo.avatarUrl);
+    assert.ok(typeof corpo.avatarVersion === 'string' && corpo.avatarVersion.length > 0);
+    assert.strictEqual(corpo.avatarVersion, corpo.avatar_version);
+    assert.ok(!('fotoUsuario' in corpo), 'fotoUsuario não deve ser retornado na resposta');
 
     const registro = await pool.query(
       'SELECT nome, telefone, whatsapp, foto_usuario FROM usuarios WHERE id = $1',
@@ -441,7 +455,7 @@ test('PUT /api/usuarios/me atualiza dados textuais e foto em base64', async () =
   }
 });
 
-test('PUT /api/usuarios/me aceita upload multipart de foto', async () => {
+test('PUT /api/usuarios/me aceita upload multipart de foto e expõe avatar_url', async () => {
   const { listen, close, pool } = setup();
   const port = await listen();
   const tinyPng = Buffer.from(
@@ -462,7 +476,13 @@ test('PUT /api/usuarios/me aceita upload multipart de foto', async () => {
     assert.strictEqual(resposta.status, 200);
     const corpo = await resposta.json();
     assert.strictEqual(corpo.nome, 'Maria Upload');
-    assert.ok(typeof corpo.fotoUsuario === 'string');
+    assert.ok(
+      typeof corpo.avatarUrl === 'string' && corpo.avatarUrl.includes(`/users/${corpo.id}/avatar`),
+      'avatarUrl deveria apontar para a rota pública de avatar'
+    );
+    assert.strictEqual(corpo.avatar_url, corpo.avatarUrl);
+    assert.ok(typeof corpo.avatarVersion === 'string' && corpo.avatarVersion.length > 0);
+    assert.ok(!('fotoUsuario' in corpo), 'fotoUsuario não deve ser retornado na resposta');
 
     const registro = await pool.query('SELECT nome, foto_usuario FROM usuarios WHERE id = $1', [1]);
     assert.strictEqual(registro.rows[0].nome, 'Maria Upload');

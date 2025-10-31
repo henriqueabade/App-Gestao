@@ -142,8 +142,76 @@ window.addEventListener('DOMContentLoaded', () => {
     if (nameEl) nameEl.textContent = nome;
     if (profileEl) profileEl.textContent = perfil || 'Sem Perfil';
 
+    const normalizarValorVersao = valor => {
+      if (valor === null || valor === undefined) return null;
+      if (valor instanceof Date && !Number.isNaN(valor.getTime())) {
+        return String(valor.getTime());
+      }
+      if (typeof valor === 'number' && Number.isFinite(valor)) {
+        return String(Math.trunc(valor));
+      }
+      if (typeof valor === 'string') {
+        const trimmed = valor.trim();
+        if (!trimmed) return null;
+        if (/^\d+$/.test(trimmed)) {
+          return trimmed;
+        }
+        const parsed = Date.parse(trimmed);
+        if (!Number.isNaN(parsed)) {
+          return String(parsed);
+        }
+      }
+      return null;
+    };
+
+    const extrairAvatarVersao = usuario => {
+      if (!usuario || typeof usuario !== 'object') return null;
+      const candidatos = [
+        usuario.avatar_version,
+        usuario.avatarVersion,
+        usuario.avatar_updated_at,
+        usuario.avatarUpdatedAt,
+        usuario.atualizadoEm,
+        usuario.atualizado_em,
+        usuario.updatedAt,
+        usuario.updated_at,
+        usuario.ultimaAlteracaoEm,
+        usuario.ultima_alteracao_em,
+        usuario.ultimaAlteracao,
+        usuario.ultima_alteracao
+      ];
+      for (const candidato of candidatos) {
+        const normalizado = normalizarValorVersao(candidato);
+        if (normalizado) {
+          return normalizado;
+        }
+      }
+      return null;
+    };
+
+    const aplicarCacheBuster = (url, versao) => {
+      if (!url || !versao) return url;
+      if (typeof url !== 'string') return url;
+      if (/^data:/i.test(url)) return url;
+
+      const [base, fragmento] = url.split('#', 2);
+      const encoded = encodeURIComponent(versao);
+      let atualizado = base;
+
+      if (/(?:^|[?&])t=/.test(base)) {
+        atualizado = base.replace(/([?&])t=[^&]*/, `$1t=${encoded}`);
+      } else {
+        const separador = base.includes('?') ? '&' : '?';
+        atualizado = `${base}${separador}t=${encoded}`;
+      }
+
+      return fragmento !== undefined ? `${atualizado}#${fragmento}` : atualizado;
+    };
+
     if (avatarEl) {
-      const avatarUrl = user.avatarUrl || user.fotoUrl || user.foto || null;
+      const versaoAvatar = extrairAvatarVersao(user);
+      const avatarUrl =
+        user.avatar_url || user.avatarUrl || user.fotoUrl || user.foto || null;
       const initials = getInitials(nome);
       const loadablePattern = /^(?:data:|blob:|file:|https?:|\/\/)/i;
 
@@ -210,7 +278,7 @@ window.addEventListener('DOMContentLoaded', () => {
         const canLoadSync = resolvedTrimmed && loadablePattern.test(resolvedTrimmed);
 
         if (canLoadSync) {
-          showImage(resolvedTrimmed);
+          showImage(aplicarCacheBuster(resolvedTrimmed, versaoAvatar));
         }
 
         const shouldAttemptAsync =
@@ -231,7 +299,7 @@ window.addEventListener('DOMContentLoaded', () => {
               const finalUrl =
                 typeof resolvedAsync === 'string' ? resolvedAsync.trim() : resolvedAsync;
               if (typeof finalUrl === 'string' && loadablePattern.test(finalUrl)) {
-                showImage(finalUrl);
+                showImage(aplicarCacheBuster(finalUrl, versaoAvatar));
               } else if (initials) {
                 showInitials();
               } else {

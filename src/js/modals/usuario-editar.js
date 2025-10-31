@@ -2,19 +2,76 @@
   const overlay = document.getElementById('editarUsuarioOverlay');
   if (!overlay) return;
 
-  const escapeAttribute = value => {
-    if (value === null || value === undefined) return '';
-    return String(value)
-      .replace(/&/g, '&amp;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#39;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;');
+  const normalizarValorVersao = valor => {
+    if (valor === null || valor === undefined) return null;
+    if (valor instanceof Date && !Number.isNaN(valor.getTime())) {
+      return String(valor.getTime());
+    }
+    if (typeof valor === 'number' && Number.isFinite(valor)) {
+      return String(Math.trunc(valor));
+    }
+    if (typeof valor === 'string') {
+      const trimmed = valor.trim();
+      if (!trimmed) return null;
+      if (/^\d+$/.test(trimmed)) {
+        return trimmed;
+      }
+      const parsed = Date.parse(trimmed);
+      if (!Number.isNaN(parsed)) {
+        return String(parsed);
+      }
+    }
+    return null;
+  };
+
+  const extrairAvatarVersao = usuario => {
+    if (!usuario || typeof usuario !== 'object') return null;
+    const candidatos = [
+      usuario.avatar_version,
+      usuario.avatarVersion,
+      usuario.avatar_updated_at,
+      usuario.avatarUpdatedAt,
+      usuario.atualizadoEm,
+      usuario.atualizado_em,
+      usuario.updatedAt,
+      usuario.updated_at,
+      usuario.ultimaAlteracaoEm,
+      usuario.ultima_alteracao_em,
+      usuario.ultimaAlteracao,
+      usuario.ultima_alteracao
+    ];
+    for (const candidato of candidatos) {
+      const normalizado = normalizarValorVersao(candidato);
+      if (normalizado) {
+        return normalizado;
+      }
+    }
+    return null;
+  };
+
+  const aplicarCacheBuster = (url, versao) => {
+    if (!url || !versao) return url;
+    if (typeof url !== 'string') return url;
+    if (/^data:/i.test(url)) return url;
+
+    const [base, fragmento] = url.split('#', 2);
+    const encoded = encodeURIComponent(versao);
+    let atualizado = base;
+
+    if (/(?:^|[?&])t=/.test(base)) {
+      atualizado = base.replace(/([?&])t=[^&]*/, `$1t=${encoded}`);
+    } else {
+      const separador = base.includes('?') ? '&' : '?';
+      atualizado = `${base}${separador}t=${encoded}`;
+    }
+
+    return fragmento !== undefined ? `${atualizado}#${fragmento}` : atualizado;
   };
 
   const obterAvatarUrl = usuario => {
     if (!usuario || typeof usuario !== 'object') return null;
     const candidatos = [
+      usuario.avatar_url,
       usuario.avatarUrl,
       usuario.fotoUrl,
       usuario.foto,
@@ -24,13 +81,14 @@
     ];
 
     const isUrlPermitida = valor => /^(?:https?|blob|file):/i.test(valor) || valor.startsWith('/');
+    const versao = extrairAvatarVersao(usuario);
 
     for (const candidato of candidatos) {
       if (!candidato || typeof candidato !== 'string') continue;
       const trimmed = candidato.trim();
       if (!trimmed) continue;
       if (/^data:image\//i.test(trimmed) || isUrlPermitida(trimmed)) {
-        return trimmed;
+        return aplicarCacheBuster(trimmed, versao);
       }
       const base64Regex = /^[A-Za-z0-9+/=\s]+$/;
       if (base64Regex.test(trimmed)) {
@@ -421,12 +479,27 @@
         .join('')
         .substring(0, 2)
         .toUpperCase();
+      const fallbackInitials = iniciais || 'US';
       const avatarUrl = obterAvatarUrl(usuario);
       avatar.classList.toggle('has-image', Boolean(avatarUrl));
+      avatar.innerHTML = '';
       if (avatarUrl) {
-        avatar.innerHTML = `<img src="${escapeAttribute(avatarUrl)}" alt="${escapeAttribute(origem ? `Avatar de ${origem}` : 'Avatar do usuário')}" loading="lazy" />`;
+        const img = document.createElement('img');
+        img.src = avatarUrl;
+        img.loading = 'lazy';
+        img.alt = origem ? `Avatar de ${origem}` : 'Avatar do usuário';
+        img.className = 'usuario-avatar__image';
+        img.addEventListener(
+          'error',
+          () => {
+            avatar.classList.remove('has-image');
+            avatar.textContent = fallbackInitials;
+          },
+          { once: true }
+        );
+        avatar.appendChild(img);
       } else {
-        avatar.textContent = iniciais || 'US';
+        avatar.textContent = fallbackInitials;
       }
     }
 

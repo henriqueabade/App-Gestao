@@ -24,6 +24,9 @@ app.use('/api/orcamentos', orcamentosRouter);
 app.use('/api/pedidos', pedidosRouter);
 app.use('/api/notifications', notificationsRouter);
 app.use(passwordResetRouter);
+if (typeof usuariosRouter.handleAvatarRequest === 'function') {
+  app.get('/users/:id/avatar', usuariosRouter.handleAvatarRequest);
+}
 app.use('/pdf', express.static(path.join(__dirname, '../src/pdf')));
 app.use('/styles', express.static(path.join(__dirname, '../src/styles')));
 app.use('/js', express.static(path.join(__dirname, '../src/js')));
