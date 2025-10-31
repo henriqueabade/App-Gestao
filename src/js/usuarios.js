@@ -329,21 +329,47 @@ function obterAvatarUrl(usuario) {
         usuario.avatar
     ];
 
-    const isUrlPermitida = valor => /^(?:https?|blob|file):/i.test(valor) || valor.startsWith('/');
+    const loadablePattern = /^(?:data:|blob:|file:|https?:|\/\/)/i;
 
     for (const candidato of candidatos) {
         if (!candidato) continue;
-        if (typeof candidato !== 'string') continue;
-        const trimmed = candidato.trim();
-        if (!trimmed) continue;
-        if (/^data:image\//i.test(trimmed) || isUrlPermitida(trimmed)) {
-            return trimmed;
-        }
-        const base64Regex = /^[A-Za-z0-9+/=\s]+$/;
-        if (base64Regex.test(trimmed)) {
-            const sanitized = trimmed.replace(/\s+/g, '');
-            if (sanitized) {
-                return `data:image/png;base64,${sanitized}`;
+        if (typeof candidato === 'string') {
+            const trimmed = candidato.trim();
+            if (!trimmed) continue;
+            if (/^data:image\//i.test(trimmed)) {
+                return trimmed;
+            }
+
+            let resolved = trimmed;
+            if (typeof window.apiConfig?.resolveUrl === 'function') {
+                resolved = window.apiConfig.resolveUrl(trimmed);
+            }
+            const resolvedTrimmed = typeof resolved === 'string' ? resolved.trim() : '';
+            if (resolvedTrimmed && loadablePattern.test(resolvedTrimmed)) {
+                return resolvedTrimmed;
+            }
+
+            const base64Regex = /^[A-Za-z0-9+/=\s]+$/;
+            if (base64Regex.test(trimmed)) {
+                const sanitized = trimmed.replace(/\s+/g, '');
+                if (sanitized) {
+                    return `data:image/png;base64,${sanitized}`;
+                }
+            }
+        } else if (typeof candidato === 'object' && candidato.type === 'Buffer' && Array.isArray(candidato.data)) {
+            try {
+                const buffer = Uint8Array.from(candidato.data);
+                if (buffer.length) {
+                    let binary = '';
+                    const chunkSize = 0x8000;
+                    for (let i = 0; i < buffer.length; i += chunkSize) {
+                        const chunk = buffer.subarray(i, i + chunkSize);
+                        binary += String.fromCharCode.apply(null, chunk);
+                    }
+                    return `data:image/png;base64,${btoa(binary)}`;
+                }
+            } catch (err) {
+                // ignore buffer conversion failures
             }
         }
     }

@@ -657,13 +657,25 @@ const MenuStartupPreferences = (() => {
             source.image ??
             null;
 
+        let avatarUrl = avatar ? String(avatar).trim() : '';
+        if (avatarUrl && typeof window.apiConfig?.resolveUrl === 'function') {
+            avatarUrl = window.apiConfig.resolveUrl(avatarUrl);
+            if (typeof avatarUrl === 'string') {
+                avatarUrl = avatarUrl.trim();
+            }
+        }
+
+        if (!avatarUrl) {
+            avatarUrl = null;
+        }
+
         return {
             ...source,
             nome: nome ? String(nome).trim() : '',
             email: email ? String(email).trim() : '',
             telefone,
             perfil: perfil ? String(perfil).trim() : '',
-            avatarUrl: avatar ? String(avatar).trim() : null
+            avatarUrl
         };
     }
 
@@ -684,15 +696,80 @@ const MenuStartupPreferences = (() => {
         const initialsEl = dom.profile.avatarInitials;
         if (!previewEl) return;
 
-        const sanitizedUrl = sourceUrl ? `url("${String(sourceUrl).replace(/"/g, '\\"')}")` : 'none';
-        previewEl.style.setProperty('--avatar-preview-image', sanitizedUrl);
-        const hasImage = Boolean(sourceUrl);
-        previewEl.classList.toggle('has-image', hasImage);
-        previewEl.dataset.hasImage = hasImage ? 'true' : 'false';
+        const loadablePattern = /^(?:data:|blob:|file:|https?:|\/\/)/i;
+        const initials = getInitialsFromName(fallbackName);
+
+        const applyPreview = url => {
+            if (url) {
+                const sanitizedUrl = `url("${String(url).replace(/"/g, '\\"')}")`;
+                previewEl.style.setProperty('--avatar-preview-image', sanitizedUrl);
+                previewEl.classList.add('has-image');
+                previewEl.dataset.hasImage = 'true';
+            } else {
+                previewEl.style.setProperty('--avatar-preview-image', 'none');
+                previewEl.classList.remove('has-image');
+                previewEl.dataset.hasImage = 'false';
+            }
+            delete previewEl.dataset.avatarRequestId;
+        };
 
         if (initialsEl) {
-            initialsEl.textContent = getInitialsFromName(fallbackName);
+            initialsEl.textContent = initials;
         }
+
+        if (!sourceUrl) {
+            applyPreview(null);
+            return;
+        }
+
+        const resolvedSync =
+            typeof window.apiConfig?.resolveUrl === 'function' ? window.apiConfig.resolveUrl(sourceUrl) : sourceUrl;
+        const resolvedTrimmed = typeof resolvedSync === 'string' ? resolvedSync.trim() : '';
+        const canLoadSync = resolvedTrimmed && loadablePattern.test(resolvedTrimmed);
+
+        if (canLoadSync) {
+            applyPreview(resolvedTrimmed);
+        } else {
+            previewEl.style.setProperty('--avatar-preview-image', 'none');
+            previewEl.classList.remove('has-image');
+            previewEl.dataset.hasImage = 'false';
+        }
+
+        const shouldAttemptAsync =
+            !canLoadSync &&
+            typeof sourceUrl === 'string' &&
+            sourceUrl.trim() &&
+            typeof window.apiConfig?.resolveUrlAsync === 'function';
+
+        if (!shouldAttemptAsync) {
+            if (!canLoadSync) {
+                applyPreview(null);
+            }
+            return;
+        }
+
+        const requestId = `${Date.now()}-${Math.random()}`;
+        previewEl.dataset.avatarRequestId = requestId;
+        window.apiConfig
+            .resolveUrlAsync(sourceUrl)
+            .then(resolvedAsync => {
+                if (previewEl.dataset.avatarRequestId !== requestId) {
+                    return;
+                }
+                const finalUrl =
+                    typeof resolvedAsync === 'string' ? resolvedAsync.trim() : resolvedAsync;
+                if (typeof finalUrl === 'string' && loadablePattern.test(finalUrl)) {
+                    applyPreview(finalUrl);
+                } else {
+                    applyPreview(null);
+                }
+            })
+            .catch(() => {
+                if (previewEl.dataset.avatarRequestId !== requestId) {
+                    return;
+                }
+                applyPreview(null);
+            });
     }
 
     function setProfileFeedback(message, type = 'info') {

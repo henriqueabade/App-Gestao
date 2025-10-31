@@ -145,27 +145,130 @@ window.addEventListener('DOMContentLoaded', () => {
     if (avatarEl) {
       const avatarUrl = user.avatarUrl || user.fotoUrl || user.foto || null;
       const initials = getInitials(nome);
+      const loadablePattern = /^(?:data:|blob:|file:|https?:|\/\/)/i;
 
-      if (avatarUrl) {
-        const safeUrl = String(avatarUrl).replace(/"/g, '\\"');
-        avatarEl.style.backgroundImage = `url("${safeUrl}")`;
-        avatarEl.classList.add('has-image');
-        avatarEl.textContent = '';
-        avatarEl.classList.remove('hidden');
-        avatarEl.setAttribute('aria-hidden', 'false');
-      } else if (initials) {
+      const showInitials = () => {
         avatarEl.style.removeProperty('background-image');
         avatarEl.classList.remove('has-image');
-        avatarEl.textContent = initials;
+        avatarEl.textContent = initials || '';
         avatarEl.classList.remove('hidden');
         avatarEl.setAttribute('aria-hidden', 'false');
-      } else {
+        delete avatarEl.dataset.avatarRequestId;
+      };
+
+      const hideAvatar = () => {
         avatarEl.style.removeProperty('background-image');
         avatarEl.classList.remove('has-image');
         avatarEl.textContent = '';
         avatarEl.classList.add('hidden');
         avatarEl.setAttribute('aria-hidden', 'true');
-      }
+        delete avatarEl.dataset.avatarRequestId;
+      };
+
+      const showImage = url => {
+        const safeUrl = String(url).replace(/"/g, '\\"');
+        avatarEl.style.backgroundImage = `url("${safeUrl}")`;
+        avatarEl.classList.add('has-image');
+        avatarEl.textContent = '';
+        avatarEl.classList.remove('hidden');
+        avatarEl.setAttribute('aria-hidden', 'false');
+        delete avatarEl.dataset.avatarRequestId;
+      };
+
+      const applyResolvedUrl = rawUrl => {
+        if (rawUrl && typeof rawUrl === 'object' && rawUrl.type === 'Buffer' && Array.isArray(rawUrl.data)) {
+          try {
+            const buffer = Uint8Array.from(rawUrl.data);
+            if (buffer.length) {
+              let binary = '';
+              const chunkSize = 0x8000;
+              for (let i = 0; i < buffer.length; i += chunkSize) {
+                const chunk = buffer.subarray(i, i + chunkSize);
+                binary += String.fromCharCode.apply(null, chunk);
+              }
+              rawUrl = `data:image/png;base64,${btoa(binary)}`;
+            } else {
+              rawUrl = null;
+            }
+          } catch (error) {
+            rawUrl = null;
+          }
+        }
+
+        if (!rawUrl) {
+          if (initials) {
+            showInitials();
+          } else {
+            hideAvatar();
+          }
+          return;
+        }
+
+        const resolvedSync =
+          typeof window.apiConfig?.resolveUrl === 'function' ? window.apiConfig.resolveUrl(rawUrl) : rawUrl;
+        const resolvedTrimmed = typeof resolvedSync === 'string' ? resolvedSync.trim() : '';
+        const canLoadSync = resolvedTrimmed && loadablePattern.test(resolvedTrimmed);
+
+        if (canLoadSync) {
+          showImage(resolvedTrimmed);
+        }
+
+        const shouldAttemptAsync =
+          !canLoadSync &&
+          typeof rawUrl === 'string' &&
+          rawUrl.trim() &&
+          typeof window.apiConfig?.resolveUrlAsync === 'function';
+
+        if (shouldAttemptAsync) {
+          const requestId = `${Date.now()}-${Math.random()}`;
+          avatarEl.dataset.avatarRequestId = requestId;
+          window.apiConfig
+            .resolveUrlAsync(rawUrl)
+            .then(resolvedAsync => {
+              if (avatarEl.dataset.avatarRequestId !== requestId) {
+                return;
+              }
+              const finalUrl =
+                typeof resolvedAsync === 'string' ? resolvedAsync.trim() : resolvedAsync;
+              if (typeof finalUrl === 'string' && loadablePattern.test(finalUrl)) {
+                showImage(finalUrl);
+              } else if (initials) {
+                showInitials();
+              } else {
+                hideAvatar();
+              }
+            })
+            .catch(() => {
+              if (avatarEl.dataset.avatarRequestId !== requestId) {
+                return;
+              }
+              if (initials) {
+                showInitials();
+              } else {
+                hideAvatar();
+              }
+            });
+
+          if (!canLoadSync) {
+            avatarEl.style.removeProperty('background-image');
+            avatarEl.classList.remove('has-image');
+            avatarEl.textContent = '';
+            avatarEl.classList.add('hidden');
+            avatarEl.setAttribute('aria-hidden', 'true');
+          }
+          return;
+        }
+
+        if (!canLoadSync) {
+          if (initials) {
+            showInitials();
+          } else {
+            hideAvatar();
+          }
+        }
+      };
+
+      applyResolvedUrl(avatarUrl);
     }
 
     if (appUpdates && typeof appUpdates.setUserProfile === 'function') {
