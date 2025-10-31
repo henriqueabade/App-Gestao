@@ -332,8 +332,11 @@ const AppUpdates = (() => {
 
     let publishStartToastShown = false;
     let eventsAttached = false;
-    let scheduledAutoCheckHandle = null;
-    let scheduledAutoCheckType = null;
+      let scheduledAutoCheckHandle = null;
+      let scheduledAutoCheckType = null;
+      let updatesDailyScheduled = false;
+      let updatesSuspended = false;
+    const updatesDailyBaseKey = 'menu.updates.lastCheckAt';
 
     const STATUS_WITH_BADGE = new Set([
         'checking',
@@ -386,6 +389,75 @@ const AppUpdates = (() => {
             pre: preParts,
             hasPreRelease: preRelease.length > 0
         };
+    }
+
+    function getTodayKeySafe() {
+        if (window.dateUtils?.getTodayKey) {
+            try {
+                return window.dateUtils.getTodayKey();
+            } catch (err) {
+                // ignora falha e usa fallback
+            }
+        }
+        const now = new Date();
+        const year = String(now.getFullYear()).padStart(4, '0');
+        const month = String(now.getMonth() + 1).padStart(2, '0');
+        const day = String(now.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    }
+
+    function getUpdatesDailyStorageKey(user = state.user) {
+        if (window.dailyRun?.getScopedKey) {
+            return window.dailyRun.getScopedKey(updatesDailyBaseKey, user);
+        }
+        const identifier =
+            user?.id || user?.usuario_id || user?.email || user?.login || 'anonimo';
+        return `${updatesDailyBaseKey}:${String(identifier).toLowerCase()}`;
+    }
+
+    function readUpdatesDailyFlag(user = state.user) {
+        if (window.dailyRun?.readFlag) {
+            return window.dailyRun.readFlag(updatesDailyBaseKey, user);
+        }
+        try {
+            return localStorage.getItem(getUpdatesDailyStorageKey(user));
+        } catch (err) {
+            return null;
+        }
+    }
+
+    function markUpdatesDailyFlag(user = state.user) {
+        const today = getTodayKeySafe();
+        if (window.dailyRun?.writeFlag) {
+            window.dailyRun.writeFlag(updatesDailyBaseKey, user, today);
+            return today;
+        }
+        try {
+            localStorage.setItem(getUpdatesDailyStorageKey(user), today);
+        } catch (err) {
+            // ignora falha de storage
+        }
+        return today;
+    }
+
+    function shouldRunDailyUpdateCheck(user = state.user) {
+        const today = getTodayKeySafe();
+        const stored = readUpdatesDailyFlag(user);
+        if (stored === today) {
+            updatesDailyScheduled = true;
+            return false;
+        }
+        updatesDailyScheduled = false;
+        return true;
+    }
+
+    function markUpdatesCheckComplete(user = state.user) {
+        updatesDailyScheduled = true;
+        markUpdatesDailyFlag(user);
+    }
+
+    function resetUpdatesDailyState(user = state.user) {
+        updatesDailyScheduled = readUpdatesDailyFlag(user) === getTodayKeySafe();
     }
 
     function compareSemanticVersions(a, b) {
@@ -2058,8 +2130,13 @@ const AppUpdates = (() => {
 
         updateStatusRequest.refreshInFlight = refresh;
 
-        const promise = window.electronAPI
-            .getUpdateStatus({ refresh })
+          if (updatesSuspended) {
+              updateStatusRequest.promise = null;
+              updateStatusRequest.refreshInFlight = false;
+              return null;
+          }
+          const promise = window.electronAPI
+              .getUpdateStatus({ refresh })
             .then(result => cacheUpdateStatusResult(result))
             .finally(() => {
                 if (updateStatusRequest.promise === promise) {
@@ -2072,11 +2149,12 @@ const AppUpdates = (() => {
         return promise;
     }
 
-    async function runAutomaticCheck({ silent = true, userInitiated = false } = {}) {
-        if (!window.electronAPI?.getUpdateStatus) return null;
-        if (state.autoCheckPending) {
-            return updateStatusRequest.promise ?? updateStatusRequest.lastResult ?? null;
-        }
+      async function runAutomaticCheck({ silent = true, userInitiated = false } = {}) {
+          if (!window.electronAPI?.getUpdateStatus) return null;
+          if (updatesSuspended) return null;
+          if (state.autoCheckPending) {
+              return updateStatusRequest.promise ?? updateStatusRequest.lastResult ?? null;
+          }
         state.autoCheckPending = true;
         try {
             const result = await requestUpdateStatus({ refresh: true });
@@ -2111,13 +2189,49 @@ const AppUpdates = (() => {
         scheduledAutoCheckType = null;
     }
 
-    function scheduleAutoCheck(options = {}) {
-        if (!window.electronAPI?.getUpdateStatus) return;
-        if (state.userControl?.pendingAction || state.userControl?.mode === 'updating') {
-            return;
+      function scheduleAutoCheck(options = {}) {
+          if (!window.electronAPI?.getUpdateStatus) return;
+          if (updatesSuspended) return;
+          if (state.userControl?.pendingAction || state.userControl?.mode === 'updating') {
+              return;
+          }
+
+        const {
+            delay = 0,
+            silent = true,
+            userInitiated = false,
+            respectDaily = true,
+            markDaily = false
+        } = options;
+
+        let shouldMarkDaily = markDaily;
+
+        if (respectDaily) {
+            if (!shouldRunDailyUpdateCheck()) {
+                return;
+            }
+            if (updatesDailyScheduled) {
+                return;
+            }
+            updatesDailyScheduled = true;
+            shouldMarkDaily = true;
         }
 
-        const { delay = 0, silent = true, userInitiated = false } = options;
+        const finalizeDailyMarker = () => {
+            if (shouldMarkDaily) {
+                markUpdatesCheckComplete();
+            }
+        };
+
+        const runAndMaybeMark = () => {
+            const result = runAutomaticCheck({ silent, userInitiated });
+            if (shouldMarkDaily) {
+                Promise.resolve(result)
+                    .catch(() => null)
+                    .finally(finalizeDailyMarker);
+            }
+            return result;
+        };
 
         const requeueLater = ms => {
             clearScheduledAutoCheck();
@@ -2125,7 +2239,12 @@ const AppUpdates = (() => {
             scheduledAutoCheckHandle = setTimeout(() => {
                 scheduledAutoCheckHandle = null;
                 scheduledAutoCheckType = null;
-                scheduleAutoCheck({ ...options, delay: 0 });
+                scheduleAutoCheck({
+                    ...options,
+                    delay: 0,
+                    respectDaily: false,
+                    markDaily: shouldMarkDaily
+                });
             }, ms);
         };
 
@@ -2149,7 +2268,7 @@ const AppUpdates = (() => {
                 scheduledAutoCheckHandle = requestIdleCallback(() => {
                     scheduledAutoCheckHandle = null;
                     scheduledAutoCheckType = null;
-                    runAutomaticCheck({ silent, userInitiated });
+                    runAndMaybeMark();
                 }, { timeout: 2500 });
                 return;
             }
@@ -2158,7 +2277,7 @@ const AppUpdates = (() => {
             scheduledAutoCheckHandle = requestAnimationFrame(() => {
                 scheduledAutoCheckHandle = null;
                 scheduledAutoCheckType = null;
-                runAutomaticCheck({ silent, userInitiated });
+                runAndMaybeMark();
             });
         };
 
@@ -2182,21 +2301,21 @@ const AppUpdates = (() => {
     }
 
     function ensureAutoCheckTimer() {
-        if (state.autoCheckInterval || !window.electronAPI?.getUpdateStatus) return;
-        // Executa a verificação automática a cada 10 minutos
-        const intervalMs = 10 * 60 * 1000;
-        state.autoCheckInterval = setInterval(() => {
-            scheduleAutoCheck({ silent: true });
-        }, intervalMs);
+        if (!window.electronAPI?.getUpdateStatus) return;
+        resetUpdatesDailyState();
+        if (!shouldRunDailyUpdateCheck()) {
+            return;
+        }
+        if (updatesDailyScheduled) {
+            return;
+        }
+        scheduleAutoCheck({ silent: true, respectDaily: true });
     }
 
-    function stopAutoCheckTimer() {
-        if (state.autoCheckInterval) {
-            clearInterval(state.autoCheckInterval);
-            state.autoCheckInterval = null;
-        }
-        clearScheduledAutoCheck();
-    }
+      function stopAutoCheckTimer() {
+          clearScheduledAutoCheck();
+          updatesDailyScheduled = false;
+      }
 
     async function handleSupAdminTriggerClick(event) {
         if (event && typeof event.button === 'number' && event.button !== 0) {
@@ -2514,10 +2633,12 @@ const AppUpdates = (() => {
         }
     }
 
-    function setUserProfile(user) {
-        state.user = user || {};
-        ensureAutoCheckTimer();
-        scheduleAutoCheck({ silent: true, delay: 600 });
+      function setUserProfile(user) {
+          state.user = user || {};
+          updatesSuspended = false;
+          resetUpdatesDailyState(state.user);
+          ensureAutoCheckTimer();
+          scheduleAutoCheck({ silent: true, delay: 600, respectDaily: true });
         applySupAdminState();
         updateUserControlFromStatus();
         applyUserState();
@@ -2727,6 +2848,30 @@ const AppUpdates = (() => {
             window.addEventListener('beforeunload', stopAutoCheckTimer);
         }
     }
+
+    window.__updatesInternals = window.__updatesInternals || {};
+      Object.assign(window.__updatesInternals, {
+          scheduleAutoCheck,
+          stopAutoCheckTimer,
+          resetDaily: () => {
+              updatesDailyScheduled = false;
+              if (window.dailyRun?.clearFlag) {
+                window.dailyRun.clearFlag(updatesDailyBaseKey, state.user);
+            } else {
+                try {
+                    localStorage.removeItem(getUpdatesDailyStorageKey(state.user));
+                } catch (err) {
+                    // ignora
+                }
+            }
+        },
+        hasCheckedToday: () => readUpdatesDailyFlag(state.user) === getTodayKeySafe(),
+          shutdown: () => {
+              stopAutoCheckTimer();
+              updatesDailyScheduled = false;
+              updatesSuspended = true;
+          }
+      });
 
     return {
         init,

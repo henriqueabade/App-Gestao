@@ -33,11 +33,76 @@ window.addEventListener('DOMContentLoaded', () => {
   };
 
   const notificationsStore = new Map();
-  let refreshIntervalId = null;
   let isFetching = false;
+  let hasDailyCheckRun = false;
 
   const preferenceKey = 'menu.notifications';
   const preferenceEvent = 'menu-notification-preferences-changed';
+  const dailyBaseKey = 'menu.notifications.lastCheckAt';
+
+  let dailyStorageKey;
+
+  function updateDailyStorageKey(user = currentUser) {
+    if (window.dailyRun?.getScopedKey) {
+      dailyStorageKey = window.dailyRun.getScopedKey(dailyBaseKey, user);
+      return;
+    }
+    const identifier =
+      user?.id || user?.usuario_id || user?.email || user?.login || 'anonimo';
+    dailyStorageKey = `${dailyBaseKey}:${String(identifier).toLowerCase()}`;
+  }
+
+  function getTodayKeySafe() {
+    return (
+      window.dateUtils?.getTodayKey?.() || new Date().toISOString().slice(0, 10)
+    );
+  }
+
+  function readDailyCheck() {
+    if (window.dailyRun?.readFlag) {
+      return window.dailyRun.readFlag(dailyBaseKey, currentUser);
+    }
+    try {
+      return localStorage.getItem(dailyStorageKey);
+    } catch (err) {
+      return null;
+    }
+  }
+
+  function markDailyCheck(value) {
+    const today = value || getTodayKeySafe();
+    if (window.dailyRun?.writeFlag) {
+      window.dailyRun.writeFlag(dailyBaseKey, currentUser, today);
+      return today;
+    }
+    try {
+      localStorage.setItem(dailyStorageKey, today);
+    } catch (err) {
+      // ignora falhas de storage
+    }
+    return today;
+  }
+
+  function clearDailyCheck() {
+    if (window.dailyRun?.clearFlag) {
+      window.dailyRun.clearFlag(dailyBaseKey, currentUser);
+      return;
+    }
+    try {
+      localStorage.removeItem(dailyStorageKey);
+    } catch (err) {
+      // ignora falhas de storage
+    }
+  }
+
+  function resetDailyStateForToday() {
+    const stored = readDailyCheck();
+    const today = getTodayKeySafe();
+    hasDailyCheckRun = stored === today;
+  }
+
+  updateDailyStorageKey(currentUser);
+  resetDailyStateForToday();
 
   const clone = (value) => {
     if (typeof structuredClone === 'function') {
@@ -257,10 +322,13 @@ window.addEventListener('DOMContentLoaded', () => {
     if (notificationsEnabled) {
       attachClickListener();
       updateIcon();
+      triggerDailyFetchIfNeeded();
     } else {
       detachClickListener();
       btn.style.color = 'white';
       badge.classList.add('hidden');
+      notificationsStore.clear();
+      resetDailyStateForToday();
     }
   }
 
@@ -280,6 +348,14 @@ window.addEventListener('DOMContentLoaded', () => {
   }
 
   window.updateNotificationColor = updateIcon;
+
+  function triggerDailyFetchIfNeeded() {
+    if (!notificationsEnabled || !btn || !badge) return;
+    resetDailyStateForToday();
+    if (!hasDailyCheckRun) {
+      refreshNotifications({ respectDaily: true });
+    }
+  }
 
   applyPreferences(currentPreferences);
 
@@ -305,66 +381,59 @@ window.addEventListener('DOMContentLoaded', () => {
       return [];
     }
 
-    const endpoints = ['/api/notifications/menu', '/api/notifications'];
-    for (const endpoint of endpoints) {
-      const url = new URL(endpoint, baseUrl).toString();
-      let attempt = 0;
+    const endpoint = '/api/notifications';
+    const url = new URL(endpoint, baseUrl).toString();
 
-      while (attempt <= maxRetries) {
-        try {
-          const response = await fetch(url, {
-            headers: { Accept: 'application/json' },
-            credentials: 'include',
-          });
-          if (!response.ok) {
-            const statusError = new Error(
-              `Falha ao carregar notificações (${response.status})`,
-            );
-            statusError.status = response.status;
-            throw statusError;
-          }
-
-          let data;
-          try {
-            data = await response.json();
-          } catch (err) {
-            console.warn('Resposta de notificações não é JSON válido.', err);
-            return [];
-          }
-
-          if (!data) return [];
-          if (Array.isArray(data)) return data;
-          if (Array.isArray(data?.notifications)) return data.notifications;
-          if (Array.isArray(data?.data)) return data.data;
-          if (Array.isArray(data?.items)) return data.items;
-          return [];
-        } catch (error) {
-          attempt += 1;
-          const offline = typeof navigator !== 'undefined' && navigator.onLine === false;
-          console.warn('Erro ao carregar notificações do menu.', {
-            error,
-            attempt,
-            offline,
-            endpoint,
-          });
-
-          if (offline) {
-            return [];
-          }
-
-          if (error?.status === 404) {
-            break;
-          }
-
-          if (attempt > maxRetries) {
-            break;
-          }
-
-          const delay = Math.min(4000, 1000 * attempt);
-          await new Promise((resolve) => setTimeout(resolve, delay));
+    for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
+      try {
+        const response = await fetch(url, {
+          headers: { Accept: 'application/json' },
+          credentials: 'include',
+        });
+        if (!response.ok) {
+          const statusError = new Error(
+            `Falha ao carregar notificações (${response.status})`,
+          );
+          statusError.status = response.status;
+          throw statusError;
         }
+
+        let data;
+        try {
+          data = await response.json();
+        } catch (err) {
+          console.warn('Resposta de notificações não é JSON válido.', err);
+          return [];
+        }
+
+        if (!data) return [];
+        if (Array.isArray(data)) return data;
+        if (Array.isArray(data?.notifications)) return data.notifications;
+        if (Array.isArray(data?.data)) return data.data;
+        if (Array.isArray(data?.items)) return data.items;
+        return [];
+      } catch (error) {
+        const offline = typeof navigator !== 'undefined' && navigator.onLine === false;
+        console.warn('Erro ao carregar notificações do menu.', {
+          error,
+          attempt: attempt + 1,
+          offline,
+          endpoint,
+        });
+
+        if (offline) {
+          return [];
+        }
+
+        if (attempt >= maxRetries) {
+          break;
+        }
+
+        const delay = Math.min(4000, 1000 * (attempt + 1));
+        await new Promise((resolve) => setTimeout(resolve, delay));
       }
     }
+
     return [];
   }
 
@@ -380,7 +449,15 @@ window.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  async function refreshNotifications() {
+  async function refreshNotifications({ respectDaily = true } = {}) {
+    if (!notificationsEnabled || !btn || !badge) return;
+    if (respectDaily) {
+      resetDailyStateForToday();
+      if (hasDailyCheckRun) {
+        return;
+      }
+      hasDailyCheckRun = true;
+    }
     if (isFetching) return;
     isFetching = true;
     try {
@@ -391,19 +468,25 @@ window.addEventListener('DOMContentLoaded', () => {
     } finally {
       isFetching = false;
       updateIcon();
+      if (respectDaily) {
+        markDailyCheck();
+      }
     }
   }
 
-  refreshNotifications();
-  const REFRESH_INTERVAL = 60000;
-  refreshIntervalId = window.setInterval(refreshNotifications, REFRESH_INTERVAL);
-
-  window.addEventListener('beforeunload', () => {
-    if (refreshIntervalId) {
-      window.clearInterval(refreshIntervalId);
-      refreshIntervalId = null;
-    }
-  });
+  window.__notificationsInternals.refreshNotifications = refreshNotifications;
+  window.__notificationsInternals.resetDailyState = () => {
+    clearDailyCheck();
+    hasDailyCheckRun = false;
+  };
+  window.__notificationsInternals.shutdown = () => {
+    detachClickListener();
+    notificationsEnabled = false;
+    notificationsStore.clear();
+    clearDailyCheck();
+    hasDailyCheckRun = false;
+    updateIcon();
+  };
 
   if (typeof window.setMenuNotifications !== 'function') {
     window.setMenuNotifications = (update = {}) => {

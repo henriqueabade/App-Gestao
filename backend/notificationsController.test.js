@@ -121,7 +121,7 @@ function setup() {
     delete require.cache[materiaPrimaPath];
   }
 
-  return { pool, listen, close };
+  return { pool, listen, close, notificationsModule: notificationsRouter };
 }
 
 test('GET /api/notifications expõe alertas das regras configuradas', async () => {
@@ -304,6 +304,46 @@ test('GET /api/notifications expõe alertas das regras configuradas', async () =
     assert.strictEqual(session.category, 'system');
     assert.ok(session.metadata.ultimaSaida === null || session.metadata.ultimaSaida === undefined);
   } finally {
+    await close();
+  }
+});
+
+test('collectNotifications reutiliza cache por alguns minutos', async () => {
+  const { pool, listen, close, notificationsModule } = setup();
+
+  const estoqueCritico = await pool.query(
+    `INSERT INTO materia_prima (nome, quantidade, unidade, data_estoque)
+     VALUES ('Inicial', 0, 'kg', NOW()) RETURNING id`
+  );
+
+  const port = await listen();
+
+  try {
+    const firstResponse = await fetch(`http://127.0.0.1:${port}/api/notifications`);
+    assert.strictEqual(firstResponse.status, 200);
+    const firstBody = await firstResponse.json();
+    const initialId = `stock-zero-${estoqueCritico.rows[0].id}`;
+    assert.ok(firstBody.items.some((item) => item.id === initialId));
+
+    const novoEstoque = await pool.query(
+      `INSERT INTO materia_prima (nome, quantidade, unidade, data_estoque)
+       VALUES ('Novo Estoque', 0, 'kg', NOW()) RETURNING id`
+    );
+
+    const secondResponse = await fetch(`http://127.0.0.1:${port}/api/notifications`);
+    assert.strictEqual(secondResponse.status, 200);
+    const secondBody = await secondResponse.json();
+    const cachedId = `stock-zero-${novoEstoque.rows[0].id}`;
+    assert.ok(!secondBody.items.some((item) => item.id === cachedId));
+
+    notificationsModule.invalidateNotificationsCache();
+
+    const thirdResponse = await fetch(`http://127.0.0.1:${port}/api/notifications`);
+    assert.strictEqual(thirdResponse.status, 200);
+    const thirdBody = await thirdResponse.json();
+    assert.ok(thirdBody.items.some((item) => item.id === cachedId));
+  } finally {
+    notificationsModule.invalidateNotificationsCache();
     await close();
   }
 });

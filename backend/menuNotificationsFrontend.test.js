@@ -91,9 +91,6 @@ test('fetchNotificationsWithRetry usa rota principal quando necessário', async 
   const fetchCalls = [];
   global.fetch = async (url) => {
     fetchCalls.push(url);
-    if (url.endsWith('/api/notifications/menu')) {
-      return { ok: false, status: 404 };
-    }
     if (url.endsWith('/api/notifications')) {
       return {
         ok: true,
@@ -151,7 +148,7 @@ test('fetchNotificationsWithRetry usa rota principal quando necessário', async 
   const result = await fetchFn(0);
 
   const fetchedPaths = fetchCalls.map((url) => new URL(url).pathname);
-  assert.deepEqual(fetchedPaths, ['/api/notifications/menu', '/api/notifications']);
+  assert.deepEqual(fetchedPaths, ['/api/notifications']);
   assert.equal(Array.isArray(result), true);
   assert.equal(result.length, 1);
   assert.equal(result[0].message, 'Nova tarefa');

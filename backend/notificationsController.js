@@ -28,6 +28,15 @@ const CATEGORY = {
   finance: 'finance'
 };
 
+const CACHE_TTL_MS = 3 * 60 * 1000; // 3 minutos
+let cachedItems = null;
+let cachedAt = 0;
+
+function invalidateCache() {
+  cachedItems = null;
+  cachedAt = 0;
+}
+
 function daysAgo(days) {
   const now = new Date();
   now.setDate(now.getDate() - days);
@@ -104,7 +113,9 @@ function formatCurrency(value) {
 async function getStockNotifications() {
   const { rows } = await safeQuery(
     `SELECT id, nome, quantidade, unidade, data_estoque
-       FROM materia_prima`
+       FROM materia_prima
+      WHERE COALESCE(quantidade, 0) <= $1`,
+    [CRITICAL_STOCK_THRESHOLD]
   );
   const items = [];
   for (const row of rows) {
@@ -216,12 +227,21 @@ async function getPriceChangeNotifications() {
 }
 
 async function getProductAvailabilityNotifications() {
+  const offlineStatuses = PRODUCT_OFFLINE_STATUSES.map((status) => status.toLowerCase());
   const { rows } = await safeQuery(
-    `SELECT p.id, p.nome, p.status, COALESCE(SUM(pe.quantidade), 0) AS quantidade_total,
-            MAX(pe.data_hora_completa) AS ultima_movimentacao
-       FROM produtos p
-       LEFT JOIN produtos_em_cada_ponto pe ON pe.produto_id = p.id
-      GROUP BY p.id, p.nome, p.status`
+    `WITH agregados AS (
+       SELECT p.id, p.nome, p.status,
+              COALESCE(SUM(pe.quantidade), 0) AS quantidade_total,
+              MAX(pe.data_hora_completa) AS ultima_movimentacao
+         FROM produtos p
+         LEFT JOIN produtos_em_cada_ponto pe ON pe.produto_id = p.id
+        GROUP BY p.id, p.nome, p.status
+      )
+      SELECT id, nome, status, quantidade_total, ultima_movimentacao
+        FROM agregados
+       WHERE quantidade_total <= 0
+          OR LOWER(COALESCE(status, '')) = ANY($1::text[])`,
+    [offlineStatuses]
   );
   const items = [];
   for (const row of rows) {
@@ -393,16 +413,21 @@ async function getBudgetNotifications() {
 }
 
 async function getCrmNotifications() {
+  const normalizedStatuses = CRM_ACTIVE_STATUSES.map((status) => status.toLowerCase());
   const { rows: semDono } = await safeQuery(
     `SELECT id, nome_fantasia, status_cliente
        FROM clientes
-      WHERE dono_cliente IS NULL OR dono_cliente = ''`
+      WHERE (dono_cliente IS NULL OR dono_cliente = '')
+        AND (status_cliente IS NULL OR LOWER(status_cliente) = ANY($1::text[]))`,
+    [normalizedStatuses]
   );
   const { rows: semContato } = await safeQuery(
     `SELECT c.id, c.nome_fantasia
        FROM clientes c
        LEFT JOIN contatos_cliente cc ON cc.id_cliente = c.id
-      WHERE cc.id IS NULL`
+      WHERE cc.id IS NULL
+        AND (c.status_cliente IS NULL OR LOWER(c.status_cliente) = ANY($1::text[]))`,
+    [normalizedStatuses]
   );
 
   const ativos = new Set(CRM_ACTIVE_STATUSES);
@@ -436,9 +461,29 @@ async function getCrmNotifications() {
 }
 
 async function getUserNotifications() {
-  const { rows } = await safeQuery('SELECT * FROM usuarios');
   const inactiveCutoff = daysAgo(INACTIVE_USER_DAYS);
   const sessionCutoff = hoursAgo(OPEN_SESSION_MAX_HOURS);
+  const { rows } = await safeQuery(
+    `SELECT id, nome, verificado,
+            ultima_atividade_em, ultima_atividade,
+            ultimo_login_em, ultimo_login,
+            ultima_entrada, ultima_entrada_em,
+            ultima_saida, ultima_saida_em
+       FROM usuarios
+      WHERE (
+              COALESCE(ultima_atividade_em, ultima_atividade, ultimo_login_em, ultimo_login) IS NULL
+              OR COALESCE(ultima_atividade_em, ultima_atividade, ultimo_login_em, ultimo_login) <= $1
+            )
+         OR (
+              COALESCE(ultima_entrada, ultima_entrada_em) IS NOT NULL
+              AND (
+                COALESCE(ultima_saida, ultima_saida_em) IS NULL
+                OR COALESCE(ultima_saida, ultima_saida_em) < COALESCE(ultima_entrada, ultima_entrada_em)
+              )
+              AND COALESCE(ultima_entrada, ultima_entrada_em) <= $2
+            )`,
+    [inactiveCutoff, sessionCutoff]
+  );
 
   const items = [];
   for (const row of rows) {
@@ -489,7 +534,11 @@ async function getUserNotifications() {
   return items;
 }
 
-async function collectNotifications() {
+async function collectNotifications({ forceRefresh = false } = {}) {
+  if (!forceRefresh && cachedItems && Date.now() - cachedAt < CACHE_TTL_MS) {
+    return cachedItems;
+  }
+
   const all = await Promise.all([
     getStockNotifications(),
     getManualMovementNotifications(),
@@ -500,11 +549,14 @@ async function collectNotifications() {
     getCrmNotifications(),
     getUserNotifications()
   ]);
-  return all.flat().sort((a, b) => {
+  const items = all.flat().sort((a, b) => {
     const aDate = toDate(a.date) || new Date(0);
     const bDate = toDate(b.date) || new Date(0);
     return bDate.getTime() - aDate.getTime();
   });
+  cachedItems = items;
+  cachedAt = Date.now();
+  return items;
 }
 
 router.get('/', async (_req, res) => {
@@ -519,3 +571,4 @@ router.get('/', async (_req, res) => {
 
 module.exports = router;
 module.exports.collectNotifications = collectNotifications;
+module.exports.invalidateNotificationsCache = invalidateCache;
