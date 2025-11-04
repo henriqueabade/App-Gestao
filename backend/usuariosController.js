@@ -30,20 +30,14 @@ const AVATAR_TIMESTAMP_CANDIDATES = [
   'avatarAtualizadoEm',
   'avatar_updated_at',
   'avatarUpdatedAt',
+  'avatar_atualizado',
+  'avatarAtualizado',
   'foto_atualizado_em',
   'fotoAtualizadoEm',
-  'atualizado_em',
-  'atualizadoEm',
-  'updated_at',
-  'updatedAt',
-  'ultima_alteracao',
-  'ultimaAlteracao',
-  'ultima_alteracao_em',
-  'ultimaAlteracaoEm',
-  'ultima_atividade_em',
-  'ultimaAtividadeEm',
-  'ultima_acao_em',
-  'ultimaAcaoEm'
+  'foto_updated_at',
+  'fotoUpdatedAt',
+  'foto_atualizado',
+  'fotoAtualizado'
 ];
 
 const MAX_IMAGE_SIZE = 2 * 1024 * 1024;

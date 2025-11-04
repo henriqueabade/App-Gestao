@@ -664,14 +664,16 @@ const MenuStartupPreferences = (() => {
             usuario.avatarVersion,
             usuario.avatar_updated_at,
             usuario.avatarUpdatedAt,
-            usuario.atualizadoEm,
-            usuario.atualizado_em,
-            usuario.updatedAt,
-            usuario.updated_at,
-            usuario.ultimaAlteracaoEm,
-            usuario.ultima_alteracao_em,
-            usuario.ultimaAlteracao,
-            usuario.ultima_alteracao
+            usuario.avatar_atualizado_em,
+            usuario.avatarAtualizadoEm,
+            usuario.avatar_atualizado,
+            usuario.avatarAtualizado,
+            usuario.foto_atualizado_em,
+            usuario.fotoAtualizadoEm,
+            usuario.foto_updated_at,
+            usuario.fotoUpdatedAt,
+            usuario.foto_atualizado,
+            usuario.fotoAtualizado
         ];
         for (const candidato of candidatos) {
             const normalizado = normalizarValorVersao(candidato);
