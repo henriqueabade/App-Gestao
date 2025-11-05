@@ -141,50 +141,35 @@ const localAppVersion = app.getVersion();
 const initialPublishing = publisher.isPublishing();
 const projectRoot = path.resolve(__dirname);
 
-const HEALTH_CHECK_INTERVAL_MS = 10000;
-const HEALTH_CHECK_TIMEOUT_MS = 5000;
-const HEALTH_CHECK_PATH = '/healthz';
-
 const DEFAULT_API_PORT = 3000;
 const MAX_PORT = 65535;
 let configuredApiPort = DEFAULT_API_PORT;
 
-// Configurações do monitor de conectividade (rede + banco)
-const CONNECTION_BASE_INTERVAL_MS = Math.max(
+const CONNECTION_MONITOR_INTERVAL_MS = Math.max(
   Number.parseInt(process.env.CONNECTION_MONITOR_INTERVAL_MS || '10000', 10),
-  5000
-);
-const CONNECTION_DEEP_INTERVAL_MS = Math.max(
-  Number.parseInt(process.env.CONNECTION_MONITOR_DEEP_INTERVAL_MS || '90000', 10),
-  CONNECTION_BASE_INTERVAL_MS * 2
-);
-const CONNECTION_MAX_BACKOFF_MS = Math.max(
-  Number.parseInt(process.env.CONNECTION_MONITOR_MAX_BACKOFF_MS || '120000', 10),
-  CONNECTION_BASE_INTERVAL_MS
-);
-const CONNECTION_EXTERNAL_URL =
-  process.env.CONNECTION_MONITOR_EXTERNAL_URL ||
-  process.env.EXTERNAL_CONNECTIVITY_URL ||
-  'https://www.gstatic.com/generate_204';
-const CONNECTION_EXTERNAL_TIMEOUT_MS = Math.max(
-  Number.parseInt(process.env.CONNECTION_MONITOR_EXTERNAL_TIMEOUT_MS || '8000', 10),
   1000
 );
-const CONNECTION_HEALTH_TIMEOUT_MS = Math.max(
-  Number.parseInt(process.env.CONNECTION_MONITOR_HEALTH_TIMEOUT_MS || '8000', 10),
+const CONNECTION_MONITOR_ACTIVITY_LIMIT_MS = Math.max(
+  Number.parseInt(process.env.CONNECTION_MONITOR_ACTIVITY_LIMIT_MS || '120000', 10),
+  CONNECTION_MONITOR_INTERVAL_MS
+);
+const CONNECTION_MONITOR_TIMEOUT_MS = Math.max(
+  Number.parseInt(process.env.CONNECTION_MONITOR_TIMEOUT_MS || '6000', 10),
   1000
 );
-const CONNECTION_DB_TIMEOUT_MS = Math.max(
-  Number.parseInt(process.env.CONNECTION_MONITOR_DB_TIMEOUT_MS || '8000', 10),
-  1000
+const CONNECTION_MONITOR_ENDPOINT_PATH = '/healthz/combined';
+const CONNECTION_MONITOR_AGENT_KEEP_ALIVE_MS = Math.max(
+  Number.parseInt(process.env.CONNECTION_MONITOR_AGENT_KEEP_ALIVE_MS || '65000', 10),
+  15000
 );
-const CONNECTION_DEEP_STARTUP_DELAY_MS = Math.max(
-  Number.parseInt(process.env.CONNECTION_MONITOR_DEEP_STARTUP_DELAY_MS || '60000', 10),
-  CONNECTION_BASE_INTERVAL_MS
+const CONNECTION_MONITOR_LOG_FILE = path.resolve('/logs/connection-monitor.log');
+const CONNECTION_MONITOR_LOG_MAX_BYTES = Math.max(
+  Number.parseInt(process.env.CONNECTION_MONITOR_LOG_MAX_BYTES || '524288', 10),
+  131072
 );
-const CONNECTION_DB_FAILURE_THRESHOLD = Math.max(
-  Number.parseInt(process.env.CONNECTION_MONITOR_DB_FAILURE_THRESHOLD || '2', 10),
-  1
+const CONNECTION_MONITOR_HEARTBEAT_INTERVAL_MS = Math.max(
+  Number.parseInt(process.env.CONNECTION_MONITOR_HEARTBEAT_MS || '600000', 10),
+  600000
 );
 const CONNECTION_SERVER_KEEP_ALIVE_MS = Math.max(
   Number.parseInt(process.env.CONNECTION_MONITOR_SERVER_KEEP_ALIVE_MS || '65000', 10),
@@ -194,7 +179,7 @@ const CONNECTION_STATUS_CHANNEL = 'connection-monitor:status';
 const SESSION_FORCE_LOGOUT_CHANNEL = 'session:force-logout';
 const SESSION_FORCE_LOGOUT_DEBOUNCE_MS = Math.max(
   Number.parseInt(process.env.SESSION_FORCE_LOGOUT_DEBOUNCE_MS || '5000', 10),
-  0
+  5000
 );
 
 let publishState = {
@@ -229,9 +214,26 @@ const UPDATE_STATUS_CACHE_TTL = 1500;
 
 let publishStateFilePath;
 
-let healthCheckAgent = null;
-let healthCheckIntervalId = null;
-let lastHealthStatusPayload = null;
+let lastConnectionStatusPayload = null;
+let netState = 'online';
+let lastMonitorHeartbeatAt = 0;
+let monitorLogWritePromise = Promise.resolve();
+const monitorActivityState = {
+  visible: false,
+  focused: false,
+  lastInteractionAt: 0
+};
+
+monitorActivityState.lastInteractionAt = Date.now();
+try {
+  if (typeof db.setQueryGuard === 'function') {
+    db.setQueryGuard(() => netState === 'online');
+  }
+} catch (err) {
+  if (DEBUG) {
+    console.warn('Falha ao configurar guarda de consultas do banco:', err);
+  }
+}
 
 function getPublishStateFilePath() {
   if (!publishStateFilePath) {
@@ -257,29 +259,17 @@ function loadPersistedPublishState() {
   }
 }
 
-function ensureHealthCheckAgent() {
-  if (!healthCheckAgent) {
-    healthCheckAgent = new http.Agent({
-      keepAlive: true,
-      keepAliveMsecs: HEALTH_CHECK_INTERVAL_MS,
-      maxSockets: 1,
-      maxFreeSockets: 1
-    });
-  }
-  return healthCheckAgent;
-}
-
 function sendLastNetworkStatusToWindow(win) {
-  if (!win || win.isDestroyed() || !lastHealthStatusPayload) return;
+  if (!win || win.isDestroyed() || !lastConnectionStatusPayload) return;
   try {
-    win.webContents.send('network-status', lastHealthStatusPayload);
+    win.webContents.send('network-status', lastConnectionStatusPayload);
   } catch (err) {
     if (DEBUG) console.error('Falha ao enviar status de rede para janela', err);
   }
 }
 
 function broadcastNetworkStatus(payload) {
-  lastHealthStatusPayload = payload;
+  lastConnectionStatusPayload = payload;
   BrowserWindow.getAllWindows().forEach(win => {
     if (win && !win.isDestroyed()) {
       try {
@@ -289,90 +279,6 @@ function broadcastNetworkStatus(payload) {
       }
     }
   });
-}
-
-function performHealthCheck() {
-  if (!currentApiPort) {
-    return Promise.resolve();
-  }
-
-  const agent = ensureHealthCheckAgent();
-
-  return new Promise((resolve) => {
-    const request = http.request(
-      {
-        host: '127.0.0.1',
-        port: currentApiPort,
-        path: HEALTH_CHECK_PATH,
-        method: 'GET',
-        agent,
-        timeout: HEALTH_CHECK_TIMEOUT_MS
-      },
-      (res) => {
-        res.resume();
-        const online = res.statusCode >= 200 && res.statusCode < 300;
-        resolve({ online, statusCode: res.statusCode });
-      }
-    );
-
-    request.on('timeout', () => {
-      request.destroy(new Error('Health check timeout'));
-    });
-
-    request.on('error', (err) => {
-      resolve({ online: false, error: err });
-    });
-
-    request.end();
-  })
-    .then((result) => {
-      if (!result) return;
-      const payload = {
-        online: Boolean(result.online),
-        timestamp: Date.now()
-      };
-
-      if (typeof result.statusCode === 'number') {
-        payload.statusCode = result.statusCode;
-      }
-
-      payload.status = payload.online ? 'online' : 'offline';
-
-      if (!result.online && result.error) {
-        payload.error = {
-          message: result.error.message,
-          code: result.error.code
-        };
-      }
-
-      broadcastNetworkStatus(payload);
-    })
-    .catch((err) => {
-      if (DEBUG) console.error('Falha na verificação de saúde da API', err);
-    });
-}
-
-function startHealthMonitoring() {
-  stopHealthMonitoring();
-  performHealthCheck();
-  healthCheckIntervalId = setInterval(() => {
-    performHealthCheck();
-  }, HEALTH_CHECK_INTERVAL_MS);
-}
-
-function stopHealthMonitoring() {
-  if (healthCheckIntervalId) {
-    clearInterval(healthCheckIntervalId);
-    healthCheckIntervalId = null;
-  }
-  if (healthCheckAgent) {
-    try {
-      healthCheckAgent.destroy();
-    } catch (err) {
-      if (DEBUG) console.error('Falha ao destruir agente de verificação de saúde', err);
-    }
-    healthCheckAgent = null;
-  }
 }
 
 function persistPublishStateSnapshot() {
@@ -1869,17 +1775,26 @@ async function startApiServerOnPort(port) {
       apiServerInstance = server;
       currentApiPort = port;
       apiServerInstance.on('error', handleApiServerError);
-      startHealthMonitoring();
       if (DEBUG) {
         console.log(`API server running on port ${currentApiPort}`);
       }
       try {
         const monitor = ensureConnectionMonitor();
-        monitor.requestImmediateCheck({ forceDeep: true, triggeredBy: 'server-start' }).catch((err) => {
-          console.error('Falha ao iniciar verificação inicial de conexão:', err);
-        });
+        refreshConnectionMonitorActivityState('server-ready');
+        monitor
+          .requestImmediateCheck({
+            triggeredBy: 'server-start',
+            allowWhilePaused: true
+          })
+          .catch((err) => {
+            if (DEBUG) {
+              console.error('Falha ao iniciar verificação inicial de conexão:', err);
+            }
+          });
       } catch (monitorErr) {
-        console.error('Não foi possível inicializar o monitor de conexão:', monitorErr);
+        if (DEBUG) {
+          console.error('Não foi possível inicializar o monitor de conexão:', monitorErr);
+        }
       }
       resolve(apiServerInstance);
     };
@@ -1932,7 +1847,6 @@ async function handleApiServerError(err) {
 }
 
 function closeApiServer() {
-  stopHealthMonitoring();
   if (!apiServerInstance) {
     return Promise.resolve();
   }
@@ -1981,7 +1895,14 @@ function resolveBackendHealthBaseUrl() {
   for (const candidate of candidates) {
     const normalized = normalizeMonitorBaseUrl(candidate);
     if (normalized) {
-      return normalized;
+      try {
+        const url = new URL(normalized);
+        if (!isLocalHostname(url.hostname)) {
+          return url.origin;
+        }
+      } catch (_err) {
+        // ignora candidato inválido
+      }
     }
   }
 
@@ -2013,23 +1934,7 @@ function resolveBackendHealthBaseUrl() {
     fallback.hostname = 'localhost';
   }
 
-  return fallback.origin;
-}
-
-function createKeepAliveAgent(protocol) {
-  const options = {
-    keepAlive: true,
-    keepAliveMsecs: Math.max(CONNECTION_BASE_INTERVAL_MS, 10_000),
-    maxSockets: 1,
-    maxFreeSockets: 1
-  };
-  return protocol === 'https:' ? new https.Agent(options) : new http.Agent(options);
-}
-
-function destroyAgent(agent) {
-  if (agent && typeof agent.destroy === 'function') {
-    agent.destroy();
-  }
+  return isLocalHostname(fallback.hostname) ? null : fallback.origin;
 }
 
 function formatMonitorError(err) {
@@ -2081,43 +1986,6 @@ async function checkDatabaseAndCurrentUser({ skipBasicQuery = false } = {}) {
   return { success: true };
 }
 
-function requestWithAgent(targetUrl, { method = 'GET', timeout = 5000, agent } = {}) {
-  const url = targetUrl instanceof URL ? targetUrl : new URL(targetUrl);
-  const transport = url.protocol === 'https:' ? https : http;
-  const options = {
-    method,
-    protocol: url.protocol,
-    hostname: url.hostname,
-    port: url.port || undefined,
-    path: `${url.pathname}${url.search}`,
-    agent,
-    timeout
-  };
-
-  return new Promise((resolve, reject) => {
-    const request = transport.request(options, (response) => {
-      response.on('error', reject);
-      response.on('data', () => {});
-      response.on('end', () => {
-        const statusCode = response.statusCode ?? 0;
-        if (statusCode >= 200 && statusCode < 400) {
-          resolve({ statusCode });
-        } else {
-          const error = new Error(`Request failed with status ${statusCode}`);
-          error.statusCode = statusCode;
-          reject(error);
-        }
-      });
-    });
-
-    request.on('timeout', () => {
-      request.destroy(new Error('Request timeout'));
-    });
-    request.on('error', reject);
-    request.end();
-  });
-}
-
 function broadcastConnectionStatusPayload(payload) {
   for (const win of BrowserWindow.getAllWindows()) {
     if (!win || win.isDestroyed()) continue;
@@ -2144,387 +2012,531 @@ function broadcastSessionForceLogout(payload) {
   }
 }
 
+function appendConnectionMonitorLog(entry) {
+  const payload = {
+    timestamp: new Date().toISOString(),
+    ...entry
+  };
+  const line = JSON.stringify(payload);
+  const lineLength = Buffer.byteLength(line) + 1;
+
+  monitorLogWritePromise = monitorLogWritePromise
+    .catch(() => {})
+    .then(async () => {
+      try {
+        await fs.promises.mkdir(path.dirname(CONNECTION_MONITOR_LOG_FILE), { recursive: true });
+        let shouldRotate = false;
+        try {
+          const stats = await fs.promises.stat(CONNECTION_MONITOR_LOG_FILE);
+          if (stats.size + lineLength > CONNECTION_MONITOR_LOG_MAX_BYTES) {
+            shouldRotate = true;
+          }
+        } catch (err) {
+          if (err && err.code !== 'ENOENT') {
+            throw err;
+          }
+        }
+
+        if (shouldRotate) {
+          const rotatedPath = `${CONNECTION_MONITOR_LOG_FILE}.${Date.now()}`;
+          try {
+            await fs.promises.rename(CONNECTION_MONITOR_LOG_FILE, rotatedPath);
+          } catch (err) {
+            if (err && err.code !== 'ENOENT') {
+              await fs.promises.unlink(CONNECTION_MONITOR_LOG_FILE).catch(() => {});
+            }
+          }
+        }
+
+        await fs.promises.appendFile(CONNECTION_MONITOR_LOG_FILE, `${line}\n`);
+      } catch (_err) {
+        // Falhas de IO são silenciosas, conforme requisito.
+      }
+    });
+
+  return monitorLogWritePromise;
+}
+
+function isLocalHostname(hostname) {
+  const normalized = (hostname || '').trim().toLowerCase();
+  if (!normalized) return true;
+  if (normalized === 'localhost' || normalized === '127.0.0.1' || normalized === '::1') return true;
+  if (normalized.startsWith('127.')) return true;
+  if (normalized === '0.0.0.0') return true;
+  return false;
+}
+
+function applyNetState(nextState) {
+  if (netState === nextState) return;
+  netState = nextState;
+  try {
+    if (typeof db.setQueryGuard === 'function') {
+      db.setQueryGuard(() => netState === 'online');
+    }
+  } catch (_err) {
+    // Silencioso: a guarda será reconfigurada em futuras atualizações.
+  }
+}
+
 function createConnectionMonitor() {
-  const externalUrl = new URL(CONNECTION_EXTERNAL_URL);
-  let externalAgent = null;
-  let backendAgent = null;
-  let backendAgentProtocol = null;
   let active = false;
   let timer = null;
   let checkPromise = null;
-  let consecutiveFailures = 0;
-  let lastDeepCheckAt = 0;
-  let allowDeepChecksAfter = Date.now() + CONNECTION_DEEP_STARTUP_DELAY_MS;
-  let deepFailureCount = 0;
+  let agent = null;
+  let agentKey = null;
+  let nextCheckAt = 0;
+  let lastLoggedStableSignature = null;
   let lastForcedLogoutBroadcast = { reason: null, at: 0 };
-  let nextAttemptAt = Date.now();
-  let lastLoggedState = null;
-  let lastLoggedSignature = null;
   let currentStatus = {
-    state: 'checking',
-    detail: 'initializing',
-    reason: null,
+    state: 'waiting',
+    reason: 'inactive',
+    detail: 'paused',
     shouldLogout: false,
-    failureStage: null,
     lastError: null,
-    triggeredBy: 'startup',
-    baseUrl: null,
-    updatedAt: Date.now(),
-    consecutiveFailures: 0,
-    nextAttemptAt
+    triggeredBy: 'init',
+    updatedAt: Date.now()
   };
 
-  function ensureExternalAgent() {
-    if (!externalAgent) {
-      externalAgent = createKeepAliveAgent(externalUrl.protocol);
+  function ensureAgent(url) {
+    const key = `${url.protocol}//${url.host}`;
+    if (agent && agentKey === key) {
+      return agent;
     }
-    return externalAgent;
+    const options = {
+      keepAlive: true,
+      keepAliveMsecs: CONNECTION_MONITOR_AGENT_KEEP_ALIVE_MS,
+      maxSockets: 1,
+      maxFreeSockets: 1
+    };
+    agent = url.protocol === 'https:' ? new https.Agent(options) : new http.Agent(options);
+    agentKey = key;
+    return agent;
   }
 
-  function ensureBackendAgent(urlObject) {
-    const protocol = urlObject.protocol || 'http:';
-    if (!backendAgent || backendAgentProtocol !== protocol) {
-      if (backendAgent) {
-        destroyAgent(backendAgent);
-      }
-      backendAgent = createKeepAliveAgent(protocol);
-      backendAgentProtocol = protocol;
-    }
-    return backendAgent;
-  }
-
-  function scheduleNextAttempt(failed) {
+  function emitStatusUpdate() {
     const now = Date.now();
-    if (!failed) {
-      consecutiveFailures = 0;
-      nextAttemptAt = now + CONNECTION_BASE_INTERVAL_MS;
+    const payload = {
+      ...currentStatus,
+      netState,
+      active,
+      nextCheckAt,
+      nextCheckIn: nextCheckAt ? Math.max(nextCheckAt - now, 0) : 0,
+      timestamp: now
+    };
+    lastConnectionStatusPayload = payload;
+    logHeartbeatIfNeeded(now);
+    broadcastConnectionStatusPayload(payload);
+    broadcastNetworkStatus(payload);
+  }
+
+  function logHeartbeatIfNeeded(now = Date.now()) {
+    if (now - lastMonitorHeartbeatAt >= CONNECTION_MONITOR_HEARTBEAT_INTERVAL_MS) {
+      lastMonitorHeartbeatAt = now;
+      appendConnectionMonitorLog({ event: 'heartbeat', state: currentStatus.state, netState });
+    }
+  }
+
+  function enforceSessionIfNeeded(status) {
+    if (!status.shouldLogout || !status.reason) {
+      lastForcedLogoutBroadcast = { reason: null, at: 0 };
       return;
     }
-    consecutiveFailures += 1;
-    const exponent = Math.min(consecutiveFailures, 5);
-    const baseDelay = CONNECTION_BASE_INTERVAL_MS * Math.pow(2, exponent);
-    const cappedDelay = Math.min(Math.max(baseDelay, CONNECTION_BASE_INTERVAL_MS), CONNECTION_MAX_BACKOFF_MS);
-    const jitterRange = Math.max(Math.round(cappedDelay * 0.25), 500);
-    const jitter = Math.round((Math.random() * jitterRange) - jitterRange / 2);
-    nextAttemptAt = now + cappedDelay + jitter;
-  }
-
-  function formatStatusPayload() {
     const now = Date.now();
-    return {
-      ...currentStatus,
-      timestamp: now,
-      active,
-      nextAttemptAt,
-      nextAttemptIn: Math.max(nextAttemptAt - now, 0),
-      consecutiveFailures,
-      deepCheckDueIn: Math.max(lastDeepCheckAt + CONNECTION_DEEP_INTERVAL_MS - now, 0),
-      baseInterval: CONNECTION_BASE_INTERVAL_MS,
-      maxBackoff: CONNECTION_MAX_BACKOFF_MS
-    };
+    if (
+      lastForcedLogoutBroadcast.reason !== status.reason ||
+      now - lastForcedLogoutBroadcast.at >= SESSION_FORCE_LOGOUT_DEBOUNCE_MS
+    ) {
+      lastForcedLogoutBroadcast = { reason: status.reason, at: now };
+      broadcastSessionForceLogout({
+        reason: status.reason,
+        state: status.state,
+        detail: status.detail,
+        triggeredBy: status.triggeredBy || null
+      });
+    }
   }
 
-  function broadcastStatus() {
-    broadcastConnectionStatusPayload(formatStatusPayload());
-  }
-
-  function updateStatus(partial) {
+  function updateStatus(partial = {}) {
     const now = Date.now();
-    currentStatus = {
+    const nextStatus = {
       ...currentStatus,
       ...partial,
-      updatedAt: now,
-      consecutiveFailures,
-      nextAttemptAt
+      updatedAt: now
     };
-    const signature = `${currentStatus.state}|${currentStatus.reason ?? ''}|${currentStatus.detail ?? ''}`;
-    if (currentStatus.state !== lastLoggedState || signature !== lastLoggedSignature) {
-      lastLoggedState = currentStatus.state;
-      lastLoggedSignature = signature;
-      const detailSuffix = currentStatus.detail ? ` - ${currentStatus.detail}` : '';
-      console.log(
-        `[connection-monitor] estado => ${currentStatus.state}${currentStatus.reason ? ` (${currentStatus.reason})` : ''}${detailSuffix}`
-      );
-      if (currentStatus.lastError && DEBUG) {
-        console.error('[connection-monitor] detalhe do erro:', currentStatus.lastError);
-      }
-    }
-    broadcastStatus();
-    if (currentStatus.shouldLogout && currentStatus.reason) {
-      const now = Date.now();
-      const { reason } = currentStatus;
-      const elapsed = now - lastForcedLogoutBroadcast.at;
-      if (
-        lastForcedLogoutBroadcast.reason !== reason ||
-        elapsed >= SESSION_FORCE_LOGOUT_DEBOUNCE_MS
-      ) {
-        lastForcedLogoutBroadcast = { reason, at: now };
-        console.log(`[connection-monitor] acionando tratamento de sessão (${reason})`);
-        broadcastSessionForceLogout({
-          reason,
-          state: currentStatus.state,
-          detail: currentStatus.detail,
-          triggeredBy: currentStatus.triggeredBy || partial.triggeredBy || null
+    const signature = `${nextStatus.state}|${nextStatus.reason || ''}|${nextStatus.detail || ''}`;
+    const isStableState = nextStatus.state !== 'checking';
+    if (isStableState) {
+      if (signature !== lastLoggedStableSignature) {
+        lastLoggedStableSignature = signature;
+        lastMonitorHeartbeatAt = now;
+        appendConnectionMonitorLog({
+          event: 'transition',
+          state: nextStatus.state,
+          reason: nextStatus.reason || null,
+          detail: nextStatus.detail || null,
+          netState
         });
       }
-    } else if (!currentStatus.shouldLogout) {
-      lastForcedLogoutBroadcast = { reason: null, at: 0 };
     }
+    currentStatus = nextStatus;
+    emitStatusUpdate();
+    enforceSessionIfNeeded(nextStatus);
   }
 
-  async function performCheck({ forceDeep = false, triggeredBy = 'timer' } = {}) {
-    if (!active) return;
-    const baseUrlString = resolveBackendHealthBaseUrl();
+  async function performRequest(url) {
+    const transport = url.protocol === 'https:' ? https : http;
+    const options = {
+      method: 'GET',
+      protocol: url.protocol,
+      hostname: url.hostname,
+      port: url.port || undefined,
+      path: `${url.pathname}${url.search}`,
+      agent: ensureAgent(url),
+      timeout: CONNECTION_MONITOR_TIMEOUT_MS,
+      headers: { connection: 'keep-alive' }
+    };
+
+    return new Promise((resolve, reject) => {
+      const request = transport.request(options, (response) => {
+        const chunks = [];
+        response.on('data', (chunk) => {
+          if (chunk && chunk.length && chunks.length === 0) {
+            chunks.push(chunk);
+          }
+        });
+        response.on('end', () => {
+          let body = null;
+          if (chunks.length > 0) {
+            try {
+              body = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+            } catch (_err) {
+              body = null;
+            }
+          }
+          resolve({ statusCode: response.statusCode || 0, body });
+        });
+      });
+
+      request.on('timeout', () => {
+        request.destroy(new Error('Request timeout'));
+      });
+      request.on('error', reject);
+      request.end();
+    });
+  }
+
+  async function performCheck({ triggeredBy = 'timer', allowWhilePaused = false } = {}) {
+    if (!active && !allowWhilePaused) {
+      return currentStatus;
+    }
+
+    let baseUrlString = null;
+    try {
+      baseUrlString = resolveBackendHealthBaseUrl();
+    } catch (err) {
+      appendConnectionMonitorLog({ event: 'configuration-error', detail: err?.message || 'resolve-base-url' });
+    }
+
+    if (!baseUrlString) {
+      applyNetState('offline');
+      updateStatus({
+        state: 'waiting',
+        reason: 'configuration',
+        detail: 'missing-base-url',
+        shouldLogout: false,
+        triggeredBy
+      });
+      return currentStatus;
+    }
+
     let baseUrl;
     try {
       baseUrl = new URL(baseUrlString);
-    } catch (err) {
-      scheduleNextAttempt(true);
+    } catch (_err) {
+      applyNetState('offline');
       updateStatus({
         state: 'offline',
         reason: 'offline',
         detail: 'invalid-base-url',
+        shouldLogout: true,
+        lastError: null,
+        triggeredBy
+      });
+      return currentStatus;
+    }
+
+    if (isLocalHostname(baseUrl.hostname)) {
+      applyNetState('offline');
+      updateStatus({
+        state: 'waiting',
+        reason: 'configuration',
+        detail: 'local-host-blocked',
         shouldLogout: false,
-        failureStage: 'configuration',
-        lastError: formatMonitorError(err),
         triggeredBy
       });
-      return;
+      return currentStatus;
     }
 
-    currentStatus.baseUrl = baseUrl.origin;
-    updateStatus({
-      state: 'checking',
-      detail: 'verificando-conectividade',
-      reason: null,
-      shouldLogout: false,
-      failureStage: null,
-      lastError: null,
-      triggeredBy
-    });
+    const checkUrl = new URL(CONNECTION_MONITOR_ENDPOINT_PATH, baseUrl);
+    const shouldUpdate = active || allowWhilePaused;
 
-    const externalAgentInstance = ensureExternalAgent();
-    const backendAgentInstance = ensureBackendAgent(baseUrl);
-
-    try {
-      await requestWithAgent(externalUrl, {
-        method: 'HEAD',
-        timeout: CONNECTION_EXTERNAL_TIMEOUT_MS,
-        agent: externalAgentInstance
-      });
-    } catch (err) {
-      scheduleNextAttempt(true);
+    if (shouldUpdate) {
       updateStatus({
-        state: 'offline',
-        reason: 'offline',
-        detail: 'sem-internet',
-        shouldLogout: true,
-        failureStage: 'internet',
-        lastError: formatMonitorError(err),
+        state: 'checking',
+        reason: null,
+        detail: 'verificando',
+        shouldLogout: false,
+        lastError: null,
         triggeredBy
       });
-      return;
     }
 
     try {
-      const healthUrl = new URL('/healthz', baseUrl);
-      await requestWithAgent(healthUrl, {
-        method: 'GET',
-        timeout: CONNECTION_HEALTH_TIMEOUT_MS,
-        agent: backendAgentInstance
-      });
-    } catch (err) {
-      scheduleNextAttempt(true);
-      updateStatus({
-        state: 'offline',
-        reason: 'offline',
-        detail: 'backend-indisponivel',
-        shouldLogout: true,
-        failureStage: 'api',
-        lastError: formatMonitorError(err),
-        triggeredBy
-      });
-      return;
-    }
-
-    const now = Date.now();
-    const deepAllowed = now >= allowDeepChecksAfter;
-    const shouldRunDeep =
-      (forceDeep && deepAllowed) ||
-      (!forceDeep && deepAllowed &&
-        (now - lastDeepCheckAt >= CONNECTION_DEEP_INTERVAL_MS || currentStatus.state === 'db-offline'));
-
-    if (forceDeep && !deepAllowed) {
-      const remaining = Math.max(allowDeepChecksAfter - now, 0);
-      console.log(
-        `[connection-monitor] verificação profunda adiada (${Math.ceil(remaining / 1000)}s para liberação)`
-      );
-    }
-
-    if (shouldRunDeep) {
-      allowDeepChecksAfter = 0;
-      try {
-        const dbHealthUrl = new URL('/healthz/db', baseUrl);
-        await requestWithAgent(dbHealthUrl, {
-          method: 'GET',
-          timeout: CONNECTION_DB_TIMEOUT_MS,
-          agent: backendAgentInstance
-        });
-        lastDeepCheckAt = Date.now();
-        deepFailureCount = 0;
-      } catch (err) {
-        deepFailureCount += 1;
-        const formattedError = formatMonitorError(err);
-        console.warn(
-          `[connection-monitor] falha ${deepFailureCount}/${CONNECTION_DB_FAILURE_THRESHOLD} ao verificar banco`,
-          formattedError
-        );
-        if (deepFailureCount < CONNECTION_DB_FAILURE_THRESHOLD) {
-          scheduleNextAttempt(true);
-          updateStatus({
-            state: 'checking',
-            reason: null,
-            detail: 'db-retry',
-            shouldLogout: false,
-            failureStage: 'database',
-            lastError: formattedError,
-            triggeredBy
-          });
-          return;
-        }
-        deepFailureCount = 0;
-        scheduleNextAttempt(true);
+      const response = await performRequest(checkUrl);
+      if (!shouldUpdate) {
+        return currentStatus;
+      }
+      if (response.statusCode === 204) {
+        applyNetState('online');
         updateStatus({
-          state: 'db-offline',
+          state: 'online',
+          reason: null,
+          detail: 'ok',
+          shouldLogout: false,
+          lastError: null,
+          triggeredBy
+        });
+        return currentStatus;
+      }
+      if (response.statusCode === 503 && response.body && response.body.status === 'offline-db') {
+        applyNetState('offline-db');
+        updateStatus({
+          state: 'offline-db',
           reason: 'offline-db',
           detail: 'db-indisponivel',
           shouldLogout: true,
-          failureStage: 'database',
-          lastError: formattedError,
+          lastError: null,
           triggeredBy
         });
-        return;
+        return currentStatus;
       }
-    }
-
-    const heartbeat = await checkDatabaseAndCurrentUser({ skipBasicQuery: true });
-    if (!heartbeat.success) {
-      scheduleNextAttempt(true);
-      const reason = heartbeat.reason || 'offline';
-      let detail = 'falha-db-heartbeat';
-      let failureStage = 'database';
-      if (reason === 'user-removed') {
-        detail = 'usuario-removido';
-        failureStage = 'auth';
-      } else if (reason === 'pin') {
-        detail = 'pin-invalido';
-        failureStage = 'auth';
-      } else if (reason === 'offline') {
-        detail = 'sem-internet';
-        failureStage = 'internet';
-      }
+      applyNetState('offline');
       updateStatus({
-        state: reason === 'offline-db' ? 'db-offline' : 'offline',
-        reason,
-        detail,
+        state: 'offline',
+        reason: 'offline',
+        detail: `status-${response.statusCode || 0}`,
         shouldLogout: true,
-        failureStage,
-        lastError: formatMonitorError(heartbeat.error),
+        lastError: null,
         triggeredBy
       });
-      return;
+      return currentStatus;
+    } catch (err) {
+      if (!shouldUpdate) {
+        return currentStatus;
+      }
+      const formattedError = formatMonitorError(err);
+      applyNetState('offline');
+      updateStatus({
+        state: 'offline',
+        reason: 'offline',
+        detail: formattedError?.code || 'network-error',
+        shouldLogout: true,
+        lastError: formattedError,
+        triggeredBy
+      });
+      return currentStatus;
     }
-
-    scheduleNextAttempt(false);
-    updateStatus({
-      state: 'online',
-      reason: null,
-      detail: 'ok',
-      shouldLogout: false,
-      failureStage: null,
-      lastError: null,
-      triggeredBy
-    });
   }
 
-  function maybeRunCheck(options) {
-    if (!active) return Promise.resolve();
+  function scheduleNext(delay = CONNECTION_MONITOR_INTERVAL_MS) {
+    if (timer) {
+      clearTimeout(timer);
+      timer = null;
+    }
+    if (!active) {
+      nextCheckAt = 0;
+      emitStatusUpdate();
+      return;
+    }
+    if (!shouldMonitorBeActive()) {
+      setActive(false, { triggeredBy: 'inactive' });
+      return;
+    }
+    const actualDelay = Math.max(delay, CONNECTION_MONITOR_INTERVAL_MS);
+    nextCheckAt = Date.now() + actualDelay;
+    timer = setTimeout(() => {
+      timer = null;
+      maybeRunCheck({ triggeredBy: 'timer' });
+    }, actualDelay);
+    if (timer && typeof timer.unref === 'function') {
+      timer.unref();
+    }
+    emitStatusUpdate();
+  }
+
+  function maybeRunCheck(options = {}) {
+    const { triggeredBy = 'timer', allowWhilePaused = false } = options;
+    if (!allowWhilePaused && !active) {
+      logHeartbeatIfNeeded();
+      return Promise.resolve(currentStatus);
+    }
+    if (!allowWhilePaused && !shouldMonitorBeActive()) {
+      setActive(false, { triggeredBy: 'inactive' });
+      return Promise.resolve(currentStatus);
+    }
     if (checkPromise) {
       return checkPromise;
     }
-    checkPromise = performCheck(options).finally(() => {
-      checkPromise = null;
-    });
+    checkPromise = performCheck({ triggeredBy, allowWhilePaused })
+      .finally(() => {
+        checkPromise = null;
+        if (active) {
+          scheduleNext(CONNECTION_MONITOR_INTERVAL_MS);
+        } else {
+          nextCheckAt = 0;
+          emitStatusUpdate();
+        }
+      });
     return checkPromise;
   }
 
-  function handleTick() {
-    if (!active) return;
-    broadcastStatus();
-    if (Date.now() >= nextAttemptAt) {
-      maybeRunCheck();
+  function setActive(shouldRun, { triggeredBy = shouldRun ? 'resume' : 'pause' } = {}) {
+    if (shouldRun) {
+      if (active) {
+        return;
+      }
+      active = true;
+      nextCheckAt = 0;
+      maybeRunCheck({ triggeredBy });
+    } else {
+      if (!active) {
+        return;
+      }
+      active = false;
+      if (timer) {
+        clearTimeout(timer);
+        timer = null;
+      }
+      nextCheckAt = 0;
+      updateStatus({
+        state: 'waiting',
+        reason: 'inactive',
+        detail: 'paused',
+        shouldLogout: false,
+        lastError: null,
+        triggeredBy
+      });
     }
-  }
-
-  function start() {
-    if (active) return;
-    active = true;
-    allowDeepChecksAfter = Date.now() + CONNECTION_DEEP_STARTUP_DELAY_MS;
-    deepFailureCount = 0;
-    nextAttemptAt = Date.now();
-    maybeRunCheck({ triggeredBy: 'startup' });
-    timer = setInterval(handleTick, CONNECTION_BASE_INTERVAL_MS);
-    if (typeof timer.unref === 'function') {
-      timer.unref();
-    }
-  }
-
-  function stop() {
-    if (!active) return;
-    active = false;
-    if (timer) {
-      clearInterval(timer);
-      timer = null;
-    }
-    destroyAgent(externalAgent);
-    externalAgent = null;
-    destroyAgent(backendAgent);
-    backendAgent = null;
-    backendAgentProtocol = null;
-  }
-
-  function requestImmediateCheck({ forceDeep = false, triggeredBy = 'manual' } = {}) {
-    nextAttemptAt = Date.now();
-    return maybeRunCheck({ forceDeep, triggeredBy });
   }
 
   function getStatus() {
-    return formatStatusPayload();
+    const now = Date.now();
+    return {
+      ...currentStatus,
+      netState,
+      active,
+      nextCheckAt,
+      nextCheckIn: nextCheckAt ? Math.max(nextCheckAt - now, 0) : 0,
+      timestamp: now
+    };
   }
 
+  updateStatus({
+    state: 'waiting',
+    reason: 'inactive',
+    detail: 'paused',
+    shouldLogout: false,
+    triggeredBy: 'init'
+  });
+
   return {
-    start,
-    stop,
-    getStatus,
-    requestImmediateCheck,
-    isActive: () => active
+    setActive,
+    isActive: () => active,
+    requestImmediateCheck: (options = {}) => maybeRunCheck({ ...options, allowWhilePaused: Boolean(options.allowWhilePaused) }),
+    getStatus
   };
 }
 
-function ensureConnectionMonitor(startIfInactive = true) {
+function ensureConnectionMonitor(startIfAllowed = true) {
   if (!connectionMonitorController) {
     connectionMonitorController = createConnectionMonitor();
   }
-  if (startIfInactive && !connectionMonitorController.isActive()) {
-    connectionMonitorController.start();
+  if (startIfAllowed) {
+    const shouldRun = shouldMonitorBeActive();
+    connectionMonitorController.setActive(shouldRun, { triggeredBy: 'auto' });
   }
   return connectionMonitorController;
 }
 
 function stopConnectionMonitor() {
   if (connectionMonitorController) {
-    connectionMonitorController.stop();
+    connectionMonitorController.setActive(false, { triggeredBy: 'stop' });
   }
+}
+
+function getPrimaryMonitorWindow() {
+  if (dashboardWindow && !dashboardWindow.isDestroyed()) {
+    return dashboardWindow;
+  }
+  if (loginWindow && !loginWindow.isDestroyed()) {
+    return loginWindow;
+  }
+  const focused = BrowserWindow.getFocusedWindow();
+  return focused && !focused.isDestroyed() ? focused : null;
+}
+
+function shouldMonitorBeActive() {
+  const targetWindow = getPrimaryMonitorWindow();
+  if (!targetWindow) {
+    monitorActivityState.visible = false;
+    monitorActivityState.focused = false;
+    return false;
+  }
+  const visible = targetWindow.isVisible();
+  const minimized = typeof targetWindow.isMinimized === 'function' && targetWindow.isMinimized();
+  const focused = targetWindow.isFocused();
+  monitorActivityState.visible = visible && !minimized;
+  monitorActivityState.focused = focused;
+  if (!visible || minimized) {
+    return false;
+  }
+  if (!focused) {
+    return false;
+  }
+  const now = Date.now();
+  const lastInteraction = monitorActivityState.lastInteractionAt || 0;
+  return now - lastInteraction <= CONNECTION_MONITOR_ACTIVITY_LIMIT_MS;
+}
+
+function refreshConnectionMonitorActivityState(triggeredBy = 'auto') {
+  const monitor = ensureConnectionMonitor(false);
+  if (!monitor) return;
+  const shouldRun = shouldMonitorBeActive();
+  monitor.setActive(shouldRun, { triggeredBy });
+}
+
+function markMonitorInteraction(triggeredBy = 'activity') {
+  monitorActivityState.lastInteractionAt = Date.now();
+  refreshConnectionMonitorActivityState(triggeredBy);
+}
+
+function attachMonitorHooksToWindow(win) {
+  if (!win || win.isDestroyed()) return;
+
+  const mark = (reason) => () => markMonitorInteraction(reason);
+  const refresh = (reason) => () => refreshConnectionMonitorActivityState(reason);
+
+  win.on('focus', mark('window-focus'));
+  win.on('show', mark('window-show'));
+  win.on('restore', mark('window-restore'));
+  win.on('blur', refresh('window-blur'));
+  win.on('hide', refresh('window-hide'));
+  win.on('minimize', refresh('window-minimize'));
+  win.on('closed', refresh('window-closed'));
+
+  win.webContents.on('before-input-event', () => {
+    markMonitorInteraction('input');
+  });
 }
 
 async function flushAndQuit(reason) {
@@ -2569,9 +2581,11 @@ function createLoginWindow(show = true, showOnLoad = true) {
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
-    nodeIntegration: false
-  }
+      nodeIntegration: false
+    }
   });
+
+  attachMonitorHooksToWindow(loginWindow);
 
   // Espera o conteúdo estar pronto para posicionar e exibir
   loginWindow.once('ready-to-show', () => {
@@ -2665,9 +2679,11 @@ function createDashboardWindow(show = true) {
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
-    nodeIntegration: false
-  }
+      nodeIntegration: false
+    }
   });
+
+  attachMonitorHooksToWindow(dashboardWindow);
 
   dashboardWindow.once('ready-to-show', () => {
     dashboardWindow.webContents.send('select-tab', 'dashboard');
@@ -2778,6 +2794,7 @@ app.whenReady().then(async () => {
 
   showStartupBanner();
   initializeAutoUpdater();
+  refreshConnectionMonitorActivityState('app-init');
 });
 
 app.on('window-all-closed', () => {
@@ -2816,7 +2833,8 @@ ipcMain.handle('connection-monitor:request-check', async (_event, options) => {
   const monitor = ensureConnectionMonitor(true);
   await monitor.requestImmediateCheck({
     forceDeep: Boolean(options?.forceDeep),
-    triggeredBy: 'renderer-request'
+    triggeredBy: 'renderer-request',
+    allowWhilePaused: true
   });
   return monitor.getStatus();
 });
@@ -3437,6 +3455,7 @@ ipcMain.handle('record-user-action', async (_event, action) => {
   if (!lastRecordedAction || normalized.timestamp >= lastRecordedAction.timestamp) {
     lastRecordedAction = normalized;
   }
+  markMonitorInteraction('user-action');
   return true;
 });
 

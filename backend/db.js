@@ -2,6 +2,8 @@ require('dotenv').config({ path: require('path').resolve(__dirname, '../.env'), 
 const { Pool } = require('pg');
 
 let pool;
+let queryGuard = () => true;
+let guardOverrideDepth = 0;
 
 const DEFAULT_MAX_CLIENTS = 4;
 const DEFAULT_IDLE_TIMEOUT_MS = 30_000;
@@ -50,17 +52,63 @@ function init(pin) {
 
 function query(text, params) {
   if (!pool) init();
+  if (guardOverrideDepth === 0) {
+    try {
+      if (!queryGuard()) {
+        const error = new Error('database-access-disabled');
+        error.code = 'offline';
+        throw error;
+      }
+    } catch (guardError) {
+      return Promise.reject(guardError);
+    }
+  }
   return pool.query(text, params);
 }
 
 function connect() {
   if (!pool) init();
+  if (guardOverrideDepth === 0 && !queryGuard()) {
+    const error = new Error('database-access-disabled');
+    error.code = 'offline';
+    return Promise.reject(error);
+  }
   return pool.connect();
+}
+
+function setQueryGuard(fn) {
+  if (typeof fn === 'function') {
+    queryGuard = fn;
+  } else {
+    queryGuard = () => true;
+  }
+}
+
+function withQueryGuardDisabled(fn) {
+  if (typeof fn !== 'function') {
+    return Promise.resolve();
+  }
+  guardOverrideDepth += 1;
+  let result;
+  try {
+    result = fn();
+  } catch (err) {
+    guardOverrideDepth = Math.max(guardOverrideDepth - 1, 0);
+    throw err;
+  }
+  if (result && typeof result.then === 'function') {
+    return result.finally(() => {
+      guardOverrideDepth = Math.max(guardOverrideDepth - 1, 0);
+    });
+  }
+  guardOverrideDepth = Math.max(guardOverrideDepth - 1, 0);
+  return result;
 }
 
 // inicializa com variáveis de ambiente por padrão
 init();
 
-module.exports = { init, query, connect };
+module.exports = { init, query, connect, setQueryGuard, withQueryGuardDisabled };
 // Changelog:
 // - 2024-05-17: configurado pool PG com keep-alive, limites reduzidos e timeouts para reduzir ruído e conexões ociosas.
+// - 2024-08-27: adicionada guarda configurável e bypass controlado para suspender queries durante indisponibilidade.

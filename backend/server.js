@@ -52,17 +52,16 @@ app.get('/healthz', (_req, res) => {
   res.status(200).json({ status: 'ok' });
 });
 
-// Health checks usados pelo monitor de conectividade com baixo custo.
-app.get('/healthz', (_req, res) => {
-  res.json({ status: 'ok' });
-});
-
-app.get('/healthz/db', async (_req, res) => {
+// Health check combinado (API + banco de dados) para reduzir chamadas do monitor.
+app.get('/healthz/combined', async (_req, res) => {
   try {
-    await db.query('SELECT 1');
-    res.json({ status: 'ok' });
+    await db.withQueryGuardDisabled(() => db.query('SELECT 1'));
+    res.status(204).set({ 'cache-control': 'no-store', 'content-length': '0' }).end();
   } catch (err) {
-    res.status(503).json({ status: 'error', error: err.message || 'db-unreachable' });
+    res
+      .status(503)
+      .type('application/json')
+      .send(Buffer.from(JSON.stringify({ status: 'offline-db' })));
   }
 });
 
@@ -77,12 +76,22 @@ if (require.main === module) {
   const PORT = process.env.PORT || 3000;
   if (!process.env.PORT) console.warn('PORT not set, defaulting to 3000');
   const DEBUG = process.env.DEBUG === 'true';
-  app.listen(PORT, () => {
+  const server = app.listen(PORT, () => {
     if (DEBUG) console.log(`API server running on port ${PORT}`);
   });
+  try {
+    const keepAliveTimeout = 65_000;
+    server.keepAliveTimeout = Math.max(server.keepAliveTimeout ?? 0, keepAliveTimeout);
+    server.headersTimeout = Math.max(server.headersTimeout ?? 0, keepAliveTimeout + 5_000);
+  } catch (err) {
+    if (process.env.DEBUG === 'true') {
+      console.warn('[server] unable to adjust keep-alive timeouts:', err);
+    }
+  }
 }
 
 module.exports = app;
 // Changelog:
 // - 2024-05-17: adicionadas rotas /healthz e /healthz/db para monitoramento e reaproveitamento leve do servidor.
 // - 2024-06-09: adicionado aquecimento inicial do pool com SELECT 1 para reduzir falso offline-db.
+// - 2024-08-27: criado endpoint combinado /healthz/combined com resposta 204 e keep-alive estendido.

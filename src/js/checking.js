@@ -72,7 +72,8 @@ function applyStatus(status) {
     online: 'Conectado ao servidor',
     checking: 'Verificando conectividade...',
     offline: 'Sem conexão com a Internet ou servidor',
-    'db-offline': 'Banco de dados indisponível'
+    'db-offline': 'Banco de dados indisponível',
+    waiting: 'Monitor em espera (janela inativa)'
   };
   const title = titles[state] || 'Monitorando conexão';
   checkBtn.setAttribute('title', title);
@@ -83,9 +84,15 @@ function applyStatus(status) {
   } else if (state === 'checking') {
     checking = true;
     showSpinner();
+  } else if (state === 'waiting') {
+    checking = false;
+    showSpinner('var(--color-blue)');
+  } else if (state === 'db-offline') {
+    checking = false;
+    showSpinner('var(--color-orange)');
   } else {
     checking = false;
-    showFailure();
+    showSpinner('var(--color-red)');
   }
 
   if (!shouldLogout && lastLogoutReason) {
