@@ -21,7 +21,6 @@ const { registrarUltimaSaida, registrarUltimaEntrada } = require('./backend/user
 const db = require('./backend/db');
 const fs = require('fs');
 const net = require('net');
-const http = require('http');
 const {
   listarMaterias,
   adicionarMateria,
