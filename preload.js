@@ -280,6 +280,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onSelectTab: (callback) =>
     ipcRenderer.on('select-tab', (_event, tab) => callback(tab)),
   onUpdateStatus: (callback) => subscribeToChannel('update-status', callback),
+  onNetworkStatus: (callback) => subscribeToChannel('network-status', callback),
   onPublishStatus: (callback) => {
     const unsubscribes = ['publish-progress', 'publish-done'].map(channel =>
       subscribeToChannel(channel, callback)

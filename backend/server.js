@@ -36,6 +36,10 @@ app.get('/status', (_req, res) => {
   res.json({ status: 'ok' });
 });
 
+app.get('/healthz', (_req, res) => {
+  res.status(200).json({ status: 'ok' });
+});
+
 app.get('/reset-password', (_req, res) => {
   res.sendFile(path.join(__dirname, '../src/login/reset-password.html'));
 });

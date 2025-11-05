@@ -19,6 +19,7 @@ const { registrarUltimaSaida, registrarUltimaEntrada } = require('./backend/user
 const db = require('./backend/db');
 const fs = require('fs');
 const net = require('net');
+const http = require('http');
 const {
   listarMaterias,
   adicionarMateria,
@@ -138,6 +139,10 @@ const localAppVersion = app.getVersion();
 const initialPublishing = publisher.isPublishing();
 const projectRoot = path.resolve(__dirname);
 
+const HEALTH_CHECK_INTERVAL_MS = 10000;
+const HEALTH_CHECK_TIMEOUT_MS = 5000;
+const HEALTH_CHECK_PATH = '/healthz';
+
 const DEFAULT_API_PORT = 3000;
 const MAX_PORT = 65535;
 let configuredApiPort = DEFAULT_API_PORT;
@@ -174,6 +179,10 @@ const UPDATE_STATUS_CACHE_TTL = 1500;
 
 let publishStateFilePath;
 
+let healthCheckAgent = null;
+let healthCheckIntervalId = null;
+let lastHealthStatusPayload = null;
+
 function getPublishStateFilePath() {
   if (!publishStateFilePath) {
     publishStateFilePath = path.join(app.getPath('userData'), 'publish-state.json');
@@ -195,6 +204,124 @@ function loadPersistedPublishState() {
   } catch (err) {
     console.error('Não foi possível carregar estado de publicação persistido:', err);
     return null;
+  }
+}
+
+function ensureHealthCheckAgent() {
+  if (!healthCheckAgent) {
+    healthCheckAgent = new http.Agent({
+      keepAlive: true,
+      keepAliveMsecs: HEALTH_CHECK_INTERVAL_MS,
+      maxSockets: 1,
+      maxFreeSockets: 1
+    });
+  }
+  return healthCheckAgent;
+}
+
+function sendLastNetworkStatusToWindow(win) {
+  if (!win || win.isDestroyed() || !lastHealthStatusPayload) return;
+  try {
+    win.webContents.send('network-status', lastHealthStatusPayload);
+  } catch (err) {
+    if (DEBUG) console.error('Falha ao enviar status de rede para janela', err);
+  }
+}
+
+function broadcastNetworkStatus(payload) {
+  lastHealthStatusPayload = payload;
+  BrowserWindow.getAllWindows().forEach(win => {
+    if (win && !win.isDestroyed()) {
+      try {
+        win.webContents.send('network-status', payload);
+      } catch (err) {
+        if (DEBUG) console.error('Falha ao enviar status de rede', err);
+      }
+    }
+  });
+}
+
+function performHealthCheck() {
+  if (!currentApiPort) {
+    return Promise.resolve();
+  }
+
+  const agent = ensureHealthCheckAgent();
+
+  return new Promise((resolve) => {
+    const request = http.request(
+      {
+        host: '127.0.0.1',
+        port: currentApiPort,
+        path: HEALTH_CHECK_PATH,
+        method: 'GET',
+        agent,
+        timeout: HEALTH_CHECK_TIMEOUT_MS
+      },
+      (res) => {
+        res.resume();
+        const online = res.statusCode >= 200 && res.statusCode < 300;
+        resolve({ online, statusCode: res.statusCode });
+      }
+    );
+
+    request.on('timeout', () => {
+      request.destroy(new Error('Health check timeout'));
+    });
+
+    request.on('error', (err) => {
+      resolve({ online: false, error: err });
+    });
+
+    request.end();
+  })
+    .then((result) => {
+      if (!result) return;
+      const payload = {
+        online: Boolean(result.online),
+        timestamp: Date.now()
+      };
+
+      if (typeof result.statusCode === 'number') {
+        payload.statusCode = result.statusCode;
+      }
+
+      payload.status = payload.online ? 'online' : 'offline';
+
+      if (!result.online && result.error) {
+        payload.error = {
+          message: result.error.message,
+          code: result.error.code
+        };
+      }
+
+      broadcastNetworkStatus(payload);
+    })
+    .catch((err) => {
+      if (DEBUG) console.error('Falha na verificação de saúde da API', err);
+    });
+}
+
+function startHealthMonitoring() {
+  stopHealthMonitoring();
+  performHealthCheck();
+  healthCheckIntervalId = setInterval(() => {
+    performHealthCheck();
+  }, HEALTH_CHECK_INTERVAL_MS);
+}
+
+function stopHealthMonitoring() {
+  if (healthCheckIntervalId) {
+    clearInterval(healthCheckIntervalId);
+    healthCheckIntervalId = null;
+  }
+  if (healthCheckAgent) {
+    try {
+      healthCheckAgent.destroy();
+    } catch (err) {
+      if (DEBUG) console.error('Falha ao destruir agente de verificação de saúde', err);
+    }
+    healthCheckAgent = null;
   }
 }
 
@@ -1678,6 +1805,7 @@ async function startApiServerOnPort(port) {
       apiServerInstance = server;
       currentApiPort = port;
       apiServerInstance.on('error', handleApiServerError);
+      startHealthMonitoring();
       if (DEBUG) {
         console.log(`API server running on port ${currentApiPort}`);
       }
@@ -1732,6 +1860,7 @@ async function handleApiServerError(err) {
 }
 
 function closeApiServer() {
+  stopHealthMonitoring();
   if (!apiServerInstance) {
     return Promise.resolve();
   }
@@ -1820,7 +1949,11 @@ function createLoginWindow(show = true, showOnLoad = true) {
     path.join(__dirname, 'src/login/login.html'),
     { query: { hidden: showOnLoad ? '0' : '1'
      } }
-  );  
+  );
+
+  loginWindow.webContents.on('did-finish-load', () => {
+    sendLastNetworkStatusToWindow(loginWindow);
+  });
 
   loginWindow.on('closed', () => {
     loginWindow = null;
@@ -1903,6 +2036,7 @@ function createDashboardWindow(show = true) {
 
   dashboardWindow.webContents.on('did-finish-load', () => {
     dashboardWindow.webContents.send('select-tab', 'dashboard');
+    sendLastNetworkStatusToWindow(dashboardWindow);
   });
 
   dashboardWindow.on('close', (event) => {
