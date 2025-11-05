@@ -12,6 +12,7 @@ const transportadorasRouter = require('./transportadorasController');
 const orcamentosRouter      = require('./orcamentosController');
 const pedidosRouter         = require('./pedidosController');
 const notificationsRouter   = require('./notificationsController');
+const db                    = require('./db');
 
 const app = express();
 app.use(cors());
@@ -40,6 +41,20 @@ app.get('/healthz', (_req, res) => {
   res.status(200).json({ status: 'ok' });
 });
 
+// Health checks usados pelo monitor de conectividade com baixo custo.
+app.get('/healthz', (_req, res) => {
+  res.json({ status: 'ok' });
+});
+
+app.get('/healthz/db', async (_req, res) => {
+  try {
+    await db.query('SELECT 1');
+    res.json({ status: 'ok' });
+  } catch (err) {
+    res.status(503).json({ status: 'error', error: err.message || 'db-unreachable' });
+  }
+});
+
 app.get('/reset-password', (_req, res) => {
   res.sendFile(path.join(__dirname, '../src/login/reset-password.html'));
 });
@@ -57,3 +72,5 @@ if (require.main === module) {
 }
 
 module.exports = app;
+// Changelog:
+// - 2024-05-17: adicionadas rotas /healthz e /healthz/db para monitoramento e reaproveitamento leve do servidor.

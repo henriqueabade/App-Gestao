@@ -3,6 +3,8 @@ const { app, BrowserWindow, ipcMain, screen, shell, dialog } = require('electron
 const path = require('path');
 const { execFile } = require('child_process');
 const { pathToFileURL } = require('url');
+const http = require('http');
+const https = require('https');
 const DEBUG = process.env.DEBUG === 'true';
 const { autoUpdater } = require('electron-updater');
 const updateService = require('./backend/updateService');
@@ -129,6 +131,7 @@ let lastRecordedAction = null;
 let isPersistingExit = false;
 let apiServerInstance = null;
 let currentApiPort = null;
+let connectionMonitorController = null;
 ipcMain.handle('get-runtime-config', () => {
   const port = currentApiPort ?? configuredApiPort ?? DEFAULT_API_PORT;
   return { apiBaseUrl: `http://localhost:${port}` };
@@ -146,6 +149,41 @@ const HEALTH_CHECK_PATH = '/healthz';
 const DEFAULT_API_PORT = 3000;
 const MAX_PORT = 65535;
 let configuredApiPort = DEFAULT_API_PORT;
+
+// Configurações do monitor de conectividade (rede + banco)
+const CONNECTION_BASE_INTERVAL_MS = Math.max(
+  Number.parseInt(process.env.CONNECTION_MONITOR_INTERVAL_MS || '10000', 10),
+  5000
+);
+const CONNECTION_DEEP_INTERVAL_MS = Math.max(
+  Number.parseInt(process.env.CONNECTION_MONITOR_DEEP_INTERVAL_MS || '90000', 10),
+  CONNECTION_BASE_INTERVAL_MS * 2
+);
+const CONNECTION_MAX_BACKOFF_MS = Math.max(
+  Number.parseInt(process.env.CONNECTION_MONITOR_MAX_BACKOFF_MS || '120000', 10),
+  CONNECTION_BASE_INTERVAL_MS
+);
+const CONNECTION_EXTERNAL_URL =
+  process.env.CONNECTION_MONITOR_EXTERNAL_URL ||
+  process.env.EXTERNAL_CONNECTIVITY_URL ||
+  'https://www.gstatic.com/generate_204';
+const CONNECTION_EXTERNAL_TIMEOUT_MS = Math.max(
+  Number.parseInt(process.env.CONNECTION_MONITOR_EXTERNAL_TIMEOUT_MS || '8000', 10),
+  1000
+);
+const CONNECTION_HEALTH_TIMEOUT_MS = Math.max(
+  Number.parseInt(process.env.CONNECTION_MONITOR_HEALTH_TIMEOUT_MS || '8000', 10),
+  1000
+);
+const CONNECTION_DB_TIMEOUT_MS = Math.max(
+  Number.parseInt(process.env.CONNECTION_MONITOR_DB_TIMEOUT_MS || '12000', 10),
+  1000
+);
+const CONNECTION_SERVER_KEEP_ALIVE_MS = Math.max(
+  Number.parseInt(process.env.CONNECTION_MONITOR_SERVER_KEEP_ALIVE_MS || '65000', 10),
+  15000
+);
+const CONNECTION_STATUS_CHANNEL = 'connection-monitor:status';
 
 let publishState = {
   publishing: initialPublishing,
@@ -1794,6 +1832,20 @@ async function startApiServerOnPort(port) {
 
   return new Promise((resolve, reject) => {
     const server = apiServer.listen(port);
+    try {
+      if (typeof server.keepAliveTimeout === 'number') {
+        server.keepAliveTimeout = Math.max(server.keepAliveTimeout, CONNECTION_SERVER_KEEP_ALIVE_MS);
+      } else {
+        server.keepAliveTimeout = CONNECTION_SERVER_KEEP_ALIVE_MS;
+      }
+      if (typeof server.headersTimeout === 'number') {
+        server.headersTimeout = Math.max(server.headersTimeout, CONNECTION_SERVER_KEEP_ALIVE_MS + 5000);
+      } else {
+        server.headersTimeout = CONNECTION_SERVER_KEEP_ALIVE_MS + 5000;
+      }
+    } catch (err) {
+      console.warn('Não foi possível ajustar keep-alive do servidor HTTP interno:', err);
+    }
 
     const cleanup = () => {
       server.removeListener('error', onError);
@@ -1808,6 +1860,14 @@ async function startApiServerOnPort(port) {
       startHealthMonitoring();
       if (DEBUG) {
         console.log(`API server running on port ${currentApiPort}`);
+      }
+      try {
+        const monitor = ensureConnectionMonitor();
+        monitor.requestImmediateCheck({ forceDeep: true, triggeredBy: 'server-start' }).catch((err) => {
+          console.error('Falha ao iniciar verificação inicial de conexão:', err);
+        });
+      } catch (monitorErr) {
+        console.error('Não foi possível inicializar o monitor de conexão:', monitorErr);
       }
       resolve(apiServerInstance);
     };
@@ -1879,11 +1939,517 @@ function closeApiServer() {
   });
 }
 
+function normalizeMonitorBaseUrl(value) {
+  if (!value || typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(trimmed)) {
+    try {
+      return new URL(trimmed).origin;
+    } catch (err) {
+      return null;
+    }
+  }
+  try {
+    const fallbackProtocol = (process.env.API_PROTOCOL || 'https').replace(/:$/, '');
+    return new URL(`${fallbackProtocol}://${trimmed}`).origin;
+  } catch (err) {
+    return null;
+  }
+}
+
+function resolveBackendHealthBaseUrl() {
+  const candidates = [
+    process.env.CONNECTION_MONITOR_BASE_URL,
+    process.env.API_PUBLIC_BASE_URL,
+    process.env.API_BASE_URL,
+    process.env.API_URL,
+    process.env.APP_URL
+  ];
+  for (const candidate of candidates) {
+    const normalized = normalizeMonitorBaseUrl(candidate);
+    if (normalized) {
+      return normalized;
+    }
+  }
+
+  const fallback = new URL('http://localhost');
+  const protocol = (process.env.API_PROTOCOL || 'http').replace(/:$/, '');
+  fallback.protocol = `${protocol}:`;
+  const currentPortValue = currentApiPort ?? configuredApiPort ?? DEFAULT_API_PORT;
+  fallback.port = String(currentPortValue);
+
+  const hostCandidate = (process.env.API_HOST || process.env.API_SERVER_HOST || '').trim();
+  if (hostCandidate) {
+    if (/^[a-z][a-z0-9+.-]*:\/\//i.test(hostCandidate)) {
+      try {
+        const parsed = new URL(hostCandidate);
+        if (parsed.protocol) fallback.protocol = parsed.protocol;
+        if (parsed.hostname) fallback.hostname = parsed.hostname;
+        fallback.port = parsed.port || fallback.port;
+      } catch (err) {
+        fallback.hostname = hostCandidate;
+      }
+    } else {
+      const sanitized = hostCandidate.replace(/^\/+/, '').replace(/\/+$/, '');
+      fallback.host = sanitized;
+      if (!fallback.port) {
+        fallback.port = String(currentPortValue);
+      }
+    }
+  } else {
+    fallback.hostname = 'localhost';
+  }
+
+  return fallback.origin;
+}
+
+function createKeepAliveAgent(protocol) {
+  const options = {
+    keepAlive: true,
+    keepAliveMsecs: Math.max(CONNECTION_BASE_INTERVAL_MS, 10_000),
+    maxSockets: 1,
+    maxFreeSockets: 1
+  };
+  return protocol === 'https:' ? new https.Agent(options) : new http.Agent(options);
+}
+
+function destroyAgent(agent) {
+  if (agent && typeof agent.destroy === 'function') {
+    agent.destroy();
+  }
+}
+
+function formatMonitorError(err) {
+  if (!err) return null;
+  const error = err instanceof Error ? err : new Error(String(err));
+  return {
+    message: error.message || String(error),
+    code: error.code,
+    statusCode: error.statusCode,
+    syscall: error.syscall,
+    errno: error.errno
+  };
+}
+
+async function checkDatabaseAndCurrentUser({ skipBasicQuery = false } = {}) {
+  if (!skipBasicQuery) {
+    try {
+      await db.query('SELECT 1');
+    } catch (err) {
+      if (isNetworkError(err)) {
+        return { success: false, reason: 'offline', error: err };
+      }
+      if (isPinError(err)) {
+        return { success: false, reason: 'pin', error: err };
+      }
+      return { success: false, error: err };
+    }
+  }
+
+  if (currentUserSession?.id) {
+    try {
+      const { rows } = await db.query('SELECT 1 FROM usuarios WHERE id = $1 LIMIT 1', [
+        currentUserSession.id
+      ]);
+      if (!rows || rows.length === 0) {
+        return { success: false, reason: 'user-removed' };
+      }
+    } catch (err) {
+      if (isNetworkError(err)) {
+        return { success: false, reason: 'offline', error: err };
+      }
+      if (isPinError(err)) {
+        return { success: false, reason: 'pin', error: err };
+      }
+      return { success: false, error: err };
+    }
+  }
+
+  return { success: true };
+}
+
+function requestWithAgent(targetUrl, { method = 'GET', timeout = 5000, agent } = {}) {
+  const url = targetUrl instanceof URL ? targetUrl : new URL(targetUrl);
+  const transport = url.protocol === 'https:' ? https : http;
+  const options = {
+    method,
+    protocol: url.protocol,
+    hostname: url.hostname,
+    port: url.port || undefined,
+    path: `${url.pathname}${url.search}`,
+    agent,
+    timeout
+  };
+
+  return new Promise((resolve, reject) => {
+    const request = transport.request(options, (response) => {
+      response.on('error', reject);
+      response.on('data', () => {});
+      response.on('end', () => {
+        const statusCode = response.statusCode ?? 0;
+        if (statusCode >= 200 && statusCode < 400) {
+          resolve({ statusCode });
+        } else {
+          const error = new Error(`Request failed with status ${statusCode}`);
+          error.statusCode = statusCode;
+          reject(error);
+        }
+      });
+    });
+
+    request.on('timeout', () => {
+      request.destroy(new Error('Request timeout'));
+    });
+    request.on('error', reject);
+    request.end();
+  });
+}
+
+function broadcastConnectionStatusPayload(payload) {
+  for (const win of BrowserWindow.getAllWindows()) {
+    if (!win || win.isDestroyed()) continue;
+    try {
+      win.webContents.send(CONNECTION_STATUS_CHANNEL, payload);
+    } catch (err) {
+      if (DEBUG) {
+        console.error('Falha ao enviar status de conexão para renderer', err);
+      }
+    }
+  }
+}
+
+function createConnectionMonitor() {
+  const externalUrl = new URL(CONNECTION_EXTERNAL_URL);
+  let externalAgent = null;
+  let backendAgent = null;
+  let backendAgentProtocol = null;
+  let active = false;
+  let timer = null;
+  let checkPromise = null;
+  let consecutiveFailures = 0;
+  let lastDeepCheckAt = 0;
+  let nextAttemptAt = Date.now();
+  let lastLoggedState = null;
+  let lastLoggedSignature = null;
+  let currentStatus = {
+    state: 'checking',
+    detail: 'initializing',
+    reason: null,
+    shouldLogout: false,
+    failureStage: null,
+    lastError: null,
+    triggeredBy: 'startup',
+    baseUrl: null,
+    updatedAt: Date.now(),
+    consecutiveFailures: 0,
+    nextAttemptAt
+  };
+
+  function ensureExternalAgent() {
+    if (!externalAgent) {
+      externalAgent = createKeepAliveAgent(externalUrl.protocol);
+    }
+    return externalAgent;
+  }
+
+  function ensureBackendAgent(urlObject) {
+    const protocol = urlObject.protocol || 'http:';
+    if (!backendAgent || backendAgentProtocol !== protocol) {
+      if (backendAgent) {
+        destroyAgent(backendAgent);
+      }
+      backendAgent = createKeepAliveAgent(protocol);
+      backendAgentProtocol = protocol;
+    }
+    return backendAgent;
+  }
+
+  function scheduleNextAttempt(failed) {
+    const now = Date.now();
+    if (!failed) {
+      consecutiveFailures = 0;
+      nextAttemptAt = now + CONNECTION_BASE_INTERVAL_MS;
+      return;
+    }
+    consecutiveFailures += 1;
+    const exponent = Math.min(consecutiveFailures, 5);
+    const baseDelay = CONNECTION_BASE_INTERVAL_MS * Math.pow(2, exponent);
+    const cappedDelay = Math.min(Math.max(baseDelay, CONNECTION_BASE_INTERVAL_MS), CONNECTION_MAX_BACKOFF_MS);
+    const jitterRange = Math.max(Math.round(cappedDelay * 0.25), 500);
+    const jitter = Math.round((Math.random() * jitterRange) - jitterRange / 2);
+    nextAttemptAt = now + cappedDelay + jitter;
+  }
+
+  function formatStatusPayload() {
+    const now = Date.now();
+    return {
+      ...currentStatus,
+      timestamp: now,
+      active,
+      nextAttemptAt,
+      nextAttemptIn: Math.max(nextAttemptAt - now, 0),
+      consecutiveFailures,
+      deepCheckDueIn: Math.max(lastDeepCheckAt + CONNECTION_DEEP_INTERVAL_MS - now, 0),
+      baseInterval: CONNECTION_BASE_INTERVAL_MS,
+      maxBackoff: CONNECTION_MAX_BACKOFF_MS
+    };
+  }
+
+  function broadcastStatus() {
+    broadcastConnectionStatusPayload(formatStatusPayload());
+  }
+
+  function updateStatus(partial) {
+    const now = Date.now();
+    currentStatus = {
+      ...currentStatus,
+      ...partial,
+      updatedAt: now,
+      consecutiveFailures,
+      nextAttemptAt
+    };
+    const signature = `${currentStatus.state}|${currentStatus.reason ?? ''}|${currentStatus.detail ?? ''}`;
+    if (currentStatus.state !== lastLoggedState || signature !== lastLoggedSignature) {
+      lastLoggedState = currentStatus.state;
+      lastLoggedSignature = signature;
+      const detailSuffix = currentStatus.detail ? ` - ${currentStatus.detail}` : '';
+      console.log(
+        `[connection-monitor] estado => ${currentStatus.state}${currentStatus.reason ? ` (${currentStatus.reason})` : ''}${detailSuffix}`
+      );
+      if (currentStatus.lastError && DEBUG) {
+        console.error('[connection-monitor] detalhe do erro:', currentStatus.lastError);
+      }
+    }
+    broadcastStatus();
+  }
+
+  async function performCheck({ forceDeep = false, triggeredBy = 'timer' } = {}) {
+    if (!active) return;
+    const baseUrlString = resolveBackendHealthBaseUrl();
+    let baseUrl;
+    try {
+      baseUrl = new URL(baseUrlString);
+    } catch (err) {
+      scheduleNextAttempt(true);
+      updateStatus({
+        state: 'offline',
+        reason: 'offline',
+        detail: 'invalid-base-url',
+        shouldLogout: false,
+        failureStage: 'configuration',
+        lastError: formatMonitorError(err),
+        triggeredBy
+      });
+      return;
+    }
+
+    currentStatus.baseUrl = baseUrl.origin;
+    updateStatus({
+      state: 'checking',
+      detail: 'verificando-conectividade',
+      reason: null,
+      shouldLogout: false,
+      failureStage: null,
+      lastError: null,
+      triggeredBy
+    });
+
+    const externalAgentInstance = ensureExternalAgent();
+    const backendAgentInstance = ensureBackendAgent(baseUrl);
+
+    try {
+      await requestWithAgent(externalUrl, {
+        method: 'HEAD',
+        timeout: CONNECTION_EXTERNAL_TIMEOUT_MS,
+        agent: externalAgentInstance
+      });
+    } catch (err) {
+      scheduleNextAttempt(true);
+      updateStatus({
+        state: 'offline',
+        reason: 'offline',
+        detail: 'sem-internet',
+        shouldLogout: true,
+        failureStage: 'internet',
+        lastError: formatMonitorError(err),
+        triggeredBy
+      });
+      return;
+    }
+
+    try {
+      const healthUrl = new URL('/healthz', baseUrl);
+      await requestWithAgent(healthUrl, {
+        method: 'GET',
+        timeout: CONNECTION_HEALTH_TIMEOUT_MS,
+        agent: backendAgentInstance
+      });
+    } catch (err) {
+      scheduleNextAttempt(true);
+      updateStatus({
+        state: 'offline',
+        reason: 'offline',
+        detail: 'backend-indisponivel',
+        shouldLogout: true,
+        failureStage: 'api',
+        lastError: formatMonitorError(err),
+        triggeredBy
+      });
+      return;
+    }
+
+    const now = Date.now();
+    const needsDeep = forceDeep || now - lastDeepCheckAt >= CONNECTION_DEEP_INTERVAL_MS || currentStatus.state === 'db-offline';
+
+    if (needsDeep) {
+      try {
+        const dbHealthUrl = new URL('/healthz/db', baseUrl);
+        await requestWithAgent(dbHealthUrl, {
+          method: 'GET',
+          timeout: CONNECTION_DB_TIMEOUT_MS,
+          agent: backendAgentInstance
+        });
+        lastDeepCheckAt = Date.now();
+      } catch (err) {
+        scheduleNextAttempt(true);
+        updateStatus({
+          state: 'db-offline',
+          reason: 'offline-db',
+          detail: 'db-indisponivel',
+          shouldLogout: true,
+          failureStage: 'database',
+          lastError: formatMonitorError(err),
+          triggeredBy
+        });
+        return;
+      }
+    }
+
+    const heartbeat = await checkDatabaseAndCurrentUser({ skipBasicQuery: true });
+    if (!heartbeat.success) {
+      scheduleNextAttempt(true);
+      const reason = heartbeat.reason || 'offline';
+      let detail = 'falha-db-heartbeat';
+      let failureStage = 'database';
+      if (reason === 'user-removed') {
+        detail = 'usuario-removido';
+        failureStage = 'auth';
+      } else if (reason === 'pin') {
+        detail = 'pin-invalido';
+        failureStage = 'auth';
+      } else if (reason === 'offline') {
+        detail = 'sem-internet';
+        failureStage = 'internet';
+      }
+      updateStatus({
+        state: reason === 'offline-db' ? 'db-offline' : 'offline',
+        reason,
+        detail,
+        shouldLogout: true,
+        failureStage,
+        lastError: formatMonitorError(heartbeat.error),
+        triggeredBy
+      });
+      return;
+    }
+
+    scheduleNextAttempt(false);
+    updateStatus({
+      state: 'online',
+      reason: null,
+      detail: 'ok',
+      shouldLogout: false,
+      failureStage: null,
+      lastError: null,
+      triggeredBy
+    });
+  }
+
+  function maybeRunCheck(options) {
+    if (!active) return Promise.resolve();
+    if (checkPromise) {
+      return checkPromise;
+    }
+    checkPromise = performCheck(options).finally(() => {
+      checkPromise = null;
+    });
+    return checkPromise;
+  }
+
+  function handleTick() {
+    if (!active) return;
+    broadcastStatus();
+    if (Date.now() >= nextAttemptAt) {
+      maybeRunCheck();
+    }
+  }
+
+  function start() {
+    if (active) return;
+    active = true;
+    nextAttemptAt = Date.now();
+    maybeRunCheck({ forceDeep: true, triggeredBy: 'startup' });
+    timer = setInterval(handleTick, CONNECTION_BASE_INTERVAL_MS);
+    if (typeof timer.unref === 'function') {
+      timer.unref();
+    }
+  }
+
+  function stop() {
+    if (!active) return;
+    active = false;
+    if (timer) {
+      clearInterval(timer);
+      timer = null;
+    }
+    destroyAgent(externalAgent);
+    externalAgent = null;
+    destroyAgent(backendAgent);
+    backendAgent = null;
+    backendAgentProtocol = null;
+  }
+
+  function requestImmediateCheck({ forceDeep = false, triggeredBy = 'manual' } = {}) {
+    nextAttemptAt = Date.now();
+    return maybeRunCheck({ forceDeep, triggeredBy });
+  }
+
+  function getStatus() {
+    return formatStatusPayload();
+  }
+
+  return {
+    start,
+    stop,
+    getStatus,
+    requestImmediateCheck,
+    isActive: () => active
+  };
+}
+
+function ensureConnectionMonitor(startIfInactive = true) {
+  if (!connectionMonitorController) {
+    connectionMonitorController = createConnectionMonitor();
+  }
+  if (startIfInactive && !connectionMonitorController.isActive()) {
+    connectionMonitorController.start();
+  }
+  return connectionMonitorController;
+}
+
+function stopConnectionMonitor() {
+  if (connectionMonitorController) {
+    connectionMonitorController.stop();
+  }
+}
+
 async function flushAndQuit(reason) {
   if (!quittingApp) {
     quittingApp = true;
     await persistUserExit(reason);
   }
+  stopConnectionMonitor();
   await closeApiServer();
   app.quit();
 }
@@ -2145,15 +2711,31 @@ app.on('before-quit', (event) => {
 
 app.on('will-quit', () => {
   // Garantimos que o servidor da API seja finalizado mesmo em encerramentos atípicos
+  stopConnectionMonitor();
   closeApiServer();
 });
 
 ['SIGINT', 'SIGTERM'].forEach((signal) => {
   process.on(signal, () => {
+    stopConnectionMonitor();
     closeApiServer().finally(() => {
       process.exit();
     });
   });
+});
+
+ipcMain.handle('connection-monitor:get-status', async () => {
+  const monitor = ensureConnectionMonitor(false);
+  return monitor.getStatus();
+});
+
+ipcMain.handle('connection-monitor:request-check', async (_event, options) => {
+  const monitor = ensureConnectionMonitor(true);
+  await monitor.requestImmediateCheck({
+    forceDeep: Boolean(options?.forceDeep),
+    triggeredBy: 'renderer-request'
+  });
+  return monitor.getStatus();
 });
 
 ipcMain.handle('registrar-usuario', async (_event, dados) => {
@@ -2721,26 +3303,14 @@ ipcMain.handle('open-dashboard', async () => {
 });
 
 ipcMain.handle('check-pin', async () => {
-  try {
-    await db.query('SELECT 1');
-    if (currentUserSession?.id) {
-      const { rows } = await db.query('SELECT 1 FROM usuarios WHERE id = $1 LIMIT 1', [
-        currentUserSession.id
-      ]);
-      if (!rows || rows.length === 0) {
-        return { success: false, reason: 'user-removed' };
-      }
-    }
+  const result = await checkDatabaseAndCurrentUser();
+  if (result.success) {
     return { success: true };
-  } catch (err) {
-    if (isNetworkError(err)) {
-      return { success: false, reason: 'offline' };
-    }
-    if (isPinError(err)) {
-      return { success: false, reason: 'pin' };
-    }
-    return { success: false };
   }
+  if (result.reason) {
+    return { success: false, reason: result.reason };
+  }
+  return { success: false };
 });
 
 ipcMain.handle('save-state', async (_e, state) => {
@@ -2832,6 +3402,8 @@ ipcMain.handle('show-login', async () => {
   return true;
 });
 
+// Changelog:
+// - 2024-05-17: monitor de conectividade movido para o processo principal com keep-alive, backoff com jitter e integração ao fluxo de logout.
 
 ipcMain.handle('close-window', () => {
   flushAndQuit('close-window');

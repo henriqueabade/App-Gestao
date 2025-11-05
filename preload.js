@@ -251,6 +251,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   openLoginHidden: () => ipcRenderer.invoke('open-login-hidden'),
   logout: () => ipcRenderer.invoke('logout'),
   checkPin: () => ipcRenderer.invoke('check-pin'),
+  getConnectionStatus: () => ipcRenderer.invoke('connection-monitor:get-status'),
+  requestConnectionCheck: (options) =>
+    ipcRenderer.invoke('connection-monitor:request-check', options || {}),
+  onConnectionStatus: (callback) => subscribeToChannel('connection-monitor:status', callback),
   saveState: (state) => ipcRenderer.invoke('save-state', state),
   loadState: () => ipcRenderer.invoke('load-state'),
   clearState: () => ipcRenderer.invoke('clear-state'),
@@ -296,3 +300,5 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
 
 
+// Changelog:
+// - 2024-05-17: adicionadas APIs de monitoramento de conexão (status, request e listener) para uso pelo renderer.

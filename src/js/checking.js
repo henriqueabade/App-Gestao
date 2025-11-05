@@ -2,8 +2,9 @@
 // Usa o botão de sincronização existente para exibir o status
 const checkBtn = document.getElementById('networkCheck');
 const icon = checkBtn ? checkBtn.querySelector('i') : null;
-let unsubscribeNetworkStatus = null;
-let disconnectHandled = false;
+let checking = false;
+let unsubscribeStatus = null;
+let lastHandledLogoutReason = null;
 
 function showSpinner(color = 'var(--color-blue)') {
   if (!checkBtn || !icon) return;
@@ -59,39 +60,79 @@ async function handleDisconnect(reason) {
   }
 }
 
-async function handleNetworkStatus(payload) {
-  if (!checkBtn || !icon) return;
-  const online = Boolean(payload && payload.online);
-  if (online) {
-    disconnectHandled = false;
+function applyStatus(status) {
+  if (!status || !checkBtn || !icon) return;
+  const state = status.state || 'checking';
+  const reason = status.reason;
+  const shouldLogout = Boolean(status.shouldLogout);
+
+  const titles = {
+    online: 'Conectado ao servidor',
+    checking: 'Verificando conectividade...',
+    offline: 'Sem conexão com a Internet ou servidor',
+    'db-offline': 'Banco de dados indisponível'
+  };
+  const title = titles[state] || 'Monitorando conexão';
+  checkBtn.setAttribute('title', title);
+
+  if (state === 'online') {
+    checking = false;
     showSuccess();
-    return;
+  } else if (state === 'checking') {
+    checking = true;
+    showSpinner();
+  } else {
+    checking = false;
+    showFailure();
   }
 
-  showFailure();
-  if (disconnectHandled) return;
-  disconnectHandled = true;
+  if (shouldLogout && reason && lastHandledLogoutReason !== reason) {
+    lastHandledLogoutReason = reason;
+    handleDisconnect(reason).catch((err) => {
+      console.error('Falha ao tratar desconexão forçada:', err);
+    });
+  } else if (!shouldLogout && lastHandledLogoutReason) {
+    lastHandledLogoutReason = null;
+  }
+}
+
+async function initializeMonitorBridge() {
+  if (!window.electronAPI || !checkBtn || !icon) return;
+
+  showSpinner();
   try {
-    await handleDisconnect('offline');
+    if (typeof window.electronAPI.onConnectionStatus === 'function') {
+      unsubscribeStatus = window.electronAPI.onConnectionStatus(applyStatus);
+    }
+    const initialStatus = await window.electronAPI.getConnectionStatus?.();
+    if (initialStatus) {
+      applyStatus(initialStatus);
+    }
+    await window.electronAPI.requestConnectionCheck?.({ forceDeep: true });
   } catch (err) {
-    console.error('Erro ao processar desconexão de rede', err);
+    console.error('Falha ao inicializar monitor de conexão:', err);
+    showFailure();
   }
 }
 
-function subscribeToNetworkStatus() {
-  if (!checkBtn || !icon) return;
-  if (!window.electronAPI || typeof window.electronAPI.onNetworkStatus !== 'function') {
-    return;
-  }
-  unsubscribeNetworkStatus = window.electronAPI.onNetworkStatus(handleNetworkStatus);
+if (checkBtn) {
+  checkBtn.addEventListener('click', () => {
+    if (!window.electronAPI || checking) return;
+    showSpinner();
+    window.electronAPI.requestConnectionCheck?.({ forceDeep: true }).catch((err) => {
+      console.error('Falha ao solicitar verificação manual de conexão:', err);
+    });
+  });
 }
 
-showSpinner();
-subscribeToNetworkStatus();
+initializeMonitorBridge();
 
 window.stopServerCheck = () => {
-  if (typeof unsubscribeNetworkStatus === 'function') {
-    unsubscribeNetworkStatus();
-    unsubscribeNetworkStatus = null;
+  if (typeof unsubscribeStatus === 'function') {
+    unsubscribeStatus();
+    unsubscribeStatus = null;
   }
 };
+
+// Changelog:
+// - 2024-05-17: renderer passou a consumir status via IPC do monitor centralizado no processo principal, removendo polling local.
