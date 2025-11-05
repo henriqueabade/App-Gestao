@@ -255,6 +255,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   requestConnectionCheck: (options) =>
     ipcRenderer.invoke('connection-monitor:request-check', options || {}),
   onConnectionStatus: (callback) => subscribeToChannel('connection-monitor:status', callback),
+  onSessionForceLogout: (callback) => subscribeToChannel('session:force-logout', callback),
   saveState: (state) => ipcRenderer.invoke('save-state', state),
   loadState: () => ipcRenderer.invoke('load-state'),
   clearState: () => ipcRenderer.invoke('clear-state'),
@@ -302,3 +303,4 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
 // Changelog:
 // - 2024-05-17: adicionadas APIs de monitoramento de conexão (status, request e listener) para uso pelo renderer.
+// - 2024-06-09: exposto listener session:force-logout para reutilizar fluxo de logout centralizado.

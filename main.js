@@ -175,14 +175,27 @@ const CONNECTION_HEALTH_TIMEOUT_MS = Math.max(
   1000
 );
 const CONNECTION_DB_TIMEOUT_MS = Math.max(
-  Number.parseInt(process.env.CONNECTION_MONITOR_DB_TIMEOUT_MS || '12000', 10),
+  Number.parseInt(process.env.CONNECTION_MONITOR_DB_TIMEOUT_MS || '8000', 10),
   1000
+);
+const CONNECTION_DEEP_STARTUP_DELAY_MS = Math.max(
+  Number.parseInt(process.env.CONNECTION_MONITOR_DEEP_STARTUP_DELAY_MS || '60000', 10),
+  CONNECTION_BASE_INTERVAL_MS
+);
+const CONNECTION_DB_FAILURE_THRESHOLD = Math.max(
+  Number.parseInt(process.env.CONNECTION_MONITOR_DB_FAILURE_THRESHOLD || '2', 10),
+  1
 );
 const CONNECTION_SERVER_KEEP_ALIVE_MS = Math.max(
   Number.parseInt(process.env.CONNECTION_MONITOR_SERVER_KEEP_ALIVE_MS || '65000', 10),
   15000
 );
 const CONNECTION_STATUS_CHANNEL = 'connection-monitor:status';
+const SESSION_FORCE_LOGOUT_CHANNEL = 'session:force-logout';
+const SESSION_FORCE_LOGOUT_DEBOUNCE_MS = Math.max(
+  Number.parseInt(process.env.SESSION_FORCE_LOGOUT_DEBOUNCE_MS || '5000', 10),
+  0
+);
 
 let publishState = {
   publishing: initialPublishing,
@@ -2118,6 +2131,19 @@ function broadcastConnectionStatusPayload(payload) {
   }
 }
 
+function broadcastSessionForceLogout(payload) {
+  for (const win of BrowserWindow.getAllWindows()) {
+    if (!win || win.isDestroyed()) continue;
+    try {
+      win.webContents.send(SESSION_FORCE_LOGOUT_CHANNEL, payload);
+    } catch (err) {
+      if (DEBUG) {
+        console.error('Falha ao emitir session:force-logout para renderer', err);
+      }
+    }
+  }
+}
+
 function createConnectionMonitor() {
   const externalUrl = new URL(CONNECTION_EXTERNAL_URL);
   let externalAgent = null;
@@ -2128,6 +2154,9 @@ function createConnectionMonitor() {
   let checkPromise = null;
   let consecutiveFailures = 0;
   let lastDeepCheckAt = 0;
+  let allowDeepChecksAfter = Date.now() + CONNECTION_DEEP_STARTUP_DELAY_MS;
+  let deepFailureCount = 0;
+  let lastForcedLogoutBroadcast = { reason: null, at: 0 };
   let nextAttemptAt = Date.now();
   let lastLoggedState = null;
   let lastLoggedSignature = null;
@@ -2221,6 +2250,26 @@ function createConnectionMonitor() {
       }
     }
     broadcastStatus();
+    if (currentStatus.shouldLogout && currentStatus.reason) {
+      const now = Date.now();
+      const { reason } = currentStatus;
+      const elapsed = now - lastForcedLogoutBroadcast.at;
+      if (
+        lastForcedLogoutBroadcast.reason !== reason ||
+        elapsed >= SESSION_FORCE_LOGOUT_DEBOUNCE_MS
+      ) {
+        lastForcedLogoutBroadcast = { reason, at: now };
+        console.log(`[connection-monitor] acionando tratamento de sessão (${reason})`);
+        broadcastSessionForceLogout({
+          reason,
+          state: currentStatus.state,
+          detail: currentStatus.detail,
+          triggeredBy: currentStatus.triggeredBy || partial.triggeredBy || null
+        });
+      }
+    } else if (!currentStatus.shouldLogout) {
+      lastForcedLogoutBroadcast = { reason: null, at: 0 };
+    }
   }
 
   async function performCheck({ forceDeep = false, triggeredBy = 'timer' } = {}) {
@@ -2299,9 +2348,21 @@ function createConnectionMonitor() {
     }
 
     const now = Date.now();
-    const needsDeep = forceDeep || now - lastDeepCheckAt >= CONNECTION_DEEP_INTERVAL_MS || currentStatus.state === 'db-offline';
+    const deepAllowed = now >= allowDeepChecksAfter;
+    const shouldRunDeep =
+      (forceDeep && deepAllowed) ||
+      (!forceDeep && deepAllowed &&
+        (now - lastDeepCheckAt >= CONNECTION_DEEP_INTERVAL_MS || currentStatus.state === 'db-offline'));
 
-    if (needsDeep) {
+    if (forceDeep && !deepAllowed) {
+      const remaining = Math.max(allowDeepChecksAfter - now, 0);
+      console.log(
+        `[connection-monitor] verificação profunda adiada (${Math.ceil(remaining / 1000)}s para liberação)`
+      );
+    }
+
+    if (shouldRunDeep) {
+      allowDeepChecksAfter = 0;
       try {
         const dbHealthUrl = new URL('/healthz/db', baseUrl);
         await requestWithAgent(dbHealthUrl, {
@@ -2310,7 +2371,28 @@ function createConnectionMonitor() {
           agent: backendAgentInstance
         });
         lastDeepCheckAt = Date.now();
+        deepFailureCount = 0;
       } catch (err) {
+        deepFailureCount += 1;
+        const formattedError = formatMonitorError(err);
+        console.warn(
+          `[connection-monitor] falha ${deepFailureCount}/${CONNECTION_DB_FAILURE_THRESHOLD} ao verificar banco`,
+          formattedError
+        );
+        if (deepFailureCount < CONNECTION_DB_FAILURE_THRESHOLD) {
+          scheduleNextAttempt(true);
+          updateStatus({
+            state: 'checking',
+            reason: null,
+            detail: 'db-retry',
+            shouldLogout: false,
+            failureStage: 'database',
+            lastError: formattedError,
+            triggeredBy
+          });
+          return;
+        }
+        deepFailureCount = 0;
         scheduleNextAttempt(true);
         updateStatus({
           state: 'db-offline',
@@ -2318,7 +2400,7 @@ function createConnectionMonitor() {
           detail: 'db-indisponivel',
           shouldLogout: true,
           failureStage: 'database',
-          lastError: formatMonitorError(err),
+          lastError: formattedError,
           triggeredBy
         });
         return;
@@ -2387,8 +2469,10 @@ function createConnectionMonitor() {
   function start() {
     if (active) return;
     active = true;
+    allowDeepChecksAfter = Date.now() + CONNECTION_DEEP_STARTUP_DELAY_MS;
+    deepFailureCount = 0;
     nextAttemptAt = Date.now();
-    maybeRunCheck({ forceDeep: true, triggeredBy: 'startup' });
+    maybeRunCheck({ triggeredBy: 'startup' });
     timer = setInterval(handleTick, CONNECTION_BASE_INTERVAL_MS);
     if (typeof timer.unref === 'function') {
       timer.unref();
@@ -3687,3 +3771,6 @@ ipcMain.handle('open-external-html', async (_event, html) => {
 if (DEBUG) {
   ipcMain.on('debug-log', (_, m) => console.log('[popup]', m));
 }
+
+// Alterações 2024-06-09: Ajustado monitor de conexão para tolerar aquecimento inicial do banco,
+// emitir session:force-logout com debounce e evitar encerramentos do aplicativo em quedas.

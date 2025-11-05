@@ -2,9 +2,11 @@
 // Usa o botão de sincronização existente para exibir o status
 const checkBtn = document.getElementById('networkCheck');
 const icon = checkBtn ? checkBtn.querySelector('i') : null;
+const LOGOUT_DEBOUNCE_MS = 5000;
 let checking = false;
 let unsubscribeStatus = null;
-let lastHandledLogoutReason = null;
+let lastLogoutReason = null;
+let lastLogoutHandledAt = 0;
 
 function showSpinner(color = 'var(--color-blue)') {
   if (!checkBtn || !icon) return;
@@ -86,14 +88,24 @@ function applyStatus(status) {
     showFailure();
   }
 
-  if (shouldLogout && reason && lastHandledLogoutReason !== reason) {
-    lastHandledLogoutReason = reason;
-    handleDisconnect(reason).catch((err) => {
-      console.error('Falha ao tratar desconexão forçada:', err);
-    });
-  } else if (!shouldLogout && lastHandledLogoutReason) {
-    lastHandledLogoutReason = null;
+  if (!shouldLogout && lastLogoutReason) {
+    lastLogoutReason = null;
+    lastLogoutHandledAt = 0;
   }
+}
+
+function shouldDebounceLogout(reason) {
+  const now = Date.now();
+  if (!reason) return false;
+  if (lastLogoutReason === reason && now - lastLogoutHandledAt < LOGOUT_DEBOUNCE_MS) {
+    return true;
+  }
+  return false;
+}
+
+function markLogoutHandled(reason) {
+  lastLogoutReason = reason;
+  lastLogoutHandledAt = Date.now();
 }
 
 async function initializeMonitorBridge() {
@@ -103,6 +115,18 @@ async function initializeMonitorBridge() {
   try {
     if (typeof window.electronAPI.onConnectionStatus === 'function') {
       unsubscribeStatus = window.electronAPI.onConnectionStatus(applyStatus);
+    }
+    if (typeof window.electronAPI.onSessionForceLogout === 'function') {
+      window.electronAPI.onSessionForceLogout((payload) => {
+        const reason = payload?.reason || 'offline';
+        if (shouldDebounceLogout(reason)) {
+          return;
+        }
+        markLogoutHandled(reason);
+        handleDisconnect(reason).catch((err) => {
+          console.error('Falha ao tratar desconexão forçada:', err);
+        });
+      });
     }
     const initialStatus = await window.electronAPI.getConnectionStatus?.();
     if (initialStatus) {
@@ -136,3 +160,4 @@ window.stopServerCheck = () => {
 
 // Changelog:
 // - 2024-05-17: renderer passou a consumir status via IPC do monitor centralizado no processo principal, removendo polling local.
+// - 2024-06-09: adicionado debounce para session:force-logout recebido via IPC dedicado do monitor.

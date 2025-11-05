@@ -14,6 +14,17 @@ const pedidosRouter         = require('./pedidosController');
 const notificationsRouter   = require('./notificationsController');
 const db                    = require('./db');
 
+db
+  .query('SELECT 1')
+  .then(() => {
+    if (process.env.DEBUG === 'true') {
+      console.log('[server] pool do banco aquecido com SELECT 1');
+    }
+  })
+  .catch((err) => {
+    console.warn('[server] falha ao aquecer pool do banco:', err?.message || err);
+  });
+
 const app = express();
 app.use(cors());
 app.use(express.json({ limit: '3mb' }));
@@ -74,3 +85,4 @@ if (require.main === module) {
 module.exports = app;
 // Changelog:
 // - 2024-05-17: adicionadas rotas /healthz e /healthz/db para monitoramento e reaproveitamento leve do servidor.
+// - 2024-06-09: adicionado aquecimento inicial do pool com SELECT 1 para reduzir falso offline-db.
