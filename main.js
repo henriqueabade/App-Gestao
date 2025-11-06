@@ -2170,6 +2170,7 @@ function createConnectionMonitor() {
   let deepFailureCount = 0;
   let dbReadinessFailureCount = 0;
   let lastForcedLogoutBroadcast = { reason: null, at: 0 };
+  let lastLoggedStableSignature = null;
   let currentStatus = {
     state: 'waiting',
     reason: 'inactive',
