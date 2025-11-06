@@ -1,14 +1,4 @@
 const db = require('../db');
-const { ensureRbacSetup } = require('./ensureRbacSetup');
-
-async function ensureReady() {
-  await ensureRbacSetup();
-}
-
-async function rbacQuery(text, params) {
-  await ensureReady();
-  return db.query(text, params);
-}
 
 function normalizeCode(value) {
   if (value === undefined || value === null) {
@@ -50,7 +40,7 @@ async function getRoleByCode(rawCode) {
     return null;
   }
 
-  const { rows } = await rbacQuery(
+  const { rows } = await db.query(
     `SELECT id, code, name, description, created_at, updated_at
        FROM rbac.role
       WHERE LOWER(code) = $1
@@ -67,7 +57,7 @@ async function getPermissionsVersion(rawRoleId) {
     return null;
   }
 
-  const { rows } = await rbacQuery(
+  const { rows } = await db.query(
     `SELECT r.updated_at AS role_updated_at,
             modules.max_updated_at  AS module_updated_at,
             features.max_updated_at AS feature_updated_at,
@@ -124,7 +114,7 @@ async function getPermissionsVersion(rawRoleId) {
 }
 
 async function listAllModules() {
-  const { rows } = await rbacQuery(
+  const { rows } = await db.query(
     `SELECT id, code, name, description, aliases, order_index
        FROM rbac.module
       ORDER BY order_index NULLS LAST, code`
@@ -146,7 +136,7 @@ async function listFeaturesForModule(rawModuleCode) {
     return [];
   }
 
-  const { rows } = await rbacQuery(
+  const { rows } = await db.query(
     `SELECT f.id,
             f.code,
             f.name,
@@ -175,7 +165,7 @@ async function getModulesWithAccess(roleId) {
     return [];
   }
 
-  const { rows } = await rbacQuery(
+  const { rows } = await db.query(
     `SELECT m.id,
             m.code,
             m.name,
@@ -213,7 +203,7 @@ async function getFeaturesByRoleAndModule(roleId, rawModuleCode) {
     return [];
   }
 
-  const { rows } = await rbacQuery(
+  const { rows } = await db.query(
     `SELECT f.id,
             f.code,
             f.name,
@@ -265,7 +255,7 @@ async function getGridColumns(roleId, rawModuleCode, rawTableCode) {
     }
   }
 
-  const { rows } = await rbacQuery(
+  const { rows } = await db.query(
     `SELECT c.id,
             c.code,
             c.name,
