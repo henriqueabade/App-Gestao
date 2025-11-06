@@ -254,7 +254,6 @@ let publishStateFilePath;
 
 let lastConnectionStatusPayload = null;
 let netState = 'online';
-let lastResolvedMonitorBaseUrl = null;
 let lastMonitorHeartbeatAt = 0;
 let monitorLogWritePromise = Promise.resolve();
 const monitorActivityState = {
@@ -1911,69 +1910,15 @@ function normalizeMonitorBaseUrl(value) {
   if (/^[a-z][a-z0-9+.-]*:\/\//i.test(trimmed)) {
     try {
       return new URL(trimmed).origin;
-    } catch (_err) {
+    } catch (err) {
       return null;
     }
   }
   try {
-    const fallbackProtocol = sanitizeMonitorProtocol(process.env.API_PROTOCOL, 'https');
+    const fallbackProtocol = (process.env.API_PROTOCOL || 'https').replace(/:$/, '');
     return new URL(`${fallbackProtocol}://${trimmed}`).origin;
-  } catch (_err) {
+  } catch (err) {
     return null;
-  }
-}
-
-function sanitizeMonitorProtocol(value, fallback = 'http') {
-  if (!value || typeof value !== 'string') {
-    return fallback;
-  }
-  const trimmed = value.trim();
-  if (!trimmed) {
-    return fallback;
-  }
-  const withoutSuffix = trimmed.replace(/:\/\/.*/, '').replace(/:\d+$/, '').replace(/:$/, '');
-  const normalized = withoutSuffix.replace(/\/+$/, '').toLowerCase();
-  if (!/^[a-z][a-z0-9+.-]*$/.test(normalized)) {
-    return fallback;
-  }
-  return normalized;
-}
-
-function extractHostAndPort(candidate) {
-  if (!candidate || typeof candidate !== 'string') {
-    return { host: null, port: null };
-  }
-
-  const trimmed = candidate.trim();
-  if (!trimmed) {
-    return { host: null, port: null };
-  }
-
-  const prefixed = /^[a-z][a-z0-9+.-]*:\/\//i.test(trimmed)
-    ? trimmed
-    : `http://${trimmed.replace(/^\/+/, '')}`;
-
-  try {
-    const parsed = new URL(prefixed);
-    return {
-      host: parsed.hostname || null,
-      port: parsed.port || null
-    };
-  } catch (_err) {
-    const sanitized = trimmed.replace(/^\/+/, '').replace(/\/+$/, '');
-    if (!sanitized) {
-      return { host: null, port: null };
-    }
-    const parts = sanitized.split(':');
-    if (parts.length > 1) {
-      const maybePort = parts.pop();
-      const host = parts.join(':');
-      if (/^\d+$/.test(maybePort || '')) {
-        return { host: host || null, port: maybePort };
-      }
-      return { host: sanitized, port: null };
-    }
-    return { host: sanitized, port: null };
   }
 }
 
@@ -1985,57 +1930,49 @@ function resolveBackendHealthBaseUrl() {
     process.env.API_URL,
     process.env.APP_URL
   ];
-
   for (const candidate of candidates) {
     const normalized = normalizeMonitorBaseUrl(candidate);
-    if (!normalized) {
-      continue;
-    }
-    try {
-      const url = new URL(normalized);
-      lastResolvedMonitorBaseUrl = url.origin;
-      return lastResolvedMonitorBaseUrl;
-    } catch (_err) {
-      // ignora candidato inválido
+    if (normalized) {
+      try {
+        const url = new URL(normalized);
+        if (!isLocalHostname(url.hostname)) {
+          return url.origin;
+        }
+      } catch (_err) {
+        // ignora candidato inválido
+      }
     }
   }
 
+  const fallback = new URL('http://localhost');
+  const protocol = (process.env.API_PROTOCOL || 'http').replace(/:$/, '');
+  fallback.protocol = `${protocol}:`;
   const currentPortValue = currentApiPort ?? configuredApiPort ?? DEFAULT_API_PORT;
-  const hostCandidate = process.env.API_HOST || process.env.API_SERVER_HOST || '';
-  const { host: extractedHost, port: extractedPort } = extractHostAndPort(hostCandidate);
+  fallback.port = String(currentPortValue);
 
-  const host = extractedHost || 'localhost';
-  const isLocal = isLocalHostname(host);
-  const protocol = sanitizeMonitorProtocol(
-    process.env.API_PROTOCOL,
-    isLocal ? 'http' : 'https'
-  );
-
-  let portToUse = extractedPort;
-  if (!portToUse && isLocal) {
-    portToUse = String(currentPortValue);
-  }
-
-  try {
-    const fallback = new URL('http://localhost');
-    fallback.protocol = `${protocol}:`;
-    fallback.hostname = host;
-    if (portToUse) {
-      fallback.port = String(portToUse);
+  const hostCandidate = (process.env.API_HOST || process.env.API_SERVER_HOST || '').trim();
+  if (hostCandidate) {
+    if (/^[a-z][a-z0-9+.-]*:\/\//i.test(hostCandidate)) {
+      try {
+        const parsed = new URL(hostCandidate);
+        if (parsed.protocol) fallback.protocol = parsed.protocol;
+        if (parsed.hostname) fallback.hostname = parsed.hostname;
+        fallback.port = parsed.port || fallback.port;
+      } catch (err) {
+        fallback.hostname = hostCandidate;
+      }
     } else {
-      fallback.port = '';
+      const sanitized = hostCandidate.replace(/^\/+/, '').replace(/\/+$/, '');
+      fallback.host = sanitized;
+      if (!fallback.port) {
+        fallback.port = String(currentPortValue);
+      }
     }
-    lastResolvedMonitorBaseUrl = fallback.origin;
-    return lastResolvedMonitorBaseUrl;
-  } catch (_err) {
-    if (lastResolvedMonitorBaseUrl) {
-      return lastResolvedMonitorBaseUrl;
-    }
-    const safeFallback = new URL('http://localhost');
-    safeFallback.port = String(currentPortValue);
-    lastResolvedMonitorBaseUrl = safeFallback.origin;
-    return lastResolvedMonitorBaseUrl;
+  } else {
+    fallback.hostname = 'localhost';
   }
+
+  return fallback.origin;
 }
 
 function formatMonitorError(err) {

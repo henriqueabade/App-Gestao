@@ -27,9 +27,6 @@ let lastLoginAttempt = null;
 const LOGIN_RETRY_MIN_DELAY_MS = 5000;
 let pendingAutoLoginRetryTimeout = null;
 const AUTO_LOGIN_RETRY_MIN_DELAY_MS = 1000;
-let particlesContainer = null;
-let unsubscribeNetworkStatus = null;
-let lastStatusSignature = null;
 
 async function fetchApi(path, options) {
   const baseUrl = await window.apiConfig.getApiBaseUrl();
@@ -185,147 +182,24 @@ window.addEventListener("DOMContentLoaded", async () => {
   const intro = document.getElementById('introOverlay');
   const params = new URLSearchParams(window.location.search);
   const startHidden = params.get('hidden') === '1';
-  const statusBadge = document.getElementById('connectionStatusBadge');
-  const statusDot = document.getElementById('connectionStatusDot');
-  const statusText = document.getElementById('connectionStatusText');
-  const badgeStates = ['status-online', 'status-offline', 'status-waiting', 'status-checking'];
-  const dotStates = ['online', 'offline', 'waiting', 'checking'];
 
-  function applyConnectionStatus(payload) {
-    if (!statusBadge || !statusDot || !statusText) return;
-    const state = (payload?.state || 'checking').toLowerCase();
-    const reason = (payload?.reason || '').toLowerCase();
-    const detail = (payload?.detail || '').toLowerCase();
-    const netState = (payload?.netState || '').toLowerCase();
-    const active = Boolean(payload?.active);
-    const signature = `${state}|${reason}|${detail}|${netState}|${active}`;
-    if (signature === lastStatusSignature) return;
-    lastStatusSignature = signature;
+ // remove intro overlay only after the window becomes visible
+const hideIntro = () => {
+  if (!intro) return;
+  intro.classList.add('fade-out');
+  intro.addEventListener('transitionend', () => intro.remove(), { once: true });
+};
 
-    let badgeClass = 'status-checking';
-    let dotClass = 'checking';
-    let pulse = true;
-    let message = 'Verificando conexão...';
-
-    if (state === 'online') {
-      badgeClass = 'status-online';
-      const networkOnline = netState !== 'offline';
-      dotClass = networkOnline ? 'online' : 'waiting';
-      pulse = !networkOnline;
-      message = networkOnline ? 'Conectado ao servidor' : 'Reconectando à Internet...';
-    } else if (state === 'waiting') {
-      badgeClass = 'status-waiting';
-      dotClass = 'waiting';
-      pulse = active || reason === 'configuration';
-      if (reason === 'configuration') {
-        if (detail === 'missing-base-url') {
-          message = 'Configuração de servidor ausente';
-        } else if (detail === 'invalid-base-url') {
-          message = 'Endereço do servidor inválido';
-        } else {
-          message = 'Aguardando definição do servidor';
-        }
-      } else if (!active) {
-        message = 'Monitor em espera — janela inativa';
-        pulse = false;
-      } else {
-        message = 'Aguardando próxima verificação';
-      }
-    } else if (state === 'db-offline' || reason === 'offline-db') {
-      badgeClass = 'status-offline';
-      dotClass = 'offline';
-      pulse = true;
-      message = 'Banco de dados indisponível';
-    } else if (state === 'offline') {
-      badgeClass = 'status-offline';
-      dotClass = 'offline';
-      pulse = true;
-      if (reason === 'pin' || detail === 'pin-invalido') {
-        message = 'PIN inválido ou alterado';
-      } else if (reason === 'user-removed' || detail === 'usuario-removido') {
-        message = 'Usuário removido por segurança';
-      } else if (detail === 'sem-internet' || netState === 'offline') {
-        message = 'Sem conexão com a Internet';
-      } else if (detail === 'healthz-unreachable') {
-        message = 'Servidor inacessível';
-      } else {
-        message = 'Conexão perdida com o servidor';
-      }
-    } else if (state === 'checking') {
-      badgeClass = 'status-checking';
-      dotClass = 'checking';
-      pulse = true;
-      message = 'Verificando conexão...';
-    } else {
-      badgeClass = 'status-checking';
-      dotClass = netState === 'offline' ? 'offline' : 'checking';
-      pulse = netState !== 'online';
-      message = 'Monitorando conexão...';
-    }
-
-    badgeStates.forEach(cls => statusBadge.classList.remove(cls));
-    statusBadge.classList.add(badgeClass, 'visible');
-
-    dotStates.forEach(cls => statusDot.classList.remove(cls));
-    statusDot.classList.add(dotClass);
-    if (pulse) statusDot.classList.add('pulse');
-    else statusDot.classList.remove('pulse');
-
-    statusBadge.dataset.state = state;
-    statusBadge.dataset.reason = reason || '';
-    statusBadge.dataset.netState = netState || '';
-    statusText.textContent = message;
-    statusBadge.setAttribute('title', message);
+if (intro) {
+  if (startHidden) {
+    intro.remove();
+  } else if (document.hasFocus()) {
+    hideIntro(); // page reload with focus: remove overlay right away
+  } else {
+    window.addEventListener('focus', hideIntro, { once: true });
   }
+}
 
-  function setupConnectionStatusBridge() {
-    if (!window.electronAPI || !statusBadge || !statusDot || !statusText) {
-      return;
-    }
-    applyConnectionStatus({ state: 'checking' });
-    if (typeof window.electronAPI.onNetworkStatus === 'function') {
-      unsubscribeNetworkStatus = window.electronAPI.onNetworkStatus((payload) => {
-        try {
-          applyConnectionStatus(payload);
-        } catch (err) {
-          console.error('Falha ao atualizar status de conexão:', err);
-        }
-      });
-    }
-
-    Promise.resolve()
-      .then(() => window.electronAPI.getConnectionStatus?.())
-      .then((initial) => {
-        if (initial) {
-          applyConnectionStatus(initial);
-        }
-      })
-      .catch((err) => {
-        console.error('Não foi possível obter status inicial de conexão:', err);
-      })
-      .finally(() => {
-        window.electronAPI.requestConnectionCheck?.({ allowWhilePaused: true });
-      });
-  }
-
-  // remove intro overlay only after the window becomes visible
-  const hideIntro = () => {
-    if (!intro) return;
-    intro.classList.add('fade-out');
-    intro.addEventListener('transitionend', () => intro.remove(), { once: true });
-  };
-
-  if (intro) {
-    if (startHidden) {
-      intro.remove();
-    } else if (document.hasFocus()) {
-      hideIntro(); // page reload with focus: remove overlay right away
-    } else {
-      window.addEventListener('focus', hideIntro, { once: true });
-    }
-  }
-
-  setupConnectionStatusBridge();
 
   const storedPin = localStorage.getItem('pin');
   const storedUser = localStorage.getItem('user');
@@ -902,15 +776,4 @@ window.addEventListener("DOMContentLoaded", async () => {
       forgotPasswordModal.classList.add('hidden');
     }
   });
-});
-
-window.addEventListener('beforeunload', () => {
-  if (typeof unsubscribeNetworkStatus === 'function') {
-    try {
-      unsubscribeNetworkStatus();
-    } catch (err) {
-      console.error('Falha ao limpar listener de status de conexão:', err);
-    }
-    unsubscribeNetworkStatus = null;
-  }
 });
