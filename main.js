@@ -2328,7 +2328,11 @@ function createConnectionMonitor() {
     });
   }
 
-  async function performCheck({ triggeredBy = 'timer', allowWhilePaused = false } = {}) {
+  async function performCheck({
+    triggeredBy = 'timer',
+    allowWhilePaused = false,
+    forceDeep = false
+  } = {}) {
     if (!active && !allowWhilePaused) {
       return currentStatus;
     }
@@ -2537,9 +2541,30 @@ function createConnectionMonitor() {
       });
       return currentStatus;
     }
+
+    consecutiveFailures = 0;
+    deepFailureCount = 0;
+    dbReadinessFailureCount = 0;
+    applyNetState('online');
+    updateStatus({
+      state: 'online',
+      reason: null,
+      detail: 'ok',
+      shouldLogout: false,
+      lastError: null,
+      triggeredBy
+    });
+    return currentStatus;
   }
 
-  function scheduleNext(delay = CONNECTION_MONITOR_INTERVAL_MS) {
+  function scheduleNextAttempt(accelerated = false) {
+    const delay = accelerated
+      ? Math.max(1000, CONNECTION_MONITOR_INTERVAL_MS / 10)
+      : CONNECTION_MONITOR_INTERVAL_MS;
+    scheduleNext(delay, accelerated);
+  }
+
+  function scheduleNext(delay = CONNECTION_MONITOR_INTERVAL_MS, allowShortDelay = false) {
     if (timer) {
       clearTimeout(timer);
       timer = null;
@@ -2553,7 +2578,8 @@ function createConnectionMonitor() {
       setActive(false, { triggeredBy: 'inactive' });
       return;
     }
-    const actualDelay = Math.max(delay, CONNECTION_MONITOR_INTERVAL_MS);
+    const minimumDelay = allowShortDelay ? 0 : CONNECTION_MONITOR_INTERVAL_MS;
+    const actualDelay = Math.max(delay, minimumDelay);
     nextCheckAt = Date.now() + actualDelay;
     timer = setTimeout(() => {
       timer = null;
@@ -2566,7 +2592,7 @@ function createConnectionMonitor() {
   }
 
   function maybeRunCheck(options = {}) {
-    const { triggeredBy = 'timer', allowWhilePaused = false } = options;
+    const { triggeredBy = 'timer', allowWhilePaused = false, forceDeep = false } = options;
     if (!allowWhilePaused && !active) {
       logHeartbeatIfNeeded();
       return Promise.resolve(currentStatus);
@@ -2578,11 +2604,11 @@ function createConnectionMonitor() {
     if (checkPromise) {
       return checkPromise;
     }
-    checkPromise = performCheck({ triggeredBy, allowWhilePaused })
+    checkPromise = performCheck({ triggeredBy, allowWhilePaused, forceDeep })
       .finally(() => {
         checkPromise = null;
         if (active) {
-          scheduleNext(CONNECTION_MONITOR_INTERVAL_MS);
+          scheduleNextAttempt();
         } else {
           nextCheckAt = 0;
           emitStatusUpdate();

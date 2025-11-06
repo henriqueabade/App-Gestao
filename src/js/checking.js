@@ -7,6 +7,7 @@ let checking = false;
 let unsubscribeStatus = null;
 let lastLogoutReason = null;
 let lastLogoutHandledAt = 0;
+let disconnectHandled = false;
 
 function showSpinner(color = 'var(--color-blue)') {
   if (!checkBtn || !icon) return;
@@ -20,11 +21,6 @@ function showSuccess() {
   icon.classList.remove('fa-sync-alt', 'rotating');
   icon.classList.add('fa-check');
   checkBtn.style.color = 'var(--color-green)';
-  setTimeout(() => {
-    if (!disconnectHandled) {
-      showSpinner();
-    }
-  }, 1000);
 }
 
 function showFailure() {
@@ -32,6 +28,7 @@ function showFailure() {
 }
 
 async function handleDisconnect(reason) {
+  disconnectHandled = true;
   showFailure();
   if (window.stopServerCheck) window.stopServerCheck();
   if (reason === 'pin') {
@@ -67,6 +64,10 @@ function applyStatus(status) {
   const state = status.state || 'checking';
   const reason = status.reason;
   const shouldLogout = Boolean(status.shouldLogout);
+
+  if (!shouldLogout) {
+    disconnectHandled = false;
+  }
 
   const titles = {
     online: 'Conectado ao servidor',
