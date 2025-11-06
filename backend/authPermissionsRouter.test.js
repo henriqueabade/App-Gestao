@@ -31,7 +31,7 @@ async function createTestContext() {
 
   const app = express();
   app.use((req, _res, next) => {
-    const roleCode = req.headers['x-role-code'] || req.headers['x-role'] || 'sup_admin';
+    const roleCode = req.headers['x-role-code'] || req.headers['x-role'] || 'SUPERADMIN';
     req.user = { id: 1, role: { code: roleCode } };
     next();
   });
@@ -58,7 +58,7 @@ async function createTestContext() {
     delete require.cache[repoPath];
   }
 
-  function fetchWithRole(path, { role = 'sup_admin', headers = {}, method = 'GET' } = {}) {
+  function fetchWithRole(path, { role = 'SUPERADMIN', headers = {}, method = 'GET' } = {}) {
     if (!port) {
       throw new Error('Server not started');
     }
@@ -78,7 +78,7 @@ test('menu endpoint respeita o papel informado', async () => {
   try {
     await context.start();
 
-    const supResponse = await context.fetchWithRole('/auth/permissions/menu', { role: 'sup_admin' });
+    const supResponse = await context.fetchWithRole('/auth/permissions/menu', { role: 'SUPERADMIN' });
     assert.strictEqual(supResponse.status, 200);
     const supBody = await supResponse.json();
     assert.ok(Array.isArray(supBody.modules));
@@ -107,7 +107,7 @@ test('features endpoint diferencia permissões por papel', async () => {
     assert.ok(adminFeature, 'feature permissoes deve existir');
     assert.strictEqual(adminFeature.permitted, false, 'admin não pode gerenciar permissões');
 
-    const supResponse = await context.fetchWithRole('/auth/permissions/features?module=usuarios', { role: 'sup_admin' });
+    const supResponse = await context.fetchWithRole('/auth/permissions/features?module=usuarios', { role: 'SUPERADMIN' });
     assert.strictEqual(supResponse.status, 200);
     const supBody = await supResponse.json();
     const supFeature = supBody.features.find(feature => feature.code === 'permissoes');
@@ -122,7 +122,7 @@ test('grid endpoint respeita capacidades de edição por papel', async () => {
   try {
     await context.start();
 
-    const supResponse = await context.fetchWithRole('/auth/permissions/grid?module=clientes', { role: 'sup_admin' });
+    const supResponse = await context.fetchWithRole('/auth/permissions/grid?module=clientes', { role: 'SUPERADMIN' });
     assert.strictEqual(supResponse.status, 200);
     const supBody = await supResponse.json();
     assert.ok(supBody.columns.every(column => column.can_edit), 'super admin edita todas as colunas de clientes');

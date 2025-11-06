@@ -121,12 +121,41 @@ window.addEventListener('DOMContentLoaded', () => {
       .toUpperCase();
   };
 
+  const resolveRoleCode = user => {
+    if (!user || typeof user !== 'object') {
+      return null;
+    }
+
+    const role = user.role && typeof user.role === 'object' ? user.role : null;
+    if (role && typeof role.code === 'string') {
+      const trimmed = role.code.trim();
+      if (trimmed) {
+        return trimmed;
+      }
+    }
+
+    if (typeof user.role === 'string' && user.role.trim()) {
+      return user.role.trim();
+    }
+
+    if (typeof user.roleCode === 'string' && user.roleCode.trim()) {
+      return user.roleCode.trim();
+    }
+
+    if (typeof user.role_code === 'string' && user.role_code.trim()) {
+      return user.role_code.trim();
+    }
+
+    return null;
+  };
+
   const applyUserProfile = userData => {
     const user = userData && typeof userData === 'object' ? userData : {};
     const nome = user.nome || '';
     const perfil = user.perfil || '';
-    const isSupAdmin = perfil === 'Sup Admin';
-    const isAdmin = perfil === 'Admin';
+    const roleCode = resolveRoleCode(user);
+    const isSupAdmin = roleCode === 'SUPERADMIN';
+    const isAdmin = perfil === 'Admin' || roleCode === 'ADMIN';
     const hasAdminAccess = isSupAdmin || isAdmin;
 
     if (usuariosMenuItem) {
@@ -440,7 +469,8 @@ window.addEventListener('DOMContentLoaded', () => {
       }
     }
     const user = stored ? JSON.parse(stored) : {};
-    const isSupAdmin = user.perfil === 'Sup Admin';
+    const roleCode = resolveRoleCode(user);
+    const isSupAdmin = roleCode === 'SUPERADMIN';
     const isAdmin = user.perfil === 'Admin';
 
     applyUserProfile(user);

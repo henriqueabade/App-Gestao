@@ -4,7 +4,12 @@ const bcrypt = require('bcrypt');
 const { ensureFotoUsuarioColumn } = require('./fotoUsuarioBytea');
 const { sendEmailConfirmationRequest } = require('../src/email/sendEmailConfirmationRequest');
 const { registrarUltimaEntrada } = require('./userActivity');
-const { formatarUsuario: formatarUsuarioResposta } = require('./usuariosController');
+const {
+  formatarUsuario: formatarUsuarioResposta,
+  resolverRoleDoUsuario,
+  extrairClassificacao,
+  buildRolePayload
+} = require('./usuariosController');
 
 const DEFAULT_PUBLIC_API_BASE_URL =
   process.env.AVATAR_PUBLIC_BASE_URL ||
@@ -332,20 +337,55 @@ async function loginUsuario(email, senha, pin) {
     } catch (err) {
       console.error('Falha ao registrar ultima entrada do usuário:', err);
     }
+
+    const classificacao = extrairClassificacao(usuario);
+    let resolvedRole = null;
+    try {
+      resolvedRole = await resolverRoleDoUsuario(usuario);
+    } catch (roleErr) {
+      console.error('Falha ao resolver role do usuário durante login:', roleErr);
+    }
+    const rolePayload = buildRolePayload(resolvedRole);
+
     let resposta = {
       id: usuario.id,
       nome: usuario.nome,
       email: usuario.email,
-      perfil: usuario.perfil
+      perfil: usuario.perfil,
+      classificacao: classificacao ?? null,
+      roleId: rolePayload.roleId ?? null,
+      role_id: rolePayload.roleId ?? null,
+      roleCode: rolePayload.roleCode ?? null,
+      role_code: rolePayload.roleCode ?? null,
+      role: rolePayload.role
     };
 
     if (typeof formatarUsuarioResposta === 'function') {
       try {
         const formatado = await formatarUsuarioResposta(usuario, { baseUrl: DEFAULT_PUBLIC_API_BASE_URL });
-        resposta = { ...formatado };
+        resposta = { ...resposta, ...formatado };
       } catch (err) {
         console.error('Falha ao formatar usuário para resposta de login:', err);
       }
+    }
+
+    if (!Object.prototype.hasOwnProperty.call(resposta, 'classificacao') || resposta.classificacao === undefined) {
+      resposta.classificacao = classificacao ?? null;
+    }
+    if (resposta.roleId === undefined) {
+      resposta.roleId = rolePayload.roleId ?? null;
+    }
+    if (resposta.role_id === undefined) {
+      resposta.role_id = resposta.roleId ?? rolePayload.roleId ?? null;
+    }
+    if (resposta.roleCode === undefined) {
+      resposta.roleCode = rolePayload.roleCode ?? null;
+    }
+    if (resposta.role_code === undefined) {
+      resposta.role_code = resposta.roleCode ?? rolePayload.roleCode ?? null;
+    }
+    if (resposta.role === undefined || resposta.role === null) {
+      resposta.role = rolePayload.role;
     }
 
     return resposta;

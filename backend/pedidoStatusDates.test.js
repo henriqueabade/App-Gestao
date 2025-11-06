@@ -40,7 +40,7 @@ async function bootstrapPedidosApp(pool) {
 
   await seedRbacPermissions({ query: (text, params) => pool.query(text, params) });
   await pool.query(
-    "INSERT INTO usuarios (id, nome, email, classificacao, perfil) VALUES (1, 'Sup', 'sup@example.com', 'sup_admin', 'Sup Admin')"
+    "INSERT INTO usuarios (id, nome, email, classificacao, perfil) VALUES (1, 'Sup', 'sup@example.com', 'SUPERADMIN', 'Sup Admin')"
   );
   await pool.query(
     "INSERT INTO usuarios (id, nome, email, classificacao, perfil) VALUES (2, 'Sem Role', 'semrole@example.com', NULL, 'Visitante')"

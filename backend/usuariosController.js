@@ -622,6 +622,90 @@ async function resolverRolePorCodigo(rawCode) {
   }
 }
 
+function extrairClassificacao(row) {
+  if (!row || typeof row !== 'object') {
+    return null;
+  }
+
+  const candidates = [
+    row.classificacao,
+    row.roleCode,
+    row.role_code,
+    row.role?.code,
+    row.role
+  ];
+
+  for (const candidate of candidates) {
+    if (typeof candidate === 'string') {
+      const trimmed = candidate.trim();
+      if (trimmed) {
+        return trimmed;
+      }
+    }
+  }
+
+  return null;
+}
+
+function canonicalizeRoleCode(rawCode) {
+  if (rawCode === undefined || rawCode === null) {
+    return null;
+  }
+
+  const trimmed = String(rawCode).trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  const normalized = trimmed.replace(/[^a-z0-9]/gi, '').toUpperCase();
+  if (normalized === 'SUPERADMIN') {
+    return 'SUPERADMIN';
+  }
+
+  return trimmed;
+}
+
+function isRoleSuperAdmin(role) {
+  if (!role) {
+    return false;
+  }
+
+  const code = canonicalizeRoleCode(role.code);
+  if (!code) {
+    return false;
+  }
+
+  return code === 'SUPERADMIN';
+}
+
+function buildRolePayload(role) {
+  if (!role) {
+    return { role: null, roleId: null, roleCode: null };
+  }
+
+  const code = canonicalizeRoleCode(role.code);
+  const roleId = role.id ?? null;
+  const payload = {
+    id: roleId,
+    code: code ?? null
+  };
+
+  if (role.name) {
+    payload.name = role.name;
+  }
+
+  const hasMeaningfulData =
+    (payload.id !== null && payload.id !== undefined) ||
+    (typeof payload.code === 'string' && payload.code.trim()) ||
+    (typeof payload.name === 'string' && payload.name.trim());
+
+  return {
+    role: hasMeaningfulData ? payload : null,
+    roleId,
+    roleCode: code ?? null
+  };
+}
+
 async function carregarCatalogoPermissoes() {
   if (permissoesCatalogPromise) {
     return permissoesCatalogPromise;
@@ -1089,10 +1173,7 @@ async function resolverRoleDoUsuario(row) {
     return null;
   }
 
-  const codigo =
-    (typeof row.classificacao === 'string' && row.classificacao.trim())
-      ? row.classificacao.trim()
-      : null;
+  const codigo = extrairClassificacao(row);
 
   if (!codigo) {
     return null;
@@ -1106,12 +1187,17 @@ async function resolverRoleDoUsuario(row) {
   }
 }
 
-async function obterPermissoesDoUsuario(row) {
+async function obterPermissoesDoUsuario(row, options = {}) {
   if (!row) {
     return {};
   }
 
-  const role = await resolverRoleDoUsuario(row);
+  let role;
+  if (options && Object.prototype.hasOwnProperty.call(options, 'resolvedRole')) {
+    role = options.resolvedRole;
+  } else {
+    role = await resolverRoleDoUsuario(row);
+  }
   if (!role) {
     if (Object.prototype.hasOwnProperty.call(row, 'permissoes')) {
       try {
@@ -1224,11 +1310,6 @@ async function obterPermissoesDoUsuario(row) {
   }
 
   return permissoesPorModulo;
-}
-
-function isSupAdminPerfil(perfil) {
-  if (typeof perfil !== 'string') return false;
-  return perfil.toLowerCase().includes('sup admin');
 }
 
 function parsePositiveInteger(value) {
@@ -1404,9 +1485,33 @@ async function garantirSupAdmin(req, res) {
     return null;
   }
 
-  if (!isSupAdminPerfil(solicitante.perfil)) {
+  let role;
+  try {
+    role = await resolverRoleDoUsuario(solicitante);
+  } catch (err) {
+    console.error('Falha ao resolver role do solicitante:', err);
+    return res.status(500).json({ error: 'Erro ao carregar permissões do usuário autenticado.' });
+  }
+
+  if (!isRoleSuperAdmin(role)) {
     res.status(403).json({ error: 'Apenas Sup Admin pode acessar este recurso.' });
     return null;
+  }
+
+  if (!solicitante.role) {
+    const { role: roleInfo, roleCode, roleId } = buildRolePayload(role);
+    if (roleInfo) {
+      solicitante.role = roleInfo;
+    }
+    if (roleCode && !solicitante.roleCode) {
+      solicitante.roleCode = roleCode;
+    }
+    if (roleId !== null && roleId !== undefined && !solicitante.roleId) {
+      solicitante.roleId = roleId;
+    }
+    if (!solicitante.classificacao) {
+      solicitante.classificacao = extrairClassificacao(solicitante);
+    }
   }
 
   return solicitante;
@@ -1852,6 +1957,17 @@ async function atualizarCacheLogin(usuarioId, usuarioRow) {
   adicionarCampo('nome', usuarioRow.nome ?? null);
   adicionarCampo('email', usuarioRow.email ?? null);
   adicionarCampo('perfil', usuarioRow.perfil ?? null);
+  const classificacao = extrairClassificacao(usuarioRow);
+  adicionarCampo('classificacao', classificacao ?? null);
+
+  const precisaRoleInfo = colunas.has('role_id') || colunas.has('role_code');
+  let rolePayload = { roleId: null, roleCode: null };
+  if (precisaRoleInfo) {
+    const resolvedRole = await resolverRoleDoUsuario(usuarioRow);
+    rolePayload = buildRolePayload(resolvedRole);
+  }
+  adicionarCampo('role_id', rolePayload.roleId ?? null);
+  adicionarCampo('role_code', rolePayload.roleCode ?? null);
 
   if (colunas.has('telefone')) {
     adicionarCampo('telefone', extrairPrimeiroValor(usuarioRow, telefoneColunasPreferidas) ?? null);
@@ -1921,7 +2037,7 @@ async function formatarUsuarioDetalhado(row, options = {}) {
   const base = await formatarUsuario(row, options);
   const resultado = { ...base };
 
-  const permissoes = await obterPermissoesDoUsuario(row);
+  const permissoes = await obterPermissoesDoUsuario(row, { resolvedRole: base.role ?? null });
   resultado.permissoes = permissoes;
   resultado.permissoesResumo = construirResumoPermissoes(permissoes);
 
@@ -2484,7 +2600,23 @@ router.patch('/:id', autenticarUsuario, async (req, res) => {
     return res.status(404).json({ error: 'Usuário não encontrado.' });
   }
 
-  const solicitanteSupAdmin = isSupAdminPerfil(solicitante.perfil);
+  const solicitanteRole = await resolverRoleDoUsuario(solicitante);
+  const solicitanteSupAdmin = isRoleSuperAdmin(solicitanteRole);
+  if (!solicitante.role) {
+    const { role: roleInfo, roleCode, roleId } = buildRolePayload(solicitanteRole);
+    if (roleInfo) {
+      solicitante.role = roleInfo;
+    }
+    if (roleCode && !solicitante.roleCode) {
+      solicitante.roleCode = roleCode;
+    }
+    if (roleId !== null && roleId !== undefined && !solicitante.roleId) {
+      solicitante.roleId = roleId;
+    }
+    if (!solicitante.classificacao) {
+      solicitante.classificacao = extrairClassificacao(solicitante);
+    }
+  }
   if (!solicitanteSupAdmin && solicitante.id !== alvoId) {
     return res.status(403).json({ error: 'Acesso negado.' });
   }
@@ -2769,8 +2901,25 @@ router.put('/:id/permissoes', autenticarUsuario, async (req, res) => {
     return res.status(401).json({ error: 'Usuário autenticado não encontrado.' });
   }
 
-  if (!isSupAdminPerfil(solicitante.perfil)) {
+  const solicitanteRole = await resolverRoleDoUsuario(solicitante);
+  if (!isRoleSuperAdmin(solicitanteRole)) {
     return res.status(403).json({ error: 'Apenas Sup Admin pode atualizar permissões.' });
+  }
+
+  if (!solicitante.role) {
+    const { role: roleInfo, roleCode, roleId } = buildRolePayload(solicitanteRole);
+    if (roleInfo) {
+      solicitante.role = roleInfo;
+    }
+    if (roleCode && !solicitante.roleCode) {
+      solicitante.roleCode = roleCode;
+    }
+    if (roleId !== null && roleId !== undefined && !solicitante.roleId) {
+      solicitante.roleId = roleId;
+    }
+    if (!solicitante.classificacao) {
+      solicitante.classificacao = extrairClassificacao(solicitante);
+    }
   }
 
   if (!alvo) {
@@ -4003,7 +4152,23 @@ router.get('/:id', autenticarUsuario, async (req, res) => {
     return res.status(404).json({ error: 'Usuário não encontrado.' });
   }
 
-  const solicitanteSupAdmin = isSupAdminPerfil(solicitante.perfil);
+  const solicitanteRole = await resolverRoleDoUsuario(solicitante);
+  const solicitanteSupAdmin = isRoleSuperAdmin(solicitanteRole);
+  if (!solicitante.role) {
+    const { role: roleInfo, roleCode, roleId } = buildRolePayload(solicitanteRole);
+    if (roleInfo) {
+      solicitante.role = roleInfo;
+    }
+    if (roleCode && !solicitante.roleCode) {
+      solicitante.roleCode = roleCode;
+    }
+    if (roleId !== null && roleId !== undefined && !solicitante.roleId) {
+      solicitante.roleId = roleId;
+    }
+    if (!solicitante.classificacao) {
+      solicitante.classificacao = extrairClassificacao(solicitante);
+    }
+  }
   if (!solicitanteSupAdmin && solicitante.id !== alvoId) {
     return res.status(403).json({ error: 'Acesso negado.' });
   }
@@ -4024,7 +4189,7 @@ router.post('/aprovar', async (req, res) => {
 
   try {
     const credenciais = await pool.query(
-      `SELECT id, senha, perfil
+      `SELECT id, senha, perfil, classificacao
          FROM usuarios
         WHERE lower(email) = lower($1)`,
       [supAdminEmail]
@@ -4035,9 +4200,23 @@ router.post('/aprovar', async (req, res) => {
     }
 
     const supAdmin = credenciais.rows[0];
-    const perfil = (supAdmin.perfil || '').toLowerCase();
-    if (!perfil.includes('sup admin')) {
+    const role = await resolverRoleDoUsuario(supAdmin);
+    if (!isRoleSuperAdmin(role)) {
       return res.status(403).json({ error: 'Apenas Sup Admin pode aprovar usuários.' });
+    }
+
+    const { role: roleInfo, roleCode, roleId } = buildRolePayload(role);
+    if (roleInfo) {
+      supAdmin.role = roleInfo;
+    }
+    if (roleCode) {
+      supAdmin.roleCode = roleCode;
+    }
+    if (roleId !== null && roleId !== undefined) {
+      supAdmin.roleId = roleId;
+    }
+    if (!supAdmin.classificacao) {
+      supAdmin.classificacao = extrairClassificacao(supAdmin);
     }
 
     const senhaValida = await bcrypt.compare(supAdminSenha, supAdmin.senha || '');
@@ -4103,8 +4282,11 @@ async function formatarUsuario(u, options = {}) {
     return Number.isNaN(data.getTime()) ? null : data;
   };
 
-  const permissoes = await obterPermissoesDoUsuario(u);
+  const resolvedRole = await resolverRoleDoUsuario(u);
+  const { role: roleInfo, roleCode, roleId } = buildRolePayload(resolvedRole);
+  const permissoes = await obterPermissoesDoUsuario(u, { resolvedRole });
   const permissoesResumo = construirResumoPermissoes(permissoes);
+  const classificacao = extrairClassificacao(u);
 
   const ultimoLogin = parseDate(u.ultimo_login_em);
   const ultimaAtividade = parseDate(u.ultima_atividade_em);
@@ -4234,6 +4416,12 @@ async function formatarUsuario(u, options = {}) {
     nome: u.nome,
     email: u.email,
     perfil: u.perfil,
+    classificacao: classificacao ?? null,
+    roleId: roleId ?? null,
+    role_id: roleId ?? null,
+    roleCode: roleCode ?? null,
+    role_code: roleCode ?? null,
+    role: roleInfo,
     modeloPermissoesId: u.modelo_permissoes_id ?? null,
     modelo_permissoes_id: u.modelo_permissoes_id ?? null,
     status: statusLabel,
@@ -4355,3 +4543,8 @@ module.exports.formatarUsuario = formatarUsuario;
 module.exports.formatarUsuarioDetalhado = formatarUsuarioDetalhado;
 module.exports.construirAvatarResposta = construirAvatarResposta;
 module.exports.handleAvatarRequest = handleAvatarRequest;
+module.exports.resolverRoleDoUsuario = resolverRoleDoUsuario;
+module.exports.extrairClassificacao = extrairClassificacao;
+module.exports.canonicalizeRoleCode = canonicalizeRoleCode;
+module.exports.buildRolePayload = buildRolePayload;
+module.exports.isRoleSuperAdmin = isRoleSuperAdmin;

@@ -228,7 +228,9 @@ function requireFeature(moduleCode, featureCode) {
         return res.status(401).json({ error: 'unauthenticated' });
       }
 
-      const roleCode = normalizeCode(user.classificacao || user.role || user.role_code || user.perfil);
+      const roleCode = normalizeCode(
+        user.classificacao || user.roleCode || user.role?.code || user.role || user.role_code || user.perfil
+      );
       if (!roleCode) {
         return res.status(403).json({ error: 'forbidden', feature: featureIdentifier });
       }

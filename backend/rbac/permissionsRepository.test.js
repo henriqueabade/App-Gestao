@@ -37,15 +37,15 @@ test('permissions repository resolves roles and access', async () => {
 
     const repo = require('./permissionsRepository');
 
-    const supAdmin = await repo.getRoleByCode('sup_admin');
-    assert.ok(supAdmin, 'should locate sup_admin role');
+    const supAdmin = await repo.getRoleByCode('SUPERADMIN');
+    assert.ok(supAdmin, 'should locate SUPERADMIN role');
 
     const vendas = await repo.getRoleByCode('vendas');
     assert.ok(vendas, 'should locate vendas role');
 
     const supModules = await repo.getModulesWithAccess(supAdmin.id);
-    assert.ok(supModules.length > 0, 'sup_admin should have modules');
-    assert.ok(supModules.every(m => m.permitted), 'sup_admin should access all modules');
+    assert.ok(supModules.length > 0, 'SUPERADMIN should have modules');
+    assert.ok(supModules.every(m => m.permitted), 'SUPERADMIN should access all modules');
 
     const vendasModules = await repo.getModulesWithAccess(vendas.id);
     assert.ok(vendasModules.some(m => m.code === 'clientes' && m.permitted), 'vendas should access clientes');
@@ -63,8 +63,8 @@ test('permissions repository resolves roles and access', async () => {
 
     const supColumns = await repo.getGridColumns(supAdmin.id, 'clientes');
     assert.ok(supColumns.length > 0, 'clientes deve possuir colunas');
-    assert.ok(supColumns.every(col => col.can_view), 'sup_admin vê todas as colunas');
-    assert.ok(supColumns.every(col => col.can_edit), 'sup_admin edita todas as colunas');
+    assert.ok(supColumns.every(col => col.can_view), 'SUPERADMIN vê todas as colunas');
+    assert.ok(supColumns.every(col => col.can_edit), 'SUPERADMIN edita todas as colunas');
 
     const vendasColumns = await repo.getGridColumns(vendas.id, 'clientes');
     assert.ok(vendasColumns.length > 0, 'vendas também visualiza colunas de clientes');

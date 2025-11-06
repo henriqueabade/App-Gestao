@@ -12,10 +12,33 @@ window.addEventListener('DOMContentLoaded', async () => {
     currentUser = {};
   }
 
-  const allowedProfiles = new Set(['Admin', 'Sup Admin']);
+  const allowedProfiles = new Set(['Admin']);
 
-  const profileAllowsNotifications = (user = currentUser) =>
-    allowedProfiles.has(user?.perfil);
+  const resolveRoleCode = (user) => {
+    if (!user || typeof user !== 'object') return null;
+    const role = user.role && typeof user.role === 'object' ? user.role : null;
+    if (role && typeof role.code === 'string' && role.code.trim()) {
+      return role.code.trim();
+    }
+    if (typeof user.role === 'string' && user.role.trim()) {
+      return user.role.trim();
+    }
+    if (typeof user.roleCode === 'string' && user.roleCode.trim()) {
+      return user.roleCode.trim();
+    }
+    if (typeof user.role_code === 'string' && user.role_code.trim()) {
+      return user.role_code.trim();
+    }
+    return null;
+  };
+
+  const profileAllowsNotifications = (user = currentUser) => {
+    const roleCode = resolveRoleCode(user);
+    if (roleCode === 'SUPERADMIN' || roleCode === 'ADMIN') {
+      return true;
+    }
+    return allowedProfiles.has(user?.perfil);
+  };
 
   const targetModules = ['notifications', 'notificacoes', 'menu', 'default'];
   const targetFeatures = [

@@ -234,7 +234,7 @@ const MODULE_DEFINITIONS = [
 
 const ROLE_DEFINITIONS = [
   {
-    code: 'sup_admin',
+    code: 'SUPERADMIN',
     name: 'Super Administrador',
     description: 'Acesso total ao sistema.',
     grantAllModules: true
@@ -266,7 +266,7 @@ const ROLE_DEFINITIONS = [
 ];
 
 const ROLE_COLUMN_EDIT_POLICIES = {
-  sup_admin: 'all',
+  SUPERADMIN: 'all',
   admin: 'all',
   vendas: ['pedidos', 'orcamentos']
 };
