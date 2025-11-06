@@ -379,5 +379,6 @@ module.exports = {
   registrarUsuario,
   loginUsuario,
   isPinError,
-  isNetworkError
+  isNetworkError,
+  ensureDatabaseReady
 };

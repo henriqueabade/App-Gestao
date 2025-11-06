@@ -15,7 +15,8 @@ const {
   registrarUsuario,
   loginUsuario,
   isPinError,
-  isNetworkError
+  isNetworkError,
+  ensureDatabaseReady
 } = require('./backend/backend');
 const { registrarUltimaSaida, registrarUltimaEntrada } = require('./backend/userActivity');
 const db = require('./backend/db');
@@ -65,6 +66,11 @@ const apiServer = require('./backend/server');
 function showStartupBanner() {
   const banner = `\n==============================\n Aplicativo iniciado com sucesso! \n==============================\n`;
   console.log(banner);
+}
+
+function sleep(ms) {
+  const normalized = Number.isFinite(ms) ? ms : 0;
+  return new Promise((resolve) => setTimeout(resolve, Math.max(0, normalized)));
 }
 
 // Impede que múltiplas instâncias do aplicativo sejam abertas
@@ -190,6 +196,18 @@ const CONNECTION_DEEP_INTERVAL_MS = Math.max(
 const CONNECTION_DEEP_STARTUP_DELAY_MS = Math.max(
   Number.parseInt(process.env.CONNECTION_DEEP_STARTUP_DELAY_MS || '60000', 10),
   0
+);
+const AUTO_LOGIN_DB_WAIT_TIMEOUT_MS = Math.max(
+  Number.parseInt(process.env.AUTO_LOGIN_DB_WAIT_TIMEOUT_MS || '45000', 10),
+  0
+);
+const AUTO_LOGIN_DB_RETRY_MIN_DELAY_MS = Math.max(
+  Number.parseInt(process.env.AUTO_LOGIN_DB_RETRY_MIN_DELAY_MS || '1000', 10),
+  250
+);
+const AUTO_LOGIN_DB_RETRY_MAX_DELAY_MS = Math.max(
+  Number.parseInt(process.env.AUTO_LOGIN_DB_RETRY_MAX_DELAY_MS || '5000', 10),
+  AUTO_LOGIN_DB_RETRY_MIN_DELAY_MS
 );
 const CONNECTION_DB_FAILURE_THRESHOLD = Math.max(
   Number.parseInt(process.env.CONNECTION_DB_FAILURE_THRESHOLD || '3', 10),
@@ -3517,14 +3535,119 @@ ipcMain.handle('salvar-produto-detalhado', async (_e, { codigo, produto, itens }
   return salvarProdutoDetalhado(codigo, produto, itens);
 });
 
+async function waitForAutoLoginDatabaseReady(pin) {
+  const start = Date.now();
+  const hasTimeout = AUTO_LOGIN_DB_WAIT_TIMEOUT_MS > 0;
+  let attempt = 0;
+  let lastDbError = null;
+
+  while (true) {
+    try {
+      ensureDatabaseReady(pin);
+      return { ready: true };
+    } catch (err) {
+      const error = err instanceof Error ? err : new Error(String(err));
+      const reason = error.reason || (error.code === 'db-connecting' ? 'db-connecting' : null);
+      if (reason !== 'db-connecting') {
+        throw error;
+      }
+
+      lastDbError = error;
+      const elapsed = Date.now() - start;
+      if (hasTimeout && elapsed >= AUTO_LOGIN_DB_WAIT_TIMEOUT_MS) {
+        break;
+      }
+
+      const suggestedRetry = Number(error.retryAfter);
+      const maxMultiplier = Math.max(
+        1,
+        Math.floor(AUTO_LOGIN_DB_RETRY_MAX_DELAY_MS / AUTO_LOGIN_DB_RETRY_MIN_DELAY_MS)
+      );
+      const exponentialFactor = Math.min(2 ** attempt, maxMultiplier);
+      const backoff = AUTO_LOGIN_DB_RETRY_MIN_DELAY_MS * Math.max(1, exponentialFactor);
+      const effectiveRetry = Number.isFinite(suggestedRetry) && suggestedRetry > 0
+        ? suggestedRetry
+        : 0;
+      const delayMs = Math.min(
+        AUTO_LOGIN_DB_RETRY_MAX_DELAY_MS,
+        Math.max(AUTO_LOGIN_DB_RETRY_MIN_DELAY_MS, backoff, effectiveRetry)
+      );
+      attempt += 1;
+
+      if (hasTimeout) {
+        const remaining = AUTO_LOGIN_DB_WAIT_TIMEOUT_MS - elapsed;
+        if (remaining <= 0) {
+          break;
+        }
+        const waitDuration = Math.max(0, Math.min(delayMs, remaining));
+        if (waitDuration === 0) {
+          break;
+        }
+        await db.ping();
+        await sleep(waitDuration);
+      } else {
+        await db.ping();
+        await sleep(delayMs);
+      }
+    }
+  }
+
+  if (lastDbError) {
+    const fallbackRetry = Math.min(
+      AUTO_LOGIN_DB_RETRY_MAX_DELAY_MS,
+      Math.max(
+        AUTO_LOGIN_DB_RETRY_MIN_DELAY_MS,
+        AUTO_LOGIN_DB_RETRY_MIN_DELAY_MS * Math.max(
+          1,
+          Math.min(
+            2 ** attempt,
+            Math.max(
+              1,
+              Math.floor(AUTO_LOGIN_DB_RETRY_MAX_DELAY_MS / AUTO_LOGIN_DB_RETRY_MIN_DELAY_MS)
+            )
+          )
+        ),
+        Number(lastDbError.retryAfter) || 0
+      )
+    );
+    lastDbError.retryAfter = fallbackRetry;
+    if (!lastDbError.reason) {
+      lastDbError.reason = 'db-connecting';
+    }
+    if (!lastDbError.code) {
+      lastDbError.code = 'db-connecting';
+    }
+    return { ready: false, error: lastDbError };
+  }
+
+  const timeoutError = new Error('Conectando ao banco...');
+  timeoutError.code = 'db-connecting';
+  timeoutError.reason = 'db-connecting';
+  timeoutError.retryAfter = Math.min(
+    AUTO_LOGIN_DB_RETRY_MAX_DELAY_MS,
+    AUTO_LOGIN_DB_RETRY_MIN_DELAY_MS * Math.max(
+      1,
+      Math.min(
+        2 ** Math.max(attempt, 1),
+        Math.max(
+          1,
+          Math.floor(AUTO_LOGIN_DB_RETRY_MAX_DELAY_MS / AUTO_LOGIN_DB_RETRY_MIN_DELAY_MS)
+        )
+      )
+    )
+  );
+  return { ready: false, error: timeoutError };
+}
+
 ipcMain.handle('auto-login', async (_event, payload) => {
   const { pin, user } = typeof payload === 'object' && payload !== null
     ? payload
     : { pin: payload };
   try {
-    if (pin) {
-      db.init(pin);
-      await db.query('SELECT 1');
+    const warmupResult = await waitForAutoLoginDatabaseReady(pin);
+
+    if (!warmupResult.ready) {
+      throw warmupResult.error;
     }
 
     if (!dashboardWindow) {

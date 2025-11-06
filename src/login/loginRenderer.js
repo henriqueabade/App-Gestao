@@ -25,6 +25,8 @@ let userRemovedErrorShown = false;
 let pendingLoginRetryTimeout = null;
 let lastLoginAttempt = null;
 const LOGIN_RETRY_MIN_DELAY_MS = 5000;
+let pendingAutoLoginRetryTimeout = null;
+const AUTO_LOGIN_RETRY_MIN_DELAY_MS = 1000;
 
 async function fetchApi(path, options) {
   const baseUrl = await window.apiConfig.getApiBaseUrl();
@@ -208,6 +210,79 @@ if (intro) {
     parsedStoredUser = null;
   }
   const rememberUser = localStorage.getItem('rememberUser') === '1';
+
+  function clearPendingAutoLoginRetry() {
+    if (pendingAutoLoginRetryTimeout) {
+      clearTimeout(pendingAutoLoginRetryTimeout);
+      pendingAutoLoginRetryTimeout = null;
+    }
+  }
+
+  function scheduleAutoLoginRetry(pin, user, storedUserValue, retryAfter) {
+    clearPendingAutoLoginRetry();
+    const suggestedRetry = Number(retryAfter);
+    const delay = Math.max(
+      AUTO_LOGIN_RETRY_MIN_DELAY_MS,
+      Number.isFinite(suggestedRetry) && suggestedRetry > 0 ? suggestedRetry : 0
+    );
+    pendingAutoLoginRetryTimeout = setTimeout(async () => {
+      pendingAutoLoginRetryTimeout = null;
+      const stillRemembering = localStorage.getItem('rememberUser') === '1';
+      const stillHasUser = localStorage.getItem('user');
+      if (!stillRemembering || !stillHasUser) {
+        return;
+      }
+      try {
+        await attemptStoredAutoLogin(pin, user, storedUserValue);
+      } catch (retryErr) {
+        console.error('Tentativa automática de auto-login falhou', retryErr);
+      }
+    }, delay);
+  }
+
+  async function attemptStoredAutoLogin(pin, user, storedUserValue) {
+    try {
+      const result = await window.electronAPI.autoLogin(pin, user);
+      if (result && result.success) {
+        clearPendingAutoLoginRetry();
+        const cachedUser = storedUserValue || (result.user ? JSON.stringify(result.user) : null);
+        if (cachedUser) sessionStorage.setItem('currentUser', cachedUser);
+        await cacheUpdateStatus();
+        return true;
+      }
+
+      const autoLoginReason = typeof result?.reason === 'string' ? result.reason : '';
+      if (autoLoginReason === 'db-connecting') {
+        scheduleAutoLoginRetry(pin, user, storedUserValue, result?.retryAfter);
+        return false;
+      }
+
+      clearPendingAutoLoginRetry();
+      localStorage.removeItem('user');
+      localStorage.removeItem('rememberUser');
+      localStorage.removeItem('pin');
+      if (autoLoginReason === 'offline') {
+        showOfflineError();
+      } else if (autoLoginReason === 'user-removed') {
+        showUserRemovedError();
+      } else if (autoLoginReason === 'pin') {
+        showPinError();
+      } else if (autoLoginReason) {
+        showToast(result?.message || 'Falha no login automático.', 'error');
+      } else {
+        showPinError();
+      }
+      localStorage.removeItem('pinChanged');
+      localStorage.removeItem('offlineDisconnect');
+      localStorage.removeItem('userRemoved');
+    } catch (err) {
+      clearPendingAutoLoginRetry();
+      console.error('Erro inesperado durante auto-login:', err);
+      showToast('Falha no login automático.', 'error');
+    }
+    return false;
+  }
+
   if (storedUser && rememberUser) {
     let saved = await window.electronAPI.loadState();
     if (saved) {
@@ -235,35 +310,9 @@ if (intro) {
       }
     }
 
-    const result = await window.electronAPI.autoLogin(storedPin, parsedStoredUser);
-    if (result && result.success) {
-      const cachedUser = storedUser || (result.user ? JSON.stringify(result.user) : null);
-      if (cachedUser) sessionStorage.setItem('currentUser', cachedUser);
-      await cacheUpdateStatus();
+    const autoLoginSucceeded = await attemptStoredAutoLogin(storedPin, parsedStoredUser, storedUser);
+    if (autoLoginSucceeded) {
       return;
-    }
-    const autoLoginReason = typeof result?.reason === 'string' ? result.reason : '';
-    if (autoLoginReason === 'db-connecting') {
-      const infoMessage = typeof result?.message === 'string' ? result.message : 'Conectando ao banco...';
-      showToast(infoMessage, 'info');
-    } else {
-      localStorage.removeItem('user');
-      localStorage.removeItem('rememberUser');
-      localStorage.removeItem('pin');
-      if (autoLoginReason === 'offline') {
-        showOfflineError();
-      } else if (autoLoginReason === 'user-removed') {
-        showUserRemovedError();
-      } else if (autoLoginReason === 'pin') {
-        showPinError();
-      } else if (autoLoginReason) {
-        showToast(result?.message || 'Falha no login automático.', 'error');
-      } else {
-        showPinError();
-      }
-      localStorage.removeItem('pinChanged');
-      localStorage.removeItem('offlineDisconnect');
-      localStorage.removeItem('userRemoved');
     }
   } else if (storedUser && !rememberUser) {
     localStorage.removeItem('user');
