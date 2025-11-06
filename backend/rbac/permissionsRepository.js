@@ -51,6 +51,68 @@ async function getRoleByCode(rawCode) {
   return rows[0] || null;
 }
 
+async function getPermissionsVersion(rawRoleId) {
+  const roleId = rawRoleId ? Number(rawRoleId) : null;
+  if (!roleId || Number.isNaN(roleId)) {
+    return null;
+  }
+
+  const { rows } = await db.query(
+    `SELECT r.updated_at AS role_updated_at,
+            modules.max_updated_at  AS module_updated_at,
+            features.max_updated_at AS feature_updated_at,
+            columns.max_updated_at  AS column_updated_at
+       FROM rbac.role r
+       LEFT JOIN (
+             SELECT role_id, MAX(updated_at) AS max_updated_at
+               FROM rbac.role_module_access
+              WHERE role_id = $1
+              GROUP BY role_id
+       ) AS modules ON modules.role_id = r.id
+       LEFT JOIN (
+             SELECT role_id, MAX(updated_at) AS max_updated_at
+               FROM rbac.role_feature_access
+              WHERE role_id = $1
+              GROUP BY role_id
+       ) AS features ON features.role_id = r.id
+       LEFT JOIN (
+             SELECT role_id, MAX(updated_at) AS max_updated_at
+               FROM rbac.role_column_access
+              WHERE role_id = $1
+              GROUP BY role_id
+       ) AS columns ON columns.role_id = r.id
+      WHERE r.id = $1`,
+    [roleId]
+  );
+
+  if (!rows || rows.length === 0) {
+    return null;
+  }
+
+  const timestamps = [
+    rows[0].role_updated_at,
+    rows[0].module_updated_at,
+    rows[0].feature_updated_at,
+    rows[0].column_updated_at
+  ]
+    .map(value => {
+      if (!value) return null;
+      if (value instanceof Date) {
+        const time = value.getTime();
+        return Number.isNaN(time) ? null : time;
+      }
+      const time = new Date(value).getTime();
+      return Number.isNaN(time) ? null : time;
+    })
+    .filter(time => time !== null);
+
+  if (timestamps.length === 0) {
+    return null;
+  }
+
+  return String(Math.max(...timestamps));
+}
+
 async function listAllModules() {
   const { rows } = await db.query(
     `SELECT id, code, name, description, aliases, order_index
@@ -243,5 +305,6 @@ module.exports = {
   getFeaturesByRoleAndModule,
   getGridColumns,
   listAllModules,
-  listFeaturesForModule
+  listFeaturesForModule,
+  getPermissionsVersion
 };

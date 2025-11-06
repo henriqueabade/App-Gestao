@@ -12,6 +12,7 @@ const transportadorasRouter = require('./transportadorasController');
 const orcamentosRouter      = require('./orcamentosController');
 const pedidosRouter         = require('./pedidosController');
 const notificationsRouter   = require('./notificationsController');
+const authPermissionsRouter = require('./authPermissionsRouter');
 const db                    = require('./db');
 
 const app = express();
@@ -24,6 +25,7 @@ app.use('/api/transportadoras', transportadorasRouter);
 app.use('/api/orcamentos', orcamentosRouter);
 app.use('/api/pedidos', pedidosRouter);
 app.use('/api/notifications', notificationsRouter);
+app.use('/auth/permissions', authPermissionsRouter);
 app.use(passwordResetRouter);
 if (typeof usuariosRouter.handleAvatarRequest === 'function') {
   app.get('/users/:id/avatar', usuariosRouter.handleAvatarRequest);
