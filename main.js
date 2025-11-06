@@ -2441,44 +2441,46 @@ function createConnectionMonitor() {
       }
     }
 
-    const heartbeat = await checkDatabaseAndCurrentUser({ skipBasicQuery: true });
-    if (!heartbeat.success) {
-      scheduleNextAttempt(true);
-      const reason = heartbeat.reason || 'offline';
-      let detail = 'falha-db-heartbeat';
-      let failureStage = 'database';
-      if (reason === 'user-removed') {
-        detail = 'usuario-removido';
-        failureStage = 'auth';
-      } else if (reason === 'pin') {
-        detail = 'pin-invalido';
-        failureStage = 'auth';
-      } else if (reason === 'offline') {
-        detail = 'sem-internet';
-        failureStage = 'internet';
-      } else if (reason === 'db-connecting') {
-        detail = 'db-conectando';
-        failureStage = 'database';
+    try {
+      const heartbeat = await checkDatabaseAndCurrentUser({ skipBasicQuery: true });
+      if (!heartbeat.success) {
+        scheduleNextAttempt(true);
+        const reason = heartbeat.reason || 'offline';
+        let detail = 'falha-db-heartbeat';
+        let failureStage = 'database';
+        if (reason === 'user-removed') {
+          detail = 'usuario-removido';
+          failureStage = 'auth';
+        } else if (reason === 'pin') {
+          detail = 'pin-invalido';
+          failureStage = 'auth';
+        } else if (reason === 'offline') {
+          detail = 'sem-internet';
+          failureStage = 'internet';
+        } else if (reason === 'db-connecting') {
+          detail = 'db-conectando';
+          failureStage = 'database';
+          updateStatus({
+            state: 'checking',
+            reason,
+            detail,
+            shouldLogout: false,
+            failureStage,
+            lastError: formatMonitorError(heartbeat.error),
+            triggeredBy
+          });
+          return;
+        }
         updateStatus({
-          state: 'checking',
-          reason,
-          detail,
-          shouldLogout: false,
-          failureStage,
-          lastError: formatMonitorError(heartbeat.error),
+          state: 'offline',
+          reason: 'offline',
+          detail: `status-${response.statusCode || 0}`,
+          shouldLogout: true,
+          lastError: null,
           triggeredBy
         });
-        return;
+        return currentStatus;
       }
-      updateStatus({
-        state: 'offline',
-        reason: 'offline',
-        detail: `status-${response.statusCode || 0}`,
-        shouldLogout: true,
-        lastError: null,
-        triggeredBy
-      });
-      return currentStatus;
     } catch (err) {
       if (!shouldUpdate) {
         return currentStatus;
