@@ -2165,6 +2165,7 @@ function createConnectionMonitor() {
   let timer = null;
   let checkPromise = null;
   let consecutiveFailures = 0;
+  let nextCheckAt = 0;
   let lastDeepCheckAt = 0;
   let allowDeepChecksAfter = Date.now() + CONNECTION_DEEP_STARTUP_DELAY_MS;
   let deepFailureCount = 0;
