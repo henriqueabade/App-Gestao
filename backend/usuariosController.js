@@ -16,14 +16,6 @@ const {
 const { sendSupAdminReviewNotification } = require('../src/email/sendSupAdminReviewNotification');
 const { sendUserActivationNotice } = require('../src/email/sendUserActivationNotice');
 const { sendEmailChangeConfirmation } = require('../src/email/sendEmailChangeConfirmation');
-const {
-  getRoleByCode,
-  getModulesWithAccess,
-  getFeaturesByRoleAndModule,
-  getGridColumns,
-  listAllModules,
-  listFeaturesForModule
-} = require('./rbac/permissionsRepository');
 
 const router = express.Router();
 
@@ -529,6 +521,81 @@ const telefoneColunasPreferidas = ['telefone', 'telefone_usuario', 'telefone_pri
 const celularColunasPreferidas = ['telefone_celular', 'celular', 'celular_usuario'];
 const whatsappColunasPreferidas = ['whatsapp', 'whatsapp_usuario'];
 
+const PERMISSOES_CATALOGO = {
+  clientes: {
+    label: 'Clientes',
+    aliases: ['cliente'],
+    acoes: {
+      visualizar: { label: 'Visualizar', aliases: ['ver', 'view', 'read', 'ler'] },
+      editar: { label: 'Editar', aliases: ['edit', 'write', 'atualizar', 'update'] },
+      inserir: { label: 'Inserir', aliases: ['criar', 'create', 'add', 'adicionar', 'incluir'] },
+      excluir: { label: 'Excluir', aliases: ['remover', 'delete', 'remove', 'apagar'] },
+      exportar: { label: 'Exportar', aliases: ['export'] }
+    }
+  },
+  pedidos: {
+    label: 'Pedidos',
+    aliases: ['pedido'],
+    acoes: {
+      visualizar: { label: 'Visualizar', aliases: ['ver', 'view', 'read', 'ler'] },
+      editar: { label: 'Editar', aliases: ['edit', 'write', 'atualizar', 'update'] },
+      criar: { label: 'Criar', aliases: ['inserir', 'create', 'add', 'adicionar', 'incluir'] },
+      cancelar: { label: 'Cancelar', aliases: ['cancel'] },
+      exportar: { label: 'Exportar', aliases: ['export'] }
+    }
+  },
+  orcamentos: {
+    label: 'Orçamentos',
+    aliases: ['orcamento', 'cotacoes', 'cotacao'],
+    acoes: {
+      visualizar: { label: 'Visualizar', aliases: ['ver', 'view', 'read', 'ler'] },
+      editar: { label: 'Editar', aliases: ['edit', 'write', 'atualizar', 'update'] },
+      criar: { label: 'Criar', aliases: ['inserir', 'create', 'add', 'adicionar', 'incluir'] },
+      aprovar: { label: 'Aprovar', aliases: ['approve'] },
+      enviar: { label: 'Enviar', aliases: ['send'] }
+    }
+  },
+  produtos: {
+    label: 'Produtos',
+    aliases: ['produto', 'itens', 'item'],
+    acoes: {
+      visualizar: { label: 'Visualizar', aliases: ['ver', 'view', 'read', 'ler'] },
+      editar: { label: 'Editar', aliases: ['edit', 'write', 'atualizar', 'update'] },
+      inserir: { label: 'Inserir', aliases: ['criar', 'create', 'add', 'adicionar', 'incluir'] },
+      inativar: { label: 'Inativar', aliases: ['desativar', 'disable'] },
+      exportar: { label: 'Exportar', aliases: ['export'] }
+    }
+  },
+  financeiro: {
+    label: 'Financeiro',
+    aliases: ['financeiro', 'finance'],
+    acoes: {
+      visualizar: { label: 'Visualizar', aliases: ['ver', 'view', 'read', 'ler'] },
+      editar: { label: 'Editar', aliases: ['edit', 'write', 'atualizar', 'update'] },
+      aprovar: { label: 'Aprovar', aliases: ['approve'] },
+      exportar: { label: 'Exportar', aliases: ['export'] }
+    }
+  },
+  relatorios: {
+    label: 'Relatórios',
+    aliases: ['relatorio', 'reports', 'report'],
+    acoes: {
+      visualizar: { label: 'Visualizar', aliases: ['ver', 'view', 'read', 'ler'] },
+      exportar: { label: 'Exportar', aliases: ['export'] }
+    }
+  },
+  usuarios: {
+    label: 'Usuários',
+    aliases: ['usuario', 'users', 'user'],
+    acoes: {
+      visualizar: { label: 'Visualizar', aliases: ['ver', 'view', 'read', 'ler'] },
+      editar: { label: 'Editar', aliases: ['edit', 'write', 'atualizar', 'update'] },
+      permissoes: { label: 'Gerenciar permissões', aliases: ['permissoes', 'permissions', 'permissao', 'permission', 'roles'] },
+      aprovar: { label: 'Aprovar', aliases: ['approve'] }
+    }
+  }
+};
+
 const ESCOPO_ALIASES = new Map([
   ['ver', 'visualizar'],
   ['visualizar', 'visualizar'],
@@ -592,113 +659,28 @@ const ESCOPOS_IGNORE_KEYS = new Set([
   'action'
 ]);
 
-let permissoesCatalogPromise = null;
+const PERMISSOES_MODULO_MAP = new Map();
+const PERMISSOES_ACAO_MAP = new Map();
 
-const roleCache = new Map();
-
-async function resolverRolePorCodigo(rawCode) {
-  if (rawCode === undefined || rawCode === null) {
-    return null;
-  }
-
-  const normalized = normalizeKey(rawCode);
-  if (!normalized) {
-    return null;
-  }
-
-  if (roleCache.has(normalized)) {
-    return roleCache.get(normalized);
-  }
-
-  try {
-    const role = await getRoleByCode(normalized);
-    const cacheValue = role || null;
-    roleCache.set(normalized, cacheValue);
-    return cacheValue;
-  } catch (err) {
-    console.error('Erro ao buscar role por código:', err);
-    roleCache.delete(normalized);
-    throw err;
-  }
-}
-
-async function carregarCatalogoPermissoes() {
-  if (permissoesCatalogPromise) {
-    return permissoesCatalogPromise;
-  }
-
-  permissoesCatalogPromise = (async () => {
-    const catalogo = {};
-    const moduloMap = new Map();
-    const acaoMap = new Map();
-
-    let modulos;
-    try {
-      modulos = await listAllModules();
-    } catch (err) {
-      permissoesCatalogPromise = null;
-      throw err;
+for (const [modulo, config] of Object.entries(PERMISSOES_CATALOGO)) {
+  const moduloNormalized = normalizeKey(modulo);
+  PERMISSOES_MODULO_MAP.set(moduloNormalized, modulo);
+  if (Array.isArray(config.aliases)) {
+    for (const alias of config.aliases) {
+      PERMISSOES_MODULO_MAP.set(normalizeKey(alias), modulo);
     }
+  }
 
-    for (const modulo of modulos) {
-      const codigoModulo = modulo.code;
-      const chaveModulo = normalizeKey(codigoModulo);
-      if (!chaveModulo) {
-        continue;
+  const acaoMap = new Map();
+  for (const [acao, detalhes] of Object.entries(config.acoes)) {
+    acaoMap.set(normalizeKey(acao), acao);
+    if (Array.isArray(detalhes.aliases)) {
+      for (const alias of detalhes.aliases) {
+        acaoMap.set(normalizeKey(alias), acao);
       }
-
-      catalogo[codigoModulo] = {
-        label: modulo.name ?? modulo.label ?? codigoModulo,
-        aliases: Array.isArray(modulo.aliases) ? modulo.aliases : [],
-        acoes: {}
-      };
-
-      moduloMap.set(chaveModulo, codigoModulo);
-      for (const alias of catalogo[codigoModulo].aliases) {
-        const normalizedAlias = normalizeKey(alias);
-        if (normalizedAlias) {
-          moduloMap.set(normalizedAlias, codigoModulo);
-        }
-      }
-
-      const mapaAcoes = new Map();
-      let features;
-      try {
-        features = await listFeaturesForModule(codigoModulo);
-      } catch (err) {
-        permissoesCatalogPromise = null;
-        throw err;
-      }
-
-      for (const feature of features) {
-        const codigoAcao = feature.code;
-        const chaveAcao = normalizeKey(codigoAcao);
-        if (!chaveAcao) {
-          continue;
-        }
-
-        const aliases = Array.isArray(feature.aliases) ? feature.aliases : [];
-        catalogo[codigoModulo].acoes[codigoAcao] = {
-          label: feature.name ?? feature.label ?? codigoAcao,
-          aliases
-        };
-
-        mapaAcoes.set(chaveAcao, codigoAcao);
-        for (const alias of aliases) {
-          const normalizedAlias = normalizeKey(alias);
-          if (normalizedAlias) {
-            mapaAcoes.set(normalizedAlias, codigoAcao);
-          }
-        }
-      }
-
-      acaoMap.set(codigoModulo, mapaAcoes);
     }
-
-    return { catalogo, moduloMap, acaoMap };
-  })();
-
-  return permissoesCatalogPromise;
+  }
+  PERMISSOES_ACAO_MAP.set(modulo, acaoMap);
 }
 
 function normalizeKey(value) {
@@ -954,7 +936,7 @@ function parseActionValue(rawValor) {
   return { permitido: booleanFromValue(rawValor) };
 }
 
-async function normalizarPermissoesEstrutura(origem, { strict = true } = {}) {
+function normalizarPermissoesEstrutura(origem, { strict = true } = {}) {
   if (origem === undefined || origem === null) return {};
 
   let input = origem;
@@ -972,11 +954,10 @@ async function normalizarPermissoesEstrutura(origem, { strict = true } = {}) {
     throw new Error('Formato de permissões inválido. Use objeto ou array.');
   }
 
-  const { moduloMap, acaoMap } = await carregarCatalogoPermissoes();
   const resultado = {};
 
   const processarModulo = (identificador, valor) => {
-    const moduloKey = moduloMap.get(normalizeKey(identificador));
+    const moduloKey = PERMISSOES_MODULO_MAP.get(normalizeKey(identificador));
     if (!moduloKey) {
       if (strict) {
         throw new Error(`Módulo desconhecido: ${identificador}`);
@@ -984,7 +965,7 @@ async function normalizarPermissoesEstrutura(origem, { strict = true } = {}) {
       return;
     }
 
-    const acoesPermitidas = acaoMap.get(moduloKey) || new Map();
+    const acoesPermitidas = PERMISSOES_ACAO_MAP.get(moduloKey) || new Map();
     const moduloResultado = resultado[moduloKey] || {};
 
     const adicionarAcao = (acaoIdentificador, acaoValor) => {
@@ -1084,146 +1065,17 @@ function construirResumoPermissoes(permissoes) {
   return resumo;
 }
 
-async function resolverRoleDoUsuario(row) {
-  if (!row) {
-    return null;
-  }
-
-  const codigo =
-    (typeof row.classificacao === 'string' && row.classificacao.trim())
-      ? row.classificacao.trim()
-      : null;
-
-  if (!codigo) {
-    return null;
+function obterPermissoesDoUsuario(row) {
+  if (!row || !Object.prototype.hasOwnProperty.call(row, 'permissoes')) {
+    return {};
   }
 
   try {
-    return await resolverRolePorCodigo(codigo);
+    return normalizarPermissoesEstrutura(row.permissoes, { strict: false });
   } catch (err) {
-    console.error('Falha ao resolver role do usuário:', err);
-    return null;
-  }
-}
-
-async function obterPermissoesDoUsuario(row) {
-  if (!row) {
+    console.error('Falha ao normalizar permissões do usuário:', err);
     return {};
   }
-
-  const role = await resolverRoleDoUsuario(row);
-  if (!role) {
-    if (Object.prototype.hasOwnProperty.call(row, 'permissoes')) {
-      try {
-        return await normalizarPermissoesEstrutura(row.permissoes, { strict: false });
-      } catch (err) {
-        console.error('Falha ao normalizar permissões do usuário:', err);
-      }
-    }
-    return {};
-  }
-
-  const permissoesPorModulo = {};
-
-  let modulos;
-  try {
-    modulos = await getModulesWithAccess(role.id);
-  } catch (err) {
-    console.error('Falha ao carregar módulos do role:', err);
-    return {};
-  }
-
-  for (const modulo of modulos) {
-    if (!modulo || !modulo.permitted) {
-      continue;
-    }
-
-    let features;
-    try {
-      features = await getFeaturesByRoleAndModule(role.id, modulo.code);
-    } catch (err) {
-      console.error('Falha ao carregar features do módulo:', err);
-      continue;
-    }
-
-    if (!Array.isArray(features) || !features.length) {
-      continue;
-    }
-
-    let colunasPermitidas = [];
-    try {
-      colunasPermitidas = await getGridColumns(role.id, modulo.code);
-    } catch (err) {
-      console.error('Falha ao carregar colunas do módulo:', err);
-    }
-
-    const colunasPorFeature = new Map();
-    for (const coluna of colunasPermitidas || []) {
-      if (!coluna) continue;
-      const chaveFeature = coluna.feature_code || coluna.featureCode || 'visualizar';
-      if (!chaveFeature) continue;
-      const featureCampos = colunasPorFeature.get(chaveFeature) || {};
-      featureCampos[coluna.code] = {
-        visualizar: Boolean(coluna.can_view ?? coluna.canView),
-        editar: Boolean(coluna.can_edit ?? coluna.canEdit)
-      };
-      colunasPorFeature.set(chaveFeature, featureCampos);
-    }
-
-    const permissoesModulo = {};
-    for (const feature of features) {
-      if (!feature) continue;
-      const entrada = {
-        permitido: Boolean(feature.permitted)
-      };
-
-      if (feature.scopes && typeof feature.scopes === 'object' && Object.keys(feature.scopes).length) {
-        entrada.escopos = feature.scopes;
-      }
-
-      const campos = colunasPorFeature.get(feature.code);
-      if (campos && Object.keys(campos).length) {
-        entrada.campos = campos;
-      }
-
-      if (feature.metadata && typeof feature.metadata === 'object' && Object.keys(feature.metadata).length) {
-        entrada.metadata = feature.metadata;
-      }
-
-      permissoesModulo[feature.code] = entrada;
-    }
-
-    if (Object.keys(permissoesModulo).length) {
-      permissoesPorModulo[modulo.code] = permissoesModulo;
-    }
-  }
-
-  let adicionais = {};
-  if (Object.prototype.hasOwnProperty.call(row, 'permissoes') && row.permissoes) {
-    try {
-      adicionais = await normalizarPermissoesEstrutura(row.permissoes, { strict: false });
-    } catch (err) {
-      console.warn('Falha ao combinar permissões personalizadas do usuário:', err);
-      adicionais = {};
-    }
-  }
-
-  if (adicionais && typeof adicionais === 'object') {
-    for (const [modulo, acoes] of Object.entries(adicionais)) {
-      if (!acoes || typeof acoes !== 'object') {
-        continue;
-      }
-      const destinoAtual = permissoesPorModulo[modulo] ? { ...permissoesPorModulo[modulo] } : {};
-      for (const [acao, detalhes] of Object.entries(acoes)) {
-        destinoAtual[acao] = detalhes;
-      }
-      if (Object.keys(destinoAtual).length) {
-        permissoesPorModulo[modulo] = destinoAtual;
-      }
-    }
-  }
-
-  return permissoesPorModulo;
 }
 
 function isSupAdminPerfil(perfil) {
@@ -1916,12 +1768,12 @@ async function atualizarCacheLogin(usuarioId, usuarioRow) {
   }
 }
 
-async function formatarUsuarioDetalhado(row, options = {}) {
+function formatarUsuarioDetalhado(row, options = {}) {
   if (!row) return null;
-  const base = await formatarUsuario(row, options);
+  const base = formatarUsuario(row, options);
   const resultado = { ...base };
 
-  const permissoes = await obterPermissoesDoUsuario(row);
+  const permissoes = obterPermissoesDoUsuario(row);
   resultado.permissoes = permissoes;
   resultado.permissoesResumo = construirResumoPermissoes(permissoes);
 
@@ -1975,11 +1827,11 @@ async function formatarUsuarioDetalhado(row, options = {}) {
   return resultado;
 }
 
-async function formatarModeloPermissoes(modelo) {
+function formatarModeloPermissoes(modelo) {
   if (!modelo) return null;
   let permissoesFormatadas = {};
   try {
-    permissoesFormatadas = await normalizarPermissoesEstrutura(modelo.permissoes, { strict: false });
+    permissoesFormatadas = normalizarPermissoesEstrutura(modelo.permissoes, { strict: false });
   } catch (err) {
     console.warn('Modelo de permissões possui estrutura inválida, retornando conteúdo bruto.', err);
     permissoesFormatadas = modelo.permissoes ?? {};
@@ -2008,8 +1860,7 @@ router.get('/modelos-permissoes', autenticarUsuario, async (req, res) => {
 
   try {
     const modelos = await listModelosPermissoes();
-    const modelosFormatados = await Promise.all(modelos.map(modelo => formatarModeloPermissoes(modelo)));
-    return res.json({ modelos: modelosFormatados });
+    return res.json({ modelos: modelos.map(formatarModeloPermissoes) });
   } catch (err) {
     console.error('Erro ao listar modelos de permissões:', err);
     return res.status(500).json({ error: 'Erro ao listar modelos de permissões.' });
@@ -2028,15 +1879,14 @@ router.post('/modelos-permissoes', autenticarUsuario, async (req, res) => {
 
   let permissoesNormalizadas;
   try {
-    permissoesNormalizadas = await normalizarPermissoesEstrutura(permissoesPayload, { strict: true });
+    permissoesNormalizadas = normalizarPermissoesEstrutura(permissoesPayload, { strict: true });
   } catch (err) {
     return res.status(400).json({ error: err.message });
   }
 
   try {
     const criado = await createModeloPermissoes({ nome, permissoes: permissoesNormalizadas });
-    const modeloFormatado = await formatarModeloPermissoes(criado);
-    return res.status(201).json({ modelo: modeloFormatado });
+    return res.status(201).json({ modelo: formatarModeloPermissoes(criado) });
   } catch (err) {
     if (err instanceof ModeloPermissoesError) {
       if (err.code === 'NOME_DUPLICADO') {
@@ -2069,7 +1919,7 @@ router.patch('/modelos-permissoes/:id', autenticarUsuario, async (req, res) => {
   let permissoesNormalizadas;
   if (permissoesPayload !== undefined) {
     try {
-      permissoesNormalizadas = await normalizarPermissoesEstrutura(permissoesPayload, { strict: true });
+      permissoesNormalizadas = normalizarPermissoesEstrutura(permissoesPayload, { strict: true });
     } catch (err) {
       return res.status(400).json({ error: err.message });
     }
@@ -2085,8 +1935,7 @@ router.patch('/modelos-permissoes/:id', autenticarUsuario, async (req, res) => {
       return res.status(404).json({ error: 'Modelo de permissões não encontrado.' });
     }
 
-    const modeloFormatado = await formatarModeloPermissoes(atualizado);
-    return res.json({ modelo: modeloFormatado });
+    return res.json({ modelo: formatarModeloPermissoes(atualizado) });
   } catch (err) {
     if (err instanceof ModeloPermissoesError) {
       if (err.code === 'NOME_DUPLICADO') {
@@ -2129,8 +1978,7 @@ router.get('/me', autenticarUsuario, async (req, res) => {
       return res.status(404).json({ error: 'Usuário não encontrado' });
     }
     const baseUrl = resolveRequestBaseUrl(req);
-    const detalhado = await formatarUsuarioDetalhado(usuario, { baseUrl });
-    return res.json(detalhado);
+    return res.json(formatarUsuarioDetalhado(usuario, { baseUrl }));
   } catch (err) {
     console.error('Erro ao obter dados do usuário autenticado:', err);
     return res.status(500).json({ error: 'Erro ao carregar dados do usuário.' });
@@ -2317,8 +2165,7 @@ router.put('/me', autenticarUsuario, parseMultipartIfNeeded, async (req, res) =>
 
   if (!updates.length) {
     const baseUrl = resolveRequestBaseUrl(req);
-    const detalhado = await formatarUsuarioDetalhado(usuarioAtual, { baseUrl });
-    return res.json(detalhado);
+    return res.json(formatarUsuarioDetalhado(usuarioAtual, { baseUrl }));
   }
 
   if (colunas.has('ultima_alteracao')) {
@@ -2355,8 +2202,7 @@ router.put('/me', autenticarUsuario, parseMultipartIfNeeded, async (req, res) =>
   }
 
   const baseUrl = resolveRequestBaseUrl(req);
-  const detalhado = await formatarUsuarioDetalhado(atualizado, { baseUrl });
-  return res.json(detalhado);
+  return res.json(formatarUsuarioDetalhado(atualizado, { baseUrl }));
 });
 
 router.post('/me/email-confirmation', autenticarUsuario, async (req, res) => {
@@ -2514,7 +2360,7 @@ router.patch('/:id', autenticarUsuario, async (req, res) => {
   let atualizarPermissoes = false;
   if (permissoesEntrada !== undefined) {
     try {
-      permissoesNormalizadas = await normalizarPermissoesEstrutura(permissoesEntrada, { strict: true });
+      permissoesNormalizadas = normalizarPermissoesEstrutura(permissoesEntrada, { strict: true });
       atualizarPermissoes = true;
     } catch (err) {
       return res.status(400).json({ error: err.message });
@@ -2579,7 +2425,7 @@ router.patch('/:id', autenticarUsuario, async (req, res) => {
 
   if (aplicarModelo) {
     try {
-      permissoesNormalizadas = await normalizarPermissoesEstrutura(modeloDestino?.permissoes ?? {}, { strict: true });
+      permissoesNormalizadas = normalizarPermissoesEstrutura(modeloDestino?.permissoes ?? {}, { strict: true });
       atualizarPermissoes = true;
     } catch (err) {
       console.error('Modelo de permissões inválido:', err);
@@ -2706,8 +2552,7 @@ router.patch('/:id', autenticarUsuario, async (req, res) => {
 
   if (!Object.keys(camposAtualizar).length) {
     const baseUrl = resolveRequestBaseUrl(req);
-    const detalhado = await formatarUsuarioDetalhado(alvo, { baseUrl });
-    return res.json(detalhado);
+    return res.json(formatarUsuarioDetalhado(alvo, { baseUrl }));
   }
 
   const agora = new Date();
@@ -2743,8 +2588,7 @@ router.patch('/:id', autenticarUsuario, async (req, res) => {
   }
 
   const baseUrl = resolveRequestBaseUrl(req);
-  const detalhado = await formatarUsuarioDetalhado(atualizado, { baseUrl });
-  return res.json(detalhado);
+  return res.json(formatarUsuarioDetalhado(atualizado, { baseUrl }));
 });
 
 router.put('/:id/permissoes', autenticarUsuario, async (req, res) => {
@@ -2791,7 +2635,7 @@ router.put('/:id/permissoes', autenticarUsuario, async (req, res) => {
 
   let permissoesNormalizadas;
   try {
-    permissoesNormalizadas = await normalizarPermissoesEstrutura(permissoesPayload, { strict: true });
+    permissoesNormalizadas = normalizarPermissoesEstrutura(permissoesPayload, { strict: true });
   } catch (err) {
     return res.status(400).json({ error: err.message });
   }
@@ -2816,7 +2660,7 @@ router.put('/:id/permissoes', autenticarUsuario, async (req, res) => {
     return res.status(500).json({ error: 'Erro ao carregar usuário atualizado.' });
   }
 
-  const permissoes = await obterPermissoesDoUsuario(atualizado);
+  const permissoes = obterPermissoesDoUsuario(atualizado);
   const resumo = construirResumoPermissoes(permissoes);
 
   return res.json({ permissoes, permissoesResumo: resumo });
@@ -3263,14 +3107,13 @@ async function confirmarAlteracaoEmail(req, res) {
     }
 
     const baseUrl = resolveRequestBaseUrl(req);
-    const usuarioDetalhado = await formatarUsuarioDetalhado(usuarioAtualizado, { baseUrl });
     return responder(
       req,
       res,
       200,
       'E-mail atualizado',
       'Seu novo e-mail foi confirmado com sucesso.',
-      { usuario: usuarioDetalhado }
+      { usuario: formatarUsuarioDetalhado(usuarioAtualizado, { baseUrl }) }
     );
   } catch (err) {
     console.error('Erro ao confirmar novo e-mail:', err);
@@ -3349,7 +3192,7 @@ router.get('/lista', async (req, res) => {
     const result = await pool.query(query);
 
     const baseUrl = resolveRequestBaseUrl(req);
-    const usuarios = await Promise.all(result.rows.map(row => formatarUsuario(row, { baseUrl })));
+    const usuarios = result.rows.map(row => formatarUsuario(row, { baseUrl }));
 
     res.json(usuarios);
   } catch (err) {
@@ -3683,7 +3526,7 @@ router.patch('/:id/status', async (req, res) => {
     }
 
     const baseUrl = resolveRequestBaseUrl(req);
-    const usuario = await formatarUsuario(linhaAtualizada, { baseUrl });
+    const usuario = formatarUsuario(linhaAtualizada, { baseUrl });
 
     res.json(usuario);
   } catch (err) {
@@ -3849,14 +3692,13 @@ async function reportarEmailIncorreto(req, res) {
     }
 
     const baseUrl = resolveRequestBaseUrl(req);
-    const usuarioFormatado = await formatarUsuario(usuarioAtualizado, { baseUrl });
     return responder(
       req,
       res,
       200,
       'Relato registrado',
       'Obrigado por nos avisar. Nossa equipe foi notificada e investigará o caso.',
-      { usuario: usuarioFormatado }
+      { usuario: formatarUsuario(usuarioAtualizado, { baseUrl }) }
     );
   } catch (err) {
     console.error('Erro ao reportar e-mail incorreto:', err);
@@ -3962,14 +3804,13 @@ router.get('/aprovar', async (req, res) => {
     }
 
     const baseUrl = resolveRequestBaseUrl(req);
-    const usuarioFormatado = await formatarUsuario(usuarioAtualizado, { baseUrl });
     return responder(
       req,
       res,
       200,
       'Usuário ativado',
       'O usuário foi ativado com sucesso.',
-      { usuario: usuarioFormatado }
+      { usuario: formatarUsuario(usuarioAtualizado, { baseUrl }) }
     );
   } catch (err) {
     console.error('Erro ao aprovar usuário com token:', err);
@@ -4009,8 +3850,7 @@ router.get('/:id', autenticarUsuario, async (req, res) => {
   }
 
   const baseUrl = resolveRequestBaseUrl(req);
-  const detalhado = await formatarUsuarioDetalhado(alvo, { baseUrl });
-  return res.json(detalhado);
+  return res.json(formatarUsuarioDetalhado(alvo, { baseUrl }));
 });
 
 router.post('/aprovar', async (req, res) => {
@@ -4088,22 +3928,21 @@ router.post('/aprovar', async (req, res) => {
       console.error('sendUserActivationNotice error', err);
     }
 
-    const usuarioFormatado = await formatarUsuario(usuario);
-    res.json({ message: 'Usuário aprovado com sucesso.', usuario: usuarioFormatado });
+    res.json({ message: 'Usuário aprovado com sucesso.', usuario: formatarUsuario(usuario) });
   } catch (err) {
     console.error('Erro ao aprovar usuário:', err);
     res.status(500).json({ error: 'Erro ao aprovar usuário.' });
   }
 });
 
-async function formatarUsuario(u, options = {}) {
+function formatarUsuario(u, options = {}) {
   const parseDate = valor => {
     if (!valor) return null;
     const data = valor instanceof Date ? valor : new Date(valor);
     return Number.isNaN(data.getTime()) ? null : data;
   };
 
-  const permissoes = await obterPermissoesDoUsuario(u);
+  const permissoes = obterPermissoesDoUsuario(u);
   const permissoesResumo = construirResumoPermissoes(permissoes);
 
   const ultimoLogin = parseDate(u.ultimo_login_em);

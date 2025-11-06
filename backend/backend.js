@@ -341,8 +341,9 @@ async function loginUsuario(email, senha, pin) {
 
     if (typeof formatarUsuarioResposta === 'function') {
       try {
-        const formatado = await formatarUsuarioResposta(usuario, { baseUrl: DEFAULT_PUBLIC_API_BASE_URL });
-        resposta = { ...formatado };
+        resposta = {
+          ...formatarUsuarioResposta(usuario, { baseUrl: DEFAULT_PUBLIC_API_BASE_URL })
+        };
       } catch (err) {
         console.error('Falha ao formatar usuário para resposta de login:', err);
       }
