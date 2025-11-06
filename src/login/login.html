@@ -38,6 +38,15 @@
       </div>
     </div>
     <div class="login-container relative w-full max-w-md sm:max-w-lg md:max-w-xl p-8 rounded-xl">
+      <div
+        id="connectionStatusBadge"
+        class="connection-status-badge"
+        role="status"
+        aria-live="polite"
+      >
+        <span id="connectionStatusDot" class="connection-status-dot" aria-hidden="true"></span>
+        <span id="connectionStatusText">Verificando conexão...</span>
+      </div>
       <div class="absolute top-4 right-4 z-[1001]">
         <button id="user-actions-btn" class="text-[#b6a03e] hover:text-[#d4c169]">
           <i data-feather="settings" class="w-5 h-5"></i>
