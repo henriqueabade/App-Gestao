@@ -468,7 +468,7 @@ if (intro) {
       if (!lastLoginAttempt || lastLoginAttempt.attemptId !== payload.attemptId) {
         return;
       }
-      setLoginButtonLoading(true, 'Reconectando...');
+      setLoginButtonLoading(true, 'Entrando...');
       processLoginAttempt({ ...payload, autoRetry: true }).catch((err) => {
         console.error('Tentativa automática de login falhou', err);
       });
@@ -477,7 +477,7 @@ if (intro) {
 
   async function processLoginAttempt({ email, password, pin, attemptId, autoRetry = false }) {
     let keepLoading = false;
-    setLoginButtonLoading(true, autoRetry ? 'Reconectando...' : 'Entrando...');
+    setLoginButtonLoading(true, 'Entrando...');
     try {
       const result = await window.electronAPI.login(email, password, pin);
       if (!result.success) {
@@ -500,9 +500,7 @@ if (intro) {
         }
         if (normalizedReason === 'db-connecting' || result.code === 'db-connecting') {
           keepLoading = true;
-          const toastMessage = message || 'Conectando ao banco...';
-          showToast(toastMessage, 'info');
-          setLoginButtonLoading(true, 'Conectando...');
+          setLoginButtonLoading(true, 'Entrando...');
           const retryPayload = { email, password, pin, attemptId };
           scheduleLoginRetry(retryPayload, result.retryAfter);
           return;

@@ -1972,7 +1972,7 @@ function resolveBackendHealthBaseUrl() {
     fallback.hostname = 'localhost';
   }
 
-  return isLocalHostname(fallback.hostname) ? null : fallback.origin;
+  return fallback.origin;
 }
 
 function formatMonitorError(err) {
@@ -2384,14 +2384,29 @@ function createConnectionMonitor() {
       healthPayload = response.body || null;
     } catch (err) {
       scheduleNextAttempt(true);
-      updateStatus({
-        state: 'waiting',
-        reason: 'configuration',
-        detail: 'local-host-blocked',
-        shouldLogout: false,
-        triggeredBy
-      });
-      return;
+      const formattedError = formatMonitorError(err);
+      if (isNetworkError(err) || err?.code === 'ECONNREFUSED' || err?.code === 'ENOTFOUND') {
+        applyNetState('offline');
+        updateStatus({
+          state: 'offline',
+          reason: 'offline',
+          detail: formattedError?.code || err?.code || 'healthz-unreachable',
+          shouldLogout: true,
+          failureStage: 'internet',
+          lastError: formattedError,
+          triggeredBy
+        });
+      } else {
+        updateStatus({
+          state: 'waiting',
+          reason: 'configuration',
+          detail: 'local-host-blocked',
+          shouldLogout: false,
+          lastError: formattedError,
+          triggeredBy
+        });
+      }
+      return currentStatus;
     }
 
     const healthData = healthPayload && typeof healthPayload === 'object' ? healthPayload : {};
