@@ -1,11 +1,10 @@
 const express = require('express');
 const db = require('./db');
-const requireFeature = require('./middlewares/requireFeature');
 
 const router = express.Router();
 
 // Lista pedidos com filtro opcional por cliente
-router.get('/', requireFeature('pedidos', 'visualizar'), async (req, res) => {
+router.get('/', async (req, res) => {
   const { clienteId } = req.query;
   try {
     let query =
@@ -32,7 +31,7 @@ router.get('/', requireFeature('pedidos', 'visualizar'), async (req, res) => {
 });
 
 // Atualiza o status de um pedido
-router.put('/:id/status', requireFeature('pedidos', 'editar'), async (req, res) => {
+router.put('/:id/status', async (req, res) => {
   const { status } = req.body;
   const { id } = req.params;
   try {
@@ -53,7 +52,7 @@ router.put('/:id/status', requireFeature('pedidos', 'editar'), async (req, res) 
 }); // <--- Faltava este '});' para fechar a rota e a função async
 
 // Obtém um pedido específico com itens e parcelas
-router.get('/:id', requireFeature('pedidos', 'visualizar'), async (req, res) => {
+router.get('/:id', async (req, res) => {
   const { id } = req.params;
   const client = await db.connect();
   try {

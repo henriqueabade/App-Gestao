@@ -74,17 +74,10 @@ window.MenuTheme = MenuThemeController;
 const sidebar = document.getElementById('sidebar');
 const mainContent = document.getElementById('mainContent');
 const menuToggle = document.getElementById('menuToggle');
-let crmToggle = document.getElementById('crmToggle');
-let crmSubmenu = document.getElementById('crmSubmenu');
-let chevron = crmToggle?.querySelector('.chevron') || null;
+const crmToggle = document.getElementById('crmToggle');
+const crmSubmenu = document.getElementById('crmSubmenu');
+const chevron = crmToggle.querySelector('.chevron');
 const companyName = document.getElementById('companyName');
-const sidebarNav = sidebar ? sidebar.querySelector('nav') : null;
-
-const accessiblePages = new Set();
-const submenuGroupByPage = new Map();
-const submenuRegistry = new Map();
-let sidebarExpanded = false;
-let crmExpanded = false;
 
 const MODULES_WITHOUT_SCROLL = new Set([
     'materia-prima',
@@ -96,7 +89,7 @@ const MODULES_WITHOUT_SCROLL = new Set([
     'usuarios'
 ]);
 
-let CRM_SUBMODULES = new Set([
+const CRM_SUBMODULES = new Set([
     'clientes',
     'prospeccoes',
     'contatos',
@@ -122,278 +115,25 @@ const MODULE_LABELS = {
     configuracoes: 'Configurações'
 };
 
-function normalizeMenuPageKey(page) {
-    if (page === null || page === undefined) {
-        return null;
-    }
-    const value = typeof page === 'string' ? page : String(page);
-    const trimmed = value.trim();
-    if (!trimmed) {
-        return null;
-    }
-    return trimmed.toLowerCase();
-}
-
-function registerAccessiblePage(page, groupCode = null) {
-    const normalized = normalizeMenuPageKey(page);
-    if (!normalized) return;
-    accessiblePages.add(normalized);
-    if (groupCode) {
-        submenuGroupByPage.set(normalized, groupCode);
-    }
-}
-
-function resetMenuAccessMaps() {
-    accessiblePages.clear();
-    submenuGroupByPage.clear();
-    submenuRegistry.clear();
-}
-
-function collectAccessiblePagesFromDOM() {
-    resetMenuAccessMaps();
-    if (!sidebarNav) return;
-
-    sidebarNav.querySelectorAll('.sidebar-item[data-page]').forEach(item => {
-        registerAccessiblePage(item.dataset.page);
-    });
-
-    sidebarNav.querySelectorAll('.submenu').forEach(submenuEl => {
-        const groupCode = submenuEl.dataset.menuGroup || (submenuEl.id === 'crmSubmenu' ? 'crm' : null);
-        submenuEl.querySelectorAll('.submenu-item[data-page]').forEach(item => {
-            registerAccessiblePage(item.dataset.page, groupCode);
-        });
-    });
-
-    crmToggle = document.getElementById('crmToggle') || crmToggle;
-    crmSubmenu = document.getElementById('crmSubmenu') || crmSubmenu;
-    chevron = crmToggle?.querySelector('.chevron') || chevron;
-
-    CRM_SUBMODULES = new Set(
-        Array.from(submenuGroupByPage.entries())
-            .filter(([, group]) => group === 'crm')
-            .map(([page]) => page)
-    );
-}
-
-function createIconElement(iconClass, { size = 'md' } = {}) {
-    const icon = document.createElement('i');
-    icon.classList.add('fas');
-    const classes = typeof iconClass === 'string' ? iconClass.trim().split(/\s+/).filter(Boolean) : [];
-    if (classes.length) {
-        classes.forEach(cls => icon.classList.add(cls));
-    } else {
-        icon.classList.add('fa-circle');
-    }
-    if (size === 'sm') {
-        icon.classList.add('w-4', 'h-4');
-    } else {
-        icon.classList.add('w-5', 'h-5');
-    }
-    icon.classList.add('flex-shrink-0');
-    return icon;
-}
-
-function createMenuLeaf(item, { isSubmenu = false, parentCode = null } = {}) {
-    if (!item || typeof item !== 'object') {
-        return null;
-    }
-    const pageSource = item.page ?? item.route ?? item.href ?? item.code ?? item.slug ?? item.module;
-    const pageKey = normalizeMenuPageKey(pageSource);
-    if (!pageKey) {
-        return null;
-    }
-    const hidden = item.permitted === false || item.enabled === false || item.visible === false ||
-        item.metadata?.hidden === true || item.metadata?.visibility === 'hidden';
-    if (hidden) {
-        return null;
-    }
-
-    registerAccessiblePage(pageKey, parentCode);
-
-    const element = document.createElement('div');
-    element.className = isSubmenu
-        ? 'submenu-item flex items-center py-2 px-3 rounded-lg'
-        : 'sidebar-item flex items-center p-3 rounded-lg';
-    element.dataset.page = pageKey;
-
-    if (item.metadata?.id) {
-        element.id = String(item.metadata.id);
-    }
-    if (item.metadata?.className) {
-        String(item.metadata.className)
-            .split(/\s+/)
-            .filter(Boolean)
-            .forEach(cls => element.classList.add(cls));
-    }
-
-    const icon = createIconElement(item.icon, { size: isSubmenu ? 'sm' : 'md' });
-    element.appendChild(icon);
-
-    const label = document.createElement('span');
-    label.className = 'sidebar-text ml-3 whitespace-nowrap';
-    label.textContent = item.label || MODULE_LABELS[pageKey] || item.title || item.name || '';
-    element.appendChild(label);
-
-    return element;
-}
-
-function createGroupContainer(item, code, childElements) {
-    const groupCode = code || `grupo:${Date.now()}`;
-    const toggle = document.createElement('div');
-    toggle.className = 'sidebar-item flex items-center justify-between p-3 rounded-lg';
-    toggle.dataset.menuGroup = groupCode;
-    toggle.setAttribute('role', 'button');
-    toggle.setAttribute('tabindex', '0');
-    toggle.setAttribute('aria-expanded', 'false');
-
-    if (item.metadata?.id) {
-        toggle.id = String(item.metadata.id);
-    } else if (groupCode === 'crm') {
-        toggle.id = 'crmToggle';
-    }
-
-    const left = document.createElement('div');
-    left.className = 'flex items-center';
-    left.appendChild(createIconElement(item.icon));
-    const label = document.createElement('span');
-    label.className = 'sidebar-text ml-3 whitespace-nowrap';
-    label.textContent = item.label || MODULE_LABELS[groupCode] || item.title || item.name || '';
-    left.appendChild(label);
-    toggle.appendChild(left);
-
-    const chevronEl = document.createElement('i');
-    chevronEl.classList.add('fas', 'fa-chevron-right', 'w-3', 'h-3', 'chevron', 'sidebar-text');
-    toggle.appendChild(chevronEl);
-
-    const submenuEl = document.createElement('div');
-    submenuEl.className = 'submenu';
-    submenuEl.dataset.menuGroup = groupCode;
-    if (item.metadata?.submenuId) {
-        submenuEl.id = String(item.metadata.submenuId);
-    } else if (groupCode === 'crm') {
-        submenuEl.id = 'crmSubmenu';
-    }
-    childElements.forEach(child => submenuEl.appendChild(child));
-
-    toggle.addEventListener('click', event => {
-        event.preventDefault();
-        toggleGroup(groupCode);
-    });
-    toggle.addEventListener('keydown', event => {
-        if (event.key === 'Enter' || event.key === ' ') {
-            event.preventDefault();
-            toggleGroup(groupCode);
+function getCurrentUserFromStorage() {
+    let stored = null;
+    try {
+        if (typeof sessionStorage !== 'undefined') {
+            stored = sessionStorage.getItem('currentUser');
         }
-    });
-
-    submenuRegistry.set(groupCode, { toggle, submenu: submenuEl, chevron: chevronEl });
-
-    if (groupCode === 'crm') {
-        crmToggle = toggle;
-        crmSubmenu = submenuEl;
-        chevron = chevronEl;
-        CRM_SUBMODULES = new Set(
-            Array.from(childElements)
-                .map(child => normalizeMenuPageKey(child.dataset.page))
-                .filter(Boolean)
-        );
-    }
-
-    return { toggle, submenu: submenuEl };
-}
-
-function buildMenuEntry(item, index = 0) {
-    if (!item || typeof item !== 'object') {
-        return [];
-    }
-
-    const childrenSource = Array.isArray(item.children) || Array.isArray(item.items)
-        ? (item.children ?? item.items)
-        : [];
-    const groupCode = normalizeMenuPageKey(item.code ?? item.module ?? `group:${index}`);
-
-    const childElements = [];
-    childrenSource.forEach(child => {
-        const childElement = createMenuLeaf(child, { isSubmenu: true, parentCode: groupCode });
-        if (childElement) {
-            childElements.push(childElement);
+        if (!stored && typeof localStorage !== 'undefined') {
+            stored = localStorage.getItem('user');
         }
-    });
-
-    if (!childElements.length) {
-        const leaf = createMenuLeaf(item);
-        return leaf ? [leaf] : [];
-    }
-
-    const { toggle, submenu } = createGroupContainer(item, groupCode, childElements);
-    return [toggle, submenu];
-}
-
-function rebuildSidebarMenu(menuItems = []) {
-    if (!sidebarNav) return;
-    resetMenuAccessMaps();
-    sidebarNav.innerHTML = '';
-
-    menuItems.forEach((item, index) => {
-        buildMenuEntry(item, index).forEach(element => sidebarNav.appendChild(element));
-    });
-
-    if (!accessiblePages.size) {
-        collectAccessiblePagesFromDOM();
-    }
-
-    const keepCrmExpanded = shouldKeepCrmExpanded();
-    if (submenuRegistry.has('crm')) {
-        toggleGroup('crm', keepCrmExpanded);
-    } else if (keepCrmExpanded && crmSubmenu) {
-        crmSubmenu.classList.add('open');
-        chevron?.classList.add('rotated');
-        crmExpanded = true;
+        return stored ? JSON.parse(stored) : null;
+    } catch (error) {
+        console.warn('Não foi possível recuperar o usuário logado', error);
+        return null;
     }
 }
 
-function ensureMenuFromPermissions() {
-    if (!window.permissionsService?.loadBootstrap) {
-        collectAccessiblePagesFromDOM();
-        return;
-    }
-    window.permissionsService
-        .loadBootstrap()
-        .then(() => {
-            const menuItems = window.permissionsService.getMenu();
-            if (Array.isArray(menuItems) && menuItems.length) {
-                rebuildSidebarMenu(menuItems);
-            } else {
-                collectAccessiblePagesFromDOM();
-            }
-        })
-        .catch(error => {
-            console.warn('Não foi possível carregar o menu dinâmico', error);
-            collectAccessiblePagesFromDOM();
-        });
-}
-
-collectAccessiblePagesFromDOM();
-ensureMenuFromPermissions();
-
-if (window.permissionsService?.EVENT_NAME) {
-    window.addEventListener(window.permissionsService.EVENT_NAME, event => {
-        const items = event?.detail?.data?.menu;
-        if (Array.isArray(items) && items.length) {
-            rebuildSidebarMenu(items);
-        }
-    });
-}
-
-function isPageAccessible(page) {
-    const normalized = normalizeMenuPageKey(page);
-    if (!normalized) {
-        return false;
-    }
-    if (!accessiblePages.size) {
-        return true;
-    }
-    return accessiblePages.has(normalized);
+function canAccessUsuariosModule() {
+    const perfil = getCurrentUserFromStorage()?.perfil;
+    return perfil === 'Sup Admin' || perfil === 'Admin';
 }
 
 const MENU_DEFAULT_PAGE_KEY = 'menu.defaultPage';
@@ -402,20 +142,11 @@ const MENU_CRM_EXPANDED_KEY = 'menu.crmExpanded';
 const MENU_DEFAULT_PAGE_FALLBACK = 'dashboard';
 
 function normalizeModulePage(page) {
-    if (page === null || page === undefined) {
+    if (!page || typeof page !== 'string') {
         return null;
     }
-    const normalized = normalizeMenuPageKey(page);
-    if (!normalized) {
-        return null;
-    }
-    if (MODULE_LABELS[normalized]) {
-        return normalized;
-    }
-    if (accessiblePages.has(normalized)) {
-        return normalized;
-    }
-    return null;
+    const normalized = page.toLowerCase();
+    return MODULE_LABELS[normalized] ? normalized : null;
 }
 
 function readStoredDefaultPage() {
@@ -460,17 +191,6 @@ function shouldKeepCrmExpanded() {
     } catch (error) {
         console.warn('Não foi possível ler a preferência de expansão do CRM', error);
         return false;
-    }
-}
-
-function persistCrmExpandedState(isExpanded) {
-    if (typeof localStorage === 'undefined') {
-        return;
-    }
-    try {
-        localStorage.setItem(MENU_CRM_EXPANDED_KEY, isExpanded ? '1' : '0');
-    } catch (error) {
-        console.warn('Não foi possível salvar a preferência de expansão do CRM', error);
     }
 }
 
@@ -3182,10 +2902,9 @@ async function loadPage(page, options = {}) {
         return;
     }
 
-    const normalizedPage = normalizeModulePage(page) || normalizeMenuPageKey(page);
-    if (!isPageAccessible(normalizedPage || page)) {
-        console.warn(`Usuário sem permissão para acessar o módulo ${page}. Redirecionando.`);
-        const fallbackPage = options?.fallbackPage && options.fallbackPage !== page
+    if (page === 'usuarios' && !canAccessUsuariosModule()) {
+        console.warn('Usuário sem permissão para acessar o módulo de Usuários. Redirecionando.');
+        const fallbackPage = options?.fallbackPage && options.fallbackPage !== 'usuarios'
             ? options.fallbackPage
             : MENU_DEFAULT_PAGE_FALLBACK;
 
@@ -3194,21 +2913,20 @@ async function loadPage(page, options = {}) {
             delete fallbackOptions.fallbackPage;
             fallbackOptions.skipNavigationUpdate = false;
             return loadPage(fallbackPage, fallbackOptions);
+        } else {
+            content.dataset.activePage = fallbackPage || MENU_DEFAULT_PAGE_FALLBACK;
+            content.innerHTML = `
+                <div class="modulo-container flex flex-col items-center justify-center py-24 text-center space-y-6">
+                    <div class="w-12 h-12 rounded-full border border-dashed border-white/20 flex items-center justify-center">
+                        <i class="fas fa-user-lock text-xl" style="color: var(--color-bordeaux)"></i>
+                    </div>
+                    <div>
+                        <p class="text-lg font-semibold text-white">Você não tem permissão para acessar esta área.</p>
+                        <p class="text-sm" style="color: var(--neutral-100)">Entre em contato com um administrador para solicitar acesso.</p>
+                    </div>
+                </div>
+            `;
         }
-
-        content.dataset.activePage = fallbackPage || MENU_DEFAULT_PAGE_FALLBACK;
-        const deniedTitle = getModuleTitle(page);
-        content.innerHTML = `
-            <div class="modulo-container flex flex-col items-center justify-center py-24 text-center space-y-6">
-                <div class="w-12 h-12 rounded-full border border-dashed border-white/20 flex items-center justify-center">
-                    <i class="fas fa-user-lock text-xl" style="color: var(--color-bordeaux)"></i>
-                </div>
-                <div>
-                    <p class="text-lg font-semibold text-white">Você não tem permissão para acessar ${deniedTitle}.</p>
-                    <p class="text-sm" style="color: var(--neutral-100)">Entre em contato com um administrador para solicitar acesso.</p>
-                </div>
-            </div>
-        `;
         return;
     }
 
@@ -3304,14 +3022,15 @@ async function loadPage(page, options = {}) {
 }
 window.loadPage = loadPage;
 
+let sidebarExpanded = false;
+let crmExpanded = false;
+
 function setActiveNavigation(page) {
-    const normalized = normalizeMenuPageKey(page);
     const items = document.querySelectorAll('.sidebar-item, .submenu-item');
     items.forEach(item => item.classList.remove('active'));
 
-    const selectorKey = normalized || page;
-    const target = document.querySelector(`.sidebar-item[data-page="${selectorKey}"]`) ||
-        document.querySelector(`.submenu-item[data-page="${selectorKey}"]`);
+    const target = document.querySelector(`.sidebar-item[data-page="${page}"]`) ||
+        document.querySelector(`.submenu-item[data-page="${page}"]`);
 
     if (!target) {
         return;
@@ -3319,17 +3038,20 @@ function setActiveNavigation(page) {
 
     target.classList.add('active');
 
-    const groupCode = submenuGroupByPage.get(normalized || selectorKey);
+    const insideCrm = target.closest('#crmSubmenu');
     const keepCrmExpanded = shouldKeepCrmExpanded();
-
-    if (groupCode) {
-        toggleGroup(groupCode, true);
-    } else if (!keepCrmExpanded) {
-        toggleGroup('crm', false);
+    if (insideCrm) {
+        crmSubmenu.classList.add('open');
+        chevron.classList.add('rotated');
+        crmExpanded = true;
+    } else if (crmExpanded && !keepCrmExpanded) {
+        crmSubmenu.classList.remove('open');
+        chevron.classList.remove('rotated');
+        crmExpanded = false;
     }
 
     if (shouldPersistLastVisitedPage()) {
-        persistLastVisitedPage(selectorKey);
+        persistLastVisitedPage(page);
     }
 }
 
@@ -3403,61 +3125,31 @@ menuToggle?.addEventListener('click', () => {
 mainContent?.addEventListener('mouseenter', collapseSidebar);
 mainContent?.addEventListener('click', collapseSidebar);
 
-function toggleGroup(groupCode, force) {
-    if (!groupCode) return;
-    const entry = submenuRegistry.get(groupCode);
-    if (entry) {
-        const shouldOpen = force !== undefined ? Boolean(force) : !entry.submenu.classList.contains('open');
-        entry.submenu.classList.toggle('open', shouldOpen);
-        entry.toggle.classList.toggle('submenu-open', shouldOpen);
-        entry.toggle.setAttribute('aria-expanded', shouldOpen ? 'true' : 'false');
-        entry.chevron?.classList.toggle('rotated', shouldOpen);
-        if (groupCode === 'crm') {
-            crmExpanded = shouldOpen;
-            persistCrmExpandedState(shouldOpen);
-        }
-        return;
-    }
-
-    if (groupCode === 'crm' && crmSubmenu && chevron) {
-        const shouldOpen = force !== undefined ? Boolean(force) : !crmExpanded;
-        crmExpanded = shouldOpen;
-        crmSubmenu.classList.toggle('open', shouldOpen);
-        chevron.classList.toggle('rotated', shouldOpen);
-        persistCrmExpandedState(shouldOpen);
+// Mostra ou esconde submenu do CRM
+function toggleCrmSubmenu() {
+    crmExpanded = !crmExpanded;
+    if (crmExpanded) {
+        crmSubmenu.classList.add('open');
+        chevron.classList.add('rotated');
+        // CRM submenu should not trigger sidebar expansion
+    } else {
+        crmSubmenu.classList.remove('open');
+        chevron.classList.remove('rotated');
+        // Submenu fecha apenas em ações explícitas
     }
 }
+crmToggle.addEventListener('click', toggleCrmSubmenu);
 
-// Mostra ou esconde submenu do CRM (compatibilidade com menu estático)
-function toggleCrmSubmenu(force) {
-    toggleGroup('crm', force);
-}
-crmToggle?.addEventListener('click', () => toggleGroup('crm'));
-
-// Navegação interna com delegação
-if (sidebar) {
-    sidebar.addEventListener('click', (event) => {
-        const groupToggle = event.target.closest('.sidebar-item[data-menu-group]');
-        if (groupToggle && sidebar.contains(groupToggle)) {
-            event.preventDefault();
-            const groupCode = groupToggle.dataset.menuGroup || (groupToggle.id === 'crmToggle' ? 'crm' : null);
-            if (groupCode) {
-                toggleGroup(groupCode);
-            }
-            return;
-        }
-
-        const target = event.target.closest('.sidebar-item[data-page], .submenu-item[data-page]');
-        if (!target || !sidebar.contains(target)) {
-            return;
-        }
+// Navegação interna
+document.querySelectorAll('.sidebar-item[data-page], .submenu-item[data-page]').forEach(item => {
+    item.addEventListener('click', (event) => {
         event.stopPropagation();
-        const page = target.dataset.page;
+        const page = item.dataset.page;
         if (!page) return;
         loadPage(page);
         collapseSidebar();
     });
-}
+});
 
 window.addEventListener('load', () => {
     const defaultPagePreference = readStoredDefaultPage();
@@ -3471,9 +3163,9 @@ window.addEventListener('load', () => {
     const keepCrmExpanded = shouldKeepCrmExpanded();
     const isCrmModule = CRM_SUBMODULES.has(pageToLoad);
     if (keepCrmExpanded && !crmExpanded) {
-        toggleGroup('crm', true);
+        toggleCrmSubmenu();
     } else if (!keepCrmExpanded && crmExpanded && !isCrmModule) {
-        toggleGroup('crm', false);
+        toggleCrmSubmenu();
     }
 });
 

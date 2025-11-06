@@ -1,6 +1,5 @@
 const express = require('express');
 const db = require('./db');
-const requireFeature = require('./middlewares/requireFeature');
 
 const router = express.Router();
 
@@ -73,7 +72,7 @@ async function converterParaPedido(orcamentoId) {
 }
 
 // Lista orçamentos com filtro opcional por cliente
-router.get('/', requireFeature('orcamentos', 'visualizar'), async (req, res) => {
+router.get('/', async (req, res) => {
   const { clienteId } = req.query;
   try {
     let query =
@@ -96,7 +95,7 @@ router.get('/', requireFeature('orcamentos', 'visualizar'), async (req, res) => 
 });
 
 // Obtém um orçamento específico com itens e parcelas
-router.get('/:id', requireFeature('orcamentos', 'visualizar'), async (req, res) => {
+router.get('/:id', async (req, res) => {
   const { id } = req.params;
   const client = await db.connect();
   try {
@@ -119,7 +118,7 @@ router.get('/:id', requireFeature('orcamentos', 'visualizar'), async (req, res) 
   }
 });
 
-router.post('/', requireFeature('orcamentos', 'criar'), async (req, res) => {
+router.post('/', async (req, res) => {
   const {
     cliente_id,
     contato_id,
@@ -220,7 +219,7 @@ router.post('/', requireFeature('orcamentos', 'criar'), async (req, res) => {
 });
 
 // Atualiza um orçamento existente
-router.put('/:id', requireFeature('orcamentos', 'editar'), async (req, res) => {
+router.put('/:id', async (req, res) => {
   const { id } = req.params;
   const {
     cliente_id,
@@ -325,7 +324,7 @@ router.put('/:id', requireFeature('orcamentos', 'editar'), async (req, res) => {
 });
 
 // Atualiza apenas o status de um orçamento
-router.patch('/:id/status', requireFeature('orcamentos', 'editar'), async (req, res) => {
+router.patch('/:id/status', async (req, res) => {
   const { id } = req.params;
   const { situacao } = req.body;
   try {
@@ -342,7 +341,7 @@ router.patch('/:id/status', requireFeature('orcamentos', 'editar'), async (req, 
 });
 
 // Clona um orçamento existente
-router.post('/:id/clone', requireFeature('orcamentos', 'criar'), async (req, res) => {
+router.post('/:id/clone', async (req, res) => {
   const { id } = req.params;
   const client = await db.connect();
   try {

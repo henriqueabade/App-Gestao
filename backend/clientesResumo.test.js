@@ -2,7 +2,6 @@ const test = require('node:test');
 const assert = require('node:assert');
 const express = require('express');
 const { newDb } = require('pg-mem');
-const { seedRbacPermissions } = require('./scripts/seed_rbac_permissions');
 
 function setupDb() {
   const db = newDb();
@@ -53,62 +52,7 @@ function setupDb() {
       email text
     );
   `);
-  db.public.none(`
-    CREATE TABLE orcamentos (
-      id serial primary key,
-      cliente_id integer
-    );
-  `);
-  db.public.none(`
-    CREATE TABLE usuarios (
-      id serial primary key,
-      nome text,
-      email text,
-      classificacao text,
-      perfil text
-    );
-  `);
   return db;
-}
-
-async function bootstrapApp(pool) {
-  const dbModulePath = require.resolve('./db');
-  const originalDbModule = require.cache[dbModulePath];
-  require.cache[dbModulePath] = {
-    exports: {
-      query: (text, params) => pool.query(text, params),
-      connect: () => pool.connect()
-    }
-  };
-
-  await seedRbacPermissions({ query: (text, params) => pool.query(text, params) });
-  await pool.query(
-    "INSERT INTO usuarios (id, nome, email, classificacao, perfil) VALUES (1, 'Sup', 'sup@example.com', 'sup_admin', 'Sup Admin')"
-  );
-  await pool.query(
-    "INSERT INTO usuarios (id, nome, email, classificacao, perfil) VALUES (2, 'Vendas', 'vendas@example.com', 'vendas', 'Vendas')"
-  );
-
-  delete require.cache[require.resolve('./clientesController')];
-  const clientesRouter = require('./clientesController');
-
-  const app = express();
-  app.use('/api/clientes', clientesRouter);
-  const server = app.listen(0);
-  await new Promise(resolve => server.once('listening', resolve));
-  const port = server.address().port;
-
-  async function close() {
-    await new Promise(resolve => server.close(resolve));
-    if (originalDbModule) {
-      require.cache[dbModulePath] = originalDbModule;
-    } else {
-      delete require.cache[dbModulePath];
-    }
-    delete require.cache[require.resolve('./clientesController')];
-  }
-
-  return { port, close };
 }
 
 test('GET /api/clientes/:id/resumo formata endereços e contatos', async () => {
@@ -131,11 +75,23 @@ test('GET /api/clientes/:id/resumo formata endereços e contatos', async () => {
   await pool.query(`INSERT INTO contatos_cliente (id_cliente, nome, telefone_fixo, telefone_celular, email)
     VALUES (1, 'Maria', '1111-1111', '9999-9999', 'maria@example.com');`);
 
-  const { port, close } = await bootstrapApp(pool);
+  const dbModulePath = require.resolve('./db');
+  require.cache[dbModulePath] = {
+    exports: {
+      query: (text, params) => pool.query(text, params),
+      connect: () => pool.connect()
+    }
+  };
+  delete require.cache[require.resolve('./clientesController')];
+  const clientesRouter = require('./clientesController');
 
-  const res = await fetch(`http://localhost:${port}/api/clientes/1/resumo`, {
-    headers: { Authorization: 'Bearer 1' }
-  });
+  const app = express();
+  app.use('/api/clientes', clientesRouter);
+  const server = app.listen(0);
+  await new Promise(resolve => server.once('listening', resolve));
+  const port = server.address().port;
+
+  const res = await fetch(`http://localhost:${port}/api/clientes/1/resumo`);
   assert.strictEqual(res.status, 200);
   const body = await res.json();
 
@@ -152,7 +108,7 @@ test('GET /api/clientes/:id/resumo formata endereços e contatos', async () => {
     }
   ]);
 
-  await close();
+  server.close();
 });
 
 test('GET /api/clientes/contatos retorna contatos com dados do cliente', async () => {
@@ -170,11 +126,23 @@ test('GET /api/clientes/contatos retorna contatos com dados do cliente', async (
                       (11, 2, 'Bruno Lima', 'Financeiro', '(21) 98888-1111', '(21) 4000-2000', 'bruno@beta.com'),
                       (12, 2, 'Carlos Alves', 'Compras', '(21) 97777-2222', '(21) 4000-3000', 'carlos@beta.com')`);
 
-  const { port, close } = await bootstrapApp(pool);
+  const dbModulePath = require.resolve('./db');
+  require.cache[dbModulePath] = {
+    exports: {
+      query: (text, params) => pool.query(text, params),
+      connect: () => pool.connect()
+    }
+  };
+  delete require.cache[require.resolve('./clientesController')];
+  const clientesRouter = require('./clientesController');
 
-  const res = await fetch(`http://localhost:${port}/api/clientes/contatos`, {
-    headers: { Authorization: 'Bearer 1' }
-  });
+  const app = express();
+  app.use('/api/clientes', clientesRouter);
+  const server = app.listen(0);
+  await new Promise(resolve => server.once('listening', resolve));
+  const port = server.address().port;
+
+  const res = await fetch(`http://localhost:${port}/api/clientes/contatos`);
   assert.strictEqual(res.status, 200);
   const body = await res.json();
 
@@ -217,7 +185,7 @@ test('GET /api/clientes/contatos retorna contatos com dados do cliente', async (
     }
   ]);
 
-  await close();
+  server.close();
 });
 
 test('GET /api/clientes/lista inclui pais', async () => {
@@ -228,11 +196,23 @@ test('GET /api/clientes/lista inclui pais', async () => {
   await pool.query(`INSERT INTO clientes (id, nome_fantasia, cnpj, ent_uf, ent_pais, status_cliente, dono_cliente)
                     VALUES (1, 'Cliente A', '123', 'São Paulo', 'Brasil', 'Ativo', 'Joao')`);
 
-  const { port, close } = await bootstrapApp(pool);
+  const dbModulePath = require.resolve('./db');
+  require.cache[dbModulePath] = {
+    exports: {
+      query: (text, params) => pool.query(text, params),
+      connect: () => pool.connect()
+    }
+  };
+  delete require.cache[require.resolve('./clientesController')];
+  const clientesRouter = require('./clientesController');
 
-  const res = await fetch(`http://localhost:${port}/api/clientes/lista`, {
-    headers: { Authorization: 'Bearer 1' }
-  });
+  const app = express();
+  app.use('/api/clientes', clientesRouter);
+  const server = app.listen(0);
+  await new Promise(resolve => server.once('listening', resolve));
+  const port = server.address().port;
+
+  const res = await fetch(`http://localhost:${port}/api/clientes/lista`);
   assert.strictEqual(res.status, 200);
   const body = await res.json();
   assert.deepStrictEqual(body, [{
@@ -245,50 +225,5 @@ test('GET /api/clientes/lista inclui pais', async () => {
     dono_cliente: 'Joao'
   }]);
 
-  await close();
-});
-
-test('DELETE /api/clientes/:id permite Sup Admin excluir registros', async () => {
-  const mem = setupDb();
-  const { Pool } = mem.adapters.createPg();
-  const pool = new Pool();
-
-  await pool.query(`INSERT INTO clientes (id, nome_fantasia, cnpj, ent_uf, ent_pais, status_cliente, dono_cliente)
-                    VALUES (5, 'Cliente Z', '999', 'São Paulo', 'Brasil', 'Ativo', 'Ana')`);
-
-  const { port, close } = await bootstrapApp(pool);
-
-  const res = await fetch(`http://localhost:${port}/api/clientes/5`, {
-    method: 'DELETE',
-    headers: { Authorization: 'Bearer 1' }
-  });
-  assert.strictEqual(res.status, 200);
-  const body = await res.json();
-  assert.deepStrictEqual(body, { success: true });
-
-  const remaining = await pool.query('SELECT COUNT(*)::int AS total FROM clientes WHERE id = $1', [5]);
-  assert.strictEqual(remaining.rows[0].total, 0);
-
-  await close();
-});
-
-test('DELETE /api/clientes/:id bloqueia quando falta permissão de exclusão', async () => {
-  const mem = setupDb();
-  const { Pool } = mem.adapters.createPg();
-  const pool = new Pool();
-
-  await pool.query(`INSERT INTO clientes (id, nome_fantasia, cnpj, ent_uf, ent_pais, status_cliente, dono_cliente)
-                    VALUES (7, 'Cliente W', '111', 'São Paulo', 'Brasil', 'Ativo', 'Ana')`);
-
-  const { port, close } = await bootstrapApp(pool);
-
-  const res = await fetch(`http://localhost:${port}/api/clientes/7`, {
-    method: 'DELETE',
-    headers: { Authorization: 'Bearer 2' }
-  });
-  assert.strictEqual(res.status, 403);
-  const body = await res.json();
-  assert.deepStrictEqual(body, { error: 'forbidden', feature: 'clientes.excluir' });
-
-  await close();
+  server.close();
 });
