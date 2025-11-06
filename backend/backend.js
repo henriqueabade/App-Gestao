@@ -18,6 +18,7 @@ let pinErrorAttempts = 0;
 function ensureDatabaseReady(pin) {
   pool.init(pin);
   const hasEnsureWarmup = Object.prototype.hasOwnProperty.call(pool, 'ensureWarmup');
+  const hasGetStatus = Object.prototype.hasOwnProperty.call(pool, 'getStatus');
   if (hasEnsureWarmup && typeof pool.ensureWarmup === 'function') {
     pool.ensureWarmup();
   }
@@ -25,6 +26,29 @@ function ensureDatabaseReady(pin) {
   const hasCreateNotReadyError = Object.prototype.hasOwnProperty.call(pool, 'createNotReadyError');
   if (hasIsReady && hasCreateNotReadyError && typeof pool.isReady === 'function') {
     if (!pool.isReady()) {
+      let status = null;
+      if (hasGetStatus && typeof pool.getStatus === 'function') {
+        try {
+          status = pool.getStatus();
+        } catch (statusErr) {
+          console.error('Falha ao obter status do pool:', statusErr);
+        }
+      }
+      if (status && status.lastError) {
+        const errorMessage = status.lastError.message || 'Conectando ao banco...';
+        const detailedError = new Error(errorMessage);
+        detailedError.code = status.lastError.code || 'db-connecting';
+        const retryAfter = Number(status.retryInMs ?? 0);
+        if (!Number.isNaN(retryAfter)) {
+          detailedError.retryAfter = Math.max(retryAfter, 0);
+        }
+        if (isPinError(detailedError)) {
+          detailedError.reason = 'pin';
+        } else if (isNetworkError(detailedError)) {
+          detailedError.reason = 'offline';
+        }
+        throw detailedError;
+      }
       if (typeof pool.createNotReadyError === 'function') {
         throw pool.createNotReadyError();
       }
@@ -237,14 +261,25 @@ async function registrarUsuario(nome, email, senha, pin) {
     return resultado.rows[0];
   } catch (err) {
     if (isNetworkError(err)) {
-      throw new Error('Sem conexão com internet');
+      if (err instanceof Error) {
+        err.message = 'Sem conexão com internet';
+        err.reason = err.reason || 'offline';
+      }
+      throw err;
     }
     if (isPinError(err)) {
       pinErrorAttempts += 1;
       if (pinErrorAttempts >= 5) {
-        throw new Error('PIN incorreto, contate Administrador');
+        if (err instanceof Error) {
+          err.message = 'PIN incorreto, contate Administrador';
+        }
+      } else if (err instanceof Error) {
+        err.message = 'PIN incorreto';
       }
-      throw new Error('PIN incorreto');
+      if (err instanceof Error) {
+        err.reason = err.reason || 'pin';
+      }
+      throw err;
     }
     throw err;
   }
@@ -317,14 +352,25 @@ async function loginUsuario(email, senha, pin) {
     return resposta;
   } catch (err) {
     if (isNetworkError(err)) {
-      throw new Error('Sem conexão com internet');
+      if (err instanceof Error) {
+        err.message = 'Sem conexão com internet';
+        err.reason = err.reason || 'offline';
+      }
+      throw err;
     }
     if (isPinError(err)) {
       pinErrorAttempts += 1;
       if (pinErrorAttempts >= 5) {
-        throw new Error('PIN incorreto, contate Administrador');
+        if (err instanceof Error) {
+          err.message = 'PIN incorreto, contate Administrador';
+        }
+      } else if (err instanceof Error) {
+        err.message = 'PIN incorreto';
       }
-      throw new Error('PIN incorreto');
+      if (err instanceof Error) {
+        err.reason = err.reason || 'pin';
+      }
+      throw err;
     }
     throw err;
   }

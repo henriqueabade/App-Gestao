@@ -242,19 +242,29 @@ if (intro) {
       await cacheUpdateStatus();
       return;
     }
-    localStorage.removeItem('user');
-    localStorage.removeItem('rememberUser');
-    localStorage.removeItem('pin');
-    if (result && result.reason === 'offline') {
-      showOfflineError();
-    } else if (result && result.reason === 'user-removed') {
-      showUserRemovedError();
+    const autoLoginReason = typeof result?.reason === 'string' ? result.reason : '';
+    if (autoLoginReason === 'db-connecting') {
+      const infoMessage = typeof result?.message === 'string' ? result.message : 'Conectando ao banco...';
+      showToast(infoMessage, 'info');
     } else {
-      showPinError();
+      localStorage.removeItem('user');
+      localStorage.removeItem('rememberUser');
+      localStorage.removeItem('pin');
+      if (autoLoginReason === 'offline') {
+        showOfflineError();
+      } else if (autoLoginReason === 'user-removed') {
+        showUserRemovedError();
+      } else if (autoLoginReason === 'pin') {
+        showPinError();
+      } else if (autoLoginReason) {
+        showToast(result?.message || 'Falha no login automático.', 'error');
+      } else {
+        showPinError();
+      }
+      localStorage.removeItem('pinChanged');
+      localStorage.removeItem('offlineDisconnect');
+      localStorage.removeItem('userRemoved');
     }
-    localStorage.removeItem('pinChanged');
-    localStorage.removeItem('offlineDisconnect');
-    localStorage.removeItem('userRemoved');
   } else if (storedUser && !rememberUser) {
     localStorage.removeItem('user');
     localStorage.removeItem('rememberUser');
@@ -423,7 +433,23 @@ if (intro) {
       const result = await window.electronAPI.login(email, password, pin);
       if (!result.success) {
         const message = typeof result.message === 'string' ? result.message : '';
-        if (result.code === 'db-connecting') {
+        const reason = typeof result.reason === 'string' ? result.reason : '';
+        const normalizedReason = reason.toLowerCase();
+        if (normalizedReason && normalizedReason !== 'db-connecting') {
+          clearPendingLoginRetry();
+          lastLoginAttempt = null;
+          if (normalizedReason === 'pin') {
+            showToast(message || 'PIN incorreto', 'error');
+            return;
+          }
+          if (normalizedReason === 'offline') {
+            showToast(message || 'Sem conexão com internet', 'error');
+            return;
+          }
+          showToast(message || 'Erro ao realizar login', 'error');
+          return;
+        }
+        if (normalizedReason === 'db-connecting' || result.code === 'db-connecting') {
           keepLoading = true;
           const toastMessage = message || 'Conectando ao banco...';
           showToast(toastMessage, 'info');

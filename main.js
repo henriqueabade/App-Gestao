@@ -3027,11 +3027,22 @@ ipcMain.handle('login-usuario', async (event, dados) => {
     setCurrentUserSession(user);
     return { success: true, user };
   } catch (err) {
+    let reason = err?.reason;
+    if (!reason) {
+      if (isPinError(err)) {
+        reason = 'pin';
+      } else if (isNetworkError(err)) {
+        reason = 'offline';
+      } else if (err && err.code === 'db-connecting') {
+        reason = 'db-connecting';
+      }
+    }
     return {
       success: false,
       message: err.message,
       code: err.code,
-      retryAfter: err.retryAfter
+      retryAfter: err.retryAfter,
+      reason
     };
   }
 });
@@ -3552,13 +3563,26 @@ ipcMain.handle('auto-login', async (_event, payload) => {
   } catch (err) {
     console.error('Auto-login failed:', err.message);
     currentUserSession = null;
-    if (isNetworkError(err)) {
-      return { success: false, reason: 'offline' };
+    let reason = err?.reason;
+    if (!reason) {
+      if (isNetworkError(err)) {
+        reason = 'offline';
+      } else if (isPinError(err)) {
+        reason = 'pin';
+      } else if (err && err.code === 'db-connecting') {
+        reason = 'db-connecting';
+      }
     }
-    if (isPinError(err)) {
-      return { success: false, reason: 'pin' };
+    if (reason === 'offline') {
+      return { success: false, reason, message: err.message, retryAfter: err.retryAfter, code: err.code };
     }
-    return { success: false, message: err.message };
+    if (reason === 'pin') {
+      return { success: false, reason, message: err.message, retryAfter: err.retryAfter, code: err.code };
+    }
+    if (reason === 'db-connecting') {
+      return { success: false, reason, message: err.message, retryAfter: err.retryAfter, code: err.code };
+    }
+    return { success: false, message: err.message, code: err.code, retryAfter: err.retryAfter };
   }
 });
 
