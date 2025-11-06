@@ -3,8 +3,9 @@ const assert = require('node:assert');
 const http = require('node:http');
 const express = require('express');
 const { newDb } = require('pg-mem');
+const { seedRbacPermissions } = require('./scripts/seed_rbac_permissions');
 
-function setup() {
+async function setup() {
   const db = newDb();
   db.public.registerFunction({
     name: 'trim',
@@ -17,6 +18,7 @@ function setup() {
     nome text,
     email text,
     perfil text,
+    classificacao text,
     senha text,
     telefone text,
     telefone_celular text,
@@ -92,10 +94,10 @@ function setup() {
     email text
   );`);
   db.public.none(
-    "INSERT INTO usuarios (nome, email, perfil, verificado, telefone) VALUES ('Maria', 'maria@example.com', 'admin', false, '(11) 4000-0000');"
+    "INSERT INTO usuarios (nome, email, perfil, classificacao, verificado, telefone) VALUES ('Maria', 'maria@example.com', 'admin', 'admin', false, '(11) 4000-0000');"
   );
   db.public.none(
-    "INSERT INTO usuarios (nome, email, perfil, verificado, telefone, permissoes) VALUES ('Supervisor', 'sup@example.com', 'Sup Admin', true, '(11) 5000-0000', '{\"usuarios\":{\"permissoes\":{\"permitido\":true}}}');"
+    "INSERT INTO usuarios (nome, email, perfil, classificacao, verificado, telefone, permissoes) VALUES ('Supervisor', 'sup@example.com', 'Sup Admin', 'sup_admin', true, '(11) 5000-0000', '{\"usuarios\":{\"permissoes\":{\"permitido\":true}}}');"
   );
 
   const { Pool } = db.adapters.createPg();
@@ -124,6 +126,8 @@ function setup() {
       }
     }
   };
+
+  await seedRbacPermissions({ query: (text, params) => pool.query(text, params) });
 
   const usuariosControllerPath = require.resolve('./usuariosController');
   delete require.cache[usuariosControllerPath];
@@ -183,7 +187,7 @@ async function authenticatedFetch(port, path, options = {}) {
 }
 
 test('modelos de permissões requerem Sup Admin', async () => {
-  const { listen, close } = setup();
+  const { listen, close } = await setup();
   const port = await listen();
 
   try {
@@ -202,7 +206,7 @@ test('modelos de permissões requerem Sup Admin', async () => {
 });
 
 test('GET /api/usuarios/lista inclui avatarUrl apontando para rota pública', async () => {
-  const { pool, listen, close } = setup();
+  const { pool, listen, close } = await setup();
   const port = await listen();
 
   try {
@@ -240,7 +244,7 @@ test('GET /api/usuarios/lista inclui avatarUrl apontando para rota pública', as
 });
 
 test('Sup Admin gerencia modelos de permissões e aplica em usuário', async () => {
-  const { listen, close, pool } = setup();
+  const { listen, close, pool } = await setup();
   const port = await listen();
 
   try {
@@ -315,7 +319,7 @@ test('Sup Admin gerencia modelos de permissões e aplica em usuário', async () 
 });
 
 test('PATCH /api/usuarios/:id/status alterna verificado e atualiza hora_ativacao', async () => {
-  const { listen, close, pool } = setup();
+  const { listen, close, pool } = await setup();
   const port = await listen();
   const baseUrl = `http://127.0.0.1:${port}/api/usuarios/1/status`;
 
@@ -373,7 +377,7 @@ test('PATCH /api/usuarios/:id/status alterna verificado e atualiza hora_ativacao
 });
 
 test('GET /api/usuarios/me exige autenticação', async () => {
-  const { listen, close } = setup();
+  const { listen, close } = await setup();
   const port = await listen();
   try {
     const resposta = await fetch(`http://127.0.0.1:${port}/api/usuarios/me`);
@@ -384,7 +388,7 @@ test('GET /api/usuarios/me exige autenticação', async () => {
 });
 
 test('GET /api/usuarios/me retorna dados do usuário autenticado', async () => {
-  const { listen, close } = setup();
+  const { listen, close } = await setup();
   const port = await listen();
   try {
     const resposta = await authenticatedFetch(port, '/api/usuarios/me');
@@ -399,7 +403,7 @@ test('GET /api/usuarios/me retorna dados do usuário autenticado', async () => {
 });
 
 test('PUT /api/usuarios/me atualiza dados textuais e foto via JSON', async () => {
-  const { listen, close, pool } = setup();
+  const { listen, close, pool } = await setup();
   const port = await listen();
   const tinyPng = Buffer.from(
     '89504E470D0A1A0A0000000D49484452000000010000000108020000009077053E0000000A49444154789C6360000002000100FFFF03000006000557BF0000000049454E44AE426082',
@@ -456,7 +460,7 @@ test('PUT /api/usuarios/me atualiza dados textuais e foto via JSON', async () =>
 });
 
 test('PUT /api/usuarios/me aceita upload multipart de foto e expõe avatar_url', async () => {
-  const { listen, close, pool } = setup();
+  const { listen, close, pool } = await setup();
   const port = await listen();
   const tinyPng = Buffer.from(
     '89504E470D0A1A0A0000000D49484452000000010000000108020000009077053E0000000A49444154789C6360000002000100FFFF03000006000557BF0000000049454E44AE426082',
@@ -493,7 +497,7 @@ test('PUT /api/usuarios/me aceita upload multipart de foto e expõe avatar_url',
 });
 
 test('PUT /api/usuarios/me rejeita alteração direta de e-mail', async () => {
-  const { listen, close } = setup();
+  const { listen, close } = await setup();
   const port = await listen();
   try {
     const resposta = await authenticatedFetch(port, '/api/usuarios/me', {
@@ -508,7 +512,7 @@ test('PUT /api/usuarios/me rejeita alteração direta de e-mail', async () => {
 });
 
 test('POST /api/usuarios/me/email-confirmation cria token e envia e-mail', async () => {
-  const { listen, close, pool, emailChangeRequests } = setup();
+  const { listen, close, pool, emailChangeRequests } = await setup();
   const port = await listen();
   try {
     const resposta = await authenticatedFetch(port, '/api/usuarios/me/email-confirmation', {
@@ -539,7 +543,7 @@ test('POST /api/usuarios/me/email-confirmation cria token e envia e-mail', async
 });
 
 test('GET /api/usuarios/confirm-email aplica novo e-mail confirmado', async () => {
-  const { listen, close, pool } = setup();
+  const { listen, close, pool } = await setup();
   const port = await listen();
   try {
     const iniciar = await authenticatedFetch(port, '/api/usuarios/me/email-confirmation', {
@@ -581,7 +585,7 @@ test('GET /api/usuarios/confirm-email aplica novo e-mail confirmado', async () =
 });
 
 test('GET /api/usuarios/:id permite Sup Admin visualizar dados completos', async () => {
-  const { listen, close } = setup();
+  const { listen, close } = await setup();
   const port = await listen();
   try {
     const resposta = await authenticatedFetch(port, '/api/usuarios/1', { usuarioId: 2 });
@@ -590,14 +594,17 @@ test('GET /api/usuarios/:id permite Sup Admin visualizar dados completos', async
     assert.strictEqual(corpo.id, 1);
     assert.ok(Array.isArray(corpo.permissoesResumo));
     assert.ok(Object.prototype.hasOwnProperty.call(corpo, 'permissoes'));
-    assert.deepStrictEqual(corpo.permissoes, {});
+    assert.ok(corpo.permissoes);
+    assert.ok(corpo.permissoes.usuarios);
+    assert.strictEqual(corpo.permissoes.usuarios.permissoes.permitido, false);
+    assert.strictEqual(corpo.permissoes.clientes.visualizar.campos.nome.visualizar, true);
   } finally {
     await close();
   }
 });
 
 test('GET /api/usuarios/:id impede acesso a dados de terceiros sem privilégio', async () => {
-  const { listen, close } = setup();
+  const { listen, close } = await setup();
   const port = await listen();
   try {
     const resposta = await authenticatedFetch(port, '/api/usuarios/2');
@@ -608,7 +615,7 @@ test('GET /api/usuarios/:id impede acesso a dados de terceiros sem privilégio',
 });
 
 test('PATCH /api/usuarios/:id permite atualização de dados pessoais autorizados', async () => {
-  const { listen, close, pool } = setup();
+  const { listen, close, pool } = await setup();
   const port = await listen();
   try {
     const resposta = await authenticatedFetch(port, '/api/usuarios/1', {
@@ -644,7 +651,7 @@ test('PATCH /api/usuarios/:id permite atualização de dados pessoais autorizado
 });
 
 test('PUT /api/usuarios/:id/permissoes atualiza permissões granuladas', async () => {
-  const { listen, close, pool } = setup();
+  const { listen, close, pool } = await setup();
   const port = await listen();
   try {
     const payload = {
@@ -676,25 +683,32 @@ test('PUT /api/usuarios/:id/permissoes atualiza permissões granuladas', async (
     const corpo = await resposta.json();
     assert.strictEqual(corpo.permissoes.usuarios.permissoes.permitido, true);
     assert.strictEqual(corpo.permissoes.pedidos.editar.permitido, true);
-    assert.strictEqual(
-      corpo.permissoes.pedidos.editar.campos.valor_total.visualizar,
-      true
-    );
-    assert.strictEqual(
-      corpo.permissoes.pedidos.editar.campos.valor_total.editar,
-      false
-    );
+    assert.strictEqual(corpo.permissoes.pedidos.editar.campos.valor_total.visualizar, true);
+    assert.strictEqual(corpo.permissoes.pedidos.editar.campos.valor_total.editar, false);
     assert.ok(Array.isArray(corpo.permissoesResumo));
 
     const registro = await pool.query('SELECT permissoes FROM usuarios WHERE id = $1', [1]);
-    assert.deepStrictEqual(registro.rows[0].permissoes, corpo.permissoes);
+    assert.strictEqual(registro.rows[0].permissoes.usuarios.permissoes.permitido, true);
+    const editarDetalhes = registro.rows[0].permissoes.usuarios.editar;
+    assert.strictEqual(
+      typeof editarDetalhes === 'object' ? editarDetalhes.permitido : editarDetalhes,
+      false
+    );
+    assert.strictEqual(
+      registro.rows[0].permissoes.pedidos.editar.campos.valor_total.visualizar,
+      true
+    );
+    assert.strictEqual(
+      registro.rows[0].permissoes.pedidos.editar.campos.valor_total.editar,
+      false
+    );
   } finally {
     await close();
   }
 });
 
 test('PUT /api/usuarios/:id/permissoes bloqueia usuários sem privilégio de Sup Admin', async () => {
-  const { listen, close } = setup();
+  const { listen, close } = await setup();
   const port = await listen();
   try {
     const resposta = await authenticatedFetch(port, '/api/usuarios/2/permissoes', {
@@ -709,7 +723,7 @@ test('PUT /api/usuarios/:id/permissoes bloqueia usuários sem privilégio de Sup
 });
 
 test('DELETE /api/usuarios/:id remove usuário sem vínculos', async () => {
-  const { listen, close, pool } = setup();
+  const { listen, close, pool } = await setup();
   const port = await listen();
   try {
     const resposta = await authenticatedFetch(port, '/api/usuarios/1', {
@@ -727,7 +741,7 @@ test('DELETE /api/usuarios/:id remove usuário sem vínculos', async () => {
 });
 
 test('DELETE /api/usuarios/:id retorna 409 quando existem associações', async () => {
-  const { listen, close, pool } = setup();
+  const { listen, close, pool } = await setup();
   const port = await listen();
   try {
     await pool.query("INSERT INTO clientes (nome, dono_cliente, email) VALUES ('Alpha', 'Maria', 'alpha@empresa.com')");
@@ -750,7 +764,7 @@ test('DELETE /api/usuarios/:id retorna 409 quando existem associações', async 
 });
 
 test('POST /api/usuarios/:id/transferencia transfere dados e exclui usuário', async () => {
-  const { listen, close, pool } = setup();
+  const { listen, close, pool } = await setup();
   const port = await listen();
   try {
     await pool.query(

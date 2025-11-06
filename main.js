@@ -162,7 +162,7 @@ const CONNECTION_MONITOR_AGENT_KEEP_ALIVE_MS = Math.max(
   Number.parseInt(process.env.CONNECTION_MONITOR_AGENT_KEEP_ALIVE_MS || '65000', 10),
   15000
 );
-const CONNECTION_MONITOR_LOG_FILE = path.resolve('/logs/connection-monitor.log');
+const CONNECTION_MONITOR_LOG_FILE = path.join(projectRoot, 'connection-monitor.log');
 const CONNECTION_MONITOR_LOG_MAX_BYTES = Math.max(
   Number.parseInt(process.env.CONNECTION_MONITOR_LOG_MAX_BYTES || '524288', 10),
   131072
