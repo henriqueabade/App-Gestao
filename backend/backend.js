@@ -15,6 +15,26 @@ const DEFAULT_PUBLIC_API_BASE_URL =
 // Track failed PIN attempts across session
 let pinErrorAttempts = 0;
 
+function ensureDatabaseReady(pin) {
+  pool.init(pin);
+  const hasEnsureWarmup = Object.prototype.hasOwnProperty.call(pool, 'ensureWarmup');
+  if (hasEnsureWarmup && typeof pool.ensureWarmup === 'function') {
+    pool.ensureWarmup();
+  }
+  const hasIsReady = Object.prototype.hasOwnProperty.call(pool, 'isReady');
+  const hasCreateNotReadyError = Object.prototype.hasOwnProperty.call(pool, 'createNotReadyError');
+  if (hasIsReady && hasCreateNotReadyError && typeof pool.isReady === 'function') {
+    if (!pool.isReady()) {
+      if (typeof pool.createNotReadyError === 'function') {
+        throw pool.createNotReadyError();
+      }
+      const error = new Error('Conectando ao banco...');
+      error.code = 'db-connecting';
+      throw error;
+    }
+  }
+}
+
 // Helper to detect errors related to an invalid PIN/port
 function isPinError(err) {
   if (!err) return false;
@@ -184,7 +204,7 @@ async function ensureUsuariosSchema() {
 async function registrarUsuario(nome, email, senha, pin) {
   const senhaCriptografada = await bcrypt.hash(senha, 10);
   try {
-    pool.init(pin);
+    ensureDatabaseReady(pin);
     await ensureUsuariosSchema();
     if (await usuarioExiste(email)) {
       throw new Error('Usuário já cadastrado');
@@ -233,7 +253,7 @@ async function registrarUsuario(nome, email, senha, pin) {
 // Login de usuário (corrigido)
 async function loginUsuario(email, senha, pin) {
   try {
-    pool.init(pin);
+    ensureDatabaseReady(pin);
     await ensureUsuariosSchema();
     const resultado = await pool.query(
       'SELECT * FROM usuarios WHERE lower(email) = lower($1)',

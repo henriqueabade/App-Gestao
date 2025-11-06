@@ -24,6 +24,19 @@ router.post('/password-reset-request', async (req, res) => {
 
   try {
     pool.init(normalizedPin);
+    if (typeof pool.ensureWarmup === 'function') {
+      pool.ensureWarmup();
+    }
+    const hasReadyCheck = typeof pool.isReady === 'function';
+    const hasNotReadyFactory = typeof pool.createNotReadyError === 'function';
+    if (hasReadyCheck && !pool.isReady()) {
+      const err = hasNotReadyFactory ? pool.createNotReadyError() : Object.assign(new Error('Conectando ao banco...'), { code: 'db-connecting', retryAfter: 5000 });
+      return res.status(503).json({
+        error: err.message,
+        code: err.code,
+        retryAfter: err.retryAfter
+      });
+    }
 
     const userRes = await pool.query('SELECT id FROM usuarios WHERE email = $1', [normalizedEmail]);
     if (userRes.rows.length === 0) {
@@ -45,6 +58,14 @@ router.post('/password-reset-request', async (req, res) => {
     res.status(200).json({ success: true });
   } catch (err) {
     console.error('password-reset-request error', err);
+
+    if (err.code === 'db-connecting') {
+      return res.status(503).json({
+        error: err.message,
+        code: err.code,
+        retryAfter: err.retryAfter
+      });
+    }
 
     if (isPinError(err)) {
       return res.status(400).json({ error: 'PIN incorreto. E-mail não enviado.' });
@@ -77,6 +98,13 @@ router.post('/password-reset', async (req, res) => {
     res.sendStatus(200);
   } catch (err) {
     console.error('password-reset error', err);
+    if (err.code === 'db-connecting') {
+      return res.status(503).json({
+        error: err.message,
+        code: err.code,
+        retryAfter: err.retryAfter
+      });
+    }
     res.status(500).end();
   }
 });

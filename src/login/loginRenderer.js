@@ -22,6 +22,9 @@ let currentPinPopup = null;
 let pinErrorShown = false;
 let offlineErrorShown = false;
 let userRemovedErrorShown = false;
+let pendingLoginRetryTimeout = null;
+let lastLoginAttempt = null;
+const LOGIN_RETRY_MIN_DELAY_MS = 5000;
 
 async function fetchApi(path, options) {
   const baseUrl = await window.apiConfig.getApiBaseUrl();
@@ -367,6 +370,163 @@ if (intro) {
   const loginForm    = document.getElementById('loginForm');
   const registerForm = document.getElementById('registerForm');
   const registerSubmitButton = registerForm?.querySelector('button[type="submit"]');
+  const loginSubmitButton = loginForm?.querySelector('button[type="submit"]');
+
+  function clearPendingLoginRetry() {
+    if (pendingLoginRetryTimeout) {
+      clearTimeout(pendingLoginRetryTimeout);
+      pendingLoginRetryTimeout = null;
+    }
+  }
+
+  function setLoginButtonLoading(isLoading, label = 'Entrando...') {
+    if (!loginSubmitButton) return;
+    loginSubmitButton.setAttribute('aria-busy', isLoading ? 'true' : 'false');
+    if (isLoading) {
+      if (!loginSubmitButton.dataset.originalContent) {
+        loginSubmitButton.dataset.originalContent = loginSubmitButton.innerHTML;
+      }
+      loginSubmitButton.disabled = true;
+      loginSubmitButton.classList.add('cursor-not-allowed', 'opacity-80');
+      loginSubmitButton.innerHTML =
+        `<span class="button-spinner" aria-hidden="true"></span><span class="ml-2">${label}</span>`;
+    } else {
+      const original = loginSubmitButton.dataset.originalContent;
+      if (original) {
+        loginSubmitButton.innerHTML = original;
+      }
+      loginSubmitButton.disabled = false;
+      loginSubmitButton.classList.remove('cursor-not-allowed', 'opacity-80');
+      delete loginSubmitButton.dataset.originalContent;
+    }
+  }
+
+  function scheduleLoginRetry(payload, retryAfter) {
+    clearPendingLoginRetry();
+    const delay = Math.max(Number(retryAfter) || 0, LOGIN_RETRY_MIN_DELAY_MS);
+    pendingLoginRetryTimeout = setTimeout(() => {
+      pendingLoginRetryTimeout = null;
+      if (!lastLoginAttempt || lastLoginAttempt.attemptId !== payload.attemptId) {
+        return;
+      }
+      setLoginButtonLoading(true, 'Reconectando...');
+      processLoginAttempt({ ...payload, autoRetry: true }).catch((err) => {
+        console.error('Tentativa automática de login falhou', err);
+      });
+    }, delay);
+  }
+
+  async function processLoginAttempt({ email, password, pin, attemptId, autoRetry = false }) {
+    let keepLoading = false;
+    setLoginButtonLoading(true, autoRetry ? 'Reconectando...' : 'Entrando...');
+    try {
+      const result = await window.electronAPI.login(email, password, pin);
+      if (!result.success) {
+        const message = typeof result.message === 'string' ? result.message : '';
+        if (result.code === 'db-connecting') {
+          keepLoading = true;
+          const toastMessage = message || 'Conectando ao banco...';
+          showToast(toastMessage, 'info');
+          setLoginButtonLoading(true, 'Conectando...');
+          const retryPayload = { email, password, pin, attemptId };
+          scheduleLoginRetry(retryPayload, result.retryAfter);
+          return;
+        }
+        clearPendingLoginRetry();
+        lastLoginAttempt = null;
+        if (
+          result.code === 'inactive-user' ||
+          message.toLowerCase().includes('inativo')
+        ) {
+          showInactiveUserWarning();
+        } else {
+          showToast(message || 'Erro ao realizar login', 'error');
+        }
+        return;
+      }
+
+      clearPendingLoginRetry();
+      lastLoginAttempt = null;
+      showToast('Login realizado com sucesso!', 'success');
+      const remember = document.getElementById('remember').checked;
+      if (result.user) localStorage.setItem('user', JSON.stringify(result.user));
+      localStorage.setItem('rememberUser', remember ? '1' : '0');
+      localStorage.setItem('pin', pin);
+      sessionStorage.setItem('currentUser', JSON.stringify(result.user));
+      await cacheUpdateStatus();
+
+      if (pinInput) {
+        pinInput.value = pin;
+        pinInput.readOnly = true;
+        pinInput.classList.add('text-gray-400');
+      }
+      if (registerPinInput) {
+        registerPinInput.value = pin;
+        registerPinInput.readOnly = true;
+        registerPinInput.classList.add('text-gray-400');
+      }
+
+      let savedState = localStorage.getItem('savedState');
+      if (!savedState) {
+        const diskState = await window.electronAPI.loadState();
+        if (diskState) {
+          try {
+            const savedUser = diskState.storage && diskState.storage.user
+              ? JSON.parse(diskState.storage.user)
+              : null;
+            if (
+              savedUser &&
+              savedUser.id === result.user.id &&
+              diskState.sectionId &&
+              diskState.sectionId !== 'dashboard'
+            ) {
+              localStorage.setItem('savedState', JSON.stringify(diskState));
+              await window.electronAPI.clearState();
+            } else {
+              await window.electronAPI.clearState();
+              localStorage.removeItem('savedState');
+            }
+          } catch (err) {
+            await window.electronAPI.clearState();
+            localStorage.removeItem('savedState');
+          }
+        } else {
+          localStorage.removeItem('savedState');
+        }
+      }
+
+      window.electronAPI.openDashboard();
+      const overlay = document.getElementById('loadingOverlay');
+      if (overlay) {
+        overlay.classList.remove('hidden');
+        overlay.classList.add('visible');
+      }
+      const network = document.getElementById('bg-network');
+      if (network) {
+        network.classList.remove('visible');
+        network.classList.add('network-fade-out');
+      }
+      setTimeout(() => {
+        if (overlay) overlay.classList.add('fade-out');
+      }, 1500);
+      setTimeout(() => {
+        if (overlay) overlay.classList.remove('visible');
+        document.body.classList.add('fade-out');
+        setTimeout(() => {
+          window.electronAPI.closeLogin();
+        }, 500);
+      }, 4000);
+    } catch (err) {
+      clearPendingLoginRetry();
+      lastLoginAttempt = null;
+      showToast('Erro ao realizar login', 'error');
+      console.error('Falha ao realizar login', err);
+    } finally {
+      if (!keepLoading) {
+        setLoginButtonLoading(false);
+      }
+    }
+  }
 
   function setRegisterButtonLoading(isLoading) {
     if (!registerSubmitButton) return;
@@ -437,93 +597,21 @@ if (intro) {
   // === 6) Envio do formulário de Login ===
   loginForm.addEventListener('submit', async e => {
     e.preventDefault();
-    const email    = document.getElementById('email').value;
-    const password = document.getElementById('password').value;
-    const pin      = document.getElementById('pin').value;
+    const emailInput = document.getElementById('email');
+    const passwordInput = document.getElementById('password');
+    const pinField = document.getElementById('pin');
+    const email = emailInput ? emailInput.value : '';
+    const password = passwordInput ? passwordInput.value : '';
+    const pin = pinField ? pinField.value : '';
     if (pin.length !== 5) {
       showToast('PIN deve ter 5 dígitos', 'error');
       return;
     }
-    const result   = await window.electronAPI.login(email, password, pin);
-    if (!result.success) {
-      const message = typeof result.message === 'string' ? result.message : '';
-      if (
-        result.code === 'inactive-user' ||
-        message.toLowerCase().includes('inativo')
-      ) {
-        showInactiveUserWarning();
-      } else {
-        showToast(message || 'Erro ao realizar login', 'error');
-      }
-      return;
-    }
 
-    showToast('Login realizado com sucesso!', 'success');
-    const remember = document.getElementById('remember').checked;
-    if (result.user) localStorage.setItem('user', JSON.stringify(result.user));
-    localStorage.setItem('rememberUser', remember ? '1' : '0');
-    localStorage.setItem('pin', pin);
-    sessionStorage.setItem('currentUser', JSON.stringify(result.user));
-    await cacheUpdateStatus();
-
-    if (pinInput) {
-      pinInput.value = pin;
-      pinInput.readOnly = true;
-      pinInput.classList.add('text-gray-400');
-    }
-    if (registerPinInput) {
-      registerPinInput.value = pin;
-      registerPinInput.readOnly = true;
-      registerPinInput.classList.add('text-gray-400');
-    }
-
-    let savedState = localStorage.getItem('savedState');
-    if (!savedState) {
-      const diskState = await window.electronAPI.loadState();
-      if (diskState) {
-        try {
-          const savedUser = diskState.storage && diskState.storage.user
-            ? JSON.parse(diskState.storage.user)
-            : null;
-          if (
-            savedUser &&
-            savedUser.id === result.user.id &&
-            diskState.sectionId &&
-            diskState.sectionId !== 'dashboard'
-          ) {
-            localStorage.setItem('savedState', JSON.stringify(diskState));
-            await window.electronAPI.clearState();
-          } else {
-            await window.electronAPI.clearState();
-            localStorage.removeItem('savedState');
-          }
-        } catch (err) {
-          await window.electronAPI.clearState();
-          localStorage.removeItem('savedState');
-        }
-      } else {
-        localStorage.removeItem('savedState');
-      }
-    }
-
-    window.electronAPI.openDashboard();
-    const overlay = document.getElementById('loadingOverlay');
-    if (overlay) {
-      overlay.classList.remove('hidden');
-      overlay.classList.add('visible');
-    }
-    const network = document.getElementById('bg-network');
-    if (network) {
-      network.classList.remove('visible');
-      network.classList.add('network-fade-out');
-    }
-    setTimeout(() => {
-      if (overlay) overlay.classList.remove('visible');
-      document.body.classList.add('fade-out');
-      setTimeout(() => {
-        window.electronAPI.closeLogin();
-      }, 500);
-    }, 4000);
+    clearPendingLoginRetry();
+    const attemptId = Date.now();
+    lastLoginAttempt = { email, password, pin, attemptId };
+    await processLoginAttempt({ email, password, pin, attemptId, autoRetry: false });
   });
 
   // === 7) Envio do formulário de Cadastro ===

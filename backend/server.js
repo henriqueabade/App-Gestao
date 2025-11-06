@@ -14,17 +14,6 @@ const pedidosRouter         = require('./pedidosController');
 const notificationsRouter   = require('./notificationsController');
 const db                    = require('./db');
 
-db
-  .query('SELECT 1')
-  .then(() => {
-    if (process.env.DEBUG === 'true') {
-      console.log('[server] pool do banco aquecido com SELECT 1');
-    }
-  })
-  .catch((err) => {
-    console.warn('[server] falha ao aquecer pool do banco:', err?.message || err);
-  });
-
 const app = express();
 app.use(cors());
 app.use(express.json({ limit: '3mb' }));
@@ -49,20 +38,52 @@ app.get('/status', (_req, res) => {
 });
 
 app.get('/healthz', (_req, res) => {
-  res.status(200).json({ status: 'ok' });
+  const status = db.getStatus();
+  if (!status.ready) {
+    db.ensureWarmup();
+  }
+
+  const dbStatus = status.ready ? 'ready' : status.connecting ? 'connecting' : 'error';
+  const payload = {
+    internet: true,
+    db_ok: status.ready,
+    db_ready: status.ready,
+    db_status: dbStatus,
+    connecting: status.connecting,
+    next_retry_in_ms: status.retryInMs,
+    last_success_at: status.lastSuccessAt || null,
+    last_failure_at: status.lastFailureAt || null,
+    consecutive_failures: status.consecutiveFailures
+  };
+
+  if (status.lastError) {
+    payload.last_error = status.lastError;
+  }
+
+  res.status(200).json(payload);
 });
 
-// Health check combinado (API + banco de dados) para reduzir chamadas do monitor.
-app.get('/healthz/combined', async (_req, res) => {
-  try {
-    await db.withQueryGuardDisabled(() => db.query('SELECT 1'));
-    res.status(204).set({ 'cache-control': 'no-store', 'content-length': '0' }).end();
-  } catch (err) {
-    res
-      .status(503)
-      .type('application/json')
-      .send(Buffer.from(JSON.stringify({ status: 'offline-db' })));
+app.get('/healthz/db', (_req, res) => {
+  const status = db.getStatus();
+  if (!status.ready) {
+    db.ensureWarmup();
   }
+
+  const dbStatus = status.ready ? 'ready' : status.connecting ? 'connecting' : 'error';
+  const payload = {
+    internet: true,
+    db_ok: status.ready,
+    db_ready: status.ready,
+    db_status: dbStatus,
+    connecting: status.connecting,
+    next_retry_in_ms: status.retryInMs
+  };
+
+  if (status.lastError) {
+    payload.last_error = status.lastError;
+  }
+
+  res.status(200).json(payload);
 });
 
 app.get('/reset-password', (_req, res) => {
@@ -94,4 +115,4 @@ module.exports = app;
 // Changelog:
 // - 2024-05-17: adicionadas rotas /healthz e /healthz/db para monitoramento e reaproveitamento leve do servidor.
 // - 2024-06-09: adicionado aquecimento inicial do pool com SELECT 1 para reduzir falso offline-db.
-// - 2024-08-27: criado endpoint combinado /healthz/combined com resposta 204 e keep-alive estendido.
+// - 2024-07-XX: atualizado /healthz para relatar estado do banco e manter resposta 200.
