@@ -32,6 +32,33 @@ async function fetchApi(path, options = {}) {
 let usuariosCache = [];
 let usuarioPopoverAtual = null;
 let usuarioLogado = null;
+let usuariosPermissoesAtuais = {
+    podeEditar: false,
+    podeEditarDados: false,
+    podeGerenciarPermissoes: false,
+    podeExcluir: false,
+    podeAtivar: false,
+    colunaDesabilitada: false
+};
+const usuariosColunasConfiguradas = new Map();
+
+const USUARIOS_FEATURE_CODES = {
+    editar: ['usuarios.editar', 'usuarios:editar', 'usuarios_edit', 'edit-user', 'editar'],
+    editarDados: ['usuarios.editar-dados', 'usuarios.editar_dados', 'usuarios.update', 'edit-data'],
+    gerenciarPermissoes: [
+        'usuarios.permissoes',
+        'usuarios:permissoes',
+        'usuarios.gerenciar_permissoes',
+        'usuarios.manage_permissions',
+        'usuarios.permissions'
+    ],
+    excluir: ['usuarios.excluir', 'usuarios:excluir', 'usuarios_delete', 'delete-user', 'excluir'],
+    ativar: ['usuarios.ativar', 'usuarios.alterar_status', 'usuarios.toggle', 'usuarios.activate']
+};
+
+const USUARIOS_COLUMN_CODES = {
+    acoes: ['acoes', 'actions', 'operacoes', 'options']
+};
 
 const USUARIO_TRIGGER_ACTIVE_CLASS = 'usuario-detalhes-trigger--active';
 
@@ -310,19 +337,18 @@ function carregarUsuarioLogado() {
         const localStore = typeof localStorage !== 'undefined' ? localStorage : null;
         const stored = sessionStore?.getItem('currentUser') || localStore?.getItem('user');
         usuarioLogado = stored ? JSON.parse(stored) : null;
+        usuariosPermissoesAtuais = calcularPermissoesPorPerfil();
     } catch (err) {
         console.error('Erro ao recuperar usuário logado', err);
         usuarioLogado = null;
+        usuariosPermissoesAtuais = calcularPermissoesPorPerfil();
     }
     return usuarioLogado;
 }
 
-function obterPermissoesUsuario() {
+function calcularPermissoesPorPerfil() {
     const perfil = usuarioLogado?.perfil;
-    const isSupAdmin = perfil === 'Sup Admin';
-    const isAdmin = perfil === 'Admin';
-
-    if (isSupAdmin) {
+    if (perfil === 'Sup Admin') {
         return {
             podeEditar: true,
             podeEditarDados: true,
@@ -332,8 +358,7 @@ function obterPermissoesUsuario() {
             colunaDesabilitada: false
         };
     }
-
-    if (isAdmin) {
+    if (perfil === 'Admin') {
         return {
             podeEditar: true,
             podeEditarDados: true,
@@ -343,7 +368,6 @@ function obterPermissoesUsuario() {
             colunaDesabilitada: false
         };
     }
-
     return {
         podeEditar: false,
         podeEditarDados: false,
@@ -352,6 +376,196 @@ function obterPermissoesUsuario() {
         podeAtivar: false,
         colunaDesabilitada: true
     };
+}
+
+function normalizarCodigoGenerico(valor) {
+    if (valor === null || valor === undefined) {
+        return null;
+    }
+    const texto = typeof valor === 'string' ? valor : String(valor);
+    const trimmed = texto.trim();
+    if (!trimmed) {
+        return null;
+    }
+    return trimmed.toLowerCase();
+}
+
+function possuiRecurso(modulos, codigos, options = {}) {
+    if (!window.permissionsService?.isFeatureEnabled) {
+        return null;
+    }
+    const modulesList = Array.isArray(modulos) && modulos.length ? modulos : ['usuarios', 'users', 'menu'];
+    const codesList = Array.isArray(codigos) ? codigos : [codigos];
+    for (const modulo of modulesList) {
+        for (const codigo of codesList) {
+            const featureCode = normalizarCodigoGenerico(codigo);
+            if (!featureCode) continue;
+            if (window.permissionsService.isFeatureEnabled(normalizarCodigoGenerico(modulo) || modulo, featureCode, options)) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+function encontrarColunaUsuarios(codigos = []) {
+    const columnCodes = codigos.map(normalizarCodigoGenerico).filter(Boolean);
+    for (const codigo of columnCodes) {
+        if (usuariosColunasConfiguradas.has(codigo)) {
+            return usuariosColunasConfiguradas.get(codigo);
+        }
+    }
+    if (!window.permissionsService?.getCached) {
+        return null;
+    }
+    try {
+        const roleKey = window.permissionsService.getActiveRoleKey?.();
+        const data = window.permissionsService.getCached(roleKey);
+        if (!data) {
+            return null;
+        }
+        const modules = ['usuarios', 'users', 'default'];
+        for (const modulo of modules) {
+            const moduleEntry = data.columns.get(normalizarCodigoGenerico(modulo) || modulo);
+            if (!moduleEntry) continue;
+            for (const table of moduleEntry.values()) {
+                for (const column of table.columns) {
+                    const columnCode = normalizarCodigoGenerico(column.code);
+                    if (columnCode && columnCodes.includes(columnCode)) {
+                        return column;
+                    }
+                    if (column.aliases) {
+                        for (const alias of column.aliases) {
+                            if (columnCodes.includes(normalizarCodigoGenerico(alias))) {
+                                return column;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    } catch (err) {
+        console.warn('Não foi possível avaliar colunas do módulo de usuários via serviço de permissões.', err);
+    }
+    return null;
+}
+
+async function atualizarPermissoesUsuarios() {
+    const fallback = calcularPermissoesPorPerfil();
+    const service = window.permissionsService;
+    if (!service?.loadBootstrap) {
+        usuariosPermissoesAtuais = fallback;
+        return;
+    }
+    try {
+        await service.loadBootstrap();
+    } catch (err) {
+        console.warn('Não foi possível carregar permissões de usuários via serviço dedicado.', err);
+        usuariosPermissoesAtuais = fallback;
+        return;
+    }
+
+    usuariosColunasConfiguradas.clear();
+    try {
+        const roleKey = service.getActiveRoleKey?.();
+        const data = service.getCached(roleKey);
+        if (data) {
+            const modules = ['usuarios', 'users', 'default'];
+            modules.forEach(modulo => {
+                const entry = data.columns.get(normalizarCodigoGenerico(modulo) || modulo);
+                if (!entry) return;
+                entry.forEach(table => {
+                    table.columns.forEach(column => {
+                        const codeKey = normalizarCodigoGenerico(column.code);
+                        if (codeKey) {
+                            usuariosColunasConfiguradas.set(codeKey, column);
+                        }
+                        if (column.aliases) {
+                            column.aliases.forEach(alias => {
+                                const aliasKey = normalizarCodigoGenerico(alias);
+                                if (aliasKey) {
+                                    usuariosColunasConfiguradas.set(aliasKey, column);
+                                }
+                            });
+                        }
+                    });
+                });
+            });
+        }
+    } catch (err) {
+        console.warn('Não foi possível mapear colunas de usuários a partir do serviço de permissões.', err);
+    }
+
+    const podeEditar = possuiRecurso(null, USUARIOS_FEATURE_CODES.editar) || false;
+    const podeEditarDados =
+        possuiRecurso(null, USUARIOS_FEATURE_CODES.editarDados) || podeEditar || false;
+    const podeGerenciarPermissoes = possuiRecurso(null, USUARIOS_FEATURE_CODES.gerenciarPermissoes) || false;
+    const podeExcluir = possuiRecurso(null, USUARIOS_FEATURE_CODES.excluir) || false;
+    const podeAtivarFeature =
+        possuiRecurso(null, USUARIOS_FEATURE_CODES.ativar, { scope: 'toggle' }) ||
+        possuiRecurso(null, USUARIOS_FEATURE_CODES.ativar) ||
+        false;
+
+    const colunaAcoes = encontrarColunaUsuarios(USUARIOS_COLUMN_CODES.acoes);
+
+    usuariosPermissoesAtuais = {
+        podeEditar: podeEditar || fallback.podeEditar,
+        podeEditarDados: podeEditarDados || fallback.podeEditarDados,
+        podeGerenciarPermissoes: podeGerenciarPermissoes || fallback.podeGerenciarPermissoes,
+        podeExcluir: podeExcluir || fallback.podeExcluir,
+        podeAtivar: podeAtivarFeature || fallback.podeAtivar,
+        colunaDesabilitada: colunaAcoes
+            ? columnVisibilityIndicaBloqueio(colunaAcoes)
+            : fallback.colunaDesabilitada
+    };
+
+    aplicarConfiguracaoCabecalhoUsuarios();
+}
+
+function columnVisibilityIndicaBloqueio(column) {
+    if (!column) return false;
+    if (column.canView === false) return true;
+    const visibility = normalizarCodigoGenerico(column.visibility);
+    return visibility === 'hidden';
+}
+
+function obterConfiguracaoColuna(codigos) {
+    const lista = Array.isArray(codigos) ? codigos : [codigos];
+    for (const codigo of lista) {
+        const normalized = normalizarCodigoGenerico(codigo);
+        if (normalized && usuariosColunasConfiguradas.has(normalized)) {
+            return usuariosColunasConfiguradas.get(normalized);
+        }
+    }
+    return null;
+}
+
+function aplicarMascaraValor(config, valor) {
+    if (!config) {
+        return valor;
+    }
+    const mask = config.mask ?? config.metadata?.mask ?? config.metadata?.mascara ?? null;
+    if (typeof mask === 'string' && mask.trim()) {
+        return mask;
+    }
+    return valor;
+}
+
+function aplicarConfiguracaoCabecalhoUsuarios() {
+    const headers = document.querySelectorAll('#usuariosTableWrapper th[data-column-key]');
+    headers.forEach(header => {
+        const key = header.dataset.columnKey;
+        const config = obterConfiguracaoColuna(key);
+        const oculto = columnVisibilityIndicaBloqueio(config);
+        header.classList.toggle('hidden', oculto);
+        header.dataset.canSort = config ? String(config.canSort !== false) : 'true';
+        header.dataset.canFilter = config ? String(config.canFilter !== false) : 'true';
+        header.dataset.exportPerm = config ? String(config.exportPerm !== false) : 'true';
+    });
+}
+
+function obterPermissoesUsuario() {
+    return usuariosPermissoesAtuais;
 }
 
 function obterPrimeiroValor(obj, chaves) {
@@ -732,16 +946,18 @@ function temFiltrosAplicados() {
     return Array.isArray(filtros.status) && filtros.status.length > 0;
 }
 
-function initUsuarios() {
+async function initUsuarios() {
     carregarUsuarioLogado();
+    await atualizarPermissoesUsuarios().catch(err => {
+        console.warn('Falha ao atualizar permissões do módulo de usuários via serviço dedicado.', err);
+    });
 
     const btnModelosPermissao = document.getElementById('btnModelosPermissao');
-    const isSupAdmin = usuarioLogado?.perfil === 'Sup Admin';
     if (btnModelosPermissao) {
-        if (isSupAdmin) {
+        if (usuariosPermissoesAtuais.podeGerenciarPermissoes) {
             btnModelosPermissao.classList.remove('hidden');
             btnModelosPermissao.addEventListener('click', () => {
-                window.usuarioModelosPermissoesContext = { isSupAdmin: true };
+                window.usuarioModelosPermissoesContext = { podeGerenciarPermissoes: true };
                 openModalWithSpinner(
                     'modals/usuarios/modelos-permissoes.html',
                     '../js/modals/usuario-modelos-permissoes.js',
@@ -891,6 +1107,15 @@ function aplicarFiltros() {
     renderUsuarios(filtrados);
 }
 
+function sanitizarTextoPlano(valor) {
+    if (valor === null || valor === undefined) return '';
+    return String(valor)
+        .replace(/[<>]/g, '')
+        .replace(/[\n\r\t]+/g, ' ')
+        .replace(/\s{2,}/g, ' ')
+        .trim();
+}
+
 function renderUsuarios(lista) {
     const tbody = document.getElementById('listaUsuarios');
     if (!tbody) return;
@@ -902,7 +1127,6 @@ function renderUsuarios(lista) {
         const tr = document.createElement('tr');
         tr.classList.add('table-row');
         const nomeOriginal = typeof u.nome === 'string' ? u.nome : '';
-        const nome = escapeHtml(nomeOriginal);
         const baseParaIniciais = nomeOriginal || (typeof u.email === 'string' ? u.email : '');
         const iniciais = baseParaIniciais
             .split(' ')
@@ -911,8 +1135,6 @@ function renderUsuarios(lista) {
             .substring(0, 2)
             .toUpperCase();
         const iniciaisSeguro = escapeHtml(iniciais);
-        const email = escapeHtml(u.email);
-        const perfil = escapeHtml(u.perfil || '');
         const online = resolverStatusOnline(u);
         const sessaoClasse = online ? 'usuario-sessao-badge online' : 'usuario-sessao-badge offline';
         const sessaoRotulo = online ? 'Online' : 'Offline';
@@ -997,26 +1219,55 @@ function renderUsuarios(lista) {
         const statusBadgeClasse = obterStatusBadge(u, statusInterno);
         const podeAlternarStatus = statusPodeSerAlternado(statusInterno);
 
+        const colunaAvatarConfig = obterConfiguracaoColuna(['avatar', 'foto', 'photo']);
+        const colunaNomeConfig = obterConfiguracaoColuna(['nome', 'name', 'full_name']);
+        const colunaEmailConfig = obterConfiguracaoColuna(['email', 'mail']);
+        const colunaPerfilConfig = obterConfiguracaoColuna(['perfil', 'role']);
+        const colunaSessaoConfig = obterConfiguracaoColuna(['situacao', 'sessao', 'session']);
+        const colunaStatusConfig = obterConfiguracaoColuna(['status']);
+        const colunaAcoesConfig = obterConfiguracaoColuna(USUARIOS_COLUMN_CODES.acoes);
+
+        const avatarHiddenClass = colunaAvatarConfig && columnVisibilityIndicaBloqueio(colunaAvatarConfig) ? ' hidden' : '';
+        const nomeHiddenClass = colunaNomeConfig && columnVisibilityIndicaBloqueio(colunaNomeConfig) ? ' hidden' : '';
+        const emailHiddenClass = colunaEmailConfig && columnVisibilityIndicaBloqueio(colunaEmailConfig) ? ' hidden' : '';
+        const perfilHiddenClass = colunaPerfilConfig && columnVisibilityIndicaBloqueio(colunaPerfilConfig) ? ' hidden' : '';
+        const sessaoHiddenClass = colunaSessaoConfig && columnVisibilityIndicaBloqueio(colunaSessaoConfig) ? ' hidden' : '';
+        const statusHiddenClass = colunaStatusConfig && columnVisibilityIndicaBloqueio(colunaStatusConfig) ? ' hidden' : '';
+        const acoesHiddenClass = colunaAcoesConfig && columnVisibilityIndicaBloqueio(colunaAcoesConfig) ? ' hidden' : '';
+
+        const nomeComMascara = aplicarMascaraValor(colunaNomeConfig, nomeOriginal);
+        const nomeDisplay = escapeHtml(nomeComMascara);
+        const nomeAtributo = escapeAttribute(nomeComMascara);
+        const nomePlano = sanitizarTextoPlano(nomeComMascara) || 'este usuário';
+        const emailComMascara = aplicarMascaraValor(colunaEmailConfig, u.email);
+        const emailDisplay = escapeHtml(emailComMascara);
+        const perfilComMascara = aplicarMascaraValor(colunaPerfilConfig, u.perfil || '');
+        const perfilDisplay = escapeHtml(perfilComMascara);
+        const sessaoRotuloComMascara = aplicarMascaraValor(colunaSessaoConfig, sessaoRotulo);
+        const sessaoRotuloDisplay = escapeHtml(sessaoRotuloComMascara);
+        const statusRotuloComMascara = aplicarMascaraValor(colunaStatusConfig, statusRotulo);
+        const statusRotuloDisplay = escapeHtml(statusRotuloComMascara);
+
         tr.innerHTML = `
-            <td class="px-6 py-4">
+            <td data-column-key="avatar" class="px-6 py-4${avatarHiddenClass}">
                 ${avatarMarkup}
             </td>
-            <td class="px-6 py-4">
+            <td data-column-key="nome" class="px-6 py-4${nomeHiddenClass}">
                 <div class="usuario-popover-container relative">
                     <div class="flex items-center gap-2">
-                        <div class="text-sm font-medium text-white">${nome}</div>
+                        <div class="text-sm font-medium text-white">${nomeDisplay}</div>
                         <button
                             type="button"
                             class="usuario-detalhes-trigger"
                             aria-expanded="false"
                             aria-haspopup="dialog"
-                            title="Ver atividade recente de ${nome}"
-                            data-nome="${nome}"
+                            title="Ver atividade recente de ${nomeDisplay}"
+                            data-nome="${nomeAtributo}"
                             data-ultimo-login="${ultimoLoginTexto}"
                             data-ultima-alteracao="${ultimaAlteracaoTexto}"
                             data-ultima-descricao="${ultimaDescricaoTexto}"
                         >
-                            <span class="sr-only">Ver atividade recente de ${nome}</span>
+                            <span class="sr-only">Ver atividade recente de ${nomeDisplay}</span>
                             <span class="info-icon" aria-hidden="true"></span>
                         </button>
                     </div>
@@ -1044,16 +1295,16 @@ function renderUsuarios(lista) {
                     </div>
                 </div>
             </td>
-            <td class="px-6 py-4 text-sm text-white">${email}</td>
-            <td class="px-6 py-4 text-sm text-white">${perfil}</td>
-            <td class="px-6 py-4">
+            <td data-column-key="email" class="px-6 py-4 text-sm text-white${emailHiddenClass}">${emailDisplay}</td>
+            <td data-column-key="perfil" class="px-6 py-4 text-sm text-white${perfilHiddenClass}">${perfilDisplay}</td>
+            <td data-column-key="situacao" class="px-6 py-4${sessaoHiddenClass}">
                 <span class="${sessaoClasse}">
                     <span class="status-dot"></span>
-                    ${sessaoRotulo}
+                    ${sessaoRotuloDisplay}
                 </span>
             </td>
-            <td class="px-6 py-4">
-                <span class="${statusBadgeClasse} px-2 py-1 rounded-full text-xs font-medium">${escapeHtml(statusRotulo)}</span>
+            <td data-column-key="status" class="px-6 py-4${statusHiddenClass}">
+                <span class="${statusBadgeClasse} px-2 py-1 rounded-full text-xs font-medium">${statusRotuloDisplay}</span>
             </td>`;
 
         if (avatarUrl) {
@@ -1077,7 +1328,8 @@ function renderUsuarios(lista) {
         }
 
         const actionsTd = document.createElement('td');
-        actionsTd.className = 'px-6 py-4';
+        actionsTd.className = `px-6 py-4${acoesHiddenClass}`;
+        actionsTd.dataset.columnKey = 'acoes';
         const actionsWrapper = document.createElement('div');
         actionsWrapper.className = 'flex items-center gap-2 usuario-acoes';
         if (permissoes.colunaDesabilitada) {
@@ -1091,7 +1343,7 @@ function renderUsuarios(lista) {
         toggleBtn.dataset.usuarioStatus = statusInterno;
         const isAtivo = statusInterno === 'ativo';
         const isNaoConfirmado = statusInterno === 'nao_confirmado';
-        toggleBtn.setAttribute('aria-label', `${isAtivo ? 'Desativar' : 'Ativar'} ${nome}`);
+        toggleBtn.setAttribute('aria-label', `${isAtivo ? 'Desativar' : 'Ativar'} ${nomePlano}`);
         if (isAtivo) {
             toggleBtn.classList.add('usuario-acao-botao--ativo');
         }
@@ -1126,7 +1378,7 @@ function renderUsuarios(lista) {
         editBtn.type = 'button';
         editBtn.className = 'usuario-acao-botao';
         editBtn.dataset.acao = 'editar';
-        editBtn.title = `Editar ${nome}`;
+        editBtn.title = `Editar ${nomePlano}`;
         const editIcon = document.createElement('i');
         editIcon.classList.add('fas', 'fa-edit', 'usuario-acao-icone');
         editIcon.style.color = 'var(--color-primary)';
@@ -1146,7 +1398,7 @@ function renderUsuarios(lista) {
         deleteBtn.className = 'usuario-acao-botao';
         deleteBtn.dataset.acao = 'remover';
         deleteBtn.dataset.usuarioId = String(u.id || '');
-        deleteBtn.title = `Excluir ${nome}`;
+        deleteBtn.title = `Excluir ${nomePlano}`;
         const deleteIcon = document.createElement('i');
         deleteIcon.classList.add('fas', 'fa-trash', 'usuario-acao-icone');
         deleteIcon.style.color = 'var(--color-red)';
@@ -1167,6 +1419,7 @@ function renderUsuarios(lista) {
         tbody.appendChild(tr);
     });
 
+    aplicarConfiguracaoCabecalhoUsuarios();
     prepararPopoversUsuarios();
     updateEmptyStateUsuarios(lista.length > 0);
 }

@@ -106,6 +106,51 @@ const MODULE_DEFINITIONS = [
     ]
   },
   {
+    code: 'materia_prima',
+    name: 'Matéria-Prima',
+    description: 'Gestão de insumos e matérias-primas.',
+    aliases: ['materia', 'insumos', 'insumo'],
+    order: 8,
+    features: [
+      { code: 'visualizar', name: 'Visualizar', aliases: ['ver', 'view', 'read', 'ler'], order: 1 },
+      { code: 'editar', name: 'Editar', aliases: ['edit', 'write', 'atualizar', 'update'], order: 2 },
+      { code: 'inserir', name: 'Inserir', aliases: ['criar', 'create', 'add', 'adicionar', 'incluir'], order: 3 },
+      { code: 'excluir', name: 'Excluir', aliases: ['remover', 'delete', 'apagar'], order: 4 },
+      { code: 'exportar', name: 'Exportar', aliases: ['export'], order: 5 }
+    ],
+    tables: []
+  },
+  {
+    code: 'contatos',
+    name: 'Contatos',
+    description: 'Gestão de contatos e relacionamento.',
+    aliases: ['contato', 'contacts'],
+    order: 9,
+    features: [
+      { code: 'visualizar', name: 'Visualizar', aliases: ['ver', 'view', 'read', 'ler'], order: 1 },
+      { code: 'editar', name: 'Editar', aliases: ['edit', 'write', 'atualizar', 'update'], order: 2 },
+      { code: 'inserir', name: 'Inserir', aliases: ['criar', 'create', 'add', 'adicionar', 'incluir'], order: 3 },
+      { code: 'excluir', name: 'Excluir', aliases: ['remover', 'delete', 'apagar'], order: 4 },
+      { code: 'exportar', name: 'Exportar', aliases: ['export'], order: 5 }
+    ],
+    tables: []
+  },
+  {
+    code: 'prospeccoes',
+    name: 'Prospecções',
+    description: 'Acompanhamento de prospecções comerciais.',
+    aliases: ['prospeccao', 'prospects', 'prospectos'],
+    order: 10,
+    features: [
+      { code: 'visualizar', name: 'Visualizar', aliases: ['ver', 'view', 'read', 'ler'], order: 1 },
+      { code: 'editar', name: 'Editar', aliases: ['edit', 'write', 'atualizar', 'update'], order: 2 },
+      { code: 'inserir', name: 'Inserir', aliases: ['criar', 'create', 'add', 'adicionar', 'incluir'], order: 3 },
+      { code: 'excluir', name: 'Excluir', aliases: ['remover', 'delete', 'apagar'], order: 4 },
+      { code: 'exportar', name: 'Exportar', aliases: ['export'], order: 5 }
+    ],
+    tables: []
+  },
+  {
     code: 'financeiro',
     name: 'Financeiro',
     description: 'Análises financeiras e aprovações.',
@@ -128,6 +173,35 @@ const MODULE_DEFINITIONS = [
     features: [
       { code: 'visualizar', name: 'Visualizar', aliases: ['ver', 'view', 'read', 'ler'], order: 1 },
       { code: 'exportar', name: 'Exportar', aliases: ['export'], order: 2 }
+    ],
+    tables: []
+  },
+  {
+    code: 'tarefas',
+    name: 'Tarefas',
+    description: 'Gestão de atividades e tarefas operacionais.',
+    aliases: ['tarefa', 'tasks', 'task'],
+    order: 11,
+    features: [
+      { code: 'visualizar', name: 'Visualizar', aliases: ['ver', 'view', 'read', 'ler'], order: 1 },
+      { code: 'inserir', name: 'Inserir', aliases: ['criar', 'create', 'add', 'adicionar', 'incluir'], order: 2 },
+      { code: 'editar', name: 'Editar', aliases: ['edit', 'write', 'atualizar', 'update'], order: 3 },
+      { code: 'concluir', name: 'Concluir', aliases: ['finalizar', 'complete', 'done'], order: 4 },
+      { code: 'excluir', name: 'Excluir', aliases: ['remover', 'delete', 'apagar'], order: 5 }
+    ],
+    tables: []
+  },
+  {
+    code: 'configuracoes',
+    name: 'Configurações',
+    description: 'Painel de configurações e preferências.',
+    aliases: ['configuracao', 'settings'],
+    order: 12,
+    features: [
+      { code: 'visualizar', name: 'Visualizar', aliases: ['ver', 'view', 'read', 'ler'], order: 1 },
+      { code: 'editar', name: 'Editar', aliases: ['edit', 'write', 'atualizar', 'update'], order: 2 },
+      { code: 'gerenciar', name: 'Gerenciar', aliases: ['manage', 'administrar'], order: 3 },
+      { code: 'exportar', name: 'Exportar', aliases: ['export'], order: 4 }
     ],
     tables: []
   },
@@ -183,7 +257,10 @@ const ROLE_DEFINITIONS = [
       pedidos: ['visualizar', 'criar', 'editar', 'exportar'],
       orcamentos: ['visualizar', 'criar', 'enviar'],
       produtos: ['visualizar'],
-      relatorios: ['visualizar']
+      relatorios: ['visualizar'],
+      contatos: ['visualizar', 'inserir', 'editar', 'exportar'],
+      prospeccoes: ['visualizar', 'inserir', 'editar', 'exportar'],
+      tarefas: ['visualizar', 'inserir', 'editar']
     }
   }
 ];

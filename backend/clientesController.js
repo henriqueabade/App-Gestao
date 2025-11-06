@@ -1,10 +1,11 @@
 const express = require('express');
 const pool = require('./db');
+const requireFeature = require('./middlewares/requireFeature');
 
 const router = express.Router();
 
 // GET /api/clientes/lista
-router.get('/lista', async (_req, res) => {
+router.get('/lista', requireFeature('clientes', 'visualizar'), async (_req, res) => {
   try {
     const result = await pool.query(
       'SELECT id, nome_fantasia, cnpj, ent_pais AS pais, ent_uf AS estado, status_cliente, dono_cliente FROM clientes ORDER BY nome_fantasia'
@@ -26,7 +27,7 @@ router.get('/lista', async (_req, res) => {
 });
 
 // GET /api/clientes/contatos
-router.get('/contatos', async (_req, res) => {
+router.get('/contatos', requireFeature('contatos', 'visualizar'), async (_req, res) => {
   try {
     const { rows } = await pool.query(
       `SELECT
@@ -66,7 +67,7 @@ router.get('/contatos', async (_req, res) => {
 });
 
 // GET /api/clientes/:id
-router.get('/:id', async (req, res) => {
+router.get('/:id', requireFeature('clientes', 'visualizar'), async (req, res) => {
   const { id } = req.params;
   try {
     const clienteRes = await pool.query('SELECT * FROM clientes WHERE id = $1', [id]);
@@ -152,7 +153,7 @@ router.get('/:id', async (req, res) => {
 });
 
 // GET /api/clientes/:id/resumo
-router.get('/:id/resumo', async (req, res) => {
+router.get('/:id/resumo', requireFeature('clientes', 'visualizar'), async (req, res) => {
   const { id } = req.params;
   try {
     const clienteRes = await pool.query('SELECT * FROM clientes WHERE id = $1', [id]);
@@ -209,7 +210,7 @@ router.get('/:id/resumo', async (req, res) => {
   }
 });
 
-router.post('/', async (req, res) => {
+router.post('/', requireFeature('clientes', 'inserir'), async (req, res) => {
   const cli = req.body || {};
   const values = [
     cli.razao_social,
@@ -279,7 +280,7 @@ router.post('/', async (req, res) => {
 });
 
 // PUT /api/clientes/:id
-router.put('/:id', async (req, res) => {
+router.put('/:id', requireFeature('clientes', 'editar'), async (req, res) => {
   const { id } = req.params;
   const cli = req.body || {};
   const values = [
@@ -383,7 +384,7 @@ router.put('/:id', async (req, res) => {
 });
 
 // DELETE /api/clientes/:id
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', requireFeature('clientes', 'excluir'), async (req, res) => {
   const { id } = req.params;
   try {
     const orcRes = await pool.query('SELECT 1 FROM orcamentos WHERE cliente_id = $1 LIMIT 1', [id]);

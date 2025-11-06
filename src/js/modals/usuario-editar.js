@@ -143,7 +143,7 @@
 
   const podeEditarDados = contexto.podeEditarDados !== false;
   const podeGerenciarPermissoes = contexto.podeGerenciarPermissoes === true;
-  const deveMostrarPermissoes = usuarioBase.perfil === 'Sup Admin';
+  const deveMostrarPermissoes = contexto.podeGerenciarPermissoes === true;
 
   const tabTemplate = overlay.querySelector('#usuarioPermissoesTabTemplate');
   if (deveMostrarPermissoes && tabTemplate?.content?.firstElementChild) {
