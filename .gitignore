@@ -137,3 +137,5 @@ dist
 
 # não envia senhas do email para repositório (mais seguro)
 .env
+
+alteracoes.patch
