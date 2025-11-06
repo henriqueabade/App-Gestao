@@ -42,31 +42,6 @@ let usuariosPermissoesAtuais = {
 };
 const usuariosColunasConfiguradas = new Map();
 
-function resolveRoleCode(user) {
-    if (!user || typeof user !== 'object') {
-        return null;
-    }
-
-    const role = user.role && typeof user.role === 'object' ? user.role : null;
-    if (role && typeof role.code === 'string' && role.code.trim()) {
-        return role.code.trim();
-    }
-
-    if (typeof user.role === 'string' && user.role.trim()) {
-        return user.role.trim();
-    }
-
-    if (typeof user.roleCode === 'string' && user.roleCode.trim()) {
-        return user.roleCode.trim();
-    }
-
-    if (typeof user.role_code === 'string' && user.role_code.trim()) {
-        return user.role_code.trim();
-    }
-
-    return null;
-}
-
 const USUARIOS_FEATURE_CODES = {
     editar: ['usuarios.editar', 'usuarios:editar', 'usuarios_edit', 'edit-user', 'editar'],
     editarDados: ['usuarios.editar-dados', 'usuarios.editar_dados', 'usuarios.update', 'edit-data'],
@@ -373,8 +348,7 @@ function carregarUsuarioLogado() {
 
 function calcularPermissoesPorPerfil() {
     const perfil = usuarioLogado?.perfil;
-    const roleCode = resolveRoleCode(usuarioLogado);
-    if (roleCode === 'SUPERADMIN') {
+    if (perfil === 'Sup Admin') {
         return {
             podeEditar: true,
             podeEditarDados: true,
@@ -384,7 +358,7 @@ function calcularPermissoesPorPerfil() {
             colunaDesabilitada: false
         };
     }
-    if (perfil === 'Admin' || roleCode === 'ADMIN') {
+    if (perfil === 'Admin') {
         return {
             podeEditar: true,
             podeEditarDados: true,

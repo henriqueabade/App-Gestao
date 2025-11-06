@@ -1125,39 +1125,12 @@ const API_MODULE_TITLES = {
 function setCurrentUserSession(user) {
   const previousUserId = currentUserSession?.id ?? null;
   if (user && user.id) {
-    const roleId =
-      user.roleId ??
-      user.role_id ??
-      (user.role && typeof user.role === 'object' ? user.role.id : undefined) ??
-      null;
-    const roleCode =
-      (user.role && typeof user.role === 'object' ? user.role.code : undefined) ??
-      user.roleCode ??
-      user.role_code ??
-      null;
-    let roleInfo = null;
-    if (user.role && typeof user.role === 'object' && user.role !== null) {
-      roleInfo = { ...user.role };
-      if (!Object.prototype.hasOwnProperty.call(roleInfo, 'id')) {
-        roleInfo.id = roleId ?? null;
-      }
-      if (!Object.prototype.hasOwnProperty.call(roleInfo, 'code')) {
-        roleInfo.code = roleCode ?? null;
-      }
-    } else if (roleId !== null || roleCode) {
-      roleInfo = { id: roleId ?? null, code: roleCode ?? null };
-    }
-
     currentUserSession = {
       id: user.id,
       nome: user.nome,
-      perfil: user.perfil,
-      classificacao: user.classificacao ?? null,
-      roleId: roleId ?? null,
-      roleCode: roleCode ?? null,
-      role: roleInfo
+      perfil: user.perfil
     };
-    isSupAdmin = Boolean(roleInfo && roleInfo.code === 'SUPERADMIN');
+    isSupAdmin = user.perfil === 'Sup Admin';
   } else {
     currentUserSession = null;
     isSupAdmin = false;

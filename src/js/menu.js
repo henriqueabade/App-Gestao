@@ -122,38 +122,6 @@ const MODULE_LABELS = {
     configuracoes: 'Configurações'
 };
 
-function resolveUserRoleCode(profile) {
-    if (!profile || typeof profile !== 'object') {
-        return null;
-    }
-
-    const role = profile.role && typeof profile.role === 'object' ? profile.role : null;
-    if (role && typeof role.code === 'string') {
-        const trimmed = role.code.trim();
-        if (trimmed) {
-            return trimmed;
-        }
-    }
-
-    if (typeof profile.role === 'string' && profile.role.trim()) {
-        return profile.role.trim();
-    }
-
-    if (typeof profile.roleCode === 'string' && profile.roleCode.trim()) {
-        return profile.roleCode.trim();
-    }
-
-    if (typeof profile.role_code === 'string' && profile.role_code.trim()) {
-        return profile.role_code.trim();
-    }
-
-    return null;
-}
-
-function isSuperAdminProfile(profile) {
-    return resolveUserRoleCode(profile) === 'SUPERADMIN';
-}
-
 function normalizeMenuPageKey(page) {
     if (page === null || page === undefined) {
         return null;
@@ -1645,7 +1613,7 @@ const AppUpdates = (() => {
         }
 
         const profile = state.user || {};
-        const isSupAdmin = isSuperAdminProfile(profile);
+        const isSupAdmin = profile?.perfil === 'Sup Admin';
         sup.container.classList.toggle('hidden', !isSupAdmin);
 
         if (!isSupAdmin) {
@@ -2089,7 +2057,7 @@ const AppUpdates = (() => {
         }
 
         const profile = state.user || {};
-        const isSupAdmin = isSuperAdminProfile(profile);
+        const isSupAdmin = profile?.perfil === 'Sup Admin';
         user.container.classList.toggle('hidden', isSupAdmin);
 
         if (isSupAdmin) {
@@ -2174,7 +2142,7 @@ const AppUpdates = (() => {
 
     function updateUserControlFromStatus() {
         const profile = state.user || {};
-        if (isSuperAdminProfile(profile)) {
+        if (profile?.perfil === 'Sup Admin') {
             applyUserState();
             return;
         }

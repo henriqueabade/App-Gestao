@@ -11,7 +11,6 @@ function createTable(db) {
     nome text,
     email text,
     perfil text,
-    classificacao text,
     senha text,
     verificado boolean default false,
     status text default 'nao_confirmado',
@@ -28,18 +27,6 @@ function createTable(db) {
     status_atualizado_em timestamp,
     hora_ativacao timestamptz
   );`);
-  db.public.none('CREATE SCHEMA rbac;');
-  db.public.none(`CREATE TABLE rbac.role (
-    id serial primary key,
-    code text not null unique,
-    name text not null,
-    description text,
-    created_at timestamptz not null default NOW(),
-    updated_at timestamptz not null default NOW()
-  );`);
-  db.public.none(`INSERT INTO rbac.role (code, name, description)
-    VALUES ('SUPERADMIN', 'Super Administrador', NULL),
-           ('admin', 'Administrador', NULL);`);
 }
 
 function setupEnvironment() {
@@ -347,8 +334,8 @@ test('POST /api/usuarios/aprovar exige Sup Admin e envia e-mail de ativação', 
   try {
     const senhaSupAdmin = await bcrypt.hash('senhaSupAdmin', 10);
     await pool.query(
-      `INSERT INTO usuarios (nome, email, senha, perfil, classificacao, status, verificado, confirmacao, email_confirmado)
-       VALUES ('Administrador', 'admin@example.com', $1, 'Sup Admin', 'SUPERADMIN', 'ativo', true, true, true)`,
+      `INSERT INTO usuarios (nome, email, senha, perfil, status, verificado, confirmacao, email_confirmado)
+       VALUES ('Administrador', 'admin@example.com', $1, 'Sup Admin', 'ativo', true, true, true)`,
       [senhaSupAdmin]
     );
 

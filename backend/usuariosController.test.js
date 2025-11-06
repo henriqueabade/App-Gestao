@@ -52,9 +52,6 @@ async function setup() {
     nome text,
     email text,
     perfil text,
-    classificacao text,
-    role_id integer,
-    role_code text,
     telefone text,
     telefone_celular text,
     whatsapp text,
@@ -100,7 +97,7 @@ async function setup() {
     "INSERT INTO usuarios (nome, email, perfil, classificacao, verificado, telefone) VALUES ('Maria', 'maria@example.com', 'admin', 'admin', false, '(11) 4000-0000');"
   );
   db.public.none(
-    "INSERT INTO usuarios (nome, email, perfil, classificacao, verificado, telefone, permissoes) VALUES ('Supervisor', 'sup@example.com', 'Sup Admin', 'SUPERADMIN', true, '(11) 5000-0000', '{\"usuarios\":{\"permissoes\":{\"permitido\":true}}}');"
+    "INSERT INTO usuarios (nome, email, perfil, classificacao, verificado, telefone, permissoes) VALUES ('Supervisor', 'sup@example.com', 'Sup Admin', 'sup_admin', true, '(11) 5000-0000', '{\"usuarios\":{\"permissoes\":{\"permitido\":true}}}');"
   );
 
   const { Pool } = db.adapters.createPg();
@@ -400,11 +397,6 @@ test('GET /api/usuarios/me retorna dados do usuário autenticado', async () => {
     assert.strictEqual(corpo.nome, 'Maria');
     assert.strictEqual(corpo.email, 'maria@example.com');
     assert.strictEqual(corpo.telefone, '(11) 4000-0000');
-    assert.strictEqual(corpo.classificacao, 'admin');
-    assert.ok(Number.isInteger(corpo.roleId));
-    assert.ok(corpo.roleId > 0);
-    assert.strictEqual(corpo.roleCode, 'admin');
-    assert.ok(corpo.role && corpo.role.code === 'admin');
   } finally {
     await close();
   }
@@ -455,17 +447,13 @@ test('PUT /api/usuarios/me atualiza dados textuais e foto via JSON', async () =>
     assert.ok(Buffer.isBuffer(registro.rows[0].foto_usuario));
 
     const cache = await pool.query(
-      'SELECT nome, telefone, foto_usuario, classificacao, role_id, role_code FROM usuarios_login_cache WHERE usuario_id = $1',
+      'SELECT nome, telefone, foto_usuario FROM usuarios_login_cache WHERE usuario_id = $1',
       [1]
     );
     assert.strictEqual(cache.rows.length, 1);
     assert.strictEqual(cache.rows[0].nome, 'Maria Atualizada');
     assert.strictEqual(cache.rows[0].telefone, '(11) 98888-0000');
     assert.ok(Buffer.isBuffer(cache.rows[0].foto_usuario));
-    assert.strictEqual(cache.rows[0].classificacao, 'admin');
-    assert.ok(Number.isInteger(cache.rows[0].role_id));
-    assert.ok(cache.rows[0].role_id > 0);
-    assert.strictEqual(cache.rows[0].role_code, 'admin');
   } finally {
     await close();
   }
@@ -589,15 +577,8 @@ test('GET /api/usuarios/confirm-email aplica novo e-mail confirmado', async () =
     assert.strictEqual(registro.rows[0].token, null);
     assert.ok(registro.rows[0].confirmado_em instanceof Date);
 
-    const cache = await pool.query(
-      'SELECT email, classificacao, role_id, role_code FROM usuarios_login_cache WHERE usuario_id = $1',
-      [1]
-    );
+    const cache = await pool.query('SELECT email FROM usuarios_login_cache WHERE usuario_id = $1', [1]);
     assert.strictEqual(cache.rows[0].email, 'confirmado@example.com');
-    assert.strictEqual(cache.rows[0].classificacao, 'admin');
-    assert.ok(Number.isInteger(cache.rows[0].role_id));
-    assert.ok(cache.rows[0].role_id > 0);
-    assert.strictEqual(cache.rows[0].role_code, 'admin');
   } finally {
     await close();
   }
