@@ -175,6 +175,26 @@ const CONNECTION_SERVER_KEEP_ALIVE_MS = Math.max(
   Number.parseInt(process.env.CONNECTION_MONITOR_SERVER_KEEP_ALIVE_MS || '65000', 10),
   15000
 );
+const CONNECTION_HEALTH_TIMEOUT_MS = Math.max(
+  Number.parseInt(process.env.CONNECTION_HEALTH_TIMEOUT_MS || '5000', 10),
+  1000
+);
+const CONNECTION_DB_TIMEOUT_MS = Math.max(
+  Number.parseInt(process.env.CONNECTION_DB_TIMEOUT_MS || '7000', 10),
+  1000
+);
+const CONNECTION_DEEP_INTERVAL_MS = Math.max(
+  Number.parseInt(process.env.CONNECTION_DEEP_INTERVAL_MS || '300000', 10),
+  60000
+);
+const CONNECTION_DEEP_STARTUP_DELAY_MS = Math.max(
+  Number.parseInt(process.env.CONNECTION_DEEP_STARTUP_DELAY_MS || '60000', 10),
+  0
+);
+const CONNECTION_DB_FAILURE_THRESHOLD = Math.max(
+  Number.parseInt(process.env.CONNECTION_DB_FAILURE_THRESHOLD || '3', 10),
+  1
+);
 const CONNECTION_STATUS_CHANNEL = 'connection-monitor:status';
 const SESSION_FORCE_LOGOUT_CHANNEL = 'session:force-logout';
 const SESSION_FORCE_LOGOUT_DEBOUNCE_MS = Math.max(
