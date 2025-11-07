@@ -251,8 +251,13 @@ if (intro) {
         return true;
       }
 
-      const autoLoginReason = typeof result?.reason === 'string' ? result.reason : '';
-      if (autoLoginReason === 'db-connecting') {
+      const reasonRaw = typeof result?.reason === 'string' ? result.reason.trim() : '';
+      const codeRaw = typeof result?.code === 'string' ? result.code.trim() : '';
+      const normalizedReason = reasonRaw.toLowerCase();
+      const normalizedCode = codeRaw.toLowerCase();
+      const effectiveReason = normalizedReason || normalizedCode;
+
+      if (effectiveReason === 'db-connecting') {
         scheduleAutoLoginRetry(pin, user, storedUserValue, result?.retryAfter);
         return false;
       }
@@ -261,13 +266,13 @@ if (intro) {
       localStorage.removeItem('user');
       localStorage.removeItem('rememberUser');
       localStorage.removeItem('pin');
-      if (autoLoginReason === 'offline') {
+      if (effectiveReason === 'offline') {
         showOfflineError();
-      } else if (autoLoginReason === 'user-removed') {
+      } else if (effectiveReason === 'user-removed') {
         showUserRemovedError();
-      } else if (autoLoginReason === 'pin') {
+      } else if (effectiveReason === 'pin') {
         showPinError();
-      } else if (autoLoginReason) {
+      } else if (effectiveReason) {
         showToast(result?.message || 'Falha no login automático.', 'error');
       } else {
         showPinError();
@@ -482,7 +487,7 @@ if (intro) {
       const result = await window.electronAPI.login(email, password, pin);
       if (!result.success) {
         const message = typeof result.message === 'string' ? result.message : '';
-        const reason = typeof result.reason === 'string' ? result.reason : '';
+        const reason = typeof result.reason === 'string' ? result.reason.trim() : '';
         const normalizedReason = reason.toLowerCase();
         if (normalizedReason && normalizedReason !== 'db-connecting') {
           clearPendingLoginRetry();

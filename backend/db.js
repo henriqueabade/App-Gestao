@@ -286,6 +286,7 @@ function createNotReadyError() {
   const error = new Error('Conectando ao banco...');
   error.code = 'db-connecting';
   error.retryAfter = Math.max(status.retryInMs || WARMUP_RETRY_DELAY_MS, 1_000);
+  error.reason = 'db-connecting';
   return error;
 }
 

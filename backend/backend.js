@@ -16,6 +16,58 @@ const DEFAULT_DATABASE_PORT = (() => {
   return Number.isFinite(configured) ? String(configured) : '5432';
 })();
 
+const DEBUG_ENABLED =
+  typeof process.env.DEBUG === 'string' && process.env.DEBUG.toLowerCase() === 'true';
+const DEFAULT_NOT_READY_RETRY_MS = 1_000;
+const DEFAULT_DB_WAIT_OPTIONS = {
+  timeoutMs: 4_000,
+  pingTimeoutMs: 1_200,
+  pollIntervalMs: 120
+};
+
+function debugLogAuth(message, metadata) {
+  if (!DEBUG_ENABLED) return;
+  if (metadata && typeof metadata === 'object' && Object.keys(metadata).length > 0) {
+    console.debug(`[auth] ${message}`, metadata);
+  } else {
+    console.debug(`[auth] ${message}`);
+  }
+}
+
+function normalizeNotReadyError(err) {
+  const error = err instanceof Error ? err : new Error('Conectando ao banco...');
+  if (!error.code) {
+    error.code = 'db-connecting';
+  }
+  if (!error.reason) {
+    error.reason = 'db-connecting';
+  }
+  const retryAfterNumber = Number(error.retryAfter);
+  if (!Number.isFinite(retryAfterNumber) || retryAfterNumber <= 0) {
+    let fallback = null;
+    if (typeof pool.getStatus === 'function') {
+      try {
+        const status = pool.getStatus();
+        if (status) {
+          const candidate = Number(status.retryInMs);
+          if (Number.isFinite(candidate) && candidate > 0) {
+            fallback = candidate;
+          }
+        }
+      } catch (statusErr) {
+        debugLogAuth('Falha ao obter status do pool para retryAfter', {
+          message: statusErr?.message
+        });
+      }
+    }
+    if (!Number.isFinite(fallback) || fallback <= 0) {
+      fallback = DEFAULT_NOT_READY_RETRY_MS;
+    }
+    error.retryAfter = fallback;
+  }
+  return error;
+}
+
 // Track failed PIN attempts across session
 let pinErrorAttempts = 0;
 let lastDatabaseInitPin = null;
@@ -63,15 +115,126 @@ function ensureDatabaseReady(pin) {
           detailedError.reason = 'pin';
         } else if (isNetworkError(detailedError)) {
           detailedError.reason = 'offline';
+        } else if (!detailedError.reason) {
+          detailedError.reason = 'db-connecting';
         }
         throw detailedError;
       }
       if (typeof pool.createNotReadyError === 'function') {
-        throw pool.createNotReadyError();
+        throw normalizeNotReadyError(pool.createNotReadyError());
       }
-      const error = new Error('Conectando ao banco...');
-      error.code = 'db-connecting';
-      throw error;
+      throw normalizeNotReadyError(new Error('Conectando ao banco...'));
+    }
+  }
+}
+
+async function waitForDatabaseReady(pin, options = {}) {
+  const mergedOptions = { ...DEFAULT_DB_WAIT_OPTIONS, ...(options || {}) };
+  const timeoutMs = Number.isFinite(mergedOptions.timeoutMs)
+    ? Math.max(0, mergedOptions.timeoutMs)
+    : DEFAULT_DB_WAIT_OPTIONS.timeoutMs;
+  const pingTimeoutMs = Number.isFinite(mergedOptions.pingTimeoutMs)
+    ? Math.max(100, mergedOptions.pingTimeoutMs)
+    : DEFAULT_DB_WAIT_OPTIONS.pingTimeoutMs;
+  const pollIntervalMs = Number.isFinite(mergedOptions.pollIntervalMs)
+    ? Math.max(50, mergedOptions.pollIntervalMs)
+    : DEFAULT_DB_WAIT_OPTIONS.pollIntervalMs;
+
+  const hasTimeout = timeoutMs > 0;
+  const start = Date.now();
+  let attempt = 0;
+  let lastError = null;
+  let loggedWaitStart = false;
+
+  while (true) {
+    attempt += 1;
+    try {
+      ensureDatabaseReady(pin);
+      if (typeof pool.isReady !== 'function' || pool.isReady()) {
+        if (loggedWaitStart) {
+          debugLogAuth('Pool do banco pronto após espera', {
+            attempts: attempt,
+            elapsedMs: Date.now() - start
+          });
+        }
+        return;
+      }
+    } catch (err) {
+      const error = err instanceof Error ? err : new Error(String(err));
+      const reason = typeof error.reason === 'string'
+        ? error.reason.toLowerCase()
+        : error.code === 'db-connecting'
+          ? 'db-connecting'
+          : '';
+      if (reason !== 'db-connecting') {
+        throw error;
+      }
+      lastError = error;
+      if (!loggedWaitStart) {
+        loggedWaitStart = true;
+        debugLogAuth('Aguardando pool do banco ficar pronto', {
+          attempts: attempt,
+          elapsedMs: Date.now() - start
+        });
+      }
+    }
+
+    if (typeof pool.isReady !== 'function' || pool.isReady()) {
+      if (loggedWaitStart) {
+        debugLogAuth('Pool do banco pronto após espera', {
+          attempts: attempt,
+          elapsedMs: Date.now() - start
+        });
+      }
+      return;
+    }
+
+    const elapsed = Date.now() - start;
+    if (hasTimeout && elapsed >= timeoutMs) {
+      const timeoutError = normalizeNotReadyError(
+        lastError || (typeof pool.createNotReadyError === 'function' ? pool.createNotReadyError() : null)
+      );
+      debugLogAuth('Pool do banco não ficou pronto no tempo limite', {
+        attempts: attempt,
+        elapsedMs: elapsed,
+        timeoutMs
+      });
+      throw timeoutError;
+    }
+
+    const remainingBudget = hasTimeout ? Math.max(timeoutMs - elapsed, 0) : Number.POSITIVE_INFINITY;
+    const effectivePingBudget = Number.isFinite(remainingBudget)
+      ? Math.max(100, Math.min(pingTimeoutMs, remainingBudget || pingTimeoutMs))
+      : pingTimeoutMs;
+
+    if (typeof pool.ping === 'function') {
+      const pingOutcome = await Promise.race([
+        pool.ping().catch(() => false),
+        new Promise((resolve) => setTimeout(() => resolve('timeout'), effectivePingBudget))
+      ]);
+      if (pingOutcome === true && (typeof pool.isReady !== 'function' || pool.isReady())) {
+        if (loggedWaitStart) {
+          debugLogAuth('Pool do banco pronto após ping', {
+            attempts: attempt,
+            elapsedMs: Date.now() - start
+          });
+        }
+        return;
+      }
+      if (pingOutcome === 'timeout') {
+        debugLogAuth('Ping do banco excedeu tempo limite', {
+          attempts: attempt,
+          elapsedMs: Date.now() - start,
+          budgetMs: effectivePingBudget
+        });
+      }
+    }
+
+    const waitBudget = Number.isFinite(remainingBudget)
+      ? Math.min(pollIntervalMs, Math.max(remainingBudget, 0))
+      : pollIntervalMs;
+    if (waitBudget > 0) {
+      await new Promise((resolve) => setTimeout(resolve, waitBudget));
     }
   }
 }
@@ -295,7 +458,7 @@ async function ensureUsuariosSchema() {
 async function registrarUsuario(nome, email, senha, pin) {
   const senhaCriptografada = await bcrypt.hash(senha, 10);
   try {
-    ensureDatabaseReady(pin);
+    await waitForDatabaseReady(pin);
     await ensureUsuariosSchema();
     if (await usuarioExiste(email)) {
       throw new Error('Usuário já cadastrado');
@@ -355,7 +518,7 @@ async function registrarUsuario(nome, email, senha, pin) {
 // Login de usuário (corrigido)
 async function loginUsuario(email, senha, pin) {
   try {
-    ensureDatabaseReady(pin);
+    await waitForDatabaseReady(pin);
     await ensureUsuariosSchema();
     const resultado = await pool.query(
       'SELECT * FROM usuarios WHERE lower(email) = lower($1)',
@@ -448,5 +611,6 @@ module.exports = {
   loginUsuario,
   isPinError,
   isNetworkError,
-  ensureDatabaseReady
+  ensureDatabaseReady,
+  waitForDatabaseReady
 };
