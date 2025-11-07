@@ -63,6 +63,21 @@ function setup() {
     criado_em timestamp default NOW(),
     atualizado_em timestamp default NOW()
   );`);
+  db.public.none(`CREATE TABLE roles_modules_matrix (
+    id serial primary key,
+    modelo_id integer not null,
+    modulo text not null,
+    acao text not null,
+    permitido boolean default false,
+    escopos jsonb default '{}'::jsonb
+  );`);
+  db.public.none(`CREATE TABLE perm_usuarios (
+    id serial primary key,
+    modelo_id integer not null,
+    campo text not null,
+    acao text not null,
+    permitido boolean default false
+  );`);
   db.public.none(`CREATE TABLE clientes (
     id serial primary key,
     nome text,
@@ -130,6 +145,9 @@ function setup() {
   const modelosPermissoesRepoPath = require.resolve('./modelosPermissoesRepository');
   const originalModelosPermissoesRepo = require.cache[modelosPermissoesRepoPath];
   delete require.cache[modelosPermissoesRepoPath];
+  const permissionsCatalogRepoPath = require.resolve('./permissionsCatalogRepository');
+  const originalPermissionsCatalogRepo = require.cache[permissionsCatalogRepoPath];
+  delete require.cache[permissionsCatalogRepoPath];
   const usuariosController = require('./usuariosController');
 
   const app = express();
@@ -165,6 +183,11 @@ function setup() {
       require.cache[modelosPermissoesRepoPath] = originalModelosPermissoesRepo;
     } else {
       delete require.cache[modelosPermissoesRepoPath];
+    }
+    if (originalPermissionsCatalogRepo) {
+      require.cache[permissionsCatalogRepoPath] = originalPermissionsCatalogRepo;
+    } else {
+      delete require.cache[permissionsCatalogRepoPath];
     }
     delete require.cache[usuariosControllerPath];
   }
@@ -249,7 +272,12 @@ test('Sup Admin gerencia modelos de permissões e aplica em usuário', async () 
     const corpoListaInicial = await listaInicial.json();
     assert.deepStrictEqual(corpoListaInicial.modelos, []);
 
-    const permissoesModelo = { usuarios: { permissoes: { permitido: true } } };
+    const permissoesModelo = {
+      usuarios: {
+        permissoes: { permitido: true },
+        editar: { permitido: true, campos: { email: { editar: true } } }
+      }
+    };
     const criar = await authenticatedFetch(port, '/api/usuarios/modelos-permissoes', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -261,6 +289,21 @@ test('Sup Admin gerencia modelos de permissões e aplica em usuário', async () 
     assert.ok(modelo.id);
     assert.strictEqual(modelo.nome, 'Financeiro');
     assert.deepStrictEqual(modelo.permissoes, permissoesModelo);
+
+    const matrizCriada = await pool.query(
+      'SELECT modulo, acao, permitido FROM roles_modules_matrix WHERE modelo_id = $1 ORDER BY acao',
+      [modelo.id]
+    );
+    assert.deepStrictEqual(matrizCriada.rows, [
+      { modulo: 'usuarios', acao: 'editar', permitido: true },
+      { modulo: 'usuarios', acao: 'permissoes', permitido: true }
+    ]);
+
+    const camposCriados = await pool.query(
+      'SELECT campo, acao, permitido FROM perm_usuarios WHERE modelo_id = $1',
+      [modelo.id]
+    );
+    assert.deepStrictEqual(camposCriados.rows, [{ campo: 'email', acao: 'editar', permitido: true }]);
 
     const duplicado = await authenticatedFetch(port, '/api/usuarios/modelos-permissoes', {
       method: 'POST',
@@ -274,12 +317,31 @@ test('Sup Admin gerencia modelos de permissões e aplica em usuário', async () 
       method: 'PATCH',
       headers: { 'content-type': 'application/json' },
       usuarioId: 2,
-      body: JSON.stringify({ nome: 'Financeiro Corporativo', permissoes: { usuarios: { permissoes: { permitido: false } } } })
+      body: JSON.stringify({
+        nome: 'Financeiro Corporativo',
+        permissoes: { usuarios: { permissoes: { permitido: false }, editar: { permitido: false, campos: { email: { editar: false } } } } }
+      })
     });
     assert.strictEqual(atualizar.status, 200);
     const { modelo: atualizado } = await atualizar.json();
     assert.strictEqual(atualizado.nome, 'Financeiro Corporativo');
     assert.strictEqual(atualizado.permissoes.usuarios.permissoes.permitido, false);
+    assert.strictEqual(atualizado.permissoes.usuarios.editar.campos.email.editar, false);
+
+    const matrizAtualizada = await pool.query(
+      'SELECT modulo, acao, permitido FROM roles_modules_matrix WHERE modelo_id = $1 ORDER BY acao',
+      [atualizado.id]
+    );
+    assert.deepStrictEqual(matrizAtualizada.rows, [
+      { modulo: 'usuarios', acao: 'editar', permitido: false },
+      { modulo: 'usuarios', acao: 'permissoes', permitido: false }
+    ]);
+
+    const camposAtualizados = await pool.query(
+      'SELECT campo, acao, permitido FROM perm_usuarios WHERE modelo_id = $1 ORDER BY campo',
+      [atualizado.id]
+    );
+    assert.deepStrictEqual(camposAtualizados.rows, [{ campo: 'email', acao: 'editar', permitido: false }]);
 
     const aplicar = await authenticatedFetch(port, '/api/usuarios/1', {
       method: 'PATCH',
@@ -304,6 +366,18 @@ test('Sup Admin gerencia modelos de permissões e aplica em usuário', async () 
       usuarioId: 2
     });
     assert.strictEqual(remover.status, 204);
+
+    const matrizRemovida = await pool.query(
+      'SELECT count(*)::int AS total FROM roles_modules_matrix WHERE modelo_id = $1',
+      [atualizado.id]
+    );
+    assert.strictEqual(matrizRemovida.rows[0].total, 0);
+
+    const camposRemovidos = await pool.query(
+      'SELECT count(*)::int AS total FROM perm_usuarios WHERE modelo_id = $1',
+      [atualizado.id]
+    );
+    assert.strictEqual(camposRemovidos.rows[0].total, 0);
 
     const listaFinal = await authenticatedFetch(port, '/api/usuarios/modelos-permissoes', { usuarioId: 2 });
     assert.strictEqual(listaFinal.status, 200);
