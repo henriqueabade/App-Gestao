@@ -47,6 +47,14 @@ async function handleDisconnect(reason) {
   } else if (reason === 'user-removed') {
     localStorage.setItem('userRemoved', '1');
   }
+
+  try {
+    localStorage.removeItem('user');
+    localStorage.removeItem('rememberUser');
+  } catch (storageErr) {
+    console.error('Failed to clear remembered credentials after disconnect', storageErr);
+  }
+
   if (window.collectState && window.electronAPI && window.electronAPI.saveState) {
     window.electronAPI.saveState(window.collectState());
   }
