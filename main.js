@@ -165,6 +165,8 @@ const CONNECTION_MONITOR_AGENT_KEEP_ALIVE_MS = Math.max(
   15000
 );
 let connectionMonitorLogPath = null;
+let backendAgentInstance = null;
+let backendAgentKey = null;
 function getConnectionMonitorLogFile() {
   if (!connectionMonitorLogPath) {
     try {
@@ -328,6 +330,56 @@ function broadcastNetworkStatus(payload) {
       }
     }
   });
+}
+
+function destroyHttpAgent(agent) {
+  if (!agent) return;
+  if (typeof agent.destroy === 'function') {
+    try {
+      agent.destroy();
+    } catch (err) {
+      if (DEBUG) {
+        console.warn('Falha ao destruir agente HTTP', err);
+      }
+    }
+  }
+}
+
+function ensureBackendAgent(target) {
+  if (!target) {
+    if (backendAgentInstance) {
+      destroyHttpAgent(backendAgentInstance);
+      backendAgentInstance = null;
+      backendAgentKey = null;
+    }
+    return null;
+  }
+
+  let url;
+  try {
+    url = target instanceof URL ? target : new URL(target);
+  } catch (_err) {
+    return null;
+  }
+
+  const key = `${url.protocol}//${url.host}`;
+  if (backendAgentInstance && backendAgentKey === key) {
+    return backendAgentInstance;
+  }
+
+  if (backendAgentInstance) {
+    destroyHttpAgent(backendAgentInstance);
+  }
+
+  const options = {
+    keepAlive: true,
+    keepAliveMsecs: CONNECTION_MONITOR_AGENT_KEEP_ALIVE_MS,
+    maxSockets: 1,
+    maxFreeSockets: 1
+  };
+  backendAgentInstance = url.protocol === 'https:' ? new https.Agent(options) : new http.Agent(options);
+  backendAgentKey = key;
+  return backendAgentInstance;
 }
 
 function persistPublishStateSnapshot() {
@@ -2202,6 +2254,8 @@ function createConnectionMonitor() {
   let dbReadinessFailureCount = 0;
   let lastForcedLogoutBroadcast = { reason: null, at: 0 };
   let lastLoggedStableSignature = null;
+  let agent = null;
+  let agentKey = null;
   let currentStatus = {
     state: 'waiting',
     reason: 'inactive',
@@ -2415,13 +2469,15 @@ function createConnectionMonitor() {
         return currentStatus;
       }
 
+      const backendAgent = ensureBackendAgent(baseUrl);
+
       let healthPayload = null;
       try {
         const healthUrl = new URL('/healthz', baseUrl);
         const response = await requestWithAgent(healthUrl, {
           method: 'GET',
           timeout: CONNECTION_HEALTH_TIMEOUT_MS,
-          agent: backendAgentInstance,
+          agent: backendAgent,
           expectJson: true
         });
         healthPayload = response.body || null;
@@ -2510,7 +2566,7 @@ function createConnectionMonitor() {
           await requestWithAgent(dbHealthUrl, {
             method: 'GET',
             timeout: CONNECTION_DB_TIMEOUT_MS,
-            agent: backendAgentInstance
+            agent: backendAgent
           });
           lastDeepCheckAt = Date.now();
           deepFailureCount = 0;
@@ -2709,6 +2765,12 @@ function createConnectionMonitor() {
       }
       active = true;
       nextCheckAt = 0;
+      appendConnectionMonitorLog({
+        event: 'monitor-activated',
+        triggeredBy,
+        netState,
+        state: currentStatus.state
+      });
       maybeRunCheck({ triggeredBy });
     } else {
       if (!active) {
@@ -2720,6 +2782,12 @@ function createConnectionMonitor() {
         timer = null;
       }
       nextCheckAt = 0;
+      appendConnectionMonitorLog({
+        event: 'monitor-paused',
+        triggeredBy,
+        netState,
+        state: currentStatus.state
+      });
       updateStatus({
         state: 'waiting',
         reason: 'inactive',
@@ -2774,6 +2842,7 @@ function stopConnectionMonitor() {
   if (connectionMonitorController) {
     connectionMonitorController.setActive(false, { triggeredBy: 'stop' });
   }
+  ensureBackendAgent(null);
 }
 
 function getPrimaryMonitorWindow() {
