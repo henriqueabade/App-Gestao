@@ -715,7 +715,7 @@
       permissoes: permissoesPayload,
     };
 
-    let metodo = 'PUT';
+    let metodo = 'PATCH';
     let url = `/api/usuarios/modelos-permissoes/${encodeURIComponent(state.modeloAtual?.id)}`;
 
     if (state.modoNovo || !state.modeloAtual) {
@@ -749,8 +749,7 @@
         const texto = await resp.text();
         throw new Error(texto || 'Falha ao salvar o modelo de permissões.');
       }
-      const salvo = await resp.json();
-      const recebido = salvo?.modelo ?? salvo;
+      const recebido = await resp.json();
       const normalizado = normalizarModelo(recebido, state.modelos.length);
       if (metodo === 'POST') {
         state.modelos.push(normalizado);
@@ -763,6 +762,9 @@
         }
         state.modeloAtual = normalizado;
       }
+      if (state.modeloAtual?.id) {
+        state.ultimoModeloSelecionado = state.modeloAtual.id;
+      }
       renderListaModelos();
       if (state.modeloAtual) {
         elementos.select.value = String(state.modeloAtual.id);
@@ -774,7 +776,6 @@
       window.dispatchEvent(new CustomEvent('usuariosModeloPermissaoAtualizado', {
         detail: { refresh: true, modeloId: state.modeloAtual?.id },
       }));
-      setTimeout(() => close(), 600);
     } catch (err) {
       console.error(err);
       exibirMensagem('erro', err.message || 'Não foi possível salvar o modelo.');

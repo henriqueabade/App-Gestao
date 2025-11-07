@@ -1908,7 +1908,7 @@ router.post('/modelos-permissoes', autenticarUsuario, async (req, res) => {
 
   try {
     const criado = await createModeloPermissoes({ nome, permissoes: permissoesNormalizadas });
-    return res.status(201).json({ modelo: formatarModeloPermissoes(criado) });
+    return res.status(201).json(formatarModeloPermissoes(criado));
   } catch (err) {
     if (err instanceof ModeloPermissoesError) {
       if (err.code === 'NOME_DUPLICADO') {
@@ -1957,7 +1957,7 @@ router.patch('/modelos-permissoes/:id', autenticarUsuario, async (req, res) => {
       return res.status(404).json({ error: 'Modelo de permissões não encontrado.' });
     }
 
-    return res.json({ modelo: formatarModeloPermissoes(atualizado) });
+    return res.json(formatarModeloPermissoes(atualizado));
   } catch (err) {
     if (err instanceof ModeloPermissoesError) {
       if (err.code === 'NOME_DUPLICADO') {

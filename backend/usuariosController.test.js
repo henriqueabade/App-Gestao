@@ -333,7 +333,7 @@ test('Sup Admin gerencia modelos de permissões e aplica em usuário', async () 
       body: JSON.stringify({ nome: 'Financeiro', permissoes: permissoesModelo })
     });
     assert.strictEqual(criar.status, 201);
-    const { modelo } = await criar.json();
+    const modelo = await criar.json();
     assert.ok(modelo.id);
     assert.strictEqual(modelo.nome, 'Financeiro');
     assert.deepStrictEqual(modelo.permissoes, permissoesModelo);
@@ -371,7 +371,7 @@ test('Sup Admin gerencia modelos de permissões e aplica em usuário', async () 
       })
     });
     assert.strictEqual(atualizar.status, 200);
-    const { modelo: atualizado } = await atualizar.json();
+    const atualizado = await atualizar.json();
     assert.strictEqual(atualizado.nome, 'Financeiro Corporativo');
     assert.strictEqual(atualizado.permissoes.usuarios.permissoes.permitido, false);
     assert.strictEqual(atualizado.permissoes.usuarios.editar.campos.email.editar, false);
