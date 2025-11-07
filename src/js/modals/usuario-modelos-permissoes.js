@@ -53,11 +53,17 @@
     novoBtn: overlay.querySelector('#novoModeloPermissao'),
     salvarBtn: overlay.querySelector('#salvarModeloPermissao'),
     excluirBtn: overlay.querySelector('#excluirModeloPermissao'),
+    tabelaWrapper: overlay.querySelector('#modeloPermissoesTabelaWrapper'),
+    tabela: overlay.querySelector('#modeloPermissoesTabela'),
+    tabelaBody: overlay.querySelector('#modeloPermissoesTabelaBody'),
+    tabelaVazio: overlay.querySelector('#modeloPermissoesTabelaVazio'),
+    resumo: overlay.querySelector('#modeloPermissoesResumo'),
   };
 
   const templates = {
     modulo: overlay.querySelector('#modeloPermissoesModuloTemplate'),
     acao: overlay.querySelector('#modeloPermissoesAcaoTemplate'),
+    linha: overlay.querySelector('#modeloPermissoesLinhaTemplate'),
   };
 
   const state = {
@@ -175,6 +181,15 @@
     }));
   }
 
+  function formatarData(valor) {
+    if (!valor) return 'Sem atualização';
+    const data = valor instanceof Date ? valor : new Date(valor);
+    if (Number.isNaN(data.getTime())) {
+      return 'Sem atualização';
+    }
+    return data.toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
+  }
+
   function normalizarModelo(modelo, indice) {
     const permissoesOrigem =
       modelo?.permissoes && typeof modelo.permissoes === 'object' ? modelo.permissoes : {};
@@ -184,6 +199,49 @@
       descricao: modelo?.descricao || modelo?.detalhes || '',
       permissoes: permissoesOrigem,
     };
+  }
+
+  function calcularResumoEstrutura(estrutura) {
+    const resumo = {
+      modulosAtivos: 0,
+      acoesAtivas: 0,
+      camposAtivos: 0,
+    };
+    if (!Array.isArray(estrutura)) {
+      return resumo;
+    }
+    estrutura.forEach((modulo) => {
+      if (!modulo || !Array.isArray(modulo.campos)) return;
+      const acoes = modulo.campos.filter((campo) => campo?.tipo === 'acao');
+      const campos = modulo.campos.filter((campo) => campo?.tipo === 'coluna');
+      const possuiAcaoAtiva = acoes.some((acao) => acao?.permitido);
+      const possuiCampoAtivo = campos.some((campo) => campo?.permitido);
+      if (possuiAcaoAtiva || possuiCampoAtivo) {
+        resumo.modulosAtivos += 1;
+      }
+      resumo.acoesAtivas += acoes.filter((acao) => acao?.permitido).length;
+      resumo.camposAtivos += campos.filter((campo) => campo?.permitido).length;
+    });
+    return resumo;
+  }
+
+  function calcularResumoModelo(modelo) {
+    if (!modelo) {
+      return { modulosAtivos: 0, acoesAtivas: 0, camposAtivos: 0 };
+    }
+    const estruturaAplicada = aplicarModeloNaEstruturaBase(modelo.permissoes);
+    return calcularResumoEstrutura(estruturaAplicada);
+  }
+
+  function criarBadge(label, valor) {
+    const badge = document.createElement('span');
+    badge.className = 'modelo-permissoes-tag';
+    const valorEl = document.createElement('strong');
+    valorEl.textContent = valor;
+    badge.appendChild(valorEl);
+    const labelText = document.createTextNode(` ${label}`);
+    badge.appendChild(labelText);
+    return badge;
   }
 
   function construirMapaPermissoes(permissoes) {
@@ -391,6 +449,7 @@
     atualizarBadge();
     atualizarBotaoNovo();
     atualizarVisibilidadeExcluir();
+    renderTabelaModelos();
     limparMensagem();
   }
 
@@ -472,6 +531,103 @@
     aplicarFiltroBusca();
   }
 
+  function atualizarResumoTabela(resumoGeral) {
+    if (!elementos.resumo) return;
+    const totalModelos = state.modelos.length;
+    if (!totalModelos) {
+      elementos.resumo.textContent = '';
+      elementos.resumo.classList.add('hidden');
+      return;
+    }
+    const partes = [
+      `${totalModelos} ${totalModelos === 1 ? 'modelo' : 'modelos'}`,
+      `${resumoGeral.modulosAtivos} módulos ativos`,
+      `${resumoGeral.acoesAtivas} ações liberadas`,
+    ];
+    if (resumoGeral.camposAtivos > 0) {
+      partes.push(`${resumoGeral.camposAtivos} campos visíveis`);
+    }
+    elementos.resumo.textContent = partes.join(' • ');
+    elementos.resumo.classList.remove('hidden');
+  }
+
+  function renderTabelaModelos() {
+    if (!elementos.tabelaBody) return;
+    elementos.tabelaBody.innerHTML = '';
+
+    const possuiModelos = Array.isArray(state.modelos) && state.modelos.length > 0;
+    if (elementos.tabela) {
+      elementos.tabela.classList.toggle('hidden', !possuiModelos);
+    }
+    elementos.tabelaVazio?.classList.toggle('hidden', possuiModelos);
+
+    if (!possuiModelos) {
+      atualizarResumoTabela({ modulosAtivos: 0, acoesAtivas: 0, camposAtivos: 0 });
+      return;
+    }
+
+    const resumoGeral = { modulosAtivos: 0, acoesAtivas: 0, camposAtivos: 0 };
+
+    state.modelos.forEach((modelo) => {
+      if (!templates.linha?.content?.firstElementChild) return;
+      const linha = templates.linha.content.firstElementChild.cloneNode(true);
+      linha.dataset.modeloId = String(modelo.id);
+      const tituloEl = linha.querySelector('[data-col="nome"]');
+      if (tituloEl) {
+        tituloEl.textContent = modelo.nome || 'Modelo sem nome';
+      }
+      const metaEl = linha.querySelector('[data-col="atualizado"]');
+      if (metaEl) {
+        metaEl.textContent = `Atualizado em ${formatarData(modelo.atualizadoEm || modelo.criadoEm)}`;
+      }
+      const badgesEl = linha.querySelector('[data-col="resumo"]');
+      const resumoModelo = calcularResumoModelo(modelo);
+      resumoGeral.modulosAtivos += resumoModelo.modulosAtivos;
+      resumoGeral.acoesAtivas += resumoModelo.acoesAtivas;
+      resumoGeral.camposAtivos += resumoModelo.camposAtivos;
+      if (badgesEl) {
+        badgesEl.innerHTML = '';
+        badgesEl.appendChild(criarBadge('módulos ativos', resumoModelo.modulosAtivos));
+        badgesEl.appendChild(criarBadge('ações', resumoModelo.acoesAtivas));
+        badgesEl.appendChild(criarBadge('campos', resumoModelo.camposAtivos));
+      }
+      if (state.modeloAtual && String(state.modeloAtual.id) === String(modelo.id)) {
+        linha.classList.add('is-selected');
+      }
+      elementos.tabelaBody.appendChild(linha);
+    });
+
+    atualizarResumoTabela(resumoGeral);
+  }
+
+  async function abrirDetalhesModelo(modeloId) {
+    const modelo = state.modelos.find((item) => String(item.id) === String(modeloId));
+    if (!modelo) {
+      exibirMensagem('erro', 'Não foi possível localizar o modelo selecionado.');
+      return;
+    }
+    if (!state.estruturaCarregada) {
+      await carregarEstruturaBase();
+    }
+    const estruturaAplicada = aplicarModeloNaEstruturaBase(modelo.permissoes);
+    const resumo = calcularResumoEstrutura(estruturaAplicada);
+    window.usuarioModeloPermissaoDetalheContext = {
+      modelo,
+      estrutura: estruturaAplicada,
+      resumo,
+    };
+    try {
+      await Modal.open(
+        'modals/usuarios/modelo-permissoes-detalhe.html',
+        '../js/modals/usuario-modelo-permissoes-detalhe.js',
+        'detalhesModeloPermissao',
+        true
+      );
+    } catch (err) {
+      console.error('Falha ao abrir detalhes do modelo de permissões:', err);
+    }
+  }
+
   function aplicarFiltroBusca() {
     if (!elementos.busca) return;
     const termo = elementos.busca.value?.trim().toLowerCase() || '';
@@ -494,6 +650,22 @@
   }
 
   elementos.busca?.addEventListener('input', aplicarFiltroBusca);
+
+  elementos.tabelaBody?.addEventListener('click', (event) => {
+    const botao = event.target.closest('button[data-action]');
+    if (!botao) return;
+    event.preventDefault();
+    const linha = botao.closest('tr[data-modelo-id]');
+    if (!linha) return;
+    const modeloId = linha.dataset.modeloId;
+    if (!modeloId) return;
+    if (botao.dataset.action === 'detalhes') {
+      abrirDetalhesModelo(modeloId);
+    } else if (botao.dataset.action === 'editar') {
+      elementos.select.value = String(modeloId);
+      selecionarModeloPorId(modeloId);
+    }
+  });
 
   overlay.addEventListener('change', (event) => {
     const target = event.target;
@@ -596,6 +768,7 @@
       }
 
       renderListaModelos();
+      renderTabelaModelos();
 
       if (!state.modelos.length) {
         alternarModoNovo(true);
@@ -661,6 +834,7 @@
     state.ultimoModeloSelecionado = modelo.id;
     state.permissoes = aplicarModeloNaEstruturaBase(modelo.permissoes);
     alternarModoNovo(false);
+    renderTabelaModelos();
   }
 
   elementos.carregarBtn?.addEventListener('click', () => {
@@ -679,6 +853,7 @@
       renderPermissoes();
       atualizarBadge();
       atualizarVisibilidadeExcluir();
+      renderTabelaModelos();
       return;
     }
     selecionarModeloPorId(elementos.select.value);
@@ -766,6 +941,7 @@
         state.ultimoModeloSelecionado = state.modeloAtual.id;
       }
       renderListaModelos();
+      renderTabelaModelos();
       if (state.modeloAtual) {
         elementos.select.value = String(state.modeloAtual.id);
         state.permissoes = aplicarModeloNaEstruturaBase(state.modeloAtual.permissoes);
@@ -800,6 +976,7 @@
       }
       state.modelos = state.modelos.filter((modelo) => String(modelo.id) !== String(state.modeloAtual?.id));
       renderListaModelos();
+      renderTabelaModelos();
       state.modeloAtual = null;
       state.permissoes = [];
       elementos.select.value = '';

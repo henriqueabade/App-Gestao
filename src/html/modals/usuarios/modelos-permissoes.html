@@ -39,6 +39,32 @@
           <p class="modelo-permissoes-toolbar__hint">Dica: carregue um modelo existente ou crie um novo ajustando as permissões abaixo.</p>
         </div>
 
+        <div id="modeloPermissoesTabelaWrapper" class="modelo-permissoes-listagem glass-surface border border-white/10 rounded-2xl">
+          <div class="modelo-permissoes-listagem__header">
+            <div>
+              <h3 class="modelo-permissoes-listagem__titulo">Modelos cadastrados</h3>
+              <p class="modelo-permissoes-listagem__descricao">Visualize e selecione um modelo para aplicar ou editar as permissões.</p>
+            </div>
+            <div id="modeloPermissoesResumo" class="modelo-permissoes-listagem__resumo" aria-live="polite"></div>
+          </div>
+          <div class="modelo-permissoes-table-wrapper">
+            <table id="modeloPermissoesTabela" class="modelo-permissoes-table">
+              <thead>
+                <tr>
+                  <th scope="col">Modelo</th>
+                  <th scope="col">Resumo</th>
+                  <th scope="col" class="text-right">Ações</th>
+                </tr>
+              </thead>
+              <tbody id="modeloPermissoesTabelaBody"></tbody>
+            </table>
+            <div id="modeloPermissoesTabelaVazio" class="modelo-permissoes-table-empty hidden">
+              <div class="modelo-permissoes-empty__icon">📄</div>
+              <p class="modelo-permissoes-empty__text">Nenhum modelo cadastrado ainda. Crie um novo para começar.</p>
+            </div>
+          </div>
+        </div>
+
         <div id="modeloPermissoesContainer" class="modelo-permissoes-grid"></div>
         <div id="modeloPermissoesEmpty" class="modelo-permissoes-empty hidden">
           <div class="modelo-permissoes-empty__icon">📄</div>
@@ -58,6 +84,24 @@
       </div>
     </footer>
   </div>
+
+  <template id="modeloPermissoesLinhaTemplate">
+    <tr class="modelo-permissoes-tabela__row" data-modelo-id="">
+      <td class="modelo-permissoes-tabela__col--principal">
+        <div class="modelo-permissoes-tabela__titulo" data-col="nome"></div>
+        <div class="modelo-permissoes-tabela__meta" data-col="atualizado"></div>
+      </td>
+      <td>
+        <div class="modelo-permissoes-tabela__badges" data-col="resumo"></div>
+      </td>
+      <td class="modelo-permissoes-tabela__acoes">
+        <div class="modelo-permissoes-tabela__acoes-lista">
+          <button type="button" class="btn-secondary btn-modal-action" data-action="editar">Editar</button>
+          <button type="button" class="btn-outline btn-modal-action" data-action="detalhes">Detalhes</button>
+        </div>
+      </td>
+    </tr>
+  </template>
 
   <template id="modeloPermissoesModuloTemplate">
     <article class="modelo-permissoes-modulo" data-modulo="">
