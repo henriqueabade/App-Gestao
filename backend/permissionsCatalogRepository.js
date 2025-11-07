@@ -1,9 +1,49 @@
 const db = require('./db');
 
-const ROLE_COLUMN_CANDIDATES = ['role_id', 'perfil_id', 'modelo_id', 'modelo_permissoes_id', 'model_id'];
-const MODULE_COLUMN_CANDIDATES = ['modulo', 'module', 'modulo_nome', 'module_name'];
-const ACTION_COLUMN_CANDIDATES = ['acao', 'funcao', 'action', 'function'];
-const ALLOWED_COLUMN_CANDIDATES = ['permitido', 'allowed', 'permitted', 'habilitado', 'enabled', 'ativo', 'active'];
+const ROLE_COLUMN_CANDIDATES = [
+  'role_id',
+  'perfil_id',
+  'modelo_id',
+  'modelo_permissoes_id',
+  'model_id',
+  'role_code',
+  'tipo_usuario',
+  'tipo_perfil',
+  'user_type'
+];
+const MODULE_COLUMN_CANDIDATES = [
+  'modulo',
+  'module',
+  'modulo_nome',
+  'module_name',
+  'module_code',
+  'module_id',
+  'modulo_id',
+  'modulo_codigo',
+  'mp',
+  'prod'
+];
+const ACTION_COLUMN_CANDIDATES = [
+  'acao',
+  'funcao',
+  'action',
+  'function',
+  'permissao',
+  'permission',
+  'acao_nome',
+  'acao_id',
+  'pode_*'
+];
+const ALLOWED_COLUMN_CANDIDATES = [
+  'permitido',
+  'allowed',
+  'permitted',
+  'habilitado',
+  'enabled',
+  'ativo',
+  'active',
+  'pode'
+];
 const SCOPE_COLUMN_CANDIDATES = ['escopos', 'scopes', 'scope'];
 const FIELD_COLUMN_CANDIDATES = ['campo', 'coluna', 'column', 'field'];
 const MODULE_TITLE_COLUMN_CANDIDATES = ['modulo_titulo', 'module_title', 'modulo_label', 'module_label', 'modulo_nome', 'module_name'];
@@ -106,8 +146,23 @@ function detectColumn(columns, candidates) {
     }
   }
   for (const candidate of candidates) {
-    const normalized = normalizeIdentifier(candidate);
-    if (lookup.has(normalized)) {
+    let value = candidate;
+    let isPrefix = false;
+    if (typeof value === 'string' && value.endsWith('*')) {
+      isPrefix = true;
+      value = value.slice(0, -1);
+    }
+    const normalized = normalizeIdentifier(value);
+    if (!normalized) {
+      continue;
+    }
+    if (isPrefix) {
+      for (const [key, original] of lookup.entries()) {
+        if (key.startsWith(normalized)) {
+          return original;
+        }
+      }
+    } else if (lookup.has(normalized)) {
       return lookup.get(normalized);
     }
   }
@@ -119,6 +174,125 @@ async function runQuery(client, text, params = []) {
     return client.query(text, params);
   }
   return db.query(text, params);
+}
+
+function isLikelyBooleanColumn(column) {
+  if (!column) {
+    return false;
+  }
+  const dataType = String(column.data_type || '').toLowerCase();
+  if (dataType.includes('bool')) {
+    return true;
+  }
+  if (dataType === 'bit') {
+    return true;
+  }
+  const normalized = normalizeIdentifier(column.column_name);
+  if (!normalized) {
+    return false;
+  }
+  return (
+    normalized.startsWith('pode') ||
+    normalized.startsWith('permite') ||
+    normalized.startsWith('habilita') ||
+    normalized.startsWith('enable') ||
+    normalized.includes('permitido') ||
+    normalized.includes('habilitado') ||
+    normalized.includes('enabled') ||
+    normalized.endsWith('_flag') ||
+    normalized.endsWith('_bool')
+  );
+}
+
+function parseModuleActionFromColumn(columnName, options = {}) {
+  if (!columnName) {
+    return null;
+  }
+  const original = String(columnName);
+  const lower = original.toLowerCase();
+  const defaultActionName = options.defaultActionName || 'acesso';
+  const fallbackModuleName = options.moduleName || options.moduleKey || 'geral';
+
+  const patterns = [
+    { token: '_pode_', length: 6 },
+    { token: '_can_', length: 5 }
+  ];
+
+  for (const pattern of patterns) {
+    const index = lower.indexOf(pattern.token);
+    if (index >= 0) {
+      const moduleSegment = original.slice(0, index) || fallbackModuleName;
+      const actionSegment = original.slice(index + pattern.length) || defaultActionName;
+      const moduleKey = normalizeIdentifier(moduleSegment);
+      const actionKey = normalizeIdentifier(actionSegment);
+      if (!moduleKey || !actionKey) {
+        continue;
+      }
+      return {
+        moduleKey,
+        moduleName: moduleSegment,
+        actionKey,
+        actionName: actionSegment
+      };
+    }
+  }
+
+  if (lower.startsWith('pode_') || lower.startsWith('can_')) {
+    const actionSegment = original.slice(original.indexOf('_') + 1) || defaultActionName;
+    const moduleKey = normalizeIdentifier(fallbackModuleName);
+    const actionKey = normalizeIdentifier(actionSegment);
+    if (!moduleKey || !actionKey) {
+      return null;
+    }
+    return {
+      moduleKey,
+      moduleName: fallbackModuleName,
+      actionKey,
+      actionName: actionSegment
+    };
+  }
+
+  const moduleKey = normalizeIdentifier(original);
+  const actionKey = normalizeIdentifier(defaultActionName);
+  if (!moduleKey || !actionKey) {
+    return null;
+  }
+  return {
+    moduleKey,
+    moduleName: original,
+    actionKey,
+    actionName: defaultActionName
+  };
+}
+
+function ensurePermTableEntry(permTables, moduleKey, defaults = {}) {
+  if (!moduleKey) {
+    return null;
+  }
+  let entry = permTables.get(moduleKey);
+  if (!entry) {
+    entry = {
+      moduleKey,
+      moduleName: defaults.moduleName || moduleKey,
+      table: defaults.table || null,
+      roleColumn: defaults.roleColumn || null,
+      fieldColumn: defaults.fieldColumn || null,
+      actionColumn: defaults.actionColumn || null,
+      allowedColumn: defaults.allowedColumn || null,
+      derivedColumns: []
+    };
+    permTables.set(moduleKey, entry);
+    return entry;
+  }
+  for (const [key, value] of Object.entries(defaults)) {
+    if (value !== undefined && value !== null && entry[key] == null) {
+      entry[key] = value;
+    }
+  }
+  if (!Array.isArray(entry.derivedColumns)) {
+    entry.derivedColumns = [];
+  }
+  return entry;
 }
 
 async function getTableColumns(client, tableName) {
@@ -200,10 +374,26 @@ async function loadPermissionsCatalog(client) {
   const modules = new Map();
   const matrixColumns = await getTableColumns(client, 'roles_modules_matrix');
   const roleColumn = detectColumn(matrixColumns, ROLE_COLUMN_CANDIDATES);
-  const moduleColumn = detectColumn(matrixColumns, MODULE_COLUMN_CANDIDATES);
-  const actionColumn = detectColumn(matrixColumns, ACTION_COLUMN_CANDIDATES);
+  let moduleColumn = detectColumn(matrixColumns, MODULE_COLUMN_CANDIDATES);
+  let actionColumn = detectColumn(matrixColumns, ACTION_COLUMN_CANDIDATES);
   const allowedColumn = detectColumn(matrixColumns, ALLOWED_COLUMN_CANDIDATES);
   const scopeColumn = detectColumn(matrixColumns, SCOPE_COLUMN_CANDIDATES);
+  const moduleColumnInfo = moduleColumn
+    ? matrixColumns.find(column => column.column_name === moduleColumn)
+    : null;
+  if (moduleColumnInfo && isLikelyBooleanColumn(moduleColumnInfo)) {
+    moduleColumn = null;
+  }
+  const actionColumnInfo = actionColumn
+    ? matrixColumns.find(column => column.column_name === actionColumn)
+    : null;
+  if (actionColumnInfo && isLikelyBooleanColumn(actionColumnInfo)) {
+    actionColumn = null;
+  }
+  const matrixDerivedColumns = [];
+  const ignoredMatrixColumns = new Set(
+    [roleColumn, moduleColumn, actionColumn, allowedColumn, scopeColumn].filter(Boolean)
+  );
 
   if (moduleColumn) {
     const { rows } = await runQuery(
@@ -228,22 +418,63 @@ async function loadPermissionsCatalog(client) {
     }
   }
 
+  if (!moduleColumn || !actionColumn) {
+    for (const column of matrixColumns) {
+      if (ignoredMatrixColumns.has(column.column_name)) {
+        continue;
+      }
+      if (!isLikelyBooleanColumn(column)) {
+        continue;
+      }
+      const parsed = parseModuleActionFromColumn(column.column_name, { defaultActionName: 'acesso' });
+      if (!parsed) {
+        continue;
+      }
+      const moduleMeta = ensureModuleMetadata(modules, parsed.moduleName, parsed.moduleName);
+      if (moduleMeta) {
+        registerModuleAction(moduleMeta, parsed.actionName, {
+          type: 'matrix_wide',
+          column: column.column_name
+        });
+      }
+      matrixDerivedColumns.push({
+        source: 'matrix',
+        table: 'roles_modules_matrix',
+        roleColumn,
+        column: column.column_name,
+        moduleKey: parsed.moduleKey,
+        moduleName: parsed.moduleName,
+        actionKey: parsed.actionKey,
+        actionName: parsed.actionName,
+        fieldColumn: null
+      });
+    }
+  }
+
   const permTables = new Map();
   const permTableNames = await listPermTables(client);
   for (const tableName of permTableNames) {
     const moduleName = tableName.replace(/^perm_/, '');
     const moduleMeta = ensureModuleMetadata(modules, moduleName, moduleName);
+    const moduleKey = moduleMeta ? moduleMeta.key : normalizeIdentifier(moduleName);
     const columns = await getTableColumns(client, tableName);
-    const tableInfo = {
+    const tableInfo = ensurePermTableEntry(permTables, moduleKey, {
       table: tableName,
-      moduleKey: moduleMeta ? moduleMeta.key : normalizeIdentifier(moduleName),
-      roleColumn: detectColumn(columns, ROLE_COLUMN_CANDIDATES),
-      fieldColumn: detectColumn(columns, FIELD_COLUMN_CANDIDATES),
-      actionColumn: detectColumn(columns, ACTION_COLUMN_CANDIDATES),
-      allowedColumn: detectColumn(columns, ALLOWED_COLUMN_CANDIDATES)
-    };
-
-    permTables.set(tableInfo.moduleKey, tableInfo);
+      moduleName: moduleMeta ? moduleMeta.name || moduleName : moduleName
+    });
+    tableInfo.table = tableName;
+    tableInfo.moduleKey = moduleKey;
+    tableInfo.moduleName = tableInfo.moduleName || moduleMeta?.name || moduleName;
+    tableInfo.roleColumn = tableInfo.roleColumn || detectColumn(columns, ROLE_COLUMN_CANDIDATES);
+    tableInfo.fieldColumn = tableInfo.fieldColumn || detectColumn(columns, FIELD_COLUMN_CANDIDATES);
+    tableInfo.actionColumn = tableInfo.actionColumn || detectColumn(columns, ACTION_COLUMN_CANDIDATES);
+    tableInfo.allowedColumn = tableInfo.allowedColumn || detectColumn(columns, ALLOWED_COLUMN_CANDIDATES);
+    if (tableInfo.actionColumn) {
+      const actionInfo = columns.find(column => column.column_name === tableInfo.actionColumn);
+      if (actionInfo && isLikelyBooleanColumn(actionInfo)) {
+        tableInfo.actionColumn = null;
+      }
+    }
 
     if (moduleMeta && tableInfo.actionColumn) {
       const { rows } = await runQuery(
@@ -254,6 +485,53 @@ async function loadPermissionsCatalog(client) {
         registerModuleAction(moduleMeta, row.action_name, { type: 'perm_table', table: tableInfo.table });
       }
     }
+
+    if (!tableInfo.actionColumn) {
+      const skipColumns = new Set(
+        [tableInfo.roleColumn, tableInfo.fieldColumn, tableInfo.allowedColumn].filter(Boolean)
+      );
+      for (const column of columns) {
+        if (skipColumns.has(column.column_name)) {
+          continue;
+        }
+        if (!isLikelyBooleanColumn(column)) {
+          continue;
+        }
+        const parsed = parseModuleActionFromColumn(column.column_name, {
+          moduleName: moduleMeta ? moduleMeta.name || moduleName : moduleName,
+          moduleKey,
+          defaultActionName: 'acesso'
+        });
+        if (!parsed) {
+          continue;
+        }
+        if (moduleMeta) {
+          registerModuleAction(moduleMeta, parsed.actionName, {
+            type: 'perm_table_wide',
+            table: tableInfo.table,
+            column: column.column_name
+          });
+        }
+        tableInfo.derivedColumns.push({
+          source: 'perm_table',
+          table: tableInfo.table,
+          roleColumn: tableInfo.roleColumn,
+          fieldColumn: tableInfo.fieldColumn,
+          column: column.column_name,
+          moduleKey,
+          moduleName: parsed.moduleName,
+          actionKey: parsed.actionKey,
+          actionName: parsed.actionName
+        });
+      }
+    }
+  }
+
+  for (const derived of matrixDerivedColumns) {
+    const entry = ensurePermTableEntry(permTables, derived.moduleKey, {
+      moduleName: derived.moduleName
+    });
+    entry.derivedColumns.push(derived);
   }
 
   return {
@@ -263,7 +541,8 @@ async function loadPermissionsCatalog(client) {
       moduleColumn,
       actionColumn,
       allowedColumn,
-      scopeColumn
+      scopeColumn,
+      derivedColumns: matrixDerivedColumns
     },
     modules,
     permTables
@@ -345,13 +624,18 @@ async function loadPermissionsForRole(client, roleId, existingCatalog) {
   const resultado = {};
 
   const matrix = catalog.matrix;
-  if (matrix.roleColumn && matrix.moduleColumn && matrix.actionColumn) {
+  let matrixRows = [];
+  if (matrix.roleColumn) {
     const { rows } = await runQuery(
       client,
       `SELECT * FROM ${matrix.table} WHERE ${matrix.roleColumn} = $1`,
       [roleId]
     );
-    for (const row of rows) {
+    matrixRows = rows;
+  }
+
+  if (matrix.moduleColumn && matrix.actionColumn && matrixRows.length) {
+    for (const row of matrixRows) {
       const moduloRaw = row[matrix.moduleColumn];
       const acaoRaw = row[matrix.actionColumn];
       if (!moduloRaw || !acaoRaw) {
@@ -372,34 +656,107 @@ async function loadPermissionsForRole(client, roleId, existingCatalog) {
     }
   }
 
+  if (Array.isArray(matrix.derivedColumns) && matrix.derivedColumns.length && matrixRows.length) {
+    for (const row of matrixRows) {
+      for (const derived of matrix.derivedColumns) {
+        if (!derived.column || !Object.prototype.hasOwnProperty.call(row, derived.column)) {
+          continue;
+        }
+        const permitido = booleanFromValue(row[derived.column]);
+        const acao = ensureResultadoAcao(resultado, derived.moduleKey, derived.actionKey);
+        acao.permitido = permitido;
+      }
+    }
+  }
+
   for (const tableInfo of catalog.permTables.values()) {
-    if (!tableInfo.roleColumn || !tableInfo.fieldColumn) {
+    const derivedColumns = Array.isArray(tableInfo.derivedColumns)
+      ? tableInfo.derivedColumns.filter(column => column.source !== 'matrix')
+      : [];
+    const hasExplicit = Boolean(tableInfo.roleColumn && tableInfo.fieldColumn && tableInfo.actionColumn);
+
+    if (hasExplicit) {
+      const { rows } = await runQuery(
+        client,
+        `SELECT * FROM ${tableInfo.table} WHERE ${tableInfo.roleColumn} = $1`,
+        [roleId]
+      );
+      for (const row of rows) {
+        const campoRaw = row[tableInfo.fieldColumn];
+        if (!campoRaw) continue;
+        const moduloKey = tableInfo.moduleKey;
+        const acaoRaw = row[tableInfo.actionColumn];
+        if (!acaoRaw) {
+          continue;
+        }
+        const acaoKey = normalizeIdentifier(acaoRaw);
+        const acao = ensureResultadoAcao(resultado, moduloKey, acaoKey);
+        if (!acao.campos) {
+          acao.campos = {};
+        }
+        const campoKey = normalizeIdentifier(campoRaw) || String(campoRaw);
+        const campoEntrada = acao.campos[campoKey] || {};
+        if (tableInfo.allowedColumn && Object.prototype.hasOwnProperty.call(row, tableInfo.allowedColumn)) {
+          campoEntrada[acaoKey] = booleanFromValue(row[tableInfo.allowedColumn]);
+        }
+        acao.campos[campoKey] = campoEntrada;
+      }
+    }
+
+    if (!derivedColumns.length) {
       continue;
     }
-    const { rows } = await runQuery(
-      client,
-      `SELECT * FROM ${tableInfo.table} WHERE ${tableInfo.roleColumn} = $1`,
-      [roleId]
-    );
-    for (const row of rows) {
-      const campoRaw = row[tableInfo.fieldColumn];
-      if (!campoRaw) continue;
-      const moduloKey = tableInfo.moduleKey;
-      const acaoRaw = tableInfo.actionColumn ? row[tableInfo.actionColumn] : null;
-      if (!acaoRaw) {
+
+    const grouped = new Map();
+    for (const derived of derivedColumns) {
+      const tableName = derived.table || tableInfo.table;
+      const roleColumnName = derived.roleColumn || tableInfo.roleColumn;
+      if (!tableName || !roleColumnName) {
         continue;
       }
-      const acaoKey = normalizeIdentifier(acaoRaw);
-      const acao = ensureResultadoAcao(resultado, moduloKey, acaoKey);
-      if (!acao.campos) {
-        acao.campos = {};
+      const key = `${tableName}::${roleColumnName}`;
+      let group = grouped.get(key);
+      if (!group) {
+        group = {
+          table: tableName,
+          roleColumn: roleColumnName,
+          columns: []
+        };
+        grouped.set(key, group);
       }
-      const campoKey = normalizeIdentifier(campoRaw) || String(campoRaw);
-      const campoEntrada = acao.campos[campoKey] || {};
-      if (tableInfo.allowedColumn && Object.prototype.hasOwnProperty.call(row, tableInfo.allowedColumn)) {
-        campoEntrada[acaoKey] = booleanFromValue(row[tableInfo.allowedColumn]);
+      group.columns.push(derived);
+    }
+
+    for (const group of grouped.values()) {
+      const { rows } = await runQuery(
+        client,
+        `SELECT * FROM ${group.table} WHERE ${group.roleColumn} = $1`,
+        [roleId]
+      );
+      for (const row of rows) {
+        for (const derived of group.columns) {
+          if (!derived.column || !Object.prototype.hasOwnProperty.call(row, derived.column)) {
+            continue;
+          }
+          const permitido = booleanFromValue(row[derived.column]);
+          const acao = ensureResultadoAcao(resultado, derived.moduleKey, derived.actionKey);
+          if (derived.fieldColumn) {
+            const campoValor = row[derived.fieldColumn];
+            if (campoValor === undefined || campoValor === null || campoValor === '') {
+              continue;
+            }
+            if (!acao.campos) {
+              acao.campos = {};
+            }
+            const campoKey = normalizeIdentifier(campoValor) || String(campoValor);
+            const campoEntrada = acao.campos[campoKey] || {};
+            campoEntrada[derived.actionKey] = permitido;
+            acao.campos[campoKey] = campoEntrada;
+          } else {
+            acao.permitido = permitido;
+          }
+        }
       }
-      acao.campos[campoKey] = campoEntrada;
     }
   }
 
@@ -596,6 +953,19 @@ async function buildPermissionsStructure(client, existingCatalog) {
     }
   }
 
+  if (Array.isArray(catalog.matrix.derivedColumns)) {
+    for (const derived of catalog.matrix.derivedColumns) {
+      const moduleEntry = ensureModule(derived.moduleKey, {
+        modulo: derived.moduleName || derived.moduleKey,
+        titulo: formatDisplayName(derived.moduleName || derived.moduleKey)
+      });
+      ensureAction(moduleEntry, derived.actionName, {
+        acao: derived.actionName,
+        titulo: formatDisplayName(derived.actionName)
+      });
+    }
+  }
+
   const matrixColumns = catalog.matrix.table
     ? await getTableColumns(client, catalog.matrix.table)
     : [];
@@ -642,9 +1012,24 @@ async function buildPermissionsStructure(client, existingCatalog) {
   }
 
   for (const tableInfo of catalog.permTables.values()) {
-    if (!tableInfo.table || !tableInfo.actionColumn || !tableInfo.fieldColumn) {
+    const derivedColumns = Array.isArray(tableInfo.derivedColumns)
+      ? tableInfo.derivedColumns.filter(column => column.source !== 'matrix')
+      : [];
+
+    if (!tableInfo.table) {
+      for (const derived of derivedColumns.filter(column => !column.fieldColumn)) {
+        const moduleEntry = ensureModule(derived.moduleKey, {
+          modulo: derived.moduleName || derived.moduleKey,
+          titulo: formatDisplayName(derived.moduleName || derived.moduleKey)
+        });
+        ensureAction(moduleEntry, derived.actionName, {
+          acao: derived.actionName,
+          titulo: formatDisplayName(derived.actionName)
+        });
+      }
       continue;
     }
+
     const columns = await getTableColumns(client, tableInfo.table);
     const fieldTitleColumn = detectColumn(columns, FIELD_TITLE_COLUMN_CANDIDATES);
     const fieldDescriptionColumn = detectColumn(columns, FIELD_DESCRIPTION_COLUMN_CANDIDATES);
@@ -652,40 +1037,83 @@ async function buildPermissionsStructure(client, existingCatalog) {
     const actionDescriptionColumnTable = detectColumn(columns, ACTION_DESCRIPTION_COLUMN_CANDIDATES);
     const moduleColumnCandidate = detectColumn(columns, MODULE_COLUMN_CANDIDATES);
 
-    const selectParts = [
-      `${tableInfo.fieldColumn} AS campo`,
-      `${tableInfo.actionColumn} AS acao`
-    ];
-    if (fieldTitleColumn) {
-      selectParts.push(`${fieldTitleColumn} AS campo_titulo`);
-    }
-    if (fieldDescriptionColumn) {
-      selectParts.push(`${fieldDescriptionColumn} AS campo_descricao`);
-    }
-    if (actionTitleColumnTable) {
-      selectParts.push(`${actionTitleColumnTable} AS acao_titulo`);
-    }
-    if (actionDescriptionColumnTable) {
-      selectParts.push(`${actionDescriptionColumnTable} AS acao_descricao`);
-    }
-    if (moduleColumnCandidate) {
-      selectParts.push(`${moduleColumnCandidate} AS modulo`);
+    if (tableInfo.actionColumn && tableInfo.fieldColumn) {
+      const selectParts = [
+        `${tableInfo.fieldColumn} AS campo`,
+        `${tableInfo.actionColumn} AS acao`
+      ];
+      if (fieldTitleColumn) {
+        selectParts.push(`${fieldTitleColumn} AS campo_titulo`);
+      }
+      if (fieldDescriptionColumn) {
+        selectParts.push(`${fieldDescriptionColumn} AS campo_descricao`);
+      }
+      if (actionTitleColumnTable) {
+        selectParts.push(`${actionTitleColumnTable} AS acao_titulo`);
+      }
+      if (actionDescriptionColumnTable) {
+        selectParts.push(`${actionDescriptionColumnTable} AS acao_descricao`);
+      }
+      if (moduleColumnCandidate) {
+        selectParts.push(`${moduleColumnCandidate} AS modulo`);
+      }
+
+      const query = `SELECT DISTINCT ${selectParts.join(', ')} FROM ${tableInfo.table} WHERE ${tableInfo.fieldColumn} IS NOT NULL`;
+      const { rows } = await runQuery(client, query);
+      for (const row of rows) {
+        const moduleEntry = ensureModule(row.modulo || tableInfo.moduleKey, {
+          modulo: row.modulo || tableInfo.moduleName || tableInfo.moduleKey
+        });
+        const actionEntry = ensureAction(moduleEntry, row.acao, {
+          titulo: row.acao_titulo,
+          descricao: row.acao_descricao
+        });
+        ensureField(actionEntry, row.campo, {
+          titulo: row.campo_titulo,
+          descricao: row.campo_descricao,
+          campo: row.campo
+        });
+      }
     }
 
-    const query = `SELECT DISTINCT ${selectParts.join(', ')} FROM ${tableInfo.table} WHERE ${tableInfo.fieldColumn} IS NOT NULL`;
-    const { rows } = await runQuery(client, query);
-    for (const row of rows) {
-      const moduleEntry = ensureModule(row.modulo || tableInfo.moduleKey, {
-        modulo: row.modulo || tableInfo.moduleKey
+    const derivedWithFields = derivedColumns.filter(column => column.fieldColumn);
+    if (derivedWithFields.length && tableInfo.fieldColumn) {
+      const selectPartsDerived = [`${tableInfo.fieldColumn} AS campo`];
+      if (fieldTitleColumn) {
+        selectPartsDerived.push(`${fieldTitleColumn} AS campo_titulo`);
+      }
+      if (fieldDescriptionColumn) {
+        selectPartsDerived.push(`${fieldDescriptionColumn} AS campo_descricao`);
+      }
+      const queryDerived = `SELECT DISTINCT ${selectPartsDerived.join(', ')} FROM ${tableInfo.table} WHERE ${tableInfo.fieldColumn} IS NOT NULL`;
+      const { rows } = await runQuery(client, queryDerived);
+      for (const row of rows) {
+        for (const derived of derivedWithFields) {
+          const moduleEntry = ensureModule(derived.moduleKey, {
+            modulo: derived.moduleName || tableInfo.moduleName || derived.moduleKey,
+            titulo: formatDisplayName(derived.moduleName || tableInfo.moduleName || derived.moduleKey)
+          });
+          const actionEntry = ensureAction(moduleEntry, derived.actionName, {
+            acao: derived.actionName,
+            titulo: formatDisplayName(derived.actionName)
+          });
+          ensureField(actionEntry, row.campo, {
+            titulo: row.campo_titulo,
+            descricao: row.campo_descricao,
+            campo: row.campo
+          });
+        }
+      }
+    }
+
+    for (const derived of derivedColumns.filter(column => !column.fieldColumn)) {
+      const moduleEntry = ensureModule(derived.moduleKey, {
+        modulo: derived.moduleName || tableInfo.moduleName || derived.moduleKey,
+        titulo: formatDisplayName(derived.moduleName || tableInfo.moduleName || derived.moduleKey)
       });
-      const actionEntry = ensureAction(moduleEntry, row.acao, {
-        titulo: row.acao_titulo,
-        descricao: row.acao_descricao
-      });
-      ensureField(actionEntry, row.campo, {
-        titulo: row.campo_titulo,
-        descricao: row.campo_descricao,
-        campo: row.campo
+      ensureAction(moduleEntry, derived.actionName, {
+        acao: derived.actionName,
+        titulo: formatDisplayName(derived.actionName)
       });
     }
   }
