@@ -68,6 +68,7 @@
     modoNovo: false,
     carregando: false,
     ultimoModeloSelecionado: null,
+    estruturaCarregada: false,
   };
 
   function formatarTitulo(valor) {
@@ -96,29 +97,75 @@
       .toLowerCase();
   }
 
-  function normalizarCampo(campo, indice) {
-    const chave = normalizarChave(campo?.nome || campo?.chave || campo?.id, `campo_${indice + 1}`);
+  function normalizarAcao(acao, indice) {
+    const chave = normalizarChave(acao?.chave || acao?.acao || acao?.nome || acao?.id, `acao_${indice + 1}`);
+    const titulo =
+      acao?.titulo || acao?.label || acao?.nome || acao?.acao || formatarTitulo(acao?.acao || acao?.nome || chave);
+    const descricao = acao?.descricao || acao?.description || '';
     return {
       chave,
-      titulo: campo?.label || campo?.titulo || formatarTitulo(campo?.nome || campo?.chave || campo?.id || chave),
-      descricao: campo?.descricao || campo?.description || '',
-      permitido: campo?.permitido ?? campo?.enabled ?? campo?.habilitado ?? campo?.valor ?? campo?.value ?? false,
+      titulo,
+      descricao,
+      permitido: acao?.permitido ?? acao?.enabled ?? acao?.habilitado ?? acao?.valor ?? acao?.value ?? false,
+      tipo: 'acao',
+      acao: acao?.acao || acao?.nome || chave,
+      acaoChave: chave,
+      origem: acao,
+    };
+  }
+
+  function normalizarColuna(coluna, indice, acao) {
+    const baseChave = normalizarChave(coluna?.chave || coluna?.nome || coluna?.campo || coluna?.coluna, `coluna_${indice + 1}`);
+    const chave = normalizarChave(`${acao.acaoChave}_${baseChave}`) || baseChave;
+    const tituloBase = coluna?.titulo || coluna?.label || coluna?.nome || coluna?.campo || coluna?.coluna || baseChave;
+    return {
+      chave,
+      titulo: coluna?.titulo || coluna?.label || `${acao.titulo} - ${formatarTitulo(tituloBase)}`,
+      descricao: coluna?.descricao || coluna?.description || '',
+      permitido: coluna?.permitido ?? coluna?.enabled ?? coluna?.habilitado ?? coluna?.valor ?? coluna?.value ?? false,
+      tipo: 'coluna',
+      acao: acao.acao,
+      acaoChave: acao.acaoChave,
+      coluna: coluna?.campo || coluna?.coluna || coluna?.nome || baseChave,
+      colunaChave: baseChave,
+      origem: coluna,
     };
   }
 
   function normalizarModulo(modulo, indice) {
-    const chave = normalizarChave(modulo?.modulo || modulo?.chave || modulo?.nome || modulo?.id, `modulo_${indice + 1}`);
-    const titulo = modulo?.titulo || modulo?.label || modulo?.nome || formatarTitulo(chave);
+    const chave = normalizarChave(modulo?.chave || modulo?.modulo || modulo?.nome || modulo?.id, `modulo_${indice + 1}`);
+    const titulo = modulo?.titulo || modulo?.label || modulo?.nome || formatarTitulo(modulo?.modulo || chave);
     const descricao = modulo?.descricao || modulo?.description || '';
-    const camposOrigem = Array.isArray(modulo?.campos)
+    const permissoesOrigem = Array.isArray(modulo?.campos)
       ? modulo.campos
       : Array.isArray(modulo?.acoes)
       ? modulo.acoes
       : Array.isArray(modulo?.permissoes)
       ? modulo.permissoes
       : [];
-    const campos = camposOrigem.map((campo, idx) => normalizarCampo(campo, idx));
-    return { chave, titulo, descricao, campos };
+
+    const campos = [];
+    permissoesOrigem.forEach((entrada, idx) => {
+      const acao = normalizarAcao(entrada, idx);
+      campos.push(acao);
+      const colunasOrigem = Array.isArray(entrada?.colunas)
+        ? entrada.colunas
+        : Array.isArray(entrada?.campos)
+        ? entrada.campos
+        : [];
+      colunasOrigem.forEach((coluna, colunaIdx) => {
+        campos.push(normalizarColuna(coluna, colunaIdx, acao));
+      });
+    });
+
+    return {
+      chave,
+      identificador: modulo?.chave || modulo?.slug || modulo?.id || chave,
+      modulo: modulo?.modulo || modulo?.nome || modulo?.label || chave,
+      titulo,
+      descricao,
+      campos,
+    };
   }
 
   function clonarEstrutura(estrutura) {
@@ -129,65 +176,114 @@
   }
 
   function normalizarModelo(modelo, indice) {
-    const permissoesOrigem = Array.isArray(modelo?.permissoes) ? modelo.permissoes : [];
+    const permissoesOrigem =
+      modelo?.permissoes && typeof modelo.permissoes === 'object' ? modelo.permissoes : {};
     return {
       id: modelo?.id ?? modelo?.uuid ?? modelo?.codigo ?? modelo?.slug ?? `modelo_${indice + 1}`,
       nome: modelo?.nome || modelo?.titulo || modelo?.label || `Modelo ${indice + 1}`,
       descricao: modelo?.descricao || modelo?.detalhes || '',
-      permissoes: permissoesOrigem.map((modulo, idx) => normalizarModulo(modulo, idx)),
+      permissoes: permissoesOrigem,
     };
   }
 
-  function extrairEstruturaBase(modelos) {
+  function construirMapaPermissoes(permissoes) {
     const mapa = new Map();
-    modelos.forEach((modelo) => {
-      modelo.permissoes.forEach((modulo) => {
-        if (!mapa.has(modulo.chave)) {
-          mapa.set(modulo.chave, {
-            chave: modulo.chave,
-            titulo: modulo.titulo,
-            descricao: modulo.descricao,
-            campos: modulo.campos.map((campo) => ({
-              ...campo,
-              permitido: false,
-            })),
-          });
-        } else {
-          const existente = mapa.get(modulo.chave);
-          modulo.campos.forEach((campo) => {
-            if (!existente.campos.some((c) => c.chave === campo.chave)) {
-              existente.campos.push({ ...campo, permitido: false });
-            }
+    if (!permissoes) return mapa;
+
+    if (Array.isArray(permissoes)) {
+      permissoes.forEach((modulo) => {
+        if (!modulo) return;
+        const chaveModulo = normalizarChave(modulo?.chave || modulo?.modulo || modulo?.nome);
+        if (!chaveModulo) return;
+        if (!mapa.has(chaveModulo)) {
+          mapa.set(chaveModulo, new Map());
+        }
+        const mapaAcoes = mapa.get(chaveModulo);
+        const campos = Array.isArray(modulo?.campos)
+          ? modulo.campos
+          : Array.isArray(modulo?.acoes)
+          ? modulo.acoes
+          : Array.isArray(modulo?.permissoes)
+          ? modulo.permissoes
+          : [];
+        campos.forEach((campo) => {
+          if (!campo) return;
+          const acaoChave = normalizarChave(campo?.acao || campo?.nome || campo?.chave);
+          if (!acaoChave) return;
+          mapaAcoes.set(acaoChave, campo);
+        });
+      });
+      return mapa;
+    }
+
+    if (typeof permissoes === 'object') {
+      Object.entries(permissoes).forEach(([moduloId, acoes]) => {
+        const chaveModulo = normalizarChave(moduloId);
+        if (!chaveModulo) return;
+        if (!mapa.has(chaveModulo)) {
+          mapa.set(chaveModulo, new Map());
+        }
+        const mapaAcoes = mapa.get(chaveModulo);
+        if (acoes && typeof acoes === 'object') {
+          Object.entries(acoes).forEach(([acaoId, acaoValor]) => {
+            const acaoChave = normalizarChave(acaoId);
+            if (!acaoChave) return;
+            mapaAcoes.set(acaoChave, acaoValor);
           });
         }
       });
-    });
-    return Array.from(mapa.values());
+    }
+
+    return mapa;
   }
 
   function aplicarModeloNaEstruturaBase(permissoes) {
-    const base = clonarEstrutura(state.estruturaBase.length ? state.estruturaBase : permissoes);
-    const mapaModulos = new Map(permissoes.map((modulo) => [modulo.chave, modulo]));
+    const baseReferencia = state.estruturaBase.length ? state.estruturaBase : [];
+    const base = clonarEstrutura(baseReferencia);
+    const mapaPermissoes = construirMapaPermissoes(permissoes);
+
     base.forEach((modulo) => {
-      const selecionado = mapaModulos.get(modulo.chave);
-      if (!selecionado) return;
-      const mapaCampos = new Map(selecionado.campos.map((campo) => [campo.chave, campo]));
+      const chaveModulo = normalizarChave(modulo?.chave || modulo?.identificador || modulo?.modulo);
+      const mapaAcoes = mapaPermissoes.get(chaveModulo);
+      if (!mapaAcoes) {
+        modulo.campos.forEach((campo) => {
+          campo.permitido = false;
+        });
+        return;
+      }
       modulo.campos.forEach((campo) => {
-        if (mapaCampos.has(campo.chave)) {
-          campo.permitido = Boolean(mapaCampos.get(campo.chave)?.permitido);
+        const acaoChave = normalizarChave(campo.acaoChave || campo.acao || campo.chave);
+        const acaoValor = mapaAcoes.get(acaoChave);
+        if (!acaoValor) {
+          campo.permitido = false;
+          return;
+        }
+        if (campo.tipo === 'acao') {
+          let permitido = Boolean(acaoValor?.permitido ?? acaoValor?.enabled ?? acaoValor);
+          if (!permitido && acaoValor && typeof acaoValor === 'object' && acaoValor.campos) {
+            permitido = Object.values(acaoValor.campos).some((valorCampo) => {
+              if (!valorCampo) return false;
+              if (typeof valorCampo === 'object') {
+                return Object.values(valorCampo).some(Boolean);
+              }
+              return Boolean(valorCampo);
+            });
+          }
+          campo.permitido = permitido;
+        } else if (campo.tipo === 'coluna') {
+          const campoValor =
+            acaoValor?.campos?.[campo.coluna] ??
+            acaoValor?.campos?.[campo.colunaChave] ??
+            acaoValor?.campos?.[normalizarChave(campo.coluna)];
+          if (campoValor && typeof campoValor === 'object') {
+            campo.permitido = Boolean(
+              campoValor[campo.acaoChave] ?? campoValor[campo.acao] ?? campoValor.permitido ?? campoValor.valor
+            );
+          } else {
+            campo.permitido = Boolean(campoValor);
+          }
         }
       });
-    });
-
-    permissoes.forEach((modulo) => {
-      if (!base.some((item) => item.chave === modulo.chave)) {
-        base.push({
-          chave: modulo.chave,
-          titulo: modulo.titulo,
-          descricao: modulo.descricao,
-          campos: modulo.campos.map((campo) => ({ ...campo })),
-        });
-      }
     });
 
     return base;
@@ -429,39 +525,46 @@
     });
   }
 
-  async function carregarEstruturaBaseSeNecessario() {
-    if (state.estruturaBase.length) {
-      state.estruturaBase = clonarEstrutura(state.estruturaBase.map((modulo, idx) => normalizarModulo(modulo, idx)));
+  async function carregarEstruturaBase() {
+    if (state.estruturaCarregada) {
+      state.estruturaBase = clonarEstrutura(state.estruturaBase);
       return;
     }
+
+    let estruturaNormalizada = [];
     try {
       const resp = await fetchApi('/api/usuarios/permissoes/estrutura');
       if (resp.ok) {
         const data = await resp.json();
-        if (Array.isArray(data)) {
-          state.estruturaBase = data.map((modulo, idx) => {
-            const normalizado = normalizarModulo(modulo, idx);
-            normalizado.campos.forEach((campo) => {
-              campo.permitido = false;
-            });
-            return normalizado;
+        const lista = Array.isArray(data?.estrutura) ? data.estrutura : Array.isArray(data) ? data : [];
+        estruturaNormalizada = lista.map((modulo, idx) => {
+          const normalizado = normalizarModulo(modulo, idx);
+          normalizado.campos.forEach((campo) => {
+            campo.permitido = false;
           });
-          return;
-        }
-        if (Array.isArray(data?.estrutura)) {
-          state.estruturaBase = data.estrutura.map((modulo, idx) => {
-            const normalizado = normalizarModulo(modulo, idx);
-            normalizado.campos.forEach((campo) => {
-              campo.permitido = false;
-            });
-            return normalizado;
-          });
-          return;
-        }
+          return normalizado;
+        });
       }
     } catch (err) {
       console.warn('Não foi possível carregar a estrutura base de permissões', err);
     }
+
+    if (!estruturaNormalizada.length && Array.isArray(context.estrutura)) {
+      estruturaNormalizada = context.estrutura.map((modulo, idx) => {
+        const normalizado = normalizarModulo(modulo, idx);
+        normalizado.campos.forEach((campo) => {
+          campo.permitido = false;
+        });
+        return normalizado;
+      });
+    }
+
+    if (!estruturaNormalizada.length && state.estruturaBase.length) {
+      estruturaNormalizada = clonarEstrutura(state.estruturaBase);
+    }
+
+    state.estruturaBase = estruturaNormalizada;
+    state.estruturaCarregada = true;
   }
 
   async function carregarModelosDisponiveis() {
@@ -476,7 +579,7 @@
       const lista = Array.isArray(data?.modelos) ? data.modelos : Array.isArray(data) ? data : [];
       state.modelos = lista.map((modelo, idx) => normalizarModelo(modelo, idx));
 
-      if (!state.estruturaBase.length) {
+      if (!state.estruturaCarregada) {
         const baseRemota = Array.isArray(data?.estrutura) ? data.estrutura : [];
         if (baseRemota.length) {
           state.estruturaBase = baseRemota.map((modulo, idx) => {
@@ -486,15 +589,10 @@
             });
             return normalizado;
           });
+          state.estruturaCarregada = true;
+        } else {
+          await carregarEstruturaBase();
         }
-      }
-
-      if (!state.estruturaBase.length) {
-        state.estruturaBase = extrairEstruturaBase(state.modelos);
-      }
-
-      if (!state.estruturaBase.length) {
-        await carregarEstruturaBaseSeNecessario();
       }
 
       renderListaModelos();
@@ -511,6 +609,46 @@
       state.carregando = false;
       definirLoading(elementos.carregarBtn, false);
     }
+  }
+
+  function montarPayloadPermissoes() {
+    const resultado = {};
+
+    state.permissoes.forEach((modulo) => {
+      if (!modulo) return;
+      const moduloKey = normalizarChave(modulo.identificador || modulo.chave || modulo.modulo);
+      if (!moduloKey) return;
+      const permissoesModulo = resultado[moduloKey] || {};
+
+      modulo.campos.forEach((campo) => {
+        if (!campo) return;
+        const acaoKey = normalizarChave(campo.acaoChave || campo.acao || campo.chave);
+        if (!acaoKey) return;
+        const destino = permissoesModulo[acaoKey] || {};
+        if (campo.tipo === 'acao') {
+          destino.permitido = Boolean(campo.permitido);
+        } else if (campo.tipo === 'coluna') {
+          if (!destino.campos) destino.campos = {};
+          const colunaKey = campo.coluna || campo.colunaChave || campo.chave;
+          if (colunaKey) {
+            if (!destino.campos[colunaKey]) {
+              destino.campos[colunaKey] = {};
+            }
+            destino.campos[colunaKey][acaoKey] = Boolean(campo.permitido);
+            if (campo.permitido) {
+              destino.permitido = true;
+            }
+          }
+        }
+        permissoesModulo[acaoKey] = destino;
+      });
+
+      if (Object.keys(permissoesModulo).length) {
+        resultado[moduloKey] = permissoesModulo;
+      }
+    });
+
+    return resultado;
   }
 
   function selecionarModeloPorId(id) {
@@ -548,8 +686,8 @@
 
   elementos.novoBtn?.addEventListener('click', async () => {
     if (!state.modoNovo) {
-      if (!state.estruturaBase.length) {
-        await carregarEstruturaBaseSeNecessario();
+      if (!state.estruturaCarregada) {
+        await carregarEstruturaBase();
       }
       alternarModoNovo(true);
     } else {
@@ -571,19 +709,10 @@
       return;
     }
 
+    const permissoesPayload = montarPayloadPermissoes();
     const payload = {
       nome: '',
-      permissoes: state.permissoes.map((modulo) => ({
-        modulo: modulo.chave,
-        titulo: modulo.titulo,
-        descricao: modulo.descricao,
-        campos: modulo.campos.map((campo) => ({
-          nome: campo.chave,
-          titulo: campo.titulo,
-          descricao: campo.descricao,
-          permitido: Boolean(campo.permitido),
-        })),
-      })),
+      permissoes: permissoesPayload,
     };
 
     let metodo = 'PUT';
@@ -621,7 +750,8 @@
         throw new Error(texto || 'Falha ao salvar o modelo de permissões.');
       }
       const salvo = await resp.json();
-      const normalizado = normalizarModelo(salvo, state.modelos.length);
+      const recebido = salvo?.modelo ?? salvo;
+      const normalizado = normalizarModelo(recebido, state.modelos.length);
       if (metodo === 'POST') {
         state.modelos.push(normalizado);
         state.modeloAtual = normalizado;
@@ -690,6 +820,6 @@
   elementos.salvarBtn?.addEventListener('click', salvarModelo);
   elementos.excluirBtn?.addEventListener('click', excluirModelo);
 
-  await carregarEstruturaBaseSeNecessario();
+  await carregarEstruturaBase();
   await carregarModelosDisponiveis();
 })();

@@ -6,6 +6,32 @@ const ACTION_COLUMN_CANDIDATES = ['acao', 'funcao', 'action', 'function'];
 const ALLOWED_COLUMN_CANDIDATES = ['permitido', 'allowed', 'permitted', 'habilitado', 'enabled', 'ativo', 'active'];
 const SCOPE_COLUMN_CANDIDATES = ['escopos', 'scopes', 'scope'];
 const FIELD_COLUMN_CANDIDATES = ['campo', 'coluna', 'column', 'field'];
+const MODULE_TITLE_COLUMN_CANDIDATES = ['modulo_titulo', 'module_title', 'modulo_label', 'module_label', 'modulo_nome', 'module_name'];
+const MODULE_DESCRIPTION_COLUMN_CANDIDATES = [
+  'modulo_descricao',
+  'module_description',
+  'modulo_desc',
+  'module_desc',
+  'modulo_detalhes',
+  'module_details'
+];
+const ACTION_TITLE_COLUMN_CANDIDATES = ['acao_titulo', 'action_title', 'funcao_titulo', 'acao_label', 'action_label'];
+const ACTION_DESCRIPTION_COLUMN_CANDIDATES = [
+  'acao_descricao',
+  'action_description',
+  'funcao_descricao',
+  'acao_desc',
+  'action_desc',
+  'funcao_desc'
+];
+const FIELD_TITLE_COLUMN_CANDIDATES = ['campo_titulo', 'coluna_titulo', 'field_title', 'campo_label', 'field_label'];
+const FIELD_DESCRIPTION_COLUMN_CANDIDATES = [
+  'campo_descricao',
+  'coluna_descricao',
+  'field_description',
+  'campo_desc',
+  'field_desc'
+];
 
 function normalizeIdentifier(value) {
   if (value === null || value === undefined) return '';
@@ -16,6 +42,30 @@ function normalizeIdentifier(value) {
     .replace(/_{2,}/g, '_')
     .replace(/^_|_$/g, '')
     .toLowerCase();
+}
+
+function formatDisplayName(value, fallback) {
+  const base = value === null || value === undefined || value === '' ? fallback : value;
+  if (base === null || base === undefined) return '';
+  return String(base)
+    .replace(/[._-]+/g, ' ')
+    .split(' ')
+    .filter(Boolean)
+    .map(part => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+}
+
+function assignIfPresent(target, key, value) {
+  if (!value) {
+    return;
+  }
+  if (!target[key]) {
+    target[key] = value;
+    return;
+  }
+  if (typeof target[key] === 'string' && target[key].trim() === '') {
+    target[key] = value;
+  }
 }
 
 function booleanFromValue(value) {
@@ -433,9 +483,249 @@ async function savePermissionsForRole(client, roleId, permissoes, existingCatalo
   }
 }
 
+async function buildPermissionsStructure(client, existingCatalog) {
+  const catalog = existingCatalog || (await loadPermissionsCatalog(client));
+  const modules = new Map();
+
+  const ensureModule = (moduleKey, initial = {}) => {
+    if (!moduleKey) {
+      return null;
+    }
+    const key = normalizeIdentifier(moduleKey);
+    if (!key) {
+      return null;
+    }
+    let entry = modules.get(key);
+    if (!entry) {
+      entry = {
+        chave: key,
+        modulo: moduleKey,
+        titulo: formatDisplayName(moduleKey),
+        descricao: '',
+        campos: new Map()
+      };
+      modules.set(key, entry);
+    }
+    if (initial.titulo) {
+      assignIfPresent(entry, 'titulo', initial.titulo);
+    }
+    if (initial.descricao) {
+      assignIfPresent(entry, 'descricao', initial.descricao);
+    }
+    if (initial.modulo) {
+      assignIfPresent(entry, 'modulo', initial.modulo);
+    }
+    return entry;
+  };
+
+  const ensureAction = (moduleEntry, actionName, initial = {}) => {
+    if (!moduleEntry) {
+      return null;
+    }
+    const actionKey = normalizeIdentifier(actionName || initial.chave || initial.nome);
+    if (!actionKey) {
+      return null;
+    }
+    let actionEntry = moduleEntry.campos.get(actionKey);
+    if (!actionEntry) {
+      actionEntry = {
+        chave: actionKey,
+        acao: actionName || initial.nome || actionKey,
+        titulo: formatDisplayName(actionName || initial.nome || actionKey),
+        descricao: '',
+        colunas: new Map()
+      };
+      moduleEntry.campos.set(actionKey, actionEntry);
+    }
+    if (initial.titulo) {
+      assignIfPresent(actionEntry, 'titulo', initial.titulo);
+    }
+    if (initial.descricao) {
+      assignIfPresent(actionEntry, 'descricao', initial.descricao);
+    }
+    if (initial.acao) {
+      assignIfPresent(actionEntry, 'acao', initial.acao);
+    }
+    return actionEntry;
+  };
+
+  const ensureField = (actionEntry, fieldName, initial = {}) => {
+    if (!actionEntry) {
+      return null;
+    }
+    const fieldKey = normalizeIdentifier(fieldName || initial.nome);
+    if (!fieldKey) {
+      return null;
+    }
+    let fieldEntry = actionEntry.colunas.get(fieldKey);
+    if (!fieldEntry) {
+      fieldEntry = {
+        chave: fieldKey,
+        campo: fieldName || initial.nome || fieldKey,
+        titulo: formatDisplayName(fieldName || initial.nome || fieldKey),
+        descricao: ''
+      };
+      actionEntry.colunas.set(fieldKey, fieldEntry);
+    }
+    if (initial.titulo) {
+      assignIfPresent(fieldEntry, 'titulo', initial.titulo);
+    }
+    if (initial.descricao) {
+      assignIfPresent(fieldEntry, 'descricao', initial.descricao);
+    }
+    if (initial.campo) {
+      assignIfPresent(fieldEntry, 'campo', initial.campo);
+    }
+    return fieldEntry;
+  };
+
+  for (const moduleMeta of catalog.modules.values()) {
+    const moduleEntry = ensureModule(moduleMeta.name || moduleMeta.key, {
+      modulo: moduleMeta.name || moduleMeta.key,
+      titulo: moduleMeta.name,
+      descricao: moduleMeta.description
+    });
+    if (!moduleEntry) {
+      continue;
+    }
+    for (const actionMeta of moduleMeta.actions.values()) {
+      ensureAction(moduleEntry, actionMeta.name || actionMeta.key, {
+        titulo: actionMeta.name,
+        acao: actionMeta.name || actionMeta.key
+      });
+    }
+  }
+
+  const matrixColumns = catalog.matrix.table
+    ? await getTableColumns(client, catalog.matrix.table)
+    : [];
+  const moduleTitleColumn = detectColumn(matrixColumns, MODULE_TITLE_COLUMN_CANDIDATES);
+  const moduleDescriptionColumn = detectColumn(matrixColumns, MODULE_DESCRIPTION_COLUMN_CANDIDATES);
+  const actionTitleColumn = detectColumn(matrixColumns, ACTION_TITLE_COLUMN_CANDIDATES);
+  const actionDescriptionColumn = detectColumn(matrixColumns, ACTION_DESCRIPTION_COLUMN_CANDIDATES);
+
+  if (catalog.matrix.moduleColumn) {
+    const selectParts = [`${catalog.matrix.moduleColumn} AS modulo`];
+    if (moduleTitleColumn) {
+      selectParts.push(`${moduleTitleColumn} AS modulo_titulo`);
+    }
+    if (moduleDescriptionColumn) {
+      selectParts.push(`${moduleDescriptionColumn} AS modulo_descricao`);
+    }
+    if (catalog.matrix.actionColumn) {
+      selectParts.push(`${catalog.matrix.actionColumn} AS acao`);
+      if (actionTitleColumn) {
+        selectParts.push(`${actionTitleColumn} AS acao_titulo`);
+      }
+      if (actionDescriptionColumn) {
+        selectParts.push(`${actionDescriptionColumn} AS acao_descricao`);
+      }
+    }
+    const query = `SELECT DISTINCT ${selectParts.join(', ')} FROM ${catalog.matrix.table} WHERE ${catalog.matrix.moduleColumn} IS NOT NULL`;
+    const { rows } = await runQuery(client, query);
+    for (const row of rows) {
+      const moduleEntry = ensureModule(row.modulo, {
+        titulo: row.modulo_titulo,
+        descricao: row.modulo_descricao
+      });
+      if (!moduleEntry || !catalog.matrix.actionColumn) {
+        continue;
+      }
+      const actionEntry = ensureAction(moduleEntry, row.acao, {
+        titulo: row.acao_titulo,
+        descricao: row.acao_descricao
+      });
+      if (actionEntry && row.acao) {
+        assignIfPresent(actionEntry, 'acao', row.acao);
+      }
+    }
+  }
+
+  for (const tableInfo of catalog.permTables.values()) {
+    if (!tableInfo.table || !tableInfo.actionColumn || !tableInfo.fieldColumn) {
+      continue;
+    }
+    const columns = await getTableColumns(client, tableInfo.table);
+    const fieldTitleColumn = detectColumn(columns, FIELD_TITLE_COLUMN_CANDIDATES);
+    const fieldDescriptionColumn = detectColumn(columns, FIELD_DESCRIPTION_COLUMN_CANDIDATES);
+    const actionTitleColumnTable = detectColumn(columns, ACTION_TITLE_COLUMN_CANDIDATES);
+    const actionDescriptionColumnTable = detectColumn(columns, ACTION_DESCRIPTION_COLUMN_CANDIDATES);
+    const moduleColumnCandidate = detectColumn(columns, MODULE_COLUMN_CANDIDATES);
+
+    const selectParts = [
+      `${tableInfo.fieldColumn} AS campo`,
+      `${tableInfo.actionColumn} AS acao`
+    ];
+    if (fieldTitleColumn) {
+      selectParts.push(`${fieldTitleColumn} AS campo_titulo`);
+    }
+    if (fieldDescriptionColumn) {
+      selectParts.push(`${fieldDescriptionColumn} AS campo_descricao`);
+    }
+    if (actionTitleColumnTable) {
+      selectParts.push(`${actionTitleColumnTable} AS acao_titulo`);
+    }
+    if (actionDescriptionColumnTable) {
+      selectParts.push(`${actionDescriptionColumnTable} AS acao_descricao`);
+    }
+    if (moduleColumnCandidate) {
+      selectParts.push(`${moduleColumnCandidate} AS modulo`);
+    }
+
+    const query = `SELECT DISTINCT ${selectParts.join(', ')} FROM ${tableInfo.table} WHERE ${tableInfo.fieldColumn} IS NOT NULL`;
+    const { rows } = await runQuery(client, query);
+    for (const row of rows) {
+      const moduleEntry = ensureModule(row.modulo || tableInfo.moduleKey, {
+        modulo: row.modulo || tableInfo.moduleKey
+      });
+      const actionEntry = ensureAction(moduleEntry, row.acao, {
+        titulo: row.acao_titulo,
+        descricao: row.acao_descricao
+      });
+      ensureField(actionEntry, row.campo, {
+        titulo: row.campo_titulo,
+        descricao: row.campo_descricao,
+        campo: row.campo
+      });
+    }
+  }
+
+  const resultado = [];
+  for (const moduleEntry of modules.values()) {
+    const campos = [];
+    for (const actionEntry of moduleEntry.campos.values()) {
+      const colunas = Array.from(actionEntry.colunas.values()).map(field => ({
+        ...field,
+        nome: field.chave,
+        permitido: false
+      }));
+      campos.push({
+        chave: actionEntry.chave,
+        acao: actionEntry.acao,
+        titulo: actionEntry.titulo,
+        descricao: actionEntry.descricao,
+        permitido: false,
+        colunas
+      });
+    }
+    campos.sort((a, b) => a.titulo.localeCompare(b.titulo, 'pt-BR'));
+    resultado.push({
+      chave: moduleEntry.chave,
+      modulo: moduleEntry.modulo,
+      titulo: moduleEntry.titulo,
+      descricao: moduleEntry.descricao,
+      campos
+    });
+  }
+
+  resultado.sort((a, b) => a.titulo.localeCompare(b.titulo, 'pt-BR'));
+  return resultado;
+}
+
 module.exports = {
   loadPermissionsCatalog,
   loadPermissionsForRole,
   savePermissionsForRole,
-  deletePermissionsForRole
+  deletePermissionsForRole,
+  buildPermissionsStructure
 };

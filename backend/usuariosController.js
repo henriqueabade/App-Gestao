@@ -16,6 +16,7 @@ const {
 const { sendSupAdminReviewNotification } = require('../src/email/sendSupAdminReviewNotification');
 const { sendUserActivationNotice } = require('../src/email/sendUserActivationNotice');
 const { sendEmailChangeConfirmation } = require('../src/email/sendEmailChangeConfirmation');
+const { buildPermissionsStructure } = require('./permissionsCatalogRepository');
 
 const router = express.Router();
 
@@ -1851,6 +1852,27 @@ function formatarModeloPermissoes(modelo) {
     atualizadoEm: parseData(modelo.atualizadoEm)
   };
 }
+
+router.get('/permissoes/estrutura', autenticarUsuario, async (req, res) => {
+  const solicitante = await garantirSupAdmin(req, res);
+  if (!solicitante) {
+    return null;
+  }
+
+  let client;
+  try {
+    client = await pool.connect();
+    const estrutura = await buildPermissionsStructure(client);
+    return res.json({ estrutura });
+  } catch (err) {
+    console.error('Erro ao carregar estrutura de permissões:', err);
+    return res.status(500).json({ error: 'Erro ao carregar estrutura de permissões.' });
+  } finally {
+    if (client) {
+      client.release();
+    }
+  }
+});
 
 router.get('/modelos-permissoes', autenticarUsuario, async (req, res) => {
   const solicitante = await garantirSupAdmin(req, res);

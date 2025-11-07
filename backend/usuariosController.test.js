@@ -224,6 +224,54 @@ test('modelos de permissões requerem Sup Admin', async () => {
   }
 });
 
+test('GET /api/usuarios/permissoes/estrutura exige Sup Admin e retorna estrutura completa', async () => {
+  const { listen, close, pool } = setup();
+  const port = await listen();
+
+  try {
+    const negado = await authenticatedFetch(port, '/api/usuarios/permissoes/estrutura');
+    assert.strictEqual(negado.status, 403);
+
+    await pool.query(
+      "INSERT INTO roles_modules_matrix (modelo_id, modulo, acao, permitido) VALUES (1, 'usuarios', 'listar', true)"
+    );
+    await pool.query(
+      "INSERT INTO roles_modules_matrix (modelo_id, modulo, acao, permitido) VALUES (1, 'usuarios', 'editar', true)"
+    );
+    await pool.query(
+      "INSERT INTO roles_modules_matrix (modelo_id, modulo, acao, permitido) VALUES (1, 'clientes', 'visualizar', true)"
+    );
+    await pool.query(
+      "INSERT INTO perm_usuarios (modelo_id, campo, acao, permitido) VALUES (1, 'email', 'editar', true)"
+    );
+
+    const permitido = await authenticatedFetch(port, '/api/usuarios/permissoes/estrutura', { usuarioId: 2 });
+    assert.strictEqual(permitido.status, 200);
+    const corpo = await permitido.json();
+    assert.ok(Array.isArray(corpo.estrutura));
+
+    const moduloUsuarios = corpo.estrutura.find(item => item.chave === 'usuarios' || item.modulo === 'usuarios');
+    assert.ok(moduloUsuarios, 'Estrutura deveria incluir módulo de usuários.');
+    assert.ok(Array.isArray(moduloUsuarios.campos));
+
+    const acaoEditar = moduloUsuarios.campos.find(campo => campo.chave === 'editar');
+    assert.ok(acaoEditar, 'Deveria existir ação editar para usuários.');
+    assert.strictEqual(acaoEditar.acao, 'editar');
+    assert.strictEqual(acaoEditar.titulo, 'Editar');
+    assert.ok(Array.isArray(acaoEditar.colunas));
+    const colunaEmail = acaoEditar.colunas.find(coluna => coluna.campo === 'email');
+    assert.ok(colunaEmail, 'Deveria existir coluna email na ação editar.');
+    assert.strictEqual(colunaEmail.titulo, 'Email');
+
+    const moduloClientes = corpo.estrutura.find(item => item.chave === 'clientes' || item.modulo === 'clientes');
+    assert.ok(moduloClientes, 'Estrutura deveria incluir módulo de clientes.');
+    const acaoVisualizar = moduloClientes.campos.find(campo => campo.chave === 'visualizar');
+    assert.ok(acaoVisualizar, 'Deveria existir ação visualizar para clientes.');
+  } finally {
+    await close();
+  }
+});
+
 test('GET /api/usuarios/lista inclui avatarUrl apontando para rota pública', async () => {
   const { pool, listen, close } = setup();
   const port = await listen();
