@@ -522,81 +522,6 @@ const telefoneColunasPreferidas = ['telefone', 'telefone_usuario', 'telefone_pri
 const celularColunasPreferidas = ['telefone_celular', 'celular', 'celular_usuario'];
 const whatsappColunasPreferidas = ['whatsapp', 'whatsapp_usuario'];
 
-const PERMISSOES_CATALOGO = {
-  clientes: {
-    label: 'Clientes',
-    aliases: ['cliente'],
-    acoes: {
-      visualizar: { label: 'Visualizar', aliases: ['ver', 'view', 'read', 'ler'] },
-      editar: { label: 'Editar', aliases: ['edit', 'write', 'atualizar', 'update'] },
-      inserir: { label: 'Inserir', aliases: ['criar', 'create', 'add', 'adicionar', 'incluir'] },
-      excluir: { label: 'Excluir', aliases: ['remover', 'delete', 'remove', 'apagar'] },
-      exportar: { label: 'Exportar', aliases: ['export'] }
-    }
-  },
-  pedidos: {
-    label: 'Pedidos',
-    aliases: ['pedido'],
-    acoes: {
-      visualizar: { label: 'Visualizar', aliases: ['ver', 'view', 'read', 'ler'] },
-      editar: { label: 'Editar', aliases: ['edit', 'write', 'atualizar', 'update'] },
-      criar: { label: 'Criar', aliases: ['inserir', 'create', 'add', 'adicionar', 'incluir'] },
-      cancelar: { label: 'Cancelar', aliases: ['cancel'] },
-      exportar: { label: 'Exportar', aliases: ['export'] }
-    }
-  },
-  orcamentos: {
-    label: 'Orçamentos',
-    aliases: ['orcamento', 'cotacoes', 'cotacao'],
-    acoes: {
-      visualizar: { label: 'Visualizar', aliases: ['ver', 'view', 'read', 'ler'] },
-      editar: { label: 'Editar', aliases: ['edit', 'write', 'atualizar', 'update'] },
-      criar: { label: 'Criar', aliases: ['inserir', 'create', 'add', 'adicionar', 'incluir'] },
-      aprovar: { label: 'Aprovar', aliases: ['approve'] },
-      enviar: { label: 'Enviar', aliases: ['send'] }
-    }
-  },
-  produtos: {
-    label: 'Produtos',
-    aliases: ['produto', 'itens', 'item'],
-    acoes: {
-      visualizar: { label: 'Visualizar', aliases: ['ver', 'view', 'read', 'ler'] },
-      editar: { label: 'Editar', aliases: ['edit', 'write', 'atualizar', 'update'] },
-      inserir: { label: 'Inserir', aliases: ['criar', 'create', 'add', 'adicionar', 'incluir'] },
-      inativar: { label: 'Inativar', aliases: ['desativar', 'disable'] },
-      exportar: { label: 'Exportar', aliases: ['export'] }
-    }
-  },
-  financeiro: {
-    label: 'Financeiro',
-    aliases: ['financeiro', 'finance'],
-    acoes: {
-      visualizar: { label: 'Visualizar', aliases: ['ver', 'view', 'read', 'ler'] },
-      editar: { label: 'Editar', aliases: ['edit', 'write', 'atualizar', 'update'] },
-      aprovar: { label: 'Aprovar', aliases: ['approve'] },
-      exportar: { label: 'Exportar', aliases: ['export'] }
-    }
-  },
-  relatorios: {
-    label: 'Relatórios',
-    aliases: ['relatorio', 'reports', 'report'],
-    acoes: {
-      visualizar: { label: 'Visualizar', aliases: ['ver', 'view', 'read', 'ler'] },
-      exportar: { label: 'Exportar', aliases: ['export'] }
-    }
-  },
-  usuarios: {
-    label: 'Usuários',
-    aliases: ['usuario', 'users', 'user'],
-    acoes: {
-      visualizar: { label: 'Visualizar', aliases: ['ver', 'view', 'read', 'ler'] },
-      editar: { label: 'Editar', aliases: ['edit', 'write', 'atualizar', 'update'] },
-      permissoes: { label: 'Gerenciar permissões', aliases: ['permissoes', 'permissions', 'permissao', 'permission', 'roles'] },
-      aprovar: { label: 'Aprovar', aliases: ['approve'] }
-    }
-  }
-};
-
 const ESCOPO_ALIASES = new Map([
   ['ver', 'visualizar'],
   ['visualizar', 'visualizar'],
@@ -662,26 +587,186 @@ const ESCOPOS_IGNORE_KEYS = new Set([
 
 const PERMISSOES_MODULO_MAP = new Map();
 const PERMISSOES_ACAO_MAP = new Map();
+let permissoesEstruturaCache = null;
+let permissoesEstruturaPromise = null;
 
-for (const [modulo, config] of Object.entries(PERMISSOES_CATALOGO)) {
-  const moduloNormalized = normalizeKey(modulo);
-  PERMISSOES_MODULO_MAP.set(moduloNormalized, modulo);
-  if (Array.isArray(config.aliases)) {
-    for (const alias of config.aliases) {
-      PERMISSOES_MODULO_MAP.set(normalizeKey(alias), modulo);
-    }
+function sanitizeIdentifier(value) {
+  if (value === null || value === undefined) {
+    return null;
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    return trimmed ? trimmed : null;
+  }
+  if (typeof value === 'number' || typeof value === 'boolean') {
+    return String(value);
+  }
+  return null;
+}
+
+function registerModuleAlias(canonicalModule, alias) {
+  const normalized = normalizeKey(alias);
+  if (!normalized) {
+    return;
+  }
+  PERMISSOES_MODULO_MAP.set(normalized, canonicalModule);
+}
+
+function registerActionAlias(actionMap, canonicalAction, alias) {
+  const normalized = normalizeKey(alias);
+  if (!normalized) {
+    return;
+  }
+  actionMap.set(normalized, canonicalAction);
+}
+
+function populatePermissionMapsFromStructure(estrutura) {
+  PERMISSOES_MODULO_MAP.clear();
+  PERMISSOES_ACAO_MAP.clear();
+
+  if (!Array.isArray(estrutura)) {
+    permissoesEstruturaCache = [];
+    return;
   }
 
-  const acaoMap = new Map();
-  for (const [acao, detalhes] of Object.entries(config.acoes)) {
-    acaoMap.set(normalizeKey(acao), acao);
-    if (Array.isArray(detalhes.aliases)) {
-      for (const alias of detalhes.aliases) {
-        acaoMap.set(normalizeKey(alias), acao);
+  permissoesEstruturaCache = estrutura.slice();
+
+  for (const moduloEntry of estrutura) {
+    if (!moduloEntry || typeof moduloEntry !== 'object') {
+      continue;
+    }
+
+    const moduleName =
+      sanitizeIdentifier(moduloEntry.modulo) ||
+      sanitizeIdentifier(moduloEntry.nome) ||
+      sanitizeIdentifier(moduloEntry.chave) ||
+      sanitizeIdentifier(moduloEntry.titulo);
+
+    if (!moduleName) {
+      continue;
+    }
+
+    const aliases = new Set(
+      [
+        moduloEntry.modulo,
+        moduloEntry.nome,
+        moduloEntry.chave,
+        moduloEntry.titulo,
+        ...(Array.isArray(moduloEntry.aliases) ? moduloEntry.aliases : [])
+      ].filter(Boolean)
+    );
+    aliases.add(moduleName);
+
+    for (const alias of aliases) {
+      registerModuleAlias(moduleName, alias);
+    }
+
+    let actionMap = PERMISSOES_ACAO_MAP.get(moduleName);
+    if (!actionMap) {
+      actionMap = new Map();
+      PERMISSOES_ACAO_MAP.set(moduleName, actionMap);
+    } else {
+      actionMap.clear();
+    }
+
+    if (!Array.isArray(moduloEntry.campos)) {
+      continue;
+    }
+
+    for (const acaoEntry of moduloEntry.campos) {
+      if (!acaoEntry || typeof acaoEntry !== 'object') {
+        continue;
+      }
+
+      const actionName =
+        sanitizeIdentifier(acaoEntry.acao) ||
+        sanitizeIdentifier(acaoEntry.nome) ||
+        sanitizeIdentifier(acaoEntry.chave) ||
+        sanitizeIdentifier(acaoEntry.titulo);
+
+      if (!actionName) {
+        continue;
+      }
+
+      const actionAliases = new Set(
+        [
+          acaoEntry.acao,
+          acaoEntry.nome,
+          acaoEntry.chave,
+          acaoEntry.titulo,
+          ...(Array.isArray(acaoEntry.aliases) ? acaoEntry.aliases : [])
+        ].filter(Boolean)
+      );
+      actionAliases.add(actionName);
+
+      if (actionAliases.size) {
+        for (const alias of actionAliases) {
+          registerActionAlias(actionMap, actionName, alias);
+        }
+      }
+
+      const normalizedAction = normalizeKey(actionName);
+      if (normalizedAction) {
+        for (const [aliasKey, target] of ESCOPO_ALIASES.entries()) {
+          if (target === normalizedAction) {
+            actionMap.set(aliasKey, actionName);
+          }
+        }
       }
     }
   }
-  PERMISSOES_ACAO_MAP.set(modulo, acaoMap);
+}
+
+async function ensurePermissionsMapsLoaded({ client, force = false } = {}) {
+  if (!force && PERMISSOES_MODULO_MAP.size > 0) {
+    return permissoesEstruturaCache;
+  }
+
+  if (!force && Array.isArray(permissoesEstruturaCache) && permissoesEstruturaCache.length) {
+    populatePermissionMapsFromStructure(permissoesEstruturaCache);
+    if (PERMISSOES_MODULO_MAP.size > 0) {
+      return permissoesEstruturaCache;
+    }
+  }
+
+  if (permissoesEstruturaPromise) {
+    return permissoesEstruturaPromise;
+  }
+
+  permissoesEstruturaPromise = (async () => {
+    let localClient = client;
+    let releaseClient = false;
+    try {
+      if (!localClient) {
+        localClient = await pool.connect();
+        releaseClient = true;
+      }
+      const estrutura = await buildPermissionsStructure(localClient);
+      populatePermissionMapsFromStructure(estrutura);
+      return estrutura;
+    } finally {
+      if (releaseClient && localClient) {
+        localClient.release();
+      }
+    }
+  })();
+
+  try {
+    return await permissoesEstruturaPromise;
+  } finally {
+    permissoesEstruturaPromise = null;
+  }
+}
+
+async function ensurePermissionsCatalogOrRespond(res, options = {}) {
+  try {
+    await ensurePermissionsMapsLoaded(options);
+    return true;
+  } catch (err) {
+    console.error('Erro ao carregar catálogo de permissões dinâmico:', err);
+    res.status(500).json({ error: 'Erro ao carregar catálogo de permissões.' });
+    return false;
+  }
 }
 
 function normalizeKey(value) {
@@ -958,24 +1043,45 @@ function normalizarPermissoesEstrutura(origem, { strict = true } = {}) {
   const resultado = {};
 
   const processarModulo = (identificador, valor) => {
-    const moduloKey = PERMISSOES_MODULO_MAP.get(normalizeKey(identificador));
+    const moduloNormalized = normalizeKey(identificador);
+    const moduloRegistrado = moduloNormalized ? PERMISSOES_MODULO_MAP.get(moduloNormalized) : null;
+
+    let moduloKey = moduloRegistrado;
     if (!moduloKey) {
+      const fallbackModulo = sanitizeIdentifier(identificador);
+      if (!fallbackModulo) {
+        if (strict) {
+          throw new Error(`Módulo desconhecido: ${identificador}`);
+        }
+        return;
+      }
       if (strict) {
         throw new Error(`Módulo desconhecido: ${identificador}`);
       }
-      return;
+      moduloKey = fallbackModulo;
     }
 
-    const acoesPermitidas = PERMISSOES_ACAO_MAP.get(moduloKey) || new Map();
+    const acoesPermitidas = PERMISSOES_ACAO_MAP.get(moduloRegistrado || moduloKey) || null;
     const moduloResultado = resultado[moduloKey] || {};
 
     const adicionarAcao = (acaoIdentificador, acaoValor) => {
-      const acaoKey = acoesPermitidas.get(normalizeKey(acaoIdentificador));
+      const acaoNormalized = normalizeKey(acaoIdentificador);
+      let acaoKey = acaoNormalized && acoesPermitidas ? acoesPermitidas.get(acaoNormalized) : null;
+
       if (!acaoKey) {
-        if (strict) {
+        const fallbackAcao = sanitizeIdentifier(acaoIdentificador);
+        if (!fallbackAcao) {
+          if (strict) {
+            throw new Error(`Ação desconhecida para ${moduloKey}: ${acaoIdentificador}`);
+          }
+          return;
+        }
+
+        if (strict && acoesPermitidas && acoesPermitidas.size > 0) {
           throw new Error(`Ação desconhecida para ${moduloKey}: ${acaoIdentificador}`);
         }
-        return;
+
+        acaoKey = fallbackAcao;
       }
 
       const preparado = prepararValorAcao(acaoValor);
@@ -1863,6 +1969,7 @@ router.get('/permissoes/estrutura', autenticarUsuario, async (req, res) => {
   try {
     client = await pool.connect();
     const estrutura = await buildPermissionsStructure(client);
+    populatePermissionMapsFromStructure(estrutura);
     return res.json({ estrutura });
   } catch (err) {
     console.error('Erro ao carregar estrutura de permissões:', err);
@@ -1898,6 +2005,10 @@ router.post('/modelos-permissoes', autenticarUsuario, async (req, res) => {
   const body = req.body && typeof req.body === 'object' ? req.body : {};
   const nome = body.nome ?? body.name;
   const permissoesPayload = body.permissoes ?? body.permissions ?? {};
+
+  if (!(await ensurePermissionsCatalogOrRespond(res))) {
+    return null;
+  }
 
   let permissoesNormalizadas;
   try {
@@ -1940,6 +2051,9 @@ router.patch('/modelos-permissoes/:id', autenticarUsuario, async (req, res) => {
 
   let permissoesNormalizadas;
   if (permissoesPayload !== undefined) {
+    if (!(await ensurePermissionsCatalogOrRespond(res))) {
+      return null;
+    }
     try {
       permissoesNormalizadas = normalizarPermissoesEstrutura(permissoesPayload, { strict: true });
     } catch (err) {
@@ -2380,7 +2494,14 @@ router.patch('/:id', autenticarUsuario, async (req, res) => {
 
   let permissoesNormalizadas;
   let atualizarPermissoes = false;
+  let catalogoPermissoesDisponivel = false;
   if (permissoesEntrada !== undefined) {
+    if (!catalogoPermissoesDisponivel) {
+      if (!(await ensurePermissionsCatalogOrRespond(res))) {
+        return null;
+      }
+      catalogoPermissoesDisponivel = true;
+    }
     try {
       permissoesNormalizadas = normalizarPermissoesEstrutura(permissoesEntrada, { strict: true });
       atualizarPermissoes = true;
@@ -2446,6 +2567,12 @@ router.patch('/:id', autenticarUsuario, async (req, res) => {
   }
 
   if (aplicarModelo) {
+    if (!catalogoPermissoesDisponivel) {
+      if (!(await ensurePermissionsCatalogOrRespond(res))) {
+        return null;
+      }
+      catalogoPermissoesDisponivel = true;
+    }
     try {
       permissoesNormalizadas = normalizarPermissoesEstrutura(modeloDestino?.permissoes ?? {}, { strict: true });
       atualizarPermissoes = true;
@@ -2653,6 +2780,10 @@ router.put('/:id/permissoes', autenticarUsuario, async (req, res) => {
 
   if (permissoesPayload === undefined) {
     return res.status(400).json({ error: 'Informe as permissões desejadas.' });
+  }
+
+  if (!(await ensurePermissionsCatalogOrRespond(res))) {
+    return null;
   }
 
   let permissoesNormalizadas;

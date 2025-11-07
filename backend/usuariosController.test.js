@@ -148,6 +148,96 @@ function setup() {
   const permissionsCatalogRepoPath = require.resolve('./permissionsCatalogRepository');
   const originalPermissionsCatalogRepo = require.cache[permissionsCatalogRepoPath];
   delete require.cache[permissionsCatalogRepoPath];
+  const permissionsStructureMock = [
+    {
+      chave: 'usuarios',
+      modulo: 'usuarios',
+      titulo: 'Usuários',
+      campos: [
+        { chave: 'listar', acao: 'listar', titulo: 'Listar', colunas: [] },
+        { chave: 'visualizar', acao: 'visualizar', titulo: 'Visualizar', colunas: [] },
+        {
+          chave: 'editar',
+          acao: 'editar',
+          titulo: 'Editar',
+          colunas: [{ chave: 'email', campo: 'email', titulo: 'Email' }]
+        },
+        { chave: 'permissoes', acao: 'permissoes', titulo: 'Permissões', colunas: [] }
+      ]
+    },
+    {
+      chave: 'clientes',
+      modulo: 'clientes',
+      titulo: 'Clientes',
+      campos: [{ chave: 'visualizar', acao: 'visualizar', titulo: 'Visualizar', colunas: [] }]
+    },
+    {
+      chave: 'pedidos',
+      modulo: 'pedidos',
+      titulo: 'Pedidos',
+      campos: [
+        { chave: 'visualizar', acao: 'visualizar', titulo: 'Visualizar', colunas: [] },
+        {
+          chave: 'editar',
+          acao: 'editar',
+          titulo: 'Editar',
+          colunas: [
+            { chave: 'valor_total', campo: 'valor_total', titulo: 'Valor Total' },
+            { chave: 'observacoes', campo: 'observacoes', titulo: 'Observações' }
+          ]
+        }
+      ]
+    },
+    {
+      chave: 'mp',
+      modulo: 'mp',
+      titulo: 'MP',
+      campos: [
+        {
+          chave: 'visualizar',
+          acao: 'visualizar',
+          titulo: 'Visualizar',
+          colunas: [{ chave: 'valor_total', campo: 'valor_total', titulo: 'Valor Total' }]
+        },
+        {
+          chave: 'editar',
+          acao: 'editar',
+          titulo: 'Editar',
+          colunas: [
+            { chave: 'valor_total', campo: 'valor_total', titulo: 'Valor Total' },
+            { chave: 'responsavel', campo: 'responsavel', titulo: 'Responsável' }
+          ]
+        }
+      ]
+    },
+    {
+      chave: 'tarefas',
+      modulo: 'tarefas',
+      titulo: 'Tarefas',
+      campos: [
+        { chave: 'visualizar', acao: 'visualizar', titulo: 'Visualizar', colunas: [] },
+        { chave: 'editar', acao: 'editar', titulo: 'Editar', colunas: [] }
+      ]
+    },
+    {
+      chave: 'cfg',
+      modulo: 'cfg',
+      titulo: 'Configurações',
+      campos: [
+        { chave: 'permissoes', acao: 'permissoes', titulo: 'Permissões', colunas: [] },
+        {
+          chave: 'personalizar',
+          acao: 'personalizar',
+          titulo: 'Personalizar',
+          colunas: [{ chave: 'theme', campo: 'theme', titulo: 'Tema' }]
+        }
+      ]
+    }
+  ];
+  const permissionsCatalogModule = require('./permissionsCatalogRepository');
+  const originalBuildPermissionsStructure = permissionsCatalogModule.buildPermissionsStructure;
+  permissionsCatalogModule.buildPermissionsStructure = async () =>
+    JSON.parse(JSON.stringify(permissionsStructureMock));
   const usuariosController = require('./usuariosController');
 
   const app = express();
@@ -183,6 +273,9 @@ function setup() {
       require.cache[modelosPermissoesRepoPath] = originalModelosPermissoesRepo;
     } else {
       delete require.cache[modelosPermissoesRepoPath];
+    }
+    if (permissionsCatalogModule && originalBuildPermissionsStructure) {
+      permissionsCatalogModule.buildPermissionsStructure = originalBuildPermissionsStructure;
     }
     if (originalPermissionsCatalogRepo) {
       require.cache[permissionsCatalogRepoPath] = originalPermissionsCatalogRepo;
@@ -807,6 +900,65 @@ test('PUT /api/usuarios/:id/permissoes atualiza permissões granuladas', async (
       false
     );
     assert.ok(Array.isArray(corpo.permissoesResumo));
+
+    const registro = await pool.query('SELECT permissoes FROM usuarios WHERE id = $1', [1]);
+    assert.deepStrictEqual(registro.rows[0].permissoes, corpo.permissoes);
+  } finally {
+    await close();
+  }
+});
+
+test('PUT /api/usuarios/:id/permissoes aceita módulos dinâmicos do catálogo', async () => {
+  const { listen, close, pool } = setup();
+  const port = await listen();
+  try {
+    const payload = {
+      permissoes: {
+        mp: {
+          editar: {
+            permitido: true,
+            campos: {
+              valor_total: { visualizar: true, editar: false },
+              responsavel: true
+            }
+          }
+        },
+        tarefas: {
+          visualizar: true,
+          editar: { permitido: false }
+        },
+        cfg: {
+          permissoes: { permitido: true },
+          personalizar: {
+            campos: {
+              theme: { editar: true }
+            }
+          }
+        }
+      }
+    };
+
+    const resposta = await authenticatedFetch(port, '/api/usuarios/1/permissoes', {
+      method: 'PUT',
+      usuarioId: 2,
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+
+    assert.strictEqual(resposta.status, 200);
+    const corpo = await resposta.json();
+    assert.ok(corpo.permissoes.mp);
+    assert.strictEqual(corpo.permissoes.mp.editar.permitido, true);
+    assert.strictEqual(corpo.permissoes.mp.editar.campos.valor_total.visualizar, true);
+    assert.strictEqual(corpo.permissoes.mp.editar.campos.valor_total.editar, false);
+    assert.strictEqual(corpo.permissoes.mp.editar.campos.responsavel.visualizar, true);
+    assert.strictEqual(corpo.permissoes.mp.editar.campos.responsavel.editar, true);
+    assert.ok(corpo.permissoes.tarefas);
+    assert.strictEqual(corpo.permissoes.tarefas.visualizar.permitido, true);
+    assert.strictEqual(corpo.permissoes.tarefas.editar.permitido, false);
+    assert.ok(corpo.permissoes.cfg);
+    assert.strictEqual(corpo.permissoes.cfg.permissoes.permitido, true);
+    assert.strictEqual(corpo.permissoes.cfg.personalizar.campos.theme.editar, true);
 
     const registro = await pool.query('SELECT permissoes FROM usuarios WHERE id = $1', [1]);
     assert.deepStrictEqual(registro.rows[0].permissoes, corpo.permissoes);
