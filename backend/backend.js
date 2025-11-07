@@ -11,12 +11,29 @@ const DEFAULT_PUBLIC_API_BASE_URL =
   process.env.API_PUBLIC_BASE_URL ||
   process.env.API_BASE_URL ||
   null;
+const DEFAULT_DATABASE_PORT = (() => {
+  const configured = process.env.DB_PORT ? parseInt(process.env.DB_PORT, 10) : 5432;
+  return Number.isFinite(configured) ? String(configured) : '5432';
+})();
 
 // Track failed PIN attempts across session
 let pinErrorAttempts = 0;
+let lastDatabaseInitPin = null;
 
 function ensureDatabaseReady(pin) {
-  pool.init(pin);
+  const sanitizedPin = typeof pin === 'string' ? pin.trim() : pin;
+  const normalizedPin =
+    typeof sanitizedPin === 'string'
+      ? sanitizedPin
+      : sanitizedPin !== null && sanitizedPin !== undefined
+        ? String(sanitizedPin)
+        : '';
+  if (/^\d+$/.test(normalizedPin) && normalizedPin !== DEFAULT_DATABASE_PORT) {
+    lastDatabaseInitPin = normalizedPin;
+  } else {
+    lastDatabaseInitPin = null;
+  }
+  pool.init(sanitizedPin);
   const hasEnsureWarmup = Object.prototype.hasOwnProperty.call(pool, 'ensureWarmup');
   const hasGetStatus = Object.prototype.hasOwnProperty.call(pool, 'getStatus');
   if (hasEnsureWarmup && typeof pool.ensureWarmup === 'function') {
@@ -64,6 +81,10 @@ function isPinError(err) {
   if (!err) return false;
   if (err.reason === 'pin') return true;
 
+  if (err.code === 'ECONNREFUSED' && lastDatabaseInitPin) {
+    return true;
+  }
+
   const pinErrorCodes = new Set([
     'ERR_INVALID_ARG_TYPE',
     'ERR_SOCKET_BAD_PORT',
@@ -76,7 +97,7 @@ function isPinError(err) {
   const msg = String(err.message || '').toLowerCase();
   if (!msg) return false;
 
-  return (
+  if (
     msg.includes('pin incorreto') ||
     msg.includes('pin inválido') ||
     msg.includes('pin invalido') ||
@@ -86,12 +107,24 @@ function isPinError(err) {
     msg.includes('port should') ||
     msg.includes('porta inválida') ||
     msg.includes('porta invalida')
-  );
+  ) {
+    return true;
+  }
+
+  if (lastDatabaseInitPin) {
+    if (msg.includes('econnrefused') || msg.includes('connection refused')) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 // Helper to detect network connectivity issues
 function isNetworkError(err) {
   if (!err) return false;
+
+  if (isPinError(err)) return false;
 
   const networkCodes = new Set([
     'ENOTFOUND',
