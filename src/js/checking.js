@@ -9,29 +9,38 @@ let lastLogoutReason = null;
 let lastLogoutHandledAt = 0;
 let disconnectHandled = false;
 
+function resetIcon() {
+  if (!icon) return;
+  icon.classList.remove('fa-sync-alt', 'fa-check', 'fa-times', 'rotating');
+}
+
 function showSpinner(color = 'var(--color-blue)') {
   if (!checkBtn || !icon) return;
+  resetIcon();
   checkBtn.style.color = color;
-  icon.classList.remove('fa-check');
   icon.classList.add('fa-sync-alt', 'rotating');
 }
 
 function showSuccess() {
   if (!checkBtn || !icon) return;
-  icon.classList.remove('fa-sync-alt', 'rotating');
+  resetIcon();
   icon.classList.add('fa-check');
   checkBtn.style.color = 'var(--color-green)';
 }
 
-function showFailure() {
-  showSpinner('var(--color-red)');
+function showFailure(color = 'var(--color-red)') {
+  if (!checkBtn || !icon) return;
+  resetIcon();
+  icon.classList.add('fa-times');
+  checkBtn.style.color = color;
 }
 
 async function handleDisconnect(reason) {
   disconnectHandled = true;
-  showFailure();
+  const failureColor = reason === 'offline-db' ? 'var(--color-orange)' : 'var(--color-red)';
+  showFailure(failureColor);
   if (window.stopServerCheck) window.stopServerCheck();
-  if (reason === 'pin') {
+  if (reason === 'pin' || reason === 'offline-db') {
     localStorage.setItem('pinChanged', '1');
   } else if (reason === 'offline') {
     localStorage.setItem('offlineDisconnect', '1');
@@ -61,9 +70,10 @@ async function handleDisconnect(reason) {
 
 function applyStatus(status) {
   if (!status || !checkBtn || !icon) return;
-  const state = status.state || 'checking';
+  const rawState = status.state || 'checking';
   const reason = status.reason;
   const shouldLogout = Boolean(status.shouldLogout);
+  const state = rawState === 'db-offline' ? 'offline-db' : rawState;
 
   if (!shouldLogout) {
     disconnectHandled = false;
@@ -73,10 +83,15 @@ function applyStatus(status) {
     online: 'Conectado ao servidor',
     checking: 'Verificando conectividade...',
     offline: 'Sem conexão com a Internet ou servidor',
-    'db-offline': 'Banco de dados indisponível',
+    'offline-db': 'Banco de dados indisponível',
     waiting: 'Monitor em espera (janela inativa)'
   };
-  const title = titles[state] || 'Monitorando conexão';
+  let title = titles[state] || 'Monitorando conexão';
+  if (state === 'offline' && reason === 'pin') {
+    title = 'PIN inválido ou alterado';
+  } else if (state === 'offline' && reason === 'user-removed') {
+    title = 'Usuário removido do sistema';
+  }
   checkBtn.setAttribute('title', title);
 
   if (state === 'online') {
@@ -88,12 +103,12 @@ function applyStatus(status) {
   } else if (state === 'waiting') {
     checking = false;
     showSpinner('var(--color-blue)');
-  } else if (state === 'db-offline') {
+  } else if (state === 'offline-db') {
     checking = false;
-    showSpinner('var(--color-orange)');
+    showFailure('var(--color-orange)');
   } else {
     checking = false;
-    showSpinner('var(--color-red)');
+    showFailure('var(--color-red)');
   }
 
   if (!shouldLogout && lastLogoutReason) {

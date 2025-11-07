@@ -155,10 +155,6 @@ const CONNECTION_MONITOR_INTERVAL_MS = Math.max(
   Number.parseInt(process.env.CONNECTION_MONITOR_INTERVAL_MS || '10000', 10),
   1000
 );
-const CONNECTION_MONITOR_ACTIVITY_LIMIT_MS = Math.max(
-  Number.parseInt(process.env.CONNECTION_MONITOR_ACTIVITY_LIMIT_MS || '120000', 10),
-  CONNECTION_MONITOR_INTERVAL_MS
-);
 const CONNECTION_MONITOR_TIMEOUT_MS = Math.max(
   Number.parseInt(process.env.CONNECTION_MONITOR_TIMEOUT_MS || '6000', 10),
   1000
@@ -168,7 +164,22 @@ const CONNECTION_MONITOR_AGENT_KEEP_ALIVE_MS = Math.max(
   Number.parseInt(process.env.CONNECTION_MONITOR_AGENT_KEEP_ALIVE_MS || '65000', 10),
   15000
 );
-const CONNECTION_MONITOR_LOG_FILE = path.resolve('/logs/connection-monitor.log');
+let connectionMonitorLogPath = null;
+function getConnectionMonitorLogFile() {
+  if (!connectionMonitorLogPath) {
+    try {
+      const logsDir = app.getPath('logs');
+      connectionMonitorLogPath = path.join(logsDir, 'connection-monitor.log');
+    } catch (err) {
+      // Fallback para o diretório atual caso não seja possível obter o caminho de logs.
+      connectionMonitorLogPath = path.resolve('connection-monitor.log');
+      if (DEBUG) {
+        console.error('Falha ao resolver diretório de logs, usando fallback local.', err);
+      }
+    }
+  }
+  return connectionMonitorLogPath;
+}
 const CONNECTION_MONITOR_LOG_MAX_BYTES = Math.max(
   Number.parseInt(process.env.CONNECTION_MONITOR_LOG_MAX_BYTES || '524288', 10),
   131072
@@ -2124,10 +2135,11 @@ function appendConnectionMonitorLog(entry) {
     .catch(() => {})
     .then(async () => {
       try {
-        await fs.promises.mkdir(path.dirname(CONNECTION_MONITOR_LOG_FILE), { recursive: true });
+        const logFile = getConnectionMonitorLogFile();
+        await fs.promises.mkdir(path.dirname(logFile), { recursive: true });
         let shouldRotate = false;
         try {
-          const stats = await fs.promises.stat(CONNECTION_MONITOR_LOG_FILE);
+          const stats = await fs.promises.stat(logFile);
           if (stats.size + lineLength > CONNECTION_MONITOR_LOG_MAX_BYTES) {
             shouldRotate = true;
           }
@@ -2138,17 +2150,17 @@ function appendConnectionMonitorLog(entry) {
         }
 
         if (shouldRotate) {
-          const rotatedPath = `${CONNECTION_MONITOR_LOG_FILE}.${Date.now()}`;
+          const rotatedPath = `${logFile}.${Date.now()}`;
           try {
-            await fs.promises.rename(CONNECTION_MONITOR_LOG_FILE, rotatedPath);
+            await fs.promises.rename(logFile, rotatedPath);
           } catch (err) {
             if (err && err.code !== 'ENOENT') {
-              await fs.promises.unlink(CONNECTION_MONITOR_LOG_FILE).catch(() => {});
+              await fs.promises.unlink(logFile).catch(() => {});
             }
           }
         }
 
-        await fs.promises.appendFile(CONNECTION_MONITOR_LOG_FILE, `${line}\n`);
+        await fs.promises.appendFile(logFile, `${line}\n`);
       } catch (_err) {
         // Falhas de IO são silenciosas, conforme requisito.
       }
@@ -2333,243 +2345,301 @@ function createConnectionMonitor() {
     allowWhilePaused = false,
     forceDeep = false
   } = {}) {
+    const logEvent = (outcome, extra = {}) => {
+      appendConnectionMonitorLog({
+        event: 'check',
+        outcome,
+        triggeredBy,
+        forceDeep: Boolean(forceDeep),
+        allowWhilePaused: Boolean(allowWhilePaused),
+        netState,
+        state: currentStatus.state,
+        reason: currentStatus.reason || null,
+        detail: currentStatus.detail || null,
+        ...extra
+      });
+    };
+
     if (!active && !allowWhilePaused) {
+      logEvent('skipped', { reason: 'inactive-monitor' });
       return currentStatus;
     }
 
-    let baseUrlString = null;
-    try {
-      baseUrlString = resolveBackendHealthBaseUrl();
-    } catch (err) {
-      appendConnectionMonitorLog({ event: 'configuration-error', detail: err?.message || 'resolve-base-url' });
-    }
-
-    if (!baseUrlString) {
-      applyNetState('offline');
-      updateStatus({
-        state: 'waiting',
-        reason: 'configuration',
-        detail: 'missing-base-url',
-        shouldLogout: false,
-        triggeredBy
-      });
+    if (!allowWhilePaused && !shouldMonitorBeActive()) {
+      logEvent('skipped', { reason: 'window-inactive' });
+      setActive(false, { triggeredBy: 'inactive' });
       return currentStatus;
     }
 
-    let baseUrl;
-    try {
-      baseUrl = new URL(baseUrlString);
-    } catch (_err) {
-      applyNetState('offline');
-      updateStatus({
-        state: 'offline',
-        reason: 'offline',
-        detail: 'invalid-base-url',
-        shouldLogout: true,
-        lastError: null,
-        triggeredBy
-      });
-      return currentStatus;
-    }
+    logEvent('start');
+    let finalOutcome = 'success';
+    let finalExtra = {};
 
-    let healthPayload = null;
     try {
-      const healthUrl = new URL('/healthz', baseUrl);
-      const response = await requestWithAgent(healthUrl, {
-        method: 'GET',
-        timeout: CONNECTION_HEALTH_TIMEOUT_MS,
-        agent: backendAgentInstance,
-        expectJson: true
-      });
-      healthPayload = response.body || null;
-    } catch (err) {
-      scheduleNextAttempt(true);
-      const formattedError = formatMonitorError(err);
-      if (isNetworkError(err) || err?.code === 'ECONNREFUSED' || err?.code === 'ENOTFOUND') {
+      let baseUrlString = null;
+      try {
+        baseUrlString = resolveBackendHealthBaseUrl();
+      } catch (err) {
+        appendConnectionMonitorLog({ event: 'configuration-error', detail: err?.message || 'resolve-base-url' });
+      }
+
+      if (!baseUrlString) {
+        applyNetState('offline');
+        updateStatus({
+          state: 'waiting',
+          reason: 'configuration',
+          detail: 'missing-base-url',
+          shouldLogout: false,
+          triggeredBy
+        });
+        finalOutcome = 'failure';
+        finalExtra = { stage: 'configuration', detail: 'missing-base-url' };
+        return currentStatus;
+      }
+
+      let baseUrl;
+      try {
+        baseUrl = new URL(baseUrlString);
+      } catch (_err) {
         applyNetState('offline');
         updateStatus({
           state: 'offline',
           reason: 'offline',
-          detail: formattedError?.code || err?.code || 'healthz-unreachable',
-          shouldLogout: true,
-          failureStage: 'internet',
-          lastError: formattedError,
-          triggeredBy
-        });
-      } else {
-        updateStatus({
-          state: 'waiting',
-          reason: 'configuration',
-          detail: 'local-host-blocked',
-          shouldLogout: false,
-          lastError: formattedError,
-          triggeredBy
-        });
-      }
-      return currentStatus;
-    }
-
-    const healthData = healthPayload && typeof healthPayload === 'object' ? healthPayload : {};
-    const dbOk = healthData.db_ok !== false && healthData.db_ready !== false;
-    if (!dbOk) {
-      dbReadinessFailureCount += 1;
-      const shouldTriggerOffline =
-        dbReadinessFailureCount >= CONNECTION_DB_FAILURE_THRESHOLD;
-      const dbStatus = typeof healthData.db_status === 'string' ? healthData.db_status : 'connecting';
-      const detail = dbStatus === 'connecting' ? 'db-conectando' : 'db-indisponivel';
-      const healthErrorSource = healthData.last_error && typeof healthData.last_error === 'object'
-        ? Object.assign(new Error(healthData.last_error.message || dbStatus), {
-            code: healthData.last_error.code
-          })
-        : healthData.last_error || healthData.error || healthData.message || dbStatus;
-
-      scheduleNextAttempt(true);
-      updateStatus({
-        state: shouldTriggerOffline ? 'db-offline' : 'checking',
-        reason: shouldTriggerOffline ? 'offline-db' : 'db-connecting',
-        detail,
-        shouldLogout: shouldTriggerOffline,
-        failureStage: 'database',
-        lastError: formatMonitorError(healthErrorSource),
-        triggeredBy
-      });
-      if (!shouldTriggerOffline) {
-        return;
-      }
-      return;
-    } else {
-      dbReadinessFailureCount = 0;
-    }
-
-    const now = Date.now();
-    const deepAllowed = now >= allowDeepChecksAfter;
-    const shouldRunDeep =
-      (forceDeep && deepAllowed) ||
-      (!forceDeep && deepAllowed &&
-        (now - lastDeepCheckAt >= CONNECTION_DEEP_INTERVAL_MS || currentStatus.state === 'db-offline'));
-
-    if (forceDeep && !deepAllowed) {
-      const remaining = Math.max(allowDeepChecksAfter - now, 0);
-      console.log(
-        `[connection-monitor] verificação profunda adiada (${Math.ceil(remaining / 1000)}s para liberação)`
-      );
-    }
-
-    if (shouldRunDeep) {
-      allowDeepChecksAfter = 0;
-      try {
-        const dbHealthUrl = new URL('/healthz/db', baseUrl);
-        await requestWithAgent(dbHealthUrl, {
-          method: 'GET',
-          timeout: CONNECTION_DB_TIMEOUT_MS,
-          agent: backendAgentInstance
-        });
-        lastDeepCheckAt = Date.now();
-        deepFailureCount = 0;
-      } catch (err) {
-        deepFailureCount += 1;
-        const formattedError = formatMonitorError(err);
-        console.warn(
-          `[connection-monitor] falha ${deepFailureCount}/${CONNECTION_DB_FAILURE_THRESHOLD} ao verificar banco`,
-          formattedError
-        );
-        if (deepFailureCount < CONNECTION_DB_FAILURE_THRESHOLD) {
-          scheduleNextAttempt(true);
-          updateStatus({
-            state: 'checking',
-            reason: null,
-            detail: 'db-retry',
-            shouldLogout: false,
-            failureStage: 'database',
-            lastError: formattedError,
-            triggeredBy
-          });
-          return;
-        }
-        deepFailureCount = 0;
-        scheduleNextAttempt(true);
-        updateStatus({
-          state: 'offline-db',
-          reason: 'offline-db',
-          detail: 'db-indisponivel',
+          detail: 'invalid-base-url',
           shouldLogout: true,
           lastError: null,
           triggeredBy
         });
-        return;
+        finalOutcome = 'failure';
+        finalExtra = { stage: 'configuration', detail: 'invalid-base-url' };
+        return currentStatus;
       }
-    }
 
-    try {
-      const heartbeat = await checkDatabaseAndCurrentUser({ skipBasicQuery: true });
-      if (!heartbeat.success) {
+      let healthPayload = null;
+      try {
+        const healthUrl = new URL('/healthz', baseUrl);
+        const response = await requestWithAgent(healthUrl, {
+          method: 'GET',
+          timeout: CONNECTION_HEALTH_TIMEOUT_MS,
+          agent: backendAgentInstance,
+          expectJson: true
+        });
+        healthPayload = response.body || null;
+      } catch (err) {
         scheduleNextAttempt(true);
-        const reason = heartbeat.reason || 'offline';
-        let detail = 'falha-db-heartbeat';
-        let failureStage = 'database';
-        if (reason === 'user-removed') {
-          detail = 'usuario-removido';
-          failureStage = 'auth';
-        } else if (reason === 'pin') {
-          detail = 'pin-invalido';
-          failureStage = 'auth';
-        } else if (reason === 'offline') {
-          detail = 'sem-internet';
-          failureStage = 'internet';
-        } else if (reason === 'db-connecting') {
-          detail = 'db-conectando';
-          failureStage = 'database';
+        const formattedError = formatMonitorError(err);
+        if (isNetworkError(err) || err?.code === 'ECONNREFUSED' || err?.code === 'ENOTFOUND') {
+          applyNetState('offline');
           updateStatus({
-            state: 'checking',
-            reason,
-            detail,
+            state: 'offline',
+            reason: 'offline',
+            detail: formattedError?.code || err?.code || 'healthz-unreachable',
+            shouldLogout: true,
+            failureStage: 'internet',
+            lastError: formattedError,
+            triggeredBy
+          });
+        } else {
+          updateStatus({
+            state: 'waiting',
+            reason: 'configuration',
+            detail: 'local-host-blocked',
             shouldLogout: false,
+            lastError: formattedError,
+            triggeredBy
+          });
+        }
+        finalOutcome = 'failure';
+        finalExtra = { stage: 'health-check', error: formattedError };
+        return currentStatus;
+      }
+
+      const healthData = healthPayload && typeof healthPayload === 'object' ? healthPayload : {};
+      const dbOk = healthData.db_ok !== false && healthData.db_ready !== false;
+      if (!dbOk) {
+        dbReadinessFailureCount += 1;
+        const shouldTriggerOffline =
+          dbReadinessFailureCount >= CONNECTION_DB_FAILURE_THRESHOLD;
+        const dbStatus = typeof healthData.db_status === 'string' ? healthData.db_status : 'connecting';
+        const detail = dbStatus === 'connecting' ? 'db-conectando' : 'db-indisponivel';
+        const healthErrorSource = healthData.last_error && typeof healthData.last_error === 'object'
+          ? Object.assign(new Error(healthData.last_error.message || dbStatus), {
+              code: healthData.last_error.code
+            })
+          : healthData.last_error || healthData.error || healthData.message || dbStatus;
+
+        scheduleNextAttempt(true);
+        updateStatus({
+          state: shouldTriggerOffline ? 'offline-db' : 'checking',
+          reason: shouldTriggerOffline ? 'offline-db' : 'db-connecting',
+          detail,
+          shouldLogout: shouldTriggerOffline,
+          failureStage: 'database',
+          lastError: formatMonitorError(healthErrorSource),
+          triggeredBy
+        });
+        if (shouldTriggerOffline) {
+          finalOutcome = 'failure';
+          finalExtra = { stage: 'db-readiness', detail };
+        } else {
+          finalOutcome = 'pending';
+          finalExtra = { stage: 'db-readiness', detail };
+        }
+        return currentStatus;
+      }
+      dbReadinessFailureCount = 0;
+
+      const now = Date.now();
+      const deepAllowed = now >= allowDeepChecksAfter;
+      const shouldRunDeep =
+        (forceDeep && deepAllowed) ||
+        (!forceDeep && deepAllowed &&
+          (now - lastDeepCheckAt >= CONNECTION_DEEP_INTERVAL_MS || currentStatus.state === 'offline-db'));
+
+      if (forceDeep && !deepAllowed) {
+        const remaining = Math.max(allowDeepChecksAfter - now, 0);
+        console.log(
+          `[connection-monitor] verificação profunda adiada (${Math.ceil(remaining / 1000)}s para liberação)`
+        );
+      }
+
+      if (shouldRunDeep) {
+        allowDeepChecksAfter = 0;
+        try {
+          const dbHealthUrl = new URL('/healthz/db', baseUrl);
+          await requestWithAgent(dbHealthUrl, {
+            method: 'GET',
+            timeout: CONNECTION_DB_TIMEOUT_MS,
+            agent: backendAgentInstance
+          });
+          lastDeepCheckAt = Date.now();
+          deepFailureCount = 0;
+        } catch (err) {
+          deepFailureCount += 1;
+          const formattedError = formatMonitorError(err);
+          console.warn(
+            `[connection-monitor] falha ${deepFailureCount}/${CONNECTION_DB_FAILURE_THRESHOLD} ao verificar banco`,
+            formattedError
+          );
+          if (deepFailureCount < CONNECTION_DB_FAILURE_THRESHOLD) {
+            scheduleNextAttempt(true);
+            updateStatus({
+              state: 'checking',
+              reason: null,
+              detail: 'db-retry',
+              shouldLogout: false,
+              failureStage: 'database',
+              lastError: formattedError,
+              triggeredBy
+            });
+            finalOutcome = 'pending';
+            finalExtra = { stage: 'db-deep-check', attempt: deepFailureCount, retry: true };
+            return currentStatus;
+          }
+          deepFailureCount = 0;
+          scheduleNextAttempt(true);
+          updateStatus({
+            state: 'offline-db',
+            reason: 'offline-db',
+            detail: 'db-indisponivel',
+            shouldLogout: true,
+            lastError: null,
+            triggeredBy
+          });
+          finalOutcome = 'failure';
+          finalExtra = { stage: 'db-deep-check', detail: 'db-indisponivel' };
+          return currentStatus;
+        }
+      }
+
+      try {
+        const heartbeat = await checkDatabaseAndCurrentUser({ skipBasicQuery: true });
+        if (!heartbeat.success) {
+          scheduleNextAttempt(true);
+          const reason = heartbeat.reason || 'offline';
+          let detail = 'falha-db-heartbeat';
+          let failureStage = 'database';
+          if (reason === 'user-removed') {
+            detail = 'usuario-removido';
+            failureStage = 'auth';
+          } else if (reason === 'pin') {
+            detail = 'pin-invalido';
+            failureStage = 'auth';
+          } else if (reason === 'offline') {
+            detail = 'sem-internet';
+            failureStage = 'internet';
+          } else if (reason === 'db-connecting') {
+            detail = 'db-conectando';
+            failureStage = 'database';
+            updateStatus({
+              state: 'checking',
+              reason,
+              detail,
+              shouldLogout: false,
+              failureStage,
+              lastError: formatMonitorError(heartbeat.error),
+              triggeredBy
+            });
+            finalOutcome = 'pending';
+            finalExtra = { stage: 'db-heartbeat', detail };
+            return currentStatus;
+          }
+          let normalizedReason = reason;
+          if (!['offline', 'offline-db', 'pin', 'user-removed'].includes(normalizedReason)) {
+            normalizedReason = 'offline';
+          }
+          const statusState = normalizedReason === 'offline-db' ? 'offline-db' : 'offline';
+          updateStatus({
+            state: statusState,
+            reason: normalizedReason,
+            detail,
+            shouldLogout: true,
             failureStage,
             lastError: formatMonitorError(heartbeat.error),
             triggeredBy
           });
-          return;
+          finalOutcome = 'failure';
+          finalExtra = { stage: 'db-heartbeat', detail, reason: normalizedReason };
+          return currentStatus;
         }
+      } catch (err) {
+        const formattedError = formatMonitorError(err);
+        applyNetState('offline');
         updateStatus({
           state: 'offline',
           reason: 'offline',
-          detail: `status-${response.statusCode || 0}`,
+          detail: formattedError?.code || 'network-error',
           shouldLogout: true,
-          lastError: null,
+          lastError: formattedError,
           triggeredBy
         });
+        finalOutcome = 'failure';
+        finalExtra = { stage: 'db-heartbeat', error: formattedError };
         return currentStatus;
       }
-    } catch (err) {
-      if (!shouldUpdate) {
-        return currentStatus;
-      }
-      const formattedError = formatMonitorError(err);
-      applyNetState('offline');
+
+      consecutiveFailures = 0;
+      deepFailureCount = 0;
+      dbReadinessFailureCount = 0;
+      applyNetState('online');
       updateStatus({
-        state: 'offline',
-        reason: 'offline',
-        detail: formattedError?.code || 'network-error',
-        shouldLogout: true,
-        lastError: formattedError,
+        state: 'online',
+        reason: null,
+        detail: 'ok',
+        shouldLogout: false,
+        lastError: null,
         triggeredBy
       });
+      finalOutcome = 'success';
+      finalExtra = { stage: 'complete' };
       return currentStatus;
+    } catch (err) {
+      finalOutcome = 'error';
+      finalExtra = { stage: 'unexpected-error', error: formatMonitorError(err) };
+      throw err;
+    } finally {
+      logEvent(finalOutcome, finalExtra);
     }
-
-    consecutiveFailures = 0;
-    deepFailureCount = 0;
-    dbReadinessFailureCount = 0;
-    applyNetState('online');
-    updateStatus({
-      state: 'online',
-      reason: null,
-      detail: 'ok',
-      shouldLogout: false,
-      lastError: null,
-      triggeredBy
-    });
-    return currentStatus;
   }
 
   function scheduleNextAttempt(accelerated = false) {
@@ -2735,9 +2805,7 @@ function shouldMonitorBeActive() {
   if (!focused) {
     return false;
   }
-  const now = Date.now();
-  const lastInteraction = monitorActivityState.lastInteractionAt || 0;
-  return now - lastInteraction <= CONNECTION_MONITOR_ACTIVITY_LIMIT_MS;
+  return true;
 }
 
 function refreshConnectionMonitorActivityState(triggeredBy = 'auto') {
