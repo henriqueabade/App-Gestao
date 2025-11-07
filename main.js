@@ -3983,9 +3983,17 @@ ipcMain.handle('close-login', async () => {
 
 ipcMain.handle('logout', async () => {
   await persistUserExit('logout');
+
+  if (!loginWindow || loginWindow.isDestroyed()) {
+    createLoginWindow(false, false);
+  }
+
+  await revealLoginWindow();
+
   if (dashboardWindow && !dashboardWindow.isDestroyed()) {
     dashboardWindow.close();
   }
+
   return true;
 });
 

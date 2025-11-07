@@ -62,30 +62,64 @@ function ensureDatabaseReady(pin) {
 // Helper to detect errors related to an invalid PIN/port
 function isPinError(err) {
   if (!err) return false;
-  const codes = ['ETIMEDOUT', 'ECONNREFUSED'];
-  if (codes.includes(err.code)) return true;
+  if (err.reason === 'pin') return true;
+
+  const pinErrorCodes = new Set([
+    'ERR_INVALID_ARG_TYPE',
+    'ERR_SOCKET_BAD_PORT',
+    'ERR_INVALID_PORT'
+  ]);
+  if (pinErrorCodes.has(err.code)) {
+    return true;
+  }
+
   const msg = String(err.message || '').toLowerCase();
+  if (!msg) return false;
+
   return (
-    msg.includes('etimedout') ||
-    msg.includes('econnrefused') ||
+    msg.includes('pin incorreto') ||
+    msg.includes('pin inválido') ||
+    msg.includes('pin invalido') ||
+    msg.includes('pin alterado') ||
+    msg.includes('invalid pin') ||
+    msg.includes('invalid port') ||
     msg.includes('port should') ||
-    msg.includes('invalid port')
+    msg.includes('porta inválida') ||
+    msg.includes('porta invalida')
   );
 }
 
 // Helper to detect network connectivity issues
 function isNetworkError(err) {
   if (!err) return false;
-  const codes = ['ENOTFOUND', 'EAI_AGAIN', 'ENETUNREACH', 'ECONNRESET'];
-  if (codes.includes(err.code)) return true;
+
+  const networkCodes = new Set([
+    'ENOTFOUND',
+    'EAI_AGAIN',
+    'ENETUNREACH',
+    'ECONNRESET',
+    'EHOSTUNREACH',
+    'ECONNREFUSED',
+    'ETIMEDOUT'
+  ]);
+
+  if (networkCodes.has(err.code)) {
+    return true;
+  }
+
   const msg = String(err.message || '').toLowerCase();
+  if (!msg) return false;
+
   return (
     msg.includes('enotfound') ||
     msg.includes('eai_again') ||
     msg.includes('enetworkunreach') ||
+    msg.includes('ehostunreach') ||
     msg.includes('getaddrinfo') ||
     msg.includes('ssl connection') ||
-    msg.includes('econnreset')
+    msg.includes('econnreset') ||
+    msg.includes('econnrefused') ||
+    msg.includes('etimedout')
   );
 }
 
