@@ -741,7 +741,11 @@ function initUsuarios() {
         if (isSupAdmin) {
             btnModelosPermissao.classList.remove('hidden');
             btnModelosPermissao.addEventListener('click', () => {
-                alert('A gestão de permissões estará disponível em breve.');
+                openModalWithSpinner(
+                    'modals/usuarios/permissoes.html',
+                    '../js/modals/usuario-permissoes.js',
+                    'usuariosPermissoes'
+                );
             });
         } else {
             btnModelosPermissao.classList.add('hidden');

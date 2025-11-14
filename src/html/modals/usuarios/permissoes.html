@@ -1,0 +1,625 @@
+<div id="usuariosPermissoesOverlay" class="hidden fixed inset-0 bg-black/50 backdrop-blur-sm z-[1200] flex items-center justify-center p-4">
+  <div data-modal-root class="w-full max-w-6xl max-h-[95vh] glass-surface backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade overflow-hidden flex flex-col">
+    <header class="glass-surface border-b border-white/10 p-6 flex flex-col gap-4">
+      <div class="flex items-center justify-between">
+        <h2 class="text-2xl font-semibold text-[var(--color-primary)] flex items-center gap-3">
+          <i class="fas fa-user-shield"></i>
+          Permissões de Usuário
+        </h2>
+        <button id="usuariosPermissoesFechar" class="p-2 hover:bg-white/10 rounded-lg transition-colors">
+          <i class="fas fa-times text-xl"></i>
+        </button>
+      </div>
+      <div class="flex flex-col lg:flex-row gap-4 items-start lg:items-center justify-between">
+        <div class="flex flex-wrap gap-3">
+          <select
+            id="usuariosPermissoesPerfil"
+            class="bg-input border border-inputBorder rounded-lg px-4 py-2 text-white focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all duration-150 min-w-[200px]"
+          >
+            <option value="">Selecionar Perfil</option>
+            <option value="ADMIN">Administrador</option>
+            <option value="VENDEDOR">Vendedor</option>
+            <option value="ARQUITETO">Arquiteto</option>
+            <option value="GERENTE">Gerente</option>
+          </select>
+          <button id="usuariosPermissoesCarregar" class="btn-primary px-4 py-2 rounded-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+            <i class="fas fa-download mr-2"></i>
+            Carregar
+          </button>
+          <button id="usuariosPermissoesSalvar" class="btn-primary px-4 py-2 rounded-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+            <i class="fas fa-save mr-2"></i>
+            Salvar
+          </button>
+          <button id="usuariosPermissoesSalvarNovo" class="btn-warning px-4 py-2 rounded-lg font-medium">
+            <i class="fas fa-plus mr-2"></i>
+            Salvar como novo
+          </button>
+          <button id="usuariosPermissoesDuplicar" class="btn-neutral px-4 py-2 rounded-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+            <i class="fas fa-copy mr-2"></i>
+            Duplicar
+          </button>
+          <button id="usuariosPermissoesExcluir" class="btn-danger px-4 py-2 rounded-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+            <i class="fas fa-trash mr-2"></i>
+            Excluir
+          </button>
+        </div>
+        <div class="relative">
+          <input
+            id="usuariosPermissoesBusca"
+            type="text"
+            placeholder="Buscar permissões..."
+            class="bg-input border border-inputBorder rounded-lg pl-10 pr-4 py-2 text-white focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all duration-150 w-64"
+          />
+          <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"></i>
+        </div>
+      </div>
+    </header>
+
+    <nav class="border-b border-white/10">
+      <div class="flex overflow-x-auto usuarios-permissoes-tablist" role="tablist">
+        <button class="usuarios-permissoes-tab usuarios-permissoes-tab--active" data-permission-tab-trigger="materiaprima">
+          <i class="fas fa-boxes mr-2"></i>
+          Matéria-prima
+        </button>
+        <button class="usuarios-permissoes-tab" data-permission-tab-trigger="produtos">
+          <i class="fas fa-tags mr-2"></i>
+          Produtos
+        </button>
+        <button class="usuarios-permissoes-tab" data-permission-tab-trigger="orcamentos">
+          <i class="fas fa-calculator mr-2"></i>
+          Orçamentos
+        </button>
+        <button class="usuarios-permissoes-tab" data-permission-tab-trigger="pedidos">
+          <i class="fas fa-shopping-cart mr-2"></i>
+          Pedidos
+        </button>
+        <button class="usuarios-permissoes-tab" data-permission-tab-trigger="clientes">
+          <i class="fas fa-users mr-2"></i>
+          Clientes
+        </button>
+        <button class="usuarios-permissoes-tab" data-permission-tab-trigger="prospeccoes">
+          <i class="fas fa-bullseye mr-2"></i>
+          Prospecções
+        </button>
+        <button class="usuarios-permissoes-tab" data-permission-tab-trigger="contatos">
+          <i class="fas fa-address-book mr-2"></i>
+          Contatos
+        </button>
+        <button class="usuarios-permissoes-tab" data-permission-tab-trigger="relatorios">
+          <i class="fas fa-chart-bar mr-2"></i>
+          Relatórios
+        </button>
+        <button class="usuarios-permissoes-tab" data-permission-tab-trigger="tarefas">
+          <i class="fas fa-tasks mr-2"></i>
+          Tarefas/Agenda
+        </button>
+        <button class="usuarios-permissoes-tab" data-permission-tab-trigger="configuracoes">
+          <i class="fas fa-cog mr-2"></i>
+          Configurações
+        </button>
+      </div>
+    </nav>
+
+    <div class="flex-1 overflow-hidden">
+      <div class="h-full overflow-y-auto modal-scroll p-6 space-y-8">
+        <section data-permission-tab-panel="materiaprima" class="space-y-6">
+          <article class="usuarios-permissoes-accordion">
+            <button class="usuarios-permissoes-accordion__toggle" data-accordion-toggle="acoes-principais-mp" aria-expanded="true">
+              <span class="flex items-center gap-3">
+                <i class="fas fa-play text-[var(--color-primary)]"></i>
+                <span class="font-semibold text-lg text-[var(--color-primary)]">Ações Principais</span>
+              </span>
+              <i class="fas fa-chevron-down"></i>
+            </button>
+            <div class="usuarios-permissoes-accordion__content glass-surface rounded-2xl border border-white/10 p-4 is-open" data-accordion-content="acoes-principais-mp" data-group-container="acoes-principais-mp">
+              <div class="flex items-center justify-between mb-4 pb-3 border-b border-white/10">
+                <div class="flex items-center gap-3">
+                  <input type="checkbox" id="usuariosPermissoesMasterAcoesPrincipaisMp" data-role="master" data-group="acoes-principais-mp" class="w-4 h-4" />
+                  <label for="usuariosPermissoesMasterAcoesPrincipaisMp" class="font-medium">Selecionar tudo</label>
+                  <span class="text-sm text-gray-400" data-group-count="acoes-principais-mp">(0 selecionadas)</span>
+                </div>
+                <i class="fas fa-info-circle text-[var(--color-primary)]" title="Ações básicas do módulo de matéria-prima"></i>
+              </div>
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <label class="usuarios-permissoes-item" data-search="ver lista visualizar">
+                  <input type="checkbox" name="mp_ver_lista" data-role="item" data-group="acoes-principais-mp" data-item-type="action" class="w-4 h-4 mt-1" />
+                  <div>
+                    <span class="font-medium">Ver lista</span>
+                    <p class="text-sm text-gray-400">Visualizar lista de matérias-primas</p>
+                  </div>
+                </label>
+                <label class="usuarios-permissoes-item" data-search="buscar pesquisar filtrar">
+                  <input type="checkbox" name="mp_buscar" data-role="item" data-group="acoes-principais-mp" data-item-type="action" class="w-4 h-4 mt-1" />
+                  <div>
+                    <span class="font-medium">Buscar</span>
+                    <p class="text-sm text-gray-400">Pesquisar e filtrar matérias-primas</p>
+                  </div>
+                </label>
+                <label class="usuarios-permissoes-item" data-search="exportar download relatorio">
+                  <input type="checkbox" name="mp_exportar" data-role="item" data-group="acoes-principais-mp" data-item-type="action" class="w-4 h-4 mt-1" />
+                  <div>
+                    <span class="font-medium">Exportar</span>
+                    <p class="text-sm text-gray-400">Exportar dados para relatórios</p>
+                  </div>
+                </label>
+                <label class="usuarios-permissoes-item" data-search="criar adicionar novo">
+                  <input type="checkbox" name="mp_criar" data-role="item" data-group="acoes-principais-mp" data-item-type="action" class="w-4 h-4 mt-1" />
+                  <div>
+                    <span class="font-medium">Criar</span>
+                    <p class="text-sm text-gray-400">Adicionar novas matérias-primas</p>
+                  </div>
+                </label>
+                <label class="usuarios-permissoes-item" data-search="editar modificar alterar">
+                  <input type="checkbox" name="mp_editar" data-role="item" data-group="acoes-principais-mp" data-item-type="action" class="w-4 h-4 mt-1" />
+                  <div>
+                    <span class="font-medium">Editar</span>
+                    <p class="text-sm text-gray-400">Modificar matérias-primas existentes</p>
+                  </div>
+                </label>
+                <label class="usuarios-permissoes-item" data-search="excluir deletar remover">
+                  <input type="checkbox" name="mp_excluir" data-role="item" data-group="acoes-principais-mp" data-item-type="action" class="w-4 h-4 mt-1" />
+                  <div>
+                    <span class="font-medium">Excluir</span>
+                    <p class="text-sm text-gray-400">Remover matérias-primas</p>
+                  </div>
+                </label>
+              </div>
+            </div>
+          </article>
+
+          <article class="usuarios-permissoes-accordion">
+            <button class="usuarios-permissoes-accordion__toggle" data-accordion-toggle="processos-mp" aria-expanded="false">
+              <span class="flex items-center gap-3">
+                <i class="fas fa-cogs text-[var(--color-primary)]"></i>
+                <span class="font-semibold text-lg text-[var(--color-primary)]">Processos</span>
+              </span>
+              <i class="fas fa-chevron-down"></i>
+            </button>
+            <div class="usuarios-permissoes-accordion__content glass-surface rounded-2xl border border-white/10 p-4" data-accordion-content="processos-mp" data-group-container="processos-mp">
+              <div class="flex items-center justify-between mb-4 pb-3 border-b border-white/10">
+                <div class="flex items-center gap-3">
+                  <input type="checkbox" id="usuariosPermissoesMasterProcessosMp" data-role="master" data-group="processos-mp" class="w-4 h-4" />
+                  <label for="usuariosPermissoesMasterProcessosMp" class="font-medium">Selecionar tudo</label>
+                  <span class="text-sm text-gray-400" data-group-count="processos-mp">(0 selecionadas)</span>
+                </div>
+                <i class="fas fa-info-circle text-[var(--color-primary)]" title="Gerenciamento de processos de matéria-prima"></i>
+              </div>
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <label class="usuarios-permissoes-item" data-search="ver processos visualizar">
+                  <input type="checkbox" name="mp_ver_processos" data-role="item" data-group="processos-mp" data-item-type="action" class="w-4 h-4 mt-1" />
+                  <div>
+                    <span class="font-medium">Ver processos</span>
+                    <p class="text-sm text-gray-400">Visualizar processos de matéria-prima</p>
+                  </div>
+                </label>
+                <label class="usuarios-permissoes-item" data-search="criar processo adicionar">
+                  <input type="checkbox" name="mp_criar_processo" data-role="item" data-group="processos-mp" data-item-type="action" class="w-4 h-4 mt-1" />
+                  <div>
+                    <span class="font-medium">Criar processo</span>
+                    <p class="text-sm text-gray-400">Adicionar novos processos</p>
+                  </div>
+                </label>
+                <label class="usuarios-permissoes-item" data-search="excluir processo deletar">
+                  <input type="checkbox" name="mp_excluir_processo" data-role="item" data-group="processos-mp" data-item-type="action" class="w-4 h-4 mt-1" />
+                  <div>
+                    <span class="font-medium">Excluir processo</span>
+                    <p class="text-sm text-gray-400">Remover processos existentes</p>
+                  </div>
+                </label>
+              </div>
+            </div>
+          </article>
+
+          <article class="usuarios-permissoes-accordion">
+            <button class="usuarios-permissoes-accordion__toggle" data-accordion-toggle="categorias-mp" aria-expanded="false">
+              <span class="flex items-center gap-3">
+                <i class="fas fa-tags text-[var(--color-primary)]"></i>
+                <span class="font-semibold text-lg text-[var(--color-primary)]">Categorias e Unidades</span>
+              </span>
+              <i class="fas fa-chevron-down"></i>
+            </button>
+            <div class="usuarios-permissoes-accordion__content glass-surface rounded-2xl border border-white/10 p-4" data-accordion-content="categorias-mp" data-group-container="categorias-mp">
+              <div class="flex items-center justify-between mb-4 pb-3 border-b border-white/10">
+                <div class="flex items-center gap-3">
+                  <input type="checkbox" id="usuariosPermissoesMasterCategoriasMp" data-role="master" data-group="categorias-mp" class="w-4 h-4" />
+                  <label for="usuariosPermissoesMasterCategoriasMp" class="font-medium">Selecionar tudo</label>
+                  <span class="text-sm text-gray-400" data-group-count="categorias-mp">(0 selecionadas)</span>
+                </div>
+                <i class="fas fa-info-circle text-[var(--color-primary)]" title="Gerenciamento de categorias e unidades de medida"></i>
+              </div>
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <label class="usuarios-permissoes-item" data-search="ver categorias visualizar">
+                  <input type="checkbox" name="mp_ver_categorias" data-role="item" data-group="categorias-mp" data-item-type="action" class="w-4 h-4 mt-1" />
+                  <div>
+                    <span class="font-medium">Ver categorias</span>
+                    <p class="text-sm text-gray-400">Visualizar categorias de matéria-prima</p>
+                  </div>
+                </label>
+                <label class="usuarios-permissoes-item" data-search="criar categoria adicionar">
+                  <input type="checkbox" name="mp_criar_categoria" data-role="item" data-group="categorias-mp" data-item-type="action" class="w-4 h-4 mt-1" />
+                  <div>
+                    <span class="font-medium">Criar categoria</span>
+                    <p class="text-sm text-gray-400">Adicionar novas categorias</p>
+                  </div>
+                </label>
+                <label class="usuarios-permissoes-item" data-search="editar categoria modificar">
+                  <input type="checkbox" name="mp_editar_categoria" data-role="item" data-group="categorias-mp" data-item-type="action" class="w-4 h-4 mt-1" />
+                  <div>
+                    <span class="font-medium">Editar categoria</span>
+                    <p class="text-sm text-gray-400">Modificar categorias existentes</p>
+                  </div>
+                </label>
+                <label class="usuarios-permissoes-item" data-search="excluir categoria deletar">
+                  <input type="checkbox" name="mp_excluir_categoria" data-role="item" data-group="categorias-mp" data-item-type="action" class="w-4 h-4 mt-1" />
+                  <div>
+                    <span class="font-medium">Excluir categoria</span>
+                    <p class="text-sm text-gray-400">Remover categorias</p>
+                  </div>
+                </label>
+                <label class="usuarios-permissoes-item" data-search="ver unidades visualizar medida">
+                  <input type="checkbox" name="mp_ver_unidades" data-role="item" data-group="categorias-mp" data-item-type="action" class="w-4 h-4 mt-1" />
+                  <div>
+                    <span class="font-medium">Ver unidades</span>
+                    <p class="text-sm text-gray-400">Visualizar unidades de medida</p>
+                  </div>
+                </label>
+                <label class="usuarios-permissoes-item" data-search="criar unidade adicionar medida">
+                  <input type="checkbox" name="mp_criar_unidade" data-role="item" data-group="categorias-mp" data-item-type="action" class="w-4 h-4 mt-1" />
+                  <div>
+                    <span class="font-medium">Criar unidade</span>
+                    <p class="text-sm text-gray-400">Adicionar novas unidades de medida</p>
+                  </div>
+                </label>
+                <label class="usuarios-permissoes-item" data-search="editar unidade modificar medida">
+                  <input type="checkbox" name="mp_editar_unidade" data-role="item" data-group="categorias-mp" data-item-type="action" class="w-4 h-4 mt-1" />
+                  <div>
+                    <span class="font-medium">Editar unidade</span>
+                    <p class="text-sm text-gray-400">Modificar unidades existentes</p>
+                  </div>
+                </label>
+                <label class="usuarios-permissoes-item" data-search="excluir unidade deletar medida">
+                  <input type="checkbox" name="mp_excluir_unidade" data-role="item" data-group="categorias-mp" data-item-type="action" class="w-4 h-4 mt-1" />
+                  <div>
+                    <span class="font-medium">Excluir unidade</span>
+                    <p class="text-sm text-gray-400">Remover unidades de medida</p>
+                  </div>
+                </label>
+              </div>
+            </div>
+          </article>
+
+          <article class="usuarios-permissoes-accordion">
+            <button class="usuarios-permissoes-accordion__toggle" data-accordion-toggle="estoque-mp" aria-expanded="false">
+              <span class="flex items-center gap-3">
+                <i class="fas fa-warehouse text-[var(--color-primary)]"></i>
+                <span class="font-semibold text-lg text-[var(--color-primary)]">Estoque</span>
+              </span>
+              <i class="fas fa-chevron-down"></i>
+            </button>
+            <div class="usuarios-permissoes-accordion__content glass-surface rounded-2xl border border-white/10 p-4" data-accordion-content="estoque-mp" data-group-container="estoque-mp">
+              <div class="flex items-center justify-between mb-4 pb-3 border-b border-white/10">
+                <div class="flex items-center gap-3">
+                  <input type="checkbox" id="usuariosPermissoesMasterEstoqueMp" data-role="master" data-group="estoque-mp" class="w-4 h-4" />
+                  <label for="usuariosPermissoesMasterEstoqueMp" class="font-medium">Selecionar tudo</label>
+                  <span class="text-sm text-gray-400" data-group-count="estoque-mp">(0 selecionadas)</span>
+                </div>
+                <i class="fas fa-info-circle text-[var(--color-primary)]" title="Controle de estoque de matéria-prima"></i>
+              </div>
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <label class="usuarios-permissoes-item" data-search="ver estoque visualizar quantidade">
+                  <input type="checkbox" name="mp_ver_estoque" data-role="item" data-group="estoque-mp" data-item-type="action" class="w-4 h-4 mt-1" />
+                  <div>
+                    <span class="font-medium">Ver estoque</span>
+                    <p class="text-sm text-gray-400">Visualizar quantidades em estoque</p>
+                  </div>
+                </label>
+                <label class="usuarios-permissoes-item" data-search="entrada estoque adicionar">
+                  <input type="checkbox" name="mp_entrada_estoque" data-role="item" data-group="estoque-mp" data-item-type="action" class="w-4 h-4 mt-1" />
+                  <div>
+                    <span class="font-medium">Entrada</span>
+                    <p class="text-sm text-gray-400">Registrar entrada de estoque</p>
+                  </div>
+                </label>
+                <label class="usuarios-permissoes-item" data-search="saida estoque retirar">
+                  <input type="checkbox" name="mp_saida_estoque" data-role="item" data-group="estoque-mp" data-item-type="action" class="w-4 h-4 mt-1" />
+                  <div>
+                    <span class="font-medium">Saída</span>
+                    <p class="text-sm text-gray-400">Registrar saída de estoque</p>
+                  </div>
+                </label>
+                <label class="usuarios-permissoes-item" data-search="ajustar estoque corrigir">
+                  <input type="checkbox" name="mp_ajustar_estoque" data-role="item" data-group="estoque-mp" data-item-type="action" class="w-4 h-4 mt-1" />
+                  <div>
+                    <span class="font-medium">Ajustar estoque</span>
+                    <p class="text-sm text-gray-400">Fazer ajustes de estoque</p>
+                  </div>
+                </label>
+                <label class="usuarios-permissoes-item" data-search="estoque infinito ilimitado">
+                  <input type="checkbox" name="mp_estoque_infinito" data-role="item" data-group="estoque-mp" data-item-type="action" class="w-4 h-4 mt-1" />
+                  <div>
+                    <span class="font-medium">Estoque infinito</span>
+                    <p class="text-sm text-gray-400">Configurar estoque como infinito</p>
+                  </div>
+                </label>
+              </div>
+            </div>
+          </article>
+
+          <article class="usuarios-permissoes-accordion">
+            <button class="usuarios-permissoes-accordion__toggle" data-accordion-toggle="colunas-mp" aria-expanded="false">
+              <span class="flex items-center gap-3">
+                <i class="fas fa-columns text-[var(--color-primary)]"></i>
+                <span class="font-semibold text-lg text-[var(--color-primary)]">Colunas Visíveis na Tabela</span>
+              </span>
+              <i class="fas fa-chevron-down"></i>
+            </button>
+            <div class="usuarios-permissoes-accordion__content glass-surface rounded-2xl border border-white/10 p-4" data-accordion-content="colunas-mp" data-group-container="colunas-mp">
+              <div class="flex items-center justify-between mb-4 pb-3 border-b border-white/10">
+                <div class="flex items-center gap-3">
+                  <input type="checkbox" id="usuariosPermissoesMasterColunasMp" data-role="master" data-group="colunas-mp" class="w-4 h-4" />
+                  <label for="usuariosPermissoesMasterColunasMp" class="font-medium">Selecionar tudo</label>
+                  <span class="text-sm text-gray-400" data-group-count="colunas-mp">(0 selecionadas)</span>
+                </div>
+                <i class="fas fa-info-circle text-[var(--color-primary)]" title="Colunas exibidas nas listagens"></i>
+              </div>
+              <div class="space-y-6">
+                <div>
+                  <h4 class="text-sm font-semibold text-gray-300 mb-3">Matéria-prima</h4>
+                  <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <label class="usuarios-permissoes-checkbox">
+                      <input type="checkbox" name="col_mp_codigo" data-role="item" data-group="colunas-mp" data-item-type="column" class="w-4 h-4" />
+                      <span class="text-sm">Código</span>
+                    </label>
+                    <label class="usuarios-permissoes-checkbox">
+                      <input type="checkbox" name="col_mp_nome" data-role="item" data-group="colunas-mp" data-item-type="column" class="w-4 h-4" />
+                      <span class="text-sm">Nome</span>
+                    </label>
+                    <label class="usuarios-permissoes-checkbox">
+                      <input type="checkbox" name="col_mp_categoria" data-role="item" data-group="colunas-mp" data-item-type="column" class="w-4 h-4" />
+                      <span class="text-sm">Categoria</span>
+                    </label>
+                    <label class="usuarios-permissoes-checkbox">
+                      <input type="checkbox" name="col_mp_unidade" data-role="item" data-group="colunas-mp" data-item-type="column" class="w-4 h-4" />
+                      <span class="text-sm">Unidade</span>
+                    </label>
+                    <label class="usuarios-permissoes-checkbox">
+                      <input type="checkbox" name="col_mp_estoque_atual" data-role="item" data-group="colunas-mp" data-item-type="column" class="w-4 h-4" />
+                      <span class="text-sm">Estoque atual</span>
+                    </label>
+                    <label class="usuarios-permissoes-checkbox">
+                      <input type="checkbox" name="col_mp_estoque_minimo" data-role="item" data-group="colunas-mp" data-item-type="column" class="w-4 h-4" />
+                      <span class="text-sm">Estoque mínimo</span>
+                    </label>
+                    <label class="usuarios-permissoes-checkbox">
+                      <input type="checkbox" name="col_mp_custo_medio" data-role="item" data-group="colunas-mp" data-item-type="column" class="w-4 h-4" />
+                      <span class="text-sm">Custo médio</span>
+                    </label>
+                    <label class="usuarios-permissoes-checkbox">
+                      <input type="checkbox" name="col_mp_fornecedor" data-role="item" data-group="colunas-mp" data-item-type="column" class="w-4 h-4" />
+                      <span class="text-sm">Fornecedor</span>
+                    </label>
+                    <label class="usuarios-permissoes-checkbox">
+                      <input type="checkbox" name="col_mp_status" data-role="item" data-group="colunas-mp" data-item-type="column" class="w-4 h-4" />
+                      <span class="text-sm">Status</span>
+                    </label>
+                    <label class="usuarios-permissoes-checkbox">
+                      <input type="checkbox" name="col_mp_atualizado_em" data-role="item" data-group="colunas-mp" data-item-type="column" class="w-4 h-4" />
+                      <span class="text-sm">Atualizado em</span>
+                    </label>
+                  </div>
+                </div>
+                <div>
+                  <h4 class="text-sm font-semibold text-gray-300 mb-3">Movimentações</h4>
+                  <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <label class="usuarios-permissoes-checkbox">
+                      <input type="checkbox" name="col_mov_data" data-role="item" data-group="colunas-mp" data-item-type="column" class="w-4 h-4" />
+                      <span class="text-sm">Data</span>
+                    </label>
+                    <label class="usuarios-permissoes-checkbox">
+                      <input type="checkbox" name="col_mov_tipo" data-role="item" data-group="colunas-mp" data-item-type="column" class="w-4 h-4" />
+                      <span class="text-sm">Tipo</span>
+                    </label>
+                    <label class="usuarios-permissoes-checkbox">
+                      <input type="checkbox" name="col_mov_quantidade" data-role="item" data-group="colunas-mp" data-item-type="column" class="w-4 h-4" />
+                      <span class="text-sm">Quantidade</span>
+                    </label>
+                    <label class="usuarios-permissoes-checkbox">
+                      <input type="checkbox" name="col_mov_referencia" data-role="item" data-group="colunas-mp" data-item-type="column" class="w-4 h-4" />
+                      <span class="text-sm">Referência</span>
+                    </label>
+                    <label class="usuarios-permissoes-checkbox">
+                      <input type="checkbox" name="col_mov_usuario" data-role="item" data-group="colunas-mp" data-item-type="column" class="w-4 h-4" />
+                      <span class="text-sm">Usuário</span>
+                    </label>
+                  </div>
+                </div>
+                <div>
+                  <h4 class="text-sm font-semibold text-gray-300 mb-3">Processos</h4>
+                  <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <label class="usuarios-permissoes-checkbox">
+                      <input type="checkbox" name="col_proc_processo" data-role="item" data-group="colunas-mp" data-item-type="column" class="w-4 h-4" />
+                      <span class="text-sm">Processo</span>
+                    </label>
+                    <label class="usuarios-permissoes-checkbox">
+                      <input type="checkbox" name="col_proc_duracao" data-role="item" data-group="colunas-mp" data-item-type="column" class="w-4 h-4" />
+                      <span class="text-sm">Duração</span>
+                    </label>
+                    <label class="usuarios-permissoes-checkbox">
+                      <input type="checkbox" name="col_proc_custo" data-role="item" data-group="colunas-mp" data-item-type="column" class="w-4 h-4" />
+                      <span class="text-sm">Custo</span>
+                    </label>
+                    <label class="usuarios-permissoes-checkbox">
+                      <input type="checkbox" name="col_proc_ordem" data-role="item" data-group="colunas-mp" data-item-type="column" class="w-4 h-4" />
+                      <span class="text-sm">Ordem</span>
+                    </label>
+                  </div>
+                </div>
+                <div>
+                  <h4 class="text-sm font-semibold text-gray-300 mb-3">Categorias</h4>
+                  <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <label class="usuarios-permissoes-checkbox">
+                      <input type="checkbox" name="col_cat_categoria" data-role="item" data-group="colunas-mp" data-item-type="column" class="w-4 h-4" />
+                      <span class="text-sm">Categoria</span>
+                    </label>
+                    <label class="usuarios-permissoes-checkbox">
+                      <input type="checkbox" name="col_cat_descricao" data-role="item" data-group="colunas-mp" data-item-type="column" class="w-4 h-4" />
+                      <span class="text-sm">Descrição</span>
+                    </label>
+                    <label class="usuarios-permissoes-checkbox">
+                      <input type="checkbox" name="col_cat_itens" data-role="item" data-group="colunas-mp" data-item-type="column" class="w-4 h-4" />
+                      <span class="text-sm">Itens</span>
+                    </label>
+                  </div>
+                </div>
+                <div>
+                  <h4 class="text-sm font-semibold text-gray-300 mb-3">Unidades</h4>
+                  <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <label class="usuarios-permissoes-checkbox">
+                      <input type="checkbox" name="col_uni_unidade" data-role="item" data-group="colunas-mp" data-item-type="column" class="w-4 h-4" />
+                      <span class="text-sm">Unidade</span>
+                    </label>
+                    <label class="usuarios-permissoes-checkbox">
+                      <input type="checkbox" name="col_uni_descricao" data-role="item" data-group="colunas-mp" data-item-type="column" class="w-4 h-4" />
+                      <span class="text-sm">Descrição</span>
+                    </label>
+                    <label class="usuarios-permissoes-checkbox">
+                      <input type="checkbox" name="col_uni_precisao" data-role="item" data-group="colunas-mp" data-item-type="column" class="w-4 h-4" />
+                      <span class="text-sm">Precisão</span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </article>
+        </section>
+
+        <section data-permission-tab-panel="produtos" class="hidden text-center py-12 text-gray-300">
+          <i class="fas fa-tags text-6xl text-gray-400 mb-4"></i>
+          <h3 class="text-xl font-semibold mb-2">Módulo Produtos</h3>
+          <p>Permissões para gerenciamento de produtos</p>
+        </section>
+
+        <section data-permission-tab-panel="orcamentos" class="hidden text-center py-12 text-gray-300">
+          <i class="fas fa-calculator text-6xl text-gray-400 mb-4"></i>
+          <h3 class="text-xl font-semibold mb-2">Módulo Orçamentos</h3>
+          <p>Permissões para gerenciamento de orçamentos</p>
+        </section>
+
+        <section data-permission-tab-panel="pedidos" class="hidden text-center py-12 text-gray-300">
+          <i class="fas fa-shopping-cart text-6xl text-gray-400 mb-4"></i>
+          <h3 class="text-xl font-semibold mb-2">Módulo Pedidos</h3>
+          <p>Permissões para gerenciamento de pedidos</p>
+        </section>
+
+        <section data-permission-tab-panel="clientes" class="hidden text-center py-12 text-gray-300">
+          <i class="fas fa-users text-6xl text-gray-400 mb-4"></i>
+          <h3 class="text-xl font-semibold mb-2">Módulo Clientes</h3>
+          <p>Permissões para gerenciamento de clientes</p>
+        </section>
+
+        <section data-permission-tab-panel="prospeccoes" class="hidden text-center py-12 text-gray-300">
+          <i class="fas fa-bullseye text-6xl text-gray-400 mb-4"></i>
+          <h3 class="text-xl font-semibold mb-2">Módulo Prospecções</h3>
+          <p>Permissões para gerenciamento de prospecções</p>
+        </section>
+
+        <section data-permission-tab-panel="contatos" class="hidden text-center py-12 text-gray-300">
+          <i class="fas fa-address-book text-6xl text-gray-400 mb-4"></i>
+          <h3 class="text-xl font-semibold mb-2">Módulo Contatos</h3>
+          <p>Permissões para gerenciamento de contatos</p>
+        </section>
+
+        <section data-permission-tab-panel="relatorios" class="hidden text-center py-12 text-gray-300">
+          <i class="fas fa-chart-bar text-6xl text-gray-400 mb-4"></i>
+          <h3 class="text-xl font-semibold mb-2">Módulo Relatórios</h3>
+          <p>Permissões para gerenciamento de relatórios</p>
+        </section>
+
+        <section data-permission-tab-panel="tarefas" class="hidden text-center py-12 text-gray-300">
+          <i class="fas fa-tasks text-6xl text-gray-400 mb-4"></i>
+          <h3 class="text-xl font-semibold mb-2">Módulo Tarefas/Agenda</h3>
+          <p>Permissões para gerenciamento de tarefas e agenda</p>
+        </section>
+
+        <section data-permission-tab-panel="configuracoes" class="hidden text-center py-12 text-gray-300">
+          <i class="fas fa-cog text-6xl text-gray-400 mb-4"></i>
+          <h3 class="text-xl font-semibold mb-2">Módulo Configurações</h3>
+          <p>Permissões para configurações do sistema</p>
+        </section>
+      </div>
+    </div>
+
+    <footer class="glass-surface border-t border-white/10 p-6">
+      <div class="flex flex-col lg:flex-row items-center justify-between gap-4">
+        <div class="flex items-center gap-6 text-sm text-gray-300">
+          <span>Módulos <strong id="usuariosPermissoesResumoModulos">0</strong></span>
+          <span>•</span>
+          <span>Ações <strong id="usuariosPermissoesResumoAcoes">0</strong></span>
+          <span>•</span>
+          <span>Colunas <strong id="usuariosPermissoesResumoColunas">0</strong></span>
+        </div>
+        <div class="flex gap-3">
+          <button data-action="cancelar" class="btn-neutral px-6 py-3 rounded-lg font-medium">
+            <i class="fas fa-times mr-2"></i>
+            Cancelar
+          </button>
+          <button id="usuariosPermissoesReverter" class="btn-warning px-6 py-3 rounded-lg font-medium">
+            <i class="fas fa-undo mr-2"></i>
+            Reverter alterações
+          </button>
+          <button id="usuariosPermissoesAplicar" class="btn-primary px-6 py-3 rounded-lg font-medium">
+            <i class="fas fa-check mr-2"></i>
+            Aplicar
+          </button>
+        </div>
+      </div>
+    </footer>
+  </div>
+</div>
+
+<div id="usuariosPermissoesSalvarOverlay" class="hidden fixed inset-0 bg-black/50 backdrop-blur-sm z-[1300] flex items-center justify-center p-4">
+  <div class="w-full max-w-md glass-surface backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade overflow-hidden">
+    <header class="glass-surface border-b border-white/10 p-6 flex items-center justify-between">
+      <h3 class="text-xl font-semibold text-[var(--color-primary)] flex items-center gap-3">
+        <i class="fas fa-save"></i>
+        Salvar Perfil
+      </h3>
+      <button id="usuariosPermissoesSalvarFechar" class="p-2 hover:bg-white/10 rounded-lg transition-colors">
+        <i class="fas fa-times text-xl"></i>
+      </button>
+    </header>
+    <div class="p-6">
+      <form id="usuariosPermissoesSalvarForm" class="space-y-4">
+        <div>
+          <label for="usuariosPermissoesSalvarNome" class="block text-sm font-medium text-gray-300 mb-2">Nome do Perfil *</label>
+          <input
+            type="text"
+            id="usuariosPermissoesSalvarNome"
+            class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all duration-150"
+            required
+            placeholder="Ex: Vendedor Sênior"
+          />
+        </div>
+        <div>
+          <label for="usuariosPermissoesSalvarDescricao" class="block text-sm font-medium text-gray-300 mb-2">Descrição</label>
+          <textarea
+            id="usuariosPermissoesSalvarDescricao"
+            rows="3"
+            class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all duration-150 resize-none"
+            placeholder="Descreva as responsabilidades e acesso deste perfil..."
+          ></textarea>
+        </div>
+      </form>
+    </div>
+    <footer class="glass-surface border-t border-white/10 p-6 flex justify-end gap-3">
+      <button id="usuariosPermissoesSalvarCancelar" class="btn-neutral px-6 py-3 rounded-lg font-medium">
+        <i class="fas fa-times mr-2"></i>
+        Cancelar
+      </button>
+      <button id="usuariosPermissoesSalvarConfirmar" class="btn-primary px-6 py-3 rounded-lg font-medium">
+        <i class="fas fa-save mr-2"></i>
+        Salvar Perfil
+      </button>
+    </footer>
+  </div>
+</div>
