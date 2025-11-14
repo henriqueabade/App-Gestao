@@ -737,16 +737,24 @@ function initUsuarios() {
 
     const btnModelosPermissao = document.getElementById('btnModelosPermissao');
     const isSupAdmin = usuarioLogado?.perfil === 'Sup Admin';
+
     if (btnModelosPermissao) {
         if (isSupAdmin) {
             btnModelosPermissao.classList.remove('hidden');
+
             btnModelosPermissao.addEventListener('click', () => {
-                alert('A gestão de permissões estará disponível em breve.');
-            });
+                openModalWithSpinner(
+                    'modals/usuarios/permissoes.html',
+                    '../js/modals/permissoes.js',
+                    'permissoes'
+                );
+                });
+
         } else {
             btnModelosPermissao.classList.add('hidden');
         }
-    }
+    }           
+
     // animação de entrada
     document.querySelectorAll('.animate-fade-in-up').forEach((el, index) => {
         setTimeout(() => {
@@ -1305,39 +1313,44 @@ function refreshUsuariosAposAtualizacao() {
 }
 
 function openModalWithSpinner(htmlPath, scriptPath, overlayId) {
-    Modal.closeAll();
-    const spinner = document.createElement('div');
-    spinner.id = 'modalLoading';
-    spinner.className = 'fixed inset-0 z-[2000] bg-black/50 flex items-center justify-center';
-    spinner.innerHTML = '<div class="w-16 h-16 border-4 border-[#b6a03e] border-t-transparent rounded-full animate-spin"></div>';
-    document.body.appendChild(spinner);
+  // Fecha qualquer modal aberto
+  Modal.closeAll();
 
-    const start = Date.now();
+  // Cria o spinner amarelo centralizado
+  const spinner = document.createElement('div');
+  spinner.id = 'modalLoading';
+  spinner.className = 'fixed inset-0 z-[2000] bg-black/50 flex items-center justify-center';
+  spinner.innerHTML = `
+    <div class="w-16 h-16 border-4 border-[#b6a03e] border-t-transparent rounded-full animate-spin"></div>
+  `;
+  document.body.appendChild(spinner);
 
-    function handleLoaded(event) {
-        if (event.detail !== overlayId) return;
-        const overlay = document.getElementById(`${overlayId}Overlay`);
-        const elapsed = Date.now() - start;
-
-        const show = () => {
-            spinner.remove();
-            if (overlay) {
-                overlay.classList.remove('hidden');
-            }
-        };
-
-        if (elapsed < 3000) {
-            setTimeout(show, Math.max(0, 2000 - elapsed));
-        } else {
-            show();
-        }
-
-        window.removeEventListener('modalSpinnerLoaded', handleLoaded);
-    }
-
-    window.addEventListener('modalSpinnerLoaded', handleLoaded);
+  // Espera 2 segundos ANTES de abrir o modal
+  setTimeout(() => {
+    // Abre o modal
     Modal.open(htmlPath, scriptPath, overlayId, true);
+
+    // Aguarda o modal carregar completamente
+    const checkModalLoaded = setInterval(() => {
+      const overlay = document.getElementById(`${overlayId}Overlay`);
+      if (overlay && overlay.classList.contains('fixed')) {
+        clearInterval(checkModalLoaded);
+
+        // Remove o spinner após confirmar que o modal foi injetado
+        spinner.remove();
+
+        // Garante que o modal apareça visível
+        overlay.classList.remove('hidden');
+        overlay.style.opacity = '0';
+        overlay.style.transition = 'opacity 0.3s ease';
+        requestAnimationFrame(() => {
+          overlay.style.opacity = '1';
+        });
+      }
+    }, 100); // verifica a cada 100ms se o modal foi injetado
+  }, 2000); // <-- tempo do spinner antes do modal
 }
+
 
 function abrirNovoUsuario() {
     openModalWithSpinner('modals/usuarios/novo.html', '../js/modals/usuario-novo.js', 'novoUsuario');

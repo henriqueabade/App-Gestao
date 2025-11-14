@@ -1,0 +1,105 @@
+<!-- Modal Modelos de Permissão (carregado via Modal.open) -->
+<div id="permissoesOverlay"
+     class="fixed inset-0 z-[1200] bg-black/60 flex items-center justify-center p-4 pt-[4vw]">
+
+  <div role="dialog"
+       aria-modal="true"
+       tabindex="0"
+       class="w-full max-w-3xl glass-surface border border-white/10 rounded-2xl shadow-2xl
+              text-white overflow-hidden flex flex-col">
+
+    <!-- Cabeçalho -->
+    <div class="flex items-center justify-between p-6 border-b border-white/10">
+      <h2 class="text-xl font-semibold text-white">Modelos de Permissão</h2>
+
+      <button id="closeModalBtn"
+              class="p-2 hover:bg-white/10 rounded-lg transition-colors"
+              aria-label="Fechar modal">
+        <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M6 18L18 6M6 6l12 12" />
+        </svg>
+      </button>
+    </div>
+
+    <!-- Controles (select + botões) -->
+    <div class="p-6 border-b border-white/10 space-y-4">
+      <!-- Linha: select + botões -->
+      <div class="flex flex-col sm:flex-row gap-4 items-start sm:items-end">
+        <div class="flex-1 min-w-0">
+          <label for="selectModelo" class="block text-sm font-medium text-gray-300 mb-2">
+            Modelos disponíveis
+          </label>
+
+          <select id="selectModelo"
+                  class="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white
+                         focus:outline-none focus:ring-2 focus:ring-[#b6a03e]/50">
+            <option value="">Selecione um modelo...</option>
+          </select>
+        </div>
+
+        <div class="flex gap-3">
+          <button id="btnCarregar"
+                  class="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium
+                         transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  disabled>
+            Carregar
+          </button>
+
+          <button id="btnNovo"
+                  class="px-6 py-3 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium
+                         transition-colors">
+            Novo
+          </button>
+        </div>
+      </div>
+
+      <!-- Nome do modelo (quando criando) -->
+      <div id="inputNomeModelo" class="hidden">
+        <label for="nomeModelo" class="block text-sm font-medium text-gray-300 mb-2">
+          Nome do modelo
+        </label>
+
+        <input type="text"
+               id="nomeModelo"
+               placeholder="Digite o nome do modelo..."
+               class="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white
+                      placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#b6a03e]/50" />
+      </div>
+    </div>
+
+    <!-- Conteúdo rolável das permissões -->
+    <div id="permissionsContainer" class="scrollable-content p-6">
+      <!-- A árvore de permissões é gerada em permissoes.js (PermissionRenderer) -->
+    </div>
+
+    <!-- Rodapé -->
+    <div class="p-6 border-t border-white/10 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <button id="btnExcluir"
+              class="px-6 py-3 bg-[#ff5858] hover:bg-red-600 text-white rounded-lg font-medium
+                     transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              disabled>
+        Excluir
+      </button>
+
+      <div class="flex gap-3">
+        <button id="btnCancelar"
+                class="px-6 py-3 bg-[#A394A7]/40 hover:bg-[#A394A7]/60 text-white rounded-lg
+                       border border-[#A394A7]/30 transition-colors font-medium">
+          Cancelar
+        </button>
+
+        <button id="btnSalvar"
+                class="px-6 py-3 bg-[#b6a03e] hover:bg-[#d4c169] text-white rounded-lg
+                       font-medium transition-colors flex items-center gap-2
+                       disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled>
+          <span class="loading-spinner hidden w-4 h-4 border-2 border-white/30
+                      border-t-white rounded-full animate-spin"></span>
+          <span class="btn-text">Salvar</span>
+        </button>
+      </div>
+    </div>
+
+  </div>
+</div>

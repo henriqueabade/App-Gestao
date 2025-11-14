@@ -816,3 +816,122 @@ body {
     box-shadow: none;
 }
 
+/* ===== Modal de Modelos de Permissão (Usuários) ===== */
+
+/* Diálogo nativo */
+#modalModelosPermissoes {
+    background: var(--color-surface);
+    backdrop-filter: blur(18px);
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    border-radius: 1rem;
+    color: #fff;
+    max-width: 720px;           /* menor que 840px */
+    width: min(90vw, 720px);    /* responsivo e pequeno */
+    max-height: 80vh;
+    padding: 0;
+    margin: auto;
+    box-shadow:
+        0 18px 45px rgba(0, 0, 0, 0.75),
+        0 0 0 1px rgba(255, 255, 255, 0.05);
+    display: flex;
+    flex-direction: column;
+}
+
+/* Backdrop nativo do <dialog> */
+#modalModelosPermissoes::backdrop {
+    background: rgba(0, 0, 0, 0.65);
+    backdrop-filter: blur(4px);
+}
+
+/* Se ainda usar .modal-backdrop em algum lugar do HTML antigo */
+.modal-backdrop {
+    backdrop-filter: blur(12px);
+    background: rgba(0, 0, 0, 0.6);
+}
+
+/* Cartão interno antigo (caso ainda exista no HTML) */
+.modal-content {
+    background: var(--color-surface);
+    backdrop-filter: blur(18px);
+    border: 1px solid rgba(255, 255, 255, 0.16);
+}
+
+/* Área de acordeão de módulos */
+.accordion-content {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.25s ease-in-out;
+}
+
+.accordion-content.open {
+    max-height: 800px;
+}
+
+/* Estado de módulo desabilitado */
+.module-disabled {
+    opacity: 0.6;
+}
+
+/* Badge de aviso (módulo desabilitado etc.) */
+.warning-badge {
+    background: rgba(255, 88, 88, 0.2);
+    border: 1px solid rgba(255, 88, 88, 0.3);
+    color: #ff5858;
+}
+
+/* Loader pequeno usado no botão Salvar */
+.spinner {
+    border: 2px solid rgba(182, 160, 62, 0.3);
+    border-top: 2px solid var(--color-primary);
+    border-radius: 50%;
+    width: 16px;
+    height: 16px;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0%   { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* Checkbox padrão do módulo de permissões */
+.checkbox-custom {
+    accent-color: var(--color-primary);
+    width: 1rem;
+    height: 1rem;
+}
+
+.checkbox-custom:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+.checkbox-custom:focus {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+}
+
+/* Área rolável do meio (lista de módulos/colunas) */
+.scrollable-content {
+    max-height: 45vh;       /* deixa o modal mais “baixinho” */
+    overflow-y: auto;
+}
+
+/* Scrollbar estilizada (mesmo padrão do resto do sistema) */
+.scrollable-content::-webkit-scrollbar {
+    width: 8px;
+}
+
+.scrollable-content::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 4px;
+}
+
+.scrollable-content::-webkit-scrollbar-thumb {
+    background: rgba(182, 160, 62, 0.6);
+    border-radius: 4px;
+}
+
+.scrollable-content::-webkit-scrollbar-thumb:hover {
+    background: rgba(182, 160, 62, 0.8);
+}
