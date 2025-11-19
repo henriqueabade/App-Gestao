@@ -267,12 +267,14 @@ const MenuStartupPreferences = (() => {
     const STORAGE_KEYS = {
         defaultPage: 'menu.defaultPage',
         crmExpanded: 'menu.crmExpanded',
-        lastPage: 'menu.lastPage'
+        lastPage: 'menu.lastPage',
+        sidebarBehavior: 'menu.sidebarBehavior'
     };
 
     const DEFAULT_STATE = {
         defaultPage: 'dashboard',
-        crmExpanded: false
+        crmExpanded: false,
+        sidebarBehavior: 'auto'
     };
 
     const PAGE_LABELS = {
@@ -294,6 +296,7 @@ const MenuStartupPreferences = (() => {
     };
 
     const VALID_PAGES = new Set(Object.keys(PAGE_LABELS));
+    const VALID_SIDEBAR_BEHAVIORS = new Set(['auto', 'fixed']);
 
     function normalizeDefaultPage(value) {
         if (!value || typeof value !== 'string') {
@@ -331,6 +334,14 @@ const MenuStartupPreferences = (() => {
         }
     }
 
+    function normalizeSidebarBehavior(value) {
+        if (!value || typeof value !== 'string') {
+            return DEFAULT_STATE.sidebarBehavior;
+        }
+        const normalized = value.toLowerCase();
+        return VALID_SIDEBAR_BEHAVIORS.has(normalized) ? normalized : DEFAULT_STATE.sidebarBehavior;
+    }
+
     function readLastVisitedPage() {
         if (typeof localStorage === 'undefined') {
             return null;
@@ -342,6 +353,19 @@ const MenuStartupPreferences = (() => {
         } catch (error) {
             console.warn('Não foi possível ler o último módulo visitado', error);
             return null;
+        }
+    }
+
+    function readSidebarBehavior() {
+        if (typeof localStorage === 'undefined') {
+            return DEFAULT_STATE.sidebarBehavior;
+        }
+        try {
+            const stored = localStorage.getItem(STORAGE_KEYS.sidebarBehavior);
+            return normalizeSidebarBehavior(stored);
+        } catch (error) {
+            console.warn('Não foi possível ler a preferência de retração da barra lateral', error);
+            return DEFAULT_STATE.sidebarBehavior;
         }
     }
 
@@ -367,6 +391,19 @@ const MenuStartupPreferences = (() => {
         }
     }
 
+    function saveSidebarBehavior(behavior) {
+        const normalized = normalizeSidebarBehavior(behavior);
+        if (typeof localStorage !== 'undefined') {
+            try {
+                localStorage.setItem(STORAGE_KEYS.sidebarBehavior, normalized);
+            } catch (error) {
+                console.warn('Não foi possível salvar a preferência de retração da barra lateral', error);
+            }
+        }
+        window.dispatchEvent(new CustomEvent('menu-sidebar-behavior-change', { detail: { behavior: normalized } }));
+        return normalized;
+    }
+
     function getPageLabel(page) {
         return PAGE_LABELS[page] || page;
     }
@@ -374,7 +411,8 @@ const MenuStartupPreferences = (() => {
     function load() {
         return {
             defaultPage: readDefaultPage(),
-            crmExpanded: readCrmExpanded()
+            crmExpanded: readCrmExpanded(),
+            sidebarBehavior: readSidebarBehavior()
         };
     }
 
@@ -382,11 +420,14 @@ const MenuStartupPreferences = (() => {
         STORAGE_KEYS,
         DEFAULT_STATE,
         normalizeDefaultPage,
+        normalizeSidebarBehavior,
         getPageLabel,
         load,
         saveDefaultPage,
         saveCrmExpanded,
-        readLastVisitedPage
+        readLastVisitedPage,
+        saveSidebarBehavior,
+        readSidebarBehavior
     };
 })();
 
@@ -413,6 +454,8 @@ const MenuStartupPreferences = (() => {
         defaultPageStatus: null,
         crmExpandedToggle: null,
         crmExpandedStatus: null,
+        sidebarBehaviorSelect: null,
+        sidebarBehaviorStatus: null,
         quickActionInputs: [],
         quickActionsStatus: null,
         quickActionShowAvatar: null,
@@ -1339,6 +1382,12 @@ const MenuStartupPreferences = (() => {
         if (dom.crmExpandedStatus) {
             dom.crmExpandedStatus.textContent = formatCrmExpandedStatus(startupPreferences.crmExpanded);
         }
+        if (dom.sidebarBehaviorSelect) {
+            dom.sidebarBehaviorSelect.value = startupPreferences.sidebarBehavior;
+        }
+        if (dom.sidebarBehaviorStatus) {
+            dom.sidebarBehaviorStatus.textContent = formatSidebarBehaviorStatus(startupPreferences.sidebarBehavior);
+        }
     }
 
     function handleDefaultPageChange(event) {
@@ -1373,6 +1422,13 @@ const MenuStartupPreferences = (() => {
         const expanded = event.target.checked;
         startupPreferences.crmExpanded = expanded;
         MenuStartupPreferences.saveCrmExpanded(expanded);
+        applyStartupPreferencesToUI();
+    }
+
+    function handleSidebarBehaviorChange(event) {
+        const behavior = MenuStartupPreferences.normalizeSidebarBehavior(event.target.value);
+        startupPreferences.sidebarBehavior = behavior;
+        MenuStartupPreferences.saveSidebarBehavior(behavior);
         applyStartupPreferencesToUI();
     }
 
@@ -1413,6 +1469,12 @@ const MenuStartupPreferences = (() => {
         return expanded
             ? 'O submenu do CRM permanecerá expandido ao abrir o menu.'
             : 'O submenu do CRM será exibido recolhido por padrão.';
+    }
+
+    function formatSidebarBehaviorStatus(behavior) {
+        return behavior === 'fixed'
+            ? 'A barra lateral ficará sempre aberta até que você a recolha manualmente.'
+            : 'A barra lateral será recolhida automaticamente ao entrar no conteúdo principal.';
     }
 
     function formatQuickActionsStatus(state) {
@@ -1491,6 +1553,8 @@ const MenuStartupPreferences = (() => {
         dom.defaultPageStatus = moduleElement.querySelector('#defaultModuleStatus');
         dom.crmExpandedToggle = moduleElement.querySelector('#crmExpandedToggle');
         dom.crmExpandedStatus = moduleElement.querySelector('#crmExpandedStatus');
+        dom.sidebarBehaviorSelect = moduleElement.querySelector('#sidebarBehaviorSelect');
+        dom.sidebarBehaviorStatus = moduleElement.querySelector('#sidebarBehaviorStatus');
         dom.quickActionInputs = Array.from(moduleElement.querySelectorAll('[data-quick-action]'));
         dom.quickActionsStatus = moduleElement.querySelector('#quickActionsStatus');
         dom.quickActionShowAvatar = moduleElement.querySelector('#quickAction-showAvatar');
@@ -1538,6 +1602,9 @@ const MenuStartupPreferences = (() => {
         }
         if (dom.crmExpandedToggle) {
             dom.crmExpandedToggle.addEventListener('change', handleCrmExpandedChange);
+        }
+        if (dom.sidebarBehaviorSelect) {
+            dom.sidebarBehaviorSelect.addEventListener('change', handleSidebarBehaviorChange);
         }
         dom.quickActionInputs.forEach(input => {
             input.addEventListener('change', handleQuickActionChange);

@@ -140,6 +140,9 @@ const MENU_DEFAULT_PAGE_KEY = 'menu.defaultPage';
 const MENU_LAST_PAGE_KEY = 'menu.lastPage';
 const MENU_CRM_EXPANDED_KEY = 'menu.crmExpanded';
 const MENU_DEFAULT_PAGE_FALLBACK = 'dashboard';
+const MENU_SIDEBAR_BEHAVIOR_KEY = 'menu.sidebarBehavior';
+const SIDEBAR_BEHAVIOR_DEFAULT = 'auto';
+const VALID_SIDEBAR_BEHAVIORS = new Set(['auto', 'fixed']);
 
 function normalizeModulePage(page) {
     if (!page || typeof page !== 'string') {
@@ -218,6 +221,27 @@ function persistLastVisitedPage(page) {
         localStorage.setItem(MENU_LAST_PAGE_KEY, normalized);
     } catch (error) {
         console.warn('Não foi possível salvar o último módulo visitado', error);
+    }
+}
+
+function normalizeSidebarBehaviorPreference(value) {
+    if (!value || typeof value !== 'string') {
+        return SIDEBAR_BEHAVIOR_DEFAULT;
+    }
+    const normalized = value.toLowerCase();
+    return VALID_SIDEBAR_BEHAVIORS.has(normalized) ? normalized : SIDEBAR_BEHAVIOR_DEFAULT;
+}
+
+function readStoredSidebarBehaviorPreference() {
+    if (typeof localStorage === 'undefined') {
+        return SIDEBAR_BEHAVIOR_DEFAULT;
+    }
+    try {
+        const stored = localStorage.getItem(MENU_SIDEBAR_BEHAVIOR_KEY);
+        return normalizeSidebarBehaviorPreference(stored);
+    } catch (error) {
+        console.warn('Não foi possível ler a preferência de retração da barra lateral', error);
+        return SIDEBAR_BEHAVIOR_DEFAULT;
     }
 }
 
@@ -3024,6 +3048,25 @@ window.loadPage = loadPage;
 
 let sidebarExpanded = false;
 let crmExpanded = false;
+let sidebarBehaviorPreference = readStoredSidebarBehaviorPreference();
+
+function shouldAutoCollapseSidebar() {
+    return sidebarBehaviorPreference !== 'fixed';
+}
+
+function applySidebarBehaviorPreference(nextBehavior) {
+    const normalized = normalizeSidebarBehaviorPreference(nextBehavior);
+    if (sidebarBehaviorPreference === normalized) {
+        return normalized;
+    }
+    sidebarBehaviorPreference = normalized;
+    if (!shouldAutoCollapseSidebar()) {
+        expandSidebar();
+    } else {
+        collapseSidebar();
+    }
+    return normalized;
+}
 
 function setActiveNavigation(page) {
     const items = document.querySelectorAll('.sidebar-item, .submenu-item');
@@ -3112,6 +3155,16 @@ function collapseSidebar() {
     // Submenu CRM permanece aberto; fechamento apenas via clique
 }
 
+function requestSidebarAutoCollapse() {
+    if (shouldAutoCollapseSidebar()) {
+        collapseSidebar();
+    }
+}
+
+if (!shouldAutoCollapseSidebar()) {
+    expandSidebar();
+}
+
 // Alterna a sidebar através do botão de menu
 menuToggle?.addEventListener('click', () => {
     if (sidebarExpanded) {
@@ -3122,8 +3175,8 @@ menuToggle?.addEventListener('click', () => {
 });
 
 // Recolhe a sidebar apenas quando o usuário entra no conteúdo principal
-mainContent?.addEventListener('mouseenter', collapseSidebar);
-mainContent?.addEventListener('click', collapseSidebar);
+mainContent?.addEventListener('mouseenter', requestSidebarAutoCollapse);
+mainContent?.addEventListener('click', requestSidebarAutoCollapse);
 
 // Mostra ou esconde submenu do CRM
 function toggleCrmSubmenu() {
@@ -3147,7 +3200,7 @@ document.querySelectorAll('.sidebar-item[data-page], .submenu-item[data-page]').
         const page = item.dataset.page;
         if (!page) return;
         loadPage(page);
-        collapseSidebar();
+        requestSidebarAutoCollapse();
     });
 });
 
@@ -3173,5 +3226,15 @@ window.addEventListener('load', () => {
 window.addEventListener('resize', () => {
     if (sidebarExpanded) {
         mainContent.style.marginLeft = window.innerWidth >= 1024 ? '240px' : '200px';
+    }
+});
+
+window.addEventListener('menu-sidebar-behavior-change', (event) => {
+    applySidebarBehaviorPreference(event?.detail?.behavior);
+});
+
+window.addEventListener('storage', (event) => {
+    if (event.key === MENU_SIDEBAR_BEHAVIOR_KEY) {
+        applySidebarBehaviorPreference(event.newValue);
     }
 });
