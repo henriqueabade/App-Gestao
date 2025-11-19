@@ -8,6 +8,14 @@
     return fetch(`${baseUrl}${path}`, options);
   }
 
+  const context = window.usuariosPermissoesContext || {};
+  delete window.usuariosPermissoesContext;
+
+  const applicationContext = {
+    usuarioId: context.usuarioId ?? context.usuario?.id ?? null,
+    modeloPermissoesId: context.modeloPermissoesId ?? context.modeloId ?? context.modelo?.id ?? null
+  };
+
   const saveOverlay = document.getElementById('usuariosPermissoesSalvarOverlay');
   const saveForm = document.getElementById('usuariosPermissoesSalvarForm');
   const saveNameInput = document.getElementById('usuariosPermissoesSalvarNome');
@@ -44,6 +52,7 @@
   };
 
   const profiles = new Map();
+  let applyInProgress = false;
 
   function getErrorMessageForStatus(status, fallbackMessage) {
     if (status === 409) {
@@ -173,6 +182,41 @@
     return payload;
   }
 
+  function findProfileKeyByModelId(modelId) {
+    if (modelId === undefined || modelId === null) {
+      return null;
+    }
+    const target = String(modelId);
+    for (const [key, profile] of profiles.entries()) {
+      if (profile?.id !== undefined && profile?.id !== null && String(profile.id) === target) {
+        return key;
+      }
+    }
+    return null;
+  }
+
+  function applyNormalizedPayload(payload = {}) {
+    clearAllCheckboxes();
+    const moduleKeys = elements.moduleToggles.map(toggle => `module_${toggle.dataset.moduleToggle}`);
+    const enabledModules = moduleKeys.filter(moduleName => payload[moduleName]);
+    applyModuleSelection(enabledModules);
+    overlay
+      .querySelectorAll('input[type="checkbox"][data-role="item"]')
+      .forEach(cb => {
+        const name = cb.name || cb.value;
+        if (!name) return;
+        cb.checked = !cb.disabled && Boolean(payload[name]);
+      });
+    updateAllMasterCheckboxes();
+    updateSummary();
+  }
+
+  function populateFromRawPermissions(rawPayload) {
+    const normalized = normalizePermissionsPayload(rawPayload);
+    applyNormalizedPayload(normalized);
+    return normalized;
+  }
+
   function resetAllOptionLabels() {
     Array.from(elements.profileSelect?.options || []).forEach(option => {
       if (!option.value) return;
@@ -279,24 +323,67 @@
       elements.profileSelect.value = profileKey;
     }
 
-    clearAllCheckboxes();
-    const payload = profile.payload || {};
-    const selectedModules = elements.moduleToggles
-      .map(toggle => `module_${toggle.dataset.moduleToggle}`)
-      .filter(moduleName => payload[moduleName]);
-    applyModuleSelection(selectedModules);
-
-    overlay
-      .querySelectorAll('input[type="checkbox"][data-role="item"]')
-      .forEach(cb => {
-        const name = cb.name || cb.value;
-        if (!name) return;
-        cb.checked = !cb.disabled && Boolean(payload[name]);
-      });
-
-    updateAllMasterCheckboxes();
-    updateSummary();
+    applyNormalizedPayload(profile.payload || {});
     markProfileLoaded(profileKey);
+  }
+
+  function syncProfileSelectionFromContext({ loadProfileIfNoUser = false } = {}) {
+    if (!applicationContext.modeloPermissoesId) {
+      return;
+    }
+    const key = findProfileKeyByModelId(applicationContext.modeloPermissoesId);
+    if (!key) {
+      return;
+    }
+    if (loadProfileIfNoUser && !applicationContext.usuarioId) {
+      loadProfile(key);
+      return;
+    }
+    if (elements.profileSelect) {
+      elements.profileSelect.value = key;
+    }
+    updateProfileButtons();
+  }
+
+  async function loadUserPermissions(usuarioId) {
+    if (!usuarioId) return;
+    try {
+      const resp = await fetchApi(`/api/usuarios/${encodeURIComponent(usuarioId)}`);
+      if (!resp.ok) {
+        const messageFromResponse = await extractResponseMessage(resp);
+        const errorMessage = messageFromResponse || 'Não foi possível carregar as permissões do usuário.';
+        if (typeof window.showToast === 'function') {
+          window.showToast(errorMessage, 'error');
+        }
+        return;
+      }
+      const data = await resp.json();
+      const usuario = data?.usuario ?? data;
+      const permissoes = data?.permissoes ?? usuario?.permissoes ?? usuario?.permissions ?? {};
+      populateFromRawPermissions(permissoes);
+      state.currentProfile = null;
+      state.profileLoaded = false;
+      if (elements.profileSelect) {
+        elements.profileSelect.value = '';
+      }
+      resetAllOptionLabels();
+      updateProfileButtons();
+      const modeloId =
+        usuario?.modeloPermissoesId ??
+        usuario?.modelo_permissoes_id ??
+        data?.modeloPermissoesId ??
+        data?.modelo_permissoes_id ??
+        null;
+      if (modeloId !== null && modeloId !== undefined) {
+        applicationContext.modeloPermissoesId = modeloId;
+      }
+      syncProfileSelectionFromContext();
+    } catch (err) {
+      console.error('Erro ao carregar permissões do usuário:', err);
+      if (typeof window.showToast === 'function') {
+        window.showToast('Erro ao carregar permissões do usuário.', 'error');
+      }
+    }
   }
 
   function revertChanges() {
@@ -337,12 +424,85 @@
     return { permissions, columns, modules };
   }
 
-  function applyChanges() {
-    const selections = collectSelections();
-    const payload = buildPayloadFromSelections(selections);
-    document.dispatchEvent(new CustomEvent('roles:apply', { detail: payload }));
-    if (typeof window.showToast === 'function') {
-      window.showToast('Permissões aplicadas com sucesso.', 'success');
+  async function applyChanges() {
+    const usuarioId = applicationContext.usuarioId;
+    if (!usuarioId) {
+      if (typeof window.showToast === 'function') {
+        window.showToast('Selecione um usuário para aplicar as permissões.', 'warning');
+      }
+      return;
+    }
+    if (applyInProgress) return;
+    const button = elements.apply;
+    applyInProgress = true;
+    if (button) {
+      button.disabled = true;
+      button.classList.add('btn-loading');
+    }
+    try {
+      const selectedProfileKey = elements.profileSelect?.value || '';
+      const profile = selectedProfileKey && profiles.has(selectedProfileKey)
+        ? profiles.get(selectedProfileKey)
+        : null;
+      const canApplyProfileDirectly = Boolean(
+        profile &&
+        selectedProfileKey === state.currentProfile &&
+        state.profileLoaded
+      );
+      let resp;
+      if (canApplyProfileDirectly && profile?.id !== undefined && profile?.id !== null) {
+        resp = await fetchApi(`/api/usuarios/${encodeURIComponent(usuarioId)}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            modeloPermissoesId: profile.id,
+            aplicarPermissoesDoModelo: true
+          })
+        });
+      } else {
+        const payload = canApplyProfileDirectly && profile
+          ? profile.rawPayload ?? profile.payload ?? {}
+          : buildPayloadFromSelections(collectSelections());
+        resp = await fetchApi(`/api/usuarios/${encodeURIComponent(usuarioId)}/permissoes`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ permissoes: payload })
+        });
+      }
+
+      if (!resp.ok) {
+        const messageFromResponse = await extractResponseMessage(resp);
+        const errorMessage = messageFromResponse || 'Não foi possível aplicar as permissões.';
+        if (typeof window.showToast === 'function') {
+          window.showToast(errorMessage, 'error');
+        }
+        return;
+      }
+
+      try {
+        await resp.json();
+      } catch (err) {
+        // Respostas 204 não possuem corpo
+      }
+
+      if (typeof window.showToast === 'function') {
+        window.showToast('Permissões aplicadas com sucesso.', 'success');
+      }
+
+      window.dispatchEvent(new Event('usuarios:atualizado'));
+      window.dispatchEvent(new CustomEvent('usuarioAtualizado', { detail: { id: usuarioId } }));
+      closeModal();
+    } catch (err) {
+      console.error('Erro ao aplicar permissões do usuário:', err);
+      if (typeof window.showToast === 'function') {
+        window.showToast('Erro ao aplicar as permissões do usuário.', 'error');
+      }
+    } finally {
+      applyInProgress = false;
+      if (button) {
+        button.disabled = false;
+        button.classList.remove('btn-loading');
+      }
     }
   }
 
@@ -816,12 +976,14 @@
   function convertModelToProfile(modelo) {
     const nome = normalizarNome(modelo?.nome) || 'Perfil';
     const key = modelo?.id !== undefined && modelo?.id !== null ? String(modelo.id) : gerarChaveUnica(nome);
+    const rawPayload = modelo?.permissoes ?? {};
     return {
       id: modelo?.id ?? null,
       key,
       name: nome,
       description: modelo?.descricao ?? modelo?.description ?? '',
-      payload: normalizePermissionsPayload(modelo?.permissoes)
+      payload: normalizePermissionsPayload(rawPayload),
+      rawPayload
     };
   }
 
@@ -910,7 +1072,22 @@
   setAllModulesState(true);
   updateProfileButtons();
   applySearch('');
-  loadProfilesFromApi();
+  const profilesLoadingPromise = loadProfilesFromApi();
+  if (profilesLoadingPromise && typeof profilesLoadingPromise.then === 'function') {
+    profilesLoadingPromise
+      .then(() => {
+        syncProfileSelectionFromContext({ loadProfileIfNoUser: !applicationContext.usuarioId });
+      })
+      .catch(err => {
+        console.error('Erro ao sincronizar modelos de permissões:', err);
+      });
+  } else {
+    syncProfileSelectionFromContext({ loadProfileIfNoUser: !applicationContext.usuarioId });
+  }
+
+  if (applicationContext.usuarioId) {
+    loadUserPermissions(applicationContext.usuarioId);
+  }
 
   if (typeof Modal?.signalReady === 'function') {
     Modal.signalReady(overlayId);
