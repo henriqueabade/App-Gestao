@@ -101,6 +101,11 @@
   let applyInProgress = false;
 
   function getErrorMessageForStatus(status, fallbackMessage) {
+    const normalizedFallback =
+      typeof fallbackMessage === 'string' ? fallbackMessage.trim() : '';
+    if (normalizedFallback) {
+      return normalizedFallback;
+    }
     if (status === 409) {
       return 'Já existe um modelo com este nome.';
     }
@@ -110,7 +115,7 @@
     if (status >= 500) {
       return 'Ocorreu um erro no servidor. Tente novamente mais tarde.';
     }
-    return fallbackMessage;
+    return '';
   }
 
   async function extractResponseMessage(resp) {
@@ -826,10 +831,9 @@
       });
       if (!resp.ok) {
         const messageFromResponse = await extractResponseMessage(resp);
-        const errorMessage = getErrorMessageForStatus(
-          resp.status,
-          messageFromResponse || 'Não foi possível atualizar o modelo de permissões.'
-        );
+        const errorMessage =
+          getErrorMessageForStatus(resp.status, messageFromResponse) ||
+          'Não foi possível atualizar o modelo de permissões.';
         if (typeof window.showToast === 'function') {
           window.showToast(errorMessage, 'error');
         }
@@ -921,10 +925,9 @@
       });
       if (!resp.ok) {
         const messageFromResponse = await extractResponseMessage(resp);
-        const errorMessage = getErrorMessageForStatus(
-          resp.status,
-          messageFromResponse || 'Não foi possível criar o modelo de permissões.'
-        );
+        const errorMessage =
+          getErrorMessageForStatus(resp.status, messageFromResponse) ||
+          'Não foi possível criar o modelo de permissões.';
         if (typeof window.showToast === 'function') {
           window.showToast(errorMessage, 'error');
         }
@@ -1024,10 +1027,9 @@
       });
       if (!resp.ok) {
         const messageFromResponse = await extractResponseMessage(resp);
-        const errorMessage = getErrorMessageForStatus(
-          resp.status,
-          messageFromResponse || 'Não foi possível excluir o modelo de permissões.'
-        );
+        const errorMessage =
+          getErrorMessageForStatus(resp.status, messageFromResponse) ||
+          'Não foi possível excluir o modelo de permissões.';
         if (typeof window.showToast === 'function') {
           window.showToast(errorMessage, 'error');
         }
