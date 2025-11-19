@@ -27,7 +27,8 @@
     summaryActions: overlay.querySelector('#usuariosPermissoesResumoAcoes'),
     summaryColumns: overlay.querySelector('#usuariosPermissoesResumoColunas'),
     tabs: Array.from(overlay.querySelectorAll('[data-permission-tab-trigger]')),
-    panels: Array.from(overlay.querySelectorAll('[data-permission-tab-panel]'))
+    panels: Array.from(overlay.querySelectorAll('[data-permission-tab-panel]')),
+    moduleToggles: Array.from(overlay.querySelectorAll('[data-module-toggle]'))
   };
 
   const state = {
@@ -40,75 +41,61 @@
     ADMIN: {
       name: 'Administrador',
       description: 'Acesso total ao sistema',
-      permissions: [
-        'mp_ver_lista',
-        'mp_buscar',
-        'mp_exportar',
-        'mp_criar',
-        'mp_editar',
-        'mp_excluir',
-        'mp_ver_processos',
-        'mp_criar_processo',
-        'mp_excluir_processo',
-        'mp_ver_categorias',
-        'mp_criar_categoria',
-        'mp_editar_categoria',
-        'mp_excluir_categoria',
-        'mp_ver_unidades',
-        'mp_criar_unidade',
-        'mp_editar_unidade',
-        'mp_excluir_unidade',
-        'mp_ver_estoque',
-        'mp_entrada_estoque',
-        'mp_saida_estoque',
-        'mp_ajustar_estoque',
-        'mp_estoque_infinito'
-      ],
-      columns: [
-        'col_mp_codigo',
-        'col_mp_nome',
-        'col_mp_categoria',
-        'col_mp_unidade',
-        'col_mp_estoque_atual',
-        'col_mp_estoque_minimo',
-        'col_mp_custo_medio',
-        'col_mp_fornecedor',
-        'col_mp_status',
-        'col_mp_atualizado_em',
-        'col_mov_data',
-        'col_mov_tipo',
-        'col_mov_quantidade',
-        'col_mov_referencia',
-        'col_mov_usuario',
-        'col_proc_processo',
-        'col_proc_duracao',
-        'col_proc_custo',
-        'col_proc_ordem',
-        'col_cat_categoria',
-        'col_cat_descricao',
-        'col_cat_itens',
-        'col_uni_unidade',
-        'col_uni_descricao',
-        'col_uni_precisao'
-      ]
+      permissions: [],
+      columns: [],
+      modules: []
     },
     VENDEDOR: {
       name: 'Vendedor',
       description: 'Acesso a vendas e relacionamento com clientes',
-      permissions: ['mp_ver_lista', 'mp_buscar', 'mp_ver_estoque'],
-      columns: ['col_mp_nome', 'col_mp_categoria', 'col_mp_estoque_atual', 'col_mp_status']
+      permissions: [
+        'mp.view',
+        'mp.search',
+        'mp.stock.view',
+        'prod.view',
+        'prod.search',
+        'prod.details.view',
+        'prod.stock.view',
+        'orc.view',
+        'orc.search',
+        'orc.view.details',
+        'orc.create',
+        'ped.view',
+        'ped.search',
+        'ped.view.details',
+        'cli.view',
+        'cli.search',
+        'cli.details.view',
+        'pros.view',
+        'pros.search',
+        'pros.details.view',
+        'ctt.view',
+        'ctt.search',
+        'ctt.details.view',
+        'rel.view',
+        'rel.search',
+        'tarefas.view',
+        'tarefas.calendar.view'
+      ],
+      columns: ['col_mp_nome', 'col_mp_categoria', 'col_mp_estoque_atual', 'col_mp_status', 'col_prod_nome', 'col_prod_status'],
+      modules: ['module_mp', 'module_prod', 'module_orc', 'module_ped', 'module_cli', 'module_pros', 'module_ctt', 'module_rel', 'module_tarefas']
     },
     ARQUITETO: {
       name: 'Arquiteto',
       description: 'Acesso a produtos e projetos técnicos',
       permissions: [
-        'mp_ver_lista',
-        'mp_buscar',
-        'mp_ver_processos',
-        'mp_criar_processo',
-        'mp_ver_categorias',
-        'mp_ver_unidades',
-        'mp_ver_estoque'
+        'mp.view',
+        'mp.search',
+        'mp.process.view',
+        'mp.process.create',
+        'mp.category.view',
+        'mp.unit.view',
+        'mp.stock.view',
+        'prod.view',
+        'prod.search',
+        'prod.details.view',
+        'prod.stage.view',
+        'prod.stage.insert'
       ],
       columns: [
         'col_mp_codigo',
@@ -117,29 +104,78 @@
         'col_mp_unidade',
         'col_mp_estoque_atual',
         'col_mp_custo_medio',
-        'col_proc_processo',
+        'col_proc_nome',
         'col_proc_duracao',
         'col_proc_custo',
-        'col_proc_ordem'
-      ]
+        'col_proc_ordem',
+        'col_prod_nome',
+        'col_prod_etapa_atual'
+      ],
+      modules: ['module_mp', 'module_prod']
     },
     GERENTE: {
       name: 'Gerente',
       description: 'Acesso gerencial e relatórios avançados',
       permissions: [
-        'mp_ver_lista',
-        'mp_buscar',
-        'mp_exportar',
-        'mp_editar',
-        'mp_ver_processos',
-        'mp_ver_categorias',
-        'mp_criar_categoria',
-        'mp_editar_categoria',
-        'mp_ver_unidades',
-        'mp_ver_estoque',
-        'mp_ajustar_estoque'
+        'mp.view',
+        'mp.search',
+        'mp.export',
+        'mp.edit',
+        'mp.category.view',
+        'mp.category.create',
+        'mp.category.edit',
+        'mp.unit.view',
+        'mp.stock.view',
+        'mp.stock.adjust',
+        'prod.view',
+        'prod.search',
+        'prod.export',
+        'prod.edit',
+        'prod.collection.view',
+        'prod.collection.edit',
+        'orc.view',
+        'orc.search',
+        'orc.edit',
+        'orc.convert',
+        'ped.view',
+        'ped.search',
+        'ped.status.confirm',
+        'ped.status.invoice',
+        'ped.status.ship',
+        'ped.status.deliver',
+        'cli.view',
+        'cli.search',
+        'cli.details.view',
+        'pros.view',
+        'pros.search',
+        'pros.details.view',
+        'ctt.view',
+        'ctt.search',
+        'rel.view',
+        'rel.run',
+        'rel.export.csv',
+        'rel.export.xlsx',
+        'rel.export.pdf',
+        'tarefas.view',
+        'tarefas.calendar.view',
+        'cfg.view',
+        'cfg.roles.view'
       ],
-      columns: ['col_mp_nome', 'col_mp_categoria', 'col_mp_estoque_atual', 'col_mp_custo_medio', 'col_mp_status']
+      columns: [
+        'col_mp_nome',
+        'col_mp_categoria',
+        'col_mp_estoque_atual',
+        'col_mp_custo_medio',
+        'col_mp_status',
+        'col_prod_nome',
+        'col_prod_status',
+        'col_orc_total',
+        'col_ped_total',
+        'col_cli_nome_fantasia',
+        'col_rel_total',
+        'col_rel_qtd'
+      ],
+      modules: ['module_mp', 'module_prod', 'module_orc', 'module_ped', 'module_cli', 'module_pros', 'module_ctt', 'module_rel', 'module_tarefas', 'module_cfg']
     }
   };
 
@@ -152,7 +188,8 @@
       name: profile?.name || 'Perfil',
       description: profile?.description || '',
       permissions: Array.isArray(profile?.permissions) ? [...profile.permissions] : [],
-      columns: Array.isArray(profile?.columns) ? [...profile.columns] : []
+      columns: Array.isArray(profile?.columns) ? [...profile.columns] : [],
+      modules: Array.isArray(profile?.modules) ? [...profile.modules] : []
     };
   }
 
@@ -220,8 +257,10 @@
     const totalColumns = overlay.querySelectorAll(
       'input[type="checkbox"][data-role="item"][data-item-type="column"]:checked'
     ).length;
+    const totalModules = overlay.querySelectorAll('[data-module-toggle] input[type="checkbox"]:checked').length;
     if (elements.summaryActions) elements.summaryActions.textContent = totalActions;
     if (elements.summaryColumns) elements.summaryColumns.textContent = totalColumns;
+    if (elements.summaryModules) elements.summaryModules.textContent = totalModules;
   }
 
   function markProfileLoaded(profileKey) {
@@ -261,19 +300,20 @@
     }
 
     clearAllCheckboxes();
+    applyModuleSelection(profile.modules);
 
     profile.permissions.forEach(permission => {
       const checkbox = overlay.querySelector(
         `input[type="checkbox"][data-role="item"][name="${permission}"]`
       );
-      if (checkbox) checkbox.checked = true;
+      if (checkbox && !checkbox.disabled) checkbox.checked = true;
     });
 
     profile.columns.forEach(column => {
       const checkbox = overlay.querySelector(
         `input[type="checkbox"][data-role="item"][name="${column}"]`
       );
-      if (checkbox) checkbox.checked = true;
+      if (checkbox && !checkbox.disabled) checkbox.checked = true;
     });
 
     updateAllMasterCheckboxes();
@@ -287,6 +327,7 @@
       return;
     }
     clearAllCheckboxes();
+    setAllModulesState();
     updateAllMasterCheckboxes();
     updateSummary();
     resetAllOptionLabels();
@@ -299,7 +340,7 @@
     overlay
       .querySelectorAll('input[type="checkbox"][data-role="item"]')
       .forEach(cb => {
-        if (!cb.checked) return;
+        if (!cb.checked || cb.disabled) return;
         const name = cb.name || cb.value;
         if (!name) return;
         if (cb.dataset.itemType === 'column') {
@@ -308,13 +349,20 @@
           permissions.push(name);
         }
       });
-    return { permissions, columns };
+    const modules = elements.moduleToggles
+      .map(toggle => {
+        const id = toggle.dataset.moduleToggle;
+        const input = toggle.querySelector('input[type="checkbox"]');
+        return input?.checked ? `module_${id}` : null;
+      })
+      .filter(Boolean);
+    return { permissions, columns, modules };
   }
 
   function applyChanges() {
     const selections = collectSelections();
     const payload = {};
-    [...selections.permissions, ...selections.columns].forEach(name => {
+    [...selections.modules, ...selections.permissions, ...selections.columns].forEach(name => {
       payload[name] = true;
     });
     document.dispatchEvent(new CustomEvent('roles:apply', { detail: payload }));
@@ -330,6 +378,7 @@
     const profile = profiles.get(key);
     profile.permissions = selections.permissions;
     profile.columns = selections.columns;
+    profile.modules = selections.modules;
     state.profileLoaded = true;
     markProfileLoaded(key);
     if (typeof window.showToast === 'function') {
@@ -382,7 +431,8 @@
       name: finalName,
       description: descricao || '',
       permissions: selections.permissions,
-      columns: selections.columns
+      columns: selections.columns,
+      modules: selections.modules
     });
     adicionarOuAtualizarOpcao(key, finalName);
     if (elements.profileSelect) {
@@ -446,6 +496,7 @@
       state.currentProfile = null;
       state.profileLoaded = false;
       clearAllCheckboxes();
+      setAllModulesState();
       updateAllMasterCheckboxes();
       updateSummary();
     }
@@ -528,6 +579,13 @@
     markProfileDirty();
   }
 
+  function handleModuleToggle(event) {
+    const toggle = event.target;
+    const id = toggle.closest('[data-module-toggle]')?.dataset?.moduleToggle;
+    if (!id) return;
+    setModuleState(id, toggle.checked);
+  }
+
   function handleProfileChange() {
     resetAllOptionLabels();
     updateProfileButtons();
@@ -584,9 +642,7 @@
     elements.tabs.forEach(tab => {
       tab.addEventListener('click', () => setTab(tab.dataset.permissionTabTrigger));
     });
-    if (elements.summaryModules) {
-      elements.summaryModules.textContent = String(elements.panels.length);
-    }
+    updateSummary();
   }
 
   function initAccordions() {
@@ -605,6 +661,46 @@
       .forEach(cb => cb.addEventListener('change', handleItemChange));
 
     updateAllMasterCheckboxes();
+    updateSummary();
+  }
+
+  function setModuleState(moduleId, enabled, options = {}) {
+    const toggleLabel = overlay.querySelector(`[data-module-toggle="${moduleId}"]`);
+    const toggle = toggleLabel?.querySelector('input[type="checkbox"]');
+    const content = overlay.querySelector(`[data-module-content="${moduleId}"]`);
+    const { markDirty = true } = options;
+    if (toggle) toggle.checked = enabled;
+    if (toggleLabel) {
+      toggleLabel.classList.toggle('usuario-permissao-toggle--on', enabled);
+      toggleLabel.classList.toggle('usuario-permissao-toggle--disabled', !enabled);
+    }
+    if (content) {
+      content.classList.toggle('usuarios-permissoes-module--disabled', !enabled);
+      content.querySelectorAll('input[type="checkbox"][data-role="item"]').forEach(cb => {
+        cb.disabled = !enabled;
+        if (!enabled) cb.checked = false;
+      });
+    }
+    updateAllMasterCheckboxes();
+    updateSummary();
+    if (markDirty) markProfileDirty();
+  }
+
+  function setAllModulesState(enabled = true) {
+    elements.moduleToggles.forEach(toggle => {
+      setModuleState(toggle.dataset.moduleToggle, enabled, { markDirty: false });
+    });
+  }
+
+  function applyModuleSelection(modules = []) {
+    const moduleSet = Array.isArray(modules) && modules.length
+      ? new Set(modules.map(mod => mod.replace(/^module_/, '')))
+      : null;
+    elements.moduleToggles.forEach(toggle => {
+      const id = toggle.dataset.moduleToggle;
+      const shouldEnable = moduleSet ? moduleSet.has(id) : true;
+      setModuleState(id, shouldEnable, { markDirty: false });
+    });
     updateSummary();
   }
 
@@ -640,6 +736,45 @@
     saveCancelBtn?.addEventListener('click', fecharModalSalvar);
     saveConfirmBtn?.addEventListener('click', handleSaveConfirm);
     saveForm?.addEventListener('submit', handleSaveConfirm);
+    elements.moduleToggles.forEach(toggle => {
+      const input = toggle.querySelector('input[type="checkbox"]');
+      if (input) {
+        input.addEventListener('change', handleModuleToggle);
+      }
+    });
+  }
+
+  function getAllAvailableSelections() {
+    const permissions = Array.from(
+      overlay.querySelectorAll('input[type="checkbox"][data-role="item"][data-item-type="action"]')
+    )
+      .map(cb => cb.name || cb.value)
+      .filter(Boolean);
+    const columns = Array.from(
+      overlay.querySelectorAll('input[type="checkbox"][data-role="item"][data-item-type="column"]')
+    )
+      .map(cb => cb.name || cb.value)
+      .filter(Boolean);
+    const modules = elements.moduleToggles.map(toggle => `module_${toggle.dataset.moduleToggle}`);
+    return { permissions, columns, modules };
+  }
+
+  function ensureAdminHasAll() {
+    if (!profiles.has('ADMIN')) return;
+    const admin = profiles.get('ADMIN');
+    const available = getAllAvailableSelections();
+    if (!admin.permissions.length) admin.permissions = available.permissions;
+    if (!admin.columns.length) admin.columns = available.columns;
+    if (!admin.modules?.length) admin.modules = available.modules;
+  }
+
+  function ensureProfilesHaveModules() {
+    const availableModules = getAllAvailableSelections().modules;
+    profiles.forEach(profile => {
+      if (!Array.isArray(profile.modules) || !profile.modules.length) {
+        profile.modules = [...availableModules];
+      }
+    });
   }
 
   initTabs();
@@ -647,6 +782,9 @@
   initCheckboxes();
   initProfileOptions();
   initEvents();
+  ensureAdminHasAll();
+  ensureProfilesHaveModules();
+  setAllModulesState(true);
   updateProfileButtons();
   applySearch('');
 
