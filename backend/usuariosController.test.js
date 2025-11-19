@@ -193,6 +193,7 @@ function setup() {
       modulo: 'mp',
       titulo: 'MP',
       campos: [
+        { chave: 'acesso', acao: 'acesso', titulo: 'Acesso', colunas: [] },
         {
           chave: 'visualizar',
           acao: 'visualizar',
@@ -962,6 +963,28 @@ test('PUT /api/usuarios/:id/permissoes aceita módulos dinâmicos do catálogo',
 
     const registro = await pool.query('SELECT permissoes FROM usuarios WHERE id = $1', [1]);
     assert.deepStrictEqual(registro.rows[0].permissoes, corpo.permissoes);
+  } finally {
+    await close();
+  }
+});
+
+test('PUT /api/usuarios/:id/permissoes aceita alias "permissoes" para acesso ao módulo', async () => {
+  const { listen, close, pool } = setup();
+  const port = await listen();
+  try {
+    const resposta = await authenticatedFetch(port, '/api/usuarios/1/permissoes', {
+      method: 'PUT',
+      usuarioId: 2,
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ permissoes: { mp: { permissoes: true } } })
+    });
+
+    assert.strictEqual(resposta.status, 200);
+    const corpo = await resposta.json();
+    assert.strictEqual(corpo.permissoes.mp.acesso.permitido, true);
+
+    const registro = await pool.query('SELECT permissoes FROM usuarios WHERE id = $1', [1]);
+    assert.strictEqual(registro.rows[0].permissoes.mp.acesso.permitido, true);
   } finally {
     await close();
   }

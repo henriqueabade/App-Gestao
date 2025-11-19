@@ -706,6 +706,11 @@ function populatePermissionMapsFromStructure(estrutura) {
       }
 
       const normalizedAction = normalizeKey(actionName);
+      if (normalizedAction === 'acesso') {
+        registerActionAlias(actionMap, actionName, 'permissoes');
+        registerActionAlias(actionMap, actionName, 'permissao');
+        registerActionAlias(actionMap, actionName, 'permissões');
+      }
       if (normalizedAction) {
         for (const [aliasKey, target] of ESCOPO_ALIASES.entries()) {
           if (target === normalizedAction) {
