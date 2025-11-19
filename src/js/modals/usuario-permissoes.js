@@ -164,61 +164,19 @@
       }
     }
 
-    if (Array.isArray(input)) {
-      const payload = {};
-      input.forEach(item => {
-        if (!item) return;
-        if (typeof item === 'string') {
-          payload[item] = true;
-          return;
-        }
-        if (typeof item === 'object') {
-          const key = item.name || item.nome || item.chave || item.key || item.id;
-          if (!key) return;
-          const value = item.value ?? item.valor ?? item.permitido ?? item.enabled ?? item.allow ?? item.allowed ?? item.checked ??
-            item.active ?? item.ativo;
-          payload[key] = value === undefined ? true : booleanFromValue(value);
-        }
-      });
-      return payload;
+    if (!input || typeof input !== 'object' || Array.isArray(input)) {
+      return {};
     }
 
-    if (typeof input === 'object') {
-      if (looksLikeStructuredPermissions(input)) {
-        const flattened = flattenPermissionsStructure(input);
-        if (Object.keys(flattened).length) {
-          return flattened;
-        }
+    const payload = {};
+    Object.entries(input).forEach(([moduleName, moduleValue]) => {
+      const normalizedModule = normalizePermissionKey(moduleName);
+      if (!normalizedModule || !moduleValue || typeof moduleValue !== 'object') {
+        return;
       }
-      const payload = {};
-      Object.entries(input).forEach(([key, value]) => {
-        if (value === null || value === undefined) {
-          return;
-        }
-        if (typeof value === 'object' && !Array.isArray(value)) {
-          if (
-            Object.prototype.hasOwnProperty.call(value, 'permitido') ||
-            Object.prototype.hasOwnProperty.call(value, 'enabled') ||
-            Object.prototype.hasOwnProperty.call(value, 'allow') ||
-            Object.prototype.hasOwnProperty.call(value, 'allowed') ||
-            Object.prototype.hasOwnProperty.call(value, 'value') ||
-            Object.prototype.hasOwnProperty.call(value, 'valor') ||
-            Object.prototype.hasOwnProperty.call(value, 'checked') ||
-            Object.prototype.hasOwnProperty.call(value, 'active') ||
-            Object.prototype.hasOwnProperty.call(value, 'ativo')
-          ) {
-            const indicator = value.permitido ?? value.enabled ?? value.allow ?? value.allowed ?? value.value ?? value.valor ??
-              value.checked ?? value.active ?? value.ativo;
-            payload[key] = booleanFromValue(indicator);
-            return;
-          }
-        }
-        payload[key] = booleanFromValue(value);
-      });
-      return payload;
-    }
-
-    return {};
+      processModulePermissions(normalizedModule, moduleValue, payload);
+    });
+    return payload;
   }
 
   function normalizePermissionKey(value) {
@@ -306,74 +264,123 @@
     return columnFieldLookup.get(key) || null;
   }
 
-  function looksLikeStructuredPermissions(input) {
-    if (!input || typeof input !== 'object' || Array.isArray(input)) return false;
-    return Object.values(input).some(moduleValue => {
-      if (!moduleValue || typeof moduleValue !== 'object' || Array.isArray(moduleValue)) return false;
-      return Object.values(moduleValue).some(actionValue => actionValue && typeof actionValue === 'object' && !Array.isArray(actionValue));
-    });
-  }
-
-  function flattenPermissionsStructure(structure) {
-    const flattened = {};
-    Object.entries(structure || {}).forEach(([moduleName, moduleValue]) => {
-      const normalizedModule = normalizePermissionKey(moduleName);
-      if (!normalizedModule || !moduleValue || typeof moduleValue !== 'object' || Array.isArray(moduleValue)) {
+  function processModulePermissions(moduleKey, moduleTree, acc) {
+    Object.entries(moduleTree || {}).forEach(([actionKey, actionNode]) => {
+      if (!actionNode || typeof actionNode !== 'object' || Array.isArray(actionNode)) {
         return;
       }
-      Object.entries(moduleValue).forEach(([actionKey, actionValue]) => {
-        if (!actionValue || typeof actionValue !== 'object' || Array.isArray(actionValue)) {
-          return;
-        }
-        const normalizedAction = normalizePermissionKey(actionKey);
-        if (!normalizedAction) return;
-        traverseActionTree(normalizedModule, [normalizedAction], actionValue, flattened);
-      });
+      const normalizedAction = normalizePermissionKey(actionKey);
+      if (!normalizedAction) return;
+      traverseStructuredPermissions(moduleKey, [normalizedAction], actionNode, acc);
     });
-    return flattened;
   }
 
-  function traverseActionTree(moduleKey, path, node, acc) {
-    if (!moduleKey || !path || !path.length || !node || typeof node !== 'object' || Array.isArray(node)) {
+  function traverseStructuredPermissions(moduleKey, path, node, acc) {
+    if (!moduleKey || !Array.isArray(path) || !path.length || !node || typeof node !== 'object' || Array.isArray(node)) {
       return;
     }
     const normalizedPath = path.map(segment => normalizePermissionKey(segment)).filter(Boolean);
     if (!normalizedPath.length) {
       return;
     }
-    const firstSegment = normalizedPath[0];
-    if (Object.prototype.hasOwnProperty.call(node, 'permitido')) {
-      const allowed = booleanFromValue(node.permitido);
-      if (allowed) {
-        if (normalizedPath.length === 1 && MODULE_ACTIVATION_ACTIONS.has(firstSegment)) {
-          acc[`module_${moduleKey}`] = true;
-        } else {
-          acc[[moduleKey, ...normalizedPath].join('.')] = true;
-        }
+
+    if (isPermissionNodeAllowed(node)) {
+      const permissionKey = [moduleKey, ...normalizedPath].join('.');
+      acc[permissionKey] = true;
+      if (normalizedPath.length === 1 && MODULE_ACTIVATION_ACTIONS.has(normalizedPath[0])) {
+        acc[`module_${moduleKey}`] = true;
       }
     }
+
     if (node.campos && typeof node.campos === 'object' && !Array.isArray(node.campos)) {
-      Object.entries(node.campos).forEach(([fieldName, fieldValue]) => {
-        if (fieldValue === null || fieldValue === undefined) return;
-        let allowed = false;
-        if (typeof fieldValue === 'object' && !Array.isArray(fieldValue)) {
-          allowed = Object.values(fieldValue).some(Boolean);
-        } else {
-          allowed = booleanFromValue(fieldValue);
-        }
-        if (!allowed) return;
-        const columnName = findColumnNameForField(moduleKey, normalizedPath, fieldName);
-        if (columnName) {
-          acc[columnName] = true;
-        }
-      });
+      processFieldPermissions(moduleKey, normalizedPath, node.campos, acc);
     }
+
     Object.entries(node).forEach(([childKey, childValue]) => {
-      if (['permitido', 'escopos', 'campos'].includes(childKey)) return;
+      if (['permitido', 'escopos', 'campos', 'scopes'].includes(childKey)) return;
       if (!childValue || typeof childValue !== 'object' || Array.isArray(childValue)) return;
-      const childSegment = normalizePermissionKey(childKey);
-      if (!childSegment) return;
-      traverseActionTree(moduleKey, [...normalizedPath, childSegment], childValue, acc);
+      const normalizedChild = normalizePermissionKey(childKey);
+      if (!normalizedChild) return;
+      traverseStructuredPermissions(moduleKey, [...normalizedPath, normalizedChild], childValue, acc);
+    });
+  }
+
+  function isPermissionNodeAllowed(node) {
+    if (node === null || node === undefined) {
+      return false;
+    }
+    if (typeof node !== 'object' || Array.isArray(node)) {
+      return booleanFromValue(node);
+    }
+    const indicator =
+      node.permitido ??
+      node.acesso ??
+      node.access ??
+      node.allowed ??
+      node.allow ??
+      node.enabled ??
+      node.value ??
+      node.valor ??
+      node.ativo ??
+      node.active;
+    if (indicator !== undefined) {
+      return booleanFromValue(indicator);
+    }
+    if (node.escopos && typeof node.escopos === 'object') {
+      return Object.values(node.escopos).some(value => booleanFromValue(value));
+    }
+    if (node.scopes && typeof node.scopes === 'object') {
+      return Object.values(node.scopes).some(value => booleanFromValue(value));
+    }
+    return false;
+  }
+
+  function processFieldPermissions(moduleKey, actionSegments, fieldsNode, acc) {
+    Object.entries(fieldsNode || {}).forEach(([fieldName, fieldValue]) => {
+      if (fieldValue === null || fieldValue === undefined) {
+        return;
+      }
+      const columnName = findColumnNameForField(moduleKey, actionSegments, fieldName);
+      if (!columnName) {
+        return;
+      }
+      const metadata = columnInputsMetadata.get(columnName);
+      if (!metadata) {
+        return;
+      }
+      if (isFieldAllowedForScopes(fieldValue, metadata.scopes)) {
+        acc[columnName] = true;
+      }
+    });
+  }
+
+  function isFieldAllowedForScopes(fieldValue, scopes) {
+    const expectedScopes = Array.isArray(scopes) && scopes.length ? scopes : ['editar'];
+    const normalizedScopes = expectedScopes.map(scope => normalizePermissionKey(scope)).filter(Boolean);
+    if (!normalizedScopes.length) {
+      return false;
+    }
+
+    if (typeof fieldValue !== 'object' || Array.isArray(fieldValue) || fieldValue === null) {
+      return booleanFromValue(fieldValue);
+    }
+
+    const scopeSource =
+      (fieldValue.escopos && typeof fieldValue.escopos === 'object' && fieldValue.escopos) ||
+      (fieldValue.scopes && typeof fieldValue.scopes === 'object' && fieldValue.scopes) ||
+      fieldValue;
+
+    return normalizedScopes.every(scopeKey => {
+      if (Object.prototype.hasOwnProperty.call(scopeSource, scopeKey)) {
+        return booleanFromValue(scopeSource[scopeKey]);
+      }
+      if (Object.prototype.hasOwnProperty.call(fieldValue, scopeKey)) {
+        return booleanFromValue(fieldValue[scopeKey]);
+      }
+      if (Object.prototype.hasOwnProperty.call(fieldValue, 'permitido')) {
+        return booleanFromValue(fieldValue.permitido);
+      }
+      return false;
     });
   }
 
