@@ -94,7 +94,11 @@
     currentProfile: null,
     profileLoaded: false,
     searchTerm: '',
-    profilesPromise: null
+    profilesPromise: null,
+    saveContext: {
+      mode: 'new',
+      baseProfileKey: null
+    }
   };
 
   const profiles = new Map();
@@ -153,6 +157,20 @@
       return !Number.isNaN(value.getTime());
     }
     return Boolean(value);
+  }
+
+  function normalizeModuleSelection(value) {
+    const raw = typeof value === 'string' ? value.trim() : String(value || '').trim();
+    if (!raw) return '';
+    if (raw.startsWith('module_')) {
+      return raw;
+    }
+    return `module_${normalizePermissionKey(raw)}`;
+  }
+
+  function normalizeColumnSelection(value) {
+    const raw = typeof value === 'string' ? value.trim() : String(value || '').trim();
+    return raw || '';
   }
 
   function normalizePermissionsPayload(raw) {
@@ -816,12 +834,17 @@
       return;
     }
     const button = event?.currentTarget || elements.save;
-    if (button) button.disabled = true;
+    if (button) {
+      button.disabled = true;
+      button.classList.add('btn-loading');
+    }
     const selections = collectSelections();
     const payload = {
       nome: profile.name,
       descricao: profile.description || '',
-      permissoes: buildPayloadFromSelections(selections)
+      permissoes: buildPayloadFromSelections(selections),
+      colunas: selections.columns,
+      modulos: selections.modules
     };
     try {
       const resp = await fetchApi(`/api/usuarios/modelos-permissoes/${encodeURIComponent(profile.id)}`, {
@@ -861,7 +884,10 @@
         window.showToast('Erro ao atualizar o modelo de permissões.', 'error');
       }
     } finally {
-      if (button) button.disabled = false;
+      if (button) {
+        button.disabled = false;
+        button.classList.remove('btn-loading');
+      }
     }
   }
 
@@ -906,17 +932,38 @@
     }
   }
 
-  async function salvarNovoPerfil(nome, descricao) {
+  async function salvarNovoPerfil(nome, descricao, { mode = 'new', baseProfileKey = null } = {}) {
     const finalName = normalizarNome(nome);
     if (!finalName) return;
     const button = saveConfirmBtn;
-    if (button) button.disabled = true;
-    const selections = collectSelections();
+    if (button) {
+      button.disabled = true;
+      button.classList.add('btn-loading');
+    }
+
+    const baseProfile = baseProfileKey && profiles.has(baseProfileKey) ? profiles.get(baseProfileKey) : null;
+    const isDuplicating = mode === 'duplicate' && baseProfile;
+    const selections = isDuplicating
+      ? {
+          permissions: [],
+          columns: baseProfile?.columns || [],
+          modules: baseProfile?.modules || []
+        }
+      : collectSelections();
+
+    const columns = Array.isArray(selections.columns) ? selections.columns : [];
+    const modules = Array.isArray(selections.modules) ? selections.modules : [];
+
     const payload = {
       nome: finalName,
-      descricao: descricao || '',
-      permissoes: buildPayloadFromSelections(selections)
+      descricao: descricao || (isDuplicating ? baseProfile?.description || '' : ''),
+      permissoes: isDuplicating
+        ? baseProfile?.rawPayload ?? baseProfile?.payload ?? {}
+        : buildPayloadFromSelections(selections),
+      colunas: columns,
+      modulos: modules
     };
+
     try {
       const resp = await fetchApi('/api/usuarios/modelos-permissoes', {
         method: 'POST',
@@ -952,12 +999,17 @@
         window.showToast('Erro ao criar o modelo de permissões.', 'error');
       }
     } finally {
-      if (button) button.disabled = false;
+      if (button) {
+        button.disabled = false;
+        button.classList.remove('btn-loading');
+      }
     }
   }
 
-  function abrirModalSalvar(prefill = {}) {
+  function abrirModalSalvar(prefill = {}, options = {}) {
     if (!saveOverlay) return;
+    const { mode = 'new', baseProfileKey = null } = options;
+    state.saveContext = { mode, baseProfileKey };
     if (saveForm) saveForm.reset();
     if (prefill.name) saveNameInput.value = prefill.name;
     if (prefill.description) saveDescriptionInput.value = prefill.description;
@@ -971,6 +1023,7 @@
     if (!saveOverlay) return;
     saveOverlay.classList.add('hidden');
     saveForm?.reset();
+    state.saveContext = { mode: 'new', baseProfileKey: null };
   }
 
   function handleSaveConfirm(event) {
@@ -980,7 +1033,8 @@
       saveNameInput?.focus();
       return;
     }
-    salvarNovoPerfil(nome, saveDescriptionInput?.value || '');
+    const currentContext = state.saveContext || {};
+    salvarNovoPerfil(nome, saveDescriptionInput?.value || '', currentContext);
   }
 
   function handleDuplicate() {
@@ -988,7 +1042,10 @@
     if (!selected || !profiles.has(selected)) return;
     const profile = profiles.get(selected);
     const defaultName = profile?.name ? `${profile.name} Cópia` : 'Perfil Cópia';
-    abrirModalSalvar({ name: defaultName, description: profile?.description || '' });
+    abrirModalSalvar({ name: defaultName, description: profile?.description || '' }, {
+      mode: 'duplicate',
+      baseProfileKey: selected
+    });
   }
 
   async function handleDelete() {
@@ -1004,13 +1061,14 @@
       profiles.delete(selected);
       const option = elements.profileSelect?.querySelector(`option[value="${selected}"]`);
       option?.remove();
-      if (state.currentProfile === selected) {
-        state.currentProfile = null;
-        state.profileLoaded = false;
-        clearAllCheckboxes();
-        setAllModulesState();
-        updateAllMasterCheckboxes();
-        updateSummary();
+      state.currentProfile = null;
+      state.profileLoaded = false;
+      clearAllCheckboxes();
+      setAllModulesState();
+      updateAllMasterCheckboxes();
+      updateSummary();
+      if (elements.profileSelect) {
+        elements.profileSelect.value = '';
       }
       resetAllOptionLabels();
       updateProfileButtons();
@@ -1020,7 +1078,10 @@
       return;
     }
     const button = elements.remove;
-    if (button) button.disabled = true;
+    if (button) {
+      button.disabled = true;
+      button.classList.add('btn-loading');
+    }
     try {
       const resp = await fetchApi(`/api/usuarios/modelos-permissoes/${encodeURIComponent(profile.id)}`, {
         method: 'DELETE'
@@ -1038,13 +1099,14 @@
       profiles.delete(selected);
       const option = elements.profileSelect?.querySelector(`option[value="${selected}"]`);
       option?.remove();
-      if (state.currentProfile === selected) {
-        state.currentProfile = null;
-        state.profileLoaded = false;
-        clearAllCheckboxes();
-        setAllModulesState();
-        updateAllMasterCheckboxes();
-        updateSummary();
+      state.currentProfile = null;
+      state.profileLoaded = false;
+      clearAllCheckboxes();
+      setAllModulesState();
+      updateAllMasterCheckboxes();
+      updateSummary();
+      if (elements.profileSelect) {
+        elements.profileSelect.value = '';
       }
       resetAllOptionLabels();
       updateProfileButtons();
@@ -1057,7 +1119,10 @@
         window.showToast('Erro ao excluir o modelo de permissões.', 'error');
       }
     } finally {
-      if (button) button.disabled = false;
+      if (button) {
+        button.disabled = false;
+        button.classList.remove('btn-loading');
+      }
     }
   }
 
@@ -1269,17 +1334,35 @@
     });
   }
 
+  function buildPayloadFromModel(modelo = {}) {
+    const payload = normalizePermissionsPayload(modelo?.permissoes);
+    const columns = Array.isArray(modelo?.colunas) ? modelo.colunas.filter(Boolean).map(normalizeColumnSelection) : [];
+    const modules = Array.isArray(modelo?.modulos)
+      ? modelo.modulos.map(normalizeModuleSelection).filter(Boolean)
+      : [];
+    columns.forEach(coluna => {
+      payload[coluna] = true;
+    });
+    modules.forEach(modulo => {
+      payload[modulo] = true;
+    });
+    return { payload, columns, modules };
+  }
+
   function convertModelToProfile(modelo) {
     const nome = normalizarNome(modelo?.nome) || 'Perfil';
     const key = modelo?.id !== undefined && modelo?.id !== null ? String(modelo.id) : gerarChaveUnica(nome);
     const rawPayload = modelo?.permissoes ?? {};
+    const { payload, columns, modules } = buildPayloadFromModel(modelo);
     return {
       id: modelo?.id ?? null,
       key,
       name: nome,
       description: modelo?.descricao ?? modelo?.description ?? '',
-      payload: normalizePermissionsPayload(rawPayload),
-      rawPayload
+      payload,
+      rawPayload,
+      columns,
+      modules
     };
   }
 
@@ -1339,7 +1422,7 @@
     elements.profileSelect?.addEventListener('change', handleProfileChange);
     elements.load?.addEventListener('click', handleLoadProfile);
     elements.save?.addEventListener('click', handleSaveExisting);
-    elements.saveNew?.addEventListener('click', () => abrirModalSalvar());
+    elements.saveNew?.addEventListener('click', () => abrirModalSalvar({}, { mode: 'new', baseProfileKey: null }));
     elements.duplicate?.addEventListener('click', handleDuplicate);
     elements.remove?.addEventListener('click', handleDelete);
     elements.search?.addEventListener('input', handleSearchInput);
