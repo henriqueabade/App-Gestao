@@ -86,6 +86,10 @@
     moduleToggles: Array.from(overlay.querySelectorAll('[data-module-toggle]'))
   };
 
+  const columnInputsMetadata = initializeColumnMetadata();
+  const columnFieldLookup = buildColumnFieldLookup(columnInputsMetadata);
+  const MODULE_ACTIVATION_ACTIONS = new Set(['permissoes', 'acesso']);
+
   const state = {
     currentProfile: null,
     profileLoaded: false,
@@ -180,6 +184,12 @@
     }
 
     if (typeof input === 'object') {
+      if (looksLikeStructuredPermissions(input)) {
+        const flattened = flattenPermissionsStructure(input);
+        if (Object.keys(flattened).length) {
+          return flattened;
+        }
+      }
       const payload = {};
       Object.entries(input).forEach(([key, value]) => {
         if (value === null || value === undefined) {
@@ -211,16 +221,251 @@
     return {};
   }
 
+  function normalizePermissionKey(value) {
+    if (value === undefined || value === null) return '';
+    return String(value)
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '_')
+      .replace(/^_+|_+$/g, '');
+  }
+
+  function deriveFieldNameFromColumn(name) {
+    if (!name || typeof name !== 'string') return '';
+    const trimmed = name.trim();
+    if (!trimmed.startsWith('col_')) {
+      return normalizePermissionKey(trimmed);
+    }
+    const raw = trimmed.slice(4);
+    if (!raw) return '';
+    const [, ...fieldParts] = raw.split('_');
+    const fieldName = fieldParts.length ? fieldParts.join('_') : raw;
+    return normalizePermissionKey(fieldName);
+  }
+
+  function initializeColumnMetadata() {
+    const map = new Map();
+    overlay
+      .querySelectorAll('input[type="checkbox"][data-role="item"][data-item-type="column"]')
+      .forEach(input => {
+        const name = input.name || input.value;
+        if (!name) return;
+        const parentModule = input.closest('[data-module]');
+        const moduleKey = parentModule?.dataset.module || null;
+        const normalizedModule = normalizePermissionKey(moduleKey);
+        if (!normalizedModule) return;
+        const actionRaw = input.dataset.columnAction || input.dataset.fieldAction || 'editar';
+        const actionSegments = String(actionRaw)
+          .split('.')
+          .map(segment => normalizePermissionKey(segment))
+          .filter(Boolean);
+        if (!actionSegments.length) {
+          actionSegments.push('editar');
+        }
+        const scopeAttr = input.dataset.columnScope || input.dataset.fieldScope;
+        const scopes = scopeAttr ? scopeAttr.split(',').map(scope => scope.trim()).filter(Boolean) : ['editar'];
+        const fieldKey =
+          input.dataset.columnField || input.dataset.fieldName || deriveFieldNameFromColumn(name);
+        const normalizedField = normalizePermissionKey(fieldKey);
+        if (!normalizedField) return;
+        map.set(name, {
+          module: moduleKey,
+          normalizedModule,
+          action: actionRaw,
+          actionSegments,
+          scopes,
+          fieldKey: normalizedField
+        });
+      });
+    return map;
+  }
+
+  function buildColumnFieldLookup(metadataMap) {
+    const lookup = new Map();
+    metadataMap.forEach((metadata, name) => {
+      if (!metadata?.normalizedModule || !metadata?.fieldKey || !metadata?.actionSegments?.length) {
+        return;
+      }
+      const key = `${metadata.normalizedModule}:${metadata.actionSegments.join('.')}:${metadata.fieldKey}`;
+      lookup.set(key, name);
+    });
+    return lookup;
+  }
+
+  function findColumnNameForField(moduleKey, actionSegments, fieldName) {
+    const normalizedModule = normalizePermissionKey(moduleKey);
+    const normalizedField = normalizePermissionKey(fieldName);
+    const normalizedAction = (actionSegments || [])
+      .map(segment => normalizePermissionKey(segment))
+      .filter(Boolean)
+      .join('.');
+    if (!normalizedModule || !normalizedField || !normalizedAction) {
+      return null;
+    }
+    const key = `${normalizedModule}:${normalizedAction}:${normalizedField}`;
+    return columnFieldLookup.get(key) || null;
+  }
+
+  function looksLikeStructuredPermissions(input) {
+    if (!input || typeof input !== 'object' || Array.isArray(input)) return false;
+    return Object.values(input).some(moduleValue => {
+      if (!moduleValue || typeof moduleValue !== 'object' || Array.isArray(moduleValue)) return false;
+      return Object.values(moduleValue).some(actionValue => actionValue && typeof actionValue === 'object' && !Array.isArray(actionValue));
+    });
+  }
+
+  function flattenPermissionsStructure(structure) {
+    const flattened = {};
+    Object.entries(structure || {}).forEach(([moduleName, moduleValue]) => {
+      const normalizedModule = normalizePermissionKey(moduleName);
+      if (!normalizedModule || !moduleValue || typeof moduleValue !== 'object' || Array.isArray(moduleValue)) {
+        return;
+      }
+      Object.entries(moduleValue).forEach(([actionKey, actionValue]) => {
+        if (!actionValue || typeof actionValue !== 'object' || Array.isArray(actionValue)) {
+          return;
+        }
+        const normalizedAction = normalizePermissionKey(actionKey);
+        if (!normalizedAction) return;
+        traverseActionTree(normalizedModule, [normalizedAction], actionValue, flattened);
+      });
+    });
+    return flattened;
+  }
+
+  function traverseActionTree(moduleKey, path, node, acc) {
+    if (!moduleKey || !path || !path.length || !node || typeof node !== 'object' || Array.isArray(node)) {
+      return;
+    }
+    const normalizedPath = path.map(segment => normalizePermissionKey(segment)).filter(Boolean);
+    if (!normalizedPath.length) {
+      return;
+    }
+    const firstSegment = normalizedPath[0];
+    if (Object.prototype.hasOwnProperty.call(node, 'permitido')) {
+      const allowed = booleanFromValue(node.permitido);
+      if (allowed) {
+        if (normalizedPath.length === 1 && MODULE_ACTIVATION_ACTIONS.has(firstSegment)) {
+          acc[`module_${moduleKey}`] = true;
+        } else {
+          acc[[moduleKey, ...normalizedPath].join('.')] = true;
+        }
+      }
+    }
+    if (node.campos && typeof node.campos === 'object' && !Array.isArray(node.campos)) {
+      Object.entries(node.campos).forEach(([fieldName, fieldValue]) => {
+        if (fieldValue === null || fieldValue === undefined) return;
+        let allowed = false;
+        if (typeof fieldValue === 'object' && !Array.isArray(fieldValue)) {
+          allowed = Object.values(fieldValue).some(Boolean);
+        } else {
+          allowed = booleanFromValue(fieldValue);
+        }
+        if (!allowed) return;
+        const columnName = findColumnNameForField(moduleKey, normalizedPath, fieldName);
+        if (columnName) {
+          acc[columnName] = true;
+        }
+      });
+    }
+    Object.entries(node).forEach(([childKey, childValue]) => {
+      if (['permitido', 'escopos', 'campos'].includes(childKey)) return;
+      if (!childValue || typeof childValue !== 'object' || Array.isArray(childValue)) return;
+      const childSegment = normalizePermissionKey(childKey);
+      if (!childSegment) return;
+      traverseActionTree(moduleKey, [...normalizedPath, childSegment], childValue, acc);
+    });
+  }
+
   function buildPayloadFromSelections(selections) {
     const payload = {};
     if (!selections) return payload;
-    const mark = name => {
-      if (!name) return;
-      payload[name] = true;
+
+    const ensureModuleEntry = moduleKey => {
+      const normalizedModule = normalizePermissionKey(moduleKey);
+      if (!normalizedModule) return null;
+      if (!payload[normalizedModule] || typeof payload[normalizedModule] !== 'object') {
+        payload[normalizedModule] = {};
+      }
+      return payload[normalizedModule];
     };
-    (selections.modules || []).forEach(mark);
-    (selections.permissions || []).forEach(mark);
-    (selections.columns || []).forEach(mark);
+
+    const ensureActionEntry = (moduleKey, actionSegments) => {
+      if (!moduleKey || !actionSegments || !actionSegments.length) return null;
+      const moduleEntry = ensureModuleEntry(moduleKey);
+      if (!moduleEntry) return null;
+      let current = moduleEntry;
+      for (const segment of actionSegments) {
+        const key = normalizePermissionKey(segment);
+        if (!key) continue;
+        if (!current[key] || typeof current[key] !== 'object' || Array.isArray(current[key])) {
+          current[key] = {};
+        }
+        current = current[key];
+      }
+      return current;
+    };
+
+    const markActionAllowed = (moduleKey, actionSegments) => {
+      const actionEntry = ensureActionEntry(moduleKey, actionSegments);
+      if (!actionEntry) return;
+      actionEntry.permitido = true;
+    };
+
+    const assignFieldPermission = (moduleKey, actionSegments, fieldName, scopes) => {
+      const actionEntry = ensureActionEntry(moduleKey, actionSegments);
+      if (!actionEntry) return;
+      const normalizedField = normalizePermissionKey(fieldName);
+      if (!normalizedField) return;
+      if (!actionEntry.campos || typeof actionEntry.campos !== 'object') {
+        actionEntry.campos = {};
+      }
+      const fieldEntry =
+        actionEntry.campos[normalizedField] && typeof actionEntry.campos[normalizedField] === 'object'
+          ? actionEntry.campos[normalizedField]
+          : {};
+      scopes.forEach(scope => {
+        const scopeKey = normalizePermissionKey(scope);
+        if (!scopeKey) return;
+        fieldEntry[scopeKey] = true;
+      });
+      actionEntry.campos[normalizedField] = fieldEntry;
+    };
+
+    (selections.modules || []).forEach(name => {
+      if (!name) return;
+      const moduleKey = normalizePermissionKey(name.replace(/^module_/, ''));
+      if (!moduleKey) return;
+      markActionAllowed(moduleKey, ['permissoes']);
+    });
+
+    (selections.permissions || []).forEach(name => {
+      if (!name) return;
+      const parts = String(name)
+        .split('.')
+        .map(part => normalizePermissionKey(part))
+        .filter(Boolean);
+      if (!parts.length) return;
+      const [moduleKey, ...actionSegments] = parts;
+      if (!moduleKey || !actionSegments.length) return;
+      markActionAllowed(moduleKey, actionSegments);
+    });
+
+    (selections.columns || []).forEach(name => {
+      if (!name) return;
+      const metadata = columnInputsMetadata.get(name);
+      const moduleKey = metadata?.normalizedModule || '';
+      const scopes = Array.isArray(metadata?.scopes) && metadata.scopes.length ? metadata.scopes : ['editar'];
+      const fieldKey = metadata?.fieldKey || deriveFieldNameFromColumn(name);
+      if (!moduleKey || !fieldKey) {
+        return;
+      }
+      const actionSegments = metadata?.actionSegments?.length
+        ? metadata.actionSegments
+        : ['editar'];
+      assignFieldPermission(moduleKey, actionSegments, fieldKey, scopes);
+    });
+
     return payload;
   }
 
