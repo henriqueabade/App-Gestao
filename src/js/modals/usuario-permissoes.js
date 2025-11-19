@@ -3,6 +3,11 @@
   const overlay = document.getElementById(`${overlayId}Overlay`);
   if (!overlay) return;
 
+  async function fetchApi(path, options) {
+    const baseUrl = await window.apiConfig.getApiBaseUrl();
+    return fetch(`${baseUrl}${path}`, options);
+  }
+
   const saveOverlay = document.getElementById('usuariosPermissoesSalvarOverlay');
   const saveForm = document.getElementById('usuariosPermissoesSalvarForm');
   const saveNameInput = document.getElementById('usuariosPermissoesSalvarNome');
@@ -34,163 +39,102 @@
   const state = {
     currentProfile: null,
     profileLoaded: false,
-    searchTerm: ''
+    searchTerm: '',
+    profilesPromise: null
   };
 
-  const baseProfiles = {
-    ADMIN: {
-      name: 'Administrador',
-      description: 'Acesso total ao sistema',
-      permissions: [],
-      columns: [],
-      modules: []
-    },
-    VENDEDOR: {
-      name: 'Vendedor',
-      description: 'Acesso a vendas e relacionamento com clientes',
-      permissions: [
-        'mp.view',
-        'mp.search',
-        'mp.stock.view',
-        'prod.view',
-        'prod.search',
-        'prod.details.view',
-        'prod.stock.view',
-        'orc.view',
-        'orc.search',
-        'orc.view.details',
-        'orc.create',
-        'ped.view',
-        'ped.search',
-        'ped.view.details',
-        'cli.view',
-        'cli.search',
-        'cli.details.view',
-        'pros.view',
-        'pros.search',
-        'pros.details.view',
-        'ctt.view',
-        'ctt.search',
-        'ctt.details.view',
-        'rel.view',
-        'rel.search',
-        'tarefas.view',
-        'tarefas.calendar.view'
-      ],
-      columns: ['col_mp_nome', 'col_mp_categoria', 'col_mp_estoque_atual', 'col_mp_status', 'col_prod_nome', 'col_prod_status'],
-      modules: ['module_mp', 'module_prod', 'module_orc', 'module_ped', 'module_cli', 'module_pros', 'module_ctt', 'module_rel', 'module_tarefas']
-    },
-    ARQUITETO: {
-      name: 'Arquiteto',
-      description: 'Acesso a produtos e projetos técnicos',
-      permissions: [
-        'mp.view',
-        'mp.search',
-        'mp.process.view',
-        'mp.process.create',
-        'mp.category.view',
-        'mp.unit.view',
-        'mp.stock.view',
-        'prod.view',
-        'prod.search',
-        'prod.details.view',
-        'prod.stage.view',
-        'prod.stage.insert'
-      ],
-      columns: [
-        'col_mp_codigo',
-        'col_mp_nome',
-        'col_mp_categoria',
-        'col_mp_unidade',
-        'col_mp_estoque_atual',
-        'col_mp_custo_medio',
-        'col_proc_nome',
-        'col_proc_duracao',
-        'col_proc_custo',
-        'col_proc_ordem',
-        'col_prod_nome',
-        'col_prod_etapa_atual'
-      ],
-      modules: ['module_mp', 'module_prod']
-    },
-    GERENTE: {
-      name: 'Gerente',
-      description: 'Acesso gerencial e relatórios avançados',
-      permissions: [
-        'mp.view',
-        'mp.search',
-        'mp.export',
-        'mp.edit',
-        'mp.category.view',
-        'mp.category.create',
-        'mp.category.edit',
-        'mp.unit.view',
-        'mp.stock.view',
-        'mp.stock.adjust',
-        'prod.view',
-        'prod.search',
-        'prod.export',
-        'prod.edit',
-        'prod.collection.view',
-        'prod.collection.edit',
-        'orc.view',
-        'orc.search',
-        'orc.edit',
-        'orc.convert',
-        'ped.view',
-        'ped.search',
-        'ped.status.confirm',
-        'ped.status.invoice',
-        'ped.status.ship',
-        'ped.status.deliver',
-        'cli.view',
-        'cli.search',
-        'cli.details.view',
-        'pros.view',
-        'pros.search',
-        'pros.details.view',
-        'ctt.view',
-        'ctt.search',
-        'rel.view',
-        'rel.run',
-        'rel.export.csv',
-        'rel.export.xlsx',
-        'rel.export.pdf',
-        'tarefas.view',
-        'tarefas.calendar.view',
-        'cfg.view',
-        'cfg.roles.view'
-      ],
-      columns: [
-        'col_mp_nome',
-        'col_mp_categoria',
-        'col_mp_estoque_atual',
-        'col_mp_custo_medio',
-        'col_mp_status',
-        'col_prod_nome',
-        'col_prod_status',
-        'col_orc_total',
-        'col_ped_total',
-        'col_cli_nome_fantasia',
-        'col_rel_total',
-        'col_rel_qtd'
-      ],
-      modules: ['module_mp', 'module_prod', 'module_orc', 'module_ped', 'module_cli', 'module_pros', 'module_ctt', 'module_rel', 'module_tarefas', 'module_cfg']
+  const profiles = new Map();
+
+  function booleanFromValue(value) {
+    if (typeof value === 'boolean') return value;
+    if (typeof value === 'number') return value !== 0;
+    if (typeof value === 'string') {
+      const normalized = value.trim().toLowerCase();
+      if (!normalized) return false;
+      return ['1', 'true', 'yes', 'y', 'sim', 'on', 'permitido', 'habilitado', 'enabled', 'ativo', 'active'].includes(normalized);
     }
-  };
+    if (value instanceof Date) {
+      return !Number.isNaN(value.getTime());
+    }
+    return Boolean(value);
+  }
 
-  const profiles = new Map(
-    Object.entries(baseProfiles).map(([key, value]) => [key, cloneProfile(value)])
-  );
+  function normalizePermissionsPayload(raw) {
+    if (raw === undefined || raw === null) return {};
+    let input = raw;
+    if (typeof input === 'string') {
+      const trimmed = input.trim();
+      if (!trimmed) return {};
+      try {
+        input = JSON.parse(trimmed);
+      } catch (err) {
+        console.error('Falha ao interpretar permissões do modelo:', err);
+        return {};
+      }
+    }
 
-  function cloneProfile(profile) {
-    return {
-      name: profile?.name || 'Perfil',
-      description: profile?.description || '',
-      permissions: Array.isArray(profile?.permissions) ? [...profile.permissions] : [],
-      columns: Array.isArray(profile?.columns) ? [...profile.columns] : [],
-      modules: Array.isArray(profile?.modules) ? [...profile.modules] : []
+    if (Array.isArray(input)) {
+      const payload = {};
+      input.forEach(item => {
+        if (!item) return;
+        if (typeof item === 'string') {
+          payload[item] = true;
+          return;
+        }
+        if (typeof item === 'object') {
+          const key = item.name || item.nome || item.chave || item.key || item.id;
+          if (!key) return;
+          const value = item.value ?? item.valor ?? item.permitido ?? item.enabled ?? item.allow ?? item.allowed ?? item.checked ??
+            item.active ?? item.ativo;
+          payload[key] = value === undefined ? true : booleanFromValue(value);
+        }
+      });
+      return payload;
+    }
+
+    if (typeof input === 'object') {
+      const payload = {};
+      Object.entries(input).forEach(([key, value]) => {
+        if (value === null || value === undefined) {
+          return;
+        }
+        if (typeof value === 'object' && !Array.isArray(value)) {
+          if (
+            Object.prototype.hasOwnProperty.call(value, 'permitido') ||
+            Object.prototype.hasOwnProperty.call(value, 'enabled') ||
+            Object.prototype.hasOwnProperty.call(value, 'allow') ||
+            Object.prototype.hasOwnProperty.call(value, 'allowed') ||
+            Object.prototype.hasOwnProperty.call(value, 'value') ||
+            Object.prototype.hasOwnProperty.call(value, 'valor') ||
+            Object.prototype.hasOwnProperty.call(value, 'checked') ||
+            Object.prototype.hasOwnProperty.call(value, 'active') ||
+            Object.prototype.hasOwnProperty.call(value, 'ativo')
+          ) {
+            const indicator = value.permitido ?? value.enabled ?? value.allow ?? value.allowed ?? value.value ?? value.valor ??
+              value.checked ?? value.active ?? value.ativo;
+            payload[key] = booleanFromValue(indicator);
+            return;
+          }
+        }
+        payload[key] = booleanFromValue(value);
+      });
+      return payload;
+    }
+
+    return {};
+  }
+
+  function buildPayloadFromSelections(selections) {
+    const payload = {};
+    if (!selections) return payload;
+    const mark = name => {
+      if (!name) return;
+      payload[name] = true;
     };
+    (selections.modules || []).forEach(mark);
+    (selections.permissions || []).forEach(mark);
+    (selections.columns || []).forEach(mark);
+    return payload;
   }
 
   function resetAllOptionLabels() {
@@ -205,12 +149,12 @@
 
   function updateProfileButtons() {
     const selected = elements.profileSelect?.value || '';
-    const hasSelection = Boolean(selected);
+    const hasSelection = Boolean(selected) && profiles.has(selected);
     if (elements.load) elements.load.disabled = !hasSelection;
     if (elements.duplicate) elements.duplicate.disabled = !hasSelection;
     if (elements.remove) elements.remove.disabled = !hasSelection;
     if (elements.save) {
-      elements.save.disabled = !selected || selected !== state.currentProfile;
+      elements.save.disabled = !hasSelection || selected !== state.currentProfile;
     }
   }
 
@@ -300,21 +244,19 @@
     }
 
     clearAllCheckboxes();
-    applyModuleSelection(profile.modules);
+    const payload = profile.payload || {};
+    const selectedModules = elements.moduleToggles
+      .map(toggle => `module_${toggle.dataset.moduleToggle}`)
+      .filter(moduleName => payload[moduleName]);
+    applyModuleSelection(selectedModules);
 
-    profile.permissions.forEach(permission => {
-      const checkbox = overlay.querySelector(
-        `input[type="checkbox"][data-role="item"][name="${permission}"]`
-      );
-      if (checkbox && !checkbox.disabled) checkbox.checked = true;
-    });
-
-    profile.columns.forEach(column => {
-      const checkbox = overlay.querySelector(
-        `input[type="checkbox"][data-role="item"][name="${column}"]`
-      );
-      if (checkbox && !checkbox.disabled) checkbox.checked = true;
-    });
+    overlay
+      .querySelectorAll('input[type="checkbox"][data-role="item"]')
+      .forEach(cb => {
+        const name = cb.name || cb.value;
+        if (!name) return;
+        cb.checked = !cb.disabled && Boolean(payload[name]);
+      });
 
     updateAllMasterCheckboxes();
     updateSummary();
@@ -361,10 +303,7 @@
 
   function applyChanges() {
     const selections = collectSelections();
-    const payload = {};
-    [...selections.modules, ...selections.permissions, ...selections.columns].forEach(name => {
-      payload[name] = true;
-    });
+    const payload = buildPayloadFromSelections(selections);
     document.dispatchEvent(new CustomEvent('roles:apply', { detail: payload }));
     if (typeof window.showToast === 'function') {
       window.showToast('Permissões aplicadas com sucesso.', 'success');
@@ -376,9 +315,7 @@
     if (!key || !profiles.has(key) || key !== state.currentProfile) return;
     const selections = collectSelections();
     const profile = profiles.get(key);
-    profile.permissions = selections.permissions;
-    profile.columns = selections.columns;
-    profile.modules = selections.modules;
+    profile.payload = buildPayloadFromSelections(selections);
     state.profileLoaded = true;
     markProfileLoaded(key);
     if (typeof window.showToast === 'function') {
@@ -410,7 +347,7 @@
     return `${base}_${index}`;
   }
 
-  function adicionarOuAtualizarOpcao(key, label) {
+  function adicionarOuAtualizarOpcao(key, label, id = null) {
     if (!elements.profileSelect) return;
     let option = elements.profileSelect.querySelector(`option[value="${key}"]`);
     if (!option) {
@@ -420,6 +357,11 @@
     }
     option.textContent = label;
     option.dataset.originalLabel = label;
+    if (id !== null && id !== undefined) {
+      option.dataset.profileId = String(id);
+    } else {
+      delete option.dataset.profileId;
+    }
   }
 
   function salvarNovoPerfil(nome, descricao) {
@@ -428,11 +370,11 @@
     const key = gerarChaveUnica(finalName);
     const selections = collectSelections();
     profiles.set(key, {
+      id: null,
+      key,
       name: finalName,
       description: descricao || '',
-      permissions: selections.permissions,
-      columns: selections.columns,
-      modules: selections.modules
+      payload: buildPayloadFromSelections(selections)
     });
     adicionarOuAtualizarOpcao(key, finalName);
     if (elements.profileSelect) {
@@ -474,7 +416,7 @@
 
   function handleDuplicate() {
     const selected = elements.profileSelect?.value;
-    if (!selected) return;
+    if (!selected || !profiles.has(selected)) return;
     const profile = profiles.get(selected);
     const defaultName = profile?.name ? `${profile.name} Cópia` : 'Perfil Copia';
     abrirModalSalvar({ name: defaultName, description: profile?.description || '' });
@@ -593,7 +535,7 @@
 
   function handleLoadProfile() {
     const selected = elements.profileSelect?.value;
-    if (!selected) return;
+    if (!selected || !profiles.has(selected)) return;
     loadProfile(selected);
   }
 
@@ -705,14 +647,74 @@
   }
 
   function initProfileOptions() {
-    Array.from(elements.profileSelect?.options || []).forEach(option => {
-      if (!option.value) return;
-      option.dataset.originalLabel = option.textContent || option.value;
-      const profile = baseProfiles[option.value];
-      if (profile && !profiles.has(option.value)) {
-        profiles.set(option.value, cloneProfile(profile));
+    if (!elements.profileSelect) return;
+    Array.from(elements.profileSelect.options).forEach(option => {
+      if (!option.value) {
+        option.dataset.originalLabel = option.textContent || option.value || 'Selecionar Perfil';
+      } else {
+        option.remove();
       }
     });
+  }
+
+  function convertModelToProfile(modelo) {
+    const nome = normalizarNome(modelo?.nome) || 'Perfil';
+    const key = modelo?.id !== undefined && modelo?.id !== null ? String(modelo.id) : gerarChaveUnica(nome);
+    return {
+      id: modelo?.id ?? null,
+      key,
+      name: nome,
+      description: modelo?.descricao ?? modelo?.description ?? '',
+      payload: normalizePermissionsPayload(modelo?.permissoes)
+    };
+  }
+
+  function populateProfilesFromApi(modelos = []) {
+    profiles.clear();
+    if (elements.profileSelect) {
+      Array.from(elements.profileSelect.options).forEach(option => {
+        if (option.value) option.remove();
+      });
+    }
+    modelos.forEach(modelo => {
+      const profile = convertModelToProfile(modelo);
+      profiles.set(profile.key, profile);
+      adicionarOuAtualizarOpcao(profile.key, profile.name, profile.id);
+    });
+    state.currentProfile = null;
+    state.profileLoaded = false;
+    if (elements.profileSelect) {
+      elements.profileSelect.value = '';
+    }
+    resetAllOptionLabels();
+    updateProfileButtons();
+  }
+
+  async function loadProfilesFromApi() {
+    if (state.profilesPromise) return state.profilesPromise;
+    if (!window.apiConfig?.getApiBaseUrl) return null;
+    const promise = (async () => {
+      try {
+        const resp = await fetchApi('/api/usuarios/modelos-permissoes');
+        if (!resp.ok) {
+          const texto = await resp.text();
+          throw new Error(texto || 'Não foi possível carregar os modelos de permissões.');
+        }
+        const data = await resp.json();
+        const modelos = Array.isArray(data?.modelos) ? data.modelos : [];
+        populateProfilesFromApi(modelos);
+      } catch (err) {
+        console.error('Erro ao carregar modelos de permissões:', err);
+        if (typeof window.showToast === 'function') {
+          window.showToast('Não foi possível carregar os modelos de permissões.', 'error');
+        }
+      } finally {
+        state.profilesPromise = null;
+        updateProfileButtons();
+      }
+    })();
+    state.profilesPromise = promise;
+    return promise;
   }
 
   function initEvents() {
@@ -744,49 +746,15 @@
     });
   }
 
-  function getAllAvailableSelections() {
-    const permissions = Array.from(
-      overlay.querySelectorAll('input[type="checkbox"][data-role="item"][data-item-type="action"]')
-    )
-      .map(cb => cb.name || cb.value)
-      .filter(Boolean);
-    const columns = Array.from(
-      overlay.querySelectorAll('input[type="checkbox"][data-role="item"][data-item-type="column"]')
-    )
-      .map(cb => cb.name || cb.value)
-      .filter(Boolean);
-    const modules = elements.moduleToggles.map(toggle => `module_${toggle.dataset.moduleToggle}`);
-    return { permissions, columns, modules };
-  }
-
-  function ensureAdminHasAll() {
-    if (!profiles.has('ADMIN')) return;
-    const admin = profiles.get('ADMIN');
-    const available = getAllAvailableSelections();
-    if (!admin.permissions.length) admin.permissions = available.permissions;
-    if (!admin.columns.length) admin.columns = available.columns;
-    if (!admin.modules?.length) admin.modules = available.modules;
-  }
-
-  function ensureProfilesHaveModules() {
-    const availableModules = getAllAvailableSelections().modules;
-    profiles.forEach(profile => {
-      if (!Array.isArray(profile.modules) || !profile.modules.length) {
-        profile.modules = [...availableModules];
-      }
-    });
-  }
-
   initTabs();
   initAccordions();
   initCheckboxes();
   initProfileOptions();
   initEvents();
-  ensureAdminHasAll();
-  ensureProfilesHaveModules();
   setAllModulesState(true);
   updateProfileButtons();
   applySearch('');
+  loadProfilesFromApi();
 
   if (typeof Modal?.signalReady === 'function') {
     Modal.signalReady(overlayId);
