@@ -3,9 +3,51 @@
   const overlay = document.getElementById(`${overlayId}Overlay`);
   if (!overlay) return;
 
-  async function fetchApi(path, options) {
+  let usuarioAtualCache = null;
+
+  function carregarUsuarioAtual() {
+    if (usuarioAtualCache) {
+      return usuarioAtualCache;
+    }
+    try {
+      const sessionStore = typeof sessionStorage !== 'undefined' ? sessionStorage : null;
+      const localStore = typeof localStorage !== 'undefined' ? localStorage : null;
+      const stored = sessionStore?.getItem('currentUser') || localStore?.getItem('user');
+      usuarioAtualCache = stored ? JSON.parse(stored) : null;
+    } catch (err) {
+      console.error('Falha ao recuperar usuário autenticado:', err);
+      usuarioAtualCache = null;
+    }
+    return usuarioAtualCache;
+  }
+
+  async function fetchApi(path, options = {}) {
     const baseUrl = await window.apiConfig.getApiBaseUrl();
-    return fetch(`${baseUrl}${path}`, options);
+    const finalOptions = { ...options };
+    const headers = new Headers(options?.headers || {});
+
+    const usuarioAtual = carregarUsuarioAtual();
+    const email = typeof usuarioAtual?.email === 'string' ? usuarioAtual.email.trim() : '';
+    const usuarioId = (() => {
+      if (typeof usuarioAtual?.id === 'number') {
+        return usuarioAtual.id;
+      }
+      const parsed = Number(usuarioAtual?.id);
+      return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+    })();
+
+    if (email && !headers.has('x-usuario-email')) {
+      headers.set('x-usuario-email', email);
+    }
+    if (usuarioId && !headers.has('x-usuario-id')) {
+      headers.set('x-usuario-id', String(usuarioId));
+    }
+    if (usuarioId && !headers.has('authorization')) {
+      headers.set('authorization', `Bearer ${usuarioId}`);
+    }
+
+    finalOptions.headers = headers;
+    return fetch(`${baseUrl}${path}`, finalOptions);
   }
 
   const context = window.usuariosPermissoesContext || {};
