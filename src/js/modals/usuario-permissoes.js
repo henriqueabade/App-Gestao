@@ -45,6 +45,42 @@
 
   const profiles = new Map();
 
+  function getErrorMessageForStatus(status, fallbackMessage) {
+    if (status === 409) {
+      return 'Já existe um modelo com este nome.';
+    }
+    if (status === 400) {
+      return 'Os dados enviados são inválidos. Verifique as informações e tente novamente.';
+    }
+    if (status >= 500) {
+      return 'Ocorreu um erro no servidor. Tente novamente mais tarde.';
+    }
+    return fallbackMessage;
+  }
+
+  async function extractResponseMessage(resp) {
+    if (!resp) return null;
+    const contentType = resp.headers?.get('content-type') || '';
+    try {
+      if (contentType.includes('application/json')) {
+        const data = await resp.json();
+        return (
+          data?.mensagem ||
+          data?.menssage ||
+          data?.message ||
+          data?.erro ||
+          data?.error ||
+          null
+        );
+      }
+      const text = await resp.text();
+      return text?.trim() || null;
+    } catch (err) {
+      console.error('Falha ao extrair mensagem da resposta da API:', err);
+      return null;
+    }
+  }
+
   function booleanFromValue(value) {
     if (typeof value === 'boolean') return value;
     if (typeof value === 'number') return value !== 0;
@@ -310,16 +346,64 @@
     }
   }
 
-  function handleSaveExisting() {
+  async function handleSaveExisting(event) {
     const key = elements.profileSelect?.value;
     if (!key || !profiles.has(key) || key !== state.currentProfile) return;
-    const selections = collectSelections();
     const profile = profiles.get(key);
-    profile.payload = buildPayloadFromSelections(selections);
-    state.profileLoaded = true;
-    markProfileLoaded(key);
-    if (typeof window.showToast === 'function') {
-      window.showToast('Perfil atualizado com sucesso.', 'success');
+    if (!profile?.id) {
+      if (typeof window.showToast === 'function') {
+        window.showToast('Não é possível atualizar um perfil que ainda não foi salvo.', 'warning');
+      }
+      return;
+    }
+    const button = event?.currentTarget || elements.save;
+    if (button) button.disabled = true;
+    const selections = collectSelections();
+    const payload = {
+      nome: profile.name,
+      descricao: profile.description || '',
+      permissoes: buildPayloadFromSelections(selections)
+    };
+    try {
+      const resp = await fetchApi(`/api/usuarios/modelos-permissoes/${encodeURIComponent(profile.id)}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      if (!resp.ok) {
+        const messageFromResponse = await extractResponseMessage(resp);
+        const errorMessage = getErrorMessageForStatus(
+          resp.status,
+          messageFromResponse || 'Não foi possível atualizar o modelo de permissões.'
+        );
+        if (typeof window.showToast === 'function') {
+          window.showToast(errorMessage, 'error');
+        }
+        return;
+      }
+      const data = await resp.json();
+      const modelo = data?.modelo ?? data;
+      const normalizedProfile = convertModelToProfile(modelo);
+      const finalKey = normalizedProfile.key;
+      if (finalKey !== key) {
+        profiles.delete(key);
+      }
+      profiles.set(finalKey, normalizedProfile);
+      adicionarOuAtualizarOpcao(finalKey, normalizedProfile.name, normalizedProfile.id);
+      if (elements.profileSelect) {
+        elements.profileSelect.value = finalKey;
+      }
+      markProfileLoaded(finalKey);
+      if (typeof window.showToast === 'function') {
+        window.showToast('Perfil atualizado com sucesso.', 'success');
+      }
+    } catch (err) {
+      console.error('Erro ao atualizar modelo de permissões:', err);
+      if (typeof window.showToast === 'function') {
+        window.showToast('Erro ao atualizar o modelo de permissões.', 'error');
+      }
+    } finally {
+      if (button) button.disabled = false;
     }
   }
 
@@ -364,26 +448,54 @@
     }
   }
 
-  function salvarNovoPerfil(nome, descricao) {
+  async function salvarNovoPerfil(nome, descricao) {
     const finalName = normalizarNome(nome);
     if (!finalName) return;
-    const key = gerarChaveUnica(finalName);
+    const button = saveConfirmBtn;
+    if (button) button.disabled = true;
     const selections = collectSelections();
-    profiles.set(key, {
-      id: null,
-      key,
-      name: finalName,
-      description: descricao || '',
-      payload: buildPayloadFromSelections(selections)
-    });
-    adicionarOuAtualizarOpcao(key, finalName);
-    if (elements.profileSelect) {
-      elements.profileSelect.value = key;
-    }
-    markProfileLoaded(key);
-    fecharModalSalvar();
-    if (typeof window.showToast === 'function') {
-      window.showToast('Novo perfil salvo com sucesso.', 'success');
+    const payload = {
+      nome: finalName,
+      descricao: descricao || '',
+      permissoes: buildPayloadFromSelections(selections)
+    };
+    try {
+      const resp = await fetchApi('/api/usuarios/modelos-permissoes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      if (!resp.ok) {
+        const messageFromResponse = await extractResponseMessage(resp);
+        const errorMessage = getErrorMessageForStatus(
+          resp.status,
+          messageFromResponse || 'Não foi possível criar o modelo de permissões.'
+        );
+        if (typeof window.showToast === 'function') {
+          window.showToast(errorMessage, 'error');
+        }
+        return;
+      }
+      const data = await resp.json();
+      const modelo = data?.modelo ?? data;
+      const profile = convertModelToProfile(modelo);
+      profiles.set(profile.key, profile);
+      adicionarOuAtualizarOpcao(profile.key, profile.name, profile.id);
+      if (elements.profileSelect) {
+        elements.profileSelect.value = profile.key;
+      }
+      markProfileLoaded(profile.key);
+      fecharModalSalvar();
+      if (typeof window.showToast === 'function') {
+        window.showToast('Novo perfil salvo com sucesso.', 'success');
+      }
+    } catch (err) {
+      console.error('Erro ao criar modelo de permissões:', err);
+      if (typeof window.showToast === 'function') {
+        window.showToast('Erro ao criar o modelo de permissões.', 'error');
+      }
+    } finally {
+      if (button) button.disabled = false;
     }
   }
 
@@ -418,11 +530,11 @@
     const selected = elements.profileSelect?.value;
     if (!selected || !profiles.has(selected)) return;
     const profile = profiles.get(selected);
-    const defaultName = profile?.name ? `${profile.name} Cópia` : 'Perfil Copia';
+    const defaultName = profile?.name ? `${profile.name} Cópia` : 'Perfil Cópia';
     abrirModalSalvar({ name: defaultName, description: profile?.description || '' });
   }
 
-  function handleDelete() {
+  async function handleDelete() {
     const selected = elements.profileSelect?.value;
     if (!selected || !profiles.has(selected)) return;
     const profile = profiles.get(selected);
@@ -431,21 +543,65 @@
       ? window.confirm(`Deseja realmente excluir o perfil "${nome}"?`)
       : true;
     if (!confirmar) return;
-    profiles.delete(selected);
-    const option = elements.profileSelect?.querySelector(`option[value="${selected}"]`);
-    option?.remove();
-    if (state.currentProfile === selected) {
-      state.currentProfile = null;
-      state.profileLoaded = false;
-      clearAllCheckboxes();
-      setAllModulesState();
-      updateAllMasterCheckboxes();
-      updateSummary();
+    if (!profile?.id) {
+      profiles.delete(selected);
+      const option = elements.profileSelect?.querySelector(`option[value="${selected}"]`);
+      option?.remove();
+      if (state.currentProfile === selected) {
+        state.currentProfile = null;
+        state.profileLoaded = false;
+        clearAllCheckboxes();
+        setAllModulesState();
+        updateAllMasterCheckboxes();
+        updateSummary();
+      }
+      resetAllOptionLabels();
+      updateProfileButtons();
+      if (typeof window.showToast === 'function') {
+        window.showToast('Perfil local removido.', 'info');
+      }
+      return;
     }
-    resetAllOptionLabels();
-    updateProfileButtons();
-    if (typeof window.showToast === 'function') {
-      window.showToast('Perfil excluído.', 'info');
+    const button = elements.remove;
+    if (button) button.disabled = true;
+    try {
+      const resp = await fetchApi(`/api/usuarios/modelos-permissoes/${encodeURIComponent(profile.id)}`, {
+        method: 'DELETE'
+      });
+      if (!resp.ok) {
+        const messageFromResponse = await extractResponseMessage(resp);
+        const errorMessage = getErrorMessageForStatus(
+          resp.status,
+          messageFromResponse || 'Não foi possível excluir o modelo de permissões.'
+        );
+        if (typeof window.showToast === 'function') {
+          window.showToast(errorMessage, 'error');
+        }
+        return;
+      }
+      profiles.delete(selected);
+      const option = elements.profileSelect?.querySelector(`option[value="${selected}"]`);
+      option?.remove();
+      if (state.currentProfile === selected) {
+        state.currentProfile = null;
+        state.profileLoaded = false;
+        clearAllCheckboxes();
+        setAllModulesState();
+        updateAllMasterCheckboxes();
+        updateSummary();
+      }
+      resetAllOptionLabels();
+      updateProfileButtons();
+      if (typeof window.showToast === 'function') {
+        window.showToast('Perfil excluído com sucesso.', 'success');
+      }
+    } catch (err) {
+      console.error('Erro ao excluir modelo de permissões:', err);
+      if (typeof window.showToast === 'function') {
+        window.showToast('Erro ao excluir o modelo de permissões.', 'error');
+      }
+    } finally {
+      if (button) button.disabled = false;
     }
   }
 
