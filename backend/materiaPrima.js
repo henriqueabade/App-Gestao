@@ -294,15 +294,19 @@ async function atualizarPreco(id, preco, usuarioId = null) {
 }
 
 async function listarCategorias() {
-  const res = await pool.query(
-    'SELECT nome_categoria FROM categoria ORDER BY nome_categoria'
-  );
-  return res.rows.map(r => r.nome_categoria);
+  const categorias = await pool.get('/categoria', {
+    query: { select: 'nome_categoria', order: 'nome_categoria' }
+  });
+  const lista = Array.isArray(categorias) ? categorias : [];
+  return lista.map(r => r.nome_categoria).filter(Boolean);
 }
 
 async function listarUnidades() {
-  const res = await pool.query('SELECT tipo FROM unidades ORDER BY tipo');
-  return res.rows.map(r => r.tipo);
+  const unidades = await pool.get('/unidades', {
+    query: { select: 'tipo', order: 'tipo' }
+  });
+  const lista = Array.isArray(unidades) ? unidades : [];
+  return lista.map(r => r.tipo).filter(Boolean);
 }
 
 async function adicionarCategoria(nome) {

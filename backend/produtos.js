@@ -44,61 +44,65 @@ async function listarDetalhesProduto(produtoCodigo, produtoId) {
       throw new Error('Produto não informado');
     }
 
-    if (produtoCodigo && !produtoId) {
-      const idRes = await pool.query(
-        'SELECT id FROM produtos WHERE codigo = $1::text',
-        [produtoCodigo]
-      );
-      produtoId = idRes.rows[0]?.id ?? null;
-    }
+    const produtoFiltro = produtoCodigo
+      ? { codigo: `eq.${produtoCodigo}`, limit: 1 }
+      : { id: produtoId, limit: 1 };
 
-    const produtoQuery = `
-      SELECT id, codigo, nome, descricao, categoria, preco_base, criado_em,
-             pct_fabricacao, pct_acabamento, pct_montagem, pct_embalagem,
-             pct_markup, pct_comissao, pct_imposto, preco_venda, status, ncm, data
-        FROM produtos
-       WHERE codigo = $1::text`;
-    const produtoRes = await pool.query(produtoQuery, [produtoCodigo]);
+    const produtos = await pool.get('/produtos', {
+      query: { select: '*', ...produtoFiltro }
+    });
+    const produto = Array.isArray(produtos) ? produtos[0] : null;
+    produtoId = produtoId || produto?.id || null;
 
-    const itensQuery = `
-      SELECT pi.id,
-             pi.insumo_id,
-             pi.quantidade,
-             pi.ordem_insumo,
-             mp.nome,
-             mp.preco_unitario,
-             mp.unidade,
-             mp.processo
-        FROM produtos_insumos pi
-        JOIN materia_prima mp ON mp.id = pi.insumo_id
-       WHERE pi.produto_codigo = $1::text
-       ORDER BY mp.processo, pi.ordem_insumo`;
-    const itensRes = await pool.query(itensQuery, [produtoCodigo]);
+    const itens = await pool.get('/produtos_insumos', {
+      query: {
+        select:
+          'id,produto_codigo,insumo_id,quantidade,ordem_insumo,materia_prima:insumo_id(nome,preco_unitario,unidade,processo)',
+        produto_codigo: `eq.${produtoCodigo}`,
+        order: 'materia_prima.processo,ordem_insumo'
+      }
+    });
 
-    // Ajuste: alias que o front costuma usar é "etapa".
-    // Também normalizamos espaços e evitamos string vazia.
-    const lotesQuery = `
-      SELECT
-        pecp.id,
-        pecp.quantidade,
-        pecp.ultimo_insumo_id,
-        mp.nome AS ultimo_item,
-        pecp.tempo_estimado_minutos,
-        pecp.data_hora_completa,
-        COALESCE(NULLIF(TRIM(pecp.etapa_id::text), ''), '—') AS etapa
-      FROM produtos_em_cada_ponto pecp
-      LEFT JOIN materia_prima mp
-        ON mp.id = pecp.ultimo_insumo_id
-      JOIN produtos p
-        ON p.id = pecp.produto_id
-      WHERE p.codigo = $1::text
-      ORDER BY pecp.data_hora_completa DESC`;
-    const lotesRes = await pool.query(lotesQuery, [produtoCodigo]);
+    const itensFormatados = (Array.isArray(itens) ? itens : []).map(item => {
+      const precoUnitario = Number(item?.materia_prima?.preco_unitario) || 0;
+      const quantidade = Number(item?.quantidade) || 0;
+      return {
+        id: item?.id,
+        insumo_id: item?.insumo_id,
+        quantidade,
+        ordem_insumo: item?.ordem_insumo,
+        nome: item?.materia_prima?.nome,
+        preco_unitario: precoUnitario,
+        unidade: item?.materia_prima?.unidade,
+        processo: item?.materia_prima?.processo,
+        total: precoUnitario * quantidade
+      };
+    });
+
+    const lotes = await pool.get('/produtos_em_cada_ponto', {
+      query: {
+        select:
+          'id,quantidade,ultimo_insumo_id,tempo_estimado_minutos,data_hora_completa,etapa_id,materia_prima:ultimo_insumo_id(nome)',
+        produto_id: produtoId ? `eq.${produtoId}` : undefined,
+        produto_codigo: produtoCodigo ? `eq.${produtoCodigo}` : undefined,
+        order: 'data_hora_completa.desc'
+      }
+    });
+
+    const lotesFormatados = (Array.isArray(lotes) ? lotes : []).map(lote => ({
+      id: lote?.id,
+      quantidade: lote?.quantidade,
+      ultimo_insumo_id: lote?.ultimo_insumo_id,
+      ultimo_item: lote?.materia_prima?.nome,
+      tempo_estimado_minutos: lote?.tempo_estimado_minutos,
+      data_hora_completa: lote?.data_hora_completa,
+      etapa: lote?.etapa_id ? String(lote.etapa_id).trim() || '—' : '—'
+    }));
 
     return {
-      produto: produtoRes.rows[0] || null,
-      itens: itensRes.rows,
-      lotes: lotesRes.rows,
+      produto: produto || null,
+      itens: itensFormatados,
+      lotes: lotesFormatados
     };
   } catch (err) {
     console.error('Erro ao listar detalhes do produto:', err.message);
@@ -111,30 +115,40 @@ async function listarDetalhesProduto(produtoCodigo, produtoId) {
  * Busca 1 produto pelo codigo (text)
  */
 async function obterProduto(codigo) {
-  const sql = 'SELECT * FROM produtos WHERE codigo = $1::text';
-  const res = await pool.query(sql, [codigo]);
-  return res.rows[0];
+  const produtos = await pool.get('/produtos', {
+    query: { select: '*', codigo: `eq.${codigo}`, limit: 1 }
+  });
+  return Array.isArray(produtos) ? produtos[0] : null;
 }
 
 /**
  * Lista insumos (produtos_insumos + materia_prima) por codigo de produto (text)
  */
 async function listarInsumosProduto(codigo) {
-  const query = `
-    SELECT pi.id,
-           mp.nome,
-           pi.quantidade,
-           pi.ordem_insumo,
-           mp.preco_unitario,
-           mp.unidade,
-           mp.preco_unitario * pi.quantidade AS total,
-           mp.processo
-      FROM produtos_insumos pi
-      JOIN materia_prima mp ON mp.id = pi.insumo_id
-     WHERE pi.produto_codigo = $1::text
-     ORDER BY mp.processo, pi.ordem_insumo`;
-  const res = await pool.query(query, [codigo]);
-  return res.rows;
+  const itens = await pool.get('/produtos_insumos', {
+    query: {
+      select:
+        'id,produto_codigo,insumo_id,quantidade,ordem_insumo,materia_prima:insumo_id(nome,preco_unitario,unidade,processo)',
+      produto_codigo: `eq.${codigo}`,
+      order: 'materia_prima.processo,ordem_insumo'
+    }
+  });
+
+  const lista = Array.isArray(itens) ? itens : [];
+  return lista.map(item => {
+    const precoUnitario = Number(item?.materia_prima?.preco_unitario) || 0;
+    const quantidade = Number(item?.quantidade) || 0;
+    return {
+      id: item?.id,
+      nome: item?.materia_prima?.nome,
+      quantidade,
+      ordem_insumo: item?.ordem_insumo,
+      preco_unitario: precoUnitario,
+      unidade: item?.materia_prima?.unidade,
+      total: precoUnitario * quantidade,
+      processo: item?.materia_prima?.processo
+    };
+  });
 }
 
 /**

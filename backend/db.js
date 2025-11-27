@@ -76,6 +76,17 @@ function updateStateFailure(err) {
   };
 }
 
+function buildQueryString(params = {}) {
+  const entries = Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== '');
+  if (!entries.length) return '';
+  const searchParams = new URLSearchParams();
+  for (const [key, value] of entries) {
+    searchParams.set(key, String(value));
+  }
+  const qs = searchParams.toString();
+  return qs ? `?${qs}` : '';
+}
+
 async function request(method, path, options = {}) {
   const token = await resolveToken(options);
   if (!token) {
@@ -86,7 +97,8 @@ async function request(method, path, options = {}) {
   }
 
   const normalizedPath = path.startsWith('/') ? path : `/${path}`;
-  const url = `${API_BASE_URL}${normalizedPath}`;
+  const qs = buildQueryString(options.query || {});
+  const url = `${API_BASE_URL}${normalizedPath}${qs}`;
   const headers = {
     'Content-Type': 'application/json',
     ...(options.headers || {}),

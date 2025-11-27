@@ -15,7 +15,7 @@ async function updateUsuarioCampos(id, campos) {
   if (!Object.keys(payload).length) return false;
 
   try {
-    await pool.patch(`/usuarios/${id}`, payload);
+    await pool.put(`/usuarios/${id}`, payload);
     return true;
   } catch (err) {
     console.error('Falha ao atualizar dados do usuário:', err);
