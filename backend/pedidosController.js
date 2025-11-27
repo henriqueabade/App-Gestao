@@ -1,5 +1,5 @@
 const express = require('express');
-const db = require('./db');
+const { createApiClient } = require('./apiHttpClient');
 
 const router = express.Router();
 
@@ -7,26 +7,18 @@ const router = express.Router();
 router.get('/', async (req, res) => {
   const { clienteId } = req.query;
   try {
-    let query =
-      `SELECT p.id, p.numero, c.nome_fantasia AS cliente, to_char(p.data_emissao,'DD/MM/YYYY') AS data_emissao,
-              p.valor_final, p.parcelas, p.situacao, p.dono,
-              to_char(p.data_aprovacao,'DD/MM/YYYY') AS data_aprovacao,
-              to_char(p.data_envio,'DD/MM/YYYY') AS data_envio,
-              to_char(p.data_entrega,'DD/MM/YYYY') AS data_entrega,
-              to_char(p.data_cancelamento,'DD/MM/YYYY') AS data_cancelamento
-         FROM pedidos p
-         LEFT JOIN clientes c ON c.id = p.cliente_id`;
-    const params = [];
-    if (clienteId) {
-      params.push(clienteId);
-      query += ' WHERE p.cliente_id = $1';
-    }
-    query += ' ORDER BY p.id DESC';
-    const { rows } = await db.query(query, params);
-    res.json(rows);
+    const api = createApiClient(req);
+    const pedidos = await api.get('/pedidos', {
+      query: {
+        ...(clienteId ? { cliente_id: `eq.${clienteId}` } : {}),
+        order: 'id.desc'
+      }
+    });
+
+    res.json(Array.isArray(pedidos) ? pedidos : []);
   } catch (err) {
     console.error('Erro ao listar pedidos:', err);
-    res.status(500).json({ error: 'Erro ao listar pedidos' });
+    res.status(err.status || 500).json({ error: 'Erro ao listar pedidos' });
   }
 });
 
@@ -35,48 +27,40 @@ router.put('/:id/status', async (req, res) => {
   const { status } = req.body;
   const { id } = req.params;
   try {
-    const baseQuery = 'UPDATE pedidos SET situacao = $1';
-    let query = baseQuery;
+    const api = createApiClient(req);
+    const payload = { situacao: status };
     if (status === 'Enviado') {
-      query += ', data_envio = NOW()';
+      payload.data_envio = new Date().toISOString();
     } else if (status === 'Entregue') {
-      query += ', data_entrega = NOW()';
+      payload.data_entrega = new Date().toISOString();
     }
-    query += ' WHERE id = $2';
-    await db.query(query, [status, id]);
+    await api.put(`/pedidos/${id}`, payload);
     res.json({ success: true });
   } catch (err) {
     console.error('Erro ao atualizar status do pedido:', err);
-    res.status(500).json({ error: 'Erro ao atualizar status do pedido' });
+    res.status(err.status || 500).json({ error: 'Erro ao atualizar status do pedido' });
   }
 }); // <--- Faltava este '});' para fechar a rota e a função async
 
 // Obtém um pedido específico com itens e parcelas
 router.get('/:id', async (req, res) => {
   const { id } = req.params;
-  const client = await db.connect();
   try {
-    const { rows } = await client.query('SELECT * FROM pedidos WHERE id=$1', [id]);
-    if (!rows.length) {
+    const api = createApiClient(req);
+    const pedido = await api.get(`/pedidos/${id}`);
+    if (!pedido || pedido.error === 'Not found') {
       return res.status(404).json({ error: 'Pedido não encontrado' });
     }
-    const pedido = rows[0];
-    const { rows: itens } = await client.query(
-      'SELECT * FROM pedidos_itens WHERE pedido_id=$1',
-      [id]
-    );
-    const { rows: parcelas } = await client.query(
-      'SELECT * FROM pedido_parcelas WHERE pedido_id=$1 ORDER BY numero_parcela',
-      [id]
-    );
-    pedido.itens = itens;
-    pedido.parcelas_detalhes = parcelas;
+    const [itens, parcelas] = await Promise.all([
+      api.get('/pedidos_itens', { query: { pedido_id: `eq.${id}` } }),
+      api.get('/pedido_parcelas', { query: { pedido_id: `eq.${id}`, order: 'numero_parcela' } })
+    ]);
+    pedido.itens = itens || [];
+    pedido.parcelas_detalhes = parcelas || [];
     res.json(pedido);
   } catch (err) {
     console.error('Erro ao buscar pedido:', err);
-    res.status(500).json({ error: 'Erro ao buscar pedido' });
-  } finally {
-    client.release();
+    res.status(err.status || 500).json({ error: 'Erro ao buscar pedido' });
   }
 });
 module.exports = router;

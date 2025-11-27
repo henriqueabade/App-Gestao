@@ -1,5 +1,5 @@
 const express = require('express');
-const pool = require('./db');
+const { createApiClient } = require('./apiHttpClient');
 
 const router = express.Router();
 
@@ -7,14 +7,14 @@ const router = express.Router();
 router.get('/:clienteId', async (req, res) => {
   const { clienteId } = req.params;
   try {
-    const result = await pool.query(
-      'SELECT id, transportadora AS nome FROM transportadoras WHERE id_cliente = $1 ORDER BY transportadora',
-      [clienteId]
-    );
-    res.json(result.rows);
+    const api = createApiClient(req);
+    const result = await api.get('/transportadoras', {
+      query: { id_cliente: `eq.${clienteId}`, order: 'transportadora' }
+    });
+    res.json(Array.isArray(result) ? result.map((row) => ({ id: row.id, nome: row.transportadora })) : []);
   } catch (err) {
     console.error('Erro ao listar transportadoras:', err);
-    res.status(500).json({ error: 'Erro ao listar transportadoras' });
+    res.status(err.status || 500).json({ error: 'Erro ao listar transportadoras' });
   }
 });
 
