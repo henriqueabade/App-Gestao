@@ -119,6 +119,10 @@ function ensureDatabaseReady(pin, credentials) {
         if (!Number.isNaN(retryAfter)) {
           detailedError.retryAfter = Math.max(retryAfter, 0);
         }
+        const lastErrorReason = status.lastError.reason || status.lastError.code;
+        if (lastErrorReason) {
+          detailedError.reason = lastErrorReason;
+        }
         if (isPinError(detailedError)) {
           detailedError.reason = 'pin';
         } else if (isNetworkError(detailedError)) {
