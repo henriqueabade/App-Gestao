@@ -173,12 +173,15 @@ async function waitForDatabaseReady(pin, credentials, options = {}) {
       }
     } catch (err) {
       const error = err instanceof Error ? err : new Error(String(err));
-      const reason = typeof error.reason === 'string'
-        ? error.reason.toLowerCase()
-        : error.code === 'db-connecting'
-          ? 'db-connecting'
-          : '';
-      if (reason !== 'db-connecting') {
+      const reason =
+        typeof error.reason === 'string'
+          ? error.reason.toLowerCase()
+          : typeof error.code === 'string'
+            ? error.code.toLowerCase()
+            : error.status === 401
+              ? 'user-auth'
+              : '';
+      if (reason && reason !== 'db-connecting') {
         throw error;
       }
       lastError = error;
@@ -203,9 +206,23 @@ async function waitForDatabaseReady(pin, credentials, options = {}) {
 
     const elapsed = Date.now() - start;
     if (hasTimeout && elapsed >= timeoutMs) {
+      const poolStatus = typeof pool.getStatus === 'function' ? pool.getStatus() : null;
+      const normalizedReason = (() => {
+        const candidate =
+          poolStatus?.lastError?.reason ||
+          poolStatus?.lastError?.code ||
+          (poolStatus?.lastError?.status === 401 ? 'user-auth' : null);
+        return typeof candidate === 'string' ? candidate.toLowerCase() : null;
+      })();
       const timeoutError = normalizeNotReadyError(
         lastError || (typeof pool.createNotReadyError === 'function' ? pool.createNotReadyError() : null)
       );
+      if (normalizedReason && normalizedReason !== 'db-connecting') {
+        timeoutError.reason = normalizedReason;
+        if (!timeoutError.code || timeoutError.code === 'db-connecting') {
+          timeoutError.code = normalizedReason;
+        }
+      }
       debugLogAuth('Pool do banco não ficou pronto no tempo limite', {
         attempts: attempt,
         elapsedMs: elapsed,

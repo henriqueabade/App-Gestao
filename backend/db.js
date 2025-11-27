@@ -112,7 +112,11 @@ function markFailure(err) {
   state.connecting = false;
   state.lastFailureAt = Date.now();
   state.consecutiveFailures = Math.min(state.consecutiveFailures + 1, 1_000_000);
-  state.lastError = err instanceof Error ? err : new Error(String(err));
+  const normalizedError = err instanceof Error ? err : new Error(String(err));
+  if (!normalizedError.reason && normalizedError.status === 401) {
+    normalizedError.reason = 'user-auth';
+  }
+  state.lastError = normalizedError;
   state.nextAttemptAt = Date.now() + DEFAULT_WARMUP_RETRY_DELAY_MS;
   scheduleWarmup(DEFAULT_WARMUP_RETRY_DELAY_MS);
 }
@@ -134,10 +138,17 @@ function scheduleWarmup(delay = 0) {
 
 function createNotReadyError() {
   const status = getStatus();
-  const error = new Error('Conectando ao serviço de API...');
-  error.code = 'db-connecting';
+  const isAuthError =
+    status.lastError?.status === 401 ||
+    status.lastError?.reason === 'user-auth' ||
+    status.lastError?.code === 'auth-failed';
+  const error = new Error(
+    status.lastError?.message ||
+      (isAuthError ? 'Falha na autenticação. Verifique suas credenciais.' : 'Conectando ao serviço de API...')
+  );
+  error.code = isAuthError ? 'user-auth' : 'db-connecting';
   error.retryAfter = Math.max(status.retryInMs || DEFAULT_WARMUP_RETRY_DELAY_MS, 1_000);
-  error.reason = 'db-connecting';
+  error.reason = isAuthError ? 'user-auth' : 'db-connecting';
   return error;
 }
 
@@ -165,7 +176,9 @@ function getStatus() {
     lastError: state.lastError
       ? {
           message: state.lastError.message,
-          code: state.lastError.code
+          code: state.lastError.code,
+          reason: state.lastError.reason,
+          status: state.lastError.status
         }
       : null
   };

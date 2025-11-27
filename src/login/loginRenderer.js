@@ -496,6 +496,10 @@ if (intro) {
             showToast(message || 'PIN incorreto', 'error');
             return;
           }
+          if (normalizedReason === 'user-auth') {
+            showToast(message || 'Credenciais inválidas. Verifique login e senha.', 'error');
+            return;
+          }
           if (normalizedReason === 'offline') {
             showToast(message || 'Sem conexão com internet', 'error');
             return;
