@@ -1,32 +1,29 @@
 const pool = require('./db');
 
-async function listarMaterias(filtro = '') {
-  const params = [];
-  let whereClause = '';
+function aplicarFiltroLocal(lista, filtro) {
+  if (!filtro) return lista;
+  const normalized = filtro.trim().toLowerCase();
 
-  if (filtro) {
-    const normalized = filtro.trim().toLowerCase();
-
-    // Lógica para filtro de "infinito"
-    if (['sim', 's', 'true', 'infinito', 'infinita', '∞'].includes(normalized)) {
-      whereClause = 'WHERE infinito = $1';
-      params.push(true); // Adiciona o valor booleano ao array de parâmetros
-    } else if (['nao', 'não', 'n', 'false', 'finito', 'finita'].includes(normalized)) {
-      whereClause = 'WHERE infinito = $1';
-      params.push(false); // Adiciona o valor booleano ao array de parâmetros
-    } else {
-      // Lógica para filtro de texto (nome, categoria, processo)
-      params.push(`%${filtro}%`);
-      whereClause = 'WHERE (nome ILIKE $1 OR categoria ILIKE $1 OR processo ILIKE $1)';
-    }
+  if (['sim', 's', 'true', 'infinito', 'infinita', '∞'].includes(normalized)) {
+    return lista.filter(item => Boolean(item?.infinito));
   }
 
-  // Monta a query final com a cláusula WHERE e a ordenação
-  const query = `SELECT * FROM materia_prima ${whereClause} ORDER BY nome`;
+  if (['nao', 'não', 'n', 'false', 'finito', 'finita'].includes(normalized)) {
+    return lista.filter(item => !item?.infinito);
+  }
 
+  return lista.filter(item => {
+    const alvo = `${item?.nome || ''} ${item?.categoria || ''} ${item?.processo || ''}`.toLowerCase();
+    return alvo.includes(normalized);
+  });
+}
+
+async function listarMaterias(filtro = '') {
   try {
-    const res = await pool.query(query, params);
-    return res.rows;
+    const materias = await pool.get('/materia_prima');
+    const lista = Array.isArray(materias) ? materias : [];
+    const filtrada = aplicarFiltroLocal(lista, filtro);
+    return filtrada.sort((a, b) => String(a?.nome || '').localeCompare(String(b?.nome || '')));
   } catch (err) {
     console.error('Erro ao listar materiais:', err.message);
     throw err;

@@ -1,21 +1,5 @@
 const pool = require('./db');
 
-let cachedColumns = null;
-
-async function getUsuarioColumns() {
-  if (cachedColumns) return cachedColumns;
-  try {
-    const { rows } = await pool.query(
-      `SELECT column_name FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'usuarios'`
-    );
-    cachedColumns = new Set(rows.map(r => r.column_name));
-  } catch (err) {
-    console.error('Falha ao obter colunas da tabela usuarios:', err);
-    cachedColumns = new Set();
-  }
-  return cachedColumns;
-}
-
 function normalizarData(valor, padrao = null) {
   if (!valor) return padrao;
   const data = valor instanceof Date ? valor : new Date(valor);
@@ -25,16 +9,13 @@ function normalizarData(valor, padrao = null) {
 
 async function updateUsuarioCampos(id, campos) {
   if (!id) return false;
-  const colunas = await getUsuarioColumns();
-  const entries = Object.entries(campos || {})
-    .filter(([col, valor]) => colunas.has(col) && valor !== undefined);
-  if (!entries.length) return false;
-
-  const sets = entries.map(([col], idx) => `${col} = $${idx + 2}`);
-  const valores = entries.map(([, valor]) => valor);
+  const payload = Object.fromEntries(
+    Object.entries(campos || {}).filter(([, valor]) => valor !== undefined)
+  );
+  if (!Object.keys(payload).length) return false;
 
   try {
-    await pool.query(`UPDATE usuarios SET ${sets.join(', ')} WHERE id = $1`, [id, ...valores]);
+    await pool.patch(`/usuarios/${id}`, payload);
     return true;
   } catch (err) {
     console.error('Falha ao atualizar dados do usuário:', err);

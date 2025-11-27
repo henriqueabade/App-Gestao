@@ -13,26 +13,25 @@ function tipo(v) {
  */
 async function listarProdutos() {
   try {
-    const sql = `
-      SELECT p.id,
-             p.codigo,
-             p.nome,
-             p.descricao,
-             p.categoria,
-             p.ncm,
-             p.preco_venda,
-             p.pct_markup,
-             p.status,
-             p.criado_em,
-             p.data,
-             COALESCE(SUM(pe.quantidade), 0) AS quantidade_total
-        FROM produtos p
-   LEFT JOIN produtos_em_cada_ponto pe ON pe.produto_id = p.id
-   GROUP BY p.id, p.codigo, p.nome, p.descricao, p.categoria, p.preco_venda,
-             p.ncm, p.pct_markup, p.status, p.criado_em, p.data
-    ORDER BY p.nome`;
-    const res = await pool.query(sql);
-    return res.rows;
+    const produtos = await pool.get('/produtos');
+    const lotes = await pool.get('/produtos_em_cada_ponto');
+    const listaProdutos = Array.isArray(produtos) ? produtos : [];
+    const listaLotes = Array.isArray(lotes) ? lotes : [];
+
+    const quantidadesPorProduto = listaLotes.reduce((acc, lote) => {
+      const produtoId = lote?.produto_id;
+      const atual = Number(acc.get(produtoId) || 0);
+      const qtd = Number(lote?.quantidade) || 0;
+      acc.set(produtoId, atual + qtd);
+      return acc;
+    }, new Map());
+
+    return listaProdutos
+      .map(produto => ({
+        ...produto,
+        quantidade_total: quantidadesPorProduto.get(produto?.id) || 0
+      }))
+      .sort((a, b) => String(a?.nome || '').localeCompare(String(b?.nome || '')));
   } catch (err) {
     console.error('Erro ao listar produtos:', err.message);
     throw err;

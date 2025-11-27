@@ -145,6 +145,10 @@ function post(path, body, options) {
   return query(path, { ...options, method: 'POST', body });
 }
 
+function patch(path, body, options) {
+  return query(path, { ...options, method: 'PATCH', body });
+}
+
 function put(path, body, options) {
   return query(path, { ...options, method: 'PUT', body });
 }
@@ -247,6 +251,7 @@ module.exports = {
   ping,
   get,
   post,
+  patch,
   put,
   delete: del,
   runWithToken
