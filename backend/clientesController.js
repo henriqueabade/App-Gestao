@@ -106,7 +106,7 @@ function buildPayload(cli = {}) {
 router.get('/lista', async (req, res) => {
   try {
     const api = createApiClient(req);
-    const clientes = await api.get('/clientes', {
+    const clientes = await api.get('/api/clientes', {
       query: {
         select: 'id,nome_fantasia,cnpj,ent_pais,ent_uf,status_cliente,dono_cliente',
         order: 'nome_fantasia'
@@ -124,8 +124,8 @@ router.get('/contatos', async (req, res) => {
   try {
     const api = createApiClient(req);
     const [contatos, clientes] = await Promise.all([
-      api.get('/contatos_cliente', { query: { order: 'nome' } }),
-      api.get('/clientes', { query: { select: 'id,nome_fantasia,dono_cliente,status_cliente' } })
+      api.get('/api/contatos_cliente', { query: { order: 'nome' } }),
+      api.get('/api/clientes', { query: { select: 'id,nome_fantasia,dono_cliente,status_cliente' } })
     ]);
 
     const clienteMap = new Map((clientes || []).map((c) => [c.id, c]));
@@ -167,15 +167,15 @@ router.get('/:id', async (req, res) => {
     let contratos = [];
     let notas = [];
     try {
-      contatos = await api.get('/contatos_cliente', {
+      contatos = await api.get('/api/contatos_cliente', {
         query: { cliente_id: `eq.${id}`, order: 'nome' }
       });
     } catch (_) {}
     try {
-      contratos = await api.get('/contratos', { query: { cliente_id: `eq.${id}` } });
+      contratos = await api.get('/api/contratos', { query: { cliente_id: `eq.${id}` } });
     } catch (_) {}
     try {
-      notas = await api.get('/cliente_notas', { query: { cliente_id: `eq.${id}`, order: 'data.desc' } });
+      notas = await api.get('/api/cliente_notas', { query: { cliente_id: `eq.${id}`, order: 'data.desc' } });
     } catch (_) {}
 
     res.json({
@@ -225,7 +225,7 @@ router.get('/:id/resumo', async (req, res) => {
     const cobranca = enderecoIgual('cob', 'ent') ? 'Igual Entrega' : formatEndereco('cob');
     const registro = enderecoIgual('reg', 'ent') ? 'Igual Entrega' : formatEndereco('reg');
 
-    const contatosRes = await api.get('/contatos_cliente', {
+    const contatosRes = await api.get('/api/contatos_cliente', {
       query: { cliente_id: `eq.${id}`, order: 'nome' }
     });
 
@@ -260,18 +260,18 @@ router.post('/', async (req, res) => {
   const cli = req.body || {};
   try {
     const api = createApiClient(req);
-    const duplicados = await api.get('/clientes', {
+    const duplicados = await api.get('/api/clientes', {
       query: { cnpj: `eq.${cli.cnpj}`, select: 'id', limit: 1 }
     });
     if (Array.isArray(duplicados) && duplicados.length) {
       return res.status(409).json({ error: 'Cliente já registrado' });
     }
 
-    const created = await api.post('/clientes', buildPayload(cli));
+    const created = await api.post('/api/clientes', buildPayload(cli));
     const clienteId = created?.id || created?.[0]?.id || created?.data?.id;
     const contatos = Array.isArray(cli.contatos) ? cli.contatos : [];
     for (const ct of contatos) {
-      await api.post('/contatos_cliente', {
+      await api.post('/api/contatos_cliente', {
         id_cliente: clienteId,
         nome: ct.nome,
         cargo: ct.cargo,
@@ -296,7 +296,7 @@ router.put('/:id', async (req, res) => {
 
     const contatosNovos = Array.isArray(cli.contatosNovos) ? cli.contatosNovos : [];
     for(const ct of contatosNovos){
-      await api.post('/contatos_cliente', {
+      await api.post('/api/contatos_cliente', {
         id_cliente: id,
         nome: ct.nome,
         cargo: ct.cargo,
@@ -334,19 +334,19 @@ router.delete('/:id', async (req, res) => {
   const { id } = req.params;
   try {
     const api = createApiClient(req);
-    const orcRes = await api.get('/orcamentos', {
+    const orcRes = await api.get('/api/orcamentos', {
       query: { cliente_id: `eq.${id}`, select: 'id', limit: 1 }
     });
     if (Array.isArray(orcRes) && orcRes.length) {
       return res.status(400).json({ error: 'Não é possível excluir: cliente possui orçamentos vinculados' });
     }
 
-    await api.delete('/contatos_cliente', { query: { cliente_id: `eq.${id}` } });
+    await api.delete('/api/contatos_cliente', { query: { cliente_id: `eq.${id}` } });
     try {
-      await api.delete('/contratos', { query: { cliente_id: `eq.${id}` } });
+      await api.delete('/api/contratos', { query: { cliente_id: `eq.${id}` } });
     } catch (_) {}
     try {
-      await api.delete('/cliente_notas', { query: { cliente_id: `eq.${id}` } });
+      await api.delete('/api/cliente_notas', { query: { cliente_id: `eq.${id}` } });
     } catch (_) {}
     await api.delete(`/clientes/${id}`);
 

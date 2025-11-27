@@ -8,7 +8,7 @@ router.get('/', async (req, res) => {
   const { clienteId } = req.query;
   try {
     const api = createApiClient(req);
-    const pedidos = await api.get('/pedidos', {
+    const pedidos = await api.get('/api/pedidos', {
       query: {
         ...(clienteId ? { cliente_id: `eq.${clienteId}` } : {}),
         order: 'id.desc'
@@ -34,7 +34,7 @@ router.put('/:id/status', async (req, res) => {
     } else if (status === 'Entregue') {
       payload.data_entrega = new Date().toISOString();
     }
-    await api.put(`/pedidos/${id}`, payload);
+    await api.put(`/api/pedidos/${id}`, payload);
     res.json({ success: true });
   } catch (err) {
     console.error('Erro ao atualizar status do pedido:', err);
@@ -47,13 +47,13 @@ router.get('/:id', async (req, res) => {
   const { id } = req.params;
   try {
     const api = createApiClient(req);
-    const pedido = await api.get(`/pedidos/${id}`);
+    const pedido = await api.get(`/api/pedidos/${id}`);
     if (!pedido || pedido.error === 'Not found') {
       return res.status(404).json({ error: 'Pedido não encontrado' });
     }
     const [itens, parcelas] = await Promise.all([
-      api.get('/pedidos_itens', { query: { pedido_id: `eq.${id}` } }),
-      api.get('/pedido_parcelas', { query: { pedido_id: `eq.${id}`, order: 'numero_parcela' } })
+      api.get('/api/pedidos_itens', { query: { pedido_id: `eq.${id}` } }),
+      api.get('/api/pedido_parcelas', { query: { pedido_id: `eq.${id}`, order: 'numero_parcela' } })
     ]);
     pedido.itens = itens || [];
     pedido.parcelas_detalhes = parcelas || [];

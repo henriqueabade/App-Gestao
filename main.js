@@ -19,7 +19,8 @@ const {
   ensureDatabaseReady
 } = require('./backend/backend');
 const { registrarUltimaSaida, registrarUltimaEntrada } = require('./backend/userActivity');
-const db = require('./backend/db');
+const { createApiClient } = require('./backend/apiHttpClient');
+const { getToken } = require('./backend/tokenStore');
 const fs = require('fs');
 const net = require('net');
 const {
@@ -276,15 +277,6 @@ const monitorActivityState = {
 };
 
 monitorActivityState.lastInteractionAt = Date.now();
-try {
-  if (typeof db.setQueryGuard === 'function') {
-    db.setQueryGuard(() => netState === 'online');
-  }
-} catch (err) {
-  if (DEBUG) {
-    console.warn('Falha ao configurar guarda de consultas do banco:', err);
-  }
-}
 
 function getPublishStateFilePath() {
   if (!publishStateFilePath) {
@@ -1206,6 +1198,11 @@ function setCurrentUserSession(user) {
   }
 }
 
+function getAuthorizedApiClient() {
+  const token = getToken();
+  return createApiClient({ headers: { authorization: token ? `Bearer ${token}` : '' } });
+}
+
 function summarizeValue(value) {
   if (value === null || value === undefined) return '';
   if (typeof value === 'string') return value.trim();
@@ -2051,13 +2048,11 @@ function formatMonitorError(err) {
 }
 
 async function checkDatabaseAndCurrentUser({ skipBasicQuery = false } = {}) {
+  const api = getAuthorizedApiClient();
   if (!skipBasicQuery) {
     try {
-      await db.query('SELECT 1');
+      await api.get('/status');
     } catch (err) {
-      if (err.code === 'db-connecting') {
-        return { success: false, reason: 'db-connecting', error: err };
-      }
       if (isNetworkError(err)) {
         return { success: false, reason: 'offline', error: err };
       }
@@ -2070,16 +2065,8 @@ async function checkDatabaseAndCurrentUser({ skipBasicQuery = false } = {}) {
 
   if (currentUserSession?.id) {
     try {
-      const { rows } = await db.query('SELECT 1 FROM usuarios WHERE id = $1 LIMIT 1', [
-        currentUserSession.id
-      ]);
-      if (!rows || rows.length === 0) {
-        return { success: false, reason: 'user-removed' };
-      }
+      await api.get(`/api/usuarios/${currentUserSession.id}`);
     } catch (err) {
-      if (err.code === 'db-connecting') {
-        return { success: false, reason: 'db-connecting', error: err };
-      }
       if (isNetworkError(err)) {
         return { success: false, reason: 'offline', error: err };
       }
@@ -2233,13 +2220,6 @@ function isLocalHostname(hostname) {
 function applyNetState(nextState) {
   if (netState === nextState) return;
   netState = nextState;
-  try {
-    if (typeof db.setQueryGuard === 'function') {
-      db.setQueryGuard(() => netState === 'online');
-    }
-  } catch (_err) {
-    // Silencioso: a guarda será reconfigurada em futuras atualizações.
-  }
 }
 
 function createConnectionMonitor() {
@@ -3761,10 +3741,10 @@ async function waitForAutoLoginDatabaseReady(pin) {
         if (waitDuration === 0) {
           break;
         }
-        await db.ping();
+        await getAuthorizedApiClient().get('/status');
         await sleep(waitDuration);
       } else {
-        await db.ping();
+        await getAuthorizedApiClient().get('/status');
         await sleep(delayMs);
       }
     }

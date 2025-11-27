@@ -1,5 +1,11 @@
-const API_BASE_URL = 'https://api.santissimodecor.com.br/api';
-const DEFAULT_BEARER_TOKEN = normalizeToken(process.env.API_BEARER_TOKEN || 'test-token');
+const { getToken } = require('./tokenStore');
+
+const RAW_API_BASE_URL =
+  (process.env.API_BASE_URL && process.env.API_BASE_URL.trim()) ||
+  (process.env.API_URL && process.env.API_URL.trim()) ||
+  'http://localhost:3000';
+const API_BASE_URL = RAW_API_BASE_URL.replace(/\/$/, '');
+const DEFAULT_BEARER_TOKEN = normalizeToken(process.env.API_BEARER_TOKEN || '');
 
 function buildQueryString(params = {}) {
   const searchParams = new URLSearchParams();
@@ -22,7 +28,8 @@ function normalizeToken(rawToken) {
 }
 
 function createApiClient(req) {
-  const bearer = normalizeToken(req?.headers?.authorization || '') || DEFAULT_BEARER_TOKEN;
+  const stored = normalizeToken(getToken());
+  const bearer = normalizeToken(req?.headers?.authorization || '') || stored || DEFAULT_BEARER_TOKEN;
   if (!bearer) {
     const error = new Error('Token de autenticação ausente');
     error.status = 401;
@@ -30,7 +37,8 @@ function createApiClient(req) {
   }
 
   async function send(method, path, { query, body } = {}) {
-    const url = `${API_BASE_URL}${path}${buildQueryString(query)}`;
+    const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+    const url = `${API_BASE_URL}${normalizedPath}${buildQueryString(query)}`;
     const headers = {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${bearer}`
@@ -50,7 +58,7 @@ function createApiClient(req) {
     }
 
     if (!response.ok) {
-      const error = new Error(`Falha na requisição ${method} ${path}: ${response.status}`);
+      const error = new Error(`Falha na requisição ${method} ${normalizedPath}: ${response.status}`);
       error.status = response.status;
       error.body = data;
       throw error;
@@ -68,5 +76,6 @@ function createApiClient(req) {
 }
 
 module.exports = {
-  createApiClient
+  createApiClient,
+  normalizeToken
 };

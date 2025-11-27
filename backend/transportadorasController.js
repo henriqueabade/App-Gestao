@@ -8,7 +8,7 @@ router.get('/:clienteId', async (req, res) => {
   const { clienteId } = req.params;
   try {
     const api = createApiClient(req);
-    const result = await api.get('/transportadoras', {
+    const result = await api.get('/api/transportadoras', {
       query: { id_cliente: `eq.${clienteId}`, order: 'transportadora' }
     });
     res.json(Array.isArray(result) ? result.map((row) => ({ id: row.id, nome: row.transportadora })) : []);

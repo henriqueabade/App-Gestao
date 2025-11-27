@@ -15,7 +15,7 @@ router.post('/password-reset-request', async (req, res) => {
 
   try {
     const api = requireAuthApiClient(req);
-    const users = await api.get('/usuarios', {
+    const users = await api.get('/api/usuarios', {
       query: { email: `eq.${normalizedEmail}`, select: 'id' }
     });
 
@@ -28,7 +28,7 @@ router.post('/password-reset-request', async (req, res) => {
     const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
     const expiresAt = new Date(Date.now() + 30 * 60 * 1000).toISOString();
 
-    await api.post('/password_reset_tokens', {
+    await api.post('/api/password_reset_tokens', {
       user_id: userId,
       token_hash: tokenHash,
       expires_at: expiresAt,
@@ -62,7 +62,7 @@ router.post('/password-reset', async (req, res) => {
     const api = requireAuthApiClient(req);
     const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
 
-    const tokens = await api.get('/password_reset_tokens', {
+    const tokens = await api.get('/api/password_reset_tokens', {
       query: { token_hash: `eq.${tokenHash}`, select: 'user_id,expires_at' }
     });
 
@@ -72,12 +72,12 @@ router.post('/password-reset', async (req, res) => {
     const row = tokens[0];
     const expiresAt = row.expires_at ? new Date(row.expires_at) : null;
     if (!expiresAt || expiresAt < new Date()) {
-      await api.delete('/password_reset_tokens', { query: { token_hash: `eq.${tokenHash}` } });
+      await api.delete('/api/password_reset_tokens', { query: { token_hash: `eq.${tokenHash}` } });
       return res.status(400).end();
     }
     const hashed = await bcrypt.hash(newPassword, 12);
     await api.put(`/usuarios/${row.user_id}`, { senha: hashed });
-    await api.delete('/password_reset_tokens', { query: { token_hash: `eq.${tokenHash}` } });
+    await api.delete('/api/password_reset_tokens', { query: { token_hash: `eq.${tokenHash}` } });
     res.sendStatus(200);
   } catch (err) {
     console.error('password-reset error', err);

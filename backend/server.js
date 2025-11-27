@@ -1,37 +1,35 @@
 // carrega variáveis do .env sem mensagens informativas
 require('dotenv').config({ quiet: true });
 
-// importa libs só uma vez
-const express               = require('express');
-const cors                  = require('cors');
-const path                  = require('path');
-const clientesRouter        = require('./clientesController');
-const passwordResetRouter   = require('./passwordResetRoutes');
-const usuariosRouter        = require('./usuariosController');
+const express = require('express');
+const cors = require('cors');
+const path = require('path');
+const clientesRouter = require('./clientesController');
+const passwordResetRouter = require('./passwordResetRoutes');
+const usuariosRouter = require('./usuariosController');
 const transportadorasRouter = require('./transportadorasController');
-const orcamentosRouter      = require('./orcamentosController');
-const pedidosRouter         = require('./pedidosController');
-const notificationsRouter   = require('./notificationsController');
-const db                    = require('./db');
+const orcamentosRouter = require('./orcamentosController');
+const pedidosRouter = require('./pedidosController');
+const notificationsRouter = require('./notificationsController');
+const { normalizeToken } = require('./apiHttpClient');
+const { getToken } = require('./tokenStore');
 
-const DEFAULT_BEARER_TOKEN = (process.env.API_BEARER_TOKEN || 'test-token').trim();
+const DEFAULT_BEARER_TOKEN = normalizeToken(process.env.API_BEARER_TOKEN || '');
 
 const app = express();
 app.use(cors());
 app.use(express.json({ limit: '3mb' }));
 
-function extractToken(req) {
-  const header = req.get('authorization');
-  if (!header) return null;
-  const trimmed = header.trim();
-  const match = trimmed.match(/^Bearer\s+(.+)/i);
-  return match ? match[1] : trimmed;
-}
-
 app.use((req, _res, next) => {
-  const token = extractToken(req) || DEFAULT_BEARER_TOKEN;
-  if (!token) return next();
-  return db.runWithToken(token, next);
+  if (!req.headers.authorization) {
+    const stored = getToken();
+    if (stored) {
+      req.headers.authorization = `Bearer ${normalizeToken(stored)}`;
+    } else if (DEFAULT_BEARER_TOKEN) {
+      req.headers.authorization = `Bearer ${DEFAULT_BEARER_TOKEN}`;
+    }
+  }
+  next();
 });
 
 app.use('/api/clientes', clientesRouter);
@@ -48,78 +46,8 @@ app.use('/pdf', express.static(path.join(__dirname, '../src/pdf')));
 app.use('/styles', express.static(path.join(__dirname, '../src/styles')));
 app.use('/js', express.static(path.join(__dirname, '../src/js')));
 
-// Endpoint simples para verificar a disponibilidade do servidor
 app.get('/status', (_req, res) => {
   res.json({ status: 'ok' });
-});
-
-app.get('/healthz', async (_req, res) => {
-  const status = db.getStatus();
-  if (!status.ready) {
-    db.ensureWarmup();
-  }
-
-  try {
-    await db.ping();
-  } catch (err) {
-    // ping já atualiza o status internamente
-    console.warn('[healthz] falha ao pingar API remota', err?.message);
-  }
-
-  const apiStatus = status.ready ? 'ready' : status.connecting ? 'connecting' : 'error';
-  const payload = {
-    internet: true,
-    api_ok: status.ready,
-    api_ready: status.ready,
-    api_status: apiStatus,
-    connecting: status.connecting,
-    next_retry_in_ms: status.retryInMs,
-    last_success_at: status.lastSuccessAt || null,
-    last_failure_at: status.lastFailureAt || null,
-    consecutive_failures: status.consecutiveFailures
-  };
-
-  if (status.lastError) {
-    payload.last_error = status.lastError;
-  }
-
-  res.status(200).json(payload);
-});
-
-app.get('/healthz/db', async (_req, res) => {
-  const status = db.getStatus();
-  if (!status.ready) {
-    db.ensureWarmup();
-  }
-
-  try {
-    await db.ping();
-  } catch (err) {
-    console.warn('[healthz/db] falha ao pingar API remota', err?.message);
-  }
-
-  const apiStatus = status.ready ? 'ready' : status.connecting ? 'connecting' : 'error';
-  const payload = {
-    internet: true,
-    api_ok: status.ready,
-    api_ready: status.ready,
-    api_status: apiStatus,
-    connecting: status.connecting,
-    next_retry_in_ms: status.retryInMs
-  };
-
-  if (status.lastError) {
-    payload.last_error = status.lastError;
-  }
-
-  res.status(200).json(payload);
-});
-
-app.get('/reset-password', (_req, res) => {
-  res.sendFile(path.join(__dirname, '../src/login/reset-password.html'));
-});
-app.get('/resetPasswordRenderer.js', (_req, res) => {
-  res.sendFile(path.join(__dirname, '../src/login/resetPasswordRenderer.js'));
 });
 
 if (require.main === module) {
@@ -141,7 +69,3 @@ if (require.main === module) {
 }
 
 module.exports = app;
-// Changelog:
-// - 2024-05-17: adicionadas rotas /healthz e /healthz/db para monitoramento e reaproveitamento leve do servidor.
-// - 2024-06-09: adicionado aquecimento inicial do pool com SELECT 1 para reduzir falso offline-db.
-// - 2024-07-XX: atualizado /healthz para relatar estado do banco e manter resposta 200.
