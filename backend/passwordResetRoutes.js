@@ -10,20 +10,18 @@ const { isPinError, isNetworkError } = require('./backend');
 const router = express.Router();
 
 router.post('/password-reset-request', async (req, res) => {
-  const { email, pin } = req.body;
+  const { email } = req.body;
   const normalizedEmail = (email || '').trim();
-  const normalizedPin = typeof pin === 'string' ? pin.trim() : '';
+  const authHeader = req.get('authorization') || '';
+  const tokenMatch = authHeader.trim().match(/^Bearer\s+(.+)/i);
+  const token = tokenMatch ? tokenMatch[1] : authHeader.trim();
 
-  if (!normalizedPin) {
-    return res.status(400).json({ error: 'PIN ausente. Solicitação não enviada.' });
-  }
-
-  if (!/^\d{5}$/.test(normalizedPin)) {
-    return res.status(400).json({ error: 'PIN inválido. Informe os 5 dígitos corretos.' });
+  if (!token) {
+    return res.status(401).json({ error: 'Token ausente. Solicitação não enviada.' });
   }
 
   try {
-    pool.init(normalizedPin);
+    pool.init({ token });
     if (typeof pool.ensureWarmup === 'function') {
       pool.ensureWarmup();
     }

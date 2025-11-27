@@ -1,7 +1,7 @@
 require('dotenv').config({ path: require('path').resolve(__dirname, '../.env'), quiet: true });
 
-const DEFAULT_WARMUP_RETRY_DELAY_MS = 5_000;
-const AUTH_EARLY_REFRESH_SECONDS = 60;
+const { AsyncLocalStorage } = require('async_hooks');
+
 const RAW_API_BASE_URL =
   (process.env.API_BASE_URL && process.env.API_BASE_URL.trim()) ||
   (process.env.API_URL && process.env.API_URL.trim()) ||
@@ -10,32 +10,16 @@ const NORMALIZED_API_BASE_URL = RAW_API_BASE_URL.replace(/\/$/, '');
 const API_BASE_URL = NORMALIZED_API_BASE_URL.endsWith('/api')
   ? NORMALIZED_API_BASE_URL
   : `${NORMALIZED_API_BASE_URL}/api`;
-const LOGIN_URL =
-  (process.env.API_LOGIN_URL && process.env.API_LOGIN_URL.trim()) ||
-  `${NORMALIZED_API_BASE_URL}/login`;
 
-let warmupPromise = null;
-let warmupTimer = null;
-let warmupGeneration = 0;
-let currentConfigKey = null;
-let authPromise = null;
+const requestContext = new AsyncLocalStorage();
+let defaultTokenProvider = null;
 
 const state = {
   ready: false,
-  connecting: false,
   lastSuccessAt: 0,
   lastFailureAt: 0,
   lastAttemptAt: 0,
-  nextAttemptAt: 0,
-  consecutiveFailures: 0,
   lastError: null
-};
-
-const authState = {
-  token: null,
-  tokenExpiresAt: 0,
-  pin: null,
-  credentials: null
 };
 
 function logDebug(message, context) {
@@ -47,303 +31,69 @@ function logDebug(message, context) {
   }
 }
 
-function normalizeCredentialInput(input) {
-  if (input === null || input === undefined) return {};
-  if (typeof input === 'string') {
-    return { pin: input };
-  }
-  if (typeof input !== 'object') return {};
-  const normalized = {};
-  if (typeof input.login === 'string') {
-    normalized.login = input.login.trim();
-  }
-  if (typeof input.password === 'string') {
-    normalized.password = input.password;
-  } else if (input.password) {
-    normalized.password = String(input.password);
-  }
-  if (input.pin !== undefined) {
-    normalized.pin = typeof input.pin === 'string' ? input.pin.trim() : input.pin;
-  }
-  return normalized;
+function normalizeToken(token) {
+  if (!token) return null;
+  const trimmed = token.trim();
+  if (!trimmed) return null;
+  const bearerMatch = trimmed.match(/^Bearer\s+(.+)/i);
+  return bearerMatch ? bearerMatch[1] : trimmed;
 }
 
-function buildConfig(credentialsInput) {
-  const normalizedInput = normalizeCredentialInput(credentialsInput);
-  const preferredCredentials =
-    normalizedInput.login && normalizedInput.password
-      ? normalizedInput
-      : authState.credentials
-        ? { ...authState.credentials, pin: normalizedInput.pin }
-        : normalizedInput;
-  const credentials = resolveCredentials(preferredCredentials);
-  return {
-    ...credentials,
-    pin: preferredCredentials.pin || null
-  };
-}
+async function resolveToken(options = {}) {
+  const providedToken = normalizeToken(options.token);
+  if (providedToken) return providedToken;
 
-function buildConfigKey(config) {
-  return JSON.stringify({
-    login: config.login,
-    pin: config.pin
-  });
-}
-
-function resetWarmupState() {
-  if (warmupTimer) {
-    clearTimeout(warmupTimer);
-    warmupTimer = null;
+  if (typeof options.tokenProvider === 'function') {
+    const candidate = normalizeToken(await options.tokenProvider());
+    if (candidate) return candidate;
   }
-  warmupPromise = null;
-  state.ready = false;
-  state.connecting = false;
-  state.lastError = null;
-  state.nextAttemptAt = 0;
+
+  const storeToken = normalizeToken(requestContext.getStore()?.token);
+  if (storeToken) return storeToken;
+
+  if (typeof defaultTokenProvider === 'function') {
+    return normalizeToken(await defaultTokenProvider());
+  }
+
+  return null;
 }
 
-function markConnecting() {
-  state.connecting = true;
-  state.lastAttemptAt = Date.now();
-}
-
-function markSuccess() {
+function updateStateSuccess() {
   state.ready = true;
-  state.connecting = false;
   state.lastSuccessAt = Date.now();
-  state.consecutiveFailures = 0;
   state.lastError = null;
-  state.nextAttemptAt = 0;
 }
 
-function markFailure(err) {
+function updateStateFailure(err) {
   state.ready = false;
-  state.connecting = false;
   state.lastFailureAt = Date.now();
-  state.consecutiveFailures = Math.min(state.consecutiveFailures + 1, 1_000_000);
   const normalizedError = err instanceof Error ? err : new Error(String(err));
-  if (!normalizedError.reason && normalizedError.status === 401) {
-    normalizedError.reason = 'user-auth';
-  }
-  state.lastError = normalizedError;
-  state.nextAttemptAt = Date.now() + DEFAULT_WARMUP_RETRY_DELAY_MS;
-  scheduleWarmup(DEFAULT_WARMUP_RETRY_DELAY_MS);
-}
-
-function scheduleWarmup(delay = 0) {
-  if (state.ready) return;
-  if (warmupPromise) return;
-  if (warmupTimer) {
-    clearTimeout(warmupTimer);
-  }
-  warmupTimer = setTimeout(() => {
-    warmupTimer = null;
-    runWarmup().catch(() => {});
-  }, Math.max(0, delay));
-  if (typeof warmupTimer.unref === 'function') {
-    warmupTimer.unref();
-  }
-}
-
-function createNotReadyError() {
-  const status = getStatus();
-  const isAuthError =
-    status.lastError?.status === 401 ||
-    status.lastError?.reason === 'user-auth' ||
-    status.lastError?.code === 'auth-failed';
-  const error = new Error(
-    status.lastError?.message ||
-      (isAuthError ? 'Falha na autenticação. Verifique suas credenciais.' : 'Conectando ao serviço de API...')
-  );
-  error.code = isAuthError ? 'user-auth' : 'db-connecting';
-  error.retryAfter = Math.max(status.retryInMs || DEFAULT_WARMUP_RETRY_DELAY_MS, 1_000);
-  error.reason = isAuthError ? 'user-auth' : 'db-connecting';
-  return error;
-}
-
-function isReady() {
-  return state.ready === true;
-}
-
-function ensureWarmup() {
-  if (!state.ready && !state.connecting && !warmupPromise) {
-    scheduleWarmup(0);
-  }
-}
-
-function getStatus() {
-  const retryInMs = state.ready ? 0 : Math.max((state.nextAttemptAt || 0) - Date.now(), 0);
-  return {
-    ready: state.ready,
-    connecting: state.connecting,
-    lastSuccessAt: state.lastSuccessAt,
-    lastFailureAt: state.lastFailureAt,
-    lastAttemptAt: state.lastAttemptAt,
-    nextAttemptAt: state.nextAttemptAt,
-    retryInMs,
-    consecutiveFailures: state.consecutiveFailures,
-    lastError: state.lastError
-      ? {
-          message: state.lastError.message,
-          code: state.lastError.code,
-          reason: state.lastError.reason,
-          status: state.lastError.status
-        }
-      : null
+  state.lastError = {
+    message: normalizedError.message,
+    code: normalizedError.code,
+    reason: normalizedError.reason,
+    status: normalizedError.status
   };
-}
-
-function resolveCredentials(preferred = {}) {
-  if (preferred.login && preferred.password) {
-    return { login: preferred.login, password: preferred.password };
-  }
-
-  const candidates = [
-    { login: process.env.API_LOGIN_EMAIL || process.env.API_LOGIN, password: process.env.API_LOGIN_PASSWORD },
-    { login: process.env.API_EMAIL, password: process.env.API_PASSWORD },
-    { login: process.env.DB_USER, password: process.env.DB_PASSWORD }
-  ];
-
-  for (const candidate of candidates) {
-    if (candidate.login && candidate.password) {
-      return { login: candidate.login, password: candidate.password };
-    }
-  }
-
-  throw new Error('Credenciais de API não configuradas. Informe login e senha para continuar.');
-}
-
-function decodeTokenExpiry(token) {
-  if (!token || typeof token !== 'string') return 0;
-  const parts = token.split('.');
-  if (parts.length < 2) return 0;
-  try {
-    const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString('utf8'));
-    if (payload && typeof payload.exp === 'number') {
-      return payload.exp * 1000;
-    }
-  } catch (err) {
-    logDebug('Falha ao decodificar exp do token', { message: err?.message });
-  }
-  return 0;
-}
-
-async function authenticate(config) {
-  if (authPromise) return authPromise;
-
-  authPromise = (async () => {
-    const body = { login: config.login, password: config.password };
-    const response = await fetch(LOGIN_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body)
-    });
-
-    if (!response.ok) {
-      const error = new Error(`Falha ao autenticar usuário: ${response.status}`);
-      error.code = 'auth-failed';
-      error.reason = 'user-auth';
-      throw error;
-    }
-
-    const data = await response.json();
-    const token = data?.token || data?.access_token || data?.jwt;
-    if (!token) {
-      throw new Error('Resposta de login sem token');
-    }
-
-    const expiresAt = decodeTokenExpiry(token);
-    authState.token = token;
-    authState.tokenExpiresAt = expiresAt;
-    return token;
-  })();
-
-  try {
-    return await authPromise;
-  } finally {
-    authPromise = null;
-  }
-}
-
-function tokenIsValid() {
-  if (!authState.token) return false;
-  if (!authState.tokenExpiresAt) return true;
-  const expiresInMs = authState.tokenExpiresAt - Date.now();
-  return expiresInMs > AUTH_EARLY_REFRESH_SECONDS * 1000;
-}
-
-async function getToken(config) {
-  if (tokenIsValid()) return authState.token;
-  try {
-    const token = await authenticate(config);
-    markSuccess();
-    return token;
-  } catch (err) {
-    markFailure(err);
-    throw err;
-  }
-}
-
-async function runWarmup() {
-  if (state.ready) return;
-  if (warmupPromise) return warmupPromise;
-
-  const generation = warmupGeneration;
-
-  warmupPromise = (async () => {
-    markConnecting();
-    const config = buildConfig(authState.credentials ? { ...authState.credentials, pin: authState.pin } : authState.pin);
-    try {
-      await getToken(config);
-      if (generation === warmupGeneration) {
-        await lightweightHealthCheck(config);
-        markSuccess();
-      }
-    } catch (err) {
-      if (generation === warmupGeneration) {
-        markFailure(err);
-      }
-      throw err;
-    } finally {
-      warmupPromise = null;
-    }
-  })();
-
-  warmupPromise.catch(() => {});
-  return warmupPromise;
-}
-
-async function lightweightHealthCheck(config) {
-  try {
-    await request('GET', '/health', { config, skipRetry: true });
-  } catch (err) {
-    if (err?.status === 404) {
-      // Se o endpoint não existir, considere que a autenticação já prova disponibilidade
-      return true;
-    }
-    throw err;
-  }
-  return true;
 }
 
 async function request(method, path, options = {}) {
-  const normalizedPath = path.startsWith('/') ? path : `/${path}`;
-  const defaultCredentials = authState.credentials
-    ? { ...authState.credentials, pin: authState.pin }
-    : { pin: authState.pin };
-  const config = options.config || buildConfig(defaultCredentials);
-  let token = authState.token;
-
-  if (!tokenIsValid()) {
-    token = await getToken(config);
+  const token = await resolveToken(options);
+  if (!token) {
+    const error = new Error('Token de autenticação ausente.');
+    error.code = 'auth-missing';
+    error.reason = 'user-auth';
+    throw error;
   }
 
+  const normalizedPath = path.startsWith('/') ? path : `/${path}`;
   const url = `${API_BASE_URL}${normalizedPath}`;
   const headers = {
     'Content-Type': 'application/json',
     ...(options.headers || {}),
     Authorization: `Bearer ${token}`
   };
+
+  state.lastAttemptAt = Date.now();
 
   const response = await fetch(url, {
     method,
@@ -352,11 +102,12 @@ async function request(method, path, options = {}) {
   });
 
   if (response.status === 401 && !options.skipRetry) {
-    authState.token = null;
-    authState.tokenExpiresAt = 0;
-    token = await getToken(config);
-    headers.Authorization = `Bearer ${token}`;
-    return request(method, path, { ...options, headers, skipRetry: true });
+    logDebug('Token inválido, tentando renovar e refazer a requisição');
+    const refreshedToken = await resolveToken({ ...options, skipRetry: true });
+    if (refreshedToken && refreshedToken !== token) {
+      headers.Authorization = `Bearer ${refreshedToken}`;
+      return request(method, path, { ...options, headers, skipRetry: true, token: refreshedToken });
+    }
   }
 
   if (!response.ok) {
@@ -364,9 +115,11 @@ async function request(method, path, options = {}) {
     error.code = 'api-request-failed';
     error.status = response.status;
     error.body = await safeJson(response);
+    updateStateFailure(error);
     throw error;
   }
 
+  updateStateSuccess();
   return safeJson(response);
 }
 
@@ -378,55 +131,10 @@ async function safeJson(response) {
   }
 }
 
-function init(credentialsInput) {
-  const config = buildConfig(credentialsInput);
-  authState.pin = config.pin;
-  authState.credentials = { login: config.login, password: config.password };
-  const configKey = buildConfigKey(config);
-  if (currentConfigKey === configKey && authState.token) {
-    return;
-  }
-
-  if (currentConfigKey !== configKey) {
-    authState.token = null;
-    authState.tokenExpiresAt = 0;
-  }
-
-  warmupGeneration += 1;
-  resetWarmupState();
-  currentConfigKey = configKey;
-  scheduleWarmup(0);
-}
-
-async function ping() {
-  try {
-    await runWarmup();
-    return true;
-  } catch (err) {
-    markFailure(err);
-    return false;
-  }
-}
-
 async function query(path, options = {}) {
-  if (!state.ready) {
-    ensureWarmup();
-    throw createNotReadyError();
-  }
   const method = options.method || 'GET';
   const body = options.body || options.data;
-  return request(method, path, { body, headers: options.headers });
-}
-
-async function connect() {
-  await runWarmup();
-  return {
-    query,
-    get,
-    post,
-    put,
-    delete: del
-  };
+  return request(method, path, { ...options, body });
 }
 
 function get(path, options) {
@@ -445,6 +153,89 @@ function del(path, options) {
   return query(path, { ...options, method: 'DELETE' });
 }
 
+async function connect(options = {}) {
+  const token = await resolveToken(options);
+  if (!token) {
+    throw createNotReadyError();
+  }
+  const boundOptions = { ...options, token };
+  return {
+    query: (path, localOptions = {}) => query(path, { ...boundOptions, ...localOptions }),
+    get: (path, localOptions = {}) => get(path, { ...boundOptions, ...localOptions }),
+    post: (path, body, localOptions = {}) => post(path, body, { ...boundOptions, ...localOptions }),
+    put: (path, body, localOptions = {}) => put(path, body, { ...boundOptions, ...localOptions }),
+    delete: (path, localOptions = {}) => del(path, { ...boundOptions, ...localOptions })
+  };
+}
+
+function runWithToken(token, fn) {
+  const normalized = normalizeToken(token);
+  if (!normalized) return fn();
+  return requestContext.run({ token: normalized }, fn);
+}
+
+function init(config) {
+  if (!config) {
+    defaultTokenProvider = null;
+    state.ready = false;
+    return;
+  }
+
+  if (typeof config === 'string') {
+    defaultTokenProvider = () => normalizeToken(config);
+  } else if (typeof config.tokenProvider === 'function') {
+    defaultTokenProvider = config.tokenProvider;
+  } else if (config.token) {
+    defaultTokenProvider = () => normalizeToken(config.token);
+  } else {
+    defaultTokenProvider = null;
+  }
+
+  state.ready = Boolean(defaultTokenProvider);
+}
+
+function isReady() {
+  return Boolean(requestContext.getStore()?.token || defaultTokenProvider);
+}
+
+function ensureWarmup() {
+  if (!isReady()) {
+    throw createNotReadyError();
+  }
+}
+
+function getStatus() {
+  return {
+    ready: isReady(),
+    connecting: false,
+    lastSuccessAt: state.lastSuccessAt,
+    lastFailureAt: state.lastFailureAt,
+    lastAttemptAt: state.lastAttemptAt,
+    nextAttemptAt: 0,
+    retryInMs: isReady() ? 0 : 1_000,
+    consecutiveFailures: state.lastError ? 1 : 0,
+    lastError: state.lastError
+  };
+}
+
+function createNotReadyError() {
+  const error = new Error('Token de autenticação ausente.');
+  error.code = 'auth-missing';
+  error.reason = 'user-auth';
+  error.retryAfter = 1_000;
+  return error;
+}
+
+async function ping(options = {}) {
+  try {
+    await request('GET', '/health', { ...options, skipRetry: true });
+    return true;
+  } catch (err) {
+    updateStateFailure(err);
+    return false;
+  }
+}
+
 module.exports = {
   init,
   query,
@@ -457,6 +248,6 @@ module.exports = {
   get,
   post,
   put,
-  delete: del
+  delete: del,
+  runWithToken
 };
-

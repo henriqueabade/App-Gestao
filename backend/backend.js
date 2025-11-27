@@ -72,28 +72,27 @@ function normalizeNotReadyError(err) {
 let pinErrorAttempts = 0;
 let lastDatabaseInitPin = null;
 
-function ensureDatabaseReady(pin, credentials) {
-  const sanitizedPin = typeof pin === 'string' ? pin.trim() : pin;
-  const normalizedPin =
-    typeof sanitizedPin === 'string'
-      ? sanitizedPin
-      : sanitizedPin !== null && sanitizedPin !== undefined
-        ? String(sanitizedPin)
-        : '';
-  if (/^\d+$/.test(normalizedPin) && normalizedPin !== DEFAULT_DATABASE_PORT) {
-    lastDatabaseInitPin = normalizedPin;
-  } else {
-    lastDatabaseInitPin = null;
+function extractAuthToken(tokenOrPin, credentials = {}) {
+  if (typeof tokenOrPin === 'string' && tokenOrPin.trim()) {
+    return tokenOrPin.trim();
   }
-  const sanitizedCredentials =
-    credentials && typeof credentials === 'object'
-      ? {
-          login: typeof credentials.login === 'string' ? credentials.login.trim() : credentials.login,
-          password: credentials.password,
-          pin: sanitizedPin
-        }
-      : { pin: sanitizedPin };
-  pool.init(sanitizedCredentials);
+  if (typeof credentials.token === 'string' && credentials.token.trim()) {
+    return credentials.token.trim();
+  }
+  if (typeof credentials.jwt === 'string' && credentials.jwt.trim()) {
+    return credentials.jwt.trim();
+  }
+  if (typeof credentials.accessToken === 'string' && credentials.accessToken.trim()) {
+    return credentials.accessToken.trim();
+  }
+  return null;
+}
+
+function ensureDatabaseReady(tokenOrPin, credentials) {
+  lastDatabaseInitPin = null;
+  const token = extractAuthToken(tokenOrPin, credentials);
+
+  pool.init(token ? { token } : null);
   const hasEnsureWarmup = Object.prototype.hasOwnProperty.call(pool, 'ensureWarmup');
   const hasGetStatus = Object.prototype.hasOwnProperty.call(pool, 'getStatus');
   if (hasEnsureWarmup && typeof pool.ensureWarmup === 'function') {
@@ -135,7 +134,7 @@ function ensureDatabaseReady(pin, credentials) {
       if (typeof pool.createNotReadyError === 'function') {
         throw normalizeNotReadyError(pool.createNotReadyError());
       }
-      throw normalizeNotReadyError(new Error('Conectando ao banco...'));
+      throw normalizeNotReadyError(new Error('Token de autenticação ausente ou inválido.'));
     }
   }
 }

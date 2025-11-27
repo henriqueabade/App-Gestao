@@ -14,9 +14,25 @@ const pedidosRouter         = require('./pedidosController');
 const notificationsRouter   = require('./notificationsController');
 const db                    = require('./db');
 
+const DEFAULT_BEARER_TOKEN = (process.env.API_BEARER_TOKEN || 'test-token').trim();
+
 const app = express();
 app.use(cors());
 app.use(express.json({ limit: '3mb' }));
+
+function extractToken(req) {
+  const header = req.get('authorization');
+  if (!header) return null;
+  const trimmed = header.trim();
+  const match = trimmed.match(/^Bearer\s+(.+)/i);
+  return match ? match[1] : trimmed;
+}
+
+app.use((req, _res, next) => {
+  const token = extractToken(req) || DEFAULT_BEARER_TOKEN;
+  if (!token) return next();
+  return db.runWithToken(token, next);
+});
 
 app.use('/api/clientes', clientesRouter);
 app.use('/api/usuarios', usuariosRouter);

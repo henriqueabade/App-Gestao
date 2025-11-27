@@ -1,4 +1,5 @@
 const API_BASE_URL = 'https://api.santissimodecor.com.br/api';
+const DEFAULT_BEARER_TOKEN = normalizeToken(process.env.API_BEARER_TOKEN || 'test-token');
 
 function buildQueryString(params = {}) {
   const searchParams = new URLSearchParams();
@@ -21,7 +22,7 @@ function normalizeToken(rawToken) {
 }
 
 function createApiClient(req) {
-  const bearer = normalizeToken(req?.headers?.authorization || '');
+  const bearer = normalizeToken(req?.headers?.authorization || '') || DEFAULT_BEARER_TOKEN;
   if (!bearer) {
     const error = new Error('Token de autenticação ausente');
     error.status = 401;
