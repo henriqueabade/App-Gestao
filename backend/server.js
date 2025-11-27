@@ -37,18 +37,25 @@ app.get('/status', (_req, res) => {
   res.json({ status: 'ok' });
 });
 
-app.get('/healthz', (_req, res) => {
+app.get('/healthz', async (_req, res) => {
   const status = db.getStatus();
   if (!status.ready) {
     db.ensureWarmup();
   }
 
-  const dbStatus = status.ready ? 'ready' : status.connecting ? 'connecting' : 'error';
+  try {
+    await db.ping();
+  } catch (err) {
+    // ping já atualiza o status internamente
+    console.warn('[healthz] falha ao pingar API remota', err?.message);
+  }
+
+  const apiStatus = status.ready ? 'ready' : status.connecting ? 'connecting' : 'error';
   const payload = {
     internet: true,
-    db_ok: status.ready,
-    db_ready: status.ready,
-    db_status: dbStatus,
+    api_ok: status.ready,
+    api_ready: status.ready,
+    api_status: apiStatus,
     connecting: status.connecting,
     next_retry_in_ms: status.retryInMs,
     last_success_at: status.lastSuccessAt || null,
@@ -63,18 +70,24 @@ app.get('/healthz', (_req, res) => {
   res.status(200).json(payload);
 });
 
-app.get('/healthz/db', (_req, res) => {
+app.get('/healthz/db', async (_req, res) => {
   const status = db.getStatus();
   if (!status.ready) {
     db.ensureWarmup();
   }
 
-  const dbStatus = status.ready ? 'ready' : status.connecting ? 'connecting' : 'error';
+  try {
+    await db.ping();
+  } catch (err) {
+    console.warn('[healthz/db] falha ao pingar API remota', err?.message);
+  }
+
+  const apiStatus = status.ready ? 'ready' : status.connecting ? 'connecting' : 'error';
   const payload = {
     internet: true,
-    db_ok: status.ready,
-    db_ready: status.ready,
-    db_status: dbStatus,
+    api_ok: status.ready,
+    api_ready: status.ready,
+    api_status: apiStatus,
     connecting: status.connecting,
     next_retry_in_ms: status.retryInMs
   };

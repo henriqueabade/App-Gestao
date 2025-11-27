@@ -1,35 +1,15 @@
 require('dotenv').config({ path: require('path').resolve(__dirname, '../.env'), quiet: true });
-const fs = require('fs');
-const path = require('path');
-const { Pool } = require('pg');
 
-const DEFAULT_MAX_CLIENTS = 4;
-const DEFAULT_IDLE_TIMEOUT_MS = 30_000;
-const DEFAULT_CONNECTION_TIMEOUT_MS = 30_000;
-const WARMUP_RETRY_DELAY_MS = 5_000;
+const DEFAULT_WARMUP_RETRY_DELAY_MS = 5_000;
+const AUTH_EARLY_REFRESH_SECONDS = 60;
+const API_BASE_URL = 'https://api.santissimodecor.com.br/api';
+const LOGIN_URL = 'https://api.santissimodecor.com.br/login';
 
-const warmupLogPath = path.join(__dirname, 'db-warmup.log');
-
-const CONNECTION_ERROR_CODES = new Set([
-  '57P01', // admin_shutdown
-  '57P02', // crash_shutdown
-  '57P03', // cannot_connect_now
-  '53300', // too_many_connections
-  '08001', // sqlclient_unable_to_establish_sqlconnection
-  '08003', // connection_does_not_exist
-  '08006', // connection_failure
-  '08004', // sqlserver_rejected_establishment_of_sqlconnection
-  'ECONNREFUSED',
-  'ECONNRESET',
-  'ETIMEDOUT',
-  'EPIPE'
-]);
-
-let pool;
-let currentConfigKey = null;
 let warmupPromise = null;
 let warmupTimer = null;
 let warmupGeneration = 0;
+let currentConfigKey = null;
+let authPromise = null;
 
 const state = {
   ready: false,
@@ -42,73 +22,33 @@ const state = {
   lastError: null
 };
 
-function logWarmup(level, message, extra) {
-  const timestamp = new Date().toISOString();
-  const normalizedLevel = String(level || 'info').toUpperCase();
-  const serializedExtra =
-    extra && Object.keys(extra).length ? ` ${JSON.stringify(extra)}` : '';
-  const line = `[${timestamp}] [${normalizedLevel}] ${message}${serializedExtra}\n`;
-  fs.promises
-    .appendFile(warmupLogPath, line)
-    .catch((err) => {
-      if (process.env.DEBUG === 'true') {
-        console.error('[db] falha ao registrar log de warmup:', err);
-      }
-    });
-}
+const authState = {
+  token: null,
+  tokenExpiresAt: 0,
+  pin: null
+};
 
-function createConfig(pin) {
-  const useSSL = process.env.DB_USE_SSL === 'true';
-  const configuredPort = process.env.DB_PORT ? parseInt(process.env.DB_PORT, 10) : 5432;
-  return {
-    user: process.env.DB_USER,
-    host: process.env.DB_HOST,
-    database: process.env.DB_NAME,
-    password: process.env.DB_PASSWORD,
-    port: pin ? parseInt(pin, 10) : configuredPort,
-    ssl: useSSL
-      ? {
-          rejectUnauthorized: false // Permite conectar com SSL mesmo sem certificado válido
-        }
-      : false,
-    max: process.env.DB_POOL_MAX ? parseInt(process.env.DB_POOL_MAX, 10) : DEFAULT_MAX_CLIENTS,
-    idleTimeoutMillis: process.env.DB_IDLE_TIMEOUT_MS
-      ? parseInt(process.env.DB_IDLE_TIMEOUT_MS, 10)
-      : DEFAULT_IDLE_TIMEOUT_MS,
-    connectionTimeoutMillis: process.env.DB_CONNECTION_TIMEOUT_MS
-      ? parseInt(process.env.DB_CONNECTION_TIMEOUT_MS, 10)
-      : DEFAULT_CONNECTION_TIMEOUT_MS,
-    allowExitOnIdle: false,
-    keepAlive: true
-  };
-}
-
-function isConnectionError(err) {
-  if (!err) return false;
-  if (err.code && CONNECTION_ERROR_CODES.has(err.code)) {
-    return true;
+function logDebug(message, context) {
+  if (process.env.DEBUG !== 'true') return;
+  if (context && Object.keys(context).length) {
+    console.debug(`[api-client] ${message}`, context);
+  } else {
+    console.debug(`[api-client] ${message}`);
   }
-  const message = String(err.message || '').toLowerCase();
-  return (
-    message.includes('connection refused') ||
-    message.includes('terminating connection') ||
-    message.includes('server closed the connection') ||
-    message.includes('timeout') ||
-    message.includes('could not connect') ||
-    message.includes('connection reset')
-  );
+}
+
+function buildConfig(pin) {
+  const credentials = resolveCredentials();
+  return {
+    ...credentials,
+    pin: typeof pin === 'string' ? pin.trim() : pin || null
+  };
 }
 
 function buildConfigKey(config) {
   return JSON.stringify({
-    user: config.user,
-    host: config.host,
-    database: config.database,
-    port: config.port,
-    ssl: Boolean(config.ssl),
-    max: config.max,
-    idleTimeoutMillis: config.idleTimeoutMillis,
-    connectionTimeoutMillis: config.connectionTimeoutMillis
+    login: config.login,
+    pin: config.pin
   });
 }
 
@@ -122,6 +62,30 @@ function resetWarmupState() {
   state.connecting = false;
   state.lastError = null;
   state.nextAttemptAt = 0;
+}
+
+function markConnecting() {
+  state.connecting = true;
+  state.lastAttemptAt = Date.now();
+}
+
+function markSuccess() {
+  state.ready = true;
+  state.connecting = false;
+  state.lastSuccessAt = Date.now();
+  state.consecutiveFailures = 0;
+  state.lastError = null;
+  state.nextAttemptAt = 0;
+}
+
+function markFailure(err) {
+  state.ready = false;
+  state.connecting = false;
+  state.lastFailureAt = Date.now();
+  state.consecutiveFailures = Math.min(state.consecutiveFailures + 1, 1_000_000);
+  state.lastError = err instanceof Error ? err : new Error(String(err));
+  state.nextAttemptAt = Date.now() + DEFAULT_WARMUP_RETRY_DELAY_MS;
+  scheduleWarmup(DEFAULT_WARMUP_RETRY_DELAY_MS);
 }
 
 function scheduleWarmup(delay = 0) {
@@ -139,113 +103,13 @@ function scheduleWarmup(delay = 0) {
   }
 }
 
-function markConnecting() {
-  state.connecting = true;
-  state.lastAttemptAt = Date.now();
-}
-
-function markSuccess() {
-  state.ready = true;
-  state.connecting = false;
-  state.lastSuccessAt = Date.now();
-  state.consecutiveFailures = 0;
-  state.lastError = null;
-  state.nextAttemptAt = 0;
-  logWarmup('info', 'Conexão com o banco estabelecida', {
-    attemptAt: state.lastAttemptAt,
-    successAt: state.lastSuccessAt
-  });
-}
-
-function markFailure(err) {
-  state.ready = false;
-  state.connecting = false;
-  state.lastFailureAt = Date.now();
-  state.consecutiveFailures = Math.min(state.consecutiveFailures + 1, 1_000_000);
-  state.lastError = err instanceof Error ? err : new Error(String(err));
-  state.nextAttemptAt = Date.now() + WARMUP_RETRY_DELAY_MS;
-  logWarmup('warn', 'Falha ao conectar ao banco', {
-    message: state.lastError.message,
-    code: state.lastError.code,
-    attemptAt: state.lastAttemptAt
-  });
-  scheduleWarmup(WARMUP_RETRY_DELAY_MS);
-}
-
-function runWarmup() {
-  if (!pool) init();
-  if (!pool) return Promise.reject(new Error('Pool não inicializado'));
-  if (state.ready) return Promise.resolve();
-  if (warmupPromise) return warmupPromise;
-
-  const generation = warmupGeneration;
-
-  warmupPromise = (async () => {
-    markConnecting();
-    try {
-      await pool.query('SELECT 1');
-      if (generation === warmupGeneration) {
-        markSuccess();
-      }
-    } catch (err) {
-      if (generation === warmupGeneration) {
-        markFailure(err);
-      }
-      throw err;
-    } finally {
-      warmupPromise = null;
-    }
-  })();
-
-  warmupPromise.catch(() => {});
-  return warmupPromise;
-}
-
-function init(pin) {
-  const required = ['DB_USER', 'DB_PASSWORD', 'DB_NAME'];
-  const missing = required.filter((k) => !process.env[k]);
-  if (missing.length) {
-    console.warn(
-      `Using default database configuration because environment variables ${missing.join(', ')} are not set.`
-    );
-  }
-
-  const config = createConfig(pin);
-  const configKey = buildConfigKey(config);
-
-  if (pool && configKey === currentConfigKey) {
-    return pool;
-  }
-
-  warmupGeneration += 1;
-  resetWarmupState();
-
-  if (pool) {
-    pool.removeAllListeners('error');
-    pool.end().catch((err) => {
-      if (process.env.DEBUG === 'true') {
-        console.error('[db] falha ao encerrar pool anterior:', err);
-      }
-    });
-  }
-
-  pool = new Pool(config);
-  currentConfigKey = configKey;
-  pool.on('error', (err) => {
-    logWarmup('error', 'Erro inesperado do cliente PostgreSQL', {
-      message: err?.message,
-      code: err?.code
-    });
-    markFailure(err);
-  });
-
-  logWarmup('info', 'Pool do banco reconfigurado', {
-    host: config.host,
-    port: config.port
-  });
-
-  scheduleWarmup(0);
-  return pool;
+function createNotReadyError() {
+  const status = getStatus();
+  const error = new Error('Conectando ao serviço de API...');
+  error.code = 'db-connecting';
+  error.retryAfter = Math.max(status.retryInMs || DEFAULT_WARMUP_RETRY_DELAY_MS, 1_000);
+  error.reason = 'db-connecting';
+  return error;
 }
 
 function isReady() {
@@ -253,16 +117,13 @@ function isReady() {
 }
 
 function ensureWarmup() {
-  if (!pool) init();
   if (!state.ready && !state.connecting && !warmupPromise) {
     scheduleWarmup(0);
   }
 }
 
 function getStatus() {
-  const retryInMs = state.ready
-    ? 0
-    : Math.max((state.nextAttemptAt || 0) - Date.now(), 0);
+  const retryInMs = state.ready ? 0 : Math.max((state.nextAttemptAt || 0) - Date.now(), 0);
   return {
     ready: state.ready,
     connecting: state.connecting,
@@ -281,43 +142,195 @@ function getStatus() {
   };
 }
 
-function createNotReadyError() {
-  const status = getStatus();
-  const error = new Error('Conectando ao banco...');
-  error.code = 'db-connecting';
-  error.retryAfter = Math.max(status.retryInMs || WARMUP_RETRY_DELAY_MS, 1_000);
-  error.reason = 'db-connecting';
-  return error;
-}
+function resolveCredentials() {
+  const candidates = [
+    { login: process.env.API_LOGIN_EMAIL || process.env.API_LOGIN, password: process.env.API_LOGIN_PASSWORD },
+    { login: process.env.API_EMAIL, password: process.env.API_PASSWORD },
+    { login: process.env.DB_USER, password: process.env.DB_PASSWORD }
+  ];
 
-function query(text, params) {
-  if (!pool) init();
-  if (!state.ready) {
-    ensureWarmup();
-    throw createNotReadyError();
+  for (const candidate of candidates) {
+    if (candidate.login && candidate.password) {
+      return { login: candidate.login, password: candidate.password };
+    }
   }
 
-  return pool.query(text, params).catch((err) => {
-    if (isConnectionError(err)) {
-      markFailure(err);
-    }
-    throw err;
-  });
+  throw new Error('Credenciais de API não configuradas');
 }
 
-function connect() {
-  if (!pool) init();
-  if (!state.ready) {
-    ensureWarmup();
-    throw createNotReadyError();
+function decodeTokenExpiry(token) {
+  if (!token || typeof token !== 'string') return 0;
+  const parts = token.split('.');
+  if (parts.length < 2) return 0;
+  try {
+    const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString('utf8'));
+    if (payload && typeof payload.exp === 'number') {
+      return payload.exp * 1000;
+    }
+  } catch (err) {
+    logDebug('Falha ao decodificar exp do token', { message: err?.message });
   }
+  return 0;
+}
 
-  return pool.connect().catch((err) => {
-    if (isConnectionError(err)) {
-      markFailure(err);
+async function authenticate(config) {
+  if (authPromise) return authPromise;
+
+  authPromise = (async () => {
+    const body = { login: config.login, password: config.password };
+    const response = await fetch(LOGIN_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+
+    if (!response.ok) {
+      const error = new Error(`Falha ao autenticar: ${response.status}`);
+      error.code = 'auth-failed';
+      throw error;
+    }
+
+    const data = await response.json();
+    const token = data?.token || data?.access_token || data?.jwt;
+    if (!token) {
+      throw new Error('Resposta de login sem token');
+    }
+
+    const expiresAt = decodeTokenExpiry(token);
+    authState.token = token;
+    authState.tokenExpiresAt = expiresAt;
+    return token;
+  })();
+
+  try {
+    return await authPromise;
+  } finally {
+    authPromise = null;
+  }
+}
+
+function tokenIsValid() {
+  if (!authState.token) return false;
+  if (!authState.tokenExpiresAt) return true;
+  const expiresInMs = authState.tokenExpiresAt - Date.now();
+  return expiresInMs > AUTH_EARLY_REFRESH_SECONDS * 1000;
+}
+
+async function getToken(config) {
+  if (tokenIsValid()) return authState.token;
+  try {
+    const token = await authenticate(config);
+    markSuccess();
+    return token;
+  } catch (err) {
+    markFailure(err);
+    throw err;
+  }
+}
+
+async function runWarmup() {
+  if (state.ready) return;
+  if (warmupPromise) return warmupPromise;
+
+  const generation = warmupGeneration;
+
+  warmupPromise = (async () => {
+    markConnecting();
+    const config = buildConfig(authState.pin);
+    try {
+      await getToken(config);
+      if (generation === warmupGeneration) {
+        await lightweightHealthCheck(config);
+        markSuccess();
+      }
+    } catch (err) {
+      if (generation === warmupGeneration) {
+        markFailure(err);
+      }
+      throw err;
+    } finally {
+      warmupPromise = null;
+    }
+  })();
+
+  warmupPromise.catch(() => {});
+  return warmupPromise;
+}
+
+async function lightweightHealthCheck(config) {
+  try {
+    await request('GET', '/health', { config, skipRetry: true });
+  } catch (err) {
+    if (err?.status === 404) {
+      // Se o endpoint não existir, considere que a autenticação já prova disponibilidade
+      return true;
     }
     throw err;
+  }
+  return true;
+}
+
+async function request(method, path, options = {}) {
+  const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+  const config = options.config || buildConfig(authState.pin);
+  let token = authState.token;
+
+  if (!tokenIsValid()) {
+    token = await getToken(config);
+  }
+
+  const url = `${API_BASE_URL}${normalizedPath}`;
+  const headers = {
+    'Content-Type': 'application/json',
+    ...(options.headers || {}),
+    Authorization: `Bearer ${token}`
+  };
+
+  const response = await fetch(url, {
+    method,
+    headers,
+    body: options.body ? JSON.stringify(options.body) : undefined
   });
+
+  if (response.status === 401 && !options.skipRetry) {
+    authState.token = null;
+    authState.tokenExpiresAt = 0;
+    token = await getToken(config);
+    headers.Authorization = `Bearer ${token}`;
+    return request(method, path, { ...options, headers, skipRetry: true });
+  }
+
+  if (!response.ok) {
+    const error = new Error(`Erro na requisição ${method} ${normalizedPath}: ${response.status}`);
+    error.code = 'api-request-failed';
+    error.status = response.status;
+    error.body = await safeJson(response);
+    throw error;
+  }
+
+  return safeJson(response);
+}
+
+async function safeJson(response) {
+  try {
+    return await response.json();
+  } catch (err) {
+    return null;
+  }
+}
+
+function init(pin) {
+  const config = buildConfig(pin);
+  authState.pin = config.pin;
+  const configKey = buildConfigKey(config);
+  if (currentConfigKey === configKey && authState.token) {
+    return;
+  }
+
+  warmupGeneration += 1;
+  resetWarmupState();
+  currentConfigKey = configKey;
+  scheduleWarmup(0);
 }
 
 async function ping() {
@@ -330,33 +343,41 @@ async function ping() {
   }
 }
 
-function setQueryGuard(fn) {
-  if (typeof fn === 'function') {
-    queryGuard = fn;
-  } else {
-    queryGuard = () => true;
+async function query(path, options = {}) {
+  if (!state.ready) {
+    ensureWarmup();
+    throw createNotReadyError();
   }
+  const method = options.method || 'GET';
+  const body = options.body || options.data;
+  return request(method, path, { body, headers: options.headers });
 }
 
-function withQueryGuardDisabled(fn) {
-  if (typeof fn !== 'function') {
-    return Promise.resolve();
-  }
-  guardOverrideDepth += 1;
-  let result;
-  try {
-    result = fn();
-  } catch (err) {
-    guardOverrideDepth = Math.max(guardOverrideDepth - 1, 0);
-    throw err;
-  }
-  if (result && typeof result.then === 'function') {
-    return result.finally(() => {
-      guardOverrideDepth = Math.max(guardOverrideDepth - 1, 0);
-    });
-  }
-  guardOverrideDepth = Math.max(guardOverrideDepth - 1, 0);
-  return result;
+async function connect() {
+  await runWarmup();
+  return {
+    query,
+    get,
+    post,
+    put,
+    delete: del
+  };
+}
+
+function get(path, options) {
+  return query(path, { ...options, method: 'GET' });
+}
+
+function post(path, body, options) {
+  return query(path, { ...options, method: 'POST', body });
+}
+
+function put(path, body, options) {
+  return query(path, { ...options, method: 'PUT', body });
+}
+
+function del(path, options) {
+  return query(path, { ...options, method: 'DELETE' });
 }
 
 // inicializa com variáveis de ambiente por padrão
@@ -370,8 +391,10 @@ module.exports = {
   ensureWarmup,
   getStatus,
   createNotReadyError,
-  ping
+  ping,
+  get,
+  post,
+  put,
+  delete: del
 };
-// Changelog:
-// - 2024-05-17: configurado pool PG com keep-alive, limites reduzidos e timeouts para reduzir ruído e conexões ociosas.
-// - 2024-07-XX: adicionado warmup tolerante com tentativas em background e timeout ampliado.
+
