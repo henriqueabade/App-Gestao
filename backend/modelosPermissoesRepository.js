@@ -1,10 +1,4 @@
-const db = require('./db');
-const {
-  loadPermissionsCatalog,
-  loadPermissionsForRole,
-  savePermissionsForRole,
-  deletePermissionsForRole
-} = require('./permissionsCatalogRepository');
+const { createApiClient } = require('./apiHttpClient');
 
 class ModeloPermissoesError extends Error {
   constructor(message, code) {
@@ -31,19 +25,6 @@ function sanitizeNome(nome) {
   return trimmed;
 }
 
-async function ensureNomeDisponivel(nome, ignoreId) {
-  const params = [nome.toLowerCase()];
-  let query = 'SELECT id FROM modelos_permissoes WHERE lower(nome) = $1';
-  if (ignoreId) {
-    params.push(ignoreId);
-    query += ' AND id <> $2';
-  }
-  const { rows } = await db.query(query, params);
-  if (rows.length) {
-    throw new ModeloPermissoesError('Já existe um modelo com este nome.', 'NOME_DUPLICADO');
-  }
-}
-
 function parsePermissoesValor(valor) {
   if (!valor) return {};
   if (typeof valor === 'object') {
@@ -61,85 +42,59 @@ function parsePermissoesValor(valor) {
   return {};
 }
 
-function mergePermissoes(base, override) {
-  const resultado = Array.isArray(base) ? [...base] : { ...base };
-  if (!override || typeof override !== 'object') {
-    return resultado;
-  }
-
-  const mergeObjeto = (destino, origem) => {
-    for (const [chave, valorOrigem] of Object.entries(origem)) {
-      if (valorOrigem && typeof valorOrigem === 'object' && !Array.isArray(valorOrigem)) {
-        const atual = destino[chave];
-        if (!atual || typeof atual !== 'object' || Array.isArray(atual)) {
-          destino[chave] = Array.isArray(valorOrigem) ? [...valorOrigem] : {};
-        }
-        mergeObjeto(destino[chave], valorOrigem);
-      } else if (Array.isArray(valorOrigem)) {
-        destino[chave] = [...valorOrigem];
-      } else {
-        destino[chave] = valorOrigem;
-      }
-    }
-  };
-
-  mergeObjeto(resultado, override);
-  return resultado;
-}
-
-function mapRow(row, permissoes) {
+function mapRow(row) {
   if (!row) return null;
+  const permissoes = parsePermissoesValor(row.permissoes);
   return {
     id: row.id,
     nome: row.nome,
-    permissoes: permissoes ?? row.permissoes ?? {},
+    permissoes,
     criadoEm: row.criado_em ?? row.created_at ?? null,
     atualizadoEm: row.atualizado_em ?? row.updated_at ?? null
   };
 }
 
-async function carregarPermissoesNormalizadas(client, linhas, catalogo) {
-  const modelos = [];
-  for (const row of linhas) {
-    const permissoesBase = parsePermissoesValor(row.permissoes);
-    const permissoesDb = await loadPermissionsForRole(client, row.id, catalogo);
-    const permissoesFinais = Object.keys(permissoesDb).length
-      ? mergePermissoes(permissoesBase, permissoesDb)
-      : permissoesBase;
-    modelos.push(mapRow(row, permissoesFinais));
+function mapApiError(err) {
+  if (err?.status === 409 || err?.body?.code === 'NOME_DUPLICADO') {
+    return new ModeloPermissoesError('Já existe um modelo com este nome.', 'NOME_DUPLICADO');
   }
-  return modelos;
+  return err;
+}
+
+function createAuthenticatedClient() {
+  return createApiClient();
+}
+
+async function ensureNomeDisponivel(nome, ignoreId) {
+  const api = createAuthenticatedClient();
+  const resposta = await api.get('/api/modelos_permissoes', { query: { nome } });
+  const lista = Array.isArray(resposta) ? resposta : resposta ? [resposta] : [];
+  const conflito = lista.find(item => {
+    const nomeItem = (item?.nome ?? '').trim().toLowerCase();
+    if (!nomeItem) return false;
+    const mesmoId = ignoreId ? item?.id === ignoreId : false;
+    return nomeItem === nome.toLowerCase() && !mesmoId;
+  });
+  if (conflito) {
+    throw new ModeloPermissoesError('Já existe um modelo com este nome.', 'NOME_DUPLICADO');
+  }
 }
 
 async function listModelosPermissoes() {
-  const client = await db.connect();
-  try {
-    const { rows } = await client.query(
-      'SELECT id, nome, permissoes, criado_em, atualizado_em FROM modelos_permissoes ORDER BY nome ASC'
-    );
-    const catalogo = await loadPermissionsCatalog(client);
-    const modelos = await carregarPermissoesNormalizadas(client, rows, catalogo);
-    return modelos;
-  } finally {
-    client.release();
-  }
+  const api = createAuthenticatedClient();
+  const resposta = await api.get('/api/modelos_permissoes');
+  const linhas = Array.isArray(resposta) ? resposta : [];
+  return linhas.map(mapRow).filter(Boolean);
 }
 
 async function getModeloPermissoesById(id) {
-  const client = await db.connect();
+  const api = createAuthenticatedClient();
   try {
-    const { rows } = await client.query(
-      'SELECT id, nome, permissoes, criado_em, atualizado_em FROM modelos_permissoes WHERE id = $1',
-      [id]
-    );
-    if (!rows.length) {
-      return null;
-    }
-    const catalogo = await loadPermissionsCatalog(client);
-    const [modelo] = await carregarPermissoesNormalizadas(client, rows, catalogo);
-    return modelo ?? null;
-  } finally {
-    client.release();
+    const modelo = await api.get(`/api/modelos_permissoes/${id}`);
+    return mapRow(modelo);
+  } catch (err) {
+    if (err?.status === 404) return null;
+    throw err;
   }
 }
 
@@ -147,120 +102,53 @@ async function createModeloPermissoes({ nome, permissoes }) {
   const sanitizedNome = sanitizeNome(nome);
   await ensureNomeDisponivel(sanitizedNome);
 
-  const permissoesNormalizadas = permissoes ?? {};
-  const client = await db.connect();
+  const api = createAuthenticatedClient();
   try {
-    await client.query('BEGIN');
-    const { rows } = await client.query(
-      'INSERT INTO modelos_permissoes (nome, permissoes) VALUES ($1, $2) RETURNING id, nome, permissoes, criado_em, atualizado_em',
-      [sanitizedNome, permissoesNormalizadas]
-    );
-    const criado = rows[0];
-    await savePermissionsForRole(client, criado.id, permissoesNormalizadas);
-    await client.query('COMMIT');
-    return getModeloPermissoesById(criado.id);
+    const criado = await api.post('/api/modelos_permissoes', {
+      nome: sanitizedNome,
+      permissoes: permissoes ?? {}
+    });
+    return mapRow(criado);
   } catch (err) {
-    try {
-      await client.query('ROLLBACK');
-    } catch (rollbackErr) {
-      console.error('Falha ao desfazer transação de criação de modelo de permissões:', rollbackErr);
-    }
-    if (err.code === '23505') {
-      throw new ModeloPermissoesError('Já existe um modelo com este nome.', 'NOME_DUPLICADO');
-    }
-    throw err;
-  } finally {
-    client.release();
+    throw mapApiError(err);
   }
 }
 
 async function updateModeloPermissoes(id, { nome, permissoes }) {
-  const campos = [];
-  const valores = [];
+  const payload = {};
 
   if (nome !== undefined) {
     const sanitizedNome = sanitizeNome(nome);
     await ensureNomeDisponivel(sanitizedNome, id);
-    valores.push(sanitizedNome);
-    campos.push(`nome = $${valores.length}`);
+    payload.nome = sanitizedNome;
   }
 
   if (permissoes !== undefined) {
-    valores.push(permissoes);
-    campos.push(`permissoes = $${valores.length}`);
+    payload.permissoes = permissoes;
   }
 
-  if (!campos.length) {
+  if (!Object.keys(payload).length) {
     return getModeloPermissoesById(id);
   }
 
-  valores.push(id);
-
-  const client = await db.connect();
+  const api = createAuthenticatedClient();
   try {
-    await client.query('BEGIN');
-    let rowAtualizado = null;
-    if (campos.length) {
-      const { rows } = await client.query(
-        `UPDATE modelos_permissoes SET ${campos.join(', ')} WHERE id = $${valores.length} RETURNING id, nome, permissoes, criado_em, atualizado_em`,
-        valores
-      );
-      rowAtualizado = rows[0] ?? null;
-    } else {
-      const { rows } = await client.query(
-        'SELECT id, nome, permissoes, criado_em, atualizado_em FROM modelos_permissoes WHERE id = $1',
-        [id]
-      );
-      rowAtualizado = rows[0] ?? null;
-    }
-
-    if (!rowAtualizado) {
-      await client.query('ROLLBACK');
-      return null;
-    }
-
-    if (permissoes !== undefined) {
-      await savePermissionsForRole(client, id, permissoes);
-    }
-
-    await client.query('COMMIT');
-    return getModeloPermissoesById(id);
+    const atualizado = await api.put(`/api/modelos_permissoes/${id}`, payload);
+    return mapRow(atualizado) ?? getModeloPermissoesById(id);
   } catch (err) {
-    try {
-      await client.query('ROLLBACK');
-    } catch (rollbackErr) {
-      console.error('Falha ao desfazer transação de atualização de modelo de permissões:', rollbackErr);
-    }
-    if (err.code === '23505') {
-      throw new ModeloPermissoesError('Já existe um modelo com este nome.', 'NOME_DUPLICADO');
-    }
-    throw err;
-  } finally {
-    client.release();
+    if (err?.status === 404) return null;
+    throw mapApiError(err);
   }
 }
 
 async function deleteModeloPermissoes(id) {
-  const client = await db.connect();
+  const api = createAuthenticatedClient();
   try {
-    await client.query('BEGIN');
-    await deletePermissionsForRole(client, id);
-    const { rowCount } = await client.query('DELETE FROM modelos_permissoes WHERE id = $1', [id]);
-    if (!rowCount) {
-      await client.query('ROLLBACK');
-      return false;
-    }
-    await client.query('COMMIT');
+    await api.delete(`/api/modelos_permissoes/${id}`);
     return true;
   } catch (err) {
-    try {
-      await client.query('ROLLBACK');
-    } catch (rollbackErr) {
-      console.error('Falha ao desfazer transação de remoção de modelo de permissões:', rollbackErr);
-    }
+    if (err?.status === 404) return false;
     throw err;
-  } finally {
-    client.release();
   }
 }
 
