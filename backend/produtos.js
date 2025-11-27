@@ -155,10 +155,10 @@ async function listarInsumosProduto(codigo) {
  * Lista etapas de produção ordenadas pela coluna "ordem".
  */
 async function listarEtapasProducao() {
-  const res = await pool.query(
-    'SELECT id, nome, ordem FROM etapas_producao ORDER BY ordem ASC'
-  );
-  return res.rows;
+  const etapas = await pool.get('/etapas_producao', {
+    query: { select: 'id,nome,ordem', order: 'ordem.asc' }
+  });
+  return Array.isArray(etapas) ? etapas : [];
 }
 
 /**
@@ -632,39 +632,91 @@ async function salvarProdutoDetalhado(codigoOriginal, produto, itens) {
 }
 
 async function listarColecoes() {
-  await pool.query('CREATE TABLE IF NOT EXISTS colecao (nome TEXT PRIMARY KEY)');
-  const { rows } = await pool.query(
-    'SELECT nome FROM colecao UNION SELECT DISTINCT categoria AS nome FROM produtos WHERE categoria IS NOT NULL ORDER BY nome'
-  );
-  return rows.map(r => r.nome);
+  const colecoesPersistidas = await buscarColecoesPersistidas();
+  const categoriasProdutos = await buscarCategoriasProdutos();
+
+  const conjunto = new Set();
+  for (const nome of [...colecoesPersistidas, ...categoriasProdutos]) {
+    if (nome) conjunto.add(nome);
+  }
+
+  return [...conjunto].sort((a, b) => a.localeCompare(b));
 }
 
 async function adicionarColecao(nome) {
-  await pool.query('CREATE TABLE IF NOT EXISTS colecao (nome TEXT PRIMARY KEY)');
-  const res = await pool.query(
-    'INSERT INTO colecao (nome) VALUES ($1) ON CONFLICT (nome) DO NOTHING RETURNING nome',
-    [nome]
-  );
-  return res.rows[0]?.nome || nome;
+  const nomeNormalizado = (nome || '').trim();
+  if (!nomeNormalizado) return '';
+
+  try {
+    const res = await pool.post('/colecao', { nome: nomeNormalizado });
+    return res?.nome || nomeNormalizado;
+  } catch (err) {
+    if (err.status === 404) {
+      return nomeNormalizado;
+    }
+    throw err;
+  }
 }
 
 async function colecaoTemDependencias(nome) {
-  const { rowCount } = await pool.query(
-    'SELECT 1 FROM produtos WHERE categoria=$1 LIMIT 1',
-    [nome]
-  );
-  return rowCount > 0;
+  const produtos = await pool.get('/produtos', {
+    query: { select: 'id', categoria: `eq.${nome}`, limit: 1 }
+  });
+
+  return Array.isArray(produtos) && produtos.length > 0;
 }
 
 async function removerColecao(nome) {
-  await pool.query('CREATE TABLE IF NOT EXISTS colecao (nome TEXT PRIMARY KEY)');
-  const dependente = await colecaoTemDependencias(nome);
+  const nomeNormalizado = (nome || '').trim();
+  if (!nomeNormalizado) return;
+
+  const dependente = await colecaoTemDependencias(nomeNormalizado);
   if (dependente) {
     const err = new Error('DEPENDENTE');
     err.code = 'DEPENDENTE';
     throw err;
   }
-  await pool.query('DELETE FROM colecao WHERE nome=$1', [nome]);
+
+  try {
+    await pool.delete('/colecao', {
+      query: { nome: `eq.${nomeNormalizado}` }
+    });
+  } catch (err) {
+    if (err.status !== 404) {
+      throw err;
+    }
+  }
+}
+
+async function buscarColecoesPersistidas() {
+  try {
+    const colecao = await pool.get('/colecao', {
+      query: { select: 'nome', order: 'nome' }
+    });
+    return Array.isArray(colecao) ? colecao.map(c => (c?.nome || '').trim()).filter(Boolean) : [];
+  } catch (err) {
+    if (err.status === 404) {
+      return [];
+    }
+    throw err;
+  }
+}
+
+async function buscarCategoriasProdutos() {
+  try {
+    const produtos = await pool.get('/produtos', {
+      query: { select: 'categoria' }
+    });
+    const categorias = Array.isArray(produtos) ? produtos : [];
+    return categorias
+      .map(p => (p?.categoria || '').trim())
+      .filter(Boolean);
+  } catch (err) {
+    if (err.status === 404) {
+      return [];
+    }
+    throw err;
+  }
 }
 
 module.exports = {
