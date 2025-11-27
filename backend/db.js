@@ -2,8 +2,17 @@ require('dotenv').config({ path: require('path').resolve(__dirname, '../.env'), 
 
 const DEFAULT_WARMUP_RETRY_DELAY_MS = 5_000;
 const AUTH_EARLY_REFRESH_SECONDS = 60;
-const API_BASE_URL = 'https://api.santissimodecor.com.br/api';
-const LOGIN_URL = 'https://api.santissimodecor.com.br/login';
+const RAW_API_BASE_URL =
+  (process.env.API_BASE_URL && process.env.API_BASE_URL.trim()) ||
+  (process.env.API_URL && process.env.API_URL.trim()) ||
+  'http://localhost:3000';
+const NORMALIZED_API_BASE_URL = RAW_API_BASE_URL.replace(/\/$/, '');
+const API_BASE_URL = NORMALIZED_API_BASE_URL.endsWith('/api')
+  ? NORMALIZED_API_BASE_URL
+  : `${NORMALIZED_API_BASE_URL}/api`;
+const LOGIN_URL =
+  (process.env.API_LOGIN_URL && process.env.API_LOGIN_URL.trim()) ||
+  `${NORMALIZED_API_BASE_URL}/login`;
 
 let warmupPromise = null;
 let warmupTimer = null;
