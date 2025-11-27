@@ -1,436 +1,236 @@
 const express = require('express');
-const db = require('./db');
+const { createApiClient } = require('./apiHttpClient');
 
 const router = express.Router();
 
-async function converterParaPedido(orcamentoId) {
-  try {
-    const { rows } = await db.query('SELECT * FROM orcamentos WHERE id=$1', [orcamentoId]);
-    if (!rows.length) return;
-    const o = rows[0];
-
-    // Crie uma variável para a data atual
-    const dataAtual = new Date();
-    
-    // Data de validade com 30 dias de acréscimo
-    const dataValidade = new Date();
-    dataValidade.setDate(dataValidade.getDate() + 30);
-
-    const numeroOriginal = o.numero;
-
-    // 1. Usa uma expressão regular para encontrar o(s) dígito(s)
-    const match = numeroOriginal.match(/\d+/);
-
-    // 2. Extrai o número se ele existir (a expressão regular retornou uma correspondência)
-    const numero = match ? match[0] : null;
-
-    // 3. Aplica o número ao formato desejado (ex: 'PED(x)')
-    let numeroFormatado = null;
-    if (numero !== null) {
-      numeroFormatado = `PED${numero}`;
-    }
-
-    const insertPedido = await db.query(
-      `INSERT INTO pedidos (id, numero, cliente_id, contato_id, data_emissao, situacao, parcelas, tipo_parcela, forma_pagamento, transportadora, desconto_pagamento, desconto_especial, desconto_total, valor_final, observacoes, validade, prazo, dono, data_aprovacao)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19) RETURNING id`,
-      [
-        o.id,
-        numeroFormatado,
-        o.cliente_id,
-        o.contato_id,
-        dataAtual,
-        'Produção',
-        o.parcelas,
-        o.tipo_parcela,
-        o.forma_pagamento,
-        o.transportadora,
-        o.desconto_pagamento,
-        o.desconto_especial,
-        o.desconto_total,
-        o.valor_final,
-        o.observacoes,
-        dataValidade,
-        o.prazo,
-        o.dono,
-        dataAtual
-      ]
-    );
-    const pedidoId = insertPedido.rows[0].id;
-    await db.query(
-      `INSERT INTO pedidos_itens (id, pedido_id, produto_id, codigo, nome, ncm, quantidade, valor_unitario, valor_unitario_desc, desconto_pagamento, desconto_pagamento_prc, desconto_especial, desconto_especial_prc, valor_desc, desconto_total, valor_total)
-       SELECT id, $1, produto_id, codigo, nome, ncm, quantidade, valor_unitario, valor_unitario_desc, desconto_pagamento, desconto_pagamento_prc, desconto_especial, desconto_especial_prc, valor_desc, desconto_total, valor_total FROM orcamentos_itens WHERE orcamento_id=$2`,
-      [pedidoId, orcamentoId]
-    );
-    await db.query(
-      `INSERT INTO pedido_parcelas (id, pedido_id, numero_parcela, valor, data_vencimento)
-       SELECT id, $1, numero_parcela, valor, data_vencimento FROM orcamento_parcelas WHERE orcamento_id=$2`,
-      [pedidoId, orcamentoId]
-    );
-  } catch (err) {
-    console.error('Erro ao converter orçamento para pedido:', err);
-  }
+async function getNextNumero(api) {
+  const last = await api
+    .get('/api/orcamentos', { query: { order: 'id.desc', limit: 1 } })
+    .catch(() => []);
+  const ultimo = Array.isArray(last) && last.length ? last[0] : null;
+  const sequencia = ultimo?.numero ? parseInt(String(ultimo.numero).replace(/\D/g, ''), 10) || 0 : 0;
+  return `ORC${sequencia + 1}`;
 }
 
-// Lista orçamentos com filtro opcional por cliente
+function buildOrcamentoPayload(body = {}, { numero, situacao, dataAprovacao } = {}) {
+  return {
+    numero,
+    cliente_id: body.cliente_id,
+    contato_id: body.contato_id,
+    data_emissao: body.data_emissao || new Date().toISOString(),
+    situacao: situacao || body.situacao,
+    parcelas: body.parcelas,
+    tipo_parcela: body.tipo_parcela,
+    forma_pagamento: body.forma_pagamento,
+    transportadora: body.transportadora,
+    desconto_pagamento: body.desconto_pagamento,
+    desconto_especial: body.desconto_especial,
+    desconto_total: body.desconto_total,
+    valor_final: body.valor_final,
+    observacoes: body.observacoes,
+    validade: body.validade,
+    prazo: body.prazo,
+    dono: body.dono,
+    data_aprovacao: dataAprovacao
+  };
+}
+
 router.get('/', async (req, res) => {
   const { clienteId } = req.query;
   try {
-    let query =
-      `SELECT o.id, o.numero, c.nome_fantasia AS cliente, to_char(o.data_emissao,'DD/MM/YYYY') AS data_emissao,
-              o.valor_final, o.parcelas, o.situacao, o.dono
-         FROM orcamentos o
-         LEFT JOIN clientes c ON c.id = o.cliente_id`;
-    const params = [];
-    if (clienteId) {
-      params.push(clienteId);
-      query += ' WHERE o.cliente_id = $1';
-    }
-    query += ' ORDER BY o.id DESC';
-    const { rows } = await db.query(query, params);
-    res.json(rows);
+    const api = createApiClient(req);
+    const orcamentos = await api.get('/api/orcamentos', {
+      query: clienteId ? { cliente_id: clienteId, order: 'id.desc' } : { order: 'id.desc' }
+    });
+    res.json(Array.isArray(orcamentos) ? orcamentos : []);
   } catch (err) {
     console.error('Erro ao listar orçamentos:', err);
-    res.status(500).json({ error: 'Erro ao listar orçamentos' });
+    res.status(err.status || 500).json({ error: 'Erro ao listar orçamentos' });
   }
 });
 
-// Obtém um orçamento específico com itens e parcelas
 router.get('/:id', async (req, res) => {
   const { id } = req.params;
-  const client = await db.connect();
   try {
-    const { rows } = await client.query('SELECT * FROM orcamentos WHERE id=$1', [id]);
-    if (!rows.length) return res.status(404).json({ error: 'Orçamento não encontrado' });
-    const orcamento = rows[0];
-    const { rows: itens } = await client.query('SELECT * FROM orcamentos_itens WHERE orcamento_id=$1', [id]);
-    const { rows: parcelas } = await client.query(
-      'SELECT * FROM orcamento_parcelas WHERE orcamento_id=$1 ORDER BY numero_parcela',
-      [id]
-    );
-    orcamento.itens = itens;
-    orcamento.parcelas_detalhes = parcelas;
-    res.json(orcamento);
+    const api = createApiClient(req);
+    const orcamento = await api.get(`/api/orcamentos/${id}`);
+    if (!orcamento || orcamento.error === 'Not found') {
+      return res.status(404).json({ error: 'Orçamento não encontrado' });
+    }
+    const [itens, parcelas] = await Promise.all([
+      api.get('/api/orcamentos_itens', { query: { orcamento_id: id } }).catch(() => []),
+      api
+        .get('/api/orcamento_parcelas', { query: { orcamento_id: id, order: 'numero_parcela' } })
+        .catch(() => [])
+    ]);
+    res.json({
+      ...orcamento,
+      itens: Array.isArray(itens) ? itens : [],
+      parcelas_detalhes: Array.isArray(parcelas) ? parcelas : []
+    });
   } catch (err) {
     console.error('Erro ao buscar orçamento:', err);
-    res.status(500).json({ error: 'Erro ao buscar orçamento' });
-  } finally {
-    client.release();
+    res.status(err.status || 500).json({ error: 'Erro ao buscar orçamento' });
   }
 });
 
 router.post('/', async (req, res) => {
-  const {
-    cliente_id,
-    contato_id,
-    situacao,
-    parcelas,
-    tipo_parcela,
-    forma_pagamento,
-    transportadora,
-    desconto_pagamento,
-    desconto_especial,
-    desconto_total,
-    valor_final,
-    observacoes,
-    validade,
-    prazo,
-    dono,
-    itens = [],
-    parcelas_detalhes = []
-  } = req.body;
+  const body = req.body || {};
+  const itens = Array.isArray(body.itens) ? body.itens : [];
+  const parcelasDetalhes = Array.isArray(body.parcelas_detalhes) ? body.parcelas_detalhes : [];
 
-  const client = await db.connect();
   try {
-    await client.query('BEGIN');
-    const { rows: last } = await client.query('SELECT numero FROM orcamentos ORDER BY id DESC LIMIT 1');
-    let numero = 'ORC1';
-    if (last.length) {
-      const seq = parseInt(String(last[0].numero).replace(/\D/g, ''), 10) + 1;
-      numero = `ORC${seq}`;
-    }
-    const now = new Date();
-    const insertOrc = await client.query(
-      `INSERT INTO orcamentos (numero, cliente_id, contato_id, data_emissao, situacao, parcelas, tipo_parcela, forma_pagamento, transportadora, desconto_pagamento, desconto_especial, desconto_total, valor_final, observacoes, validade, prazo, dono)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17) RETURNING id`,
-      [
-        numero,
-        cliente_id,
-        contato_id,
-        now,
-        situacao,
-        parcelas,
-        tipo_parcela,
-        forma_pagamento,
-        transportadora,
-        desconto_pagamento,
-        desconto_especial,
-        desconto_total,
-        valor_final,
-        observacoes,
-        validade,
-        prazo,
-        dono
-      ]
-    );
-    const orcamentoId = insertOrc.rows[0].id;
+    const api = createApiClient(req);
+    const numero = await getNextNumero(api);
+    const created = await api.post('/api/orcamentos', buildOrcamentoPayload(body, { numero }));
+    const orcamentoId = created?.id || created?.data?.id || created?.[0]?.id;
 
     for (const item of itens) {
-      await client.query(
-        `INSERT INTO orcamentos_itens (orcamento_id, produto_id, codigo, nome, ncm, quantidade, valor_unitario, valor_unitario_desc, desconto_pagamento, desconto_pagamento_prc, desconto_especial, desconto_especial_prc, valor_desc, desconto_total, valor_total)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
-        [
-          orcamentoId,
-          item.produto_id,
-          item.codigo,
-          item.nome,
-          item.ncm,
-          item.quantidade,
-          item.valor_unitario,
-          item.valor_unitario_desc,
-          item.desconto_pagamento,
-          item.desconto_pagamento_prc,
-          item.desconto_especial,
-          item.desconto_especial_prc,
-          item.valor_desc,
-          item.desconto_total,
-          item.valor_total
-        ]
-      );
+      await api.post('/api/orcamentos_itens', { ...item, orcamento_id: orcamentoId });
     }
 
-    for (let i = 0; i < parcelas_detalhes.length; i++) {
-      const p = parcelas_detalhes[i];
-      await client.query(
-        `INSERT INTO orcamento_parcelas (orcamento_id, numero_parcela, valor, data_vencimento)
-        VALUES ($1,$2,$3,$4)`,
-        [orcamentoId, i + 1, p.valor, p.data_vencimento]
-      );
+    for (let i = 0; i < parcelasDetalhes.length; i++) {
+      const parcela = parcelasDetalhes[i];
+      await api.post('/api/orcamento_parcelas', {
+        ...parcela,
+        orcamento_id: orcamentoId,
+        numero_parcela: parcela.numero_parcela || i + 1
+      });
     }
 
-    await client.query('COMMIT');
-    res.json({ success: true, numero });
+    res.json({ success: true, id: orcamentoId, numero });
   } catch (err) {
-    await client.query('ROLLBACK');
     console.error('Erro ao salvar orçamento:', err);
-    res.status(500).json({ error: 'Erro ao salvar orçamento' });
-  } finally {
-    client.release();
+    res.status(err.status || 500).json({ error: 'Erro ao salvar orçamento' });
   }
 });
 
-// Atualiza um orçamento existente
 router.put('/:id', async (req, res) => {
   const { id } = req.params;
-  const {
-    cliente_id,
-    contato_id,
-    situacao,
-    parcelas,
-    tipo_parcela,
-    forma_pagamento,
-    transportadora,
-    desconto_pagamento,
-    desconto_especial,
-    desconto_total,
-    valor_final,
-    observacoes,
-    validade,
-    prazo,
-    dono,
-    itens = [],
-    parcelas_detalhes = []
-  } = req.body;
+  const body = req.body || {};
+  const itens = Array.isArray(body.itens) ? body.itens : [];
+  const parcelasDetalhes = Array.isArray(body.parcelas_detalhes) ? body.parcelas_detalhes : [];
 
-  const client = await db.connect();
   try {
-    // Calcule o valor de data_aprovacao
-    let data_aprovacao_valor = null;
+    const api = createApiClient(req);
     const situacoesComData = ['Aprovado', 'Rejeitado', 'Expirado'];
-    if (situacoesComData.includes(situacao)) {
-      data_aprovacao_valor = new Date(); // ou outra forma de pegar a data atual
-    }
+    const dataAprovacaoValor = situacoesComData.includes(body.situacao)
+      ? new Date().toISOString()
+      : null;
 
-    await client.query('BEGIN');
-    await client.query(
-      `UPDATE orcamentos SET cliente_id=$1, contato_id=$2, situacao=$3, parcelas=$4, tipo_parcela=$5, forma_pagamento=$6,
-      transportadora=$7, desconto_pagamento=$8, desconto_especial=$9, desconto_total=$10, valor_final=$11,
-      observacoes=$12, validade=$13, prazo=$14, dono=$15, data_aprovacao=$16
-      WHERE id=$17`,
-      [
-        cliente_id,
-        contato_id,
-        situacao,
-        parcelas,
-        tipo_parcela,
-        forma_pagamento,
-        transportadora,
-        desconto_pagamento,
-        desconto_especial,
-        desconto_total,
-        valor_final,
-        observacoes,
-        validade,
-        prazo,
-        dono,
-        data_aprovacao_valor,
-        id
-      ]
-    );
-      await client.query('DELETE FROM orcamentos_itens WHERE orcamento_id=$1', [id]);
-      for (const item of itens) {
-        await client.query(
-          `INSERT INTO orcamentos_itens (orcamento_id, produto_id, codigo, nome, ncm, quantidade, valor_unitario, valor_unitario_desc, desconto_pagamento, desconto_pagamento_prc, desconto_especial, desconto_especial_prc, valor_desc, desconto_total, valor_total)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
-          [
-            id,
-            item.produto_id,
-            item.codigo,
-            item.nome,
-            item.ncm,
-            item.quantidade,
-            item.valor_unitario,
-            item.valor_unitario_desc,
-            item.desconto_pagamento,
-            item.desconto_pagamento_prc,
-            item.desconto_especial,
-            item.desconto_especial_prc,
-            item.valor_desc,
-            item.desconto_total,
-            item.valor_total
-          ]
-        );
+    await api.put(`/api/orcamentos/${id}`, buildOrcamentoPayload(body, {
+      situacao: body.situacao,
+      dataAprovacao: dataAprovacaoValor
+    }));
+
+    const itensExistentes = await api.get('/api/orcamentos_itens', { query: { orcamento_id: id } }).catch(() => []);
+    if (Array.isArray(itensExistentes)) {
+      for (const item of itensExistentes) {
+        if (item?.id) {
+          await api.delete(`/api/orcamentos_itens/${item.id}`);
+        }
       }
-
-    await client.query('DELETE FROM orcamento_parcelas WHERE orcamento_id=$1', [id]);
-    for (let i = 0; i < parcelas_detalhes.length; i++) {
-      const p = parcelas_detalhes[i];
-      await client.query(
-        `INSERT INTO orcamento_parcelas (orcamento_id, numero_parcela, valor, data_vencimento)
-         VALUES ($1,$2,$3,$4)`,
-        [id, i + 1, p.valor, p.data_vencimento]
-      );
+    }
+    for (const item of itens) {
+      await api.post('/api/orcamentos_itens', { ...item, orcamento_id: id });
     }
 
-    await client.query('COMMIT');
-    if (situacao === 'Aprovado') await converterParaPedido(id);
+    const parcelasExistentes = await api
+      .get('/api/orcamento_parcelas', { query: { orcamento_id: id } })
+      .catch(() => []);
+    if (Array.isArray(parcelasExistentes)) {
+      for (const parcela of parcelasExistentes) {
+        if (parcela?.id) {
+          await api.delete(`/api/orcamento_parcelas/${parcela.id}`);
+        }
+      }
+    }
+
+    for (let i = 0; i < parcelasDetalhes.length; i++) {
+      const parcela = parcelasDetalhes[i];
+      await api.post('/api/orcamento_parcelas', {
+        ...parcela,
+        orcamento_id: id,
+        numero_parcela: parcela.numero_parcela || i + 1
+      });
+    }
+
+    if (body.situacao === 'Aprovado') {
+      try {
+        await api.post(`/api/orcamentos/${id}/convert`);
+      } catch (_) {}
+    }
+
     res.json({ success: true });
   } catch (err) {
-    await client.query('ROLLBACK');
     console.error('Erro ao atualizar orçamento:', err);
-    res.status(500).json({ error: 'Erro ao atualizar orçamento' });
-  } finally {
-    client.release();
+    res.status(err.status || 500).json({ error: 'Erro ao atualizar orçamento' });
   }
 });
 
-// Atualiza apenas o status de um orçamento
 router.patch('/:id/status', async (req, res) => {
   const { id } = req.params;
   const { situacao } = req.body;
   try {
-    await db.query(
-      `UPDATE orcamentos SET situacao=$1, data_aprovacao = CASE WHEN $1 IN ('Aprovado','Rejeitado','Expirado') THEN NOW() ELSE NULL END WHERE id=$2`,
-      [situacao, id]
-    );
-    if (situacao === 'Aprovado') await converterParaPedido(id);
+    const api = createApiClient(req);
+    const situacoesComData = ['Aprovado', 'Rejeitado', 'Expirado'];
+    const payload = {
+      situacao,
+      data_aprovacao: situacoesComData.includes(situacao) ? new Date().toISOString() : null
+    };
+    await api.put(`/api/orcamentos/${id}`, payload);
+    if (situacao === 'Aprovado') {
+      try {
+        await api.post(`/api/orcamentos/${id}/convert`);
+      } catch (_) {}
+    }
     res.json({ success: true });
   } catch (err) {
     console.error('Erro ao atualizar status do orçamento:', err);
-    res.status(500).json({ error: 'Erro ao atualizar status do orçamento' });
+    res.status(err.status || 500).json({ error: 'Erro ao atualizar status do orçamento' });
   }
 });
 
-// Clona um orçamento existente
 router.post('/:id/clone', async (req, res) => {
   const { id } = req.params;
-  const client = await db.connect();
   try {
-    await client.query('BEGIN');
-    const { rows } = await client.query('SELECT * FROM orcamentos WHERE id=$1', [id]);
-    if (!rows.length) {
-      await client.query('ROLLBACK');
+    const api = createApiClient(req);
+    const orcamento = await api.get(`/api/orcamentos/${id}`);
+    if (!orcamento || orcamento.error === 'Not found') {
       return res.status(404).json({ error: 'Orçamento não encontrado' });
     }
-    const orc = rows[0];
+    const [itens, parcelas] = await Promise.all([
+      api.get('/api/orcamentos_itens', { query: { orcamento_id: id } }).catch(() => []),
+      api.get('/api/orcamento_parcelas', { query: { orcamento_id: id } }).catch(() => [])
+    ]);
 
-    const { rows: last } = await client.query('SELECT numero FROM orcamentos ORDER BY id DESC LIMIT 1');
-    let numero = 'ORC1';
-    if (last.length) {
-      const seq = parseInt(String(last[0].numero).replace(/\D/g, ''), 10) + 1;
-      numero = `ORC${seq}`;
+    const numero = await getNextNumero(api);
+    const created = await api.post(
+      '/api/orcamentos',
+      buildOrcamentoPayload(
+        { ...orcamento, situacao: 'Rascunho' },
+        { numero, situacao: 'Rascunho', dataAprovacao: null }
+      )
+    );
+    const novoId = created?.id || created?.data?.id || created?.[0]?.id;
+
+    for (const item of Array.isArray(itens) ? itens : []) {
+      await api.post('/api/orcamentos_itens', { ...item, orcamento_id: novoId, id: undefined });
+    }
+    for (let i = 0; i < (Array.isArray(parcelas) ? parcelas.length : 0); i++) {
+      const parcela = parcelas[i];
+      await api.post('/api/orcamento_parcelas', {
+        ...parcela,
+        orcamento_id: novoId,
+        id: undefined,
+        numero_parcela: parcela.numero_parcela || i + 1
+      });
     }
 
-    const insert = await client.query(
-      `INSERT INTO orcamentos (numero, cliente_id, contato_id, data_emissao, situacao, parcelas, tipo_parcela, forma_pagamento, transportadora,
-       desconto_pagamento, desconto_especial, desconto_total, valor_final, observacoes, validade, prazo, dono)
-       VALUES ($1,$2,$3,NOW(),'Rascunho',$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING id`,
-      [
-        numero,
-        orc.cliente_id,
-        orc.contato_id,
-        orc.parcelas,
-        orc.tipo_parcela,
-        orc.forma_pagamento,
-        orc.transportadora,
-        orc.desconto_pagamento,
-        orc.desconto_especial,
-        orc.desconto_total,
-        orc.valor_final,
-        orc.observacoes,
-        orc.validade,
-        orc.prazo,
-        orc.dono
-      ]
-    );
-    const newId = insert.rows[0].id;
-      const { rows: itens } = await client.query(
-        'SELECT produto_id, codigo, nome, ncm, quantidade, valor_unitario, valor_unitario_desc, desconto_pagamento, desconto_pagamento_prc, desconto_especial, desconto_especial_prc, valor_desc, desconto_total, valor_total FROM orcamentos_itens WHERE orcamento_id=$1',
-        [id]
-      );
-      for (const item of itens) {
-        await client.query(
-          `INSERT INTO orcamentos_itens (orcamento_id, produto_id, codigo, nome, ncm, quantidade, valor_unitario, valor_unitario_desc, desconto_pagamento, desconto_pagamento_prc, desconto_especial, desconto_especial_prc, valor_desc, desconto_total, valor_total)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
-          [
-            newId,
-            item.produto_id,
-            item.codigo,
-            item.nome,
-            item.ncm,
-            item.quantidade,
-            item.valor_unitario,
-            item.valor_unitario_desc,
-            item.desconto_pagamento,
-            item.desconto_pagamento_prc,
-            item.desconto_especial,
-            item.desconto_especial_prc,
-            item.valor_desc,
-            item.desconto_total,
-            item.valor_total
-          ]
-        );
-      }
-
-    const { rows: parcelas } = await client.query(
-      'SELECT numero_parcela, valor, data_vencimento FROM orcamento_parcelas WHERE orcamento_id=$1',
-      [id]
-    );
-    for (const p of parcelas) {
-      await client.query(
-        `INSERT INTO orcamento_parcelas (orcamento_id, numero_parcela, valor, data_vencimento)
-         VALUES ($1,$2,$3,$4)`,
-        [newId, p.numero_parcela, p.valor, p.data_vencimento]
-      );
-    }
-
-    await client.query('COMMIT');
-    res.json({ success: true, id: newId, numero });
+    res.json({ success: true, id: novoId, numero });
   } catch (err) {
-    await client.query('ROLLBACK');
     console.error('Erro ao clonar orçamento:', err);
-    res.status(500).json({ error: 'Erro ao clonar orçamento' });
-  } finally {
-    client.release();
+    res.status(err.status || 500).json({ error: 'Erro ao clonar orçamento' });
   }
 });
 

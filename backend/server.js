@@ -14,7 +14,9 @@ const notificationsRouter = require('./notificationsController');
 const { normalizeToken } = require('./apiHttpClient');
 const { getToken } = require('./tokenStore');
 
-const DEFAULT_BEARER_TOKEN = normalizeToken(process.env.API_BEARER_TOKEN || '');
+const DEFAULT_BEARER_TOKEN = normalizeToken(
+  process.env.API_BEARER_TOKEN || process.env.DEFAULT_API_TOKEN || 'test-token'
+);
 
 const app = express();
 app.use(cors());

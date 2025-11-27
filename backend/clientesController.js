@@ -106,12 +106,7 @@ function buildPayload(cli = {}) {
 router.get('/lista', async (req, res) => {
   try {
     const api = createApiClient(req);
-    const clientes = await api.get('/api/clientes', {
-      query: {
-        select: 'id,nome_fantasia,cnpj,ent_pais,ent_uf,status_cliente,dono_cliente',
-        order: 'nome_fantasia'
-      }
-    });
+    const clientes = await api.get('/api/clientes');
 
     res.json(Array.isArray(clientes) ? clientes.map(mapClienteBasico) : []);
   } catch (err) {
@@ -158,7 +153,7 @@ router.get('/:id', async (req, res) => {
   const { id } = req.params;
   try {
     const api = createApiClient(req);
-    const cliente = await api.get(`/clientes/${id}`);
+    const cliente = await api.get(`/api/clientes/${id}`);
     if (!cliente || cliente.error === 'Not found') {
       return res.status(404).json({ error: 'Cliente não encontrado' });
     }
@@ -168,14 +163,14 @@ router.get('/:id', async (req, res) => {
     let notas = [];
     try {
       contatos = await api.get('/api/contatos_cliente', {
-        query: { cliente_id: `eq.${id}`, order: 'nome' }
+        query: { cliente_id: id, order: 'nome' }
       });
     } catch (_) {}
     try {
-      contratos = await api.get('/api/contratos', { query: { cliente_id: `eq.${id}` } });
+      contratos = await api.get('/api/contratos', { query: { cliente_id: id } });
     } catch (_) {}
     try {
-      notas = await api.get('/api/cliente_notas', { query: { cliente_id: `eq.${id}`, order: 'data.desc' } });
+      notas = await api.get('/api/cliente_notas', { query: { cliente_id: id, order: 'data.desc' } });
     } catch (_) {}
 
     res.json({
@@ -194,7 +189,7 @@ router.get('/:id/resumo', async (req, res) => {
   const { id } = req.params;
   try {
     const api = createApiClient(req);
-    const row = await api.get(`/clientes/${id}`);
+    const row = await api.get(`/api/clientes/${id}`);
     if (!row || row.error === 'Not found') {
       return res.status(404).json({ error: 'Cliente não encontrado' });
     }
@@ -226,7 +221,7 @@ router.get('/:id/resumo', async (req, res) => {
     const registro = enderecoIgual('reg', 'ent') ? 'Igual Entrega' : formatEndereco('reg');
 
     const contatosRes = await api.get('/api/contatos_cliente', {
-      query: { cliente_id: `eq.${id}`, order: 'nome' }
+      query: { cliente_id: id, order: 'nome' }
     });
 
     res.json({
@@ -261,7 +256,7 @@ router.post('/', async (req, res) => {
   try {
     const api = createApiClient(req);
     const duplicados = await api.get('/api/clientes', {
-      query: { cnpj: `eq.${cli.cnpj}`, select: 'id', limit: 1 }
+      query: { cnpj: cli.cnpj, limit: 1 }
     });
     if (Array.isArray(duplicados) && duplicados.length) {
       return res.status(409).json({ error: 'Cliente já registrado' });
@@ -292,7 +287,7 @@ router.put('/:id', async (req, res) => {
   const cli = req.body || {};
   try {
     const api = createApiClient(req);
-    await api.put(`/clientes/${id}`, buildPayload(cli));
+    await api.put(`/api/clientes/${id}`, buildPayload(cli));
 
     const contatosNovos = Array.isArray(cli.contatosNovos) ? cli.contatosNovos : [];
     for(const ct of contatosNovos){
@@ -335,20 +330,43 @@ router.delete('/:id', async (req, res) => {
   try {
     const api = createApiClient(req);
     const orcRes = await api.get('/api/orcamentos', {
-      query: { cliente_id: `eq.${id}`, select: 'id', limit: 1 }
+      query: { cliente_id: id, limit: 1 }
     });
     if (Array.isArray(orcRes) && orcRes.length) {
       return res.status(400).json({ error: 'Não é possível excluir: cliente possui orçamentos vinculados' });
     }
 
-    await api.delete('/api/contatos_cliente', { query: { cliente_id: `eq.${id}` } });
     try {
-      await api.delete('/api/contratos', { query: { cliente_id: `eq.${id}` } });
+      const contatos = await api.get('/api/contatos_cliente', { query: { cliente_id: id } });
+      if (Array.isArray(contatos)) {
+        for (const contato of contatos) {
+          if (contato?.id) {
+            await api.delete(`/api/contatos_cliente/${contato.id}`);
+          }
+        }
+      }
     } catch (_) {}
     try {
-      await api.delete('/api/cliente_notas', { query: { cliente_id: `eq.${id}` } });
+      const contratos = await api.get('/api/contratos', { query: { cliente_id: id } });
+      if (Array.isArray(contratos)) {
+        for (const contrato of contratos) {
+          if (contrato?.id) {
+            await api.delete(`/api/contratos/${contrato.id}`);
+          }
+        }
+      }
     } catch (_) {}
-    await api.delete(`/clientes/${id}`);
+    try {
+      const notas = await api.get('/api/cliente_notas', { query: { cliente_id: id } });
+      if (Array.isArray(notas)) {
+        for (const nota of notas) {
+          if (nota?.id) {
+            await api.delete(`/api/cliente_notas/${nota.id}`);
+          }
+        }
+      }
+    } catch (_) {}
+    await api.delete(`/api/clientes/${id}`);
 
     res.json({ success: true });
   } catch (err) {

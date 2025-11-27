@@ -9,10 +9,7 @@ router.get('/', async (req, res) => {
   try {
     const api = createApiClient(req);
     const pedidos = await api.get('/api/pedidos', {
-      query: {
-        ...(clienteId ? { cliente_id: `eq.${clienteId}` } : {}),
-        order: 'id.desc'
-      }
+      query: clienteId ? { cliente_id: clienteId, order: 'id.desc' } : { order: 'id.desc' }
     });
 
     res.json(Array.isArray(pedidos) ? pedidos : []);
@@ -52,8 +49,8 @@ router.get('/:id', async (req, res) => {
       return res.status(404).json({ error: 'Pedido não encontrado' });
     }
     const [itens, parcelas] = await Promise.all([
-      api.get('/api/pedidos_itens', { query: { pedido_id: `eq.${id}` } }),
-      api.get('/api/pedido_parcelas', { query: { pedido_id: `eq.${id}`, order: 'numero_parcela' } })
+      api.get('/api/pedidos_itens', { query: { pedido_id: id } }),
+      api.get('/api/pedido_parcelas', { query: { pedido_id: id, order: 'numero_parcela' } })
     ]);
     pedido.itens = itens || [];
     pedido.parcelas_detalhes = parcelas || [];
