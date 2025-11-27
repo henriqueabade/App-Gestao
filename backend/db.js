@@ -25,7 +25,8 @@ const state = {
 const authState = {
   token: null,
   tokenExpiresAt: 0,
-  pin: null
+  pin: null,
+  credentials: null
 };
 
 function logDebug(message, context) {
@@ -37,11 +38,39 @@ function logDebug(message, context) {
   }
 }
 
-function buildConfig(pin) {
-  const credentials = resolveCredentials();
+function normalizeCredentialInput(input) {
+  if (input === null || input === undefined) return {};
+  if (typeof input === 'string') {
+    return { pin: input };
+  }
+  if (typeof input !== 'object') return {};
+  const normalized = {};
+  if (typeof input.login === 'string') {
+    normalized.login = input.login.trim();
+  }
+  if (typeof input.password === 'string') {
+    normalized.password = input.password;
+  } else if (input.password) {
+    normalized.password = String(input.password);
+  }
+  if (input.pin !== undefined) {
+    normalized.pin = typeof input.pin === 'string' ? input.pin.trim() : input.pin;
+  }
+  return normalized;
+}
+
+function buildConfig(credentialsInput) {
+  const normalizedInput = normalizeCredentialInput(credentialsInput);
+  const preferredCredentials =
+    normalizedInput.login && normalizedInput.password
+      ? normalizedInput
+      : authState.credentials
+        ? { ...authState.credentials, pin: normalizedInput.pin }
+        : normalizedInput;
+  const credentials = resolveCredentials(preferredCredentials);
   return {
     ...credentials,
-    pin: typeof pin === 'string' ? pin.trim() : pin || null
+    pin: preferredCredentials.pin || null
   };
 }
 
@@ -142,7 +171,11 @@ function getStatus() {
   };
 }
 
-function resolveCredentials() {
+function resolveCredentials(preferred = {}) {
+  if (preferred.login && preferred.password) {
+    return { login: preferred.login, password: preferred.password };
+  }
+
   const candidates = [
     { login: process.env.API_LOGIN_EMAIL || process.env.API_LOGIN, password: process.env.API_LOGIN_PASSWORD },
     { login: process.env.API_EMAIL, password: process.env.API_PASSWORD },
@@ -155,7 +188,7 @@ function resolveCredentials() {
     }
   }
 
-  throw new Error('Credenciais de API não configuradas');
+  throw new Error('Credenciais de API não configuradas. Informe login e senha para continuar.');
 }
 
 function decodeTokenExpiry(token) {
@@ -185,8 +218,9 @@ async function authenticate(config) {
     });
 
     if (!response.ok) {
-      const error = new Error(`Falha ao autenticar: ${response.status}`);
+      const error = new Error(`Falha ao autenticar usuário: ${response.status}`);
       error.code = 'auth-failed';
+      error.reason = 'user-auth';
       throw error;
     }
 
@@ -236,7 +270,7 @@ async function runWarmup() {
 
   warmupPromise = (async () => {
     markConnecting();
-    const config = buildConfig(authState.pin);
+    const config = buildConfig(authState.credentials ? { ...authState.credentials, pin: authState.pin } : authState.pin);
     try {
       await getToken(config);
       if (generation === warmupGeneration) {
@@ -272,7 +306,10 @@ async function lightweightHealthCheck(config) {
 
 async function request(method, path, options = {}) {
   const normalizedPath = path.startsWith('/') ? path : `/${path}`;
-  const config = options.config || buildConfig(authState.pin);
+  const defaultCredentials = authState.credentials
+    ? { ...authState.credentials, pin: authState.pin }
+    : { pin: authState.pin };
+  const config = options.config || buildConfig(defaultCredentials);
   let token = authState.token;
 
   if (!tokenIsValid()) {
@@ -319,12 +356,18 @@ async function safeJson(response) {
   }
 }
 
-function init(pin) {
-  const config = buildConfig(pin);
+function init(credentialsInput) {
+  const config = buildConfig(credentialsInput);
   authState.pin = config.pin;
+  authState.credentials = { login: config.login, password: config.password };
   const configKey = buildConfigKey(config);
   if (currentConfigKey === configKey && authState.token) {
     return;
+  }
+
+  if (currentConfigKey !== configKey) {
+    authState.token = null;
+    authState.tokenExpiresAt = 0;
   }
 
   warmupGeneration += 1;
@@ -379,9 +422,6 @@ function put(path, body, options) {
 function del(path, options) {
   return query(path, { ...options, method: 'DELETE' });
 }
-
-// inicializa com variáveis de ambiente por padrão
-init();
 
 module.exports = {
   init,

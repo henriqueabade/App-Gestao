@@ -72,7 +72,7 @@ function normalizeNotReadyError(err) {
 let pinErrorAttempts = 0;
 let lastDatabaseInitPin = null;
 
-function ensureDatabaseReady(pin) {
+function ensureDatabaseReady(pin, credentials) {
   const sanitizedPin = typeof pin === 'string' ? pin.trim() : pin;
   const normalizedPin =
     typeof sanitizedPin === 'string'
@@ -85,7 +85,15 @@ function ensureDatabaseReady(pin) {
   } else {
     lastDatabaseInitPin = null;
   }
-  pool.init(sanitizedPin);
+  const sanitizedCredentials =
+    credentials && typeof credentials === 'object'
+      ? {
+          login: typeof credentials.login === 'string' ? credentials.login.trim() : credentials.login,
+          password: credentials.password,
+          pin: sanitizedPin
+        }
+      : { pin: sanitizedPin };
+  pool.init(sanitizedCredentials);
   const hasEnsureWarmup = Object.prototype.hasOwnProperty.call(pool, 'ensureWarmup');
   const hasGetStatus = Object.prototype.hasOwnProperty.call(pool, 'getStatus');
   if (hasEnsureWarmup && typeof pool.ensureWarmup === 'function') {
@@ -128,7 +136,7 @@ function ensureDatabaseReady(pin) {
   }
 }
 
-async function waitForDatabaseReady(pin, options = {}) {
+async function waitForDatabaseReady(pin, credentials, options = {}) {
   const mergedOptions = { ...DEFAULT_DB_WAIT_OPTIONS, ...(options || {}) };
   const timeoutMs = Number.isFinite(mergedOptions.timeoutMs)
     ? Math.max(0, mergedOptions.timeoutMs)
@@ -149,7 +157,7 @@ async function waitForDatabaseReady(pin, options = {}) {
   while (true) {
     attempt += 1;
     try {
-      ensureDatabaseReady(pin);
+      ensureDatabaseReady(pin, credentials);
       if (typeof pool.isReady !== 'function' || pool.isReady()) {
         if (loggedWaitStart) {
           debugLogAuth('Pool do banco pronto após espera', {
@@ -518,7 +526,8 @@ async function registrarUsuario(nome, email, senha, pin) {
 // Login de usuário (corrigido)
 async function loginUsuario(email, senha, pin) {
   try {
-    await waitForDatabaseReady(pin);
+    const credentials = { login: email, password: senha };
+    await waitForDatabaseReady(pin, credentials);
     await ensureUsuariosSchema();
     const resultado = await pool.query(
       'SELECT * FROM usuarios WHERE lower(email) = lower($1)',
@@ -599,6 +608,13 @@ async function loginUsuario(email, senha, pin) {
       }
       if (err instanceof Error) {
         err.reason = err.reason || 'pin';
+      }
+      throw err;
+    }
+    if (err && err.code === 'auth-failed') {
+      if (err instanceof Error) {
+        err.message = err.message || 'Falha ao autenticar com as credenciais informadas.';
+        err.reason = err.reason || 'user-auth';
       }
       throw err;
     }
