@@ -11,12 +11,15 @@ const transportadorasRouter = require('./transportadorasController');
 const orcamentosRouter = require('./orcamentosController');
 const pedidosRouter = require('./pedidosController');
 const notificationsRouter = require('./notificationsController');
+const db = require('./db');
 const { normalizeToken } = require('./apiHttpClient');
 const { getToken } = require('./tokenStore');
 
 const DEFAULT_BEARER_TOKEN = normalizeToken(
   process.env.API_BEARER_TOKEN || process.env.DEFAULT_API_TOKEN || 'test-token'
 );
+
+db.init({ tokenProvider: getToken });
 
 const app = express();
 app.use(cors());

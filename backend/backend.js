@@ -1,5 +1,6 @@
+const db = require('./db');
 const { createApiClient } = require('./apiHttpClient');
-const { setToken, clearToken } = require('./tokenStore');
+const { setToken, clearToken, getToken } = require('./tokenStore');
 
 const RAW_API_BASE_URL =
   (process.env.API_BASE_URL && process.env.API_BASE_URL.trim()) ||
@@ -47,6 +48,7 @@ async function loginUsuario(email, senha) {
 
     if (data?.token) {
       setToken(data.token);
+      db.init({ tokenProvider: getToken });
     }
 
     const user = data?.usuario || data?.user || {};
@@ -86,6 +88,7 @@ function waitForDatabaseReady() {
 
 function clearAuthentication() {
   clearToken();
+  db.init(null);
 }
 
 module.exports = {
