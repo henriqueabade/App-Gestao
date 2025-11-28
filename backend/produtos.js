@@ -170,32 +170,29 @@ async function listarDetalhesProduto(produtoCodigo, produtoId) {
 
     if (idsUltimosInsumos.length > 0) {
       const idsUnicos = Array.from(new Set(idsUltimosInsumos.map(id => Number(id))));
-      try {
-        const resultado = await pool.get('/materia_prima', {
-          query: { select: 'id,nome', id: `in.(${idsUnicos.join(',')})` }
-        });
+      idsUnicos.forEach(id => nomesUltimosInsumos.set(id, null));
 
-        if (Array.isArray(resultado)) {
-          resultado.forEach(registro => {
-            if (!registro || registro.id === undefined || registro.id === null) return;
-            nomesUltimosInsumos.set(registro.id, registro?.nome || null);
+      const BATCH_SIZE = 30;
+      for (let i = 0; i < idsUnicos.length; i += BATCH_SIZE) {
+        const batchIds = idsUnicos.slice(i, i + BATCH_SIZE);
+        try {
+          const resultado = await pool.get('/materia_prima', {
+            query: { select: 'id,nome', id: `in.(${batchIds.join(',')})` }
           });
-        }
 
-        idsUnicos.forEach(id => {
-          if (!nomesUltimosInsumos.has(id)) {
-            nomesUltimosInsumos.set(id, null);
+          if (Array.isArray(resultado)) {
+            resultado.forEach(registro => {
+              if (!registro || registro.id === undefined || registro.id === null) return;
+              nomesUltimosInsumos.set(registro.id, registro?.nome || null);
+            });
           }
-        });
-      } catch (insumoErr) {
-        console.error(
-          'Falha ao buscar materia_prima para ids de ultimo_insumo',
-          idsUnicos,
-          insumoErr?.message || insumoErr
-        );
-        idsUnicos.forEach(id => {
-          nomesUltimosInsumos.set(id, null);
-        });
+        } catch (insumoErr) {
+          console.error(
+            'Falha ao buscar materia_prima para ids de ultimo_insumo',
+            batchIds,
+            insumoErr?.message || insumoErr
+          );
+        }
       }
     }
 
