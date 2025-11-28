@@ -17,6 +17,13 @@
   const itemOptions = document.getElementById('itemOptions');
   const itemMensagem = document.getElementById('itemMensagem');
   const quantidadeInput = overlay.querySelector('input[type="number"]');
+  const produto = window.produtoDetalhes;
+  const lotes = Array.isArray(produto?.lotes) ? produto.lotes : [];
+  const ultimoLote = lotes.length ? lotes[0] : null;
+  const processoPadrao = ultimoLote?.processo || ultimoLote?.etapa || '';
+  const ultimoInsumoId = ultimoLote?.ultimo_insumo_id ? String(ultimoLote.ultimo_insumo_id) : '';
+  const ultimoItemNome = ultimoLote?.ultimo_item || '';
+  let preenchidoPadrao = false;
   let debounce;
 
   async function carregarProcessos(){ // carga de processos
@@ -25,8 +32,28 @@
       processos.sort((a,b) => (a.ordem ?? 0) - (b.ordem ?? 0));
       processoSelect.innerHTML = '<option value="">Selecione um processo…</option>' +
         processos.map(p => `<option value="${p.nome}" data-id="${p.id}">${p.nome}</option>`).join('');
+
+      if(processoPadrao){
+        const opcaoPadrao = Array.from(processoSelect.options).find(opt => opt.value === processoPadrao || opt.textContent === processoPadrao);
+        if(opcaoPadrao){
+          processoSelect.value = opcaoPadrao.value;
+          preenchidoPadrao = false;
+          carregarItens();
+        }
+      }
     }catch(err){
       console.error('Erro ao listar processos', err);
+    }
+  }
+
+  function preencherItemPadrao(){
+    if(preenchidoPadrao) return;
+    if(processoPadrao && processoSelect.value !== processoPadrao) return;
+    if(!ultimoInsumoId) return;
+    const opcaoItem = Array.from(itemOptions.querySelectorAll('option')).find(o => String(o.dataset.id) === String(ultimoInsumoId));
+    if(opcaoItem){
+      itemInput.value = opcaoItem.value || ultimoItemNome || '';
+      preenchidoPadrao = true;
     }
   }
 
@@ -48,10 +75,12 @@
       console.error('Erro ao listar itens', err);
     }
     itemInput.disabled = false;
+    preencherItemPadrao();
   }
 
   processoSelect.addEventListener('change', () => {
     itemInput.value = '';
+    preenchidoPadrao = processoSelect.value !== processoPadrao;
     carregarItens();
   });
 

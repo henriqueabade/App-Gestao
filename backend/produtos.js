@@ -114,7 +114,7 @@ async function listarDetalhesProduto(produtoCodigo, produtoId) {
 
     const lotesQueryBasica = {
       select:
-        'id,produto_id,quantidade,ultimo_insumo_id,ultimo_item,data_hora_completa,etapa_id,materia_prima:ultimo_insumo_id(nome)',
+        'id,produto_id,quantidade,ultimo_insumo_id,ultimo_item,data_hora_completa,etapa_id,materia_prima:ultimo_insumo_id(nome,processo)',
       order: 'data_hora_completa.desc'
     };
 
@@ -160,15 +160,25 @@ async function listarDetalhesProduto(produtoCodigo, produtoId) {
       }
     }
 
-    const lotesFormatados = (Array.isArray(lotes) ? lotes : []).map(lote => ({
-      id: lote?.id,
-      quantidade: lote?.quantidade,
-      ultimo_insumo_id: lote?.ultimo_insumo_id,
-      ultimo_item: lote?.materia_prima?.nome || lote?.ultimo_item || null,
-      tempo_estimado_minutos: lote?.tempo_estimado_minutos,
-      data_hora_completa: lote?.data_hora_completa,
-      etapa: lote?.etapa_id ? String(lote.etapa_id).trim() || '—' : '—'
-    }));
+    const lotesFormatados = (Array.isArray(lotes) ? lotes : []).map(lote => {
+      const processo = lote?.materia_prima?.processo;
+      const etapa = processo
+        ? String(processo).trim()
+        : lote?.etapa_id
+          ? String(lote.etapa_id).trim() || '—'
+          : '—';
+
+      return {
+        id: lote?.id,
+        quantidade: lote?.quantidade,
+        ultimo_insumo_id: lote?.ultimo_insumo_id,
+        ultimo_item: lote?.materia_prima?.nome || lote?.ultimo_item || null,
+        tempo_estimado_minutos: lote?.tempo_estimado_minutos,
+        data_hora_completa: lote?.data_hora_completa,
+        etapa,
+        processo: processo ? String(processo).trim() || null : null
+      };
+    });
 
     return {
       produto: produto || null,
