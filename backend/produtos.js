@@ -332,8 +332,37 @@ async function removerEtapaProducao(nome) {
  * Aceita etapa por id (int) OU por nome (text).
  */
 async function listarItensProcessoProduto(codigo, etapa, busca = '') {
-  const etapaBusca = String(etapa || '').trim().toLowerCase();
-  const termoBusca = String(busca || '').trim().toLowerCase();
+  const normalizarTexto = valor => String(valor || '').trim().toLowerCase();
+
+  const etapaInfo = (() => {
+    if (typeof etapa === 'object' && etapa !== null) {
+      return {
+        nome: etapa.nome || etapa.valor || etapa.value || '',
+        id: etapa.id || etapa.dataId || etapa.data_id || null
+      };
+    }
+    const etapaNormalizada = String(etapa || '').trim();
+    const etapaId = etapaNormalizada && Number.isFinite(Number(etapaNormalizada))
+      ? Number(etapaNormalizada)
+      : null;
+    return { nome: etapaNormalizada, id: etapaId };
+  })();
+
+  const termoBusca = normalizarTexto(busca);
+  const etapaIdBusca = etapaInfo.id !== undefined && etapaInfo.id !== null
+    ? String(etapaInfo.id).trim()
+    : '';
+
+  let etapaBusca = normalizarTexto(etapaInfo.nome);
+  if (etapaIdBusca && !etapaBusca) {
+    const etapaRegistro = await fetchSingle('etapas_producao', {
+      id: `eq.${etapaIdBusca}`,
+      select: 'id,nome'
+    });
+    etapaBusca = normalizarTexto(etapaRegistro?.nome);
+  }
+
+  const etapaFiltroAtivo = Boolean(etapaBusca || etapaIdBusca);
 
   const itens = await pool.get('/produtos_insumos', {
     query: {
@@ -346,8 +375,20 @@ async function listarItensProcessoProduto(codigo, etapa, busca = '') {
 
   const filtrados = lista
     .map(item => item?.materia_prima)
-    .filter(mp => mp && (!etapaBusca || String(mp.processo || '').trim().toLowerCase() === etapaBusca))
-    .filter(mp => !termoBusca || String(mp.nome || '').toLowerCase().includes(termoBusca));
+    .filter(mp => {
+      if (!mp) return false;
+      const processoNormalizado = normalizarTexto(mp.processo);
+      const correspondeEtapa = !etapaFiltroAtivo
+        || (processoNormalizado && processoNormalizado === etapaBusca)
+        || (!processoNormalizado && etapaFiltroAtivo);
+      if (!correspondeEtapa) return false;
+
+      if (!termoBusca) return true;
+
+      const nomeNormalizado = normalizarTexto(mp.nome);
+      const idNormalizado = normalizarTexto(mp.id);
+      return nomeNormalizado.includes(termoBusca) || idNormalizado.includes(termoBusca);
+    });
 
   const unicoPorId = new Map();
   for (const mp of filtrados) {
