@@ -113,8 +113,7 @@ async function listarDetalhesProduto(produtoCodigo, produtoId) {
     const produtoIdEhNumero = Number.isFinite(produtoIdNumero);
 
     const lotesQueryBasica = {
-      select:
-        'id,produto_id,quantidade,ultimo_insumo_id,ultimo_item,data_hora_completa,etapa_id,materia_prima:ultimo_insumo_id(nome,processo)',
+      select: 'id,produto_id,quantidade,ultimo_insumo_id,ultimo_item,data_hora_completa,etapa_id,tempo_estimado_minutos',
       order: 'data_hora_completa.desc'
     };
 
@@ -137,7 +136,7 @@ async function listarDetalhesProduto(produtoCodigo, produtoId) {
         // Fallback minimalista para tentar recuperar dados básicos sem filtros adicionais
         const baseFallbackQuery = {
           select:
-            'id,produto_id,quantidade,ultimo_insumo_id,ultimo_item,data_hora_completa,etapa_id,materia_prima:ultimo_insumo_id(nome,processo)'
+            'id,produto_id,quantidade,ultimo_insumo_id,ultimo_item,data_hora_completa,etapa_id,tempo_estimado_minutos'
         };
         if (produtoIdEhNumero) {
           baseFallbackQuery.produto_id = `eq.${produtoIdNumero}`;
@@ -160,23 +159,43 @@ async function listarDetalhesProduto(produtoCodigo, produtoId) {
       }
     }
 
-    const lotesFormatados = (Array.isArray(lotes) ? lotes : []).map(lote => {
-      const processo = lote?.materia_prima?.processo;
-      const etapa = processo
-        ? String(processo).trim()
-        : lote?.etapa_id
-          ? String(lote.etapa_id).trim() || '—'
-          : '—';
+    const lotesLista = Array.isArray(lotes) ? lotes : [];
+
+    const idsUltimosInsumos = lotesLista
+      .map(lote => lote?.ultimo_insumo_id)
+      .filter(id => id !== undefined && id !== null);
+
+    const nomesUltimosInsumos = new Map();
+
+    for (const id of idsUltimosInsumos) {
+      if (nomesUltimosInsumos.has(id)) continue;
+      try {
+        const resultado = await pool.get('/materia_prima', {
+          query: { select: 'id,nome', id: `eq.${id}`, limit: 1 }
+        });
+        const registro = Array.isArray(resultado) ? resultado[0] : null;
+        nomesUltimosInsumos.set(id, registro?.nome || null);
+      } catch (insumoErr) {
+        console.error('Falha ao buscar materia_prima para ultimo_insumo_id', id, insumoErr?.message || insumoErr);
+        nomesUltimosInsumos.set(id, null);
+      }
+    }
+
+    const lotesFormatados = lotesLista.map(lote => {
+      const etapa = lote?.etapa_id
+        ? String(lote.etapa_id).trim() || '—'
+        : '—';
+      const ultimoItemNome = nomesUltimosInsumos.get(lote?.ultimo_insumo_id) ?? lote?.ultimo_item ?? null;
 
       return {
         id: lote?.id,
         quantidade: lote?.quantidade,
         ultimo_insumo_id: lote?.ultimo_insumo_id,
-        ultimo_item: lote?.materia_prima?.nome || lote?.ultimo_item || null,
+        ultimo_item: ultimoItemNome,
         tempo_estimado_minutos: lote?.tempo_estimado_minutos,
         data_hora_completa: lote?.data_hora_completa,
         etapa,
-        processo: processo ? String(processo).trim() || null : null
+        processo: null
       };
     });
 
