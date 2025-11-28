@@ -163,21 +163,39 @@ async function listarDetalhesProduto(produtoCodigo, produtoId) {
 
     const idsUltimosInsumos = lotesLista
       .map(lote => lote?.ultimo_insumo_id)
-      .filter(id => id !== undefined && id !== null);
+      .filter(id => id !== undefined && id !== null)
+      .filter(id => Number.isFinite(Number(id)));
 
     const nomesUltimosInsumos = new Map();
 
-    for (const id of idsUltimosInsumos) {
-      if (nomesUltimosInsumos.has(id)) continue;
+    if (idsUltimosInsumos.length > 0) {
+      const idsUnicos = Array.from(new Set(idsUltimosInsumos.map(id => Number(id))));
       try {
         const resultado = await pool.get('/materia_prima', {
-          query: { select: 'id,nome', id: `eq.${id}`, limit: 1 }
+          query: { select: 'id,nome', id: `in.(${idsUnicos.join(',')})` }
         });
-        const registro = Array.isArray(resultado) ? resultado[0] : null;
-        nomesUltimosInsumos.set(id, registro?.nome || null);
+
+        if (Array.isArray(resultado)) {
+          resultado.forEach(registro => {
+            if (!registro || registro.id === undefined || registro.id === null) return;
+            nomesUltimosInsumos.set(registro.id, registro?.nome || null);
+          });
+        }
+
+        idsUnicos.forEach(id => {
+          if (!nomesUltimosInsumos.has(id)) {
+            nomesUltimosInsumos.set(id, null);
+          }
+        });
       } catch (insumoErr) {
-        console.error('Falha ao buscar materia_prima para ultimo_insumo_id', id, insumoErr?.message || insumoErr);
-        nomesUltimosInsumos.set(id, null);
+        console.error(
+          'Falha ao buscar materia_prima para ids de ultimo_insumo',
+          idsUnicos,
+          insumoErr?.message || insumoErr
+        );
+        idsUnicos.forEach(id => {
+          nomesUltimosInsumos.set(id, null);
+        });
       }
     }
 
@@ -185,7 +203,8 @@ async function listarDetalhesProduto(produtoCodigo, produtoId) {
       const etapa = lote?.etapa_id
         ? String(lote.etapa_id).trim() || '—'
         : '—';
-      const ultimoItemNome = nomesUltimosInsumos.get(lote?.ultimo_insumo_id) ?? lote?.ultimo_item ?? null;
+      const ultimoItemNome =
+        nomesUltimosInsumos.get(Number(lote?.ultimo_insumo_id)) ?? lote?.ultimo_item ?? null;
 
       return {
         id: lote?.id,
