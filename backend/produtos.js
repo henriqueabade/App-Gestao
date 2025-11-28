@@ -113,7 +113,8 @@ async function listarDetalhesProduto(produtoCodigo, produtoId) {
     const produtoIdEhNumero = Number.isFinite(produtoIdNumero);
 
     const lotesQueryBasica = {
-      select: 'id,produto_id,quantidade,ultimo_insumo_id,data_hora_completa,etapa_id',
+      select:
+        'id,produto_id,quantidade,ultimo_insumo_id,data_hora_completa,etapa_id,materia_prima:ultimo_insumo_id(nome)',
       order: 'data_hora_completa.desc'
     };
 
@@ -134,7 +135,10 @@ async function listarDetalhesProduto(produtoCodigo, produtoId) {
       );
       try {
         // Fallback minimalista para tentar recuperar dados básicos sem filtros adicionais
-        const baseFallbackQuery = {};
+        const baseFallbackQuery = {
+          select:
+            'id,produto_id,quantidade,ultimo_insumo_id,data_hora_completa,etapa_id,materia_prima:ultimo_insumo_id(nome)'
+        };
         if (produtoIdEhNumero) {
           baseFallbackQuery.produto_id = `eq.${produtoIdNumero}`;
         }
