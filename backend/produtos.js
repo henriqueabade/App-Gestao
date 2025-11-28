@@ -116,7 +116,23 @@ async function listarDetalhesProduto(produtoCodigo, produtoId) {
         'Falha ao carregar lotes do produto com parâmetros compatíveis, retornando lista vazia:',
         err?.message || err
       );
-      lotes = [];
+      try {
+        // Fallback minimalista para tentar recuperar dados básicos sem filtros adicionais
+        const fallbackQuery = {};
+        if (produtoId) {
+          fallbackQuery.produto_id = `eq.${produtoId}`;
+        }
+        const lotesFallback = await pool.get(LOTES_ENDPOINT, {
+          query: Object.keys(fallbackQuery).length ? fallbackQuery : undefined
+        });
+        lotes = Array.isArray(lotesFallback) ? lotesFallback : [];
+      } catch (fallbackErr) {
+        console.error(
+          'Fallback simplificado ao carregar lotes também falhou:',
+          fallbackErr?.message || fallbackErr
+        );
+        lotes = [];
+      }
     }
 
     const lotesFormatados = (Array.isArray(lotes) ? lotes : []).map(lote => ({
@@ -135,7 +151,21 @@ async function listarDetalhesProduto(produtoCodigo, produtoId) {
       lotes: lotesFormatados
     };
   } catch (err) {
-    console.error('Erro ao listar detalhes do produto:', err.message);
+    const corpoErro =
+      typeof err?.body === 'object' && err?.body !== null
+        ? { ...err.body, token: err.body?.token ? '[redacted]' : undefined }
+        : err?.body;
+
+    console.error('Erro ao listar detalhes do produto:', err.message, {
+      status: err?.status,
+      body: corpoErro,
+      query: {
+        produtoCodigo,
+        produtoId,
+        itensQuery,
+        lotesQuery: lotesQueryBasica
+      }
+    });
     throw new Error('Erro ao listar detalhes do produto');
   }
 }
