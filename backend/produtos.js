@@ -83,33 +83,47 @@ async function listarDetalhesProduto(produtoCodigo, produtoId) {
       };
     });
 
-    const lotesQuery = {
-      select:
-        'id,quantidade,ultimo_insumo_id,tempo_estimado_minutos,data_hora_completa,etapa_id,materia_prima:ultimo_insumo_id(nome)',
+    const lotesQueryBasica = {
+      select: 'id,quantidade,ultimo_insumo_id,data_hora_completa,etapa_id',
       order: 'data_hora_completa.desc'
     };
 
+    const lotesQueryCompleta = {
+      ...lotesQueryBasica,
+      select: `${lotesQueryBasica.select},tempo_estimado_minutos,materia_prima:ultimo_insumo_id(nome)`
+    };
+
     if (produtoId) {
-      lotesQuery.produto_id = `eq.${produtoId}`;
+      lotesQueryBasica.produto_id = `eq.${produtoId}`;
+      lotesQueryCompleta.produto_id = `eq.${produtoId}`;
     }
 
     if (produtoCodigo) {
-      lotesQuery.produto_codigo = `eq.${produtoCodigo}`;
+      lotesQueryBasica.produto_codigo = `eq.${produtoCodigo}`;
+      lotesQueryCompleta.produto_codigo = `eq.${produtoCodigo}`;
     }
 
     let lotes = [];
     try {
-      lotes = await pool.get('/produtos_em_cada_ponto', { query: lotesQuery });
+      lotes = await pool.get('/produtos_em_cada_ponto', { query: lotesQueryCompleta });
     } catch (err) {
-      console.error('Falha ao carregar lotes do produto, retornando lista vazia:', err?.message || err);
-      lotes = [];
+      console.error('Falha ao carregar lotes do produto, tentando consulta básica:', err?.message || err);
+      try {
+        lotes = await pool.get('/produtos_em_cada_ponto', { query: lotesQueryBasica });
+      } catch (fallbackErr) {
+        console.error(
+          'Falha ao carregar lotes do produto (consulta básica), retornando lista vazia:',
+          fallbackErr?.message || fallbackErr
+        );
+        lotes = [];
+      }
     }
 
     const lotesFormatados = (Array.isArray(lotes) ? lotes : []).map(lote => ({
       id: lote?.id,
       quantidade: lote?.quantidade,
       ultimo_insumo_id: lote?.ultimo_insumo_id,
-      ultimo_item: lote?.materia_prima?.nome,
+      ultimo_item: lote?.materia_prima?.nome || null,
       tempo_estimado_minutos: lote?.tempo_estimado_minutos,
       data_hora_completa: lote?.data_hora_completa,
       etapa: lote?.etapa_id ? String(lote.etapa_id).trim() || '—' : '—'
