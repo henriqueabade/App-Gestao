@@ -21,10 +21,26 @@
   const lotes = Array.isArray(produto?.lotes) ? produto.lotes : [];
   const ultimoLote = lotes.length ? lotes[0] : null;
   const processoPadrao = ultimoLote?.processo || ultimoLote?.etapa || '';
+  let processoPadraoId = processoPadrao && Number.isFinite(Number(processoPadrao)) ? String(processoPadrao) : '';
+  let processoPadraoNome = processoPadraoId ? '' : processoPadrao;
+  let processoSelecionadoId = '';
   const ultimoInsumoId = ultimoLote?.ultimo_insumo_id ? String(ultimoLote.ultimo_insumo_id) : '';
   const ultimoItemNome = ultimoLote?.ultimo_item || '';
   let preenchidoPadrao = false;
   let debounce;
+
+  function atualizarProcessoSelecionadoId(){
+    processoSelecionadoId = processoSelect.selectedOptions[0]?.dataset.id || '';
+    processoSelect.dataset.selectedId = processoSelecionadoId;
+  }
+
+  function processoSelecionadoEhPadrao(){
+    const selecionadoId = processoSelect.selectedOptions[0]?.dataset.id || '';
+    const selecionadoNome = processoSelect.value;
+    const idBate = processoPadraoId && selecionadoId === processoPadraoId;
+    const nomeBate = processoPadraoNome && selecionadoNome === processoPadraoNome;
+    return Boolean(idBate || nomeBate);
+  }
 
   async function carregarProcessos(){ // carga de processos
     try{
@@ -34,11 +50,20 @@
         processos.map(p => `<option value="${p.nome}" data-id="${p.id}">${p.nome}</option>`).join('');
 
       if(processoPadrao){
-        const opcaoPadrao = Array.from(processoSelect.options).find(opt => opt.value === processoPadrao || opt.textContent === processoPadrao);
+        const opcaoPadrao = Array.from(processoSelect.options).find(opt => {
+          const opcaoId = opt.dataset.id || '';
+          return opt.value === processoPadrao || opt.textContent === processoPadrao || opcaoId === String(processoPadrao);
+        });
         if(opcaoPadrao){
           processoSelect.value = opcaoPadrao.value;
+          processoPadraoId = opcaoPadrao.dataset.id || processoPadraoId;
+          processoPadraoNome = opcaoPadrao.value || processoPadraoNome;
+          atualizarProcessoSelecionadoId();
           preenchidoPadrao = false;
           carregarItens();
+        }else{
+          processoPadraoId = processoPadraoId || '';
+          processoPadraoNome = processoPadraoNome || '';
         }
       }
     }catch(err){
@@ -48,7 +73,7 @@
 
   function preencherItemPadrao(){
     if(preenchidoPadrao) return;
-    if(processoPadrao && processoSelect.value !== processoPadrao) return;
+    if(processoPadrao && !processoSelecionadoEhPadrao()) return;
     if(!ultimoInsumoId) return;
     const opcaoItem = Array.from(itemOptions.querySelectorAll('option')).find(o => String(o.dataset.id) === String(ultimoInsumoId));
     if(opcaoItem){
@@ -61,11 +86,11 @@
     itemInput.disabled = true;
     itemMensagem.textContent = '';
     itemOptions.innerHTML = '';
-    const etapa = processoSelect.value;
+    const etapa = processoSelecionadoId || processoSelect.value;
     const codigo = window.produtoDetalhes?.codigo;
     if(!etapa || !codigo){ itemInput.disabled = true; return; }
     try{
-      const itens = await window.electronAPI.listarItensProcessoProduto(codigo, etapa, termo);
+      const itens = await window.electronAPI.listarItensProcessoProduto(codigo, { id: processoSelecionadoId, nome: processoSelect.value }, termo);
       if(itens.length){
         itemOptions.innerHTML = itens.map(i => `<option value="${i.nome}" data-id="${i.id}"></option>`).join('');
       }else{
@@ -80,7 +105,8 @@
 
   processoSelect.addEventListener('change', () => {
     itemInput.value = '';
-    preenchidoPadrao = processoSelect.value !== processoPadrao;
+    atualizarProcessoSelecionadoId();
+    preenchidoPadrao = !processoSelecionadoEhPadrao();
     carregarItens();
   });
 
@@ -95,7 +121,7 @@
   if(form){
     form.addEventListener('submit', async e => {
       e.preventDefault();
-      const etapa = processoSelect.value;
+      const etapa = processoSelecionadoId || processoSelect.value;
       const itemNome = itemInput.value.trim();
       const option = Array.from(itemOptions.querySelectorAll('option')).find(o => o.value === itemNome);
       const itemId = option?.dataset.id;
@@ -107,7 +133,11 @@
       const produto = window.produtoDetalhes;
       if(!produto) return;
       const etapaNome = processoSelect.options[processoSelect.selectedIndex]?.textContent || etapa;
-      const existente = produto.lotes?.find(l => String(l.etapa) === String(etapa) && String(l.ultimo_insumo_id) === String(itemId));
+      const existente = produto.lotes?.find(l => {
+        const etapaLote = String(l.etapa ?? l.processo ?? '');
+        return (String(etapaLote) === String(etapa) || String(etapaLote) === String(processoSelect.value))
+          && String(l.ultimo_insumo_id) === String(itemId);
+      });
       if(existente){
         window.somarEstoqueInfo = {
           existing: existente,
@@ -145,6 +175,7 @@
               codigo: produto.codigo
             },
             etapa: etapaNome,
+            etapaId: processoSelecionadoId || null,
             itemNome,
             quantidade
           }
