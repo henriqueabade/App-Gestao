@@ -53,15 +53,19 @@ async function listarDetalhesProduto(produtoCodigo, produtoId) {
     });
     const produto = Array.isArray(produtos) ? produtos[0] : null;
     produtoId = produtoId || produto?.id || null;
+    produtoCodigo = produtoCodigo || produto?.codigo || null;
 
-    const itens = await pool.get('/produtos_insumos', {
-      query: {
-        select:
-          'id,produto_codigo,insumo_id,quantidade,ordem_insumo,materia_prima:insumo_id(nome,preco_unitario,unidade,processo)',
-        produto_codigo: `eq.${produtoCodigo}`,
-        order: 'materia_prima.processo,ordem_insumo'
-      }
-    });
+    const itensQuery = {
+      select:
+        'id,produto_codigo,insumo_id,quantidade,ordem_insumo,materia_prima:insumo_id(nome,preco_unitario,unidade,processo)',
+      order: 'materia_prima.processo,ordem_insumo'
+    };
+
+    if (produtoCodigo) {
+      itensQuery.produto_codigo = `eq.${produtoCodigo}`;
+    }
+
+    const itens = await pool.get('/produtos_insumos', { query: itensQuery });
 
     const itensFormatados = (Array.isArray(itens) ? itens : []).map(item => {
       const precoUnitario = Number(item?.materia_prima?.preco_unitario) || 0;
@@ -79,15 +83,21 @@ async function listarDetalhesProduto(produtoCodigo, produtoId) {
       };
     });
 
-    const lotes = await pool.get('/produtos_em_cada_ponto', {
-      query: {
-        select:
-          'id,quantidade,ultimo_insumo_id,tempo_estimado_minutos,data_hora_completa,etapa_id,materia_prima:ultimo_insumo_id(nome)',
-        produto_id: produtoId ? `eq.${produtoId}` : undefined,
-        produto_codigo: produtoCodigo ? `eq.${produtoCodigo}` : undefined,
-        order: 'data_hora_completa.desc'
-      }
-    });
+    const lotesQuery = {
+      select:
+        'id,quantidade,ultimo_insumo_id,tempo_estimado_minutos,data_hora_completa,etapa_id,materia_prima:ultimo_insumo_id(nome)',
+      order: 'data_hora_completa.desc'
+    };
+
+    if (produtoId) {
+      lotesQuery.produto_id = `eq.${produtoId}`;
+    }
+
+    if (produtoCodigo) {
+      lotesQuery.produto_codigo = `eq.${produtoCodigo}`;
+    }
+
+    const lotes = await pool.get('/produtos_em_cada_ponto', { query: lotesQuery });
 
     const lotesFormatados = (Array.isArray(lotes) ? lotes : []).map(lote => ({
       id: lote?.id,

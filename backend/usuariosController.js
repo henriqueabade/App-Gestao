@@ -15,6 +15,41 @@ function buildPayload(body = {}) {
   };
 }
 
+function normalizeAvatar(usuario = {}) {
+  const { fotoUsuario, foto_usuario, ...rest } = usuario || {};
+  const normalized = { ...rest };
+  const id = usuario?.id ?? usuario?.usuario_id;
+  const avatarVersion =
+    usuario?.avatarVersion ??
+    usuario?.avatar_version ??
+    usuario?.avatar_updated_at ??
+    usuario?.avatarUpdatedAt ??
+    usuario?.avatar_atualizado_em ??
+    usuario?.avatarAtualizadoEm ??
+    usuario?.foto_atualizado_em ??
+    usuario?.fotoAtualizadoEm ??
+    null;
+
+  const avatarUrl = usuario?.avatarUrl ?? usuario?.avatar_url ?? (id ? `/users/${id}/avatar` : null);
+
+  if (avatarUrl) {
+    normalized.avatarUrl = avatarUrl;
+    normalized.avatar_url = avatarUrl;
+    normalized.foto = avatarUrl;
+    normalized.fotoUrl = avatarUrl;
+  }
+
+  if (avatarVersion !== null && avatarVersion !== undefined) {
+    const value = typeof avatarVersion === 'string' ? avatarVersion.trim() : String(avatarVersion);
+    if (value) {
+      normalized.avatarVersion = value;
+      normalized.avatar_version = value;
+    }
+  }
+
+  return normalized;
+}
+
 router.get('/', async (req, res) => {
   try {
     const api = createApiClient(req);
@@ -23,6 +58,29 @@ router.get('/', async (req, res) => {
   } catch (err) {
     console.error('Erro ao listar usuários:', err);
     res.status(err.status || 500).json({ error: 'Erro ao listar usuários' });
+  }
+});
+
+router.get('/lista', async (req, res) => {
+  try {
+    const api = createApiClient(req);
+    const usuarios = await api.get('/api/usuarios/lista', { query: req.query });
+    const payload = Array.isArray(usuarios) ? usuarios.map(normalizeAvatar) : [];
+    res.status(200).json(payload);
+  } catch (err) {
+    console.error('Erro ao listar usuários (rota /lista):', err);
+    res.status(err.status || 500).json({ error: 'Erro ao listar usuários' });
+  }
+});
+
+router.get('/me', async (req, res) => {
+  try {
+    const api = createApiClient(req);
+    const usuario = await api.get('/api/usuarios/me');
+    res.status(200).json(normalizeAvatar(usuario || {}));
+  } catch (err) {
+    console.error('Erro ao buscar usuário autenticado:', err);
+    res.status(err.status || 500).json({ error: 'Erro ao buscar usuário autenticado' });
   }
 });
 

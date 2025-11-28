@@ -139,3 +139,4 @@ dist
 .env
 
 alteracoes.patch
+data/authToken.json
