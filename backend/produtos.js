@@ -16,26 +16,10 @@ function tipo(v) {
 /**
  * Lista todos os produtos (resumo)
  */
-const LOTES_ENDPOINTS = ['/produtos_em_cada_ponto', '/produtos-em-cada-ponto'];
+const LOTES_ENDPOINT = '/produtos_em_cada_ponto';
 
 async function executarLotes(method, pathSuffix = '', payload) {
-  let ultimaFalha = null;
-
-  for (const endpoint of LOTES_ENDPOINTS) {
-    try {
-      return await pool[method](`${endpoint}${pathSuffix}`, payload);
-    } catch (err) {
-      ultimaFalha = err;
-      const statusInfo = err?.status ? ` (status ${err.status})` : '';
-      console.warn(
-        `Falha ao executar ${method.toUpperCase()} em ${endpoint}${pathSuffix}${statusInfo}, tentando próximo endpoint...`,
-        err?.message || err
-      );
-    }
-  }
-
-  if (ultimaFalha) throw ultimaFalha;
-  return null;
+  return pool[method](`${LOTES_ENDPOINT}${pathSuffix}`, payload);
 }
 
 async function listarProdutos() {
@@ -66,24 +50,8 @@ async function listarProdutos() {
 }
 
 async function carregarLotesSeguros(query) {
-  let ultimaFalha = null;
-
-  for (const endpoint of LOTES_ENDPOINTS) {
-    try {
-      const dados = await pool.get(endpoint, { query });
-      return Array.isArray(dados) ? dados : [];
-    } catch (err) {
-      ultimaFalha = err;
-      const statusInfo = err?.status ? ` (status ${err.status})` : '';
-      console.warn(
-        `Falha ao carregar lotes via ${endpoint}${statusInfo}, tentando próximo endpoint...`,
-        err?.message || err
-      );
-    }
-  }
-
-  if (ultimaFalha) throw ultimaFalha;
-  return [];
+  const dados = await pool.get(LOTES_ENDPOINT, { query });
+  return Array.isArray(dados) ? dados : [];
 }
 
 async function listarDetalhesProduto(produtoCodigo, produtoId) {
