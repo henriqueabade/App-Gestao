@@ -16,12 +16,32 @@ function tipo(v) {
 /**
  * Lista todos os produtos (resumo)
  */
+const LOTES_ENDPOINTS = ['/produtos_em_cada_ponto', '/produtos-em-cada-ponto'];
+
+async function executarLotes(method, pathSuffix = '', payload) {
+  let ultimaFalha = null;
+
+  for (const endpoint of LOTES_ENDPOINTS) {
+    try {
+      return await pool[method](`${endpoint}${pathSuffix}`, payload);
+    } catch (err) {
+      ultimaFalha = err;
+      const statusInfo = err?.status ? ` (status ${err.status})` : '';
+      console.warn(
+        `Falha ao executar ${method.toUpperCase()} em ${endpoint}${pathSuffix}${statusInfo}, tentando próximo endpoint...`,
+        err?.message || err
+      );
+    }
+  }
+
+  if (ultimaFalha) throw ultimaFalha;
+  return null;
+}
+
 async function listarProdutos() {
   try {
     const produtos = await pool.get('/produtos');
-    const lotes = await pool.get('/produtos_em_cada_ponto', {
-      query: { select: 'produto_id,quantidade' }
-    });
+    const lotes = await carregarLotesSeguros({ select: 'produto_id,quantidade' });
     const listaProdutos = Array.isArray(produtos) ? produtos : [];
     const listaLotes = Array.isArray(lotes) ? lotes : [];
 
@@ -43,6 +63,27 @@ async function listarProdutos() {
     console.error('Erro ao listar produtos:', err.message);
     throw err;
   }
+}
+
+async function carregarLotesSeguros(query) {
+  let ultimaFalha = null;
+
+  for (const endpoint of LOTES_ENDPOINTS) {
+    try {
+      const dados = await pool.get(endpoint, { query });
+      return Array.isArray(dados) ? dados : [];
+    } catch (err) {
+      ultimaFalha = err;
+      const statusInfo = err?.status ? ` (status ${err.status})` : '';
+      console.warn(
+        `Falha ao carregar lotes via ${endpoint}${statusInfo}, tentando próximo endpoint...`,
+        err?.message || err
+      );
+    }
+  }
+
+  if (ultimaFalha) throw ultimaFalha;
+  return [];
 }
 
 async function listarDetalhesProduto(produtoCodigo, produtoId) {
@@ -101,7 +142,7 @@ async function listarDetalhesProduto(produtoCodigo, produtoId) {
 
     let lotes = [];
     try {
-      lotes = await pool.get('/produtos_em_cada_ponto', { query: lotesQueryBasica });
+      lotes = await carregarLotesSeguros(lotesQueryBasica);
     } catch (err) {
       console.error(
         'Falha ao carregar lotes do produto com parâmetros compatíveis, retornando lista vazia:',
@@ -396,11 +437,9 @@ async function excluirProduto(id) {
     await pool.delete(`/produtos_insumos/${insumo.id}`);
   }
 
-  const lotes = await pool.get('/produtos_em_cada_ponto', {
-    query: { select: 'id', produto_id: `eq.${id}` }
-  });
+  const lotes = await carregarLotesSeguros({ select: 'id', produto_id: `eq.${id}` });
   for (const lote of Array.isArray(lotes) ? lotes : []) {
-    await pool.delete(`/produtos_em_cada_ponto/${lote.id}`);
+    await executarLotes('delete', `/${lote.id}`);
   }
 
   await pool.delete(`/produtos/${id}`);
@@ -418,7 +457,7 @@ async function excluirProduto(id) {
  * @returns {Promise<Object>}            Registro completo do lote recém inserido.
  */
 async function inserirLoteProduto({ produtoId, etapa, ultimoInsumoId, quantidade }) {
-  return pool.post('/produtos_em_cada_ponto', {
+  return executarLotes('post', '', {
     produto_id: produtoId,
     etapa_id: etapa,
     ultimo_insumo_id: ultimoInsumoId,
@@ -431,14 +470,14 @@ async function inserirLoteProduto({ produtoId, etapa, ultimoInsumoId, quantidade
  * Atualiza um lote (quantidade + data)
  */
 async function atualizarLoteProduto(id, quantidade) {
-  return pool.put(`/produtos_em_cada_ponto/${id}`, {
+  return executarLotes('put', `/${id}`, {
     quantidade,
     data_hora_completa: new Date().toISOString()
   });
 }
 
 async function excluirLoteProduto(id) {
-  await pool.delete(`/produtos_em_cada_ponto/${id}`);
+  await executarLotes('delete', `/${id}`);
 }
 
 /**
@@ -522,15 +561,13 @@ async function salvarProdutoDetalhado(codigoOriginal, produto, itens) {
     const deleted = await pool.delete(`/produtos_insumos/${del.id}`).catch(() => null);
     const insumoId = deleted?.insumo_id || del.insumo_id;
     if (insumoId != null) {
-      const lotesRelacionados = await pool.get('/produtos_em_cada_ponto', {
-        query: {
-          select: 'id',
-          produto_id: `eq.${produtoAtual.id}`,
-          ultimo_insumo_id: `eq.${insumoId}`
-        }
+      const lotesRelacionados = await carregarLotesSeguros({
+        select: 'id',
+        produto_id: `eq.${produtoAtual.id}`,
+        ultimo_insumo_id: `eq.${insumoId}`
       });
       for (const lote of Array.isArray(lotesRelacionados) ? lotesRelacionados : []) {
-        await pool.delete(`/produtos_em_cada_ponto/${lote.id}`);
+        await executarLotes('delete', `/${lote.id}`);
       }
     }
   }

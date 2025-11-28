@@ -661,10 +661,6 @@ const MenuStartupPreferences = (() => {
         const headers = new Headers(options.headers || {});
         const storedUserId = getStoredUserId();
 
-        if (storedUserId && !headers.has('authorization')) {
-            headers.set('authorization', `Bearer ${storedUserId}`);
-        }
-
         if (storedUserId && !headers.has('x-usuario-id')) {
             headers.set('x-usuario-id', String(storedUserId));
         }
