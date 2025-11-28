@@ -175,24 +175,31 @@ async function listarDetalhesProduto(produtoCodigo, produtoId) {
       const BATCH_SIZE = 30;
       for (let i = 0; i < idsUnicos.length; i += BATCH_SIZE) {
         const batchIds = idsUnicos.slice(i, i + BATCH_SIZE);
-        try {
-          const resultado = await pool.get('/materia_prima', {
-            query: { select: 'id,nome', id: `in.(${batchIds.join(',')})` }
-          });
 
-          if (Array.isArray(resultado)) {
-            resultado.forEach(registro => {
-              if (!registro || registro.id === undefined || registro.id === null) return;
-              nomesUltimosInsumos.set(registro.id, registro?.nome || null);
+        const consultas = batchIds.map(async id => {
+          try {
+            const resultado = await pool.get('/materia_prima', {
+              query: { select: 'id,nome', id }
             });
+
+            if (Array.isArray(resultado)) {
+              resultado.forEach(registro => {
+                if (!registro || registro.id === undefined || registro.id === null) return;
+                nomesUltimosInsumos.set(registro.id, registro?.nome || null);
+              });
+            } else if (resultado && resultado.id !== undefined && resultado.id !== null) {
+              nomesUltimosInsumos.set(resultado.id, resultado?.nome || null);
+            }
+          } catch (insumoErr) {
+            console.error(
+              'Falha ao buscar materia_prima para ids de ultimo_insumo',
+              id,
+              insumoErr?.message || insumoErr
+            );
           }
-        } catch (insumoErr) {
-          console.error(
-            'Falha ao buscar materia_prima para ids de ultimo_insumo',
-            batchIds,
-            insumoErr?.message || insumoErr
-          );
-        }
+        });
+
+        await Promise.allSettled(consultas);
       }
     }
 
