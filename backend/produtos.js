@@ -366,7 +366,8 @@ async function listarItensProcessoProduto(codigo, etapa, busca = '') {
 
   const itens = await pool.get('/produtos_insumos', {
     query: {
-      select: 'insumo_id,materia_prima:insumo_id(id,nome,processo)',
+      select:
+        'insumo_id,materia_prima:insumo_id(id,nome,processo,etapa:etapas_producao(id,nome))',
       produto_codigo: `eq.${codigo}`
     }
   });
@@ -377,10 +378,21 @@ async function listarItensProcessoProduto(codigo, etapa, busca = '') {
     .map(item => item?.materia_prima)
     .filter(mp => {
       if (!mp) return false;
-      const processoNormalizado = normalizarTexto(mp.processo);
+
+      const etapaRelacionada = mp?.etapa || mp?.etapas_producao || null;
+      const processoNumerico = Number(mp?.processo);
+      const processoIdNormalizado = Number.isFinite(processoNumerico)
+        ? String(processoNumerico).trim()
+        : '';
+      const etapaNomeNormalizado = normalizarTexto(etapaRelacionada?.nome || mp.processo);
+      const etapaIdNormalizado = etapaRelacionada?.id !== undefined && etapaRelacionada?.id !== null
+        ? String(etapaRelacionada.id).trim()
+        : processoIdNormalizado;
+
       const correspondeEtapa = !etapaFiltroAtivo
-        || (processoNormalizado && processoNormalizado === etapaBusca)
-        || (!processoNormalizado && etapaFiltroAtivo);
+        || (etapaIdBusca && etapaIdNormalizado && etapaIdNormalizado === etapaIdBusca)
+        || (etapaBusca && etapaNomeNormalizado && etapaNomeNormalizado === etapaBusca);
+
       if (!correspondeEtapa) return false;
 
       if (!termoBusca) return true;
