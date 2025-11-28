@@ -97,7 +97,13 @@ async function listarDetalhesProduto(produtoCodigo, produtoId) {
       lotesQuery.produto_codigo = `eq.${produtoCodigo}`;
     }
 
-    const lotes = await pool.get('/produtos_em_cada_ponto', { query: lotesQuery });
+    let lotes = [];
+    try {
+      lotes = await pool.get('/produtos_em_cada_ponto', { query: lotesQuery });
+    } catch (err) {
+      console.error('Falha ao carregar lotes do produto, retornando lista vazia:', err?.message || err);
+      lotes = [];
+    }
 
     const lotesFormatados = (Array.isArray(lotes) ? lotes : []).map(lote => ({
       id: lote?.id,
@@ -237,17 +243,31 @@ async function removerEtapaProducao(nome) {
  * Aceita etapa por id (int) OU por nome (text).
  */
 async function listarItensProcessoProduto(codigo, etapa, busca = '') {
-  const sql = `
-    SELECT DISTINCT mp.id, mp.nome
-      FROM materia_prima mp
-      JOIN produtos_insumos pi ON pi.insumo_id = mp.id
-      JOIN etapas_producao ep ON (ep.id::text = $2::text OR ep.nome = $2::text)
-     WHERE pi.produto_codigo = $1::text
-       AND mp.processo = ep.nome
-       AND mp.nome ILIKE $3
-     ORDER BY mp.nome ASC`;
-  const res = await pool.query(sql, [codigo, etapa, '%' + busca + '%']);
-  return res.rows;
+  const etapaBusca = String(etapa || '').trim().toLowerCase();
+  const termoBusca = String(busca || '').trim().toLowerCase();
+
+  const itens = await pool.get('/produtos_insumos', {
+    query: {
+      select: 'insumo_id,materia_prima:insumo_id(id,nome,processo)',
+      produto_codigo: `eq.${codigo}`
+    }
+  });
+
+  const lista = Array.isArray(itens) ? itens : [];
+
+  const filtrados = lista
+    .map(item => item?.materia_prima)
+    .filter(mp => mp && (!etapaBusca || String(mp.processo || '').trim().toLowerCase() === etapaBusca))
+    .filter(mp => !termoBusca || String(mp.nome || '').toLowerCase().includes(termoBusca));
+
+  const unicoPorId = new Map();
+  for (const mp of filtrados) {
+    if (!unicoPorId.has(mp.id)) {
+      unicoPorId.set(mp.id, { id: mp.id, nome: mp.nome });
+    }
+  }
+
+  return Array.from(unicoPorId.values()).sort((a, b) => String(a.nome || '').localeCompare(String(b.nome || '')));
 }
 
 /**
