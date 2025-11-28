@@ -50,6 +50,34 @@ function normalizeAvatar(usuario = {}) {
   return normalized;
 }
 
+function extractUserIdFromToken(token) {
+  const raw = typeof token === 'string' ? token.trim() : '';
+  if (!raw) return null;
+
+  const bearerMatch = raw.match(/^Bearer\s+(.+)/i);
+  const stripped = bearerMatch ? bearerMatch[1].trim() : raw;
+  const numeric = Number(stripped);
+  if (Number.isInteger(numeric) && numeric > 0) {
+    return numeric;
+  }
+
+  const jwtParts = stripped.split('.');
+  if (jwtParts.length === 3) {
+    try {
+      const payload = JSON.parse(Buffer.from(jwtParts[1], 'base64').toString('utf-8'));
+      const candidates = [payload?.id, payload?.usuarioId, payload?.userId, payload?.sub];
+      for (const candidate of candidates) {
+        const parsed = Number(candidate);
+        if (Number.isInteger(parsed) && parsed > 0) {
+          return parsed;
+        }
+      }
+    } catch (_) {}
+  }
+
+  return null;
+}
+
 router.get('/', async (req, res) => {
   try {
     const api = createApiClient(req);
@@ -83,7 +111,9 @@ router.get('/lista', async (req, res) => {
 router.get('/me', async (req, res) => {
   try {
     const api = createApiClient(req);
-    const usuario = await api.get('/api/usuarios/me');
+    const tokenFromRequest = req.headers?.authorization || getToken();
+    const userId = extractUserIdFromToken(tokenFromRequest);
+    const usuario = userId ? await api.get(`/api/usuarios/${userId}`) : await api.get('/api/usuarios/me');
     res.status(200).json(normalizeAvatar(usuario || {}));
   } catch (err) {
     console.error('Erro ao buscar usuário autenticado:', err);
