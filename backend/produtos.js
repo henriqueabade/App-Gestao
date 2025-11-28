@@ -19,7 +19,9 @@ function tipo(v) {
 async function listarProdutos() {
   try {
     const produtos = await pool.get('/produtos');
-    const lotes = await pool.get('/produtos_em_cada_ponto');
+    const lotes = await pool.get('/produtos_em_cada_ponto', {
+      query: { select: 'produto_id,quantidade' }
+    });
     const listaProdutos = Array.isArray(produtos) ? produtos : [];
     const listaLotes = Array.isArray(lotes) ? lotes : [];
 
@@ -89,39 +91,23 @@ async function listarDetalhesProduto(produtoCodigo, produtoId) {
     });
 
     const lotesQueryBasica = {
-      select: 'id,quantidade,ultimo_insumo_id,data_hora_completa,etapa_id',
+      select: 'id,produto_id,quantidade,ultimo_insumo_id,data_hora_completa,etapa_id',
       order: 'data_hora_completa.desc'
-    };
-
-    const lotesQueryCompleta = {
-      ...lotesQueryBasica,
-      select: `${lotesQueryBasica.select},tempo_estimado_minutos,materia_prima:ultimo_insumo_id(nome)`
     };
 
     if (produtoId) {
       lotesQueryBasica.produto_id = `eq.${produtoId}`;
-      lotesQueryCompleta.produto_id = `eq.${produtoId}`;
-    }
-
-    if (produtoCodigo) {
-      lotesQueryBasica.produto_codigo = `eq.${produtoCodigo}`;
-      lotesQueryCompleta.produto_codigo = `eq.${produtoCodigo}`;
     }
 
     let lotes = [];
     try {
-      lotes = await pool.get('/produtos_em_cada_ponto', { query: lotesQueryCompleta });
+      lotes = await pool.get('/produtos_em_cada_ponto', { query: lotesQueryBasica });
     } catch (err) {
-      console.error('Falha ao carregar lotes do produto, tentando consulta básica:', err?.message || err);
-      try {
-        lotes = await pool.get('/produtos_em_cada_ponto', { query: lotesQueryBasica });
-      } catch (fallbackErr) {
-        console.error(
-          'Falha ao carregar lotes do produto (consulta básica), retornando lista vazia:',
-          fallbackErr?.message || fallbackErr
-        );
-        lotes = [];
-      }
+      console.error(
+        'Falha ao carregar lotes do produto com parâmetros compatíveis, retornando lista vazia:',
+        err?.message || err
+      );
+      lotes = [];
     }
 
     const lotesFormatados = (Array.isArray(lotes) ? lotes : []).map(lote => ({

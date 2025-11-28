@@ -64,7 +64,14 @@ router.get('/', async (req, res) => {
 router.get('/lista', async (req, res) => {
   try {
     const api = createApiClient(req);
-    const usuarios = await api.get('/api/usuarios/lista', { query: req.query });
+    const query = {
+      select:
+        'id,nome,email,perfil,status,permissoes,modelo_permissoes_id,avatar_url,avatar_updated_at,avatar_atualizado_em,foto_usuario',
+      order: 'nome',
+      ...req.query
+    };
+
+    const usuarios = await api.get('/api/usuarios', { query });
     const payload = Array.isArray(usuarios) ? usuarios.map(normalizeAvatar) : [];
     res.status(200).json(payload);
   } catch (err) {
