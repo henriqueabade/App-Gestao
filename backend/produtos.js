@@ -13,6 +13,16 @@ function tipo(v) {
   return Object.prototype.toString.call(v);
 }
 
+function normalizarCorpoErro(err) {
+  if (!err) return null;
+  if (typeof err?.body === 'object' && err.body !== null) {
+    const corpo = { ...err.body };
+    if (corpo.token) corpo.token = '[redacted]';
+    return corpo;
+  }
+  return err?.body || null;
+}
+
 /**
  * Lista todos os produtos (resumo)
  */
@@ -99,37 +109,48 @@ async function listarDetalhesProduto(produtoCodigo, produtoId) {
       };
     });
 
+    const produtoIdNumero = Number(produtoId);
+    const produtoIdEhNumero = Number.isFinite(produtoIdNumero);
+
     const lotesQueryBasica = {
       select: 'id,produto_id,quantidade,ultimo_insumo_id,data_hora_completa,etapa_id',
       order: 'data_hora_completa.desc'
     };
 
-    if (produtoId) {
-      lotesQueryBasica.produto_id = `eq.${produtoId}`;
+    if (produtoIdEhNumero) {
+      lotesQueryBasica.produto_id = produtoIdNumero;
     }
 
     let lotes = [];
+    let fallbackQuery;
     try {
       lotes = await carregarLotesSeguros(lotesQueryBasica);
     } catch (err) {
+      const corpoErro = normalizarCorpoErro(err);
       console.error(
         'Falha ao carregar lotes do produto com parâmetros compatíveis, retornando lista vazia:',
-        err?.message || err
+        err?.message || err,
+        corpoErro ? { body: corpoErro, query: lotesQueryBasica } : { body: corpoErro }
       );
       try {
         // Fallback minimalista para tentar recuperar dados básicos sem filtros adicionais
-        const fallbackQuery = {};
-        if (produtoId) {
-          fallbackQuery.produto_id = `eq.${produtoId}`;
+        const baseFallbackQuery = {};
+        if (produtoIdEhNumero) {
+          baseFallbackQuery.produto_id = `eq.${produtoIdNumero}`;
         }
+        fallbackQuery = baseFallbackQuery;
         const lotesFallback = await pool.get(LOTES_ENDPOINT, {
           query: Object.keys(fallbackQuery).length ? fallbackQuery : undefined
         });
         lotes = Array.isArray(lotesFallback) ? lotesFallback : [];
       } catch (fallbackErr) {
+        const corpoFallback = normalizarCorpoErro(fallbackErr);
         console.error(
           'Fallback simplificado ao carregar lotes também falhou:',
-          fallbackErr?.message || fallbackErr
+          fallbackErr?.message || fallbackErr,
+          corpoFallback
+            ? { body: corpoFallback, query: { fallback: true, ...(fallbackQuery || {}) } }
+            : { body: corpoFallback }
         );
         lotes = [];
       }
@@ -151,10 +172,7 @@ async function listarDetalhesProduto(produtoCodigo, produtoId) {
       lotes: lotesFormatados
     };
   } catch (err) {
-    const corpoErro =
-      typeof err?.body === 'object' && err?.body !== null
-        ? { ...err.body, token: err.body?.token ? '[redacted]' : undefined }
-        : err?.body;
+    const corpoErro = normalizarCorpoErro(err);
 
     console.error('Erro ao listar detalhes do produto:', err.message, {
       status: err?.status,

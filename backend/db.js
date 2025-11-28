@@ -5,7 +5,7 @@ const { AsyncLocalStorage } = require('async_hooks');
 const RAW_API_BASE_URL =
   (process.env.API_BASE_URL && process.env.API_BASE_URL.trim()) ||
   (process.env.API_URL && process.env.API_URL.trim()) ||
-  'http://localhost:3000';
+  'https://api.santissimodecor.com.br';
 const NORMALIZED_API_BASE_URL = RAW_API_BASE_URL.replace(/\/$/, '');
 const API_BASE_URL = NORMALIZED_API_BASE_URL.endsWith('/api')
   ? NORMALIZED_API_BASE_URL

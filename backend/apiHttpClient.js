@@ -3,7 +3,7 @@ const { getToken } = require('./tokenStore');
 const RAW_API_BASE_URL =
   (process.env.API_BASE_URL && process.env.API_BASE_URL.trim()) ||
   (process.env.API_URL && process.env.API_URL.trim()) ||
-  'http://localhost:3000';
+  'https://api.santissimodecor.com.br';
 const API_BASE_URL = RAW_API_BASE_URL.replace(/\/$/, '');
 const DEFAULT_BEARER_TOKEN = normalizeToken(
   process.env.API_BEARER_TOKEN || process.env.DEFAULT_API_TOKEN || 'test-token'
