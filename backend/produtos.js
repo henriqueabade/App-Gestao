@@ -137,7 +137,7 @@ async function listarDetalhesProduto(produtoCodigo, produtoId) {
         // Fallback minimalista para tentar recuperar dados básicos sem filtros adicionais
         const baseFallbackQuery = {
           select:
-            'id,produto_id,quantidade,ultimo_insumo_id,data_hora_completa,etapa_id,materia_prima:ultimo_insumo_id(nome)'
+            'id,produto_id,quantidade,ultimo_insumo_id,ultimo_item,data_hora_completa,etapa_id,materia_prima:ultimo_insumo_id(nome,processo)'
         };
         if (produtoIdEhNumero) {
           baseFallbackQuery.produto_id = `eq.${produtoIdNumero}`;
