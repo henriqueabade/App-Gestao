@@ -124,7 +124,14 @@ window.addEventListener('DOMContentLoaded', () => {
   const applyUserProfile = userData => {
     const user = userData && typeof userData === 'object' ? userData : {};
     const nome = user.nome || '';
-    const perfil = user.perfil || '';
+    const perfil =
+      user.perfil ||
+      user.tipo_perfil ||
+      user.tipoPerfil ||
+      user.perfil_nome ||
+      user.perfilNome ||
+      user.role ||
+      '';
     const isSupAdmin = perfil === 'Sup Admin';
     const isAdmin = perfil === 'Admin';
     const hasAdminAccess = isSupAdmin || isAdmin;

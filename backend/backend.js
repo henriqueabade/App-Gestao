@@ -52,10 +52,18 @@ async function loginUsuario(email, senha) {
     }
 
     const user = data?.usuario || data?.user || {};
+    const perfil =
+      user.perfil ||
+      user.tipo_perfil ||
+      user.tipoPerfil ||
+      user.perfil_nome ||
+      user.perfilNome ||
+      user.role ||
+      null;
     return {
       id: user.id,
       nome: user.nome,
-      perfil: user.perfil,
+      perfil,
       email: user.email,
       token: data?.token || null
     };
