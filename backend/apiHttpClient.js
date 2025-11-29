@@ -1,4 +1,4 @@
-const { getToken, clearToken } = require('./tokenStore');
+const { getToken } = require('./tokenStore');
 
 const RAW_API_BASE_URL =
   (process.env.API_BASE_URL && process.env.API_BASE_URL.trim()) ||
@@ -77,16 +77,6 @@ function createApiClient(req) {
       const error = new Error(`Falha na requisição ${method} ${normalizedPath}: ${response.status}`);
       error.status = response.status;
       error.body = data;
-
-      if (
-        response.status === 401 &&
-        bearer &&
-        typeof data?.error === 'string' &&
-        data.error.toLowerCase().includes('token inválido')
-      ) {
-        clearToken();
-      }
-
       throw error;
     }
 

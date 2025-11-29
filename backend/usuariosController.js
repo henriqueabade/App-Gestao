@@ -78,14 +78,6 @@ function extractUserIdFromToken(token) {
   return null;
 }
 
-function buildErrorPayload(err, fallbackMessage) {
-  if (err?.status === 401) {
-    return { error: 'Sessão expirada. Faça login novamente.' };
-  }
-
-  return { error: fallbackMessage };
-}
-
 router.get('/', async (req, res) => {
   try {
     const api = createApiClient(req);
@@ -93,7 +85,7 @@ router.get('/', async (req, res) => {
     res.json(Array.isArray(usuarios) ? usuarios : []);
   } catch (err) {
     console.error('Erro ao listar usuários:', err);
-    res.status(err.status || 500).json(buildErrorPayload(err, 'Erro ao listar usuários'));
+    res.status(err.status || 500).json({ error: 'Erro ao listar usuários' });
   }
 });
 
@@ -112,7 +104,7 @@ router.get('/lista', async (req, res) => {
     res.status(200).json(payload);
   } catch (err) {
     console.error('Erro ao listar usuários (rota /lista):', err);
-    res.status(err.status || 500).json(buildErrorPayload(err, 'Erro ao listar usuários'));
+    res.status(err.status || 500).json({ error: 'Erro ao listar usuários' });
   }
 });
 
@@ -125,9 +117,7 @@ router.get('/me', async (req, res) => {
     res.status(200).json(normalizeAvatar(usuario || {}));
   } catch (err) {
     console.error('Erro ao buscar usuário autenticado:', err);
-    res
-      .status(err.status || 500)
-      .json(buildErrorPayload(err, 'Erro ao buscar usuário autenticado'));
+    res.status(err.status || 500).json({ error: 'Erro ao buscar usuário autenticado' });
   }
 });
 
@@ -138,7 +128,7 @@ router.get('/:id', async (req, res) => {
     res.json(usuario || {});
   } catch (err) {
     console.error('Erro ao buscar usuário:', err);
-    res.status(err.status || 500).json(buildErrorPayload(err, 'Erro ao buscar usuário'));
+    res.status(err.status || 500).json({ error: 'Erro ao buscar usuário' });
   }
 });
 
@@ -149,7 +139,7 @@ router.post('/', async (req, res) => {
     res.status(201).json(created);
   } catch (err) {
     console.error('Erro ao criar usuário:', err);
-    res.status(err.status || 500).json(buildErrorPayload(err, 'Erro ao criar usuário'));
+    res.status(err.status || 500).json({ error: 'Erro ao criar usuário' });
   }
 });
 
@@ -160,7 +150,7 @@ router.put('/:id', async (req, res) => {
     res.json({ success: true });
   } catch (err) {
     console.error('Erro ao atualizar usuário:', err);
-    res.status(err.status || 500).json(buildErrorPayload(err, 'Erro ao atualizar usuário'));
+    res.status(err.status || 500).json({ error: 'Erro ao atualizar usuário' });
   }
 });
 
@@ -171,7 +161,7 @@ router.delete('/:id', async (req, res) => {
     res.json({ success: true });
   } catch (err) {
     console.error('Erro ao excluir usuário:', err);
-    res.status(err.status || 500).json(buildErrorPayload(err, 'Erro ao excluir usuário'));
+    res.status(err.status || 500).json({ error: 'Erro ao excluir usuário' });
   }
 });
 
