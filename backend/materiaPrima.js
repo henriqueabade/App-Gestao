@@ -18,8 +18,52 @@ function aplicarFiltroLocal(lista, filtro) {
   });
 }
 
+function normalizarValorFiltro(valor) {
+  if (Array.isArray(valor)) return valor.map(normalizarValorFiltro);
+  if (typeof valor === 'string' && valor.startsWith('eq.')) return valor.slice(3);
+  return valor;
+}
+
+function separarFiltrosQuery(query = {}) {
+  const queryParams = {};
+  const filtrosLocais = {};
+
+  for (const [chave, valorOriginal] of Object.entries(query)) {
+    if (valorOriginal === undefined || valorOriginal === null) continue;
+
+    if (['select', 'order', 'limit'].includes(chave)) {
+      queryParams[chave] = valorOriginal;
+      continue;
+    }
+
+    const valor = normalizarValorFiltro(valorOriginal);
+    queryParams[chave] = valor;
+    filtrosLocais[chave] = valor;
+  }
+
+  return { queryParams, filtrosLocais };
+}
+
+function aplicarFiltrosLocais(lista, filtrosLocais) {
+  if (!filtrosLocais || !Object.keys(filtrosLocais).length) return lista;
+  return lista.filter(item =>
+    Object.entries(filtrosLocais).every(([chave, esperado]) => {
+      const valores = Array.isArray(esperado) ? esperado : [esperado];
+      if (!valores.length) return true;
+      return valores.some(valor => String(item?.[chave]) === String(valor));
+    })
+  );
+}
+
+async function getFiltrado(path, query = {}) {
+  const { queryParams, filtrosLocais } = separarFiltrosQuery(query);
+  const dados = await pool.get(path, Object.keys(queryParams).length ? { query: queryParams } : undefined);
+  const lista = Array.isArray(dados) ? dados : [];
+  return aplicarFiltrosLocais(lista, filtrosLocais);
+}
+
 async function fetchSingle(table, query) {
-  const rows = await pool.get(`/${table}`, { query: { ...query, limit: 1 } });
+  const rows = await getFiltrado(`/${table}`, { ...query, limit: 1 });
   return Array.isArray(rows) && rows.length > 0 ? rows[0] : null;
 }
 
@@ -37,7 +81,7 @@ async function listarMaterias(filtro = '') {
 
 async function adicionarMateria(dados) {
   const { nome, quantidade, preco_unitario, categoria, unidade, infinito, processo, descricao } = dados;
-  const duplicada = await fetchSingle('materia_prima', { nome: `eq.${nome}`, select: 'id,nome' });
+  const duplicada = await fetchSingle('materia_prima', { nome, select: 'id,nome' });
   if (duplicada) {
     const err = new Error('DUPLICADO');
     err.code = 'DUPLICADO';
@@ -72,7 +116,7 @@ async function atualizarMateria(id, dados) {
     descricao
   } = dados;
 
-  const existente = await fetchSingle('materia_prima', { nome: `eq.${nome}`, select: 'id,nome' });
+  const existente = await fetchSingle('materia_prima', { nome, select: 'id,nome' });
   if (existente && existente.id !== id) {
     const err = new Error('DUPLICADO');
     err.code = 'DUPLICADO';
@@ -135,7 +179,7 @@ async function registrarMovimentacao({
 
 async function registrarEntrada(id, quantidade, usuarioId = null) {
   const materiaAtual = await fetchSingle('materia_prima', {
-    id: `eq.${id}`,
+    id,
     select: 'id,quantidade'
   });
   const quantidadeAnterior = materiaAtual ? Number(materiaAtual.quantidade) || 0 : 0;
@@ -160,7 +204,7 @@ async function registrarEntrada(id, quantidade, usuarioId = null) {
 
 async function registrarSaida(id, quantidade, usuarioId = null) {
   const materiaAtual = await fetchSingle('materia_prima', {
-    id: `eq.${id}`,
+    id,
     select: 'id,quantidade'
   });
   const quantidadeAnterior = materiaAtual ? Number(materiaAtual.quantidade) || 0 : 0;
@@ -184,8 +228,9 @@ async function registrarSaida(id, quantidade, usuarioId = null) {
 }
 
 async function atualizarProdutosComInsumo(insumoId) {
-  const produtosRelacionados = await pool.get('/produtos_insumos', {
-    query: { select: 'produto_codigo', insumo_id: `eq.${insumoId}` }
+  const produtosRelacionados = await getFiltrado('/produtos_insumos', {
+    select: 'produto_codigo,insumo_id',
+    insumo_id: insumoId
   });
 
   const codigos = new Set(
@@ -198,21 +243,32 @@ async function atualizarProdutosComInsumo(insumoId) {
     const produto = await fetchSingle('produtos', {
       select:
         'id,codigo,pct_fabricacao,pct_acabamento,pct_montagem,pct_embalagem,pct_markup,pct_comissao,pct_imposto',
-      codigo: `eq.${produtoCodigo}`
+      codigo: produtoCodigo
     });
 
     if (!produto?.id) continue;
 
-    const itens = await pool.get('/produtos_insumos', {
-      query: {
-        select: 'quantidade,materia_prima:insumo_id(preco_unitario)',
-        produto_codigo: `eq.${produtoCodigo}`
-      }
+    const itens = await getFiltrado('/produtos_insumos', {
+      select: 'quantidade,insumo_id',
+      produto_codigo: produtoCodigo
     });
+
+    const idsMateria = Array.from(
+      new Set((Array.isArray(itens) ? itens : []).map(item => item?.insumo_id).filter(id => id !== undefined && id !== null))
+    );
+    const materias = await getFiltrado('/materia_prima', {
+      select: 'id,preco_unitario',
+      id: idsMateria
+    });
+    const materiaPorId = new Map();
+    for (const materia of materias) {
+      if (materia?.id === undefined || materia?.id === null) continue;
+      materiaPorId.set(Number(materia.id), materia);
+    }
 
     const base = (Array.isArray(itens) ? itens : []).reduce((acc, item) => {
       const quantidade = Number(item?.quantidade) || 0;
-      const precoUnitario = Number(item?.materia_prima?.preco_unitario) || 0;
+      const precoUnitario = Number(materiaPorId.get(Number(item?.insumo_id))?.preco_unitario) || 0;
       return acc + quantidade * precoUnitario;
     }, 0);
 
@@ -243,7 +299,7 @@ async function atualizarProdutosComInsumo(insumoId) {
 
 async function atualizarPreco(id, preco, usuarioId = null) {
   const materiaAtual = await fetchSingle('materia_prima', {
-    id: `eq.${id}`,
+    id,
     select: 'id,preco_unitario'
   });
   const precoAnterior = materiaAtual ? Number(materiaAtual.preco_unitario) || 0 : null;
@@ -323,12 +379,12 @@ async function obterMovimentacoesRecentes({ tipos = null, desde = null, limite =
 
 async function removerCategoria(nome) {
   const categoria = await fetchSingle('categoria', {
-    nome_categoria: `eq.${nome}`,
+    nome_categoria: nome,
     select: 'id,nome_categoria'
   });
   if (!categoria) return false;
 
-  const dependente = await fetchSingle('materia_prima', { categoria: `eq.${nome}`, select: 'id' });
+  const dependente = await fetchSingle('materia_prima', { categoria: nome, select: 'id' });
   if (dependente) {
     const err = new Error('DEPENDENTE');
     err.code = 'DEPENDENTE';
@@ -341,12 +397,12 @@ async function removerCategoria(nome) {
 
 async function removerUnidade(tipo) {
   const unidade = await fetchSingle('unidades', {
-    tipo: `eq.${tipo}`,
+    tipo,
     select: 'id,tipo'
   });
   if (!unidade) return false;
 
-  const dependente = await fetchSingle('materia_prima', { unidade: `eq.${tipo}`, select: 'id' });
+  const dependente = await fetchSingle('materia_prima', { unidade: tipo, select: 'id' });
   if (dependente) {
     const err = new Error('DEPENDENTE');
     err.code = 'DEPENDENTE';
@@ -358,17 +414,17 @@ async function removerUnidade(tipo) {
 }
 
 async function categoriaTemDependencias(nome) {
-  const dep = await fetchSingle('materia_prima', { categoria: `eq.${nome}`, select: 'id' });
+  const dep = await fetchSingle('materia_prima', { categoria: nome, select: 'id' });
   return Boolean(dep);
 }
 
 async function unidadeTemDependencias(tipo) {
-  const dep = await fetchSingle('materia_prima', { unidade: `eq.${tipo}`, select: 'id' });
+  const dep = await fetchSingle('materia_prima', { unidade: tipo, select: 'id' });
   return Boolean(dep);
 }
 
 async function processoTemDependencias(nome) {
-  const dep = await fetchSingle('materia_prima', { processo: `eq.${nome}`, select: 'id' });
+  const dep = await fetchSingle('materia_prima', { processo: nome, select: 'id' });
   return Boolean(dep);
 }
 

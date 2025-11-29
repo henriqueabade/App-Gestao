@@ -1,8 +1,58 @@
 const pool = require('./db');
 
+function normalizarValorFiltro(valor) {
+  if (Array.isArray(valor)) return valor.map(normalizarValorFiltro);
+  if (typeof valor === 'string' && valor.startsWith('eq.')) return valor.slice(3);
+  return valor;
+}
+
+function separarFiltrosQuery(query = {}) {
+  const queryParams = {};
+  const filtrosLocais = {};
+
+  for (const [chave, valorOriginal] of Object.entries(query)) {
+    if (valorOriginal === undefined || valorOriginal === null) continue;
+
+    if (chave === 'select') {
+      if (typeof valorOriginal === 'string' && valorOriginal.includes(':')) continue;
+      queryParams[chave] = valorOriginal;
+      continue;
+    }
+
+    if (['order', 'limit'].includes(chave)) {
+      queryParams[chave] = valorOriginal;
+      continue;
+    }
+
+    const valor = normalizarValorFiltro(valorOriginal);
+    queryParams[chave] = valor;
+    filtrosLocais[chave] = valor;
+  }
+
+  return { queryParams, filtrosLocais };
+}
+
+function aplicarFiltrosLocais(lista, filtrosLocais) {
+  if (!filtrosLocais || !Object.keys(filtrosLocais).length) return lista;
+  return lista.filter(item => {
+    return Object.entries(filtrosLocais).every(([chave, esperado]) => {
+      const valores = Array.isArray(esperado) ? esperado : [esperado];
+      if (!valores.length) return true;
+      return valores.some(valor => String(item?.[chave]) === String(valor));
+    });
+  });
+}
+
+async function getFiltrado(path, query = {}) {
+  const { queryParams, filtrosLocais } = separarFiltrosQuery(query);
+  const dados = await pool.get(path, Object.keys(queryParams).length ? { query: queryParams } : undefined);
+  const lista = Array.isArray(dados) ? dados : [];
+  return aplicarFiltrosLocais(lista, filtrosLocais);
+}
+
 async function fetchSingle(table, query) {
-  const rows = await pool.get(`/${table}`, { query: { ...query, limit: 1 } });
-  return Array.isArray(rows) && rows.length > 0 ? rows[0] : null;
+  const itens = await getFiltrado(`/${table}`, { ...query, limit: 1 });
+  return Array.isArray(itens) && itens.length > 0 ? itens[0] : null;
 }
 
 /* Utilitário simples de log de tipos para debug */
@@ -30,6 +80,23 @@ const LOTES_ENDPOINT = '/produtos_em_cada_ponto';
 
 async function executarLotes(method, pathSuffix = '', payload) {
   return pool[method](`${LOTES_ENDPOINT}${pathSuffix}`, payload);
+}
+
+async function carregarMateriasPorIds(ids = []) {
+  const idsValidos = Array.from(new Set((Array.isArray(ids) ? ids : []).filter(id => id !== undefined && id !== null))).map(Number).filter(Number.isFinite);
+  if (!idsValidos.length) return new Map();
+
+  const registros = await getFiltrado('/materia_prima', {
+    id: idsValidos,
+    select: 'id,nome,preco_unitario,unidade,processo'
+  });
+
+  const mapa = new Map();
+  for (const registro of registros) {
+    if (registro?.id === undefined || registro?.id === null) continue;
+    mapa.set(Number(registro.id), registro);
+  }
+  return mapa;
 }
 
 async function listarProdutos() {
@@ -70,44 +137,44 @@ async function listarDetalhesProduto(produtoCodigo, produtoId) {
       throw new Error('Produto não informado');
     }
 
-    const produtoFiltro = produtoCodigo
-      ? { codigo: `eq.${produtoCodigo}`, limit: 1 }
-      : { id: produtoId, limit: 1 };
+    const produtoFiltro = produtoCodigo ? { codigo: produtoCodigo } : { id: produtoId };
 
-    const produtos = await pool.get('/produtos', {
-      query: { select: '*', ...produtoFiltro }
+    const produtos = await getFiltrado('/produtos', {
+      select: '*',
+      ...produtoFiltro,
+      limit: 1
     });
     const produto = Array.isArray(produtos) ? produtos[0] : null;
     produtoId = produtoId || produto?.id || null;
     produtoCodigo = produtoCodigo || produto?.codigo || null;
 
-    const itensQuery = {
-      select:
-        'id,produto_codigo,insumo_id,quantidade,ordem_insumo,materia_prima:insumo_id(nome,preco_unitario,unidade,processo)',
-      order: 'materia_prima.processo,ordem_insumo'
-    };
+    const itens = await getFiltrado('/produtos_insumos', {
+      select: 'id,produto_codigo,insumo_id,quantidade,ordem_insumo',
+      produto_codigo: produtoCodigo,
+      produto_id: produtoId
+    });
 
-    if (produtoCodigo) {
-      itensQuery.produto_codigo = `eq.${produtoCodigo}`;
-    }
-
-    const itens = await pool.get('/produtos_insumos', { query: itensQuery });
+    const idsMateriaPrima = Array.from(
+      new Set((Array.isArray(itens) ? itens : []).map(item => item?.insumo_id).filter(id => id !== undefined && id !== null))
+    );
+    const materias = await carregarMateriasPorIds(idsMateriaPrima);
 
     const itensFormatados = (Array.isArray(itens) ? itens : []).map(item => {
-      const precoUnitario = Number(item?.materia_prima?.preco_unitario) || 0;
+      const materia = materias.get(Number(item?.insumo_id)) || {};
+      const precoUnitario = Number(materia?.preco_unitario) || 0;
       const quantidade = Number(item?.quantidade) || 0;
       return {
         id: item?.id,
         insumo_id: item?.insumo_id,
         quantidade,
         ordem_insumo: item?.ordem_insumo,
-        nome: item?.materia_prima?.nome,
+        nome: materia?.nome,
         preco_unitario: precoUnitario,
-        unidade: item?.materia_prima?.unidade,
-        processo: item?.materia_prima?.processo,
+        unidade: materia?.unidade,
+        processo: materia?.processo,
         total: precoUnitario * quantidade
       };
-    });
+    }).sort((a, b) => String(a?.processo || '').localeCompare(String(b?.processo || '')) || Number(a?.ordem_insumo || 0) - Number(b?.ordem_insumo || 0));
 
     const produtoIdNumero = Number(produtoId);
     const produtoIdEhNumero = Number.isFinite(produtoIdNumero);
@@ -139,7 +206,7 @@ async function listarDetalhesProduto(produtoCodigo, produtoId) {
             'id,produto_id,quantidade,ultimo_insumo_id,ultimo_item,data_hora_completa,etapa_id,tempo_estimado_minutos'
         };
         if (produtoIdEhNumero) {
-          baseFallbackQuery.produto_id = `eq.${produtoIdNumero}`;
+          baseFallbackQuery.produto_id = produtoIdNumero;
         }
         fallbackQuery = baseFallbackQuery;
         const lotesFallback = await pool.get(LOTES_ENDPOINT, {
@@ -178,17 +245,14 @@ async function listarDetalhesProduto(produtoCodigo, produtoId) {
 
         const consultas = batchIds.map(async id => {
           try {
-            const resultado = await pool.get('/materia_prima', {
-              query: { select: 'id,nome', id }
+            const resultado = await getFiltrado('/materia_prima', {
+              select: 'id,nome',
+              id: [id]
             });
 
-            if (Array.isArray(resultado)) {
-              resultado.forEach(registro => {
-                if (!registro || registro.id === undefined || registro.id === null) return;
-                nomesUltimosInsumos.set(registro.id, registro?.nome || null);
-              });
-            } else if (resultado && resultado.id !== undefined && resultado.id !== null) {
-              nomesUltimosInsumos.set(resultado.id, resultado?.nome || null);
+            for (const registro of Array.isArray(resultado) ? resultado : []) {
+              if (!registro || registro.id === undefined || registro.id === null) continue;
+              nomesUltimosInsumos.set(registro.id, registro?.nome || null);
             }
           } catch (insumoErr) {
             console.error(
@@ -249,8 +313,10 @@ async function listarDetalhesProduto(produtoCodigo, produtoId) {
  * Busca 1 produto pelo codigo (text)
  */
 async function obterProduto(codigo) {
-  const produtos = await pool.get('/produtos', {
-    query: { select: '*', codigo: `eq.${codigo}`, limit: 1 }
+  const produtos = await getFiltrado('/produtos', {
+    select: '*',
+    codigo,
+    limit: 1
   });
   return Array.isArray(produtos) ? produtos[0] : null;
 }
@@ -259,30 +325,28 @@ async function obterProduto(codigo) {
  * Lista insumos (produtos_insumos + materia_prima) por codigo de produto (text)
  */
 async function listarInsumosProduto(codigo) {
-  const itens = await pool.get('/produtos_insumos', {
-    query: {
-      select:
-        'id,produto_codigo,insumo_id,quantidade,ordem_insumo,materia_prima:insumo_id(nome,preco_unitario,unidade,processo)',
-      produto_codigo: `eq.${codigo}`,
-      order: 'materia_prima.processo,ordem_insumo'
-    }
+  const itens = await getFiltrado('/produtos_insumos', {
+    select: 'id,produto_codigo,insumo_id,quantidade,ordem_insumo',
+    produto_codigo: codigo
   });
 
   const lista = Array.isArray(itens) ? itens : [];
+  const materias = await carregarMateriasPorIds(lista.map(item => item?.insumo_id));
   return lista.map(item => {
-    const precoUnitario = Number(item?.materia_prima?.preco_unitario) || 0;
+    const materia = materias.get(Number(item?.insumo_id)) || {};
+    const precoUnitario = Number(materia?.preco_unitario) || 0;
     const quantidade = Number(item?.quantidade) || 0;
     return {
       id: item?.id,
-      nome: item?.materia_prima?.nome,
+      nome: materia?.nome,
       quantidade,
       ordem_insumo: item?.ordem_insumo,
       preco_unitario: precoUnitario,
-      unidade: item?.materia_prima?.unidade,
+      unidade: materia?.unidade,
       total: precoUnitario * quantidade,
-      processo: item?.materia_prima?.processo
+      processo: materia?.processo
     };
-  });
+  }).sort((a, b) => String(a?.processo || '').localeCompare(String(b?.processo || '')) || Number(a?.ordem_insumo || 0) - Number(b?.ordem_insumo || 0));
 }
 
 /**
@@ -338,8 +402,10 @@ async function removerEtapaProducao(nome) {
   const nomeNormalizado = String(nome || '').trim();
   if (!nomeNormalizado) return false;
 
-  const dependente = await pool.get('/materia_prima', {
-    query: { select: 'id', processo: `eq.${nomeNormalizado}`, limit: 1 }
+  const dependente = await getFiltrado('/materia_prima', {
+    select: 'id',
+    processo: nomeNormalizado,
+    limit: 1
   });
   if (Array.isArray(dependente) && dependente.length > 0) {
     const err = new Error('DEPENDENTE');
@@ -347,7 +413,7 @@ async function removerEtapaProducao(nome) {
     throw err;
   }
 
-  const etapa = await fetchSingle('etapas_producao', { nome: `eq.${nomeNormalizado}` });
+  const etapa = await fetchSingle('etapas_producao', { nome: nomeNormalizado });
   if (!etapa) return false;
 
   await pool.delete(`/etapas_producao/${etapa.id}`);
@@ -377,7 +443,7 @@ async function listarItensProcessoProduto(codigo, etapa, busca = '', produtoId =
   const normalizarTexto = valor => String(valor || '').trim().toLowerCase();
 
   if (!codigo && produtoId) {
-    const produto = await fetchSingle('produtos', { id: `eq.${produtoId}`, select: 'codigo' });
+    const produto = await fetchSingle('produtos', { id: produtoId, select: 'codigo' });
     codigo = produto?.codigo || codigo;
   }
 
@@ -403,7 +469,7 @@ async function listarItensProcessoProduto(codigo, etapa, busca = '', produtoId =
   let etapaBusca = normalizarTexto(etapaInfo.nome);
   if (etapaIdBusca && !etapaBusca) {
     const etapaRegistro = await fetchSingle('etapas_producao', {
-      id: `eq.${etapaIdBusca}`,
+      id: etapaIdBusca,
       select: 'id,nome'
     });
     etapaBusca = normalizarTexto(etapaRegistro?.nome);
@@ -411,35 +477,27 @@ async function listarItensProcessoProduto(codigo, etapa, busca = '', produtoId =
 
   const etapaFiltroAtivo = Boolean(etapaBusca || etapaIdBusca);
 
-  const itensQuery = {
-    select:
-      'insumo_id,materia_prima:insumo_id(id,nome,processo,etapa:etapas_producao(id,nome))',
-  };
+  const itensQuery = { select: 'insumo_id,produto_codigo,produto_id' };
 
-  if (codigo) itensQuery.produto_codigo = `eq.${codigo}`;
+  if (codigo) itensQuery.produto_codigo = codigo;
   if (produtoId) itensQuery.produto_id = produtoId;
 
-  const itens = await pool.get('/produtos_insumos', { query: itensQuery });
+  const itens = await getFiltrado('/produtos_insumos', itensQuery);
 
   const lista = Array.isArray(itens) ? itens : [];
+  const materias = await carregarMateriasPorIds(lista.map(item => item?.insumo_id));
 
-  const filtrados = lista
-    .map(item => item?.materia_prima)
+  const filtrados = Array.from(materias.values())
     .filter(mp => {
       if (!mp) return false;
 
-      const etapaRelacionada = mp?.etapa || mp?.etapas_producao || null;
       const processoNumerico = Number(mp?.processo);
       const processoIdNormalizado = Number.isFinite(processoNumerico)
         ? String(processoNumerico).trim()
         : '';
-      const etapaNomeNormalizado = normalizarTexto(etapaRelacionada?.nome || mp.processo);
-      const etapaIdNormalizado = etapaRelacionada?.id !== undefined && etapaRelacionada?.id !== null
-        ? String(etapaRelacionada.id).trim()
-        : processoIdNormalizado;
-
+      const etapaNomeNormalizado = normalizarTexto(mp.processo);
       const correspondeEtapa = !etapaFiltroAtivo
-        || (etapaIdBusca && etapaIdNormalizado && etapaIdNormalizado === etapaIdBusca)
+        || (etapaIdBusca && processoIdNormalizado && processoIdNormalizado === etapaIdBusca)
         || (etapaBusca && etapaNomeNormalizado && etapaNomeNormalizado === etapaBusca);
 
       if (!correspondeEtapa) return false;
@@ -483,13 +541,13 @@ async function adicionarProduto(dados) {
       throw err;
     }
   }
-  const codigoDup = await fetchSingle('produtos', { codigo: `eq.${codigo}` });
+  const codigoDup = await fetchSingle('produtos', { codigo });
   if (codigoDup) {
     const err = new Error('Código já existe');
     err.code = 'CODIGO_EXISTE';
     throw err;
   }
-  const nomeDup = await fetchSingle('produtos', { nome: `eq.${nome}` });
+  const nomeDup = await fetchSingle('produtos', { nome });
   if (nomeDup) {
     const err = new Error('Nome já existe');
     err.code = 'NOME_EXISTE';
@@ -508,12 +566,12 @@ async function adicionarProduto(dados) {
 async function atualizarProduto(id, dados) {
   const { codigo, nome, preco_venda, pct_markup, status } = dados;
   const categoria = dados.categoria || (nome ? String(nome).trim().split(' ')[0] : null);
-  const atuais = await fetchSingle('produtos', { id: `eq.${id}` });
+  const atuais = await fetchSingle('produtos', { id });
   if (!atuais) {
     throw new Error('Produto não encontrado');
   }
   if (codigo !== undefined && codigo !== atuais.codigo) {
-    const dup = await fetchSingle('produtos', { codigo: `eq.${codigo}` });
+    const dup = await fetchSingle('produtos', { codigo });
     if (dup) {
       const err = new Error('Código já existe');
       err.code = 'CODIGO_EXISTE';
@@ -521,7 +579,7 @@ async function atualizarProduto(id, dados) {
     }
   }
   if (nome !== undefined && nome !== atuais.nome) {
-    const dup = await fetchSingle('produtos', { nome: `eq.${nome}` });
+    const dup = await fetchSingle('produtos', { nome });
     if (dup) {
       const err = new Error('Nome já existe');
       err.code = 'NOME_EXISTE';
@@ -538,8 +596,9 @@ async function atualizarProduto(id, dados) {
   });
 
   if (codigo !== undefined && codigo !== atuais.codigo) {
-    const insumos = await pool.get('/produtos_insumos', {
-      query: { select: 'id', produto_codigo: `eq.${atuais.codigo}` }
+    const insumos = await getFiltrado('/produtos_insumos', {
+      select: 'id',
+      produto_codigo: atuais.codigo
     });
     for (const ins of Array.isArray(insumos) ? insumos : []) {
       await pool.put(`/produtos_insumos/${ins.id}`, { produto_codigo: codigo });
@@ -550,26 +609,29 @@ async function atualizarProduto(id, dados) {
 }
 
 async function excluirProduto(id) {
-  const produto = await fetchSingle('produtos', { id: `eq.${id}` });
+  const produto = await fetchSingle('produtos', { id });
   if (!produto) {
     throw new Error('Produto não encontrado');
   }
 
-  const orcamentos = await pool.get('/orcamentos_itens', {
-    query: { select: 'id', produto_id: `eq.${id}`, limit: 1 }
+  const orcamentos = await getFiltrado('/orcamentos_itens', {
+    select: 'id',
+    produto_id: id,
+    limit: 1
   });
   if (Array.isArray(orcamentos) && orcamentos.length > 0) {
     throw new Error('Produto existe em Orçamentos, não é possível realizar a ação!');
   }
 
-  const insumos = await pool.get('/produtos_insumos', {
-    query: { select: 'id', produto_codigo: `eq.${produto.codigo}` }
+  const insumos = await getFiltrado('/produtos_insumos', {
+    select: 'id',
+    produto_codigo: produto.codigo
   });
   for (const insumo of Array.isArray(insumos) ? insumos : []) {
     await pool.delete(`/produtos_insumos/${insumo.id}`);
   }
 
-  const lotes = await carregarLotesSeguros({ select: 'id', produto_id: `eq.${id}` });
+  const lotes = await carregarLotesSeguros({ select: 'id', produto_id: id });
   for (const lote of Array.isArray(lotes) ? lotes : []) {
     await executarLotes('delete', `/${lote.id}`);
   }
@@ -634,7 +696,7 @@ async function salvarProdutoDetalhado(codigoOriginal, produto, itens) {
     status
   } = produto;
 
-  const produtoAtual = await fetchSingle('produtos', { codigo: `eq.${codigoOriginal}` });
+  const produtoAtual = await fetchSingle('produtos', { codigo: codigoOriginal });
   if (!produtoAtual) {
     throw new Error('Produto não encontrado');
   }
@@ -644,7 +706,7 @@ async function salvarProdutoDetalhado(codigoOriginal, produto, itens) {
     ncm !== undefined && ncm !== null ? String(ncm).slice(0, 8) : undefined;
 
   if (codigo !== undefined && codigo !== codigoOriginal) {
-    const dup = await fetchSingle('produtos', { codigo: `eq.${codigo}` });
+    const dup = await fetchSingle('produtos', { codigo });
     if (dup) {
       const err = new Error('Código já existe');
       err.code = 'CODIGO_EXISTE';
@@ -653,7 +715,7 @@ async function salvarProdutoDetalhado(codigoOriginal, produto, itens) {
   }
 
   if (nome !== undefined) {
-    const dup = await fetchSingle('produtos', { nome: `eq.${nome}` });
+    const dup = await fetchSingle('produtos', { nome });
     if (dup && dup.codigo !== codigoOriginal) {
       const err = new Error('Nome já existe');
       err.code = 'NOME_EXISTE';
@@ -695,8 +757,8 @@ async function salvarProdutoDetalhado(codigoOriginal, produto, itens) {
     if (insumoId != null) {
       const lotesRelacionados = await carregarLotesSeguros({
         select: 'id',
-        produto_id: `eq.${produtoAtual.id}`,
-        ultimo_insumo_id: `eq.${insumoId}`
+        produto_id: produtoAtual.id,
+        ultimo_insumo_id: insumoId
       });
       for (const lote of Array.isArray(lotesRelacionados) ? lotesRelacionados : []) {
         await executarLotes('delete', `/${lote.id}`);
@@ -751,8 +813,10 @@ async function adicionarColecao(nome) {
 }
 
 async function colecaoTemDependencias(nome) {
-  const produtos = await pool.get('/produtos', {
-    query: { select: 'id', categoria: `eq.${nome}`, limit: 1 }
+  const produtos = await getFiltrado('/produtos', {
+    select: 'id',
+    categoria: nome,
+    limit: 1
   });
 
   return Array.isArray(produtos) && produtos.length > 0;
@@ -771,7 +835,7 @@ async function removerColecao(nome) {
 
   try {
     await pool.delete('/colecao', {
-      query: { nome: `eq.${nomeNormalizado}` }
+      query: { nome: nomeNormalizado }
     });
   } catch (err) {
     if (err.status !== 404) {

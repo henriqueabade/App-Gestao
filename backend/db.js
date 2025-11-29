@@ -81,7 +81,14 @@ function buildQueryString(params = {}) {
   if (!entries.length) return '';
   const searchParams = new URLSearchParams();
   for (const [key, value] of entries) {
-    searchParams.set(key, String(value));
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        if (item === undefined || item === null || item === '') continue;
+        searchParams.append(key, String(item));
+      }
+    } else {
+      searchParams.append(key, String(value));
+    }
   }
   const qs = searchParams.toString();
   return qs ? `?${qs}` : '';
