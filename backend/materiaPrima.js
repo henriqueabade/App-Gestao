@@ -24,6 +24,29 @@ function normalizarValorFiltro(valor) {
   return valor;
 }
 
+function normalizarListaIds(valor) {
+  const valoresBase = Array.isArray(valor)
+    ? valor
+    : typeof valor === 'string'
+      ? valor.split(',')
+      : [valor];
+
+  const valoresLimpos = valoresBase
+    .map(item => (typeof item === 'string' ? item.trim() : item))
+    .filter(item => item !== undefined && item !== null && item !== '');
+
+  const valoresNormalizados = valoresLimpos.map(item => {
+    const numero = Number(item);
+    return Number.isFinite(numero) ? numero : item;
+  });
+
+  return Array.from(new Set(valoresNormalizados));
+}
+
+function campoEhId(chave) {
+  return ['id', 'produto_id', 'insumo_id'].includes(chave);
+}
+
 function separarFiltrosQuery(query = {}) {
   const queryParams = {};
   const filtrosLocais = {};
@@ -36,7 +59,11 @@ function separarFiltrosQuery(query = {}) {
       continue;
     }
 
-    const valor = normalizarValorFiltro(valorOriginal);
+    let valor = normalizarValorFiltro(valorOriginal);
+    if (campoEhId(chave)) {
+      const listaIds = normalizarListaIds(valor);
+      valor = listaIds.length === 1 ? listaIds[0] : listaIds;
+    }
     queryParams[chave] = valor;
     filtrosLocais[chave] = valor;
   }

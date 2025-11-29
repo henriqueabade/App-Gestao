@@ -9,12 +9,22 @@ const DEFAULT_BEARER_TOKEN = normalizeToken(
   process.env.API_BEARER_TOKEN || process.env.DEFAULT_API_TOKEN || 'test-token'
 );
 
+function appendQueryParam(searchParams, key, value) {
+  if (Array.isArray(value)) {
+    value.forEach(item => {
+      if (item === undefined || item === null || item === '') return;
+      searchParams.append(key, String(item));
+    });
+    return;
+  }
+
+  if (value === undefined || value === null || value === '') return;
+  searchParams.append(key, String(value));
+}
+
 function buildQueryString(params = {}) {
   const searchParams = new URLSearchParams();
-  Object.entries(params).forEach(([key, value]) => {
-    if (value === undefined || value === null || value === '') return;
-    searchParams.set(key, String(value));
-  });
+  Object.entries(params).forEach(([key, value]) => appendQueryParam(searchParams, key, value));
   const qs = searchParams.toString();
   return qs ? `?${qs}` : '';
 }
