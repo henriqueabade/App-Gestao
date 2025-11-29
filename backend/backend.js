@@ -8,6 +8,34 @@ const RAW_API_BASE_URL =
   'https://api.santissimodecor.com.br';
 const API_BASE_URL = RAW_API_BASE_URL.replace(/\/$/, '');
 
+function extractUserIdFromToken(token) {
+  const raw = typeof token === 'string' ? token.trim() : '';
+  if (!raw) return null;
+
+  const bearerMatch = raw.match(/^Bearer\s+(.+)/i);
+  const stripped = bearerMatch ? bearerMatch[1].trim() : raw;
+  const numeric = Number(stripped);
+  if (Number.isInteger(numeric) && numeric > 0) {
+    return numeric;
+  }
+
+  const jwtParts = stripped.split('.');
+  if (jwtParts.length === 3) {
+    try {
+      const payload = JSON.parse(Buffer.from(jwtParts[1], 'base64').toString('utf-8'));
+      const candidates = [payload?.id, payload?.usuarioId, payload?.userId, payload?.sub];
+      for (const candidate of candidates) {
+        const parsed = Number(candidate);
+        if (Number.isInteger(parsed) && parsed > 0) {
+          return parsed;
+        }
+      }
+    } catch (_) {}
+  }
+
+  return null;
+}
+
 function normalizeEmail(email) {
   return typeof email === 'string' ? email.trim().toLowerCase() : '';
 }
@@ -51,7 +79,23 @@ async function loginUsuario(email, senha) {
       db.init({ tokenProvider: getToken });
     }
 
-    const user = data?.usuario || data?.user || {};
+    const userFromLogin = data?.usuario || data?.user || {};
+    const userIdFromLogin = userFromLogin?.id;
+    const userIdFromToken = data?.token ? extractUserIdFromToken(data.token) : null;
+    const userId = userIdFromLogin || userIdFromToken || null;
+
+    let userDetails = null;
+
+    if (userId) {
+      try {
+        const api = createApiClient();
+        userDetails = await api.get(`/api/usuarios/${userId}`);
+      } catch (userFetchError) {
+        console.error('Erro ao buscar usuário autenticado:', userFetchError);
+      }
+    }
+
+    const user = { ...userFromLogin, ...(userDetails || {}) };
     const perfil =
       user.perfil ||
       user.tipo_perfil ||
