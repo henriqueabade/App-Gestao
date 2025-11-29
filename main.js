@@ -3686,8 +3686,8 @@ ipcMain.handle('remover-etapa-producao', async (_e, nome) => {
     throw err;
   }
 });
-ipcMain.handle('listar-itens-processo-produto', async (_e, { codigo, etapa, busca }) => {
-  return listarItensProcessoProduto(codigo, etapa, busca);
+ipcMain.handle('listar-itens-processo-produto', async (_e, { codigo, etapa, busca, produtoId }) => {
+  return listarItensProcessoProduto(codigo, etapa, busca, produtoId);
 });
 ipcMain.handle('salvar-produto-detalhado', async (_e, { codigo, produto, itens }) => {
   return salvarProdutoDetalhado(codigo, produto, itens);

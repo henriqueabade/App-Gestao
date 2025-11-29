@@ -189,8 +189,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     recordIpcAction('remover-etapa-producao', nome, result);
     return result;
   },
-  listarItensProcessoProduto: (codigo, etapa, busca) =>
-    ipcRenderer.invoke('listar-itens-processo-produto', { codigo, etapa, busca }),
+  listarItensProcessoProduto: (codigo, etapa, busca, produtoId) =>
+    ipcRenderer.invoke('listar-itens-processo-produto', { codigo, etapa, busca, produtoId }),
   salvarProdutoDetalhado: async (codigo, produto, itens) => {
     const result = await ipcRenderer.invoke('salvar-produto-detalhado', { codigo, produto, itens });
     recordIpcAction('salvar-produto-detalhado', { codigo, produto, itens }, result);

@@ -373,8 +373,13 @@ async function removerEtapaProducao(nome) {
  * Lista itens de um processo para um produto (dependente de etapa)
  * Aceita etapa por id (int) OU por nome (text).
  */
-async function listarItensProcessoProduto(codigo, etapa, busca = '') {
+async function listarItensProcessoProduto(codigo, etapa, busca = '', produtoId = null) {
   const normalizarTexto = valor => String(valor || '').trim().toLowerCase();
+
+  if (!codigo && produtoId) {
+    const produto = await fetchSingle('produtos', { id: `eq.${produtoId}`, select: 'codigo' });
+    codigo = produto?.codigo || codigo;
+  }
 
   const etapaInfo = (() => {
     if (typeof etapa === 'object' && etapa !== null) {
@@ -406,13 +411,15 @@ async function listarItensProcessoProduto(codigo, etapa, busca = '') {
 
   const etapaFiltroAtivo = Boolean(etapaBusca || etapaIdBusca);
 
-  const itens = await pool.get('/produtos_insumos', {
-    query: {
-      select:
-        'insumo_id,materia_prima:insumo_id(id,nome,processo,etapa:etapas_producao(id,nome))',
-      produto_codigo: `eq.${codigo}`
-    }
-  });
+  const itensQuery = {
+    select:
+      'insumo_id,materia_prima:insumo_id(id,nome,processo,etapa:etapas_producao(id,nome))',
+  };
+
+  if (codigo) itensQuery.produto_codigo = `eq.${codigo}`;
+  if (produtoId) itensQuery.produto_id = produtoId;
+
+  const itens = await pool.get('/produtos_insumos', { query: itensQuery });
 
   const lista = Array.isArray(itens) ? itens : [];
 

@@ -18,6 +18,7 @@
   const itemMensagem = document.getElementById('itemMensagem');
   const quantidadeInput = overlay.querySelector('input[type="number"]');
   const produto = window.produtoDetalhes;
+  const produtoId = produto?.id || null;
   const lotes = Array.isArray(produto?.lotes) ? produto.lotes : [];
   const ultimoLote = lotes.length ? lotes[0] : null;
   const processoPadrao = ultimoLote?.processo || ultimoLote?.etapa || '';
@@ -88,9 +89,14 @@
     itemOptions.innerHTML = '';
     const etapa = processoSelecionadoId || processoSelect.value;
     const codigo = window.produtoDetalhes?.codigo;
-    if(!etapa || !codigo){ itemInput.disabled = true; return; }
+    if(!etapa || (!codigo && !produtoId)){ itemInput.disabled = true; return; }
     try{
-      const itens = await window.electronAPI.listarItensProcessoProduto(codigo, { id: processoSelecionadoId, nome: processoSelect.value }, termo);
+      const itens = await window.electronAPI.listarItensProcessoProduto(
+        codigo,
+        { id: processoSelecionadoId, nome: processoSelect.value },
+        termo,
+        produtoId
+      );
       if(itens.length){
         itemOptions.innerHTML = itens.map(i => `<option value="${i.nome}" data-id="${i.id}"></option>`).join('');
       }else{
