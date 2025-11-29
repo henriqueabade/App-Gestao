@@ -9,6 +9,65 @@ const DEFAULT_BEARER_TOKEN = normalizeToken(
   process.env.API_BEARER_TOKEN || process.env.DEFAULT_API_TOKEN || 'test-token'
 );
 
+const FORBIDDEN_OPERATORS = ['or', 'and', 'not'];
+const MANDATORY_FILTER_KEYS = ['filtro', 'filter'];
+
+function logValidationIssue(message, context = {}) {
+  const logContext = Object.keys(context).length ? context : undefined;
+  console.warn(`[api-http-client] ${message}`, logContext);
+}
+
+function isForbiddenOperatorValue(value = '') {
+  const normalized = String(value).toLowerCase();
+  return FORBIDDEN_OPERATORS.some(op =>
+    normalized === op || normalized.startsWith(`${op}(`) || normalized.startsWith(`${op}=`) || normalized.includes(`${op}.`)
+  );
+}
+
+function hasForbiddenOperators(payload = {}) {
+  if (!payload || typeof payload !== 'object') return null;
+
+  for (const [key, value] of Object.entries(payload)) {
+    if (FORBIDDEN_OPERATORS.includes(String(key).toLowerCase())) {
+      return { key, value };
+    }
+    if (Array.isArray(value)) {
+      const invalidItem = value.find(item => isForbiddenOperatorValue(item));
+      if (invalidItem !== undefined) {
+        return { key, value: invalidItem };
+      }
+    } else if (value !== null && typeof value !== 'object' && isForbiddenOperatorValue(value)) {
+      return { key, value };
+    }
+  }
+
+  return null;
+}
+
+function findEmptyMandatoryFilters(payload = {}) {
+  if (!payload || typeof payload !== 'object') return [];
+
+  const emptyKeys = [];
+  for (const [key, value] of Object.entries(payload)) {
+    if (!MANDATORY_FILTER_KEYS.includes(String(key).toLowerCase())) continue;
+
+    if (Array.isArray(value)) {
+      const sanitized = value.map(item => (typeof item === 'string' ? item.trim() : item)).filter(item => item !== undefined && item !== null);
+      if (!sanitized.length || sanitized.every(item => item === '')) {
+        emptyKeys.push(key);
+      }
+      continue;
+    }
+
+    const normalized = typeof value === 'string' ? value.trim() : value;
+    if (normalized === '' || normalized === null || normalized === undefined) {
+      emptyKeys.push(key);
+    }
+  }
+
+  return emptyKeys;
+}
+
 function appendQueryParam(searchParams, key, value) {
   if (Array.isArray(value)) {
     value.forEach(item => {
@@ -53,6 +112,22 @@ function createApiClient(req) {
       throw error;
     }
 
+    const forbiddenQuery = hasForbiddenOperators(query);
+    if (forbiddenQuery) {
+      logValidationIssue('Payload rejeitado por operador proibido no filtro', {
+        path,
+        operador: forbiddenQuery.key,
+        valor: forbiddenQuery.value
+      });
+      const error = new Error(
+        'Filtros inválidos. Utilize apenas comparações simples (campo=valor) sem operadores lógicos.'
+      );
+      error.status = 400;
+      throw error;
+    }
+
+    const emptyMandatoryFilters = findEmptyMandatoryFilters(query);
+
     const normalizedPath = path.startsWith('/') ? path : `/${path}`;
     const url = `${API_BASE_URL}${normalizedPath}${buildQueryString(query)}`;
     const headers = {
@@ -77,6 +152,19 @@ function createApiClient(req) {
       const error = new Error(`Falha na requisição ${method} ${normalizedPath}: ${response.status}`);
       error.status = response.status;
       error.body = data;
+      throw error;
+    }
+
+    if (Array.isArray(data) && data.length === 0 && emptyMandatoryFilters.length) {
+      const missing = emptyMandatoryFilters.join(', ');
+      logValidationIssue('Filtro obrigatório vazio retornou lista vazia', {
+        path,
+        filtros: emptyMandatoryFilters
+      });
+      const error = new Error(
+        `Filtro obrigatório ausente ou vazio (${missing}). Envie no formato campo=valor para continuar.`
+      );
+      error.status = 400;
       throw error;
     }
 
