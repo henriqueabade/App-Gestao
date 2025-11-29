@@ -18,15 +18,32 @@ function aplicarFiltroLocal(lista, filtro) {
   });
 }
 
+function extrairListaIn(valor) {
+  if (typeof valor !== 'string') return null;
+  const match = valor.trim().match(/^in\.\((.*)\)$/i);
+  if (!match) return null;
+  return match[1]
+    .split(',')
+    .map(item => item.trim())
+    .filter(item => item !== '')
+    .map(item => {
+      const numero = Number(item);
+      return Number.isFinite(numero) ? numero : item;
+    });
+}
+
 function normalizarValorFiltro(valor) {
   if (Array.isArray(valor)) return valor.map(normalizarValorFiltro);
+  const listaIn = extrairListaIn(valor);
+  if (listaIn) return listaIn;
   if (typeof valor === 'string' && valor.startsWith('eq.')) return valor.slice(3);
   return valor;
 }
 
 function normalizarListaIds(valor) {
-  const valoresBase = Array.isArray(valor)
-    ? valor
+  const listaIn = extrairListaIn(valor);
+  const valoresBase = Array.isArray(listaIn ?? valor)
+    ? listaIn ?? valor
     : typeof valor === 'string'
       ? valor.split(',')
       : [valor];
@@ -54,7 +71,13 @@ function separarFiltrosQuery(query = {}) {
   for (const [chave, valorOriginal] of Object.entries(query)) {
     if (valorOriginal === undefined || valorOriginal === null) continue;
 
-    if (['select', 'order', 'limit'].includes(chave)) {
+    if (['order', 'limit'].includes(chave)) {
+      queryParams[chave] = valorOriginal;
+      continue;
+    }
+
+    if (chave === 'select') {
+      if (typeof valorOriginal === 'string' && valorOriginal.includes(':')) continue;
       queryParams[chave] = valorOriginal;
       continue;
     }

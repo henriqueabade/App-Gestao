@@ -1,14 +1,31 @@
 const pool = require('./db');
 
+function extrairListaIn(valor) {
+  if (typeof valor !== 'string') return null;
+  const match = valor.trim().match(/^in\.\((.*)\)$/i);
+  if (!match) return null;
+  return match[1]
+    .split(',')
+    .map(item => item.trim())
+    .filter(item => item !== '')
+    .map(item => {
+      const numero = Number(item);
+      return Number.isFinite(numero) ? numero : item;
+    });
+}
+
 function normalizarValorFiltro(valor) {
   if (Array.isArray(valor)) return valor.map(normalizarValorFiltro);
+  const listaIn = extrairListaIn(valor);
+  if (listaIn) return listaIn;
   if (typeof valor === 'string' && valor.startsWith('eq.')) return valor.slice(3);
   return valor;
 }
 
 function normalizarListaIds(valor) {
-  const valoresBase = Array.isArray(valor)
-    ? valor
+  const listaIn = extrairListaIn(valor);
+  const valoresBase = Array.isArray(listaIn ?? valor)
+    ? listaIn ?? valor
     : typeof valor === 'string'
       ? valor.split(',')
       : [valor];
