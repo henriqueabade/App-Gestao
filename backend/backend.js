@@ -84,18 +84,32 @@ async function loginUsuario(email, senha) {
     const userIdFromToken = data?.token ? extractUserIdFromToken(data.token) : null;
     const userId = userIdFromLogin || userIdFromToken || null;
 
-    let userDetails = null;
-
-    if (userId) {
-      try {
-        const api = createApiClient();
-        userDetails = await api.get(`/api/usuarios/${userId}`);
-      } catch (userFetchError) {
-        console.error('Erro ao buscar usuário autenticado:', userFetchError);
-      }
+    if (!userId) {
+      const error = new Error('Não foi possível identificar o usuário autenticado.');
+      error.code = 'user-details-missing';
+      throw error;
     }
 
-    const user = { ...userFromLogin, ...(userDetails || {}) };
+    let userDetails = null;
+
+    try {
+      const api = createApiClient();
+      userDetails = await api.get(`/api/usuarios/${userId}`);
+    } catch (userFetchError) {
+      console.error('Erro ao buscar usuário autenticado:', userFetchError);
+      const error = new Error('Não foi possível carregar os dados do usuário autenticado.');
+      error.code = 'user-details-fetch-failed';
+      error.cause = userFetchError;
+      throw error;
+    }
+
+    if (!userDetails) {
+      const error = new Error('Dados do usuário autenticado não disponíveis.');
+      error.code = 'user-details-empty';
+      throw error;
+    }
+
+    const user = { ...userFromLogin, ...userDetails };
     const perfil =
       user.perfil ||
       user.tipo_perfil ||
