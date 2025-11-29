@@ -99,6 +99,97 @@ async function carregarMateriasPorIds(ids = []) {
   return mapa;
 }
 
+function mapearMateriasPorId(registros = []) {
+  const mapa = new Map();
+  for (const registro of Array.isArray(registros) ? registros : []) {
+    if (registro?.id === undefined || registro?.id === null) continue;
+    mapa.set(Number(registro.id), registro);
+  }
+  return mapa;
+}
+
+function comporItensComMaterias(itensBase = [], materiasPorId = new Map()) {
+  return (Array.isArray(itensBase) ? itensBase : [])
+    .map(item => {
+      const materia = materiasPorId.get(Number(item?.insumo_id)) || {};
+      const precoUnitario = Number(materia?.preco_unitario) || 0;
+      const quantidade = Number(item?.quantidade) || 0;
+
+      return {
+        id: item?.id,
+        insumo_id: item?.insumo_id,
+        quantidade,
+        ordem_insumo: item?.ordem_insumo,
+        nome: materia?.nome,
+        preco_unitario: precoUnitario,
+        unidade: materia?.unidade,
+        processo: materia?.processo,
+        total: precoUnitario * quantidade
+      };
+    })
+    .sort(
+      (a, b) =>
+        String(a?.processo || '').localeCompare(String(b?.processo || '')) ||
+        Number(a?.ordem_insumo || 0) - Number(b?.ordem_insumo || 0)
+    );
+}
+
+async function carregarProdutoBase(produtoCodigo, produtoId) {
+  const produtoFiltro = produtoCodigo ? { codigo: produtoCodigo } : { id: produtoId };
+  const produtos = await getFiltrado('/produtos', {
+    select: '*',
+    ...produtoFiltro,
+    limit: 1
+  });
+
+  return Array.isArray(produtos) ? produtos[0] : null;
+}
+
+async function carregarInsumosBase(produtoCodigo, produtoId) {
+  const itensQuery = {
+    select: 'id,produto_codigo,produto_id,insumo_id,quantidade,ordem_insumo'
+  };
+
+  if (produtoCodigo) itensQuery.produto_codigo = produtoCodigo;
+  if (produtoId) itensQuery.produto_id = produtoId;
+
+  const itens = await getFiltrado('/produtos_insumos', itensQuery);
+  return Array.isArray(itens) ? itens : [];
+}
+
+/**
+ * Formato unificado utilizado pelas rotas que retornam um produto com insumos.
+ *
+ * {
+ *   produto: { ...registro de produtos... },
+ *   itens: [
+ *     {
+ *       id, insumo_id, quantidade, ordem_insumo,
+ *       nome, unidade, processo, preco_unitario, total
+ *     }
+ *   ],
+ *   lotes: [...]
+ * }
+ */
+async function montarProdutoComInsumos(produtoCodigo, produtoId) {
+  const [produto, itensBase] = await Promise.all([
+    carregarProdutoBase(produtoCodigo, produtoId),
+    carregarInsumosBase(produtoCodigo, produtoId)
+  ]);
+
+  const idsMateriaPrima = Array.from(
+    new Set(itensBase.map(item => item?.insumo_id).filter(id => id !== undefined && id !== null))
+  );
+
+  const materias = idsMateriaPrima.length > 0 ? await carregarMateriasPorIds(idsMateriaPrima) : new Map();
+  const materiasPorId = materias instanceof Map ? materias : mapearMateriasPorId(materias);
+
+  return {
+    produto: produto || null,
+    itens: comporItensComMaterias(itensBase, materiasPorId)
+  };
+}
+
 async function listarProdutos() {
   try {
     const produtos = await pool.get('/produtos');
@@ -137,44 +228,10 @@ async function listarDetalhesProduto(produtoCodigo, produtoId) {
       throw new Error('Produto não informado');
     }
 
-    const produtoFiltro = produtoCodigo ? { codigo: produtoCodigo } : { id: produtoId };
+    const { produto, itens: itensFormatados } = await montarProdutoComInsumos(produtoCodigo, produtoId);
 
-    const produtos = await getFiltrado('/produtos', {
-      select: '*',
-      ...produtoFiltro,
-      limit: 1
-    });
-    const produto = Array.isArray(produtos) ? produtos[0] : null;
     produtoId = produtoId || produto?.id || null;
     produtoCodigo = produtoCodigo || produto?.codigo || null;
-
-    const itens = await getFiltrado('/produtos_insumos', {
-      select: 'id,produto_codigo,insumo_id,quantidade,ordem_insumo',
-      produto_codigo: produtoCodigo,
-      produto_id: produtoId
-    });
-
-    const idsMateriaPrima = Array.from(
-      new Set((Array.isArray(itens) ? itens : []).map(item => item?.insumo_id).filter(id => id !== undefined && id !== null))
-    );
-    const materias = await carregarMateriasPorIds(idsMateriaPrima);
-
-    const itensFormatados = (Array.isArray(itens) ? itens : []).map(item => {
-      const materia = materias.get(Number(item?.insumo_id)) || {};
-      const precoUnitario = Number(materia?.preco_unitario) || 0;
-      const quantidade = Number(item?.quantidade) || 0;
-      return {
-        id: item?.id,
-        insumo_id: item?.insumo_id,
-        quantidade,
-        ordem_insumo: item?.ordem_insumo,
-        nome: materia?.nome,
-        preco_unitario: precoUnitario,
-        unidade: materia?.unidade,
-        processo: materia?.processo,
-        total: precoUnitario * quantidade
-      };
-    }).sort((a, b) => String(a?.processo || '').localeCompare(String(b?.processo || '')) || Number(a?.ordem_insumo || 0) - Number(b?.ordem_insumo || 0));
 
     const produtoIdNumero = Number(produtoId);
     const produtoIdEhNumero = Number.isFinite(produtoIdNumero);
@@ -294,16 +351,15 @@ async function listarDetalhesProduto(produtoCodigo, produtoId) {
   } catch (err) {
     const corpoErro = normalizarCorpoErro(err);
 
-    console.error('Erro ao listar detalhes do produto:', err.message, {
-      status: err?.status,
-      body: corpoErro,
-      query: {
-        produtoCodigo,
-        produtoId,
-        itensQuery,
-        lotesQuery: lotesQueryBasica
-      }
-    });
+      console.error('Erro ao listar detalhes do produto:', err.message, {
+        status: err?.status,
+        body: corpoErro,
+        query: {
+          produtoCodigo,
+          produtoId,
+          lotesQuery: lotesQueryBasica
+        }
+      });
     throw new Error('Erro ao listar detalhes do produto');
   }
 }
@@ -325,28 +381,8 @@ async function obterProduto(codigo) {
  * Lista insumos (produtos_insumos + materia_prima) por codigo de produto (text)
  */
 async function listarInsumosProduto(codigo) {
-  const itens = await getFiltrado('/produtos_insumos', {
-    select: 'id,produto_codigo,insumo_id,quantidade,ordem_insumo',
-    produto_codigo: codigo
-  });
-
-  const lista = Array.isArray(itens) ? itens : [];
-  const materias = await carregarMateriasPorIds(lista.map(item => item?.insumo_id));
-  return lista.map(item => {
-    const materia = materias.get(Number(item?.insumo_id)) || {};
-    const precoUnitario = Number(materia?.preco_unitario) || 0;
-    const quantidade = Number(item?.quantidade) || 0;
-    return {
-      id: item?.id,
-      nome: materia?.nome,
-      quantidade,
-      ordem_insumo: item?.ordem_insumo,
-      preco_unitario: precoUnitario,
-      unidade: materia?.unidade,
-      total: precoUnitario * quantidade,
-      processo: materia?.processo
-    };
-  }).sort((a, b) => String(a?.processo || '').localeCompare(String(b?.processo || '')) || Number(a?.ordem_insumo || 0) - Number(b?.ordem_insumo || 0));
+  const { itens } = await montarProdutoComInsumos(codigo, null);
+  return itens;
 }
 
 /**
