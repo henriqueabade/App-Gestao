@@ -40,15 +40,19 @@ function normalizeToken(rawToken) {
 }
 
 function createApiClient(req) {
-  const stored = normalizeToken(getToken());
-  const bearer = normalizeToken(req?.headers?.authorization || '') || stored || DEFAULT_BEARER_TOKEN;
-  if (!bearer) {
-    const error = new Error('Token de autenticação ausente');
-    error.status = 401;
-    throw error;
+  function resolveBearer() {
+    const stored = normalizeToken(getToken());
+    return normalizeToken(req?.headers?.authorization || '') || stored || DEFAULT_BEARER_TOKEN;
   }
 
   async function send(method, path, { query, body } = {}) {
+    const bearer = resolveBearer();
+    if (!bearer) {
+      const error = new Error('Token de autenticação ausente');
+      error.status = 401;
+      throw error;
+    }
+
     const normalizedPath = path.startsWith('/') ? path : `/${path}`;
     const url = `${API_BASE_URL}${normalizedPath}${buildQueryString(query)}`;
     const headers = {
