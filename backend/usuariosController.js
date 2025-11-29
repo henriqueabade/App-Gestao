@@ -4,6 +4,11 @@ const { getToken } = require('./tokenStore');
 
 const router = express.Router();
 
+function createInternalApiClient() {
+  const token = getToken();
+  return createApiClient({ headers: { authorization: token ? `Bearer ${token}` : '' } });
+}
+
 function buildPayload(body = {}) {
   return {
     nome: body.nome,
@@ -80,7 +85,7 @@ function extractUserIdFromToken(token) {
 
 router.get('/', async (req, res) => {
   try {
-    const api = createApiClient(req);
+    const api = createInternalApiClient();
     const usuarios = await api.get('/api/usuarios', { query: req.query });
     res.json(Array.isArray(usuarios) ? usuarios : []);
   } catch (err) {
@@ -91,7 +96,7 @@ router.get('/', async (req, res) => {
 
 router.get('/lista', async (req, res) => {
   try {
-    const api = createApiClient(req);
+    const api = createInternalApiClient();
     const query = {
       select:
         'id,nome,email,perfil,status,permissoes,modelo_permissoes_id,avatar_url,avatar_updated_at,avatar_atualizado_em,foto_usuario',
@@ -110,7 +115,7 @@ router.get('/lista', async (req, res) => {
 
 router.get('/me', async (req, res) => {
   try {
-    const api = createApiClient(req);
+    const api = createInternalApiClient();
     const tokenFromRequest = req.headers?.authorization || getToken();
     const userId = extractUserIdFromToken(tokenFromRequest);
     const usuario = userId ? await api.get(`/api/usuarios/${userId}`) : await api.get('/api/usuarios/me');
@@ -123,7 +128,7 @@ router.get('/me', async (req, res) => {
 
 router.get('/:id', async (req, res) => {
   try {
-    const api = createApiClient(req);
+    const api = createInternalApiClient();
     const usuario = await api.get(`/api/usuarios/${req.params.id}`);
     res.json(usuario || {});
   } catch (err) {
@@ -134,7 +139,7 @@ router.get('/:id', async (req, res) => {
 
 router.post('/', async (req, res) => {
   try {
-    const api = createApiClient(req);
+    const api = createInternalApiClient();
     const created = await api.post('/api/usuarios', buildPayload(req.body));
     res.status(201).json(created);
   } catch (err) {
@@ -145,7 +150,7 @@ router.post('/', async (req, res) => {
 
 router.put('/:id', async (req, res) => {
   try {
-    const api = createApiClient(req);
+    const api = createInternalApiClient();
     await api.put(`/api/usuarios/${req.params.id}`, buildPayload(req.body));
     res.json({ success: true });
   } catch (err) {
@@ -156,7 +161,7 @@ router.put('/:id', async (req, res) => {
 
 router.delete('/:id', async (req, res) => {
   try {
-    const api = createApiClient(req);
+    const api = createInternalApiClient();
     await api.delete(`/api/usuarios/${req.params.id}`);
     res.json({ success: true });
   } catch (err) {
