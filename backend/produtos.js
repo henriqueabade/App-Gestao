@@ -127,19 +127,38 @@ async function executarLotes(method, pathSuffix = '', payload) {
 }
 
 async function carregarMateriasPorIds(ids = []) {
-  const idsValidos = Array.from(new Set((Array.isArray(ids) ? ids : []).filter(id => id !== undefined && id !== null))).map(Number).filter(Number.isFinite);
+  const idsValidos = Array.from(
+    new Set(
+      (Array.isArray(ids) ? ids : [])
+        .filter(id => id !== undefined && id !== null)
+    )
+  )
+    .map(Number)
+    .filter(Number.isFinite);
+
   if (!idsValidos.length) return new Map();
 
-  const registros = await getFiltrado('/materia_prima', {
-    id: idsValidos,
-    select: 'id,nome,preco_unitario,unidade,processo'
-  });
-
   const mapa = new Map();
-  for (const registro of registros) {
-    if (registro?.id === undefined || registro?.id === null) continue;
-    mapa.set(Number(registro.id), registro);
+
+  // 🔥 Faz uma requisição por ID, pois a API não aceita array
+  for (const id of idsValidos) {
+    try {
+      const resultado = await getFiltrado('/materia_prima', {
+        id,                       // agora é número, não array
+        select: 'id,nome,preco_unitario,unidade,processo'
+      });
+
+      if (Array.isArray(resultado) && resultado[0]) {
+        mapa.set(id, resultado[0]);
+      } else {
+        mapa.set(id, null);
+      }
+    } catch (err) {
+      console.error(`Erro ao carregar materia_prima id=${id}:`, err?.message || err);
+      mapa.set(id, null);
+    }
   }
+
   return mapa;
 }
 
@@ -191,15 +210,16 @@ async function carregarProdutoBase(produtoCodigo, produtoId) {
 
 async function carregarInsumosBase(produtoCodigo, produtoId) {
   const itensQuery = {
-    select: 'id,produto_codigo,produto_id,insumo_id,quantidade,ordem_insumo'
+    select: 'id,produto_codigo,insumo_id,quantidade,ordem_insumo'
   };
 
+  // 🔥 SOMENTE produto_codigo EXISTE NA TABELA
   if (produtoCodigo) itensQuery.produto_codigo = produtoCodigo;
-  if (produtoId) itensQuery.produto_id = produtoId;
 
   const itens = await getFiltrado('/produtos_insumos', itensQuery);
   return Array.isArray(itens) ? itens : [];
 }
+
 
 /**
  * Formato unificado utilizado pelas rotas que retornam um produto com insumos.
@@ -215,6 +235,7 @@ async function carregarInsumosBase(produtoCodigo, produtoId) {
  *   lotes: [...]
  * }
  */
+
 async function montarProdutoComInsumos(produtoCodigo, produtoId) {
   const [produto, itensBase] = await Promise.all([
     carregarProdutoBase(produtoCodigo, produtoId),
@@ -233,6 +254,7 @@ async function montarProdutoComInsumos(produtoCodigo, produtoId) {
     itens: comporItensComMaterias(itensBase, materiasPorId)
   };
 }
+
 
 async function listarProdutos() {
   try {
@@ -267,6 +289,8 @@ async function carregarLotesSeguros(query) {
 }
 
 async function listarDetalhesProduto(produtoCodigo, produtoId) {
+  let lotesQueryBasica;  // 🔥 Correção: agora existe no escopo de toda a função
+
   try {
     if (!produtoCodigo && !produtoId) {
       throw new Error('Produto não informado');
@@ -280,7 +304,8 @@ async function listarDetalhesProduto(produtoCodigo, produtoId) {
     const produtoIdNumero = Number(produtoId);
     const produtoIdEhNumero = Number.isFinite(produtoIdNumero);
 
-    const lotesQueryBasica = {
+    // 🔥 Prepara antes do try interno
+    lotesQueryBasica = {
       select: 'id,produto_id,quantidade,ultimo_insumo_id,ultimo_item,data_hora_completa,etapa_id,tempo_estimado_minutos',
       order: 'data_hora_completa.desc'
     };
@@ -291,6 +316,7 @@ async function listarDetalhesProduto(produtoCodigo, produtoId) {
 
     let lotes = [];
     let fallbackQuery;
+
     try {
       lotes = await carregarLotesSeguros(lotesQueryBasica);
     } catch (err) {
@@ -300,28 +326,27 @@ async function listarDetalhesProduto(produtoCodigo, produtoId) {
         err?.message || err,
         corpoErro ? { body: corpoErro, query: lotesQueryBasica } : { body: corpoErro }
       );
+
       try {
-        // Fallback minimalista para tentar recuperar dados básicos sem filtros adicionais
-        const baseFallbackQuery = {
-          select:
-            'id,produto_id,quantidade,ultimo_insumo_id,ultimo_item,data_hora_completa,etapa_id,tempo_estimado_minutos'
+        fallbackQuery = {
+          select: 'id,produto_id,quantidade,ultimo_insumo_id,ultimo_item,data_hora_completa,etapa_id,tempo_estimado_minutos'
         };
+
         if (produtoIdEhNumero) {
-          baseFallbackQuery.produto_id = produtoIdNumero;
+          fallbackQuery.produto_id = produtoIdNumero;
         }
-        fallbackQuery = baseFallbackQuery;
+
         const lotesFallback = await pool.get(LOTES_ENDPOINT, {
-          query: Object.keys(fallbackQuery).length ? fallbackQuery : undefined
+          query: fallbackQuery
         });
+
         lotes = Array.isArray(lotesFallback) ? lotesFallback : [];
       } catch (fallbackErr) {
         const corpoFallback = normalizarCorpoErro(fallbackErr);
         console.error(
           'Fallback simplificado ao carregar lotes também falhou:',
           fallbackErr?.message || fallbackErr,
-          corpoFallback
-            ? { body: corpoFallback, query: { fallback: true, ...(fallbackQuery || {}) } }
-            : { body: corpoFallback }
+          corpoFallback ? { body: corpoFallback, query: fallbackQuery } : undefined
         );
         lotes = [];
       }
@@ -329,6 +354,7 @@ async function listarDetalhesProduto(produtoCodigo, produtoId) {
 
     const lotesLista = Array.isArray(lotes) ? lotes : [];
 
+    // --------------- Resolve últimos insumos -----------------
     const idsUltimosInsumos = lotesLista
       .map(lote => lote?.ultimo_insumo_id)
       .filter(id => id !== undefined && id !== null)
@@ -337,73 +363,56 @@ async function listarDetalhesProduto(produtoCodigo, produtoId) {
     const nomesUltimosInsumos = new Map();
 
     if (idsUltimosInsumos.length > 0) {
-      const idsUnicos = Array.from(new Set(idsUltimosInsumos.map(id => Number(id))));
+      const idsUnicos = Array.from(new Set(idsUltimosInsumos.map(Number)));
       idsUnicos.forEach(id => nomesUltimosInsumos.set(id, null));
 
       const BATCH_SIZE = 30;
       for (let i = 0; i < idsUnicos.length; i += BATCH_SIZE) {
-        const batchIds = idsUnicos.slice(i, i + BATCH_SIZE);
+        const batch = idsUnicos.slice(i, i + BATCH_SIZE);
 
-        const consultas = batchIds.map(async id => {
+        await Promise.all(batch.map(async id => {
           try {
             const resultado = await getFiltrado('/materia_prima', {
               select: 'id,nome',
               id: [id]
             });
 
-            for (const registro of Array.isArray(resultado) ? resultado : []) {
-              if (!registro || registro.id === undefined || registro.id === null) continue;
-              nomesUltimosInsumos.set(registro.id, registro?.nome || null);
+            for (const reg of (Array.isArray(resultado) ? resultado : [])) {
+              nomesUltimosInsumos.set(Number(reg.id), reg.nome || null);
             }
-          } catch (insumoErr) {
-            console.error(
-              'Falha ao buscar materia_prima para ids de ultimo_insumo',
-              id,
-              insumoErr?.message || insumoErr
-            );
+          } catch (erroMP) {
+            console.error('Falha ao buscar matéria-prima para ultimo_insumo:', id, erroMP?.message || erroMP);
           }
-        });
-
-        await Promise.allSettled(consultas);
+        }));
       }
     }
 
-    const lotesFormatados = lotesLista.map(lote => {
-      const etapa = lote?.etapa_id
-        ? String(lote.etapa_id).trim() || '—'
-        : '—';
-      const ultimoItemNome =
-        nomesUltimosInsumos.get(Number(lote?.ultimo_insumo_id)) ?? lote?.ultimo_item ?? null;
-
-      return {
-        id: lote?.id,
-        quantidade: lote?.quantidade,
-        ultimo_insumo_id: lote?.ultimo_insumo_id,
-        ultimo_item: ultimoItemNome,
-        tempo_estimado_minutos: lote?.tempo_estimado_minutos,
-        data_hora_completa: lote?.data_hora_completa,
-        etapa,
-        processo: null
-      };
-    });
+    const lotesFormatados = lotesLista.map(lote => ({
+      id: lote?.id,
+      quantidade: lote?.quantidade,
+      ultimo_insumo_id: lote?.ultimo_insumo_id,
+      ultimo_item: nomesUltimosInsumos.get(Number(lote?.ultimo_insumo_id)) ?? lote?.ultimo_item ?? null,
+      tempo_estimado_minutos: lote?.tempo_estimado_minutos,
+      data_hora_completa: lote?.data_hora_completa,
+      etapa: lote?.etapa_id ? String(lote.etapa_id).trim() : '—',
+      processo: null
+    }));
 
     return {
       produto: produto || null,
       itens: itensFormatados,
       lotes: lotesFormatados
     };
+
   } catch (err) {
     const corpoErro = normalizarCorpoErro(err);
 
-      console.error('Erro ao listar detalhes do produto:', err.message, {
-        status: err?.status,
-        body: corpoErro,
-        query: {
-          produtoCodigo,
-          produtoId,
-          lotesQuery: lotesQueryBasica
-        }
-      });
+    console.error('Erro ao listar detalhes do produto:', err.message, {
+      status: err?.status,
+      body: corpoErro,
+      query: { produtoCodigo, produtoId, lotesQueryBasica }
+    });
+
     throw new Error('Erro ao listar detalhes do produto');
   }
 }
@@ -557,12 +566,12 @@ async function listarItensProcessoProduto(codigo, etapa, busca = '', produtoId =
 
   const etapaFiltroAtivo = Boolean(etapaBusca || etapaIdBusca);
 
-  const itensQuery = { select: 'insumo_id,produto_codigo,produto_id' };
+const itensQuery = { select: 'insumo_id,produto_codigo' };
 
-  if (codigo) itensQuery.produto_codigo = codigo;
-  if (produtoId) itensQuery.produto_id = produtoId;
+// 🔥 SOMENTE produto_codigo EXISTE
+if (codigo) itensQuery.produto_codigo = codigo;
 
-  const itens = await getFiltrado('/produtos_insumos', itensQuery);
+const itens = await getFiltrado('/produtos_insumos', itensQuery);
 
   const lista = Array.isArray(itens) ? itens : [];
   const materias = await carregarMateriasPorIds(lista.map(item => item?.insumo_id));
