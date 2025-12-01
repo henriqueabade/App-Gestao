@@ -249,14 +249,41 @@ function createNotReadyError() {
   return error;
 }
 
-async function ping(options = {}) {
+async function healthCheck(options = {}) {
   try {
     await request('GET', '/health', { ...options, skipRetry: true });
-    return true;
+    updateStateSuccess();
+    return { ok: true, status: 'ok', statusCode: 200, lastError: null };
   } catch (err) {
     updateStateFailure(err);
-    return false;
+    const normalized = err instanceof Error ? err : new Error(String(err));
+    const statusCode = Number.isFinite(normalized.status)
+      ? normalized.status
+      : Number.isFinite(normalized.statusCode)
+        ? normalized.statusCode
+        : normalized.code === 'auth-missing' || normalized.reason === 'user-auth'
+          ? 401
+          : normalized.reason === 'offline'
+            ? 502
+            : 503;
+
+    return {
+      ok: false,
+      status: 'error',
+      statusCode,
+      lastError: {
+        message: normalized.message,
+        code: normalized.code,
+        reason: normalized.reason,
+        status: statusCode
+      }
+    };
   }
+}
+
+async function ping(options = {}) {
+  const result = await healthCheck(options);
+  return result.ok;
 }
 
 module.exports = {
@@ -267,6 +294,7 @@ module.exports = {
   ensureWarmup,
   getStatus,
   createNotReadyError,
+  healthCheck,
   ping,
   get,
   post,

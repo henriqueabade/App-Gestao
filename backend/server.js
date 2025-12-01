@@ -55,6 +55,53 @@ app.get('/status', (_req, res) => {
   res.json({ status: 'ok' });
 });
 
+async function runHealthCheck() {
+  const dbStatus = db.getStatus();
+  const health = await db.healthCheck();
+  const ok = Boolean(health?.ok && dbStatus.ready);
+  const statusCode = ok ? 200 : health?.statusCode || 503;
+
+  return {
+    statusCode,
+    status: ok ? 'ok' : 'error',
+    db_ready: ok,
+    db_ok: ok,
+    db_status: ok ? 'ready' : 'error',
+    last_error: health?.lastError || dbStatus.lastError || null,
+    last_success_at: dbStatus.lastSuccessAt || null,
+    last_failure_at: dbStatus.lastFailureAt || null,
+    token_ready: dbStatus.ready
+  };
+}
+
+async function handleHealthz(req, res) {
+  try {
+    const payload = await runHealthCheck();
+    res.status(payload.statusCode).json({
+      status: payload.status,
+      db_ok: payload.db_ok,
+      db_ready: payload.db_ready,
+      db_status: payload.db_status,
+      last_error: payload.last_error,
+      last_success_at: payload.last_success_at,
+      last_failure_at: payload.last_failure_at,
+      token_ready: payload.token_ready
+    });
+  } catch (err) {
+    res.status(503).json({
+      status: 'error',
+      db_ok: false,
+      db_ready: false,
+      db_status: 'error',
+      last_error: { message: err?.message || 'health-check-error' }
+    });
+  }
+}
+
+app.get('/healthz', handleHealthz);
+app.get('/healthz/combined', handleHealthz);
+app.get('/healthz/db', handleHealthz);
+
 if (require.main === module) {
   const PORT = process.env.PORT || 3000;
   if (!process.env.PORT) console.warn('PORT not set, defaulting to 3000');
