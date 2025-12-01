@@ -1203,6 +1203,16 @@ function getAuthorizedApiClient() {
   return createApiClient({ headers: { authorization: token ? `Bearer ${token}` : '' } });
 }
 
+function mapApiErrorToReason(err) {
+  if (isNetworkError(err)) {
+    return 'offline';
+  }
+  if (isPinError(err) || err?.status === 401 || err?.statusCode === 401 || err?.status === 403 || err?.statusCode === 403) {
+    return 'pin';
+  }
+  return null;
+}
+
 function summarizeValue(value) {
   if (value === null || value === undefined) return '';
   if (typeof value === 'string') return value.trim();
@@ -2053,11 +2063,9 @@ async function checkDatabaseAndCurrentUser({ skipBasicQuery = false } = {}) {
     try {
       await api.get('/status');
     } catch (err) {
-      if (isNetworkError(err)) {
-        return { success: false, reason: 'offline', error: err };
-      }
-      if (isPinError(err)) {
-        return { success: false, reason: 'pin', error: err };
+      const reason = mapApiErrorToReason(err);
+      if (reason) {
+        return { success: false, reason, error: err };
       }
       return { success: false, error: err };
     }
@@ -2067,11 +2075,9 @@ async function checkDatabaseAndCurrentUser({ skipBasicQuery = false } = {}) {
     try {
       await api.get(`/api/usuarios/${currentUserSession.id}`);
     } catch (err) {
-      if (isNetworkError(err)) {
-        return { success: false, reason: 'offline', error: err };
-      }
-      if (isPinError(err)) {
-        return { success: false, reason: 'pin', error: err };
+      const reason = mapApiErrorToReason(err);
+      if (reason) {
+        return { success: false, reason, error: err };
       }
       return { success: false, error: err };
     }
@@ -3190,7 +3196,7 @@ ipcMain.handle('connection-monitor:request-check', async (_event, options) => {
 
 ipcMain.handle('registrar-usuario', async (_event, dados) => {
   try {
-    await registrarUsuario(dados.name, dados.email, dados.password, dados.pin);
+    await registrarUsuario(dados.name, dados.email, dados.password);
     return { success: true, message: 'Usuário cadastrado com sucesso!' };
   } catch (err) {
     return { success: false, message: err.message || 'Erro ao cadastrar usuário' };
@@ -3199,7 +3205,7 @@ ipcMain.handle('registrar-usuario', async (_event, dados) => {
 
 ipcMain.handle('login-usuario', async (event, dados) => {
   try {
-    const user = await loginUsuario(dados.email, dados.password, dados.pin);
+    const user = await loginUsuario(dados.email, dados.password);
     setCurrentUserSession(user);
     return { success: true, user };
   } catch (err) {
@@ -3693,7 +3699,7 @@ ipcMain.handle('salvar-produto-detalhado', async (_e, { codigo, produto, itens }
   return salvarProdutoDetalhado(codigo, produto, itens);
 });
 
-async function waitForAutoLoginDatabaseReady(pin) {
+async function waitForAutoLoginDatabaseReady(user) {
   const start = Date.now();
   const hasTimeout = AUTO_LOGIN_DB_WAIT_TIMEOUT_MS > 0;
   let attempt = 0;
@@ -3701,11 +3707,20 @@ async function waitForAutoLoginDatabaseReady(pin) {
 
   while (true) {
     try {
-      ensureDatabaseReady(pin);
+      ensureDatabaseReady();
+      const api = getAuthorizedApiClient();
+      await api.get('/status');
+      if (user?.id) {
+        await api.get(`/api/usuarios/${user.id}`);
+      }
       return { ready: true };
     } catch (err) {
       const error = err instanceof Error ? err : new Error(String(err));
-      const reason = error.reason || (error.code === 'db-connecting' ? 'db-connecting' : null);
+      const mappedReason = mapApiErrorToReason(error);
+      const reason = mappedReason || error.reason || (error.code === 'db-connecting' ? 'db-connecting' : null);
+      if (reason && !error.reason) {
+        error.reason = reason;
+      }
       if (reason !== 'db-connecting') {
         throw error;
       }
@@ -3798,11 +3813,11 @@ async function waitForAutoLoginDatabaseReady(pin) {
 }
 
 ipcMain.handle('auto-login', async (_event, payload) => {
-  const { pin, user } = typeof payload === 'object' && payload !== null
+  const { user } = typeof payload === 'object' && payload !== null
     ? payload
-    : { pin: payload };
+    : { user: null };
   try {
-    const warmupResult = await waitForAutoLoginDatabaseReady(pin);
+    const warmupResult = await waitForAutoLoginDatabaseReady(user);
 
     if (!warmupResult.ready) {
       throw warmupResult.error;

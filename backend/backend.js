@@ -133,7 +133,17 @@ async function loginUsuario(email, senha) {
   }
 }
 
-function isPinError() {
+function isPinError(err) {
+  if (!err) return false;
+  if (err.reason === 'pin') return true;
+  if (err.reason === 'user-auth') return false;
+  const status = Number(err.status || err.statusCode);
+  if (status === 401 || status === 403) return true;
+  const message = typeof err.message === 'string' ? err.message.toLowerCase() : '';
+  if (message.includes('token') && (message.includes('inválido') || message.includes('invalido') || message.includes('expirado'))) {
+    return true;
+  }
+  if (err.code === 'auth-failed') return true;
   return false;
 }
 

@@ -77,9 +77,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     if (DEBUG) ipcRenderer.send('debug-log', msg);
   },
   getRuntimeConfig: () => getRuntimeConfigCached(),
-  login: (email, password, pin) => ipcRenderer.invoke('login-usuario', { email, password, pin }),
-  register: async (name, email, password, pin) => {
-    const result = await ipcRenderer.invoke('registrar-usuario', { name, email, password, pin });
+  login: (email, password) => ipcRenderer.invoke('login-usuario', { email, password }),
+  register: async (name, email, password) => {
+    const result = await ipcRenderer.invoke('registrar-usuario', { name, email, password });
     if (result && result.success) {
       recordIpcAction('registrar-usuario', { name, email }, result);
     }
@@ -245,7 +245,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     recordIpcAction('atualizar-preco-materia-prima', { id, preco }, result);
     return result;
   },
-  autoLogin: (pin, user) => ipcRenderer.invoke('auto-login', { pin, user }),
+  autoLogin: (user) => ipcRenderer.invoke('auto-login', { user }),
   openDashboard: () => ipcRenderer.invoke('open-dashboard'),
   closeLogin: () => ipcRenderer.invoke('close-login'),
   openLoginHidden: () => ipcRenderer.invoke('open-login-hidden'),

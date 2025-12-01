@@ -45,7 +45,7 @@ router.post('/password-reset-request', async (req, res) => {
       return res.status(401).json({ error: 'Token ausente ou inválido.' });
     }
     if (isPinError(err)) {
-      return res.status(400).json({ error: 'PIN incorreto. E-mail não enviado.' });
+      return res.status(401).json({ error: 'Token inválido ou expirado.' });
     }
 
     if (isNetworkError(err)) {

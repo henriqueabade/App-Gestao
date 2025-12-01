@@ -18,7 +18,6 @@ function showInactiveUserWarning() {
   showToast('Seu usuário está inativo. Solicite ao administrador a ativação do seu acesso.', 'error');
 }
 
-let currentPinPopup = null;
 let pinErrorShown = false;
 let offlineErrorShown = false;
 let userRemovedErrorShown = false;
@@ -50,47 +49,6 @@ async function cacheUpdateStatus() {
     sessionStorage.removeItem('pendingUpdate');
   }
 }
-function createPinPopupContent() {
-  return `
-    <div class="bg-white p-4 rounded-lg shadow-md border border-gray-100 w-64 text-sm text-gray-700 leading-relaxed">
-      <p><strong>PIN</strong> é o número de 5 dígitos recebido por e-mail</p>
-      <p class="mt-2"><strong>Para primeiro PIN:</strong> Contate o Administrador</p>
-      <p class="mt-1"><strong>Em caso de Erro/Não Recebimento:</strong> Contate o Administrador</p>
-    </div>`;
-}
-
-function showPinPopup(target) {
-  hidePinPopup();
-  const popup = document.createElement('div');
-  popup.className = 'fixed z-50';
-  popup.style.position = 'fixed';
-  popup.innerHTML = createPinPopupContent();
-  document.body.appendChild(popup);
-  const rect = target.getBoundingClientRect();
-  const margin = 8;
-  const popupRect = popup.getBoundingClientRect();
-
-  let top = rect.top - popupRect.height - margin;
-  if (top < margin) top = margin;
-
-  let left = rect.left + rect.width / 2 - popupRect.width / 2;
-  if (left + popupRect.width > window.innerWidth - margin) {
-    left = window.innerWidth - popupRect.width - margin;
-  }
-  if (left < margin) left = margin;
-
-  popup.style.left = `${left}px`;
-  popup.style.top = `${top}px`;
-  currentPinPopup = popup;
-}
-
-function hidePinPopup() {
-  if (currentPinPopup) {
-    currentPinPopup.remove();
-    currentPinPopup = null;
-  }
-}
-
 function showPinError() {
   if (pinErrorShown) return;
   pinErrorShown = true;
@@ -201,7 +159,6 @@ if (intro) {
 }
 
 
-  const storedPin = localStorage.getItem('pin');
   const storedUser = localStorage.getItem('user');
   let parsedStoredUser = null;
   try {
@@ -218,7 +175,7 @@ if (intro) {
     }
   }
 
-  function scheduleAutoLoginRetry(pin, user, storedUserValue, retryAfter) {
+  function scheduleAutoLoginRetry(user, storedUserValue, retryAfter) {
     clearPendingAutoLoginRetry();
     const suggestedRetry = Number(retryAfter);
     const delay = Math.max(
@@ -233,21 +190,22 @@ if (intro) {
         return;
       }
       try {
-        await attemptStoredAutoLogin(pin, user, storedUserValue);
+        await attemptStoredAutoLogin(user, storedUserValue);
       } catch (retryErr) {
         console.error('Tentativa automática de auto-login falhou', retryErr);
       }
     }, delay);
   }
 
-  async function attemptStoredAutoLogin(pin, user, storedUserValue) {
+  async function attemptStoredAutoLogin(user, storedUserValue) {
     try {
-      const result = await window.electronAPI.autoLogin(pin, user);
+      const result = await window.electronAPI.autoLogin(user);
       if (result && result.success) {
         clearPendingAutoLoginRetry();
         const cachedUser = storedUserValue || (result.user ? JSON.stringify(result.user) : null);
         if (cachedUser) sessionStorage.setItem('currentUser', cachedUser);
         await cacheUpdateStatus();
+        await window.electronAPI.requestConnectionCheck?.({ forceDeep: true });
         return true;
       }
 
@@ -258,14 +216,13 @@ if (intro) {
       const effectiveReason = normalizedReason || normalizedCode;
 
       if (effectiveReason === 'db-connecting') {
-        scheduleAutoLoginRetry(pin, user, storedUserValue, result?.retryAfter);
+        scheduleAutoLoginRetry(user, storedUserValue, result?.retryAfter);
         return false;
       }
 
       clearPendingAutoLoginRetry();
       localStorage.removeItem('user');
       localStorage.removeItem('rememberUser');
-      localStorage.removeItem('pin');
       if (effectiveReason === 'offline') {
         showOfflineError();
       } else if (effectiveReason === 'user-removed') {
@@ -315,7 +272,7 @@ if (intro) {
       }
     }
 
-    const autoLoginSucceeded = await attemptStoredAutoLogin(storedPin, parsedStoredUser, storedUser);
+    const autoLoginSucceeded = await attemptStoredAutoLogin(parsedStoredUser, storedUser);
     if (autoLoginSucceeded) {
       return;
     }
@@ -335,43 +292,6 @@ if (intro) {
     localStorage.removeItem('userRemoved');
     showUserRemovedError();
   }
-  const pinInput = document.getElementById('pin');
-  const registerPinInput = document.getElementById('registerPin');
-  const applyStoredPin = input => {
-    if (input && storedPin) {
-      input.value = storedPin;
-      input.readOnly = true;
-      input.classList.add('text-gray-400');
-      input.addEventListener('focus', () => {
-        input.readOnly = false;
-        input.classList.remove('text-gray-400');
-      }, { once: true });
-    }
-  };
-  applyStoredPin(pinInput);
-  applyStoredPin(registerPinInput);
-
-  const enforcePin = input => {
-    if (!input) return;
-    input.addEventListener('input', () => {
-      input.value = input.value.replace(/\D/g, '').slice(0, 5);
-    });
-  };
-  enforcePin(pinInput);
-  enforcePin(registerPinInput);
-  const pinInfoLogin = document.getElementById('pinInfoLogin');
-  const pinInfoRegister = document.getElementById('pinInfoRegister');
-  [pinInfoLogin, pinInfoRegister].forEach(icon => {
-    if (!icon) return;
-    icon.addEventListener('mouseenter', () => showPinPopup(icon));
-    icon.addEventListener('mouseleave', hidePinPopup);
-    icon.addEventListener('click', () => {
-      if (currentPinPopup) hidePinPopup();
-      else showPinPopup(icon);
-    });
-  });
-
-
 // 1) Inicializa tsParticles com efeito twinkle e cores customizadas
   tsParticles.load("bg-network", {
     fpsLimit: 30,
@@ -480,11 +400,11 @@ if (intro) {
     }, delay);
   }
 
-  async function processLoginAttempt({ email, password, pin, attemptId, autoRetry = false }) {
+  async function processLoginAttempt({ email, password, attemptId, autoRetry = false }) {
     let keepLoading = false;
     setLoginButtonLoading(true, 'Entrando...');
     try {
-      const result = await window.electronAPI.login(email, password, pin);
+      const result = await window.electronAPI.login(email, password);
       if (!result.success) {
         const message = typeof result.message === 'string' ? result.message : '';
         const reason = typeof result.reason === 'string' ? result.reason.trim() : '';
@@ -493,7 +413,7 @@ if (intro) {
           clearPendingLoginRetry();
           lastLoginAttempt = null;
           if (normalizedReason === 'pin') {
-            showToast(message || 'PIN incorreto', 'error');
+            showToast(message || 'Sessão inválida. Faça login novamente.', 'error');
             return;
           }
           if (normalizedReason === 'user-auth') {
@@ -510,7 +430,7 @@ if (intro) {
         if (normalizedReason === 'db-connecting' || result.code === 'db-connecting') {
           keepLoading = true;
           setLoginButtonLoading(true, 'Entrando...');
-          const retryPayload = { email, password, pin, attemptId };
+          const retryPayload = { email, password, attemptId };
           scheduleLoginRetry(retryPayload, result.retryAfter);
           return;
         }
@@ -533,20 +453,8 @@ if (intro) {
       const remember = document.getElementById('remember').checked;
       if (result.user) localStorage.setItem('user', JSON.stringify(result.user));
       localStorage.setItem('rememberUser', remember ? '1' : '0');
-      localStorage.setItem('pin', pin);
       sessionStorage.setItem('currentUser', JSON.stringify(result.user));
       await cacheUpdateStatus();
-
-      if (pinInput) {
-        pinInput.value = pin;
-        pinInput.readOnly = true;
-        pinInput.classList.add('text-gray-400');
-      }
-      if (registerPinInput) {
-        registerPinInput.value = pin;
-        registerPinInput.readOnly = true;
-        registerPinInput.classList.add('text-gray-400');
-      }
 
       let savedState = localStorage.getItem('savedState');
       if (!savedState) {
@@ -578,6 +486,7 @@ if (intro) {
       }
 
       window.electronAPI.openDashboard();
+      window.electronAPI.requestConnectionCheck?.({ forceDeep: true });
       const overlay = document.getElementById('loadingOverlay');
       if (overlay) {
         overlay.classList.remove('hidden');
@@ -681,19 +590,13 @@ if (intro) {
     e.preventDefault();
     const emailInput = document.getElementById('email');
     const passwordInput = document.getElementById('password');
-    const pinField = document.getElementById('pin');
     const email = emailInput ? emailInput.value : '';
     const password = passwordInput ? passwordInput.value : '';
-    const pin = pinField ? pinField.value : '';
-    if (pin.length !== 5) {
-      showToast('PIN deve ter 5 dígitos', 'error');
-      return;
-    }
 
     clearPendingLoginRetry();
     const attemptId = Date.now();
-    lastLoginAttempt = { email, password, pin, attemptId };
-    await processLoginAttempt({ email, password, pin, attemptId, autoRetry: false });
+    lastLoginAttempt = { email, password, attemptId };
+    await processLoginAttempt({ email, password, attemptId, autoRetry: false });
   });
 
   // === 7) Envio do formulário de Cadastro ===
@@ -705,11 +608,6 @@ if (intro) {
     const emailReg        = document.getElementById('registerEmail').value;
     const passwordReg     = document.getElementById('registerPassword').value;
     const confirmPassword = document.getElementById('confirmPassword').value;
-    const pinReg          = document.getElementById('registerPin').value;
-    if (pinReg.length !== 5) {
-      showToast('PIN deve ter 5 dígitos', 'error');
-      return;
-    }
     if (passwordReg !== confirmPassword) {
       showToast('As senhas não coincidem!', 'error');
       return;
@@ -719,21 +617,18 @@ if (intro) {
       const result = await window.electronAPI.register(
         name,
         emailReg,
-        passwordReg,
-        pinReg
+        passwordReg
       );
       if (!result.success) {
-        showToast(result.message || 'PIN incorreto', 'error');
+        showToast(result.message || 'Erro ao cadastrar usuário', 'error');
         return;
       }
 
       showToast(result.message, 'success');
-      localStorage.setItem('pin', pinReg);
       registerForm.reset();
-      applyStoredPin(registerPinInput);
       loginTab.click();
     } catch (err) {
-      showToast(err.message || 'PIN incorreto', 'error');
+      showToast(err.message || 'Erro ao cadastrar usuário', 'error');
     } finally {
       setRegisterButtonLoading(false);
     }
@@ -743,19 +638,12 @@ if (intro) {
   document.getElementById('resetPasswordForm').addEventListener('submit', async e => {
     e.preventDefault();
     const emailReset = document.getElementById('resetEmail').value;
-    const pinInput = document.getElementById('pin');
-    const pinValue = pinInput ? pinInput.value.trim() : '';
-
-    if (!/^\d{5}$/.test(pinValue)) {
-      showToast('Informe o PIN de 5 dígitos para solicitar a redefinição.', 'error');
-      return;
-    }
 
     try {
       const resp = await fetchApi('/password-reset-request', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: emailReset, pin: pinValue })
+        body: JSON.stringify({ email: emailReset })
       });
 
       if (resp.ok) {
@@ -771,8 +659,10 @@ if (intro) {
 
         if (resp.status === 404) {
           showToast(errorMessage || 'E-mail não encontrado!', 'error');
+        } else if (resp.status === 401) {
+          showToast(errorMessage || 'Sessão inválida. Tente novamente.', 'error');
         } else if (resp.status === 400) {
-          showToast(errorMessage || 'PIN incorreto ou ausente.', 'error');
+          showToast(errorMessage || 'Solicitação inválida. Tente novamente.', 'error');
         } else if (resp.status === 503) {
           showToast(errorMessage || 'Sem conexão com internet.', 'error');
         } else {
