@@ -3,30 +3,57 @@
 
 async function fetchApi(path, options = {}) {
     const baseUrl = await window.apiConfig.getApiBaseUrl();
+
     const finalOptions = { ...options };
     const headers = new Headers(options?.headers || {});
 
+    // Carrega usuário atual
     const usuarioAtual = usuarioLogado || carregarUsuarioLogado();
-    const email = typeof usuarioAtual?.email === 'string' ? usuarioAtual.email.trim() : '';
+
+    // Extrai e normaliza EMAIL
+    const email = typeof usuarioAtual?.email === 'string'
+        ? usuarioAtual.email.trim()
+        : '';
+
+    if (email) {
+        headers.set('x-usuario-email', email);
+    }
+
+    // Extrai e normaliza ID (para headers auxiliares)
     const usuarioId =
         typeof usuarioAtual?.id === 'number'
             ? usuarioAtual.id
             : Number.isFinite(Number(usuarioAtual?.id))
                 ? Number(usuarioAtual.id)
                 : null;
-    if (email) {
-        headers.set('x-usuario-email', email);
-    }
+
     if (usuarioId && !headers.has('x-usuario-id')) {
         headers.set('x-usuario-id', String(usuarioId));
     }
-    if (usuarioId && !headers.has('authorization')) {
-        headers.set('authorization', `Bearer ${usuarioId}`);
+
+    // ======== 🔥 AQUÍ CORRIGIMOS O PROBLEMA PRINCIPAL 🔥 ========
+
+    // Tenta encontrar o token JWT salvo
+    const token =
+        usuarioAtual?.token ||
+        usuarioAtual?.jwt ||
+        usuarioAtual?.accessToken ||
+        usuarioAtual?.access_token ||
+        null;
+
+    // Só define authorization se ainda não foi definido manualmente
+    if (token && !headers.has('authorization')) {
+        headers.set('authorization', `Bearer ${token}`);
     }
 
+    // NÃO enviar mais Bearer <usuarioId> !! (erro original)
+    // ==========================================================
+
     finalOptions.headers = headers;
+
     return fetch(`${baseUrl}${path}`, finalOptions);
 }
+
 
 // Cache local dos usuários carregados
 let usuariosCache = [];
@@ -918,9 +945,12 @@ function renderUsuarios(lista) {
         const avatarUrl = obterAvatarUrl(u);
         const avatarAltTexto = nomeOriginal ? `Avatar de ${nomeOriginal}` : 'Avatar do usuário';
         const avatarAlt = escapeAttribute(avatarAltTexto);
-        const avatarMarkup = avatarUrl
-            ? `<div class="usuario-avatar usuario-avatar--list usuario-avatar--has-image"><img src="${escapeAttribute(avatarUrl)}" alt="${avatarAlt}" class="usuario-avatar__image" loading="lazy" /></div>`
-            : `<div class="usuario-avatar usuario-avatar--list"><span class="usuario-avatar__initials">${iniciaisSeguro || 'US'}</span></div>`;
+        const avatarMarkup = `
+            <div class="usuario-avatar usuario-avatar--list usuario-avatar--initials">
+                <span class="usuario-avatar__initials">${iniciaisSeguro || 'US'}</span>
+            </div>
+            `;
+
         const ultimaEntradaValor = obterPrimeiroValor(u, [
             'ultimaEntradaEm',
             'ultima_entrada_em',
@@ -1409,15 +1439,35 @@ async function alternarStatusUsuario(botao) {
 }
 
 async function carregarUsuarios() {
+    const t0 = performance.now();
+    console.log("📌 Iniciando carregarUsuarios()");
+
     try {
+        const t1 = performance.now();
         const resp = await fetchApi('/api/usuarios/lista');
+        const t2 = performance.now();
+
+        console.log("⏱ Tempo fetchApi →", (t2 - t1).toFixed(2), "ms");
+
         usuariosCache = await resp.json();
+        const t3 = performance.now();
+
+        console.log("⏱ Tempo JSON.parse →", (t3 - t2).toFixed(2), "ms");
+        console.log("📦 Total usuários recebidos:", usuariosCache.length);
+
         renderUsuarios(usuariosCache);
+        const t4 = performance.now();
+
+        console.log("⏱ Tempo renderUsuarios →", (t4 - t3).toFixed(2), "ms");
+        console.log("⏳ Tempo total carregarUsuarios →", (t4 - t0).toFixed(2), "ms");
+
         atualizarResumo();
     } catch (err) {
-        console.error('Erro ao carregar usuários:', err);
+        console.error('❌ Erro ao carregar usuários:', err);
     }
 }
+
+
 
 window.addEventListener('usuarioAtualizado', () => carregarUsuarios());
 window.addEventListener('usuariosModeloPermissaoAtualizado', (event) => {
