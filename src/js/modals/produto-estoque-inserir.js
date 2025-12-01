@@ -88,7 +88,7 @@
   itemMensagem.textContent = '';
   itemOptions.innerHTML = '';
 
-  const etapa = processoSelecionadoId || processoSelect.value;
+  const etapa =  processoSelect.value;
   const codigo = window.produtoDetalhes?.codigo;
 
   if(!etapa || (!codigo && !produtoId)){
@@ -137,7 +137,7 @@
   if(form){
     form.addEventListener('submit', async e => {
       e.preventDefault();
-      const etapa = processoSelecionadoId || processoSelect.value;
+      const etapa = processoSelect.value;
       const itemNome = itemInput.value.trim();
       const option = Array.from(itemOptions.querySelectorAll('option')).find(o => o.value === itemNome);
       const itemId = option?.dataset.id;
