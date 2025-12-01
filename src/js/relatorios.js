@@ -4779,11 +4779,21 @@ REPORT_CONFIGS.usuarios = {
             : (usuario?.ultimaAtividadeEm ? formatDate(usuario.ultimaAtividadeEm) : '—');
         const initials = getInitials(usuario?.nome);
         const avatarColor = getAvatarColor(usuario?.nome);
+        const avatarVersao = usuario?.avatar_version || usuario?.avatarVersion || null;
+        const avatarBase = usuario?.foto_usuario || usuario?.avatar || usuario?.avatar_url || usuario?.avatarUrl || null;
+        const avatarUrl = avatarBase
+            ? `${avatarBase}${avatarBase.includes('?') ? '&' : '?'}v=${encodeURIComponent(avatarVersao || '')}`
+            : null;
+        const avatarMarkup = avatarUrl
+            ? `<div class="w-10 h-10 rounded-full overflow-hidden flex items-center justify-center bg-gray-800">
+                    <img src="${escapeHtml(avatarUrl)}" alt="Avatar de ${escapeHtml(usuario?.nome || 'usuário')}" class="w-full h-full object-cover" loading="lazy" onerror="this.parentElement.innerHTML='<div class=\\"w-full h-full flex items-center justify-center text-sm font-semibold text-white\\" style=\\"background:${avatarColor};\\">${initials}</div>'" />
+               </div>`
+            : `<div class="w-10 h-10 rounded-full flex items-center justify-center text-sm font-semibold text-white" style="background:${avatarColor};">${initials}</div>`;
 
         return `
             <tr class="transition-colors duration-150">
                 <td data-column-key="avatar" class="px-6 py-4 text-left">
-                    <div class="w-10 h-10 rounded-full flex items-center justify-center text-sm font-semibold text-white" style="background:${avatarColor};">${initials}</div>
+                    ${avatarMarkup}
                 </td>
                 <td data-column-key="nome" class="px-6 py-4 whitespace-normal break-words text-left text-sm font-medium text-white">${nome}</td>
                 <td data-column-key="email" class="px-6 py-4 whitespace-normal break-words text-left text-sm text-gray-300">${email}</td>

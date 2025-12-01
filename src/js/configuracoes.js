@@ -614,7 +614,7 @@ const MenuStartupPreferences = (() => {
 
     const USER_PROFILE_EVENT = 'user-profile-updated';
     const API_PROFILE_ENDPOINT = '/api/usuarios/me';
-    const MAX_AVATAR_SIZE = 2 * 1024 * 1024;
+    const MAX_AVATAR_SIZE = 1 * 1024 * 1024;
     const PROFILE_FIELD_KEYS = ['nome', 'email', 'telefone', 'senha', 'confirmacao'];
 
     const profileState = {
@@ -623,7 +623,6 @@ const MenuStartupPreferences = (() => {
         data: null,
         initialData: null,
         avatarDataUrl: null,
-        avatarObjectUrl: null,
         avatarChanged: false
     };
 
@@ -726,18 +725,11 @@ const MenuStartupPreferences = (() => {
     function aplicarCacheBuster(url, versao) {
         if (!url || !versao) return url;
         if (typeof url !== 'string') return url;
-        if (/^data:/i.test(url)) return url;
 
         const [base, fragmento] = url.split('#', 2);
         const encoded = encodeURIComponent(versao);
-        let atualizado = base;
-
-        if (/(?:^|[?&])t=/.test(base)) {
-            atualizado = base.replace(/([?&])t=[^&]*/, `$1t=${encoded}`);
-        } else {
-            const separador = base.includes('?') ? '&' : '?';
-            atualizado = `${base}${separador}t=${encoded}`;
-        }
+        const separador = base.includes('?') ? '&' : '?';
+        const atualizado = `${base}${separador}v=${encoded}`;
 
         return fragmento !== undefined ? `${atualizado}#${fragmento}` : atualizado;
     }
@@ -757,13 +749,13 @@ const MenuStartupPreferences = (() => {
         const perfil = source.perfil ?? source.role ?? source.tipo ?? '';
         const versaoAvatar = extrairAvatarVersao(source);
         const avatarCandidatos = [
+            source.foto_usuario,
+            source.fotoUsuario,
+            source.avatar,
             source.avatar_url,
             source.avatarUrl,
             source.fotoUrl,
-            source.foto,
-            source.avatar,
-            source.imagem,
-            source.image
+            source.foto
         ];
 
         let avatarUrl = null;
@@ -771,19 +763,8 @@ const MenuStartupPreferences = (() => {
             if (!candidato || typeof candidato !== 'string') continue;
             const trimmed = candidato.trim();
             if (!trimmed) continue;
-            if (/^data:image\//i.test(trimmed)) {
-                avatarUrl = trimmed;
-                break;
-            }
-            let resolved = trimmed;
-            if (typeof window.apiConfig?.resolveUrl === 'function') {
-                resolved = window.apiConfig.resolveUrl(trimmed);
-            }
-            const resolvedTrimmed = typeof resolved === 'string' ? resolved.trim() : '';
-            if (resolvedTrimmed) {
-                avatarUrl = aplicarCacheBuster(resolvedTrimmed, versaoAvatar);
-                break;
-            }
+            avatarUrl = aplicarCacheBuster(trimmed, versaoAvatar);
+            break;
         }
 
         return {
@@ -816,7 +797,6 @@ const MenuStartupPreferences = (() => {
         const initialsEl = dom.profile.avatarInitials;
         if (!previewEl) return;
 
-        const loadablePattern = /^(?:data:|blob:|file:|https?:|\/\/)/i;
         const initials = getInitialsFromName(fallbackName);
 
         const applyPreview = url => {
@@ -837,59 +817,18 @@ const MenuStartupPreferences = (() => {
             initialsEl.textContent = initials;
         }
 
-        if (!sourceUrl) {
+        if (!sourceUrl || typeof sourceUrl !== 'string') {
             applyPreview(null);
             return;
         }
 
-        const resolvedSync =
-            typeof window.apiConfig?.resolveUrl === 'function' ? window.apiConfig.resolveUrl(sourceUrl) : sourceUrl;
-        const resolvedTrimmed = typeof resolvedSync === 'string' ? resolvedSync.trim() : '';
-        const canLoadSync = resolvedTrimmed && loadablePattern.test(resolvedTrimmed);
-
-        if (canLoadSync) {
-            applyPreview(aplicarCacheBuster(resolvedTrimmed, versao));
-        } else {
-            previewEl.style.setProperty('--avatar-preview-image', 'none');
-            previewEl.classList.remove('has-image');
-            previewEl.dataset.hasImage = 'false';
-        }
-
-        const shouldAttemptAsync =
-            !canLoadSync &&
-            typeof sourceUrl === 'string' &&
-            sourceUrl.trim() &&
-            typeof window.apiConfig?.resolveUrlAsync === 'function';
-
-        if (!shouldAttemptAsync) {
-            if (!canLoadSync) {
-                applyPreview(null);
-            }
+        const trimmed = sourceUrl.trim();
+        if (!trimmed) {
+            applyPreview(null);
             return;
         }
 
-        const requestId = `${Date.now()}-${Math.random()}`;
-        previewEl.dataset.avatarRequestId = requestId;
-        window.apiConfig
-            .resolveUrlAsync(sourceUrl)
-            .then(resolvedAsync => {
-                if (previewEl.dataset.avatarRequestId !== requestId) {
-                    return;
-                }
-                const finalUrl =
-                    typeof resolvedAsync === 'string' ? resolvedAsync.trim() : resolvedAsync;
-                if (typeof finalUrl === 'string' && loadablePattern.test(finalUrl)) {
-                    applyPreview(aplicarCacheBuster(finalUrl, versao));
-                } else {
-                    applyPreview(null);
-                }
-            })
-            .catch(() => {
-                if (previewEl.dataset.avatarRequestId !== requestId) {
-                    return;
-                }
-                applyPreview(null);
-            });
+        applyPreview(aplicarCacheBuster(trimmed, versao));
     }
 
     function setProfileFeedback(message, type = 'info') {
@@ -1030,7 +969,7 @@ const MenuStartupPreferences = (() => {
             dom.profile.avatarInput.value = '';
         }
         updateAvatarPreview(
-            profileState.avatarObjectUrl || data.avatarUrl,
+            data.avatarUrl || data.foto_usuario || null,
             data.nome || '',
             data.avatarVersion || data.avatar_version || null
         );
@@ -1053,16 +992,8 @@ const MenuStartupPreferences = (() => {
         profileState.initialData = { ...normalized };
         profileState.avatarChanged = false;
         profileState.avatarDataUrl = null;
-        revokeAvatarObjectUrl();
         renderProfileData();
         clearProfileErrors();
-    }
-
-    function revokeAvatarObjectUrl() {
-        if (profileState.avatarObjectUrl) {
-            URL.revokeObjectURL(profileState.avatarObjectUrl);
-            profileState.avatarObjectUrl = null;
-        }
     }
 
     function readFileAsDataUrl(file) {
@@ -1074,14 +1005,15 @@ const MenuStartupPreferences = (() => {
         });
     }
 
+    function revokeAvatarObjectUrl() {}
+
     async function handleAvatarInputChange(event) {
         const file = event?.target?.files?.[0];
         if (!file) {
             profileState.avatarChanged = false;
             profileState.avatarDataUrl = null;
-            revokeAvatarObjectUrl();
             updateAvatarPreview(
-                profileState.data?.avatarUrl || null,
+                profileState.data?.avatarUrl || profileState.data?.foto_usuario || null,
                 collectProfileFormValues().nome || profileState.data?.nome || '',
                 profileState.data?.avatarVersion || profileState.data?.avatar_version || null
             );
@@ -1089,7 +1021,7 @@ const MenuStartupPreferences = (() => {
         }
 
         if (file.size > MAX_AVATAR_SIZE) {
-            setProfileFeedback('A imagem selecionada excede o limite de 2 MB. Escolha um arquivo menor.', 'error');
+            setProfileFeedback('A imagem selecionada excede o limite de 1 MB. Escolha um arquivo menor.', 'error');
             event.target.value = '';
             return;
         }
@@ -1101,19 +1033,16 @@ const MenuStartupPreferences = (() => {
             return;
         }
 
-        revokeAvatarObjectUrl();
-        profileState.avatarObjectUrl = URL.createObjectURL(file);
-        profileState.avatarChanged = true;
-        updateAvatarPreview(
-            profileState.avatarObjectUrl,
-            collectProfileFormValues().nome || profileState.data?.nome || '',
-            profileState.data?.avatarVersion || profileState.data?.avatar_version || null
-        );
-        setProfileFeedback('Pré-visualização atualizada. Salve para confirmar a nova foto.', 'info');
-
         try {
             const dataUrl = await readFileAsDataUrl(file);
             profileState.avatarDataUrl = dataUrl;
+            profileState.avatarChanged = true;
+            updateAvatarPreview(
+                dataUrl,
+                collectProfileFormValues().nome || profileState.data?.nome || '',
+                Date.now()
+            );
+            setProfileFeedback('Pré-visualização atualizada. Salve para confirmar a nova foto.', 'info');
         } catch (error) {
             console.error('Erro ao ler imagem selecionada:', error);
             setProfileFeedback('Não foi possível carregar a imagem selecionada.', 'error');
@@ -1191,6 +1120,26 @@ const MenuStartupPreferences = (() => {
         setProfileFeedback('Alterações descartadas.', 'info');
     }
 
+    async function uploadUserAvatar(avatarDataUrl) {
+        const response = await fetchApi('/api/usuarios/me/avatar', {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ avatar: avatarDataUrl }),
+            credentials: 'include'
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => null);
+            const message = errorData?.error || errorData?.message || 'Não foi possível atualizar o avatar.';
+            throw new Error(message);
+        }
+
+        const payload = await response.json();
+        return normalizeUserProfile({ ...profileState.data, ...payload });
+    }
+
     async function handleProfileSubmit(event) {
         if (event) {
             event.preventDefault();
@@ -1216,10 +1165,6 @@ const MenuStartupPreferences = (() => {
         if (values.senha) {
             payload.senha = values.senha;
         }
-        if (profileState.avatarChanged && profileState.avatarDataUrl) {
-            payload.avatar = profileState.avatarDataUrl;
-        }
-
         setProfileSaving(true);
         setProfileFeedback('Salvando alterações...', 'info');
 
@@ -1238,12 +1183,16 @@ const MenuStartupPreferences = (() => {
                 throw new Error(message);
             }
             const result = await response.json();
-            const normalized = normalizeUserProfile({ ...profileState.data, ...result });
+            let normalized = normalizeUserProfile({ ...profileState.data, ...result });
+
+            if (profileState.avatarChanged && profileState.avatarDataUrl) {
+                normalized = await uploadUserAvatar(profileState.avatarDataUrl);
+            }
+
             profileState.data = { ...normalized };
             profileState.initialData = { ...normalized };
             profileState.avatarChanged = false;
             profileState.avatarDataUrl = null;
-            revokeAvatarObjectUrl();
             renderProfileData();
             setProfileFeedback('Dados atualizados com sucesso!', 'success');
             persistUserToStorage(profileState.data);

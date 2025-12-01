@@ -32,17 +32,8 @@ function buildPayload(body = {}) {
   };
 }
 
-/**
- * Normaliza avatar APENAS para /me (topbar). A lista não mexe mais em avatar.
- */
 function normalizeAvatar(usuario = {}) {
-  const { fotoUsuario, foto_usuario, ...rest } = usuario || {};
-  const normalized = { ...rest };
-
-  const id =
-    usuario?.id ??
-    usuario?.usuario_id ??
-    null;
+  const normalized = { ...usuario };
 
   const avatarVersion =
     usuario?.avatarVersion ??
@@ -55,30 +46,65 @@ function normalizeAvatar(usuario = {}) {
     usuario?.fotoAtualizadoEm ??
     null;
 
-  const avatarUrl =
-    usuario?.avatarUrl ??
-    usuario?.avatar_url ??
-    (id ? `/users/${id}/avatar` : null);
-
-  if (avatarUrl) {
-    normalized.avatarUrl = avatarUrl;
-    normalized.avatar_url = avatarUrl;
-    normalized.foto = avatarUrl;
-    normalized.fotoUrl = avatarUrl;
-  }
-
-  if (avatarVersion !== null && avatarVersion !== undefined) {
-    const value =
-      typeof avatarVersion === 'string'
+  const versionValue =
+    avatarVersion === null || avatarVersion === undefined
+      ? null
+      : typeof avatarVersion === 'string'
         ? avatarVersion.trim()
         : String(avatarVersion);
-    if (value) {
-      normalized.avatarVersion = value;
-      normalized.avatar_version = value;
-    }
+
+  const fotoUsuario =
+    usuario?.foto_usuario ??
+    usuario?.fotoUsuario ??
+    usuario?.avatar ??
+    usuario?.avatar_url ??
+    usuario?.avatarUrl ??
+    null;
+
+  if (versionValue) {
+    normalized.avatarVersion = versionValue;
+    normalized.avatar_version = versionValue;
+  }
+
+  if (fotoUsuario) {
+    normalized.foto_usuario = fotoUsuario;
+    normalized.avatar = fotoUsuario;
+    normalized.avatarUrl = fotoUsuario;
+    normalized.avatar_url = fotoUsuario;
+    normalized.foto = fotoUsuario;
+    normalized.fotoUrl = fotoUsuario;
   }
 
   return normalized;
+}
+
+function validateAvatarPayload(dataUrl) {
+  const trimmed = typeof dataUrl === 'string' ? dataUrl.trim() : '';
+  if (!trimmed) {
+    const error = new Error('Avatar ausente.');
+    error.status = 400;
+    throw error;
+  }
+
+  const matches = trimmed.match(/^data:(image\/(?:png|jpe?g));base64,(.+)$/i);
+  if (!matches) {
+    const error = new Error('Formato de avatar inválido. Utilize PNG ou JPEG em dataURL.');
+    error.status = 400;
+    throw error;
+  }
+
+  const base64Payload = matches[2];
+  const sanitized = base64Payload.replace(/\s+/g, '');
+  const padding = (sanitized.match(/=*$/) || [''])[0].length;
+  const bytes = Math.floor((sanitized.length * 3) / 4) - padding;
+
+  if (bytes > 1_048_576) {
+    const error = new Error('Avatar excede o limite de 1 MB.');
+    error.status = 413;
+    throw error;
+  }
+
+  return trimmed;
 }
 
 function extractUserIdFromToken(token) {
@@ -147,13 +173,15 @@ router.get('/lista', async (req, res) => {
 
     const query = {
       // só o que o front realmente usa
-      select: 'id,nome,email,perfil,status,permissoes',
+      select: 'id,nome,email,perfil,status,permissoes,foto_usuario,avatar_version',
       order: 'nome',
       ...req.query
     };
 
     const usuarios = await api.get('/api/usuarios', { query });
-    const payload = Array.isArray(usuarios) ? usuarios : [];
+    const payload = Array.isArray(usuarios)
+      ? usuarios.map(user => normalizeAvatar(user))
+      : [];
 
     res.status(200).json(payload);
   } catch (err) {
@@ -184,6 +212,29 @@ router.get('/me', async (req, res) => {
     res
       .status(err.status || 500)
       .json({ error: 'Erro ao buscar usuário autenticado' });
+  }
+});
+
+router.put('/me/avatar', async (req, res) => {
+  try {
+    const avatar = validateAvatarPayload(req.body?.avatar);
+    const avatarVersion = Date.now();
+
+    const api = createInternalApiClient();
+    const updated = await api.put('/api/usuarios/me/avatar', {
+      avatar,
+      avatarVersion,
+      avatar_version: avatarVersion,
+      foto_usuario: avatar
+    });
+
+    const payload = normalizeAvatar({ ...updated, avatarVersion, avatar_version: avatarVersion });
+    res.status(200).json(payload);
+  } catch (err) {
+    console.error('Erro ao atualizar avatar do usuário:', err);
+    res
+      .status(err.status || 500)
+      .json({ error: err.message || 'Erro ao atualizar avatar do usuário' });
   }
 });
 
@@ -220,6 +271,22 @@ router.post('/', async (req, res) => {
 });
 
 /**
+ * PUT /usuarios/me
+ */
+router.put('/me', async (req, res) => {
+  try {
+    const api = createInternalApiClient();
+    const updated = await api.put('/api/usuarios/me', buildPayload(req.body));
+    res.json(normalizeAvatar(updated || {}));
+  } catch (err) {
+    console.error('Erro ao atualizar usuário autenticado:', err);
+    res
+      .status(err.status || 500)
+      .json({ error: 'Erro ao atualizar usuário autenticado' });
+  }
+});
+
+/**
  * PUT /usuarios/:id
  */
 router.put('/:id', async (req, res) => {
@@ -250,28 +317,5 @@ router.delete('/:id', async (req, res) => {
       .json({ error: 'Erro ao excluir usuário' });
   }
 });
-
-/**
- * Handler para /users/:id/avatar (caso você ainda use em algum lugar)
- */
-async function handleAvatarRequest(req, res) {
-  const token = getToken();
-  const api = createApiClient({
-    headers: { authorization: token ? `Bearer ${token}` : '' }
-  });
-
-  try {
-    const usuario = await api.get(`/api/usuarios/${req.params.id}`);
-    if (usuario?.avatar_url) {
-      return res.redirect(usuario.avatar_url);
-    }
-    return res.status(404).end();
-  } catch (err) {
-    console.error('Erro ao buscar avatar do usuário:', err);
-    res.status(err.status || 500).end();
-  }
-}
-
-router.handleAvatarRequest = handleAvatarRequest;
 
 module.exports = router;

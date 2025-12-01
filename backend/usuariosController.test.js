@@ -22,7 +22,7 @@ function setup() {
     telefone_celular text,
     whatsapp text,
     descricao text,
-    foto_usuario bytea,
+    foto_usuario text,
     verificado boolean default false,
     status text default 'nao_confirmado',
     confirmacao boolean default false,
@@ -53,7 +53,7 @@ function setup() {
     telefone text,
     telefone_celular text,
     whatsapp text,
-    foto_usuario bytea,
+    foto_usuario text,
     atualizado_em timestamp
   );`);
   db.public.none(`CREATE TABLE modelos_permissoes (

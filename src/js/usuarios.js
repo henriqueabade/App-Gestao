@@ -126,18 +126,11 @@ function extrairAvatarVersao(usuario) {
 function aplicarCacheBuster(url, versao) {
     if (!url || !versao) return url;
     if (typeof url !== 'string') return url;
-    if (/^data:/i.test(url)) return url;
 
     const [base, fragmento] = url.split('#', 2);
     const encoded = encodeURIComponent(versao);
-    let atualizado = base;
-
-    if (/(?:^|[?&])t=/.test(base)) {
-        atualizado = base.replace(/([?&])t=[^&]*/, `$1t=${encoded}`);
-    } else {
-        const separador = base.includes('?') ? '&' : '?';
-        atualizado = `${base}${separador}t=${encoded}`;
-    }
+    const separador = base.includes('?') ? '&' : '?';
+    const atualizado = `${base}${separador}v=${encoded}`;
 
     return fragmento !== undefined ? `${atualizado}#${fragmento}` : atualizado;
 }
@@ -414,16 +407,15 @@ function escapeAttribute(valor) {
 function obterAvatarUrl(usuario) {
     if (!usuario || typeof usuario !== 'object') return null;
     const candidatos = [
+        usuario.foto_usuario,
+        usuario.fotoUsuario,
+        usuario.avatar,
         usuario.avatar_url,
         usuario.avatarUrl,
         usuario.fotoUrl,
-        usuario.foto,
-        usuario.fotoUsuario,
-        usuario.foto_usuario,
-        usuario.avatar
+        usuario.foto
     ];
 
-    const loadablePattern = /^(?:data:|blob:|file:|https?:|\/\/)/i;
     const versao = extrairAvatarVersao(usuario);
 
     for (const candidato of candidatos) {
@@ -431,41 +423,7 @@ function obterAvatarUrl(usuario) {
         if (typeof candidato === 'string') {
             const trimmed = candidato.trim();
             if (!trimmed) continue;
-            if (/^data:image\//i.test(trimmed)) {
-                return trimmed;
-            }
-
-            let resolved = trimmed;
-            if (typeof window.apiConfig?.resolveUrl === 'function') {
-                resolved = window.apiConfig.resolveUrl(trimmed);
-            }
-            const resolvedTrimmed = typeof resolved === 'string' ? resolved.trim() : '';
-            if (resolvedTrimmed && loadablePattern.test(resolvedTrimmed)) {
-                return aplicarCacheBuster(resolvedTrimmed, versao);
-            }
-
-            const base64Regex = /^[A-Za-z0-9+/=\s]+$/;
-            if (base64Regex.test(trimmed)) {
-                const sanitized = trimmed.replace(/\s+/g, '');
-                if (sanitized) {
-                    return `data:image/png;base64,${sanitized}`;
-                }
-            }
-        } else if (typeof candidato === 'object' && candidato.type === 'Buffer' && Array.isArray(candidato.data)) {
-            try {
-                const buffer = Uint8Array.from(candidato.data);
-                if (buffer.length) {
-                    let binary = '';
-                    const chunkSize = 0x8000;
-                    for (let i = 0; i < buffer.length; i += chunkSize) {
-                        const chunk = buffer.subarray(i, i + chunkSize);
-                        binary += String.fromCharCode.apply(null, chunk);
-                    }
-                    return `data:image/png;base64,${btoa(binary)}`;
-                }
-            } catch (err) {
-                // ignore buffer conversion failures
-            }
+            return aplicarCacheBuster(trimmed, versao);
         }
     }
 
@@ -945,7 +903,14 @@ function renderUsuarios(lista) {
         const avatarUrl = obterAvatarUrl(u);
         const avatarAltTexto = nomeOriginal ? `Avatar de ${nomeOriginal}` : 'Avatar do usuário';
         const avatarAlt = escapeAttribute(avatarAltTexto);
-        const avatarMarkup = `
+        const avatarMarkup = avatarUrl
+            ? `
+            <div class="usuario-avatar usuario-avatar--list usuario-avatar--has-image">
+                <img src="${escapeAttribute(avatarUrl)}" alt="${avatarAlt}" loading="lazy" class="usuario-avatar__image" />
+                <span class="usuario-avatar__initials">${iniciaisSeguro || 'US'}</span>
+            </div>
+            `
+            : `
             <div class="usuario-avatar usuario-avatar--list usuario-avatar--initials">
                 <span class="usuario-avatar__initials">${iniciaisSeguro || 'US'}</span>
             </div>

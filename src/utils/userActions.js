@@ -198,36 +198,29 @@ window.addEventListener('DOMContentLoaded', () => {
       return null;
     };
 
-    const aplicarCacheBuster = (url, versao) => {
-      if (!url || !versao) return url;
-      if (typeof url !== 'string') return url;
-      if (/^data:/i.test(url)) return url;
+  const aplicarCacheBuster = (url, versao) => {
+    if (!url || !versao) return url;
+    if (typeof url !== 'string') return url;
 
-      const [base, fragmento] = url.split('#', 2);
-      const encoded = encodeURIComponent(versao);
-      let atualizado = base;
+    const [base, fragmento] = url.split('#', 2);
+    const encoded = encodeURIComponent(versao);
+    const separador = base.includes('?') ? '&' : '?';
+    const atualizado = `${base}${separador}v=${encoded}`;
 
-      if (/(?:^|[?&])t=/.test(base)) {
-        atualizado = base.replace(/([?&])t=[^&]*/, `$1t=${encoded}`);
-      } else {
-        const separador = base.includes('?') ? '&' : '?';
-        atualizado = `${base}${separador}t=${encoded}`;
-      }
+    return fragmento !== undefined ? `${atualizado}#${fragmento}` : atualizado;
+  };
 
-      return fragmento !== undefined ? `${atualizado}#${fragmento}` : atualizado;
-    };
+  if (avatarEl) {
+    const versaoAvatar = extrairAvatarVersao(user);
+    const avatarUrl =
+      user.foto_usuario || user.avatar || user.avatar_url || user.avatarUrl || user.fotoUrl || user.foto || null;
+    const avatarComVersao = avatarUrl ? aplicarCacheBuster(String(avatarUrl).trim(), versaoAvatar) : null;
+    const initials = getInitials(nome);
 
-    if (avatarEl) {
-      const versaoAvatar = extrairAvatarVersao(user);
-      const avatarUrl =
-        user.avatar_url || user.avatarUrl || user.fotoUrl || user.foto || null;
-      const initials = getInitials(nome);
-      const loadablePattern = /^(?:data:|blob:|file:|https?:|\/\/)/i;
-
-      const showInitials = () => {
-        avatarEl.style.removeProperty('background-image');
-        avatarEl.classList.remove('has-image');
-        avatarEl.textContent = initials || '';
+    const showInitials = () => {
+      avatarEl.style.removeProperty('background-image');
+      avatarEl.classList.remove('has-image');
+      avatarEl.textContent = initials || '';
         avatarEl.classList.remove('hidden');
         avatarEl.setAttribute('aria-hidden', 'false');
         delete avatarEl.dataset.avatarRequestId;
@@ -249,104 +242,17 @@ window.addEventListener('DOMContentLoaded', () => {
         avatarEl.textContent = '';
         avatarEl.classList.remove('hidden');
         avatarEl.setAttribute('aria-hidden', 'false');
-        delete avatarEl.dataset.avatarRequestId;
-      };
+      delete avatarEl.dataset.avatarRequestId;
+    };
 
-      const applyResolvedUrl = rawUrl => {
-        if (rawUrl && typeof rawUrl === 'object' && rawUrl.type === 'Buffer' && Array.isArray(rawUrl.data)) {
-          try {
-            const buffer = Uint8Array.from(rawUrl.data);
-            if (buffer.length) {
-              let binary = '';
-              const chunkSize = 0x8000;
-              for (let i = 0; i < buffer.length; i += chunkSize) {
-                const chunk = buffer.subarray(i, i + chunkSize);
-                binary += String.fromCharCode.apply(null, chunk);
-              }
-              rawUrl = `data:image/png;base64,${btoa(binary)}`;
-            } else {
-              rawUrl = null;
-            }
-          } catch (error) {
-            rawUrl = null;
-          }
-        }
-
-        if (!rawUrl) {
-          if (initials) {
-            showInitials();
-          } else {
-            hideAvatar();
-          }
-          return;
-        }
-
-        const resolvedSync =
-          typeof window.apiConfig?.resolveUrl === 'function' ? window.apiConfig.resolveUrl(rawUrl) : rawUrl;
-        const resolvedTrimmed = typeof resolvedSync === 'string' ? resolvedSync.trim() : '';
-        const canLoadSync = resolvedTrimmed && loadablePattern.test(resolvedTrimmed);
-
-        if (canLoadSync) {
-          showImage(aplicarCacheBuster(resolvedTrimmed, versaoAvatar));
-        }
-
-        const shouldAttemptAsync =
-          !canLoadSync &&
-          typeof rawUrl === 'string' &&
-          rawUrl.trim() &&
-          typeof window.apiConfig?.resolveUrlAsync === 'function';
-
-        if (shouldAttemptAsync) {
-          const requestId = `${Date.now()}-${Math.random()}`;
-          avatarEl.dataset.avatarRequestId = requestId;
-          window.apiConfig
-            .resolveUrlAsync(rawUrl)
-            .then(resolvedAsync => {
-              if (avatarEl.dataset.avatarRequestId !== requestId) {
-                return;
-              }
-              const finalUrl =
-                typeof resolvedAsync === 'string' ? resolvedAsync.trim() : resolvedAsync;
-              if (typeof finalUrl === 'string' && loadablePattern.test(finalUrl)) {
-                showImage(aplicarCacheBuster(finalUrl, versaoAvatar));
-              } else if (initials) {
-                showInitials();
-              } else {
-                hideAvatar();
-              }
-            })
-            .catch(() => {
-              if (avatarEl.dataset.avatarRequestId !== requestId) {
-                return;
-              }
-              if (initials) {
-                showInitials();
-              } else {
-                hideAvatar();
-              }
-            });
-
-          if (!canLoadSync) {
-            avatarEl.style.removeProperty('background-image');
-            avatarEl.classList.remove('has-image');
-            avatarEl.textContent = '';
-            avatarEl.classList.add('hidden');
-            avatarEl.setAttribute('aria-hidden', 'true');
-          }
-          return;
-        }
-
-        if (!canLoadSync) {
-          if (initials) {
-            showInitials();
-          } else {
-            hideAvatar();
-          }
-        }
-      };
-
-      applyResolvedUrl(avatarUrl);
+    if (avatarComVersao) {
+      showImage(avatarComVersao);
+    } else if (initials) {
+      showInitials();
+    } else {
+      hideAvatar();
     }
+  }
 
     if (appUpdates && typeof appUpdates.setUserProfile === 'function') {
       appUpdates.setUserProfile(user);
