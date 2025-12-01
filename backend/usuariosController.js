@@ -26,6 +26,7 @@ function buildPayload(body = {}) {
     nome: body.nome,
     email: body.email,
     perfil: body.perfil,
+    telefone: body.telefone,
     senha: body.senha,
     permissoes: body.permissoes,
     status: body.status
@@ -221,7 +222,13 @@ router.put('/me/avatar', async (req, res) => {
     const avatarVersion = Date.now();
 
     const api = createInternalApiClient();
-    const updated = await api.put('/api/usuarios/me/avatar', {
+    const tokenFromRequest = req.headers?.authorization || getToken();
+    const userId = extractUserIdFromToken(tokenFromRequest);
+    const targetPath = userId
+      ? `/api/usuarios/${userId}/avatar`
+      : '/api/usuarios/me/avatar';
+
+    const updated = await api.put(targetPath, {
       avatar,
       avatarVersion,
       avatar_version: avatarVersion,
@@ -276,7 +283,11 @@ router.post('/', async (req, res) => {
 router.put('/me', async (req, res) => {
   try {
     const api = createInternalApiClient();
-    const updated = await api.put('/api/usuarios/me', buildPayload(req.body));
+    const tokenFromRequest = req.headers?.authorization || getToken();
+    const userId = extractUserIdFromToken(tokenFromRequest);
+    const targetPath = userId ? `/api/usuarios/${userId}` : '/api/usuarios/me';
+
+    const updated = await api.put(targetPath, buildPayload(req.body));
     res.json(normalizeAvatar(updated || {}));
   } catch (err) {
     console.error('Erro ao atualizar usuário autenticado:', err);
