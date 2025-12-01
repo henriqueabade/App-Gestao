@@ -83,31 +83,41 @@
     }
   }
 
-  async function carregarItens(termo=''){ // filtro por processo + produto
+  async function carregarItens(termo=''){
+  itemInput.disabled = true;
+  itemMensagem.textContent = '';
+  itemOptions.innerHTML = '';
+
+  const etapa = processoSelecionadoId || processoSelect.value;
+  const codigo = window.produtoDetalhes?.codigo;
+
+  if(!etapa || (!codigo && !produtoId)){
     itemInput.disabled = true;
-    itemMensagem.textContent = '';
-    itemOptions.innerHTML = '';
-    const etapa = processoSelecionadoId || processoSelect.value;
-    const codigo = window.produtoDetalhes?.codigo;
-    if(!etapa || (!codigo && !produtoId)){ itemInput.disabled = true; return; }
-    try{
-      const itens = await window.electronAPI.listarItensProcessoProduto(
-        codigo,
-        { id: processoSelecionadoId, nome: processoSelect.value },
-        termo,
-        produtoId
-      );
-      if(itens.length){
-        itemOptions.innerHTML = itens.map(i => `<option value="${i.nome}" data-id="${i.id}"></option>`).join('');
-      }else{
-        itemMensagem.textContent = 'Nenhum item disponível para este processo';
-      }
-    }catch(err){
-      console.error('Erro ao listar itens', err);
-    }
-    itemInput.disabled = false;
-    preencherItemPadrao();
+    return;
   }
+
+  try {
+    const itens = await window.electronAPI.listarItensProcessoProduto(
+      codigo,
+      { id: processoSelecionadoId, nome: processoSelect.value },
+      termo,
+      produtoId
+    );
+
+    if(itens.length){
+      itemOptions.innerHTML = itens.map(i =>
+        `<option value="${i.nome}" data-id="${i.id}"></option>`
+      ).join('');
+    } else {
+      itemMensagem.textContent = 'Nenhum item disponível para este processo';
+    }
+  } catch (err) {
+    console.error('Erro ao listar itens', err);
+  }
+
+  itemInput.disabled = false;
+}
+
 
   processoSelect.addEventListener('change', () => {
     itemInput.value = '';

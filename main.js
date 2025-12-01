@@ -2470,7 +2470,35 @@ function createConnectionMonitor() {
       } catch (err) {
         scheduleNextAttempt(true);
         const formattedError = formatMonitorError(err);
-        if (isNetworkError(err) || err?.code === 'ECONNREFUSED' || err?.code === 'ENOTFOUND') {
+        const statusCode = Number.isFinite(err?.statusCode)
+          ? err.statusCode
+          : Number.isFinite(err?.status)
+            ? err.status
+            : null;
+
+        if (statusCode === 401 || statusCode === 403) {
+          applyNetState('offline');
+          updateStatus({
+            state: 'offline',
+            reason: 'pin',
+            detail: 'token-invalido',
+            shouldLogout: true,
+            failureStage: 'auth',
+            lastError: formattedError,
+            triggeredBy
+          });
+        } else if (statusCode && statusCode >= 500) {
+          applyNetState('offline');
+          updateStatus({
+            state: 'offline',
+            reason: 'offline',
+            detail: `http-${statusCode}`,
+            shouldLogout: true,
+            failureStage: 'internet',
+            lastError: formattedError,
+            triggeredBy
+          });
+        } else if (isNetworkError(err) || err?.code === 'ECONNREFUSED' || err?.code === 'ENOTFOUND') {
           applyNetState('offline');
           updateStatus({
             state: 'offline',
@@ -2492,7 +2520,7 @@ function createConnectionMonitor() {
           });
         }
         finalOutcome = 'failure';
-        finalExtra = { stage: 'health-check', error: formattedError };
+        finalExtra = { stage: 'health-check', error: formattedError, statusCode };
         return currentStatus;
       }
 
