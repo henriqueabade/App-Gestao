@@ -1,155 +1,270 @@
-README – Santíssimo Decor Dashboard (Arquitetura 100% HTTP)
+Arquitetura Oficial (100% HTTP / 0% Banco Local)
 
-Santíssimo Decor Dashboard
+Este projeto é o Dashboard Desktop da Santíssimo Decor, desenvolvido em Electron, que se comunica exclusivamente com a API externa do sistema corporativo.
 
-Este projeto é um aplicativo desktop em Electron usado para gerenciar o fluxo de trabalho interno da Santíssimo Decor.  
-A arquitetura atual é 100% baseada em **HTTP + API externa**, sem qualquer conexão direta com PostgreSQL local.
+Ele não acessa PostgreSQL local, não executa SQL e não contém backend próprio.
+O Electron atua somente como:
 
-------------------------------------------
-Nova Arquitetura (importante)
+interface gráfica (UI)
 
-✔ 100% HTTP  
-✔ 0% PostgreSQL local  
-✔ Sem SQL, SELECT, FROM, JOIN  
-✔ Sem pg, pg-pool, migrations, warmup, rollback  
-✔ Token JWT obrigatório em todas as requisições  
-✔ Todas as tabelas acessadas via /api/<tabela>  
+gerenciador do Token JWT
 
-O Electron funciona apenas como:
+orquestrador de requisições HTTP
 
-- UI
-- armazenamento do token
-- orquestrador de chamadas HTTP
-- interpretador de JSON (colunas, tipos, tabelas, dados)
+parser/interpretador de JSON
 
-------------------------------------------
-Requisitos
+🚨 ARQUITETURA OFICIAL – REGRAS INFRAUTILMENTE OBRIGATÓRIAS
+✔ Modelo Real
 
-- Node.js (18+)
-- npm
+100% baseado em HTTP → API externa
 
-Nenhum banco de dados local é necessário.
+0% PostgreSQL local
 
-------------------------------------------
-Configuração do .env
+0% SQL
 
-Somente variáveis relacionadas à API externa:
+0% SELECT / FROM / JOIN
 
-APP_URL=http://localhost:3000  
-API_BASE_URL=https://api.santissimodecor.com.br  
+0% pg, pg-pool, migrations, seeds, warmup, rollback
 
-SMTP_HOST=... (opcional)  
-SMTP_PORT=...  
-SMTP_USER=...  
-SMTP_PASS=...  
-FROM_EMAIL=...
+✔ API REST simples
 
-❗ Variáveis antigas como DB_HOST, DB_USER, DB_NAME, DB_PASSWORD NÃO são usadas.
+A API usa REST puro, sem qualquer sintaxe avançada.
 
-------------------------------------------
-Execução em Desenvolvimento
+❗Proibido (não funciona):
 
+eq., neq., gte., lte.
+
+in.(1,2,3)
+
+like.*
+
+select=id,nome,perfil:perfil_id(...)
+
+joins virtuais tipo:
+
+materia_prima:insumo_id(...)
+
+processo:etapa_id(...)
+
+✔ Permitido (funciona):
+GET /api/tabela?id=1
+GET /api/tabela?id=1&id=2&id=3
+GET /api/tabela?status=ativo
+
+
+📌 Qualquer uso de arrays via URLSearchParams vira erro.
+Use apenas múltiplos parâmetros repetidos:
+
+Correto:
+?id=1&id=2&id=3
+
+Errado (API não entende):
+?id=1,2,3
+
+⚙️ Requisitos
+
+Node.js 18+
+
+npm
+
+Windows / macOS / Linux
+
+Nenhum banco ou serviço adicional é necessário na máquina local.
+
+🔐 Variáveis de Ambiente (.env)
+
+Somente variáveis relacionadas à API e serviços externos:
+
+APP_URL=http://localhost:3000
+API_BASE_URL=https://api.santissimodecor.com.br
+
+SMTP_HOST=
+SMTP_PORT=
+SMTP_USER=
+SMTP_PASS=
+FROM_EMAIL=
+
+❌ NÃO USAR (obsoletos)
+DB_HOST
+DB_USER
+DB_NAME
+DB_PASSWORD
+DB_PORT
+
+▶️ Execução em Desenvolvimento
 npm start
 
-Isso inicia o Electron e habilita a ponte HTTP para a API externa.
 
-Não existe mais:
+Isso inicia o Electron + ponte HTTP para a API externa.
 
-- backend/server.js
-- conexões pg
-- pool.connect
-- migrations
-- db.query
-- SQL local
+❗Não existe mais:
 
-------------------------------------------
-Autenticação
+nenhum backend local
 
-Fluxo:
+server.js
 
-1. Electron envia POST /login  
-2. API retorna { sucesso, token, usuario }  
-3. Electron salva o token localmente  
-4. Todas as requisições seguintes enviam:
+pg ou pg-pool
+
+conexões PostgreSQL locais
+
+queries SQL
+
+migrations
+
+seeds
+
+introspecção information_schema
+
+🔑 Autenticação – Fluxo Oficial
+
+Electron envia POST /login para a API
+
+API retorna:
+
+{ sucesso, token, usuario }
+
+
+Electron salva o token (localStorage / storage interno)
+
+Todas as requisições passam a enviar:
 
 Authorization: Bearer TOKEN
 
-------------------------------------------
-Acesso às Tabelas
 
-A API já expõe todas as tabelas via rotas simples:
+Sem o token → 403
+Token inválido → 401
 
-GET /api/usuarios  
-GET /api/clientes  
-GET /api/materia_prima  
-GET /api/produtos  
-GET /api/orcamentos  
-GET /api/pedidos  
+📦 Acesso às Tabelas (CRUD Oficial)
 
-Consulta por ID:
+Padrão REST real da API:
 
+Listar
+GET /api/<tabela>
+
+Buscar por ID
 GET /api/<tabela>/<id>
 
-Criação:
-
+Criar
 POST /api/<tabela>
 
-Atualização:
-
+Atualizar
 PUT /api/<tabela>/<id>
 
-Exclusão:
-
+Deletar
 DELETE /api/<tabela>/<id>
 
-------------------------------------------
-Como o Electron interpreta colunas e tipos
+Exemplos
+GET /api/usuarios
+GET /api/clientes
+GET /api/materia_prima
+GET /api/produtos
+GET /api/orcamentos
+GET /api/pedidos
 
-A API retorna JSON. A estrutura da tabela é deduzida automaticamente:
+🔄 Como o Electron interpreta colunas, tipos e tabelas
 
-- colunas = keys do objeto
-- tipo = typeof valor
-- datas ISO → tipo date
-- obrigatórios → inferidos pelas mensagens da API
-- selects → obtidos via endpoints auxiliares, quando existirem
+Toda a estrutura vem pura da API.
 
-Sem SQL.  
-Sem information_schema.  
-Sem introspecção de banco.
+O Electron deduz:
 
-------------------------------------------
-Permissões de Usuário (via API)
+colunas → chaves do JSON
 
-Rotas:
+tipos → typeof
 
-GET /api/usuarios/:id  
-PATCH /api/usuarios/:id  
-PUT /api/usuarios/:id/permissoes  
+datas → ISO convertida para Date
 
-A API retorna o JSON já normalizado de permissões.
+selects → carregados via endpoints de apoio
 
-------------------------------------------
-Padrões de Interface
+relacionamentos → devem ser buscados manualmente no backend da API
 
-Mantidos conforme a versão original (tipografia, gradientes, tokens CSS).
+❗IMPORTANTE
 
-------------------------------------------
-Geração de Instalador
+O Electron não faz JOIN.
+Ele não deve tentar usar select expandido.
 
-npm run dist  
-npm run dist:publish  
+Se precisar de dados relacionados:
+➡ buscar manualmente usando id e montar.
 
-Fluxo permanece inalterado. A arquitetura de dados não influencia no build.
+👤 Permissões de Usuário
 
-------------------------------------------
-Conclusão
+Rotas oficiais:
 
-O Santíssimo Decor Dashboard agora é totalmente:
+GET /api/usuarios/:id
+PATCH /api/usuarios/:id
+PUT /api/usuarios/:id/permissoes
 
-✔ Electron + HTTP  
-✔ API externa como única fonte de dados  
-✔ Token JWT obrigatório  
-✔ Zero SQL local  
-✔ Zero PostgreSQL local  
-✔ 100% REST  
-✔ Interpretação dinâmica de colunas via JSON
+
+A API já retorna o JSON completo de permissões normalizadas.
+
+O Electron apenas consome e renderiza.
+
+🎨 Padrões de Interface
+
+O projeto mantém:
+
+tipografia original
+
+gradientes
+
+tokens CSS
+
+componentes padrão
+
+layout do Dashboard
+
+Nada da arquitetura de dados interfere na UI.
+
+📦 Geração de Instaladores (Build)
+npm run dist
+npm run dist:publish
+
+
+Criação de .exe, .dmg, .AppImage
+
+Usa electron-builder
+
+A arquitetura não afeta o build
+
+🚫 ERROS MAIS COMUNS (NÃO PODEM ACONTECER)
+1. Usar operadores PostgREST
+
+→ causa tabelas vazias
+→ API ignora parâmetros
+→ erro silencioso
+
+2. Enviar arrays no querystring
+
+?id=1,2,3
+→ API interpreta como string e retorna vazio
+
+3. Tentar fazer JOIN via select=
+
+→ API devolve apenas tabela base
+
+4. Supondo que a API faz filtragem avançada
+
+→ é REST simples; tudo manual
+
+5. Achar que Electron tem backend próprio
+
+→ Electron só faz chamadas HTTP
+
+🧠 PRINCÍPIO CENTRAL
+
+O frontend deve se comportar como um cliente HTTP burro — sem regras de banco, sem joins, sem SQL.
+Toda lógica de dados está na API externa.
+
+✅ Conclusão
+
+O Santíssimo Decor Dashboard é:
+
+✔ Electron + HTTP
+✔ 100% REST
+✔ API externa como única fonte de dados
+✔ Token JWT obrigatório
+✔ Zero SQL local
+✔ Zero PostgreSQL
+✔ Estrutura dinâmica deduzida de JSON
+✔ Sem operadores PostgREST
+✔ Sem joins automáticos
+✔ Sem arrays na querystring
