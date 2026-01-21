@@ -77,6 +77,9 @@ const menuToggle = document.getElementById('menuToggle');
 const crmToggle = document.getElementById('crmToggle');
 const crmSubmenu = document.getElementById('crmSubmenu');
 const chevron = crmToggle.querySelector('.chevron');
+const laminacaoToggle = document.getElementById('laminacaoToggle');
+const laminacaoSubmenu = document.getElementById('laminacaoSubmenu');
+const laminacaoChevron = laminacaoToggle?.querySelector('.chevron');
 const companyName = document.getElementById('companyName');
 
 const MODULES_WITHOUT_SCROLL = new Set([
@@ -111,6 +114,10 @@ const MODULE_LABELS = {
     usuarios: 'Usuários',
     financeiro: 'Financeiro',
     relatorios: 'Relatórios',
+    'laminacao-clientes': 'Clientes',
+    'laminacao-servicos': 'Serviços',
+    'laminacao-precificacao': 'Precificação',
+    'laminacao-relatorios': 'Relatórios',
     ia: 'IA',
     configuracoes: 'Configurações'
 };
@@ -3048,6 +3055,7 @@ window.loadPage = loadPage;
 
 let sidebarExpanded = false;
 let crmExpanded = false;
+let laminacaoExpanded = false;
 let sidebarBehaviorPreference = readStoredSidebarBehaviorPreference();
 
 function shouldAutoCollapseSidebar() {
@@ -3091,6 +3099,17 @@ function setActiveNavigation(page) {
         crmSubmenu.classList.remove('open');
         chevron.classList.remove('rotated');
         crmExpanded = false;
+    }
+
+    const insideLaminacao = target.closest('#laminacaoSubmenu');
+    if (insideLaminacao) {
+        laminacaoSubmenu.classList.add('open');
+        laminacaoChevron?.classList.add('rotated');
+        laminacaoExpanded = true;
+    } else if (laminacaoExpanded) {
+        laminacaoSubmenu.classList.remove('open');
+        laminacaoChevron?.classList.remove('rotated');
+        laminacaoExpanded = false;
     }
 
     if (shouldPersistLastVisitedPage()) {
@@ -3192,6 +3211,21 @@ function toggleCrmSubmenu() {
     }
 }
 crmToggle.addEventListener('click', toggleCrmSubmenu);
+
+// Mostra ou esconde submenu de Laminação
+function toggleLaminacaoSubmenu() {
+    laminacaoExpanded = !laminacaoExpanded;
+    if (laminacaoExpanded) {
+        laminacaoSubmenu.classList.add('open');
+        laminacaoChevron?.classList.add('rotated');
+        // Laminação submenu should not trigger sidebar expansion
+    } else {
+        laminacaoSubmenu.classList.remove('open');
+        laminacaoChevron?.classList.remove('rotated');
+        // Submenu fecha apenas em ações explícitas
+    }
+}
+laminacaoToggle?.addEventListener('click', toggleLaminacaoSubmenu);
 
 // Navegação interna
 document.querySelectorAll('.sidebar-item[data-page], .submenu-item[data-page]').forEach(item => {
