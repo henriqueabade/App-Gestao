@@ -3092,6 +3092,9 @@ function setActiveNavigation(page) {
     const insideCrm = target.closest('#crmSubmenu');
     const keepCrmExpanded = shouldKeepCrmExpanded();
     if (insideCrm) {
+        laminacaoSubmenu.classList.remove('open');
+        laminacaoChevron?.classList.remove('rotated');
+        laminacaoExpanded = false;
         crmSubmenu.classList.add('open');
         chevron.classList.add('rotated');
         crmExpanded = true;
@@ -3103,6 +3106,9 @@ function setActiveNavigation(page) {
 
     const insideLaminacao = target.closest('#laminacaoSubmenu');
     if (insideLaminacao) {
+        crmSubmenu.classList.remove('open');
+        chevron.classList.remove('rotated');
+        crmExpanded = false;
         laminacaoSubmenu.classList.add('open');
         laminacaoChevron?.classList.add('rotated');
         laminacaoExpanded = true;
@@ -3199,8 +3205,11 @@ mainContent?.addEventListener('click', requestSidebarAutoCollapse);
 
 // Mostra ou esconde submenu do CRM
 function toggleCrmSubmenu() {
-    crmExpanded = !crmExpanded;
-    if (crmExpanded) {
+    const nextExpanded = !crmExpanded;
+    if (nextExpanded) {
+        laminacaoSubmenu.classList.remove('open');
+        laminacaoChevron?.classList.remove('rotated');
+        laminacaoExpanded = false;
         crmSubmenu.classList.add('open');
         chevron.classList.add('rotated');
         // CRM submenu should not trigger sidebar expansion
@@ -3209,13 +3218,17 @@ function toggleCrmSubmenu() {
         chevron.classList.remove('rotated');
         // Submenu fecha apenas em ações explícitas
     }
+    crmExpanded = nextExpanded;
 }
 crmToggle.addEventListener('click', toggleCrmSubmenu);
 
 // Mostra ou esconde submenu de Laminação
 function toggleLaminacaoSubmenu() {
-    laminacaoExpanded = !laminacaoExpanded;
-    if (laminacaoExpanded) {
+    const nextExpanded = !laminacaoExpanded;
+    if (nextExpanded) {
+        crmSubmenu.classList.remove('open');
+        chevron.classList.remove('rotated');
+        crmExpanded = false;
         laminacaoSubmenu.classList.add('open');
         laminacaoChevron?.classList.add('rotated');
         // Laminação submenu should not trigger sidebar expansion
@@ -3224,6 +3237,7 @@ function toggleLaminacaoSubmenu() {
         laminacaoChevron?.classList.remove('rotated');
         // Submenu fecha apenas em ações explícitas
     }
+    laminacaoExpanded = nextExpanded;
 }
 laminacaoToggle?.addEventListener('click', toggleLaminacaoSubmenu);
 
