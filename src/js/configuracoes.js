@@ -292,6 +292,10 @@ const MenuStartupPreferences = (() => {
         usuarios: 'Usuários',
         financeiro: 'Financeiro',
         relatorios: 'Relatórios',
+        'laminacao-clientes': 'Laminação - Clientes',
+        'laminacao-servicos': 'Laminação - Serviços',
+        'laminacao-precificacao': 'Laminação - Precificação',
+        'laminacao-relatorios': 'Laminação - Relatórios',
         configuracoes: 'Configurações'
     };
 
