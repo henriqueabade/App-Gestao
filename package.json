@@ -10,7 +10,8 @@
     "publish": "npm run dist:publish",
     "verify-smtp": "node backend/verifyTransporter.js",
     "test": "node --test backend src/js/__tests__",
-    "build:tailwind": "tailwindcss -i ./src/styles/tailwind-input.css -o ./src/styles/tailwind-offline.css --minify"
+    "build:tailwind": "tailwindcss -i ./src/styles/tailwind-input.css -o ./src/styles/tailwind-offline.css --minify",
+    "start:dev-safe": "powershell -Command \"$env:ELECTRON_DISABLE_GPU='1'; electron .\""
   },
   "author": "Henrique Viana Abade",
   "license": "MIT",

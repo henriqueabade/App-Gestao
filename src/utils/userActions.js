@@ -500,31 +500,7 @@ action('logout', () => {
   }
 });
 
-
-
-
-  action('close', () => {
-    if (window.collectState && window.electronAPI && window.electronAPI.saveState) {
-      window.electronAPI.saveState(window.collectState());
-    }
-    if (window.stopServerCheck) window.stopServerCheck();
-    localStorage.removeItem('offlineDisconnect');
-    localStorage.removeItem('pinChanged');
-    localStorage.removeItem('userRemoved');
-    const overlay = document.getElementById('exitOverlay');
-    if (overlay) {
-      overlay.classList.remove('hidden');
-      void overlay.offsetWidth; // trigger reflow
-      overlay.classList.add('visible');
-      overlay.addEventListener('transitionend', function onEnd(e) {
-        if (e.propertyName !== 'opacity') return;
-        overlay.removeEventListener('transitionend', onEnd);
-        window.electronAPI.closeWindow();
-      });
-    } else {
-      window.electronAPI.closeWindow();
-    }
-  });
+  action('close', () => window.electronAPI.closeWindow());
   action('minimize', () => window.electronAPI.minimizeWindow());
   action('reload', () => window.electronAPI.reloadWindow());
 
