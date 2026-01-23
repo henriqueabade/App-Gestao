@@ -16,6 +16,41 @@ function parseIsoDateToLocal(iso) {
     return parsed;
 }
 
+// =====================================================
+// 🔧 Cache de clientes e busca otimizada via backend local
+// =====================================================
+const cacheClientes = new Map();
+
+async function carregarClientes() {
+  try {
+    // 🧠 Esta rota passa pelo backend local → token injetado automaticamente
+    const resp = await fetchApi('/api/clientes/lista');
+    if (!resp.ok) throw new Error(`Erro HTTP ${resp.status}`);
+
+    const clientes = await resp.json();
+
+    clientes.forEach(c => {
+      cacheClientes.set(c.id, c.nome_fantasia || c.razao_social || c.nome || 'Sem nome');
+    });
+
+    console.log('✅ Clientes carregados:', cacheClientes.size);
+  } catch (err) {
+    console.error('💥 Erro ao carregar lista de clientes:', err);
+  }
+}
+
+function obterNomeCliente(id) {
+  return cacheClientes.get(id) || '—';
+}
+
+function formatarDataLocal(isoDate) {
+    if (!isoDate) return '';
+    const data = new Date(isoDate);
+    if (isNaN(data)) return '';
+    return data.toLocaleDateString('pt-BR', { timeZone: 'UTC' });
+}
+
+
 function updateEmptyStatePedidos(hasData) {
     const wrapper = document.getElementById('pedidosTableWrapper');
     const empty = document.getElementById('pedidosEmptyState');
@@ -153,6 +188,7 @@ async function carregarPedidos() {
     try {
         const resp = await fetchApi('/api/pedidos');
         const data = await resp.json();
+        await carregarClientes();
         const tbody = document.getElementById('pedidosTabela');
         tbody.innerHTML = '';
         const statusClasses = {
@@ -177,13 +213,18 @@ async function carregarPedidos() {
             const isDraft = p.situacao === 'Rascunho';
             const downloadClass = isDraft ? 'pdf-disabled relative' : '';
             const downloadTitle = isDraft ? 'PDF indisponível' : 'Baixar PDF';
+            const dataFormatada = formatarDataLocal(p.data_emissao);
+            const dataFormatada2 = formatarDataLocal(p.data_aprovacao);
+            const dataFormatada3 = formatarDataLocal(p.data_envio);
+            const dataFormatada4 = formatarDataLocal(p.data_entrega);
+            const dataFormatada5 = formatarDataLocal(p.data_cancelamento);
             tr.innerHTML = `
                 <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">${p.numero}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-white">${p.cliente || ''}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-violet)">${p.data_emissao || ''}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-white">${obterNomeCliente(p.cliente_id)}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-violet)">${dataFormatada}</td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm text-white">${valor}</td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-violet)">${condicao}</td>
-                <td class="px-6 py-4 whitespace-nowrap"><span class="${badgeClass} px-3 py-1 rounded-full text-xs font-medium status-badge" data-aprovacao="${p.data_aprovacao || ''}" data-envio="${p.data_envio || ''}" data-entrega="${p.data_entrega || ''}" data-cancelamento="${p.data_cancelamento || ''}">${p.situacao}</span></td>
+                <td class="px-6 py-4 whitespace-nowrap"><span class="${badgeClass} px-3 py-1 rounded-full text-xs font-medium status-badge" data-aprovacao="${dataFormatada2}" data-envio="${dataFormatada3}" data-entrega="${dataFormatada4}" data-cancelamento="${dataFormatada5}">${p.situacao}</span></td>
                 <td class="px-6 py-4 whitespace-nowrap text-left">
                     <div class="flex items-center justify-start space-x-2">
                         <i class="fas fa-eye w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Visualizar"></i>
@@ -217,27 +258,48 @@ async function carregarPedidos() {
             }
             tbody.appendChild(tr);
         });
-        const ownerSelect = document.getElementById('filterOwner');
-        if (ownerSelect) {
-            ownerSelect.innerHTML = '<option value="">Todos os Donos</option>' +
-                [...owners].map(d => `<option value="${d}">${d}</option>`).join('');
-        }
-
-        tbody.querySelectorAll('.fa-eye').forEach(icon => {
-            icon.addEventListener('click', e => {
-                e.stopPropagation();
-                const id = e.currentTarget.closest('tr')?.dataset.id;
-                if (!id) return;
-                openVisualizarPedidoModal(id);
-            });
-        });
-
-        tbody.querySelectorAll('.fa-clipboard').forEach(icon => {
-            icon.addEventListener('click', e => {
-                e.stopPropagation();
-                showFunctionUnavailableDialog('Fun??o em desenvolvimento.');
-            });
-        });
+        const ownerSelect = document.getElementById('filterOwner');
+
+        if (ownerSelect) {
+
+            ownerSelect.innerHTML = '<option value="">Todos os Donos</option>' +
+
+                [...owners].map(d => `<option value="${d}">${d}</option>`).join('');
+
+        }
+
+
+
+        tbody.querySelectorAll('.fa-eye').forEach(icon => {
+
+            icon.addEventListener('click', e => {
+
+                e.stopPropagation();
+
+                const id = e.currentTarget.closest('tr')?.dataset.id;
+
+                if (!id) return;
+
+                openVisualizarPedidoModal(id);
+
+            });
+
+        });
+
+
+
+        tbody.querySelectorAll('.fa-clipboard').forEach(icon => {
+
+            icon.addEventListener('click', e => {
+
+                e.stopPropagation();
+
+                showFunctionUnavailableDialog('Fun??o em desenvolvimento.');
+
+            });
+
+        });
+
         tbody.querySelectorAll('.fa-download').forEach(icon => {
             icon.addEventListener('click', async e => {
                 e.stopPropagation();

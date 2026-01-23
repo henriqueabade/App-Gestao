@@ -16,6 +16,40 @@ function parseIsoDateToLocal(iso) {
     return parsed;
 }
 
+// =====================================================
+// 🔧 Cache de clientes e busca otimizada via backend local
+// =====================================================
+const cacheClientes = new Map();
+
+async function carregarClientes() {
+  try {
+    // 🧠 Esta rota passa pelo backend local → token injetado automaticamente
+    const resp = await fetchApi('/api/clientes/lista');
+    if (!resp.ok) throw new Error(`Erro HTTP ${resp.status}`);
+
+    const clientes = await resp.json();
+
+    clientes.forEach(c => {
+      cacheClientes.set(c.id, c.nome_fantasia || c.razao_social || c.nome || 'Sem nome');
+    });
+
+    console.log('✅ Clientes carregados:', cacheClientes.size);
+  } catch (err) {
+    console.error('💥 Erro ao carregar lista de clientes:', err);
+  }
+}
+
+function obterNomeCliente(id) {
+  return cacheClientes.get(id) || '—';
+}
+
+function formatarDataLocal(isoDate) {
+    if (!isoDate) return '';
+    const data = new Date(isoDate);
+    if (isNaN(data)) return '';
+    return data.toLocaleDateString('pt-BR', { timeZone: 'UTC' });
+}
+
 function updateEmptyStateOrcamentos(hasData) {
     const wrapper = document.getElementById('orcamentosTableWrapper');
     const empty = document.getElementById('orcamentosEmptyState');
@@ -173,6 +207,7 @@ async function carregarOrcamentos() {
     try {
         const resp = await fetchApi('/api/orcamentos');
         const data = await resp.json();
+        await carregarClientes();
         const tbody = document.getElementById('orcamentosTabela');
         tbody.innerHTML = '';
         const statusClasses = {
@@ -185,6 +220,7 @@ async function carregarOrcamentos() {
         const owners = new Set();
         data.forEach(o => {
             const tr = document.createElement('tr');
+            
             tr.className = 'transition-colors duration-150';
             tr.style.cursor = 'pointer';
             tr.setAttribute('onmouseover', "this.style.background='rgba(163, 148, 167, 0.05)'");
@@ -201,6 +237,8 @@ async function carregarOrcamentos() {
             const editBlocked = ['Aprovado','Expirado','Rejeitado'].includes(o.situacao);
             const editClass = editBlocked ? 'icon-disabled' : '';
             const convertBlocked = ['Aprovado','Expirado','Rejeitado','Rascunho'].includes(o.situacao);
+                        const dataFormatada = formatarDataLocal(o.data_emissao);
+
             const convertTitle = convertBlocked
                 ? (isDraft
                     ? 'Converter indisponível para orçamentos em rascunho'
@@ -209,8 +247,8 @@ async function carregarOrcamentos() {
             const convertClass = convertBlocked ? 'icon-disabled' : '';
             tr.innerHTML = `
                 <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">${o.numero}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-white">${o.cliente || ''}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-violet)">${o.data_emissao}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-white">${obterNomeCliente(o.cliente_id)}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-violet)">${dataFormatada}</td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm text-white">${valor}</td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-violet)">${condicao}</td>
                 <td class="px-6 py-4 whitespace-nowrap"><span class="${badgeClass} px-3 py-1 rounded-full text-xs font-medium">${o.situacao}</span></td>
