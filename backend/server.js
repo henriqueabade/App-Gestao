@@ -42,6 +42,27 @@ app.use('/api/usuarios', usuariosRouter);
 app.use('/api/transportadoras', transportadorasRouter);
 app.use('/api/orcamentos', orcamentosRouter);
 app.use('/api/pedidos', pedidosRouter);
+
+const { createApiClient } = require('./apiHttpClient');
+
+app.get('/api/contatos_cliente', async (req, res) => {
+  try {
+    // Cria o cliente com base na requisição atual (injeta token automaticamente)
+    const api = createApiClient(req);
+
+    const query = req._parsedUrl.search || '';
+
+    // Agora sim, o cliente possui o método .get()
+    const data = await api.get(`/api/contatos_cliente${query}`);
+
+    res.status(200).json(data);
+  } catch (err) {
+    console.error('Erro no proxy /api/contatos_cliente:', err);
+    const status = err.status || 500;
+    res.status(status).json({ error: err.message || 'Erro interno ao buscar contatos do cliente' });
+  }
+});
+
 app.use('/api/notifications', notificationsRouter);
 app.use(passwordResetRouter);
 app.use('/pdf', express.static(path.join(__dirname, '../src/pdf')));

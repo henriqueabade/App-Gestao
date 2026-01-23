@@ -21,6 +21,23 @@
       document.head.appendChild(s);
     });
   }
+
+async function carregarContatos(idCliente) {
+  try {
+    if (!idCliente) return [];
+
+    // ✅ Filtra diretamente pela query string permitida (sem operadores proibidos)
+    const res = await fetchApi(`/api/contatos_cliente?id_cliente=${idCliente}`);
+    if (!res.ok) throw new Error(`Erro HTTP ${res.status}`);
+
+    const data = await res.json();
+    return Array.isArray(data) ? data : [];
+  } catch (err) {
+    console.error('Erro ao carregar contatos:', err);
+    return [];
+  }
+}
+
   if(cliente){
     const titulo = document.getElementById('clienteDetalhesTitulo');
     if(titulo) titulo.textContent = `Detalhes – ${cliente.nome_fantasia || ''}`;
@@ -30,7 +47,8 @@
       if(data && data.cliente){
         preencherDadosEmpresa(data.cliente);
         await preencherEnderecos(data.cliente);
-        renderContatos(data.contatos || []);
+        const contatos = await carregarContatos(cliente.id);
+        renderContatos(contatos);
         inicializarToggles(data.cliente);
         const notas = document.getElementById('clienteNotas');
         if(notas) notas.value = data.cliente.anotacoes || '';
