@@ -10,7 +10,7 @@ let todosClientes = [];
 
 async function carregarClientes(preserveFilters = false) {
     try {
-        const resp = await fetchApi('/api/clientes/lista');
+        const resp = await fetchApi('/api/clientes_laminacao/lista');
         const clientes = await resp.json();
         todosClientes = clientes;
         if (preserveFilters) {
@@ -190,7 +190,7 @@ function openModalWithSpinner(htmlPath, scriptPath, overlayId) {
 
 function abrirDetalhesCliente(cliente) {
     window.clienteDetalhes = cliente;
-    openModalWithSpinner('modals/clientes/detalhes.html', '../js/modals/cliente-detalhes.js', 'detalhesCliente');
+    openModalWithSpinner('modals/laminacao-clientes/detalhes.html', '../js/modals/laminacao-clientes/cliente-detalhes.js', 'detalhesCliente');
 }
 
 function abrirEditarCliente(cliente, options = {}) {
@@ -200,12 +200,12 @@ function abrirEditarCliente(cliente, options = {}) {
     } else {
         delete window.clienteEditarPreferencias;
     }
-    openModalWithSpinner('modals/clientes/editar.html', '../js/modals/cliente-editar.js', 'editarCliente');
+    openModalWithSpinner('modals/laminacao-clientes/editar.html', '../js/modals/laminacao-clientes/cliente-editar.js', 'editarCliente');
 }
 
 function abrirExcluirCliente(cliente) {
     window.clienteExcluir = cliente;
-    Modal.open('modals/clientes/excluir.html', '../js/modals/cliente-excluir.js', 'excluirCliente');
+    Modal.open('modals/laminacao-clientes/excluir.html', '../js/modals/laminacao-clientes/cliente-excluir.js', 'excluirCliente');
 }
 
 // Expose the edit modal opener globally so other scripts (like the
@@ -263,7 +263,7 @@ function initClientes() {
     document.getElementById('btnFiltrar')?.addEventListener('click', aplicarFiltros);
     document.getElementById('btnLimpar')?.addEventListener('click', limparFiltros);
     document.getElementById('btnNovoCliente')?.addEventListener('click', () => {
-        openModalWithSpinner('modals/clientes/novo.html', '../js/modals/cliente-novo.js', 'novoCliente');
+        openModalWithSpinner('modals/laminacao-clientes/novo.html', '../js/modals/laminacao-clientes/cliente-novo.js', 'novoCliente');
     });
 
     const emDesenvolvimento = () => alert('Função em desenvolvimento');
