@@ -306,7 +306,7 @@ function initServicosLaminacao() {
     const novoServico = document.getElementById('btnNovoServico');
     if (novoServico) {
         novoServico.addEventListener('click', () => {
-            openModalWithSpinner('modals/laminacao-servicos/novo.html', '../js/modals/laminacao-servicos/servico-novo.js', 'novoServico');
+            openModalWithSpinner('modals/laminacao-servicos/servico-novo.html', '../js/modals/laminacao-servicos/servico-novo.js', 'novoServico');
         });
     }
 
