@@ -1,0 +1,81 @@
+<!-- Página de serviços: lista e filtros -->
+<div class="modulo-container">
+    <!-- Header -->
+    <div class="flex justify-between items-center mb-8 animate-fade-in-up">
+        <div>
+            <h1 class="text-2xl font-semibold mb-2">Serviços</h1>
+            <p style="color: var(--color-violet)">Acompanhe o status de produção e entrega dos serviços</p>
+        </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="glass-surface rounded-xl p-6 mb-6 animate-fade-in-up">
+        <div class="filter-bar flex flex-col md:flex-row md:flex-nowrap items-center">
+            <!-- Status Filter -->
+            <div class="flex-1 min-w-0">
+                <label class="block text-sm font-medium mb-2 text-white">Status</label>
+                <select id="filterStatusServicos" class="input-glass text-white rounded-md px-4 py-3 w-full">
+                    <option value="">Todos os Status</option>
+                </select>
+            </div>
+
+            <!-- Period Filter -->
+            <div class="flex-1 min-w-0">
+                <label class="block text-sm font-medium mb-2 text-white">Período</label>
+                <select id="filterPeriodServicos" class="input-glass text-white rounded-md px-4 py-3 w-full">
+                    <option value="">Todos os Períodos</option>
+                    <option value="Semana">Semana</option>
+                    <option value="Mês">Mês</option>
+                    <option value="Trimestre">Trimestre</option>
+                    <option value="Ano">Ano</option>
+                    <option value="Personalizado">Personalizado</option>
+                </select>
+            </div>
+
+            <!-- Salesperson Filter -->
+            <div class="flex-1 min-w-0">
+                <label class="block text-sm font-medium mb-2 text-white">Dono</label>
+                <select id="filterOwnerServicos" class="input-glass text-white rounded-md px-4 py-3 w-full">
+                    <option value="">Todos os Donos</option>
+                </select>
+            </div>
+
+            <!-- Client Filter -->
+            <div class="flex-1 min-w-0">
+                <label class="block text-sm font-medium mb-2 text-white">Cliente</label>
+                <select id="filterClientServicos" class="input-glass text-white rounded-md px-4 py-3 w-full">
+                    <option value="">Todos os Clientes</option>
+                </select>
+            </div>
+
+            <!-- Action Buttons -->
+            <div id="bt-actions" class="flex items-center gap-2 flex-shrink-0">
+                <button id="btnFiltrarServicos" class="btn-secondary text-white rounded-md px-4 py-3 text-sm font-medium">
+                    Filtrar
+                </button>
+                <button id="btnLimparServicos" class="btn-warning text-white rounded-md px-4 py-3 text-sm font-medium">
+                    Limpar
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Services Table -->
+    <div id="servicosTableWrapper" class="glass-surface rounded-xl shadow-lg animate-fade-in-up table-scroll">
+        <table class="w-full">
+            <thead class="bg-gray-50 sticky top-0">
+                <tr id="servicosHeaderRow"></tr>
+            </thead>
+            <tbody id="servicosTabela" class="divide-y divide-white/10"></tbody>
+        </table>
+    </div>
+
+    <!-- Empty State -->
+    <div id="servicosEmptyState" class="hidden py-12 flex flex-col items-center justify-center text-center px-4">
+      <div class="rounded-full bg-[var(--color-primary-opacity)] p-8 mb-6">
+        <i class="fas fa-box-open text-8xl text-[var(--color-primary)]"></i>
+      </div>
+      <h3 class="text-lg font-medium text-white">Nenhum serviço encontrado</h3>
+      <p class="mt-1 text-sm text-white/70">Tente ajustar os filtros.</p>
+    </div>
+</div>
