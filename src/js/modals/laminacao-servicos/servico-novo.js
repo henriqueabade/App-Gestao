@@ -169,6 +169,7 @@
   const mdfInput = document.getElementById('servicoMdf');
   const donoMdfInput = document.getElementById('servicoDonoMdf');
   const novoDesenhoBtn = document.getElementById('novoDesenhoBtn');
+  const codigoPecaAtual = document.getElementById('codigoPecaAtual');
   const pecasTabela = document.getElementById('pecasTabela');
 
   const amarradoLaminaInput = document.getElementById('amarradoLamina');
@@ -257,6 +258,27 @@
     return `${inicial}${total + 1}`;
   }
 
+  function obterCodigoPecaAtual(ambiente) {
+    const ambienteLimpo = (ambiente || '').trim();
+    if (!ambienteLimpo) return '';
+    if (pecaEmEdicao !== null) {
+      const pecaAtual = pecas[pecaEmEdicao];
+      const ambienteOriginal = (pecaAtual?.ambiente || '').trim().toLowerCase();
+      const ambienteInformado = ambienteLimpo.toLowerCase();
+      const codigoOriginal = pecaAtual?.codigo || '';
+      if (codigoOriginal && ambienteOriginal && ambienteOriginal === ambienteInformado) {
+        return codigoOriginal;
+      }
+    }
+    return gerarCodigoPeca(ambienteLimpo, pecaEmEdicao);
+  }
+
+  function atualizarCodigoPecaAtual() {
+    if (!codigoPecaAtual) return;
+    const codigo = obterCodigoPecaAtual(ambienteInput?.value);
+    codigoPecaAtual.textContent = `Código: ${codigo || '-'}`;
+  }
+
   function limparFormularioPeca() {
     if (ambienteInput) ambienteInput.value = '';
     if (nomeInput) nomeInput.value = '';
@@ -270,7 +292,8 @@
     if (donoMdfInput) donoMdfInput.value = '';
     atualizarBloqueioMdf();
     pecaEmEdicao = null;
-    if (novoDesenhoBtn) novoDesenhoBtn.textContent = '+ Peça';
+    if (novoDesenhoBtn) novoDesenhoBtn.textContent = '+ Desenho';
+    atualizarCodigoPecaAtual();
   }
 
   function validarLetras(valor, campo) {
@@ -379,6 +402,7 @@
         if (donoMdfInput) donoMdfInput.value = peca.dono_mdf || '';
         atualizarBloqueioMdf();
         if (novoDesenhoBtn) novoDesenhoBtn.textContent = 'Atualizar Peça';
+        atualizarCodigoPecaAtual();
       });
       deleteBtn?.addEventListener('click', () => {
         pecas.splice(index, 1);
@@ -396,7 +420,7 @@
       alert(dados.erro);
       return;
     }
-    const codigo = gerarCodigoPeca(dados.ambiente, pecaEmEdicao);
+    const codigo = obterCodigoPecaAtual(dados.ambiente);
     const registro = { ...dados, codigo };
     if (pecaEmEdicao !== null) {
       pecas[pecaEmEdicao] = registro;
@@ -406,6 +430,9 @@
     renderPecas();
     limparFormularioPeca();
   });
+
+  ambienteInput?.addEventListener('input', atualizarCodigoPecaAtual);
+  atualizarCodigoPecaAtual();
 
   const amarrados = [];
   let amarradoEmEdicao = null;
