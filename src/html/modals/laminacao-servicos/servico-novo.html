@@ -1,0 +1,145 @@
+<div id="novoServicoOverlay" class="hidden fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4 pt-[4vw]" aria-hidden="true" data-modal-loading="true">
+  <div class="w-full max-w-6xl max-h-[90vh] glass-surface backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade slide-in overflow-hidden flex flex-col">
+    <header class="grid grid-cols-3 items-center gap-4 px-8 py-5 border-b border-white/10 flex-shrink-0">
+      <div class="flex items-center gap-4 justify-self-start">
+        <button id="voltarNovoServico" class="btn-neutral px-4 py-2 rounded-lg text-white font-medium flex items-center gap-2">← Voltar</button>
+        <div class="min-w-[220px]">
+          <label for="servicoCliente" class="block text-xs font-medium text-gray-300 mb-1">Cliente</label>
+          <select id="servicoCliente" required class="w-full bg-input border border-inputBorder rounded-lg px-3 py-2 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition select-arrow appearance-none">
+            <option value="">Selecione o cliente</option>
+          </select>
+        </div>
+      </div>
+      <h2 id="servicoNovoTitulo" class="text-lg font-semibold text-white text-center">Novo Serviço</h2>
+      <span></span>
+    </header>
+
+    <nav class="px-8 border-b border-white/10 flex-shrink-0" role="tablist">
+      <div class="flex gap-8 overflow-x-auto scrollbar-hide">
+        <button id="tab-pecas" role="tab" aria-selected="true" aria-controls="panel-pecas" tabindex="0" class="py-4 px-2 text-sm font-medium border-b-2 tab-active whitespace-nowrap transition">Peças</button>
+        <button id="tab-amarrado" role="tab" aria-selected="false" aria-controls="panel-amarrado" tabindex="-1" class="py-4 px-2 text-sm font-medium text-gray-400 border-b-2 border-transparent hover:text-white transition whitespace-nowrap">Amarrado</button>
+      </div>
+    </nav>
+
+    <div class="flex-1 overflow-y-auto modal-scroll">
+      <section id="panel-pecas" role="tabpanel" aria-labelledby="tab-pecas" class="px-8 py-6">
+        <div class="flex items-center justify-between mb-6">
+          <h3 class="text-lg font-semibold text-white">Peças</h3>
+          <button id="novoDesenhoBtn" class="btn-primary px-4 py-2 rounded-lg text-white font-medium">+ Desenho</button>
+        </div>
+
+        <div class="glass-surface rounded-xl border border-white/10 p-6 mb-6">
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <label class="block text-sm font-medium text-gray-300 mb-2">Peça</label>
+              <input id="servicoPeca" type="text" placeholder="Nome da peça" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-300 mb-2">Quantidade</label>
+              <input id="servicoQuantidade" type="number" min="0" placeholder="0" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-300 mb-2">Dimensão (L x A)</label>
+              <input id="servicoDimensao" type="text" placeholder="Ex.: 1200 x 800 mm" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-300 mb-2">Espessura</label>
+              <input id="servicoEspessura" type="text" placeholder="Ex.: 6 mm" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-300 mb-2">Material</label>
+              <select id="servicoMaterial" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition select-arrow appearance-none">
+                <option value="">Selecione o material</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-300 mb-2">Observações</label>
+              <input id="servicoObservacoes" type="text" placeholder="Detalhes adicionais" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+            </div>
+          </div>
+        </div>
+
+        <div class="glass-surface rounded-xl border border-white/10 overflow-hidden">
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+              <thead class="glass-surface">
+                <tr class="border-b border-white/10">
+                  <th class="text-left py-4 px-4 text-gray-300 font-medium">PEÇA</th>
+                  <th class="text-left py-4 px-4 text-gray-300 font-medium">DESENHO</th>
+                  <th class="text-left py-4 px-4 text-gray-300 font-medium">QTD.</th>
+                  <th class="text-left py-4 px-4 text-gray-300 font-medium">DIMENSÃO</th>
+                  <th class="text-left py-4 px-4 text-gray-300 font-medium">MATERIAL</th>
+                  <th class="text-left py-4 px-4 text-gray-300 font-medium">AÇÕES</th>
+                </tr>
+              </thead>
+              <tbody id="pecasTabela">
+                <tr>
+                  <td colspan="6" class="py-12 text-left text-gray-400">Nenhuma peça cadastrada</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <section id="panel-amarrado" role="tabpanel" aria-labelledby="tab-amarrado" class="px-8 py-6 hidden">
+        <div class="grid grid-cols-1 gap-6">
+          <div class="glass-surface rounded-xl border border-white/10 p-6">
+            <h3 class="text-lg font-semibold text-white mb-4">Dados do Amarrado</h3>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <label class="block text-sm font-medium text-gray-300 mb-2">Código do Amarrado</label>
+                <input id="amarradoCodigo" type="text" placeholder="Informe o código" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-300 mb-2">Quantidade</label>
+                <input id="amarradoQuantidade" type="number" min="0" placeholder="0" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-300 mb-2">Setor</label>
+                <select id="amarradoSetor" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition select-arrow appearance-none">
+                  <option value="">Selecione o setor</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-300 mb-2">Data</label>
+                <input id="amarradoData" type="date" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              </div>
+              <div class="md:col-span-2">
+                <label class="block text-sm font-medium text-gray-300 mb-2">Observações</label>
+                <textarea id="amarradoObservacoes" rows="3" placeholder="Anote informações adicionais" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition resize-none"></textarea>
+              </div>
+            </div>
+          </div>
+
+          <div class="glass-surface rounded-xl border border-white/10 overflow-hidden">
+            <div class="overflow-x-auto">
+              <table class="w-full text-sm">
+                <thead class="glass-surface">
+                  <tr class="border-b border-white/10">
+                    <th class="text-left py-4 px-4 text-gray-300 font-medium">CÓDIGO</th>
+                    <th class="text-left py-4 px-4 text-gray-300 font-medium">QUANTIDADE</th>
+                    <th class="text-left py-4 px-4 text-gray-300 font-medium">SETOR</th>
+                    <th class="text-left py-4 px-4 text-gray-300 font-medium">DATA</th>
+                    <th class="text-left py-4 px-4 text-gray-300 font-medium">OBSERVAÇÕES</th>
+                    <th class="text-left py-4 px-4 text-gray-300 font-medium">AÇÕES</th>
+                  </tr>
+                </thead>
+                <tbody id="amarradoTabela">
+                  <tr>
+                    <td colspan="6" class="py-12 text-left text-gray-400">Nenhum amarrado cadastrado</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <footer class="flex justify-end items-center gap-4 px-8 py-6 border-t border-white/10 flex-shrink-0">
+      <button id="cancelarNovoServico" class="btn-secondary px-6 py-3 rounded-lg text-white font-medium">Cancelar</button>
+      <button id="salvarNovoServico" class="btn-primary px-6 py-3 rounded-lg text-white font-medium">Salvar</button>
+    </footer>
+  </div>
+</div>
