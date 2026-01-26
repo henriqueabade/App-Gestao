@@ -367,7 +367,7 @@
     if (!pecasTabela) return;
     pecasTabela.innerHTML = '';
     if (!pecas.length) {
-      pecasTabela.innerHTML = '<tr><td colspan="9" class="py-12 text-left text-gray-400">Nenhuma peça cadastrada</td></tr>';
+      pecasTabela.innerHTML = '<tr><td colspan="10" class="py-12 text-left text-gray-400">Nenhuma peça cadastrada</td></tr>';
       return;
     }
     pecas.forEach((peca, index) => {
@@ -376,8 +376,9 @@
         <td class="py-4 px-4 text-white">${peca.codigo || ''}</td>
         <td class="py-4 px-4 text-white">${peca.ambiente || ''}</td>
         <td class="py-4 px-4 text-white">${peca.nome || ''}</td>
-        <td class="py-4 px-4 text-white">${peca.quantidade ?? ''}</td>
+        <td class="py-4 px-4 text-white">${peca.segue_veio ?? ''}</td>
         <td class="py-4 px-4 text-white">${peca.largura ?? ''}</td>
+        <td class="py-4 px-4 text-white">${peca.quantidade ?? ''}</td>
         <td class="py-4 px-4 text-white">${peca.tipo || ''}</td>
         <td class="py-4 px-4 text-white">${peca.lamina || ''}</td>
         <td class="py-4 px-4 text-white">${peca.mdf || ''}</td>
