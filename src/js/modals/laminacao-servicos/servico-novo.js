@@ -205,7 +205,7 @@
 
   function atualizarBloqueioMdf() {
     if (!tipoInput || !mdfInput || !donoMdfInput) return;
-    const tipo = tipoInput.value.trim().toLowerCase();
+    const tipo = tipoInput.value;
     const bloqueado = tipo === 'contraplacado';
     mdfInput.disabled = bloqueado;
     donoMdfInput.disabled = bloqueado;
