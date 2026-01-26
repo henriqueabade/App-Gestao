@@ -79,7 +79,7 @@ async function popularClientes() {
 
 function showFunctionUnavailableDialog(message) {
     const overlay = document.createElement('div');
-    overlay.className = 'fixed inset-0 bg-black/50 flex items-center justify-center p-4';
+    overlay.className = 'fixed inset-0 z-[2000] bg-black/50 flex items-center justify-center p-4';
     overlay.innerHTML = `<div class="max-w-sm w-full glass-surface backdrop-blur-xl rounded-2xl border border-yellow-500/20 ring-1 ring-yellow-500/30 shadow-2xl/40 animate-modalFade">
         <div class="p-6 text-center">
             <h3 class="text-lg font-semibold mb-4 text-yellow-400">Função Indisponível</h3>
@@ -95,7 +95,7 @@ function showFunctionUnavailableDialog(message) {
 
 function showPdfUnavailableDialog() {
     const overlay = document.createElement('div');
-    overlay.className = 'fixed inset-0 bg-black/50 flex items-center justify-center p-4';
+    overlay.className = 'fixed inset-0 z-[2000] bg-black/50 flex items-center justify-center p-4';
     overlay.innerHTML = `<div class="max-w-sm w-full glass-surface backdrop-blur-xl rounded-2xl border border-red-500/20 ring-1 ring-red-500/30 shadow-2xl/40 animate-modalFade">
         <div class="p-6 text-center">
             <h3 class="text-lg font-semibold mb-4 text-red-400">Função Indisponível</h3>
@@ -111,7 +111,7 @@ function showPdfUnavailableDialog() {
 
 function showStatusConfirmDialog(message, cb) {
     const overlay = document.createElement('div');
-    overlay.className = 'fixed inset-0 bg-black/50 flex items-center justify-center p-4';
+    overlay.className = 'fixed inset-0 z-[2000] bg-black/50 flex items-center justify-center p-4';
     overlay.innerHTML = `<div class="max-w-md w-full glass-surface backdrop-blur-xl rounded-2xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade">
         <div class="p-6 text-center">
             <h3 class="text-lg font-semibold mb-4 text-yellow-300">Atenção</h3>
