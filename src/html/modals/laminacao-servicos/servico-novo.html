@@ -25,36 +25,54 @@
       <section id="panel-pecas" role="tabpanel" aria-labelledby="tab-pecas" class="px-8 py-6">
         <div class="flex items-center justify-between mb-6">
           <h3 class="text-lg font-semibold text-white">Peças</h3>
-          <button id="novoDesenhoBtn" class="btn-primary px-4 py-2 rounded-lg text-white font-medium">+ Desenho</button>
+          <button id="novoDesenhoBtn" class="btn-primary px-4 py-2 rounded-lg text-white font-medium">+ Peça</button>
         </div>
 
         <div class="glass-surface rounded-xl border border-white/10 p-6 mb-6">
           <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
-              <label class="block text-sm font-medium text-gray-300 mb-2">Peça</label>
-              <input id="servicoPeca" type="text" placeholder="Nome da peça" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              <label class="block text-sm font-medium text-gray-300 mb-2">Ambiente</label>
+              <input id="servicoAmbiente" type="text" placeholder="Ex.: Cozinha" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
             </div>
             <div>
-              <label class="block text-sm font-medium text-gray-300 mb-2">Quantidade</label>
-              <input id="servicoQuantidade" type="number" min="0" placeholder="0" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              <label class="block text-sm font-medium text-gray-300 mb-2">Nome da Peça</label>
+              <input id="servicoNome" type="text" placeholder="Nome da peça" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
             </div>
             <div>
-              <label class="block text-sm font-medium text-gray-300 mb-2">Dimensão (L x A)</label>
-              <input id="servicoDimensao" type="text" placeholder="Ex.: 1200 x 800 mm" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
-            </div>
-            <div>
-              <label class="block text-sm font-medium text-gray-300 mb-2">Espessura</label>
-              <input id="servicoEspessura" type="text" placeholder="Ex.: 6 mm" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
-            </div>
-            <div>
-              <label class="block text-sm font-medium text-gray-300 mb-2">Material</label>
-              <select id="servicoMaterial" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition select-arrow appearance-none">
-                <option value="">Selecione o material</option>
+              <label class="block text-sm font-medium text-gray-300 mb-2">Segue Veio</label>
+              <select id="servicoSegueVeio" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition select-arrow appearance-none">
+                <option value="">Selecione</option>
+                <option value="Sim">Sim</option>
+                <option value="Não">Não</option>
               </select>
             </div>
             <div>
-              <label class="block text-sm font-medium text-gray-300 mb-2">Observações</label>
-              <input id="servicoObservacoes" type="text" placeholder="Detalhes adicionais" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              <label class="block text-sm font-medium text-gray-300 mb-2">Largura</label>
+              <input id="servicoLargura" type="text" placeholder="Ex.: 600" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-300 mb-2">Quantidade</label>
+              <input id="servicoQuantidade" type="text" placeholder="0" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-300 mb-2">Tipo</label>
+              <input id="servicoTipo" type="text" placeholder="Ex.: Contraplacado" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-300 mb-2">Lâmina</label>
+              <input id="servicoLamina" type="text" placeholder="Informe a lâmina" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-300 mb-2">Dono da Lâmina</label>
+              <input id="servicoDonoLamina" type="text" placeholder="Informe o dono da lâmina" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-300 mb-2">MDF</label>
+              <input id="servicoMdf" type="text" placeholder="Informe o MDF" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-300 mb-2">Dono do MDF</label>
+              <input id="servicoDonoMdf" type="text" placeholder="Informe o dono do MDF" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
             </div>
           </div>
         </div>
@@ -64,17 +82,20 @@
             <table class="w-full text-sm">
               <thead class="glass-surface">
                 <tr class="border-b border-white/10">
+                  <th class="text-left py-4 px-4 text-gray-300 font-medium">CÓDIGO</th>
+                  <th class="text-left py-4 px-4 text-gray-300 font-medium">AMBIENTE</th>
                   <th class="text-left py-4 px-4 text-gray-300 font-medium">PEÇA</th>
-                  <th class="text-left py-4 px-4 text-gray-300 font-medium">DESENHO</th>
                   <th class="text-left py-4 px-4 text-gray-300 font-medium">QTD.</th>
-                  <th class="text-left py-4 px-4 text-gray-300 font-medium">DIMENSÃO</th>
-                  <th class="text-left py-4 px-4 text-gray-300 font-medium">MATERIAL</th>
+                  <th class="text-left py-4 px-4 text-gray-300 font-medium">LARGURA</th>
+                  <th class="text-left py-4 px-4 text-gray-300 font-medium">TIPO</th>
+                  <th class="text-left py-4 px-4 text-gray-300 font-medium">LÂMINA</th>
+                  <th class="text-left py-4 px-4 text-gray-300 font-medium">MDF</th>
                   <th class="text-left py-4 px-4 text-gray-300 font-medium">AÇÕES</th>
                 </tr>
               </thead>
               <tbody id="pecasTabela">
                 <tr>
-                  <td colspan="6" class="py-12 text-left text-gray-400">Nenhuma peça cadastrada</td>
+                  <td colspan="9" class="py-12 text-left text-gray-400">Nenhuma peça cadastrada</td>
                 </tr>
               </tbody>
             </table>
@@ -85,29 +106,53 @@
       <section id="panel-amarrado" role="tabpanel" aria-labelledby="tab-amarrado" class="px-8 py-6 hidden">
         <div class="grid grid-cols-1 gap-6">
           <div class="glass-surface rounded-xl border border-white/10 p-6">
-            <h3 class="text-lg font-semibold text-white mb-4">Dados do Amarrado</h3>
+            <div class="flex items-center justify-between mb-4">
+              <h3 class="text-lg font-semibold text-white">Dados do Amarrado</h3>
+              <span id="amarradoModoEdicao" class="hidden text-xs font-semibold text-amber-200 bg-amber-500/10 border border-amber-400/30 px-3 py-1 rounded-full">Modo edição</span>
+            </div>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
-                <label class="block text-sm font-medium text-gray-300 mb-2">Código do Amarrado</label>
-                <input id="amarradoCodigo" type="text" placeholder="Informe o código" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                <label class="block text-sm font-medium text-gray-300 mb-2">Lâmina</label>
+                <input id="amarradoLamina" type="text" placeholder="Informe a lâmina" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-300 mb-2">Comprimento</label>
+                <input id="amarradoComprimento" type="text" placeholder="0" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-300 mb-2">Largura Principal</label>
+                <input id="amarradoLarguraPrincipal" type="text" placeholder="0" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-300 mb-2">Largura Menor</label>
+                <input id="amarradoLarguraMenor" type="text" placeholder="0" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-300 mb-2">Largura Média</label>
+                <input id="amarradoLarguraMedia" type="text" placeholder="0" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-300 mb-2">Altura Média</label>
+                <input id="amarradoAlturaMedia" type="text" placeholder="0" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-300 mb-2">Largura Maior</label>
+                <input id="amarradoLarguraMaior" type="text" placeholder="0" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
               </div>
               <div>
                 <label class="block text-sm font-medium text-gray-300 mb-2">Quantidade</label>
-                <input id="amarradoQuantidade" type="number" min="0" placeholder="0" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                <input id="amarradoQuantidade" type="text" placeholder="0" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
               </div>
               <div>
-                <label class="block text-sm font-medium text-gray-300 mb-2">Setor</label>
-                <select id="amarradoSetor" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition select-arrow appearance-none">
-                  <option value="">Selecione o setor</option>
-                </select>
+                <label class="block text-sm font-medium text-gray-300 mb-2">Tipo</label>
+                <input id="amarradoTipo" type="text" placeholder="Tipo" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
               </div>
               <div>
-                <label class="block text-sm font-medium text-gray-300 mb-2">Data</label>
-                <input id="amarradoData" type="date" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+                <label class="block text-sm font-medium text-gray-300 mb-2">Sequência</label>
+                <input id="amarradoSequencia" type="text" placeholder="0" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
               </div>
-              <div class="md:col-span-2">
-                <label class="block text-sm font-medium text-gray-300 mb-2">Observações</label>
-                <textarea id="amarradoObservacoes" rows="3" placeholder="Anote informações adicionais" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition resize-none"></textarea>
+              <div class="md:col-span-2 flex justify-end">
+                <button id="amarradoAdicionarBtn" class="btn-primary px-4 py-2 rounded-lg text-white font-medium">Adicionar Amarrado</button>
               </div>
             </div>
           </div>
@@ -117,17 +162,22 @@
               <table class="w-full text-sm">
                 <thead class="glass-surface">
                   <tr class="border-b border-white/10">
-                    <th class="text-left py-4 px-4 text-gray-300 font-medium">CÓDIGO</th>
+                    <th class="text-left py-4 px-4 text-gray-300 font-medium">LÂMINA</th>
+                    <th class="text-left py-4 px-4 text-gray-300 font-medium">COMPRIMENTO</th>
+                    <th class="text-left py-4 px-4 text-gray-300 font-medium">LARG. PRINCIPAL</th>
+                    <th class="text-left py-4 px-4 text-gray-300 font-medium">LARG. MENOR</th>
+                    <th class="text-left py-4 px-4 text-gray-300 font-medium">LARG. MÉDIA</th>
+                    <th class="text-left py-4 px-4 text-gray-300 font-medium">ALT. MÉDIA</th>
+                    <th class="text-left py-4 px-4 text-gray-300 font-medium">LARG. MAIOR</th>
                     <th class="text-left py-4 px-4 text-gray-300 font-medium">QUANTIDADE</th>
-                    <th class="text-left py-4 px-4 text-gray-300 font-medium">SETOR</th>
-                    <th class="text-left py-4 px-4 text-gray-300 font-medium">DATA</th>
-                    <th class="text-left py-4 px-4 text-gray-300 font-medium">OBSERVAÇÕES</th>
+                    <th class="text-left py-4 px-4 text-gray-300 font-medium">TIPO</th>
+                    <th class="text-left py-4 px-4 text-gray-300 font-medium">SEQUÊNCIA</th>
                     <th class="text-left py-4 px-4 text-gray-300 font-medium">AÇÕES</th>
                   </tr>
                 </thead>
                 <tbody id="amarradoTabela">
                   <tr>
-                    <td colspan="6" class="py-12 text-left text-gray-400">Nenhum amarrado cadastrado</td>
+                    <td colspan="11" class="py-12 text-left text-gray-400">Nenhum amarrado cadastrado</td>
                   </tr>
                 </tbody>
               </table>

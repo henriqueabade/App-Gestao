@@ -330,6 +330,7 @@ function initServicosLaminacao() {
         });
     }
 
+    window.addEventListener('servicoLaminacaoAtualizado', () => carregarServicos());
     carregarServicos();
 }
 
