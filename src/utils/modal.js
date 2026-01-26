@@ -42,6 +42,27 @@ const ModalManager = (() => {
     });
   }
 
+  function ensureHighZIndex(element, minZIndex = 2000) {
+    if (!element) return;
+    const zClassRegex = /^z-(?:\[(\d+)\]|(\d+))$/;
+    let currentZIndex = null;
+    element.classList.forEach(className => {
+      const match = className.match(zClassRegex);
+      if (!match) return;
+      const value = Number(match[1] ?? match[2]);
+      if (!Number.isNaN(value)) {
+        currentZIndex = currentZIndex === null ? value : Math.max(currentZIndex, value);
+      }
+    });
+    if (currentZIndex !== null && currentZIndex >= minZIndex) return;
+    [...element.classList].forEach(className => {
+      if (zClassRegex.test(className)) {
+        element.classList.remove(className);
+      }
+    });
+    element.classList.add(`z-[${minZIndex}]`);
+  }
+
   async function open(htmlPath, scriptPath, overlayId, keepExisting = false) {
     if (arguments.length === 1) {
       const cfg = modalConfigs[htmlPath];
@@ -64,6 +85,7 @@ const ModalManager = (() => {
 
     const wrapper = document.createElement('div');
     wrapper.innerHTML = html;
+    ensureHighZIndex(wrapper.firstElementChild);
     if (token !== openToken) return;
     document.body.appendChild(wrapper);
     document.body.classList.add('overflow-hidden');
