@@ -355,6 +355,152 @@ if (intro) {
   const registerForm = document.getElementById('registerForm');
   const registerSubmitButton = registerForm?.querySelector('button[type="submit"]');
   const loginSubmitButton = loginForm?.querySelector('button[type="submit"]');
+  const emailInput = document.getElementById('email');
+  const emailSuggestions = document.getElementById('emailSuggestions');
+  let activeEmailSuggestionIndex = -1;
+
+  function loadRememberedEmails() {
+    try {
+      const raw = localStorage.getItem('rememberedEmails');
+      const parsed = raw ? JSON.parse(raw) : [];
+      return Array.isArray(parsed) ? parsed.filter((item) => typeof item === 'string') : [];
+    } catch (_) {
+      return [];
+    }
+  }
+
+  function persistRememberedEmail(value) {
+    const trimmed = value.trim();
+    if (!trimmed) return;
+    const list = loadRememberedEmails();
+    const seen = new Set();
+    const updated = [];
+    const lowerTrimmed = trimmed.toLowerCase();
+    list.forEach((email) => {
+      const lower = email.toLowerCase();
+      if (!seen.has(lower) && lower !== lowerTrimmed) {
+        seen.add(lower);
+        updated.push(email);
+      }
+    });
+    updated.push(trimmed);
+    updated.sort((a, b) => a.localeCompare(b, 'pt-BR', { sensitivity: 'base' }));
+    localStorage.setItem('rememberedEmails', JSON.stringify(updated));
+  }
+
+  function filterRememberedEmails(prefix) {
+    const normalized = prefix.trim().toLowerCase();
+    if (!normalized) return loadRememberedEmails();
+    return loadRememberedEmails().filter((email) => email.toLowerCase().startsWith(normalized));
+  }
+
+  function closeEmailSuggestions() {
+    if (!emailSuggestions || !emailInput) return;
+    emailSuggestions.classList.add('hidden');
+    emailSuggestions.innerHTML = '';
+    activeEmailSuggestionIndex = -1;
+    emailInput.setAttribute('aria-expanded', 'false');
+  }
+
+  function highlightEmailSuggestion(index) {
+    if (!emailSuggestions) return;
+    const options = Array.from(emailSuggestions.querySelectorAll('[role="option"]'));
+    options.forEach((option, idx) => {
+      if (idx === index) {
+        option.classList.add('active');
+        option.setAttribute('aria-selected', 'true');
+        option.scrollIntoView({ block: 'nearest' });
+      } else {
+        option.classList.remove('active');
+        option.setAttribute('aria-selected', 'false');
+      }
+    });
+  }
+
+  function selectEmailSuggestion(value) {
+    if (!emailInput) return;
+    emailInput.value = value;
+    closeEmailSuggestions();
+  }
+
+  function renderEmailSuggestions() {
+    if (!emailSuggestions || !emailInput) return;
+    const suggestions = filterRememberedEmails(emailInput.value);
+    emailSuggestions.innerHTML = '';
+    activeEmailSuggestionIndex = -1;
+
+    if (!suggestions.length) {
+      closeEmailSuggestions();
+      return;
+    }
+
+    suggestions.forEach((email, index) => {
+      const option = document.createElement('button');
+      option.type = 'button';
+      option.className = 'email-suggestion-option';
+      option.textContent = email;
+      option.setAttribute('role', 'option');
+      option.setAttribute('aria-selected', 'false');
+      option.addEventListener('click', () => selectEmailSuggestion(email));
+      option.addEventListener('mousemove', () => {
+        activeEmailSuggestionIndex = index;
+        highlightEmailSuggestion(activeEmailSuggestionIndex);
+      });
+      emailSuggestions.appendChild(option);
+    });
+
+    emailSuggestions.classList.remove('hidden');
+    emailInput.setAttribute('aria-expanded', 'true');
+  }
+
+  if (emailInput && emailSuggestions) {
+    emailInput.addEventListener('input', () => {
+      renderEmailSuggestions();
+    });
+
+    emailInput.addEventListener('focus', () => {
+      renderEmailSuggestions();
+    });
+
+    emailInput.addEventListener('keydown', (event) => {
+      const options = Array.from(emailSuggestions.querySelectorAll('[role="option"]'));
+      if (!options.length) return;
+
+      if (event.key === 'ArrowDown') {
+        event.preventDefault();
+        activeEmailSuggestionIndex =
+          activeEmailSuggestionIndex < options.length - 1 ? activeEmailSuggestionIndex + 1 : 0;
+        highlightEmailSuggestion(activeEmailSuggestionIndex);
+      } else if (event.key === 'ArrowUp') {
+        event.preventDefault();
+        activeEmailSuggestionIndex =
+          activeEmailSuggestionIndex > 0 ? activeEmailSuggestionIndex - 1 : options.length - 1;
+        highlightEmailSuggestion(activeEmailSuggestionIndex);
+      } else if (event.key === 'Enter') {
+        if (activeEmailSuggestionIndex >= 0) {
+          event.preventDefault();
+          const selected = options[activeEmailSuggestionIndex];
+          if (selected) {
+            selectEmailSuggestion(selected.textContent);
+          }
+        }
+      } else if (event.key === 'Tab') {
+        const targetIndex = activeEmailSuggestionIndex >= 0 ? activeEmailSuggestionIndex : 0;
+        const selected = options[targetIndex];
+        if (selected) {
+          selectEmailSuggestion(selected.textContent);
+        }
+      } else if (event.key === 'Escape') {
+        closeEmailSuggestions();
+      }
+    });
+
+    document.addEventListener('click', (event) => {
+      if (!emailSuggestions.contains(event.target) && event.target !== emailInput) {
+        closeEmailSuggestions();
+      }
+    });
+  }
 
   function clearPendingLoginRetry() {
     if (pendingLoginRetryTimeout) {
@@ -451,6 +597,9 @@ if (intro) {
       lastLoginAttempt = null;
       showToast('Login realizado com sucesso!', 'success');
       const remember = document.getElementById('remember').checked;
+      if (remember) {
+        persistRememberedEmail(email);
+      }
       if (result.user) localStorage.setItem('user', JSON.stringify(result.user));
       localStorage.setItem('rememberUser', remember ? '1' : '0');
       sessionStorage.setItem('currentUser', JSON.stringify(result.user));

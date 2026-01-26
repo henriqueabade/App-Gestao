@@ -34,6 +34,42 @@ body {
   box-shadow: 0 0 0 3px rgba(182, 160, 62, 0.534);
 }
 
+.email-suggestions {
+  position: absolute;
+  top: calc(100% + 0.35rem);
+  left: 0;
+  right: 0;
+  background-color: #ffffff;
+  border: 1px solid rgba(182, 160, 62, 0.25);
+  border-radius: 0.75rem;
+  box-shadow: 0 16px 30px rgba(15, 23, 42, 0.12);
+  max-height: 220px;
+  overflow-y: auto;
+  z-index: 20;
+}
+
+.email-suggestions.hidden {
+  display: none;
+}
+
+.email-suggestion-option {
+  padding: 0.65rem 1rem;
+  font-size: 0.95rem;
+  color: #1f2937;
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
+  background: transparent;
+  border: none;
+  width: 100%;
+  text-align: left;
+}
+
+.email-suggestion-option:hover,
+.email-suggestion-option.active {
+  background-color: rgba(182, 160, 62, 0.12);
+  color: #3d021f;
+}
+
 #bg-network {
   position: fixed;
   top: -20vh;

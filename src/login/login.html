@@ -68,9 +68,10 @@
         <button id="registerTab" class="px-4 py-2 font-medium text-white border-b-2 border-transparent hover:text-[#d4c169]">Cadastrar</button>
       </div>
       <form id="loginForm" class="space-y-4">
-        <div>
+        <div class="relative">
           <label for="email" class="block text-sm font-medium text-[#b6a03e] mb-1">E-mail ou usuário</label>
-          <input type="text" id="email" class="form-input w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none" required />
+          <input type="text" id="email" class="form-input w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none" required aria-expanded="false" />
+          <div id="emailSuggestions" class="email-suggestions hidden" role="listbox" aria-label="Sugestões de e-mail"></div>
         </div>
         <div class="relative">
           <label for="password" class="block text-sm font-medium text-[#b6a03e] mb-1">Senha</label>
