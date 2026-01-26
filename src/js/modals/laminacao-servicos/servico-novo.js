@@ -187,12 +187,8 @@
   const amarradoModoEdicao = document.getElementById('amarradoModoEdicao');
 
   restringirLetras(ambienteInput);
-  restringirLetras(nomeInput);
-  restringirLetras(tipoInput);
   restringirLetras(laminaInput);
-  restringirLetras(donoLaminaInput);
-  restringirLetras(mdfInput);
-  restringirLetras(donoMdfInput);
+  restringirNumeros(segueVeioInput);
   restringirNumeros(larguraInput);
   restringirNumeros(quantidadeInput);
 
@@ -219,7 +215,7 @@
     }
   }
 
-  tipoInput?.addEventListener('input', atualizarBloqueioMdf);
+  tipoInput?.addEventListener('change', atualizarBloqueioMdf);
   atualizarBloqueioMdf();
 
   async function carregarClientes() {
@@ -310,6 +306,11 @@
     return null;
   }
 
+  function validarSelecao(valor, campo) {
+    if (!valor) return `${campo} é obrigatório.`;
+    return null;
+  }
+
   function obterDadosPeca() {
     const ambiente = ambienteInput?.value.trim() || '';
     const nome = nomeInput?.value.trim() || '';
@@ -324,33 +325,34 @@
 
     let erro = validarLetras(ambiente, 'Ambiente');
     if (erro) return { erro };
-    erro = validarLetras(nome, 'Nome da peça');
+    erro = validarSelecao(nome, 'Nome da peça');
     if (erro) return { erro };
-    if (!segueVeio) return { erro: 'Selecione se a peça segue veio.' };
+    erro = validarNumero(segueVeio, 'Segue veio');
+    if (erro) return { erro };
     erro = validarNumero(largura, 'Largura');
     if (erro) return { erro };
     erro = validarNumero(quantidade, 'Quantidade');
     if (erro) return { erro };
-    erro = validarLetras(tipo, 'Tipo');
+    erro = validarSelecao(tipo, 'Tipo');
     if (erro) return { erro };
     erro = validarLetras(lamina, 'Lâmina');
     if (erro) return { erro };
-    erro = validarLetras(donoLamina, 'Dono da lâmina');
+    erro = validarSelecao(donoLamina, 'Dono da lâmina');
     if (erro) return { erro };
 
     const tipoNormalizado = tipo.toLowerCase();
     const bloquearMdf = tipoNormalizado === 'contraplacado';
     if (!bloquearMdf) {
-      erro = validarLetras(mdf, 'MDF');
+      erro = validarSelecao(mdf, 'MDF');
       if (erro) return { erro };
-      erro = validarLetras(donoMdf, 'Dono do MDF');
+      erro = validarSelecao(donoMdf, 'Dono do MDF');
       if (erro) return { erro };
     }
 
     return {
       ambiente,
       nome,
-      segue_veio: segueVeio,
+      segue_veio: prepararNumero(segueVeio),
       largura: prepararNumero(largura),
       quantidade: prepararNumero(quantidade),
       tipo,

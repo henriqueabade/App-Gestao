@@ -39,15 +39,22 @@
             </div>
             <div>
               <label class="block text-sm font-medium text-gray-300 mb-2">Nome da Peça</label>
-              <input id="servicoNome" type="text" placeholder="Nome da peça" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              <select id="servicoNome" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition select-arrow appearance-none">
+                <option value="">Selecione a peça</option>
+                <option value="Painel">Painel</option>
+                <option value="Forro">Forro</option>
+                <option value="Bandera Superior">Bandera Superior</option>
+                <option value="Bancada">Bancada</option>
+                <option value="Marco">Marco</option>
+                <option value="Peça Comum">Peça Comum</option>
+                <option value="Lateral Armário">Lateral Armário</option>
+                <option value="Porta Armário">Porta Armário</option>
+                <option value="Fundo Armário">Fundo Armário</option>
+              </select>
             </div>
             <div>
               <label class="block text-sm font-medium text-gray-300 mb-2">Segue Veio</label>
-              <select id="servicoSegueVeio" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition select-arrow appearance-none">
-                <option value="">Selecione</option>
-                <option value="Sim">Sim</option>
-                <option value="Não">Não</option>
-              </select>
+              <input id="servicoSegueVeio" type="number" placeholder="0" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
             </div>
             <div>
               <label class="block text-sm font-medium text-gray-300 mb-2">Largura</label>
@@ -59,7 +66,12 @@
             </div>
             <div>
               <label class="block text-sm font-medium text-gray-300 mb-2">Tipo</label>
-              <input id="servicoTipo" type="text" placeholder="Ex.: Contraplacado" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              <select id="servicoTipo" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition select-arrow appearance-none">
+                <option value="">Selecione o tipo</option>
+                <option value="1 face">1 face</option>
+                <option value="2 faces">2 faces</option>
+                <option value="contraplacado">contraplacado</option>
+              </select>
             </div>
             <div>
               <label class="block text-sm font-medium text-gray-300 mb-2">Lâmina</label>
@@ -67,15 +79,31 @@
             </div>
             <div>
               <label class="block text-sm font-medium text-gray-300 mb-2">Dono da Lâmina</label>
-              <input id="servicoDonoLamina" type="text" placeholder="Informe o dono da lâmina" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              <select id="servicoDonoLamina" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition select-arrow appearance-none">
+                <option value="">Selecione o dono</option>
+                <option value="Lâmina Cliente">Lâmina Cliente</option>
+                <option value="Lâmina Santíssimo Decor">Lâmina Santíssimo Decor</option>
+              </select>
             </div>
             <div>
               <label class="block text-sm font-medium text-gray-300 mb-2">MDF</label>
-              <input id="servicoMdf" type="text" placeholder="Informe o MDF" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              <select id="servicoMdf" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition select-arrow appearance-none">
+                <option value="">Selecione o MDF</option>
+                <option value="03 mm">03 mm</option>
+                <option value="06 mm">06 mm</option>
+                <option value="09 mm">09 mm</option>
+                <option value="15 mm">15 mm</option>
+                <option value="18 mm">18 mm</option>
+                <option value="25 mm">25 mm</option>
+              </select>
             </div>
             <div>
               <label class="block text-sm font-medium text-gray-300 mb-2">Dono do MDF</label>
-              <input id="servicoDonoMdf" type="text" placeholder="Informe o dono do MDF" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              <select id="servicoDonoMdf" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition select-arrow appearance-none">
+                <option value="">Selecione o dono</option>
+                <option value="MDF Cliente">MDF Cliente</option>
+                <option value="MDF Santíssimo Decor">MDF Santíssimo Decor</option>
+              </select>
             </div>
           </div>
         </div>
