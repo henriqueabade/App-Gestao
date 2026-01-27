@@ -169,6 +169,8 @@
   const mdfInput = document.getElementById('servicoMdf');
   const donoMdfInput = document.getElementById('servicoDonoMdf');
   const novoDesenhoBtn = document.getElementById('novoDesenhoBtn');
+  const pecasSalvarBtn = document.getElementById('pecasSalvarBtn');
+  const pecasLimparBtn = document.getElementById('pecasLimparBtn');
   const codigoPecaAtual = document.getElementById('codigoPecaAtual');
   const pecasTabela = document.getElementById('pecasTabela');
 
@@ -318,6 +320,12 @@
     atualizarCodigoPecaAtual();
   }
 
+  function limparEstadoPecas() {
+    pecas.length = 0;
+    renderPecas();
+    limparFormularioPeca();
+  }
+
   function validarLetras(valor, campo) {
     if (!valor) return `${campo} é obrigatório.`;
     if (!/^[A-Za-zÀ-ÿ\s]+$/.test(valor)) {
@@ -463,6 +471,16 @@
     }
     renderPecas();
     limparFormularioPeca();
+  });
+
+  pecasSalvarBtn?.addEventListener('click', (event) => {
+    event.preventDefault();
+    salvarDados();
+  });
+
+  pecasLimparBtn?.addEventListener('click', (event) => {
+    event.preventDefault();
+    limparEstadoPecas();
   });
 
   ambienteInput?.addEventListener('input', atualizarCodigoPecaAtual);
@@ -674,9 +692,9 @@
           const payload = {
             ambiente: peca.ambiente,
             nome: peca.nome,
-            segue_veio: peca.segue_veio,
-            largura: peca.largura,
-            quantidade: peca.quantidade,
+            segue_veio: prepararNumero(peca.segue_veio),
+            largura: prepararNumero(peca.largura),
+            quantidade: prepararNumero(peca.quantidade),
             tipo: peca.tipo,
             lamina: peca.lamina,
             dono_lamina: peca.dono_lamina,
@@ -696,15 +714,15 @@
         amarrados.forEach((amarrado) => {
           const payload = {
             lamina: amarrado.lamina,
-            comprimento: amarrado.comprimento,
-            largura_principal: amarrado.largura_principal,
-            largura_menor: amarrado.largura_menor,
-            largura_media: amarrado.largura_media,
-            altura_media: amarrado.altura_media,
-            largura_maior: amarrado.largura_maior,
-            quantidade: amarrado.quantidade,
+            comprimento: prepararNumero(amarrado.comprimento),
+            largura_principal: prepararNumero(amarrado.largura_principal),
+            largura_menor: prepararNumero(amarrado.largura_menor),
+            largura_media: prepararNumero(amarrado.largura_media),
+            altura_media: prepararNumero(amarrado.altura_media),
+            largura_maior: prepararNumero(amarrado.largura_maior),
+            quantidade: prepararNumero(amarrado.quantidade),
             tipo: amarrado.tipo,
-            sequencia: amarrado.sequencia
+            sequencia: prepararNumero(amarrado.sequencia)
           };
           requisicoes.push(
             fetchApi('/api/amarrados_laminacao', {
