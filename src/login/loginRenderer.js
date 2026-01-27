@@ -61,10 +61,10 @@ function showPinError() {
           <i data-feather="lock"></i>
         </div>
       </div>
-      <h2 class="warning-title">PIN Alterado</h2>
-      <p class="warning-text">Usuário desconectado, PIN alterado por questões de segurança. Faça login novamente com o novo PIN recebido no e-mail cadastrado.</p>
+      <h2 class="warning-title">Token Alterado</h2>
+      <p class="warning-text">Usuário desconectado, Token de Acesso alterado por questões de segurança. Faça login novamente para renovar Token.</p>
       <hr class="warning-divider">
-      <p class="warning-text-small">As atividades que estavam sendo realizadas não foram perdidas e ficarão disponíveis por 30 min. Em caso de não recebimento do PIN, contate o Administrador.</p>
+      <p class="warning-text-small">Caso tenha problemas no login, contate o Administrador.</p>
       <button id="pinErrorOk" class="warning-button pulse">OK</button>
     </div>`;
   document.body.appendChild(overlay);
