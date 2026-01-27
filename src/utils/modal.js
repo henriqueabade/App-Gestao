@@ -63,6 +63,45 @@ const ModalManager = (() => {
     element.classList.add(`z-[${minZIndex}]`);
   }
 
+  function mergeModalTemplate(templateHtml, contentHtml) {
+    const parser = new DOMParser();
+    const templateDoc = parser.parseFromString(templateHtml, 'text/html');
+    const contentDoc = parser.parseFromString(contentHtml, 'text/html');
+    const slots = ['header', 'body', 'footer'];
+    const contentHasSlots = Boolean(
+      contentDoc.querySelector('[data-modal-slot], [data-modal-header], [data-modal-body], [data-modal-footer]')
+    );
+
+    slots.forEach(slot => {
+      const target = templateDoc.querySelector(`[data-modal-slot="${slot}"]`);
+      if (!target) return;
+      const source = contentDoc.querySelector(`[data-modal-slot="${slot}"]`)
+        || contentDoc.querySelector(`[data-modal-${slot}]`);
+      if (source) {
+        target.innerHTML = source.innerHTML;
+      }
+    });
+
+    if (!contentHasSlots) {
+      const bodySlot = templateDoc.querySelector('[data-modal-slot="body"]');
+      if (bodySlot) {
+        bodySlot.innerHTML = contentDoc.body.innerHTML;
+      }
+    }
+
+    return templateDoc.body.innerHTML.trim();
+  }
+
+  async function buildModalWrapper(html) {
+    const wrapper = document.createElement('div');
+    wrapper.innerHTML = html;
+    ensureHighZIndex(wrapper.firstElementChild);
+    document.body.appendChild(wrapper);
+    document.body.classList.add('overflow-hidden');
+    setupEmptyStates(wrapper);
+    return wrapper;
+  }
+
   async function open(htmlPath, scriptPath, overlayId, keepExisting = false) {
     if (arguments.length === 1) {
       const cfg = modalConfigs[htmlPath];
@@ -90,6 +129,44 @@ const ModalManager = (() => {
     document.body.appendChild(wrapper);
     document.body.classList.add('overflow-hidden');
     setupEmptyStates(wrapper);
+
+    if (scriptPath) {
+      const script = document.createElement('script');
+      script.type = 'text/javascript';
+      script.src = scriptPath;
+      wrapper.appendChild(script);
+    }
+
+    modals.set(overlayId, wrapper);
+  }
+
+  async function openWithTemplate({
+    templatePath,
+    contentPath,
+    scriptPath,
+    overlayId,
+    keepExisting = false
+  } = {}) {
+    if (!templatePath || !contentPath || !overlayId) return;
+
+    if (!keepExisting) closeAll();
+    readyModals.delete(overlayId);
+    const token = ++openToken;
+
+    const [templateResp, contentResp] = await Promise.all([
+      fetch(templatePath),
+      fetch(contentPath)
+    ]);
+    if (token !== openToken) return;
+    const [templateHtml, contentHtml] = await Promise.all([
+      templateResp.text(),
+      contentResp.text()
+    ]);
+    if (token !== openToken) return;
+
+    const mergedHtml = mergeModalTemplate(templateHtml, contentHtml);
+    if (token !== openToken) return;
+    const wrapper = await buildModalWrapper(mergedHtml);
 
     if (scriptPath) {
       const script = document.createElement('script');
@@ -168,7 +245,7 @@ const ModalManager = (() => {
     });
   }
 
-  return { open, close, closeAll, signalReady, waitForReady };
+  return { open, openWithTemplate, close, closeAll, signalReady, waitForReady };
 })();
 
 window.ModalManager = ModalManager;

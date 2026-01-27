@@ -210,7 +210,45 @@ env               → API / SMTP
 
 Este documento elimina esses riscos.
 
-🔍 10. CHECKLIST OBRIGATÓRIO PARA QUALQUER NOVA FEATURE
+🧱 10. TEMPLATE PADRÃO DE MODAL
+
+Para manter consistência visual e de acessibilidade, use o template compartilhado:
+
+`src/html/modals/shared/dialog-base.html`
+
+Ele contém o overlay padrão e o container do diálogo (com `role="dialog"`, `aria-modal="true"` e `tabindex="0"`).
+Mantenha as classes do overlay e do container para preservar o visual padrão.
+
+Como consumir:
+
+1) Crie um HTML de conteúdo com slots:
+
+```html
+<div data-modal-slot="header">
+  <!-- Conteúdo do header -->
+</div>
+<div data-modal-slot="body">
+  <!-- Conteúdo do body -->
+</div>
+<div data-modal-slot="footer">
+  <!-- Conteúdo do footer -->
+</div>
+```
+
+2) Abra o modal usando o helper de template:
+
+```js
+Modal.openWithTemplate({
+  templatePath: 'modals/shared/dialog-base.html',
+  contentPath: 'modals/usuarios/novo.html',
+  scriptPath: '../js/modals/usuario-novo.js',
+  overlayId: 'novoUsuario'
+});
+```
+
+Se o conteúdo não tiver slots, todo o HTML será inserido no slot `body`.
+
+🔍 11. CHECKLIST OBRIGATÓRIO PARA QUALQUER NOVA FEATURE
 
 Antes de fazer PR:
 
@@ -226,7 +264,7 @@ Antes de fazer PR:
 
 Se algum item falhar → a PR não deve ser aprovada.
 
-🧠 11. MANDAMENTOS DO DESENVOLVEDOR SANTÍSSIMO DECOR
+🧠 12. MANDAMENTOS DO DESENVOLVEDOR SANTÍSSIMO DECOR
 
 A API é minha única fonte de dados.
 
@@ -248,7 +286,7 @@ A UI é burra; a API é inteligente.
 
 Eu sigo este DEV-ONBOARDING.md.
 
-🏁 12. CONCLUSÃO
+🏁 13. CONCLUSÃO
 
 Este guia garante que o Dashboard seja:
 
