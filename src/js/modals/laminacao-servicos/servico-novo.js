@@ -182,7 +182,8 @@
   const amarradoQuantidadeInput = document.getElementById('amarradoQuantidade');
   const amarradoTipoInput = document.getElementById('amarradoTipo');
   const amarradoSequenciaInput = document.getElementById('amarradoSequencia');
-  const amarradoAdicionarBtn = document.getElementById('amarradoAdicionarBtn');
+  const amarradoSalvarBtn = document.getElementById('amarradoSalvarBtn');
+  const amarradoLimparBtn = document.getElementById('amarradoLimparBtn');
   const amarradoTabela = document.getElementById('amarradoTabela');
   const amarradoModoEdicao = document.getElementById('amarradoModoEdicao');
 
@@ -477,7 +478,6 @@
     if (amarradoTipoInput) amarradoTipoInput.value = '';
     if (amarradoSequenciaInput) amarradoSequenciaInput.value = '';
     amarradoEmEdicao = null;
-    if (amarradoAdicionarBtn) amarradoAdicionarBtn.textContent = 'Adicionar Amarrado';
     amarradoModoEdicao?.classList.add('hidden');
     atualizarDependenciasAmarrado();
   }
@@ -533,22 +533,17 @@
     if (!amarradoTabela) return;
     amarradoTabela.innerHTML = '';
     if (!amarrados.length) {
-      amarradoTabela.innerHTML = '<tr><td colspan="11" class="py-12 text-left text-gray-400">Nenhum amarrado cadastrado</td></tr>';
+      amarradoTabela.innerHTML = '<tr><td colspan="5" class="py-12 text-left text-gray-400">Nenhum amarrado cadastrado</td></tr>';
       return;
     }
     amarrados.forEach((amarrado, index) => {
+      const tipificacao = `${amarrado.tipo || ''}${amarrado.sequencia ?? ''}`;
       const tr = document.createElement('tr');
       tr.innerHTML = `
         <td class="py-4 px-4 text-white">${amarrado.lamina || ''}</td>
         <td class="py-4 px-4 text-white">${amarrado.comprimento ?? ''}</td>
-        <td class="py-4 px-4 text-white">${amarrado.largura_principal ?? ''}</td>
-        <td class="py-4 px-4 text-white">${amarrado.largura_menor ?? ''}</td>
-        <td class="py-4 px-4 text-white">${amarrado.largura_media ?? ''}</td>
-        <td class="py-4 px-4 text-white">${amarrado.altura_media ?? ''}</td>
-        <td class="py-4 px-4 text-white">${amarrado.largura_maior ?? ''}</td>
         <td class="py-4 px-4 text-white">${amarrado.quantidade ?? ''}</td>
-        <td class="py-4 px-4 text-white">${amarrado.tipo || ''}</td>
-        <td class="py-4 px-4 text-white">${amarrado.sequencia ?? ''}</td>
+        <td class="py-4 px-4 text-white">${tipificacao}</td>
         <td class="py-4 px-4 text-left text-white">
           <div class="flex items-center justify-start gap-2">
             <i class="fas fa-edit w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Editar"></i>
@@ -570,7 +565,6 @@
         if (amarradoQuantidadeInput) amarradoQuantidadeInput.value = amarrado.quantidade ?? '';
         if (amarradoTipoInput) amarradoTipoInput.value = amarrado.tipo || '';
         if (amarradoSequenciaInput) amarradoSequenciaInput.value = amarrado.sequencia ?? '';
-        if (amarradoAdicionarBtn) amarradoAdicionarBtn.textContent = 'Atualizar Amarrado';
         amarradoModoEdicao?.classList.remove('hidden');
         atualizarDependenciasAmarrado();
       });
@@ -583,7 +577,7 @@
     });
   }
 
-  amarradoAdicionarBtn?.addEventListener('click', (event) => {
+  amarradoSalvarBtn?.addEventListener('click', (event) => {
     event.preventDefault();
     const dados = obterDadosAmarrado();
     if (dados.erro) {
@@ -604,6 +598,13 @@
     } else {
       amarrados.push(dados);
     }
+    renderAmarrados();
+    limparFormularioAmarrado();
+  });
+
+  amarradoLimparBtn?.addEventListener('click', (event) => {
+    event.preventDefault();
+    amarrados.length = 0;
     renderAmarrados();
     limparFormularioAmarrado();
   });

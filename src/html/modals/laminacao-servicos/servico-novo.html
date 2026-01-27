@@ -183,8 +183,9 @@
                 <label class="block text-sm font-medium text-gray-300 mb-2">Sequência</label>
                 <input id="amarradoSequencia" type="text" placeholder="0" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
               </div>
-              <div class="md:col-span-2 flex justify-end">
-                <button id="amarradoAdicionarBtn" class="btn-primary px-4 py-2 rounded-lg text-white font-medium">Adicionar Amarrado</button>
+              <div class="md:col-span-2 flex justify-end gap-3">
+                <button id="amarradoSalvarBtn" class="btn-primary px-4 py-2 rounded-lg text-white font-medium">Salvar</button>
+                <button id="amarradoLimparBtn" class="btn-secondary px-4 py-2 rounded-lg text-white font-medium">Limpar</button>
               </div>
             </div>
           </div>
@@ -194,22 +195,16 @@
               <table class="w-full text-sm">
                 <thead class="glass-surface">
                   <tr class="border-b border-white/10">
-                    <th class="text-left py-4 px-4 text-gray-300 font-medium">LÂMINA</th>
+                    <th class="text-left py-4 px-4 text-gray-300 font-medium">TIPO (LÂMINA)</th>
                     <th class="text-left py-4 px-4 text-gray-300 font-medium">COMPRIMENTO</th>
-                    <th class="text-left py-4 px-4 text-gray-300 font-medium">LARG. PRINCIPAL</th>
-                    <th class="text-left py-4 px-4 text-gray-300 font-medium">LARG. MENOR</th>
-                    <th class="text-left py-4 px-4 text-gray-300 font-medium">LARG. MÉDIA</th>
-                    <th class="text-left py-4 px-4 text-gray-300 font-medium">ALT. MÉDIA</th>
-                    <th class="text-left py-4 px-4 text-gray-300 font-medium">LARG. MAIOR</th>
                     <th class="text-left py-4 px-4 text-gray-300 font-medium">QUANTIDADE</th>
-                    <th class="text-left py-4 px-4 text-gray-300 font-medium">TIPO</th>
-                    <th class="text-left py-4 px-4 text-gray-300 font-medium">SEQUÊNCIA</th>
+                    <th class="text-left py-4 px-4 text-gray-300 font-medium">TIPIFICAÇÃO</th>
                     <th class="text-left py-4 px-4 text-gray-300 font-medium">AÇÕES</th>
                   </tr>
                 </thead>
                 <tbody id="amarradoTabela">
                   <tr>
-                    <td colspan="11" class="py-12 text-left text-gray-400">Nenhum amarrado cadastrado</td>
+                    <td colspan="5" class="py-12 text-left text-gray-400">Nenhum amarrado cadastrado</td>
                   </tr>
                 </tbody>
               </table>
