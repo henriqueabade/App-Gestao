@@ -63,7 +63,13 @@ function openModalWithSpinner(htmlPath, scriptPath, overlayId) {
         window.removeEventListener('modalSpinnerLoaded', handleLoaded);
     }
     window.addEventListener('modalSpinnerLoaded', handleLoaded);
-    Modal.open(htmlPath, scriptPath, overlayId, true);
+    Modal.openWithTemplate({
+        templatePath: 'modals/shared/dialog-base.html',
+        contentPath: htmlPath,
+        scriptPath,
+        overlayId,
+        keepExisting: true
+    });
 }
 
 function toTitleCase(value) {

@@ -1,22 +1,24 @@
-<div id="novoClienteOverlay" class="hidden fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4 pt-[4vw]">
-  <div class="w-full max-w-6xl max-h-[90vh] glass-surface backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade slide-in overflow-hidden flex flex-col">
-    <header class="grid grid-cols-3 items-center px-8 py-5 border-b border-white/10 flex-shrink-0">
-      <button id="voltarNovoCliente" class="btn-neutral px-4 py-2 rounded-lg text-white font-medium flex items-center gap-2 justify-self-start">← Voltar</button>
-      <h2 id="clienteNovoTitulo" class="text-lg font-semibold text-white text-center">Novo Cliente</h2>
-      <span></span>
-    </header>
+<div data-modal-overlay id="novoClienteOverlay" class="hidden fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4 pt-[4vw]"></div>
+<div data-modal-dialog class="w-full max-w-6xl max-h-[90vh] glass-surface backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade slide-in overflow-hidden flex flex-col" role="dialog" aria-modal="true" tabindex="0"></div>
+<div data-modal-slot="header" class="flex flex-col flex-shrink-0">
+  <div class="grid grid-cols-3 items-center px-8 py-5 border-b border-white/10">
+    <button id="voltarNovoCliente" class="btn-neutral px-4 py-2 rounded-lg text-white font-medium flex items-center gap-2 justify-self-start">← Voltar</button>
+    <h2 id="clienteNovoTitulo" class="text-lg font-semibold text-white text-center">Novo Cliente</h2>
+    <span></span>
+  </div>
 
-    <nav class="px-8 border-b border-white/10 flex-shrink-0" role="tablist">
-      <div class="flex gap-8 overflow-x-auto scrollbar-hide">
-        <button id="tab-dados-empresa" role="tab" aria-selected="true" aria-controls="panel-dados-empresa" tabindex="0" class="py-4 px-2 text-sm font-medium border-b-2 tab-active whitespace-nowrap transition">Dados Empresa</button>
-        <button id="tab-contatos" role="tab" aria-selected="false" aria-controls="panel-contatos" tabindex="-1" class="py-4 px-2 text-sm font-medium text-gray-400 border-b-2 border-transparent hover:text-white transition whitespace-nowrap">Contatos</button>
-        <button id="tab-enderecos" role="tab" aria-selected="false" aria-controls="panel-enderecos" tabindex="-1" class="py-4 px-2 text-sm font-medium text-gray-400 border-b-2 border-transparent hover:text-white transition whitespace-nowrap">Endereços</button>
-        <button id="tab-ordens" role="tab" aria-selected="false" aria-controls="panel-ordens" tabindex="-1" class="py-4 px-2 text-sm font-medium text-gray-400 border-b-2 border-transparent hover:text-white transition whitespace-nowrap">Ordens</button>
-        <button id="tab-notas" role="tab" aria-selected="false" aria-controls="panel-notas" tabindex="-1" class="py-4 px-2 text-sm font-medium text-gray-400 border-b-2 border-transparent hover:text-white transition whitespace-nowrap">Notas</button>
-      </div>
-    </nav>
+  <nav class="px-8 border-b border-white/10" role="tablist">
+    <div class="flex gap-8 overflow-x-auto scrollbar-hide">
+      <button id="tab-dados-empresa" role="tab" aria-selected="true" aria-controls="panel-dados-empresa" tabindex="0" class="py-4 px-2 text-sm font-medium border-b-2 tab-active whitespace-nowrap transition">Dados Empresa</button>
+      <button id="tab-contatos" role="tab" aria-selected="false" aria-controls="panel-contatos" tabindex="-1" class="py-4 px-2 text-sm font-medium text-gray-400 border-b-2 border-transparent hover:text-white transition whitespace-nowrap">Contatos</button>
+      <button id="tab-enderecos" role="tab" aria-selected="false" aria-controls="panel-enderecos" tabindex="-1" class="py-4 px-2 text-sm font-medium text-gray-400 border-b-2 border-transparent hover:text-white transition whitespace-nowrap">Endereços</button>
+      <button id="tab-ordens" role="tab" aria-selected="false" aria-controls="panel-ordens" tabindex="-1" class="py-4 px-2 text-sm font-medium text-gray-400 border-b-2 border-transparent hover:text-white transition whitespace-nowrap">Ordens</button>
+      <button id="tab-notas" role="tab" aria-selected="false" aria-controls="panel-notas" tabindex="-1" class="py-4 px-2 text-sm font-medium text-gray-400 border-b-2 border-transparent hover:text-white transition whitespace-nowrap">Notas</button>
+    </div>
+  </nav>
+</div>
 
-    <div class="flex-1 overflow-y-auto modal-scroll">
+<div data-modal-slot="body" class="flex-1 overflow-y-auto modal-scroll">
       <section id="panel-dados-empresa" role="tabpanel" aria-labelledby="tab-dados-empresa" class="px-8 py-6">
         <div class="grid grid-cols-1 md:grid-cols-12 gap-8">
           <div class="md:col-span-3 flex flex-col items-center">
@@ -270,10 +272,9 @@
         </div>
       </section>
     </div>
-
-    <footer class="flex justify-end items-center gap-4 px-8 py-5 border-t border-white/10 flex-shrink-0">
-      <button id="cancelarNovoCliente" class="btn-danger px-6 py-2 rounded-lg text-white font-medium min-w-[120px]">Cancelar</button>
-      <button id="registrarCliente" class="btn-success px-6 py-2 rounded-lg text-white font-medium min-w-[120px]">Registrar</button>
-    </footer>
-  </div>
 </div>
+
+<footer data-modal-slot="footer" class="flex justify-end items-center gap-4 px-8 py-5 border-t border-white/10 flex-shrink-0">
+  <button id="cancelarNovoCliente" class="btn-danger px-6 py-2 rounded-lg text-white font-medium min-w-[120px]">Cancelar</button>
+  <button id="registrarCliente" class="btn-success px-6 py-2 rounded-lg text-white font-medium min-w-[120px]">Registrar</button>
+</footer>

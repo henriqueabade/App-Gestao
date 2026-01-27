@@ -68,9 +68,33 @@ const ModalManager = (() => {
     const templateDoc = parser.parseFromString(templateHtml, 'text/html');
     const contentDoc = parser.parseFromString(contentHtml, 'text/html');
     const slots = ['header', 'body', 'footer'];
+    const copyAttributes = (target, source, ignored = []) => {
+      if (!target || !source) return;
+      const ignoreSet = new Set(ignored);
+      Array.from(source.attributes).forEach(attr => {
+        if (ignoreSet.has(attr.name)) return;
+        if (attr.name === 'class') {
+          target.className = attr.value;
+          return;
+        }
+        target.setAttribute(attr.name, attr.value);
+      });
+    };
     const contentHasSlots = Boolean(
       contentDoc.querySelector('[data-modal-slot], [data-modal-header], [data-modal-body], [data-modal-footer]')
     );
+
+    const overlayTarget = templateDoc.querySelector('[data-modal-overlay]');
+    const overlaySource = contentDoc.querySelector('[data-modal-overlay]');
+    if (overlaySource) {
+      copyAttributes(overlayTarget, overlaySource, ['data-modal-overlay']);
+    }
+
+    const dialogTarget = templateDoc.querySelector('[data-modal-dialog]');
+    const dialogSource = contentDoc.querySelector('[data-modal-dialog]');
+    if (dialogSource) {
+      copyAttributes(dialogTarget, dialogSource, ['data-modal-dialog']);
+    }
 
     slots.forEach(slot => {
       const target = templateDoc.querySelector(`[data-modal-slot="${slot}"]`);
@@ -78,6 +102,7 @@ const ModalManager = (() => {
       const source = contentDoc.querySelector(`[data-modal-slot="${slot}"]`)
         || contentDoc.querySelector(`[data-modal-${slot}]`);
       if (source) {
+        copyAttributes(target, source, [`data-modal-${slot}`, 'data-modal-slot']);
         target.innerHTML = source.innerHTML;
       }
     });

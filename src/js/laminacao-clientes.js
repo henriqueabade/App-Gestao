@@ -185,7 +185,13 @@ function openModalWithSpinner(htmlPath, scriptPath, overlayId) {
         window.removeEventListener('modalSpinnerLoaded', handleLoaded);
     }
     window.addEventListener('modalSpinnerLoaded', handleLoaded);
-    Modal.open(htmlPath, scriptPath, overlayId, true);
+    Modal.openWithTemplate({
+        templatePath: 'modals/shared/dialog-base.html',
+        contentPath: htmlPath,
+        scriptPath,
+        overlayId,
+        keepExisting: true
+    });
 }
 
 function abrirDetalhesCliente(cliente) {
@@ -205,7 +211,12 @@ function abrirEditarCliente(cliente, options = {}) {
 
 function abrirExcluirCliente(cliente) {
     window.clienteExcluir = cliente;
-    Modal.open('modals/laminacao-clientes/excluir.html', '../js/modals/laminacao-clientes/cliente-excluir.js', 'excluirCliente');
+    Modal.openWithTemplate({
+        templatePath: 'modals/shared/dialog-base.html',
+        contentPath: 'modals/laminacao-clientes/excluir.html',
+        scriptPath: '../js/modals/laminacao-clientes/cliente-excluir.js',
+        overlayId: 'excluirCliente'
+    });
 }
 
 // Expose the edit modal opener globally so other scripts (like the
