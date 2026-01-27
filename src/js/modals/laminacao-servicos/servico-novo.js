@@ -326,9 +326,14 @@
     return null;
   }
 
-  function validarNumero(valor, campo) {
-    const numero = prepararNumero(valor);
-    if (numero === null) return `${campo} é obrigatório e deve ser numérico.`;
+  function validarNumero(valor, campo, { obrigatorio = true, input } = {}) {
+    if (input?.disabled) return null;
+    const texto = String(valor ?? '').trim();
+    if (!texto) {
+      return obrigatorio ? `${campo} é obrigatório e deve ser numérico.` : null;
+    }
+    const numero = prepararNumero(texto);
+    if (numero === null) return `${campo} deve ser numérico.`;
     return null;
   }
 
@@ -500,17 +505,17 @@
     if (erro) return { erro };
     erro = validarNumero(larguraPrincipal, 'Largura principal');
     if (erro) return { erro };
-    erro = validarNumero(larguraMenor, 'Largura menor');
+    erro = validarNumero(larguraMenor, 'Largura menor', { input: amarradoLarguraMenorInput });
     if (erro) return { erro };
-    erro = validarNumero(larguraMedia, 'Largura média');
+    erro = validarNumero(larguraMedia, 'Largura média', { input: amarradoLarguraMediaInput });
     if (erro) return { erro };
-    erro = validarNumero(alturaMedia, 'Altura média');
+    erro = validarNumero(alturaMedia, 'Altura média', { input: amarradoAlturaMediaInput });
     if (erro) return { erro };
-    erro = validarNumero(larguraMaior, 'Largura maior');
+    erro = validarNumero(larguraMaior, 'Largura maior', { input: amarradoLarguraMaiorInput });
     if (erro) return { erro };
     erro = validarNumero(quantidade, 'Quantidade');
     if (erro) return { erro };
-    erro = validarLetras(tipo, 'Tipo');
+    erro = validarSelecao(tipo, 'Tipo');
     if (erro) return { erro };
     erro = validarNumero(sequencia, 'Sequência');
     if (erro) return { erro };
