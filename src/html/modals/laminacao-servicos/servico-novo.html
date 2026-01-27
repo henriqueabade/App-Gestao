@@ -11,7 +11,9 @@
         </div>
       </div>
       <h2 id="servicoNovoTitulo" class="text-lg font-semibold text-white text-center">Novo Serviço</h2>
-      <span></span>
+      <div class="justify-self-end">
+        <button id="novoDesenhoBtn" class="btn-desenho btn-primary px-4 py-2 rounded-lg text-white font-medium">+ Desenho</button>
+      </div>
     </header>
 
     <nav class="px-8 border-b border-white/10 flex-shrink-0" role="tablist">
@@ -27,7 +29,6 @@
           <h3 class="text-lg font-semibold text-white">Peças</h3>
           <div class="flex items-center gap-4">
             <span id="codigoPecaAtual" class="text-sm text-gray-300">Código: -</span>
-            <button id="novoDesenhoBtn" class="btn-primary px-4 py-2 rounded-lg text-white font-medium">+ Desenho</button>
           </div>
         </div>
 
@@ -68,9 +69,9 @@
               <label class="block text-sm font-medium text-gray-300 mb-2">Tipo</label>
               <select id="servicoTipo" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition select-arrow appearance-none">
                 <option value="">Selecione o tipo</option>
-                <option value="1 face">1 face</option>
-                <option value="2 faces">2 faces</option>
-                <option value="contraplacado">contraplacado</option>
+                <option value="1 face">1 Face</option>
+                <option value="2 faces">2 Faces</option>
+                <option value="contraplacado">Contraplacado</option>
               </select>
             </div>
             <div>

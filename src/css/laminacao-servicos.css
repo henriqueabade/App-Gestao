@@ -379,3 +379,7 @@ input[type="date"]:valid::-webkit-datetime-edit {
 .status-tooltip div + div {
     margin-top: 0.25rem;
 }
+
+.btn-desenho {
+    margin-left:60%;
+}
