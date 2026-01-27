@@ -1,36 +1,11 @@
 (() => {
-  const escapeHtml = text => {
-    if (text === null || text === undefined) return '';
-    return String(text).replace(/[&<>"']+/g, match => {
-      switch (match) {
-        case '&':
-          return '&amp;';
-        case '<':
-          return '&lt;';
-        case '>':
-          return '&gt;';
-        case '"':
-          return '&quot;';
-        case "'":
-          return '&#39;';
-        default:
-          return match;
-      }
-    });
-  };
+  const escapeHtml = text =>
+    text == null ? '' :
+    String(text).replace(/[&<>"']/g, m =>
+      ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[m])
+    );
 
-  const iconByVariant = variant => {
-    if (variant === 'erro') return 'fa-triangle-exclamation';
-    if (variant === 'confirm') return 'fa-circle-question';
-    return 'fa-circle-info';
-  };
-
-  const normalizeVariant = variant => {
-    if (variant === 'erro' || variant === 'confirm') return variant;
-    return 'info';
-  };
-
-  const createDialog = ({
+  function createDialog({
     title,
     message,
     variant = 'info',
@@ -39,109 +14,93 @@
     confirmText = 'Confirmar',
     cancelText = 'Cancelar',
     okText = 'OK'
-  } = {}) => {
-    const normalizedVariant = normalizeVariant(variant);
-    const isConfirm = normalizedVariant === 'confirm';
+  } = {}) {
 
-    const overlay = document.createElement('div');
-    overlay.className = 'warning-overlay';
+    // Remove dialog antigo se existir
+    document.querySelectorAll('dialog[data-dialog-padrao]')
+      .forEach(d => d.remove());
 
-    const modal = document.createElement('div');
-    modal.className = 'warning-modal';
-    modal.setAttribute('role', 'dialog');
-    modal.setAttribute('aria-modal', 'true');
+    const isConfirm = variant === 'confirm';
 
-    const titleId = `dialogPadraoTitle-${Date.now()}`;
-    modal.setAttribute('aria-labelledby', titleId);
+    // 🔥 DIALOG NATIVO (TOP LAYER)
+    const dialog = document.createElement('dialog');
+    dialog.setAttribute('data-dialog-padrao', 'true');
 
-    const iconWrap = document.createElement('div');
-    iconWrap.className = 'warning-icon';
-
-    const circle = document.createElement('div');
-    circle.className = 'warning-icon-circle';
-    const icon = document.createElement('i');
-    icon.classList.add('fas', iconByVariant(normalizedVariant));
-    circle.appendChild(icon);
-    iconWrap.appendChild(circle);
-
-    const titleEl = document.createElement('h2');
-    titleEl.id = titleId;
-    titleEl.className = 'warning-title text-lg';
-    titleEl.innerHTML = escapeHtml(title || (isConfirm ? 'Confirmação' : 'Aviso'));
-
-    const messageEl = document.createElement('p');
-    messageEl.className = 'warning-text mt-3';
-    const safeMessage = escapeHtml(message || '');
-    messageEl.innerHTML = safeMessage.replace(/\n/g, '<br>');
-
-    const actions = document.createElement('div');
-    actions.className = isConfirm ? 'warning-actions warning-actions--confirm' : 'warning-actions';
-
-    const confirmBtn = document.createElement('button');
-    confirmBtn.type = 'button';
-    confirmBtn.className = 'warning-button';
-    confirmBtn.dataset.action = 'confirm';
-    confirmBtn.textContent = isConfirm ? confirmText : okText;
-
-    let cancelBtn = null;
-    if (isConfirm) {
-      cancelBtn = document.createElement('button');
-      cancelBtn.type = 'button';
-      cancelBtn.dataset.action = 'cancel';
-      cancelBtn.textContent = cancelText;
-      cancelBtn.className = 'warning-button warning-button-secondary';
-      actions.appendChild(cancelBtn);
-    }
-
-    actions.appendChild(confirmBtn);
-
-    modal.appendChild(iconWrap);
-    modal.appendChild(titleEl);
-    modal.appendChild(messageEl);
-    modal.appendChild(actions);
-
-    overlay.appendChild(modal);
-    document.body.appendChild(overlay);
-
-    requestAnimationFrame(() => {
-      modal.classList.add('show');
-      confirmBtn.focus();
+    Object.assign(dialog.style, {
+      padding: '0',
+      border: 'none',
+      background: 'transparent'
     });
 
-    const cleanup = result => {
-      modal.classList.remove('show');
-      setTimeout(() => {
-        if (overlay.isConnected) overlay.remove();
-      }, 160);
-      if (result) {
-        if (typeof onConfirm === 'function') onConfirm();
-      } else if (typeof onCancel === 'function') {
-        onCancel();
-      }
+    dialog.innerHTML = `
+      <div style="
+        background: rgba(20,20,20,.92);
+        backdrop-filter: blur(18px);
+        color: #fff;
+        padding: 24px;
+        border-radius: 16px;
+        max-width: 420px;
+        width: 100%;
+        box-shadow: 0 30px 90px rgba(0,0,0,.8);
+        text-align: center;
+      ">
+        <h2 style="font-size:18px;font-weight:600;margin-bottom:12px">
+          ${escapeHtml(title || (isConfirm ? 'Confirmação' : 'Aviso'))}
+        </h2>
+
+        <p style="opacity:.85;margin-bottom:20px">
+          ${escapeHtml(message || '')}
+        </p>
+
+        <div style="display:flex;justify-content:center;gap:16px">
+          ${isConfirm ? `
+            <button data-cancel style="
+              padding:8px 18px;
+              border-radius:8px;
+              background:#444;
+              color:#fff;
+              border:none;
+            ">${cancelText}</button>
+          ` : ''}
+
+          <button data-confirm style="
+            padding:8px 18px;
+            border-radius:8px;
+            background:#c8b24a;
+            color:#000;
+            font-weight:600;
+            border:none;
+          ">
+            ${isConfirm ? confirmText : okText}
+          </button>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(dialog);
+
+    const confirmBtn = dialog.querySelector('[data-confirm]');
+    const cancelBtn = dialog.querySelector('[data-cancel]');
+
+    const close = result => {
+      dialog.close();
+      dialog.remove();
+      result ? onConfirm?.() : onCancel?.();
     };
 
-    overlay.addEventListener('click', event => {
-      if (event.target !== overlay) return;
-      cleanup(!isConfirm);
+    confirmBtn.onclick = () => close(true);
+    cancelBtn && (cancelBtn.onclick = () => close(false));
+
+    dialog.addEventListener('cancel', e => {
+      e.preventDefault();
+      close(false);
     });
 
-    confirmBtn.addEventListener('click', () => cleanup(true));
-    if (cancelBtn) {
-      cancelBtn.addEventListener('click', () => cleanup(false));
-    }
+    dialog.showModal(); // 🔥 TOP LAYER
+    confirmBtn.focus();
 
-    overlay.addEventListener('keydown', event => {
-      if (event.key === 'Escape') {
-        cleanup(!isConfirm);
-      }
-    });
+    return { close: () => close(false) };
+  }
 
-    return {
-      close: () => cleanup(false)
-    };
-  };
-
-  window.DialogPadrao = {
-    open: createDialog
-  };
+  window.DialogPadrao = { open: createDialog };
 })();

@@ -12,6 +12,93 @@
   document.getElementById('cancelarEditarCliente')?.addEventListener('click', close);
   document.addEventListener('keydown', function esc(e){ if(e.key==='Escape'){ close(); document.removeEventListener('keydown', esc); }});
 
+  const dialogState = {
+    isOpen: false,
+    dialogProps: null
+  };
+
+  const openStandardDialog = window.openStandardDialog || function openStandardDialog({
+    title,
+    message,
+    variant = 'info',
+    confirmText,
+    cancelText
+  }) {
+    return new Promise((resolve) => {
+      if (dialogState.isOpen && dialogState.dialogProps?.overlay?.isConnected) {
+        dialogState.dialogProps.overlay.remove();
+      }
+
+      dialogState.isOpen = true;
+      dialogState.dialogProps = null;
+
+      const previousActive = document.activeElement;
+      const isConfirm = variant === 'confirm';
+      const overlay = document.createElement('div');
+      overlay.className = 'fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-[3000]';
+
+      const heading = title || (isConfirm ? 'Tem certeza?' : 'Atenção');
+      const confirmLabel = confirmText || (isConfirm ? 'Confirmar' : 'OK');
+      const cancelLabel = cancelText || 'Cancelar';
+      const borderClass = isConfirm ? 'border-white/10 ring-white/5' : 'border-yellow-500/20 ring-yellow-500/30';
+      const titleClass = isConfirm ? 'text-white' : 'text-yellow-400';
+
+      overlay.innerHTML = `
+        <div class="max-w-sm w-full glass-surface backdrop-blur-xl rounded-2xl ${borderClass} ring-1 shadow-2xl/40 animate-modalFade" role="dialog" aria-modal="true" tabindex="-1" data-dialog>
+          <div class="p-6 text-center">
+            <h3 class="text-lg font-semibold mb-4 ${titleClass}">${heading}</h3>
+            <p class="text-sm text-gray-300">${message || ''}</p>
+            <div class="flex justify-center ${isConfirm ? 'gap-6' : ''} mt-6">
+              ${isConfirm ? `<button type="button" class="btn-danger px-6 py-2 rounded-lg text-white font-medium active:scale-95" data-action="cancel">${cancelLabel}</button>` : ''}
+              <button type="button" class="${isConfirm ? 'btn-success' : 'btn-warning'} px-6 py-2 rounded-lg text-white font-medium active:scale-95" data-action="confirm">${confirmLabel}</button>
+            </div>
+          </div>
+        </div>
+      `;
+
+      document.body.appendChild(overlay);
+
+      const dialogEl = overlay.querySelector('[data-dialog]');
+      const confirmBtn = overlay.querySelector('[data-action="confirm"]');
+      const cancelBtn = overlay.querySelector('[data-action="cancel"]');
+
+      const cleanup = (result) => {
+        dialogState.isOpen = false;
+        dialogState.dialogProps = null;
+        overlay.remove();
+        document.removeEventListener('keydown', handleKey);
+        if (previousActive && typeof previousActive.focus === 'function') {
+          previousActive.focus();
+        }
+        resolve(result);
+      };
+
+      const handleKey = (event) => {
+        if (event.key === 'Escape') {
+          event.preventDefault();
+          cleanup(false);
+        }
+      };
+
+      dialogState.dialogProps = { overlay, dialogEl, confirmBtn, cancelBtn };
+
+      overlay.addEventListener('click', (event) => {
+        if (event.target === overlay) cleanup(false);
+      });
+
+      confirmBtn?.addEventListener('click', () => cleanup(true), { once: true });
+      cancelBtn?.addEventListener('click', () => cleanup(false), { once: true });
+      document.addEventListener('keydown', handleKey);
+
+      setTimeout(() => {
+        const focusTarget = confirmBtn || cancelBtn || dialogEl;
+        focusTarget?.focus();
+      }, 0);
+    });
+  };
+
+  window.openStandardDialog = openStandardDialog;
+
   const cliente = window.clienteEditar;
   const preferencias = window.clienteEditarPreferencias || null;
   if (preferencias) {
@@ -216,7 +303,7 @@
       estadoSel.addEventListener('mousedown', e => {
         if(!paisSel.value){
           e.preventDefault();
-          alert('Por favor, selecione o país primeiro');
+          openStandardDialog({ message: 'Por favor, selecione o país primeiro' });
         }
       });
     }
@@ -295,27 +382,21 @@
     });
   }
 
-  function showConfirmDialog(message, cb){
-    const ov=document.createElement('div');
-    ov.className='fixed inset-0 z-[2000] bg-black/50 flex items-center justify-center p-4';
-    ov.innerHTML=`<div class="max-w-md w-full glass-surface backdrop-blur-xl rounded-2xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade"><div class="p-6 text-center"><h3 class="text-lg font-semibold mb-4 text-white">Tem certeza?</h3><p class="text-sm text-gray-300 mb-6">${message}</p><div class="flex justify-center gap-4"><button id="dlgYes" class="btn-success px-4 py-2 rounded-lg text-white font-medium">Sim</button><button id="dlgNo" class="btn-danger px-4 py-2 rounded-lg text-white font-medium">Não</button></div></div></div>`;
-    document.body.appendChild(ov);
-    ov.querySelector('#dlgYes').addEventListener('click',()=>{ov.remove();cb(true);});
-    ov.querySelector('#dlgNo').addEventListener('click',()=>{ov.remove();cb(false);});
-  }
-
-  function confirmDeleteContato(idx){
+  async function confirmDeleteContato(idx){
     const ct = contatos[idx];
-    showConfirmDialog('Deseja excluir este contato?', yes => {
-      if(!yes) return;
-      if(ct.status === 'new'){
-        contatos.splice(idx,1);
-      }else{
-        contatosExcluidos.push(ct.id);
-        contatos.splice(idx,1);
-      }
-      renderContatos();
+    const confirmar = await openStandardDialog({
+      title: 'Excluir contato?',
+      message: 'Deseja excluir este contato?',
+      variant: 'confirm'
     });
+    if(!confirmar) return;
+    if(ct.status === 'new'){
+      contatos.splice(idx,1);
+    }else{
+      contatosExcluidos.push(ct.id);
+      contatos.splice(idx,1);
+    }
+    renderContatos();
   }
 
   document.getElementById('addContatoBtn')?.addEventListener('click', () => {

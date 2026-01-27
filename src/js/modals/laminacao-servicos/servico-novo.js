@@ -27,6 +27,93 @@
 
   window.dispatchEvent(new CustomEvent('modalSpinnerLoaded', { detail: overlayId }));
 
+  const dialogState = {
+    isOpen: false,
+    dialogProps: null
+  };
+
+  const openStandardDialog = window.openStandardDialog || function openStandardDialog({
+    title,
+    message,
+    variant = 'info',
+    confirmText,
+    cancelText
+  }) {
+    return new Promise((resolve) => {
+      if (dialogState.isOpen && dialogState.dialogProps?.overlay?.isConnected) {
+        dialogState.dialogProps.overlay.remove();
+      }
+
+      dialogState.isOpen = true;
+      dialogState.dialogProps = null;
+
+      const previousActive = document.activeElement;
+      const isConfirm = variant === 'confirm';
+      const overlay = document.createElement('div');
+      overlay.className = 'fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-[3000]';
+
+      const heading = title || (isConfirm ? 'Tem certeza?' : 'Atenção');
+      const confirmLabel = confirmText || (isConfirm ? 'Confirmar' : 'OK');
+      const cancelLabel = cancelText || 'Cancelar';
+      const borderClass = isConfirm ? 'border-white/10 ring-white/5' : 'border-yellow-500/20 ring-yellow-500/30';
+      const titleClass = isConfirm ? 'text-white' : 'text-yellow-400';
+
+      overlay.innerHTML = `
+        <div class="max-w-sm w-full glass-surface backdrop-blur-xl rounded-2xl ${borderClass} ring-1 shadow-2xl/40 animate-modalFade" role="dialog" aria-modal="true" tabindex="-1" data-dialog>
+          <div class="p-6 text-center">
+            <h3 class="text-lg font-semibold mb-4 ${titleClass}">${heading}</h3>
+            <p class="text-sm text-gray-300">${message || ''}</p>
+            <div class="flex justify-center ${isConfirm ? 'gap-6' : ''} mt-6">
+              ${isConfirm ? `<button type="button" class="btn-danger px-6 py-2 rounded-lg text-white font-medium active:scale-95" data-action="cancel">${cancelLabel}</button>` : ''}
+              <button type="button" class="${isConfirm ? 'btn-success' : 'btn-warning'} px-6 py-2 rounded-lg text-white font-medium active:scale-95" data-action="confirm">${confirmLabel}</button>
+            </div>
+          </div>
+        </div>
+      `;
+
+      document.body.appendChild(overlay);
+
+      const dialogEl = overlay.querySelector('[data-dialog]');
+      const confirmBtn = overlay.querySelector('[data-action="confirm"]');
+      const cancelBtn = overlay.querySelector('[data-action="cancel"]');
+
+      const cleanup = (result) => {
+        dialogState.isOpen = false;
+        dialogState.dialogProps = null;
+        overlay.remove();
+        document.removeEventListener('keydown', handleKey);
+        if (previousActive && typeof previousActive.focus === 'function') {
+          previousActive.focus();
+        }
+        resolve(result);
+      };
+
+      const handleKey = (event) => {
+        if (event.key === 'Escape') {
+          event.preventDefault();
+          cleanup(false);
+        }
+      };
+
+      dialogState.dialogProps = { overlay, dialogEl, confirmBtn, cancelBtn };
+
+      overlay.addEventListener('click', (event) => {
+        if (event.target === overlay) cleanup(false);
+      });
+
+      confirmBtn?.addEventListener('click', () => cleanup(true), { once: true });
+      cancelBtn?.addEventListener('click', () => cleanup(false), { once: true });
+      document.addEventListener('keydown', handleKey);
+
+      setTimeout(() => {
+        const focusTarget = confirmBtn || cancelBtn || dialogEl;
+        focusTarget?.focus();
+      }, 0);
+    });
+  };
+
+  window.openStandardDialog = openStandardDialog;
+
   const tablist = overlay.querySelector('[role="tablist"]');
   const tabs = Array.from(overlay.querySelectorAll('[role="tab"]'));
   const panels = Array.from(overlay.querySelectorAll('[role="tabpanel"]'));
@@ -128,7 +215,9 @@
   function exigirToken() {
     const token = obterToken();
     if (!token) {
-      alert('Não foi possível identificar o token do usuário. Faça login novamente.');
+      openStandardDialog({
+        message: 'Não foi possível identificar o token do usuário. Faça login novamente.'
+      });
       throw new Error('Token ausente');
     }
     return token;
@@ -446,7 +535,13 @@
         if (novoDesenhoBtn) novoDesenhoBtn.textContent = 'Atualizar Peça';
         atualizarCodigoPecaAtual();
       });
-      deleteBtn?.addEventListener('click', () => {
+      deleteBtn?.addEventListener('click', async () => {
+        const confirmar = await openStandardDialog({
+          title: 'Excluir peça?',
+          message: 'Deseja remover esta peça da lista?',
+          variant: 'confirm'
+        });
+        if (!confirmar) return;
         pecas.splice(index, 1);
         renderPecas();
         limparFormularioPeca();
@@ -459,7 +554,7 @@
     event.preventDefault();
     const dados = obterDadosPeca();
     if (dados.erro) {
-      alert(dados.erro);
+      openStandardDialog({ message: dados.erro });
       return;
     }
     const codigo = obterCodigoPecaAtual(dados.ambiente);
@@ -478,8 +573,14 @@
     salvarDados();
   });
 
-  pecasLimparBtn?.addEventListener('click', (event) => {
+  pecasLimparBtn?.addEventListener('click', async (event) => {
     event.preventDefault();
+    const confirmar = await openStandardDialog({
+      title: 'Limpar peças?',
+      message: 'Deseja remover todas as peças cadastradas?',
+      variant: 'confirm'
+    });
+    if (!confirmar) return;
     limparEstadoPecas();
   });
 
@@ -591,7 +692,13 @@
         amarradoModoEdicao?.classList.remove('hidden');
         atualizarDependenciasAmarrado();
       });
-      deleteBtn?.addEventListener('click', () => {
+      deleteBtn?.addEventListener('click', async () => {
+        const confirmar = await openStandardDialog({
+          title: 'Excluir amarrado?',
+          message: 'Deseja remover este amarrado da lista?',
+          variant: 'confirm'
+        });
+        if (!confirmar) return;
         amarrados.splice(index, 1);
         renderAmarrados();
         limparFormularioAmarrado();
@@ -604,7 +711,7 @@
     event.preventDefault();
     const dados = obterDadosAmarrado();
     if (dados.erro) {
-      alert(dados.erro);
+      openStandardDialog({ message: dados.erro });
       return;
     }
     const chave = `${dados.tipo.toLowerCase()}-${dados.sequencia}`;
@@ -613,7 +720,9 @@
       return `${item.tipo.toLowerCase()}-${item.sequencia}` === chave;
     });
     if (duplicado) {
-      alert('Já existe um amarrado com o mesmo tipo e sequência.');
+      openStandardDialog({
+        message: 'Já existe um amarrado com o mesmo tipo e sequência.'
+      });
       return;
     }
     if (amarradoEmEdicao !== null) {
@@ -625,8 +734,14 @@
     limparFormularioAmarrado();
   });
 
-  amarradoLimparBtn?.addEventListener('click', (event) => {
+  amarradoLimparBtn?.addEventListener('click', async (event) => {
     event.preventDefault();
+    const confirmar = await openStandardDialog({
+      title: 'Limpar amarrados?',
+      message: 'Deseja remover todos os amarrados cadastrados?',
+      variant: 'confirm'
+    });
+    if (!confirmar) return;
     amarrados.length = 0;
     renderAmarrados();
     limparFormularioAmarrado();
@@ -659,24 +774,32 @@
   async function salvarDados() {
     const cliente = clienteSelect?.value || '';
     if (!cliente) {
-      alert('Selecione um cliente antes de salvar.');
+      openStandardDialog({ message: 'Selecione um cliente antes de salvar.' });
       return;
     }
 
     if (!pecas.length && !amarrados.length) {
-      alert('É necessário cadastrar peças ou amarrados antes de salvar.');
+      openStandardDialog({
+        message: 'É necessário cadastrar peças ou amarrados antes de salvar.'
+      });
       return;
     }
 
     if (!pecas.length || !amarrados.length) {
       const faltante = !pecas.length ? 'peças' : 'amarrados';
-      const confirmar = window.confirm(`A aba de ${faltante} está vazia. Deseja continuar mesmo assim?`);
+      const confirmar = await openStandardDialog({
+        title: 'Continuar sem dados?',
+        message: `A aba de ${faltante} está vazia. Deseja continuar mesmo assim?`,
+        variant: 'confirm'
+      });
       if (!confirmar) return;
       try {
         await atualizarPedidoLaminacao(!pecas.length ? 'pecas' : 'amarrado');
       } catch (err) {
         console.error(err);
-        alert('Não foi possível atualizar o pedido de laminação.');
+        openStandardDialog({
+          message: 'Não foi possível atualizar o pedido de laminação.'
+        });
         return;
       }
     }
@@ -744,7 +867,9 @@
       close();
     } catch (err) {
       console.error(err);
-      alert('Não foi possível salvar o serviço. Verifique os dados e tente novamente.');
+      openStandardDialog({
+        message: 'Não foi possível salvar o serviço. Verifique os dados e tente novamente.'
+      });
     } finally {
       if (salvarBtn) salvarBtn.disabled = false;
     }
