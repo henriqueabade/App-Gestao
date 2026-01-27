@@ -203,6 +203,31 @@
   restringirNumeros(amarradoQuantidadeInput);
   restringirNumeros(amarradoSequenciaInput);
 
+  function definirCampoDependente(input, deveBloquear) {
+    if (!input) return;
+    input.disabled = deveBloquear;
+    if (deveBloquear) {
+      input.value = '';
+    }
+  }
+
+  function atualizarDependenciasAmarrado() {
+    const larguraPrincipalVazia = !(amarradoLarguraPrincipalInput?.value || '').trim();
+    const larguraMediaVazia = !(amarradoLarguraMediaInput?.value || '').trim();
+
+    definirCampoDependente(amarradoLarguraMenorInput, larguraPrincipalVazia);
+    definirCampoDependente(amarradoLarguraMediaInput, larguraPrincipalVazia);
+    definirCampoDependente(amarradoLarguraMaiorInput, larguraPrincipalVazia);
+    definirCampoDependente(
+      amarradoAlturaMediaInput,
+      larguraPrincipalVazia || larguraMediaVazia
+    );
+  }
+
+  amarradoLarguraPrincipalInput?.addEventListener('input', atualizarDependenciasAmarrado);
+  amarradoLarguraMediaInput?.addEventListener('input', atualizarDependenciasAmarrado);
+  atualizarDependenciasAmarrado();
+
   function atualizarBloqueioMdf() {
     if (!tipoInput || !mdfInput || !donoMdfInput) return;
     const tipo = tipoInput.value;
@@ -454,6 +479,7 @@
     amarradoEmEdicao = null;
     if (amarradoAdicionarBtn) amarradoAdicionarBtn.textContent = 'Adicionar Amarrado';
     amarradoModoEdicao?.classList.add('hidden');
+    atualizarDependenciasAmarrado();
   }
 
   function obterDadosAmarrado() {
@@ -546,6 +572,7 @@
         if (amarradoSequenciaInput) amarradoSequenciaInput.value = amarrado.sequencia ?? '';
         if (amarradoAdicionarBtn) amarradoAdicionarBtn.textContent = 'Atualizar Amarrado';
         amarradoModoEdicao?.classList.remove('hidden');
+        atualizarDependenciasAmarrado();
       });
       deleteBtn?.addEventListener('click', () => {
         amarrados.splice(index, 1);
