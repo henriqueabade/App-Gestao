@@ -1435,8 +1435,18 @@ const AppUpdates = (() => {
         });
     }
 
-    function showUpdateDialog({ title, message, confirmLabel = 'OK', cancelLabel = null, variant = 'info' }) {
+    function showUpdateDialog({ title, message, confirmLabel, cancelLabel, variant = 'info' }) {
         return new Promise(resolve => {
+            const resolveLabel = (customLabel, fallback) => {
+                if (typeof customLabel !== 'string') {
+                    return fallback;
+                }
+                const trimmed = customLabel.trim();
+                return trimmed ? trimmed : fallback;
+            };
+            const isConfirm = variant === 'confirm';
+            const resolvedConfirmLabel = resolveLabel(confirmLabel, isConfirm ? 'Confirmar' : 'OK');
+            const resolvedCancelLabel = isConfirm ? resolveLabel(cancelLabel, 'Cancelar') : null;
             const overlay = document.createElement('div');
             overlay.className = 'warning-overlay';
 
@@ -1476,20 +1486,20 @@ const AppUpdates = (() => {
             messageEl.innerHTML = safeMessage.replace(/\n/g, '<br>');
 
             const actions = document.createElement('div');
-            actions.className = cancelLabel ? 'mt-6 space-y-3' : 'mt-6';
+            actions.className = resolvedCancelLabel ? 'mt-6 space-y-3' : 'mt-6';
 
             const confirmBtn = document.createElement('button');
             confirmBtn.type = 'button';
             confirmBtn.className = 'warning-button';
-            confirmBtn.textContent = confirmLabel;
+            confirmBtn.textContent = resolvedConfirmLabel;
             confirmBtn.dataset.action = 'confirm';
 
             let cancelBtn = null;
-            if (cancelLabel) {
+            if (resolvedCancelLabel) {
                 cancelBtn = document.createElement('button');
                 cancelBtn.type = 'button';
                 cancelBtn.dataset.action = 'cancel';
-                cancelBtn.textContent = cancelLabel;
+                cancelBtn.textContent = resolvedCancelLabel;
                 cancelBtn.className = 'warning-button bg-white/10 text-white border border-white/20';
                 actions.appendChild(cancelBtn);
             }
@@ -1518,9 +1528,9 @@ const AppUpdates = (() => {
             };
 
             overlay.addEventListener('click', event => {
-                if (event.target === overlay && !cancelLabel) {
+                if (event.target === overlay && !resolvedCancelLabel) {
                     cleanup(true);
-                } else if (event.target === overlay && cancelLabel) {
+                } else if (event.target === overlay && resolvedCancelLabel) {
                     cleanup(false);
                 }
             });
@@ -1532,7 +1542,7 @@ const AppUpdates = (() => {
 
             overlay.addEventListener('keydown', event => {
                 if (event.key === 'Escape') {
-                    cleanup(Boolean(cancelLabel));
+                    cleanup(Boolean(resolvedCancelLabel));
                 }
             });
         });
@@ -1544,12 +1554,7 @@ const AppUpdates = (() => {
         activePromise: null
     };
 
-    function showStandardDialog({
-        title,
-        message,
-        confirmLabel = 'OK',
-        variant = 'info'
-    }) {
+    function showStandardDialog({ title, message, confirmLabel, variant = 'info' }) {
         if (typeof showUpdateDialog === 'function') {
             return showUpdateDialog({ title, message, confirmLabel, variant });
         }
@@ -1584,7 +1589,6 @@ const AppUpdates = (() => {
         const result = showStandardDialog({
             title: 'Falha na Publicação',
             message: normalized,
-            confirmLabel: 'Entendi',
             variant: 'error'
         });
         const trackedPromise = Promise.resolve(result).finally(() => {
@@ -1932,7 +1936,6 @@ const AppUpdates = (() => {
                     showUpdateDialog({
                         title: 'Erro na atualização',
                         message: lastErrorMessage || 'Ocorreu um erro durante a atualização.',
-                        confirmLabel: 'OK',
                         variant: 'error'
                     }).then(() => {
                         state.userControl.pendingAction = false;
@@ -2026,8 +2029,6 @@ const AppUpdates = (() => {
         const confirmed = await showUpdateDialog({
             title: 'Aplicar atualização',
             message: lines.join('\n'),
-            confirmLabel: 'Sim',
-            cancelLabel: 'Não',
             variant: 'confirm'
         });
 
@@ -2064,7 +2065,6 @@ const AppUpdates = (() => {
             await showUpdateDialog({
                 title: 'Erro na atualização',
                 message: err?.message || 'Não foi possível aplicar a atualização.',
-                confirmLabel: 'OK',
                 variant: 'error'
             });
             runAutomaticCheck({ silent: true });
@@ -2400,7 +2400,6 @@ const AppUpdates = (() => {
         await showStandardDialog({
             title: 'Atualizações',
             message,
-            confirmLabel: 'Entendi',
             variant: 'info'
         });
     }

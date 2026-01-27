@@ -19,9 +19,9 @@ Inclua o script na página (ex.: `src/html/menu.html`):
 - `variant`: `info` (padrão), `confirm` ou `erro`.
 - `onConfirm`: callback ao confirmar.
 - `onCancel`: callback ao cancelar/fechar (apenas `confirm` usa Cancelar).
-- `confirmText`: texto do botão Confirmar (apenas `confirm`).
-- `cancelText`: texto do botão Cancelar (apenas `confirm`).
-- `okText`: texto do botão OK (apenas `info` e `erro`).
+- `confirmText`: texto do botão Confirmar (apenas `confirm`, padrão: `Confirmar`).
+- `cancelText`: texto do botão Cancelar (apenas `confirm`, padrão: `Cancelar`).
+- `okText`: texto do botão OK (apenas `info` e `erro`, padrão: `OK`).
 
 ## Exemplos
 
@@ -32,7 +32,6 @@ window.DialogPadrao.open({
   title: 'Atualização',
   message: 'Processo concluído com sucesso.',
   variant: 'info',
-  okText: 'OK',
   onConfirm: () => {
     console.log('OK clicado');
   }
@@ -46,8 +45,6 @@ window.DialogPadrao.open({
   title: 'Confirmação',
   message: 'Deseja realmente excluir este registro?',
   variant: 'confirm',
-  confirmText: 'Confirmar',
-  cancelText: 'Cancelar',
   onConfirm: () => {
     console.log('Confirmado');
   },

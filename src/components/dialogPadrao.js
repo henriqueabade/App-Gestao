@@ -11,9 +11,9 @@
     variant = 'info',
     onConfirm,
     onCancel,
-    confirmText = 'Confirmar',
-    cancelText = 'Cancelar',
-    okText = 'OK'
+    confirmText,
+    cancelText,
+    okText
   } = {}) {
 
     // Remove dialog antigo se existir
@@ -21,6 +21,16 @@
       .forEach(d => d.remove());
 
     const isConfirm = variant === 'confirm';
+    const resolveLabel = (customLabel, fallback) => {
+      if (typeof customLabel !== 'string') {
+        return fallback;
+      }
+      const trimmed = customLabel.trim();
+      return trimmed ? trimmed : fallback;
+    };
+    const confirmLabel = resolveLabel(confirmText, 'Confirmar');
+    const cancelLabel = resolveLabel(cancelText, 'Cancelar');
+    const okLabel = resolveLabel(okText, 'OK');
 
     // 🔥 DIALOG NATIVO (TOP LAYER)
     const dialog = document.createElement('dialog');
@@ -60,7 +70,7 @@
               background:#444;
               color:#fff;
               border:none;
-            ">${cancelText}</button>
+            ">${cancelLabel}</button>
           ` : ''}
 
           <button data-confirm style="
@@ -71,7 +81,7 @@
             font-weight:600;
             border:none;
           ">
-            ${isConfirm ? confirmText : okText}
+            ${isConfirm ? confirmLabel : okLabel}
           </button>
         </div>
       </div>
