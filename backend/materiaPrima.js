@@ -188,11 +188,17 @@ async function atualizarMateria(id, dados) {
 
   const atualizado = await pool.put(`/materia_prima/${id}`, payload);
 
+  let warning;
   if (preco_unitario !== undefined) {
-    await atualizarProdutosComInsumo(id);
+    try {
+      await atualizarProdutosComInsumo(id);
+    } catch (err) {
+      console.error('Erro ao atualizar produtos com insumo:', err);
+      warning = 'Falha ao atualizar produtos relacionados.';
+    }
   }
 
-  return atualizado;
+  return warning ? { ...atualizado, warning } : atualizado;
 }
 
 async function excluirMateria(id) {
