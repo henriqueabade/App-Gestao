@@ -44,6 +44,60 @@ app.use('/api/orcamentos', orcamentosRouter);
 app.use('/api/pedidos', pedidosRouter);
 
 const { createApiClient } = require('./apiHttpClient');
+const apiCache = new Map();
+const CACHE_TTL_MS = Number.parseInt(process.env.API_TABLE_CACHE_TTL_MS || '0', 10);
+
+function getTableCache(table) {
+  if (!apiCache.has(table)) {
+    apiCache.set(table, new Map());
+  }
+  return apiCache.get(table);
+}
+
+function buildCacheKey(query = {}) {
+  const entries = [];
+  for (const [key, value] of Object.entries(query)) {
+    if (Array.isArray(value)) {
+      value.forEach((item) => {
+        if (item === undefined || item === null || item === '') return;
+        entries.push([key, String(item)]);
+      });
+      continue;
+    }
+    if (value === undefined || value === null || value === '') continue;
+    entries.push([key, String(value)]);
+  }
+
+  if (!entries.length) return '';
+  entries.sort((a, b) => (a[0] === b[0] ? a[1].localeCompare(b[1]) : a[0].localeCompare(b[0])));
+  return entries.map(([key, value]) => `${key}=${value}`).join('&');
+}
+
+function readCache(table, cacheKey) {
+  const tableCache = apiCache.get(table);
+  if (!tableCache) return null;
+  const entry = tableCache.get(cacheKey);
+  if (!entry) return null;
+  if (entry.expiresAt && Date.now() > entry.expiresAt) {
+    tableCache.delete(cacheKey);
+    return null;
+  }
+  return entry.value;
+}
+
+function writeCache(table, cacheKey, value) {
+  const tableCache = getTableCache(table);
+  const expiresAt = CACHE_TTL_MS > 0 ? Date.now() + CACHE_TTL_MS : null;
+  tableCache.set(cacheKey, { value, expiresAt });
+}
+
+function invalidateCache(table) {
+  if (!table) {
+    apiCache.clear();
+    return;
+  }
+  apiCache.delete(table);
+}
 
 app.get('/api/contatos_cliente', async (req, res) => {
   try {
@@ -68,6 +122,51 @@ app.use(passwordResetRouter);
 app.use('/pdf', express.static(path.join(__dirname, '../src/pdf')));
 app.use('/styles', express.static(path.join(__dirname, '../src/styles')));
 app.use('/js', express.static(path.join(__dirname, '../src/js')));
+
+app.get('/api/:table', async (req, res) => {
+  const { table } = req.params;
+  if (!table) {
+    res.status(400).json({ error: 'Tabela inválida' });
+    return;
+  }
+
+  try {
+    const api = createApiClient(req);
+    const cacheKey = buildCacheKey(req.query);
+    const cached = readCache(table, cacheKey);
+    if (cached) {
+      res.status(200).json(cached);
+      return;
+    }
+
+    const data = await api.get(`/api/${table}`, { query: req.query });
+    writeCache(table, cacheKey, data);
+    res.status(200).json(data);
+  } catch (err) {
+    console.error('Erro no proxy /api/:table:', err);
+    const status = err.status || 500;
+    res.status(status).json({ error: err.message || 'Erro interno ao buscar dados' });
+  }
+});
+
+app.post('/api/:table', async (req, res) => {
+  const { table } = req.params;
+  if (!table) {
+    res.status(400).json({ error: 'Tabela inválida' });
+    return;
+  }
+
+  try {
+    const api = createApiClient(req);
+    const created = await api.post(`/api/${table}`, req.body);
+    invalidateCache(table);
+    res.status(201).json(created);
+  } catch (err) {
+    console.error('Erro no proxy POST /api/:table:', err);
+    const status = err.status || 500;
+    res.status(status).json({ error: err.message || 'Erro interno ao salvar dados' });
+  }
+});
 
 app.get('/status', (_req, res) => {
   res.json({ status: 'ok' });
