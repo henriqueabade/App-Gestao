@@ -142,6 +142,7 @@ window.addEventListener("DOMContentLoaded", async () => {
   const startHidden = params.get('hidden') === '1';
   let particlesContainer = null;
   let particlesCleanupIntervalId = null;
+  let particlesReady = false;
 
  // remove intro overlay only after the window becomes visible
 const hideIntro = () => {
@@ -334,44 +335,52 @@ if (intro) {
   if (existingParticles) {
     particlesContainer = existingParticles;
     particlesContainer.play();
+    particlesReady = true;
     handleParticlesReady(existingParticles);
   } else {
-    // 1) Inicializa tsParticles com efeito twinkle e cores customizadas
-    tsParticles.load("bg-network", {
-      fpsLimit: 30,
-      background: { color: "transparent" },
-      fullScreen: { enable: false },
-      particles: {
-        number: { value: 300, density: { enable: false } },
-        color: { value: ["#A394A7", "#B7A1C2", "#CAB4D0"] },
-        links: {
-          enable: true,
-          color: "#ffd000",
-          distance: 200,
-          opacity: 0.5,
-          width: 0.8
-        },
-        move: {
-          enable: true,
-          speed: 1,
-          warp: false,
-          outModes: { default: "bounce" }
-        },
-        size: { value: 2 },
-      },
-      interactivity: {
-        events: {
-          onHover: { enable: true, mode: "grab" },
-          onclick: { enable: true, mode: "push"},
+    if (!particlesReady) {
+      particlesReady = true;
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          // 1) Inicializa tsParticles com efeito twinkle e cores customizadas
+          tsParticles.load("bg-network", {
+            fpsLimit: 30,
+            background: { color: "transparent" },
+            fullScreen: { enable: false },
+            particles: {
+              number: { value: 300, density: { enable: false } },
+              color: { value: ["#A394A7", "#B7A1C2", "#CAB4D0"] },
+              links: {
+                enable: true,
+                color: "#ffd000",
+                distance: 200,
+                opacity: 0.5,
+                width: 0.8
+              },
+              move: {
+                enable: true,
+                speed: 1,
+                warp: false,
+                outModes: { default: "bounce" }
+              },
+              size: { value: 2 },
+            },
+            interactivity: {
+              events: {
+                onHover: { enable: true, mode: "grab" },
+                onclick: { enable: true, mode: "push"},
 
-        },
-        modes: {
-          grab: { distance: 140, links: { opacity: 0.7, color: "#ffffff" } },
-          push: { particles_nb: 4},
-        }
-      },
-      detectRetina: true
-    }).then(handleParticlesReady);
+              },
+              modes: {
+                grab: { distance: 140, links: { opacity: 0.7, color: "#ffffff" } },
+                push: { particles_nb: 4},
+              }
+            },
+            detectRetina: true
+          }).then(handleParticlesReady);
+        });
+      });
+    }
   }
   // === 3) Abas Login / Cadastro ===
   const loginTab     = document.getElementById('loginTab');
