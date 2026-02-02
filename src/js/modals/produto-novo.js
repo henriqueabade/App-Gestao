@@ -378,6 +378,7 @@
       await window.electronAPI.adicionarProduto({
         codigo,
         nome,
+        ncm,
         categoria: colecaoSelect.value.trim(),
         preco_venda: totals.valorVenda || 0,
         pct_markup: parseFloat(markupInput?.value) || 0,

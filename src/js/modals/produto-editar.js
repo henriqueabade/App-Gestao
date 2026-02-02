@@ -616,6 +616,7 @@
           await window.electronAPI.adicionarProduto({
             codigo: cloneCodigo,
             nome: cloneNome,
+            ncm: ncmInput?.value?.slice(0, 8) || '',
             preco_venda: totals.valorVenda || 0,
             pct_markup: parseFloat(markupInput?.value) || 0,
             status: 'Em linha'

@@ -612,7 +612,7 @@ const itens = await getFiltrado('/produtos_insumos', itensQuery);
  * CRUD básico de produtos
  */
 async function adicionarProduto(dados) {
-  const { codigo, nome, preco_venda, pct_markup, status } = dados;
+  const { codigo, nome, ncm, preco_venda, pct_markup, status } = dados;
   const categoria = dados.categoria || (nome ? String(nome).trim().split(' ')[0] : null);
   const required = {
     codigo: 'Código',
@@ -645,6 +645,7 @@ async function adicionarProduto(dados) {
   return pool.post('/produtos', {
     codigo,
     nome,
+    ncm,
     categoria,
     preco_venda,
     pct_markup,
