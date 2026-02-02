@@ -307,6 +307,46 @@
       totalInsumosTituloEl.innerHTML = parts.join(' ');
     }
 
+    function normalizeItensParaSalvar(){
+      const ativos = itens.filter(i => i.status !== 'deleted');
+      const deletadosAtuais = itens.filter(i => i.status === 'deleted');
+      const ordenados = ativos.slice().sort((a,b)=> (a.ordem||0)-(b.ordem||0));
+      const vistos = new Map();
+      const normalizados = [];
+      const duplicadosDeletados = [];
+      let hadDuplicates = false;
+
+      ordenados.forEach((it, idx) => {
+        const rawKey = it.insumo_id ?? it.id;
+        const key = rawKey != null ? String(rawKey) : `__missing_${idx}`;
+        const existente = vistos.get(key);
+        if(existente){
+          hadDuplicates = true;
+          existente.quantidade = (parseFloat(existente.quantidade) || 0) + (parseFloat(it.quantidade) || 0);
+          existente.total = existente.quantidade * (existente.preco_unitario || 0);
+          if(existente.id && existente.status !== 'new') existente.status = 'updated';
+          if(it.id && it.status !== 'new') duplicadosDeletados.push({ ...it, status: 'deleted' });
+        }else{
+          const clone = { ...it };
+          vistos.set(key, clone);
+          normalizados.push(clone);
+        }
+      });
+
+      normalizados.forEach((it, idx) => {
+        const novaOrdem = idx + 1;
+        if(it.ordem !== novaOrdem){
+          it.ordem = novaOrdem;
+          if(it.id && it.status !== 'new') it.status = 'updated';
+        }
+      });
+
+      return {
+        itensNormalizados: [...normalizados, ...deletadosAtuais, ...duplicadosDeletados],
+        hadDuplicates
+      };
+    }
+
     // ações
     function renderActionButtons(item){
       const actionCell = item.row.querySelector('.action-cell');
@@ -581,6 +621,12 @@
             status: 'Em linha'
           });
 
+          const { itensNormalizados, hadDuplicates } = normalizeItensParaSalvar();
+          if(hadDuplicates && typeof showToast === 'function'){
+            showToast('Insumos duplicados consolidados automaticamente.', 'info');
+          }
+          itens = itensNormalizados;
+
           const itensPayload = itens
             .filter(i => i.status !== 'deleted')
             .map(i => ({ insumo_id: i.insumo_id ?? i.id, quantidade: i.quantidade, ordem_insumo: i.ordem }));
@@ -623,6 +669,13 @@
           if(typeof showToast === 'function') showToast('Confirme a posição produtiva de insumos', 'error');
           return;
         }
+        const { itensNormalizados, hadDuplicates } = normalizeItensParaSalvar();
+        if(hadDuplicates && typeof showToast === 'function'){
+          showToast('Insumos duplicados consolidados automaticamente.', 'info');
+        }
+        itens = itensNormalizados;
+        updateTotals();
+
         const produto = {
           pct_fabricacao: parseFloat(fabricacaoInput && fabricacaoInput.value) || 0,
           pct_acabamento: parseFloat(acabamentoInput && acabamentoInput.value) || 0,

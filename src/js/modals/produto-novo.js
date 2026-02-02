@@ -178,6 +178,36 @@
     itens.forEach((it,idx)=> it.ordem = idx+1);
   }
 
+  function normalizeItensParaSalvar(){
+    const ordenados = itens.slice().sort((a,b)=> (a.ordem||0)-(b.ordem||0));
+    const vistos = new Map();
+    const normalizados = [];
+    let hadDuplicates = false;
+
+    ordenados.forEach((it, idx) => {
+      const rawKey = it.insumo_id ?? it.id;
+      const key = rawKey != null ? String(rawKey) : `__missing_${idx}`;
+      const existente = vistos.get(key);
+      if(existente){
+        hadDuplicates = true;
+        existente.quantidade = (parseFloat(existente.quantidade) || 0) + (parseFloat(it.quantidade) || 0);
+        if(!existente.preco_unitario && it.preco_unitario != null){
+          existente.preco_unitario = it.preco_unitario;
+        }
+      }else{
+        const clone = { ...it };
+        vistos.set(key, clone);
+        normalizados.push(clone);
+      }
+    });
+
+    normalizados.forEach((it, idx) => {
+      it.ordem = idx + 1;
+    });
+
+    return { itensNormalizados: normalizados, hadDuplicates };
+  }
+
   function renderItens(){
     if(!tableBody) return;
     normalizeOrder();
@@ -353,6 +383,12 @@
         pct_markup: parseFloat(markupInput?.value) || 0,
         status: 'Em linha'
       });
+
+      const { itensNormalizados, hadDuplicates } = normalizeItensParaSalvar();
+      if(hadDuplicates && typeof showToast === 'function'){
+        showToast('Insumos duplicados consolidados automaticamente.', 'info');
+      }
+      itens = itensNormalizados;
 
       const itensPayload = itens.map(i => ({
         insumo_id: i.insumo_id ?? i.id,
