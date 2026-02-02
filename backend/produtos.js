@@ -786,9 +786,29 @@ async function salvarProdutoDetalhado(codigoOriginal, produto, itens, produtoId)
     status
   } = produto;
 
+  const produtoIdPayload = itens && Object.prototype.hasOwnProperty.call(itens, 'produto_id')
+    ? itens.produto_id
+    : undefined;
+  if (produtoIdPayload === null || produtoIdPayload === '') {
+    const err = new Error('produto_id é obrigatório');
+    err.code = 'PRODUTO_ID_OBRIGATORIO';
+    throw err;
+  }
+
+  const produtoIdInformado = produtoIdPayload ?? produtoId;
+  const produtoIdNormalizado =
+    produtoIdInformado !== undefined && produtoIdInformado !== null && String(produtoIdInformado).trim() !== ''
+      ? Number(produtoIdInformado)
+      : null;
+  if (produtoIdInformado !== undefined && produtoIdInformado !== null && Number.isNaN(produtoIdNormalizado)) {
+    const err = new Error('produto_id inválido');
+    err.code = 'PRODUTO_ID_INVALIDO';
+    throw err;
+  }
+
   let produtoAtual = null;
-  if (produtoId !== undefined && produtoId !== null) {
-    produtoAtual = await fetchSingle('produtos', { id: produtoId });
+  if (produtoIdNormalizado !== null) {
+    produtoAtual = await fetchSingle('produtos', { id: produtoIdNormalizado });
   }
   if (!produtoAtual && codigoOriginal) {
     produtoAtual = await fetchSingle('produtos', { codigo: codigoOriginal });
