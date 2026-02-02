@@ -25,6 +25,7 @@
     "body-parser": "^2.2.0",
     "core-util-is": "^1.0.3",
     "cors": "^2.8.5",
+    "dunder-proto": "^1.0.1",
     "dotenv": "^17.0.1",
     "electron-updater": "^6.6.2",
     "express": "^5.1.0",

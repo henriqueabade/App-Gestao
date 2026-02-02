@@ -21,6 +21,9 @@ module.exports = {
     "!*.map"
   ],
 
+  npmRebuild: false,
+  npmArgs: ["--include=dev"],
+
   asar: true,
   artifactName: '${productName}-Setup-${version}-${arch}.${ext}',
 
