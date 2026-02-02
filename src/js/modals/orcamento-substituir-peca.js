@@ -91,41 +91,14 @@
   });
 
   function openResetSelectionDialog() {
-    return new Promise(resolve => {
-      const dialogOverlay = document.createElement('div');
-      dialogOverlay.className = 'fixed inset-0 bg-black/60 flex items-center justify-center p-4';
-      const baseOverlay = replaceModalRefs?.overlay;
-      const computedZ = baseOverlay ? window.getComputedStyle(baseOverlay).zIndex : '';
-      const parsedZ = Number(computedZ);
-      const fallbackZ = 15000;
-      const finalZ = Number.isFinite(parsedZ) ? Math.max(parsedZ + 5, fallbackZ) : fallbackZ;
-      dialogOverlay.style.zIndex = String(finalZ);
-      dialogOverlay.innerHTML = `
-        <div class="max-w-md w-full glass-surface backdrop-blur-xl rounded-2xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade">
-          <div class="p-6 text-center space-y-4">
-            <div>
-              <h3 class="text-lg font-semibold text-sky-300">Reiniciar seleção</h3>
-              <p class="text-sm text-gray-300 mt-2">Deseja reiniciar a seleção de peças? Esta ação vai remover todas as peças selecionadas até o momento.</p>
-            </div>
-            <div class="flex justify-center gap-4">
-              <button type="button" data-action="confirm" class="btn-warning px-4 py-2 rounded-lg text-white font-medium">Sim</button>
-              <button type="button" data-action="cancel" class="btn-neutral px-4 py-2 rounded-lg text-white font-medium">Não</button>
-            </div>
-          </div>
-        </div>`;
-      document.body.appendChild(dialogOverlay);
-
-      const cleanup = result => {
-        if (dialogOverlay.isConnected) dialogOverlay.remove();
-        resolve(!!result);
-      };
-
-      dialogOverlay.addEventListener('click', e => {
-        if (e.target === dialogOverlay) cleanup(false);
-      });
-
-      dialogOverlay.querySelector('[data-action="confirm"]')?.addEventListener('click', () => cleanup(true), { once: true });
-      dialogOverlay.querySelector('[data-action="cancel"]')?.addEventListener('click', () => cleanup(false), { once: true });
+    if (!window.DialogPadrao?.confirm) {
+      return Promise.resolve(false);
+    }
+    return window.DialogPadrao.confirm({
+      title: 'Reiniciar seleção',
+      message: 'Deseja reiniciar a seleção de peças? Esta ação vai remover todas as peças selecionadas até o momento.',
+      confirmText: 'Sim',
+      cancelText: 'Não'
     });
   }
 

@@ -112,5 +112,32 @@
     return { close: () => close(false) };
   }
 
-  window.DialogPadrao = { open: createDialog };
+  function openDialogAsync({
+    title,
+    message,
+    variant = 'info',
+    confirmText,
+    cancelText,
+    okText
+  } = {}) {
+    return new Promise(resolve => {
+      createDialog({
+        title,
+        message,
+        variant,
+        confirmText,
+        cancelText,
+        okText,
+        onConfirm: () => resolve(true),
+        onCancel: () => resolve(false)
+      });
+    });
+  }
+
+  window.DialogPadrao = {
+    open: createDialog,
+    openAsync: openDialogAsync,
+    info: (options = {}) => openDialogAsync({ ...options, variant: 'info' }),
+    confirm: (options = {}) => openDialogAsync({ ...options, variant: 'confirm' })
+  };
 })();
