@@ -313,13 +313,14 @@ async function atualizarProdutosComInsumo(insumoId) {
       new Set((Array.isArray(itens) ? itens : []).map(item => item?.insumo_id).filter(id => id !== undefined && id !== null))
     );
     const materias = await getFiltrado('/materia_prima', {
-      select: 'id,preco_unitario',
-      id: idsMateria
+      select: 'id,preco_unitario'
     });
     const materiaPorId = new Map();
+    const idsMateriaSet = new Set(idsMateria.map(id => Number(id)));
     for (const materia of materias) {
-      if (materia?.id === undefined || materia?.id === null) continue;
-      materiaPorId.set(Number(materia.id), materia);
+      const materiaId = Number(materia?.id);
+      if (!Number.isFinite(materiaId) || !idsMateriaSet.has(materiaId)) continue;
+      materiaPorId.set(materiaId, materia);
     }
 
     const base = (Array.isArray(itens) ? itens : []).reduce((acc, item) => {
