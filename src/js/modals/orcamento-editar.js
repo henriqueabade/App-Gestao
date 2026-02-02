@@ -65,7 +65,8 @@
   }
   function showResetDialog(cb){
     const overlay=document.createElement('div');
-    overlay.className='fixed inset-0 z-[2000] bg-black/50 flex items-center justify-center p-4';
+    overlay.className='fixed inset-0 bg-black/50 flex items-center justify-center p-4';
+    overlay.style.zIndex = 'var(--z-dialog)';
     overlay.innerHTML=`<div class="max-w-md w-full glass-surface backdrop-blur-xl rounded-2xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade"><div class="p-6 text-center"><h3 class="text-lg font-semibold mb-4 text-yellow-300">Atenção</h3><p class="text-sm text-gray-300 mb-6">Esta ação irá reiniciar a condição de pagamento. Deseja continuar?</p><div class="flex justify-center gap-4"><button id="resetYes" class="btn-warning px-4 py-2 rounded-lg text-white font-medium">Sim</button><button id="resetNo" class="btn-neutral px-4 py-2 rounded-lg text-white font-medium">Não</button></div></div></div>`;
     document.body.appendChild(overlay);
     overlay.querySelector('#resetYes').addEventListener('click',()=>{overlay.remove();cb(true);});
@@ -74,7 +75,8 @@
 
   function showBlockedDialog(){
     const overlay=document.createElement('div');
-    overlay.className='fixed inset-0 z-[2000] bg-black/50 flex items-center justify-center p-4';
+    overlay.className='fixed inset-0 bg-black/50 flex items-center justify-center p-4';
+    overlay.style.zIndex = 'var(--z-dialog)';
     overlay.innerHTML=`<div class="max-w-sm w-full glass-surface backdrop-blur-xl rounded-2xl border border-yellow-500/20 ring-1 ring-yellow-500/30 shadow-2xl/40 animate-modalFade"><div class="p-6 text-center"><h3 class="text-lg font-semibold mb-4 text-yellow-400">Condição de Pagamento Bloqueada</h3><p class="text-sm text-gray-300 mb-6">Para definir condição de pagamento é necessario adicionar itens ao orçamento primeiro!.</p><div class="flex justify-center"><button id="blockedOk" class="btn-warning px-6 py-2 rounded-lg text-white font-medium active:scale-95">OK</button></div></div></div>`;
     document.body.appendChild(overlay);
     overlay.querySelector('#blockedOk').addEventListener('click',()=>overlay.remove());
@@ -82,7 +84,8 @@
 
   function showActionDialog(message, cb){
     const overlay=document.createElement('div');
-    overlay.className='fixed inset-0 z-[2000] bg-black/50 flex items-center justify-center p-4';
+    overlay.className='fixed inset-0 bg-black/50 flex items-center justify-center p-4';
+    overlay.style.zIndex = 'var(--z-dialog)';
     overlay.innerHTML=`<div class="max-w-md w-full glass-surface backdrop-blur-xl rounded-2xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade"><div class="p-6 text-center"><h3 class="text-lg font-semibold mb-4 text-yellow-300">Atenção</h3><p class="text-sm text-gray-300 mb-6">${message}</p><div class="flex justify-center gap-4"><button id="actYes" class="btn-warning px-4 py-2 rounded-lg text-white font-medium">Sim</button><button id="actNo" class="btn-neutral px-4 py-2 rounded-lg text-white font-medium">Não</button></div></div></div>`;
     document.body.appendChild(overlay);
     overlay.querySelector('#actYes').addEventListener('click',()=>{overlay.remove();cb(true);});
@@ -90,7 +93,8 @@
   }
   function showMissingDialog(fields){
     const overlay=document.createElement('div');
-    overlay.className='fixed inset-0 z-[2000] bg-black/50 flex items-center justify-center p-4';
+    overlay.className='fixed inset-0 bg-black/50 flex items-center justify-center p-4';
+    overlay.style.zIndex = 'var(--z-dialog)';
     overlay.innerHTML=`<div class="max-w-sm w-full glass-surface backdrop-blur-xl rounded-2xl border border-yellow-500/20 ring-1 ring-yellow-500/30 shadow-2xl/40 animate-modalFade"><div class="p-6 text-center"><h3 class="text-lg font-semibold mb-4 text-yellow-400">Dados Incompletos</h3><p class="text-sm text-gray-300 mb-6">Preencha os campos: ${fields.join(', ')}</p><div class="flex justify-center"><button id="missingOk" class="btn-warning px-6 py-2 rounded-lg text-white font-medium active:scale-95">OK</button></div></div></div>`;
     document.body.appendChild(overlay);
     overlay.querySelector('#missingOk').addEventListener('click',()=>overlay.remove());
@@ -98,7 +102,8 @@
 
   function showFunctionUnavailableDialog(message){
     const overlay=document.createElement('div');
-    overlay.className='fixed inset-0 z-[2000] bg-black/50 flex items-center justify-center p-4';
+    overlay.className='fixed inset-0 bg-black/50 flex items-center justify-center p-4';
+    overlay.style.zIndex = 'var(--z-dialog)';
     overlay.innerHTML=`<div class="max-w-sm w-full glass-surface backdrop-blur-xl rounded-2xl border border-yellow-500/20 ring-1 ring-yellow-500/30 shadow-2xl/40 animate-modalFade"><div class="p-6 text-center"><h3 class="text-lg font-semibold mb-4 text-yellow-400">Função Indisponível</h3><p class="text-sm text-gray-300 mb-6">${message}</p><div class="flex justify-center"><button id="funcUnavailableOk" class="btn-neutral px-6 py-2 rounded-lg text-white font-medium">OK</button></div></div></div>`;
     document.body.appendChild(overlay);
     overlay.querySelector('#funcUnavailableOk').addEventListener('click',()=>overlay.remove());
@@ -410,7 +415,8 @@
 
     function showDuplicateDialog(callback) {
       const overlay = document.createElement('div');
-      overlay.className = 'fixed inset-0 z-[2000] bg-black/50 flex items-center justify-center p-4';
+      overlay.className = 'fixed inset-0 bg-black/50 flex items-center justify-center p-4';
+      overlay.style.zIndex = 'var(--z-dialog)';
       overlay.innerHTML = `
         <div class="max-w-lg w-full glass-surface backdrop-blur-xl rounded-2xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade">
           <div class="p-6 text-center">
@@ -844,7 +850,8 @@
   document.getElementById('clonarOrcamento').addEventListener('click', async () => {
     const spinner = document.createElement('div');
     spinner.id = 'modalLoading';
-    spinner.className = 'fixed inset-0 z-[2000] bg-black/50 flex items-center justify-center';
+    spinner.className = 'fixed inset-0 bg-black/50 flex items-center justify-center';
+    spinner.style.zIndex = 'var(--z-dialog)';
     spinner.innerHTML = '<div class="w-16 h-16 border-4 border-[#b6a03e] border-t-transparent rounded-full animate-spin"></div>';
     document.body.appendChild(spinner);
     try {

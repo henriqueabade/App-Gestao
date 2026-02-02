@@ -1759,7 +1759,8 @@ const AppUpdates = (() => {
         }
 
         const overlay = document.createElement('div');
-        overlay.className = 'fixed inset-0 z-[2000] bg-black/60 backdrop-blur-sm flex flex-col items-center justify-center gap-4';
+        overlay.className = 'fixed inset-0 bg-black/60 backdrop-blur-sm flex flex-col items-center justify-center gap-4';
+        overlay.style.zIndex = 'var(--z-dialog)';
         overlay.setAttribute('role', 'alert');
         overlay.innerHTML = `
             <div class="w-16 h-16 border-4 border-[#60a5fa] border-t-transparent rounded-full animate-spin"></div>

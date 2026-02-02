@@ -37,7 +37,8 @@
       const previousActive = document.activeElement;
       const isConfirm = variant === 'confirm';
       const overlay = document.createElement('div');
-      overlay.className = 'fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-[3000]';
+      overlay.className = 'fixed inset-0 bg-black/50 flex items-center justify-center p-4';
+      overlay.style.zIndex = 'var(--z-dialog)';
 
       const heading = title || (isConfirm ? 'Tem certeza?' : 'Atenção');
       const confirmLabel = confirmText || (isConfirm ? 'Confirmar' : 'OK');
