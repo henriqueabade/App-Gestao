@@ -768,7 +768,7 @@ async function excluirLoteProduto(id) {
  * Salva detalhes do produto (percentuais + itens) em transação
  */
 
-async function salvarProdutoDetalhado(codigoOriginal, produto, itens) {
+async function salvarProdutoDetalhado(codigoOriginal, produto, itens, produtoId) {
   const {
     pct_fabricacao,
     pct_acabamento,
@@ -786,7 +786,13 @@ async function salvarProdutoDetalhado(codigoOriginal, produto, itens) {
     status
   } = produto;
 
-  const produtoAtual = await fetchSingle('produtos', { codigo: codigoOriginal });
+  let produtoAtual = null;
+  if (produtoId !== undefined && produtoId !== null) {
+    produtoAtual = await fetchSingle('produtos', { id: produtoId });
+  }
+  if (!produtoAtual && codigoOriginal) {
+    produtoAtual = await fetchSingle('produtos', { codigo: codigoOriginal });
+  }
   if (!produtoAtual) {
     throw new Error('Produto não encontrado');
   }

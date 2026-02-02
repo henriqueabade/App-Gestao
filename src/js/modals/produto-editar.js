@@ -613,7 +613,7 @@
             return;
           }
 
-          await window.electronAPI.adicionarProduto({
+          const produtoCriado = await window.electronAPI.adicionarProduto({
             codigo: cloneCodigo,
             nome: cloneNome,
             ncm: ncmInput?.value?.slice(0, 8) || '',
@@ -647,7 +647,7 @@
             ncm: ncmInput?.value?.slice(0,8) || '',
             categoria: colecaoSelect ? colecaoSelect.value.trim() : '',
             status: 'Em linha'
-          }, { inseridos: itensPayload, atualizados: [], deletados: [] });
+          }, { inseridos: itensPayload, atualizados: [], deletados: [] }, produtoCriado?.id);
 
           if (typeof carregarProdutos === 'function') await carregarProdutos();
           showToast('Peça clonada com sucesso!', 'success');

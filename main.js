@@ -3723,8 +3723,8 @@ ipcMain.handle('remover-etapa-producao', async (_e, nome) => {
 ipcMain.handle('listar-itens-processo-produto', async (_e, { codigo, etapa, busca, produtoId }) => {
   return listarItensProcessoProduto(codigo, etapa, busca, produtoId);
 });
-ipcMain.handle('salvar-produto-detalhado', async (_e, { codigo, produto, itens }) => {
-  return salvarProdutoDetalhado(codigo, produto, itens);
+ipcMain.handle('salvar-produto-detalhado', async (_e, { codigo, produto, itens, produtoId }) => {
+  return salvarProdutoDetalhado(codigo, produto, itens, produtoId);
 });
 
 async function waitForAutoLoginDatabaseReady(user) {

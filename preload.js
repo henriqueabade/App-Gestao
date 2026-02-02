@@ -191,9 +191,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   listarItensProcessoProduto: (codigo, etapa, busca, produtoId) =>
     ipcRenderer.invoke('listar-itens-processo-produto', { codigo, etapa, busca, produtoId }),
-  salvarProdutoDetalhado: async (codigo, produto, itens) => {
-    const result = await ipcRenderer.invoke('salvar-produto-detalhado', { codigo, produto, itens });
-    recordIpcAction('salvar-produto-detalhado', { codigo, produto, itens }, result);
+  salvarProdutoDetalhado: async (codigo, produto, itens, produtoId) => {
+    const result = await ipcRenderer.invoke('salvar-produto-detalhado', {
+      codigo,
+      produto,
+      itens,
+      produtoId
+    });
+    recordIpcAction('salvar-produto-detalhado', { codigo, produto, itens, produtoId }, result);
     return result;
   },
   adicionarMateriaPrima: async (dados) => {
