@@ -375,7 +375,7 @@
         return;
       }
 
-      await window.electronAPI.adicionarProduto({
+      const produtoCriado = await window.electronAPI.adicionarProduto({
         codigo,
         nome,
         ncm,
@@ -397,6 +397,8 @@
         ordem_insumo: i.ordem
       }));
 
+      const produtoId = produtoCriado?.id;
+
       await window.electronAPI.salvarProdutoDetalhado(codigo, {
         pct_fabricacao: parseFloat(fabricacaoInput?.value) || 0,
         pct_acabamento: parseFloat(acabamentoInput?.value) || 0,
@@ -412,7 +414,7 @@
         ncm,
         categoria: colecaoSelect.value.trim(),
         status: 'Em linha'
-      }, { inseridos: itensPayload, atualizados: [], deletados: [] });
+      }, { inseridos: itensPayload, atualizados: [], deletados: [] }, produtoId);
 
       showToast('Peça criada com sucesso!', 'success');
       close();

@@ -715,7 +715,12 @@
           ]
         };
         try{
-          await window.electronAPI.salvarProdutoDetalhado(produtoSelecionado.codigo, produto, itensPayload);
+          await window.electronAPI.salvarProdutoDetalhado(
+            produtoSelecionado.codigo,
+            produto,
+            itensPayload,
+            produtoSelecionado.id
+          );
           deletedItens = [];
           const now = new Date();
           if (ultimaDataEl) ultimaDataEl.textContent = now.toLocaleDateString('pt-BR');
