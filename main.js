@@ -3851,7 +3851,8 @@ ipcMain.handle('auto-login', async (_event, payload) => {
       throw warmupResult.error;
     }
 
-    if (!dashboardWindow) {
+    const shouldCreateDashboard = !dashboardWindow;
+    if (shouldCreateDashboard) {
       if (loginWindow) {
         try {
           const bounds = loginWindow.getBounds();
@@ -3879,9 +3880,18 @@ ipcMain.handle('auto-login', async (_event, payload) => {
     } else {
       setCurrentUserSession(null);
     }
-    if (dashboardWindow) {
-      dashboardWindow.show();
-      dashboardWindow.focus();
+    if (dashboardWindow && !shouldCreateDashboard && !dashboardWindow.isVisible()) {
+      if (dashboardWindow.webContents.isLoading()) {
+        dashboardWindow.once('ready-to-show', () => {
+          if (dashboardWindow && !dashboardWindow.isDestroyed() && !dashboardWindow.isVisible()) {
+            dashboardWindow.show();
+            dashboardWindow.focus();
+          }
+        });
+      } else {
+        dashboardWindow.show();
+        dashboardWindow.focus();
+      }
     }
     return { success: true };
   } catch (err) {
