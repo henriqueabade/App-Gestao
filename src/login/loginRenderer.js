@@ -26,6 +26,8 @@ let lastLoginAttempt = null;
 const LOGIN_RETRY_MIN_DELAY_MS = 5000;
 let pendingAutoLoginRetryTimeout = null;
 const AUTO_LOGIN_RETRY_MIN_DELAY_MS = 1000;
+const PARTICLES_RESIZE_DEBOUNCE_MS = 200;
+const PARTICLES_LAYOUT_STABILIZE_DELAY_MS = 600;
 
 async function fetchApi(path, options) {
   const baseUrl = await window.apiConfig.getApiBaseUrl();
@@ -143,6 +145,11 @@ window.addEventListener("DOMContentLoaded", async () => {
   let particlesContainer = null;
   let particlesCleanupIntervalId = null;
   let particlesReady = false;
+  let particlesResizeTimeoutId = null;
+  let particlesResizeUnlockTimeoutId = null;
+  let particlesResizeListenerAttached = false;
+  let particlesResizeLocked = true;
+  let particlesLastSize = { width: 0, height: 0 };
 
  // remove intro overlay only after the window becomes visible
 const hideIntro = () => {
@@ -310,6 +317,71 @@ if (intro) {
     }, 500);
   };
 
+  const getParticlesTargetSize = () => {
+    const network = document.getElementById('bg-network');
+    if (!network) return null;
+    const width = network.clientWidth;
+    const height = network.clientHeight;
+    if (!width || !height) return null;
+    return { width, height };
+  };
+
+  const lockParticlesCanvasSize = () => {
+    const canvas = particlesContainer?.canvas?.element;
+    const size = getParticlesTargetSize();
+    if (!canvas || !size) return;
+    canvas.style.width = `${size.width}px`;
+    canvas.style.height = `${size.height}px`;
+    particlesLastSize = size;
+    particlesResizeLocked = true;
+  };
+
+  const unlockParticlesCanvasSize = () => {
+    const canvas = particlesContainer?.canvas?.element;
+    if (!canvas) return;
+    canvas.style.width = "";
+    canvas.style.height = "";
+    particlesResizeLocked = false;
+  };
+
+  const resizeParticlesIfNeeded = () => {
+    if (!particlesContainer || particlesResizeLocked) return;
+    const size = getParticlesTargetSize();
+    if (!size) return;
+    if (size.width === particlesLastSize.width && size.height === particlesLastSize.height) return;
+    particlesLastSize = size;
+    if (typeof particlesContainer.resize === "function") {
+      particlesContainer.resize();
+    }
+  };
+
+  const handleParticlesResize = () => {
+    if (particlesResizeTimeoutId) {
+      clearTimeout(particlesResizeTimeoutId);
+    }
+    particlesResizeTimeoutId = setTimeout(() => {
+      particlesResizeTimeoutId = null;
+      resizeParticlesIfNeeded();
+    }, PARTICLES_RESIZE_DEBOUNCE_MS);
+  };
+
+  const attachParticlesResizeListener = () => {
+    if (particlesResizeListenerAttached) return;
+    particlesResizeListenerAttached = true;
+    window.addEventListener('resize', handleParticlesResize);
+  };
+
+  const scheduleParticlesResizeUnlock = () => {
+    if (particlesResizeUnlockTimeoutId) {
+      clearTimeout(particlesResizeUnlockTimeoutId);
+    }
+    particlesResizeUnlockTimeoutId = setTimeout(() => {
+      particlesResizeUnlockTimeoutId = null;
+      unlockParticlesCanvasSize();
+      resizeParticlesIfNeeded();
+    }, PARTICLES_LAYOUT_STABILIZE_DELAY_MS);
+  };
+
   const handleParticlesReady = (container) => {
     particlesContainer = container;
     const network = document.getElementById('bg-network');
@@ -319,6 +391,10 @@ if (intro) {
     }
 
     window.electronAPI.showLogin();
+    lockParticlesCanvasSize();
+    scheduleParticlesResizeUnlock();
+    attachParticlesResizeListener();
+    resizeParticlesIfNeeded();
     setupParticlesCleanupInterval();
   };
 
@@ -369,6 +445,7 @@ if (intro) {
               events: {
                 onHover: { enable: true, mode: "grab" },
                 onclick: { enable: true, mode: "push"},
+                resize: { enable: false, delay: 0 },
 
               },
               modes: {
