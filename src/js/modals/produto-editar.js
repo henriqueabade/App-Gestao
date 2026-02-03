@@ -52,6 +52,27 @@
     const voltarBtn = document.getElementById('voltarEditarProduto');
     if (voltarBtn) voltarBtn.addEventListener('click', close);
     const form = document.getElementById('editarProdutoForm');
+    const submitBtn = form?.querySelector('button[type="submit"]') || null;
+    const submitBtnText = submitBtn?.textContent || '';
+    const clonarBtn = document.getElementById('clonarProduto');
+    const clonarBtnText = clonarBtn?.textContent || '';
+    let isSubmitting = false;
+    let isCloning = false;
+
+    function setModalLoadingState(isLoading, { submitText, cloneText } = {}) {
+      if (submitBtn) {
+        submitBtn.disabled = isLoading;
+        submitBtn.classList.toggle('opacity-60', isLoading);
+        submitBtn.classList.toggle('cursor-not-allowed', isLoading);
+        submitBtn.textContent = isLoading ? (submitText || 'Salvando...') : submitBtnText;
+      }
+      if (clonarBtn) {
+        clonarBtn.disabled = isLoading;
+        clonarBtn.classList.toggle('opacity-60', isLoading);
+        clonarBtn.classList.toggle('cursor-not-allowed', isLoading);
+        clonarBtn.textContent = isLoading ? (cloneText || 'Aguarde...') : clonarBtnText;
+      }
+    }
 
     // ------- Campos e referências -------
     let tableBody = resolveItensTbody();
@@ -591,10 +612,12 @@
       });
     }
 
-    const clonarBtn = document.getElementById('clonarProduto');
     if (clonarBtn) {
       clonarBtn.addEventListener('click', async () => {
+        if (isSubmitting || isCloning) return;
         try {
+          isCloning = true;
+          setModalLoadingState(true, { submitText: 'Aguarde...', cloneText: 'Clonando...' });
           if(!ordemConfirmada){
             if(ordemContainer){
               ordemContainer.classList.remove('hidden');
@@ -607,12 +630,6 @@
           const codigoBase = (codigoInput?.value || '').trim();
           const cloneNome = `${nomeBase} - Copiado`;
           const cloneCodigo = `${codigoBase}COPIA`;
-
-          const existentes = await window.electronAPI.listarProdutos();
-          if (existentes.some(p => p.nome === cloneNome || p.codigo === cloneCodigo)) {
-            showToast('Já existe uma cópia idêntica desta peça', 'error');
-            return;
-          }
 
           const produtoCriado = await window.electronAPI.adicionarProduto({
             codigo: cloneCodigo,
@@ -650,12 +667,32 @@
             status: 'Em linha'
           }, { inseridos: itensPayload, atualizados: [], deletados: [] }, produtoCriado?.id);
 
-          if (typeof carregarProdutos === 'function') await carregarProdutos();
+          if (typeof atualizarProdutoLocal === 'function') {
+            atualizarProdutoLocal({
+              id: produtoCriado?.id,
+              codigo: cloneCodigo,
+              nome: cloneNome,
+              ncm: ncmInput?.value?.slice(0, 8) || '',
+              categoria: colecaoSelect ? colecaoSelect.value.trim() : '',
+              preco_venda: totals.valorVenda || 0,
+              pct_markup: parseFloat(markupInput?.value) || 0,
+              status: 'Em linha',
+              quantidade_total: produtoCriado?.quantidade_total ?? 0
+            }, { mode: 'add' });
+          }
+          if (typeof carregarProdutos === 'function') carregarProdutos();
           showToast('Peça clonada com sucesso!', 'success');
           close();
         } catch (err) {
           console.error('Erro ao clonar produto', err);
-          showToast('Erro ao clonar peça', 'error');
+          if (err?.code === 'CODIGO_EXISTE' || err?.code === 'NOME_EXISTE') {
+            showToast('Já existe uma cópia idêntica desta peça', 'error');
+          } else {
+            showToast('Erro ao clonar peça', 'error');
+          }
+        } finally {
+          isCloning = false;
+          setModalLoadingState(false);
         }
       });
     }
@@ -663,6 +700,7 @@
     if (form) {
       form.addEventListener('submit', async e => {
         e.preventDefault();
+        if (isSubmitting || isCloning) return;
         if(!ordemConfirmada){
           if(ordemContainer){
             ordemContainer.classList.remove('hidden');
@@ -716,6 +754,8 @@
           ]
         };
         try{
+          isSubmitting = true;
+          setModalLoadingState(true, { submitText: 'Salvando...', cloneText: 'Aguarde...' });
           await window.electronAPI.salvarProdutoDetalhado(
             produtoSelecionado.codigo,
             produto,
@@ -733,12 +773,27 @@
             status: produto.status,
             categoria: colecaoSelect ? colecaoSelect.value : ''
           };
-          if(typeof carregarProdutos === 'function') await carregarProdutos();
+          if (typeof atualizarProdutoLocal === 'function') {
+            atualizarProdutoLocal({
+              id: produtoSelecionado.id,
+              codigo: produto.codigo || produtoSelecionado.codigo,
+              nome: produto.nome || nomeInput?.value || produtoSelecionado.nome,
+              ncm: produto.ncm || ncmInput?.value?.slice(0, 8) || produtoSelecionado.ncm,
+              categoria: produto.categoria || colecaoSelect?.value?.trim(),
+              preco_venda: produto.preco_venda,
+              pct_markup: produto.pct_markup,
+              status: produto.status
+            });
+          }
+          if(typeof carregarProdutos === 'function') carregarProdutos();
           showToast('Peça alterada com sucesso!', 'success');
           close();
         }catch(err){
           console.error('Erro ao salvar produto', err);
           showToast('Erro ao salvar peça', 'error');
+        } finally {
+          isSubmitting = false;
+          setModalLoadingState(false);
         }
       });
     }

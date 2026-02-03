@@ -7,6 +7,17 @@
   document.addEventListener('keydown', function esc(e){ if(e.key==='Escape'){ close(); document.removeEventListener('keydown', esc); } });
 
   const form = document.getElementById('novoProdutoForm');
+  const submitBtn = form?.querySelector('button[type="submit"]') || null;
+  const submitBtnText = submitBtn?.textContent || '';
+  let isSubmitting = false;
+
+  function setLoadingState(isLoading) {
+    if (!submitBtn) return;
+    submitBtn.disabled = isLoading;
+    submitBtn.classList.toggle('opacity-60', isLoading);
+    submitBtn.classList.toggle('cursor-not-allowed', isLoading);
+    submitBtn.textContent = isLoading ? 'Salvando...' : submitBtnText;
+  }
 
   // ------- Campos -------
   const nomeInput       = document.getElementById('nomeInput');
@@ -353,6 +364,7 @@
 
   form.addEventListener('submit', async e => {
     e.preventDefault();
+    if (isSubmitting) return;
     if(!ordemConfirmada){
       if(ordemContainer){
         ordemContainer.classList.remove('hidden');
@@ -365,15 +377,8 @@
     const codigo = codigoInput.value.trim();
     const ncm = ncmInput.value.trim().slice(0,8);
     try{
-      const existentes = await window.electronAPI.listarProdutos();
-      if(existentes.some(p => p.codigo === codigo)){
-        showToast('Código já existe', 'error');
-        return;
-      }
-      if(existentes.some(p => p.nome === nome)){
-        showToast('Nome já existe', 'error');
-        return;
-      }
+      isSubmitting = true;
+      setLoadingState(true);
 
       const produtoCriado = await window.electronAPI.adicionarProduto({
         codigo,
@@ -416,9 +421,23 @@
         status: 'Em linha'
       }, { inseridos: itensPayload, atualizados: [], deletados: [] }, produtoId);
 
+      if (typeof atualizarProdutoLocal === 'function') {
+        atualizarProdutoLocal({
+          id: produtoCriado?.id,
+          codigo,
+          nome,
+          ncm,
+          categoria: colecaoSelect.value.trim(),
+          preco_venda: totals.valorVenda || 0,
+          pct_markup: parseFloat(markupInput?.value) || 0,
+          status: 'Em linha',
+          quantidade_total: produtoCriado?.quantidade_total ?? 0
+        }, { mode: 'add' });
+      }
+
       showToast('Peça criada com sucesso!', 'success');
       close();
-      if(typeof carregarProdutos === 'function') await carregarProdutos();
+      if(typeof carregarProdutos === 'function') carregarProdutos();
     }catch(err){
       console.error('Erro ao criar produto', err);
       if(err?.code === 'CODIGO_EXISTE'){
@@ -429,6 +448,9 @@
         const msg = err?.message || 'Erro ao criar peça';
         showToast(msg, 'error');
       }
+    } finally {
+      isSubmitting = false;
+      setLoadingState(false);
     }
   });
 

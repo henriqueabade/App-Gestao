@@ -2,6 +2,8 @@
 // Responsável por carregar os dados e controlar filtros e ações de estoque.
 
 let listaProdutos = [];
+let refreshInProgress = false;
+let refreshQueued = false;
 let filtrosAplicados = {
     categoria: '',
     status: '',
@@ -18,6 +20,11 @@ let productInfoEventsBound = false;
 let produtoActionsBound = false;
 
 async function carregarProdutos() {
+    if (refreshInProgress) {
+        refreshQueued = true;
+        return;
+    }
+    refreshInProgress = true;
     try {
         listaProdutos = await (window.electronAPI?.listarProdutos?.() ?? []);
         popularFiltros();
@@ -25,9 +32,32 @@ async function carregarProdutos() {
     } catch (err) {
         console.error('Erro ao carregar produtos', err);
         showToast('Erro ao carregar produtos', 'error');
+    } finally {
+        refreshInProgress = false;
+        if (refreshQueued) {
+            refreshQueued = false;
+            carregarProdutos();
+        }
     }
 }
 window.carregarProdutos = carregarProdutos;
+
+function atualizarProdutoLocal(produto, { mode } = {}) {
+    if (!produto) return;
+    const produtoId = produto?.id;
+    const index = listaProdutos.findIndex(p => (
+        (produtoId != null && p.id === produtoId) ||
+        (produto.codigo && p.codigo === produto.codigo)
+    ));
+    if (mode === 'add' || index === -1) {
+        listaProdutos = [...listaProdutos, produto];
+    } else {
+        listaProdutos[index] = { ...listaProdutos[index], ...produto };
+    }
+    popularFiltros();
+    aplicarFiltro(false);
+}
+window.atualizarProdutoLocal = atualizarProdutoLocal;
 
 function updateEmptyStateProdutos(hasData) {
     const wrapper = document.getElementById('produtosTableWrapper');
