@@ -13,8 +13,13 @@
   document.getElementById('cancelarExcluirProduto').addEventListener('click', close);
   document.addEventListener('keydown', function esc(e){ if(e.key==='Escape'){ close(); document.removeEventListener('keydown', esc); } });
   document.getElementById('confirmarExcluirProduto').addEventListener('click', async () => {
+    const confirmButton = document.getElementById('confirmarExcluirProduto');
     const item = window.produtoExcluir;
     if(!item) return;
+    if (confirmButton.disabled) return;
+    const originalText = confirmButton.textContent;
+    confirmButton.disabled = true;
+    confirmButton.textContent = 'Excluindo...';
     try{
       await window.electronAPI.excluirProduto({
         id: item.id,
@@ -27,10 +32,17 @@
         }
       });
       showToast('Produto excluído com sucesso!', 'success');
+      try{
+        if (typeof carregarProdutos === 'function') {
+          await carregarProdutos();
+        }
+      }catch(err){
+        showErrorDialog(err.message || 'Erro ao atualizar a lista de produtos');
+      }
       close();
-      carregarProdutos();
     }catch(err){
-      close();
+      confirmButton.disabled = false;
+      confirmButton.textContent = originalText;
       showErrorDialog(err.message || 'Erro ao excluir produto');
     }
   });
