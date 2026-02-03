@@ -126,7 +126,25 @@ async function executarLotes(method, pathSuffix = '', payload) {
   return pool[method](`${LOTES_ENDPOINT}${pathSuffix}`, payload);
 }
 
-async function carregarMateriasPorIds(ids = []) {
+const MATERIAS_CACHE_TTL_MS = 30000;
+const materiasCache = new Map();
+const MATERIAS_SELECT_PADRAO = 'id,nome,preco_unitario,unidade,processo';
+
+function obterMateriaCache(id, agora) {
+  const entrada = materiasCache.get(id);
+  if (!entrada) return { hit: false, data: null };
+  if (agora - entrada.fetchedAt > MATERIAS_CACHE_TTL_MS) {
+    materiasCache.delete(id);
+    return { hit: false, data: null };
+  }
+  return { hit: true, data: entrada.data, completo: entrada.completo };
+}
+
+function salvarMateriaCache(id, data, agora, completo) {
+  materiasCache.set(id, { data, fetchedAt: agora, completo });
+}
+
+async function carregarMateriasPorIds(ids = [], options = {}) {
   const idsValidos = Array.from(
     new Set(
       (Array.isArray(ids) ? ids : [])
@@ -138,24 +156,39 @@ async function carregarMateriasPorIds(ids = []) {
 
   if (!idsValidos.length) return new Map();
 
+  const agora = Date.now();
   const mapa = new Map();
+  const idsParaBuscar = [];
+  const select = options.select || MATERIAS_SELECT_PADRAO;
+  const requerCompleto = select === MATERIAS_SELECT_PADRAO;
 
-  // 🔥 Faz uma requisição por ID, pois a API não aceita array
   for (const id of idsValidos) {
+    const cache = obterMateriaCache(id, agora);
+    if (cache.hit && (!requerCompleto || cache.completo)) {
+      mapa.set(id, cache.data);
+    } else {
+      idsParaBuscar.push(id);
+    }
+  }
+
+  if (idsParaBuscar.length > 0) {
     try {
       const resultado = await getFiltrado('/materia_prima', {
-        id,                       // agora é número, não array
-        select: 'id,nome,preco_unitario,unidade,processo'
+        select
       });
+      const materiasPorId = mapearMateriasPorId(resultado);
 
-      if (Array.isArray(resultado) && resultado[0]) {
-        mapa.set(id, resultado[0]);
-      } else {
-        mapa.set(id, null);
+      for (const id of idsParaBuscar) {
+        const materia = materiasPorId.get(id) || null;
+        mapa.set(id, materia);
+        salvarMateriaCache(id, materia, agora, requerCompleto);
       }
     } catch (err) {
-      console.error(`Erro ao carregar materia_prima id=${id}:`, err?.message || err);
-      mapa.set(id, null);
+      console.error('Erro ao carregar matéria-prima em lote:', err?.message || err);
+      for (const id of idsParaBuscar) {
+        mapa.set(id, null);
+        salvarMateriaCache(id, null, agora, requerCompleto);
+      }
     }
   }
 
@@ -366,24 +399,10 @@ async function listarDetalhesProduto(produtoCodigo, produtoId) {
       const idsUnicos = Array.from(new Set(idsUltimosInsumos.map(Number)));
       idsUnicos.forEach(id => nomesUltimosInsumos.set(id, null));
 
-      const BATCH_SIZE = 30;
-      for (let i = 0; i < idsUnicos.length; i += BATCH_SIZE) {
-        const batch = idsUnicos.slice(i, i + BATCH_SIZE);
-
-        await Promise.all(batch.map(async id => {
-          try {
-            const resultado = await getFiltrado('/materia_prima', {
-              select: 'id,nome',
-              id: [id]
-            });
-
-            for (const reg of (Array.isArray(resultado) ? resultado : [])) {
-              nomesUltimosInsumos.set(Number(reg.id), reg.nome || null);
-            }
-          } catch (erroMP) {
-            console.error('Falha ao buscar matéria-prima para ultimo_insumo:', id, erroMP?.message || erroMP);
-          }
-        }));
+      const materiasUltimas = await carregarMateriasPorIds(idsUnicos, { select: 'id,nome' });
+      for (const id of idsUnicos) {
+        const materia = materiasUltimas.get(id);
+        nomesUltimosInsumos.set(id, materia?.nome || null);
       }
     }
 
@@ -699,10 +718,15 @@ async function atualizarProduto(id, dados) {
 }
 
 async function excluirProduto(id) {
+  const inicioTotal = Date.now();
+  let inicioEtapa = inicioTotal;
+
   const produto = await fetchSingle('produtos', { id });
   if (!produto) {
     throw new Error('Produto não encontrado');
   }
+  console.info(`[excluirProduto] produto em ${Date.now() - inicioEtapa}ms`);
+  inicioEtapa = Date.now();
 
   const orcamentos = await getFiltrado('/orcamentos_itens', {
     select: 'id',
@@ -712,21 +736,27 @@ async function excluirProduto(id) {
   if (Array.isArray(orcamentos) && orcamentos.length > 0) {
     throw new Error('Produto existe em Orçamentos, não é possível realizar a ação!');
   }
+  console.info(`[excluirProduto] orcamentos em ${Date.now() - inicioEtapa}ms`);
+  inicioEtapa = Date.now();
 
   const insumos = await getFiltrado('/produtos_insumos', {
     select: 'id',
     produto_codigo: produto.codigo
   });
-  for (const insumo of Array.isArray(insumos) ? insumos : []) {
-    await pool.delete(`/produtos_insumos/${insumo.id}`);
-  }
+  await Promise.all(
+    (Array.isArray(insumos) ? insumos : []).map(insumo => pool.delete(`/produtos_insumos/${insumo.id}`))
+  );
+  console.info(`[excluirProduto] insumos em ${Date.now() - inicioEtapa}ms`);
+  inicioEtapa = Date.now();
 
   const lotes = await carregarLotesSeguros({ select: 'id', produto_id: id });
-  for (const lote of Array.isArray(lotes) ? lotes : []) {
-    await executarLotes('delete', `/${lote.id}`);
-  }
+  await Promise.all(
+    (Array.isArray(lotes) ? lotes : []).map(lote => executarLotes('delete', `/${lote.id}`))
+  );
+  console.info(`[excluirProduto] lotes em ${Date.now() - inicioEtapa}ms`);
 
   await pool.delete(`/produtos/${id}`);
+  console.info(`[excluirProduto] total em ${Date.now() - inicioTotal}ms`);
   return true;
 }
 
