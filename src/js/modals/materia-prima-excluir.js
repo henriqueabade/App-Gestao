@@ -19,9 +19,13 @@
         }
       });
       showToast('Insumo excluído com sucesso!', 'success');
+      if (window.carregarMateriais) {
+        await window.carregarMateriais();
+      } else {
+        document.dispatchEvent(new CustomEvent('materiaPrima:refresh'));
+      }
       close();
       Modal.close('editarInsumo');
-      carregarMateriais();
     }catch(err){
       console.error(err);
       showToast('Erro ao excluir, insumo existe em um produto', 'error');

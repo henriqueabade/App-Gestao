@@ -19,8 +19,11 @@ let produtoActionsBound = false;
 
 async function carregarProdutos() {
     try {
+        const categoriaAtual = document.getElementById('filterCategory')?.value || '';
+        const statusAtual = document.getElementById('filterStatus')?.value || '';
+
         listaProdutos = await (window.electronAPI?.listarProdutos?.() ?? []);
-        popularFiltros();
+        popularFiltros({ categoriaAtual, statusAtual });
         aplicarFiltro(true);
     } catch (err) {
         console.error('Erro ao carregar produtos', err);
@@ -161,18 +164,26 @@ function garantirEventosAcoesProdutos() {
     });
 }
 
-function popularFiltros() {
+function popularFiltros({ categoriaAtual = '', statusAtual = '' } = {}) {
     const categoriaSelect = document.getElementById('filterCategory');
     const statusSelect = document.getElementById('filterStatus');
     if (categoriaSelect) {
         const categorias = [...new Set(listaProdutos.map(p => p.categoria).filter(Boolean))];
+        if (categoriaAtual && !categorias.includes(categoriaAtual)) {
+            categorias.unshift(categoriaAtual);
+        }
         categoriaSelect.innerHTML = '<option value="">Todas as Categorias</option>' +
             categorias.map(c => `<option value="${c}">${c}</option>`).join('');
+        if (categoriaAtual) categoriaSelect.value = categoriaAtual;
     }
     if (statusSelect) {
         const status = [...new Set(listaProdutos.map(p => p.status).filter(Boolean))];
+        if (statusAtual && !status.includes(statusAtual)) {
+            status.unshift(statusAtual);
+        }
         statusSelect.innerHTML = '<option value="">Todos</option>' +
             status.map(s => `<option value="${s}">${s}</option>`).join('');
+        if (statusAtual) statusSelect.value = statusAtual;
     }
 }
 
@@ -434,6 +445,10 @@ function initProdutos() {
 
     document.getElementById('produtosEmptyNew')?.addEventListener('click', () => {
         document.getElementById('btnNovoProduto')?.click();
+    });
+
+    document.addEventListener('produtos:refresh', () => {
+        carregarProdutos();
     });
 
     carregarProdutos();

@@ -30,6 +30,11 @@ function initMateriaPrima() {
     document.getElementById('btnLimpar')?.addEventListener('click', limparFiltros);
     document.getElementById('zeroStock')?.addEventListener('change', aplicarFiltros);
 
+    document.addEventListener('materiaPrima:refresh', async () => {
+        await carregarMateriais();
+        aplicarFiltros();
+    });
+
     const novoBtn = document.getElementById('btnNovoInsumo');
     novoBtn?.addEventListener('click', event => {
         event.stopPropagation();
