@@ -418,11 +418,7 @@
 
       showToast('Peça criada com sucesso!', 'success');
       close();
-      if (window.carregarProdutos) {
-        await window.carregarProdutos();
-      } else {
-        document.dispatchEvent(new CustomEvent('produtos:refresh'));
-      }
+      if(typeof carregarProdutos === 'function') await carregarProdutos();
     }catch(err){
       console.error('Erro ao criar produto', err);
       if(err?.code === 'CODIGO_EXISTE'){
