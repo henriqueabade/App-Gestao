@@ -126,6 +126,32 @@ async function executarLotes(method, pathSuffix = '', payload) {
   return pool[method](`${LOTES_ENDPOINT}${pathSuffix}`, payload);
 }
 
+const LOTES_CACHE_TTL_MS = 30000;
+const LOTES_CACHE_ALERTA_LIMITE = 5000;
+let lotesCache = null;
+
+function obterCacheLotes(agora, queryKey) {
+  if (!lotesCache || lotesCache.queryKey !== queryKey) return null;
+  if (agora - lotesCache.fetchedAt > LOTES_CACHE_TTL_MS) return null;
+  return lotesCache;
+}
+
+function salvarCacheLotes(agora, queryKey, lotes) {
+  const lista = Array.isArray(lotes) ? lotes : [];
+  lotesCache = {
+    fetchedAt: agora,
+    queryKey,
+    lotes: lista,
+    quantidade: lista.length
+  };
+  if (lista.length > LOTES_CACHE_ALERTA_LIMITE) {
+    console.warn(
+      'Aviso: carga elevada de lotes em produtos_em_cada_ponto.',
+      { quantidade: lista.length }
+    );
+  }
+}
+
 const MATERIAS_CACHE_TTL_MS = 30000;
 const materiasCache = new Map();
 const MATERIAS_SELECT_PADRAO = 'id,nome,preco_unitario,unidade,processo';
@@ -292,7 +318,14 @@ async function montarProdutoComInsumos(produtoCodigo, produtoId) {
 async function listarProdutos() {
   try {
     const produtos = await pool.get('/produtos');
-    const lotes = await carregarLotesSeguros({ select: 'produto_id,quantidade' });
+    const queryLotes = { select: 'produto_id,quantidade' };
+    const queryKey = JSON.stringify(queryLotes);
+    const agora = Date.now();
+    const cache = obterCacheLotes(agora, queryKey);
+    const lotes = cache ? cache.lotes : await carregarLotesSeguros(queryLotes);
+    if (!cache) {
+      salvarCacheLotes(agora, queryKey, lotes);
+    }
     const listaProdutos = Array.isArray(produtos) ? produtos : [];
     const listaLotes = Array.isArray(lotes) ? lotes : [];
 
