@@ -680,9 +680,18 @@
               quantidade_total: produtoCriado?.quantidade_total ?? 0
             }, { mode: 'add' });
           }
-          if (typeof carregarProdutos === 'function') carregarProdutos();
           showToast('Peça clonada com sucesso!', 'success');
           close();
+          const novoProduto = {
+            id: produtoCriado?.id,
+            codigo: cloneCodigo,
+            nome: cloneNome
+          };
+          if (typeof window.recarregarProdutos === 'function') {
+            window.recarregarProdutos({ novoProduto, origem: 'clone' });
+          } else if (typeof carregarProdutos === 'function') {
+            carregarProdutos();
+          }
         } catch (err) {
           console.error('Erro ao clonar produto', err);
           if (err?.code === 'CODIGO_EXISTE' || err?.code === 'NOME_EXISTE') {

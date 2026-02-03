@@ -4,7 +4,9 @@
 let listaProdutos = [];
 let refreshInProgress = false;
 let refreshQueued = false;
+let refreshQueuedOptions = null;
 let filtrosAplicados = {
+    busca: '',
     categoria: '',
     status: '',
     precoMin: '',
@@ -12,6 +14,7 @@ let filtrosAplicados = {
     zeroEstoque: false
 };
 let filtrosPendentes = false;
+let avisoNovoItemEl = null;
 
 // Controle de popup de informações do produto
 let produtosRenderizados = [];
@@ -19,15 +22,22 @@ let currentProductPopup = null;
 let productInfoEventsBound = false;
 let produtoActionsBound = false;
 
-async function carregarProdutos() {
+async function carregarProdutos(options = {}) {
     if (refreshInProgress) {
         refreshQueued = true;
+        refreshQueuedOptions = options;
         return;
     }
     refreshInProgress = true;
     try {
         listaProdutos = await (window.electronAPI?.listarProdutos?.() ?? []);
         popularFiltros();
+        if (options.resetFiltros) {
+            resetarFiltrosUI();
+        }
+        if (options.novoProduto) {
+            sinalizarNovoProduto(options.novoProduto, options.origem);
+        }
         aplicarFiltro(true);
     } catch (err) {
         console.error('Erro ao carregar produtos', err);
@@ -36,11 +46,14 @@ async function carregarProdutos() {
         refreshInProgress = false;
         if (refreshQueued) {
             refreshQueued = false;
-            carregarProdutos();
+            const queuedOptions = refreshQueuedOptions || {};
+            refreshQueuedOptions = null;
+            carregarProdutos(queuedOptions);
         }
     }
 }
 window.carregarProdutos = carregarProdutos;
+window.recarregarProdutos = carregarProdutos;
 
 function atualizarProdutoLocal(produto, { mode } = {}) {
     if (!produto) return;
@@ -207,7 +220,8 @@ function popularFiltros() {
 }
 
 function aplicarFiltro(aplicarNovos = false) {
-    const busca = document.getElementById('filterSearch')?.value.toLowerCase() || '';
+    const buscaRaw = document.getElementById('filterSearch')?.value || '';
+    const busca = buscaRaw.trim().toLowerCase();
     const categoria = aplicarNovos ? (document.getElementById('filterCategory')?.value || '') : filtrosAplicados.categoria;
     const status = aplicarNovos ? (document.getElementById('filterStatus')?.value || '') : filtrosAplicados.status;
     const precoMinStr = aplicarNovos ? document.getElementById('filterPriceMin')?.value : filtrosAplicados.precoMin;
@@ -242,14 +256,29 @@ function aplicarFiltro(aplicarNovos = false) {
     }
 
     if (aplicarNovos) {
-        filtrosAplicados = { categoria, status, precoMin: precoMinStr || '', precoMax: precoMaxStr || '', zeroEstoque: !!zeroEstoque };
+        filtrosAplicados = {
+            busca: buscaRaw.trim(),
+            categoria,
+            status,
+            precoMin: precoMinStr || '',
+            precoMax: precoMaxStr || '',
+            zeroEstoque: !!zeroEstoque
+        };
         filtrosPendentes = false;
     }
 
     renderProdutos(filtrados);
+    registrarFiltroAplicado({ busca: buscaRaw, categoria, status, precoMinStr, precoMaxStr, zeroEstoque, total: listaProdutos.length, exibidos: filtrados.length });
+    avaliarNovoProdutoFiltrado(filtrados);
 }
 
 function limparFiltros() {
+    resetarFiltrosUI();
+    aplicarFiltro(true);
+    ocultarAvisoNovoItem();
+}
+
+function resetarFiltrosUI() {
     const busca = document.getElementById('filterSearch');
     const categoria = document.getElementById('filterCategory');
     const status = document.getElementById('filterStatus');
@@ -262,12 +291,116 @@ function limparFiltros() {
     if (precoMin) precoMin.value = '';
     if (precoMax) precoMax.value = '';
     if (zero) zero.checked = false;
-    filtrosAplicados = { categoria: '', status: '', precoMin: '', precoMax: '', zeroEstoque: false };
+    filtrosAplicados = { busca: '', categoria: '', status: '', precoMin: '', precoMax: '', zeroEstoque: false };
     filtrosPendentes = false;
-    aplicarFiltro(false);
 }
 function marcarFiltrosPendentes() {
     filtrosPendentes = true;
+}
+
+function filtrosAtivos({ busca, categoria, status, precoMinStr, precoMaxStr, zeroEstoque } = {}) {
+    const hasBusca = typeof busca === 'string' && busca.trim().length > 0;
+    return Boolean(
+        hasBusca ||
+        categoria ||
+        status ||
+        (precoMinStr && String(precoMinStr).trim() !== '') ||
+        (precoMaxStr && String(precoMaxStr).trim() !== '') ||
+        zeroEstoque
+    );
+}
+
+function registrarFiltroAplicado({ busca, categoria, status, precoMinStr, precoMaxStr, zeroEstoque, total, exibidos } = {}) {
+    if (!filtrosAtivos({ busca, categoria, status, precoMinStr, precoMaxStr, zeroEstoque })) return;
+    const detalhes = {
+        busca: (busca || '').trim(),
+        categoria: categoria || '',
+        status: status || '',
+        precoMin: precoMinStr || '',
+        precoMax: precoMaxStr || '',
+        zeroEstoque: !!zeroEstoque,
+        total: Number(total) || 0,
+        exibidos: Number(exibidos) || 0
+    };
+    window.electronAPI?.log?.(`produtos.lista_filtrada ${JSON.stringify(detalhes)}`);
+}
+
+function avaliarNovoProdutoFiltrado(filtrados) {
+    if (!pendingNovoProduto) return;
+    const filtrosEmUso = filtrosAtivos({
+        busca: filtrosAplicados.busca || document.getElementById('filterSearch')?.value || '',
+        categoria: filtrosAplicados.categoria,
+        status: filtrosAplicados.status,
+        precoMinStr: filtrosAplicados.precoMin,
+        precoMaxStr: filtrosAplicados.precoMax,
+        zeroEstoque: filtrosAplicados.zeroEstoque
+    });
+    const produto = pendingNovoProduto;
+    const encontrado = filtrados.some(item => (
+        (produto?.id != null && item.id === produto.id) ||
+        (produto?.codigo && item.codigo === produto.codigo)
+    ));
+
+    if (filtrosEmUso && !encontrado) {
+        const aviso = 'Novo item criado, mas filtrado.';
+        window.showToast?.(aviso, 'info');
+        exibirAvisoNovoItem(aviso);
+        window.electronAPI?.log?.(`produtos.novo_item_filtrado origem=${pendingNovoProdutoOrigem || 'n/a'} id=${produto?.id ?? ''} codigo=${produto?.codigo ?? ''}`);
+    } else {
+        ocultarAvisoNovoItem();
+    }
+
+    pendingNovoProduto = null;
+    pendingNovoProdutoOrigem = '';
+}
+
+function exibirAvisoNovoItem(mensagem) {
+    const container = obterAvisoNovoItemContainer();
+    if (!container) return;
+    const messageEl = container.querySelector('[data-role="aviso-mensagem"]');
+    if (messageEl) messageEl.textContent = mensagem;
+    container.classList.remove('hidden');
+}
+
+function ocultarAvisoNovoItem() {
+    const container = obterAvisoNovoItemContainer();
+    if (!container) return;
+    container.classList.add('hidden');
+}
+
+function obterAvisoNovoItemContainer() {
+    if (avisoNovoItemEl) return avisoNovoItemEl;
+    const filtroBar = document.querySelector('.filter-bar');
+    const filtroWrapper = filtroBar?.closest('.glass-surface');
+    const parent = filtroWrapper?.parentElement;
+    if (!parent || !filtroWrapper) return null;
+    const container = document.createElement('div');
+    container.id = 'produtosFilteredNotice';
+    container.className = 'glass-surface rounded-xl p-4 mb-6 border border-yellow-500/20 text-yellow-100 flex flex-col md:flex-row md:items-center md:justify-between gap-4 hidden';
+    container.innerHTML = `
+        <div class="flex items-center gap-3">
+            <i class="fas fa-filter"></i>
+            <p class="text-sm" data-role="aviso-mensagem">Novo item criado, mas filtrado.</p>
+        </div>
+        <button type="button" class="btn-warning text-white rounded-md px-4 py-2 text-sm font-medium" data-role="aviso-reset">
+            Limpar filtros e recarregar
+        </button>
+    `;
+    parent.insertBefore(container, filtroWrapper.nextSibling);
+    container.querySelector('[data-role="aviso-reset"]')?.addEventListener('click', () => {
+        ocultarAvisoNovoItem();
+        carregarProdutos({ resetFiltros: true });
+    });
+    avisoNovoItemEl = container;
+    return avisoNovoItemEl;
+}
+
+let pendingNovoProduto = null;
+let pendingNovoProdutoOrigem = '';
+
+function sinalizarNovoProduto(produto, origem) {
+    pendingNovoProduto = produto;
+    pendingNovoProdutoOrigem = origem || '';
 }
 
 function formatCurrency(value) {

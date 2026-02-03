@@ -437,7 +437,16 @@
 
       showToast('Peça criada com sucesso!', 'success');
       close();
-      if(typeof carregarProdutos === 'function') carregarProdutos();
+      const novoProduto = {
+        id: produtoCriado?.id,
+        codigo,
+        nome
+      };
+      if (typeof window.recarregarProdutos === 'function') {
+        window.recarregarProdutos({ novoProduto, origem: 'create' });
+      } else if (typeof carregarProdutos === 'function') {
+        carregarProdutos();
+      }
     }catch(err){
       console.error('Erro ao criar produto', err);
       if(err?.code === 'CODIGO_EXISTE'){
