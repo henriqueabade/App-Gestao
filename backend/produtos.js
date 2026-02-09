@@ -960,8 +960,9 @@ async function salvarProdutoDetalhado(codigoOriginal, produto, itens, produtoId)
   const codigoDestino = codigo !== undefined ? codigo : codigoOriginal;
   const ncmSanitizado =
     ncm !== undefined && ncm !== null ? String(ncm).slice(0, 8) : undefined;
+  const codigoAlterado = codigo !== undefined && codigo !== codigoOriginal;
 
-  if (codigo !== undefined && codigo !== codigoOriginal) {
+  if (codigoAlterado) {
     const dup = await fetchSingle('produtos', { codigo });
     if (dup) {
       const err = new Error('Código já existe');
@@ -1019,6 +1020,18 @@ async function salvarProdutoDetalhado(codigoOriginal, produto, itens, produtoId)
       throw friendly;
     }
     throw err;
+  }
+
+  if (codigoAlterado) {
+    const itensProduto = await getFiltrado('produtos_insumos', {
+      produto_id: produtoAtual.id,
+      select: 'id,produto_codigo'
+    });
+    for (const item of Array.isArray(itensProduto) ? itensProduto : []) {
+      await pool.put(`/produtos_insumos/${item.id}`, {
+        produto_codigo: codigoDestino
+      });
+    }
   }
 
   for (const del of itens?.deletados || []) {
