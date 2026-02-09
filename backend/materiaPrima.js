@@ -285,28 +285,28 @@ async function registrarSaida(id, quantidade, usuarioId = null) {
 
 async function atualizarProdutosComInsumo(insumoId) {
   const produtosRelacionados = await getFiltrado('/produtos_insumos', {
-    select: 'produto_codigo,insumo_id',
+    select: 'produto_id,insumo_id',
     insumo_id: insumoId
   });
 
-  const codigos = new Set(
+  const produtosIds = new Set(
     (Array.isArray(produtosRelacionados) ? produtosRelacionados : [])
-      .map(r => r?.produto_codigo)
+      .map(r => r?.produto_id)
       .filter(Boolean)
   );
 
-  for (const produtoCodigo of codigos) {
+  for (const produtoId of produtosIds) {
     const produto = await fetchSingle('produtos', {
       select:
         'id,codigo,pct_fabricacao,pct_acabamento,pct_montagem,pct_embalagem,pct_markup,pct_comissao,pct_imposto',
-      codigo: produtoCodigo
+      id: produtoId
     });
 
     if (!produto?.id) continue;
 
     const itens = await getFiltrado('/produtos_insumos', {
       select: 'quantidade,insumo_id',
-      produto_codigo: produtoCodigo
+      produto_id: produtoId
     });
 
     const idsMateria = Array.from(
