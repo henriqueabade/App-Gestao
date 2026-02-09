@@ -24,6 +24,7 @@
         sel.innerHTML = '<option value="">Selecionar Coleção</option>' + colecoes.map(c => `<option value="${c}">${c}</option>`).join('');
         sel.value = nome;
       });
+      window.dispatchEvent(new CustomEvent('colecaoAtualizada', { detail: { selecionada: nome } }));
     }catch(err){
       console.error(err);
       showToast('Erro ao adicionar coleção', 'error');

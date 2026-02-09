@@ -1,7 +1,13 @@
 // Modal de novo produto
 (function(){
   const overlay = document.getElementById('novoProdutoOverlay');
-  const close = () => Modal.close('novoProduto');
+  let handleColecaoAtualizada = null;
+  const close = () => {
+    if (handleColecaoAtualizada) {
+      window.removeEventListener('colecaoAtualizada', handleColecaoAtualizada);
+    }
+    Modal.close('novoProduto');
+  };
   overlay.addEventListener('click', e => { if(e.target === overlay) close(); });
   document.getElementById('voltarNovoProduto').addEventListener('click', close);
   document.addEventListener('keydown', function esc(e){ if(e.key==='Escape'){ close(); document.removeEventListener('keydown', esc); } });
@@ -99,16 +105,30 @@
   }
 
   if(colecaoSelect){
-    async function carregarColecoes(){
+    async function carregarColecoes({ selecionada, removida } = {}){
       try{
         const colecoes = await window.electronAPI.listarColecoes();
         colecaoSelect.innerHTML = '<option value="">Selecionar Coleção</option>' +
           colecoes.map(c => `<option value="${c}">${c}</option>`).join('');
+        const valorAtual = colecaoSelect.value;
+        let valorSelecionado = selecionada ?? valorAtual;
+        if (removida && valorSelecionado === removida) {
+          valorSelecionado = '';
+        }
+        if (valorSelecionado && colecoes.includes(valorSelecionado)) {
+          colecaoSelect.value = valorSelecionado;
+        } else {
+          colecaoSelect.value = '';
+        }
       }catch(err){
         console.error('Erro ao carregar coleções', err);
       }
     }
     carregarColecoes();
+    handleColecaoAtualizada = (event) => {
+      carregarColecoes(event?.detail || {});
+    };
+    window.addEventListener('colecaoAtualizada', handleColecaoAtualizada);
     document.getElementById('addColecaoNovo')?.addEventListener('click', () => {
       Modal.open('modals/produtos/colecao-novo.html', '../js/modals/produto-colecao-novo.js', 'novaColecao', true);
     });

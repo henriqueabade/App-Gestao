@@ -50,6 +50,7 @@
       document.querySelectorAll('select#colecaoSelect').forEach(sel => {
         sel.innerHTML = '<option value="">Selecionar Coleção</option>' + colecoes.map(c => `<option value="${c}">${c}</option>`).join('');
       });
+      window.dispatchEvent(new CustomEvent('colecaoAtualizada', { detail: { removida: nome } }));
       showToast('Coleção excluída', 'success');
       close();
     } catch (err) {
