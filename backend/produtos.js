@@ -286,20 +286,58 @@ async function carregarProdutoBase(produtoCodigo, produtoId) {
   return Array.isArray(produtos) ? produtos[0] : null;
 }
 
-async function carregarInsumosBase(produtoCodigo, produtoId) {
-  const itensQuery = {
-    select: 'id,produto_id,insumo_id,quantidade,ordem_insumo'
-  };
+function mesclarItensPorId(...listas) {
+  const itensUnificados = [];
+  const itensPorId = new Map();
 
-  // 🔥 produto_id é a referência principal na tabela
-  if (produtoId) {
-    itensQuery.produto_id = produtoId;
-  } else if (produtoCodigo) {
-    itensQuery.produto_codigo = produtoCodigo;
+  for (const lista of listas) {
+    for (const item of Array.isArray(lista) ? lista : []) {
+      const id = item?.id;
+      if (id === undefined || id === null) {
+        itensUnificados.push(item);
+        continue;
+      }
+      if (!itensPorId.has(id)) {
+        itensPorId.set(id, item);
+        itensUnificados.push(item);
+      }
+    }
   }
 
-  const itens = await getFiltrado('/produtos_insumos', itensQuery);
-  return Array.isArray(itens) ? itens : [];
+  return itensUnificados;
+}
+
+async function carregarInsumosBase(produtoCodigo, produtoId) {
+  const select = 'id,produto_id,insumo_id,quantidade,ordem_insumo';
+  const produtoIdNum = Number(produtoId);
+  const produtoIdValido = Number.isFinite(produtoIdNum);
+
+  let itensPrimarios = [];
+  if (produtoIdValido) {
+    itensPrimarios = await getFiltrado('/produtos_insumos', {
+      select,
+      produto_id: produtoIdNum
+    });
+  } else if (produtoCodigo) {
+    itensPrimarios = await getFiltrado('/produtos_insumos', {
+      select,
+      produto_codigo: produtoCodigo
+    });
+  }
+
+  let itensFallback = [];
+  if ((!Array.isArray(itensPrimarios) || itensPrimarios.length === 0) && produtoCodigo) {
+    console.debug('[carregarInsumosBase] fallback por produto_codigo acionado', {
+      produtoId,
+      produtoCodigo
+    });
+    itensFallback = await getFiltrado('/produtos_insumos', {
+      select,
+      produto_codigo: produtoCodigo
+    });
+  }
+
+  return mesclarItensPorId(itensPrimarios, itensFallback);
 }
 
 
@@ -641,18 +679,36 @@ async function listarItensProcessoProduto(codigo, etapa, busca = '', produtoId =
 
   const etapaFiltroAtivo = Boolean(etapaBusca || etapaIdBusca);
 
-  const itensQuery = { select: 'insumo_id,produto_id' };
+  const produtoIdNum = Number(produtoId);
+  const produtoIdValido = Number.isFinite(produtoIdNum);
+  const itensSelect = 'insumo_id,produto_id';
 
-  // 🔥 produto_id é a referência principal
-  if (produtoId) {
-    itensQuery.produto_id = produtoId;
+  let itensPrimarios = [];
+  if (produtoIdValido) {
+    itensPrimarios = await getFiltrado('/produtos_insumos', {
+      select: itensSelect,
+      produto_id: produtoIdNum
+    });
   } else if (codigo) {
-    itensQuery.produto_codigo = codigo;
+    itensPrimarios = await getFiltrado('/produtos_insumos', {
+      select: itensSelect,
+      produto_codigo: codigo
+    });
   }
 
-  const itens = await getFiltrado('/produtos_insumos', itensQuery);
+  let itensFallback = [];
+  if ((!Array.isArray(itensPrimarios) || itensPrimarios.length === 0) && codigo) {
+    console.debug('[listarItensProcessoProduto] fallback por produto_codigo acionado', {
+      produtoId,
+      produtoCodigo: codigo
+    });
+    itensFallback = await getFiltrado('/produtos_insumos', {
+      select: itensSelect,
+      produto_codigo: codigo
+    });
+  }
 
-  const lista = Array.isArray(itens) ? itens : [];
+  const lista = mesclarItensPorId(itensPrimarios, itensFallback);
   const materias = await carregarMateriasPorIds(lista.map(item => item?.insumo_id));
 
   const filtrados = Array.from(materias.values())
