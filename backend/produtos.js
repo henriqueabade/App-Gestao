@@ -952,7 +952,22 @@ async function salvarProdutoDetalhado(codigoOriginal, produto, itens, produtoId)
     categoria,
     status
   });
-  await pool.put(`/produtos/${produtoAtual.id}`, payload);
+  try {
+    await pool.put(`/produtos/${produtoAtual.id}`, payload);
+  } catch (err) {
+    const message = err?.message ? String(err.message) : '';
+    if (message.includes('produtos_insumos_produto_codigo_fkey') || /foreign key/i.test(message)) {
+      console.error(
+        '[salvarProdutoDetalhado] FK produtos_insumos_produto_codigo_fkey sem ON UPDATE CASCADE.'
+      );
+      const friendly = new Error(
+        'Falha ao atualizar o código do produto. Verifique se a FK produtos_insumos_produto_codigo_fkey está com ON UPDATE CASCADE.'
+      );
+      friendly.code = 'FK_SEM_CASCADE';
+      throw friendly;
+    }
+    throw err;
+  }
 
   for (const del of itens?.deletados || []) {
     const deleted = await pool.delete(`/produtos_insumos/${del.id}`).catch(() => null);

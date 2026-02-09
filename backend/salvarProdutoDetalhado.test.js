@@ -21,7 +21,7 @@ function createMockDb() {
   );`);
   db.public.none(`CREATE TABLE produtos_insumos (
     id serial primary key,
-    produto_codigo text references produtos(codigo),
+    produto_codigo text references produtos(codigo) ON UPDATE CASCADE,
     insumo_id integer,
     quantidade numeric,
     ordem_insumo integer,
