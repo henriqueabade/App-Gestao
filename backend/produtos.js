@@ -823,7 +823,38 @@ async function atualizarProduto(id, dados) {
     status,
     ncm: ncmSanitizado
   });
+  const codigoAlterado = codigo !== undefined && codigo !== atuais.codigo;
+  const codigoAnterior = atuais.codigo;
   const atualizado = await pool.put(`/produtos/${id}`, payload);
+
+  if (codigoAlterado) {
+    const novoCodigo = payload.codigo;
+    let insumos = await getFiltrado('/produtos_insumos', {
+      select: 'id,produto_codigo',
+      produto_id: id
+    });
+
+    if (!Array.isArray(insumos) || insumos.length === 0) {
+      insumos = await getFiltrado('/produtos_insumos', {
+        select: 'id,produto_codigo',
+        produto_codigo: codigoAnterior
+      });
+    }
+
+    const insumosParaAtualizar = (Array.isArray(insumos) ? insumos : []).filter(insumo => {
+      return String(insumo?.produto_codigo ?? '') !== String(novoCodigo ?? '');
+    });
+
+    await Promise.all(
+      insumosParaAtualizar.map(insumo =>
+        pool.put(`/produtos_insumos/${insumo.id}`, { produto_codigo: novoCodigo })
+      )
+    );
+
+    console.info(
+      `[atualizarProduto] produto_codigo sincronizado em ${insumosParaAtualizar.length} registros`
+    );
+  }
 
   return atualizado;
 }
