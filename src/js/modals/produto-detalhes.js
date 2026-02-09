@@ -28,8 +28,16 @@
 
   async function carregarDetalhes(codigo, id){
     try {
+      const produtoIdNum = Number(id);
+      if (!Number.isFinite(produtoIdNum) || produtoIdNum <= 0) {
+        console.error('Produto ID inválido para carregar detalhes', { produtoId: id });
+        return;
+      }
       // Ajuste: envia produtoCodigo (string) e produtoId (int)
-      const { lotes: dados } = await window.electronAPI.listarDetalhesProduto({ produtoCodigo: codigo, produtoId: id });
+      const { lotes: dados } = await window.electronAPI.listarDetalhesProduto({
+        produtoCodigo: codigo,
+        produtoId: produtoIdNum
+      });
       item.lotes = dados;
       const tbody = document.getElementById('detalhesTableBody');
       if(!tbody) return;
