@@ -117,6 +117,25 @@ function normalizarCorpoErro(err) {
   return err?.body || null;
 }
 
+function montarPayloadProduto(produtoAtual, sobrescritas = {}) {
+  const payload = {};
+  if (produtoAtual && typeof produtoAtual === 'object') {
+    for (const [chave, valor] of Object.entries(produtoAtual)) {
+      if (valor === null || valor === undefined) continue;
+      if (typeof valor === 'object') continue;
+      payload[chave] = valor;
+    }
+  }
+
+  for (const [chave, valor] of Object.entries(sobrescritas)) {
+    if (valor !== undefined) {
+      payload[chave] = valor;
+    }
+  }
+
+  return payload;
+}
+
 /**
  * Lista todos os produtos (resumo)
  */
@@ -706,12 +725,14 @@ async function adicionarProduto(dados) {
 }
 
 async function atualizarProduto(id, dados) {
-  const { codigo, nome, preco_venda, pct_markup, status } = dados;
+  const { codigo, nome, preco_venda, pct_markup, status, ncm } = dados;
   const categoria = dados.categoria || (nome ? String(nome).trim().split(' ')[0] : null);
   const atuais = await fetchSingle('produtos', { id });
   if (!atuais) {
     throw new Error('Produto não encontrado');
   }
+  const ncmSanitizado =
+    ncm !== undefined && ncm !== null ? String(ncm).slice(0, 8) : undefined;
   if (codigo !== undefined && codigo !== atuais.codigo) {
     const dup = await fetchSingle('produtos', { codigo });
     if (dup) {
@@ -728,14 +749,16 @@ async function atualizarProduto(id, dados) {
       throw err;
     }
   }
-  const atualizado = await pool.put(`/produtos/${id}`, {
+  const payload = montarPayloadProduto(atuais, {
     codigo,
     nome,
     categoria,
     preco_venda,
     pct_markup,
-    status
+    status,
+    ncm: ncmSanitizado
   });
+  const atualizado = await pool.put(`/produtos/${id}`, payload);
 
   if (codigo !== undefined && codigo !== atuais.codigo) {
     const insumos = await getFiltrado('/produtos_insumos', {
@@ -913,7 +936,7 @@ async function salvarProdutoDetalhado(codigoOriginal, produto, itens, produtoId)
     insumoIds.add(ins.insumo_id);
   }
 
-  await pool.put(`/produtos/${produtoAtual.id}`, {
+  const payload = montarPayloadProduto(produtoAtual, {
     codigo: codigoDestino,
     pct_fabricacao,
     pct_acabamento,
@@ -924,11 +947,12 @@ async function salvarProdutoDetalhado(codigoOriginal, produto, itens, produtoId)
     pct_imposto,
     preco_base,
     preco_venda,
-    nome: nome !== undefined ? nome : produtoAtual.nome,
-    ncm: ncmSanitizado !== undefined ? ncmSanitizado : produtoAtual.ncm,
-    categoria: categoria !== undefined ? categoria : produtoAtual.categoria,
-    status: status !== undefined ? status : produtoAtual.status
+    nome,
+    ncm: ncmSanitizado,
+    categoria,
+    status
   });
+  await pool.put(`/produtos/${produtoAtual.id}`, payload);
 
   for (const del of itens?.deletados || []) {
     const deleted = await pool.delete(`/produtos_insumos/${del.id}`).catch(() => null);
