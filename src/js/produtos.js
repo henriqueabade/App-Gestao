@@ -101,8 +101,6 @@ function renderProdutos(produtos) {
 }
 
 function criarLinhaProduto(produto, index) {
-    const statusText = produto.status || '';
-    const badgeClass = statusText.toLowerCase() === 'em linha' ? 'badge-success' : 'badge-danger';
     const markup = formatPercent(produto.pct_markup);
     const quantidade = produto.quantidade_total ?? 0;
     const codigo = produto.codigo || '';
@@ -115,20 +113,25 @@ function criarLinhaProduto(produto, index) {
     return `
         <tr class="transition-colors duration-150" data-index="${index}"${produtoId} style="cursor: pointer;">
             <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-white relative">
-                <div class="flex items-center">
-                    <span>${codigo}</span>
+                <div class="flex items-center min-w-0">
+                    <span class="cell-text" title="${codigo}">${codigo}</span>
                     <i class="info-icon ml-2" data-id="${infoId}"></i>
                 </div>
             </td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-white">${nome}</td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-violet)">${categoria}</td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-white">${precoVenda}</td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-green)">${markup}</td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-white">${quantidade}</td>
-            <td class="px-6 py-4 whitespace-nowrap">
-                <span class="${badgeClass} px-3 py-1 rounded-full text-xs font-medium">
-                    ${statusText}
-                </span>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-white">
+                <span class="cell-text" title="${produto.nome || ''}">${nome}</span>
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-violet)">
+                <span class="cell-text" title="${categoria}">${categoria}</span>
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-white">
+                <span class="cell-text" title="${precoVenda}">${precoVenda}</span>
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-green)">
+                <span class="cell-text" title="${markup}">${markup}</span>
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-white">
+                <span class="cell-text" title="${quantidade}">${quantidade}</span>
             </td>
             <td class="px-6 py-4 whitespace-nowrap text-left action-cell">
                 <div class="flex items-center justify-start space-x-2">
@@ -473,6 +476,11 @@ function createPopupContent(item) {
     const { corNome, corAmostra, dimensoes } = extrairCorDimensoes(item);
     const corCss = resolveColorCss(corAmostra);
     const outlineClass = isDarkColor(corCss) ? ' popup-color-bar-outline' : '';
+    const statusText = item.status || '';
+    const badgeClass = statusText.toLowerCase() === 'em linha' ? 'badge-success' : 'badge-danger';
+    const statusSection = statusText
+        ? `<span class="${badgeClass} px-3 py-1 rounded-full text-xs font-medium">${statusText}</span>`
+        : '<p class="popup-info-value">-</p>';
     const corSection = corNome
         ? `
             <div class="popup-color-wrapper">
@@ -505,6 +513,10 @@ function createPopupContent(item) {
           </div>
         </div>
         <div class="popup-info-grid">
+          <div>
+            <p class="popup-info-label">Status:</p>
+            ${statusSection}
+          </div>
           <div>
             <p class="popup-info-label">Cor:</p>
             ${corSection}

@@ -253,6 +253,30 @@ textarea:disabled::placeholder {
     max-height: calc(var(--module-height) - 260px) !important;
 }
 
+.produtos-table {
+    table-layout: fixed;
+}
+
+.produtos-table th,
+.produtos-table td {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.produtos-table th:last-child,
+.produtos-table td:last-child {
+    width: 120px;
+}
+
+.cell-text {
+    display: block;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 #bt-actions {
     margin-top: 1vw;
 }
