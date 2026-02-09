@@ -288,11 +288,15 @@ async function carregarProdutoBase(produtoCodigo, produtoId) {
 
 async function carregarInsumosBase(produtoCodigo, produtoId) {
   const itensQuery = {
-    select: 'id,produto_codigo,insumo_id,quantidade,ordem_insumo'
+    select: 'id,produto_id,insumo_id,quantidade,ordem_insumo'
   };
 
-  // 🔥 SOMENTE produto_codigo EXISTE NA TABELA
-  if (produtoCodigo) itensQuery.produto_codigo = produtoCodigo;
+  // 🔥 produto_id é a referência principal na tabela
+  if (produtoId) {
+    itensQuery.produto_id = produtoId;
+  } else if (produtoCodigo) {
+    itensQuery.produto_codigo = produtoCodigo;
+  }
 
   const itens = await getFiltrado('/produtos_insumos', itensQuery);
   return Array.isArray(itens) ? itens : [];
@@ -637,12 +641,16 @@ async function listarItensProcessoProduto(codigo, etapa, busca = '', produtoId =
 
   const etapaFiltroAtivo = Boolean(etapaBusca || etapaIdBusca);
 
-const itensQuery = { select: 'insumo_id,produto_codigo' };
+  const itensQuery = { select: 'insumo_id,produto_id' };
 
-// 🔥 SOMENTE produto_codigo EXISTE
-if (codigo) itensQuery.produto_codigo = codigo;
+  // 🔥 produto_id é a referência principal
+  if (produtoId) {
+    itensQuery.produto_id = produtoId;
+  } else if (codigo) {
+    itensQuery.produto_codigo = codigo;
+  }
 
-const itens = await getFiltrado('/produtos_insumos', itensQuery);
+  const itens = await getFiltrado('/produtos_insumos', itensQuery);
 
   const lista = Array.isArray(itens) ? itens : [];
   const materias = await carregarMateriasPorIds(lista.map(item => item?.insumo_id));
@@ -760,16 +768,6 @@ async function atualizarProduto(id, dados) {
   });
   const atualizado = await pool.put(`/produtos/${id}`, payload);
 
-  if (codigo !== undefined && codigo !== atuais.codigo) {
-    const insumos = await getFiltrado('/produtos_insumos', {
-      select: 'id',
-      produto_codigo: atuais.codigo
-    });
-    for (const ins of Array.isArray(insumos) ? insumos : []) {
-      await pool.put(`/produtos_insumos/${ins.id}`, { produto_codigo: codigo });
-    }
-  }
-
   return atualizado;
 }
 
@@ -797,7 +795,7 @@ async function excluirProduto(id) {
 
   const insumos = await getFiltrado('/produtos_insumos', {
     select: 'id',
-    produto_codigo: produto.codigo
+    produto_id: produto.id
   });
   await Promise.all(
     (Array.isArray(insumos) ? insumos : []).map(insumo => pool.delete(`/produtos_insumos/${insumo.id}`))
@@ -956,12 +954,10 @@ async function salvarProdutoDetalhado(codigoOriginal, produto, itens, produtoId)
     await pool.put(`/produtos/${produtoAtual.id}`, payload);
   } catch (err) {
     const message = err?.message ? String(err.message) : '';
-    if (message.includes('produtos_insumos_produto_codigo_fkey') || /foreign key/i.test(message)) {
-      console.error(
-        '[salvarProdutoDetalhado] FK produtos_insumos_produto_codigo_fkey sem ON UPDATE CASCADE.'
-      );
+    if (/foreign key/i.test(message)) {
+      console.error('[salvarProdutoDetalhado] Falha de FK ao atualizar produto.');
       const friendly = new Error(
-        'Falha ao atualizar o código do produto. Verifique se a FK produtos_insumos_produto_codigo_fkey está com ON UPDATE CASCADE.'
+        'Falha ao atualizar o produto. Verifique se as referências em produtos_insumos estão coerentes com produto_id.'
       );
       friendly.code = 'FK_SEM_CASCADE';
       throw friendly;
@@ -993,7 +989,7 @@ async function salvarProdutoDetalhado(codigoOriginal, produto, itens, produtoId)
 
   for (const ins of insumosInseridos) {
     await pool.post('/produtos_insumos', {
-      produto_codigo: codigoDestino,
+      produto_id: produtoAtual.id,
       insumo_id: ins.insumo_id,
       quantidade: ins.quantidade,
       ordem_insumo: ins.ordem_insumo
