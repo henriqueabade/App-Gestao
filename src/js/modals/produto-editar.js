@@ -139,8 +139,8 @@
     }
 
     const produtoSelecionado = window.produtoSelecionado;
-    if(!produtoSelecionado || !produtoSelecionado.codigo){
-      showError('Produto não selecionado');
+    if(!produtoSelecionado || !produtoSelecionado.id){
+      showError('Produto inválido ou sem ID');
       return;
     }
 

@@ -359,21 +359,7 @@ async function carregarInsumosBase(produtoCodigo, produtoId) {
     if (Array.isArray(itensPorId) && itensPorId.length > 0) {
       return itensPorId;
     }
-    if (produtoCodigo) {
-      console.debug('[carregarInsumosBase] fallback para produto_codigo após produto_id vazio', {
-        produtoId: produtoIdNum,
-        produtoCodigo
-      });
-    }
   }
-
-  if (produtoCodigo) {
-    return getFiltrado('/produtos_insumos', {
-      select,
-      produto_codigo: produtoCodigo
-    });
-  }
-
   return [];
 }
 
@@ -726,26 +712,9 @@ async function listarItensProcessoProduto(codigo, etapa, busca = '', produtoId =
       select: itensSelect,
       produto_id: produtoIdNum
     });
-  } else if (codigo) {
-    itensPrimarios = await getFiltrado('/produtos_insumos', {
-      select: itensSelect,
-      produto_codigo: codigo
-    });
   }
 
-  let itensFallback = [];
-  if ((!Array.isArray(itensPrimarios) || itensPrimarios.length === 0) && codigo) {
-    console.debug('[listarItensProcessoProduto] fallback por produto_codigo acionado', {
-      produtoId,
-      produtoCodigo: codigo
-    });
-    itensFallback = await getFiltrado('/produtos_insumos', {
-      select: itensSelect,
-      produto_codigo: codigo
-    });
-  }
-
-  const lista = mesclarItensPorId(itensPrimarios, itensFallback);
+  const lista = Array.isArray(itensPrimarios) ? itensPrimarios : [];
   const materias = await carregarMateriasPorIds(lista.map(item => item?.insumo_id));
 
   const filtrados = Array.from(materias.values())
