@@ -18,24 +18,20 @@
     if(titulo) titulo.textContent = `DETALHE DE ESTOQUE – ${item.nome || ''}`;
     const codigoEl = document.getElementById('codigoPeca');
     if(codigoEl) codigoEl.textContent = `Código da Peça: ${item.codigo || ''}`; // subtítulo mostra código da peça
-    carregarDetalhes(item.codigo, item.id).finally(() => {
-      window.dispatchEvent(new CustomEvent('modalSpinnerLoaded', { detail: 'detalhesProduto' }));
-    });
-    window.reloadDetalhesProduto = () => carregarDetalhes(item.codigo, item.id);
+    window.dispatchEvent(new CustomEvent('modalSpinnerLoaded', { detail: 'detalhesProduto' }));
+    window.reloadDetalhesProduto = () => carregarDetalhes(item.id);
   } else {
     window.dispatchEvent(new CustomEvent('modalSpinnerLoaded', { detail: 'detalhesProduto' }));
   }
 
-  async function carregarDetalhes(codigo, id){
+  async function carregarDetalhes(id){
     try {
       const produtoIdNum = Number(id);
       if (!Number.isFinite(produtoIdNum) || produtoIdNum <= 0) {
         console.error('Produto ID inválido para carregar detalhes', { produtoId: id });
         return;
       }
-      // Ajuste: envia produtoCodigo (string) e produtoId (int)
       const { lotes: dados } = await window.electronAPI.listarDetalhesProduto({
-        produtoCodigo: codigo,
         produtoId: produtoIdNum
       });
       item.lotes = dados;
@@ -110,14 +106,14 @@
           }
         });
         showToast('Quantidade atualizada', 'success');
-        carregarDetalhes(item.codigo, item.id);
+        carregarDetalhes(item.id);
         if (typeof carregarProdutos === 'function') carregarProdutos();
       } catch (err) {
         console.error(err);
         showToast('Erro ao atualizar quantidade', 'error');
       }
     });
-    cancelBtn.addEventListener('click', () => carregarDetalhes(item.codigo, item.id));
+    cancelBtn.addEventListener('click', () => carregarDetalhes(item.id));
   }
 
   function excluirLote(dados) {
@@ -133,7 +129,7 @@
       etapa: dados?.etapa,
       itemNome: dados?.ultimo_item,
       reload: () => {
-        carregarDetalhes(item.codigo, item.id);
+        carregarDetalhes(item.id);
         if (typeof carregarProdutos === 'function') carregarProdutos();
       }
     };

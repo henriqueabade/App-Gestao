@@ -3680,10 +3680,9 @@ ipcMain.handle('excluir-produto', async (_e, info) => {
     return { error: err.message };
   }
 });
-ipcMain.handle('listar-detalhes-produto', async (_e, { produtoCodigo, produtoId }) => {
+ipcMain.handle('listar-detalhes-produto', async (_e, { produtoId }) => {
   try {
-    // Ajuste: encaminha ambos os parâmetros para o backend
-    return await listarDetalhesProduto(produtoCodigo, produtoId);
+    return await listarDetalhesProduto(produtoId);
   } catch (err) {
     console.error('Erro ao listar detalhes do produto:', err);
     throw err;

@@ -58,9 +58,12 @@ window.recarregarProdutos = carregarProdutos;
 function atualizarProdutoLocal(produto, { mode } = {}) {
     if (!produto) return;
     const produtoId = produto?.id;
+    if (produtoId == null) {
+        console.error('atualizarProdutoLocal recebeu produto sem id', produto);
+        return;
+    }
     const index = listaProdutos.findIndex(p => (
-        (produtoId != null && p.id === produtoId) ||
-        (produto.codigo && p.codigo === produto.codigo)
+        p.id === produtoId
     ));
     if (mode === 'add' || index === -1) {
         listaProdutos = [...listaProdutos, produto];
@@ -340,8 +343,7 @@ function avaliarNovoProdutoFiltrado(filtrados) {
     });
     const produto = pendingNovoProduto;
     const encontrado = filtrados.some(item => (
-        (produto?.id != null && item.id === produto.id) ||
-        (produto?.codigo && item.codigo === produto.codigo)
+        produto?.id != null && item.id === produto.id
     ));
 
     if (filtrosEmUso && !encontrado) {
@@ -670,11 +672,12 @@ function abrirNovoProduto() {
 }
 
 function abrirEditarProduto(prod) {
-    if (!prod || !prod.codigo) {
+    if (!prod || prod.id == null) {
         showToast('Produto inválido', 'error');
         return;
     }
-    window.produtoSelecionado = prod;
+    const produtoCompleto = listaProdutos.find(item => item?.id === prod.id) || prod;
+    window.produtoSelecionado = produtoCompleto;
     openModalWithSpinner('modals/produtos/editar.html', '../js/modals/produto-editar.js', 'editarProduto');
 }
 
@@ -684,7 +687,12 @@ function abrirExcluirProduto(prod) {
 }
 
 function abrirDetalhesProduto(prod) {
-    window.produtoDetalhes = prod;
+    if (!prod || prod.id == null) {
+        showToast('Produto inválido', 'error');
+        return;
+    }
+    const produtoCompleto = listaProdutos.find(item => item?.id === prod.id) || prod;
+    window.produtoDetalhes = produtoCompleto;
     openModalWithSpinner('modals/produtos/detalhes.html', '../js/modals/produto-detalhes.js', 'detalhesProduto');
 }
 

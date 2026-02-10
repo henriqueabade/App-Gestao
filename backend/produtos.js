@@ -43,7 +43,7 @@ function normalizarListaIds(valor) {
 }
 
 function campoEhId(chave) {
-  return ['id', 'produto_id', 'insumo_id', 'produto_codigo'].includes(chave);
+  return ['id', 'produto_id', 'insumo_id'].includes(chave);
 }
 
 function separarFiltrosQuery(query = {}) {
@@ -275,45 +275,29 @@ function comporItensComMaterias(itensBase = [], materiasPorId = new Map()) {
     );
 }
 
-async function carregarProdutoBase(produtoCodigo, produtoId) {
+async function carregarProdutoBase(produtoId) {
   const produtoIdNum = Number(produtoId);
   const produtoIdInformado = produtoId !== undefined && produtoId !== null && produtoId !== '';
-  const produtoIdValido = produtoIdInformado && Number.isFinite(produtoIdNum);
 
-  if (produtoIdValido) {
-    const produtosPorId = await getFiltrado('/produtos', {
-      select: '*',
-      id: produtoIdNum,
-      limit: 1
-    });
-    if (Array.isArray(produtosPorId) && produtosPorId.length > 0) {
-      return produtosPorId[0];
-    }
-    if (produtoCodigo) {
-      console.debug('[carregarProdutoBase] fallback para codigo após id não retornar dados', {
-        produtoId: produtoIdNum,
-        produtoCodigo
-      });
-    }
+  if (!produtoIdInformado) {
+    const err = new Error('produto_id é obrigatório');
+    err.code = 'PRODUTO_ID_OBRIGATORIO';
+    throw err;
   }
 
-  if (produtoCodigo) {
-    const produtosPorCodigo = await getFiltrado('/produtos', {
-      select: '*',
-      codigo: produtoCodigo,
-      limit: 1
-    });
-    return Array.isArray(produtosPorCodigo) ? produtosPorCodigo[0] : null;
+  if (!Number.isFinite(produtoIdNum)) {
+    const err = new Error('produto_id inválido');
+    err.code = 'PRODUTO_ID_INVALIDO';
+    throw err;
   }
 
-  if (produtoIdInformado && !produtoIdValido) {
-    console.debug('[carregarProdutoBase] produtoId inválido; busca ignorada', {
-      produtoId,
-      produtoCodigo
-    });
-  }
+  const produtosPorId = await getFiltrado('/produtos', {
+    select: '*',
+    id: produtoIdNum,
+    limit: 1
+  });
 
-  return null;
+  return Array.isArray(produtosPorId) ? produtosPorId[0] || null : null;
 }
 
 function mesclarItensPorId(...listas) {
@@ -337,30 +321,22 @@ function mesclarItensPorId(...listas) {
   return itensUnificados;
 }
 
-async function carregarInsumosBase(produtoCodigo, produtoId) {
+async function carregarInsumosBase(produtoId) {
   const select = 'id,produto_id,insumo_id,quantidade,ordem_insumo';
   const produtoIdNum = Number(produtoId);
-  const produtoIdInformado = produtoId !== undefined && produtoId !== null && produtoId !== '';
-  const produtoIdValido = produtoIdInformado && Number.isFinite(produtoIdNum);
 
-  if (produtoIdInformado && !produtoIdValido) {
-    console.error('[carregarInsumosBase] produtoId inválido; abortando busca por insumos', {
-      produtoId,
-      produtoCodigo
-    });
-    return [];
+  if (!Number.isFinite(produtoIdNum)) {
+    const err = new Error('produto_id inválido');
+    err.code = 'PRODUTO_ID_INVALIDO';
+    throw err;
   }
 
-  if (produtoIdValido) {
-    const itensPorId = await getFiltrado('/produtos_insumos', {
-      select,
-      produto_id: produtoIdNum
-    });
-    if (Array.isArray(itensPorId) && itensPorId.length > 0) {
-      return itensPorId;
-    }
-  }
-  return [];
+  const itensPorId = await getFiltrado('/produtos_insumos', {
+    select,
+    produto_id: produtoIdNum
+  });
+
+  return Array.isArray(itensPorId) ? itensPorId : [];
 }
 
 
@@ -379,10 +355,10 @@ async function carregarInsumosBase(produtoCodigo, produtoId) {
  * }
  */
 
-async function montarProdutoComInsumos(produtoCodigo, produtoId) {
+async function montarProdutoComInsumos(produtoId) {
   const [produto, itensBase] = await Promise.all([
-    carregarProdutoBase(produtoCodigo, produtoId),
-    carregarInsumosBase(produtoCodigo, produtoId)
+    carregarProdutoBase(produtoId),
+    carregarInsumosBase(produtoId)
   ]);
 
   const idsMateriaPrima = Array.from(
@@ -438,73 +414,26 @@ async function carregarLotesSeguros(query) {
   return Array.isArray(dados) ? dados : [];
 }
 
-async function listarDetalhesProduto(produtoCodigo, produtoId) {
-  let lotesQueryBasica;  // 🔥 Correção: agora existe no escopo de toda a função
+async function listarDetalhesProduto(produtoId) {
+  const produtoIdNumero = Number(produtoId);
+  if (!Number.isFinite(produtoIdNumero)) {
+    const err = new Error('produto_id é obrigatório');
+    err.code = 'PRODUTO_ID_OBRIGATORIO';
+    throw err;
+  }
 
   try {
-    if (!produtoCodigo && !produtoId) {
-      throw new Error('Produto não informado');
-    }
+    const { produto, itens: itensFormatados } = await montarProdutoComInsumos(produtoIdNumero);
 
-    const { produto, itens: itensFormatados } = await montarProdutoComInsumos(produtoCodigo, produtoId);
-
-    produtoId = produtoId || produto?.id || null;
-    produtoCodigo = produtoCodigo || produto?.codigo || null;
-
-    const produtoIdNumero = Number(produtoId);
-    const produtoIdEhNumero = Number.isFinite(produtoIdNumero);
-
-    // 🔥 Prepara antes do try interno
-    lotesQueryBasica = {
+    const lotesQuery = {
       select: 'id,produto_id,quantidade,ultimo_insumo_id,ultimo_item,data_hora_completa,etapa_id,tempo_estimado_minutos',
-      order: 'data_hora_completa.desc'
+      order: 'data_hora_completa.desc',
+      produto_id: produtoIdNumero
     };
 
-    if (produtoIdEhNumero) {
-      lotesQueryBasica.produto_id = produtoIdNumero;
-    }
-
-    let lotes = [];
-    let fallbackQuery;
-
-    try {
-      lotes = await carregarLotesSeguros(lotesQueryBasica);
-    } catch (err) {
-      const corpoErro = normalizarCorpoErro(err);
-      console.error(
-        'Falha ao carregar lotes do produto com parâmetros compatíveis, retornando lista vazia:',
-        err?.message || err,
-        corpoErro ? { body: corpoErro, query: lotesQueryBasica } : { body: corpoErro }
-      );
-
-      try {
-        fallbackQuery = {
-          select: 'id,produto_id,quantidade,ultimo_insumo_id,ultimo_item,data_hora_completa,etapa_id,tempo_estimado_minutos'
-        };
-
-        if (produtoIdEhNumero) {
-          fallbackQuery.produto_id = produtoIdNumero;
-        }
-
-        const lotesFallback = await pool.get(LOTES_ENDPOINT, {
-          query: fallbackQuery
-        });
-
-        lotes = Array.isArray(lotesFallback) ? lotesFallback : [];
-      } catch (fallbackErr) {
-        const corpoFallback = normalizarCorpoErro(fallbackErr);
-        console.error(
-          'Fallback simplificado ao carregar lotes também falhou:',
-          fallbackErr?.message || fallbackErr,
-          corpoFallback ? { body: corpoFallback, query: fallbackQuery } : undefined
-        );
-        lotes = [];
-      }
-    }
-
+    const lotes = await carregarLotesSeguros(lotesQuery);
     const lotesLista = Array.isArray(lotes) ? lotes : [];
 
-    // --------------- Resolve últimos insumos -----------------
     const idsUltimosInsumos = lotesLista
       .map(lote => lote?.ultimo_insumo_id)
       .filter(id => id !== undefined && id !== null)
@@ -539,16 +468,13 @@ async function listarDetalhesProduto(produtoCodigo, produtoId) {
       itens: itensFormatados,
       lotes: lotesFormatados
     };
-
   } catch (err) {
     const corpoErro = normalizarCorpoErro(err);
-
     console.error('Erro ao listar detalhes do produto:', err.message, {
       status: err?.status,
       body: corpoErro,
-      query: { produtoCodigo, produtoId, lotesQueryBasica }
+      query: { produtoId: produtoIdNumero }
     });
-
     throw new Error('Erro ao listar detalhes do produto');
   }
 }
@@ -667,9 +593,11 @@ async function removerEtapaProducao(nome) {
 async function listarItensProcessoProduto(codigo, etapa, busca = '', produtoId = null) {
   const normalizarTexto = valor => String(valor || '').trim().toLowerCase();
 
-  if (!codigo && produtoId) {
-    const produto = await fetchSingle('produtos', { id: produtoId, select: 'codigo' });
-    codigo = produto?.codigo || codigo;
+  const produtoIdNum = Number(produtoId);
+  if (!Number.isFinite(produtoIdNum)) {
+    const err = new Error('produto_id é obrigatório');
+    err.code = 'PRODUTO_ID_OBRIGATORIO';
+    throw err;
   }
 
   const etapaInfo = (() => {
@@ -701,18 +629,10 @@ async function listarItensProcessoProduto(codigo, etapa, busca = '', produtoId =
   }
 
   const etapaFiltroAtivo = Boolean(etapaBusca || etapaIdBusca);
-
-  const produtoIdNum = Number(produtoId);
-  const produtoIdValido = Number.isFinite(produtoIdNum);
-  const itensSelect = 'insumo_id,produto_id';
-
-  let itensPrimarios = [];
-  if (produtoIdValido) {
-    itensPrimarios = await getFiltrado('/produtos_insumos', {
-      select: itensSelect,
-      produto_id: produtoIdNum
-    });
-  }
+  const itensPrimarios = await getFiltrado('/produtos_insumos', {
+    select: 'insumo_id,produto_id',
+    produto_id: produtoIdNum
+  });
 
   const lista = Array.isArray(itensPrimarios) ? itensPrimarios : [];
   const materias = await carregarMateriasPorIds(lista.map(item => item?.insumo_id));
@@ -805,7 +725,7 @@ async function atualizarProduto(id, dados) {
     ncm !== undefined && ncm !== null ? String(ncm).slice(0, 8) : undefined;
   if (codigo !== undefined && codigo !== atuais.codigo) {
     const dup = await fetchSingle('produtos', { codigo });
-    if (dup) {
+    if (dup && Number(dup.id) !== Number(atuais.id)) {
       const err = new Error('Código já existe');
       err.code = 'CODIGO_EXISTE';
       throw err;
@@ -813,7 +733,7 @@ async function atualizarProduto(id, dados) {
   }
   if (nome !== undefined && nome !== atuais.nome) {
     const dup = await fetchSingle('produtos', { nome });
-    if (dup) {
+    if (dup && Number(dup.id) !== Number(atuais.id)) {
       const err = new Error('Nome já existe');
       err.code = 'NOME_EXISTE';
       throw err;
@@ -828,39 +748,7 @@ async function atualizarProduto(id, dados) {
     status,
     ncm: ncmSanitizado
   });
-  const codigoAlterado = codigo !== undefined && codigo !== atuais.codigo;
-  const codigoAnterior = atuais.codigo;
   const atualizado = await pool.put(`/produtos/${id}`, payload);
-
-  if (codigoAlterado) {
-    const novoCodigo = payload.codigo;
-    let insumos = await getFiltrado('/produtos_insumos', {
-      select: 'id,produto_codigo',
-      produto_id: id
-    });
-
-    if (!Array.isArray(insumos) || insumos.length === 0) {
-      insumos = await getFiltrado('/produtos_insumos', {
-        select: 'id,produto_codigo',
-        produto_codigo: codigoAnterior
-      });
-    }
-
-    const insumosParaAtualizar = (Array.isArray(insumos) ? insumos : []).filter(insumo => {
-      return String(insumo?.produto_codigo ?? '') !== String(novoCodigo ?? '');
-    });
-
-    await Promise.all(
-      insumosParaAtualizar.map(insumo =>
-        pool.put(`/produtos_insumos/${insumo.id}`, { produto_codigo: novoCodigo })
-      )
-    );
-
-    console.info(
-      `[atualizarProduto] produto_codigo sincronizado em ${insumosParaAtualizar.length} registros`
-    );
-  }
-
   return atualizado;
 }
 
@@ -966,42 +854,34 @@ async function salvarProdutoDetalhado(codigoOriginal, produto, itens, produtoId)
   const produtoIdPayload = itens && Object.prototype.hasOwnProperty.call(itens, 'produto_id')
     ? itens.produto_id
     : undefined;
-  if (produtoIdPayload === null || produtoIdPayload === '') {
+  const produtoIdInformado = produtoIdPayload ?? produtoId;
+
+  if (produtoIdInformado === undefined || produtoIdInformado === null || String(produtoIdInformado).trim() === '') {
     const err = new Error('produto_id é obrigatório');
     err.code = 'PRODUTO_ID_OBRIGATORIO';
     throw err;
   }
 
-  const produtoIdInformado = produtoIdPayload ?? produtoId;
-  const produtoIdNormalizado =
-    produtoIdInformado !== undefined && produtoIdInformado !== null && String(produtoIdInformado).trim() !== ''
-      ? Number(produtoIdInformado)
-      : null;
-  if (produtoIdInformado !== undefined && produtoIdInformado !== null && Number.isNaN(produtoIdNormalizado)) {
+  const produtoIdNormalizado = Number(produtoIdInformado);
+  if (!Number.isFinite(produtoIdNormalizado)) {
     const err = new Error('produto_id inválido');
     err.code = 'PRODUTO_ID_INVALIDO';
     throw err;
   }
 
-  let produtoAtual = null;
-  if (produtoIdNormalizado !== null) {
-    produtoAtual = await fetchSingle('produtos', { id: produtoIdNormalizado });
-  }
-  if (!produtoAtual && codigoOriginal) {
-    produtoAtual = await fetchSingle('produtos', { codigo: codigoOriginal });
-  }
+  const produtoAtual = await fetchSingle('produtos', { id: produtoIdNormalizado });
   if (!produtoAtual) {
     throw new Error('Produto não encontrado');
   }
 
-  const codigoDestino = codigo !== undefined ? codigo : codigoOriginal;
+  const codigoDestino = codigo !== undefined ? codigo : produtoAtual.codigo;
   const ncmSanitizado =
     ncm !== undefined && ncm !== null ? String(ncm).slice(0, 8) : undefined;
-  const codigoAlterado = codigo !== undefined && codigo !== codigoOriginal;
+  const codigoAlterado = codigo !== undefined && codigo !== produtoAtual.codigo;
 
   if (codigoAlterado) {
     const dup = await fetchSingle('produtos', { codigo });
-    if (dup) {
+    if (dup && Number(dup.id) !== Number(produtoAtual.id)) {
       const err = new Error('Código já existe');
       err.code = 'CODIGO_EXISTE';
       throw err;
@@ -1010,7 +890,7 @@ async function salvarProdutoDetalhado(codigoOriginal, produto, itens, produtoId)
 
   if (nome !== undefined) {
     const dup = await fetchSingle('produtos', { nome });
-    if (dup && dup.codigo !== codigoOriginal) {
+    if (dup && Number(dup.id) !== Number(produtoAtual.id)) {
       const err = new Error('Nome já existe');
       err.code = 'NOME_EXISTE';
       throw err;
@@ -1059,25 +939,13 @@ async function salvarProdutoDetalhado(codigoOriginal, produto, itens, produtoId)
     throw err;
   }
 
-  if (codigoAlterado) {
-    const itensProduto = await getFiltrado('produtos_insumos', {
-      produto_id: produtoAtual.id,
-      select: 'id,produto_codigo'
-    });
-    for (const item of Array.isArray(itensProduto) ? itensProduto : []) {
-      await pool.put(`/produtos_insumos/${item.id}`, {
-        produto_codigo: codigoDestino
-      });
-    }
-  }
-
   for (const del of itens?.deletados || []) {
     const deleted = await pool.delete(`/produtos_insumos/${del.id}`).catch(() => null);
     const insumoId = deleted?.insumo_id || del.insumo_id;
     if (insumoId != null) {
       const lotesRelacionados = await carregarLotesSeguros({
         select: 'id',
-        produto_id: produtoAtual.id,
+        produto_id: produtoIdNormalizado,
         ultimo_insumo_id: insumoId
       });
       for (const lote of Array.isArray(lotesRelacionados) ? lotesRelacionados : []) {
@@ -1095,7 +963,7 @@ async function salvarProdutoDetalhado(codigoOriginal, produto, itens, produtoId)
 
   for (const ins of insumosInseridos) {
     await pool.post('/produtos_insumos', {
-      produto_id: produtoAtual.id,
+      produto_id: produtoIdNormalizado,
       insumo_id: ins.insumo_id,
       quantidade: ins.quantidade,
       ordem_insumo: ins.ordem_insumo

@@ -650,7 +650,7 @@
             .filter(i => i.status !== 'deleted')
             .map(i => ({ insumo_id: i.insumo_id ?? i.id, quantidade: i.quantidade, ordem_insumo: i.ordem }));
 
-          await window.electronAPI.salvarProdutoDetalhado(cloneCodigo, {
+          await window.electronAPI.salvarProdutoDetalhado(null, {
             pct_fabricacao: parseFloat(fabricacaoInput?.value) || 0,
             pct_acabamento: parseFloat(acabamentoInput?.value) || 0,
             pct_montagem:   parseFloat(montagemInput?.value) || 0,
@@ -665,7 +665,7 @@
             ncm: ncmInput?.value?.slice(0,8) || '',
             categoria: colecaoSelect ? colecaoSelect.value.trim() : '',
             status: 'Em linha'
-          }, { inseridos: itensPayload, atualizados: [], deletados: [] }, produtoCriado?.id);
+          }, { produto_id: produtoCriado?.id, inseridos: itensPayload, atualizados: [], deletados: [] }, produtoCriado?.id);
 
           if (typeof atualizarProdutoLocal === 'function') {
             atualizarProdutoLocal({
@@ -680,6 +680,7 @@
               quantidade_total: produtoCriado?.quantidade_total ?? 0
             }, { mode: 'add' });
           }
+          await carregarProdutos();
           showToast('Peça clonada com sucesso!', 'success');
           close();
           const novoProduto = {
@@ -749,6 +750,7 @@
           if (statusSelecionado) produto.status = statusSelecionado.value;
         }
         const itensPayload = {
+          produto_id: produtoSelecionado.id,
           inseridos: itens
             .filter(i => i.status === 'new')
             .map(i => ({ insumo_id: i.insumo_id ?? i.id, quantidade: i.quantidade, ordem_insumo: i.ordem })),
@@ -766,7 +768,7 @@
           isSubmitting = true;
           setModalLoadingState(true, { submitText: 'Salvando...', cloneText: 'Aguarde...' });
           await window.electronAPI.salvarProdutoDetalhado(
-            produtoSelecionado.codigo,
+            null,
             produto,
             itensPayload,
             produtoSelecionado.id
@@ -795,6 +797,7 @@
             });
           }
           if(typeof carregarProdutos === 'function') carregarProdutos();
+          await carregarProdutos();
           showToast('Peça alterada com sucesso!', 'success');
           close();
         }catch(err){
@@ -815,17 +818,20 @@
         l('produtoSelecionado', produtoSelecionado);
 
         l('>> listarDetalhesProduto: start');
-        const payload = { produtoCodigo: produtoSelecionado.codigo, produtoId: produtoSelecionado.id };
+        const payload = { produtoId: produtoSelecionado.id };
         l('payload', payload);
-        const { produto: dados, itens: itensData, lotes } = await window.electronAPI.listarDetalhesProduto(payload);
+
+        const { produto: dados } =
+        await window.electronAPI.listarDetalhesProduto(payload);
+
         l('<< listarDetalhesProduto: ok', {
-          produtoOk: !!dados,
-          itensCount: Array.isArray(itensData) ? itensData.length : 'N/A',
-          lotesCount: Array.isArray(lotes) ? lotes.length : 'N/A'
+          produtoOk: !!dados
         });
 
         await carregarColecoes(dados && dados.categoria);
 
+        const itensData = [];
+        
         // Preenche cabeçalho/percentuais
         if(dados){
           if(dados.nome && nomeInput) nomeInput.value = dados.nome;
