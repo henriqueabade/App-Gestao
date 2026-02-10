@@ -117,6 +117,22 @@ function normalizarCorpoErro(err) {
   return err?.body || null;
 }
 
+function criarErroDetalhesProduto({
+  message,
+  code = 'ERRO_LISTAR_DETALHES_PRODUTO',
+  context = {},
+  originalError
+}) {
+  const erro = new Error(message || 'Erro ao listar detalhes do produto');
+  erro.code = originalError?.code || code;
+  erro.context = {
+    ...(originalError?.context && typeof originalError.context === 'object' ? originalError.context : {}),
+    ...context
+  };
+  erro.originalMessage = originalError?.message || null;
+  return erro;
+}
+
 function montarPayloadProduto(produtoAtual, sobrescritas = {}) {
   const payload = {};
   if (produtoAtual && typeof produtoAtual === 'object') {
@@ -356,16 +372,51 @@ async function carregarInsumosBase(produtoId) {
  */
 
 async function montarProdutoComInsumos(produtoId) {
-  const [produto, itensBase] = await Promise.all([
-    carregarProdutoBase(produtoId),
-    carregarInsumosBase(produtoId)
-  ]);
+  let produto = null;
+  let itensBase = [];
+
+  try {
+    produto = await carregarProdutoBase(produtoId);
+  } catch (err) {
+    throw criarErroDetalhesProduto({
+      message: err?.message || 'Falha ao carregar dados base do produto',
+      context: { produtoId, etapa: 'carregarProdutoBase' },
+      originalError: err
+    });
+  }
+
+  try {
+    itensBase = await carregarInsumosBase(produtoId);
+  } catch (err) {
+    throw criarErroDetalhesProduto({
+      message: err?.message || 'Falha ao carregar insumos base do produto',
+      context: { produtoId, etapa: 'carregarInsumosBase' },
+      originalError: err
+    });
+  }
+
+  if (!Array.isArray(itensBase) || itensBase.length === 0) {
+    throw criarErroDetalhesProduto({
+      message: 'Produto sem insumos cadastrados',
+      code: 'PRODUTO_SEM_INSUMOS',
+      context: { produtoId, etapa: 'carregarInsumosBase' }
+    });
+  }
 
   const idsMateriaPrima = Array.from(
     new Set(itensBase.map(item => item?.insumo_id).filter(id => id !== undefined && id !== null))
   );
 
-  const materias = idsMateriaPrima.length > 0 ? await carregarMateriasPorIds(idsMateriaPrima) : new Map();
+  let materias = new Map();
+  try {
+    materias = idsMateriaPrima.length > 0 ? await carregarMateriasPorIds(idsMateriaPrima) : new Map();
+  } catch (err) {
+    throw criarErroDetalhesProduto({
+      message: err?.message || 'Falha ao carregar matérias-primas por ids',
+      context: { produtoId, etapa: 'carregarMateriasPorIds' },
+      originalError: err
+    });
+  }
   const materiasPorId = materias instanceof Map ? materias : mapearMateriasPorId(materias);
 
   return {
@@ -475,7 +526,14 @@ async function listarDetalhesProduto(produtoId) {
       body: corpoErro,
       query: { produtoId: produtoIdNumero }
     });
-    throw new Error('Erro ao listar detalhes do produto');
+    throw criarErroDetalhesProduto({
+      message: err?.message || 'Erro ao listar detalhes do produto',
+      context: {
+        produtoId: produtoIdNumero,
+        etapa: err?.context?.etapa || 'listarDetalhesProduto'
+      },
+      originalError: err
+    });
   }
 }
 

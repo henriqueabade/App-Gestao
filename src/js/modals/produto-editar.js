@@ -937,7 +937,22 @@
 
       } catch(err){
         console.error('[editar-produto][catch load]', err);
-        const msg = err && err.message ? err.message : 'Erro ao carregar dados';
+        const code = err && err.code ? String(err.code) : '';
+        const context = err && err.context && typeof err.context === 'object' ? err.context : {};
+        let msg = err && err.message ? err.message : 'Erro ao carregar dados';
+
+        if (code === 'PRODUTO_ID_OBRIGATORIO') {
+          msg = 'Não foi possível abrir o produto: identificador não informado.';
+        } else if (code === 'PRODUTO_ID_INVALIDO') {
+          msg = 'Não foi possível abrir o produto: identificador inválido.';
+        } else if (code === 'PRODUTO_SEM_INSUMOS' || /produto\s+sem\s+insumos/i.test(msg)) {
+          msg = 'Este produto ainda não possui insumos cadastrados.';
+        }
+
+        if (context?.etapa) {
+          msg = `${msg} (etapa: ${context.etapa})`;
+        }
+
         if (!tableBody) tableBody = resolveItensTbody();
         if (tableBody) {
           tableBody.innerHTML = `<tr><td colspan="6" class="py-4 text-left text-red-400">${msg}</td></tr>`;
