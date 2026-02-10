@@ -3702,8 +3702,11 @@ ipcMain.handle('excluir-lote-produto', async (_e, info) => {
   await excluirLoteProduto(id);
   return { success: true };
 });
-ipcMain.handle('listar-insumos-produto', async (_e, codigo) => {
-  return listarInsumosProduto(codigo);
+ipcMain.handle('listar-insumos-produto', async (_e, payload) => {
+  const params = typeof payload === 'object' && payload !== null
+    ? payload
+    : { codigo: payload };
+  return listarInsumosProduto(params);
 });
 ipcMain.handle('listar-etapas-producao', async () => {
   return listarEtapasProducao();

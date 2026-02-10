@@ -495,8 +495,21 @@ async function obterProduto(codigo) {
 /**
  * Lista insumos (produtos_insumos + materia_prima) por codigo de produto (text)
  */
-async function listarInsumosProduto(codigo) {
-  const { itens } = await montarProdutoComInsumos(codigo, null);
+async function listarInsumosProduto(codigoOuParams) {
+  const params = typeof codigoOuParams === 'object' && codigoOuParams !== null
+    ? codigoOuParams
+    : { codigo: codigoOuParams };
+
+  const produtoIdDireto = Number(params.produtoId ?? params.id);
+  const produtoId = Number.isFinite(produtoIdDireto)
+    ? produtoIdDireto
+    : Number((await obterProduto(params.codigo))?.id);
+
+  if (!Number.isFinite(produtoId)) {
+    return [];
+  }
+
+  const { itens } = await montarProdutoComInsumos(produtoId);
   return itens;
 }
 

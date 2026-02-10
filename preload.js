@@ -177,7 +177,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
     recordIpcAction('excluir-lote-produto', payload, result);
     return result;
   },
-  listarInsumosProduto: (codigo) => ipcRenderer.invoke('listar-insumos-produto', codigo),
+  listarInsumosProduto: (codigoOuParams) => {
+    const payload = typeof codigoOuParams === 'object' && codigoOuParams !== null
+      ? codigoOuParams
+      : { codigo: codigoOuParams };
+    return ipcRenderer.invoke('listar-insumos-produto', payload);
+  },
   listarEtapasProducao: () => ipcRenderer.invoke('listar-etapas-producao'),
   adicionarEtapaProducao: async (dados) => {
     const result = await ipcRenderer.invoke('adicionar-etapa-producao', dados);
