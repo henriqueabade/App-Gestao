@@ -821,7 +821,7 @@
         const payload = { produtoId: produtoSelecionado.id };
         l('payload', payload);
 
-        const { produto: dados } =
+        const { produto: dados, itens } =
         await window.electronAPI.listarDetalhesProduto(payload);
 
         l('<< listarDetalhesProduto: ok', {
@@ -830,7 +830,19 @@
 
         await carregarColecoes(dados && dados.categoria);
 
-        const itensData = Array.isArray(dados?.itens) ? dados.itens : [];
+        const itensData = Array.isArray(itens)
+          ? itens.map((item = {}) => ({
+              id: item.id,
+              insumo_id: item.insumo_id,
+              nome: item.nome,
+              processo: item.processo,
+              quantidade: item.quantidade,
+              preco_unitario: item.preco_unitario,
+              unidade: item.unidade,
+              ordem: item.ordem,
+              ordem_insumo: item.ordem_insumo
+            }))
+          : [];
         
         // Preenche cabeçalho/percentuais
         if(dados){
