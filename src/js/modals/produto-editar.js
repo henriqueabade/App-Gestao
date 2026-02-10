@@ -830,7 +830,7 @@
 
         await carregarColecoes(dados && dados.categoria);
 
-        const itensData = [];
+        const itensData = Array.isArray(dados?.itens) ? dados.itens : [];
         
         // Preenche cabeçalho/percentuais
         if(dados){

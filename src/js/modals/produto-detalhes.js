@@ -31,9 +31,22 @@
         console.error('Produto ID inválido para carregar detalhes', { produtoId: id });
         return;
       }
-      const { lotes: dados } = await window.electronAPI.listarDetalhesProduto({
+      const { lotes = [], itens = [] } = await window.electronAPI.listarDetalhesProduto({
         produtoId: produtoIdNum
       });
+
+      const usarItensComoFallback = (!Array.isArray(lotes) || lotes.length === 0) && Array.isArray(itens) && itens.length > 0;
+      const dados = usarItensComoFallback
+        ? itens.map(insumo => ({
+            id: insumo?.id,
+            etapa: insumo?.processo || '—',
+            ultimo_item: insumo?.nome || '—',
+            quantidade: insumo?.quantidade ?? 0,
+            data_hora_completa: null,
+            _origem: 'insumo'
+          }))
+        : (Array.isArray(lotes) ? lotes : []);
+
       item.lotes = dados;
       const tbody = document.getElementById('detalhesTableBody');
       if(!tbody) return;
@@ -43,22 +56,25 @@
         total += Number(d.quantidade || 0);
         const tr = document.createElement('tr');
         tr.className = 'border-b border-white/5 hover:bg-white/5 transition';
+        const origemInsumo = d._origem === 'insumo';
         tr.innerHTML = `
           <td class="py-4 px-4 text-gray-300">${d.etapa || ''}</td>
           <td class="py-4 px-4 text-white font-medium">${d.ultimo_item || ''}</td>
           <td class="py-4 px-4 text-left text-white font-medium">${d.quantidade ?? ''}</td>
-          <td class="py-4 px-4 text-gray-300">${formatDateTime(d.data_hora_completa)}</td>
+          <td class="py-4 px-4 text-gray-300">${origemInsumo ? '—' : formatDateTime(d.data_hora_completa)}</td>
           <td class="py-4 px-4 text-left">
             <div class="flex items-center justify-start space-x-2">
-              <i class="fas fa-edit w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Editar"></i>
-              <i class="fas fa-trash w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10 hover:text-white" style="color: var(--color-red)" title="Excluir"></i>
+              ${origemInsumo
+                ? '<span class="text-xs text-gray-400">Somente visualização</span>'
+                : '<i class="fas fa-edit w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Editar"></i><i class="fas fa-trash w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10 hover:text-white" style="color: var(--color-red)" title="Excluir"></i>'
+              }
             </div>
           </td>
         `;
         const editBtn = tr.querySelector('.fa-edit');
         const delBtn = tr.querySelector('.fa-trash');
-        if (editBtn) editBtn.addEventListener('click', () => editarLinha(tr, d));
-        if (delBtn) delBtn.addEventListener('click', () => excluirLote(d));
+        if (editBtn && !origemInsumo) editBtn.addEventListener('click', () => editarLinha(tr, d));
+        if (delBtn && !origemInsumo) delBtn.addEventListener('click', () => excluirLote(d));
         tbody.appendChild(tr);
       });
       const totalEl = document.getElementById('totalEstoque');
