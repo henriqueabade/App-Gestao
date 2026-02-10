@@ -3680,8 +3680,22 @@ ipcMain.handle('excluir-produto', async (_e, info) => {
     return { error: err.message };
   }
 });
-ipcMain.handle('listar-detalhes-produto', async (_e, { produtoId }) => {
+ipcMain.handle('listar-detalhes-produto', async (_e, payload) => {
   try {
+    const produtoId = payload?.produtoId ?? payload?.id ?? payload;
+    console.info('[IPC] listar-detalhes-produto entrada:', {
+      tipoProdutoId: typeof produtoId,
+      produtoId,
+    });
+
+    if (
+      produtoId === undefined
+      || produtoId === null
+      || (typeof produtoId === 'string' && produtoId.trim() === '')
+    ) {
+      return { success: false, error: 'invalid-produto-id', code: 'INVALID_PRODUTO_ID' };
+    }
+
     return await listarDetalhesProduto(produtoId);
   } catch (err) {
     console.error('Erro ao listar detalhes do produto:', err);
