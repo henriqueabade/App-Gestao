@@ -276,14 +276,44 @@ function comporItensComMaterias(itensBase = [], materiasPorId = new Map()) {
 }
 
 async function carregarProdutoBase(produtoCodigo, produtoId) {
-  const produtoFiltro = produtoCodigo ? { codigo: produtoCodigo } : { id: produtoId };
-  const produtos = await getFiltrado('/produtos', {
-    select: '*',
-    ...produtoFiltro,
-    limit: 1
-  });
+  const produtoIdNum = Number(produtoId);
+  const produtoIdInformado = produtoId !== undefined && produtoId !== null && produtoId !== '';
+  const produtoIdValido = produtoIdInformado && Number.isFinite(produtoIdNum);
 
-  return Array.isArray(produtos) ? produtos[0] : null;
+  if (produtoIdValido) {
+    const produtosPorId = await getFiltrado('/produtos', {
+      select: '*',
+      id: produtoIdNum,
+      limit: 1
+    });
+    if (Array.isArray(produtosPorId) && produtosPorId.length > 0) {
+      return produtosPorId[0];
+    }
+    if (produtoCodigo) {
+      console.debug('[carregarProdutoBase] fallback para codigo após id não retornar dados', {
+        produtoId: produtoIdNum,
+        produtoCodigo
+      });
+    }
+  }
+
+  if (produtoCodigo) {
+    const produtosPorCodigo = await getFiltrado('/produtos', {
+      select: '*',
+      codigo: produtoCodigo,
+      limit: 1
+    });
+    return Array.isArray(produtosPorCodigo) ? produtosPorCodigo[0] : null;
+  }
+
+  if (produtoIdInformado && !produtoIdValido) {
+    console.debug('[carregarProdutoBase] produtoId inválido; busca ignorada', {
+      produtoId,
+      produtoCodigo
+    });
+  }
+
+  return null;
 }
 
 function mesclarItensPorId(...listas) {
@@ -322,16 +352,22 @@ async function carregarInsumosBase(produtoCodigo, produtoId) {
   }
 
   if (produtoIdValido) {
-    return getFiltrado('/produtos_insumos', {
+    const itensPorId = await getFiltrado('/produtos_insumos', {
       select,
       produto_id: produtoIdNum
     });
+    if (Array.isArray(itensPorId) && itensPorId.length > 0) {
+      return itensPorId;
+    }
+    if (produtoCodigo) {
+      console.debug('[carregarInsumosBase] fallback para produto_codigo após produto_id vazio', {
+        produtoId: produtoIdNum,
+        produtoCodigo
+      });
+    }
   }
 
   if (produtoCodigo) {
-    console.debug('[carregarInsumosBase] produtoId ausente; usando produto_codigo', {
-      produtoCodigo
-    });
     return getFiltrado('/produtos_insumos', {
       select,
       produto_codigo: produtoCodigo
