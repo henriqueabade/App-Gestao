@@ -1097,14 +1097,35 @@ async function removerColecao(nome) {
     throw err;
   }
 
+  let colecao = null;
   try {
-    await pool.delete('/colecao', {
-      query: { nome: nomeNormalizado }
+    const colecoes = await pool.get('/colecao', {
+      query: { nome: nomeNormalizado, limit: 1 }
     });
+    colecao = Array.isArray(colecoes) && colecoes.length > 0 ? colecoes[0] : null;
   } catch (err) {
     if (err.status !== 404) {
       throw err;
     }
+  }
+
+  if (!colecao?.id) {
+    const err = new Error('Coleção não encontrada');
+    err.code = 'COLECAO_NAO_ENCONTRADA';
+    err.status = 404;
+    throw err;
+  }
+
+  try {
+    await pool.delete(`/colecao/${colecao.id}`);
+  } catch (err) {
+    if (err.status === 404) {
+      const notFoundError = new Error('Coleção não encontrada');
+      notFoundError.code = 'COLECAO_NAO_ENCONTRADA';
+      notFoundError.status = 404;
+      throw notFoundError;
+    }
+    throw err;
   }
 }
 
