@@ -20,6 +20,7 @@
     if(codigoEl) codigoEl.textContent = `Código da Peça: ${item.codigo || ''}`; // subtítulo mostra código da peça
     window.dispatchEvent(new CustomEvent('modalSpinnerLoaded', { detail: 'detalhesProduto' }));
     window.reloadDetalhesProduto = () => carregarDetalhes(item.id);
+    if (isProdutoIdValido(item.id)) carregarDetalhes(item.id);
   } else {
     window.dispatchEvent(new CustomEvent('modalSpinnerLoaded', { detail: 'detalhesProduto' }));
   }
@@ -27,7 +28,7 @@
   async function carregarDetalhes(id){
     try {
       const produtoIdNum = Number(id);
-      if (!Number.isFinite(produtoIdNum) || produtoIdNum <= 0) {
+      if (!isProdutoIdValido(produtoIdNum)) {
         console.error('Produto ID inválido para carregar detalhes', { produtoId: id });
         return;
       }
@@ -155,5 +156,10 @@
   function formatDateTime(value){
     if(!value) return '';
     return new Date(value).toLocaleString('pt-BR');
+  }
+
+  function isProdutoIdValido(id) {
+    const produtoIdNum = Number(id);
+    return Number.isFinite(produtoIdNum) && produtoIdNum > 0;
   }
 })();

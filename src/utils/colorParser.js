@@ -26,24 +26,24 @@ function normalize(text = '') {
 // Dicionário de cores fornecido externamente.
 const colorDictionary = [
   {"name":"branco","hex":"#FFFFFF","keywords":["branco","white","neve","snow"]},
-  {"name":"preto","hex":"#000000","keywords":["preto","black","carvão","carvao","coal","jet"]},
+  {"name":"preto","hex":"#000000","keywords":["preto","black","carvão","carvao","coal","jet", "ebano", "ébano"]},
   {"name":"cinza","hex":"#808080","keywords":["cinza","cinzento","gray","grey","acinzentado"]},
   {"name":"cinza claro","hex":"#D3D3D3","keywords":["cinza claro","lightgray","light grey","gelo","ice"]},
   {"name":"cinza escuro","hex":"#505050","keywords":["cinza escuro","darkgray","dark grey","grafite","graphite","chumbo","lead"]},
   {"name":"prata","hex":"#C0C0C0","keywords":["prata","silver","metalico prata","metalico prateado"]},
-  {"name":"off-white","hex":"#F5F5F5","keywords":["off white","offwhite","marfim claro","marfim suave","ivory light"]},
+  {"name":"off-white","hex":"#F5F5F5","keywords":["off white","off-white","offwhite","marfim claro","marfim suave","ivory light"]},
   {"name":"marfim","hex":"#FFFFF0","keywords":["marfim","ivory","creme claro"]},
-  {"name":"bege","hex":"#F5DEB3","keywords":["bege","beige","areia clara","sand","trigo","wheat"]},
+  {"name":"bege","hex":"#F5DEB3","keywords":["bege","beige","areia clara","sand","trigo","wheat","nacarado"]},
   {"name":"areia","hex":"#C2B280","keywords":["areia","sandstone","khaki claro","khaki light"]},
   {"name":"caqui","hex":"#BDB76B","keywords":["caqui","khaki","oliva claro","army light"]},
   {"name":"taupe","hex":"#8B8589","keywords":["taupe","topo","toupe"]},
-  {"name":"caramelo","hex":"#AF6F2F","keywords":["caramelo","caramel","toffee","butterscotch"]},
-  {"name":"marrom","hex":"#8B4513","keywords":["marrom","brown","terra","soil","saddle brown"]},
-  {"name":"chocolate","hex":"#5D3A1A","keywords":["chocolate","cocoa","cacau"]},
+  {"name":"caramelo","hex":"#AF6F2F","keywords":["caramelo","caramel","toffee","butterscotch", "jequitiba"]},
+  {"name":"marrom","hex":"#8B4513","keywords":["marrom","brown","terra","soil","saddle brown", "muiracatiara"]},
+  {"name":"chocolate","hex":"#5D3A1A","keywords":["chocolate","cocoa","cacau","nogueira"]},
   {"name":"cobre","hex":"#B87333","keywords":["cobre","copper"]},
-  {"name":"bronze","hex":"#CD7F32","keywords":["bronze"]},
+  {"name":"bronze","hex":"#CD7F32","keywords":["bronze",]},
   {"name":"dourado","hex":"#C9A227","keywords":["dourado","gold","ouro","golden","amarelo dourado"]},
-  {"name":"ouro velho","hex":"#B8860B","keywords":["ouro velho","goldenrod","dourado escuro"]},
+  {"name":"ouro velho","hex":"#B8860B","keywords":["ouro velho","goldenrod","dourado escuro", "freijo", "freijó"]},
 
   {"name":"vermelho","hex":"#FF0000","keywords":["vermelho","red","vermelho vivo","puro"]},
   {"name":"escarlate","hex":"#FF2400","keywords":["escarlate","scarlet"]},
@@ -53,7 +53,7 @@ const colorDictionary = [
   {"name":"rubi","hex":"#E0115F","keywords":["rubi","ruby"]},
   {"name":"cereja","hex":"#DE3163","keywords":["cereja","cherry"]},
   {"name":"salmon","hex":"#FA8072","keywords":["salmão","salmao","salmon"]},
-  {"name":"coral","hex":"#FF7F50","keywords":["coral"]},
+  {"name":"coral","hex":"#FF7F50","keywords":["coral","peroba"]},
 
   {"name":"laranja","hex":"#FFA500","keywords":["laranja","orange","tangerina","mandarina"]},
   {"name":"âmbar","hex":"#FFBF00","keywords":["ambar","âmbar","amber"]},
@@ -109,7 +109,7 @@ const colorDictionary = [
 
   {"name":"prata escuro","hex":"#A9A9A9","keywords":["prata escuro","dark silver"]},
   {"name":"dourado claro","hex":"#E1C16E","keywords":["dourado claro","light gold"]},
-  {"name":"ouro rosa","hex":"#B76E79","keywords":["ouro rosa","rose gold","rosé"]},
+  {"name":"ouro rosa","hex":"#B76E79","keywords":["ouro rosa","rose gold","rosé","camurça"]},
 
   {"name":"transparente","hex":"#00000000","keywords":["transparente","sem cor","none","clear"]},
 
