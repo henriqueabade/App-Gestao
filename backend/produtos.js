@@ -338,21 +338,29 @@ function mesclarItensPorId(...listas) {
 }
 
 async function carregarInsumosBase(produtoId) {
-  const select = 'id,produto_id,insumo_id,quantidade,ordem_insumo';
   const produtoIdNum = Number(produtoId);
 
-  if (!Number.isFinite(produtoIdNum)) {
-    const err = new Error('produto_id inválido');
-    err.code = 'PRODUTO_ID_INVALIDO';
-    throw err;
+  if (!Number.isInteger(produtoIdNum) || produtoIdNum <= 0) {
+    console.error('❌ produto_id inválido:', produtoId);
+    return [];
   }
 
-  const itensPorId = await getFiltrado('/produtos_insumos', {
-    select,
-    produto_id: produtoIdNum
-  });
+  try {
+    console.log('🔎 Buscando insumos do produto:', produtoIdNum);
 
-  return Array.isArray(itensPorId) ? itensPorId : [];
+    const itens = await getFiltrado('/produtos_insumos', {
+      select: '*',
+      produto_id: produtoIdNum
+    });
+
+    console.log('✅ Insumos filtrados corretamente:', itens.length);
+
+    return Array.isArray(itens) ? itens : [];
+
+  } catch (err) {
+    console.error('❌ Erro ao buscar insumos:', err);
+    return [];
+  }
 }
 
 
@@ -395,13 +403,10 @@ async function montarProdutoComInsumos(produtoId) {
     });
   }
 
-  if (!Array.isArray(itensBase) || itensBase.length === 0) {
-    throw criarErroDetalhesProduto({
-      message: 'Produto sem insumos cadastrados',
-      code: 'PRODUTO_SEM_INSUMOS',
-      context: { produtoId, etapa: 'carregarInsumosBase' }
-    });
+  if (!Array.isArray(itensBase)) {
+  itensBase = [];
   }
+
 
   const idsMateriaPrima = Array.from(
     new Set(itensBase.map(item => item?.insumo_id).filter(id => id !== undefined && id !== null))
