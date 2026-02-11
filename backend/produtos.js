@@ -1042,7 +1042,8 @@ async function salvarProdutoDetalhado(codigoOriginal, produto, itens, produtoId)
       produto_id: produtoIdNormalizado,
       insumo_id: ins.insumo_id,
       quantidade: ins.quantidade,
-      ordem_insumo: ins.ordem_insumo
+      ordem_insumo: ins.ordem_insumo,
+      produto_codigo: codigoDestino,
     });
   }
 
