@@ -32,26 +32,30 @@
         console.error('Produto ID inválido para carregar detalhes', { produtoId: id });
         return;
       }
-      const { lotes = [], itens = [] } = await window.electronAPI.listarDetalhesProduto({
+      const { lotes = [] } = await window.electronAPI.listarDetalhesProduto({
         produtoId: produtoIdNum
       });
 
-      const usarItensComoFallback = (!Array.isArray(lotes) || lotes.length === 0) && Array.isArray(itens) && itens.length > 0;
-      const dados = usarItensComoFallback
-        ? itens.map(insumo => ({
-            id: insumo?.id,
-            etapa: insumo?.processo || '—',
-            ultimo_item: insumo?.nome || '—',
-            quantidade: insumo?.quantidade ?? 0,
-            data_hora_completa: null,
-            _origem: 'insumo'
-          }))
-        : (Array.isArray(lotes) ? lotes : []);
+      const dados = Array.isArray(lotes) ? lotes : [];
 
       item.lotes = dados;
       const tbody = document.getElementById('detalhesTableBody');
       if(!tbody) return;
       tbody.innerHTML = '';
+
+      if (dados.length === 0) {
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="5" class="py-12 text-center text-gray-400">
+              <div class="flex flex-col items-center justify-center gap-3">
+                <i class="fas fa-box-open text-5xl text-[var(--color-primary)]"></i>
+                <p class="text-sm">Não há produtos em estoque.</p>
+              </div>
+            </td>
+          </tr>
+        `;
+      }
+
       let total = 0;
       dados.forEach(d => {
         total += Number(d.quantidade || 0);
