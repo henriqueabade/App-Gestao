@@ -1002,6 +1002,21 @@ async function salvarProdutoDetalhado(codigoOriginal, produto, itens, produtoId)
   });
   try {
     await pool.put(`/produtos/${produtoAtual.id}`, payload);
+
+    // 🔄 Se o código foi alterado, atualizar todos os itens desse produto
+    if (codigoAlterado) {
+      const itensExistentes = await getFiltrado('/produtos_insumos', {
+        select: 'id',
+        produto_id: produtoIdNormalizado
+      });
+
+      for (const item of itensExistentes) {
+        await pool.put(`/produtos_insumos/${item.id}`, {
+          produto_codigo: codigoDestino
+        });
+      }
+    }
+
   } catch (err) {
     const message = err?.message ? String(err.message) : '';
     if (/foreign key/i.test(message)) {
