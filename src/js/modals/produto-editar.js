@@ -227,19 +227,34 @@
     async function carregarColecoes({ selecionada, removida } = {}){
       if (!colecaoSelect) return;
       try {
+        const valorAtual = colecaoSelect.value;
         const colecoes = await window.electronAPI.listarColecoes();
         colecaoSelect.innerHTML = '<option value="">Selecionar Coleção</option>' +
           colecoes.map(c => `<option value="${c}">${c}</option>`).join('');
-        const valorAtual = colecaoSelect.value;
+
+        const normalizarNomeColecao = (valor = '') =>
+          String(valor)
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .trim()
+            .toLowerCase();
+
         let valorSelecionado = selecionada ?? valorAtual;
-        if (removida && valorSelecionado === removida) {
+        if (removida && normalizarNomeColecao(valorSelecionado) === normalizarNomeColecao(removida)) {
           valorSelecionado = '';
         }
-        if (valorSelecionado && colecoes.includes(valorSelecionado)) {
-          colecaoSelect.value = valorSelecionado;
-        } else {
+
+        const valorSelecionadoNormalizado = normalizarNomeColecao(valorSelecionado);
+        const opcaoCorrespondente = colecoes.find((colecao) =>
+          normalizarNomeColecao(colecao) === valorSelecionadoNormalizado
+        );
+
+        if (!opcaoCorrespondente) {
           colecaoSelect.value = '';
+          return;
         }
+
+        colecaoSelect.value = opcaoCorrespondente;
       } catch(err) {
         console.error('Erro ao carregar coleções', err);
       }
