@@ -45,12 +45,8 @@
       return;
     }
     try {
-      await window.electronAPI.removerColecao(nome);
-      const colecoes = await window.electronAPI.listarColecoes();
-      document.querySelectorAll('select#colecaoSelect').forEach(sel => {
-        sel.innerHTML = '<option value="">Selecionar Coleção</option>' + colecoes.map(c => `<option value="${c}">${c}</option>`).join('');
-      });
-      window.dispatchEvent(new CustomEvent('colecaoAtualizada', { detail: { removida: nome } }));
+      const valorCanonical = await window.electronAPI.removerColecao(nome);
+      window.dispatchEvent(new CustomEvent('colecaoAtualizada', { detail: { removida: valorCanonical ?? nome } }));
       showToast('Coleção excluída', 'success');
       close();
     } catch (err) {

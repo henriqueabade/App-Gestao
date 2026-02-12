@@ -10,21 +10,24 @@
     const nome = form.nome.value.trim();
     if(!nome) return;
     try{
+      const normalizarNomeColecao = (valor = '') =>
+        String(valor)
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '')
+          .trim()
+          .toLowerCase();
+
       const existentes = await window.electronAPI.listarColecoes();
-      if(existentes.map(c => c.toLowerCase()).includes(nome.toLowerCase())){
+      const existentesNormalizadas = new Set(existentes.map(normalizarNomeColecao));
+      if(existentesNormalizadas.has(normalizarNomeColecao(nome))){
         showToast('Coleção já cadastrada!', 'warning');
         close();
         return;
       }
-      await window.electronAPI.adicionarColecao(nome);
+      const valorCanonical = await window.electronAPI.adicionarColecao(nome);
       showToast('Coleção adicionada com sucesso!', 'success');
       close();
-      const colecoes = await window.electronAPI.listarColecoes();
-      document.querySelectorAll('select#colecaoSelect').forEach(sel => {
-        sel.innerHTML = '<option value="">Selecionar Coleção</option>' + colecoes.map(c => `<option value="${c}">${c}</option>`).join('');
-        sel.value = nome;
-      });
-      window.dispatchEvent(new CustomEvent('colecaoAtualizada', { detail: { selecionada: nome } }));
+      window.dispatchEvent(new CustomEvent('colecaoAtualizada', { detail: { selecionada: valorCanonical } }));
     }catch(err){
       console.error(err);
       showToast('Erro ao adicionar coleção', 'error');
