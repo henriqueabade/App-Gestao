@@ -47,7 +47,13 @@
       console.error('[editar-produto] overlay #editarProdutoOverlay não encontrado');
       return;
     }
-    const close = () => Modal.close('editarProduto');
+    let handleColecaoAtualizada = null;
+    const close = () => {
+      if (handleColecaoAtualizada) {
+        window.removeEventListener('colecaoAtualizada', handleColecaoAtualizada);
+      }
+      Modal.close('editarProduto');
+    };
     overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
     const voltarBtn = document.getElementById('voltarEditarProduto');
     if (voltarBtn) voltarBtn.addEventListener('click', close);
@@ -218,17 +224,30 @@
       }
     });
 
-    async function carregarColecoes(selecionada){
+    async function carregarColecoes({ selecionada, removida } = {}){
       if (!colecaoSelect) return;
       try {
         const colecoes = await window.electronAPI.listarColecoes();
         colecaoSelect.innerHTML = '<option value="">Selecionar Coleção</option>' +
           colecoes.map(c => `<option value="${c}">${c}</option>`).join('');
-        if (selecionada) colecaoSelect.value = selecionada;
+        const valorAtual = colecaoSelect.value;
+        let valorSelecionado = selecionada ?? valorAtual;
+        if (removida && valorSelecionado === removida) {
+          valorSelecionado = '';
+        }
+        if (valorSelecionado && colecoes.includes(valorSelecionado)) {
+          colecaoSelect.value = valorSelecionado;
+        } else {
+          colecaoSelect.value = '';
+        }
       } catch(err) {
         console.error('Erro ao carregar coleções', err);
       }
     }
+    handleColecaoAtualizada = (event) => {
+      carregarColecoes(event?.detail || {});
+    };
+    window.addEventListener('colecaoAtualizada', handleColecaoAtualizada);
     if (addColecaoBtn) {
       addColecaoBtn.addEventListener('click', () => {
         Modal.open('modals/produtos/colecao-novo.html', '../js/modals/produto-colecao-novo.js', 'novaColecao', true);
@@ -828,7 +847,7 @@
           produtoOk: !!dados
         });
 
-        await carregarColecoes(dados && dados.categoria);
+        await carregarColecoes({ selecionada: dados && dados.categoria });
 
         const itensData = Array.isArray(itens)
           ? itens.map((item = {}) => ({
