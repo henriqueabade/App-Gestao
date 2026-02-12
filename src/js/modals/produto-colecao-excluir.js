@@ -45,8 +45,14 @@
       return;
     }
     try {
-      const valorCanonical = await window.electronAPI.removerColecao(nome);
-      window.dispatchEvent(new CustomEvent('colecaoAtualizada', { detail: { removida: valorCanonical ?? nome } }));
+      const resultado = await window.electronAPI.removerColecao(nome);
+
+      window.dispatchEvent(new CustomEvent('colecaoAtualizada', {
+        detail: {
+          removida: resultado?.nome
+        }
+      }));
+
       showToast('Coleção excluída', 'success');
       close();
     } catch (err) {

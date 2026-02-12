@@ -1066,15 +1066,18 @@ async function salvarProdutoDetalhado(codigoOriginal, produto, itens, produtoId)
 }
 
 async function listarColecoes() {
-  const colecoesPersistidas = await buscarColecoesPersistidas();
-  const categoriasProdutos = await buscarCategoriasProdutos();
+  try {
+    const colecoes = await pool.get('/colecao', {
+      query: { select: 'nome', order: 'nome.asc' }
+    });
 
-  const colecoes = deduplicarColecoesPorNomeNormalizado([
-    ...colecoesPersistidas,
-    ...categoriasProdutos
-  ]);
-
-  return colecoes.sort((a, b) => a.localeCompare(b, 'pt-BR'));
+    return Array.isArray(colecoes)
+      ? colecoes.map(c => normalizarNomeColecao(c?.nome))
+      : [];
+  } catch (err) {
+    if (err.status === 404) return [];
+    throw err;
+  }
 }
 
 function normalizarNomeColecao(nome) {
@@ -1123,7 +1126,11 @@ async function adicionarColecao(nome) {
 
   try {
     const res = await pool.post('/colecao', { nome: nomeNormalizado });
-    return normalizarNomeColecao(res?.nome || nomeNormalizado);
+    const colecoesAtualizadas = await listarColecoes();
+    return {
+      nome: normalizarNomeColecao(res?.nome || nomeNormalizado),
+      colecoes: colecoesAtualizadas
+    };
   } catch (err) {
     if (err.status === 404) {
       return nomeNormalizado;
@@ -1133,20 +1140,34 @@ async function adicionarColecao(nome) {
 }
 
 async function colecaoTemDependencias(nome) {
-  const chaveColecao = chaveNomeColecao(nome);
-  if (!chaveColecao) return false;
+  const nomeNormalizado = normalizarNomeColecao(nome);
+  if (!nomeNormalizado) return false;
 
-  const categoriasProdutos = await buscarCategoriasProdutos();
-  return categoriasProdutos.some(categoria => chaveNomeColecao(categoria) === chaveColecao);
+  const produtos = await pool.get('/produtos', {
+    query: {
+      select: 'id',
+      categoria: nomeNormalizado,
+      limit: 1
+    }
+  });
+
+  return Array.isArray(produtos) && produtos.length > 0;
 }
+
 async function removerColecao(nome) {
   const nomeNormalizado = normalizarNomeColecao(nome);
   if (!nomeNormalizado) return;
-  const chaveColecao = chaveNomeColecao(nomeNormalizado);
 
-  // 🔎 Verifica dependências
-  const dependente = await colecaoTemDependencias(nomeNormalizado);
-  if (dependente) {
+  const chave = chaveNomeColecao(nomeNormalizado);
+
+  // 🚫 Verifica se algum produto usa essa coleção
+  const produtosComColecao = await getFiltrado('/produtos', {
+    select: 'id',
+    categoria: nomeNormalizado,
+    limit: 1
+  });
+
+  if (Array.isArray(produtosComColecao) && produtosComColecao.length > 0) {
     const err = new Error('DEPENDENTE');
     err.code = 'DEPENDENTE';
     throw err;
@@ -1154,14 +1175,12 @@ async function removerColecao(nome) {
 
   // 🔎 Busca coleção pelo nome
   const colecoes = await pool.get('/colecao', {
-    query: {
-      select: 'id,nome'
-    }
+    query: { select: 'id,nome' }
   });
 
   const colecao = (Array.isArray(colecoes) ? colecoes : []).find(
-    item => chaveNomeColecao(item?.nome) === chaveColecao
-  ) || null;
+    c => chaveNomeColecao(c?.nome) === chave
+  );
 
   if (!colecao?.id) {
     const err = new Error('Coleção não encontrada');
@@ -1170,10 +1189,15 @@ async function removerColecao(nome) {
     throw err;
   }
 
-  // 🗑 DELETE PELO ID (CORRETO)
+  // 🗑 Delete por ID
   await pool.delete(`/colecao/${colecao.id}`);
 
-  return true;
+  const colecoesAtualizadas = await listarColecoes();
+  return {
+    nome: nomeNormalizado,
+    colecoes: colecoesAtualizadas
+  };
+
 }
 
 async function buscarColecoesPersistidas() {

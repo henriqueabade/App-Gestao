@@ -112,32 +112,48 @@
         .trim()
         .toLowerCase();
 
-    async function carregarColecoes({ selecionada, removida } = {}){
-      try{
+    async function carregarColecoes({ selecionada, removida } = {}) {
+      if (!colecaoSelect) return;
+
+      try {
         const colecoes = await window.electronAPI.listarColecoes();
-        const valorAnterior = colecaoSelect.value;
-        colecaoSelect.innerHTML = '<option value="">Selecionar Coleção</option>' +
+
+        const valorAtual = colecaoSelect.value;
+
+        colecaoSelect.innerHTML =
+          '<option value="">Selecionar Coleção</option>' +
           colecoes.map(c => `<option value="${c}">${c}</option>`).join('');
 
-        let valorSelecionado = selecionada ?? valorAnterior;
+        let valorSelecionado = selecionada ?? valorAtual;
+
         if (removida && normalizarNomeColecao(valorSelecionado) === normalizarNomeColecao(removida)) {
           valorSelecionado = '';
         }
 
-        const colecoesPorNomeNormalizado = new Map(
-          colecoes.map((colecao) => [normalizarNomeColecao(colecao), colecao])
+        const mapa = new Map(
+          colecoes.map(c => [normalizarNomeColecao(c), c])
         );
-        const valorCanonical = colecoesPorNomeNormalizado.get(normalizarNomeColecao(valorSelecionado));
-        colecaoSelect.value = valorCanonical || '';
-      }catch(err){
-        console.error('Erro ao carregar coleções', err);
+
+        colecaoSelect.value =
+          mapa.get(normalizarNomeColecao(valorSelecionado)) || '';
+
+      } catch (err) {
+        console.error('Erro ao carregar coleções:', err);
       }
     }
-    carregarColecoes();
-    handleColecaoAtualizada = (event) => {
-      carregarColecoes(event?.detail || {});
-    };
-    window.addEventListener('colecaoAtualizada', handleColecaoAtualizada);
+
+   
+    if (colecaoSelect) {
+      carregarColecoes();
+
+
+      handleColecaoAtualizada = (event) => {
+        carregarColecoes(event?.detail || {});
+      };
+
+      window.addEventListener('colecaoAtualizada', handleColecaoAtualizada);
+    }
+
     document.getElementById('addColecaoNovo')?.addEventListener('click', () => {
       Modal.open('modals/produtos/colecao-novo.html', '../js/modals/produto-colecao-novo.js', 'novaColecao', true);
     });

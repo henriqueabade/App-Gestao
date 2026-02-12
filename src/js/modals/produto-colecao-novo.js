@@ -27,7 +27,15 @@
       const valorCanonical = await window.electronAPI.adicionarColecao(nome);
       showToast('Coleção adicionada com sucesso!', 'success');
       close();
-      window.dispatchEvent(new CustomEvent('colecaoAtualizada', { detail: { selecionada: valorCanonical } }));
+      const resultado = await window.electronAPI.adicionarColecao(nome);
+
+      // Atualiza imediatamente o select do modal pai
+      window.dispatchEvent(new CustomEvent('colecaoAtualizada', {
+        detail: {
+          selecionada: resultado?.nome || nome
+        }
+      }));
+
     }catch(err){
       console.error(err);
       showToast('Erro ao adicionar coleção', 'error');
