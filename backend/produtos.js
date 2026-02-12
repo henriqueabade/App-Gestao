@@ -1069,21 +1069,61 @@ async function listarColecoes() {
   const colecoesPersistidas = await buscarColecoesPersistidas();
   const categoriasProdutos = await buscarCategoriasProdutos();
 
-  const conjunto = new Set();
-  for (const nome of [...colecoesPersistidas, ...categoriasProdutos]) {
-    if (nome) conjunto.add(nome);
+  const colecoes = deduplicarColecoesPorNomeNormalizado([
+    ...colecoesPersistidas,
+    ...categoriasProdutos
+  ]);
+
+  return colecoes.sort((a, b) => a.localeCompare(b, 'pt-BR'));
+}
+
+function normalizarNomeColecao(nome) {
+  if (typeof nome !== 'string') return '';
+  const nomeSemEspacosDuplicados = nome.trim().replace(/\s+/g, ' ');
+  if (!nomeSemEspacosDuplicados) return '';
+
+  return nomeSemEspacosDuplicados
+    .split(' ')
+    .map(parte => {
+      if (!parte) return '';
+      return parte[0].toLocaleUpperCase('pt-BR') + parte.slice(1).toLocaleLowerCase('pt-BR');
+    })
+    .join(' ');
+}
+
+function chaveNomeColecao(nome) {
+  return normalizarNomeColecao(nome).toLocaleLowerCase('pt-BR');
+}
+
+function deduplicarColecoesPorNomeNormalizado(nomes = []) {
+  const mapa = new Map();
+
+  for (const nome of Array.isArray(nomes) ? nomes : []) {
+    const nomeCanonico = normalizarNomeColecao(nome);
+    const chave = chaveNomeColecao(nomeCanonico);
+    if (!nomeCanonico || !chave || mapa.has(chave)) continue;
+    mapa.set(chave, nomeCanonico);
   }
 
-  return [...conjunto].sort((a, b) => a.localeCompare(b));
+  return [...mapa.values()];
 }
 
 async function adicionarColecao(nome) {
-  const nomeNormalizado = (nome || '').trim();
+  const nomeNormalizado = normalizarNomeColecao(nome);
   if (!nomeNormalizado) return '';
+
+  const colecoesExistentes = await buscarColecoesPersistidas();
+  const chaveNovaColecao = chaveNomeColecao(nomeNormalizado);
+  const colecaoExistente = colecoesExistentes.find(
+    item => chaveNomeColecao(item) === chaveNovaColecao
+  );
+  if (colecaoExistente) {
+    return normalizarNomeColecao(colecaoExistente);
+  }
 
   try {
     const res = await pool.post('/colecao', { nome: nomeNormalizado });
-    return res?.nome || nomeNormalizado;
+    return normalizarNomeColecao(res?.nome || nomeNormalizado);
   } catch (err) {
     if (err.status === 404) {
       return nomeNormalizado;
@@ -1093,17 +1133,16 @@ async function adicionarColecao(nome) {
 }
 
 async function colecaoTemDependencias(nome) {
-  const produtos = await getFiltrado('/produtos', {
-    select: 'id',
-    categoria: nome,
-    limit: 1
-  });
+  const chaveColecao = chaveNomeColecao(nome);
+  if (!chaveColecao) return false;
 
-  return Array.isArray(produtos) && produtos.length > 0;
+  const categoriasProdutos = await buscarCategoriasProdutos();
+  return categoriasProdutos.some(categoria => chaveNomeColecao(categoria) === chaveColecao);
 }
 async function removerColecao(nome) {
-  const nomeNormalizado = (nome || '').trim();
+  const nomeNormalizado = normalizarNomeColecao(nome);
   if (!nomeNormalizado) return;
+  const chaveColecao = chaveNomeColecao(nomeNormalizado);
 
   // 🔎 Verifica dependências
   const dependente = await colecaoTemDependencias(nomeNormalizado);
@@ -1116,15 +1155,13 @@ async function removerColecao(nome) {
   // 🔎 Busca coleção pelo nome
   const colecoes = await pool.get('/colecao', {
     query: {
-      select: 'id,nome',
-      nome: nomeNormalizado,
-      limit: 1
+      select: 'id,nome'
     }
   });
 
-  const colecao = Array.isArray(colecoes) && colecoes.length > 0
-    ? colecoes[0]
-    : null;
+  const colecao = (Array.isArray(colecoes) ? colecoes : []).find(
+    item => chaveNomeColecao(item?.nome) === chaveColecao
+  ) || null;
 
   if (!colecao?.id) {
     const err = new Error('Coleção não encontrada');
@@ -1144,7 +1181,8 @@ async function buscarColecoesPersistidas() {
     const colecao = await pool.get('/colecao', {
       query: { select: 'nome', order: 'nome' }
     });
-    return Array.isArray(colecao) ? colecao.map(c => (c?.nome || '').trim()).filter(Boolean) : [];
+    const nomes = Array.isArray(colecao) ? colecao.map(c => c?.nome) : [];
+    return deduplicarColecoesPorNomeNormalizado(nomes);
   } catch (err) {
     if (err.status === 404) {
       return [];
@@ -1159,9 +1197,7 @@ async function buscarCategoriasProdutos() {
       query: { select: 'categoria' }
     });
     const categorias = Array.isArray(produtos) ? produtos : [];
-    return categorias
-      .map(p => (p?.categoria || '').trim())
-      .filter(Boolean);
+    return deduplicarColecoesPorNomeNormalizado(categorias.map(p => p?.categoria));
   } catch (err) {
     if (err.status === 404) {
       return [];
