@@ -108,10 +108,10 @@
     async function carregarColecoes({ selecionada, removida } = {}){
       try{
         const colecoes = await window.electronAPI.listarColecoes();
+        const valorAnterior = colecaoSelect.value;
         colecaoSelect.innerHTML = '<option value="">Selecionar Coleção</option>' +
           colecoes.map(c => `<option value="${c}">${c}</option>`).join('');
-        const valorAtual = colecaoSelect.value;
-        let valorSelecionado = selecionada ?? valorAtual;
+        let valorSelecionado = selecionada ?? valorAnterior;
         if (removida && valorSelecionado === removida) {
           valorSelecionado = '';
         }
