@@ -349,10 +349,11 @@
 
     handleColecaoAtualizada = (event) => {
       const detail = event?.detail || {};
+      const recebeuListaAtualizada = Array.isArray(detail.colecoes);
 
       carregarColecoes({
         ...detail,
-        forcarAtualizacao: true,
+        forcarAtualizacao: !recebeuListaAtualizada,
         preservarSelecao: false,
         exibirAnimacao: true,
         atrasoMs: 3000
