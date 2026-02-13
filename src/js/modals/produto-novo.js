@@ -112,15 +112,15 @@
         .trim()
         .toLowerCase();
 
-    async function carregarColecoes({ selecionada, removida, colecoes } = {}) {
+    async function carregarColecoes({ selecionada, removida, colecoes, forcarAtualizacao = false, preservarSelecao = true } = {}) {
       if (!colecaoSelect) return;
 
       try {
-        const listaColecoes = Array.isArray(colecoes)
+        const listaColecoes = Array.isArray(colecoes) && !forcarAtualizacao
           ? colecoes
           : await window.electronAPI.listarColecoes();
 
-        const valorAtual = colecaoSelect.value;
+        const valorAtual = preservarSelecao ? colecaoSelect.value : '';
 
         colecaoSelect.innerHTML =
           '<option value="">Selecionar Coleção</option>' +
@@ -148,18 +148,27 @@
     if (colecaoSelect) {
       carregarColecoes();
 
+      const recarregarColecoesAoAbrir = () => {
+        carregarColecoes({ forcarAtualizacao: true, preservarSelecao: false });
+      };
+
+      colecaoSelect.addEventListener('focus', recarregarColecoesAoAbrir);
+      colecaoSelect.addEventListener('pointerdown', recarregarColecoesAoAbrir);
+
 
       handleColecaoAtualizada = (event) => {
-        carregarColecoes(event?.detail || {});
+        carregarColecoes({ ...(event?.detail || {}), forcarAtualizacao: true, preservarSelecao: false });
       };
 
       window.addEventListener('colecaoAtualizada', handleColecaoAtualizada);
     }
 
     document.getElementById('addColecaoNovo')?.addEventListener('click', () => {
+      if (colecaoSelect) colecaoSelect.value = '';
       Modal.open('modals/produtos/colecao-novo.html', '../js/modals/produto-colecao-novo.js', 'novaColecao', true);
     });
     document.getElementById('delColecaoNovo')?.addEventListener('click', () => {
+      if (colecaoSelect) colecaoSelect.value = '';
       Modal.open('modals/produtos/colecao-excluir.html', '../js/modals/produto-colecao-excluir.js', 'excluirColecao', true);
     });
   }
