@@ -116,47 +116,71 @@
         .toLowerCase();
 
     let carregamentoColecoesEmAndamento = 0;
+    let carregamentoColecoesComAnimacao = 0;
+
+    const aguardar = (ms = 0) => new Promise(resolve => setTimeout(resolve, ms));
+
+    const atualizarIndicadorColecao = () => {
+      if (colecaoLoadingIndicator) {
+        colecaoLoadingIndicator.classList.toggle('hidden', carregamentoColecoesComAnimacao === 0);
+      }
+    };
 
     const setColecaoLoadingState = (isLoading) => {
       if (!colecaoSelect) return;
 
       if (isLoading) {
+        // salva estado anterior
         colecaoSelect.dataset.preLoadingDisabled = String(colecaoSelect.disabled);
-        if (addColecaoBtn) addColecaoBtn.dataset.preLoadingDisabled = String(addColecaoBtn.disabled);
-        if (delColecaoBtn) delColecaoBtn.dataset.preLoadingDisabled = String(delColecaoBtn.disabled);
-      }
 
-      if (colecaoLoadingIndicator) {
-        colecaoLoadingIndicator.classList.toggle('hidden', !isLoading);
-      }
+        if (addColecaoBtn)
+          addColecaoBtn.dataset.preLoadingDisabled = String(addColecaoBtn.disabled);
 
-      if (isLoading) {
+        if (delColecaoBtn)
+          delColecaoBtn.dataset.preLoadingDisabled = String(delColecaoBtn.disabled);
+
+        // aplica loading
         colecaoSelect.disabled = true;
         [addColecaoBtn, delColecaoBtn].forEach(btn => {
           if (btn) btn.disabled = true;
         });
+
         return;
       }
 
-      const selectWasDisabled = colecaoSelect.dataset.preLoadingDisabled === 'true';
+      // restaura estado anterior
+      const selectWasDisabled =
+        colecaoSelect.dataset.preLoadingDisabled === 'true';
+
       colecaoSelect.disabled = selectWasDisabled;
       delete colecaoSelect.dataset.preLoadingDisabled;
 
       [addColecaoBtn, delColecaoBtn].forEach(btn => {
         if (!btn) return;
-        const wasDisabled = btn.dataset.preLoadingDisabled === 'true';
+
+        const wasDisabled =
+          btn.dataset.preLoadingDisabled === 'true';
+
         btn.disabled = wasDisabled;
         delete btn.dataset.preLoadingDisabled;
       });
     };
 
-    async function carregarColecoes({ selecionada, removida, colecoes, forcarAtualizacao = false, preservarSelecao = true } = {}) {
+    async function carregarColecoes({ selecionada, removida, colecoes, forcarAtualizacao = false, preservarSelecao = true, exibirAnimacao = false, atrasoMs = 0 } = {}) {
       if (!colecaoSelect) return;
 
       carregamentoColecoesEmAndamento += 1;
+      if (exibirAnimacao) {
+        carregamentoColecoesComAnimacao += 1;
+        atualizarIndicadorColecao();
+      }
       setColecaoLoadingState(true);
 
       try {
+        if (atrasoMs > 0) {
+          await aguardar(atrasoMs);
+        }
+
         const listaColecoes = Array.isArray(colecoes) && !forcarAtualizacao
           ? colecoes
           : await window.electronAPI.listarColecoes();
@@ -187,6 +211,11 @@
         }
       } finally {
         carregamentoColecoesEmAndamento = Math.max(0, carregamentoColecoesEmAndamento - 1);
+        if (exibirAnimacao) {
+          carregamentoColecoesComAnimacao = Math.max(0, carregamentoColecoesComAnimacao - 1);
+          atualizarIndicadorColecao();
+        }
+
         if (carregamentoColecoesEmAndamento === 0) {
           setColecaoLoadingState(false);
         }
@@ -207,12 +236,13 @@
 
       handleColecaoAtualizada = (event) => {
         const detail = event?.detail || {};
-        const possuiColecoesNoEvento = Array.isArray(detail.colecoes);
 
         carregarColecoes({
           ...detail,
-          forcarAtualizacao: !possuiColecoesNoEvento,
-          preservarSelecao: false
+          forcarAtualizacao: true,
+          preservarSelecao: false,
+          exibirAnimacao: true,
+          atrasoMs: 3000
         });
       };
 
