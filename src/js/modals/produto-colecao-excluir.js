@@ -46,10 +46,12 @@
     }
     try {
       const resultado = await window.electronAPI.removerColecao(nome);
+      const nomeRemovido =
+        (typeof resultado === 'string' ? resultado : resultado?.nome) || nome;
 
       window.dispatchEvent(new CustomEvent('colecaoAtualizada', {
         detail: {
-          removida: resultado?.nome
+          removida: nomeRemovido
         }
       }));
 

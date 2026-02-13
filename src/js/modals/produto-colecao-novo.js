@@ -24,15 +24,17 @@
         close();
         return;
       }
-      const valorCanonical = await window.electronAPI.adicionarColecao(nome);
+      const resultado = await window.electronAPI.adicionarColecao(nome);
+      const nomeSelecionado =
+        (typeof resultado === 'string' ? resultado : resultado?.nome) || nome;
+
       showToast('Coleção adicionada com sucesso!', 'success');
       close();
-      const resultado = await window.electronAPI.adicionarColecao(nome);
 
       // Atualiza imediatamente o select do modal pai
       window.dispatchEvent(new CustomEvent('colecaoAtualizada', {
         detail: {
-          selecionada: resultado?.nome || nome
+          selecionada: nomeSelecionado
         }
       }));
 
