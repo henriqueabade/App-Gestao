@@ -230,11 +230,12 @@
 
       handleColecaoAtualizada = (event) => {
         const detail = event?.detail || {};
-        const recebeuListaAtualizada = Array.isArray(detail.colecoes);
 
         carregarColecoes({
           ...detail,
-          forcarAtualizacao: !recebeuListaAtualizada,
+          // Sempre força nova leitura no backend para evitar lista desatualizada
+          // retornada pela operação de criação/exclusão em cenários assíncronos.
+          forcarAtualizacao: true,
           preservarSelecao: false,
           exibirAnimacao: true,
           atrasoMs: 3000
