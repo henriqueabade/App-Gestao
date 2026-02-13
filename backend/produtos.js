@@ -1126,7 +1126,12 @@ async function adicionarColecao(nome) {
 
   try {
     const res = await pool.post('/colecao', { nome: nomeNormalizado });
-    const colecoesAtualizadas = await listarColecoes();
+    let colecoesAtualizadas = [];
+    try {
+      colecoesAtualizadas = await listarColecoes();
+    } catch (listErr) {
+      console.warn('Coleção adicionada, mas não foi possível atualizar a listagem de coleções:', listErr?.message || listErr);
+    }
     return {
       nome: normalizarNomeColecao(res?.nome || nomeNormalizado),
       colecoes: colecoesAtualizadas
@@ -1192,7 +1197,12 @@ async function removerColecao(nome) {
   // 🗑 Delete por ID
   await pool.delete(`/colecao/${colecao.id}`);
 
-  const colecoesAtualizadas = await listarColecoes();
+  let colecoesAtualizadas = [];
+  try {
+    colecoesAtualizadas = await listarColecoes();
+  } catch (listErr) {
+    console.warn('Coleção removida, mas não foi possível atualizar a listagem de coleções:', listErr?.message || listErr);
+  }
   return {
     nome: nomeNormalizado,
     colecoes: colecoesAtualizadas

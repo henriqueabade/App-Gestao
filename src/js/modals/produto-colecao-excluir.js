@@ -51,7 +51,8 @@
 
       window.dispatchEvent(new CustomEvent('colecaoAtualizada', {
         detail: {
-          removida: nomeRemovido
+          removida: nomeRemovido,
+          colecoes: Array.isArray(resultado?.colecoes) ? resultado.colecoes : undefined
         }
       }));
 

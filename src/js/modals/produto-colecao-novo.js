@@ -34,7 +34,8 @@
       // Atualiza imediatamente o select do modal pai
       window.dispatchEvent(new CustomEvent('colecaoAtualizada', {
         detail: {
-          selecionada: nomeSelecionado
+          selecionada: nomeSelecionado,
+          colecoes: Array.isArray(resultado?.colecoes) ? resultado.colecoes : undefined
         }
       }));
 

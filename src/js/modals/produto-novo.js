@@ -112,17 +112,19 @@
         .trim()
         .toLowerCase();
 
-    async function carregarColecoes({ selecionada, removida } = {}) {
+    async function carregarColecoes({ selecionada, removida, colecoes } = {}) {
       if (!colecaoSelect) return;
 
       try {
-        const colecoes = await window.electronAPI.listarColecoes();
+        const listaColecoes = Array.isArray(colecoes)
+          ? colecoes
+          : await window.electronAPI.listarColecoes();
 
         const valorAtual = colecaoSelect.value;
 
         colecaoSelect.innerHTML =
           '<option value="">Selecionar Coleção</option>' +
-          colecoes.map(c => `<option value="${c}">${c}</option>`).join('');
+          listaColecoes.map(c => `<option value="${c}">${c}</option>`).join('');
 
         let valorSelecionado = selecionada ?? valorAtual;
 
@@ -131,7 +133,7 @@
         }
 
         const mapa = new Map(
-          colecoes.map(c => [normalizarNomeColecao(c), c])
+          listaColecoes.map(c => [normalizarNomeColecao(c), c])
         );
 
         colecaoSelect.value =
