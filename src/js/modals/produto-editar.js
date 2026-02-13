@@ -264,7 +264,14 @@
     }
 
     handleColecaoAtualizada = (event) => {
-      carregarColecoes({ ...(event?.detail || {}), forcarAtualizacao: true, preservarSelecao: false });
+      const detail = event?.detail || {};
+      const possuiColecoesNoEvento = Array.isArray(detail.colecoes);
+
+      carregarColecoes({
+        ...detail,
+        forcarAtualizacao: !possuiColecoesNoEvento,
+        preservarSelecao: false
+      });
     };
     window.addEventListener('colecaoAtualizada', handleColecaoAtualizada);
 
