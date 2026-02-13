@@ -169,12 +169,15 @@
     async function carregarColecoes({ selecionada, removida, colecoes, forcarAtualizacao = false, preservarSelecao = true, exibirAnimacao = false, atrasoMs = 0 } = {}) {
       if (!colecaoSelect) return;
 
+      const haviaCarregamentoEmAndamento = carregamentoColecoesEmAndamento > 0;
       carregamentoColecoesEmAndamento += 1;
       if (exibirAnimacao) {
         carregamentoColecoesComAnimacao += 1;
         atualizarIndicadorColecao();
       }
-      setColecaoLoadingState(true);
+      if (!haviaCarregamentoEmAndamento) {
+        setColecaoLoadingState(true);
+      }
 
       try {
         if (atrasoMs > 0) {
