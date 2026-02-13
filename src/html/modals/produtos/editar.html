@@ -72,6 +72,10 @@
             <button type="button" id="addColecaoEditar" class="absolute right-2 top-1/2 -translate-y-1/2 btn-neutral icon-only text-gray-300 hover:text-white" aria-label="Adicionar coleção" disabled>
               <i class="fas fa-plus"></i>
             </button>
+            <span id="colecaoLoadingIndicatorEditar" class="hidden mt-2 inline-flex items-center gap-2 text-xs text-gray-400" aria-live="polite">
+              <i class="fas fa-spinner fa-spin"></i>
+              Atualizando coleções...
+            </span>
           </div>
           <div>
             <label class="flex items-center gap-3 mb-4">
@@ -207,4 +211,3 @@
     </form>
   </div>
 </div>
-

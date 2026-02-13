@@ -39,6 +39,9 @@
   const taxInput        = document.getElementById('taxInput');
   const etapaSelect     = document.getElementById('etapaSelect');
   const comecarBtn      = document.getElementById('comecarNovoProduto');
+  const addColecaoBtn   = document.getElementById('addColecaoNovo');
+  const delColecaoBtn   = document.getElementById('delColecaoNovo');
+  const colecaoLoadingIndicator = document.getElementById('colecaoLoadingIndicatorNovo');
   const precoVendaEl    = document.getElementById('precoVenda');
   
   const precoVendaTagEl = document.getElementById('precoVendaTag');
@@ -112,8 +115,46 @@
         .trim()
         .toLowerCase();
 
+    let carregamentoColecoesEmAndamento = 0;
+
+    const setColecaoLoadingState = (isLoading) => {
+      if (!colecaoSelect) return;
+
+      if (isLoading) {
+        colecaoSelect.dataset.preLoadingDisabled = String(colecaoSelect.disabled);
+        if (addColecaoBtn) addColecaoBtn.dataset.preLoadingDisabled = String(addColecaoBtn.disabled);
+        if (delColecaoBtn) delColecaoBtn.dataset.preLoadingDisabled = String(delColecaoBtn.disabled);
+      }
+
+      if (colecaoLoadingIndicator) {
+        colecaoLoadingIndicator.classList.toggle('hidden', !isLoading);
+      }
+
+      if (isLoading) {
+        colecaoSelect.disabled = true;
+        [addColecaoBtn, delColecaoBtn].forEach(btn => {
+          if (btn) btn.disabled = true;
+        });
+        return;
+      }
+
+      const selectWasDisabled = colecaoSelect.dataset.preLoadingDisabled === 'true';
+      colecaoSelect.disabled = selectWasDisabled;
+      delete colecaoSelect.dataset.preLoadingDisabled;
+
+      [addColecaoBtn, delColecaoBtn].forEach(btn => {
+        if (!btn) return;
+        const wasDisabled = btn.dataset.preLoadingDisabled === 'true';
+        btn.disabled = wasDisabled;
+        delete btn.dataset.preLoadingDisabled;
+      });
+    };
+
     async function carregarColecoes({ selecionada, removida, colecoes, forcarAtualizacao = false, preservarSelecao = true } = {}) {
       if (!colecaoSelect) return;
+
+      carregamentoColecoesEmAndamento += 1;
+      setColecaoLoadingState(true);
 
       try {
         const listaColecoes = Array.isArray(colecoes) && !forcarAtualizacao
@@ -141,6 +182,14 @@
 
       } catch (err) {
         console.error('Erro ao carregar coleções:', err);
+        if (typeof showToast === 'function') {
+          showToast('Não foi possível atualizar coleções. Tente novamente.', 'error');
+        }
+      } finally {
+        carregamentoColecoesEmAndamento = Math.max(0, carregamentoColecoesEmAndamento - 1);
+        if (carregamentoColecoesEmAndamento === 0) {
+          setColecaoLoadingState(false);
+        }
       }
     }
 
@@ -170,11 +219,11 @@
       window.addEventListener('colecaoAtualizada', handleColecaoAtualizada);
     }
 
-    document.getElementById('addColecaoNovo')?.addEventListener('click', () => {
+    addColecaoBtn?.addEventListener('click', () => {
       if (colecaoSelect) colecaoSelect.value = '';
       Modal.open('modals/produtos/colecao-novo.html', '../js/modals/produto-colecao-novo.js', 'novaColecao', true);
     });
-    document.getElementById('delColecaoNovo')?.addEventListener('click', () => {
+    delColecaoBtn?.addEventListener('click', () => {
       if (colecaoSelect) colecaoSelect.value = '';
       Modal.open('modals/produtos/colecao-excluir.html', '../js/modals/produto-colecao-excluir.js', 'excluirColecao', true);
     });

@@ -101,6 +101,7 @@
     const colecaoSelect = document.getElementById('colecaoSelect');
     const addColecaoBtn = document.getElementById('addColecaoEditar');
     const delColecaoBtn = document.getElementById('delColecaoEditar');
+    const colecaoLoadingIndicator = document.getElementById('colecaoLoadingIndicatorEditar');
     const updateRadios = Array.from(document.querySelectorAll('input[name="updateOption"]'));
     const statusRadios = Array.from(document.querySelectorAll('input[name="statusOption"]'));
     const precoVendaEl = document.getElementById('precoVenda');
@@ -231,8 +232,50 @@
         .trim()
         .toLowerCase();
 
+    let carregamentoColecoesEmAndamento = 0;
+
+    const setColecaoLoadingState = (isLoading) => {
+      if (!colecaoSelect) return;
+
+      if (isLoading) {
+        colecaoSelect.dataset.preLoadingDisabled = String(colecaoSelect.disabled);
+        if (addColecaoBtn) addColecaoBtn.dataset.preLoadingDisabled = String(addColecaoBtn.disabled);
+        if (delColecaoBtn) delColecaoBtn.dataset.preLoadingDisabled = String(delColecaoBtn.disabled);
+      }
+
+      if (colecaoLoadingIndicator) {
+        colecaoLoadingIndicator.classList.toggle('hidden', !isLoading);
+      }
+
+      if (isLoading) {
+        [colecaoSelect, addColecaoBtn, delColecaoBtn].forEach(el => {
+          if (!el) return;
+          el.disabled = true;
+          el.style.pointerEvents = 'none';
+        });
+        return;
+      }
+
+      const editable = !!(editarRegistroToggle && editarRegistroToggle.checked);
+      const selectWasDisabled = colecaoSelect.dataset.preLoadingDisabled === 'true';
+      colecaoSelect.disabled = selectWasDisabled || !editable;
+      colecaoSelect.style.pointerEvents = colecaoSelect.disabled ? 'none' : 'auto';
+      delete colecaoSelect.dataset.preLoadingDisabled;
+
+      [addColecaoBtn, delColecaoBtn].forEach(btn => {
+        if (!btn) return;
+        const wasDisabled = btn.dataset.preLoadingDisabled === 'true';
+        btn.disabled = wasDisabled || !editable;
+        btn.style.pointerEvents = btn.disabled ? 'none' : 'auto';
+        delete btn.dataset.preLoadingDisabled;
+      });
+    };
+
     async function carregarColecoes({ selecionada, removida, colecoes, forcarAtualizacao = false, preservarSelecao = true } = {}) {
       if (!colecaoSelect) return;
+
+      carregamentoColecoesEmAndamento += 1;
+      setColecaoLoadingState(true);
 
       try {
         const listaColecoes = Array.isArray(colecoes) && !forcarAtualizacao
@@ -260,6 +303,14 @@
 
       } catch (err) {
         console.error('Erro ao carregar coleções:', err);
+        if (typeof showToast === 'function') {
+          showToast('Não foi possível atualizar coleções. Tente novamente.', 'error');
+        }
+      } finally {
+        carregamentoColecoesEmAndamento = Math.max(0, carregamentoColecoesEmAndamento - 1);
+        if (carregamentoColecoesEmAndamento === 0) {
+          setColecaoLoadingState(false);
+        }
       }
     }
 
