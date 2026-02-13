@@ -360,13 +360,6 @@
     };
     window.addEventListener('colecaoAtualizada', handleColecaoAtualizada);
 
-    const recarregarColecoesAoAbrir = () => {
-      carregarColecoes({ forcarAtualizacao: true, preservarSelecao: false });
-    };
-    if (colecaoSelect) {
-      colecaoSelect.addEventListener('focus', recarregarColecoesAoAbrir);
-      colecaoSelect.addEventListener('pointerdown', recarregarColecoesAoAbrir);
-    }
 
     if (addColecaoBtn) {
       addColecaoBtn.addEventListener('click', () => {

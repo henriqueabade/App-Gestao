@@ -226,12 +226,6 @@
     if (colecaoSelect) {
       carregarColecoes();
 
-      const recarregarColecoesAoAbrir = () => {
-        carregarColecoes({ forcarAtualizacao: true, preservarSelecao: false });
-      };
-
-      colecaoSelect.addEventListener('focus', recarregarColecoesAoAbrir);
-      colecaoSelect.addEventListener('pointerdown', recarregarColecoesAoAbrir);
 
 
       handleColecaoAtualizada = (event) => {
