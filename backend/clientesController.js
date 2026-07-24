@@ -163,7 +163,7 @@ router.get('/:id', async (req, res) => {
     let notas = [];
     try {
       contatos = await api.get('/api/contatos_cliente', {
-        query: { cliente_id: id, order: 'nome' }
+        query: { id_cliente: id, order: 'nome' }
       });
     } catch (_) {}
     try {
@@ -221,7 +221,7 @@ router.get('/:id/resumo', async (req, res) => {
     const registro = enderecoIgual('reg', 'ent') ? 'Igual Entrega' : formatEndereco('reg');
 
     const contatosRes = await api.get('/api/contatos_cliente', {
-      query: { cliente_id: id, order: 'nome' }
+      query: { id_cliente: id, order: 'nome' }
     });
 
     res.json({
@@ -337,7 +337,7 @@ router.delete('/:id', async (req, res) => {
     }
 
     try {
-      const contatos = await api.get('/api/contatos_cliente', { query: { cliente_id: id } });
+      const contatos = await api.get('/api/contatos_cliente', { query: { id_cliente: id } });
       if (Array.isArray(contatos)) {
         for (const contato of contatos) {
           if (contato?.id) {
