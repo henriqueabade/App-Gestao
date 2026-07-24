@@ -121,6 +121,51 @@ function isDuplicatePedidoNumeroError(err) {
   return partes.includes('pedidos_numero_key') || partes.includes('duplicate key');
 }
 
+// Colisão genérica de chave (pkey/unique) para retentar com outro id.
+function isDuplicateKeyError(err) {
+  const partes = [
+    err?.body?.detalhe,
+    err?.body?.detail,
+    err?.body?.message,
+    err?.body?.error,
+    err?.message
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase();
+  return partes.includes('duplicate key') || partes.includes('_pkey') || partes.includes('unique constraint');
+}
+
+// Maior id atual de uma tabela (as tabelas de pedido NÃO auto-geram id).
+async function getMaxId(api, tabela) {
+  const lista = await api
+    .get(`/api/${tabela}`, { query: { order: 'id.desc', limit: 1 } })
+    .catch(() => []);
+  const primeiro = Array.isArray(lista) && lista.length ? lista[0] : null;
+  const maxId = Number(primeiro?.id);
+  return Number.isFinite(maxId) ? maxId : 0;
+}
+
+// Insere uma linha com id explícito, retentando com o próximo id em caso de
+// colisão de chave primária. Retorna o id efetivamente usado.
+async function inserirLinhaComId(api, tabela, payload, idInicial) {
+  let id = idInicial;
+  const maxTentativas = 50;
+  for (let tentativa = 0; tentativa < maxTentativas; tentativa++) {
+    try {
+      await api.post(`/api/${tabela}`, { ...payload, id });
+      return id;
+    } catch (err) {
+      if (isDuplicateKeyError(err) && tentativa < maxTentativas - 1) {
+        id += 1;
+        continue;
+      }
+      throw err;
+    }
+  }
+  return id;
+}
+
 // Monta o payload do pedido espelhando os campos do orçamento. Só são incluídos
 // campos que sabidamente existem na tabela "pedidos" (lidos na visualização/PDF
 // do pedido), evitando erro de INSERT por coluna inexistente.
@@ -247,19 +292,31 @@ async function converterOrcamentoEmPedido(api, id, conversao = null) {
   }
   const pedidoId = created?.id || created?.data?.id || created?.[0]?.id || orcamento.id;
 
+  // pedidos_itens.id e pedido_parcelas.id também são NOT NULL sem auto-incremento:
+  // geramos ids sequenciais a partir do maior id existente, com retentativa.
+  let proximoItemId = (await getMaxId(api, 'pedidos_itens')) + 1;
   for (const item of Array.isArray(itens) ? itens : []) {
     const decisao = decisaoPorProduto.get(Number(item?.produto_id)) || {};
-    await api.post('/api/pedidos_itens', buildPedidoItemPayload(item, pedidoId, decisao));
+    const usado = await inserirLinhaComId(
+      api,
+      'pedidos_itens',
+      buildPedidoItemPayload(item, pedidoId, decisao),
+      proximoItemId
+    );
+    proximoItemId = usado + 1;
   }
 
   const listaParcelas = Array.isArray(parcelas) ? parcelas : [];
+  let proximoParcelaId = (await getMaxId(api, 'pedido_parcelas')) + 1;
   for (let i = 0; i < listaParcelas.length; i++) {
     const { id: _pId, orcamento_id: _pOid, ...rest } = listaParcelas[i] || {};
-    await api.post('/api/pedido_parcelas', {
-      ...rest,
-      pedido_id: pedidoId,
-      numero_parcela: rest.numero_parcela || i + 1
-    });
+    const usado = await inserirLinhaComId(
+      api,
+      'pedido_parcelas',
+      { ...rest, pedido_id: pedidoId, numero_parcela: rest.numero_parcela || i + 1 },
+      proximoParcelaId
+    );
+    proximoParcelaId = usado + 1;
   }
 
   return { pedido: { id: pedidoId, numero }, jaExistia: false };
