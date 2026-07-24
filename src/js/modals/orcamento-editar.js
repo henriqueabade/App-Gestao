@@ -889,8 +889,20 @@
   });
 
   if (window.autoOpenQuoteConversion?.id === id) {
+    // Conversão direta a partir da tabela: o modal de edição é apenas o
+    // "host" do modal de conversão. Ao confirmar, precisamos DE FATO converter
+    // (aprovar o orçamento -> gerar o pedido) e fechar tudo, sem reexibir a
+    // edição. Antes, o callback vazio fazia o modal apenas fechar sem converter.
     setTimeout(() => {
-      openConverterModal(() => {});
+      openConverterModal(() => {
+        currentStatus = 'Aprovado';
+        try { updateStatusTag?.(); updateConverterBtn?.(); } catch (_) {}
+        // Esconde imediatamente o modal de edição para não reaparecer.
+        const editOverlay = document.getElementById('editarOrcamentoOverlay');
+        editOverlay?.classList.add('hidden');
+        editOverlay?.setAttribute('aria-hidden', 'true');
+        saveChanges(true);
+      });
     });
   }
 

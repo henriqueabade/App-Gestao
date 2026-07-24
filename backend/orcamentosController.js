@@ -84,6 +84,135 @@ function buildOrcamentoPayload(body = {}, { numero, situacao, dataAprovacao } = 
   };
 }
 
+// ---------------------------------------------------------------------------
+// Conversão de orçamento em pedido.
+//
+// A API upstream NÃO possui o endpoint /api/orcamentos/:id/convert (retorna
+// 404). A conversão é feita aqui: cria-se um registro em "pedidos" (ligado ao
+// orçamento por "orcamento_id") espelhando os dados e copiam-se itens/parcelas.
+// ---------------------------------------------------------------------------
+
+// Maior sequência numérica já usada em pedidos (PED1, PED2, ...).
+async function getMaxSequenciaPedido(api) {
+  const lista = await api
+    .get('/api/pedidos', { query: { order: 'id.desc', limit: 5000 } })
+    .catch(() => []);
+  let maxSeq = 0;
+  if (Array.isArray(lista)) {
+    for (const ped of lista) {
+      const n = parseInt(String(ped?.numero ?? '').replace(/\D/g, ''), 10);
+      if (Number.isFinite(n) && n > maxSeq) maxSeq = n;
+    }
+  }
+  return maxSeq;
+}
+
+function isDuplicatePedidoNumeroError(err) {
+  const partes = [
+    err?.body?.detalhe,
+    err?.body?.detail,
+    err?.body?.message,
+    err?.body?.error,
+    err?.message
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase();
+  return partes.includes('pedidos_numero_key') || partes.includes('duplicate key');
+}
+
+// Monta o payload do pedido espelhando os campos do orçamento. Só são incluídos
+// campos que sabidamente existem na tabela "pedidos" (lidos na visualização/PDF
+// do pedido), evitando erro de INSERT por coluna inexistente.
+function buildPedidoPayload(orc = {}, { numero } = {}) {
+  const agora = new Date().toISOString();
+  return {
+    numero,
+    orcamento_id: orc.id,
+    cliente_id: orc.cliente_id,
+    contato_id: orc.contato_id,
+    data_emissao: agora,
+    data_aprovacao: agora,
+    situacao: 'Produção',
+    parcelas: orc.parcelas,
+    forma_pagamento: orc.forma_pagamento,
+    transportadora: orc.transportadora,
+    desconto_pagamento: orc.desconto_pagamento,
+    desconto_especial: orc.desconto_especial,
+    desconto_total: orc.desconto_total,
+    valor_final: orc.valor_final,
+    observacoes: orc.observacoes,
+    validade: orc.validade,
+    prazo: orc.prazo,
+    dono: orc.dono
+  };
+}
+
+// Cria o pedido a partir do orçamento. Idempotente: se já houver pedido para
+// o orçamento, retorna o existente em vez de duplicar.
+async function converterOrcamentoEmPedido(api, id) {
+  const existentes = await api
+    .get('/api/pedidos', { query: { orcamento_id: id } })
+    .catch(() => []);
+  // Confirma explicitamente o vínculo por orcamento_id — caso o filtro upstream
+  // seja ignorado, evita tratar erroneamente qualquer pedido como já existente.
+  const jaExiste = Array.isArray(existentes)
+    ? existentes.find(ped => String(ped?.orcamento_id) === String(id))
+    : null;
+  if (jaExiste) {
+    return { pedido: jaExiste, jaExistia: true };
+  }
+
+  const orcamento = await api.get(`/api/orcamentos/${id}`);
+  if (!orcamento || orcamento.error === 'Not found') {
+    const error = new Error('Orçamento não encontrado para conversão.');
+    error.status = 404;
+    throw error;
+  }
+
+  const [itens, parcelas] = await Promise.all([
+    api.get('/api/orcamentos_itens', { query: { orcamento_id: id } }).catch(() => []),
+    api.get('/api/orcamento_parcelas', { query: { orcamento_id: id, order: 'numero_parcela' } }).catch(() => [])
+  ]);
+
+  // Cria o pedido com número livre, retentando em caso de colisão de "numero".
+  let sequencia = (await getMaxSequenciaPedido(api)) + 1;
+  const maxTentativas = 20;
+  let created = null;
+  let numero = null;
+  for (let tentativa = 0; tentativa < maxTentativas; tentativa++) {
+    numero = `PED${sequencia}`;
+    try {
+      created = await api.post('/api/pedidos', buildPedidoPayload(orcamento, { numero }));
+      break;
+    } catch (err) {
+      if (isDuplicatePedidoNumeroError(err) && tentativa < maxTentativas - 1) {
+        sequencia += 1;
+        continue;
+      }
+      throw err;
+    }
+  }
+  const pedidoId = created?.id || created?.data?.id || created?.[0]?.id;
+
+  for (const item of Array.isArray(itens) ? itens : []) {
+    const { id: _itemId, orcamento_id: _oid, ...rest } = item || {};
+    await api.post('/api/pedidos_itens', { ...rest, pedido_id: pedidoId });
+  }
+
+  const listaParcelas = Array.isArray(parcelas) ? parcelas : [];
+  for (let i = 0; i < listaParcelas.length; i++) {
+    const { id: _pId, orcamento_id: _pOid, ...rest } = listaParcelas[i] || {};
+    await api.post('/api/pedido_parcelas', {
+      ...rest,
+      pedido_id: pedidoId,
+      numero_parcela: rest.numero_parcela || i + 1
+    });
+  }
+
+  return { pedido: { id: pedidoId, numero }, jaExistia: false };
+}
+
 router.get('/', async (req, res) => {
   const { clienteId } = req.query;
   try {
@@ -205,9 +334,11 @@ router.put('/:id', async (req, res) => {
 
     let convertido = false;
     let convertErro = null;
+    let pedido = null;
     if (body.situacao === 'Aprovado') {
       try {
-        await api.post(`/api/orcamentos/${id}/convert`);
+        const resultado = await converterOrcamentoEmPedido(api, id);
+        pedido = resultado.pedido;
         convertido = true;
       } catch (convErr) {
         convertErro = convErr?.body?.detalhe || convErr?.body?.error || convErr?.message || 'Falha ao converter em pedido';
@@ -215,7 +346,7 @@ router.put('/:id', async (req, res) => {
       }
     }
 
-    res.json({ success: true, convertido, convertErro });
+    res.json({ success: true, convertido, convertErro, pedido });
   } catch (err) {
     console.error('Erro ao atualizar orçamento:', err);
     res.status(err.status || 500).json({ error: 'Erro ao atualizar orçamento' });
@@ -235,16 +366,18 @@ router.patch('/:id/status', async (req, res) => {
     await api.put(`/api/orcamentos/${id}`, payload);
     let convertido = false;
     let convertErro = null;
+    let pedido = null;
     if (situacao === 'Aprovado') {
       try {
-        await api.post(`/api/orcamentos/${id}/convert`);
+        const resultado = await converterOrcamentoEmPedido(api, id);
+        pedido = resultado.pedido;
         convertido = true;
       } catch (convErr) {
         convertErro = convErr?.body?.detalhe || convErr?.body?.error || convErr?.message || 'Falha ao converter em pedido';
         console.error('Erro ao converter orçamento em pedido:', convErr);
       }
     }
-    res.json({ success: true, convertido, convertErro });
+    res.json({ success: true, convertido, convertErro, pedido });
   } catch (err) {
     console.error('Erro ao atualizar status do orçamento:', err);
     res.status(err.status || 500).json({ error: 'Erro ao atualizar status do orçamento' });
