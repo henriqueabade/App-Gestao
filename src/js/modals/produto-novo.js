@@ -232,6 +232,7 @@
 
 
       handleColecaoAtualizada = (event) => {
+        console.log('🔥 EVENTO COLECAO ATUALIZADA DISPAROU');
         const detail = event?.detail || {};
 
         carregarColecoes({
