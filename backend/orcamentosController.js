@@ -3,13 +3,62 @@ const { createApiClient } = require('./apiHttpClient');
 
 const router = express.Router();
 
-async function getNextNumero(api) {
-  const last = await api
-    .get('/api/orcamentos', { query: { order: 'id.desc', limit: 1 } })
+// Descobre a maior sequência numérica já usada em "numero" (ORC1, ORC2, ...).
+// Precisa varrer TODOS os registros: usar apenas o último por id.desc gera
+// colisões quando os números não são monotônicos com o id (ex.: ORC2 criado
+// depois de ORC3), violando a constraint única "orcamentos_numero_key".
+async function getMaxSequencia(api) {
+  const lista = await api
+    .get('/api/orcamentos', { query: { order: 'id.desc', limit: 5000 } })
     .catch(() => []);
-  const ultimo = Array.isArray(last) && last.length ? last[0] : null;
-  const sequencia = ultimo?.numero ? parseInt(String(ultimo.numero).replace(/\D/g, ''), 10) || 0 : 0;
-  return `ORC${sequencia + 1}`;
+  let maxSeq = 0;
+  if (Array.isArray(lista)) {
+    for (const orc of lista) {
+      const n = parseInt(String(orc?.numero ?? '').replace(/\D/g, ''), 10);
+      if (Number.isFinite(n) && n > maxSeq) maxSeq = n;
+    }
+  }
+  return maxSeq;
+}
+
+// Detecta a violação de chave única do campo "numero" vinda da API upstream.
+function isDuplicateNumeroError(err) {
+  const partes = [
+    err?.body?.detalhe,
+    err?.body?.detail,
+    err?.body?.message,
+    err?.body?.error,
+    err?.message
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase();
+  return partes.includes('orcamentos_numero_key') || partes.includes('duplicate key');
+}
+
+// Cria o orçamento gerando o próximo "numero" livre. Em caso de colisão
+// (concorrência ou lacunas na sequência), incrementa e tenta novamente.
+async function criarOrcamentoComNumero(api, body) {
+  let sequencia = (await getMaxSequencia(api)) + 1;
+  const maxTentativas = 20;
+
+  for (let tentativa = 0; tentativa < maxTentativas; tentativa++) {
+    const numero = `ORC${sequencia}`;
+    try {
+      const created = await api.post('/api/orcamentos', buildOrcamentoPayload(body, { numero }));
+      return { created, numero };
+    } catch (err) {
+      if (isDuplicateNumeroError(err) && tentativa < maxTentativas - 1) {
+        sequencia += 1;
+        continue;
+      }
+      throw err;
+    }
+  }
+
+  const error = new Error('Não foi possível gerar um número único para o orçamento.');
+  error.status = 409;
+  throw error;
 }
 
 function buildOrcamentoPayload(body = {}, { numero, situacao, dataAprovacao } = {}) {
@@ -81,8 +130,7 @@ router.post('/', async (req, res) => {
 
   try {
     const api = createApiClient(req);
-    const numero = await getNextNumero(api);
-    const created = await api.post('/api/orcamentos', buildOrcamentoPayload(body, { numero }));
+    const { created, numero } = await criarOrcamentoComNumero(api, body);
     const orcamentoId = created?.id || created?.data?.id || created?.[0]?.id;
 
     for (const item of itens) {
@@ -204,14 +252,11 @@ router.post('/:id/clone', async (req, res) => {
       api.get('/api/orcamento_parcelas', { query: { orcamento_id: id } }).catch(() => [])
     ]);
 
-    const numero = await getNextNumero(api);
-    const created = await api.post(
-      '/api/orcamentos',
-      buildOrcamentoPayload(
-        { ...orcamento, situacao: 'Rascunho' },
-        { numero, situacao: 'Rascunho', dataAprovacao: null }
-      )
-    );
+    const { created, numero } = await criarOrcamentoComNumero(api, {
+      ...orcamento,
+      situacao: 'Rascunho',
+      data_aprovacao: null
+    });
     const novoId = created?.id || created?.data?.id || created?.[0]?.id;
 
     for (const item of Array.isArray(itens) ? itens : []) {
