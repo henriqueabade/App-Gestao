@@ -4288,11 +4288,16 @@ ipcMain.handle('open-pdf', async (_event, { id, tipo }) => {
       suggestedName: `${sanitizedBaseName}.pdf`
     });
 
-    const { canceled, filePath } = await dialog.showSaveDialog({
+    const ownerWindow = getPrimaryMonitorWindow();
+    const saveDialogOptions = {
       title: docType === 'pedido' ? 'Salvar Pedido em PDF' : 'Salvar Orçamento em PDF',
       defaultPath: path.join(app.getPath('documents'), `${sanitizedBaseName}.pdf`),
       filters: [{ name: 'Arquivos PDF', extensions: ['pdf'] }]
-    });
+    };
+
+    const { canceled, filePath } = ownerWindow
+      ? await dialog.showSaveDialog(ownerWindow, saveDialogOptions)
+      : await dialog.showSaveDialog(saveDialogOptions);
 
     if (canceled || !filePath) {
       logWarn('Usuário cancelou a geração ou nenhum caminho foi informado.', { canceled, filePath });
@@ -4304,8 +4309,16 @@ ipcMain.handle('open-pdf', async (_event, { id, tipo }) => {
     await fs.promises.mkdir(path.dirname(filePath), { recursive: true });
     await fs.promises.writeFile(filePath, pdfData);
 
-    logInfo('Arquivo PDF salvo com sucesso.', { filePath });
-    return { success: true, filePath };
+    logInfo('Arquivo PDF salvo com sucesso. Abrindo documento no visualizador padrão.', { filePath });
+
+    const openError = await shell.openPath(filePath);
+    if (openError) {
+      logWarn('Arquivo salvo, mas não foi possível abrir o PDF automaticamente.', { filePath, openError });
+      return { success: true, filePath, opened: false, message: `PDF salvo, mas não foi possível abrir automaticamente: ${openError}` };
+    }
+
+    logInfo('PDF aberto no visualizador padrão.', { filePath });
+    return { success: true, filePath, opened: true };
   } catch (error) {
     logError('Erro durante o fluxo de geração de PDF.', error);
     return { success: false, message: error?.message || 'Erro ao gerar PDF.' };

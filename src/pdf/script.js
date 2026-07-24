@@ -616,14 +616,25 @@ function waitForWindowLoad() {
 
   logInfo('Aguardando evento window.load.');
   return new Promise(resolve => {
-    window.addEventListener(
-      'load',
-      () => {
-        logInfo('Evento window.load capturado.');
-        resolve();
-      },
-      { once: true }
-    );
+    let settled = false;
+    const finish = (source) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(fallbackTimer);
+      window.removeEventListener('load', onLoad);
+      logInfo(source === 'fallback'
+        ? 'Prosseguindo sem novo evento window.load porque o documento já está interativo.'
+        : 'Evento window.load capturado.');
+      resolve();
+    };
+    const onLoad = () => finish('load');
+    const fallbackTimer = setTimeout(() => {
+      if (document.readyState === 'interactive' || document.readyState === 'complete') {
+        finish('fallback');
+      }
+    }, 0);
+
+    window.addEventListener('load', onLoad, { once: true });
   });
 }
 
@@ -849,4 +860,8 @@ async function buildDocument() {
   }
 }
 
-window.onload = buildDocument;
+if (document.readyState === 'loading') {
+  window.addEventListener('DOMContentLoaded', buildDocument, { once: true });
+} else {
+  buildDocument();
+}
