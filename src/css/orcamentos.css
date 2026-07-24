@@ -378,6 +378,15 @@ input[type="date"]:valid::-webkit-datetime-edit {
     background: rgba(34, 197, 94, 0.22);
 }
 
+/* Peça ainda não confirmada: fundo avermelhado para reforçar a pendência. */
+#converterOrcamentoOverlay .quote-piece-unapproved {
+    background: rgba(239, 68, 68, 0.12);
+}
+
+#converterOrcamentoOverlay .quote-piece-unapproved:hover {
+    background: rgba(239, 68, 68, 0.18);
+}
+
 #converterOrcamentoOverlay .table-loading-spinner {
     width: 32px;
     height: 32px;

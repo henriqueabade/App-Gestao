@@ -186,8 +186,10 @@
   let rows = Array.isArray(ctx.items) ? ctx.items.map(p => ({ ...p, approved: !!p.approved })) : [];
   const state = {
     allowNegativeStock: false,
+    hasNegative: false,
     insumosView: { filtroPecaId: null, mostrarSomenteFaltantes: true }
   };
+  const decisionNote = () => document.getElementById('converterDecisionNote');
   let lastStockByName = new Map();
 
   // Subtítulo com dados do orçamento
@@ -474,7 +476,10 @@
       const isAttention = r.a_produzir > 0 && r.status === 'atencao';
       const isApproved = !!r.approved;
       if (isApproved) tr.classList.add('quote-piece-approved');
-      const primaryTextClass = isApproved ? 'text-green-300' : 'text-white';
+      // Peça ainda não confirmada: destaca a linha em vermelho para deixar
+      // claro que ela precisa ser confirmada antes de converter.
+      else tr.classList.add('quote-piece-unapproved');
+      const primaryTextClass = isApproved ? 'text-green-300' : 'text-red-400';
       const statusIcon = isAttention ? '&#9888;' : '&#10003;';
       const statusTitle = isAttention ? 'Atenção' : 'OK';
       const statusColor = isAttention
@@ -642,23 +647,59 @@
     overlay.addEventListener('click', e => { if (e.target === overlay) closeDialog(); });
   }
 
-  function validate() {
+  // Reúne todos os motivos que impedem a conversão. Fonte única da verdade
+  // usada tanto para habilitar o botão quanto para bloquear o clique.
+  function computeValidation() {
     const noRows = rows.length === 0;
     const anyError = rows.some(r => r.error);
-    const canConfirm = !noRows && !anyError; // Fase 1: decisão de insumos não bloqueia ainda
-    btnConfirmar.disabled = !canConfirm;
-    btnConfirmar.classList.toggle('opacity-60', !canConfirm);
-    btnConfirmar.classList.toggle('cursor-not-allowed', !canConfirm);
+    const unapproved = rows.filter(r => !r.error && !r.approved);
+    const noteFilled = !!(decisionNote()?.value || '').trim();
+    const needsJustification = !!state.hasNegative && !noteFilled;
+    const canConfirm = !noRows && !anyError && unapproved.length === 0 && !needsJustification;
+    return { noRows, anyError, unapproved, needsJustification, noteFilled, canConfirm };
+  }
 
-    if (noRows) {
-      warningText.textContent = 'Nenhuma peça no orçamento.';
-      warning.classList.remove('hidden');
-    } else if (anyError) {
-      warningText.textContent = 'Existem peças com dados inválidos.';
+  function validate() {
+    const v = computeValidation();
+
+    btnConfirmar.disabled = !v.canConfirm;
+    btnConfirmar.classList.toggle('opacity-60', !v.canConfirm);
+    btnConfirmar.classList.toggle('cursor-not-allowed', !v.canConfirm);
+
+    // Destaca o campo de justificativa quando ele é obrigatório e está vazio,
+    // no mesmo padrão dos outros modais (borda vermelha).
+    const noteEl = decisionNote();
+    if (noteEl) {
+      noteEl.classList.toggle('border-red-500', v.needsJustification);
+      noteEl.classList.toggle('ring-1', v.needsJustification);
+      noteEl.classList.toggle('ring-red-500/40', v.needsJustification);
+    }
+    const noteLabel = document.getElementById('converterDecisionNoteRequired');
+    if (noteLabel) noteLabel.classList.toggle('hidden', !state.hasNegative);
+
+    let message = '';
+    if (v.noRows) {
+      message = 'Nenhuma peça no orçamento.';
+    } else if (v.anyError) {
+      message = 'Existem peças com dados inválidos.';
+    } else if (v.unapproved.length) {
+      const nomes = v.unapproved.map(r => r.nome).filter(Boolean).join(', ');
+      const qtd = v.unapproved.length;
+      message = nomes
+        ? `Existe(m) ${qtd} peça(s) sem confirmação: ${nomes}. Confirme todas para converter.`
+        : `Existe(m) ${qtd} peça(s) sem confirmação. Confirme todas para converter.`;
+    } else if (v.needsJustification) {
+      message = 'Há insumos com saldo negativo. Escreva a justificativa da decisão para continuar.';
+    }
+
+    if (message) {
+      warningText.textContent = message;
       warning.classList.remove('hidden');
     } else {
       warning.classList.add('hidden');
     }
+
+    return v;
   }
 
 
@@ -674,6 +715,24 @@
 
   btnCancelar.addEventListener('click', handleCancelConversion);
   btnConfirmar.addEventListener('click', () => {
+    // Revalida antes de confirmar: se algo impede a conversão (peças sem
+    // confirmação, dados inválidos ou saldo negativo sem justificativa), o
+    // modal NÃO fecha — apenas mostra o motivo e destaca o que falta.
+    const v = validate();
+    if (!v.canConfirm) {
+      if (v.needsJustification) {
+        decisionNote()?.focus();
+      } else if (v.unapproved.length) {
+        const firstIdx = rows.indexOf(v.unapproved[0]);
+        const tr = pecasBody?.querySelector(`tr[data-index="${firstIdx}"]`);
+        tr?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      }
+      if (typeof showToast === 'function') {
+        showToast(warningText?.textContent || 'Revise os itens pendentes antes de converter.', 'error');
+      }
+      return;
+    }
+
     const deletions = (ctx.items || [])
       .filter(orig => !rows.find(r => r.produto_id === orig.produto_id))
       .map(orig => orig.produto_id);
@@ -968,6 +1027,7 @@ async function computeInsumosAndRender(options = {}) {
     }
 
     lastStockByName = stockByName;
+    state.hasNegative = computeHasNegativeStock(stockByName);
     recomputeStocks();
     buildInsumosGrid(stockByName);
     if (shouldRenderPieces || forceRenderPieces) {
@@ -982,6 +1042,28 @@ async function computeInsumosAndRender(options = {}) {
   }
 }
 
+
+  // Verifica se QUALQUER insumo fica com saldo previsto negativo, considerando
+  // a demanda agregada de todas as peças. Independe do filtro/visão da grade,
+  // para que a validação seja confiável mesmo com a tabela filtrada.
+  function computeHasNegativeStock(stockByName) {
+    const map = stockByName && stockByName.size ? stockByName : (lastStockByName || new Map());
+    const agg = new Map();
+    rows.forEach(p => {
+      (p.faltantes || []).forEach(fi => {
+        const key = `${fi.nome}__${fi.un}__${fi.etapa}`;
+        const cur = agg.get(key) || { nome: fi.nome, necessario: 0 };
+        cur.necessario += Number(fi.necessario || 0);
+        agg.set(key, cur);
+      });
+    });
+    for (const v of agg.values()) {
+      const stock = map.get(v.nome) || { quantidade: 0, infinito: false };
+      if (stock.infinito) continue;
+      if (Number(stock.quantidade || 0) - Number(v.necessario || 0) < 0) return true;
+    }
+    return false;
+  }
 
   function buildInsumosGrid(stockByName) {
     stockByName = stockByName && stockByName.size ? stockByName : (lastStockByName || new Map());
@@ -1092,11 +1174,11 @@ async function computeInsumosAndRender(options = {}) {
       }
     }
 
-    if (anyNegative && !state.allowNegativeStock) {
-      warningText.textContent = 'Há insumos com saldo negativo. Ajuste peças/insumos.';
-      warning.classList.remove('hidden');
-      btnConfirmar.disabled = true;
-      btnConfirmar.classList.add('opacity-60', 'cursor-not-allowed');
+    // O estado de saldo negativo é calculado de forma agregada em
+    // computeHasNegativeStock() e a habilitação do botão é decidida por
+    // validate(), evitando lógicas concorrentes sobre o mesmo botão.
+    if (anyNegative) {
+      state.hasNegative = true;
     }
   }
 
@@ -1136,8 +1218,10 @@ async function computeInsumosAndRender(options = {}) {
     });
 
   // Eventos extra
+  // A nota de decisão não altera o cálculo de insumos; basta revalidar para
+  // liberar o botão assim que a justificativa for preenchida.
   document.getElementById('converterDecisionNote')?.addEventListener('input', () => {
-    computeInsumosAndRender({ message: 'Atualizando insumos...' });
+    validate();
   });
   function refreshInsumosTable(message = 'Atualizando insumos...') {
     const finalize = showTableLoading(insumosBody, message);

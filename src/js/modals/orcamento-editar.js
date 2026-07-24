@@ -720,8 +720,18 @@
         body: JSON.stringify(body)
       });
       if (!resp.ok) throw new Error('Erro');
+      let result = {};
+      try { result = await resp.json(); } catch (_) {}
       if (window.reloadOrcamentos) await window.reloadOrcamentos();
-      showToast(`ORÇAMENTO ${data.numero} ATUALIZADO COM SUCESSO!`, 'success');
+      if (currentStatus === 'Aprovado') {
+        if (result.convertErro) {
+          showToast(`Orçamento ${data.numero} aprovado, mas houve erro ao gerar o pedido: ${result.convertErro}`, 'error');
+        } else {
+          showToast(`ORÇAMENTO ${data.numero} CONVERTIDO EM PEDIDO COM SUCESSO!`, 'success');
+        }
+      } else {
+        showToast(`ORÇAMENTO ${data.numero} ATUALIZADO COM SUCESSO!`, 'success');
+      }
       if (closeAfter) close();
     } catch (err) {
       console.error(err);

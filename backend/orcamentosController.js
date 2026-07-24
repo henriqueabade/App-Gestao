@@ -203,13 +203,19 @@ router.put('/:id', async (req, res) => {
       });
     }
 
+    let convertido = false;
+    let convertErro = null;
     if (body.situacao === 'Aprovado') {
       try {
         await api.post(`/api/orcamentos/${id}/convert`);
-      } catch (_) {}
+        convertido = true;
+      } catch (convErr) {
+        convertErro = convErr?.body?.detalhe || convErr?.body?.error || convErr?.message || 'Falha ao converter em pedido';
+        console.error('Erro ao converter orçamento em pedido:', convErr);
+      }
     }
 
-    res.json({ success: true });
+    res.json({ success: true, convertido, convertErro });
   } catch (err) {
     console.error('Erro ao atualizar orçamento:', err);
     res.status(err.status || 500).json({ error: 'Erro ao atualizar orçamento' });
@@ -227,12 +233,18 @@ router.patch('/:id/status', async (req, res) => {
       data_aprovacao: situacoesComData.includes(situacao) ? new Date().toISOString() : null
     };
     await api.put(`/api/orcamentos/${id}`, payload);
+    let convertido = false;
+    let convertErro = null;
     if (situacao === 'Aprovado') {
       try {
         await api.post(`/api/orcamentos/${id}/convert`);
-      } catch (_) {}
+        convertido = true;
+      } catch (convErr) {
+        convertErro = convErr?.body?.detalhe || convErr?.body?.error || convErr?.message || 'Falha ao converter em pedido';
+        console.error('Erro ao converter orçamento em pedido:', convErr);
+      }
     }
-    res.json({ success: true });
+    res.json({ success: true, convertido, convertErro });
   } catch (err) {
     console.error('Erro ao atualizar status do orçamento:', err);
     res.status(err.status || 500).json({ error: 'Erro ao atualizar status do orçamento' });
