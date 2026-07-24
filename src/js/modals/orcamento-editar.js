@@ -314,6 +314,9 @@
   };
   let currentStatus = data.situacao || 'Rascunho';
   const initialStatus = currentStatus;
+  // Decisão de estoque capturada no modal de conversão (nota + quantidades por
+  // peça), enviada ao backend junto do PUT quando o orçamento é aprovado.
+  let lastConversionData = null;
   const statusTag = document.getElementById('statusTag');
   const statusOptions = document.getElementById('statusOptions');
   const converterBtn = document.getElementById('converterOrcamento');
@@ -713,6 +716,11 @@
       itens,
       parcelas_detalhes: parcelasDetalhes
     };
+    // Ao aprovar (conversão em pedido), envia a decisão de estoque para o
+    // backend gravar corretamente no pedido (nota, saldo negativo e quantidades).
+    if (currentStatus === 'Aprovado' && lastConversionData) {
+      body.conversao = lastConversionData;
+    }
     try {
       const resp = await fetchApi(`/api/orcamentos/${id}`, {
         method: 'PUT',
@@ -777,6 +785,14 @@
             }
           }
         });
+        // Guarda a decisão de estoque para o saveChanges enviar ao backend.
+        if (changes?.conversao) {
+          lastConversionData = {
+            decisaoNote: changes.conversao.decisionNote || '',
+            podeSaldoNegativo: !!changes.conversao.hasNegative,
+            itens: Array.isArray(changes.conversao.items) ? changes.conversao.items : []
+          };
+        }
         recalcTotals();
         onConfirm?.();
       } catch (err) {

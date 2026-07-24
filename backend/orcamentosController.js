@@ -124,17 +124,24 @@ function isDuplicatePedidoNumeroError(err) {
 // Monta o payload do pedido espelhando os campos do orçamento. Só são incluídos
 // campos que sabidamente existem na tabela "pedidos" (lidos na visualização/PDF
 // do pedido), evitando erro de INSERT por coluna inexistente.
-function buildPedidoPayload(orc = {}, { numero } = {}) {
+function buildPedidoPayload(orc = {}, { numero, conversao } = {}) {
   const agora = new Date().toISOString();
+  const hoje = agora.slice(0, 10); // colunas do tipo "date"
+  const note = conversao && typeof conversao.decisaoNote === 'string' ? conversao.decisaoNote.trim() : '';
+  const decisaoBy = conversao && Number.isFinite(Number(conversao.decisaoBy)) ? Number(conversao.decisaoBy) : null;
   return {
+    // pedidos.id NÃO é auto-incrementado (NOT NULL, sem default); o pedido
+    // compartilha o mesmo id do orçamento de origem (relação 1:1).
+    id: orc.id,
     numero,
     orcamento_id: orc.id,
     cliente_id: orc.cliente_id,
     contato_id: orc.contato_id,
     data_emissao: agora,
-    data_aprovacao: agora,
+    data_aprovacao: hoje,
     situacao: 'Produção',
     parcelas: orc.parcelas,
+    tipo_parcela: orc.tipo_parcela,
     forma_pagamento: orc.forma_pagamento,
     transportadora: orc.transportadora,
     desconto_pagamento: orc.desconto_pagamento,
@@ -144,13 +151,49 @@ function buildPedidoPayload(orc = {}, { numero } = {}) {
     observacoes: orc.observacoes,
     validade: orc.validade,
     prazo: orc.prazo,
-    dono: orc.dono
+    dono: orc.dono,
+    // pode_saldo_negativo é NOT NULL; a justificativa vai na coluna correta
+    // (decisao_estoque_note), e não em "observacoes".
+    pode_saldo_negativo: !!(conversao && conversao.podeSaldoNegativo),
+    decisao_estoque_note: note || null,
+    decisao_estoque_by: decisaoBy
+  };
+}
+
+// Monta o item do pedido apenas com colunas existentes em "pedidos_itens".
+// qtd_a_produzir e qtd_usar_pronta são NOT NULL: usam a decisão de estoque
+// vinda do modal de conversão (por produto_id) ou um padrão seguro.
+function buildPedidoItemPayload(item = {}, pedidoId, decisao = {}) {
+  const quantidade = Number(item.quantidade || 0);
+  const usarPronta = Number.isFinite(Number(decisao.qtd_usar_pronta)) ? Number(decisao.qtd_usar_pronta) : 0;
+  const aProduzir = Number.isFinite(Number(decisao.qtd_a_produzir))
+    ? Number(decisao.qtd_a_produzir)
+    : Math.max(0, quantidade - usarPronta);
+  return {
+    pedido_id: pedidoId,
+    produto_id: item.produto_id,
+    codigo: item.codigo,
+    nome: item.nome,
+    ncm: item.ncm,
+    quantidade: item.quantidade,
+    valor_unitario: item.valor_unitario,
+    desconto_total: item.desconto_total,
+    valor_total: item.valor_total,
+    valor_unitario_desc: item.valor_unitario_desc,
+    valor_desc: item.valor_desc,
+    desconto_pagamento: item.desconto_pagamento,
+    desconto_especial: item.desconto_especial,
+    desconto_pagamento_prc: item.desconto_pagamento_prc,
+    desconto_especial_prc: item.desconto_especial_prc,
+    qtd_a_produzir: aProduzir,
+    qtd_usar_pronta: usarPronta
   };
 }
 
 // Cria o pedido a partir do orçamento. Idempotente: se já houver pedido para
-// o orçamento, retorna o existente em vez de duplicar.
-async function converterOrcamentoEmPedido(api, id) {
+// o orçamento, retorna o existente em vez de duplicar. `conversao` carrega a
+// decisão de estoque (nota e quantidades por produto) vinda do modal.
+async function converterOrcamentoEmPedido(api, id, conversao = null) {
   const existentes = await api
     .get('/api/pedidos', { query: { orcamento_id: id } })
     .catch(() => []);
@@ -175,6 +218,15 @@ async function converterOrcamentoEmPedido(api, id) {
     api.get('/api/orcamento_parcelas', { query: { orcamento_id: id, order: 'numero_parcela' } }).catch(() => [])
   ]);
 
+  // Índice das decisões de estoque por produto_id (vindas do modal).
+  const decisaoPorProduto = new Map();
+  if (conversao && Array.isArray(conversao.itens)) {
+    for (const it of conversao.itens) {
+      const pid = Number(it?.produto_id);
+      if (Number.isFinite(pid)) decisaoPorProduto.set(pid, it);
+    }
+  }
+
   // Cria o pedido com número livre, retentando em caso de colisão de "numero".
   let sequencia = (await getMaxSequenciaPedido(api)) + 1;
   const maxTentativas = 20;
@@ -183,7 +235,7 @@ async function converterOrcamentoEmPedido(api, id) {
   for (let tentativa = 0; tentativa < maxTentativas; tentativa++) {
     numero = `PED${sequencia}`;
     try {
-      created = await api.post('/api/pedidos', buildPedidoPayload(orcamento, { numero }));
+      created = await api.post('/api/pedidos', buildPedidoPayload(orcamento, { numero, conversao }));
       break;
     } catch (err) {
       if (isDuplicatePedidoNumeroError(err) && tentativa < maxTentativas - 1) {
@@ -193,11 +245,11 @@ async function converterOrcamentoEmPedido(api, id) {
       throw err;
     }
   }
-  const pedidoId = created?.id || created?.data?.id || created?.[0]?.id;
+  const pedidoId = created?.id || created?.data?.id || created?.[0]?.id || orcamento.id;
 
   for (const item of Array.isArray(itens) ? itens : []) {
-    const { id: _itemId, orcamento_id: _oid, ...rest } = item || {};
-    await api.post('/api/pedidos_itens', { ...rest, pedido_id: pedidoId });
+    const decisao = decisaoPorProduto.get(Number(item?.produto_id)) || {};
+    await api.post('/api/pedidos_itens', buildPedidoItemPayload(item, pedidoId, decisao));
   }
 
   const listaParcelas = Array.isArray(parcelas) ? parcelas : [];
@@ -337,7 +389,7 @@ router.put('/:id', async (req, res) => {
     let pedido = null;
     if (body.situacao === 'Aprovado') {
       try {
-        const resultado = await converterOrcamentoEmPedido(api, id);
+        const resultado = await converterOrcamentoEmPedido(api, id, body.conversao);
         pedido = resultado.pedido;
         convertido = true;
       } catch (convErr) {

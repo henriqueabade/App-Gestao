@@ -743,9 +743,21 @@
         replacements.push({ oldId: orig.produto_id, newId: now.produto_id, newName: now.nome, newPrice: now.preco_venda });
       }
     });
+    // Decisão de estoque a persistir no pedido: justificativa (para a coluna
+    // decisao_estoque_note) e, por peça, quanto usar do pronto e quanto produzir
+    // (colunas NOT NULL qtd_usar_pronta / qtd_a_produzir de pedidos_itens).
+    const conversao = {
+      decisionNote: (decisionNote()?.value || '').trim(),
+      hasNegative: !!state.hasNegative,
+      items: rows.map(r => ({
+        produto_id: r.produto_id,
+        qtd_usar_pronta: Number(r.pronta || 0),
+        qtd_a_produzir: Number(r.a_produzir || 0)
+      }))
+    };
     try {
       cleanupReplaceModalIntegration();
-      window.confirmQuoteConversion?.({ deletions, replacements });
+      window.confirmQuoteConversion?.({ deletions, replacements, conversao });
       close();
     }
     catch (err) { console.error(err); showToast('Erro ao confirmar conversão', 'error'); }
