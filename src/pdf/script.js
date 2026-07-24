@@ -78,11 +78,39 @@ async function getApiBaseUrl() {
   return apiBaseUrlPromise;
 }
 
-async function fetchApi(path, options) {
+async function fetchApi(path, options = {}) {
   const baseUrl = await getApiBaseUrl();
   const url = new URL(path, baseUrl);
-  logInfo('Consultando API.', { url: url.toString(), method: options?.method || 'GET' });
-  const response = await fetch(url.toString(), options);
+  const { timeoutMs = 10000, ...fetchOptions } = options || {};
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  const externalSignal = fetchOptions.signal;
+  const abortFromExternalSignal = () => controller.abort();
+
+  if (externalSignal) {
+    if (externalSignal.aborted) {
+      controller.abort();
+    } else {
+      externalSignal.addEventListener('abort', abortFromExternalSignal, { once: true });
+    }
+  }
+
+  logInfo('Consultando API.', { url: url.toString(), method: fetchOptions?.method || 'GET', timeoutMs });
+
+  let response;
+  try {
+    response = await fetch(url.toString(), { ...fetchOptions, signal: controller.signal });
+  } catch (err) {
+    if (err?.name === 'AbortError') {
+      throw new Error(`Tempo limite excedido ao consultar a API (${timeoutMs}ms): ${url.pathname}`);
+    }
+    throw err;
+  } finally {
+    clearTimeout(timeoutId);
+    if (externalSignal) {
+      externalSignal.removeEventListener('abort', abortFromExternalSignal);
+    }
+  }
 
   if (!response.ok) {
     let responseText = '';
@@ -746,7 +774,10 @@ async function buildDocument() {
     let contato = {};
     let clienteEmFallback = false;
     try {
-      const clienteResp = await fetchApi(`/api/clientes/${orc.cliente_id}`).then(r => r.json());
+      if (!orc.cliente_id) {
+        throw new Error('Documento sem cliente_id informado. Usando dados de fallback no PDF.');
+      }
+      const clienteResp = await fetchApi(`/api/clientes/${orc.cliente_id}`, { timeoutMs: 5000 }).then(r => r.json());
       cliente = clienteResp.cliente || clienteResp;
       contatos = clienteResp.contatos || [];
       contato = contatos.find(c => c.id === orc.contato_id) || contatos[0] || {};
