@@ -4281,7 +4281,8 @@ ipcMain.handle('open-pdf', async (_event, { id, tipo }) => {
     const pdfData = await webContents.printToPDF({
       printBackground: true,
       pageSize: 'A4',
-      marginsType: 0
+      landscape: true,
+      margins: { top: 0, bottom: 0, left: 0, right: 0 }
     });
 
     logInfo('PDF gerado em memória. Exibindo diálogo de salvamento padrão.', {

@@ -2,7 +2,7 @@
 
 @page {
   size: A4 landscape;
-  margin: 5mm;
+  margin: 0;
 }
 
 html,
@@ -68,12 +68,20 @@ body {
 }
 
 /* Cada página */
+/*
+ * A altura PRECISA ser fixa (e não "min-height"/"100vh"). Com min-height a
+ * área de conteúdo cresce para caber tudo, fazendo scrollHeight == clientHeight
+ * e quebrando a detecção de transbordo da paginação (script.js), o que provoca
+ * loop infinito na montagem. Dimensões fixas de A4 paisagem garantem que
+ * scrollHeight passe a exceder clientHeight quando o conteúdo transborda.
+ */
 .page {
   position: relative;
-  width: 100%;
+  width: 297mm;
+  height: 210mm;
   box-sizing: border-box;
   page-break-after: always;
-  min-height: calc(100vh - 0mm);
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   background: #fff;

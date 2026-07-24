@@ -492,6 +492,10 @@ function convertToHeaderContinuationPage(page, content, table, tail) {
 function buildPages(context) {
   const { items, orc, tipo, contatoNomeAssinatura = '' } = context;
   const remaining = items.slice();
+  // Tolerância (px) para arredondamentos de layout. Como o container tem altura
+  // fixa e "overflow: hidden", scrollHeight só supera clientHeight quando o
+  // conteúdo REALMENTE transborda; a tolerância é somada (e não subtraída) para
+  // evitar quebras prematuras por diferenças de sub-pixel.
   const overflowBuffer = 2;
   let pageIndex = 0;
   let pendingTailHtml = null;
@@ -500,7 +504,21 @@ function buildPages(context) {
     remaining.push(['', 'Nenhum item disponível', '', '', '', '', '']);
   }
 
+  // Guarda de segurança: em nenhuma hipótese o laço pode ficar preso.
+  // O número de páginas nunca deve exceder itens + algumas páginas de folga.
+  const maxIteracoes = remaining.length + 10;
+  let iteracoes = 0;
+
   while (remaining.length > 0 || pendingTailHtml) {
+    iteracoes += 1;
+    if (iteracoes > maxIteracoes) {
+      logError('Interrompendo paginação por exceder o limite de iterações.', {
+        maxIteracoes,
+        restantes: remaining.length
+      });
+      break;
+    }
+
     const isFirst = pageIndex === 0;
     const isTailOnlyPage = pendingTailHtml && remaining.length === 0;
     const page = createPage();
@@ -545,12 +563,21 @@ function buildPages(context) {
       appendRow(tbody, row);
       ensureTableFits(page);
 
-      if (content.scrollHeight > content.clientHeight - overflowBuffer) {
+      if (content.scrollHeight > content.clientHeight + overflowBuffer) {
         tbody.removeChild(tbody.lastElementChild);
         ensureTableFits(page);
         break;
       }
 
+      pageRows.push(remaining.shift());
+    }
+
+    // Garantia de progresso: se, por qualquer motivo de layout, nenhuma linha
+    // coube nesta página mas ainda há itens a exibir, força ao menos uma linha.
+    // Sem isso, "remaining" nunca diminui e o laço entra em loop infinito.
+    if (pageRows.length === 0 && remaining.length > 0) {
+      appendRow(tbody, remaining[0]);
+      ensureTableFits(page);
       pageRows.push(remaining.shift());
     }
 
@@ -563,8 +590,8 @@ function buildPages(context) {
 
     let safety = 0;
     while (
-      content.scrollHeight > content.clientHeight - overflowBuffer &&
-      pageRows.length > 0 &&
+      content.scrollHeight > content.clientHeight + overflowBuffer &&
+      pageRows.length > 1 &&
       safety < 200
     ) {
       safety += 1;
@@ -580,7 +607,7 @@ function buildPages(context) {
       ensureTableFits(page);
     }
 
-    if (content.scrollHeight > content.clientHeight - overflowBuffer) {
+    if (content.scrollHeight > content.clientHeight + overflowBuffer) {
       if (isLastPage) {
         pendingTailHtml = finalTailHtml;
         tail.innerHTML = signatureTailHtml;
