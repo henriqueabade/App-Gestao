@@ -3906,6 +3906,38 @@ async function waitForAutoLoginDatabaseReady(user) {
   return { ready: false, error: timeoutError };
 }
 
+/**
+ * Confere no servidor se o usuário da sessão salva ainda tem acesso liberado.
+ * Retorna null quando pode entrar, ou { code, message } quando está bloqueado.
+ * Falha de rede NÃO bloqueia (o app continua utilizável offline); a validação
+ * definitiva acontece nas rotas protegidas.
+ */
+async function verificarAcessoUsuarioAutoLogin(user) {
+  const id = user?.id;
+  if (!id) return null;
+  try {
+    const base = `http://localhost:${currentApiPort ?? configuredApiPort ?? DEFAULT_API_PORT}`;
+    const resp = await fetch(`${base}/api/usuarios/${encodeURIComponent(id)}`);
+    if (!resp.ok) return null;
+    const atual = await resp.json();
+    const bruto = String(atual?.status ?? '').trim();
+    if (!bruto) return null;
+    const chave = bruto
+      .normalize('NFD')
+      .replace(/[̀-ͯ]/g, '')
+      .replace(/[\s-]+/g, '_')
+      .toLowerCase();
+    if (chave === 'ativo' || chave === 'ativa' || chave === 'active') return null;
+    if (chave === 'nao_confirmado' || chave === 'naoconfirmado') {
+      return { code: 'unconfirmed-user', message: 'Confirme seu e-mail para acessar. Verifique sua caixa de entrada.' };
+    }
+    return { code: 'inactive-user', message: 'Login bloqueado pelo administrador, entre em contato.' };
+  } catch (err) {
+    console.warn('[auto-login] nao foi possivel revalidar o acesso:', err?.message || err);
+    return null;
+  }
+}
+
 ipcMain.handle('auto-login', async (_event, payload) => {
   const { user } = typeof payload === 'object' && payload !== null
     ? payload
@@ -3915,6 +3947,14 @@ ipcMain.handle('auto-login', async (_event, payload) => {
 
     if (!warmupResult.ready) {
       throw warmupResult.error;
+    }
+
+    // Revalida o acesso na entrada automática: se o administrador desativou a
+    // conta depois que a sessão foi salva, o usuário não pode voltar por aqui.
+    const bloqueio = await verificarAcessoUsuarioAutoLogin(user);
+    if (bloqueio) {
+      setCurrentUserSession(null);
+      return { success: false, code: bloqueio.code, message: bloqueio.message };
     }
 
     const shouldCreateDashboard = !dashboardWindow;

@@ -173,14 +173,27 @@ router.get('/lista', async (req, res) => {
   try {
     const api = createInternalApiClient();
 
+    // Campos base + os de sessão/atividade. Sem estes últimos a listagem
+    // mostrava todo mundo OFFLINE e "Sem registro" no popover de atividade,
+    // porque as colunas simplesmente não vinham na resposta.
+    const camposBase = 'id,nome,email,perfil,status,permissoes,foto_usuario,avatar_version';
+    const camposAtividade = 'modelo_permissoes_id,data_ativacao,ultimo_login,ultima_entrada,ultima_saida,ultima_alteracao,ultima_atividade';
+
     const query = {
-      // só o que o front realmente usa
-      select: 'id,nome,email,perfil,status,permissoes,foto_usuario,avatar_version',
+      select: `${camposBase},${camposAtividade}`,
       order: 'nome',
       ...req.query
     };
 
-    const usuarios = await api.get('/api/usuarios', { query });
+    let usuarios;
+    try {
+      usuarios = await api.get('/api/usuarios', { query });
+    } catch (err) {
+      // Se alguma coluna de atividade ainda não existir na tabela, o upstream
+      // recusa o select inteiro. Nesse caso, cai para os campos base.
+      console.warn('[usuarios] select estendido falhou; usando campos base.', err?.message || err);
+      usuarios = await api.get('/api/usuarios', { ...query, select: camposBase });
+    }
     const payload = Array.isArray(usuarios)
       ? usuarios.map(user => normalizeAvatar(user))
       : [];
@@ -386,6 +399,172 @@ router.put('/:id/permissoes', async (req, res) => {
   } catch (err) {
     console.error('Erro ao aplicar permissões ao usuário:', err);
     res.status(err.status || 500).json({ error: 'Erro ao aplicar permissões ao usuário' });
+  }
+});
+
+/**
+ * A coluna usuarios.status tem CHECK constraint e só aceita os valores
+ * INTERNOS ('ativo', 'aguardando_aprovacao', 'nao_confirmado').
+ * A interface trabalha com rótulos ("Ativo", "Inativo", "Não confirmado"),
+ * que violavam a constraint (erro "usuarios_status_check").
+ * Normalizamos aqui, no backend, para proteger qualquer chamador.
+ */
+const STATUS_INTERNOS = new Set(['ativo', 'aguardando_aprovacao', 'nao_confirmado']);
+
+function normalizarStatusUsuario(valor) {
+  const bruto = String(valor ?? '').trim();
+  if (!bruto) return null;
+
+  const chave = bruto
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/[\s-]+/g, '_')
+    .toLowerCase();
+
+  if (STATUS_INTERNOS.has(chave)) return chave;
+
+  const mapa = {
+    ativo: 'ativo', ativa: 'ativo', active: 'ativo', habilitado: 'ativo', confirmado: 'ativo',
+    inativo: 'aguardando_aprovacao', inativa: 'aguardando_aprovacao', inativado: 'aguardando_aprovacao',
+    desativado: 'aguardando_aprovacao', desativada: 'aguardando_aprovacao',
+    desabilitado: 'aguardando_aprovacao', desabilitada: 'aguardando_aprovacao',
+    pendente: 'aguardando_aprovacao', pending: 'aguardando_aprovacao',
+    aguardando: 'aguardando_aprovacao', aguardando_aprovacao: 'aguardando_aprovacao',
+    nao_confirmado: 'nao_confirmado', nao_confirmada: 'nao_confirmado',
+    naoconfirmado: 'nao_confirmado', unconfirmed: 'nao_confirmado',
+    aguardando_confirmacao: 'nao_confirmado', pendente_confirmacao: 'nao_confirmado',
+    email_nao_confirmado: 'nao_confirmado'
+  };
+
+  return mapa[chave] || null;
+}
+
+/**
+ * GET /usuarios/perfis
+ * Lista os perfis disponíveis para o combo do modal de edição.
+ * Junta os modelos de permissão com os valores de "perfil" já usados pelos
+ * usuários, para não perder perfis legados que ainda não viraram modelo.
+ */
+router.get('/perfis', async (req, res) => {
+  try {
+    const api = createInternalApiClient();
+    const [modelos, usuarios] = await Promise.all([
+      api.get('/api/modelos_permissoes', { query: { order: 'nome' } }).catch(() => []),
+      api.get('/api/usuarios', { query: { select: 'perfil' } }).catch(() => [])
+    ]);
+
+    const perfis = [];
+    const vistos = new Set();
+
+    for (const m of Array.isArray(modelos) ? modelos : []) {
+      const nome = String(m?.nome || '').trim();
+      if (!nome || vistos.has(nome.toLowerCase())) continue;
+      vistos.add(nome.toLowerCase());
+      perfis.push({ id: m.id, nome, modelo: true });
+    }
+    for (const u of Array.isArray(usuarios) ? usuarios : []) {
+      const nome = String(u?.perfil || '').trim();
+      if (!nome || vistos.has(nome.toLowerCase())) continue;
+      vistos.add(nome.toLowerCase());
+      perfis.push({ id: null, nome, modelo: false });
+    }
+
+    perfis.sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+    res.json({ perfis });
+  } catch (err) {
+    console.error('Erro ao listar perfis:', err);
+    res.status(err.status || 500).json({ error: 'Erro ao listar perfis' });
+  }
+});
+
+/**
+ * PUT /usuarios/:id/dados
+ * Dados pessoais do modal de edição. O modal chamava esta rota, que não
+ * existia — por isso "não foi possível salvar os dados pessoais".
+ */
+router.put('/:id/dados', async (req, res) => {
+  const { id } = req.params;
+  const body = req.body || {};
+  try {
+    const api = createInternalApiClient();
+
+    const payload = {};
+    if (body.nome !== undefined) payload.nome = body.nome;
+    if (body.email !== undefined) payload.email = body.email;
+    if (body.telefone !== undefined) payload.telefone = body.telefone;
+    if (body.status !== undefined) {
+      const st = normalizarStatusUsuario(body.status);
+      if (!st) return res.status(400).json({ error: `Status inválido: ${body.status}` });
+      payload.status = st;
+    }
+    if (body.observacoes !== undefined) payload.observacoes = body.observacoes;
+
+    // Perfil: grava o texto e, quando ele corresponder a um modelo de
+    // permissão, também vincula o modelo (é o que faz as permissões valerem).
+    if (body.perfil !== undefined) {
+      const perfil = String(body.perfil || '').trim();
+      payload.perfil = perfil;
+      if (perfil) {
+        const modelos = await api
+          .get('/api/modelos_permissoes', { query: { nome: perfil } })
+          .catch(() => []);
+        const modelo = Array.isArray(modelos)
+          ? modelos.find(m => String(m?.nome).trim().toLowerCase() === perfil.toLowerCase())
+          : null;
+        if (modelo?.id) payload.modelo_permissoes_id = modelo.id;
+      }
+    }
+    if (body.modeloPermissoesId !== undefined) {
+      payload.modelo_permissoes_id = body.modeloPermissoesId || null;
+    }
+
+    await api.put(`/api/usuarios/${id}`, payload);
+    try { require('./permissionsController').limparCachePermissoes(); } catch (_) {}
+    // devolve o usuário completo para o front atualizar a linha sem recarregar
+    const atualizado = await api.get(`/api/usuarios/${id}`).catch(() => null);
+    res.json({
+      success: true,
+      modeloPermissoesId: payload.modelo_permissoes_id ?? null,
+      usuario: atualizado || null,
+      ...(atualizado || {}),
+      statusInterno: atualizado?.status ?? payload.status ?? null
+    });
+  } catch (err) {
+    console.error('Erro ao salvar dados do usuário:', err);
+    res.status(err.status || 500).json({ error: 'Erro ao salvar dados do usuário' });
+  }
+});
+
+/**
+ * PATCH /usuarios/:id/status
+ * Ativar/desativar acesso (ícone de tomada na listagem). Também não existia.
+ */
+router.patch('/:id/status', async (req, res) => {
+  const { id } = req.params;
+  const status = normalizarStatusUsuario(req.body?.status);
+  if (!status) return res.status(400).json({ error: `Status inválido: ${req.body?.status ?? ''}` });
+
+  try {
+    const api = createInternalApiClient();
+    const payload = { status };
+    // registra quando o acesso foi (re)ativado, usado no tooltip da listagem
+    if (status === 'ativo') payload.data_ativacao = new Date().toISOString();
+    await api.put(`/api/usuarios/${id}`, payload);
+    try { require('./permissionsController').limparCachePermissoes(); } catch (_) {}
+    // devolve o usuário completo: o front usa isso para atualizar só aquela
+    // linha da tabela, em vez de recarregar/refiltrar a lista inteira.
+    const atualizado = await api.get(`/api/usuarios/${id}`).catch(() => null);
+    res.json({
+      success: true,
+      id: Number(id),
+      status,
+      statusInterno: status,
+      ...(atualizado || {}),
+      usuario: atualizado || null
+    });
+  } catch (err) {
+    console.error('Erro ao atualizar status do usuário:', err);
+    res.status(err.status || 500).json({ error: 'Erro ao atualizar status do usuário' });
   }
 });
 

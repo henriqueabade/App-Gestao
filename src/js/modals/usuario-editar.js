@@ -465,7 +465,10 @@
     if (inputs.nome) inputs.nome.value = usuario.nome || '';
     if (inputs.email) inputs.email.value = usuario.email || '';
     if (inputs.telefone) inputs.telefone.value = usuario.telefone || usuario.celular || usuario.fone || '';
-    if (inputs.perfil) inputs.perfil.value = usuario.perfil || '';
+    if (inputs.perfil) {
+      inputs.perfil.value = usuario.perfil || '';
+      popularPerfis(usuario.perfil || '');
+    }
     if (inputs.status) inputs.status.value = derivarStatus(usuario);
     if (inputs.observacoes) inputs.observacoes.value = usuario.observacoes || usuario.notas || '';
 
@@ -580,6 +583,54 @@
   function montarPermissoes(rawPermissoes) {
     permissoesState = normalizarPermissoes(rawPermissoes);
     renderPermissoes();
+  }
+
+  /**
+   * Preenche o combo "Perfil" com os perfis reais (modelos de permissão +
+   * perfis já usados por usuários). Mantém o valor atual do usuário mesmo que
+   * ele ainda não exista como modelo, para não apagá-lo ao salvar.
+   */
+  async function popularPerfis(valorAtual) {
+    const select = inputs.perfil;
+    if (!select) return;
+    const atual = String(valorAtual || '').trim();
+    try {
+      const resp = await fetchApi('/api/usuarios/perfis');
+      if (!resp.ok) throw new Error(await resp.text());
+      const dados = await resp.json();
+      const perfis = Array.isArray(dados?.perfis) ? dados.perfis : [];
+
+      select.innerHTML = '<option value="">Selecione</option>';
+      const vistos = new Set();
+      perfis.forEach(p => {
+        const nome = String(p?.nome || '').trim();
+        if (!nome || vistos.has(nome.toLowerCase())) return;
+        vistos.add(nome.toLowerCase());
+        const opt = document.createElement('option');
+        opt.value = nome;
+        opt.textContent = nome;
+        if (p?.id != null) opt.dataset.modeloId = String(p.id);
+        select.appendChild(opt);
+      });
+
+      // garante que o perfil atual do usuário apareça na lista
+      if (atual && !vistos.has(atual.toLowerCase())) {
+        const opt = document.createElement('option');
+        opt.value = atual;
+        opt.textContent = atual;
+        select.appendChild(opt);
+      }
+    } catch (err) {
+      console.error('Não foi possível carregar os perfis:', err);
+      // mantém as opções que já estiverem no HTML como fallback
+      if (atual && !Array.from(select.options).some(o => o.value === atual)) {
+        const opt = document.createElement('option');
+        opt.value = atual;
+        opt.textContent = atual;
+        select.appendChild(opt);
+      }
+    }
+    select.value = atual;
   }
 
   function coletarDadosFormulario() {

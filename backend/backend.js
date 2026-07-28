@@ -51,6 +51,36 @@ async function registrarUsuario(nome, email, senha) {
   return created;
 }
 
+/**
+ * Normaliza o status de acesso do usuário para os valores internos do banco
+ * ('ativo', 'aguardando_aprovacao', 'nao_confirmado'). Aceita também os
+ * rótulos da interface. Retorna null quando não há status informado — nesse
+ * caso o login segue (não bloqueamos por ausência de dado).
+ */
+function normalizarStatusAcesso(valor) {
+  const bruto = String(valor ?? '').trim();
+  if (!bruto) return null;
+  const chave = bruto
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/[\s-]+/g, '_')
+    .toLowerCase();
+  const mapa = {
+    ativo: 'ativo', ativa: 'ativo', active: 'ativo', habilitado: 'ativo', confirmado: 'ativo',
+    inativo: 'aguardando_aprovacao', inativa: 'aguardando_aprovacao', inativado: 'aguardando_aprovacao',
+    desativado: 'aguardando_aprovacao', desativada: 'aguardando_aprovacao',
+    desabilitado: 'aguardando_aprovacao', desabilitada: 'aguardando_aprovacao',
+    bloqueado: 'aguardando_aprovacao', bloqueada: 'aguardando_aprovacao',
+    pendente: 'aguardando_aprovacao', aguardando: 'aguardando_aprovacao',
+    aguardando_aprovacao: 'aguardando_aprovacao',
+    nao_confirmado: 'nao_confirmado', nao_confirmada: 'nao_confirmado',
+    naoconfirmado: 'nao_confirmado', unconfirmed: 'nao_confirmado',
+    aguardando_confirmacao: 'nao_confirmado', pendente_confirmacao: 'nao_confirmado',
+    email_nao_confirmado: 'nao_confirmado'
+  };
+  return mapa[chave] || chave;
+}
+
 async function loginUsuario(email, senha) {
   const normalizedEmail = normalizeEmail(email);
   try {
@@ -110,6 +140,24 @@ async function loginUsuario(email, senha) {
     }
 
     const user = { ...userFromLogin, ...userDetails };
+
+    // Usuário sem acesso liberado não entra. A credencial pode estar correta,
+    // mas o administrador desativou (ou ainda não liberou) a conta.
+    // Importante: o token já foi salvo acima, então precisa ser descartado —
+    // senão o bloqueado ficaria com uma sessão válida no disco.
+    const statusAcesso = normalizarStatusAcesso(user.status ?? user.statusInterno);
+    if (statusAcesso && statusAcesso !== 'ativo') {
+      clearToken();
+      const error = new Error(
+        statusAcesso === 'nao_confirmado'
+          ? 'Confirme seu e-mail para acessar. Verifique sua caixa de entrada.'
+          : 'Login bloqueado pelo administrador, entre em contato.'
+      );
+      // 'inactive-user' é o código que a tela de login já sabe tratar.
+      error.code = statusAcesso === 'nao_confirmado' ? 'unconfirmed-user' : 'inactive-user';
+      throw error;
+    }
+
     const perfil =
       user.perfil ||
       user.tipo_perfil ||

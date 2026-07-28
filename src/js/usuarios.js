@@ -753,13 +753,18 @@ function initUsuarios() {
         document.getElementById('btnNovoUsuario')?.click();
     });
 
-    document.getElementById('aplicarFiltro')?.addEventListener('click', aplicarFiltros);
+    document.getElementById('aplicarFiltro')?.addEventListener('click', () => {
+        // filtro explícito volta a valer para todos
+        usuariosRecemAlterados.clear();
+        aplicarFiltros();
+    });
     document.getElementById('filtroBusca')?.addEventListener('input', aplicarFiltros);
 
     document.getElementById('limparFiltro')?.addEventListener('click', () => {
         document.getElementById('filtroBusca').value = '';
         document.getElementById('filtroPerfil').value = '';
         document.querySelectorAll('.checkbox-custom').forEach(cb => cb.checked = false);
+        usuariosRecemAlterados.clear();
         renderUsuarios(usuariosCache);
     });
 
@@ -839,6 +844,11 @@ function initUsuarios() {
     }
 }
 
+// Usuários cujo status acabou de ser alterado. Eles permanecem visíveis mesmo
+// que deixem de casar com o filtro de status — antes, ativar/desativar com o
+// filtro "Ativo" marcado fazia a linha sumir da tabela.
+const usuariosRecemAlterados = new Set();
+
 function aplicarFiltros() {
     const filtros = coletarFiltros();
     const busca = normalizarParaComparacao(filtros.busca);
@@ -864,7 +874,7 @@ function aplicarFiltros() {
             }
         }
 
-        if (statusFiltros.size > 0) {
+        if (statusFiltros.size > 0 && !usuariosRecemAlterados.has(Number(u.id))) {
             const statusUsuario = obterStatusInterno(u);
             if (!statusUsuario || !statusFiltros.has(statusUsuario)) {
                 return false;
@@ -1047,7 +1057,7 @@ function renderUsuarios(lista) {
                 </span>
             </td>
             <td class="px-6 py-4">
-                <span class="${statusBadgeClasse} px-2 py-1 rounded-full text-xs font-medium">${escapeHtml(statusRotulo)}</span>
+                <span data-status-badge class="${statusBadgeClasse} px-2 py-1 rounded-full text-xs font-medium">${escapeHtml(statusRotulo)}</span>
             </td>`;
 
         if (avatarUrl) {
@@ -1294,6 +1304,40 @@ function atualizarResumo() {
     });
 }
 
+/**
+ * Atualiza no lugar a linha de um usuário após alternar o status.
+ * A tabela NÃO é re-renderizada nem re-filtrada: nenhuma outra linha some,
+ * some ou muda de posição — apenas o selo de status e o botão daquele usuário.
+ */
+function atualizarLinhaStatusUsuario(botao, statusInterno, usuarioAtualizado) {
+    const linha = botao?.closest('tr');
+    if (!linha) return;
+
+    const rotulo = obterStatusLabel(usuarioAtualizado || {}, statusInterno);
+    const classeBadge = obterStatusBadge(usuarioAtualizado || {}, statusInterno);
+
+    const badge = linha.querySelector('[data-status-badge]');
+    if (badge) {
+        badge.className = `${classeBadge} px-2 py-1 rounded-full text-xs font-medium`;
+        badge.setAttribute('data-status-badge', '');
+        badge.textContent = rotulo;
+    }
+
+    const isAtivo = statusInterno === 'ativo';
+    botao.dataset.usuarioStatus = statusInterno;
+    botao.classList.toggle('usuario-acao-botao--ativo', isAtivo);
+    botao.title = isAtivo ? 'Desativar acesso' : 'Ativar acesso';
+
+    const nomeLinha = linha.querySelector('td')?.textContent?.trim() || '';
+    botao.setAttribute('aria-label', `${isAtivo ? 'Desativar' : 'Ativar'} ${nomeLinha}`);
+
+    const icone = botao.querySelector('.usuario-acao-icone');
+    if (icone) {
+        icone.classList.toggle('usuario-acao-icone--on', isAtivo);
+        icone.classList.toggle('usuario-acao-icone--off', !isAtivo);
+    }
+}
+
 function refreshUsuariosAposAtualizacao() {
     if (temFiltrosAplicados()) {
         aplicarFiltros();
@@ -1394,8 +1438,15 @@ async function alternarStatusUsuario(botao) {
             };
         }
 
-        botao.dataset.usuarioStatus = atualizado.statusInterno || novoStatusInterno;
-        refreshUsuariosAposAtualizacao();
+        const statusFinal = normalizarStatusInternoValor(
+            atualizado.statusInterno || atualizado.status || novoStatusInterno
+        ) || novoStatusInterno;
+
+        // Atualiza SOMENTE esta linha. Antes chamávamos refreshUsuariosAposAtualizacao(),
+        // que re-aplicava os filtros e fazia linhas sumirem da tabela.
+        usuariosRecemAlterados.add(Number(usuarioId));
+        atualizarLinhaStatusUsuario(botao, statusFinal, usuariosCache[idx] || atualizado);
+        atualizarResumo();
     } catch (err) {
         console.error('Erro ao alternar status do usuário:', err);
     } finally {

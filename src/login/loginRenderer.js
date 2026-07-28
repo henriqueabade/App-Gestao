@@ -14,8 +14,8 @@ function showToast(message, type = "info") {
   }, 3000);
 }
 
-function showInactiveUserWarning() {
-  showToast('Seu usuário está inativo. Solicite ao administrador a ativação do seu acesso.', 'error');
+function showInactiveUserWarning(mensagem) {
+  showToast(mensagem || 'Login bloqueado pelo administrador, entre em contato.', 'error');
 }
 
 let pinErrorShown = false;
@@ -695,9 +695,11 @@ if (intro) {
         lastLoginAttempt = null;
         if (
           result.code === 'inactive-user' ||
-          message.toLowerCase().includes('inativo')
+          result.code === 'unconfirmed-user' ||
+          message.toLowerCase().includes('inativo') ||
+          message.toLowerCase().includes('bloqueado')
         ) {
-          showInactiveUserWarning();
+          showInactiveUserWarning(message);
         } else {
           showToast(message || 'Erro ao realizar login', 'error');
         }
