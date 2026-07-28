@@ -140,23 +140,32 @@
         const processGroups = groupItemsByProcess();
         y += 10; addPageIfNeeded(50); doc.setFontSize(13); doc.setFont('helvetica','bold'); doc.text('ITENS', margin, y); y += 18;
         doc.setFontSize(8);
+        let badgeX = margin;
         [...processGroups, { process: 'Valor Total', total: somas.totalInsumos, isTotal: true }].forEach(group => {
           const label = `${group.process}: ${currency(group.total)}`;
           const badgeWidth = Math.min(doc.getTextWidth(label) + 14, width);
-          if (y + 22 > bottom) { doc.addPage('a4', 'portrait'); y = 45; }
+          if (badgeX > margin && badgeX + badgeWidth > margin + width) {
+            badgeX = margin;
+            y += 22;
+          }
+          if (y + 12 > bottom) { doc.addPage('a4', 'portrait'); y = 45; badgeX = margin; }
           doc.setFillColor(...(group.isTotal ? [220, 242, 224] : [225, 235, 244]));
-          doc.roundedRect(margin, y - 10, badgeWidth, 16, 7, 7, 'F');
+          doc.roundedRect(badgeX, y - 10, badgeWidth, 16, 7, 7, 'F');
           doc.setTextColor(...(group.isTotal ? [25, 110, 55] : [30, 83, 120]));
-          doc.setFont('helvetica', 'bold'); doc.text(label, margin + 7, y); y += 22;
+          doc.setFont('helvetica', 'bold'); doc.text(label, badgeX + 7, y);
+          badgeX += badgeWidth + 6;
         });
+        y += 22;
         doc.setTextColor(0, 0, 0);
         const cols = [margin, 245, 320, 375, 455];
         const header = ['Item','Qtd.','Un.','Unitário','Total'];
         const drawHeader = fontSize => { doc.setFillColor(235,235,235); doc.rect(margin, y - 12, width, 20, 'F'); doc.setFontSize(fontSize); doc.setFont('helvetica','bold'); header.forEach((text,index) => doc.text(text, cols[index], y)); y += 14; };
-        processGroups.forEach((group, groupIndex) => {
+        processGroups.forEach(group => {
           const availableOnPage = bottom - y;
           const regularHeight = 38 + group.items.length * 16;
-          if (groupIndex > 0 || regularHeight > availableOnPage) { doc.addPage('a4','portrait'); y = 45; }
+          // O cabeçalho e todos os itens formam um bloco indivisível. Só inicia
+          // outra página quando o processo realmente não cabe no espaço restante.
+          if (regularHeight > availableOnPage) { doc.addPage('a4','portrait'); y = 45; }
           const availableHeight = bottom - y - 36;
           const rowHeight = Math.min(16, Math.max(7, availableHeight / Math.max(group.items.length, 1)));
           const fontSize = Math.min(8, Math.max(5, rowHeight - 2));
