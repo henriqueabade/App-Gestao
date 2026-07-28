@@ -1443,69 +1443,244 @@ const PERMISSIONS_CATALOG = {
     ],
     "columns": [
       {
-        "key": "col_rel_periodo",
-        "column": "col_rel_periodo",
-        "label": "Período"
+        "key": "col_rel_estq_nome",
+        "column": "col_rel_estq_nome",
+        "label": "Nome"
       },
       {
-        "key": "col_rel_cliente",
-        "column": "col_rel_cliente",
+        "key": "col_rel_estq_categoria",
+        "column": "col_rel_estq_categoria",
+        "label": "Categoria"
+      },
+      {
+        "key": "col_rel_estq_unidade",
+        "column": "col_rel_estq_unidade",
+        "label": "Unidade"
+      },
+      {
+        "key": "col_rel_estq_qtd",
+        "column": "col_rel_estq_qtd",
+        "label": "Quantidade"
+      },
+      {
+        "key": "col_rel_estq_preco",
+        "column": "col_rel_estq_preco",
+        "label": "Preço"
+      },
+      {
+        "key": "col_rel_estq_processo",
+        "column": "col_rel_estq_processo",
+        "label": "Processo"
+      },
+      {
+        "key": "col_rel_estq_status",
+        "column": "col_rel_estq_status",
+        "label": "Status"
+      },
+      {
+        "key": "col_rel_prod_codigo",
+        "column": "col_rel_prod_codigo",
+        "label": "Código"
+      },
+      {
+        "key": "col_rel_prod_nome",
+        "column": "col_rel_prod_nome",
+        "label": "Nome"
+      },
+      {
+        "key": "col_rel_prod_colecao",
+        "column": "col_rel_prod_colecao",
+        "label": "Coleção"
+      },
+      {
+        "key": "col_rel_prod_preco_venda",
+        "column": "col_rel_prod_preco_venda",
+        "label": "Preço de Venda"
+      },
+      {
+        "key": "col_rel_prod_margem",
+        "column": "col_rel_prod_margem",
+        "label": "Margem (%)"
+      },
+      {
+        "key": "col_rel_prod_qtd",
+        "column": "col_rel_prod_qtd",
+        "label": "Quantidade"
+      },
+      {
+        "key": "col_rel_prod_status",
+        "column": "col_rel_prod_status",
+        "label": "Status"
+      },
+      {
+        "key": "col_rel_cli_nome",
+        "column": "col_rel_cli_nome",
+        "label": "Nome"
+      },
+      {
+        "key": "col_rel_cli_cnpj",
+        "column": "col_rel_cli_cnpj",
+        "label": "CNPJ"
+      },
+      {
+        "key": "col_rel_cli_pais",
+        "column": "col_rel_cli_pais",
+        "label": "País"
+      },
+      {
+        "key": "col_rel_cli_estado",
+        "column": "col_rel_cli_estado",
+        "label": "Estado"
+      },
+      {
+        "key": "col_rel_cli_status",
+        "column": "col_rel_cli_status",
+        "label": "Status"
+      },
+      {
+        "key": "col_rel_cli_dono",
+        "column": "col_rel_cli_dono",
+        "label": "Dono"
+      },
+      {
+        "key": "col_rel_ctt_contato",
+        "column": "col_rel_ctt_contato",
+        "label": "Contato"
+      },
+      {
+        "key": "col_rel_ctt_tipo",
+        "column": "col_rel_ctt_tipo",
+        "label": "Tipo"
+      },
+      {
+        "key": "col_rel_ctt_empresa",
+        "column": "col_rel_ctt_empresa",
+        "label": "Empresa"
+      },
+      {
+        "key": "col_rel_ctt_celular",
+        "column": "col_rel_ctt_celular",
+        "label": "Celular"
+      },
+      {
+        "key": "col_rel_ctt_telefone",
+        "column": "col_rel_ctt_telefone",
+        "label": "Telefone"
+      },
+      {
+        "key": "col_rel_ctt_email",
+        "column": "col_rel_ctt_email",
+        "label": "E-mail"
+      },
+      {
+        "key": "col_rel_pros_nome",
+        "column": "col_rel_pros_nome",
+        "label": "Nome do Lead"
+      },
+      {
+        "key": "col_rel_pros_email",
+        "column": "col_rel_pros_email",
+        "label": "E-mail"
+      },
+      {
+        "key": "col_rel_pros_status",
+        "column": "col_rel_pros_status",
+        "label": "Status"
+      },
+      {
+        "key": "col_rel_pros_responsavel",
+        "column": "col_rel_pros_responsavel",
+        "label": "Responsável"
+      },
+      {
+        "key": "col_rel_orc_codigo",
+        "column": "col_rel_orc_codigo",
+        "label": "Código"
+      },
+      {
+        "key": "col_rel_orc_cliente",
+        "column": "col_rel_orc_cliente",
         "label": "Cliente"
       },
       {
-        "key": "col_rel_total",
-        "column": "col_rel_total",
-        "label": "Total vendido"
+        "key": "col_rel_orc_data",
+        "column": "col_rel_orc_data",
+        "label": "Data"
       },
       {
-        "key": "col_rel_pedidos",
-        "column": "col_rel_pedidos",
-        "label": "Nº pedidos"
+        "key": "col_rel_orc_valor",
+        "column": "col_rel_orc_valor",
+        "label": "Valor Total"
       },
       {
-        "key": "col_rel_ticket_medio",
-        "column": "col_rel_ticket_medio",
-        "label": "Ticket médio"
+        "key": "col_rel_orc_condicao",
+        "column": "col_rel_orc_condicao",
+        "label": "Condição"
       },
       {
-        "key": "col_rel_item",
-        "column": "col_rel_item",
-        "label": "Item"
+        "key": "col_rel_orc_status",
+        "column": "col_rel_orc_status",
+        "label": "Status"
       },
       {
-        "key": "col_rel_saldo",
-        "column": "col_rel_saldo",
-        "label": "Saldo"
+        "key": "col_rel_ped_codigo",
+        "column": "col_rel_ped_codigo",
+        "label": "Código"
       },
       {
-        "key": "col_rel_estq_valor",
-        "column": "col_rel_estq_valor",
-        "label": "Valor estoque"
+        "key": "col_rel_ped_cliente",
+        "column": "col_rel_ped_cliente",
+        "label": "Cliente"
       },
       {
-        "key": "col_rel_giro",
-        "column": "col_rel_giro",
-        "label": "Giro"
+        "key": "col_rel_ped_data",
+        "column": "col_rel_ped_data",
+        "label": "Data"
       },
       {
-        "key": "col_rel_etapa",
-        "column": "col_rel_etapa",
-        "label": "Etapa"
+        "key": "col_rel_ped_valor",
+        "column": "col_rel_ped_valor",
+        "label": "Valor Total"
       },
       {
-        "key": "col_rel_qtd",
-        "column": "col_rel_qtd",
-        "label": "Qtde."
+        "key": "col_rel_ped_condicao",
+        "column": "col_rel_ped_condicao",
+        "label": "Condição"
       },
       {
-        "key": "col_rel_pros_valor",
-        "column": "col_rel_pros_valor",
-        "label": "Valor potencial"
+        "key": "col_rel_ped_status",
+        "column": "col_rel_ped_status",
+        "label": "Status"
       },
       {
-        "key": "col_rel_taxa_conv",
-        "column": "col_rel_taxa_conv",
-        "label": "Taxa conv. (%)"
+        "key": "col_rel_usr_avatar",
+        "column": "col_rel_usr_avatar",
+        "label": "Avatar"
+      },
+      {
+        "key": "col_rel_usr_nome",
+        "column": "col_rel_usr_nome",
+        "label": "Nome"
+      },
+      {
+        "key": "col_rel_usr_email",
+        "column": "col_rel_usr_email",
+        "label": "E-mail"
+      },
+      {
+        "key": "col_rel_usr_perfil",
+        "column": "col_rel_usr_perfil",
+        "label": "Perfil"
+      },
+      {
+        "key": "col_rel_usr_situacao",
+        "column": "col_rel_usr_situacao",
+        "label": "Situação"
+      },
+      {
+        "key": "col_rel_usr_status",
+        "column": "col_rel_usr_status",
+        "label": "Status"
       }
     ]
   },

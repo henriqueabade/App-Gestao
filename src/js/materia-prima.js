@@ -317,19 +317,19 @@ function createMateriaPrimaRow(item) {
 
     const preco = Number(item.preco_unitario || 0);
     tr.innerHTML = `
-        <td class="px-6 py-4 whitespace-nowrap relative text-base text-white">
+        <td data-perm-col="col_mp_nome" class="px-6 py-4 whitespace-nowrap relative text-base text-white">
             <div class="flex items-center">
                 <span class="font-medium">${item.nome}</span>
                 <i class="info-icon ml-2" data-id="${item.id}"></i>
             </div>
         </td>
-        <td class="px-6 py-4 whitespace-nowrap text-base text-white">${quantidadeValor}</td>
-        <td class="px-6 py-4 whitespace-nowrap text-base" style="color: var(--color-violet)">${item.unidade || ''}</td>
-        <td class="px-6 py-4 whitespace-nowrap text-base text-white">R$ ${preco.toFixed(2).replace('.', ',')}</td>
+        <td data-perm-col="col_mp_estoque_atual" class="px-6 py-4 whitespace-nowrap text-base text-white">${quantidadeValor}</td>
+        <td data-perm-col="col_mp_unidade" class="px-6 py-4 whitespace-nowrap text-base" style="color: var(--color-violet)">${item.unidade || ''}</td>
+        <td data-perm-col="col_mp_custo_medio" class="px-6 py-4 whitespace-nowrap text-base text-white">R$ ${preco.toFixed(2).replace('.', ',')}</td>
         <td class="px-6 py-4 whitespace-nowrap text-base text-left">
             <div class="flex items-center justify-start space-x-2">
-                <i class="fas fa-edit w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Editar"></i>
-                <i class="fas fa-trash w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10 hover:text-white" style="color: var(--color-red)" title="Excluir"></i>
+                <i data-perm="mp.edit" class="fas fa-edit w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Editar"></i>
+                <i data-perm="mp.delete" class="fas fa-trash w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10 hover:text-white" style="color: var(--color-red)" title="Excluir"></i>
             </div>
         </td>`;
 

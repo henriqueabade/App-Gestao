@@ -3507,10 +3507,44 @@ ipcMain.handle('install-update', async () => {
   };
 });
 
+
+// ---------------------------------------------------------------------------
+// Verificação de permissão para handlers IPC.
+// Handlers IPC não passam pelo Express, então o middleware exigirPermissao()
+// não os alcança. Este helper consulta as permissões efetivas e recusa a
+// operação quando o usuário não tem a permissão. Em caso de falha na consulta,
+// NEGA (fail-safe) — diferente da interface, aqui a segurança vem primeiro.
+// ---------------------------------------------------------------------------
+async function verificarPermissaoIpc(chave) {
+  try {
+    const base = `http://localhost:${currentApiPort ?? configuredApiPort ?? DEFAULT_API_PORT}`;
+    const resp = await fetch(`${base}/api/permissoes/efetivas`);
+    const dados = await resp.json();
+    if (dados?.supAdmin) return true;                 // Sup Admin: tudo liberado
+    const perms = dados?.permissoes || {};
+    for (const bloco of Object.values(perms)) {
+      if (!bloco) continue;
+      if (bloco.acoes && Object.prototype.hasOwnProperty.call(bloco.acoes, chave)) {
+        return Boolean(bloco.ativo) && Boolean(bloco.acoes[chave]);
+      }
+    }
+    return false;
+  } catch (err) {
+    console.error('[permissoes] falha ao verificar permissão IPC:', chave, err);
+    return false;
+  }
+}
+
+function negadoIpc(chave) {
+  return { success: false, code: 'FORBIDDEN', permissao: chave,
+           message: 'Você não tem permissão para esta ação.' };
+}
+
 ipcMain.handle('listar-materia-prima', async (_e, { filtro }) => {
   return listarMaterias(filtro);
 });
 ipcMain.handle('adicionar-materia-prima', async (_e, dados) => {
+  if (!(await verificarPermissaoIpc('mp.create'))) return negadoIpc('mp.create');
   try {
     const materia = await adicionarMateria(dados);
     return { success: true, materia };
@@ -3519,6 +3553,7 @@ ipcMain.handle('adicionar-materia-prima', async (_e, dados) => {
   }
 });
 ipcMain.handle('atualizar-materia-prima', async (_e, { id, dados }) => {
+  if (!(await verificarPermissaoIpc('mp.edit'))) return negadoIpc('mp.edit');
   try {
     const materia = await atualizarMateria(id, dados);
     return { success: true, materia };
@@ -3527,6 +3562,7 @@ ipcMain.handle('atualizar-materia-prima', async (_e, { id, dados }) => {
   }
 });
 ipcMain.handle('excluir-materia-prima', async (_e, info) => {
+  if (!(await verificarPermissaoIpc('mp.delete'))) return negadoIpc('mp.delete');
   try {
     const id = typeof info === 'object' && info !== null ? info.id : info;
     if (id === undefined || id === null) {
@@ -3539,12 +3575,15 @@ ipcMain.handle('excluir-materia-prima', async (_e, info) => {
   }
 });
 ipcMain.handle('registrar-entrada-materia-prima', async (_e, { id, quantidade }) => {
+  if (!(await verificarPermissaoIpc('mp.stock.input'))) return negadoIpc('mp.stock.input');
   return registrarEntrada(id, quantidade, currentUserSession?.id ?? null);
 });
 ipcMain.handle('registrar-saida-materia-prima', async (_e, { id, quantidade }) => {
+  if (!(await verificarPermissaoIpc('mp.stock.output'))) return negadoIpc('mp.stock.output');
   return registrarSaida(id, quantidade, currentUserSession?.id ?? null);
 });
 ipcMain.handle('atualizar-preco-materia-prima', async (_e, { id, preco }) => {
+  if (!(await verificarPermissaoIpc('mp.edit'))) return negadoIpc('mp.edit');
   return atualizarPreco(id, preco, currentUserSession?.id ?? null);
 });
 ipcMain.handle('listar-categorias', async () => {
@@ -3572,6 +3611,7 @@ ipcMain.handle('listar-colecoes', async () => {
   }
 });
 ipcMain.handle('adicionar-categoria', async (_e, nome) => {
+  if (!(await verificarPermissaoIpc('mp.category.create'))) return negadoIpc('mp.category.create');
   try {
     return await adicionarCategoria(nome);
   } catch (err) {
@@ -3580,6 +3620,7 @@ ipcMain.handle('adicionar-categoria', async (_e, nome) => {
   }
 });
 ipcMain.handle('adicionar-unidade', async (_e, nome) => {
+  if (!(await verificarPermissaoIpc('mp.unit.create'))) return negadoIpc('mp.unit.create');
   try {
     return await adicionarUnidade(nome);
   } catch (err) {
@@ -3588,6 +3629,7 @@ ipcMain.handle('adicionar-unidade', async (_e, nome) => {
   }
 });
 ipcMain.handle('adicionar-colecao', async (_e, nome) => {
+  if (!(await verificarPermissaoIpc('prod.collection.create'))) return negadoIpc('prod.collection.create');
   try {
     return await adicionarColecao(nome);
   } catch (err) {
@@ -3663,12 +3705,15 @@ ipcMain.handle('obter-produto', async (_e, codigo) => {
   }
 });
 ipcMain.handle('adicionar-produto', async (_e, dados) => {
+  if (!(await verificarPermissaoIpc('prod.create'))) return negadoIpc('prod.create');
   return adicionarProduto(dados);
 });
 ipcMain.handle('atualizar-produto', async (_e, { id, dados }) => {
+  if (!(await verificarPermissaoIpc('prod.edit'))) return negadoIpc('prod.edit');
   return atualizarProduto(id, dados);
 });
 ipcMain.handle('excluir-produto', async (_e, info) => {
+  if (!(await verificarPermissaoIpc('prod.delete'))) return negadoIpc('prod.delete');
   try {
     const id = typeof info === 'object' && info !== null ? info.id : info;
     if (id === undefined || id === null) {
@@ -3703,12 +3748,15 @@ ipcMain.handle('listar-detalhes-produto', async (_e, payload) => {
   }
 });
 ipcMain.handle('inserir-lote-produto', async (_e, dados) => {
+  if (!(await verificarPermissaoIpc('prod.stock.input'))) return negadoIpc('prod.stock.input');
   return inserirLoteProduto(dados);
 });
 ipcMain.handle('atualizar-lote-produto', async (_e, { id, quantidade }) => {
+  if (!(await verificarPermissaoIpc('prod.stock.adjust'))) return negadoIpc('prod.stock.adjust');
   return atualizarLoteProduto(id, quantidade);
 });
 ipcMain.handle('excluir-lote-produto', async (_e, info) => {
+  if (!(await verificarPermissaoIpc('prod.stock.output'))) return negadoIpc('prod.stock.output');
   const id = typeof info === 'object' && info !== null ? info.id : info;
   if (id === undefined || id === null) {
     return { success: false, error: 'invalid-id' };
@@ -3726,6 +3774,7 @@ ipcMain.handle('listar-etapas-producao', async () => {
   return listarEtapasProducao();
 });
 ipcMain.handle('adicionar-etapa-producao', async (_e, dados) => {
+  if (!(await verificarPermissaoIpc('prod.stage.insert'))) return negadoIpc('prod.stage.insert');
   return adicionarEtapaProducao(dados);
 });
 ipcMain.handle('remover-etapa-producao', async (_e, nome) => {
@@ -3740,6 +3789,7 @@ ipcMain.handle('listar-itens-processo-produto', async (_e, { codigo, etapa, busc
   return listarItensProcessoProduto(codigo, etapa, busca, produtoId);
 });
 ipcMain.handle('salvar-produto-detalhado', async (_e, { codigo, produto, itens, produtoId }) => {
+  if (!(await verificarPermissaoIpc('prod.edit'))) return negadoIpc('prod.edit');
   return salvarProdutoDetalhado(codigo, produto, itens, produtoId);
 });
 

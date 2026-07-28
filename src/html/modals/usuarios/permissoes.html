@@ -2457,61 +2457,156 @@
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
 
                   <div>
-                    <h4 class="text-sm font-semibold text-gray-300 mb-3">Relatório: Vendas por período</h4>
+                    <h4 class="text-sm font-semibold text-gray-300 mb-3">Relatório: Estoque (matéria-prima)</h4>
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
 
                       <label class="usuarios-permissoes-checkbox">
-                        <input type="checkbox" name="col_rel_periodo" data-role="item" data-group="colunas-rel" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">Período</span>
+                        <input type="checkbox" name="col_rel_estq_nome" data-role="item" data-group="colunas-rel" data-item-type="column" class="w-4 h-4" />
+                        <span class="text-sm">Nome</span>
                       </label>
 
                       <label class="usuarios-permissoes-checkbox">
-                        <input type="checkbox" name="col_rel_cliente" data-role="item" data-group="colunas-rel" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">Cliente</span>
+                        <input type="checkbox" name="col_rel_estq_categoria" data-role="item" data-group="colunas-rel" data-item-type="column" class="w-4 h-4" />
+                        <span class="text-sm">Categoria</span>
                       </label>
 
                       <label class="usuarios-permissoes-checkbox">
-                        <input type="checkbox" name="col_rel_total" data-role="item" data-group="colunas-rel" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">Total vendido</span>
+                        <input type="checkbox" name="col_rel_estq_unidade" data-role="item" data-group="colunas-rel" data-item-type="column" class="w-4 h-4" />
+                        <span class="text-sm">Unidade</span>
                       </label>
 
                       <label class="usuarios-permissoes-checkbox">
-                        <input type="checkbox" name="col_rel_pedidos" data-role="item" data-group="colunas-rel" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">Nº pedidos</span>
+                        <input type="checkbox" name="col_rel_estq_qtd" data-role="item" data-group="colunas-rel" data-item-type="column" class="w-4 h-4" />
+                        <span class="text-sm">Quantidade</span>
                       </label>
 
                       <label class="usuarios-permissoes-checkbox">
-                        <input type="checkbox" name="col_rel_ticket_medio" data-role="item" data-group="colunas-rel" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">Ticket médio</span>
+                        <input type="checkbox" name="col_rel_estq_preco" data-role="item" data-group="colunas-rel" data-item-type="column" class="w-4 h-4" />
+                        <span class="text-sm">Preço</span>
                       </label>
 
+                      <label class="usuarios-permissoes-checkbox">
+                        <input type="checkbox" name="col_rel_estq_processo" data-role="item" data-group="colunas-rel" data-item-type="column" class="w-4 h-4" />
+                        <span class="text-sm">Processo</span>
+                      </label>
+
+                      <label class="usuarios-permissoes-checkbox">
+                        <input type="checkbox" name="col_rel_estq_status" data-role="item" data-group="colunas-rel" data-item-type="column" class="w-4 h-4" />
+                        <span class="text-sm">Status</span>
+                      </label>
                     </div>
                   </div>
 
                   <div>
-                    <h4 class="text-sm font-semibold text-gray-300 mb-3">Relatório: Estoque</h4>
+                    <h4 class="text-sm font-semibold text-gray-300 mb-3">Relatório: Produtos</h4>
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
 
                       <label class="usuarios-permissoes-checkbox">
-                        <input type="checkbox" name="col_rel_item" data-role="item" data-group="colunas-rel" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">Item</span>
+                        <input type="checkbox" name="col_rel_prod_codigo" data-role="item" data-group="colunas-rel" data-item-type="column" class="w-4 h-4" />
+                        <span class="text-sm">Código</span>
                       </label>
 
                       <label class="usuarios-permissoes-checkbox">
-                        <input type="checkbox" name="col_rel_saldo" data-role="item" data-group="colunas-rel" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">Saldo</span>
+                        <input type="checkbox" name="col_rel_prod_nome" data-role="item" data-group="colunas-rel" data-item-type="column" class="w-4 h-4" />
+                        <span class="text-sm">Nome</span>
                       </label>
 
                       <label class="usuarios-permissoes-checkbox">
-                        <input type="checkbox" name="col_rel_estq_valor" data-role="item" data-group="colunas-rel" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">Valor estoque</span>
+                        <input type="checkbox" name="col_rel_prod_colecao" data-role="item" data-group="colunas-rel" data-item-type="column" class="w-4 h-4" />
+                        <span class="text-sm">Coleção</span>
                       </label>
 
                       <label class="usuarios-permissoes-checkbox">
-                        <input type="checkbox" name="col_rel_giro" data-role="item" data-group="colunas-rel" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">Giro</span>
+                        <input type="checkbox" name="col_rel_prod_preco_venda" data-role="item" data-group="colunas-rel" data-item-type="column" class="w-4 h-4" />
+                        <span class="text-sm">Preço de Venda</span>
                       </label>
 
+                      <label class="usuarios-permissoes-checkbox">
+                        <input type="checkbox" name="col_rel_prod_margem" data-role="item" data-group="colunas-rel" data-item-type="column" class="w-4 h-4" />
+                        <span class="text-sm">Margem (%)</span>
+                      </label>
+
+                      <label class="usuarios-permissoes-checkbox">
+                        <input type="checkbox" name="col_rel_prod_qtd" data-role="item" data-group="colunas-rel" data-item-type="column" class="w-4 h-4" />
+                        <span class="text-sm">Quantidade</span>
+                      </label>
+
+                      <label class="usuarios-permissoes-checkbox">
+                        <input type="checkbox" name="col_rel_prod_status" data-role="item" data-group="colunas-rel" data-item-type="column" class="w-4 h-4" />
+                        <span class="text-sm">Status</span>
+                      </label>
+                    </div>
+                  </div>
+
+                  <div>
+                    <h4 class="text-sm font-semibold text-gray-300 mb-3">Relatório: Clientes</h4>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+
+                      <label class="usuarios-permissoes-checkbox">
+                        <input type="checkbox" name="col_rel_cli_nome" data-role="item" data-group="colunas-rel" data-item-type="column" class="w-4 h-4" />
+                        <span class="text-sm">Nome</span>
+                      </label>
+
+                      <label class="usuarios-permissoes-checkbox">
+                        <input type="checkbox" name="col_rel_cli_cnpj" data-role="item" data-group="colunas-rel" data-item-type="column" class="w-4 h-4" />
+                        <span class="text-sm">CNPJ</span>
+                      </label>
+
+                      <label class="usuarios-permissoes-checkbox">
+                        <input type="checkbox" name="col_rel_cli_pais" data-role="item" data-group="colunas-rel" data-item-type="column" class="w-4 h-4" />
+                        <span class="text-sm">País</span>
+                      </label>
+
+                      <label class="usuarios-permissoes-checkbox">
+                        <input type="checkbox" name="col_rel_cli_estado" data-role="item" data-group="colunas-rel" data-item-type="column" class="w-4 h-4" />
+                        <span class="text-sm">Estado</span>
+                      </label>
+
+                      <label class="usuarios-permissoes-checkbox">
+                        <input type="checkbox" name="col_rel_cli_status" data-role="item" data-group="colunas-rel" data-item-type="column" class="w-4 h-4" />
+                        <span class="text-sm">Status</span>
+                      </label>
+
+                      <label class="usuarios-permissoes-checkbox">
+                        <input type="checkbox" name="col_rel_cli_dono" data-role="item" data-group="colunas-rel" data-item-type="column" class="w-4 h-4" />
+                        <span class="text-sm">Dono</span>
+                      </label>
+                    </div>
+                  </div>
+
+                  <div>
+                    <h4 class="text-sm font-semibold text-gray-300 mb-3">Relatório: Contatos</h4>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+
+                      <label class="usuarios-permissoes-checkbox">
+                        <input type="checkbox" name="col_rel_ctt_contato" data-role="item" data-group="colunas-rel" data-item-type="column" class="w-4 h-4" />
+                        <span class="text-sm">Contato</span>
+                      </label>
+
+                      <label class="usuarios-permissoes-checkbox">
+                        <input type="checkbox" name="col_rel_ctt_tipo" data-role="item" data-group="colunas-rel" data-item-type="column" class="w-4 h-4" />
+                        <span class="text-sm">Tipo</span>
+                      </label>
+
+                      <label class="usuarios-permissoes-checkbox">
+                        <input type="checkbox" name="col_rel_ctt_empresa" data-role="item" data-group="colunas-rel" data-item-type="column" class="w-4 h-4" />
+                        <span class="text-sm">Empresa</span>
+                      </label>
+
+                      <label class="usuarios-permissoes-checkbox">
+                        <input type="checkbox" name="col_rel_ctt_celular" data-role="item" data-group="colunas-rel" data-item-type="column" class="w-4 h-4" />
+                        <span class="text-sm">Celular</span>
+                      </label>
+
+                      <label class="usuarios-permissoes-checkbox">
+                        <input type="checkbox" name="col_rel_ctt_telefone" data-role="item" data-group="colunas-rel" data-item-type="column" class="w-4 h-4" />
+                        <span class="text-sm">Telefone</span>
+                      </label>
+
+                      <label class="usuarios-permissoes-checkbox">
+                        <input type="checkbox" name="col_rel_ctt_email" data-role="item" data-group="colunas-rel" data-item-type="column" class="w-4 h-4" />
+                        <span class="text-sm">E-mail</span>
+                      </label>
                     </div>
                   </div>
 
@@ -2520,28 +2615,134 @@
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
 
                       <label class="usuarios-permissoes-checkbox">
-                        <input type="checkbox" name="col_rel_etapa" data-role="item" data-group="colunas-rel" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">Etapa</span>
+                        <input type="checkbox" name="col_rel_pros_nome" data-role="item" data-group="colunas-rel" data-item-type="column" class="w-4 h-4" />
+                        <span class="text-sm">Nome do Lead</span>
                       </label>
 
                       <label class="usuarios-permissoes-checkbox">
-                        <input type="checkbox" name="col_rel_qtd" data-role="item" data-group="colunas-rel" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">Qtde.</span>
+                        <input type="checkbox" name="col_rel_pros_email" data-role="item" data-group="colunas-rel" data-item-type="column" class="w-4 h-4" />
+                        <span class="text-sm">E-mail</span>
                       </label>
 
                       <label class="usuarios-permissoes-checkbox">
-                        <input type="checkbox" name="col_rel_pros_valor" data-role="item" data-group="colunas-rel" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">Valor potencial</span>
+                        <input type="checkbox" name="col_rel_pros_status" data-role="item" data-group="colunas-rel" data-item-type="column" class="w-4 h-4" />
+                        <span class="text-sm">Status</span>
                       </label>
 
                       <label class="usuarios-permissoes-checkbox">
-                        <input type="checkbox" name="col_rel_taxa_conv" data-role="item" data-group="colunas-rel" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">Taxa conv. (%)</span>
+                        <input type="checkbox" name="col_rel_pros_responsavel" data-role="item" data-group="colunas-rel" data-item-type="column" class="w-4 h-4" />
+                        <span class="text-sm">Responsável</span>
                       </label>
-
                     </div>
                   </div>
 
+                  <div>
+                    <h4 class="text-sm font-semibold text-gray-300 mb-3">Relatório: Orçamentos</h4>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+
+                      <label class="usuarios-permissoes-checkbox">
+                        <input type="checkbox" name="col_rel_orc_codigo" data-role="item" data-group="colunas-rel" data-item-type="column" class="w-4 h-4" />
+                        <span class="text-sm">Código</span>
+                      </label>
+
+                      <label class="usuarios-permissoes-checkbox">
+                        <input type="checkbox" name="col_rel_orc_cliente" data-role="item" data-group="colunas-rel" data-item-type="column" class="w-4 h-4" />
+                        <span class="text-sm">Cliente</span>
+                      </label>
+
+                      <label class="usuarios-permissoes-checkbox">
+                        <input type="checkbox" name="col_rel_orc_data" data-role="item" data-group="colunas-rel" data-item-type="column" class="w-4 h-4" />
+                        <span class="text-sm">Data</span>
+                      </label>
+
+                      <label class="usuarios-permissoes-checkbox">
+                        <input type="checkbox" name="col_rel_orc_valor" data-role="item" data-group="colunas-rel" data-item-type="column" class="w-4 h-4" />
+                        <span class="text-sm">Valor Total</span>
+                      </label>
+
+                      <label class="usuarios-permissoes-checkbox">
+                        <input type="checkbox" name="col_rel_orc_condicao" data-role="item" data-group="colunas-rel" data-item-type="column" class="w-4 h-4" />
+                        <span class="text-sm">Condição</span>
+                      </label>
+
+                      <label class="usuarios-permissoes-checkbox">
+                        <input type="checkbox" name="col_rel_orc_status" data-role="item" data-group="colunas-rel" data-item-type="column" class="w-4 h-4" />
+                        <span class="text-sm">Status</span>
+                      </label>
+                    </div>
+                  </div>
+
+                  <div>
+                    <h4 class="text-sm font-semibold text-gray-300 mb-3">Relatório: Pedidos</h4>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+
+                      <label class="usuarios-permissoes-checkbox">
+                        <input type="checkbox" name="col_rel_ped_codigo" data-role="item" data-group="colunas-rel" data-item-type="column" class="w-4 h-4" />
+                        <span class="text-sm">Código</span>
+                      </label>
+
+                      <label class="usuarios-permissoes-checkbox">
+                        <input type="checkbox" name="col_rel_ped_cliente" data-role="item" data-group="colunas-rel" data-item-type="column" class="w-4 h-4" />
+                        <span class="text-sm">Cliente</span>
+                      </label>
+
+                      <label class="usuarios-permissoes-checkbox">
+                        <input type="checkbox" name="col_rel_ped_data" data-role="item" data-group="colunas-rel" data-item-type="column" class="w-4 h-4" />
+                        <span class="text-sm">Data</span>
+                      </label>
+
+                      <label class="usuarios-permissoes-checkbox">
+                        <input type="checkbox" name="col_rel_ped_valor" data-role="item" data-group="colunas-rel" data-item-type="column" class="w-4 h-4" />
+                        <span class="text-sm">Valor Total</span>
+                      </label>
+
+                      <label class="usuarios-permissoes-checkbox">
+                        <input type="checkbox" name="col_rel_ped_condicao" data-role="item" data-group="colunas-rel" data-item-type="column" class="w-4 h-4" />
+                        <span class="text-sm">Condição</span>
+                      </label>
+
+                      <label class="usuarios-permissoes-checkbox">
+                        <input type="checkbox" name="col_rel_ped_status" data-role="item" data-group="colunas-rel" data-item-type="column" class="w-4 h-4" />
+                        <span class="text-sm">Status</span>
+                      </label>
+                    </div>
+                  </div>
+
+                  <div>
+                    <h4 class="text-sm font-semibold text-gray-300 mb-3">Relatório: Usuários</h4>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+
+                      <label class="usuarios-permissoes-checkbox">
+                        <input type="checkbox" name="col_rel_usr_avatar" data-role="item" data-group="colunas-rel" data-item-type="column" class="w-4 h-4" />
+                        <span class="text-sm">Avatar</span>
+                      </label>
+
+                      <label class="usuarios-permissoes-checkbox">
+                        <input type="checkbox" name="col_rel_usr_nome" data-role="item" data-group="colunas-rel" data-item-type="column" class="w-4 h-4" />
+                        <span class="text-sm">Nome</span>
+                      </label>
+
+                      <label class="usuarios-permissoes-checkbox">
+                        <input type="checkbox" name="col_rel_usr_email" data-role="item" data-group="colunas-rel" data-item-type="column" class="w-4 h-4" />
+                        <span class="text-sm">E-mail</span>
+                      </label>
+
+                      <label class="usuarios-permissoes-checkbox">
+                        <input type="checkbox" name="col_rel_usr_perfil" data-role="item" data-group="colunas-rel" data-item-type="column" class="w-4 h-4" />
+                        <span class="text-sm">Perfil</span>
+                      </label>
+
+                      <label class="usuarios-permissoes-checkbox">
+                        <input type="checkbox" name="col_rel_usr_situacao" data-role="item" data-group="colunas-rel" data-item-type="column" class="w-4 h-4" />
+                        <span class="text-sm">Situação</span>
+                      </label>
+
+                      <label class="usuarios-permissoes-checkbox">
+                        <input type="checkbox" name="col_rel_usr_status" data-role="item" data-group="colunas-rel" data-item-type="column" class="w-4 h-4" />
+                        <span class="text-sm">Status</span>
+                      </label>
+                    </div>
+                  </div>
                 </div>
               </div>
             </article>

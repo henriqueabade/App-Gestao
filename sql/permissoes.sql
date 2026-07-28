@@ -359,7 +359,7 @@ CREATE TABLE IF NOT EXISTS perm_ctt (
 );
 
 -- ---------------------------------------------------------------------
--- 10) Relatórios  (perm_rel)  —  11 ações, 13 colunas
+-- 10) Relatórios  (perm_rel)  —  11 ações, 48 colunas
 -- ---------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS perm_rel (
   modelo_id    INTEGER PRIMARY KEY REFERENCES modelos_permissoes(id) ON DELETE CASCADE,
@@ -379,19 +379,54 @@ CREATE TABLE IF NOT EXISTS perm_rel (
   acao_share_send                    BOOLEAN NOT NULL DEFAULT FALSE,  -- rel.share.send · Enviar relatório
 
   -- Colunas visíveis
-  col_rel_periodo                    BOOLEAN NOT NULL DEFAULT FALSE,  -- Período
-  col_rel_cliente                    BOOLEAN NOT NULL DEFAULT FALSE,  -- Cliente
-  col_rel_total                      BOOLEAN NOT NULL DEFAULT FALSE,  -- Total vendido
-  col_rel_pedidos                    BOOLEAN NOT NULL DEFAULT FALSE,  -- Nº pedidos
-  col_rel_ticket_medio               BOOLEAN NOT NULL DEFAULT FALSE,  -- Ticket médio
-  col_rel_item                       BOOLEAN NOT NULL DEFAULT FALSE,  -- Item
-  col_rel_saldo                      BOOLEAN NOT NULL DEFAULT FALSE,  -- Saldo
-  col_rel_estq_valor                 BOOLEAN NOT NULL DEFAULT FALSE,  -- Valor estoque
-  col_rel_giro                       BOOLEAN NOT NULL DEFAULT FALSE,  -- Giro
-  col_rel_etapa                      BOOLEAN NOT NULL DEFAULT FALSE,  -- Etapa
-  col_rel_qtd                        BOOLEAN NOT NULL DEFAULT FALSE,  -- Qtde.
-  col_rel_pros_valor                 BOOLEAN NOT NULL DEFAULT FALSE,  -- Valor potencial
-  col_rel_taxa_conv                  BOOLEAN NOT NULL DEFAULT FALSE  -- Taxa conv. (%)
+  col_rel_estq_nome                  BOOLEAN NOT NULL DEFAULT FALSE,  -- Nome
+  col_rel_estq_categoria             BOOLEAN NOT NULL DEFAULT FALSE,  -- Categoria
+  col_rel_estq_unidade               BOOLEAN NOT NULL DEFAULT FALSE,  -- Unidade
+  col_rel_estq_qtd                   BOOLEAN NOT NULL DEFAULT FALSE,  -- Quantidade
+  col_rel_estq_preco                 BOOLEAN NOT NULL DEFAULT FALSE,  -- Preço
+  col_rel_estq_processo              BOOLEAN NOT NULL DEFAULT FALSE,  -- Processo
+  col_rel_estq_status                BOOLEAN NOT NULL DEFAULT FALSE,  -- Status
+  col_rel_prod_codigo                BOOLEAN NOT NULL DEFAULT FALSE,  -- Código
+  col_rel_prod_nome                  BOOLEAN NOT NULL DEFAULT FALSE,  -- Nome
+  col_rel_prod_colecao               BOOLEAN NOT NULL DEFAULT FALSE,  -- Coleção
+  col_rel_prod_preco_venda           BOOLEAN NOT NULL DEFAULT FALSE,  -- Preço de Venda
+  col_rel_prod_margem                BOOLEAN NOT NULL DEFAULT FALSE,  -- Margem (%)
+  col_rel_prod_qtd                   BOOLEAN NOT NULL DEFAULT FALSE,  -- Quantidade
+  col_rel_prod_status                BOOLEAN NOT NULL DEFAULT FALSE,  -- Status
+  col_rel_cli_nome                   BOOLEAN NOT NULL DEFAULT FALSE,  -- Nome
+  col_rel_cli_cnpj                   BOOLEAN NOT NULL DEFAULT FALSE,  -- CNPJ
+  col_rel_cli_pais                   BOOLEAN NOT NULL DEFAULT FALSE,  -- País
+  col_rel_cli_estado                 BOOLEAN NOT NULL DEFAULT FALSE,  -- Estado
+  col_rel_cli_status                 BOOLEAN NOT NULL DEFAULT FALSE,  -- Status
+  col_rel_cli_dono                   BOOLEAN NOT NULL DEFAULT FALSE,  -- Dono
+  col_rel_ctt_contato                BOOLEAN NOT NULL DEFAULT FALSE,  -- Contato
+  col_rel_ctt_tipo                   BOOLEAN NOT NULL DEFAULT FALSE,  -- Tipo
+  col_rel_ctt_empresa                BOOLEAN NOT NULL DEFAULT FALSE,  -- Empresa
+  col_rel_ctt_celular                BOOLEAN NOT NULL DEFAULT FALSE,  -- Celular
+  col_rel_ctt_telefone               BOOLEAN NOT NULL DEFAULT FALSE,  -- Telefone
+  col_rel_ctt_email                  BOOLEAN NOT NULL DEFAULT FALSE,  -- E-mail
+  col_rel_pros_nome                  BOOLEAN NOT NULL DEFAULT FALSE,  -- Nome do Lead
+  col_rel_pros_email                 BOOLEAN NOT NULL DEFAULT FALSE,  -- E-mail
+  col_rel_pros_status                BOOLEAN NOT NULL DEFAULT FALSE,  -- Status
+  col_rel_pros_responsavel           BOOLEAN NOT NULL DEFAULT FALSE,  -- Responsável
+  col_rel_orc_codigo                 BOOLEAN NOT NULL DEFAULT FALSE,  -- Código
+  col_rel_orc_cliente                BOOLEAN NOT NULL DEFAULT FALSE,  -- Cliente
+  col_rel_orc_data                   BOOLEAN NOT NULL DEFAULT FALSE,  -- Data
+  col_rel_orc_valor                  BOOLEAN NOT NULL DEFAULT FALSE,  -- Valor Total
+  col_rel_orc_condicao               BOOLEAN NOT NULL DEFAULT FALSE,  -- Condição
+  col_rel_orc_status                 BOOLEAN NOT NULL DEFAULT FALSE,  -- Status
+  col_rel_ped_codigo                 BOOLEAN NOT NULL DEFAULT FALSE,  -- Código
+  col_rel_ped_cliente                BOOLEAN NOT NULL DEFAULT FALSE,  -- Cliente
+  col_rel_ped_data                   BOOLEAN NOT NULL DEFAULT FALSE,  -- Data
+  col_rel_ped_valor                  BOOLEAN NOT NULL DEFAULT FALSE,  -- Valor Total
+  col_rel_ped_condicao               BOOLEAN NOT NULL DEFAULT FALSE,  -- Condição
+  col_rel_ped_status                 BOOLEAN NOT NULL DEFAULT FALSE,  -- Status
+  col_rel_usr_avatar                 BOOLEAN NOT NULL DEFAULT FALSE,  -- Avatar
+  col_rel_usr_nome                   BOOLEAN NOT NULL DEFAULT FALSE,  -- Nome
+  col_rel_usr_email                  BOOLEAN NOT NULL DEFAULT FALSE,  -- E-mail
+  col_rel_usr_perfil                 BOOLEAN NOT NULL DEFAULT FALSE,  -- Perfil
+  col_rel_usr_situacao               BOOLEAN NOT NULL DEFAULT FALSE,  -- Situação
+  col_rel_usr_status                 BOOLEAN NOT NULL DEFAULT FALSE  -- Status
 );
 
 -- ---------------------------------------------------------------------
@@ -556,8 +591,8 @@ INSERT INTO perm_ctt (modelo_id, modulo_ativo, acao_view, acao_search, acao_deta
 SELECT id, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE FROM modelos_permissoes WHERE nome = 'Administrador'
 ON CONFLICT (modelo_id) DO NOTHING;
 
-INSERT INTO perm_rel (modelo_id, modulo_ativo, acao_view, acao_search, acao_run, acao_export_csv, acao_export_xlsx, acao_export_pdf, acao_preset_save, acao_preset_load, acao_preset_manage, acao_share_link, acao_share_send, col_rel_periodo, col_rel_cliente, col_rel_total, col_rel_pedidos, col_rel_ticket_medio, col_rel_item, col_rel_saldo, col_rel_estq_valor, col_rel_giro, col_rel_etapa, col_rel_qtd, col_rel_pros_valor, col_rel_taxa_conv)
-SELECT id, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE FROM modelos_permissoes WHERE nome = 'Administrador'
+INSERT INTO perm_rel (modelo_id, modulo_ativo, acao_view, acao_search, acao_run, acao_export_csv, acao_export_xlsx, acao_export_pdf, acao_preset_save, acao_preset_load, acao_preset_manage, acao_share_link, acao_share_send, col_rel_estq_nome, col_rel_estq_categoria, col_rel_estq_unidade, col_rel_estq_qtd, col_rel_estq_preco, col_rel_estq_processo, col_rel_estq_status, col_rel_prod_codigo, col_rel_prod_nome, col_rel_prod_colecao, col_rel_prod_preco_venda, col_rel_prod_margem, col_rel_prod_qtd, col_rel_prod_status, col_rel_cli_nome, col_rel_cli_cnpj, col_rel_cli_pais, col_rel_cli_estado, col_rel_cli_status, col_rel_cli_dono, col_rel_ctt_contato, col_rel_ctt_tipo, col_rel_ctt_empresa, col_rel_ctt_celular, col_rel_ctt_telefone, col_rel_ctt_email, col_rel_pros_nome, col_rel_pros_email, col_rel_pros_status, col_rel_pros_responsavel, col_rel_orc_codigo, col_rel_orc_cliente, col_rel_orc_data, col_rel_orc_valor, col_rel_orc_condicao, col_rel_orc_status, col_rel_ped_codigo, col_rel_ped_cliente, col_rel_ped_data, col_rel_ped_valor, col_rel_ped_condicao, col_rel_ped_status, col_rel_usr_avatar, col_rel_usr_nome, col_rel_usr_email, col_rel_usr_perfil, col_rel_usr_situacao, col_rel_usr_status)
+SELECT id, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE FROM modelos_permissoes WHERE nome = 'Administrador'
 ON CONFLICT (modelo_id) DO NOTHING;
 
 INSERT INTO perm_tarefas (modelo_id, modulo_ativo, acao_view, acao_create, acao_edit, acao_delete, acao_assign, acao_calendar_view, col_tsk_titulo, col_tsk_resp, col_tsk_prazo, col_tsk_status, col_tsk_prioridade, col_evt_titulo, col_evt_inicio, col_evt_fim, col_evt_local, col_evt_participantes, col_evt_status)

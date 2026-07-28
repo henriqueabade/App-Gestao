@@ -636,15 +636,15 @@
                             </button>
                             <div id="relatoriosExportDropdown" class="relatorios-dropdown w-48">
                                 <div class="py-2">
-                                    <a href="#" class="relatorios-dropdown-item flex items-center gap-3" data-relatorios-export="pdf">
+                                    <a href="#" data-perm="rel.export.pdf" class="relatorios-dropdown-item flex items-center gap-3" data-relatorios-export="pdf">
                                         <i class="fas fa-file-pdf text-red-400"></i>
                                         PDF
                                     </a>
-                                    <a href="#" class="relatorios-dropdown-item flex items-center gap-3" data-relatorios-export="excel">
+                                    <a href="#" data-perm="rel.export.xlsx" class="relatorios-dropdown-item flex items-center gap-3" data-relatorios-export="excel">
                                         <i class="fas fa-file-excel text-green-400"></i>
                                         Excel
                                     </a>
-                                    <a href="#" class="relatorios-dropdown-item flex items-center gap-3" data-relatorios-export="csv">
+                                    <a href="#" data-perm="rel.export.csv" class="relatorios-dropdown-item flex items-center gap-3" data-relatorios-export="csv">
                                         <i class="fas fa-file-csv text-blue-400"></i>
                                         CSV
                                     </a>
@@ -694,13 +694,13 @@
                                 <table class="w-full relatorios-table">
                                     <thead class="bg-gray-50 sticky top-0">
                                         <tr>
-                                            <th data-column-key="nome" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nome</th>
-                                            <th data-column-key="categoria" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Categoria</th>
-                                            <th data-column-key="unidade" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Unidade</th>
-                                            <th data-column-key="quantidade" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Quantidade</th>
-                                            <th data-column-key="preco" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Preço</th>
-                                            <th data-column-key="processo" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Processo</th>
-                                            <th data-column-key="status" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                                            <th data-perm-col="col_rel_estq_nome" data-column-key="nome" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nome</th>
+                                            <th data-perm-col="col_rel_estq_categoria" data-column-key="categoria" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Categoria</th>
+                                            <th data-perm-col="col_rel_estq_unidade" data-column-key="unidade" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Unidade</th>
+                                            <th data-perm-col="col_rel_estq_qtd" data-column-key="quantidade" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Quantidade</th>
+                                            <th data-perm-col="col_rel_estq_preco" data-column-key="preco" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Preço</th>
+                                            <th data-perm-col="col_rel_estq_processo" data-column-key="processo" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Processo</th>
+                                            <th data-perm-col="col_rel_estq_status" data-column-key="status" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                                         </tr>
                                     </thead>
                                     <tbody class="divide-y divide-white/10" data-relatorios-body></tbody>
@@ -715,13 +715,13 @@
                                 <table class="w-full relatorios-table">
                                     <thead class="bg-gray-50 sticky top-0">
                                         <tr>
-                                            <th data-column-key="codigo" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Código</th>
-                                            <th data-column-key="nome" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nome</th>
-                                            <th data-column-key="colecao" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Coleção</th>
-                                            <th data-column-key="precoVenda" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Preço de Venda</th>
-                                            <th data-column-key="margem" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Margem (%)</th>
-                                            <th data-column-key="quantidade" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Quantidade</th>
-                                            <th data-column-key="status" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                                            <th data-perm-col="col_rel_prod_codigo" data-column-key="codigo" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Código</th>
+                                            <th data-perm-col="col_rel_prod_nome" data-column-key="nome" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nome</th>
+                                            <th data-perm-col="col_rel_prod_colecao" data-column-key="colecao" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Coleção</th>
+                                            <th data-perm-col="col_rel_prod_preco_venda" data-column-key="precoVenda" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Preço de Venda</th>
+                                            <th data-perm-col="col_rel_prod_margem" data-column-key="margem" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Margem (%)</th>
+                                            <th data-perm-col="col_rel_prod_qtd" data-column-key="quantidade" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Quantidade</th>
+                                            <th data-perm-col="col_rel_prod_status" data-column-key="status" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                                         </tr>
                                     </thead>
                                     <tbody class="divide-y divide-white/10" data-relatorios-body></tbody>
@@ -736,12 +736,12 @@
                                 <table class="w-full relatorios-table">
                                     <thead class="bg-gray-50 sticky top-0">
                                         <tr>
-                                            <th data-column-key="nome" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nome</th>
-                                            <th data-column-key="cnpj" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">CNPJ</th>
-                                            <th data-column-key="pais" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">País</th>
-                                            <th data-column-key="estado" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Estado</th>
-                                            <th data-column-key="status" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                                            <th data-column-key="dono" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Dono</th>
+                                            <th data-perm-col="col_rel_cli_nome" data-column-key="nome" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nome</th>
+                                            <th data-perm-col="col_rel_cli_cnpj" data-column-key="cnpj" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">CNPJ</th>
+                                            <th data-perm-col="col_rel_cli_pais" data-column-key="pais" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">País</th>
+                                            <th data-perm-col="col_rel_cli_estado" data-column-key="estado" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Estado</th>
+                                            <th data-perm-col="col_rel_cli_status" data-column-key="status" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                                            <th data-perm-col="col_rel_cli_dono" data-column-key="dono" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Dono</th>
                                         </tr>
                                     </thead>
                                     <tbody class="divide-y divide-white/10" data-relatorios-body></tbody>
@@ -756,12 +756,12 @@
                                 <table class="w-full relatorios-table">
                                     <thead class="bg-gray-50 sticky top-0">
                                         <tr>
-                                            <th data-column-key="contato" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Contato</th>
-                                            <th data-column-key="tipo" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tipo</th>
-                                            <th data-column-key="empresa" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Empresa</th>
-                                            <th data-column-key="celular" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Celular</th>
-                                            <th data-column-key="telefone" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Telefone</th>
-                                            <th data-column-key="email" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">E-mail</th>
+                                            <th data-perm-col="col_rel_ctt_contato" data-column-key="contato" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Contato</th>
+                                            <th data-perm-col="col_rel_ctt_tipo" data-column-key="tipo" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tipo</th>
+                                            <th data-perm-col="col_rel_ctt_empresa" data-column-key="empresa" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Empresa</th>
+                                            <th data-perm-col="col_rel_ctt_celular" data-column-key="celular" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Celular</th>
+                                            <th data-perm-col="col_rel_ctt_telefone" data-column-key="telefone" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Telefone</th>
+                                            <th data-perm-col="col_rel_ctt_email" data-column-key="email" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">E-mail</th>
                                         </tr>
                                     </thead>
                                     <tbody class="divide-y divide-white/10" data-relatorios-body></tbody>
@@ -775,10 +775,10 @@
                                 <table class="w-full relatorios-table">
                                     <thead class="bg-gray-50 sticky top-0">
                                         <tr>
-                                            <th data-column-key="nome" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nome do Lead</th>
-                                            <th data-column-key="email" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">E-mail</th>
-                                            <th data-column-key="status" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                                            <th data-column-key="responsavel" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Responsável</th>
+                                            <th data-perm-col="col_rel_pros_nome" data-column-key="nome" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nome do Lead</th>
+                                            <th data-perm-col="col_rel_pros_email" data-column-key="email" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">E-mail</th>
+                                            <th data-perm-col="col_rel_pros_status" data-column-key="status" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                                            <th data-perm-col="col_rel_pros_responsavel" data-column-key="responsavel" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Responsável</th>
                                         </tr>
                                     </thead>
                                     <tbody class="divide-y divide-white/10" data-relatorios-body></tbody>
@@ -793,12 +793,12 @@
                                 <table class="w-full relatorios-table">
                                     <thead class="bg-gray-50 sticky top-0">
                                         <tr>
-                                            <th data-column-key="codigo" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Código</th>
-                                            <th data-column-key="cliente" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cliente</th>
-                                            <th data-column-key="data" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Data</th>
-                                            <th data-column-key="valor" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Valor Total</th>
-                                            <th data-column-key="condicao" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Condição</th>
-                                            <th data-column-key="status" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                                            <th data-perm-col="col_rel_orc_codigo" data-column-key="codigo" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Código</th>
+                                            <th data-perm-col="col_rel_orc_cliente" data-column-key="cliente" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cliente</th>
+                                            <th data-perm-col="col_rel_orc_data" data-column-key="data" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Data</th>
+                                            <th data-perm-col="col_rel_orc_valor" data-column-key="valor" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Valor Total</th>
+                                            <th data-perm-col="col_rel_orc_condicao" data-column-key="condicao" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Condição</th>
+                                            <th data-perm-col="col_rel_orc_status" data-column-key="status" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                                         </tr>
                                     </thead>
                                     <tbody class="divide-y divide-white/10" data-relatorios-body></tbody>
@@ -813,12 +813,12 @@
                                 <table class="w-full relatorios-table">
                                     <thead class="bg-gray-50 sticky top-0">
                                         <tr>
-                                            <th data-column-key="codigo" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Código</th>
-                                            <th data-column-key="cliente" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cliente</th>
-                                            <th data-column-key="data" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Data</th>
-                                            <th data-column-key="valor" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Valor Total</th>
-                                            <th data-column-key="condicao" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Condição</th>
-                                            <th data-column-key="status" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                                            <th data-perm-col="col_rel_ped_codigo" data-column-key="codigo" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Código</th>
+                                            <th data-perm-col="col_rel_ped_cliente" data-column-key="cliente" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cliente</th>
+                                            <th data-perm-col="col_rel_ped_data" data-column-key="data" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Data</th>
+                                            <th data-perm-col="col_rel_ped_valor" data-column-key="valor" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Valor Total</th>
+                                            <th data-perm-col="col_rel_ped_condicao" data-column-key="condicao" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Condição</th>
+                                            <th data-perm-col="col_rel_ped_status" data-column-key="status" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                                         </tr>
                                     </thead>
                                     <tbody class="divide-y divide-white/10" data-relatorios-body></tbody>
@@ -833,12 +833,12 @@
                                 <table class="w-full relatorios-table">
                                     <thead class="bg-gray-50 sticky top-0">
                                         <tr>
-                                            <th data-column-key="avatar" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Avatar</th>
-                                            <th data-column-key="nome" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nome</th>
-                                            <th data-column-key="email" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">E-mail</th>
-                                            <th data-column-key="perfil" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Perfil</th>
-                                            <th data-column-key="situacao" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Situação</th>
-                                            <th data-column-key="status" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                                            <th data-perm-col="col_rel_usr_avatar" data-column-key="avatar" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Avatar</th>
+                                            <th data-perm-col="col_rel_usr_nome" data-column-key="nome" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nome</th>
+                                            <th data-perm-col="col_rel_usr_email" data-column-key="email" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">E-mail</th>
+                                            <th data-perm-col="col_rel_usr_perfil" data-column-key="perfil" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Perfil</th>
+                                            <th data-perm-col="col_rel_usr_situacao" data-column-key="situacao" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Situação</th>
+                                            <th data-perm-col="col_rel_usr_status" data-column-key="status" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                                         </tr>
                                     </thead>
                                     <tbody class="divide-y divide-white/10" data-relatorios-body></tbody>

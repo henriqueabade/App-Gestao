@@ -316,19 +316,54 @@ ALTER TABLE perm_rel ADD COLUMN IF NOT EXISTS acao_preset_load BOOLEAN NOT NULL 
 ALTER TABLE perm_rel ADD COLUMN IF NOT EXISTS acao_preset_manage BOOLEAN NOT NULL DEFAULT FALSE;  -- rel.preset.manage · Gerenciar presets
 ALTER TABLE perm_rel ADD COLUMN IF NOT EXISTS acao_share_link BOOLEAN NOT NULL DEFAULT FALSE;  -- rel.share.link · Gerar link compartilhável
 ALTER TABLE perm_rel ADD COLUMN IF NOT EXISTS acao_share_send BOOLEAN NOT NULL DEFAULT FALSE;  -- rel.share.send · Enviar relatório
-ALTER TABLE perm_rel ADD COLUMN IF NOT EXISTS col_rel_periodo BOOLEAN NOT NULL DEFAULT FALSE;  -- Período
-ALTER TABLE perm_rel ADD COLUMN IF NOT EXISTS col_rel_cliente BOOLEAN NOT NULL DEFAULT FALSE;  -- Cliente
-ALTER TABLE perm_rel ADD COLUMN IF NOT EXISTS col_rel_total BOOLEAN NOT NULL DEFAULT FALSE;  -- Total vendido
-ALTER TABLE perm_rel ADD COLUMN IF NOT EXISTS col_rel_pedidos BOOLEAN NOT NULL DEFAULT FALSE;  -- Nº pedidos
-ALTER TABLE perm_rel ADD COLUMN IF NOT EXISTS col_rel_ticket_medio BOOLEAN NOT NULL DEFAULT FALSE;  -- Ticket médio
-ALTER TABLE perm_rel ADD COLUMN IF NOT EXISTS col_rel_item BOOLEAN NOT NULL DEFAULT FALSE;  -- Item
-ALTER TABLE perm_rel ADD COLUMN IF NOT EXISTS col_rel_saldo BOOLEAN NOT NULL DEFAULT FALSE;  -- Saldo
-ALTER TABLE perm_rel ADD COLUMN IF NOT EXISTS col_rel_estq_valor BOOLEAN NOT NULL DEFAULT FALSE;  -- Valor estoque
-ALTER TABLE perm_rel ADD COLUMN IF NOT EXISTS col_rel_giro BOOLEAN NOT NULL DEFAULT FALSE;  -- Giro
-ALTER TABLE perm_rel ADD COLUMN IF NOT EXISTS col_rel_etapa BOOLEAN NOT NULL DEFAULT FALSE;  -- Etapa
-ALTER TABLE perm_rel ADD COLUMN IF NOT EXISTS col_rel_qtd BOOLEAN NOT NULL DEFAULT FALSE;  -- Qtde.
-ALTER TABLE perm_rel ADD COLUMN IF NOT EXISTS col_rel_pros_valor BOOLEAN NOT NULL DEFAULT FALSE;  -- Valor potencial
-ALTER TABLE perm_rel ADD COLUMN IF NOT EXISTS col_rel_taxa_conv BOOLEAN NOT NULL DEFAULT FALSE;  -- Taxa conv. (%)
+ALTER TABLE perm_rel ADD COLUMN IF NOT EXISTS col_rel_estq_nome BOOLEAN NOT NULL DEFAULT FALSE;  -- Nome
+ALTER TABLE perm_rel ADD COLUMN IF NOT EXISTS col_rel_estq_categoria BOOLEAN NOT NULL DEFAULT FALSE;  -- Categoria
+ALTER TABLE perm_rel ADD COLUMN IF NOT EXISTS col_rel_estq_unidade BOOLEAN NOT NULL DEFAULT FALSE;  -- Unidade
+ALTER TABLE perm_rel ADD COLUMN IF NOT EXISTS col_rel_estq_qtd BOOLEAN NOT NULL DEFAULT FALSE;  -- Quantidade
+ALTER TABLE perm_rel ADD COLUMN IF NOT EXISTS col_rel_estq_preco BOOLEAN NOT NULL DEFAULT FALSE;  -- Preço
+ALTER TABLE perm_rel ADD COLUMN IF NOT EXISTS col_rel_estq_processo BOOLEAN NOT NULL DEFAULT FALSE;  -- Processo
+ALTER TABLE perm_rel ADD COLUMN IF NOT EXISTS col_rel_estq_status BOOLEAN NOT NULL DEFAULT FALSE;  -- Status
+ALTER TABLE perm_rel ADD COLUMN IF NOT EXISTS col_rel_prod_codigo BOOLEAN NOT NULL DEFAULT FALSE;  -- Código
+ALTER TABLE perm_rel ADD COLUMN IF NOT EXISTS col_rel_prod_nome BOOLEAN NOT NULL DEFAULT FALSE;  -- Nome
+ALTER TABLE perm_rel ADD COLUMN IF NOT EXISTS col_rel_prod_colecao BOOLEAN NOT NULL DEFAULT FALSE;  -- Coleção
+ALTER TABLE perm_rel ADD COLUMN IF NOT EXISTS col_rel_prod_preco_venda BOOLEAN NOT NULL DEFAULT FALSE;  -- Preço de Venda
+ALTER TABLE perm_rel ADD COLUMN IF NOT EXISTS col_rel_prod_margem BOOLEAN NOT NULL DEFAULT FALSE;  -- Margem (%)
+ALTER TABLE perm_rel ADD COLUMN IF NOT EXISTS col_rel_prod_qtd BOOLEAN NOT NULL DEFAULT FALSE;  -- Quantidade
+ALTER TABLE perm_rel ADD COLUMN IF NOT EXISTS col_rel_prod_status BOOLEAN NOT NULL DEFAULT FALSE;  -- Status
+ALTER TABLE perm_rel ADD COLUMN IF NOT EXISTS col_rel_cli_nome BOOLEAN NOT NULL DEFAULT FALSE;  -- Nome
+ALTER TABLE perm_rel ADD COLUMN IF NOT EXISTS col_rel_cli_cnpj BOOLEAN NOT NULL DEFAULT FALSE;  -- CNPJ
+ALTER TABLE perm_rel ADD COLUMN IF NOT EXISTS col_rel_cli_pais BOOLEAN NOT NULL DEFAULT FALSE;  -- País
+ALTER TABLE perm_rel ADD COLUMN IF NOT EXISTS col_rel_cli_estado BOOLEAN NOT NULL DEFAULT FALSE;  -- Estado
+ALTER TABLE perm_rel ADD COLUMN IF NOT EXISTS col_rel_cli_status BOOLEAN NOT NULL DEFAULT FALSE;  -- Status
+ALTER TABLE perm_rel ADD COLUMN IF NOT EXISTS col_rel_cli_dono BOOLEAN NOT NULL DEFAULT FALSE;  -- Dono
+ALTER TABLE perm_rel ADD COLUMN IF NOT EXISTS col_rel_ctt_contato BOOLEAN NOT NULL DEFAULT FALSE;  -- Contato
+ALTER TABLE perm_rel ADD COLUMN IF NOT EXISTS col_rel_ctt_tipo BOOLEAN NOT NULL DEFAULT FALSE;  -- Tipo
+ALTER TABLE perm_rel ADD COLUMN IF NOT EXISTS col_rel_ctt_empresa BOOLEAN NOT NULL DEFAULT FALSE;  -- Empresa
+ALTER TABLE perm_rel ADD COLUMN IF NOT EXISTS col_rel_ctt_celular BOOLEAN NOT NULL DEFAULT FALSE;  -- Celular
+ALTER TABLE perm_rel ADD COLUMN IF NOT EXISTS col_rel_ctt_telefone BOOLEAN NOT NULL DEFAULT FALSE;  -- Telefone
+ALTER TABLE perm_rel ADD COLUMN IF NOT EXISTS col_rel_ctt_email BOOLEAN NOT NULL DEFAULT FALSE;  -- E-mail
+ALTER TABLE perm_rel ADD COLUMN IF NOT EXISTS col_rel_pros_nome BOOLEAN NOT NULL DEFAULT FALSE;  -- Nome do Lead
+ALTER TABLE perm_rel ADD COLUMN IF NOT EXISTS col_rel_pros_email BOOLEAN NOT NULL DEFAULT FALSE;  -- E-mail
+ALTER TABLE perm_rel ADD COLUMN IF NOT EXISTS col_rel_pros_status BOOLEAN NOT NULL DEFAULT FALSE;  -- Status
+ALTER TABLE perm_rel ADD COLUMN IF NOT EXISTS col_rel_pros_responsavel BOOLEAN NOT NULL DEFAULT FALSE;  -- Responsável
+ALTER TABLE perm_rel ADD COLUMN IF NOT EXISTS col_rel_orc_codigo BOOLEAN NOT NULL DEFAULT FALSE;  -- Código
+ALTER TABLE perm_rel ADD COLUMN IF NOT EXISTS col_rel_orc_cliente BOOLEAN NOT NULL DEFAULT FALSE;  -- Cliente
+ALTER TABLE perm_rel ADD COLUMN IF NOT EXISTS col_rel_orc_data BOOLEAN NOT NULL DEFAULT FALSE;  -- Data
+ALTER TABLE perm_rel ADD COLUMN IF NOT EXISTS col_rel_orc_valor BOOLEAN NOT NULL DEFAULT FALSE;  -- Valor Total
+ALTER TABLE perm_rel ADD COLUMN IF NOT EXISTS col_rel_orc_condicao BOOLEAN NOT NULL DEFAULT FALSE;  -- Condição
+ALTER TABLE perm_rel ADD COLUMN IF NOT EXISTS col_rel_orc_status BOOLEAN NOT NULL DEFAULT FALSE;  -- Status
+ALTER TABLE perm_rel ADD COLUMN IF NOT EXISTS col_rel_ped_codigo BOOLEAN NOT NULL DEFAULT FALSE;  -- Código
+ALTER TABLE perm_rel ADD COLUMN IF NOT EXISTS col_rel_ped_cliente BOOLEAN NOT NULL DEFAULT FALSE;  -- Cliente
+ALTER TABLE perm_rel ADD COLUMN IF NOT EXISTS col_rel_ped_data BOOLEAN NOT NULL DEFAULT FALSE;  -- Data
+ALTER TABLE perm_rel ADD COLUMN IF NOT EXISTS col_rel_ped_valor BOOLEAN NOT NULL DEFAULT FALSE;  -- Valor Total
+ALTER TABLE perm_rel ADD COLUMN IF NOT EXISTS col_rel_ped_condicao BOOLEAN NOT NULL DEFAULT FALSE;  -- Condição
+ALTER TABLE perm_rel ADD COLUMN IF NOT EXISTS col_rel_ped_status BOOLEAN NOT NULL DEFAULT FALSE;  -- Status
+ALTER TABLE perm_rel ADD COLUMN IF NOT EXISTS col_rel_usr_avatar BOOLEAN NOT NULL DEFAULT FALSE;  -- Avatar
+ALTER TABLE perm_rel ADD COLUMN IF NOT EXISTS col_rel_usr_nome BOOLEAN NOT NULL DEFAULT FALSE;  -- Nome
+ALTER TABLE perm_rel ADD COLUMN IF NOT EXISTS col_rel_usr_email BOOLEAN NOT NULL DEFAULT FALSE;  -- E-mail
+ALTER TABLE perm_rel ADD COLUMN IF NOT EXISTS col_rel_usr_perfil BOOLEAN NOT NULL DEFAULT FALSE;  -- Perfil
+ALTER TABLE perm_rel ADD COLUMN IF NOT EXISTS col_rel_usr_situacao BOOLEAN NOT NULL DEFAULT FALSE;  -- Situação
+ALTER TABLE perm_rel ADD COLUMN IF NOT EXISTS col_rel_usr_status BOOLEAN NOT NULL DEFAULT FALSE;  -- Status
 
 -- Tarefas (perm_tarefas)
 CREATE TABLE IF NOT EXISTS perm_tarefas (
@@ -463,7 +498,7 @@ UPDATE perm_pros SET modulo_ativo = TRUE, acao_view = TRUE, acao_search = TRUE, 
   WHERE modelo_id IN (SELECT id FROM modelos_permissoes WHERE nome = 'Administrador');
 UPDATE perm_ctt SET modulo_ativo = TRUE, acao_view = TRUE, acao_search = TRUE, acao_details_view = TRUE, acao_create = TRUE, acao_edit = TRUE, acao_link_client = TRUE, acao_unlink_client = TRUE, acao_log_add = TRUE, acao_log_view = TRUE, acao_status_update = TRUE, acao_tag_manage = TRUE, acao_delete = TRUE, col_ctt_nome = TRUE, col_ctt_cliente = TRUE, col_ctt_cargo = TRUE, col_ctt_tel = TRUE, col_ctt_email = TRUE, col_ctt_origem = TRUE, col_ctt_tags = TRUE, col_ctt_status = TRUE, col_ctt_ult_interacao = TRUE, col_ctt_owner = TRUE, col_log_data = TRUE, col_log_canal = TRUE, col_log_assunto = TRUE, col_log_detalhes = TRUE, col_log_resp = TRUE
   WHERE modelo_id IN (SELECT id FROM modelos_permissoes WHERE nome = 'Administrador');
-UPDATE perm_rel SET modulo_ativo = TRUE, acao_view = TRUE, acao_search = TRUE, acao_run = TRUE, acao_export_csv = TRUE, acao_export_xlsx = TRUE, acao_export_pdf = TRUE, acao_preset_save = TRUE, acao_preset_load = TRUE, acao_preset_manage = TRUE, acao_share_link = TRUE, acao_share_send = TRUE, col_rel_periodo = TRUE, col_rel_cliente = TRUE, col_rel_total = TRUE, col_rel_pedidos = TRUE, col_rel_ticket_medio = TRUE, col_rel_item = TRUE, col_rel_saldo = TRUE, col_rel_estq_valor = TRUE, col_rel_giro = TRUE, col_rel_etapa = TRUE, col_rel_qtd = TRUE, col_rel_pros_valor = TRUE, col_rel_taxa_conv = TRUE
+UPDATE perm_rel SET modulo_ativo = TRUE, acao_view = TRUE, acao_search = TRUE, acao_run = TRUE, acao_export_csv = TRUE, acao_export_xlsx = TRUE, acao_export_pdf = TRUE, acao_preset_save = TRUE, acao_preset_load = TRUE, acao_preset_manage = TRUE, acao_share_link = TRUE, acao_share_send = TRUE, col_rel_estq_nome = TRUE, col_rel_estq_categoria = TRUE, col_rel_estq_unidade = TRUE, col_rel_estq_qtd = TRUE, col_rel_estq_preco = TRUE, col_rel_estq_processo = TRUE, col_rel_estq_status = TRUE, col_rel_prod_codigo = TRUE, col_rel_prod_nome = TRUE, col_rel_prod_colecao = TRUE, col_rel_prod_preco_venda = TRUE, col_rel_prod_margem = TRUE, col_rel_prod_qtd = TRUE, col_rel_prod_status = TRUE, col_rel_cli_nome = TRUE, col_rel_cli_cnpj = TRUE, col_rel_cli_pais = TRUE, col_rel_cli_estado = TRUE, col_rel_cli_status = TRUE, col_rel_cli_dono = TRUE, col_rel_ctt_contato = TRUE, col_rel_ctt_tipo = TRUE, col_rel_ctt_empresa = TRUE, col_rel_ctt_celular = TRUE, col_rel_ctt_telefone = TRUE, col_rel_ctt_email = TRUE, col_rel_pros_nome = TRUE, col_rel_pros_email = TRUE, col_rel_pros_status = TRUE, col_rel_pros_responsavel = TRUE, col_rel_orc_codigo = TRUE, col_rel_orc_cliente = TRUE, col_rel_orc_data = TRUE, col_rel_orc_valor = TRUE, col_rel_orc_condicao = TRUE, col_rel_orc_status = TRUE, col_rel_ped_codigo = TRUE, col_rel_ped_cliente = TRUE, col_rel_ped_data = TRUE, col_rel_ped_valor = TRUE, col_rel_ped_condicao = TRUE, col_rel_ped_status = TRUE, col_rel_usr_avatar = TRUE, col_rel_usr_nome = TRUE, col_rel_usr_email = TRUE, col_rel_usr_perfil = TRUE, col_rel_usr_situacao = TRUE, col_rel_usr_status = TRUE
   WHERE modelo_id IN (SELECT id FROM modelos_permissoes WHERE nome = 'Administrador');
 UPDATE perm_tarefas SET modulo_ativo = TRUE, acao_view = TRUE, acao_create = TRUE, acao_edit = TRUE, acao_delete = TRUE, acao_assign = TRUE, acao_calendar_view = TRUE, col_tsk_titulo = TRUE, col_tsk_resp = TRUE, col_tsk_prazo = TRUE, col_tsk_status = TRUE, col_tsk_prioridade = TRUE, col_evt_titulo = TRUE, col_evt_inicio = TRUE, col_evt_fim = TRUE, col_evt_local = TRUE, col_evt_participantes = TRUE, col_evt_status = TRUE
   WHERE modelo_id IN (SELECT id FROM modelos_permissoes WHERE nome = 'Administrador');

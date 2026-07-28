@@ -116,7 +116,7 @@ router.get('/lista', exigirPermissao('cli.view'), async (req, res) => {
   }
 });
 
-router.get('/contatos', async (req, res) => {
+router.get('/contatos', exigirPermissao('ctt.view'), async (req, res) => {
   try {
     const api = createApiClient(req);
     const [contatos, clientes] = await Promise.all([
