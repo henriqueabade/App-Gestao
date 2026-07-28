@@ -281,7 +281,10 @@ router.get('/modelos-permissoes', async (_req, res) => {
   try {
     const api = createInternalApiClient();
     const linhas = await api.get('/api/modelos_permissoes', { query: { order: 'nome' } });
-    res.json(Array.isArray(linhas) ? linhas.map(l => mapModelo(l)) : []);
+    const modelos = Array.isArray(linhas) ? linhas.map(l => mapModelo(l)) : [];
+    // O modal espera { modelos: [...] } — devolver um array puro fazia a lista
+    // de perfis vir vazia (data.modelos === undefined).
+    res.json({ modelos });
   } catch (err) {
     console.error('Erro ao listar modelos de permissões:', err);
     res.status(err.status || 500).json({ error: 'Erro ao listar modelos de permissões' });

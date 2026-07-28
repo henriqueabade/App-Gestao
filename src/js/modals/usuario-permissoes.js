@@ -70,7 +70,6 @@
     close: overlay.querySelector('#usuariosPermissoesFechar'),
     cancel: overlay.querySelector('[data-action="cancelar"]'),
     revert: overlay.querySelector('#usuariosPermissoesReverter'),
-    apply: overlay.querySelector('#usuariosPermissoesAplicar'),
     profileSelect: overlay.querySelector('#usuariosPermissoesPerfil'),
     load: overlay.querySelector('#usuariosPermissoesCarregar'),
     save: overlay.querySelector('#usuariosPermissoesSalvar'),
@@ -102,7 +101,6 @@
   };
 
   const profiles = new Map();
-  let applyInProgress = false;
 
   function getErrorMessageForStatus(status, fallbackMessage) {
     const normalizedFallback =
@@ -632,7 +630,7 @@
       });
   }
 
-  function loadProfile(profileKey) {
+  async function loadProfile(profileKey) {
     const profile = profiles.get(profileKey);
     if (!profile) return;
 
@@ -640,7 +638,35 @@
       elements.profileSelect.value = profileKey;
     }
 
-    applyNormalizedPayload(profile.payload || {});
+    // A listagem de perfis é leve (só id/nome/descrição). As permissões são
+    // buscadas sob demanda, ao carregar o perfil — evita ler 19 tabelas de
+    // cada perfil só para preencher o combo.
+    if (profile.id != null && !profile.detalhesCarregados) {
+      try {
+        const resp = await fetchApi(`/api/usuarios/modelos-permissoes/${encodeURIComponent(profile.id)}`);
+        if (resp.ok) {
+          const data = await resp.json();
+          const modelo = data?.modelo ?? data;
+          const completo = convertModelToProfile(modelo);
+          completo.key = profile.key;
+          completo.detalhesCarregados = true;
+          profiles.set(profile.key, completo);
+        } else {
+          console.error('Falha ao carregar permissões do perfil:', await resp.text());
+          if (typeof window.showToast === 'function') {
+            window.showToast('Não foi possível carregar as permissões deste perfil.', 'error');
+          }
+        }
+      } catch (err) {
+        console.error('Erro ao carregar permissões do perfil:', err);
+        if (typeof window.showToast === 'function') {
+          window.showToast('Não foi possível carregar as permissões deste perfil.', 'error');
+        }
+      }
+    }
+
+    const atual = profiles.get(profileKey) || profile;
+    applyNormalizedPayload(atual.payload || {});
     markProfileLoaded(profileKey);
   }
 
@@ -739,88 +765,6 @@
       })
       .filter(Boolean);
     return { permissions, columns, modules };
-  }
-
-  async function applyChanges() {
-    const usuarioId = applicationContext.usuarioId;
-    if (!usuarioId) {
-      if (typeof window.showToast === 'function') {
-        window.showToast('Selecione um usuário para aplicar as permissões.', 'warning');
-      }
-      return;
-    }
-    if (applyInProgress) return;
-    const button = elements.apply;
-    applyInProgress = true;
-    if (button) {
-      button.disabled = true;
-      button.classList.add('btn-loading');
-    }
-    try {
-      const selectedProfileKey = elements.profileSelect?.value || '';
-      const profile = selectedProfileKey && profiles.has(selectedProfileKey)
-        ? profiles.get(selectedProfileKey)
-        : null;
-      const canApplyProfileDirectly = Boolean(
-        profile &&
-        selectedProfileKey === state.currentProfile &&
-        state.profileLoaded
-      );
-      let resp;
-      if (canApplyProfileDirectly && profile?.id !== undefined && profile?.id !== null) {
-        resp = await fetchApi(`/api/usuarios/${encodeURIComponent(usuarioId)}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            modeloPermissoesId: profile.id,
-            aplicarPermissoesDoModelo: true
-          })
-        });
-      } else {
-        const payload = canApplyProfileDirectly && profile
-          ? profile.rawPayload ?? profile.payload ?? {}
-          : buildPayloadFromSelections(collectSelections());
-        resp = await fetchApi(`/api/usuarios/${encodeURIComponent(usuarioId)}/permissoes`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ permissoes: payload })
-        });
-      }
-
-      if (!resp.ok) {
-        const messageFromResponse = await extractResponseMessage(resp);
-        const errorMessage = messageFromResponse || 'Não foi possível aplicar as permissões.';
-        if (typeof window.showToast === 'function') {
-          window.showToast(errorMessage, 'error');
-        }
-        return;
-      }
-
-      try {
-        await resp.json();
-      } catch (err) {
-        // Respostas 204 não possuem corpo
-      }
-
-      if (typeof window.showToast === 'function') {
-        window.showToast('Permissões aplicadas com sucesso.', 'success');
-      }
-
-      window.dispatchEvent(new Event('usuarios:atualizado'));
-      window.dispatchEvent(new CustomEvent('usuarioAtualizado', { detail: { id: usuarioId } }));
-      closeModal();
-    } catch (err) {
-      console.error('Erro ao aplicar permissões do usuário:', err);
-      if (typeof window.showToast === 'function') {
-        window.showToast('Erro ao aplicar as permissões do usuário.', 'error');
-      }
-    } finally {
-      applyInProgress = false;
-      if (button) {
-        button.disabled = false;
-        button.classList.remove('btn-loading');
-      }
-    }
   }
 
   async function handleSaveExisting(event) {
@@ -1357,13 +1301,19 @@
     const modules = Array.isArray(modelo?.modulos)
       ? modelo.modulos.map(normalizeModuleSelection).filter(Boolean)
       : [];
+    // O backend devolve as AÇÕES marcadas como lista plana ("mp.view", ...).
+    // Sem isto os checkboxes de ações não eram restaurados ao carregar o perfil.
+    const actions = Array.isArray(modelo?.acoes) ? modelo.acoes.filter(Boolean) : [];
+    actions.forEach(acao => {
+      payload[acao] = true;
+    });
     columns.forEach(coluna => {
       payload[coluna] = true;
     });
     modules.forEach(modulo => {
       payload[modulo] = true;
     });
-    return { payload, columns, modules };
+    return { payload, columns, modules, actions };
   }
 
   function convertModelToProfile(modelo) {
@@ -1435,7 +1385,6 @@
     elements.close?.addEventListener('click', closeModal);
     elements.cancel?.addEventListener('click', closeModal);
     elements.revert?.addEventListener('click', revertChanges);
-    elements.apply?.addEventListener('click', applyChanges);
     elements.profileSelect?.addEventListener('change', handleProfileChange);
     elements.load?.addEventListener('click', handleLoadProfile);
     elements.save?.addEventListener('click', handleSaveExisting);
