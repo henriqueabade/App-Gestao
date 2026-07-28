@@ -32,11 +32,30 @@ function extractUserIdFromToken(rawToken) {
   }
 }
 
+// Cache da identidade do usuário.
+// Sem isto, CADA rota protegida fazia uma ida extra ao upstream só para
+// descobrir quem é o usuário — dobrando a latência de toda a aplicação.
+// A identidade praticamente não muda dentro de uma sessão.
+const cacheUsuario = new Map();
+const CACHE_USUARIO_TTL_MS = 60_000;
+
 async function carregarUsuarioAtual(req) {
+  const token = req.headers?.authorization || getToken() || '';
+  const userId = extractUserIdFromToken(token);
+  const chaveCache = userId ? `id:${userId}` : `tok:${String(token).slice(-24)}`;
+
+  const emCache = cacheUsuario.get(chaveCache);
+  if (emCache && Date.now() < emCache.expiraEm) {
+    return emCache.valor;
+  }
+
   const api = createApiClient(req);
-  const userId = extractUserIdFromToken(req.headers?.authorization || getToken());
   try {
-    return userId ? await api.get(`/api/usuarios/${userId}`) : await api.get('/api/usuarios/me');
+    const usuario = userId
+      ? await api.get(`/api/usuarios/${userId}`)
+      : await api.get('/api/usuarios/me');
+    cacheUsuario.set(chaveCache, { valor: usuario, expiraEm: Date.now() + CACHE_USUARIO_TTL_MS });
+    return usuario;
   } catch (err) {
     console.error('[permissoes] não foi possível identificar o usuário:', err?.message || err);
     return null;
@@ -56,7 +75,7 @@ function lerCache(userId) {
 function gravarCache(userId, valor) {
   cacheEfetivas.set(String(userId), { valor, expiraEm: Date.now() + CACHE_TTL_MS });
 }
-function limparCache() { cacheEfetivas.clear(); }
+function limparCache() { cacheEfetivas.clear(); cacheUsuario.clear(); }
 
 async function obterPermissoesEfetivas(req) {
   const usuario = await carregarUsuarioAtual(req);

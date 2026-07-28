@@ -159,20 +159,13 @@ router.get('/:id', exigirPermissao('cli.details.view'), async (req, res) => {
       return res.status(404).json({ error: 'Cliente não encontrado' });
     }
 
-    let contatos = [];
-    let contratos = [];
-    let notas = [];
-    try {
-      contatos = await api.get('/api/contatos_cliente', {
-        query: { id_cliente: id, order: 'nome' }
-      });
-    } catch (_) {}
-    try {
-      contratos = await api.get('/api/contratos', { query: { cliente_id: id } });
-    } catch (_) {}
-    try {
-      notas = await api.get('/api/cliente_notas', { query: { cliente_id: id, order: 'data.desc' } });
-    } catch (_) {}
+    // Em paralelo: eram 3 idas sequenciais ao upstream (3 RTTs) só para montar
+    // a tela de detalhe. Como são independentes, viram 1 RTT.
+    const [contatos, contratos, notas] = await Promise.all([
+      api.get('/api/contatos_cliente', { query: { id_cliente: id, order: 'nome' } }).catch(() => []),
+      api.get('/api/contratos', { query: { cliente_id: id } }).catch(() => []),
+      api.get('/api/cliente_notas', { query: { cliente_id: id, order: 'data.desc' } }).catch(() => [])
+    ]);
 
     res.json({
       cliente: mapClienteCompleto(cliente),
