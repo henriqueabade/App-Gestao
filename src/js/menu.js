@@ -3011,6 +3011,20 @@ async function loadPage(page, options = {}) {
             }, { once: true });
         }
 
+        // Reaplica as permissões no conteúdo recém-carregado: colunas negadas
+        // somem e botões sem permissão ficam desabilitados. Como as páginas são
+        // injetadas dinamicamente, isso precisa rodar a cada troca de módulo.
+        try {
+            if (window.Permissoes) {
+                await window.Permissoes.carregar();
+                // não reprocessa o container da página (data-page) para não
+                // ocultar o módulo inteiro; só ações e colunas internas.
+                window.Permissoes.aplicarAcoesEColunas(content);
+            }
+        } catch (err) {
+            console.error('[permissoes] falha ao aplicar no módulo carregado:', err);
+        }
+
         const style = document.createElement('link');
         style.id = 'page-style';
         style.rel = 'stylesheet';

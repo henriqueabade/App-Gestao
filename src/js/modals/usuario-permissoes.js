@@ -843,6 +843,7 @@
       nome: profile.name,
       descricao: profile.description || '',
       permissoes: buildPayloadFromSelections(selections),
+      acoes: selections.permissions,
       colunas: selections.columns,
       modulos: selections.modules
     };
@@ -953,6 +954,7 @@
 
     const columns = Array.isArray(selections.columns) ? selections.columns : [];
     const modules = Array.isArray(selections.modules) ? selections.modules : [];
+    const actions = Array.isArray(selections.permissions) ? selections.permissions : [];
 
     const payload = {
       nome: finalName,
@@ -960,6 +962,8 @@
       permissoes: isDuplicating
         ? baseProfile?.rawPayload ?? baseProfile?.payload ?? {}
         : buildPayloadFromSelections(selections),
+      // listas planas do que está marcado — formato lido pelo backend
+      acoes: actions,
       colunas: columns,
       modulos: modules
     };
@@ -1013,6 +1017,14 @@
     if (saveForm) saveForm.reset();
     if (prefill.name) saveNameInput.value = prefill.name;
     if (prefill.description) saveDescriptionInput.value = prefill.description;
+    // O overlay de salvamento nasce dentro do container do modal, que cria seu
+    // próprio contexto de empilhamento (backdrop-blur/z-index). Isso fazia o
+    // diálogo aparecer ATRÁS do modal de permissões. Movendo-o para o <body>
+    // ele passa a empilhar sobre tudo, independente do container.
+    if (saveOverlay.parentElement !== document.body) {
+      document.body.appendChild(saveOverlay);
+    }
+    saveOverlay.style.zIndex = '2147483000';
     saveOverlay.classList.remove('hidden');
     setTimeout(() => {
       saveNameInput?.focus();
@@ -1247,6 +1259,11 @@
     document.removeEventListener('keydown', handleKeydown);
     overlay.removeEventListener('click', handleOverlayClick);
     saveOverlay?.removeEventListener('click', handleSaveOverlayClick);
+    // Remove o overlay de salvamento que foi movido para o <body>, senão ele
+    // ficaria órfão na página após fechar o modal.
+    if (saveOverlay && saveOverlay.parentElement === document.body) {
+      saveOverlay.remove();
+    }
     if (typeof Modal?.close === 'function') {
       Modal.close(overlayId);
     } else {

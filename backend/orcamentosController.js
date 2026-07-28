@@ -1,5 +1,6 @@
 const express = require('express');
 const { createApiClient } = require('./apiHttpClient');
+const { exigirPermissao } = require('./permissionsController');
 
 const router = express.Router();
 
@@ -322,7 +323,7 @@ async function converterOrcamentoEmPedido(api, id, conversao = null) {
   return { pedido: { id: pedidoId, numero }, jaExistia: false };
 }
 
-router.get('/', async (req, res) => {
+router.get('/', exigirPermissao('orc.view'), async (req, res) => {
   const { clienteId } = req.query;
   try {
     const api = createApiClient(req);
@@ -336,7 +337,7 @@ router.get('/', async (req, res) => {
   }
 });
 
-router.get('/:id', async (req, res) => {
+router.get('/:id', exigirPermissao('orc.view.details'), async (req, res) => {
   const { id } = req.params;
   try {
     const api = createApiClient(req);
@@ -361,7 +362,7 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-router.post('/', async (req, res) => {
+router.post('/', exigirPermissao('orc.create'), async (req, res) => {
   const body = req.body || {};
   const itens = Array.isArray(body.itens) ? body.itens : [];
   const parcelasDetalhes = Array.isArray(body.parcelas_detalhes) ? body.parcelas_detalhes : [];
@@ -391,7 +392,7 @@ router.post('/', async (req, res) => {
   }
 });
 
-router.put('/:id', async (req, res) => {
+router.put('/:id', exigirPermissao('orc.edit'), async (req, res) => {
   const { id } = req.params;
   const body = req.body || {};
   const itens = Array.isArray(body.itens) ? body.itens : [];
@@ -462,7 +463,7 @@ router.put('/:id', async (req, res) => {
   }
 });
 
-router.patch('/:id/status', async (req, res) => {
+router.patch('/:id/status', exigirPermissao('orc.convert'), async (req, res) => {
   const { id } = req.params;
   const { situacao } = req.body;
   try {
@@ -493,7 +494,7 @@ router.patch('/:id/status', async (req, res) => {
   }
 });
 
-router.post('/:id/clone', async (req, res) => {
+router.post('/:id/clone', exigirPermissao('orc.create'), async (req, res) => {
   const { id } = req.params;
   try {
     const api = createApiClient(req);

@@ -222,19 +222,23 @@ async function carregarPedidos() {
             const dataFormatada3 = formatarDataLocal(p.data_envio);
             const dataFormatada4 = formatarDataLocal(p.data_entrega);
             const dataFormatada5 = formatarDataLocal(p.data_cancelamento);
+            // permissão exigida para avançar o status deste pedido
+            const statusPerm = p.situacao === 'Produção' ? 'ped.status.ship'
+                : p.situacao === 'Enviado' ? 'ped.status.deliver'
+                : 'ped.status.confirm';
             tr.innerHTML = `
-                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">${p.numero}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-white">${obterNomeCliente(p.cliente_id)}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-violet)">${dataFormatada}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-white">${valor}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-violet)">${condicao}</td>
-                <td class="px-6 py-4 whitespace-nowrap"><span class="${badgeClass} px-3 py-1 rounded-full text-xs font-medium status-badge" data-aprovacao="${dataFormatada2}" data-envio="${dataFormatada3}" data-entrega="${dataFormatada4}" data-cancelamento="${dataFormatada5}">${p.situacao}</span></td>
+                <td data-perm-col="col_ped_num" class="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">${p.numero}</td>
+                <td data-perm-col="col_ped_cliente" class="px-6 py-4 whitespace-nowrap text-sm text-white">${obterNomeCliente(p.cliente_id)}</td>
+                <td data-perm-col="col_ped_data" class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-violet)">${dataFormatada}</td>
+                <td data-perm-col="col_ped_total" class="px-6 py-4 whitespace-nowrap text-sm text-white">${valor}</td>
+                <td data-perm-col="col_ped_condicao" class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-violet)">${condicao}</td>
+                <td data-perm-col="col_ped_status" class="px-6 py-4 whitespace-nowrap"><span class="${badgeClass} px-3 py-1 rounded-full text-xs font-medium status-badge" data-aprovacao="${dataFormatada2}" data-envio="${dataFormatada3}" data-entrega="${dataFormatada4}" data-cancelamento="${dataFormatada5}">${p.situacao}</span></td>
                 <td class="px-6 py-4 whitespace-nowrap text-left">
                     <div class="flex items-center justify-start space-x-2">
-                        <i class="fas fa-eye w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Visualizar"></i>
-                        <i class="fas fa-check w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Concluir"></i>
-                        <i class="fas fa-clipboard w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Relatório"></i>
-                        <i class="fas fa-download w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10 ${downloadClass}" style="color: var(--color-primary)" title="${downloadTitle}"></i>
+                        <i data-perm="ped.view.details" class="fas fa-eye w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Visualizar"></i>
+                        <i data-perm="${statusPerm}" class="fas fa-check w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Concluir"></i>
+                        <i data-perm="ped.report" class="fas fa-clipboard w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Relatório"></i>
+                        <i data-perm="ped.export" class="fas fa-download w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10 ${downloadClass}" style="color: var(--color-primary)" title="${downloadTitle}"></i>
                     </div>
                 </td>`;
             const checkIcon = tr.querySelector('.fa-check');

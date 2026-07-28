@@ -250,18 +250,18 @@ async function carregarOrcamentos() {
                 : 'Converter em pedido';
             const convertClass = convertBlocked ? 'icon-disabled' : '';
             tr.innerHTML = `
-                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">${o.numero}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-white">${obterNomeCliente(o.cliente_id)}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-violet)">${dataFormatada}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-white">${valor}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-violet)">${condicao}</td>
-                <td class="px-6 py-4 whitespace-nowrap"><span class="${badgeClass} px-3 py-1 rounded-full text-xs font-medium">${o.situacao}</span></td>
+                <td data-perm-col="col_orc_num" class="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">${o.numero}</td>
+                <td data-perm-col="col_orc_cliente" class="px-6 py-4 whitespace-nowrap text-sm text-white">${obterNomeCliente(o.cliente_id)}</td>
+                <td data-perm-col="col_orc_data" class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-violet)">${dataFormatada}</td>
+                <td data-perm-col="col_orc_total" class="px-6 py-4 whitespace-nowrap text-sm text-white">${valor}</td>
+                <td data-perm-col="col_orc_cond_pagto" class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-violet)">${condicao}</td>
+                <td data-perm-col="col_orc_status" class="px-6 py-4 whitespace-nowrap"><span class="${badgeClass} px-3 py-1 rounded-full text-xs font-medium">${o.situacao}</span></td>
                 <td class="px-6 py-4 whitespace-nowrap text-left">
                     <div class="flex items-center justify-start space-x-2">
-                        <i class="fas fa-money-bill-wave w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10 ${convertClass}" style="color: var(--color-primary)" title="${convertTitle}"></i>
-                        <i class="fas fa-eye w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Visualizar"></i>
-                        <i class="fas fa-edit w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10 ${editClass}" style="color: var(--color-primary)" title="Editar"></i>
-                        <i class="fas fa-download w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10 ${downloadClass}" style="color: var(--color-primary)" title="${downloadTitle}"></i>
+                        <i data-perm="orc.convert" class="fas fa-money-bill-wave w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10 ${convertClass}" style="color: var(--color-primary)" title="${convertTitle}"></i>
+                        <i data-perm="orc.view.details" class="fas fa-eye w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Visualizar"></i>
+                        <i data-perm="orc.edit" class="fas fa-edit w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10 ${editClass}" style="color: var(--color-primary)" title="Editar"></i>
+                        <i data-perm="orc.export" class="fas fa-download w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10 ${downloadClass}" style="color: var(--color-primary)" title="${downloadTitle}"></i>
                     </div>
                 </td>`;
             tbody.appendChild(tr);

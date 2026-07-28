@@ -4150,6 +4150,25 @@ ipcMain.handle('open-pdf', async (_event, { id, tipo }) => {
   }
 
   const apiBaseUrl = `http://localhost:${currentApiPort ?? configuredApiPort ?? DEFAULT_API_PORT}`;
+
+  // Verificação de permissão no processo principal: esconder/desabilitar o
+  // ícone na interface não impede a chamada IPC, então o bloqueio real é aqui.
+  const permissaoExport = tipo === 'pedido' ? 'ped.export' : 'orc.export';
+  try {
+    const resp = await fetch(`${apiBaseUrl}/api/permissoes/efetivas`);
+    const dados = await resp.json();
+    const perms = dados?.permissoes || {};
+    const bloco = tipo === 'pedido' ? perms.ped : perms.orc;
+    const liberado = Boolean(bloco?.ativo) && Boolean(bloco?.acoes?.[permissaoExport]);
+    if (!liberado) {
+      logWarn('Geração de PDF bloqueada por falta de permissão.', { permissao: permissaoExport });
+      return { success: false, code: 'FORBIDDEN', message: 'Você não tem permissão para gerar este PDF.' };
+    }
+  } catch (permErr) {
+    logError('Não foi possível verificar a permissão de geração de PDF.', permErr);
+    return { success: false, code: 'FORBIDDEN', message: 'Não foi possível validar sua permissão para gerar o PDF.' };
+  }
+
   const url = new URL('/pdf', apiBaseUrl);
   url.searchParams.set('id', id);
   if (tipo) url.searchParams.set('tipo', tipo);

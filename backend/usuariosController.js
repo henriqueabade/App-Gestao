@@ -2,6 +2,7 @@
 const express = require('express');
 const { createApiClient } = require('./apiHttpClient');
 const { getToken } = require('./tokenStore');
+const permissoesRepo = require('./permissionsRepository');
 
 const router = express.Router();
 
@@ -242,6 +243,146 @@ router.put('/me/avatar', async (req, res) => {
     res
       .status(err.status || 500)
       .json({ error: err.message || 'Erro ao atualizar avatar do usuário' });
+  }
+});
+
+// ==========================================================================
+// Modelos (perfis) de permissão
+//
+// IMPORTANTE: estas rotas precisam ficar ANTES de "/:id", senão o Express
+// casa "/modelos-permissoes" com "/:id" e tenta buscar um usuário de id
+// "modelos-permissoes" (erro: invalid input syntax for type integer).
+// ==========================================================================
+
+function mapModelo(row = {}, permissoes) {
+  const selecoes = permissoes ? permissoesRepo.toSelections(permissoes) : null;
+  return {
+    id: row.id,
+    nome: row.nome,
+    descricao: row.descricao || '',
+    criadoEm: row.criado_em ?? null,
+    atualizadoEm: row.atualizado_em ?? null,
+    ...(selecoes
+      ? { permissoes, acoes: selecoes.acoes, colunas: selecoes.colunas, modulos: selecoes.modulos }
+      : {})
+  };
+}
+
+// Aceita as listas planas do modal e também o formato antigo aninhado.
+function permissoesDoBody(body = {}) {
+  const acoes = Array.isArray(body.acoes) ? body.acoes : [];
+  const colunas = Array.isArray(body.colunas) ? body.colunas : [];
+  const modulos = Array.isArray(body.modulos) ? body.modulos : [];
+  return permissoesRepo.fromSelections({ acoes, colunas, modulos });
+}
+
+/** GET /usuarios/modelos-permissoes — lista os perfis */
+router.get('/modelos-permissoes', async (_req, res) => {
+  try {
+    const api = createInternalApiClient();
+    const linhas = await api.get('/api/modelos_permissoes', { query: { order: 'nome' } });
+    res.json(Array.isArray(linhas) ? linhas.map(l => mapModelo(l)) : []);
+  } catch (err) {
+    console.error('Erro ao listar modelos de permissões:', err);
+    res.status(err.status || 500).json({ error: 'Erro ao listar modelos de permissões' });
+  }
+});
+
+/** GET /usuarios/modelos-permissoes/:id — perfil + permissões */
+router.get('/modelos-permissoes/:id', async (req, res) => {
+  try {
+    const api = createInternalApiClient();
+    const modelo = await api.get(`/api/modelos_permissoes/${req.params.id}`);
+    if (!modelo || modelo.error === 'Not found') {
+      return res.status(404).json({ error: 'Modelo não encontrado' });
+    }
+    const permissoes = await permissoesRepo.loadPermissionsForModelo(api, req.params.id);
+    res.json({ modelo: mapModelo(modelo, permissoes) });
+  } catch (err) {
+    console.error('Erro ao buscar modelo de permissões:', err);
+    res.status(err.status || 500).json({ error: 'Erro ao buscar modelo de permissões' });
+  }
+});
+
+/** POST /usuarios/modelos-permissoes — cria perfil e grava permissões */
+router.post('/modelos-permissoes', async (req, res) => {
+  const nome = String(req.body?.nome || '').trim();
+  if (!nome) return res.status(400).json({ error: 'Informe o nome do perfil.' });
+
+  try {
+    const api = createInternalApiClient();
+    const existentes = await api.get('/api/modelos_permissoes', { query: { nome } }).catch(() => []);
+    if (Array.isArray(existentes) && existentes.some(m => String(m?.nome).trim().toLowerCase() === nome.toLowerCase())) {
+      return res.status(409).json({ error: 'Já existe um perfil com este nome.' });
+    }
+
+    const criado = await api.post('/api/modelos_permissoes', {
+      nome,
+      descricao: req.body?.descricao || ''
+    });
+    const modeloId = criado?.id ?? criado?.data?.id ?? criado?.[0]?.id;
+    if (!modeloId) throw new Error('A API não retornou o id do perfil criado.');
+
+    const permissoes = permissoesDoBody(req.body);
+    await permissoesRepo.savePermissionsForModelo(api, modeloId, permissoes);
+
+    res.status(201).json({ modelo: mapModelo({ ...criado, id: modeloId, nome }, permissoes) });
+  } catch (err) {
+    console.error('Erro ao criar modelo de permissões:', err);
+    res.status(err.status || 500).json({ error: 'Erro ao criar modelo de permissões' });
+  }
+});
+
+/** PATCH/PUT /usuarios/modelos-permissoes/:id — atualiza perfil e permissões */
+async function atualizarModelo(req, res) {
+  const { id } = req.params;
+  try {
+    const api = createInternalApiClient();
+    const payload = {};
+    if (req.body?.nome !== undefined) payload.nome = String(req.body.nome).trim();
+    if (req.body?.descricao !== undefined) payload.descricao = req.body.descricao || '';
+    if (Object.keys(payload).length) {
+      await api.put(`/api/modelos_permissoes/${id}`, payload);
+    }
+
+    const permissoes = permissoesDoBody(req.body);
+    await permissoesRepo.savePermissionsForModelo(api, id, permissoes);
+
+    res.json({ modelo: mapModelo({ id: Number(id), ...payload }, permissoes) });
+  } catch (err) {
+    console.error('Erro ao atualizar modelo de permissões:', err);
+    res.status(err.status || 500).json({ error: 'Erro ao atualizar modelo de permissões' });
+  }
+}
+router.patch('/modelos-permissoes/:id', atualizarModelo);
+router.put('/modelos-permissoes/:id', atualizarModelo);
+
+/** DELETE /usuarios/modelos-permissoes/:id */
+router.delete('/modelos-permissoes/:id', async (req, res) => {
+  const { id } = req.params;
+  try {
+    const api = createInternalApiClient();
+    await permissoesRepo.deletePermissionsForModelo(api, id);
+    await api.delete(`/api/modelos_permissoes/${id}`);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Erro ao excluir modelo de permissões:', err);
+    res.status(err.status || 500).json({ error: 'Erro ao excluir modelo de permissões' });
+  }
+});
+
+/** PUT /usuarios/:id/permissoes — vincula um perfil ao usuário */
+router.put('/:id/permissoes', async (req, res) => {
+  const { id } = req.params;
+  const modeloId = req.body?.modeloPermissoesId ?? req.body?.modelo_permissoes_id ?? null;
+  try {
+    const api = createInternalApiClient();
+    await api.put(`/api/usuarios/${id}`, { modelo_permissoes_id: modeloId });
+    try { require('./permissionsController').limparCachePermissoes(); } catch (_) {}
+    res.json({ success: true, modeloPermissoesId: modeloId });
+  } catch (err) {
+    console.error('Erro ao aplicar permissões ao usuário:', err);
+    res.status(err.status || 500).json({ error: 'Erro ao aplicar permissões ao usuário' });
   }
 });
 

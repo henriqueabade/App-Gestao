@@ -119,6 +119,42 @@
           <i class="fas fa-cog mr-2"></i>
           Configurações
         </button>
+        <button class="usuarios-permissoes-tab" data-permission-tab-trigger="dashboard">
+          <i class="fas fa-chart-line mr-2"></i>
+          Dashboard
+        </button>
+        <button class="usuarios-permissoes-tab" data-permission-tab-trigger="calendario">
+          <i class="fas fa-calendar-days mr-2"></i>
+          Calendário
+        </button>
+        <button class="usuarios-permissoes-tab" data-permission-tab-trigger="lamclientes">
+          <i class="fas fa-users mr-2"></i>
+          Laminação · Clientes
+        </button>
+        <button class="usuarios-permissoes-tab" data-permission-tab-trigger="lamservicos">
+          <i class="fas fa-layer-group mr-2"></i>
+          Laminação · Serviços
+        </button>
+        <button class="usuarios-permissoes-tab" data-permission-tab-trigger="lamprecificacao">
+          <i class="fas fa-tags mr-2"></i>
+          Laminação · Precificação
+        </button>
+        <button class="usuarios-permissoes-tab" data-permission-tab-trigger="lamrelatorios">
+          <i class="fas fa-chart-column mr-2"></i>
+          Laminação · Relatórios
+        </button>
+        <button class="usuarios-permissoes-tab" data-permission-tab-trigger="ia">
+          <i class="fas fa-robot mr-2"></i>
+          IA
+        </button>
+        <button class="usuarios-permissoes-tab" data-permission-tab-trigger="usuarios">
+          <i class="fas fa-user-gear mr-2"></i>
+          Usuários
+        </button>
+        <button class="usuarios-permissoes-tab" data-permission-tab-trigger="financeiro">
+          <i class="fas fa-dollar-sign mr-2"></i>
+          Financeiro
+        </button>
       </div>
     </nav>
 
@@ -1038,6 +1074,14 @@
                     </div>
                   </label>
 
+                  <label class="usuarios-permissoes-item" data-search="pdf baixar exportar download">
+                    <input type="checkbox" name="orc.export" data-role="item" data-group="acoes-orc" data-item-type="action" class="w-4 h-4 mt-1" />
+                    <div>
+                      <span class="font-medium">Baixar PDF</span>
+                      <p class="text-sm text-gray-400">Gerar e baixar o PDF do orçamento</p>
+                    </div>
+                  </label>
+
                 </div>
               </div>
             </article>
@@ -1323,6 +1367,22 @@
                     </div>
                   </label>
 
+                  <label class="usuarios-permissoes-item" data-search="pdf baixar exportar download">
+                    <input type="checkbox" name="ped.export" data-role="item" data-group="acoes-ped" data-item-type="action" class="w-4 h-4 mt-1" />
+                    <div>
+                      <span class="font-medium">Baixar PDF</span>
+                      <p class="text-sm text-gray-400">Gerar e baixar o PDF do pedido</p>
+                    </div>
+                  </label>
+
+                  <label class="usuarios-permissoes-item" data-search="relatorio report prancheta">
+                    <input type="checkbox" name="ped.report" data-role="item" data-group="acoes-ped" data-item-type="action" class="w-4 h-4 mt-1" />
+                    <div>
+                      <span class="font-medium">Ver relatório</span>
+                      <p class="text-sm text-gray-400">Abrir o relatório do pedido</p>
+                    </div>
+                  </label>
+
                 </div>
               </div>
             </article>
@@ -1396,6 +1456,11 @@
                       <label class="usuarios-permissoes-checkbox">
                         <input type="checkbox" name="col_ped_status" data-role="item" data-group="colunas-ped" data-item-type="column" class="w-4 h-4" />
                         <span class="text-sm">Status</span>
+                      </label>
+
+                      <label class="usuarios-permissoes-checkbox">
+                        <input type="checkbox" name="col_ped_condicao" data-role="item" data-group="colunas-ped" data-item-type="column" class="w-4 h-4" />
+                        <span class="text-sm">Condição</span>
                       </label>
 
                       <label class="usuarios-permissoes-checkbox">
@@ -2438,7 +2503,7 @@
                       </label>
 
                       <label class="usuarios-permissoes-checkbox">
-                        <input type="checkbox" name="col_rel_valor" data-role="item" data-group="colunas-rel" data-item-type="column" class="w-4 h-4" />
+                        <input type="checkbox" name="col_rel_estq_valor" data-role="item" data-group="colunas-rel" data-item-type="column" class="w-4 h-4" />
                         <span class="text-sm">Valor estoque</span>
                       </label>
 
@@ -2465,7 +2530,7 @@
                       </label>
 
                       <label class="usuarios-permissoes-checkbox">
-                        <input type="checkbox" name="col_rel_valor" data-role="item" data-group="colunas-rel" data-item-type="column" class="w-4 h-4" />
+                        <input type="checkbox" name="col_rel_pros_valor" data-role="item" data-group="colunas-rel" data-item-type="column" class="w-4 h-4" />
                         <span class="text-sm">Valor potencial</span>
                       </label>
 
@@ -2847,6 +2912,231 @@
                 </div>
               </div>
             </article>
+          </div>
+        </section>
+
+        <section data-permission-tab-panel="dashboard" data-module="dashboard" class="space-y-6 hidden">
+          <div class="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <h3 class="text-xl font-semibold text-white flex items-center gap-3">
+                <i class="fas fa-chart-line text-[var(--color-primary)]"></i>
+                Dashboard
+              </h3>
+              <p class="text-sm text-gray-400">Visão geral e indicadores.</p>
+            </div>
+            <label class="usuario-permissao-toggle" data-module-toggle="dashboard">
+              <input type="checkbox" class="sr-only" />
+              <span class="usuario-permissao-toggle__label">Módulo ativo</span>
+              <span class="usuario-permissao-toggle__pill" aria-hidden="true">
+                <span class="usuario-permissao-toggle__knob"></span>
+              </span>
+            </label>
+          </div>
+          <div data-module-content="dashboard" class="space-y-6">
+            <p class="text-sm text-gray-400 italic">
+              Este módulo ainda não possui ações e colunas configuradas. Por enquanto,
+              apenas a visibilidade no menu (Módulo ativo) é controlada aqui.
+            </p>
+          </div>
+        </section>
+
+        <section data-permission-tab-panel="calendario" data-module="calendario" class="space-y-6 hidden">
+          <div class="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <h3 class="text-xl font-semibold text-white flex items-center gap-3">
+                <i class="fas fa-calendar-days text-[var(--color-primary)]"></i>
+                Calendário
+              </h3>
+              <p class="text-sm text-gray-400">Agenda e eventos.</p>
+            </div>
+            <label class="usuario-permissao-toggle" data-module-toggle="calendario">
+              <input type="checkbox" class="sr-only" />
+              <span class="usuario-permissao-toggle__label">Módulo ativo</span>
+              <span class="usuario-permissao-toggle__pill" aria-hidden="true">
+                <span class="usuario-permissao-toggle__knob"></span>
+              </span>
+            </label>
+          </div>
+          <div data-module-content="calendario" class="space-y-6">
+            <p class="text-sm text-gray-400 italic">
+              Este módulo ainda não possui ações e colunas configuradas. Por enquanto,
+              apenas a visibilidade no menu (Módulo ativo) é controlada aqui.
+            </p>
+          </div>
+        </section>
+
+        <section data-permission-tab-panel="lamclientes" data-module="lam_clientes" class="space-y-6 hidden">
+          <div class="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <h3 class="text-xl font-semibold text-white flex items-center gap-3">
+                <i class="fas fa-users text-[var(--color-primary)]"></i>
+                Laminação · Clientes
+              </h3>
+              <p class="text-sm text-gray-400">Clientes do módulo de laminação.</p>
+            </div>
+            <label class="usuario-permissao-toggle" data-module-toggle="lam_clientes">
+              <input type="checkbox" class="sr-only" />
+              <span class="usuario-permissao-toggle__label">Módulo ativo</span>
+              <span class="usuario-permissao-toggle__pill" aria-hidden="true">
+                <span class="usuario-permissao-toggle__knob"></span>
+              </span>
+            </label>
+          </div>
+          <div data-module-content="lam_clientes" class="space-y-6">
+            <p class="text-sm text-gray-400 italic">
+              Este módulo ainda não possui ações e colunas configuradas. Por enquanto,
+              apenas a visibilidade no menu (Módulo ativo) é controlada aqui.
+            </p>
+          </div>
+        </section>
+
+        <section data-permission-tab-panel="lamservicos" data-module="lam_servicos" class="space-y-6 hidden">
+          <div class="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <h3 class="text-xl font-semibold text-white flex items-center gap-3">
+                <i class="fas fa-layer-group text-[var(--color-primary)]"></i>
+                Laminação · Serviços
+              </h3>
+              <p class="text-sm text-gray-400">Serviços de laminação.</p>
+            </div>
+            <label class="usuario-permissao-toggle" data-module-toggle="lam_servicos">
+              <input type="checkbox" class="sr-only" />
+              <span class="usuario-permissao-toggle__label">Módulo ativo</span>
+              <span class="usuario-permissao-toggle__pill" aria-hidden="true">
+                <span class="usuario-permissao-toggle__knob"></span>
+              </span>
+            </label>
+          </div>
+          <div data-module-content="lam_servicos" class="space-y-6">
+            <p class="text-sm text-gray-400 italic">
+              Este módulo ainda não possui ações e colunas configuradas. Por enquanto,
+              apenas a visibilidade no menu (Módulo ativo) é controlada aqui.
+            </p>
+          </div>
+        </section>
+
+        <section data-permission-tab-panel="lamprecificacao" data-module="lam_precificacao" class="space-y-6 hidden">
+          <div class="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <h3 class="text-xl font-semibold text-white flex items-center gap-3">
+                <i class="fas fa-tags text-[var(--color-primary)]"></i>
+                Laminação · Precificação
+              </h3>
+              <p class="text-sm text-gray-400">Precificação de laminação.</p>
+            </div>
+            <label class="usuario-permissao-toggle" data-module-toggle="lam_precificacao">
+              <input type="checkbox" class="sr-only" />
+              <span class="usuario-permissao-toggle__label">Módulo ativo</span>
+              <span class="usuario-permissao-toggle__pill" aria-hidden="true">
+                <span class="usuario-permissao-toggle__knob"></span>
+              </span>
+            </label>
+          </div>
+          <div data-module-content="lam_precificacao" class="space-y-6">
+            <p class="text-sm text-gray-400 italic">
+              Este módulo ainda não possui ações e colunas configuradas. Por enquanto,
+              apenas a visibilidade no menu (Módulo ativo) é controlada aqui.
+            </p>
+          </div>
+        </section>
+
+        <section data-permission-tab-panel="lamrelatorios" data-module="lam_relatorios" class="space-y-6 hidden">
+          <div class="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <h3 class="text-xl font-semibold text-white flex items-center gap-3">
+                <i class="fas fa-chart-column text-[var(--color-primary)]"></i>
+                Laminação · Relatórios
+              </h3>
+              <p class="text-sm text-gray-400">Relatórios de laminação.</p>
+            </div>
+            <label class="usuario-permissao-toggle" data-module-toggle="lam_relatorios">
+              <input type="checkbox" class="sr-only" />
+              <span class="usuario-permissao-toggle__label">Módulo ativo</span>
+              <span class="usuario-permissao-toggle__pill" aria-hidden="true">
+                <span class="usuario-permissao-toggle__knob"></span>
+              </span>
+            </label>
+          </div>
+          <div data-module-content="lam_relatorios" class="space-y-6">
+            <p class="text-sm text-gray-400 italic">
+              Este módulo ainda não possui ações e colunas configuradas. Por enquanto,
+              apenas a visibilidade no menu (Módulo ativo) é controlada aqui.
+            </p>
+          </div>
+        </section>
+
+        <section data-permission-tab-panel="ia" data-module="ia" class="space-y-6 hidden">
+          <div class="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <h3 class="text-xl font-semibold text-white flex items-center gap-3">
+                <i class="fas fa-robot text-[var(--color-primary)]"></i>
+                IA
+              </h3>
+              <p class="text-sm text-gray-400">Recursos de inteligência artificial.</p>
+            </div>
+            <label class="usuario-permissao-toggle" data-module-toggle="ia">
+              <input type="checkbox" class="sr-only" />
+              <span class="usuario-permissao-toggle__label">Módulo ativo</span>
+              <span class="usuario-permissao-toggle__pill" aria-hidden="true">
+                <span class="usuario-permissao-toggle__knob"></span>
+              </span>
+            </label>
+          </div>
+          <div data-module-content="ia" class="space-y-6">
+            <p class="text-sm text-gray-400 italic">
+              Este módulo ainda não possui ações e colunas configuradas. Por enquanto,
+              apenas a visibilidade no menu (Módulo ativo) é controlada aqui.
+            </p>
+          </div>
+        </section>
+
+        <section data-permission-tab-panel="usuarios" data-module="usuarios" class="space-y-6 hidden">
+          <div class="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <h3 class="text-xl font-semibold text-white flex items-center gap-3">
+                <i class="fas fa-user-gear text-[var(--color-primary)]"></i>
+                Usuários
+              </h3>
+              <p class="text-sm text-gray-400">Gestão de usuários e permissões.</p>
+            </div>
+            <label class="usuario-permissao-toggle" data-module-toggle="usuarios">
+              <input type="checkbox" class="sr-only" />
+              <span class="usuario-permissao-toggle__label">Módulo ativo</span>
+              <span class="usuario-permissao-toggle__pill" aria-hidden="true">
+                <span class="usuario-permissao-toggle__knob"></span>
+              </span>
+            </label>
+          </div>
+          <div data-module-content="usuarios" class="space-y-6">
+            <p class="text-sm text-gray-400 italic">
+              Este módulo ainda não possui ações e colunas configuradas. Por enquanto,
+              apenas a visibilidade no menu (Módulo ativo) é controlada aqui.
+            </p>
+          </div>
+        </section>
+
+        <section data-permission-tab-panel="financeiro" data-module="financeiro" class="space-y-6 hidden">
+          <div class="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <h3 class="text-xl font-semibold text-white flex items-center gap-3">
+                <i class="fas fa-dollar-sign text-[var(--color-primary)]"></i>
+                Financeiro
+              </h3>
+              <p class="text-sm text-gray-400">Controle financeiro.</p>
+            </div>
+            <label class="usuario-permissao-toggle" data-module-toggle="financeiro">
+              <input type="checkbox" class="sr-only" />
+              <span class="usuario-permissao-toggle__label">Módulo ativo</span>
+              <span class="usuario-permissao-toggle__pill" aria-hidden="true">
+                <span class="usuario-permissao-toggle__knob"></span>
+              </span>
+            </label>
+          </div>
+          <div data-module-content="financeiro" class="space-y-6">
+            <p class="text-sm text-gray-400 italic">
+              Este módulo ainda não possui ações e colunas configuradas. Por enquanto,
+              apenas a visibilidade no menu (Módulo ativo) é controlada aqui.
+            </p>
           </div>
         </section>
       </div>
