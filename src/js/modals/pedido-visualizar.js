@@ -181,35 +181,6 @@
     const fmtCurrency = v => Number(v ?? 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
     const fmtNumber = v => Number(v ?? 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-    const renderInsumos = (item, quantidadeProduto) => {
-      const grupos = new Map();
-      (item.insumos || []).forEach(insumo => {
-        const processo = insumo.processo || 'Sem processo';
-        if (!grupos.has(processo)) grupos.set(processo, []);
-        grupos.get(processo).push(insumo);
-      });
-      if (!grupos.size) return '';
-
-      const badges = [...grupos].map(([processo, insumos]) => {
-        const total = insumos.reduce((soma, insumo) => soma + safeNumber(insumo.quantidade) * safeNumber(insumo.preco_unitario) * quantidadeProduto, 0);
-        return `<span class="badge-process px-3 py-1 rounded-full text-xs font-medium">${escapeAttr(processo)}: ${fmtCurrency(total)}</span>`;
-      }).join('');
-      const processos = [...grupos].map(([processo, insumos]) => `
-        <section class="mb-3 last:mb-0">
-          <h4 class="bg-gray-50 border-y border-gray-200 px-4 py-2 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider">${escapeAttr(processo)}</h4>
-          <div class="divide-y divide-white/10">
-            ${insumos.map(insumo => {
-              const qtd = safeNumber(insumo.quantidade) * quantidadeProduto;
-              return `<div class="grid grid-cols-4 gap-3 px-4 py-2 text-sm text-white">
-                <span>${escapeAttr(insumo.nome)}</span><span>${fmtNumber(qtd)} ${escapeAttr(insumo.unidade)}</span>
-                <span>${fmtCurrency(insumo.preco_unitario)}</span><span>${fmtCurrency(qtd * safeNumber(insumo.preco_unitario))}</span>
-              </div>`;
-            }).join('')}
-          </div>
-        </section>`).join('');
-      return `<tr class="border-b border-white/10"><td colspan="7" class="p-3"><div class="flex flex-wrap gap-2 mb-3">${badges}</div>${processos}</td></tr>`;
-    };
-
     (data.itens || []).forEach(item => {
       if (!itensTbody) return;
       const qtd = safeNumber(item.quantidade);
@@ -237,7 +208,6 @@
           </div>
         </td>`;
       itensTbody.appendChild(tr);
-      tr.insertAdjacentHTML('afterend', renderInsumos(item, qtd));
       subtotal += valorUnit * qtd;
       descPag += descPagUnit * qtd;
       descEsp += descEspUnit * qtd;

@@ -373,17 +373,7 @@ function createTableSkeleton() {
 
 function appendRow(tbody, row) {
   const tr = document.createElement('tr');
-  if (row.type === 'process') {
-    tr.className = 'process-row';
-    const td = document.createElement('td');
-    td.colSpan = 7;
-    td.textContent = row.label;
-    tr.appendChild(td);
-    tbody.appendChild(tr);
-    return;
-  }
-  const cells = row.cells || row;
-  cells.forEach(cell => {
+  row.forEach(cell => {
     const td = document.createElement('td');
     td.style.textAlign = 'left';
     td.textContent = cell;
@@ -511,7 +501,7 @@ function buildPages(context) {
   let pendingTailHtml = null;
 
   if (!remaining.length) {
-    remaining.push({ rows: [{ cells: ['', 'Nenhum item disponível', '', '', '', '', ''] }] });
+    remaining.push(['', 'Nenhum item disponível', '', '', '', '', '']);
   }
 
   // Guarda de segurança: em nenhuma hipótese o laço pode ficar preso.
@@ -569,13 +559,12 @@ function buildPages(context) {
     const pageRows = [];
 
     while (remaining.length > 0) {
-      const block = remaining[0];
-      const rows = block.rows || [block];
-      rows.forEach(row => appendRow(tbody, row));
+      const row = remaining[0];
+      appendRow(tbody, row);
       ensureTableFits(page);
 
       if (content.scrollHeight > content.clientHeight + overflowBuffer) {
-        rows.forEach(() => tbody.lastElementChild?.remove());
+        tbody.removeChild(tbody.lastElementChild);
         ensureTableFits(page);
         break;
       }
@@ -587,7 +576,7 @@ function buildPages(context) {
     // coube nesta página mas ainda há itens a exibir, força ao menos uma linha.
     // Sem isso, "remaining" nunca diminui e o laço entra em loop infinito.
     if (pageRows.length === 0 && remaining.length > 0) {
-      (remaining[0].rows || [remaining[0]]).forEach(row => appendRow(tbody, row));
+      appendRow(tbody, remaining[0]);
       ensureTableFits(page);
       pageRows.push(remaining.shift());
     }
@@ -607,7 +596,7 @@ function buildPages(context) {
     ) {
       safety += 1;
       const last = pageRows.pop();
-      (last.rows || [last]).forEach(() => tbody.lastElementChild?.remove());
+      tbody.removeChild(tbody.lastElementChild);
       remaining.unshift(last);
 
       if (isLastPage) {
@@ -881,46 +870,15 @@ async function buildDocument() {
         ? 'Igual Endereço de Faturamento'
         : formatEndereco(endRegistro) || (clienteEmFallback ? enderecoIndisponivel : '');
 
-    const items = [];
-    (orc.itens || []).forEach(it => {
-      const quantidadeProduto = Number(it.quantidade || 0);
-      items.push({ rows: [{ cells: [
-        it.codigo ?? '',
-        it.nome ?? '',
-        it.ncm ?? '',
-        quantidadeProduto.toLocaleString('pt-BR'),
-        formatCurrency(it.valor_unitario),
-        formatCurrency(it.desconto_total),
-        formatCurrency(it.valor_total)
-      ] }] });
-
-      const grupos = new Map();
-      (it.insumos || []).forEach(insumo => {
-        const processo = insumo.processo || 'Sem processo';
-        if (!grupos.has(processo)) grupos.set(processo, []);
-        grupos.get(processo).push(insumo);
-      });
-      grupos.forEach((insumos, processo) => {
-        const totalProcesso = insumos.reduce((total, insumo) =>
-          total + Number(insumo.quantidade || 0) * quantidadeProduto * Number(insumo.preco_unitario || 0), 0);
-        items.push({
-          // O bloco inteiro é testado de uma vez: título e todos os insumos do
-          // processo nunca são separados entre páginas.
-          rows: [
-            { type: 'process', label: `${processo} — ${formatCurrency(totalProcesso)}` },
-            ...insumos.map(insumo => {
-              const quantidade = Number(insumo.quantidade || 0) * quantidadeProduto;
-              return { cells: [
-                '', `↳ ${insumo.nome || ''}`, '',
-                `${quantidade.toLocaleString('pt-BR')} ${insumo.unidade || ''}`,
-                formatCurrency(insumo.preco_unitario), '',
-                formatCurrency(quantidade * Number(insumo.preco_unitario || 0))
-              ] };
-            })
-          ]
-        });
-      });
-    });
+    const items = (orc.itens || []).map(it => ([
+      it.codigo ?? '',
+      it.nome ?? '',
+      it.ncm ?? '',
+      Number(it.quantidade || 0).toLocaleString('pt-BR'),
+      formatCurrency(it.valor_unitario),
+      formatCurrency(it.desconto_total),
+      formatCurrency(it.valor_total)
+    ]));
 
     ensureDocContainer().innerHTML = '';
     buildPages({

@@ -167,15 +167,6 @@ body {
   font-weight: 600;
 }
 
-.items-table .process-row td {
-  background: #f3f4f6;
-  color: #4b5563;
-  font-weight: 700;
-  text-align: center !important;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-
 h3 {
   color: #da0c1d;
   font-size: 1rem;
