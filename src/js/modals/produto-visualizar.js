@@ -49,6 +49,29 @@
       somas = { totalInsumos, totalMaoObra, subTotal, markupValor, custoTotal, comissaoValor, impostoValor, valorVenda };
       const ids = { totalInsumos: 'totalInsumos', totalMaoObra: 'totalMaoObra', subTotal: 'subTotal', markupValor: 'markupValor', custoTotal: 'custoTotal', comissaoValor: 'comissaoValor', impostoValor: 'impostoValor', valorVenda: 'valorVenda' };
       Object.entries(ids).forEach(([key, id]) => { if (byId(id)) byId(id).textContent = currency(somas[key]); });
+      renderTotalBadges();
+    }
+    function groupItemsByProcess() {
+      return itens.reduce((groups, item) => {
+        const process = String(item.processo || '—').trim() || '—';
+        let group = groups.find(entry => entry.process === process);
+        if (!group) {
+          group = { process, items: [], total: 0 };
+          groups.push(group);
+        }
+        group.items.push(item);
+        group.total += (Number(item.quantidade) || 0) * (Number(item.preco_unitario) || 0);
+        return groups;
+      }, []);
+    }
+    function renderTotalBadges() {
+      const container = byId('totalInsumosTitulo');
+      if (!container) return;
+      const processBadges = groupItemsByProcess().map(group =>
+        `<span class="badge-process px-3 py-1 rounded-full text-xs font-medium">${safe(group.process)}: ${currency(group.total)}</span>`
+      );
+      processBadges.push(`<span class="badge-success px-3 py-1 rounded-full text-xs font-medium">Valor Total: ${currency(somas.totalInsumos)}</span>`);
+      container.innerHTML = processBadges.join(' ');
     }
     function renderItems() {
       if (!tbody) return;
@@ -56,13 +79,17 @@
         tbody.innerHTML = '<tr><td colspan="5" class="px-6 py-4 text-left text-gray-400">Nenhum item encontrado</td></tr>';
         return;
       }
-      tbody.innerHTML = itens.map(item => `<tr class="border-b border-white/5">
+      tbody.innerHTML = groupItemsByProcess().map(group => `
+      <tr class="process-row">
+        <td colspan="5" class="px-6 py-2 bg-gray-50 border-t border-gray-200 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">${safe(group.process)}</td>
+      </tr>
+      ${group.items.map(item => `<tr class="border-b border-white/5">
         <td class="px-6 py-3 text-white">${safe(item.nome)}</td>
         <td class="px-6 py-3 text-left">${number(item.quantidade)}</td>
         <td class="px-6 py-3 text-left">${safe(item.unidade)}</td>
         <td class="px-6 py-3 text-left text-white">${currency(item.preco_unitario)}</td>
         <td class="px-6 py-3 text-left text-white">${currency((Number(item.quantidade) || 0) * (Number(item.preco_unitario) || 0))}</td>
-      </tr>`).join('');
+      </tr>`).join('')}`).join('');
     }
     function populate(data) {
       produto = data;
@@ -110,12 +137,39 @@
         [['Marcenaria','fabricacao'],['Acabamento','acabamento'],['Montagem','montagem'],['Embalagem','embalagem'],['Markup','markup'],['Comissão','comissao'],['Imposto','imposto']].forEach(([label,key]) => line(label, `${number(fields[key].value)}%`));
         y += 8; doc.setFontSize(13); line('SOMAS E VALORES', '', true); doc.setFontSize(10);
         [['Total insumos','totalInsumos'],['Total mão-de-obra','totalMaoObra'],['Subtotal','subTotal'],['Markup','markupValor'],['Custo total','custoTotal'],['Comissão','comissaoValor'],['Imposto','impostoValor'],['Valor de venda da peça','valorVenda']].forEach(([label,key]) => line(label, currency(somas[key]), key === 'valorVenda'));
+        const processGroups = groupItemsByProcess();
         y += 10; addPageIfNeeded(50); doc.setFontSize(13); doc.setFont('helvetica','bold'); doc.text('ITENS', margin, y); y += 18;
+        doc.setFontSize(8);
+        [...processGroups, { process: 'Valor Total', total: somas.totalInsumos, isTotal: true }].forEach(group => {
+          const label = `${group.process}: ${currency(group.total)}`;
+          const badgeWidth = Math.min(doc.getTextWidth(label) + 14, width);
+          if (y + 22 > bottom) { doc.addPage('a4', 'portrait'); y = 45; }
+          doc.setFillColor(...(group.isTotal ? [220, 242, 224] : [225, 235, 244]));
+          doc.roundedRect(margin, y - 10, badgeWidth, 16, 7, 7, 'F');
+          doc.setTextColor(...(group.isTotal ? [25, 110, 55] : [30, 83, 120]));
+          doc.setFont('helvetica', 'bold'); doc.text(label, margin + 7, y); y += 22;
+        });
+        doc.setTextColor(0, 0, 0);
         const cols = [margin, 245, 320, 375, 455];
         const header = ['Item','Qtd.','Un.','Unitário','Total'];
-        const drawHeader = () => { doc.setFillColor(235,235,235); doc.rect(margin, y - 12, width, 20, 'F'); doc.setFontSize(8); doc.setFont('helvetica','bold'); header.forEach((text,index) => doc.text(text, cols[index], y)); y += 14; };
-        drawHeader(); doc.setFont('helvetica','normal');
-        itens.forEach(item => { if (y + 20 > bottom) { doc.addPage('a4','portrait'); y = 45; drawHeader(); } const name = doc.splitTextToSize(String(item.nome || '—'), 185)[0]; [name, number(item.quantidade), item.unidade || '—', currency(item.preco_unitario), currency((Number(item.quantidade)||0)*(Number(item.preco_unitario)||0))].forEach((text,index) => doc.text(String(text), cols[index], y)); y += 16; });
+        const drawHeader = fontSize => { doc.setFillColor(235,235,235); doc.rect(margin, y - 12, width, 20, 'F'); doc.setFontSize(fontSize); doc.setFont('helvetica','bold'); header.forEach((text,index) => doc.text(text, cols[index], y)); y += 14; };
+        processGroups.forEach((group, groupIndex) => {
+          const availableOnPage = bottom - y;
+          const regularHeight = 38 + group.items.length * 16;
+          if (groupIndex > 0 || regularHeight > availableOnPage) { doc.addPage('a4','portrait'); y = 45; }
+          const availableHeight = bottom - y - 36;
+          const rowHeight = Math.min(16, Math.max(7, availableHeight / Math.max(group.items.length, 1)));
+          const fontSize = Math.min(8, Math.max(5, rowHeight - 2));
+          doc.setFillColor(215, 222, 229); doc.rect(margin, y - 12, width, 20, 'F');
+          doc.setTextColor(55, 65, 81); doc.setFontSize(9); doc.setFont('helvetica','bold');
+          doc.text(String(group.process).toUpperCase(), margin + width / 2, y, { align: 'center' }); y += 14;
+          drawHeader(fontSize); doc.setTextColor(0, 0, 0); doc.setFont('helvetica','normal'); doc.setFontSize(fontSize);
+          group.items.forEach(item => {
+            const name = doc.splitTextToSize(String(item.nome || '—'), 185)[0];
+            [name, number(item.quantidade), item.unidade || '—', currency(item.preco_unitario), currency((Number(item.quantidade)||0)*(Number(item.preco_unitario)||0))].forEach((text,index) => doc.text(String(text), cols[index], y));
+            y += rowHeight;
+          });
+        });
         const filename = `produto-${String(produto.codigo || produto.id).replace(/[^a-z0-9_-]/gi, '_')}.pdf`;
         doc.save(filename);
         if (typeof showToast === 'function') showToast('PDF gerado com sucesso', 'success');

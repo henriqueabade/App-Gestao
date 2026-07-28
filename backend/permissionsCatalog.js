@@ -321,6 +321,12 @@ const PERMISSIONS_CATALOG = {
         "desc": "Acessar página completa do produto"
       },
       {
+        "key": "prod.pdf",
+        "column": "acao_pdf",
+        "label": "Gerar PDF do produto",
+        "desc": "Baixar a ficha de cadastro do produto em PDF"
+      },
+      {
         "key": "prod.stage.view",
         "column": "acao_stage_view",
         "label": "Ver etapas",
@@ -498,6 +504,11 @@ const PERMISSIONS_CATALOG = {
         "key": "col_ins_custo_total",
         "column": "col_ins_custo_total",
         "label": "Custo total"
+      },
+      {
+        "key": "col_ins_unidade",
+        "column": "col_ins_unidade",
+        "label": "Unidade"
       },
       {
         "key": "col_var_nome",

@@ -94,7 +94,7 @@ CREATE TABLE IF NOT EXISTS perm_mp (
 );
 
 -- ---------------------------------------------------------------------
--- 4) Produtos  (perm_prod)  —  19 ações, 29 colunas
+-- 4) Produtos  (perm_prod)  —  20 ações, 30 colunas
 -- ---------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS perm_prod (
   modelo_id    INTEGER PRIMARY KEY REFERENCES modelos_permissoes(id) ON DELETE CASCADE,
@@ -108,6 +108,7 @@ CREATE TABLE IF NOT EXISTS perm_prod (
   acao_edit                          BOOLEAN NOT NULL DEFAULT FALSE,  -- prod.edit · Editar produto
   acao_delete                        BOOLEAN NOT NULL DEFAULT FALSE,  -- prod.delete · Excluir produto
   acao_details_view                  BOOLEAN NOT NULL DEFAULT FALSE,  -- prod.details.view · Ver detalhes
+  acao_pdf                           BOOLEAN NOT NULL DEFAULT FALSE,  -- prod.pdf · Gerar PDF do produto
   acao_stage_view                    BOOLEAN NOT NULL DEFAULT FALSE,  -- prod.stage.view · Ver etapas
   acao_stage_advance                 BOOLEAN NOT NULL DEFAULT FALSE,  -- prod.stage.advance · Avançar etapa
   acao_stage_insert                  BOOLEAN NOT NULL DEFAULT FALSE,  -- prod.stage.insert · Inserir etapa
@@ -143,6 +144,7 @@ CREATE TABLE IF NOT EXISTS perm_prod (
   col_ins_qtd                        BOOLEAN NOT NULL DEFAULT FALSE,  -- Qtd.
   col_ins_custo_un                   BOOLEAN NOT NULL DEFAULT FALSE,  -- Custo un.
   col_ins_custo_total                BOOLEAN NOT NULL DEFAULT FALSE,  -- Custo total
+  col_ins_unidade                    BOOLEAN NOT NULL DEFAULT FALSE,  -- Unidade
   col_var_nome                       BOOLEAN NOT NULL DEFAULT FALSE,  -- Variação
   col_var_estoque                    BOOLEAN NOT NULL DEFAULT FALSE,  -- Estoque
   col_var_reservado                  BOOLEAN NOT NULL DEFAULT FALSE,  -- Reservado
@@ -567,8 +569,8 @@ INSERT INTO perm_mp (modelo_id, modulo_ativo, acao_view, acao_search, acao_expor
 SELECT id, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE FROM modelos_permissoes WHERE nome = 'Administrador'
 ON CONFLICT (modelo_id) DO NOTHING;
 
-INSERT INTO perm_prod (modelo_id, modulo_ativo, acao_view, acao_search, acao_export, acao_create, acao_edit, acao_delete, acao_details_view, acao_stage_view, acao_stage_advance, acao_stage_insert, acao_collection_view, acao_collection_create, acao_collection_edit, acao_collection_delete, acao_stock_view, acao_stock_input, acao_stock_output, acao_stock_adjust, acao_stock_infinite_toggle, col_prod_sku, col_prod_nome, col_prod_colecao, col_prod_categoria, col_prod_preco_base, col_prod_custo_total, col_prod_margem, col_prod_estoque, col_prod_etapa_atual, col_prod_status, col_prod_atualizado_em, col_etp_ordem, col_etp_nome, col_etp_resp, col_etp_inicio, col_etp_fim, col_etp_tempo_real, col_ins_mp, col_ins_qtd, col_ins_custo_un, col_ins_custo_total, col_var_nome, col_var_estoque, col_var_reservado, col_var_disponivel, col_col_nome, col_col_periodo, col_col_status, col_col_itens)
-SELECT id, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE FROM modelos_permissoes WHERE nome = 'Administrador'
+INSERT INTO perm_prod (modelo_id, modulo_ativo, acao_view, acao_search, acao_export, acao_create, acao_edit, acao_delete, acao_details_view, acao_pdf, acao_stage_view, acao_stage_advance, acao_stage_insert, acao_collection_view, acao_collection_create, acao_collection_edit, acao_collection_delete, acao_stock_view, acao_stock_input, acao_stock_output, acao_stock_adjust, acao_stock_infinite_toggle, col_prod_sku, col_prod_nome, col_prod_colecao, col_prod_categoria, col_prod_preco_base, col_prod_custo_total, col_prod_margem, col_prod_estoque, col_prod_etapa_atual, col_prod_status, col_prod_atualizado_em, col_etp_ordem, col_etp_nome, col_etp_resp, col_etp_inicio, col_etp_fim, col_etp_tempo_real, col_ins_mp, col_ins_qtd, col_ins_custo_un, col_ins_custo_total, col_ins_unidade, col_var_nome, col_var_estoque, col_var_reservado, col_var_disponivel, col_col_nome, col_col_periodo, col_col_status, col_col_itens)
+SELECT id, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE FROM modelos_permissoes WHERE nome = 'Administrador'
 ON CONFLICT (modelo_id) DO NOTHING;
 
 INSERT INTO perm_orc (modelo_id, modulo_ativo, acao_view, acao_search, acao_create, acao_edit, acao_view_details, acao_item_replace, acao_convert, acao_export, col_orc_num, col_orc_cliente, col_orc_vendedor, col_orc_data, col_orc_validade, col_orc_itens, col_orc_subtotal, col_orc_desc, col_orc_frete_outros, col_orc_total, col_orc_status, col_orc_it_nome, col_orc_it_sku, col_orc_it_qtd, col_orc_it_preco, col_orc_it_desc, col_orc_it_subtotal, col_orc_it_obs, col_orc_cond_pagto, col_orc_cond_parc, col_orc_cond_prazo, col_orc_cond_validade)
