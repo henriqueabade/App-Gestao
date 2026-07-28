@@ -617,7 +617,7 @@
       ordenados.forEach(([proc, arr]) => {
         const header = document.createElement('tr');
         header.className = 'process-row';
-        header.innerHTML = `<td colspan="6" class="px-6 py-2 bg-gray-50 border-t border-gray-200 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">${proc}</td>`;
+        header.innerHTML = `<td colspan="6" class="px-6 py-2 bg-gray-50 border-t border-gray-200 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">${proc}</td>`;
         tableBody.appendChild(header);
         processOrder.push(proc);
         processos[proc] = { itens: arr, total: 0 };
