@@ -17,44 +17,85 @@
   const ESTADO = {
     permissoes: null,
     catalogo: null,
-    carregado: false
+    paginas: {},
+    carregado: false,
+    // Quando não conseguimos carregar as permissões (API fora, erro de rede),
+    // a interface NÃO restringe nada. Bloquear tudo deixaria o app inutilizável
+    // por um problema de rede. A segurança real continua no backend, que recusa
+    // as requisições sem permissão (403).
+    indisponivel: false,
+    supAdmin: false
   };
 
   const MSG_BLOQUEIO = 'Você não tem permissão para esta ação.';
 
-  function baseUrl() {
-    if (global.apiConfig?.getApiBaseUrlSync) return global.apiConfig.getApiBaseUrlSync();
+  async function baseUrl() {
+    try {
+      if (global.apiConfig?.getApiBaseUrl) {
+        return (await global.apiConfig.getApiBaseUrl()) || '';
+      }
+    } catch (err) {
+      console.error('[permissoes] não foi possível resolver a URL da API.', err);
+    }
     return '';
   }
 
   async function carregar(force = false) {
     if (ESTADO.carregado && !force) return ESTADO.permissoes;
     try {
-      const resp = await fetch(`${baseUrl()}/api/permissoes/efetivas`);
+      const url = `${await baseUrl()}/api/permissoes/efetivas`;
+      const resp = await fetch(url);
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
       const dados = await resp.json();
+
+      // O backend sinaliza erro interno com { erro: true }: nesse caso não
+      // restringe a interface (o backend segue protegendo as rotas).
+      if (dados?.erro) throw new Error('backend sinalizou falha ao apurar permissões');
+
       ESTADO.permissoes = dados?.permissoes || {};
+      ESTADO.paginas = dados?.paginas || {};
+      // O backend já informa se é Sup Admin; a checagem local é redundância.
+      ESTADO.supAdmin = Boolean(dados?.supAdmin) || ehSupAdmin(dados?.perfil);
+      ESTADO.indisponivel = false;
       ESTADO.carregado = true;
     } catch (err) {
-      console.error('[permissoes] falha ao carregar; aplicando modo restrito.', err);
-      ESTADO.permissoes = {}; // fail-safe: nada liberado
+      console.warn('[permissoes] não foi possível carregar as permissões; a interface não será restringida (o backend continua validando).', err);
+      ESTADO.permissoes = {};
+      ESTADO.indisponivel = true;
       ESTADO.carregado = true;
     }
     return ESTADO.permissoes;
   }
 
+  /** Sup Admin tem TODAS as permissões, sem exceção. */
+  function ehSupAdmin(perfil) {
+    const p = String(perfil || '')
+      .normalize('NFD')
+      .replace(/[̀-ͯ]/g, '')
+      .replace(/[\s._-]+/g, '')
+      .toLowerCase();
+    return p === 'supadmin' || p === 'superadmin';
+  }
+
+  /** Libera tudo: Sup Admin, ou permissões indisponíveis (não restringe a UI). */
+  function liberaTudo() {
+    return ESTADO.supAdmin || ESTADO.indisponivel || !ESTADO.carregado;
+  }
+
   /** Módulo visível no menu? */
   function moduloAtivo(codigoOuPagina) {
+    if (liberaTudo()) return true;
     const p = ESTADO.permissoes || {};
-    if (p[codigoOuPagina]) return Boolean(p[codigoOuPagina].ativo);
-    // procura por "page" (ex.: "materia-prima" -> mp)
-    for (const bloco of Object.values(p)) {
-      if (bloco && bloco.page === codigoOuPagina) return Boolean(bloco.ativo);
-    }
-    return false;
+    // resolve "orcamentos" -> "orc" pelo mapa enviado pelo backend
+    const code = ESTADO.paginas?.[codigoOuPagina] || codigoOuPagina;
+    if (p[code]) return Boolean(p[code].ativo);
+    // Página que não corresponde a nenhum módulo do catálogo: não esconde.
+    return true;
   }
 
   /** Permissão de ação ou coluna ("mp.view", "col_mp_codigo"). */
   function pode(chave) {
+    if (liberaTudo()) return true;
     const p = ESTADO.permissoes || {};
     for (const bloco of Object.values(p)) {
       if (!bloco) continue;
@@ -65,7 +106,9 @@
         return Boolean(bloco.ativo) && Boolean(bloco.colunas[chave]);
       }
     }
-    return false;
+    // Chave que não existe no catálogo: não bloqueia (evita esconder tela por
+    // marcação errada no HTML).
+    return true;
   }
 
   /** Desabilita um elemento de ação mantendo-o visível. */

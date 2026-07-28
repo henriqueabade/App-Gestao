@@ -185,13 +185,27 @@ async function deletePermissionsForModelo(api, modeloId) {
 }
 
 /**
+ * Sup Admin? Comparação tolerante a caixa, acento, espaço, hífen e underscore
+ * ("Sup Admin", "SUP-ADMIN", "supadmin", "Super Admin" ...).
+ * Regra do projeto: Sup Admin tem TODAS as permissões, sem exceção.
+ */
+function isSupAdmin(usuario) {
+  const bruto = usuario?.perfil ?? usuario?.tipo_usuario ?? usuario?.role ?? '';
+  const perfil = String(bruto)
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/[\s._-]+/g, '')
+    .toLowerCase();
+  return perfil === 'supadmin' || perfil === 'superadmin';
+}
+
+/**
  * Permissões efetivas de um usuário.
  * Sup Admin recebe acesso total; usuário sem perfil recebe tudo negado.
  */
 async function loadPermissionsForUsuario(api, usuario) {
   if (!usuario) return emptyPermissions();
-  const perfil = String(usuario.perfil || '').trim().toLowerCase();
-  if (perfil === 'sup admin' || perfil === 'sup_admin' || perfil === 'supadmin') {
+  if (isSupAdmin(usuario)) {
     return fullPermissions();
   }
   const modeloId = usuario.modelo_permissoes_id ?? usuario.modeloPermissoesId ?? null;
@@ -216,6 +230,7 @@ function can(permissoes, chave) {
 }
 
 module.exports = {
+  isSupAdmin,
   emptyPermissions,
   fullPermissions,
   fromSelections,

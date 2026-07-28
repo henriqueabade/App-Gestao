@@ -115,32 +115,32 @@ function criarLinhaProduto(produto, index) {
 
     return `
         <tr class="transition-colors duration-150" data-index="${index}"${produtoId} style="cursor: pointer;">
-            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-white relative">
+            <td data-perm-col="col_prod_sku" class="px-6 py-4 whitespace-nowrap text-sm font-medium text-white relative">
                 <div class="flex items-center min-w-0">
                     <span class="cell-text" title="${codigo}">${codigo}</span>
                     <i class="info-icon ml-2" data-id="${infoId}"></i>
                 </div>
             </td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-white">
+            <td data-perm-col="col_prod_nome" class="px-6 py-4 whitespace-nowrap text-sm text-white">
                 <span class="cell-text" title="${produto.nome || ''}">${nome}</span>
             </td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-violet)">
+            <td data-perm-col="col_prod_categoria" class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-violet)">
                 <span class="cell-text" title="${categoria}">${categoria}</span>
             </td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-white">
+            <td data-perm-col="col_prod_preco_base" class="px-6 py-4 whitespace-nowrap text-sm text-white">
                 <span class="cell-text" title="${precoVenda}">${precoVenda}</span>
             </td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-green)">
+            <td data-perm-col="col_prod_margem" class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-green)">
                 <span class="cell-text" title="${markup}">${markup}</span>
             </td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-white">
+            <td data-perm-col="col_prod_estoque" class="px-6 py-4 whitespace-nowrap text-sm text-white">
                 <span class="cell-text" title="${quantidade}">${quantidade}</span>
             </td>
             <td class="px-6 py-4 whitespace-nowrap text-left action-cell">
                 <div class="flex items-center justify-start space-x-2">
-                    <i class="fas fa-eye w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" data-action="view" data-index="${index}" title="Visualizar" style="color: var(--color-primary)"></i>
-                    <i class="fas fa-edit w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" data-action="edit" data-index="${index}" title="Editar" style="color: var(--color-primary)"></i>
-                    <i class="fas fa-trash w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10 hover:text-white" data-action="delete" data-index="${index}" title="Excluir" style="color: var(--color-red)"></i>
+                    <i data-perm="prod.details.view" class="fas fa-eye w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" data-action="view" data-index="${index}" title="Visualizar" style="color: var(--color-primary)"></i>
+                    <i data-perm="prod.edit" class="fas fa-edit w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" data-action="edit" data-index="${index}" title="Editar" style="color: var(--color-primary)"></i>
+                    <i data-perm="prod.delete" class="fas fa-trash w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10 hover:text-white" data-action="delete" data-index="${index}" title="Excluir" style="color: var(--color-red)"></i>
                 </div>
             </td>
         </tr>

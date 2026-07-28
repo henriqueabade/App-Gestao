@@ -1,5 +1,6 @@
 const express = require('express');
 const { createApiClient } = require('./apiHttpClient');
+const { exigirPermissao } = require('./permissionsController');
 
 const router = express.Router();
 
@@ -103,7 +104,7 @@ function buildPayload(cli = {}) {
   };
 }
 
-router.get('/lista', async (req, res) => {
+router.get('/lista', exigirPermissao('cli.view'), async (req, res) => {
   try {
     const api = createApiClient(req);
     const clientes = await api.get('/api/clientes');
@@ -149,7 +150,7 @@ router.get('/contatos', async (req, res) => {
   }
 });
 
-router.get('/:id', async (req, res) => {
+router.get('/:id', exigirPermissao('cli.details.view'), async (req, res) => {
   const { id } = req.params;
   try {
     const api = createApiClient(req);
@@ -185,7 +186,7 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-router.get('/:id/resumo', async (req, res) => {
+router.get('/:id/resumo', exigirPermissao('cli.details.view'), async (req, res) => {
   const { id } = req.params;
   try {
     const api = createApiClient(req);
@@ -251,7 +252,7 @@ router.get('/:id/resumo', async (req, res) => {
   }
 });
 
-router.post('/', async (req, res) => {
+router.post('/', exigirPermissao('cli.create'), async (req, res) => {
   const cli = req.body || {};
   try {
     const api = createApiClient(req);
@@ -282,7 +283,7 @@ router.post('/', async (req, res) => {
   }
 });
 
-router.put('/:id', async (req, res) => {
+router.put('/:id', exigirPermissao('cli.edit'), async (req, res) => {
   const { id } = req.params;
   const cli = req.body || {};
   try {
@@ -325,7 +326,7 @@ router.put('/:id', async (req, res) => {
   }
 });
 
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', exigirPermissao('cli.delete'), async (req, res) => {
   const { id } = req.params;
   try {
     const api = createApiClient(req);

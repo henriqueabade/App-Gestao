@@ -74,6 +74,16 @@ async function obterPermissoesEfetivas(req) {
 // Rotas
 // --------------------------------------------------------------------------
 
+/** { 'materia-prima': 'mp', 'orcamentos': 'orc', ... } */
+function mapaPaginas() {
+  const mapa = {};
+  for (const mod of Object.values(PERMISSIONS_CATALOG)) {
+    if (mod.page) mapa[mod.page] = mod.code;
+    mapa[mod.code] = mod.code;
+  }
+  return mapa;
+}
+
 router.get('/catalogo', (_req, res) => {
   res.json(PERMISSIONS_CATALOG);
 });
@@ -81,16 +91,34 @@ router.get('/catalogo', (_req, res) => {
 router.get('/efetivas', async (req, res) => {
   try {
     const usuario = await carregarUsuarioAtual(req);
+
+    // Não foi possível identificar o usuário (token ausente/inválido, API fora).
+    // Sinaliza "erro" para que a INTERFACE não restrinja nada — travar a tela
+    // inteira por uma falha de identificação deixaria o app inutilizável.
+    // A segurança continua no backend: exigirPermissao() nega por conta própria.
+    if (!usuario) {
+      return res.status(200).json({
+        usuarioId: null,
+        perfil: null,
+        supAdmin: false,
+        permissoes: permissoesRepo.emptyPermissions(),
+        erro: true
+      });
+    }
+
     const permissoes = await obterPermissoesEfetivas(req);
     res.json({
-      usuarioId: usuario?.id ?? null,
-      perfil: usuario?.perfil ?? null,
-      modeloPermissoesId: usuario?.modelo_permissoes_id ?? null,
+      usuarioId: usuario.id ?? null,
+      perfil: usuario.perfil ?? null,
+      supAdmin: permissoesRepo.isSupAdmin(usuario),
+      modeloPermissoesId: usuario.modelo_permissoes_id ?? null,
+      // mapa "página do menu" -> "código do módulo" (ex.: materia-prima -> mp),
+      // necessário para o front decidir a visibilidade dos itens da sidebar.
+      paginas: mapaPaginas(),
       permissoes
     });
   } catch (err) {
     console.error('Erro ao carregar permissões efetivas:', err);
-    // Fail-safe: em erro, devolve tudo negado em vez de liberar acesso.
     res.status(200).json({ permissoes: permissoesRepo.emptyPermissions(), erro: true });
   }
 });

@@ -122,18 +122,18 @@ function renderClientes(clientes) {
             tr.style.background = 'transparent';
         });
         tr.innerHTML = `
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-white">${c.nome_fantasia}</td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-violet)">${c.cnpj}</td>
+            <td data-perm-col="col_cli_nome_fantasia" class="px-6 py-4 whitespace-nowrap text-sm text-white">${c.nome_fantasia}</td>
+            <td data-perm-col="col_cli_cnpj" class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-violet)">${c.cnpj}</td>
             <td class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-violet)">${c.pais || ''}</td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-violet)">${c.estado}</td>
-            <td class="px-6 py-4 whitespace-nowrap">${badgeForStatus(c.status_cliente)}</td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-white">${c.dono_cliente || ''}</td>
+            <td data-perm-col="col_cli_cidade_uf" class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-violet)">${c.estado}</td>
+            <td data-perm-col="col_cli_status" class="px-6 py-4 whitespace-nowrap">${badgeForStatus(c.status_cliente)}</td>
+            <td data-perm-col="col_cli_owner" class="px-6 py-4 whitespace-nowrap text-sm text-white">${c.dono_cliente || ''}</td>
             <td class="px-6 py-4 whitespace-nowrap text-left">
                 <div class="flex items-center justify-start space-x-2">
-                    <i class="fas fa-eye w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Visualizar"></i>
-                    <i class="fas fa-user-plus action-new-contact w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Novo contato"></i>
-                    <i class="fas fa-edit w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Editar"></i>
-                    <i class="fas fa-trash w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-red)" title="Excluir"></i>
+                    <i data-perm="cli.details.view" class="fas fa-eye w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Visualizar"></i>
+                    <i data-perm="ctt.create" class="fas fa-user-plus action-new-contact w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Novo contato"></i>
+                    <i data-perm="cli.edit" class="fas fa-edit w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Editar"></i>
+                    <i data-perm="cli.delete" class="fas fa-trash w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-red)" title="Excluir"></i>
                 </div>
             </td>`;
         const eyeBtn = tr.querySelector('.fa-eye');
