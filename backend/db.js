@@ -249,9 +249,48 @@ function createNotReadyError() {
   return error;
 }
 
+// A API remota NAO expoe /health nem /healthz (ambos 404) — a sondagem antiga
+// batia em /api/health e recebia 404 sempre. Como 404 nao e "offline", o
+// monitor do app ficava preso em `waiting/local-host-blocked` para sempre: o
+// indicador do cabecalho nunca virava check nem X, e a checagem profunda
+// (usuario desativado) nunca rodava.
+//
+// O endpoint publico que existe de fato e /status (na raiz, fora de /api), e
+// ele ja informa o estado do banco: {"status":"ok", ..., "db":"connected"}.
+const HEALTH_STATUS_URL = `${NORMALIZED_API_BASE_URL}/status`;
+
+async function sondarStatusRemoto(timeoutMs = 8000) {
+  const controller = new AbortController();
+  const prazo = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const resposta = await fetch(HEALTH_STATUS_URL, {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+      signal: controller.signal
+    });
+    if (!resposta.ok) {
+      const erro = new Error(`Erro na sondagem GET /status: ${resposta.status}`);
+      erro.status = resposta.status;
+      erro.code = 'api-request-failed';
+      throw erro;
+    }
+    const corpo = await resposta.json().catch(() => ({}));
+    if (corpo && corpo.db && corpo.db !== 'connected') {
+      const erro = new Error(`Banco de dados indisponivel: ${corpo.db}`);
+      erro.status = 503;
+      erro.code = 'db-unavailable';
+      erro.reason = 'db';
+      throw erro;
+    }
+    return corpo;
+  } finally {
+    clearTimeout(prazo);
+  }
+}
+
 async function healthCheck(options = {}) {
   try {
-    await request('GET', '/health', { ...options, skipRetry: true });
+    await sondarStatusRemoto(options.timeoutMs);
     updateStateSuccess();
     return { ok: true, status: 'ok', statusCode: 200, lastError: null };
   } catch (err) {

@@ -2002,12 +2002,15 @@ function normalizeMonitorBaseUrl(value) {
 }
 
 function resolveBackendHealthBaseUrl() {
+  // `/healthz` é rota do NOSSO backend local (backend/server.js) — a API remota
+  // (api.santissimodecor.com.br) não a expõe e respondia 404. Como 404 não é
+  // "offline", o monitor caía no ramo `waiting/local-host-blocked` e ficava
+  // preso ali: nunca chegava a `online`, então o indicador do cabeçalho nunca
+  // mostrava check nem X, e a checagem profunda (usuário desativado) nunca
+  // rodava. Por isso só honramos um override EXPLÍCITO; o padrão é o backend
+  // local, que já reporta a saúde dele e do banco.
   const candidates = [
-    process.env.CONNECTION_MONITOR_BASE_URL,
-    process.env.API_PUBLIC_BASE_URL,
-    process.env.API_BASE_URL,
-    process.env.API_URL,
-    process.env.APP_URL
+    process.env.CONNECTION_MONITOR_BASE_URL
   ];
   for (const candidate of candidates) {
     const normalized = normalizeMonitorBaseUrl(candidate);

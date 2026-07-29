@@ -75,15 +75,34 @@ async function handleDisconnect(reason) {
     localStorage.setItem('adminDisabled', reason === 'admin-pending' ? 'pending' : '1');
   }
 
+  // O estado precisa ser coletado ANTES de limpar o localStorage: collectState()
+  // carimba `storage.user` para o login saber de quem é o trabalho guardado.
+  // Limpando primeiro, o carimbo saía nulo e o loginRenderer descartava tudo —
+  // era por isso que nada era restaurado.
+  let estadoTrabalho = null;
+  if (typeof window.collectState === 'function') {
+    try {
+      estadoTrabalho = window.collectState();
+    } catch (err) {
+      console.error('Falha ao coletar o trabalho em andamento', err);
+    }
+  }
+
+  // E o salvamento precisa ser AGUARDADO: logo abaixo a janela é fechada, e um
+  // invoke não aguardado podia morrer junto com ela sem gravar o arquivo.
+  if (estadoTrabalho && window.electronAPI?.saveState) {
+    try {
+      await window.electronAPI.saveState(estadoTrabalho);
+    } catch (err) {
+      console.error('Falha ao salvar o trabalho em andamento', err);
+    }
+  }
+
   try {
     localStorage.removeItem('user');
     localStorage.removeItem('rememberUser');
   } catch (storageErr) {
     console.error('Failed to clear remembered credentials after disconnect', storageErr);
-  }
-
-  if (window.collectState && window.electronAPI && window.electronAPI.saveState) {
-    window.electronAPI.saveState(window.collectState());
   }
   if (window.electronAPI) {
     try {
