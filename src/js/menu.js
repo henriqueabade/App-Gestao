@@ -1404,15 +1404,11 @@ const AppUpdates = (() => {
         sup.label.textContent = 'Atualizações';
 
         const progress = Math.max(0, Math.min(100, Number(state.publishState?.progress) || 0));
-        sup.trigger.style.setProperty('--publish-progress', `${progress}%`);
-        if (sup.progressPercent) sup.progressPercent.textContent = `${Math.round(progress)}%`;
         if (sup.progress) {
             sup.progress.setAttribute('aria-hidden', isPublishing ? 'false' : 'true');
         }
-        sup.trigger.setAttribute(
-            'aria-label',
-            isPublishing ? `Publicando atualização: ${Math.round(progress)}%` : 'Atualizações'
-        );
+        // O desenho do percentual/barra fica a cargo do animador (rAF).
+        sincronizarProgressoPublicacao(progress, isPublishing);
 
         if (sup.panel) {
             const showPanel = state.supAdmin.panelOpen && mode === 'available';
@@ -1429,6 +1425,118 @@ const AppUpdates = (() => {
 
         renderSupAdminSummary();
         updateContainerVisibility();
+    }
+
+    // ------------------------------------------------------------------
+    // Animação do progresso de publicação.
+    //
+    // O backend só reporta marcos discretos (packaging=20, block map=48,
+    // upload=55...). Mostrar esse número cru fazia a barra congelar por vários
+    // segundos e depois saltar, dando a impressão de que travou.
+    //
+    // Aqui o valor exibido é interpolado a cada quadro:
+    //   - quando chega um marco novo, corre rápido até ele;
+    //   - enquanto espera, avança devagar rumo a um teto suave,
+    //     sem ultrapassá-lo e sem nunca voltar atrás.
+    // ------------------------------------------------------------------
+    const publishProgressAnim = {
+        alvo: 0,        // último valor real vindo do backend
+        exibido: 0,     // valor efetivamente desenhado
+        rafId: null,
+        ativo: false,
+        finalizando: false
+    };
+
+    function pintarProgressoPublicacao(valor) {
+        const sup = elements.supAdmin;
+        if (!sup?.trigger) return;
+        const v = Math.max(0, Math.min(100, valor));
+        sup.trigger.style.setProperty('--publish-progress', `${v.toFixed(2)}%`);
+        if (sup.progressPercent) sup.progressPercent.textContent = `${Math.round(v)}%`;
+        sup.trigger.setAttribute(
+            'aria-label',
+            publishProgressAnim.ativo ? `Publicando atualização: ${Math.round(v)}%` : 'Atualizações'
+        );
+        if (sup.progress) sup.progress.setAttribute('aria-valuenow', String(Math.round(v)));
+    }
+
+    function passoProgressoPublicacao() {
+        const a = publishProgressAnim;
+        const alvo = a.alvo;
+        let proximo = a.exibido;
+
+        if (a.exibido < alvo) {
+            // corrida até o marco recebido (rápida, mas suave)
+            proximo = a.exibido + (alvo - a.exibido) * 0.12;
+            if (alvo - proximo < 0.15) proximo = alvo;
+        } else if (!a.finalizando) {
+            // avanço lento enquanto o backend não reporta nada:
+            // aproxima-se de um teto sem alcançá-lo (assintótico)
+            const teto = Math.min(99, alvo + 9);
+            if (proximo < teto) {
+                proximo = a.exibido + (teto - a.exibido) * 0.006;
+            }
+        }
+
+        a.exibido = Math.min(100, Math.max(a.exibido, proximo));
+        pintarProgressoPublicacao(a.exibido);
+
+        if (a.finalizando && a.exibido >= 99.9) {
+            a.exibido = 100;
+            pintarProgressoPublicacao(100);
+            pararProgressoPublicacao();
+            return;
+        }
+        a.rafId = requestAnimationFrame(passoProgressoPublicacao);
+    }
+
+    function iniciarProgressoPublicacao() {
+        const a = publishProgressAnim;
+        if (a.rafId !== null) return;
+        a.rafId = requestAnimationFrame(passoProgressoPublicacao);
+    }
+
+    function pararProgressoPublicacao() {
+        const a = publishProgressAnim;
+        if (a.rafId !== null) {
+            cancelAnimationFrame(a.rafId);
+            a.rafId = null;
+        }
+    }
+
+    /** Recebe o progresso real e mantém a animação coerente com o estado. */
+    function sincronizarProgressoPublicacao(valorBackend, publicando) {
+        const a = publishProgressAnim;
+        const valor = Math.max(0, Math.min(100, Number(valorBackend) || 0));
+
+        if (publicando) {
+            if (!a.ativo) {
+                // começo de uma publicação: reinicia do zero
+                a.ativo = true;
+                a.finalizando = false;
+                a.exibido = 0;
+                a.alvo = 0;
+            }
+            a.alvo = Math.max(a.alvo, valor);   // nunca retrocede
+            iniciarProgressoPublicacao();
+            return;
+        }
+
+        if (a.ativo) {
+            // terminou: completa até 100% em vez de sumir no meio do caminho
+            a.ativo = false;
+            a.finalizando = true;
+            a.alvo = 100;
+            iniciarProgressoPublicacao();
+            return;
+        }
+
+        // fora de publicação: espelha o valor sem animar
+        pararProgressoPublicacao();
+        a.finalizando = false;
+        a.exibido = valor;
+        a.alvo = valor;
+        pintarProgressoPublicacao(valor);
     }
 
     function escapeHtml(text) {

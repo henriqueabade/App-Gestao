@@ -173,70 +173,119 @@ body.text-white {
     display: none;
     align-items: center;
     justify-content: center;
+    gap: 0.45rem;
+    padding-inline: 0.9rem;
     overflow: hidden;
     border-radius: inherit;
     isolation: isolate;
+    background: rgba(9, 26, 14, 0.55);
 }
 
 .sup-admin-updates-trigger[data-state="publishing"] .sup-admin-publish-progress {
     display: flex;
 }
 
+/* Durante a publicação só existem o "%" e a palavra "Publicando". */
 .sup-admin-updates-trigger[data-state="publishing"] > .sup-admin-updates-icon,
 .sup-admin-updates-trigger[data-state="publishing"] > #supAdminUpdatesLabel {
-    visibility: hidden;
+    display: none;
 }
 
+/* ------------------------------------------------------------------ */
+/* Líquido: nível que sobe + cristas de onda + brilho percorrendo.     */
+/* ------------------------------------------------------------------ */
 .sup-admin-publish-liquid {
     position: absolute;
     z-index: -1;
     inset: 0 auto 0 0;
     width: var(--publish-progress, 0%);
-    min-width: 0;
-    background: linear-gradient(90deg, rgba(82, 196, 95, 0.68), rgba(162, 255, 166, 0.78));
-    box-shadow: 0 0 16px rgba(162, 255, 166, 0.45);
-    transition: width 500ms ease-out;
+    background: linear-gradient(
+        100deg,
+        rgba(46, 160, 67, 0.92) 0%,
+        rgba(82, 196, 95, 0.95) 45%,
+        rgba(162, 255, 166, 0.98) 100%
+    );
+    box-shadow:
+        0 0 18px rgba(162, 255, 166, 0.45),
+        inset 0 -6px 12px rgba(0, 0, 0, 0.18);
+    /* A largura é animada por JS (rAF); sem transition para não conflitar. */
+    will-change: width;
 }
 
 .sup-admin-publish-liquid::before,
 .sup-admin-publish-liquid::after {
     content: '';
     position: absolute;
-    width: 1.15rem;
-    height: 180%;
-    right: -0.55rem;
-    top: -40%;
-    border-radius: 44%;
-    background: rgba(162, 255, 166, 0.5);
-    animation: publish-liquid-wave 1.25s linear infinite;
+    top: -60%;
+    right: -1.4rem;
+    width: 2.8rem;
+    height: 220%;
+    border-radius: 42% 44% 46% 48%;
+    background: rgba(162, 255, 166, 0.75);
+    animation: publish-liquid-spin 2.6s linear infinite;
 }
 
 .sup-admin-publish-liquid::after {
-    border-radius: 48%;
-    background: rgba(82, 196, 95, 0.35);
-    animation-duration: 1.8s;
+    right: -1.75rem;
+    border-radius: 47% 43% 45% 41%;
+    background: rgba(214, 255, 216, 0.45);
+    animation-duration: 3.9s;
     animation-direction: reverse;
+}
+
+.sup-admin-publish-progress::before {
+    content: '';
+    position: absolute;
+    z-index: -1;
+    inset: 0 auto 0 0;
+    width: var(--publish-progress, 0%);
+    background: linear-gradient(
+        90deg,
+        transparent 0%,
+        rgba(255, 255, 255, 0.28) 45%,
+        transparent 90%
+    );
+    background-size: 55% 100%;
+    background-repeat: no-repeat;
+    animation: publish-liquid-shine 2.1s ease-in-out infinite;
+    pointer-events: none;
 }
 
 .sup-admin-publish-percent,
 .sup-admin-publish-progress-label {
-    position: absolute;
+    position: relative;
     z-index: 1;
     color: #fff;
-    font-variant-numeric: tabular-nums;
-    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+    line-height: 1;
+    white-space: nowrap;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.85);
 }
 
-.sup-admin-publish-percent { left: 0.75rem; }
-.sup-admin-publish-progress-label { left: 50%; transform: translateX(-50%); }
+.sup-admin-publish-percent {
+    font-variant-numeric: tabular-nums;
+    font-weight: 700;
+    min-width: 2.6ch;
+    text-align: right;
+}
 
-@keyframes publish-liquid-wave {
+.sup-admin-publish-progress-label {
+    font-weight: 600;
+    opacity: 0.95;
+}
+
+@keyframes publish-liquid-spin {
     to { transform: rotate(360deg); }
+}
+
+@keyframes publish-liquid-shine {
+    0%   { background-position: -60% 0; }
+    100% { background-position: 160% 0; }
 }
 
 @media (prefers-reduced-motion: reduce) {
     .sup-admin-publish-liquid::before,
-    .sup-admin-publish-liquid::after { animation: none; }
+    .sup-admin-publish-liquid::after,
+    .sup-admin-publish-progress::before { animation: none; }
 }
 
 .sup-admin-updates-trigger[data-state="success"] {
