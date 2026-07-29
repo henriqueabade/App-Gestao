@@ -34,6 +34,35 @@ function buildPayload(body = {}) {
   };
 }
 
+function avatarToRenderableSource(value) {
+  if (!value) return null;
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+    if (/^(?:data:image\/|https?:\/\/|file:|blob:|\/)/i.test(trimmed)) return trimmed;
+    if (/^[A-Za-z0-9+/=\s]+$/.test(trimmed)) {
+      value = Buffer.from(trimmed.replace(/\s+/g, ''), 'base64');
+    } else {
+      return null;
+    }
+  }
+
+  const bytes = Buffer.isBuffer(value)
+    ? value
+    : value?.type === 'Buffer' && Array.isArray(value.data)
+      ? Buffer.from(value.data)
+      : null;
+  if (!bytes?.length) return null;
+
+  let mime = 'image/jpeg';
+  if (bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47) {
+    mime = 'image/png';
+  } else if (bytes.toString('ascii', 0, 4) === 'RIFF' && bytes.toString('ascii', 8, 12) === 'WEBP') {
+    mime = 'image/webp';
+  }
+  return `data:${mime};base64,${bytes.toString('base64')}`;
+}
+
 function normalizeAvatar(usuario = {}) {
   const normalized = { ...usuario };
 
@@ -55,13 +84,14 @@ function normalizeAvatar(usuario = {}) {
         ? avatarVersion.trim()
         : String(avatarVersion);
 
-  const fotoUsuario =
+  const fotoUsuario = avatarToRenderableSource(
     usuario?.foto_usuario ??
     usuario?.fotoUsuario ??
     usuario?.avatar ??
     usuario?.avatar_url ??
     usuario?.avatarUrl ??
-    null;
+    null
+  );
 
   if (versionValue) {
     normalized.avatarVersion = versionValue;
@@ -815,3 +845,5 @@ router.delete('/:id', async (req, res) => {
 });
 
 module.exports = router;
+module.exports.normalizeAvatar = normalizeAvatar;
+module.exports.avatarToRenderableSource = avatarToRenderableSource;

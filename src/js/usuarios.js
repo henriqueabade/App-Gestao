@@ -126,6 +126,7 @@ function extrairAvatarVersao(usuario) {
 function aplicarCacheBuster(url, versao) {
     if (!url || !versao) return url;
     if (typeof url !== 'string') return url;
+    if (/^(?:blob|data):/i.test(url)) return url;
 
     const [base, fragmento] = url.split('#', 2);
     const encoded = encodeURIComponent(versao);
@@ -407,6 +408,7 @@ function escapeAttribute(valor) {
 function obterAvatarUrl(usuario) {
     if (!usuario || typeof usuario !== 'object') return null;
     const candidatos = [
+        usuario.foto_perfil_url,
         usuario.foto_usuario,
         usuario.fotoUsuario,
         usuario.avatar,

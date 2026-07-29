@@ -733,6 +733,12 @@ const MenuStartupPreferences = (() => {
         if (!url || !versao) return url;
         if (typeof url !== 'string') return url;
 
+        // URLs locais criadas por URL.createObjectURL apontam para um recurso
+        // exato. Acrescentar query string a elas invalida o endereço e quebrava
+        // justamente a pré-visualização antes de salvar. Data URLs também não
+        // precisam (nem devem) receber cache buster.
+        if (/^(?:blob|data):/i.test(url)) return url;
+
         const [base, fragmento] = url.split('#', 2);
         const encoded = encodeURIComponent(versao);
         const separador = base.includes('?') ? '&' : '?';
