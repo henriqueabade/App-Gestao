@@ -3133,6 +3133,11 @@ async function loadPage(page, options = {}) {
     const ipcLoadToken = usesLoadingMask ? window.electronAPI?.beginModuleLoading?.() : null;
 
     content.dataset.activePage = page;
+    // Tempo mínimo de exibição do spinner do módulo: se o carregamento for mais
+    // rápido que isso, seguramos a revelação para não "piscar". Nada é somado
+    // quando o carregamento já demora mais que o mínimo.
+    const MIN_MODULE_SPINNER_MS = 1000;
+    const inicioSpinnerModulo = Date.now();
     content.classList.toggle('is-module-loading', usesLoadingMask);
     content.replaceChildren(...(usesLoadingMask ? [createModuleLoadingMask(page, moduleTitle)] : []));
 
@@ -3201,6 +3206,13 @@ async function loadPage(page, options = {}) {
         }
 
         if (loadId !== moduleLoadSequence) return;
+
+        if (usesLoadingMask) {
+            const restante = MIN_MODULE_SPINNER_MS - (Date.now() - inicioSpinnerModulo);
+            if (restante > 0) await new Promise(r => setTimeout(r, restante));
+            if (loadId !== moduleLoadSequence) return;
+        }
+
         module.classList.remove('module-loading-content');
         mask?.remove();
         content.classList.remove('is-module-loading');

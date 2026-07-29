@@ -109,6 +109,33 @@ function showOfflineError() {
   btn.addEventListener('click', () => overlay.remove());
 }
 
+let maxAttemptsErrorShown = false;
+function showMaxAttemptsError(mensagem) {
+  if (maxAttemptsErrorShown) return;
+  maxAttemptsErrorShown = true;
+  const overlay = document.createElement('div');
+  overlay.className = 'warning-overlay';
+  overlay.innerHTML = `
+    <div class="warning-modal scale-95">
+      <div class="warning-icon">
+        <div class="warning-icon-circle">
+          <i data-feather="lock"></i>
+        </div>
+      </div>
+      <h2 class="warning-title">Login Bloqueado</h2>
+      <p class="warning-text">${mensagem || 'Número máximo de tentativas de login atingido.'}</p>
+      <hr class="warning-divider">
+      <p class="warning-text-small">Enviamos um e-mail de redefinição de senha para o endereço cadastrado. Verifique sua caixa de entrada.</p>
+      <button id="maxAttemptsOk" class="warning-button pulse">OK</button>
+    </div>`;
+  document.body.appendChild(overlay);
+  if (typeof feather !== 'undefined') feather.replace();
+  overlay.querySelector('#maxAttemptsOk')?.addEventListener('click', () => {
+    overlay.remove();
+    maxAttemptsErrorShown = false;
+  }, { once: true });
+}
+
 function showUserRemovedError() {
   if (userRemovedErrorShown) return;
   userRemovedErrorShown = true;
@@ -693,7 +720,12 @@ if (intro) {
         }
         clearPendingLoginRetry();
         lastLoginAttempt = null;
-        if (
+        if (result.code === 'max-attempts') {
+          showMaxAttemptsError(message);
+        } else if (result.code === 'invalid-credentials') {
+          // mensagem específica: erro de usuário/senha (não genérica)
+          showToast(message || 'Usuário ou senha incorretos.', 'error');
+        } else if (
           result.code === 'inactive-user' ||
           result.code === 'unconfirmed-user' ||
           message.toLowerCase().includes('inativo') ||

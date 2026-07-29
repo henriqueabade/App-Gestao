@@ -3239,9 +3239,68 @@ ipcMain.handle('registrar-usuario', async (_event, dados) => {
   }
 });
 
+// ---------------------------------------------------------------------------
+// Controle de tentativas de login.
+// Após 3 falhas de credencial para o MESMO e-mail, a conta é bloqueada para
+// novas tentativas e disparamos o e-mail de redefinição de senha.
+// Por segurança, a resposta é a mesma exista ou não o e-mail cadastrado.
+// ---------------------------------------------------------------------------
+const LOGIN_MAX_TENTATIVAS = 3;
+const LOGIN_JANELA_MS = 15 * 60 * 1000;
+const tentativasLogin = new Map();   // email -> { falhas, expiraEm }
+
+function chaveTentativa(email) {
+  return String(email || '').trim().toLowerCase();
+}
+
+function lerTentativas(email) {
+  const k = chaveTentativa(email);
+  const item = tentativasLogin.get(k);
+  if (!item) return 0;
+  if (Date.now() > item.expiraEm) { tentativasLogin.delete(k); return 0; }
+  return item.falhas;
+}
+
+function registrarFalhaLogin(email) {
+  const k = chaveTentativa(email);
+  const atual = lerTentativas(email);
+  tentativasLogin.set(k, { falhas: atual + 1, expiraEm: Date.now() + LOGIN_JANELA_MS });
+  return atual + 1;
+}
+
+function limparTentativasLogin(email) {
+  tentativasLogin.delete(chaveTentativa(email));
+}
+
+/** Dispara o e-mail de redefinição. Nunca revela se o e-mail existe. */
+async function enviarRedefinicaoPorBloqueio(email) {
+  try {
+    const base = `http://localhost:${currentApiPort ?? configuredApiPort ?? DEFAULT_API_PORT}`;
+    const resp = await fetch(`${base}/password-reset-request`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email })
+    });
+    // 404 = e-mail não cadastrado: silencioso de propósito (não vazamos isso).
+    console.info('[login] redefinicao por bloqueio, status:', resp.status);
+  } catch (err) {
+    console.error('[login] falha ao enviar redefinicao por bloqueio:', err?.message || err);
+  }
+}
+
 ipcMain.handle('login-usuario', async (event, dados) => {
+  // Conta já bloqueada por excesso de tentativas nesta janela?
+  if (lerTentativas(dados?.email) >= LOGIN_MAX_TENTATIVAS) {
+    return {
+      success: false,
+      code: 'max-attempts',
+      message: 'Número máximo de tentativas de login atingido. Enviamos um e-mail para redefinição de senha ao endereço cadastrado.'
+    };
+  }
+
   try {
     const user = await loginUsuario(dados.email, dados.password);
+    limparTentativasLogin(dados?.email);
     setCurrentUserSession(user);
     return { success: true, user };
   } catch (err) {
@@ -3255,6 +3314,29 @@ ipcMain.handle('login-usuario', async (event, dados) => {
         reason = 'db-connecting';
       }
     }
+    // Só conta como tentativa quando o erro é de credencial (não conta queda
+    // de rede, conta inativa, etc. — senão bloquearíamos por engano).
+    const credencialInvalida = err?.code === 'auth-failed' || reason === 'user-auth';
+    if (credencialInvalida) {
+      const falhas = registrarFalhaLogin(dados?.email);
+      if (falhas >= LOGIN_MAX_TENTATIVAS) {
+        await enviarRedefinicaoPorBloqueio(dados?.email);
+        return {
+          success: false,
+          code: 'max-attempts',
+          message: 'Número máximo de tentativas de login atingido. Enviamos um e-mail para redefinição de senha ao endereço cadastrado.'
+        };
+      }
+      const restantes = LOGIN_MAX_TENTATIVAS - falhas;
+      // sem 'reason': assim a tela usa o branch de 'invalid-credentials' e
+      // mostra a mensagem específica (com as tentativas restantes).
+      return {
+        success: false,
+        code: 'invalid-credentials',
+        message: `Usuário ou senha incorretos. Você ainda tem ${restantes} tentativa(s) antes do bloqueio.`
+      };
+    }
+
     return {
       success: false,
       message: err.message,

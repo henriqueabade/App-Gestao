@@ -439,6 +439,163 @@ function normalizarStatusUsuario(valor) {
   return mapa[chave] || null;
 }
 
+// ==========================================================================
+// Confirmação de e-mail  +  aprovação pelo Sup Admin
+//
+// Fluxo em DOIS passos (o usuário sozinho NÃO libera o próprio acesso):
+//   1) usuário confirma o e-mail  -> email_confirmado = true,
+//      status permanece 'nao_confirmado' e o Sup Admin é notificado;
+//   2) Sup Admin aprova           -> status = 'ativo' e o usuário é avisado.
+// Estas rotas precisam vir ANTES de "/:id".
+// ==========================================================================
+
+const crypto = require('crypto');
+
+/** GET /usuarios/confirmar-email?token=... */
+router.get('/confirmar-email', async (req, res) => {
+  const token = String(req.query?.token || '').trim();
+  if (!token) return res.status(400).json({ ok: false, message: 'Token ausente.' });
+
+  try {
+    const api = createInternalApiClient();
+    const encontrados = await api
+      .get('/api/usuarios', { query: { confirmacao_token: token } })
+      .catch(() => []);
+    const usuario = Array.isArray(encontrados) ? encontrados[0] : null;
+    if (!usuario) {
+      return res.status(400).json({ ok: false, message: 'Token inválido ou já utilizado.' });
+    }
+
+    const expira = usuario.confirmacao_token_expira_em
+      ? new Date(usuario.confirmacao_token_expira_em)
+      : null;
+    if (expira && !Number.isNaN(expira.getTime()) && Date.now() > expira.getTime()) {
+      return res.status(400).json({ ok: false, message: 'Token expirado. Solicite um novo e-mail de confirmação.' });
+    }
+
+    const agora = new Date().toISOString();
+    // Token de aprovação para o Sup Admin agir a partir do e-mail.
+    const tokenAprovacao = crypto.randomBytes(24).toString('hex');
+
+    await api.put(`/api/usuarios/${usuario.id}`, {
+      email_confirmado: true,
+      email_confirmado_em: agora,
+      confirmacao: false,
+      // IMPORTANTE: continua pendente — quem libera é o Sup Admin.
+      status: 'nao_confirmado',
+      confirmacao_token: null,
+      confirmacao_token_revogado_em: agora,
+      aprovacao_token: tokenAprovacao
+    });
+
+    try {
+      const { sendSupAdminReviewNotification } = require('../src/email/sendSupAdminReviewNotification');
+      await sendSupAdminReviewNotification({
+        usuarioNome: usuario.nome,
+        usuarioEmail: usuario.email,
+        motivo: 'E-mail confirmado pelo usuário; aguardando liberação de acesso.',
+        acaoRecomendada: 'Aprovar o acesso em Gestão de Usuários ou pelo link abaixo.',
+        tokenAprovacao
+      });
+    } catch (mailErr) {
+      console.error('Falha ao notificar o Sup Admin:', mailErr?.message || mailErr);
+    }
+
+    res.status(200).json({ ok: true, message: 'e-mail confirmado com sucesso' });
+  } catch (err) {
+    console.error('Erro ao confirmar e-mail:', err);
+    res.status(err.status || 500).json({ ok: false, message: 'Erro ao confirmar e-mail.' });
+  }
+});
+
+/** Ativa o usuário e o avisa por e-mail. */
+async function ativarUsuarioAprovado(api, usuario) {
+  const agora = new Date().toISOString();
+  await api.put(`/api/usuarios/${usuario.id}`, {
+    status: 'ativo',
+    verificado: true,
+    confirmacao: true,
+    email_confirmado: true,
+    hora_ativacao: agora,
+    data_ativacao: agora,
+    aprovacao_token: null
+  });
+  try {
+    const { sendUserActivationNotice } = require('../src/email/sendUserActivationNotice');
+    await sendUserActivationNotice({ to: usuario.email, nome: usuario.nome });
+  } catch (mailErr) {
+    console.error('Falha ao avisar o usuário sobre a ativação:', mailErr?.message || mailErr);
+  }
+  try { require('./permissionsController').limparCachePermissoes(); } catch (_) {}
+}
+
+/** GET /usuarios/aprovar?token=...  (link do e-mail do Sup Admin) */
+router.get('/aprovar', async (req, res) => {
+  const token = String(req.query?.token || '').trim();
+  if (!token) return res.status(400).send('Token ausente.');
+  try {
+    const api = createInternalApiClient();
+    const encontrados = await api.get('/api/usuarios', { query: { aprovacao_token: token } }).catch(() => []);
+    const usuario = Array.isArray(encontrados) ? encontrados[0] : null;
+    if (!usuario) return res.status(400).send('Token inválido ou já utilizado.');
+
+    await ativarUsuarioAprovado(api, usuario);
+    res.status(200).send('Usuário ativado com sucesso.');
+  } catch (err) {
+    console.error('Erro ao aprovar usuário por token:', err);
+    res.status(err.status || 500).send('Erro ao aprovar usuário.');
+  }
+});
+
+/** POST /usuarios/aprovar  { usuarioId }  — exige Sup Admin */
+router.post('/aprovar', async (req, res) => {
+  try {
+    const api = createInternalApiClient();
+
+    // Só o Sup Admin aprova.
+    const solicitante = await carregarUsuarioSolicitante(req, api);
+    if (!permissoesRepo.isSupAdmin(solicitante)) {
+      return res.status(403).json({ error: 'Apenas o Sup Admin pode aprovar usuários.' });
+    }
+
+    const id = req.body?.usuarioId ?? req.body?.id;
+    if (!id) return res.status(400).json({ error: 'Informe o usuário a aprovar.' });
+
+    const usuario = await api.get(`/api/usuarios/${id}`);
+    if (!usuario || usuario.error === 'Not found') {
+      return res.status(404).json({ error: 'Usuário não encontrado.' });
+    }
+
+    await ativarUsuarioAprovado(api, usuario);
+    res.json({ success: true, status: 'ativo' });
+  } catch (err) {
+    console.error('Erro ao aprovar usuário:', err);
+    res.status(err.status || 500).json({ error: 'Erro ao aprovar usuário.' });
+  }
+});
+
+/** Identifica quem está chamando (para checar Sup Admin). */
+async function carregarUsuarioSolicitante(req, api) {
+  try {
+    const bruto = req.headers?.authorization || getToken() || '';
+    const parte = String(bruto).replace(/^Bearer\s+/i, '').split('.')[1];
+    let id = null;
+    if (parte) {
+      const payload = JSON.parse(Buffer.from(parte.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8'));
+      id = payload.id ?? payload.userId ?? payload.sub ?? null;
+    }
+    if (!id) {
+      const direto = Number(String(bruto).replace(/^Bearer\s+/i, '').trim());
+      if (Number.isInteger(direto) && direto > 0) id = direto;
+    }
+    if (!id) return null;
+    return await api.get(`/api/usuarios/${id}`);
+  } catch (err) {
+    console.error('Não foi possível identificar o solicitante:', err?.message || err);
+    return null;
+  }
+}
+
 /**
  * GET /usuarios/perfis
  * Lista os perfis disponíveis para o combo do modal de edição.
