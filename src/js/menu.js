@@ -3129,6 +3129,14 @@ async function loadPage(page, options = {}) {
 
     const loadId = ++moduleLoadSequence;
     const moduleTitle = getModuleTitle(page);
+
+    // Verifica a conexão a cada abertura de módulo, sem esperar o próximo
+    // ciclo do heartbeat: é quando o usuário mais precisa saber se está online.
+    try {
+        window.electronAPI?.requestConnectionCheck?.({ allowWhilePaused: true, triggeredBy: 'module-open' });
+    } catch (err) {
+        console.error('[conexao] falha ao solicitar verificacao imediata:', err);
+    }
     const usesLoadingMask = page !== 'configuracoes';
     const ipcLoadToken = usesLoadingMask ? window.electronAPI?.beginModuleLoading?.() : null;
 

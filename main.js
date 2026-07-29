@@ -127,6 +127,7 @@ app.on('browser-window-created', (_event, win) => {
 });
 
 let loginWindow = null;
+let loginWindowReady = false;
 let dashboardWindow = null;
 let stateFile;
 let displayFile;
@@ -2923,9 +2924,11 @@ function shouldMonitorBeActive() {
   if (!visible || minimized) {
     return false;
   }
-  if (!focused) {
-    return false;
-  }
+  // ATENÇÃO: antes o monitor PAUSAVA quando a janela perdia o foco. Isso fazia
+  // o indicador ficar girando indefinidamente, atrasava a detecção de queda de
+  // conexão e impedia perceber que o admin desativou o usuário — só voltava a
+  // funcionar quando alguém clicava na tela. Um heartbeat de conexão precisa
+  // rodar com a janela apenas VISÍVEL.
   return true;
 }
 
@@ -3011,6 +3014,14 @@ function createLoginWindow(show = true, showOnLoad = true) {
 
   attachMonitorHooksToWindow(loginWindow);
 
+  // `ready-to-show` dispara UMA vez e ANTES de `isLoading()` virar false.
+  // Guardamos o estado num sinalizador: quem for exibir a janela depois
+  // (revealLoginWindow) precisa saber que o evento já passou, senão fica
+  // esperando para sempre por um evento que não vai mais acontecer.
+  loginWindowReady = false;
+  loginWindow.on('ready-to-show', () => { loginWindowReady = true; });
+  loginWindow.webContents.on('did-finish-load', () => { loginWindowReady = true; });
+
   // Espera o conteúdo estar pronto para posicionar e exibir
   loginWindow.once('ready-to-show', () => {
     loginWindow.setBounds(getBoundsForDisplay(savedDisplay));
@@ -3044,6 +3055,7 @@ function createLoginWindow(show = true, showOnLoad = true) {
 
   loginWindow.on('closed', () => {
     loginWindow = null;
+    loginWindowReady = false;
   });
 }
 
@@ -3071,11 +3083,27 @@ function revealLoginWindow() {
       resolve();
     };
 
-    if (loginWindow.webContents.isLoading()) {
-      loginWindow.once('ready-to-show', finish);
-    } else {
+    if (loginWindowReady) {
       finish();
+      return;
     }
+
+    // Ainda carregando: aguarda o primeiro sinal de prontidão, mas com prazo.
+    // Antes usávamos só `once('ready-to-show')` — e como esse evento pode já
+    // ter disparado, a Promise nunca resolvia: o dashboard não fechava (duas
+    // telas na frente do usuário) e a tela de login ficava sem receber o
+    // `activate-tab`, parecendo travada.
+    let resolvido = false;
+    const concluir = () => {
+      if (resolvido) return;
+      resolvido = true;
+      clearTimeout(prazo);
+      loginWindow?.removeListener?.('ready-to-show', concluir);
+      finish();
+    };
+    const prazo = setTimeout(concluir, 3000);
+    loginWindow.once('ready-to-show', concluir);
+    loginWindow.webContents.once('did-finish-load', concluir);
   });
 }
 
@@ -4256,6 +4284,14 @@ ipcMain.handle('logout', async () => {
 
   if (!loginWindow || loginWindow.isDestroyed()) {
     createLoginWindow(false, false);
+  }
+
+  // Ordem importa: escondemos o dashboard ANTES de exibir o login. Se a ordem
+  // for invertida, as duas janelas ficam visíveis ao mesmo tempo enquanto o
+  // login carrega — foi exatamente o que o usuário via.
+  const dashVivo = dashboardWindow && !dashboardWindow.isDestroyed();
+  if (dashVivo) {
+    try { dashboardWindow.hide(); } catch (err) { console.error('Failed to hide dashboard', err); }
   }
 
   await revealLoginWindow();

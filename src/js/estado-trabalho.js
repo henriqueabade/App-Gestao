@@ -62,12 +62,21 @@
         return out;
     }
 
+    // Os módulos informam como reabrir cada modal (htmlPath/scriptPath).
+    // Sem isso o modal nunca reaparecia e os campos dele se perdiam.
+    let ultimoModal = null;
+    window.__registrarModalAberto = function (info) {
+        if (info?.overlayId) ultimoModal = { ...info };
+    };
+
     /** Modal aberto no momento (se houver). */
     function modalAberto() {
         const overlays = Array.from(document.querySelectorAll('[id$="Overlay"]'));
         const visivel = overlays.find(o => o && !o.classList.contains('hidden'));
         if (!visivel) return null;
-        return { overlayId: visivel.id, campos: coletarCampos(visivel) };
+        const abertura = ultimoModal && ultimoModal.overlayId
+            && `${ultimoModal.overlayId}Overlay` === visivel.id ? ultimoModal : null;
+        return { overlayId: visivel.id, abertura, campos: coletarCampos(visivel) };
     }
 
     /**
@@ -139,8 +148,16 @@
             const aplicados = restaurarCampos(content, estado.campos);
 
             if (estado.modal?.overlayId) {
-                // o modal é reaberto pelo próprio módulo; quando aparecer,
-                // repomos os campos dele.
+                // Reabre o modal usando os caminhos registrados pelo módulo e,
+                // assim que ele aparecer, repõe os campos.
+                const ab = estado.modal.abertura;
+                if (ab && typeof window.openModalWithSpinner === 'function') {
+                    try {
+                        window.openModalWithSpinner(ab.htmlPath, ab.scriptPath, ab.overlayId);
+                    } catch (err) {
+                        console.error('[estado] falha ao reabrir o modal:', err);
+                    }
+                }
                 aguardarModal(estado.modal);
             }
 
@@ -158,15 +175,18 @@
 
     /** Espera o modal reaparecer (até 15s) para repor seus campos. */
     function aguardarModal(modal) {
-        const limite = Date.now() + 15000;
+        const limite = Date.now() + 20000;
         const timer = setInterval(() => {
             const overlay = document.getElementById(modal.overlayId);
-            if (overlay && !overlay.classList.contains('hidden')) {
+            const pronto = overlay && !overlay.classList.contains('hidden')
+                && overlay.querySelector(CAMPOS);
+            if (pronto) {
                 clearInterval(timer);
-                restaurarCampos(overlay, modal.campos);
+                // pequeno atraso: o script do modal ainda pode estar populando
+                setTimeout(() => restaurarCampos(overlay, modal.campos), 250);
             } else if (Date.now() > limite) {
                 clearInterval(timer);
             }
-        }, 250);
+        }, 200);
     }
 })();

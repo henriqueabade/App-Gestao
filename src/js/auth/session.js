@@ -74,8 +74,9 @@
 
     if (window.electronAPI) {
       try {
+        // O `logout` já faz a troca completa das janelas na ordem certa;
+        // revelar o login antes deixava as duas telas visíveis juntas.
         await window.electronAPI.openLoginHidden?.();
-        await window.electronAPI.showLogin?.();
         await window.electronAPI.logout?.();
       } catch (err) {
         console.error('Falha ao processar logout por inatividade.', err);

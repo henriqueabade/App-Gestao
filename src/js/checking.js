@@ -29,18 +29,23 @@ function showSuccess() {
 }
 
 let pulsoTimer = null;
+const PULSO_RESULTADO_MS = 1000;
+
 /**
- * Mostra o giro por um instante e volta ao check verde. Dá feedback visível
- * de cada heartbeat (a cada 10s) sem trocar o estado real da conexão.
+ * O estado normal do indicador é GIRANDO. A cada verificação mostramos o
+ * resultado (check verde ou X vermelho) por 1s e voltamos a girar — assim o
+ * usuário vê que a checagem aconteceu, em vez de um ícone sempre igual.
  */
-function pulsarVerificacao() {
+function pulsarResultado(sucesso, cor) {
   if (!checkBtn || !icon) return;
   if (pulsoTimer) clearTimeout(pulsoTimer);
-  showSpinner('var(--color-green)');
+  if (sucesso) showSuccess();
+  else showFailure(cor || 'var(--color-red)');
   pulsoTimer = setTimeout(() => {
     pulsoTimer = null;
-    showSuccess();
-  }, 450);
+    // volta a girar, conservando a cor do último resultado
+    showSpinner(sucesso ? 'var(--color-green)' : (cor || 'var(--color-red)'));
+  }, PULSO_RESULTADO_MS);
 }
 
 function showFailure(color = 'var(--color-red)') {
@@ -52,6 +57,11 @@ function showFailure(color = 'var(--color-red)') {
 
 async function handleDisconnect(reason) {
   disconnectHandled = true;
+  // Cancela um pulso em andamento: aqui o X precisa FICAR, não voltar a girar.
+  if (pulsoTimer) {
+    clearTimeout(pulsoTimer);
+    pulsoTimer = null;
+  }
   const failureColor = reason === 'offline-db' ? 'var(--color-orange)' : 'var(--color-red)';
   showFailure(failureColor);
   if (window.stopServerCheck) window.stopServerCheck();
@@ -77,15 +87,11 @@ async function handleDisconnect(reason) {
   }
   if (window.electronAPI) {
     try {
+      // Prepara a janela de login ESCONDIDA e deixa o `logout` fazer a troca
+      // por inteiro (esconde o dashboard, revela o login, fecha o dashboard).
+      // Chamar `showLogin()` aqui exibia o login com o dashboard ainda na
+      // frente — as duas telas apareciam juntas.
       await window.electronAPI.openLoginHidden();
-      await window.electronAPI.showLogin();
-      await new Promise((resolve) => {
-        if (typeof requestAnimationFrame === 'function') {
-          requestAnimationFrame(() => resolve());
-        } else {
-          resolve();
-        }
-      });
       await window.electronAPI.logout();
     } catch (err) {
       console.error('Failed to return to login after disconnect', err);
@@ -125,21 +131,19 @@ function applyStatus(status) {
 
   if (state === 'online') {
     checking = false;
-    // Pulso curto a cada verificação: o usuário VÊ que a conexão foi testada
-    // agora (antes o check verde ficava parado e parecia congelado).
-    pulsarVerificacao();
+    pulsarResultado(true);
   } else if (state === 'checking') {
     checking = true;
-    showSpinner();
+    if (!pulsoTimer) showSpinner();          // não corta o pulso em andamento
   } else if (state === 'waiting') {
     checking = false;
-    showSpinner('var(--color-blue)');
+    if (!pulsoTimer) showSpinner('var(--color-blue)');
   } else if (state === 'offline-db') {
     checking = false;
-    showFailure('var(--color-orange)');
+    pulsarResultado(false, 'var(--color-orange)');
   } else {
     checking = false;
-    showFailure('var(--color-red)');
+    pulsarResultado(false, 'var(--color-red)');
   }
 
   if (!shouldLogout && lastLogoutReason) {

@@ -162,6 +162,8 @@ function renderClientes(clientes) {
 }
 
 function openModalWithSpinner(htmlPath, scriptPath, overlayId) {
+    // Registra como reabrir este modal, para restaurar o trabalho apos queda.
+    window.__registrarModalAberto?.({ htmlPath, scriptPath, overlayId });
     Modal.closeAll();
     const spinner = document.createElement('div');
     spinner.id = 'modalLoading';
