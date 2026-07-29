@@ -28,6 +28,21 @@ function showSuccess() {
   checkBtn.style.color = 'var(--color-green)';
 }
 
+let pulsoTimer = null;
+/**
+ * Mostra o giro por um instante e volta ao check verde. Dá feedback visível
+ * de cada heartbeat (a cada 10s) sem trocar o estado real da conexão.
+ */
+function pulsarVerificacao() {
+  if (!checkBtn || !icon) return;
+  if (pulsoTimer) clearTimeout(pulsoTimer);
+  showSpinner('var(--color-green)');
+  pulsoTimer = setTimeout(() => {
+    pulsoTimer = null;
+    showSuccess();
+  }, 450);
+}
+
 function showFailure(color = 'var(--color-red)') {
   if (!checkBtn || !icon) return;
   resetIcon();
@@ -46,6 +61,8 @@ async function handleDisconnect(reason) {
     localStorage.setItem('offlineDisconnect', '1');
   } else if (reason === 'user-removed') {
     localStorage.setItem('userRemoved', '1');
+  } else if (reason === 'admin-disabled' || reason === 'admin-pending') {
+    localStorage.setItem('adminDisabled', reason === 'admin-pending' ? 'pending' : '1');
   }
 
   try {
@@ -99,12 +116,18 @@ function applyStatus(status) {
     title = 'PIN inválido ou alterado';
   } else if (state === 'offline' && reason === 'user-removed') {
     title = 'Usuário removido do sistema';
+  } else if (reason === 'admin-disabled') {
+    title = 'Acesso desativado pelo administrador';
+  } else if (reason === 'admin-pending') {
+    title = 'Acesso ainda não liberado pelo administrador';
   }
   checkBtn.setAttribute('title', title);
 
   if (state === 'online') {
     checking = false;
-    showSuccess();
+    // Pulso curto a cada verificação: o usuário VÊ que a conexão foi testada
+    // agora (antes o check verde ficava parado e parecia congelado).
+    pulsarVerificacao();
   } else if (state === 'checking') {
     checking = true;
     showSpinner();

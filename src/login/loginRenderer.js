@@ -109,6 +109,36 @@ function showOfflineError() {
   btn.addEventListener('click', () => overlay.remove());
 }
 
+let adminDisabledErrorShown = false;
+function showAdminDisabledError(modo) {
+  if (adminDisabledErrorShown) return;
+  adminDisabledErrorShown = true;
+  const pendente = modo === 'pending';
+  const overlay = document.createElement('div');
+  overlay.className = 'warning-overlay';
+  overlay.innerHTML = `
+    <div class="warning-modal scale-95">
+      <div class="warning-icon">
+        <div class="warning-icon-circle">
+          <i data-feather="user-minus"></i>
+        </div>
+      </div>
+      <h2 class="warning-title">${pendente ? 'Acesso Pendente' : 'Acesso Revogado'}</h2>
+      <p class="warning-text">${pendente
+        ? 'Seu acesso ainda não foi liberado pelo administrador. Você foi desconectado.'
+        : 'Seu acesso foi desativado pelo administrador. Você foi desconectado do sistema.'}</p>
+      <hr class="warning-divider">
+      <p class="warning-text-small">Entre em contato com o administrador para reativar o seu acesso. Ao fazer login dentro de 30 min o programa restaurará os dados em registro, se existirem.</p>
+      <button id="adminDisabledOk" class="warning-button pulse">OK</button>
+    </div>`;
+  document.body.appendChild(overlay);
+  if (typeof feather !== 'undefined') feather.replace();
+  overlay.querySelector('#adminDisabledOk')?.addEventListener('click', () => {
+    overlay.remove();
+    adminDisabledErrorShown = false;
+  }, { once: true });
+}
+
 let maxAttemptsErrorShown = false;
 function showMaxAttemptsError(mensagem) {
   if (maxAttemptsErrorShown) return;
@@ -260,7 +290,12 @@ if (intro) {
       clearPendingAutoLoginRetry();
       localStorage.removeItem('user');
       localStorage.removeItem('rememberUser');
-      if (effectiveReason === 'offline') {
+      const adminDisabledFlag = localStorage.getItem('adminDisabled');
+      if (effectiveReason === 'admin-disabled' || effectiveReason === 'admin-pending' || adminDisabledFlag) {
+        showAdminDisabledError(
+          effectiveReason === 'admin-pending' || adminDisabledFlag === 'pending' ? 'pending' : 'disabled'
+        );
+      } else if (effectiveReason === 'offline') {
         showOfflineError();
       } else if (effectiveReason === 'user-removed') {
         showUserRemovedError();
@@ -274,6 +309,7 @@ if (intro) {
       localStorage.removeItem('pinChanged');
       localStorage.removeItem('offlineDisconnect');
       localStorage.removeItem('userRemoved');
+      localStorage.removeItem('adminDisabled');
     } catch (err) {
       clearPendingAutoLoginRetry();
       console.error('Erro inesperado durante auto-login:', err);

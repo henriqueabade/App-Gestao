@@ -2081,7 +2081,27 @@ async function checkDatabaseAndCurrentUser({ skipBasicQuery = false } = {}) {
 
   if (currentUserSession?.id) {
     try {
-      await api.get(`/api/usuarios/${currentUserSession.id}`);
+      const atual = await api.get(`/api/usuarios/${currentUserSession.id}`);
+
+      // O administrador pode ter desativado o acesso enquanto o usuário estava
+      // logado. O heartbeat percebe isso e encerra a sessão com um aviso
+      // específico (diferente de queda de internet ou usuário removido).
+      const statusBruto = String(atual?.status ?? '').trim();
+      if (statusBruto) {
+        const chave = statusBruto
+          .normalize('NFD')
+          .replace(/[̀-ͯ]/g, '')
+          .replace(/[\s-]+/g, '_')
+          .toLowerCase();
+        const liberado = ['ativo', 'ativa', 'active'].includes(chave);
+        if (!liberado) {
+          return {
+            success: false,
+            reason: chave === 'nao_confirmado' ? 'admin-pending' : 'admin-disabled',
+            error: new Error('Acesso do usuário não está mais ativo.')
+          };
+        }
+      }
     } catch (err) {
       const reason = mapApiErrorToReason(err);
       if (reason) {
@@ -2164,6 +2184,13 @@ function broadcastConnectionStatusPayload(payload) {
 }
 
 function broadcastSessionForceLogout(payload) {
+  // Ao FECHAR o aplicativo o servidor local cai antes do monitor parar, e a
+  // falha resultante era classificada como "token alterado" — derrubando a
+  // sessão e apagando o "Lembrar-me". Encerramento intencional não é queda.
+  if (quittingApp) {
+    if (DEBUG) console.info('[sessao] force-logout ignorado: aplicativo encerrando.');
+    return;
+  }
   for (const win of BrowserWindow.getAllWindows()) {
     if (!win || win.isDestroyed()) continue;
     try {
@@ -2640,6 +2667,9 @@ function createConnectionMonitor() {
           if (reason === 'user-removed') {
             detail = 'usuario-removido';
             failureStage = 'auth';
+          } else if (reason === 'admin-disabled' || reason === 'admin-pending') {
+            detail = 'acesso-revogado-pelo-admin';
+            failureStage = 'auth';
           } else if (reason === 'pin') {
             detail = 'pin-invalido';
             failureStage = 'auth';
@@ -2663,7 +2693,7 @@ function createConnectionMonitor() {
             return currentStatus;
           }
           let normalizedReason = reason;
-          if (!['offline', 'offline-db', 'pin', 'user-removed'].includes(normalizedReason)) {
+          if (!['offline', 'offline-db', 'pin', 'user-removed', 'admin-disabled', 'admin-pending'].includes(normalizedReason)) {
             normalizedReason = 'offline';
           }
           const statusState = normalizedReason === 'offline-db' ? 'offline-db' : 'offline';
@@ -2933,6 +2963,9 @@ function attachMonitorHooksToWindow(win) {
 async function flushAndQuit(reason) {
   if (!quittingApp) {
     quittingApp = true;
+    // Para o monitor ANTES de qualquer await: enquanto persistíamos a saída,
+    // o servidor local podia cair e o monitor interpretava como desconexão.
+    stopConnectionMonitor();
     await persistUserExit(reason);
   }
   stopConnectionMonitor();

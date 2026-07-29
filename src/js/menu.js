@@ -3441,7 +3441,16 @@ window.addEventListener('load', () => {
         ? (lastVisitedPage || MENU_DEFAULT_PAGE_FALLBACK)
         : defaultPagePreference;
 
-    loadPage(pageToLoad);
+    // Se houver trabalho interrompido guardado (desconexão há menos de 30 min),
+    // voltamos para onde o usuário estava e repomos o que ele já havia digitado.
+    // Caso não exista nada guardado, segue o fluxo normal de abertura.
+    if (typeof window.restaurarTrabalhoInterrompido === 'function') {
+        window.restaurarTrabalhoInterrompido(pagina => loadPage(pagina))
+            .then(restaurou => { if (!restaurou) loadPage(pageToLoad); })
+            .catch(err => { console.error('[estado] restauracao falhou:', err); loadPage(pageToLoad); });
+    } else {
+        loadPage(pageToLoad);
+    }
 
     const keepCrmExpanded = shouldKeepCrmExpanded();
     const isCrmModule = CRM_SUBMODULES.has(pageToLoad);
