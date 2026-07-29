@@ -348,7 +348,7 @@ function ensureBackendAgent(target) {
     return null;
   }
 
-  let url;
+  let url; 
   try {
     url = target instanceof URL ? target : new URL(target);
   } catch (_err) {
