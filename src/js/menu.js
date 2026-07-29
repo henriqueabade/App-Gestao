@@ -1511,11 +1511,18 @@ const AppUpdates = (() => {
 
         if (publicando) {
             if (!a.ativo) {
-                // começo de uma publicação: reinicia do zero
+                // Começo de uma nova publicação: zera tudo.
                 a.ativo = true;
                 a.finalizando = false;
                 a.exibido = 0;
                 a.alvo = 0;
+                // O valor que chega exatamente na virada ainda pode ser o do
+                // ciclo anterior (tipicamente 100%). Aceitá-lo aqui fazia a
+                // barra saltar para 100% e ficar travada durante toda a
+                // segunda publicação. Ignoramos esta primeira leitura: o
+                // próximo evento de progresso já traz o valor correto.
+                iniciarProgressoPublicacao();
+                return;
             }
             a.alvo = Math.max(a.alvo, valor);   // nunca retrocede
             iniciarProgressoPublicacao();

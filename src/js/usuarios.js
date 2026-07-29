@@ -1355,12 +1355,20 @@ function openModalWithSpinner(htmlPath, scriptPath, overlayId) {
     spinner.style.zIndex = 'var(--z-dialog)';
     spinner.innerHTML = '<div class="app-loading-indicator app-loading-indicator--compact" aria-hidden="true"><span class="module-loading-orbit"></span><span class="module-loading-core"><img src="../assets/Logo.ico" alt=""></span></div>';
     document.body.appendChild(spinner);
+    // Tempo mínimo de exibição do spinner: evita o "piscar" do modal e a
+    // sensação de travamento. Não atrasa o carregamento dos dados — apenas
+    // segura a revelação do modal caso ele fique pronto antes disso.
+    const MIN_SPINNER_MS = 1000;
+    const inicioSpinner = Date.now();
 
     function handleLoaded(event) {
         if (event.detail !== overlayId) return;
-        const overlay = document.getElementById(`${overlayId}Overlay`);
-        spinner.remove();
-        overlay?.classList.remove('hidden');
+        const restante = Math.max(0, MIN_SPINNER_MS - (Date.now() - inicioSpinner));
+        setTimeout(() => {
+            const overlay = document.getElementById(`${overlayId}Overlay`);
+            spinner.remove();
+            overlay?.classList.remove('hidden');
+        }, restante);
 
         window.removeEventListener('modalSpinnerLoaded', handleLoaded);
     }

@@ -164,7 +164,7 @@ body.text-white {
     --sup-admin-color: var(--color-green);
     border-color: rgba(162, 255, 166, 0.55);
     background: rgba(162, 255, 166, 0.08);
-    padding-inline: 0;
+    /* Sem alterar padding/tamanho: o botão mantém exatamente a mesma caixa. */
 }
 
 .sup-admin-publish-progress {
@@ -178,17 +178,20 @@ body.text-white {
     overflow: hidden;
     border-radius: inherit;
     isolation: isolate;
-    background: rgba(9, 26, 14, 0.55);
+    background: rgba(9, 26, 14, 0.72);
 }
 
 .sup-admin-updates-trigger[data-state="publishing"] .sup-admin-publish-progress {
     display: flex;
 }
 
-/* Durante a publicação só existem o "%" e a palavra "Publicando". */
+/* Durante a publicação só aparecem o "%" e a palavra "Publicando".
+   Usamos visibility (e não display:none) para que o ícone e o rótulo
+   continuem ocupando espaço — assim o botão preserva a mesma largura/altura
+   de quando está ocioso, sem "pular" ao iniciar a publicação. */
 .sup-admin-updates-trigger[data-state="publishing"] > .sup-admin-updates-icon,
 .sup-admin-updates-trigger[data-state="publishing"] > #supAdminUpdatesLabel {
-    display: none;
+    visibility: hidden;
 }
 
 /* ------------------------------------------------------------------ */
