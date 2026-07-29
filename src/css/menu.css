@@ -208,30 +208,37 @@ body.text-white {
         rgba(82, 196, 95, 0.95) 45%,
         rgba(162, 255, 166, 0.98) 100%
     );
+    /* Só brilho INTERNO: um box-shadow externo não é recortado pelo próprio
+       overflow e vazaria luz para a parte vazia da barra. */
     box-shadow:
-        0 0 18px rgba(162, 255, 166, 0.45),
-        inset 0 -6px 12px rgba(0, 0, 0, 0.18);
+        inset 0 -6px 12px rgba(0, 0, 0, 0.18),
+        inset 0 6px 10px rgba(255, 255, 255, 0.18);
     /* A largura é animada por JS (rAF); sem transition para não conflitar. */
     will-change: width;
+    /* Recorta as cristas: nada da animação pode vazar para além do nível do
+       líquido — depois da borda a barra fica vazia. */
+    overflow: hidden;
 }
 
 .sup-admin-publish-liquid::before,
 .sup-admin-publish-liquid::after {
     content: '';
     position: absolute;
-    top: -60%;
-    right: -1.4rem;
-    width: 2.8rem;
-    height: 220%;
+    top: -55%;
+    /* Encostadas na borda interna: giram dentro do líquido, ondulando o nível
+       sem invadir a parte vazia da barra. */
+    right: -0.9rem;
+    width: 2.4rem;
+    height: 210%;
     border-radius: 42% 44% 46% 48%;
-    background: rgba(162, 255, 166, 0.75);
+    background: rgba(198, 255, 201, 0.55);
     animation: publish-liquid-spin 2.6s linear infinite;
 }
 
 .sup-admin-publish-liquid::after {
-    right: -1.75rem;
+    right: -1.15rem;
     border-radius: 47% 43% 45% 41%;
-    background: rgba(214, 255, 216, 0.45);
+    background: rgba(120, 220, 132, 0.45);
     animation-duration: 3.9s;
     animation-direction: reverse;
 }
