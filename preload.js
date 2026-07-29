@@ -1,4 +1,57 @@
-const { contextBridge, ipcRenderer } = require('electron');
+const { contextBridge, ipcRenderer: electronIpcRenderer } = require('electron');
+
+// Centraliza as chamadas IPC para que a interface possa aguardar todas as
+// consultas disparadas durante a inicialização de um módulo.
+let ipcRequestSequence = 0;
+const pendingIpcRequests = new Map();
+let lastIpcActivityAt = Date.now();
+
+function trackedIpcInvoke(...args) {
+  const requestId = ++ipcRequestSequence;
+  pendingIpcRequests.set(requestId, Date.now());
+  lastIpcActivityAt = Date.now();
+
+  return electronIpcRenderer.invoke(...args).finally(() => {
+    pendingIpcRequests.delete(requestId);
+    lastIpcActivityAt = Date.now();
+  });
+}
+
+const ipcRenderer = new Proxy(electronIpcRenderer, {
+  get(target, property) {
+    if (property === 'invoke') return trackedIpcInvoke;
+    const value = Reflect.get(target, property, target);
+    return typeof value === 'function' ? value.bind(target) : value;
+  }
+});
+
+function beginModuleLoading() {
+  return { sequence: ipcRequestSequence, startedAt: Date.now() };
+}
+
+function waitForModuleLoading(token = {}, options = {}) {
+  const sequence = Number.isFinite(token.sequence) ? token.sequence : ipcRequestSequence;
+  const startedAt = Number.isFinite(token.startedAt) ? token.startedAt : Date.now();
+  const quietMs = Math.max(100, Number(options.quietMs) || 220);
+  const minimumMs = Math.max(0, Number(options.minimumMs) || 280);
+  const timeoutMs = Math.max(minimumMs, Number(options.timeoutMs) || 30000);
+
+  return new Promise(resolve => {
+    const inspect = () => {
+      const now = Date.now();
+      const hasModuleRequests = [...pendingIpcRequests.keys()].some(id => id > sequence);
+      const minimumElapsed = now - startedAt >= minimumMs;
+      const isQuiet = now - lastIpcActivityAt >= quietMs;
+      if ((!hasModuleRequests && minimumElapsed && isQuiet) || now - startedAt >= timeoutMs) {
+        resolve({ timedOut: now - startedAt >= timeoutMs });
+        return;
+      }
+      setTimeout(inspect, 32);
+    };
+    inspect();
+  });
+}
+
 const DEBUG = process.env.DEBUG === 'true';
 
 function recordAction(action) {
@@ -73,6 +126,8 @@ function getRuntimeConfigCached() {
 }
 
 contextBridge.exposeInMainWorld('electronAPI', {
+  beginModuleLoading,
+  waitForModuleLoading,
   log: (msg) => {
     if (DEBUG) ipcRenderer.send('debug-log', msg);
   },

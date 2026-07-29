@@ -2915,115 +2915,104 @@ const AppUpdates = (() => {
 window.AppUpdates = window.AppUpdates || AppUpdates;
 AppUpdates.init();
 
-// Carrega páginas modulares dentro da div#content
-// Remove estilos e scripts antigos e executa o novo script em escopo isolado
+// Carrega páginas modulares dentro da div#content.
+// A máscara permanece visível até o HTML, o script, as permissões e todas as
+// consultas IPC iniciadas pelo módulo terminarem.
+let moduleLoadSequence = 0;
+
+function escapeModuleLoadingText(value) {
+    return String(value)
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#039;');
+}
+
+function createModuleLoadingMask(page, title, description = 'Preparando dados, filtros e informações...') {
+    const mask = document.createElement('div');
+    mask.className = 'module-loading-mask';
+    mask.dataset.loadingPage = page;
+    mask.setAttribute('role', 'status');
+    mask.setAttribute('aria-live', 'polite');
+    mask.setAttribute('aria-label', `Carregando ${title}`);
+    const safeTitle = escapeModuleLoadingText(title);
+    const safeDescription = escapeModuleLoadingText(description);
+    mask.innerHTML = `
+        <div class="module-loading-heading">
+            <h1>${safeTitle}</h1>
+            <p>${safeDescription}</p>
+        </div>
+        <div class="module-loading-indicator" aria-hidden="true">
+            <span class="module-loading-orbit"></span>
+            <span class="module-loading-core"><i class="fas fa-gem"></i></span>
+        </div>
+        <strong>Carregando</strong>
+        <span class="module-loading-caption">Aguarde enquanto deixamos tudo pronto para você.</span>
+    `;
+    return mask;
+}
+
+function readModuleIntroduction(module, fallbackTitle) {
+    const heading = module?.querySelector('h1');
+    const description = heading?.parentElement?.querySelector('p');
+    return {
+        title: heading?.textContent?.trim() || fallbackTitle,
+        description: description?.textContent?.trim() || 'Preparando dados, filtros e informações...'
+    };
+}
+
 async function loadPage(page, options = {}) {
     const content = document.getElementById('content');
     if (!content || !page) return;
 
     const forceReload = Boolean(options.forceReload);
     const isSamePage = content.dataset.activePage === page;
-
     if (isSamePage && !forceReload) {
-        if (!options.skipNavigationUpdate) {
-            setActiveNavigation(page);
-        }
+        if (!options.skipNavigationUpdate) setActiveNavigation(page);
         applyModuleScrollBehavior(page);
         document.dispatchEvent(new CustomEvent('module-change', { detail: { page } }));
         return;
     }
 
     if (page === 'usuarios' && !canAccessUsuariosModule()) {
-        console.warn('Usuário sem permissão para acessar o módulo de Usuários. Redirecionando.');
         const fallbackPage = options?.fallbackPage && options.fallbackPage !== 'usuarios'
-            ? options.fallbackPage
-            : MENU_DEFAULT_PAGE_FALLBACK;
-
-        if (fallbackPage && fallbackPage !== page) {
-            const fallbackOptions = { ...(options || {}) };
-            delete fallbackOptions.fallbackPage;
-            fallbackOptions.skipNavigationUpdate = false;
-            return loadPage(fallbackPage, fallbackOptions);
-        } else {
-            content.dataset.activePage = fallbackPage || MENU_DEFAULT_PAGE_FALLBACK;
-            content.innerHTML = `
-                <div class="modulo-container flex flex-col items-center justify-center py-24 text-center space-y-6">
-                    <div class="w-12 h-12 rounded-full border border-dashed border-white/20 flex items-center justify-center">
-                        <i class="fas fa-user-lock text-xl" style="color: var(--color-bordeaux)"></i>
-                    </div>
-                    <div>
-                        <p class="text-lg font-semibold text-white">Você não tem permissão para acessar esta área.</p>
-                        <p class="text-sm" style="color: var(--neutral-100)">Entre em contato com um administrador para solicitar acesso.</p>
-                    </div>
-                </div>
-            `;
-        }
-        return;
+            ? options.fallbackPage : MENU_DEFAULT_PAGE_FALLBACK;
+        return loadPage(fallbackPage, { ...options, fallbackPage: undefined, skipNavigationUpdate: false });
     }
 
-    if (!options.skipNavigationUpdate) {
-        setActiveNavigation(page);
-    }
+    if (!options.skipNavigationUpdate) setActiveNavigation(page);
 
+    const loadId = ++moduleLoadSequence;
     const moduleTitle = getModuleTitle(page);
+    const usesLoadingMask = page !== 'configuracoes';
+    const ipcLoadToken = usesLoadingMask ? window.electronAPI?.beginModuleLoading?.() : null;
 
     content.dataset.activePage = page;
-    content.innerHTML = `
-        <div class="modulo-container flex flex-col items-center justify-center py-24 text-center space-y-6">
-            <div class="w-12 h-12 border-4 border-white/10 border-t-[var(--color-primary)] rounded-full animate-spin"></div>
-            <div>
-                <p class="text-lg font-semibold text-white">Carregando ${moduleTitle}</p>
-                <p class="text-sm" style="color: var(--color-violet)">Preparando a experiência...</p>
-            </div>
-        </div>
-    `;
+    content.classList.toggle('is-module-loading', usesLoadingMask);
+    content.replaceChildren(...(usesLoadingMask ? [createModuleLoadingMask(page, moduleTitle)] : []));
 
     document.getElementById('page-style')?.remove();
     document.getElementById('page-script')?.remove();
 
     try {
         const resp = await fetch(`../html/${page}.html`, { cache: 'no-store' });
-        if (!resp.ok) {
-            throw new Error(`Resposta inválida (${resp.status})`);
-        }
+        if (!resp.ok) throw new Error(`Resposta inválida (${resp.status})`);
         const rawHtml = await resp.text();
+        if (loadId !== moduleLoadSequence) return;
 
-        const parser = new DOMParser();
-        const parsed = parser.parseFromString(rawHtml, 'text/html');
+        const parsed = new DOMParser().parseFromString(rawHtml, 'text/html');
         const parsedModule = parsed.querySelector('.modulo-container');
+        const module = parsedModule
+            ? document.importNode(parsedModule, true)
+            : document.createRange().createContextualFragment(rawHtml).querySelector('.modulo-container');
+        if (!module) throw new Error('Conteúdo do módulo não encontrado');
 
-        let module;
-        if (parsedModule) {
-            const importedModule = document.importNode(parsedModule, true);
-            content.innerHTML = '';
-            content.appendChild(importedModule);
-            module = content.querySelector('.modulo-container');
-        } else {
-            content.innerHTML = rawHtml;
-            module = content.querySelector('.modulo-container');
-        }
-
-        if (module) {
-            module.dataset.page = page;
-            module.classList.add('module-enter');
-            module.addEventListener('animationend', () => {
-                module.classList.remove('module-enter');
-            }, { once: true });
-        }
-
-        // Reaplica as permissões no conteúdo recém-carregado: colunas negadas
-        // somem e botões sem permissão ficam desabilitados. Como as páginas são
-        // injetadas dinamicamente, isso precisa rodar a cada troca de módulo.
-        try {
-            if (window.Permissoes) {
-                await window.Permissoes.carregar();
-                // não reprocessa o container da página (data-page) para não
-                // ocultar o módulo inteiro; só ações e colunas internas.
-                window.Permissoes.aplicarAcoesEColunas(content);
-            }
-        } catch (err) {
-            console.error('[permissoes] falha ao aplicar no módulo carregado:', err);
-        }
+        module.dataset.page = page;
+        if (usesLoadingMask) module.classList.add('module-loading-content');
+        const introduction = readModuleIntroduction(module, moduleTitle);
+        const mask = usesLoadingMask ? createModuleLoadingMask(page, introduction.title, introduction.description) : null;
+        content.replaceChildren(module, ...(mask ? [mask] : []));
 
         const style = document.createElement('link');
         style.id = 'page-style';
@@ -3033,10 +3022,19 @@ async function loadPage(page, options = {}) {
         document.head.appendChild(style);
 
         try {
+            if (window.Permissoes) {
+                await window.Permissoes.carregar();
+                window.Permissoes.aplicarAcoesEColunas(content);
+            }
+        } catch (err) {
+            console.error('[permissoes] falha ao aplicar no módulo carregado:', err);
+        }
+
+        try {
             const jsResp = await fetch(`../js/${page}.js`, { cache: 'no-store' });
             if (jsResp.ok) {
                 const jsText = await jsResp.text();
-                if (jsText.trim().length) {
+                if (jsText.trim()) {
                     const script = document.createElement('script');
                     script.id = 'page-script';
                     script.dataset.page = page;
@@ -3047,22 +3045,36 @@ async function loadPage(page, options = {}) {
         } catch (scriptErr) {
             console.warn(`Script do módulo ${page} indisponível`, scriptErr);
         }
+
+        if (usesLoadingMask && ipcLoadToken && window.electronAPI?.waitForModuleLoading) {
+            const result = await window.electronAPI.waitForModuleLoading(ipcLoadToken);
+            if (result?.timedOut) console.warn(`Tempo limite ao aguardar os dados de ${page}.`);
+        } else if (usesLoadingMask) {
+            await new Promise(resolve => setTimeout(resolve, 280));
+        }
+
+        if (loadId !== moduleLoadSequence) return;
+        mask?.classList.add('module-loading-mask--leaving');
+        module.classList.remove('module-loading-content');
+        module.classList.add('module-enter');
+        module.addEventListener('animationend', () => module.classList.remove('module-enter'), { once: true });
+        if (mask) setTimeout(() => mask.remove(), 220);
+        content.classList.remove('is-module-loading');
     } catch (err) {
+        if (loadId !== moduleLoadSequence) return;
         console.error('Erro ao carregar página', page, err);
+        content.classList.remove('is-module-loading');
         content.innerHTML = `
             <div class="modulo-container flex flex-col items-center justify-center py-20 text-center space-y-4">
-                <div class="w-12 h-12 rounded-full border border-dashed border-white/20 flex items-center justify-center">
-                    <i class="fas fa-triangle-exclamation text-xl" style="color: var(--color-bordeaux)"></i>
-                </div>
-                <div>
-                    <p class="text-lg font-semibold text-white">Não foi possível abrir ${moduleTitle}</p>
-                    <p class="text-sm" style="color: var(--neutral-100)">Verifique se o módulo está disponível e tente novamente.</p>
-                </div>
-            </div>
-        `;
+                <i class="fas fa-triangle-exclamation text-xl" style="color: var(--color-bordeaux)"></i>
+                <div><p class="text-lg font-semibold text-white">Não foi possível abrir ${moduleTitle}</p>
+                <p class="text-sm" style="color: var(--neutral-100)">Verifique se o módulo está disponível e tente novamente.</p></div>
+            </div>`;
     } finally {
-        applyModuleScrollBehavior(page);
-        document.dispatchEvent(new CustomEvent('module-change', { detail: { page } }));
+        if (loadId === moduleLoadSequence) {
+            applyModuleScrollBehavior(page);
+            document.dispatchEvent(new CustomEvent('module-change', { detail: { page } }));
+        }
     }
 }
 window.loadPage = loadPage;
