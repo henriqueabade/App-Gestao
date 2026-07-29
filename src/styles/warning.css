@@ -2,6 +2,21 @@
   --color-primary: #b6a03e;
   --color-primary-hover: #d4c169;
   --color-bordeaux: #3d021f;
+  /* Reserved for blocking messages and confirmations. Keep this above every
+     application modal, menu, toast and loading layer. */
+  --z-dialog: 2147483000;
+}
+
+/*
+ * Blocking messages are appended directly to <body>, but they can be opened
+ * while another full-screen modal is already visible. This semantic class is
+ * shared by choice and information dialogs so they always occupy the highest
+ * application layer. !important also protects the contract from utility
+ * classes or legacy inline z-index declarations.
+ */
+.app-message-overlay {
+  z-index: var(--z-dialog) !important;
+  isolation: isolate;
 }
 
 /* Warning overlays for PIN or connection errors */
@@ -12,7 +27,8 @@
   align-items: center;
   justify-content: center;
   background-color: rgba(0, 0, 0, 0.5);
-  z-index: 9999;
+  z-index: var(--z-dialog) !important;
+  isolation: isolate;
 }
 .warning-modal {
   background: linear-gradient(

@@ -143,7 +143,7 @@ function showUsuariosConfirmDialog({
 } = {}) {
     return new Promise((resolve) => {
         const overlay = document.createElement('div');
-        overlay.className = 'fixed inset-0 z-[2100] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4';
+        overlay.className = 'app-message-overlay fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4';
         overlay.innerHTML = `
             <div class="max-w-md w-full glass-surface backdrop-blur-xl rounded-2xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade">
                 <div class="p-6 text-center space-y-4">

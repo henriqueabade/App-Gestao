@@ -109,7 +109,7 @@
   function showDuplicateWarning(onConfirm){
     const warn = document.createElement('div');
     warn.id = 'duplicadoOverlay';
-    warn.className = 'fixed inset-0 bg-black/50 flex items-center justify-center p-4';
+    warn.className = 'app-message-overlay fixed inset-0 bg-black/50 flex items-center justify-center p-4';
     warn.innerHTML = `
       <div class="max-w-sm w-full glass-surface backdrop-blur-xl rounded-2xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade">
         <div class="p-6 text-center">
@@ -134,7 +134,7 @@
     return new Promise(resolve=>{
       const warn = document.createElement('div');
       warn.id = 'duplicadoRegistrarOverlay';
-      warn.className = 'fixed inset-0 bg-black/50 flex items-center justify-center p-4';
+      warn.className = 'app-message-overlay fixed inset-0 bg-black/50 flex items-center justify-center p-4';
       warn.innerHTML = `
         <div class="max-w-md w-full glass-surface backdrop-blur-xl rounded-2xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade">
           <div class="p-6 text-center">
@@ -199,7 +199,7 @@
   function showClearConfirm(onConfirm){
     const warn = document.createElement('div');
     warn.id = 'limparTudoOverlay';
-    warn.className = 'fixed inset-0 bg-black/50 flex items-center justify-center p-4';
+    warn.className = 'app-message-overlay fixed inset-0 bg-black/50 flex items-center justify-center p-4';
     warn.innerHTML = `
       <div class="max-w-sm w-full glass-surface backdrop-blur-xl rounded-2xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade">
         <div class="p-6 text-center">
