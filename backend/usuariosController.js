@@ -341,6 +341,7 @@ router.post('/modelos-permissoes', async (req, res) => {
 
     const permissoes = permissoesDoBody(req.body);
     await permissoesRepo.savePermissionsForModelo(api, modeloId, permissoes);
+    try { require('./permissionsController').limparCachePermissoes(); } catch (_) {}
 
     res.status(201).json({ modelo: mapModelo({ ...criado, id: modeloId, nome }, permissoes) });
   } catch (err) {
@@ -363,6 +364,10 @@ async function atualizarModelo(req, res) {
 
     const permissoes = permissoesDoBody(req.body);
     await permissoesRepo.savePermissionsForModelo(api, id, permissoes);
+
+    // Sem isto, quem já estava usando o app continuava com as permissões
+    // antigas por até 30s (cache de efetivas) mesmo após salvar o perfil.
+    try { require('./permissionsController').limparCachePermissoes(); } catch (_) {}
 
     res.json({ modelo: mapModelo({ id: Number(id), ...payload }, permissoes) });
   } catch (err) {

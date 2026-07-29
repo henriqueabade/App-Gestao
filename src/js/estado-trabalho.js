@@ -180,21 +180,75 @@
         return aplicados;
     }
 
-    function lerEstadoSalvo() {
+    const JANELA_MS = 30 * 60 * 1000;
+
+    /** Id do usuário logado agora nesta janela. */
+    function usuarioAtualId() {
         try {
-            const bruto = localStorage.getItem(CHAVE_ESTADO);
-            if (!bruto) return null;
-            const estado = JSON.parse(bruto);
-            // a janela de 30 min também é validada no processo principal
-            if (estado?.salvoEm && Date.now() - estado.salvoEm > 30 * 60 * 1000) {
-                localStorage.removeItem(CHAVE_ESTADO);
-                return null;
-            }
-            return estado;
-        } catch (err) {
-            localStorage.removeItem(CHAVE_ESTADO);
+            const bruto = localStorage.getItem('user');
+            return bruto ? (JSON.parse(bruto)?.id ?? null) : null;
+        } catch (_) {
             return null;
         }
+    }
+
+    /** Id do dono do trabalho guardado. */
+    function donoDoEstado(estado) {
+        try {
+            const bruto = estado?.storage?.user;
+            return bruto ? (JSON.parse(bruto)?.id ?? null) : null;
+        } catch (_) {
+            return null;
+        }
+    }
+
+    /**
+     * Lê o trabalho guardado.
+     *
+     * Antes dependia SÓ do repasse `disco -> localStorage` feito pela janela de
+     * login. Esse salto entre janelas tinha várias condições para dar certo
+     * (usuário ainda em localStorage, `savedState` ausente, ordem de execução)
+     * e, quando qualquer uma falhava, o estado era descartado em silêncio e
+     * nada voltava. Agora, se o repasse não trouxe nada, lemos direto do disco.
+     */
+    async function lerEstadoSalvo() {
+        let estado = null;
+
+        try {
+            const bruto = localStorage.getItem(CHAVE_ESTADO);
+            if (bruto) estado = JSON.parse(bruto);
+        } catch (err) {
+            console.error('[estado] savedState ilegível:', err);
+        }
+        localStorage.removeItem(CHAVE_ESTADO);   // uso único, sempre
+
+        if (!estado && window.electronAPI?.loadState) {
+            try {
+                estado = await window.electronAPI.loadState();
+            } catch (err) {
+                console.error('[estado] falha ao ler o estado do disco:', err);
+            }
+        }
+
+        // o arquivo é de uso único, tenha sido aproveitado ou não
+        try { await window.electronAPI?.clearState?.(); } catch (_) { /* ignora */ }
+
+        if (!estado) return null;
+
+        if (estado.salvoEm && Date.now() - estado.salvoEm > JANELA_MS) {
+            console.info('[estado] trabalho guardado expirou (mais de 30 min).');
+            return null;
+        }
+
+        // Só restauramos o trabalho de QUEM está logado agora.
+        const dono = donoDoEstado(estado);
+        const atual = usuarioAtualId();
+        if (dono !== null && atual !== null && String(dono) !== String(atual)) {
+            console.info('[estado] trabalho guardado pertence a outro usuário; descartado.');
+            return null;
+        }
+
+        return estado;
     }
 
     /**
@@ -202,9 +256,8 @@
      * reabre os modais que estavam abertos — na mesma ordem, com os itens.
      */
     window.restaurarTrabalhoInterrompido = async function restaurarTrabalhoInterrompido(irParaPagina) {
-        const estado = lerEstadoSalvo();
+        const estado = await lerEstadoSalvo();
         if (!estado) return false;
-        localStorage.removeItem(CHAVE_ESTADO);   // uso único
 
         try {
             if (estado.sectionId && typeof irParaPagina === 'function') {

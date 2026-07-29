@@ -208,9 +208,34 @@ async function loadPermissionsForUsuario(api, usuario) {
   if (isSupAdmin(usuario)) {
     return fullPermissions();
   }
-  const modeloId = usuario.modelo_permissoes_id ?? usuario.modeloPermissoesId ?? null;
+  let modeloId = usuario.modelo_permissoes_id ?? usuario.modeloPermissoesId ?? null;
+
+  // A coluna `modelo_permissoes_id` está NULL em todos os usuários: o cadastro
+  // grava só o NOME do perfil em `usuarios.perfil`. Sem esta busca por nome,
+  // todo usuário que não é Sup Admin recebia "tudo negado" e não enxergava
+  // módulo nenhum — mesmo com o perfil tendo módulos ativos.
+  if (!modeloId) {
+    modeloId = await resolverModeloPeloNome(api, usuario.perfil);
+  }
+
   if (!modeloId) return emptyPermissions();
   return loadPermissionsForModelo(api, modeloId);
+}
+
+/** Acha o id do perfil a partir do nome gravado em `usuarios.perfil`. */
+async function resolverModeloPeloNome(api, perfilBruto) {
+  const nome = String(perfilBruto || '').trim();
+  if (!nome) return null;
+  try {
+    const linhas = await api.get('/api/modelos_permissoes');
+    if (!Array.isArray(linhas)) return null;
+    const alvo = nome.toLowerCase();
+    const achado = linhas.find(l => String(l?.nome || '').trim().toLowerCase() === alvo);
+    return achado?.id ?? null;
+  } catch (err) {
+    console.error('Falha ao resolver o perfil pelo nome:', err?.message || err);
+    return null;
+  }
 }
 
 /** Verifica uma chave de permissão ("mp.view" / "col_mp_codigo") na estrutura. */

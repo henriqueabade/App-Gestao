@@ -326,6 +326,10 @@ if (intro) {
           ? JSON.parse(saved.storage.user)
           : null;
         const current = parsedStoredUser;
+        // Repassamos quando dá para confirmar o dono. NÃO apagamos mais o
+        // arquivo do disco: o menu lê de lá como plano B e aplica o mesmo
+        // porteiro. Antes, qualquer falha aqui destruía o trabalho em silêncio
+        // e nada era restaurado.
         if (
           savedUser &&
           current &&
@@ -334,14 +338,9 @@ if (intro) {
           saved.sectionId !== 'dashboard'
         ) {
           localStorage.setItem('savedState', JSON.stringify(saved));
-          await window.electronAPI.clearState();
-        } else {
-          await window.electronAPI.clearState();
-          localStorage.removeItem('savedState');
         }
       } catch (err) {
-        await window.electronAPI.clearState();
-        localStorage.removeItem('savedState');
+        console.error('Falha ao repassar o trabalho guardado.', err);
       }
     }
 
@@ -838,6 +837,8 @@ if (intro) {
             const savedUser = diskState.storage && diskState.storage.user
               ? JSON.parse(diskState.storage.user)
               : null;
+            // Mesma regra do bloco de auto-login: repassa quando confirma o
+            // dono e deixa o arquivo no disco para o menu ler como plano B.
             if (
               savedUser &&
               savedUser.id === result.user.id &&
@@ -845,17 +846,10 @@ if (intro) {
               diskState.sectionId !== 'dashboard'
             ) {
               localStorage.setItem('savedState', JSON.stringify(diskState));
-              await window.electronAPI.clearState();
-            } else {
-              await window.electronAPI.clearState();
-              localStorage.removeItem('savedState');
             }
           } catch (err) {
-            await window.electronAPI.clearState();
-            localStorage.removeItem('savedState');
+            console.error('Falha ao repassar o trabalho guardado.', err);
           }
-        } else {
-          localStorage.removeItem('savedState');
         }
       }
 
