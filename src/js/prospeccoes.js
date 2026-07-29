@@ -42,22 +42,13 @@ function openModalWithSpinner(htmlPath, scriptPath, overlayId) {
     spinner.id = 'modalLoading';
     spinner.className = 'fixed inset-0 bg-black/50 flex items-center justify-center';
     spinner.style.zIndex = 'var(--z-dialog)';
-    spinner.innerHTML = '<div class="w-16 h-16 border-4 border-[#b6a03e] border-t-transparent rounded-full animate-spin"></div>';
+    spinner.innerHTML = '<div class="app-loading-indicator app-loading-indicator--compact" aria-hidden="true"><span class="module-loading-orbit"></span><span class="module-loading-core"><img src="../assets/Logo.ico" alt=""></span></div>';
     document.body.appendChild(spinner);
-    const start = Date.now();
     function handleLoaded(e) {
         if (e.detail !== overlayId) return;
         const overlay = document.getElementById(`${overlayId}Overlay`);
-        const elapsed = Date.now() - start;
-        const show = () => {
-            spinner.remove();
-            overlay.classList.remove('hidden');
-        };
-        if (elapsed < 3000) {
-            setTimeout(show, Math.max(0, 2000 - elapsed));
-        } else {
-            show();
-        }
+        spinner.remove();
+        overlay?.classList.remove('hidden');
         window.removeEventListener('modalSpinnerLoaded', handleLoaded);
     }
     window.addEventListener('modalSpinnerLoaded', handleLoaded);

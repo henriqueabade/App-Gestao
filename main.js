@@ -240,7 +240,8 @@ let publishState = {
   latestPublishedVersion: localAppVersion,
   localVersion: localAppVersion,
   lastPublishedCommit: null,
-  pendingChanges: []
+  pendingChanges: [],
+  progress: initialPublishing ? 1 : 0
 };
 
 let gitUnavailable = false;
@@ -944,6 +945,13 @@ async function updatePublishState(partial = {}) {
 
   if (hasOwn('publishing')) {
     publishState.publishing = Boolean(partial.publishing);
+  }
+
+  if (hasOwn('progress')) {
+    const progress = Number(partial.progress);
+    publishState.progress = Number.isFinite(progress)
+      ? Math.max(0, Math.min(100, Math.round(progress)))
+      : publishState.progress;
   }
 
   if (hasOwn('latestPublishedVersion')) {
@@ -3309,7 +3317,7 @@ ipcMain.handle('publish-update', async (_event, payload) => {
   const previousLocalVersion = publishState.localVersion;
   const previousPublishedVersion = publishState.latestPublishedVersion;
 
-  const startState = await updatePublishState({ publishing: true, canPublish: false });
+  const startState = await updatePublishState({ publishing: true, canPublish: false, progress: 1 });
   const startMessage = `Iniciando publicação da versão ${sanitizedVersion}...`;
   broadcastPublishEvent('publish-progress', {
     ...startState,
@@ -3319,7 +3327,14 @@ ipcMain.handle('publish-update', async (_event, payload) => {
   recordPublishAudit('publish-start', { version: sanitizedVersion });
 
   const progressHandler = info => {
-    if (!info || !info.message) return;
+    if (!info) return;
+    const publishProgress = Number(info.progress);
+    if (Number.isFinite(publishProgress)) {
+      publishState.progress = Math.max(
+        publishState.progress || 0,
+        Math.min(99, Math.round(publishProgress))
+      );
+    }
     broadcastPublishEvent('publish-progress', {
       ...publishState,
       message: info.message,
@@ -3358,7 +3373,8 @@ ipcMain.handle('publish-update', async (_event, payload) => {
       canPublish: true,
       latestPublishedVersion: sanitizedVersion,
       localVersion: sanitizedVersion,
-      lastPublishedCommit: nextHeadCommit
+      lastPublishedCommit: nextHeadCommit,
+      progress: 100
     });
     broadcastPublishEvent('publish-done', { ...successState, targetVersion: sanitizedVersion });
     recordPublishAudit('publish-success', { version: sanitizedVersion });

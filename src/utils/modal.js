@@ -282,7 +282,7 @@ function createModalLoadingOverlay() {
   const spinner = document.createElement('div');
   spinner.id = 'modalLoading';
   spinner.className = 'fixed inset-0 z-[2000] bg-black/50 flex items-center justify-center';
-  spinner.innerHTML = '<div class="w-16 h-16 border-4 border-[#b6a03e] border-t-transparent rounded-full animate-spin"></div>';
+  spinner.innerHTML = '<div class="app-loading-indicator app-loading-indicator--compact" aria-hidden="true"><span class="module-loading-orbit"></span><span class="module-loading-core"><img src="../assets/Logo.ico" alt=""></span></div>';
   return spinner;
 }
 

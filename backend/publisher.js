@@ -90,10 +90,31 @@ function notifyProgress(text, stream, callback) {
   }
 }
 
+function createPublishProgressTracker(callback) {
+  let progress = 1;
+  const report = (next, message) => {
+    progress = Math.max(progress, Math.min(99, Math.round(next)));
+    if (typeof callback === 'function') callback({ message, progress });
+  };
+  const consume = message => {
+    const text = String(message || '').toLowerCase();
+    const explicit = text.match(/(?:progress|upload(?:ing)?)[^\d]{0,24}(\d{1,3}(?:\.\d+)?)\s*%/i);
+    if (explicit) {
+      report(55 + Math.min(100, Number(explicit[1])) * 0.43, message);
+    } else if (text.includes('packaging')) report(20, message);
+    else if (text.includes('building block map')) report(48, message);
+    else if (text.includes('building target')) report(38, message);
+    else if (text.includes('publish') || text.includes('upload')) report(55, message);
+    else report(Math.min(progress + 1, 18), message);
+  };
+  return { report, consume, getProgress: () => progress };
+}
+
 async function runPublishPipeline(options = {}) {
   if (currentProcess) throw new Error('Já existe uma publicação em andamento.');
 
   const { user, onProgress, version } = options;
+  const tracker = createPublishProgressTracker(onProgress);
   const requester = user ? `${user.nome || user.email || user.id || 'usuário desconhecido'}` : 'usuário desconhecido';
   const versionSuffix = version ? ` (versão ${version})` : '';
   appendLog(`Publicação iniciada por ${requester}${versionSuffix}`);
@@ -105,6 +126,7 @@ async function runPublishPipeline(options = {}) {
     safeEmit('error', validationError);
     throw validationError;
   }
+  tracker.report(5, 'Ambiente de publicação validado.');
 
   // Pré-checagem do token no GitHub: falha rápido com mensagem clara, sem
   // esperar todo o empacotamento para só então descobrir credencial inválida.
@@ -114,6 +136,7 @@ async function runPublishPipeline(options = {}) {
     safeEmit('error', tokenError);
     throw tokenError;
   }
+  tracker.report(10, 'Acesso ao repositório validado.');
 
   return new Promise((resolve, reject) => {
     // Acumula a saída recente para diagnosticar a causa em caso de falha.
@@ -146,11 +169,13 @@ async function runPublishPipeline(options = {}) {
       });
 
       currentProcess = child;
+      tracker.report(15, 'Preparando arquivos da atualização.');
 
       child.stdout.on('data', data => {
         const text = data.toString();
         appendOutput(text);
         notifyProgress(text, 'stdout', onProgress);
+        tracker.consume(text);
         appendLog(`stdout: ${text.trimEnd()}`);
       });
 
@@ -158,6 +183,7 @@ async function runPublishPipeline(options = {}) {
         const text = data.toString();
         appendOutput(text);
         notifyProgress(text, 'stderr', onProgress);
+        tracker.consume(text);
         appendLog(`stderr: ${text.trimEnd()}`);
       });
 
@@ -271,6 +297,7 @@ function isPublishing() {
 module.exports = {
   runPublishPipeline,
   isPublishing,
+  createPublishProgressTracker,
   on: emitter.on.bind(emitter),
   once: emitter.once.bind(emitter),
   off: emitter.off ? emitter.off.bind(emitter) : emitter.removeListener.bind(emitter)

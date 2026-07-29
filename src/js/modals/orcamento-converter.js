@@ -66,8 +66,6 @@
   const insumosReloadBtn = document.querySelector('button[data-action="insumos-reload"]');
   const insumosTituloPeca = document.getElementById('insumosTituloPeca');
 
-  const TABLE_SPINNER_MIN_DURATION = 1000;
-
   function getTableColumnCount(tbody) {
     if (!tbody) return 1;
     const rows = Array.from(tbody.querySelectorAll('tr'));
@@ -114,7 +112,10 @@
       cell.colSpan = Math.max(1, columnCount);
       cell.innerHTML = `
         <div class="table-loading-inline">
-          <span class="table-loading-spinner" aria-hidden="true"></span>
+          <span class="app-loading-indicator app-loading-indicator--inline" aria-hidden="true">
+            <span class="module-loading-orbit"></span>
+            <span class="module-loading-core"><img src="../assets/Logo.ico" alt=""></span>
+          </span>
           <span class="table-loading-text"></span>
         </div>
       `;
@@ -145,15 +146,11 @@
     tbody.dataset.tableLoadingCount = String(tbodyCount + 1);
     tbody.dataset.tableLoading = 'true';
     tbody.setAttribute('aria-busy', 'true');
-    const start = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
     let closed = false;
     return () => {
       if (closed) return;
       closed = true;
-      const end = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
-      const elapsed = Math.max(0, end - start);
-      const delay = Math.max(0, TABLE_SPINNER_MIN_DURATION - elapsed);
-      setTimeout(() => {
+      {
         const containerCurrent = Number(container.dataset.tableLoadingCount || '0');
         const containerNext = Math.max(0, containerCurrent - 1);
         container.dataset.tableLoadingCount = String(containerNext);
@@ -178,7 +175,7 @@
           delete placeholderRow.dataset.loadingCount;
           if (placeholderRow.isConnected) placeholderRow.remove();
         }
-      }, delay);
+      }
     };
   }
 
@@ -1335,7 +1332,6 @@ async function computeInsumosAndRender(options = {}) {
     }
   function placePopover(trigger){ const pop=document.getElementById('piece-popover'); const r=trigger.getBoundingClientRect(); const { width: pw, height: ph } = pop.getBoundingClientRect(); const vw=window.innerWidth, vh=window.innerHeight; let top,left,arrowClass=''; const above=r.top, below=vh-r.bottom, leftSpace=r.left, rightSpace=vw-r.right; if (rightSpace>=pw+20){ top=Math.max(16, Math.min(r.top + (r.height/2) - ph/2, vh-ph-16)); left=r.right+8; arrowClass='left-[-6px] top-1/2 transform -translate-y-1/2 rotate-[135deg]'; } else if (leftSpace>=pw+20){ top=Math.max(16, Math.min(r.top + (r.height/2) - ph/2, vh-ph-16)); left=r.left-pw-8; arrowClass='right-[-6px] top-1/2 transform -translate-y-1/2 rotate-[315deg]'; } else if (below>=ph){ top=r.bottom+8; left=Math.max(16, Math.min(r.left + (r.width/2) - pw/2, vw-pw-16)); arrowClass='top-[-6px] left-1/2 transform -translate-x-1/2 rotate-[225deg]'; } else if (above>=ph){ top=r.top-ph-8; left=Math.max(16, Math.min(r.left + (r.width/2) - pw/2, vw-pw-16)); arrowClass='bottom-[-6px] left-1/2 transform -translate-x-1/2'; } else { top=Math.max(16, (vh-ph)/2); left=Math.max(16, (vw-pw)/2); arrowClass='hidden'; } pop.style.top=`${top}px`; pop.style.left=`${left}px`; const a=pop.querySelector('.popover-arrow'); if(a){ a.className=`popover-arrow absolute w-3 h-3 bg-white/10 border-l border-t border-white/20 ${arrowClass}`; } }
 })();
-
 
 
 

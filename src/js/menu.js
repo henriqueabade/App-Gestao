@@ -294,7 +294,10 @@ const AppUpdates = (() => {
             summary: document.getElementById('supAdminUpdatesSummary'),
             publish: document.getElementById('supAdminPublishAction'),
             publishIcon: document.getElementById('supAdminPublishIcon'),
-            publishLabel: document.getElementById('supAdminPublishLabel')
+            publishLabel: document.getElementById('supAdminPublishLabel'),
+            progress: document.getElementById('supAdminPublishProgress'),
+            progressLiquid: document.getElementById('supAdminPublishLiquid'),
+            progressPercent: document.getElementById('supAdminPublishPercent')
         },
         user: {
             container: document.getElementById('userUpdateControl'),
@@ -1400,6 +1403,17 @@ const AppUpdates = (() => {
 
         sup.label.textContent = 'Atualizações';
 
+        const progress = Math.max(0, Math.min(100, Number(state.publishState?.progress) || 0));
+        sup.trigger.style.setProperty('--publish-progress', `${progress}%`);
+        if (sup.progressPercent) sup.progressPercent.textContent = `${Math.round(progress)}%`;
+        if (sup.progress) {
+            sup.progress.setAttribute('aria-hidden', isPublishing ? 'false' : 'true');
+        }
+        sup.trigger.setAttribute(
+            'aria-label',
+            isPublishing ? `Publicando atualização: ${Math.round(progress)}%` : 'Atualizações'
+        );
+
         if (sup.panel) {
             const showPanel = state.supAdmin.panelOpen && mode === 'available';
             sup.panel.classList.toggle('hidden', !showPanel);
@@ -1763,7 +1777,7 @@ const AppUpdates = (() => {
         overlay.style.zIndex = 'var(--z-dialog)';
         overlay.setAttribute('role', 'alert');
         overlay.innerHTML = `
-            <div class="w-16 h-16 border-4 border-[#60a5fa] border-t-transparent rounded-full animate-spin"></div>
+            <div class="app-loading-indicator app-loading-indicator--compact" aria-hidden="true"><span class="module-loading-orbit"></span><span class="module-loading-core"><img src="../assets/Logo.ico" alt=""></span></div>
             <p class="text-sm text-white font-medium" data-role="message">${escapeHtml(message || 'Processando atualização...')}</p>
         `;
         document.body.appendChild(overlay);
@@ -3069,14 +3083,11 @@ async function loadPage(page, options = {}) {
         if (usesLoadingMask && ipcLoadToken && window.electronAPI?.waitForModuleLoading) {
             const result = await window.electronAPI.waitForModuleLoading(ipcLoadToken);
             if (result?.timedOut) console.warn(`Tempo limite ao aguardar os dados de ${page}.`);
-        } else if (usesLoadingMask) {
-            await new Promise(resolve => setTimeout(resolve, 280));
         }
 
         if (loadId !== moduleLoadSequence) return;
-        mask?.classList.add('module-loading-mask--leaving');
         module.classList.remove('module-loading-content');
-        if (mask) setTimeout(() => mask.remove(), 220);
+        mask?.remove();
         content.classList.remove('is-module-loading');
     } catch (err) {
         if (loadId !== moduleLoadSequence) return;

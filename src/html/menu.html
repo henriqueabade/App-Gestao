@@ -49,6 +49,11 @@
                             >
                                 <i id="supAdminUpdatesIcon" class="fas fa-cloud-upload-alt sup-admin-updates-icon" aria-hidden="true"></i>
                                 <span id="supAdminUpdatesLabel">Atualizações</span>
+                                <span id="supAdminPublishProgress" class="sup-admin-publish-progress" aria-hidden="true">
+                                    <span id="supAdminPublishLiquid" class="sup-admin-publish-liquid"></span>
+                                    <span id="supAdminPublishPercent" class="sup-admin-publish-percent">0%</span>
+                                    <span class="sup-admin-publish-progress-label">Publicando</span>
+                                </span>
                             </button>
                             <div
                                 id="supAdminUpdatesPanel"
@@ -290,7 +295,7 @@
         <main id="mainContent" class="transition-all duration-300 ml-16 mt-14 p-6">
          <div id="content" class="scroll-wrapper">
             <div class="modulo-container flex flex-col items-center justify-center py-24 text-center space-y-6">
-                <div class="w-12 h-12 border-4 border-white/10 border-t-[var(--color-primary)] rounded-full animate-spin"></div>
+                <div class="app-loading-indicator" aria-hidden="true"><span class="module-loading-orbit"></span><span class="module-loading-core"><img src="../assets/Logo.ico" alt=""></span></div>
                 <div>
                     <p class="text-lg font-semibold text-white">Carregando Dashboard</p>
                     <p class="text-sm" style="color: var(--color-violet)">Preparando visão geral do Santíssimo Decor...</p>
