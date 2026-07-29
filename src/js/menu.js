@@ -2929,7 +2929,7 @@ function escapeModuleLoadingText(value) {
         .replaceAll("'", '&#039;');
 }
 
-function createModuleLoadingMask(page, title, description = 'Preparando dados, filtros e informações...') {
+function createModuleLoadingMask(page, title, description = 'Preparando dados, filtros e informações...', options = {}) {
     const mask = document.createElement('div');
     mask.className = 'module-loading-mask';
     mask.dataset.loadingPage = page;
@@ -2938,14 +2938,16 @@ function createModuleLoadingMask(page, title, description = 'Preparando dados, f
     mask.setAttribute('aria-label', `Carregando ${title}`);
     const safeTitle = escapeModuleLoadingText(title);
     const safeDescription = escapeModuleLoadingText(description);
+    const keepsModuleIntroduction = Boolean(options.keepsModuleIntroduction);
+    if (keepsModuleIntroduction) mask.classList.add('module-loading-mask--module-mounted');
     mask.innerHTML = `
-        <div class="module-loading-heading">
+        <div class="module-loading-heading"${keepsModuleIntroduction ? ' aria-hidden="true"' : ''}>
             <h1>${safeTitle}</h1>
             <p>${safeDescription}</p>
         </div>
         <div class="module-loading-indicator" aria-hidden="true">
             <span class="module-loading-orbit"></span>
-            <span class="module-loading-core"><i class="fas fa-gem"></i></span>
+            <span class="module-loading-core"><img src="../assets/Logo.ico" alt=""></span>
         </div>
         <strong>Carregando</strong>
         <span class="module-loading-caption">Aguarde enquanto deixamos tudo pronto para você.</span>
@@ -2960,6 +2962,19 @@ function readModuleIntroduction(module, fallbackTitle) {
         title: heading?.textContent?.trim() || fallbackTitle,
         description: description?.textContent?.trim() || 'Preparando dados, filtros e informações...'
     };
+}
+
+function keepModuleIntroductionVisible(module) {
+    const heading = module?.querySelector('h1');
+    const introduction = heading?.parentElement;
+    if (!introduction) return;
+
+    introduction.classList.add('module-loading-introduction');
+    const row = introduction.parentElement;
+    row?.classList.add('module-introduction-row');
+    Array.from(row?.children || []).forEach(element => {
+        if (element !== introduction) element.classList.add('module-enter-after-loading');
+    });
 }
 
 async function loadPage(page, options = {}) {
@@ -3009,9 +3024,14 @@ async function loadPage(page, options = {}) {
         if (!module) throw new Error('Conteúdo do módulo não encontrado');
 
         module.dataset.page = page;
-        if (usesLoadingMask) module.classList.add('module-loading-content');
+        if (usesLoadingMask) {
+            module.classList.add('module-loading-content');
+            keepModuleIntroductionVisible(module);
+        }
         const introduction = readModuleIntroduction(module, moduleTitle);
-        const mask = usesLoadingMask ? createModuleLoadingMask(page, introduction.title, introduction.description) : null;
+        const mask = usesLoadingMask
+            ? createModuleLoadingMask(page, introduction.title, introduction.description, { keepsModuleIntroduction: true })
+            : null;
         content.replaceChildren(module, ...(mask ? [mask] : []));
 
         const style = document.createElement('link');
@@ -3056,8 +3076,6 @@ async function loadPage(page, options = {}) {
         if (loadId !== moduleLoadSequence) return;
         mask?.classList.add('module-loading-mask--leaving');
         module.classList.remove('module-loading-content');
-        module.classList.add('module-enter');
-        module.addEventListener('animationend', () => module.classList.remove('module-enter'), { once: true });
         if (mask) setTimeout(() => mask.remove(), 220);
         content.classList.remove('is-module-loading');
     } catch (err) {

@@ -1231,6 +1231,20 @@ header.glass-surface {
     pointer-events: none !important;
 }
 
+.module-loading-content .module-loading-introduction {
+    visibility: visible;
+}
+
+.module-loading-content .animate-fade-in-up,
+.module-loading-content .module-enter-after-loading {
+    animation-play-state: paused;
+}
+
+.module-introduction-row.animate-fade-in-up {
+    opacity: 1;
+    animation: none;
+}
+
 .module-loading-mask {
     position: absolute;
     inset: 0;
@@ -1247,8 +1261,20 @@ header.glass-surface {
     transition: opacity 180ms ease, transform 180ms ease;
 }
 
+.module-loading-mask--module-mounted {
+    background: transparent;
+}
+
+.module-loading-mask--module-mounted .module-loading-heading {
+    display: none;
+}
+
 [data-menu-theme="light"] .module-loading-mask {
     background: linear-gradient(145deg, rgba(249, 250, 251, 0.99), rgba(229, 231, 235, 0.99));
+}
+
+[data-menu-theme="light"] .module-loading-mask--module-mounted {
+    background: transparent;
 }
 
 .module-loading-heading {
@@ -1305,6 +1331,16 @@ header.glass-surface {
     box-shadow: inset 0 0 18px rgba(182, 160, 62, 0.12);
 }
 
+.module-loading-core img {
+    width: 3rem;
+    height: 3rem;
+    object-fit: contain;
+}
+
+.module-enter-after-loading {
+    animation: fadeInUp 0.5s ease-out both;
+}
+
 .module-loading-mask strong {
     color: var(--menu-text-strong);
     font-size: 1.15rem;
@@ -1329,4 +1365,5 @@ header.glass-surface {
 @media (prefers-reduced-motion: reduce) {
     .module-loading-orbit { animation-duration: 1.8s; }
     .module-loading-mask { transition: none; }
+    .module-enter-after-loading { animation: none; }
 }
