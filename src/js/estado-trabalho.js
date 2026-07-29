@@ -62,21 +62,85 @@
         return out;
     }
 
-    // Os módulos informam como reabrir cada modal (htmlPath/scriptPath).
-    // Sem isso o modal nunca reaparecia e os campos dele se perdiam.
-    let ultimoModal = null;
+    // ------------------------------------------------------------------
+    // Registro de modais abertos (PILHA) e do conteúdo dinâmico deles.
+    //
+    // Dois problemas motivam este registro:
+    //  1. Modais empilhados: guardávamos só o primeiro overlay visível, então
+    //     "Registrar itens no processo" aberto sobre "Novo Produto" perdia um
+    //     dos dois.
+    //  2. Itens adicionados: cada modal guarda a própria lista numa variável
+    //     interna (ex.: `let itens = []` dentro do IIFE). Nenhuma varredura de
+    //     DOM consegue repovoar isso — o modal precisa dizer como salvar e como
+    //     repor. Por isso existe `registrarConteudo`.
+    // ------------------------------------------------------------------
+    const aberturas = new Map();    // overlayId -> { htmlPath, scriptPath, overlayId }
+    const ordemAbertura = [];       // overlayId na ordem em que foram abertos
+    const conteudos = new Map();    // overlayId -> { capturar, restaurar }
+
+    function idDoOverlay(info) {
+        if (!info) return null;
+        const bruto = String(info.overlayId || '');
+        return bruto.endsWith('Overlay') ? bruto : `${bruto}Overlay`;
+    }
+
     window.__registrarModalAberto = function (info) {
-        if (info?.overlayId) ultimoModal = { ...info };
+        const id = idDoOverlay(info);
+        if (!id) return;
+        aberturas.set(id, { ...info, overlayId: info.overlayId });
+        const jaTinha = ordemAbertura.indexOf(id);
+        if (jaTinha >= 0) ordemAbertura.splice(jaTinha, 1);
+        ordemAbertura.push(id);
     };
 
-    /** Modal aberto no momento (se houver). */
-    function modalAberto() {
-        const overlays = Array.from(document.querySelectorAll('[id$="Overlay"]'));
-        const visivel = overlays.find(o => o && !o.classList.contains('hidden'));
-        if (!visivel) return null;
-        const abertura = ultimoModal && ultimoModal.overlayId
-            && `${ultimoModal.overlayId}Overlay` === visivel.id ? ultimoModal : null;
-        return { overlayId: visivel.id, abertura, campos: coletarCampos(visivel) };
+    /**
+     * Um modal declara como salvar e repor o próprio conteúdo dinâmico.
+     * Chame ao abrir o modal:
+     *   window.EstadoTrabalho.registrarConteudo('proximaEtapa', {
+     *     capturar: () => ({ itens }),
+     *     restaurar: (dados) => { itens = dados.itens || []; render(); }
+     *   });
+     */
+    function registrarConteudo(overlayId, manipuladores) {
+        const id = idDoOverlay({ overlayId });
+        if (!id || !manipuladores) return;
+        conteudos.set(id, manipuladores);
+    }
+
+    function esquecerConteudo(overlayId) {
+        const id = idDoOverlay({ overlayId });
+        if (id) conteudos.delete(id);
+    }
+
+    /** Todos os overlays visíveis, na ordem em que foram abertos. */
+    function modaisAbertos() {
+        const visiveis = Array.from(document.querySelectorAll('[id$="Overlay"]'))
+            .filter(o => o && !o.classList.contains('hidden'));
+        if (!visiveis.length) return [];
+
+        const porOrdem = (a, b) => {
+            const ia = ordemAbertura.indexOf(a.id);
+            const ib = ordemAbertura.indexOf(b.id);
+            return (ia < 0 ? 999 : ia) - (ib < 0 ? 999 : ib);
+        };
+
+        return visiveis.sort(porOrdem).map(overlay => {
+            let conteudo = null;
+            const manipuladores = conteudos.get(overlay.id);
+            if (manipuladores && typeof manipuladores.capturar === 'function') {
+                try {
+                    conteudo = manipuladores.capturar();
+                } catch (err) {
+                    console.error(`[estado] falha ao capturar o conteúdo de ${overlay.id}:`, err);
+                }
+            }
+            return {
+                overlayId: overlay.id,
+                abertura: aberturas.get(overlay.id) || null,
+                campos: coletarCampos(overlay),
+                conteudo
+            };
+        });
     }
 
     /**
@@ -86,12 +150,15 @@
         try {
             const content = document.getElementById('content');
             const sectionId = content?.dataset?.activePage || 'dashboard';
+            const modais = modaisAbertos();
             return {
                 sectionId,
                 salvoEm: Date.now(),
                 storage: { user: localStorage.getItem('user') || null },
                 campos: coletarCampos(content),
-                modal: modalAberto()
+                modais,
+                // compatibilidade com estados salvos antes da pilha existir
+                modal: modais[0] || null
             };
         } catch (err) {
             console.error('[estado] falha ao coletar o estado atual:', err);
@@ -131,8 +198,8 @@
     }
 
     /**
-     * Restaura o trabalho interrompido: volta para o módulo e repõe os campos.
-     * Chamado pelo menu depois que a interface está pronta.
+     * Restaura o trabalho interrompido: volta para o módulo, repõe os campos e
+     * reabre os modais que estavam abertos — na mesma ordem, com os itens.
      */
     window.restaurarTrabalhoInterrompido = async function restaurarTrabalhoInterrompido(irParaPagina) {
         const estado = lerEstadoSalvo();
@@ -147,21 +214,18 @@
             const content = document.getElementById('content');
             const aplicados = restaurarCampos(content, estado.campos);
 
-            if (estado.modal?.overlayId) {
-                // Reabre o modal usando os caminhos registrados pelo módulo e,
-                // assim que ele aparecer, repõe os campos.
-                const ab = estado.modal.abertura;
-                if (ab && typeof window.openModalWithSpinner === 'function') {
-                    try {
-                        window.openModalWithSpinner(ab.htmlPath, ab.scriptPath, ab.overlayId);
-                    } catch (err) {
-                        console.error('[estado] falha ao reabrir o modal:', err);
-                    }
-                }
-                aguardarModal(estado.modal);
+            // aceita tanto o formato novo (pilha) quanto o antigo (um modal só)
+            const modais = Array.isArray(estado.modais) && estado.modais.length
+                ? estado.modais
+                : (estado.modal ? [estado.modal] : []);
+
+            for (let i = 0; i < modais.length; i += 1) {
+                // do segundo em diante preservamos o que já está aberto,
+                // senão a reabertura do modal de cima fecharia o de baixo
+                await reabrirERestaurar(modais[i], i > 0);
             }
 
-            if (aplicados > 0 || estado.modal) {
+            if (aplicados > 0 || modais.length) {
                 if (typeof window.showToast === 'function') {
                     window.showToast('Restauramos o que você estava preenchendo antes da desconexão.', 'info');
                 }
@@ -173,20 +237,77 @@
         }
     };
 
-    /** Espera o modal reaparecer (até 15s) para repor seus campos. */
-    function aguardarModal(modal) {
-        const limite = Date.now() + 20000;
-        const timer = setInterval(() => {
-            const overlay = document.getElementById(modal.overlayId);
-            const pronto = overlay && !overlay.classList.contains('hidden')
-                && overlay.querySelector(CAMPOS);
-            if (pronto) {
-                clearInterval(timer);
-                // pequeno atraso: o script do modal ainda pode estar populando
-                setTimeout(() => restaurarCampos(overlay, modal.campos), 250);
-            } else if (Date.now() > limite) {
-                clearInterval(timer);
+    /**
+     * Reabre um modal e repõe campos + conteúdo dinâmico.
+     * Aguarda de verdade antes de passar para o próximo: modais empilhados
+     * precisam ser reabertos em sequência, senão o de cima abriria antes do de
+     * baixo existir e a pilha sairia trocada.
+     */
+    async function reabrirERestaurar(modal, manterAbertos = false) {
+        if (!modal || !modal.overlayId) return;
+
+        const ab = modal.abertura;
+        if (ab && ab.htmlPath && window.Modal?.open) {
+            try {
+                await window.Modal.open(ab.htmlPath, ab.scriptPath, ab.overlayId, manterAbertos);
+            } catch (err) {
+                console.error('[estado] falha ao reabrir o modal:', err);
             }
-        }, 200);
+        } else if (ab && typeof window.openModalWithSpinner === 'function') {
+            try {
+                window.openModalWithSpinner(ab.htmlPath, ab.scriptPath, ab.overlayId);
+            } catch (err) {
+                console.error('[estado] falha ao reabrir o modal:', err);
+            }
+        }
+
+        const overlay = await aguardarModal(modal.overlayId);
+        if (!overlay) {
+            console.warn('[estado] o modal ' + modal.overlayId + ' nao reapareceu; conteudo nao restaurado.');
+            return;
+        }
+
+        // pequeno respiro: o script do modal ainda pode estar populando selects
+        await new Promise(r => setTimeout(r, 250));
+        restaurarCampos(overlay, modal.campos);
+
+        // itens/linhas que o modal guarda em estado interno
+        if (modal.conteudo) {
+            const manipuladores = conteudos.get(modal.overlayId);
+            if (manipuladores && typeof manipuladores.restaurar === 'function') {
+                try {
+                    await manipuladores.restaurar(modal.conteudo);
+                } catch (err) {
+                    console.error('[estado] falha ao repor o conteudo de ' + modal.overlayId + ':', err);
+                }
+            } else {
+                console.warn('[estado] ' + modal.overlayId + ' nao registrou "restaurar": os itens nao voltaram.');
+            }
+        }
     }
+
+    /** Espera o modal reaparecer (até 20s). Resolve com o overlay ou null. */
+    function aguardarModal(overlayId) {
+        return new Promise(resolve => {
+            const limite = Date.now() + 20000;
+            const timer = setInterval(() => {
+                const overlay = document.getElementById(overlayId);
+                const pronto = overlay && !overlay.classList.contains('hidden')
+                    && overlay.querySelector(CAMPOS);
+                if (pronto) {
+                    clearInterval(timer);
+                    resolve(overlay);
+                } else if (Date.now() > limite) {
+                    clearInterval(timer);
+                    resolve(null);
+                }
+            }, 200);
+        });
+    }
+
+    window.EstadoTrabalho = {
+        registrarConteudo,
+        esquecerConteudo,
+        registrarModalAberto: window.__registrarModalAberto
+    };
 })();

@@ -820,6 +820,13 @@
         elements.profileSelect.value = finalKey;
       }
       markProfileLoaded(finalKey);
+      // As permissões efetivas podem ter mudado para quem está usando o app
+      // agora: recarrega e reaplica na hora, sem exigir reinício.
+      try {
+        await window.Permissoes?.recarregar?.();
+      } catch (err) {
+        console.error('Falha ao reaplicar as permissões após salvar.', err);
+      }
       if (typeof window.showToast === 'function') {
         window.showToast('Perfil atualizado com sucesso.', 'success');
       }
@@ -938,6 +945,13 @@
       }
       markProfileLoaded(profile.key);
       fecharModalSalvar();
+      // As permissões efetivas podem ter mudado para quem está usando o app
+      // agora: recarrega e reaplica na hora, sem exigir reinício.
+      try {
+        await window.Permissoes?.recarregar?.();
+      } catch (err) {
+        console.error('Falha ao reaplicar as permissões após salvar.', err);
+      }
       if (typeof window.showToast === 'function') {
         window.showToast('Novo perfil salvo com sucesso.', 'success');
       }

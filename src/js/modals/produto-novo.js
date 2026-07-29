@@ -605,6 +605,23 @@
     }
   });
 
+  // Preservação do trabalho: `itens` é estado interno deste modal — nenhuma
+  // varredura de DOM consegue repô-lo depois de uma desconexão. Declaramos
+  // explicitamente como salvar e como recompor a lista de insumos/processos.
+  window.EstadoTrabalho?.registrarConteudo?.('novoProduto', {
+    capturar: () => ({
+      // row/totalEl são nós do DOM e não podem ir para o JSON
+      itens: itens.map(({ row, totalEl, ...dados }) => dados)
+    }),
+    restaurar: (dados) => {
+      const guardados = Array.isArray(dados?.itens) ? dados.itens : [];
+      if (!guardados.length) return;
+      itens = guardados.map(d => ({ ...d }));
+      renderItens();
+      updateTotals();
+    }
+  });
+
   const dataHoraEl = document.getElementById('dataHoraProduto');
   if(dataHoraEl){
     const now = new Date();

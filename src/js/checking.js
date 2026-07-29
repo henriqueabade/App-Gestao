@@ -43,8 +43,9 @@ function pulsarResultado(sucesso, cor) {
   else showFailure(cor || 'var(--color-red)');
   pulsoTimer = setTimeout(() => {
     pulsoTimer = null;
-    // volta a girar, conservando a cor do último resultado
-    showSpinner(sucesso ? 'var(--color-green)' : (cor || 'var(--color-red)'));
+    // Girando é SEMPRE azul. Verde pertence só ao check e vermelho só ao X —
+    // um giro colorido confundia o estado de repouso com o resultado.
+    showSpinner();
   }, PULSO_RESULTADO_MS);
 }
 

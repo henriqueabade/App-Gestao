@@ -286,6 +286,27 @@
   overlay.addEventListener('click',(e)=>{ if(e.target===overlay) closeOverlay(); });
   if(voltarBtn) voltarBtn.addEventListener('click', closeOverlay);
 
+  // Preservação do trabalho: ver comentário equivalente em
+  // produto-proxima-etapa-novo.js — `itens` é estado interno do modal.
+  window.EstadoTrabalho?.registrarConteudo?.('proximaEtapa', {
+    capturar: () => ({
+      titulo,
+      itens: itens.map(({ row, totalEl, ...dados }) => dados)
+    }),
+    restaurar: (dados) => {
+      const guardados = Array.isArray(dados?.itens) ? dados.itens : [];
+      if (!guardados.length) return;
+      itens = [];
+      if (tabelaBody) tabelaBody.innerHTML = '';
+      guardados.forEach(dado => {
+        const item = { ...dado };
+        itens.push(item);
+        renderItem(item);
+      });
+      updateTotal();
+    }
+  });
+
   // carga filtrada
   (async ()=>{
     try{

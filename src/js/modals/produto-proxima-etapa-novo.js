@@ -286,6 +286,31 @@
   overlay.addEventListener('click',(e)=>{ if(e.target===overlay) closeOverlay(); });
   if(voltarBtn) voltarBtn.addEventListener('click', closeOverlay);
 
+  // ------------------------------------------------------------------
+  // Preservação do trabalho: `itens` vive só aqui dentro, então nenhuma
+  // varredura genérica de DOM consegue repô-lo depois de uma desconexão.
+  // Declaramos explicitamente como salvar e como recompor a lista.
+  // ------------------------------------------------------------------
+  window.EstadoTrabalho?.registrarConteudo?.('proximaEtapa', {
+    capturar: () => ({
+      titulo,
+      // `row`/`totalEl` são nós do DOM: não podem ir para o JSON
+      itens: itens.map(({ row, totalEl, ...dados }) => dados)
+    }),
+    restaurar: (dados) => {
+      const guardados = Array.isArray(dados?.itens) ? dados.itens : [];
+      if (!guardados.length) return;
+      itens = [];
+      if (tabelaBody) tabelaBody.innerHTML = '';
+      guardados.forEach(dado => {
+        const item = { ...dado };
+        itens.push(item);
+        renderItem(item);
+      });
+      updateTotal();
+    }
+  });
+
   // carga filtrada
   (async ()=>{
     try{

@@ -459,4 +459,18 @@
       }
     });
   }
+  // Preservação do trabalho: `contatos` é estado interno deste modal — os
+  // contatos adicionados/editados não são <input> na tela, então só voltam da
+  // desconexão se o próprio modal disser como salvá-los e repô-los.
+  window.EstadoTrabalho?.registrarConteudo?.('editarCliente', {
+    capturar: () => ({
+      contatos: contatos.map(({ row, ...dados }) => dados)
+    }),
+    restaurar: (dados) => {
+      const guardados = Array.isArray(dados?.contatos) ? dados.contatos : [];
+      if (!guardados.length) return;
+      contatos = guardados.map(d => ({ ...d }));
+      renderContatos();
+    }
+  });
 })();

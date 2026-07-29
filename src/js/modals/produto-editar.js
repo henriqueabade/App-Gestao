@@ -684,6 +684,21 @@
       });
     }
 
+    // Preservação do trabalho: `itens` é estado interno deste modal. Sem este
+    // registro, os insumos/processos adicionados se perdiam na desconexão —
+    // nem reabrindo o modal manualmente eles voltavam.
+    window.EstadoTrabalho?.registrarConteudo?.('editarProduto', {
+      capturar: () => ({
+        itens: itens.map(({ row, totalEl, ...dados }) => dados)
+      }),
+      restaurar: (dados) => {
+        const guardados = Array.isArray(dados?.itens) ? dados.itens : [];
+        if (!guardados.length) return;
+        renderItens(guardados);   // reatribui `itens` e redesenha
+        updateTotals();
+      }
+    });
+
     // API para comunicação com outros modais
     window.produtoEditarAPI = {
       adicionarProcessoItens(arr){

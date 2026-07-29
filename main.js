@@ -3401,6 +3401,17 @@ ipcMain.handle('login-usuario', async (event, dados) => {
       };
     }
 
+    // Sem rede a mensagem crua do fetch ("fetch failed") não diz nada ao
+    // usuário. Trocamos por uma orientação concreta.
+    if (reason === 'offline') {
+      return {
+        success: false,
+        code: 'offline',
+        reason: 'offline',
+        message: 'Sem conexão com a internet. Verifique sua rede e tente entrar novamente.'
+      };
+    }
+
     return {
       success: false,
       message: err.message,

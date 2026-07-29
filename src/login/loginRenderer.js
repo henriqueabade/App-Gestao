@@ -353,18 +353,41 @@ if (intro) {
     localStorage.removeItem('user');
     localStorage.removeItem('rememberUser');
   }
-  if (localStorage.getItem('pinChanged')) {
-    localStorage.removeItem('pinChanged');
-    showPinError();
+  /**
+   * Avisos deixados pelo dashboard antes de cair para o login.
+   *
+   * Precisa ser reavaliado toda vez que a janela é EXIBIDA, não só no
+   * DOMContentLoaded: a janela de login costuma já existir (criada escondida no
+   * início do app), então o carregamento acontece muito antes da desconexão e
+   * os avisos gravados depois nunca eram lidos — a tela voltava calada.
+   */
+  function mostrarAvisosPendentes() {
+    if (localStorage.getItem('pinChanged')) {
+      localStorage.removeItem('pinChanged');
+      showPinError();
+    }
+    if (localStorage.getItem('offlineDisconnect')) {
+      localStorage.removeItem('offlineDisconnect');
+      showOfflineError();
+    }
+    if (localStorage.getItem('userRemoved')) {
+      localStorage.removeItem('userRemoved');
+      showUserRemovedError();
+    }
+    const admin = localStorage.getItem('adminDisabled');
+    if (admin) {
+      localStorage.removeItem('adminDisabled');
+      if (typeof showAdminDisabledError === 'function') {
+        showAdminDisabledError(admin === 'pending' ? 'pending' : 'disabled');
+      }
+    }
   }
-  if (localStorage.getItem('offlineDisconnect')) {
-    localStorage.removeItem('offlineDisconnect');
-    showOfflineError();
-  }
-  if (localStorage.getItem('userRemoved')) {
-    localStorage.removeItem('userRemoved');
-    showUserRemovedError();
-  }
+
+  mostrarAvisosPendentes();
+  window.__mostrarAvisosPendentes = mostrarAvisosPendentes;
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) mostrarAvisosPendentes();
+  });
   const setupParticlesCleanupInterval = () => {
     if (particlesCleanupIntervalId) {
       clearInterval(particlesCleanupIntervalId);
@@ -478,9 +501,16 @@ if (intro) {
     handleParticlesReady(existingParticles);
   } else {
     if (!particlesReady) {
-      particlesReady = true;
-      requestAnimationFrame(() => {
+      // NÃO marcamos `particlesReady` aqui. A janela de login nasce oculta
+      // (show:false) e uma janela oculta no Electron não compõe quadros: os
+      // requestAnimationFrame abaixo simplesmente não disparavam. Marcando o
+      // sinalizador antes da hora, a retentativa ficava bloqueada e o efeito
+      // nunca começava. Agora só marcamos depois de realmente carregar.
+      const iniciarParticulas = () => {
+        if (particlesReady) return;
+        particlesReady = true;
         requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
           // 1) Inicializa tsParticles com efeito twinkle e cores customizadas
           tsParticles.load("bg-network", {
             fpsLimit: 30,
@@ -518,8 +548,22 @@ if (intro) {
             },
             detectRetina: true
           }).then(handleParticlesReady);
+          });
         });
-      });
+      };
+
+      // Só inicia quando a página estiver de fato visível. Assim o carregamento
+      // pesado (300 partículas) não é disparado no exato instante em que a
+      // janela aparece — era daí o travamento rápido ao voltar para o login.
+      if (!document.hidden) {
+        iniciarParticulas();
+      } else {
+        document.addEventListener('visibilitychange', function aoAparecer() {
+          if (document.hidden) return;
+          document.removeEventListener('visibilitychange', aoAparecer);
+          iniciarParticulas();
+        });
+      }
     }
   }
   // === 3) Abas Login / Cadastro ===
@@ -892,6 +936,9 @@ if (intro) {
     window.electronAPI.onActivateTab((tab) => {
       if (tab === 'login' && loginTab) loginTab.click();
       else if (tab === 'register' && registerTab) registerTab.click();
+      // Sinal explícito de que a janela foi exibida: garante o aviso de
+      // desconexão mesmo se o visibilitychange não chegar.
+      window.__mostrarAvisosPendentes?.();
     });
   }
 

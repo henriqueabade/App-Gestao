@@ -112,8 +112,24 @@
   }
 
   /** Desabilita um elemento de ação mantendo-o visível. */
+  // Guarda o que o elemento era ANTES de ser bloqueado, para conseguir desfazer.
+  const bloqueados = new WeakMap();
+
   function desabilitar(el) {
     if (!el || el.dataset.permAplicado === 'negado') return;
+
+    const bloqueia = ev => {
+      ev.preventDefault();
+      ev.stopImmediatePropagation();
+      if (typeof global.showToast === 'function') global.showToast(MSG_BLOQUEIO, 'error');
+    };
+    bloqueados.set(el, {
+      titulo: el.getAttribute('title'),
+      opacidade: el.style.opacity,
+      cursor: el.style.cursor,
+      handler: bloqueia
+    });
+
     el.dataset.permAplicado = 'negado';
     el.classList.add('perm-negado');
     if ('disabled' in el) el.disabled = true;
@@ -122,31 +138,55 @@
     el.style.opacity = el.style.opacity || '0.45';
     el.style.cursor = 'not-allowed';
     // Bloqueia o clique mesmo em elementos que não aceitam "disabled" (a, div, i).
-    el.addEventListener(
-      'click',
-      ev => {
-        ev.preventDefault();
-        ev.stopImmediatePropagation();
-        if (typeof global.showToast === 'function') global.showToast(MSG_BLOQUEIO, 'error');
-      },
-      true
-    );
+    el.addEventListener('click', bloqueia, true);
+  }
+
+  /**
+   * Desfaz o bloqueio. Necessário porque as permissões podem mudar durante a
+   * sessão (o perfil é editado e salvo): sem isto, um botão que foi negado uma
+   * vez permanecia morto até reiniciar o app.
+   */
+  function reabilitar(el) {
+    if (!el || el.dataset.permAplicado !== 'negado') return;
+    const antes = bloqueados.get(el);
+    bloqueados.delete(el);
+
+    delete el.dataset.permAplicado;
+    el.classList.remove('perm-negado');
+    if ('disabled' in el) el.disabled = false;
+    el.removeAttribute('aria-disabled');
+
+    if (antes?.handler) el.removeEventListener('click', antes.handler, true);
+    if (antes?.titulo) el.setAttribute('title', antes.titulo);
+    else el.removeAttribute('title');
+    el.style.opacity = antes?.opacidade || '';
+    el.style.cursor = antes?.cursor || '';
   }
 
   /** Aplica somente ações (desabilita) e colunas (esconde) — sem mexer no menu. */
   function aplicarAcoesEColunas(raiz = document) {
     if (!ESTADO.carregado || !raiz) return;
 
-    // Ações: desabilita, mantendo visível
+    // Ações: desabilita mantendo visível — e REABILITA se a permissão voltou.
     raiz.querySelectorAll('[data-perm]').forEach(el => {
       const chave = el.getAttribute('data-perm');
-      if (chave && !pode(chave)) desabilitar(el);
+      if (!chave) return;
+      if (pode(chave)) reabilitar(el);
+      else desabilitar(el);
     });
 
-    // Colunas: remove da tabela (cabeçalho e células)
+    // Colunas: sai da tabela quando negada, volta quando liberada.
     raiz.querySelectorAll('[data-perm-col]').forEach(el => {
       const chave = el.getAttribute('data-perm-col');
-      if (chave && !pode(chave)) {
+      if (!chave) return;
+      if (pode(chave)) {
+        if (el.dataset.permOculto === '1') {
+          delete el.dataset.permOculto;
+          el.classList.remove('hidden');
+          el.style.display = '';
+        }
+      } else {
+        el.dataset.permOculto = '1';
         el.classList.add('hidden');
         el.style.display = 'none';
       }
@@ -157,11 +197,23 @@
   function aplicar(raiz = document) {
     if (!ESTADO.carregado) return;
 
-    // 1) Menu: esconde módulos sem permissão (só itens de navegação da sidebar)
+    // 1) Menu: esconde OU mostra o módulo conforme a permissão ATUAL.
+    // Antes isto era mão única (só escondia). Depois de reativar um módulo,
+    // o item continuava com display:none até reiniciar o app — era por isso
+    // que "nenhum aparecia no menu mesmo estando ativo".
     raiz.querySelectorAll('.sidebar-item[data-page], .submenu-item[data-page]').forEach(item => {
       const page = item.getAttribute('data-page');
       if (!page) return;
-      if (!moduloAtivo(page)) {
+      if (moduloAtivo(page)) {
+        // só devolvemos o que NÓS escondemos, para não brigar com o menu
+        // (submenu do CRM recolhido, por exemplo)
+        if (item.dataset.permOculto === '1') {
+          delete item.dataset.permOculto;
+          item.classList.remove('hidden');
+          item.style.display = '';
+        }
+      } else {
+        item.dataset.permOculto = '1';
         item.classList.add('hidden');
         item.style.display = 'none';
       }
@@ -190,7 +242,13 @@
     pode,
     moduloAtivo,
     podeAbrirPagina,
-    recarregar: () => carregar(true),
+    // Recarrega E reaplica: salvar o perfil sem reaplicar deixava a interface
+    // exibindo o estado antigo até reiniciar o app.
+    recarregar: async (raiz = document) => {
+      await carregar(true);
+      aplicar(raiz);
+      return ESTADO.permissoes;
+    },
     get estado() { return ESTADO.permissoes; }
   };
 

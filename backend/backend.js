@@ -195,10 +195,35 @@ function isPinError(err) {
   return false;
 }
 
+const CODIGOS_DE_REDE = new Set([
+  'ENOTFOUND', 'ECONNREFUSED', 'ECONNRESET', 'EAI_AGAIN',
+  'ETIMEDOUT', 'EHOSTUNREACH', 'ENETUNREACH', 'ENETDOWN',
+  'EPIPE', 'UND_ERR_CONNECT_TIMEOUT', 'UND_ERR_SOCKET'
+]);
+
+/**
+ * Detecta falta de rede. Antes só reconhecia `instanceof TypeError`: bastava o
+ * erro ser reembrulhado em qualquer camada para a classificação se perder, e a
+ * tela de login acabava mostrando o "fetch failed" cru em vez da mensagem de
+ * sem conexão. Agora olhamos também o código, a mensagem e a cadeia de `cause`
+ * (o fetch do Node guarda o erro real de socket em `err.cause`).
+ */
 function isNetworkError(err) {
-  if (!err) return false;
-  if (err.reason === 'offline') return true;
-  if (err instanceof TypeError) return true;
+  let atual = err;
+  for (let nivel = 0; atual && nivel < 5; nivel += 1) {
+    if (atual.reason === 'offline') return true;
+    if (atual instanceof TypeError) return true;
+    if (atual.code && CODIGOS_DE_REDE.has(String(atual.code).toUpperCase())) return true;
+    const msg = String(atual.message || '').toLowerCase();
+    if (
+      msg.includes('fetch failed') ||
+      msg.includes('network error') ||
+      msg.includes('failed to fetch') ||
+      msg.includes('getaddrinfo') ||
+      msg.includes('socket hang up')
+    ) return true;
+    atual = atual.cause;
+  }
   return false;
 }
 

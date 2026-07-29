@@ -163,6 +163,16 @@ const ModalManager = (() => {
     }
 
     modals.set(overlayId, wrapper);
+
+    // Ponto único onde TODO modal aberto por aqui fica conhecido pela
+    // preservação de trabalho. Antes só os modais abertos via
+    // openModalWithSpinner se registravam, então os empilhados (ex.: itens do
+    // processo sobre "Novo Produto") nunca eram reabertos após a desconexão.
+    try {
+      window.__registrarModalAberto?.({ htmlPath, scriptPath, overlayId });
+    } catch (err) {
+      console.error('[estado] falha ao registrar a abertura do modal', err);
+    }
   }
 
   async function openWithTemplate({
