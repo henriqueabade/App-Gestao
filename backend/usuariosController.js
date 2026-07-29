@@ -40,7 +40,12 @@ function avatarToRenderableSource(value) {
     const trimmed = value.trim();
     if (!trimmed) return null;
     if (/^(?:data:image\/|https?:\/\/|file:|blob:|\/)/i.test(trimmed)) return trimmed;
-    if (/^[A-Za-z0-9+/=\s]+$/.test(trimmed)) {
+    // O driver do PostgreSQL pode serializar BYTEA como "\\x...". Esse
+    // formato aparecia na listagem, mas não era reconhecido como imagem e a
+    // interface acabava exibindo as iniciais mesmo quando havia uma foto.
+    if (/^\\x[\da-f]+$/i.test(trimmed)) {
+      value = Buffer.from(trimmed.slice(2), 'hex');
+    } else if (/^[A-Za-z0-9+/=\s]+$/.test(trimmed)) {
       value = Buffer.from(trimmed.replace(/\s+/g, ''), 'base64');
     } else {
       return null;
@@ -49,7 +54,7 @@ function avatarToRenderableSource(value) {
 
   const bytes = Buffer.isBuffer(value)
     ? value
-    : value?.type === 'Buffer' && Array.isArray(value.data)
+    : Array.isArray(value?.data)
       ? Buffer.from(value.data)
       : null;
   if (!bytes?.length) return null;
@@ -87,6 +92,10 @@ function normalizeAvatar(usuario = {}) {
   const fotoUsuario = avatarToRenderableSource(
     usuario?.foto_usuario ??
     usuario?.fotoUsuario ??
+    usuario?.foto_perfil_url ??
+    usuario?.fotoPerfilUrl ??
+    usuario?.foto_perfil ??
+    usuario?.fotoPerfil ??
     usuario?.avatar ??
     usuario?.avatar_url ??
     usuario?.avatarUrl ??

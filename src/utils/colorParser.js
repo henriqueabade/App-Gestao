@@ -25,7 +25,7 @@ function normalize(text = '') {
 
 // Dicionário de cores fornecido externamente.
 const colorDictionary = [
-  {"name":"branco","hex":"#FFFFFF","keywords":["branco","white","neve","snow"]},
+  {"name":"branco","hex":"#FFFFFF","keywords":["branco","white","neve","snow", "branca"]},
   {"name":"preto","hex":"#000000","keywords":["preto","black","carvão","carvao","coal","jet", "ebano", "ébano" , "mármore nero marquina"]},
   {"name":"cinza","hex":"#808080","keywords":["cinza","cinzento","gray","grey","acinzentado"]},
   {"name":"cinza claro","hex":"#D3D3D3","keywords":["cinza claro","lightgray","light grey","gelo","ice"]},
@@ -96,7 +96,7 @@ const colorDictionary = [
 
   {"name":"rosa","hex":"#FFC0CB","keywords":["rosa","pink","rosa claro","baby pink"]},
   {"name":"rosa choque","hex":"#FF1493","keywords":["rosa choque","pink choque","hot pink","deep pink"]},
-  {"name":"sépia","hex":"#704214","keywords":["sepia","sépia"]},
+  {"name":"sépia","hex":"#704214","keywords":["sepia","sépia", "café"]},
   {"name":"terracota","hex":"#E2725B","keywords":["terracota","terracotta","tijolo","brick"]},
 
   {"name":"petróleo escuro","hex":"#084C61","keywords":["petróleo escuro","petroleo escuro","teal dark","verde petróleo"]},
