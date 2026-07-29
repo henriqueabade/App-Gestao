@@ -133,6 +133,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   getRuntimeConfig: () => getRuntimeConfigCached(),
   login: (email, password) => ipcRenderer.invoke('login-usuario', { email, password }),
+  obterPerfil: () => ipcRenderer.invoke('perfil:obter'),
+  enviarImagemPerfil: (file) => ipcRenderer.invoke('perfil:enviar-imagem', file),
+  removerImagemPerfil: () => ipcRenderer.invoke('perfil:remover-imagem'),
   register: async (name, email, password) => {
     const result = await ipcRenderer.invoke('registrar-usuario', { name, email, password });
     if (result && result.success) {

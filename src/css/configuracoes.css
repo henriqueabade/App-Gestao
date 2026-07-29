@@ -304,6 +304,17 @@ body {
     text-align: center;
 }
 
+.personal-avatar-remove {
+    border: 0;
+    background: transparent;
+    color: #fca5a5;
+    cursor: pointer;
+    font-size: 0.85rem;
+    text-decoration: underline;
+}
+
+.personal-avatar-remove:disabled { opacity: 0.45; cursor: not-allowed; }
+
 .personal-data-fields {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));

@@ -213,7 +213,7 @@ window.addEventListener('DOMContentLoaded', () => {
   if (avatarEl) {
     const versaoAvatar = extrairAvatarVersao(user);
     const avatarUrl =
-      user.foto_usuario || user.avatar || user.avatar_url || user.avatarUrl || user.fotoUrl || user.foto || null;
+      user.foto_perfil_url || user.foto_usuario || user.avatar || user.avatar_url || user.avatarUrl || user.fotoUrl || user.foto || null;
     const avatarComVersao = avatarUrl ? aplicarCacheBuster(String(avatarUrl).trim(), versaoAvatar) : null;
     const initials = getInitials(nome);
 
@@ -246,7 +246,16 @@ window.addEventListener('DOMContentLoaded', () => {
     };
 
     if (avatarComVersao) {
-      showImage(avatarComVersao);
+      const requestId = String(Date.now());
+      avatarEl.dataset.avatarRequestId = requestId;
+      const probe = new Image();
+      probe.onload = () => {
+        if (avatarEl.dataset.avatarRequestId === requestId) showImage(avatarComVersao);
+      };
+      probe.onerror = () => {
+        if (avatarEl.dataset.avatarRequestId === requestId) showInitials();
+      };
+      probe.src = avatarComVersao;
     } else if (initials) {
       showInitials();
     } else {
@@ -357,6 +366,19 @@ window.addEventListener('DOMContentLoaded', () => {
     const isAdmin = user.perfil === 'Admin';
 
     applyUserProfile(user);
+
+    if (!user.foto_perfil_url && window.electronAPI?.obterPerfil) {
+      window.electronAPI.obterPerfil().then(profile => {
+        if (!profile || typeof profile !== 'object') return;
+        const updated = { ...user, ...profile };
+        sessionStorage.setItem('currentUser', JSON.stringify(updated));
+        if (localStorage.getItem('rememberUser') === '1') {
+          localStorage.setItem('user', JSON.stringify(updated));
+        }
+        applyUserProfile(updated);
+        window.dispatchEvent(new CustomEvent('user-profile-updated', { detail: { user: updated } }));
+      }).catch(() => { /* mantém dados da sessão antiga quando a rede não está disponível */ });
+    }
 
     let pendingUpdate = null;
     const rawPendingUpdate = sessionStorage.getItem('pendingUpdate');

@@ -1190,6 +1190,7 @@ function setCurrentUserSession(user) {
   const previousUserId = currentUserSession?.id ?? null;
   if (user && user.id) {
     currentUserSession = {
+      ...user,
       id: user.id,
       nome: user.nome,
       perfil: user.perfil
@@ -1210,6 +1211,35 @@ function setCurrentUserSession(user) {
 function getAuthorizedApiClient() {
   const token = getToken();
   return createApiClient({ headers: { authorization: token ? `Bearer ${token}` : '' } });
+}
+
+const PROFILE_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
+const PROFILE_IMAGE_MAX_BYTES = 5 * 1024 * 1024;
+
+function unwrapProfileUser(payload) {
+  return payload?.usuario && typeof payload.usuario === 'object' ? payload.usuario : payload;
+}
+
+async function requestAuthenticatedProfile(path, options = {}) {
+  const token = getToken();
+  if (!token) {
+    const error = new Error('Sessão expirada. Entre novamente.');
+    error.status = 401;
+    throw error;
+  }
+  const response = await fetch(`https://api.santissimodecor.com.br${path}`, {
+    ...options,
+    headers: { ...(options.headers || {}), Authorization: `Bearer ${token}` }
+  });
+  const payload = await response.json().catch(() => null);
+  if (!response.ok) {
+    const error = new Error(payload?.message || payload?.erro || 'Não foi possível atualizar a imagem de perfil.');
+    error.status = response.status;
+    throw error;
+  }
+  const user = unwrapProfileUser(payload);
+  if (user && typeof user === 'object') setCurrentUserSession({ ...currentUserSession, ...user });
+  return user;
 }
 
 function mapApiErrorToReason(err) {
@@ -3294,6 +3324,22 @@ ipcMain.handle('connection-monitor:request-check', async (_event, options) => {
   return monitor.getStatus();
 });
 
+ipcMain.handle('perfil:obter', () => requestAuthenticatedProfile('/api/perfil'));
+
+ipcMain.handle('perfil:enviar-imagem', async (_event, file) => {
+  const type = String(file?.type || '').toLowerCase();
+  const bytes = file?.bytes instanceof Uint8Array ? file.bytes : new Uint8Array(file?.bytes || []);
+  if (!PROFILE_IMAGE_TYPES.has(type)) throw new Error('Selecione uma imagem JPG, PNG ou WebP.');
+  if (!bytes.byteLength || bytes.byteLength > PROFILE_IMAGE_MAX_BYTES) throw new Error('A imagem deve ter no máximo 5 MB.');
+  const formData = new FormData();
+  formData.append('imagem', new Blob([bytes], { type }), String(file?.name || 'perfil'));
+  return requestAuthenticatedProfile('/api/perfil/imagem', { method: 'POST', body: formData });
+});
+
+ipcMain.handle('perfil:remover-imagem', () =>
+  requestAuthenticatedProfile('/api/perfil/imagem', { method: 'DELETE' })
+);
+
 ipcMain.handle('registrar-usuario', async (_event, dados) => {
   try {
     await registrarUsuario(dados.name, dados.email, dados.password);
@@ -3363,7 +3409,14 @@ ipcMain.handle('login-usuario', async (event, dados) => {
   }
 
   try {
-    const user = await loginUsuario(dados.email, dados.password);
+    let user = await loginUsuario(dados.email, dados.password);
+    try {
+      const profile = await requestAuthenticatedProfile('/api/perfil');
+      if (profile && typeof profile === 'object') user = { ...user, ...profile };
+    } catch (_) {
+      // O perfil complementar não deve impedir um login válido; a interface
+      // tentará sincronizá-lo novamente ao restaurar/exibir a sessão.
+    }
     limparTentativasLogin(dados?.email);
     setCurrentUserSession(user);
     return { success: true, user };

@@ -479,6 +479,7 @@ const MenuStartupPreferences = (() => {
             avatarInput: null,
             avatarPreview: null,
             avatarInitials: null,
+            avatarRemove: null,
             fields: {},
             errors: {}
         }
@@ -618,7 +619,8 @@ const MenuStartupPreferences = (() => {
 
     const USER_PROFILE_EVENT = 'user-profile-updated';
     const API_PROFILE_ENDPOINT = '/api/usuarios/me';
-    const MAX_AVATAR_SIZE = 1 * 1024 * 1024;
+    const MAX_AVATAR_SIZE = 5 * 1024 * 1024;
+    const ALLOWED_AVATAR_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
     const PROFILE_FIELD_KEYS = ['nome', 'email', 'telefone', 'senha', 'confirmacao'];
 
     const profileState = {
@@ -626,7 +628,8 @@ const MenuStartupPreferences = (() => {
         saving: false,
         data: null,
         initialData: null,
-        avatarDataUrl: null,
+        avatarFile: null,
+        avatarObjectUrl: null,
         avatarChanged: false
     };
 
@@ -753,6 +756,7 @@ const MenuStartupPreferences = (() => {
         const perfil = source.perfil ?? source.role ?? source.tipo ?? '';
         const versaoAvatar = extrairAvatarVersao(source);
         const avatarCandidatos = [
+            source.foto_perfil_url,
             source.foto_usuario,
             source.fotoUsuario,
             source.avatar,
@@ -779,6 +783,8 @@ const MenuStartupPreferences = (() => {
             perfil: perfil ? String(perfil).trim() : '',
             avatarUrl,
             avatar_url: avatarUrl,
+            foto_perfil: source.foto_perfil ?? null,
+            foto_perfil_url: source.foto_perfil_url || avatarUrl,
             avatarVersion: versaoAvatar,
             avatar_version: versaoAvatar
         };
@@ -832,7 +838,21 @@ const MenuStartupPreferences = (() => {
             return;
         }
 
-        applyPreview(aplicarCacheBuster(trimmed, versao));
+        const requestedUrl = aplicarCacheBuster(trimmed, versao);
+        if (requestedUrl.startsWith('blob:')) {
+            applyPreview(requestedUrl);
+            return;
+        }
+        const requestId = String(Date.now());
+        previewEl.dataset.avatarRequestId = requestId;
+        const probe = new Image();
+        probe.onload = () => {
+            if (previewEl.dataset.avatarRequestId === requestId) applyPreview(requestedUrl);
+        };
+        probe.onerror = () => {
+            if (previewEl.dataset.avatarRequestId === requestId) applyPreview(null);
+        };
+        probe.src = requestedUrl;
     }
 
     function setProfileFeedback(message, type = 'info') {
@@ -995,27 +1015,21 @@ const MenuStartupPreferences = (() => {
         profileState.data = { ...normalized };
         profileState.initialData = { ...normalized };
         profileState.avatarChanged = false;
-        profileState.avatarDataUrl = null;
+        profileState.avatarFile = null;
         renderProfileData();
         clearProfileErrors();
     }
 
-    function readFileAsDataUrl(file) {
-        return new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = () => resolve(reader.result);
-            reader.onerror = () => reject(reader.error || new Error('Falha ao ler arquivo.'));
-            reader.readAsDataURL(file);
-        });
+    function revokeAvatarObjectUrl() {
+        if (profileState.avatarObjectUrl) URL.revokeObjectURL(profileState.avatarObjectUrl);
+        profileState.avatarObjectUrl = null;
     }
-
-    function revokeAvatarObjectUrl() {}
 
     async function handleAvatarInputChange(event) {
         const file = event?.target?.files?.[0];
         if (!file) {
             profileState.avatarChanged = false;
-            profileState.avatarDataUrl = null;
+            profileState.avatarFile = null;
             updateAvatarPreview(
                 profileState.data?.avatarUrl || profileState.data?.foto_usuario || null,
                 collectProfileFormValues().nome || profileState.data?.nome || '',
@@ -1025,30 +1039,31 @@ const MenuStartupPreferences = (() => {
         }
 
         if (file.size > MAX_AVATAR_SIZE) {
-            setProfileFeedback('A imagem selecionada excede o limite de 1 MB. Escolha um arquivo menor.', 'error');
+            setProfileFeedback('A imagem selecionada excede o limite de 5 MB. Escolha um arquivo menor.', 'error');
             event.target.value = '';
             return;
         }
 
         const mimeType = (file.type || '').toLowerCase();
-        if (mimeType && !mimeType.startsWith('image/')) {
-            setProfileFeedback('Escolha um arquivo de imagem nos formatos JPG ou PNG.', 'error');
+        if (!ALLOWED_AVATAR_TYPES.has(mimeType)) {
+            setProfileFeedback('Escolha uma imagem JPG, PNG ou WebP.', 'error');
             event.target.value = '';
             return;
         }
 
         try {
-            const dataUrl = await readFileAsDataUrl(file);
-            profileState.avatarDataUrl = dataUrl;
+            revokeAvatarObjectUrl();
+            const objectUrl = URL.createObjectURL(file);
+            profileState.avatarObjectUrl = objectUrl;
+            profileState.avatarFile = file;
             profileState.avatarChanged = true;
             updateAvatarPreview(
-                dataUrl,
+                objectUrl,
                 collectProfileFormValues().nome || profileState.data?.nome || '',
                 Date.now()
             );
             setProfileFeedback('Pré-visualização atualizada. Salve para confirmar a nova foto.', 'info');
         } catch (error) {
-            console.error('Erro ao ler imagem selecionada:', error);
             setProfileFeedback('Não foi possível carregar a imagem selecionada.', 'error');
         }
     }
@@ -1094,11 +1109,15 @@ const MenuStartupPreferences = (() => {
                 throw new Error(message);
             }
             const payload = await response.json();
-            const normalized = normalizeUserProfile(payload);
+            let imageProfile = null;
+            if (window.electronAPI?.obterPerfil) {
+                imageProfile = await window.electronAPI.obterPerfil();
+            }
+            const normalized = normalizeUserProfile({ ...payload, ...(imageProfile || {}) });
             profileState.data = { ...normalized };
             profileState.initialData = { ...normalized };
             profileState.avatarChanged = false;
-            profileState.avatarDataUrl = null;
+            profileState.avatarFile = null;
             revokeAvatarObjectUrl();
             renderProfileData();
             clearProfileErrors();
@@ -1117,31 +1136,64 @@ const MenuStartupPreferences = (() => {
             profileState.data = { ...profileState.initialData };
         }
         profileState.avatarChanged = false;
-        profileState.avatarDataUrl = null;
+        profileState.avatarFile = null;
         revokeAvatarObjectUrl();
         renderProfileData();
         clearProfileErrors();
         setProfileFeedback('Alterações descartadas.', 'info');
     }
 
-    async function uploadUserAvatar(avatarDataUrl) {
-        const response = await fetchApi('/api/usuarios/me/avatar', {
-            method: 'PUT',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ avatar: avatarDataUrl }),
-            credentials: 'include'
+    async function uploadUserAvatar(file) {
+        if (!window.electronAPI?.enviarImagemPerfil) throw new Error('Recurso de imagem de perfil indisponível.');
+        const payload = await window.electronAPI.enviarImagemPerfil({
+            name: file.name,
+            type: file.type,
+            bytes: new Uint8Array(await file.arrayBuffer())
         });
-
-        if (!response.ok) {
-            const errorData = await response.json().catch(() => null);
-            const message = errorData?.error || errorData?.message || 'Não foi possível atualizar o avatar.';
-            throw new Error(message);
-        }
-
-        const payload = await response.json();
         return normalizeUserProfile({ ...profileState.data, ...payload });
+    }
+
+    async function handleAvatarRemove() {
+        if (profileState.saving || profileState.loading) return;
+        const confirmed = await window.DialogPadrao?.confirm({
+            title: 'Remover foto de perfil?',
+            message: 'A foto atual será removida e suas iniciais voltarão a ser exibidas.',
+            confirmText: 'Remover'
+        });
+        if (!confirmed || profileState.saving) return;
+        setProfileSaving(true);
+        setProfileFeedback('Removendo foto...', 'info');
+        try {
+            const result = await window.electronAPI.removerImagemPerfil();
+            const normalized = normalizeUserProfile({
+                ...profileState.data,
+                ...result,
+                foto_perfil: null,
+                foto_perfil_url: null,
+                foto_usuario: null,
+                fotoUsuario: null,
+                avatar: null,
+                avatar_url: null,
+                avatarUrl: null,
+                fotoUrl: null,
+                foto: null
+            });
+            profileState.data = normalized;
+            profileState.initialData = { ...normalized };
+            profileState.avatarChanged = false;
+            profileState.avatarFile = null;
+            revokeAvatarObjectUrl();
+            renderProfileData();
+            persistUserToStorage(normalized);
+            dispatchUserProfileUpdated(normalized);
+            setProfileFeedback('Foto removida com sucesso.', 'success');
+            window.showToast?.('Foto de perfil removida.', 'success');
+        } catch (error) {
+            setProfileFeedback(error.message || 'Não foi possível remover a foto.', 'error');
+            window.showToast?.(error.message || 'Não foi possível remover a foto.', 'error');
+        } finally {
+            setProfileSaving(false);
+        }
     }
 
     async function handleProfileSubmit(event) {
@@ -1189,18 +1241,20 @@ const MenuStartupPreferences = (() => {
             const result = await response.json();
             let normalized = normalizeUserProfile({ ...profileState.data, ...result });
 
-            if (profileState.avatarChanged && profileState.avatarDataUrl) {
-                normalized = await uploadUserAvatar(profileState.avatarDataUrl);
+            if (profileState.avatarChanged && profileState.avatarFile) {
+                normalized = await uploadUserAvatar(profileState.avatarFile);
             }
 
             profileState.data = { ...normalized };
             profileState.initialData = { ...normalized };
             profileState.avatarChanged = false;
-            profileState.avatarDataUrl = null;
+            profileState.avatarFile = null;
+            revokeAvatarObjectUrl();
             renderProfileData();
             setProfileFeedback('Dados atualizados com sucesso!', 'success');
             persistUserToStorage(profileState.data);
             dispatchUserProfileUpdated(profileState.data);
+            window.showToast?.('Dados pessoais atualizados.', 'success');
         } catch (error) {
             console.error('Falha ao salvar dados pessoais:', error);
             setProfileFeedback(error.message || 'Não foi possível salvar as alterações.', 'error');
@@ -1522,6 +1576,7 @@ const MenuStartupPreferences = (() => {
         dom.profile.avatarInput = moduleElement.querySelector('#personalAvatarInput');
         dom.profile.avatarPreview = moduleElement.querySelector('#personalAvatarPreview');
         dom.profile.avatarInitials = moduleElement.querySelector('#personalAvatarInitials');
+        dom.profile.avatarRemove = moduleElement.querySelector('#personalAvatarRemove');
         dom.profile.fields = {
             nome: moduleElement.querySelector('[data-field="nome"]'),
             email: moduleElement.querySelector('[data-field="email"]'),
@@ -1572,6 +1627,9 @@ const MenuStartupPreferences = (() => {
         }
         if (dom.profile.avatarInput) {
             dom.profile.avatarInput.addEventListener('change', handleAvatarInputChange);
+        }
+        if (dom.profile.avatarRemove) {
+            dom.profile.avatarRemove.addEventListener('click', handleAvatarRemove);
         }
 
         bindProfileFieldListeners();
