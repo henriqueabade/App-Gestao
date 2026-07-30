@@ -2528,95 +2528,169 @@
                   </div>
                   <i class="fas fa-info-circle text-[var(--color-primary)]" title="Permissões do módulo"></i>
                 </div>
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="grid grid-cols-1 gap-6">
 
-                  <label class="usuarios-permissoes-item" data-search="ver modulo relatorios">
-                    <input type="checkbox" name="rel.view" data-role="item" data-group="acoes-rel" data-item-type="action" class="w-4 h-4 mt-1" />
-                    <div>
-                      <span class="font-medium">Ver módulo</span>
-                      <p class="text-sm text-gray-400">Acessar área de relatórios</p>
-                    </div>
-                  </label>
+                  <div>
+                    <h4 class="text-sm font-semibold text-gray-300 mb-3">Tela de Relatórios</h4>
+                    <div class="grid grid-cols-1 gap-4">
 
-                  <label class="usuarios-permissoes-item" data-search="buscar filtrar">
-                    <input type="checkbox" name="rel.search" data-role="item" data-group="acoes-rel" data-item-type="action" class="w-4 h-4 mt-1" />
-                    <div>
-                      <span class="font-medium">Buscar/filtrar</span>
-                      <p class="text-sm text-gray-400">Selecionar período e filtros</p>
-                    </div>
-                  </label>
+                      <label class="usuarios-permissoes-item" data-search="ver módulo relatórios">
+                        <input type="checkbox" name="rel.view" data-role="item" data-group="acoes-rel" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Ver módulo</span>
+                          <p class="text-sm text-gray-400">Exibir o módulo de relatórios</p>
+                        </div>
+                      </label>
 
-                  <label class="usuarios-permissoes-item" data-search="rodar relatorio">
-                    <input type="checkbox" name="rel.run" data-role="item" data-group="acoes-rel" data-item-type="action" class="w-4 h-4 mt-1" />
-                    <div>
-                      <span class="font-medium">Rodar relatório</span>
-                      <p class="text-sm text-gray-400">Executar consultas e gerar dados</p>
-                    </div>
-                  </label>
+                      <label class="usuarios-permissoes-item" data-search="aba escolher trocar relatório">
+                        <input type="checkbox" name="rel.tab.select" data-role="item" data-group="acoes-rel" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Escolher relatório</span>
+                          <p class="text-sm text-gray-400">Abas: Matéria-Prima, Produtos, Clientes, Contatos, Prospecções, Orçamentos, Pedidos, Usuários</p>
+                        </div>
+                      </label>
 
-                  <label class="usuarios-permissoes-item" data-search="exportar csv">
-                    <input type="checkbox" name="rel.export.csv" data-role="item" data-group="acoes-rel" data-item-type="action" class="w-4 h-4 mt-1" />
-                    <div>
-                      <span class="font-medium">Exportar CSV</span>
-                      <p class="text-sm text-gray-400">Exportar dados em CSV</p>
-                    </div>
-                  </label>
+                      <label class="usuarios-permissoes-item" data-search="filtrar limpar buscar período">
+                        <input type="checkbox" name="rel.search" data-role="item" data-group="acoes-rel" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Filtrar registros</span>
+                          <p class="text-sm text-gray-400">Botões Filtrar e Limpar de cada aba</p>
+                        </div>
+                      </label>
 
-                  <label class="usuarios-permissoes-item" data-search="exportar xlsx">
-                    <input type="checkbox" name="rel.export.xlsx" data-role="item" data-group="acoes-rel" data-item-type="action" class="w-4 h-4 mt-1" />
-                    <div>
-                      <span class="font-medium">Exportar XLSX</span>
-                      <p class="text-sm text-gray-400">Exportar dados em XLSX</p>
-                    </div>
-                  </label>
+                      <label class="usuarios-permissoes-item" data-search="indicadores kpi painel totais">
+                        <input type="checkbox" name="rel.kpi.view" data-role="item" data-group="acoes-rel" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Ver indicadores</span>
+                          <p class="text-sm text-gray-400">Painel "Indicadores" (KPIs) acima da tabela</p>
+                        </div>
+                      </label>
 
-                  <label class="usuarios-permissoes-item" data-search="exportar pdf">
-                    <input type="checkbox" name="rel.export.pdf" data-role="item" data-group="acoes-rel" data-item-type="action" class="w-4 h-4 mt-1" />
-                    <div>
-                      <span class="font-medium">Exportar PDF</span>
-                      <p class="text-sm text-gray-400">Gerar PDF formatado</p>
                     </div>
-                  </label>
+                  </div>
 
-                  <label class="usuarios-permissoes-item" data-search="salvar preset">
-                    <input type="checkbox" name="rel.preset.save" data-role="item" data-group="acoes-rel" data-item-type="action" class="w-4 h-4 mt-1" />
-                    <div>
-                      <span class="font-medium">Salvar preset</span>
-                      <p class="text-sm text-gray-400">Salvar conjunto de filtros/colunas</p>
-                    </div>
-                  </label>
+                  <div>
+                    <h4 class="text-sm font-semibold text-gray-300 mb-3">Modos de visualização do resultado</h4>
+                    <div class="grid grid-cols-1 gap-4">
 
-                  <label class="usuarios-permissoes-item" data-search="carregar preset">
-                    <input type="checkbox" name="rel.preset.load" data-role="item" data-group="acoes-rel" data-item-type="action" class="w-4 h-4 mt-1" />
-                    <div>
-                      <span class="font-medium">Carregar preset</span>
-                      <p class="text-sm text-gray-400">Carregar preset salvo</p>
-                    </div>
-                  </label>
+                      <label class="usuarios-permissoes-item" data-search="tabela grade resultado">
+                        <input type="checkbox" name="rel.view.table" data-role="item" data-group="acoes-rel" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Ver como tabela</span>
+                          <p class="text-sm text-gray-400">Botão "Tabela"</p>
+                        </div>
+                      </label>
 
-                  <label class="usuarios-permissoes-item" data-search="gerenciar presets">
-                    <input type="checkbox" name="rel.preset.manage" data-role="item" data-group="acoes-rel" data-item-type="action" class="w-4 h-4 mt-1" />
-                    <div>
-                      <span class="font-medium">Gerenciar presets</span>
-                      <p class="text-sm text-gray-400">Renomear, compartilhar ou excluir presets</p>
-                    </div>
-                  </label>
+                      <label class="usuarios-permissoes-item" data-search="gráficos charts visual">
+                        <input type="checkbox" name="rel.view.charts" data-role="item" data-group="acoes-rel" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Ver como gráficos</span>
+                          <p class="text-sm text-gray-400">Botão "Gráficos"</p>
+                        </div>
+                      </label>
 
-                  <label class="usuarios-permissoes-item" data-search="gerar link compartilhar">
-                    <input type="checkbox" name="rel.share.link" data-role="item" data-group="acoes-rel" data-item-type="action" class="w-4 h-4 mt-1" />
-                    <div>
-                      <span class="font-medium">Gerar link compartilhável</span>
-                      <p class="text-sm text-gray-400">Criar link protegido para visualização</p>
-                    </div>
-                  </label>
+                      <label class="usuarios-permissoes-item" data-search="master detail detalhes registro">
+                        <input type="checkbox" name="rel.view.detail" data-role="item" data-group="acoes-rel" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Ver Master-Detail</span>
+                          <p class="text-sm text-gray-400">Botão "Master-Detail"</p>
+                        </div>
+                      </label>
 
-                  <label class="usuarios-permissoes-item" data-search="enviar relatorio">
-                    <input type="checkbox" name="rel.share.send" data-role="item" data-group="acoes-rel" data-item-type="action" class="w-4 h-4 mt-1" />
-                    <div>
-                      <span class="font-medium">Enviar relatório</span>
-                      <p class="text-sm text-gray-400">Disparar por e-mail/integração</p>
                     </div>
-                  </label>
+                  </div>
+
+                  <div>
+                    <h4 class="text-sm font-semibold text-gray-300 mb-3">Exportação</h4>
+                    <div class="grid grid-cols-1 gap-4">
+
+                      <label class="usuarios-permissoes-item" data-search="exportar csv">
+                        <input type="checkbox" name="rel.export.csv" data-role="item" data-group="acoes-rel" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Exportar CSV</span>
+                          <p class="text-sm text-gray-400">Opção CSV do botão "Exportar"</p>
+                        </div>
+                      </label>
+
+                      <label class="usuarios-permissoes-item" data-search="exportar excel xls xlsx planilha">
+                        <input type="checkbox" name="rel.export.xlsx" data-role="item" data-group="acoes-rel" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Exportar Excel</span>
+                          <p class="text-sm text-gray-400">Opção Excel do botão "Exportar"</p>
+                        </div>
+                      </label>
+
+                      <label class="usuarios-permissoes-item" data-search="exportar pdf imprimir">
+                        <input type="checkbox" name="rel.export.pdf" data-role="item" data-group="acoes-rel" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Exportar PDF</span>
+                          <p class="text-sm text-gray-400">Opção PDF do botão "Exportar"</p>
+                        </div>
+                      </label>
+
+                      <label class="usuarios-permissoes-item" data-search="imprimir impressora print">
+                        <input type="checkbox" name="rel.print" data-role="item" data-group="acoes-rel" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Imprimir</span>
+                          <p class="text-sm text-gray-400">Opção Imprimir do botão "Exportar"</p>
+                        </div>
+                      </label>
+
+                    </div>
+                  </div>
+
+                  <div>
+                    <h4 class="text-sm font-semibold text-gray-300 mb-3">Colunas visíveis</h4>
+                    <div class="grid grid-cols-1 gap-4">
+
+                      <label class="usuarios-permissoes-item" data-search="colunas visibilidade escolher mostrar">
+                        <input type="checkbox" name="rel.columns.toggle" data-role="item" data-group="acoes-rel" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Escolher colunas visíveis</span>
+                          <p class="text-sm text-gray-400">Botão "Colunas" — define quais colunas aparecem no resultado</p>
+                        </div>
+                      </label>
+
+                    </div>
+                  </div>
+
+                  <div>
+                    <h4 class="text-sm font-semibold text-gray-300 mb-3">Modelos de relatório</h4>
+                    <div class="grid grid-cols-1 gap-4">
+
+                      <label class="usuarios-permissoes-item" data-search="salvar modelo preset template">
+                        <input type="checkbox" name="rel.preset.save" data-role="item" data-group="acoes-rel" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Salvar modelo</span>
+                          <p class="text-sm text-gray-400">Botão "Salvar Modelo" e o modal de salvamento</p>
+                        </div>
+                      </label>
+
+                      <label class="usuarios-permissoes-item" data-search="carregar modelo preset template">
+                        <input type="checkbox" name="rel.preset.load" data-role="item" data-group="acoes-rel" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Carregar modelo</span>
+                          <p class="text-sm text-gray-400">Botão "Carregar Modelo"</p>
+                        </div>
+                      </label>
+
+                    </div>
+                  </div>
+
+                  <div>
+                    <h4 class="text-sm font-semibold text-gray-300 mb-3">Agendamento</h4>
+                    <div class="grid grid-cols-1 gap-4">
+
+                      <label class="usuarios-permissoes-item" data-search="agendar envio programar email relatório">
+                        <input type="checkbox" name="rel.share.send" data-role="item" data-group="acoes-rel" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Agendar envio</span>
+                          <p class="text-sm text-gray-400">Botão "Agendar" e o modal "Agendar Relatório"</p>
+                        </div>
+                      </label>
+
+                    </div>
+                  </div>
 
                 </div>
               </div>
@@ -2682,6 +2756,7 @@
                         <input type="checkbox" name="col_rel_estq_status" data-role="item" data-group="colunas-rel" data-item-type="column" class="w-4 h-4" />
                         <span class="text-sm">Status</span>
                       </label>
+
                     </div>
                   </div>
 
@@ -2723,6 +2798,7 @@
                         <input type="checkbox" name="col_rel_prod_status" data-role="item" data-group="colunas-rel" data-item-type="column" class="w-4 h-4" />
                         <span class="text-sm">Status</span>
                       </label>
+
                     </div>
                   </div>
 
@@ -2759,6 +2835,7 @@
                         <input type="checkbox" name="col_rel_cli_dono" data-role="item" data-group="colunas-rel" data-item-type="column" class="w-4 h-4" />
                         <span class="text-sm">Dono</span>
                       </label>
+
                     </div>
                   </div>
 
@@ -2795,6 +2872,7 @@
                         <input type="checkbox" name="col_rel_ctt_email" data-role="item" data-group="colunas-rel" data-item-type="column" class="w-4 h-4" />
                         <span class="text-sm">E-mail</span>
                       </label>
+
                     </div>
                   </div>
 
@@ -2821,6 +2899,7 @@
                         <input type="checkbox" name="col_rel_pros_responsavel" data-role="item" data-group="colunas-rel" data-item-type="column" class="w-4 h-4" />
                         <span class="text-sm">Responsável</span>
                       </label>
+
                     </div>
                   </div>
 
@@ -2857,6 +2936,7 @@
                         <input type="checkbox" name="col_rel_orc_status" data-role="item" data-group="colunas-rel" data-item-type="column" class="w-4 h-4" />
                         <span class="text-sm">Status</span>
                       </label>
+
                     </div>
                   </div>
 
@@ -2893,6 +2973,7 @@
                         <input type="checkbox" name="col_rel_ped_status" data-role="item" data-group="colunas-rel" data-item-type="column" class="w-4 h-4" />
                         <span class="text-sm">Status</span>
                       </label>
+
                     </div>
                   </div>
 
@@ -2929,8 +3010,10 @@
                         <input type="checkbox" name="col_rel_usr_status" data-role="item" data-group="colunas-rel" data-item-type="column" class="w-4 h-4" />
                         <span class="text-sm">Status</span>
                       </label>
+
                     </div>
                   </div>
+
                 </div>
               </div>
             </article>
@@ -3168,55 +3251,151 @@
                   </div>
                   <i class="fas fa-info-circle text-[var(--color-primary)]" title="Permissões do módulo"></i>
                 </div>
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="grid grid-cols-1 gap-6">
 
-                  <label class="usuarios-permissoes-item" data-search="ver configuracoes">
-                    <input type="checkbox" name="cfg.view" data-role="item" data-group="acoes-cfg" data-item-type="action" class="w-4 h-4 mt-1" />
-                    <div>
-                      <span class="font-medium">Ver configurações</span>
-                      <p class="text-sm text-gray-400">Acessar painel de configurações</p>
-                    </div>
-                  </label>
+                  <div>
+                    <h4 class="text-sm font-semibold text-gray-300 mb-3">Tela de Configurações</h4>
+                    <div class="grid grid-cols-1 gap-4">
 
-                  <label class="usuarios-permissoes-item" data-search="editar tema">
-                    <input type="checkbox" name="cfg.theme.edit" data-role="item" data-group="acoes-cfg" data-item-type="action" class="w-4 h-4 mt-1" />
-                    <div>
-                      <span class="font-medium">Editar tema</span>
-                      <p class="text-sm text-gray-400">Alterar identidade visual</p>
-                    </div>
-                  </label>
+                      <label class="usuarios-permissoes-item" data-search="ver abrir configurações">
+                        <input type="checkbox" name="cfg.view" data-role="item" data-group="acoes-cfg" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Ver configurações</span>
+                          <p class="text-sm text-gray-400">Abrir o módulo de configurações</p>
+                        </div>
+                      </label>
 
-                  <label class="usuarios-permissoes-item" data-search="editar integracoes">
-                    <input type="checkbox" name="cfg.integrations.edit" data-role="item" data-group="acoes-cfg" data-item-type="action" class="w-4 h-4 mt-1" />
-                    <div>
-                      <span class="font-medium">Editar integrações</span>
-                      <p class="text-sm text-gray-400">Configurar chaves e webhooks</p>
                     </div>
-                  </label>
+                  </div>
 
-                  <label class="usuarios-permissoes-item" data-search="editar preferencias">
-                    <input type="checkbox" name="cfg.prefs.edit" data-role="item" data-group="acoes-cfg" data-item-type="action" class="w-4 h-4 mt-1" />
-                    <div>
-                      <span class="font-medium">Editar preferências gerais</span>
-                      <p class="text-sm text-gray-400">Ajustar parâmetros globais</p>
-                    </div>
-                  </label>
+                  <div>
+                    <h4 class="text-sm font-semibold text-gray-300 mb-3">Seção "Dados pessoais"</h4>
+                    <div class="grid grid-cols-1 gap-4">
 
-                  <label class="usuarios-permissoes-item" data-search="ver papeis">
-                    <input type="checkbox" name="cfg.roles.view" data-role="item" data-group="acoes-cfg" data-item-type="action" class="w-4 h-4 mt-1" />
-                    <div>
-                      <span class="font-medium">Ver papéis/perfis</span>
-                      <p class="text-sm text-gray-400">Listar papéis e acessos</p>
-                    </div>
-                  </label>
+                      <label class="usuarios-permissoes-item" data-search="editar nome email telefone dados pessoais">
+                        <input type="checkbox" name="cfg.profile.edit" data-role="item" data-group="acoes-cfg" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Editar dados pessoais</span>
+                          <p class="text-sm text-gray-400">Nome, e-mail e telefone + botões Salvar/Cancelar</p>
+                        </div>
+                      </label>
 
-                  <label class="usuarios-permissoes-item" data-search="editar papeis">
-                    <input type="checkbox" name="cfg.roles.edit" data-role="item" data-group="acoes-cfg" data-item-type="action" class="w-4 h-4 mt-1" />
-                    <div>
-                      <span class="font-medium">Editar papéis/perfis</span>
-                      <p class="text-sm text-gray-400">Criar/editar/remover papéis</p>
+                      <label class="usuarios-permissoes-item" data-search="senha alterar trocar password">
+                        <input type="checkbox" name="cfg.password.change" data-role="item" data-group="acoes-cfg" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Alterar senha</span>
+                          <p class="text-sm text-gray-400">Campos de senha e confirmação</p>
+                        </div>
+                      </label>
+
+                      <label class="usuarios-permissoes-item" data-search="foto avatar imagem perfil remover">
+                        <input type="checkbox" name="cfg.avatar.edit" data-role="item" data-group="acoes-cfg" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Alterar foto de perfil</span>
+                          <p class="text-sm text-gray-400">Carregar imagem e botão "Remover foto"</p>
+                        </div>
+                      </label>
+
                     </div>
-                  </label>
+                  </div>
+
+                  <div>
+                    <h4 class="text-sm font-semibold text-gray-300 mb-3">Seção "Comportamento inicial do menu"</h4>
+                    <div class="grid grid-cols-1 gap-4">
+
+                      <label class="usuarios-permissoes-item" data-search="menu inicial crm barra lateral preferências">
+                        <input type="checkbox" name="cfg.prefs.edit" data-role="item" data-group="acoes-cfg" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Editar preferências do menu</span>
+                          <p class="text-sm text-gray-400">Módulo inicial, CRM expandido e comportamento da barra lateral</p>
+                        </div>
+                      </label>
+
+                    </div>
+                  </div>
+
+                  <div>
+                    <h4 class="text-sm font-semibold text-gray-300 mb-3">Seção "Tema do menu"</h4>
+                    <div class="grid grid-cols-1 gap-4">
+
+                      <label class="usuarios-permissoes-item" data-search="tema claro escuro aparência">
+                        <input type="checkbox" name="cfg.theme.edit" data-role="item" data-group="acoes-cfg" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Editar tema</span>
+                          <p class="text-sm text-gray-400">Chave de alternância do tema</p>
+                        </div>
+                      </label>
+
+                    </div>
+                  </div>
+
+                  <div>
+                    <h4 class="text-sm font-semibold text-gray-300 mb-3">Seção "Notificações no menu"</h4>
+                    <div class="grid grid-cols-1 gap-4">
+
+                      <label class="usuarios-permissoes-item" data-search="notificações avisos menu">
+                        <input type="checkbox" name="cfg.notifications.edit" data-role="item" data-group="acoes-cfg" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Editar notificações</span>
+                          <p class="text-sm text-gray-400">Chave de notificações no menu</p>
+                        </div>
+                      </label>
+
+                    </div>
+                  </div>
+
+                  <div>
+                    <h4 class="text-sm font-semibold text-gray-300 mb-3">Seção "Ações rápidas do usuário"</h4>
+                    <div class="grid grid-cols-1 gap-4">
+
+                      <label class="usuarios-permissoes-item" data-search="ações rápidas atalhos menu usuário">
+                        <input type="checkbox" name="cfg.quickactions.edit" data-role="item" data-group="acoes-cfg" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Editar ações rápidas</span>
+                          <p class="text-sm text-gray-400">Chaves de sair, minimizar, recarregar, tela, fechar, avatar e nome</p>
+                        </div>
+                      </label>
+
+                    </div>
+                  </div>
+
+                  <div>
+                    <h4 class="text-sm font-semibold text-gray-300 mb-3">Seção "Categorias relevantes"</h4>
+                    <div class="grid grid-cols-1 gap-4">
+
+                      <label class="usuarios-permissoes-item" data-search="categorias relevantes sistema tarefas vendas financeiro">
+                        <input type="checkbox" name="cfg.categories.edit" data-role="item" data-group="acoes-cfg" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Editar categorias relevantes</span>
+                          <p class="text-sm text-gray-400">Chaves de sistema, tarefas, vendas e financeiro</p>
+                        </div>
+                      </label>
+
+                    </div>
+                  </div>
+
+                  <div>
+                    <h4 class="text-sm font-semibold text-gray-300 mb-3">Modelos de Permissão (vive em Gestão de Usuários)</h4>
+                    <div class="grid grid-cols-1 gap-4">
+
+                      <label class="usuarios-permissoes-item" data-search="ver perfis papéis permissão modelos">
+                        <input type="checkbox" name="cfg.roles.view" data-role="item" data-group="acoes-cfg" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Ver perfis de permissão</span>
+                          <p class="text-sm text-gray-400">Filtros da tela de Gestão de Usuários</p>
+                        </div>
+                      </label>
+
+                      <label class="usuarios-permissoes-item" data-search="editar perfis papéis permissão modelos">
+                        <input type="checkbox" name="cfg.roles.edit" data-role="item" data-group="acoes-cfg" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Editar perfis de permissão</span>
+                          <p class="text-sm text-gray-400">Botão "Modelos de Permissão" e o modal dele</p>
+                        </div>
+                      </label>
+
+                    </div>
+                  </div>
 
                 </div>
               </div>
@@ -3244,59 +3423,7 @@
                 </div>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
 
-                  <div>
-                    <h4 class="text-sm font-semibold text-gray-300 mb-3">Papéis</h4>
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
 
-                      <label class="usuarios-permissoes-checkbox">
-                        <input type="checkbox" name="col_role_code" data-role="item" data-group="colunas-cfg" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">Código</span>
-                      </label>
-
-                      <label class="usuarios-permissoes-checkbox">
-                        <input type="checkbox" name="col_role_name" data-role="item" data-group="colunas-cfg" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">Nome</span>
-                      </label>
-
-                      <label class="usuarios-permissoes-checkbox">
-                        <input type="checkbox" name="col_role_desc" data-role="item" data-group="colunas-cfg" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">Descrição</span>
-                      </label>
-
-                      <label class="usuarios-permissoes-checkbox">
-                        <input type="checkbox" name="col_role_modulos" data-role="item" data-group="colunas-cfg" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">Módulos</span>
-                      </label>
-
-                      <label class="usuarios-permissoes-checkbox">
-                        <input type="checkbox" name="col_role_features" data-role="item" data-group="colunas-cfg" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">Ações</span>
-                      </label>
-
-                    </div>
-                  </div>
-
-                  <div>
-                    <h4 class="text-sm font-semibold text-gray-300 mb-3">Integrações</h4>
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-
-                      <label class="usuarios-permissoes-checkbox">
-                        <input type="checkbox" name="col_int_nome" data-role="item" data-group="colunas-cfg" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">Integração</span>
-                      </label>
-
-                      <label class="usuarios-permissoes-checkbox">
-                        <input type="checkbox" name="col_int_status" data-role="item" data-group="colunas-cfg" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">Status</span>
-                      </label>
-
-                      <label class="usuarios-permissoes-checkbox">
-                        <input type="checkbox" name="col_int_ult_sync" data-role="item" data-group="colunas-cfg" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">Últ. sync</span>
-                      </label>
-
-                    </div>
-                  </div>
 
                 </div>
               </div>

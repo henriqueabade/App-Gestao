@@ -123,10 +123,42 @@ function initializeAllReportColumns() {
     });
 }
 
+// ---------------------------------------------------------------------------
+// Permissao de coluna neste modulo.
+//
+// A tabela de Relatorios e orientada a dados: cabecalho, celulas, dropdown
+// "Colunas" e exportacao todos derivam da mesma lista. Marcar so o <th> com
+// `data-perm-col` esconderia o cabecalho e deixaria as celulas — desalinhando a
+// tabela e, pior, mantendo o dado nas exportacoes. Entao filtramos a LISTA:
+// a coluna negada deixa de existir para todos os consumidores de uma vez.
+//
+// O mapa chave-interna -> chave-de-permissao vem do proprio HTML, onde cada
+// <th> traz `data-column-key` e `data-perm-col` lado a lado.
+// ---------------------------------------------------------------------------
+const permissaoPorColuna = new Map();   // "relatorio::coluna" -> chave
+
+function mapearPermissoesDeColuna(key) {
+    const painel = document.querySelector(`[data-relatorios-tab-content="${key}"]`);
+    if (!painel) return;
+    painel.querySelectorAll('th[data-column-key][data-perm-col]').forEach(th => {
+        permissaoPorColuna.set(`${key}::${th.getAttribute('data-column-key')}`,
+                               th.getAttribute('data-perm-col'));
+    });
+}
+
+function colunaPermitida(key, colunaKey) {
+    if (!permissaoPorColuna.size) mapearPermissoesDeColuna(key);
+    const chave = permissaoPorColuna.get(`${key}::${colunaKey}`);
+    if (!chave) return true;                       // coluna sem permissao definida
+    const pode = window.Permissoes?.pode;
+    return typeof pode === 'function' ? pode(chave) : true;
+}
+
 function getVisibleColumnKeys(key) {
     initializeReportColumns(key);
     const set = reportVisibleColumns.get(key);
-    return set ? Array.from(set) : [];
+    if (!set) return [];
+    return Array.from(set).filter(colunaKey => colunaPermitida(key, colunaKey));
 }
 
 function setVisibleColumns(key, columnKeys) {

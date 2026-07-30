@@ -345,7 +345,7 @@ CREATE TABLE IF NOT EXISTS perm_ctt (
 );
 
 -- ---------------------------------------------------------------------
--- 10) Relatórios  (perm_rel)  —  11 ações, 48 colunas
+-- 10) Relatórios  (perm_rel)  —  15 ações, 48 colunas
 -- ---------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS perm_rel (
   modelo_id    INTEGER PRIMARY KEY REFERENCES modelos_permissoes(id) ON DELETE CASCADE,
@@ -353,16 +353,20 @@ CREATE TABLE IF NOT EXISTS perm_rel (
 
   -- Ações
   acao_view                          BOOLEAN NOT NULL DEFAULT FALSE,  -- rel.view · Ver módulo
-  acao_search                        BOOLEAN NOT NULL DEFAULT FALSE,  -- rel.search · Buscar/filtrar
-  acao_run                           BOOLEAN NOT NULL DEFAULT FALSE,  -- rel.run · Rodar relatório
+  acao_tab_select                    BOOLEAN NOT NULL DEFAULT FALSE,  -- rel.tab.select · Escolher relatório
+  acao_search                        BOOLEAN NOT NULL DEFAULT FALSE,  -- rel.search · Filtrar registros
+  acao_kpi_view                      BOOLEAN NOT NULL DEFAULT FALSE,  -- rel.kpi.view · Ver indicadores
+  acao_view_table                    BOOLEAN NOT NULL DEFAULT FALSE,  -- rel.view.table · Ver como tabela
+  acao_view_charts                   BOOLEAN NOT NULL DEFAULT FALSE,  -- rel.view.charts · Ver como gráficos
+  acao_view_detail                   BOOLEAN NOT NULL DEFAULT FALSE,  -- rel.view.detail · Ver Master-Detail
   acao_export_csv                    BOOLEAN NOT NULL DEFAULT FALSE,  -- rel.export.csv · Exportar CSV
-  acao_export_xlsx                   BOOLEAN NOT NULL DEFAULT FALSE,  -- rel.export.xlsx · Exportar XLSX
+  acao_export_xlsx                   BOOLEAN NOT NULL DEFAULT FALSE,  -- rel.export.xlsx · Exportar Excel
   acao_export_pdf                    BOOLEAN NOT NULL DEFAULT FALSE,  -- rel.export.pdf · Exportar PDF
-  acao_preset_save                   BOOLEAN NOT NULL DEFAULT FALSE,  -- rel.preset.save · Salvar preset
-  acao_preset_load                   BOOLEAN NOT NULL DEFAULT FALSE,  -- rel.preset.load · Carregar preset
-  acao_preset_manage                 BOOLEAN NOT NULL DEFAULT FALSE,  -- rel.preset.manage · Gerenciar presets
-  acao_share_link                    BOOLEAN NOT NULL DEFAULT FALSE,  -- rel.share.link · Gerar link compartilhável
-  acao_share_send                    BOOLEAN NOT NULL DEFAULT FALSE,  -- rel.share.send · Enviar relatório
+  acao_print                         BOOLEAN NOT NULL DEFAULT FALSE,  -- rel.print · Imprimir
+  acao_columns_toggle                BOOLEAN NOT NULL DEFAULT FALSE,  -- rel.columns.toggle · Escolher colunas visíveis
+  acao_preset_save                   BOOLEAN NOT NULL DEFAULT FALSE,  -- rel.preset.save · Salvar modelo
+  acao_preset_load                   BOOLEAN NOT NULL DEFAULT FALSE,  -- rel.preset.load · Carregar modelo
+  acao_share_send                    BOOLEAN NOT NULL DEFAULT FALSE,  -- rel.share.send · Agendar envio
 
   -- Colunas visíveis
   col_rel_estq_nome                  BOOLEAN NOT NULL DEFAULT FALSE,  -- Nome
@@ -445,7 +449,7 @@ CREATE TABLE IF NOT EXISTS perm_tarefas (
 );
 
 -- ---------------------------------------------------------------------
--- 12) Configurações  (perm_cfg)  —  6 ações, 8 colunas
+-- 12) Configurações  (perm_cfg)  —  11 ações, 0 colunas
 -- ---------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS perm_cfg (
   modelo_id    INTEGER PRIMARY KEY REFERENCES modelos_permissoes(id) ON DELETE CASCADE,
@@ -453,21 +457,16 @@ CREATE TABLE IF NOT EXISTS perm_cfg (
 
   -- Ações
   acao_view                          BOOLEAN NOT NULL DEFAULT FALSE,  -- cfg.view · Ver configurações
+  acao_profile_edit                  BOOLEAN NOT NULL DEFAULT FALSE,  -- cfg.profile.edit · Editar dados pessoais
+  acao_password_change               BOOLEAN NOT NULL DEFAULT FALSE,  -- cfg.password.change · Alterar senha
+  acao_avatar_edit                   BOOLEAN NOT NULL DEFAULT FALSE,  -- cfg.avatar.edit · Alterar foto de perfil
+  acao_prefs_edit                    BOOLEAN NOT NULL DEFAULT FALSE,  -- cfg.prefs.edit · Editar preferências do menu
   acao_theme_edit                    BOOLEAN NOT NULL DEFAULT FALSE,  -- cfg.theme.edit · Editar tema
-  acao_integrations_edit             BOOLEAN NOT NULL DEFAULT FALSE,  -- cfg.integrations.edit · Editar integrações
-  acao_prefs_edit                    BOOLEAN NOT NULL DEFAULT FALSE,  -- cfg.prefs.edit · Editar preferências gerais
-  acao_roles_view                    BOOLEAN NOT NULL DEFAULT FALSE,  -- cfg.roles.view · Ver papéis/perfis
-  acao_roles_edit                    BOOLEAN NOT NULL DEFAULT FALSE,  -- cfg.roles.edit · Editar papéis/perfis
-
-  -- Colunas visíveis
-  col_role_code                      BOOLEAN NOT NULL DEFAULT FALSE,  -- Código
-  col_role_name                      BOOLEAN NOT NULL DEFAULT FALSE,  -- Nome
-  col_role_desc                      BOOLEAN NOT NULL DEFAULT FALSE,  -- Descrição
-  col_role_modulos                   BOOLEAN NOT NULL DEFAULT FALSE,  -- Módulos
-  col_role_features                  BOOLEAN NOT NULL DEFAULT FALSE,  -- Ações
-  col_int_nome                       BOOLEAN NOT NULL DEFAULT FALSE,  -- Integração
-  col_int_status                     BOOLEAN NOT NULL DEFAULT FALSE,  -- Status
-  col_int_ult_sync                   BOOLEAN NOT NULL DEFAULT FALSE  -- Últ. sync
+  acao_notifications_edit            BOOLEAN NOT NULL DEFAULT FALSE,  -- cfg.notifications.edit · Editar notificações
+  acao_quickactions_edit             BOOLEAN NOT NULL DEFAULT FALSE,  -- cfg.quickactions.edit · Editar ações rápidas
+  acao_categories_edit               BOOLEAN NOT NULL DEFAULT FALSE,  -- cfg.categories.edit · Editar categorias relevantes
+  acao_roles_view                    BOOLEAN NOT NULL DEFAULT FALSE,  -- cfg.roles.view · Ver perfis de permissão
+  acao_roles_edit                    BOOLEAN NOT NULL DEFAULT FALSE  -- cfg.roles.edit · Editar perfis de permissão
 );
 
 -- ---------------------------------------------------------------------
@@ -577,16 +576,16 @@ INSERT INTO perm_ctt (modelo_id, modulo_ativo, acao_view, acao_search, acao_crea
 SELECT id, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE FROM modelos_permissoes WHERE nome = 'Administrador'
 ON CONFLICT (modelo_id) DO NOTHING;
 
-INSERT INTO perm_rel (modelo_id, modulo_ativo, acao_view, acao_search, acao_run, acao_export_csv, acao_export_xlsx, acao_export_pdf, acao_preset_save, acao_preset_load, acao_preset_manage, acao_share_link, acao_share_send, col_rel_estq_nome, col_rel_estq_categoria, col_rel_estq_unidade, col_rel_estq_qtd, col_rel_estq_preco, col_rel_estq_processo, col_rel_estq_status, col_rel_prod_codigo, col_rel_prod_nome, col_rel_prod_colecao, col_rel_prod_preco_venda, col_rel_prod_margem, col_rel_prod_qtd, col_rel_prod_status, col_rel_cli_nome, col_rel_cli_cnpj, col_rel_cli_pais, col_rel_cli_estado, col_rel_cli_status, col_rel_cli_dono, col_rel_ctt_contato, col_rel_ctt_tipo, col_rel_ctt_empresa, col_rel_ctt_celular, col_rel_ctt_telefone, col_rel_ctt_email, col_rel_pros_nome, col_rel_pros_email, col_rel_pros_status, col_rel_pros_responsavel, col_rel_orc_codigo, col_rel_orc_cliente, col_rel_orc_data, col_rel_orc_valor, col_rel_orc_condicao, col_rel_orc_status, col_rel_ped_codigo, col_rel_ped_cliente, col_rel_ped_data, col_rel_ped_valor, col_rel_ped_condicao, col_rel_ped_status, col_rel_usr_avatar, col_rel_usr_nome, col_rel_usr_email, col_rel_usr_perfil, col_rel_usr_situacao, col_rel_usr_status)
-SELECT id, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE FROM modelos_permissoes WHERE nome = 'Administrador'
+INSERT INTO perm_rel (modelo_id, modulo_ativo, acao_view, acao_tab_select, acao_search, acao_kpi_view, acao_view_table, acao_view_charts, acao_view_detail, acao_export_csv, acao_export_xlsx, acao_export_pdf, acao_print, acao_columns_toggle, acao_preset_save, acao_preset_load, acao_share_send, col_rel_estq_nome, col_rel_estq_categoria, col_rel_estq_unidade, col_rel_estq_qtd, col_rel_estq_preco, col_rel_estq_processo, col_rel_estq_status, col_rel_prod_codigo, col_rel_prod_nome, col_rel_prod_colecao, col_rel_prod_preco_venda, col_rel_prod_margem, col_rel_prod_qtd, col_rel_prod_status, col_rel_cli_nome, col_rel_cli_cnpj, col_rel_cli_pais, col_rel_cli_estado, col_rel_cli_status, col_rel_cli_dono, col_rel_ctt_contato, col_rel_ctt_tipo, col_rel_ctt_empresa, col_rel_ctt_celular, col_rel_ctt_telefone, col_rel_ctt_email, col_rel_pros_nome, col_rel_pros_email, col_rel_pros_status, col_rel_pros_responsavel, col_rel_orc_codigo, col_rel_orc_cliente, col_rel_orc_data, col_rel_orc_valor, col_rel_orc_condicao, col_rel_orc_status, col_rel_ped_codigo, col_rel_ped_cliente, col_rel_ped_data, col_rel_ped_valor, col_rel_ped_condicao, col_rel_ped_status, col_rel_usr_avatar, col_rel_usr_nome, col_rel_usr_email, col_rel_usr_perfil, col_rel_usr_situacao, col_rel_usr_status)
+SELECT id, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE FROM modelos_permissoes WHERE nome = 'Administrador'
 ON CONFLICT (modelo_id) DO NOTHING;
 
 INSERT INTO perm_tarefas (modelo_id, modulo_ativo, acao_view, acao_create, acao_edit, acao_delete, acao_assign, acao_calendar_view, col_tsk_titulo, col_tsk_resp, col_tsk_prazo, col_tsk_status, col_tsk_prioridade, col_evt_titulo, col_evt_inicio, col_evt_fim, col_evt_local, col_evt_participantes, col_evt_status)
 SELECT id, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE FROM modelos_permissoes WHERE nome = 'Administrador'
 ON CONFLICT (modelo_id) DO NOTHING;
 
-INSERT INTO perm_cfg (modelo_id, modulo_ativo, acao_view, acao_theme_edit, acao_integrations_edit, acao_prefs_edit, acao_roles_view, acao_roles_edit, col_role_code, col_role_name, col_role_desc, col_role_modulos, col_role_features, col_int_nome, col_int_status, col_int_ult_sync)
-SELECT id, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE FROM modelos_permissoes WHERE nome = 'Administrador'
+INSERT INTO perm_cfg (modelo_id, modulo_ativo, acao_view, acao_profile_edit, acao_password_change, acao_avatar_edit, acao_prefs_edit, acao_theme_edit, acao_notifications_edit, acao_quickactions_edit, acao_categories_edit, acao_roles_view, acao_roles_edit)
+SELECT id, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE FROM modelos_permissoes WHERE nome = 'Administrador'
 ON CONFLICT (modelo_id) DO NOTHING;
 
 INSERT INTO perm_dashboard (modelo_id, modulo_ativo)

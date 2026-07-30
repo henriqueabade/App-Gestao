@@ -1322,67 +1322,91 @@ const PERMISSIONS_CATALOG = {
         "key": "rel.view",
         "column": "acao_view",
         "label": "Ver módulo",
-        "desc": "Acessar área de relatórios"
+        "desc": "Exibir o módulo de relatórios"
+      },
+      {
+        "key": "rel.tab.select",
+        "column": "acao_tab_select",
+        "label": "Escolher relatório",
+        "desc": "Abas: Matéria-Prima, Produtos, Clientes, Contatos, Prospecções, Orçamentos, Pedidos, Usuários"
       },
       {
         "key": "rel.search",
         "column": "acao_search",
-        "label": "Buscar/filtrar",
-        "desc": "Selecionar período e filtros"
+        "label": "Filtrar registros",
+        "desc": "Botões Filtrar e Limpar de cada aba"
       },
       {
-        "key": "rel.run",
-        "column": "acao_run",
-        "label": "Rodar relatório",
-        "desc": "Executar consultas e gerar dados"
+        "key": "rel.kpi.view",
+        "column": "acao_kpi_view",
+        "label": "Ver indicadores",
+        "desc": "Painel \"Indicadores\" (KPIs) acima da tabela"
+      },
+      {
+        "key": "rel.view.table",
+        "column": "acao_view_table",
+        "label": "Ver como tabela",
+        "desc": "Botão \"Tabela\""
+      },
+      {
+        "key": "rel.view.charts",
+        "column": "acao_view_charts",
+        "label": "Ver como gráficos",
+        "desc": "Botão \"Gráficos\""
+      },
+      {
+        "key": "rel.view.detail",
+        "column": "acao_view_detail",
+        "label": "Ver Master-Detail",
+        "desc": "Botão \"Master-Detail\""
       },
       {
         "key": "rel.export.csv",
         "column": "acao_export_csv",
         "label": "Exportar CSV",
-        "desc": "Exportar dados em CSV"
+        "desc": "Opção CSV do botão \"Exportar\""
       },
       {
         "key": "rel.export.xlsx",
         "column": "acao_export_xlsx",
-        "label": "Exportar XLSX",
-        "desc": "Exportar dados em XLSX"
+        "label": "Exportar Excel",
+        "desc": "Opção Excel do botão \"Exportar\""
       },
       {
         "key": "rel.export.pdf",
         "column": "acao_export_pdf",
         "label": "Exportar PDF",
-        "desc": "Gerar PDF formatado"
+        "desc": "Opção PDF do botão \"Exportar\""
+      },
+      {
+        "key": "rel.print",
+        "column": "acao_print",
+        "label": "Imprimir",
+        "desc": "Opção Imprimir do botão \"Exportar\""
+      },
+      {
+        "key": "rel.columns.toggle",
+        "column": "acao_columns_toggle",
+        "label": "Escolher colunas visíveis",
+        "desc": "Botão \"Colunas\" — define quais colunas aparecem no resultado"
       },
       {
         "key": "rel.preset.save",
         "column": "acao_preset_save",
-        "label": "Salvar preset",
-        "desc": "Salvar conjunto de filtros/colunas"
+        "label": "Salvar modelo",
+        "desc": "Botão \"Salvar Modelo\" e o modal de salvamento"
       },
       {
         "key": "rel.preset.load",
         "column": "acao_preset_load",
-        "label": "Carregar preset",
-        "desc": "Carregar preset salvo"
-      },
-      {
-        "key": "rel.preset.manage",
-        "column": "acao_preset_manage",
-        "label": "Gerenciar presets",
-        "desc": "Renomear, compartilhar ou excluir presets"
-      },
-      {
-        "key": "rel.share.link",
-        "column": "acao_share_link",
-        "label": "Gerar link compartilhável",
-        "desc": "Criar link protegido para visualização"
+        "label": "Carregar modelo",
+        "desc": "Botão \"Carregar Modelo\""
       },
       {
         "key": "rel.share.send",
         "column": "acao_share_send",
-        "label": "Enviar relatório",
-        "desc": "Disparar por e-mail/integração"
+        "label": "Agendar envio",
+        "desc": "Botão \"Agendar\" e o modal \"Agendar Relatório\""
       }
     ],
     "columns": [
@@ -1741,81 +1765,70 @@ const PERMISSIONS_CATALOG = {
         "key": "cfg.view",
         "column": "acao_view",
         "label": "Ver configurações",
-        "desc": "Acessar painel de configurações"
+        "desc": "Abrir o módulo de configurações"
+      },
+      {
+        "key": "cfg.profile.edit",
+        "column": "acao_profile_edit",
+        "label": "Editar dados pessoais",
+        "desc": "Nome, e-mail e telefone + botões Salvar/Cancelar"
+      },
+      {
+        "key": "cfg.password.change",
+        "column": "acao_password_change",
+        "label": "Alterar senha",
+        "desc": "Campos de senha e confirmação"
+      },
+      {
+        "key": "cfg.avatar.edit",
+        "column": "acao_avatar_edit",
+        "label": "Alterar foto de perfil",
+        "desc": "Carregar imagem e botão \"Remover foto\""
+      },
+      {
+        "key": "cfg.prefs.edit",
+        "column": "acao_prefs_edit",
+        "label": "Editar preferências do menu",
+        "desc": "Módulo inicial, CRM expandido e comportamento da barra lateral"
       },
       {
         "key": "cfg.theme.edit",
         "column": "acao_theme_edit",
         "label": "Editar tema",
-        "desc": "Alterar identidade visual"
+        "desc": "Chave de alternância do tema"
       },
       {
-        "key": "cfg.integrations.edit",
-        "column": "acao_integrations_edit",
-        "label": "Editar integrações",
-        "desc": "Configurar chaves e webhooks"
+        "key": "cfg.notifications.edit",
+        "column": "acao_notifications_edit",
+        "label": "Editar notificações",
+        "desc": "Chave de notificações no menu"
       },
       {
-        "key": "cfg.prefs.edit",
-        "column": "acao_prefs_edit",
-        "label": "Editar preferências gerais",
-        "desc": "Ajustar parâmetros globais"
+        "key": "cfg.quickactions.edit",
+        "column": "acao_quickactions_edit",
+        "label": "Editar ações rápidas",
+        "desc": "Chaves de sair, minimizar, recarregar, tela, fechar, avatar e nome"
+      },
+      {
+        "key": "cfg.categories.edit",
+        "column": "acao_categories_edit",
+        "label": "Editar categorias relevantes",
+        "desc": "Chaves de sistema, tarefas, vendas e financeiro"
       },
       {
         "key": "cfg.roles.view",
         "column": "acao_roles_view",
-        "label": "Ver papéis/perfis",
-        "desc": "Listar papéis e acessos"
+        "label": "Ver perfis de permissão",
+        "desc": "Filtros da tela de Gestão de Usuários"
       },
       {
         "key": "cfg.roles.edit",
         "column": "acao_roles_edit",
-        "label": "Editar papéis/perfis",
-        "desc": "Criar/editar/remover papéis"
+        "label": "Editar perfis de permissão",
+        "desc": "Botão \"Modelos de Permissão\" e o modal dele"
       }
     ],
-    "columns": [
-      {
-        "key": "col_role_code",
-        "column": "col_role_code",
-        "label": "Código"
-      },
-      {
-        "key": "col_role_name",
-        "column": "col_role_name",
-        "label": "Nome"
-      },
-      {
-        "key": "col_role_desc",
-        "column": "col_role_desc",
-        "label": "Descrição"
-      },
-      {
-        "key": "col_role_modulos",
-        "column": "col_role_modulos",
-        "label": "Módulos"
-      },
-      {
-        "key": "col_role_features",
-        "column": "col_role_features",
-        "label": "Ações"
-      },
-      {
-        "key": "col_int_nome",
-        "column": "col_int_nome",
-        "label": "Integração"
-      },
-      {
-        "key": "col_int_status",
-        "column": "col_int_status",
-        "label": "Status"
-      },
-      {
-        "key": "col_int_ult_sync",
-        "column": "col_int_ult_sync",
-        "label": "Últ. sync"
-      }
-    ]
+    "columns": []
   },
   "dashboard": {
     "code": "dashboard",

@@ -15,7 +15,7 @@
     <link rel="stylesheet" href="../styles/scroll.css">
 </head>
 <body class="text-white">
-    <div id="configuracoesModule" class="modulo-container configuracoes-module" data-module="configuracoes">
+    <div id="configuracoesModule" class="modulo-container configuracoes-module" data-module="configuracoes" data-perm-hide="cfg.view">
         <header class="settings-header mb-8">
             <div>
                 <h1 class="text-2xl font-semibold mb-2">Configurações</h1>
@@ -38,7 +38,7 @@
                             <span class="personal-avatar-initials" id="personalAvatarInitials"></span>
                         </div>
                         <label for="personalAvatarInput" class="personal-avatar-upload">
-                            <input type="file" id="personalAvatarInput" accept="image/jpeg,image/png,image/webp" class="sr-only">
+                            <input type="file" id="personalAvatarInput" data-perm="cfg.avatar.edit" accept="image/jpeg,image/png,image/webp" class="sr-only">
                             <span class="personal-avatar-upload-button">
                                 <i class="fa-solid fa-camera"></i>
                                 <span>Atualizar foto</span>
@@ -51,27 +51,27 @@
                     <div class="personal-data-fields">
                         <div class="personal-data-field" data-field="nome">
                             <label for="personalDataName" class="personal-data-label">Nome completo</label>
-                            <input type="text" id="personalDataName" class="input-glass personal-data-input" placeholder="Seu nome" autocomplete="name" required>
+                            <input type="text" id="personalDataName" data-perm="cfg.profile.edit" class="input-glass personal-data-input" placeholder="Seu nome" autocomplete="name" required>
                             <p class="personal-field-error" id="personalDataNameError"></p>
                         </div>
                         <div class="personal-data-field" data-field="email">
                             <label for="personalDataEmail" class="personal-data-label">E-mail</label>
-                            <input type="email" id="personalDataEmail" class="input-glass personal-data-input" placeholder="voce@empresa.com" autocomplete="email" required>
+                            <input type="email" id="personalDataEmail" data-perm="cfg.profile.edit" class="input-glass personal-data-input" placeholder="voce@empresa.com" autocomplete="email" required>
                             <p class="personal-field-error" id="personalDataEmailError"></p>
                         </div>
                         <div class="personal-data-field" data-field="telefone">
                             <label for="personalDataPhone" class="personal-data-label">Telefone</label>
-                            <input type="tel" id="personalDataPhone" class="input-glass personal-data-input" placeholder="(00) 00000-0000" autocomplete="tel">
+                            <input type="tel" id="personalDataPhone" data-perm="cfg.profile.edit" class="input-glass personal-data-input" placeholder="(00) 00000-0000" autocomplete="tel">
                             <p class="personal-field-error" id="personalDataPhoneError"></p>
                         </div>
                         <div class="personal-data-field" data-field="senha">
                             <label for="personalDataPassword" class="personal-data-label">Nova senha</label>
-                            <input type="password" id="personalDataPassword" class="input-glass personal-data-input" placeholder="Deixe em branco para manter" autocomplete="new-password">
+                            <input type="password" id="personalDataPassword" data-perm="cfg.password.change" class="input-glass personal-data-input" placeholder="Deixe em branco para manter" autocomplete="new-password">
                             <p class="personal-field-error" id="personalDataPasswordError"></p>
                         </div>
                         <div class="personal-data-field" data-field="confirmacao">
                             <label for="personalDataPasswordConfirm" class="personal-data-label">Confirmar nova senha</label>
-                            <input type="password" id="personalDataPasswordConfirm" class="input-glass personal-data-input" placeholder="Repita a nova senha" autocomplete="new-password">
+                            <input type="password" id="personalDataPasswordConfirm" data-perm="cfg.password.change" class="input-glass personal-data-input" placeholder="Repita a nova senha" autocomplete="new-password">
                             <p class="personal-field-error" id="personalDataPasswordConfirmError"></p>
                         </div>
                     </div>
@@ -84,7 +84,7 @@
                         <span class="personal-button-label">Salvar alterações</span>
                         <span class="personal-button-spinner app-loading-indicator app-loading-indicator--inline" aria-hidden="true"><span class="module-loading-orbit"></span><span class="module-loading-core"><img src="../assets/Logo.ico" alt=""></span></span>
                     </button>
-                    <button type="button" id="personalDataReset" class="personal-button personal-button--ghost">Cancelar</button>
+                    <button type="button" id="personalDataReset" data-perm="cfg.profile.edit" class="personal-button personal-button--ghost">Cancelar</button>
                 </div>
             </form>
         </section>
@@ -100,7 +100,7 @@
             <div class="space-y-6 mt-6">
                 <div>
                     <label for="defaultModuleSelect" class="block text-sm font-medium text-white/80">Módulo inicial</label>
-                    <select id="defaultModuleSelect" class="mt-2 w-full input-glass text-white rounded-md px-4 py-3">
+                    <select id="defaultModuleSelect" data-perm="cfg.prefs.edit" class="mt-2 w-full input-glass text-white rounded-md px-4 py-3">
                         <option value="last">Retomar última tela</option>
                         <option value="dashboard">Dashboard</option>
                         <option value="materia-prima">Matéria Prima</option>
@@ -128,14 +128,14 @@
                 <div>
                     <label class="flex items-center justify-between gap-3 text-sm text-white/80" for="crmExpandedToggle">
                         <span>Manter CRM expandido</span>
-                        <input type="checkbox" id="crmExpandedToggle" class="toggle">
+                        <input type="checkbox" id="crmExpandedToggle" data-perm="cfg.prefs.edit" class="toggle">
                     </label>
                     <p id="crmExpandedStatus" class="settings-status mt-2"></p>
                 </div>
 
                 <div>
                     <label for="sidebarBehaviorSelect" class="block text-sm font-medium text-white/80">Barra lateral</label>
-                    <select id="sidebarBehaviorSelect" class="mt-2 w-full input-glass text-white rounded-md px-4 py-3">
+                    <select id="sidebarBehaviorSelect" data-perm="cfg.prefs.edit" class="mt-2 w-full input-glass text-white rounded-md px-4 py-3">
                         <option value="auto">Recolher automaticamente</option>
                         <option value="fixed">Manter sempre aberta</option>
                     </select>
@@ -161,7 +161,7 @@
                     <h2 class="settings-card-title">Notificações no menu</h2>
                     <p class="settings-card-description">Ative ou desative os alertas exibidos no sino do menu lateral.</p>
                 </div>
-                <input type="checkbox" id="notificationToggle" class="toggle" aria-label="Ativar notificações">
+                <input type="checkbox" id="notificationToggle" data-perm="cfg.notifications.edit" class="toggle" aria-label="Ativar notificações">
             </div>
             <p id="notificationStatus" class="settings-status"></p>
         </section>
@@ -179,23 +179,23 @@
                     <p id="quickActionsGroupLabel" class="text-sm text-white/80 mb-3">Escolha as ações que devem aparecer no menu de usuário.</p>
                     <div class="space-y-2" role="group" aria-labelledby="quickActionsGroupLabel">
                         <label class="flex items-center gap-3 text-sm text-white/80" for="quickAction-logout">
-                            <input type="checkbox" id="quickAction-logout" data-quick-action="logout" class="h-4 w-4 rounded border border-white/30 bg-transparent accent-[var(--color-primary)]">
+                            <input type="checkbox" id="quickAction-logout" data-perm="cfg.quickactions.edit" data-quick-action="logout" class="h-4 w-4 rounded border border-white/30 bg-transparent accent-[var(--color-primary)]">
                             Sair do sistema
                         </label>
                         <label class="flex items-center gap-3 text-sm text-white/80" for="quickAction-minimize">
-                            <input type="checkbox" id="quickAction-minimize" data-quick-action="minimize" class="h-4 w-4 rounded border border-white/30 bg-transparent accent-[var(--color-primary)]">
+                            <input type="checkbox" id="quickAction-minimize" data-perm="cfg.quickactions.edit" data-quick-action="minimize" class="h-4 w-4 rounded border border-white/30 bg-transparent accent-[var(--color-primary)]">
                             Minimizar janela
                         </label>
                         <label class="flex items-center gap-3 text-sm text-white/80" for="quickAction-reload">
-                            <input type="checkbox" id="quickAction-reload" data-quick-action="reload" class="h-4 w-4 rounded border border-white/30 bg-transparent accent-[var(--color-primary)]">
+                            <input type="checkbox" id="quickAction-reload" data-perm="cfg.quickactions.edit" data-quick-action="reload" class="h-4 w-4 rounded border border-white/30 bg-transparent accent-[var(--color-primary)]">
                             Recarregar aplicação
                         </label>
                         <label class="flex items-center gap-3 text-sm text-white/80" for="quickAction-selectDisplay">
-                            <input type="checkbox" id="quickAction-selectDisplay" data-quick-action="select-display" class="h-4 w-4 rounded border border-white/30 bg-transparent accent-[var(--color-primary)]">
+                            <input type="checkbox" id="quickAction-selectDisplay" data-perm="cfg.quickactions.edit" data-quick-action="select-display" class="h-4 w-4 rounded border border-white/30 bg-transparent accent-[var(--color-primary)]">
                             Escolher tela
                         </label>
                         <label class="flex items-center gap-3 text-sm text-white/80" for="quickAction-close">
-                            <input type="checkbox" id="quickAction-close" data-quick-action="close" class="h-4 w-4 rounded border border-white/30 bg-transparent accent-[var(--color-primary)]">
+                            <input type="checkbox" id="quickAction-close" data-perm="cfg.quickactions.edit" data-quick-action="close" class="h-4 w-4 rounded border border-white/30 bg-transparent accent-[var(--color-primary)]">
                             Fechar aplicação
                         </label>
                     </div>
@@ -205,11 +205,11 @@
                 <div class="pt-4 border-t border-white/10">
                     <p class="text-sm text-white/80 mb-3">Personalize como os dados do usuário são apresentados.</p>
                     <label class="flex items-center gap-3 text-sm text-white/80" for="quickAction-showAvatar">
-                        <input type="checkbox" id="quickAction-showAvatar" class="h-4 w-4 rounded border border-white/30 bg-transparent accent-[var(--color-primary)]">
+                        <input type="checkbox" id="quickAction-showAvatar" data-perm="cfg.quickactions.edit" class="h-4 w-4 rounded border border-white/30 bg-transparent accent-[var(--color-primary)]">
                         Exibir avatar do usuário
                     </label>
                     <label class="flex items-center gap-3 text-sm text-white/80 mt-2" for="quickAction-showName">
-                        <input type="checkbox" id="quickAction-showName" class="h-4 w-4 rounded border border-white/30 bg-transparent accent-[var(--color-primary)]">
+                        <input type="checkbox" id="quickAction-showName" data-perm="cfg.quickactions.edit" class="h-4 w-4 rounded border border-white/30 bg-transparent accent-[var(--color-primary)]">
                         Exibir nome e perfil
                     </label>
                     <p id="quickIdentityStatus" class="settings-status mt-2"></p>
@@ -231,7 +231,7 @@
                             <span class="category-title">Atualizações do sistema</span>
                             <p class="category-description">Avisos sobre novidades, correções e melhorias liberadas.</p>
                         </div>
-                        <input type="checkbox" id="category-system" class="category-input" value="system">
+                        <input type="checkbox" id="category-system" data-perm="cfg.categories.edit" class="category-input" value="system">
                     </div>
                 </label>
                 <label class="category-card" for="category-tasks">
@@ -240,7 +240,7 @@
                             <span class="category-title">Tarefas e lembretes</span>
                             <p class="category-description">Alertas sobre tarefas pendentes, compromissos e follow-ups.</p>
                         </div>
-                        <input type="checkbox" id="category-tasks" class="category-input" value="tasks">
+                        <input type="checkbox" id="category-tasks" data-perm="cfg.categories.edit" class="category-input" value="tasks">
                     </div>
                 </label>
                 <label class="category-card" for="category-sales">
@@ -249,7 +249,7 @@
                             <span class="category-title">Vendas e pedidos</span>
                             <p class="category-description">Notificações sobre novos pedidos e movimentações comerciais.</p>
                         </div>
-                        <input type="checkbox" id="category-sales" class="category-input" value="sales">
+                        <input type="checkbox" id="category-sales" data-perm="cfg.categories.edit" class="category-input" value="sales">
                     </div>
                 </label>
                 <label class="category-card" for="category-finance">
@@ -258,7 +258,7 @@
                             <span class="category-title">Financeiro</span>
                             <p class="category-description">Alertas de cobranças, faturamentos e vencimentos próximos.</p>
                         </div>
-                        <input type="checkbox" id="category-finance" class="category-input" value="finance">
+                        <input type="checkbox" id="category-finance" data-perm="cfg.categories.edit" class="category-input" value="finance">
                     </div>
                 </label>
             </div>

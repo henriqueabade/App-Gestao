@@ -292,16 +292,20 @@ CREATE TABLE IF NOT EXISTS perm_rel (
   modulo_ativo BOOLEAN NOT NULL DEFAULT FALSE
 );
 ALTER TABLE perm_rel ADD COLUMN IF NOT EXISTS acao_view BOOLEAN NOT NULL DEFAULT FALSE;  -- rel.view · Ver módulo
-ALTER TABLE perm_rel ADD COLUMN IF NOT EXISTS acao_search BOOLEAN NOT NULL DEFAULT FALSE;  -- rel.search · Buscar/filtrar
-ALTER TABLE perm_rel ADD COLUMN IF NOT EXISTS acao_run BOOLEAN NOT NULL DEFAULT FALSE;  -- rel.run · Rodar relatório
+ALTER TABLE perm_rel ADD COLUMN IF NOT EXISTS acao_tab_select BOOLEAN NOT NULL DEFAULT FALSE;  -- rel.tab.select · Escolher relatório
+ALTER TABLE perm_rel ADD COLUMN IF NOT EXISTS acao_search BOOLEAN NOT NULL DEFAULT FALSE;  -- rel.search · Filtrar registros
+ALTER TABLE perm_rel ADD COLUMN IF NOT EXISTS acao_kpi_view BOOLEAN NOT NULL DEFAULT FALSE;  -- rel.kpi.view · Ver indicadores
+ALTER TABLE perm_rel ADD COLUMN IF NOT EXISTS acao_view_table BOOLEAN NOT NULL DEFAULT FALSE;  -- rel.view.table · Ver como tabela
+ALTER TABLE perm_rel ADD COLUMN IF NOT EXISTS acao_view_charts BOOLEAN NOT NULL DEFAULT FALSE;  -- rel.view.charts · Ver como gráficos
+ALTER TABLE perm_rel ADD COLUMN IF NOT EXISTS acao_view_detail BOOLEAN NOT NULL DEFAULT FALSE;  -- rel.view.detail · Ver Master-Detail
 ALTER TABLE perm_rel ADD COLUMN IF NOT EXISTS acao_export_csv BOOLEAN NOT NULL DEFAULT FALSE;  -- rel.export.csv · Exportar CSV
-ALTER TABLE perm_rel ADD COLUMN IF NOT EXISTS acao_export_xlsx BOOLEAN NOT NULL DEFAULT FALSE;  -- rel.export.xlsx · Exportar XLSX
+ALTER TABLE perm_rel ADD COLUMN IF NOT EXISTS acao_export_xlsx BOOLEAN NOT NULL DEFAULT FALSE;  -- rel.export.xlsx · Exportar Excel
 ALTER TABLE perm_rel ADD COLUMN IF NOT EXISTS acao_export_pdf BOOLEAN NOT NULL DEFAULT FALSE;  -- rel.export.pdf · Exportar PDF
-ALTER TABLE perm_rel ADD COLUMN IF NOT EXISTS acao_preset_save BOOLEAN NOT NULL DEFAULT FALSE;  -- rel.preset.save · Salvar preset
-ALTER TABLE perm_rel ADD COLUMN IF NOT EXISTS acao_preset_load BOOLEAN NOT NULL DEFAULT FALSE;  -- rel.preset.load · Carregar preset
-ALTER TABLE perm_rel ADD COLUMN IF NOT EXISTS acao_preset_manage BOOLEAN NOT NULL DEFAULT FALSE;  -- rel.preset.manage · Gerenciar presets
-ALTER TABLE perm_rel ADD COLUMN IF NOT EXISTS acao_share_link BOOLEAN NOT NULL DEFAULT FALSE;  -- rel.share.link · Gerar link compartilhável
-ALTER TABLE perm_rel ADD COLUMN IF NOT EXISTS acao_share_send BOOLEAN NOT NULL DEFAULT FALSE;  -- rel.share.send · Enviar relatório
+ALTER TABLE perm_rel ADD COLUMN IF NOT EXISTS acao_print BOOLEAN NOT NULL DEFAULT FALSE;  -- rel.print · Imprimir
+ALTER TABLE perm_rel ADD COLUMN IF NOT EXISTS acao_columns_toggle BOOLEAN NOT NULL DEFAULT FALSE;  -- rel.columns.toggle · Escolher colunas visíveis
+ALTER TABLE perm_rel ADD COLUMN IF NOT EXISTS acao_preset_save BOOLEAN NOT NULL DEFAULT FALSE;  -- rel.preset.save · Salvar modelo
+ALTER TABLE perm_rel ADD COLUMN IF NOT EXISTS acao_preset_load BOOLEAN NOT NULL DEFAULT FALSE;  -- rel.preset.load · Carregar modelo
+ALTER TABLE perm_rel ADD COLUMN IF NOT EXISTS acao_share_send BOOLEAN NOT NULL DEFAULT FALSE;  -- rel.share.send · Agendar envio
 ALTER TABLE perm_rel ADD COLUMN IF NOT EXISTS col_rel_estq_nome BOOLEAN NOT NULL DEFAULT FALSE;  -- Nome
 ALTER TABLE perm_rel ADD COLUMN IF NOT EXISTS col_rel_estq_categoria BOOLEAN NOT NULL DEFAULT FALSE;  -- Categoria
 ALTER TABLE perm_rel ADD COLUMN IF NOT EXISTS col_rel_estq_unidade BOOLEAN NOT NULL DEFAULT FALSE;  -- Unidade
@@ -380,19 +384,16 @@ CREATE TABLE IF NOT EXISTS perm_cfg (
   modulo_ativo BOOLEAN NOT NULL DEFAULT FALSE
 );
 ALTER TABLE perm_cfg ADD COLUMN IF NOT EXISTS acao_view BOOLEAN NOT NULL DEFAULT FALSE;  -- cfg.view · Ver configurações
+ALTER TABLE perm_cfg ADD COLUMN IF NOT EXISTS acao_profile_edit BOOLEAN NOT NULL DEFAULT FALSE;  -- cfg.profile.edit · Editar dados pessoais
+ALTER TABLE perm_cfg ADD COLUMN IF NOT EXISTS acao_password_change BOOLEAN NOT NULL DEFAULT FALSE;  -- cfg.password.change · Alterar senha
+ALTER TABLE perm_cfg ADD COLUMN IF NOT EXISTS acao_avatar_edit BOOLEAN NOT NULL DEFAULT FALSE;  -- cfg.avatar.edit · Alterar foto de perfil
+ALTER TABLE perm_cfg ADD COLUMN IF NOT EXISTS acao_prefs_edit BOOLEAN NOT NULL DEFAULT FALSE;  -- cfg.prefs.edit · Editar preferências do menu
 ALTER TABLE perm_cfg ADD COLUMN IF NOT EXISTS acao_theme_edit BOOLEAN NOT NULL DEFAULT FALSE;  -- cfg.theme.edit · Editar tema
-ALTER TABLE perm_cfg ADD COLUMN IF NOT EXISTS acao_integrations_edit BOOLEAN NOT NULL DEFAULT FALSE;  -- cfg.integrations.edit · Editar integrações
-ALTER TABLE perm_cfg ADD COLUMN IF NOT EXISTS acao_prefs_edit BOOLEAN NOT NULL DEFAULT FALSE;  -- cfg.prefs.edit · Editar preferências gerais
-ALTER TABLE perm_cfg ADD COLUMN IF NOT EXISTS acao_roles_view BOOLEAN NOT NULL DEFAULT FALSE;  -- cfg.roles.view · Ver papéis/perfis
-ALTER TABLE perm_cfg ADD COLUMN IF NOT EXISTS acao_roles_edit BOOLEAN NOT NULL DEFAULT FALSE;  -- cfg.roles.edit · Editar papéis/perfis
-ALTER TABLE perm_cfg ADD COLUMN IF NOT EXISTS col_role_code BOOLEAN NOT NULL DEFAULT FALSE;  -- Código
-ALTER TABLE perm_cfg ADD COLUMN IF NOT EXISTS col_role_name BOOLEAN NOT NULL DEFAULT FALSE;  -- Nome
-ALTER TABLE perm_cfg ADD COLUMN IF NOT EXISTS col_role_desc BOOLEAN NOT NULL DEFAULT FALSE;  -- Descrição
-ALTER TABLE perm_cfg ADD COLUMN IF NOT EXISTS col_role_modulos BOOLEAN NOT NULL DEFAULT FALSE;  -- Módulos
-ALTER TABLE perm_cfg ADD COLUMN IF NOT EXISTS col_role_features BOOLEAN NOT NULL DEFAULT FALSE;  -- Ações
-ALTER TABLE perm_cfg ADD COLUMN IF NOT EXISTS col_int_nome BOOLEAN NOT NULL DEFAULT FALSE;  -- Integração
-ALTER TABLE perm_cfg ADD COLUMN IF NOT EXISTS col_int_status BOOLEAN NOT NULL DEFAULT FALSE;  -- Status
-ALTER TABLE perm_cfg ADD COLUMN IF NOT EXISTS col_int_ult_sync BOOLEAN NOT NULL DEFAULT FALSE;  -- Últ. sync
+ALTER TABLE perm_cfg ADD COLUMN IF NOT EXISTS acao_notifications_edit BOOLEAN NOT NULL DEFAULT FALSE;  -- cfg.notifications.edit · Editar notificações
+ALTER TABLE perm_cfg ADD COLUMN IF NOT EXISTS acao_quickactions_edit BOOLEAN NOT NULL DEFAULT FALSE;  -- cfg.quickactions.edit · Editar ações rápidas
+ALTER TABLE perm_cfg ADD COLUMN IF NOT EXISTS acao_categories_edit BOOLEAN NOT NULL DEFAULT FALSE;  -- cfg.categories.edit · Editar categorias relevantes
+ALTER TABLE perm_cfg ADD COLUMN IF NOT EXISTS acao_roles_view BOOLEAN NOT NULL DEFAULT FALSE;  -- cfg.roles.view · Ver perfis de permissão
+ALTER TABLE perm_cfg ADD COLUMN IF NOT EXISTS acao_roles_edit BOOLEAN NOT NULL DEFAULT FALSE;  -- cfg.roles.edit · Editar perfis de permissão
 
 -- Dashboard (perm_dashboard)
 CREATE TABLE IF NOT EXISTS perm_dashboard (
@@ -484,11 +485,11 @@ UPDATE perm_pros SET modulo_ativo = TRUE, acao_view = TRUE, acao_search = TRUE, 
   WHERE modelo_id IN (SELECT id FROM modelos_permissoes WHERE nome = 'Administrador');
 UPDATE perm_ctt SET modulo_ativo = TRUE, acao_view = TRUE, acao_search = TRUE, acao_create = TRUE, acao_export_csv = TRUE, acao_import_csv = TRUE, acao_report = TRUE, acao_email_bulk = TRUE, acao_edit = TRUE, col_ctt_nome = TRUE, col_ctt_tipo = TRUE, col_ctt_cliente = TRUE, col_ctt_tel = TRUE, col_ctt_fixo = TRUE
   WHERE modelo_id IN (SELECT id FROM modelos_permissoes WHERE nome = 'Administrador');
-UPDATE perm_rel SET modulo_ativo = TRUE, acao_view = TRUE, acao_search = TRUE, acao_run = TRUE, acao_export_csv = TRUE, acao_export_xlsx = TRUE, acao_export_pdf = TRUE, acao_preset_save = TRUE, acao_preset_load = TRUE, acao_preset_manage = TRUE, acao_share_link = TRUE, acao_share_send = TRUE, col_rel_estq_nome = TRUE, col_rel_estq_categoria = TRUE, col_rel_estq_unidade = TRUE, col_rel_estq_qtd = TRUE, col_rel_estq_preco = TRUE, col_rel_estq_processo = TRUE, col_rel_estq_status = TRUE, col_rel_prod_codigo = TRUE, col_rel_prod_nome = TRUE, col_rel_prod_colecao = TRUE, col_rel_prod_preco_venda = TRUE, col_rel_prod_margem = TRUE, col_rel_prod_qtd = TRUE, col_rel_prod_status = TRUE, col_rel_cli_nome = TRUE, col_rel_cli_cnpj = TRUE, col_rel_cli_pais = TRUE, col_rel_cli_estado = TRUE, col_rel_cli_status = TRUE, col_rel_cli_dono = TRUE, col_rel_ctt_contato = TRUE, col_rel_ctt_tipo = TRUE, col_rel_ctt_empresa = TRUE, col_rel_ctt_celular = TRUE, col_rel_ctt_telefone = TRUE, col_rel_ctt_email = TRUE, col_rel_pros_nome = TRUE, col_rel_pros_email = TRUE, col_rel_pros_status = TRUE, col_rel_pros_responsavel = TRUE, col_rel_orc_codigo = TRUE, col_rel_orc_cliente = TRUE, col_rel_orc_data = TRUE, col_rel_orc_valor = TRUE, col_rel_orc_condicao = TRUE, col_rel_orc_status = TRUE, col_rel_ped_codigo = TRUE, col_rel_ped_cliente = TRUE, col_rel_ped_data = TRUE, col_rel_ped_valor = TRUE, col_rel_ped_condicao = TRUE, col_rel_ped_status = TRUE, col_rel_usr_avatar = TRUE, col_rel_usr_nome = TRUE, col_rel_usr_email = TRUE, col_rel_usr_perfil = TRUE, col_rel_usr_situacao = TRUE, col_rel_usr_status = TRUE
+UPDATE perm_rel SET modulo_ativo = TRUE, acao_view = TRUE, acao_tab_select = TRUE, acao_search = TRUE, acao_kpi_view = TRUE, acao_view_table = TRUE, acao_view_charts = TRUE, acao_view_detail = TRUE, acao_export_csv = TRUE, acao_export_xlsx = TRUE, acao_export_pdf = TRUE, acao_print = TRUE, acao_columns_toggle = TRUE, acao_preset_save = TRUE, acao_preset_load = TRUE, acao_share_send = TRUE, col_rel_estq_nome = TRUE, col_rel_estq_categoria = TRUE, col_rel_estq_unidade = TRUE, col_rel_estq_qtd = TRUE, col_rel_estq_preco = TRUE, col_rel_estq_processo = TRUE, col_rel_estq_status = TRUE, col_rel_prod_codigo = TRUE, col_rel_prod_nome = TRUE, col_rel_prod_colecao = TRUE, col_rel_prod_preco_venda = TRUE, col_rel_prod_margem = TRUE, col_rel_prod_qtd = TRUE, col_rel_prod_status = TRUE, col_rel_cli_nome = TRUE, col_rel_cli_cnpj = TRUE, col_rel_cli_pais = TRUE, col_rel_cli_estado = TRUE, col_rel_cli_status = TRUE, col_rel_cli_dono = TRUE, col_rel_ctt_contato = TRUE, col_rel_ctt_tipo = TRUE, col_rel_ctt_empresa = TRUE, col_rel_ctt_celular = TRUE, col_rel_ctt_telefone = TRUE, col_rel_ctt_email = TRUE, col_rel_pros_nome = TRUE, col_rel_pros_email = TRUE, col_rel_pros_status = TRUE, col_rel_pros_responsavel = TRUE, col_rel_orc_codigo = TRUE, col_rel_orc_cliente = TRUE, col_rel_orc_data = TRUE, col_rel_orc_valor = TRUE, col_rel_orc_condicao = TRUE, col_rel_orc_status = TRUE, col_rel_ped_codigo = TRUE, col_rel_ped_cliente = TRUE, col_rel_ped_data = TRUE, col_rel_ped_valor = TRUE, col_rel_ped_condicao = TRUE, col_rel_ped_status = TRUE, col_rel_usr_avatar = TRUE, col_rel_usr_nome = TRUE, col_rel_usr_email = TRUE, col_rel_usr_perfil = TRUE, col_rel_usr_situacao = TRUE, col_rel_usr_status = TRUE
   WHERE modelo_id IN (SELECT id FROM modelos_permissoes WHERE nome = 'Administrador');
 UPDATE perm_tarefas SET modulo_ativo = TRUE, acao_view = TRUE, acao_create = TRUE, acao_edit = TRUE, acao_delete = TRUE, acao_assign = TRUE, acao_calendar_view = TRUE, col_tsk_titulo = TRUE, col_tsk_resp = TRUE, col_tsk_prazo = TRUE, col_tsk_status = TRUE, col_tsk_prioridade = TRUE, col_evt_titulo = TRUE, col_evt_inicio = TRUE, col_evt_fim = TRUE, col_evt_local = TRUE, col_evt_participantes = TRUE, col_evt_status = TRUE
   WHERE modelo_id IN (SELECT id FROM modelos_permissoes WHERE nome = 'Administrador');
-UPDATE perm_cfg SET modulo_ativo = TRUE, acao_view = TRUE, acao_theme_edit = TRUE, acao_integrations_edit = TRUE, acao_prefs_edit = TRUE, acao_roles_view = TRUE, acao_roles_edit = TRUE, col_role_code = TRUE, col_role_name = TRUE, col_role_desc = TRUE, col_role_modulos = TRUE, col_role_features = TRUE, col_int_nome = TRUE, col_int_status = TRUE, col_int_ult_sync = TRUE
+UPDATE perm_cfg SET modulo_ativo = TRUE, acao_view = TRUE, acao_profile_edit = TRUE, acao_password_change = TRUE, acao_avatar_edit = TRUE, acao_prefs_edit = TRUE, acao_theme_edit = TRUE, acao_notifications_edit = TRUE, acao_quickactions_edit = TRUE, acao_categories_edit = TRUE, acao_roles_view = TRUE, acao_roles_edit = TRUE
   WHERE modelo_id IN (SELECT id FROM modelos_permissoes WHERE nome = 'Administrador');
 UPDATE perm_dashboard SET modulo_ativo = TRUE
   WHERE modelo_id IN (SELECT id FROM modelos_permissoes WHERE nome = 'Administrador');
