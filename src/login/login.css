@@ -8,6 +8,12 @@ body {
   font-family: 'Inter', sans-serif;
   background-color:  #3d021f;
 }
+
+body > div > .min-h-screen {
+  min-height: 100vh;
+  max-height: 100vh;
+  overflow-y: auto;
+}
 .heading {
   font-family: 'Inter', sans-serif;
 }
@@ -107,12 +113,92 @@ body {
   box-shadow: 0 4px 30px rgba(0, 0, 0, 0.514);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
+  max-height: calc(100vh - 2rem);
+  overflow-y: auto;
+  transition: max-width 0.25s ease, padding 0.25s ease;
 }
+
+.last-user-profile {
+  margin-top: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.last-user-profile.hidden { display: none; }
+
+.last-user-avatar {
+  width: 6rem;
+  height: 6rem;
+  border-radius: 9999px;
+  border: 2px solid var(--color-primary);
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  font-size: 1.75rem;
+  font-weight: 600;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+}
+
+.last-user-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.last-user-name {
+  margin-top: 0.45rem;
+  color: #fff;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.email-input-wrapper { position: relative; }
+
+.email-input-wrapper #email.is-locked {
+  padding-right: 3.25rem;
+  cursor: default;
+  color: #374151;
+  background-color: #fff;
+}
+
+.change-user-button {
+  position: absolute;
+  top: 50%;
+  right: 0.55rem;
+  transform: translateY(-50%);
+  width: 1.9rem;
+  height: 1.9rem;
+  display: grid;
+  place-items: center;
+  border-radius: 9999px;
+  color: #fff;
+  background: var(--color-primary);
+  transition: background-color 0.15s ease, transform 0.15s ease;
+}
+
+.change-user-button.hidden { display: none; }
+.change-user-button:hover { background: var(--color-primary-hover); transform: translateY(-50%) rotate(30deg); }
+.change-user-button svg { width: 1rem; height: 1rem; }
+
+.login-container.has-last-user .login-heading { margin-bottom: 1rem; }
+.login-container.has-last-user .logo-wrapper { max-width: 190px; }
 
 @media (max-width: 480px) {
   .login-container {
     padding: 1rem;
   }
+
+  .last-user-avatar { width: 4.75rem; height: 4.75rem; }
+}
+
+@media (max-height: 760px) {
+  .login-container { padding-top: 1rem; padding-bottom: 1rem; }
+  .login-container.has-last-user .logo-wrapper { max-width: 145px; }
+  .last-user-avatar { width: 4.5rem; height: 4.5rem; }
+  .last-user-profile { margin-top: 0.4rem; }
 }
 
 .no-select,
