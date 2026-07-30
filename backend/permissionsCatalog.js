@@ -863,49 +863,98 @@ const PERMISSIONS_CATALOG = {
         "key": "cli.view",
         "column": "acao_view",
         "label": "Ver lista",
-        "desc": "Exibir grade de clientes"
+        "desc": "Exibir a grade de clientes"
       },
       {
         "key": "cli.search",
         "column": "acao_search",
         "label": "Buscar/filtrar",
-        "desc": "Pesquisa e ordenação"
-      },
-      {
-        "key": "cli.details.view",
-        "column": "acao_details_view",
-        "label": "Ver detalhes",
-        "desc": "Abrir cadastro completo"
+        "desc": "Busca, filtros de dono e status + Filtrar/Limpar"
       },
       {
         "key": "cli.create",
         "column": "acao_create",
         "label": "Cadastrar cliente",
-        "desc": "Criar novo registro"
+        "desc": "Botão \"Novo Cliente\""
+      },
+      {
+        "key": "cli.export.csv",
+        "column": "acao_export_csv",
+        "label": "Exportar CSV",
+        "desc": "Botão \"Exportar CSV\""
+      },
+      {
+        "key": "cli.import.csv",
+        "column": "acao_import_csv",
+        "label": "Importar CSV",
+        "desc": "Botão \"Importar CSV\""
+      },
+      {
+        "key": "cli.report",
+        "column": "acao_report",
+        "label": "Gerar relatório",
+        "desc": "Botão \"Gerar Relatório\""
+      },
+      {
+        "key": "cli.email.bulk",
+        "column": "acao_email_bulk",
+        "label": "Enviar e-mail em massa",
+        "desc": "Botão \"Enviar E-mail em Massa\""
+      },
+      {
+        "key": "cli.details.view",
+        "column": "acao_details_view",
+        "label": "Ver detalhes",
+        "desc": "Ícone de olho — abre \"Detalhes\""
       },
       {
         "key": "cli.edit",
         "column": "acao_edit",
         "label": "Editar cliente",
-        "desc": "Alterar dados e status"
+        "desc": "Ícone de lápis — abre \"Editar\""
       },
       {
         "key": "cli.delete",
         "column": "acao_delete",
         "label": "Excluir cliente",
-        "desc": "Remover cliente com validações"
+        "desc": "Ícone de lixeira — abre a confirmação"
+      },
+      {
+        "key": "cli.contact.add",
+        "column": "acao_contact_add",
+        "label": "Adicionar contato",
+        "desc": "Botão \"+ Novo Contato\""
+      },
+      {
+        "key": "cli.contact.edit",
+        "column": "acao_contact_edit",
+        "label": "Editar contato",
+        "desc": "Ícone de lápis na coluna AÇÕES dos contatos"
+      },
+      {
+        "key": "cli.contact.remove",
+        "column": "acao_contact_remove",
+        "label": "Remover contato",
+        "desc": "Ícone de lixeira na coluna AÇÕES dos contatos"
+      },
+      {
+        "key": "cli.order.add",
+        "column": "acao_order_add",
+        "label": "Adicionar ordem",
+        "desc": "Botão \"+ Nova Ordem\""
+      },
+      {
+        "key": "cli.address.copy",
+        "column": "acao_address_copy",
+        "label": "Copiar endereço",
+        "desc": "Botões de copiar entre Registro / Cobrança / Entrega"
       }
     ],
     "columns": [
       {
         "key": "col_cli_nome_fantasia",
         "column": "col_cli_nome_fantasia",
-        "label": "Nome fantasia"
-      },
-      {
-        "key": "col_cli_razao_social",
-        "column": "col_cli_razao_social",
-        "label": "Razão social"
+        "label": "Nome"
       },
       {
         "key": "col_cli_cnpj",
@@ -913,29 +962,14 @@ const PERMISSIONS_CATALOG = {
         "label": "CNPJ"
       },
       {
-        "key": "col_cli_comprador",
-        "column": "col_cli_comprador",
-        "label": "Comprador/contato"
-      },
-      {
-        "key": "col_cli_tel",
-        "column": "col_cli_tel",
-        "label": "Telefone"
-      },
-      {
-        "key": "col_cli_email",
-        "column": "col_cli_email",
-        "label": "E-mail"
+        "key": "col_cli_pais",
+        "column": "col_cli_pais",
+        "label": "País"
       },
       {
         "key": "col_cli_cidade_uf",
         "column": "col_cli_cidade_uf",
-        "label": "Cidade/UF"
-      },
-      {
-        "key": "col_cli_transportadora",
-        "column": "col_cli_transportadora",
-        "label": "Transportadora"
+        "label": "Estado"
       },
       {
         "key": "col_cli_status",
@@ -948,24 +982,94 @@ const PERMISSIONS_CATALOG = {
         "label": "Dono"
       },
       {
-        "key": "col_end_tipo",
-        "column": "col_end_tipo",
+        "key": "col_cli_razao_social",
+        "column": "col_cli_razao_social",
+        "label": "Razão social"
+      },
+      {
+        "key": "col_cli_insc_estadual",
+        "column": "col_cli_insc_estadual",
+        "label": "Inscrição estadual"
+      },
+      {
+        "key": "col_cli_site",
+        "column": "col_cli_site",
+        "label": "Site"
+      },
+      {
+        "key": "col_cli_origem",
+        "column": "col_cli_origem",
+        "label": "Origem da captação"
+      },
+      {
+        "key": "col_ctt_nome",
+        "column": "col_ctt_nome",
+        "label": "Nome"
+      },
+      {
+        "key": "col_ctt_cargo",
+        "column": "col_ctt_cargo",
+        "label": "Cargo"
+      },
+      {
+        "key": "col_ctt_email",
+        "column": "col_ctt_email",
+        "label": "E-mail"
+      },
+      {
+        "key": "col_ctt_tel",
+        "column": "col_ctt_tel",
+        "label": "Tel. celular"
+      },
+      {
+        "key": "col_ctt_fixo",
+        "column": "col_ctt_fixo",
+        "label": "Tel. fixo"
+      },
+      {
+        "key": "col_ord_numero",
+        "column": "col_ord_numero",
+        "label": "Nº Ordem"
+      },
+      {
+        "key": "col_ord_tipo",
+        "column": "col_ord_tipo",
         "label": "Tipo"
+      },
+      {
+        "key": "col_ord_inicio",
+        "column": "col_ord_inicio",
+        "label": "Início"
+      },
+      {
+        "key": "col_ord_condicao",
+        "column": "col_ord_condicao",
+        "label": "Cond. Pagamento"
+      },
+      {
+        "key": "col_ord_valor",
+        "column": "col_ord_valor",
+        "label": "Valor"
+      },
+      {
+        "key": "col_ord_status",
+        "column": "col_ord_status",
+        "label": "Status"
       },
       {
         "key": "col_end_logradouro",
         "column": "col_end_logradouro",
-        "label": "Logradouro"
+        "label": "Rua"
       },
       {
         "key": "col_end_numero",
         "column": "col_end_numero",
-        "label": "Nº"
+        "label": "Número"
       },
       {
         "key": "col_end_complemento",
         "column": "col_end_complemento",
-        "label": "Compl."
+        "label": "Complemento"
       },
       {
         "key": "col_end_bairro",
@@ -978,49 +1082,19 @@ const PERMISSIONS_CATALOG = {
         "label": "Cidade"
       },
       {
+        "key": "col_end_pais",
+        "column": "col_end_pais",
+        "label": "País"
+      },
+      {
         "key": "col_end_uf",
         "column": "col_end_uf",
-        "label": "UF"
+        "label": "Estado"
       },
       {
         "key": "col_end_cep",
         "column": "col_end_cep",
         "label": "CEP"
-      },
-      {
-        "key": "col_ctt_nome",
-        "column": "col_ctt_nome",
-        "label": "Contato"
-      },
-      {
-        "key": "col_ctt_cargo",
-        "column": "col_ctt_cargo",
-        "label": "Cargo"
-      },
-      {
-        "key": "col_ctt_tel",
-        "column": "col_ctt_tel",
-        "label": "Telefone"
-      },
-      {
-        "key": "col_ctt_email",
-        "column": "col_ctt_email",
-        "label": "E-mail"
-      },
-      {
-        "key": "col_ctt_tags",
-        "column": "col_ctt_tags",
-        "label": "Tags"
-      },
-      {
-        "key": "col_ctt_status",
-        "column": "col_ctt_status",
-        "label": "Status"
-      },
-      {
-        "key": "col_ctt_ult_interacao",
-        "column": "col_ctt_ult_interacao",
-        "label": "Últ. interação"
       }
     ]
   },

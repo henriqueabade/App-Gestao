@@ -245,7 +245,7 @@ router.get('/:id/resumo', exigirPermissao('cli.details.view'), async (req, res) 
   }
 });
 
-router.post('/', exigirPermissao('cli.create'), async (req, res) => {
+router.post('/', exigirPermissao(req => (Array.isArray(req.body?.contatos) && req.body.contatos.length ? ['cli.create', 'cli.contact.add'] : ['cli.create'])), async (req, res) => {
   const cli = req.body || {};
   try {
     const api = createApiClient(req);
@@ -276,7 +276,21 @@ router.post('/', exigirPermissao('cli.create'), async (req, res) => {
   }
 });
 
-router.put('/:id', exigirPermissao('cli.edit'), async (req, res) => {
+// PUT /clientes/:id faz MAIS do que editar o cliente: o mesmo payload cria,
+// atualiza e exclui CONTATOS. Guardado so por `cli.edit`, quem podia editar o
+// cliente mexia livremente nos contatos sem ter essas permissoes. Agora a rota
+// pede exatamente o que o payload manda fazer.
+function permissoesDeEdicaoCliente(req) {
+  const corpo = req.body || {};
+  const chaves = ['cli.edit'];
+  const temItens = (lista) => Array.isArray(lista) && lista.length > 0;
+  if (temItens(corpo.contatosNovos)) chaves.push('cli.contact.add');
+  if (temItens(corpo.contatosAtualizados)) chaves.push('cli.contact.edit');
+  if (temItens(corpo.contatosExcluidos)) chaves.push('cli.contact.remove');
+  return chaves;
+}
+
+router.put('/:id', exigirPermissao(permissoesDeEdicaoCliente), async (req, res) => {
   const { id } = req.params;
   const cli = req.body || {};
   try {

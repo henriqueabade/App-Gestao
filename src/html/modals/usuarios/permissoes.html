@@ -1699,55 +1699,169 @@
                   </div>
                   <i class="fas fa-info-circle text-[var(--color-primary)]" title="Permissões do módulo"></i>
                 </div>
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="grid grid-cols-1 gap-6">
 
-                  <label class="usuarios-permissoes-item" data-search="ver lista clientes">
-                    <input type="checkbox" name="cli.view" data-role="item" data-group="acoes-cli" data-item-type="action" class="w-4 h-4 mt-1" />
-                    <div>
-                      <span class="font-medium">Ver lista</span>
-                      <p class="text-sm text-gray-400">Exibir grade de clientes</p>
-                    </div>
-                  </label>
+                  <div>
+                    <h4 class="text-sm font-semibold text-gray-300 mb-3">Tela de Clientes (lista)</h4>
+                    <div class="grid grid-cols-1 gap-4">
 
-                  <label class="usuarios-permissoes-item" data-search="buscar filtrar">
-                    <input type="checkbox" name="cli.search" data-role="item" data-group="acoes-cli" data-item-type="action" class="w-4 h-4 mt-1" />
-                    <div>
-                      <span class="font-medium">Buscar/filtrar</span>
-                      <p class="text-sm text-gray-400">Pesquisa e ordenação</p>
-                    </div>
-                  </label>
+                      <label class="usuarios-permissoes-item" data-search="ver lista grade clientes">
+                        <input type="checkbox" name="cli.view" data-role="item" data-group="acoes-cli" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Ver lista</span>
+                          <p class="text-sm text-gray-400">Exibir a grade de clientes</p>
+                        </div>
+                      </label>
 
-                  <label class="usuarios-permissoes-item" data-search="ver detalhes cliente">
-                    <input type="checkbox" name="cli.details.view" data-role="item" data-group="acoes-cli" data-item-type="action" class="w-4 h-4 mt-1" />
-                    <div>
-                      <span class="font-medium">Ver detalhes</span>
-                      <p class="text-sm text-gray-400">Abrir cadastro completo</p>
-                    </div>
-                  </label>
+                      <label class="usuarios-permissoes-item" data-search="buscar filtrar dono status">
+                        <input type="checkbox" name="cli.search" data-role="item" data-group="acoes-cli" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Buscar/filtrar</span>
+                          <p class="text-sm text-gray-400">Busca, filtros de dono e status + Filtrar/Limpar</p>
+                        </div>
+                      </label>
 
-                  <label class="usuarios-permissoes-item" data-search="cadastrar cliente">
-                    <input type="checkbox" name="cli.create" data-role="item" data-group="acoes-cli" data-item-type="action" class="w-4 h-4 mt-1" />
-                    <div>
-                      <span class="font-medium">Cadastrar cliente</span>
-                      <p class="text-sm text-gray-400">Criar novo registro</p>
-                    </div>
-                  </label>
+                      <label class="usuarios-permissoes-item" data-search="cadastrar criar novo cliente">
+                        <input type="checkbox" name="cli.create" data-role="item" data-group="acoes-cli" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Cadastrar cliente</span>
+                          <p class="text-sm text-gray-400">Botão "Novo Cliente"</p>
+                        </div>
+                      </label>
 
-                  <label class="usuarios-permissoes-item" data-search="editar cliente">
-                    <input type="checkbox" name="cli.edit" data-role="item" data-group="acoes-cli" data-item-type="action" class="w-4 h-4 mt-1" />
-                    <div>
-                      <span class="font-medium">Editar cliente</span>
-                      <p class="text-sm text-gray-400">Alterar dados e status</p>
                     </div>
-                  </label>
+                  </div>
 
-                  <label class="usuarios-permissoes-item" data-search="excluir cliente">
-                    <input type="checkbox" name="cli.delete" data-role="item" data-group="acoes-cli" data-item-type="action" class="w-4 h-4 mt-1" />
-                    <div>
-                      <span class="font-medium">Excluir cliente</span>
-                      <p class="text-sm text-gray-400">Remover cliente com validações</p>
+                  <div>
+                    <h4 class="text-sm font-semibold text-gray-300 mb-3">Painel "Ações Rápidas"</h4>
+                    <div class="grid grid-cols-1 gap-4">
+
+                      <label class="usuarios-permissoes-item" data-search="exportar csv baixar planilha">
+                        <input type="checkbox" name="cli.export.csv" data-role="item" data-group="acoes-cli" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Exportar CSV</span>
+                          <p class="text-sm text-gray-400">Botão "Exportar CSV"</p>
+                        </div>
+                      </label>
+
+                      <label class="usuarios-permissoes-item" data-search="importar csv carregar planilha">
+                        <input type="checkbox" name="cli.import.csv" data-role="item" data-group="acoes-cli" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Importar CSV</span>
+                          <p class="text-sm text-gray-400">Botão "Importar CSV"</p>
+                        </div>
+                      </label>
+
+                      <label class="usuarios-permissoes-item" data-search="relatório gerar clientes">
+                        <input type="checkbox" name="cli.report" data-role="item" data-group="acoes-cli" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Gerar relatório</span>
+                          <p class="text-sm text-gray-400">Botão "Gerar Relatório"</p>
+                        </div>
+                      </label>
+
+                      <label class="usuarios-permissoes-item" data-search="email massa disparo enviar">
+                        <input type="checkbox" name="cli.email.bulk" data-role="item" data-group="acoes-cli" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Enviar e-mail em massa</span>
+                          <p class="text-sm text-gray-400">Botão "Enviar E-mail em Massa"</p>
+                        </div>
+                      </label>
+
                     </div>
-                  </label>
+                  </div>
+
+                  <div>
+                    <h4 class="text-sm font-semibold text-gray-300 mb-3">Ações na linha da tabela</h4>
+                    <div class="grid grid-cols-1 gap-4">
+
+                      <label class="usuarios-permissoes-item" data-search="visualizar detalhes olho">
+                        <input type="checkbox" name="cli.details.view" data-role="item" data-group="acoes-cli" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Ver detalhes</span>
+                          <p class="text-sm text-gray-400">Ícone de olho — abre "Detalhes"</p>
+                        </div>
+                      </label>
+
+                      <label class="usuarios-permissoes-item" data-search="editar alterar lápis">
+                        <input type="checkbox" name="cli.edit" data-role="item" data-group="acoes-cli" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Editar cliente</span>
+                          <p class="text-sm text-gray-400">Ícone de lápis — abre "Editar"</p>
+                        </div>
+                      </label>
+
+                      <label class="usuarios-permissoes-item" data-search="excluir remover lixeira">
+                        <input type="checkbox" name="cli.delete" data-role="item" data-group="acoes-cli" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Excluir cliente</span>
+                          <p class="text-sm text-gray-400">Ícone de lixeira — abre a confirmação</p>
+                        </div>
+                      </label>
+
+                    </div>
+                  </div>
+
+                  <div>
+                    <h4 class="text-sm font-semibold text-gray-300 mb-3">Contatos (aba dos modais de cliente)</h4>
+                    <div class="grid grid-cols-1 gap-4">
+
+                      <label class="usuarios-permissoes-item" data-search="adicionar novo contato">
+                        <input type="checkbox" name="cli.contact.add" data-role="item" data-group="acoes-cli" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Adicionar contato</span>
+                          <p class="text-sm text-gray-400">Botão "+ Novo Contato"</p>
+                        </div>
+                      </label>
+
+                      <label class="usuarios-permissoes-item" data-search="editar contato lápis">
+                        <input type="checkbox" name="cli.contact.edit" data-role="item" data-group="acoes-cli" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Editar contato</span>
+                          <p class="text-sm text-gray-400">Ícone de lápis na coluna AÇÕES dos contatos</p>
+                        </div>
+                      </label>
+
+                      <label class="usuarios-permissoes-item" data-search="remover excluir contato">
+                        <input type="checkbox" name="cli.contact.remove" data-role="item" data-group="acoes-cli" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Remover contato</span>
+                          <p class="text-sm text-gray-400">Ícone de lixeira na coluna AÇÕES dos contatos</p>
+                        </div>
+                      </label>
+
+                    </div>
+                  </div>
+
+                  <div>
+                    <h4 class="text-sm font-semibold text-gray-300 mb-3">Ordens (aba dos modais de cliente)</h4>
+                    <div class="grid grid-cols-1 gap-4">
+
+                      <label class="usuarios-permissoes-item" data-search="adicionar nova ordem">
+                        <input type="checkbox" name="cli.order.add" data-role="item" data-group="acoes-cli" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Adicionar ordem</span>
+                          <p class="text-sm text-gray-400">Botão "+ Nova Ordem"</p>
+                        </div>
+                      </label>
+
+                    </div>
+                  </div>
+
+                  <div>
+                    <h4 class="text-sm font-semibold text-gray-300 mb-3">Endereços (aba dos modais de cliente)</h4>
+                    <div class="grid grid-cols-1 gap-4">
+
+                      <label class="usuarios-permissoes-item" data-search="copiar endereço registro cobrança entrega">
+                        <input type="checkbox" name="cli.address.copy" data-role="item" data-group="acoes-cli" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Copiar endereço</span>
+                          <p class="text-sm text-gray-400">Botões de copiar entre Registro / Cobrança / Entrega</p>
+                        </div>
+                      </label>
+
+                    </div>
+                  </div>
 
                 </div>
               </div>
@@ -1776,17 +1890,12 @@
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
 
                   <div>
-                    <h4 class="text-sm font-semibold text-gray-300 mb-3">Lista de clientes</h4>
+                    <h4 class="text-sm font-semibold text-gray-300 mb-3">Tabela de clientes (lista)</h4>
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
 
                       <label class="usuarios-permissoes-checkbox">
                         <input type="checkbox" name="col_cli_nome_fantasia" data-role="item" data-group="colunas-cli" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">Nome fantasia</span>
-                      </label>
-
-                      <label class="usuarios-permissoes-checkbox">
-                        <input type="checkbox" name="col_cli_razao_social" data-role="item" data-group="colunas-cli" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">Razão social</span>
+                        <span class="text-sm">Nome</span>
                       </label>
 
                       <label class="usuarios-permissoes-checkbox">
@@ -1795,28 +1904,13 @@
                       </label>
 
                       <label class="usuarios-permissoes-checkbox">
-                        <input type="checkbox" name="col_cli_comprador" data-role="item" data-group="colunas-cli" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">Comprador/contato</span>
-                      </label>
-
-                      <label class="usuarios-permissoes-checkbox">
-                        <input type="checkbox" name="col_cli_tel" data-role="item" data-group="colunas-cli" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">Telefone</span>
-                      </label>
-
-                      <label class="usuarios-permissoes-checkbox">
-                        <input type="checkbox" name="col_cli_email" data-role="item" data-group="colunas-cli" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">E-mail</span>
+                        <input type="checkbox" name="col_cli_pais" data-role="item" data-group="colunas-cli" data-item-type="column" class="w-4 h-4" />
+                        <span class="text-sm">País</span>
                       </label>
 
                       <label class="usuarios-permissoes-checkbox">
                         <input type="checkbox" name="col_cli_cidade_uf" data-role="item" data-group="colunas-cli" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">Cidade/UF</span>
-                      </label>
-
-                      <label class="usuarios-permissoes-checkbox">
-                        <input type="checkbox" name="col_cli_transportadora" data-role="item" data-group="colunas-cli" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">Transportadora</span>
+                        <span class="text-sm">Estado</span>
                       </label>
 
                       <label class="usuarios-permissoes-checkbox">
@@ -1833,27 +1927,118 @@
                   </div>
 
                   <div>
-                    <h4 class="text-sm font-semibold text-gray-300 mb-3">Endereços</h4>
+                    <h4 class="text-sm font-semibold text-gray-300 mb-3">Dados da Empresa (aba dos modais)</h4>
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
 
                       <label class="usuarios-permissoes-checkbox">
-                        <input type="checkbox" name="col_end_tipo" data-role="item" data-group="colunas-cli" data-item-type="column" class="w-4 h-4" />
+                        <input type="checkbox" name="col_cli_razao_social" data-role="item" data-group="colunas-cli" data-item-type="column" class="w-4 h-4" />
+                        <span class="text-sm">Razão social</span>
+                      </label>
+
+                      <label class="usuarios-permissoes-checkbox">
+                        <input type="checkbox" name="col_cli_insc_estadual" data-role="item" data-group="colunas-cli" data-item-type="column" class="w-4 h-4" />
+                        <span class="text-sm">Inscrição estadual</span>
+                      </label>
+
+                      <label class="usuarios-permissoes-checkbox">
+                        <input type="checkbox" name="col_cli_site" data-role="item" data-group="colunas-cli" data-item-type="column" class="w-4 h-4" />
+                        <span class="text-sm">Site</span>
+                      </label>
+
+                      <label class="usuarios-permissoes-checkbox">
+                        <input type="checkbox" name="col_cli_origem" data-role="item" data-group="colunas-cli" data-item-type="column" class="w-4 h-4" />
+                        <span class="text-sm">Origem da captação</span>
+                      </label>
+
+                    </div>
+                  </div>
+
+                  <div>
+                    <h4 class="text-sm font-semibold text-gray-300 mb-3">Tabela de Contatos (aba dos modais)</h4>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+
+                      <label class="usuarios-permissoes-checkbox">
+                        <input type="checkbox" name="col_ctt_nome" data-role="item" data-group="colunas-cli" data-item-type="column" class="w-4 h-4" />
+                        <span class="text-sm">Nome</span>
+                      </label>
+
+                      <label class="usuarios-permissoes-checkbox">
+                        <input type="checkbox" name="col_ctt_cargo" data-role="item" data-group="colunas-cli" data-item-type="column" class="w-4 h-4" />
+                        <span class="text-sm">Cargo</span>
+                      </label>
+
+                      <label class="usuarios-permissoes-checkbox">
+                        <input type="checkbox" name="col_ctt_email" data-role="item" data-group="colunas-cli" data-item-type="column" class="w-4 h-4" />
+                        <span class="text-sm">E-mail</span>
+                      </label>
+
+                      <label class="usuarios-permissoes-checkbox">
+                        <input type="checkbox" name="col_ctt_tel" data-role="item" data-group="colunas-cli" data-item-type="column" class="w-4 h-4" />
+                        <span class="text-sm">Tel. celular</span>
+                      </label>
+
+                      <label class="usuarios-permissoes-checkbox">
+                        <input type="checkbox" name="col_ctt_fixo" data-role="item" data-group="colunas-cli" data-item-type="column" class="w-4 h-4" />
+                        <span class="text-sm">Tel. fixo</span>
+                      </label>
+
+                    </div>
+                  </div>
+
+                  <div>
+                    <h4 class="text-sm font-semibold text-gray-300 mb-3">Tabela de Ordens (aba dos modais)</h4>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+
+                      <label class="usuarios-permissoes-checkbox">
+                        <input type="checkbox" name="col_ord_numero" data-role="item" data-group="colunas-cli" data-item-type="column" class="w-4 h-4" />
+                        <span class="text-sm">Nº Ordem</span>
+                      </label>
+
+                      <label class="usuarios-permissoes-checkbox">
+                        <input type="checkbox" name="col_ord_tipo" data-role="item" data-group="colunas-cli" data-item-type="column" class="w-4 h-4" />
                         <span class="text-sm">Tipo</span>
                       </label>
 
                       <label class="usuarios-permissoes-checkbox">
+                        <input type="checkbox" name="col_ord_inicio" data-role="item" data-group="colunas-cli" data-item-type="column" class="w-4 h-4" />
+                        <span class="text-sm">Início</span>
+                      </label>
+
+                      <label class="usuarios-permissoes-checkbox">
+                        <input type="checkbox" name="col_ord_condicao" data-role="item" data-group="colunas-cli" data-item-type="column" class="w-4 h-4" />
+                        <span class="text-sm">Cond. Pagamento</span>
+                      </label>
+
+                      <label class="usuarios-permissoes-checkbox">
+                        <input type="checkbox" name="col_ord_valor" data-role="item" data-group="colunas-cli" data-item-type="column" class="w-4 h-4" />
+                        <span class="text-sm">Valor</span>
+                      </label>
+
+                      <label class="usuarios-permissoes-checkbox">
+                        <input type="checkbox" name="col_ord_status" data-role="item" data-group="colunas-cli" data-item-type="column" class="w-4 h-4" />
+                        <span class="text-sm">Status</span>
+                      </label>
+
+                    </div>
+                  </div>
+
+                  <div>
+                    <h4 class="text-sm font-semibold text-gray-300 mb-3">Endereços (aba dos modais)</h4>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+
+                      <label class="usuarios-permissoes-checkbox">
                         <input type="checkbox" name="col_end_logradouro" data-role="item" data-group="colunas-cli" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">Logradouro</span>
+                        <span class="text-sm">Rua</span>
                       </label>
 
                       <label class="usuarios-permissoes-checkbox">
                         <input type="checkbox" name="col_end_numero" data-role="item" data-group="colunas-cli" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">Nº</span>
+                        <span class="text-sm">Número</span>
                       </label>
 
                       <label class="usuarios-permissoes-checkbox">
                         <input type="checkbox" name="col_end_complemento" data-role="item" data-group="colunas-cli" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">Compl.</span>
+                        <span class="text-sm">Complemento</span>
                       </label>
 
                       <label class="usuarios-permissoes-checkbox">
@@ -1867,55 +2052,18 @@
                       </label>
 
                       <label class="usuarios-permissoes-checkbox">
+                        <input type="checkbox" name="col_end_pais" data-role="item" data-group="colunas-cli" data-item-type="column" class="w-4 h-4" />
+                        <span class="text-sm">País</span>
+                      </label>
+
+                      <label class="usuarios-permissoes-checkbox">
                         <input type="checkbox" name="col_end_uf" data-role="item" data-group="colunas-cli" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">UF</span>
+                        <span class="text-sm">Estado</span>
                       </label>
 
                       <label class="usuarios-permissoes-checkbox">
                         <input type="checkbox" name="col_end_cep" data-role="item" data-group="colunas-cli" data-item-type="column" class="w-4 h-4" />
                         <span class="text-sm">CEP</span>
-                      </label>
-
-                    </div>
-                  </div>
-
-                  <div>
-                    <h4 class="text-sm font-semibold text-gray-300 mb-3">Contatos do cliente</h4>
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-
-                      <label class="usuarios-permissoes-checkbox">
-                        <input type="checkbox" name="col_ctt_nome" data-role="item" data-group="colunas-cli" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">Contato</span>
-                      </label>
-
-                      <label class="usuarios-permissoes-checkbox">
-                        <input type="checkbox" name="col_ctt_cargo" data-role="item" data-group="colunas-cli" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">Cargo</span>
-                      </label>
-
-                      <label class="usuarios-permissoes-checkbox">
-                        <input type="checkbox" name="col_ctt_tel" data-role="item" data-group="colunas-cli" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">Telefone</span>
-                      </label>
-
-                      <label class="usuarios-permissoes-checkbox">
-                        <input type="checkbox" name="col_ctt_email" data-role="item" data-group="colunas-cli" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">E-mail</span>
-                      </label>
-
-                      <label class="usuarios-permissoes-checkbox">
-                        <input type="checkbox" name="col_ctt_tags" data-role="item" data-group="colunas-cli" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">Tags</span>
-                      </label>
-
-                      <label class="usuarios-permissoes-checkbox">
-                        <input type="checkbox" name="col_ctt_status" data-role="item" data-group="colunas-cli" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">Status</span>
-                      </label>
-
-                      <label class="usuarios-permissoes-checkbox">
-                        <input type="checkbox" name="col_ctt_ult_interacao" data-role="item" data-group="colunas-cli" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">Últ. interação</span>
                       </label>
 
                     </div>

@@ -196,35 +196,48 @@ CREATE TABLE IF NOT EXISTS perm_cli (
 );
 ALTER TABLE perm_cli ADD COLUMN IF NOT EXISTS acao_view BOOLEAN NOT NULL DEFAULT FALSE;  -- cli.view · Ver lista
 ALTER TABLE perm_cli ADD COLUMN IF NOT EXISTS acao_search BOOLEAN NOT NULL DEFAULT FALSE;  -- cli.search · Buscar/filtrar
-ALTER TABLE perm_cli ADD COLUMN IF NOT EXISTS acao_details_view BOOLEAN NOT NULL DEFAULT FALSE;  -- cli.details.view · Ver detalhes
 ALTER TABLE perm_cli ADD COLUMN IF NOT EXISTS acao_create BOOLEAN NOT NULL DEFAULT FALSE;  -- cli.create · Cadastrar cliente
+ALTER TABLE perm_cli ADD COLUMN IF NOT EXISTS acao_export_csv BOOLEAN NOT NULL DEFAULT FALSE;  -- cli.export.csv · Exportar CSV
+ALTER TABLE perm_cli ADD COLUMN IF NOT EXISTS acao_import_csv BOOLEAN NOT NULL DEFAULT FALSE;  -- cli.import.csv · Importar CSV
+ALTER TABLE perm_cli ADD COLUMN IF NOT EXISTS acao_report BOOLEAN NOT NULL DEFAULT FALSE;  -- cli.report · Gerar relatório
+ALTER TABLE perm_cli ADD COLUMN IF NOT EXISTS acao_email_bulk BOOLEAN NOT NULL DEFAULT FALSE;  -- cli.email.bulk · Enviar e-mail em massa
+ALTER TABLE perm_cli ADD COLUMN IF NOT EXISTS acao_details_view BOOLEAN NOT NULL DEFAULT FALSE;  -- cli.details.view · Ver detalhes
 ALTER TABLE perm_cli ADD COLUMN IF NOT EXISTS acao_edit BOOLEAN NOT NULL DEFAULT FALSE;  -- cli.edit · Editar cliente
 ALTER TABLE perm_cli ADD COLUMN IF NOT EXISTS acao_delete BOOLEAN NOT NULL DEFAULT FALSE;  -- cli.delete · Excluir cliente
-ALTER TABLE perm_cli ADD COLUMN IF NOT EXISTS col_cli_nome_fantasia BOOLEAN NOT NULL DEFAULT FALSE;  -- Nome fantasia
-ALTER TABLE perm_cli ADD COLUMN IF NOT EXISTS col_cli_razao_social BOOLEAN NOT NULL DEFAULT FALSE;  -- Razão social
+ALTER TABLE perm_cli ADD COLUMN IF NOT EXISTS acao_contact_add BOOLEAN NOT NULL DEFAULT FALSE;  -- cli.contact.add · Adicionar contato
+ALTER TABLE perm_cli ADD COLUMN IF NOT EXISTS acao_contact_edit BOOLEAN NOT NULL DEFAULT FALSE;  -- cli.contact.edit · Editar contato
+ALTER TABLE perm_cli ADD COLUMN IF NOT EXISTS acao_contact_remove BOOLEAN NOT NULL DEFAULT FALSE;  -- cli.contact.remove · Remover contato
+ALTER TABLE perm_cli ADD COLUMN IF NOT EXISTS acao_order_add BOOLEAN NOT NULL DEFAULT FALSE;  -- cli.order.add · Adicionar ordem
+ALTER TABLE perm_cli ADD COLUMN IF NOT EXISTS acao_address_copy BOOLEAN NOT NULL DEFAULT FALSE;  -- cli.address.copy · Copiar endereço
+ALTER TABLE perm_cli ADD COLUMN IF NOT EXISTS col_cli_nome_fantasia BOOLEAN NOT NULL DEFAULT FALSE;  -- Nome
 ALTER TABLE perm_cli ADD COLUMN IF NOT EXISTS col_cli_cnpj BOOLEAN NOT NULL DEFAULT FALSE;  -- CNPJ
-ALTER TABLE perm_cli ADD COLUMN IF NOT EXISTS col_cli_comprador BOOLEAN NOT NULL DEFAULT FALSE;  -- Comprador/contato
-ALTER TABLE perm_cli ADD COLUMN IF NOT EXISTS col_cli_tel BOOLEAN NOT NULL DEFAULT FALSE;  -- Telefone
-ALTER TABLE perm_cli ADD COLUMN IF NOT EXISTS col_cli_email BOOLEAN NOT NULL DEFAULT FALSE;  -- E-mail
-ALTER TABLE perm_cli ADD COLUMN IF NOT EXISTS col_cli_cidade_uf BOOLEAN NOT NULL DEFAULT FALSE;  -- Cidade/UF
-ALTER TABLE perm_cli ADD COLUMN IF NOT EXISTS col_cli_transportadora BOOLEAN NOT NULL DEFAULT FALSE;  -- Transportadora
+ALTER TABLE perm_cli ADD COLUMN IF NOT EXISTS col_cli_pais BOOLEAN NOT NULL DEFAULT FALSE;  -- País
+ALTER TABLE perm_cli ADD COLUMN IF NOT EXISTS col_cli_cidade_uf BOOLEAN NOT NULL DEFAULT FALSE;  -- Estado
 ALTER TABLE perm_cli ADD COLUMN IF NOT EXISTS col_cli_status BOOLEAN NOT NULL DEFAULT FALSE;  -- Status
 ALTER TABLE perm_cli ADD COLUMN IF NOT EXISTS col_cli_owner BOOLEAN NOT NULL DEFAULT FALSE;  -- Dono
-ALTER TABLE perm_cli ADD COLUMN IF NOT EXISTS col_end_tipo BOOLEAN NOT NULL DEFAULT FALSE;  -- Tipo
-ALTER TABLE perm_cli ADD COLUMN IF NOT EXISTS col_end_logradouro BOOLEAN NOT NULL DEFAULT FALSE;  -- Logradouro
-ALTER TABLE perm_cli ADD COLUMN IF NOT EXISTS col_end_numero BOOLEAN NOT NULL DEFAULT FALSE;  -- Nº
-ALTER TABLE perm_cli ADD COLUMN IF NOT EXISTS col_end_complemento BOOLEAN NOT NULL DEFAULT FALSE;  -- Compl.
+ALTER TABLE perm_cli ADD COLUMN IF NOT EXISTS col_cli_razao_social BOOLEAN NOT NULL DEFAULT FALSE;  -- Razão social
+ALTER TABLE perm_cli ADD COLUMN IF NOT EXISTS col_cli_insc_estadual BOOLEAN NOT NULL DEFAULT FALSE;  -- Inscrição estadual
+ALTER TABLE perm_cli ADD COLUMN IF NOT EXISTS col_cli_site BOOLEAN NOT NULL DEFAULT FALSE;  -- Site
+ALTER TABLE perm_cli ADD COLUMN IF NOT EXISTS col_cli_origem BOOLEAN NOT NULL DEFAULT FALSE;  -- Origem da captação
+ALTER TABLE perm_cli ADD COLUMN IF NOT EXISTS col_ctt_nome BOOLEAN NOT NULL DEFAULT FALSE;  -- Nome
+ALTER TABLE perm_cli ADD COLUMN IF NOT EXISTS col_ctt_cargo BOOLEAN NOT NULL DEFAULT FALSE;  -- Cargo
+ALTER TABLE perm_cli ADD COLUMN IF NOT EXISTS col_ctt_email BOOLEAN NOT NULL DEFAULT FALSE;  -- E-mail
+ALTER TABLE perm_cli ADD COLUMN IF NOT EXISTS col_ctt_tel BOOLEAN NOT NULL DEFAULT FALSE;  -- Tel. celular
+ALTER TABLE perm_cli ADD COLUMN IF NOT EXISTS col_ctt_fixo BOOLEAN NOT NULL DEFAULT FALSE;  -- Tel. fixo
+ALTER TABLE perm_cli ADD COLUMN IF NOT EXISTS col_ord_numero BOOLEAN NOT NULL DEFAULT FALSE;  -- Nº Ordem
+ALTER TABLE perm_cli ADD COLUMN IF NOT EXISTS col_ord_tipo BOOLEAN NOT NULL DEFAULT FALSE;  -- Tipo
+ALTER TABLE perm_cli ADD COLUMN IF NOT EXISTS col_ord_inicio BOOLEAN NOT NULL DEFAULT FALSE;  -- Início
+ALTER TABLE perm_cli ADD COLUMN IF NOT EXISTS col_ord_condicao BOOLEAN NOT NULL DEFAULT FALSE;  -- Cond. Pagamento
+ALTER TABLE perm_cli ADD COLUMN IF NOT EXISTS col_ord_valor BOOLEAN NOT NULL DEFAULT FALSE;  -- Valor
+ALTER TABLE perm_cli ADD COLUMN IF NOT EXISTS col_ord_status BOOLEAN NOT NULL DEFAULT FALSE;  -- Status
+ALTER TABLE perm_cli ADD COLUMN IF NOT EXISTS col_end_logradouro BOOLEAN NOT NULL DEFAULT FALSE;  -- Rua
+ALTER TABLE perm_cli ADD COLUMN IF NOT EXISTS col_end_numero BOOLEAN NOT NULL DEFAULT FALSE;  -- Número
+ALTER TABLE perm_cli ADD COLUMN IF NOT EXISTS col_end_complemento BOOLEAN NOT NULL DEFAULT FALSE;  -- Complemento
 ALTER TABLE perm_cli ADD COLUMN IF NOT EXISTS col_end_bairro BOOLEAN NOT NULL DEFAULT FALSE;  -- Bairro
 ALTER TABLE perm_cli ADD COLUMN IF NOT EXISTS col_end_cidade BOOLEAN NOT NULL DEFAULT FALSE;  -- Cidade
-ALTER TABLE perm_cli ADD COLUMN IF NOT EXISTS col_end_uf BOOLEAN NOT NULL DEFAULT FALSE;  -- UF
+ALTER TABLE perm_cli ADD COLUMN IF NOT EXISTS col_end_pais BOOLEAN NOT NULL DEFAULT FALSE;  -- País
+ALTER TABLE perm_cli ADD COLUMN IF NOT EXISTS col_end_uf BOOLEAN NOT NULL DEFAULT FALSE;  -- Estado
 ALTER TABLE perm_cli ADD COLUMN IF NOT EXISTS col_end_cep BOOLEAN NOT NULL DEFAULT FALSE;  -- CEP
-ALTER TABLE perm_cli ADD COLUMN IF NOT EXISTS col_ctt_nome BOOLEAN NOT NULL DEFAULT FALSE;  -- Contato
-ALTER TABLE perm_cli ADD COLUMN IF NOT EXISTS col_ctt_cargo BOOLEAN NOT NULL DEFAULT FALSE;  -- Cargo
-ALTER TABLE perm_cli ADD COLUMN IF NOT EXISTS col_ctt_tel BOOLEAN NOT NULL DEFAULT FALSE;  -- Telefone
-ALTER TABLE perm_cli ADD COLUMN IF NOT EXISTS col_ctt_email BOOLEAN NOT NULL DEFAULT FALSE;  -- E-mail
-ALTER TABLE perm_cli ADD COLUMN IF NOT EXISTS col_ctt_tags BOOLEAN NOT NULL DEFAULT FALSE;  -- Tags
-ALTER TABLE perm_cli ADD COLUMN IF NOT EXISTS col_ctt_status BOOLEAN NOT NULL DEFAULT FALSE;  -- Status
-ALTER TABLE perm_cli ADD COLUMN IF NOT EXISTS col_ctt_ult_interacao BOOLEAN NOT NULL DEFAULT FALSE;  -- Últ. interação
 
 -- Prospecções (perm_pros)
 CREATE TABLE IF NOT EXISTS perm_pros (
@@ -479,7 +492,7 @@ UPDATE perm_orc SET modulo_ativo = TRUE, acao_view = TRUE, acao_search = TRUE, a
   WHERE modelo_id IN (SELECT id FROM modelos_permissoes WHERE nome = 'Administrador');
 UPDATE perm_ped SET modulo_ativo = TRUE, acao_view = TRUE, acao_search = TRUE, acao_view_details = TRUE, acao_status_confirm = TRUE, acao_status_ship = TRUE, acao_status_deliver = TRUE, acao_report = TRUE, acao_export = TRUE, acao_cancel = TRUE, acao_stock_restore_on_cancel = TRUE, col_ped_num = TRUE, col_ped_cliente = TRUE, col_ped_data = TRUE, col_ped_total = TRUE, col_ped_condicao = TRUE, col_ped_status = TRUE, col_ped_it_nome = TRUE, col_ped_it_qtd = TRUE, col_ped_it_preco = TRUE, col_ped_it_preco_desc = TRUE, col_ped_it_desc = TRUE, col_ped_it_subtotal = TRUE, col_canc_item = TRUE, col_canc_qtd = TRUE, col_canc_restante = TRUE, col_canc_origem = TRUE, col_canc_situacao = TRUE, col_canc_destinos = TRUE, col_ped_campo_dono = TRUE, col_ped_campo_transportadora = TRUE, col_ped_campo_pagamento = TRUE, col_ped_campo_observacoes = TRUE
   WHERE modelo_id IN (SELECT id FROM modelos_permissoes WHERE nome = 'Administrador');
-UPDATE perm_cli SET modulo_ativo = TRUE, acao_view = TRUE, acao_search = TRUE, acao_details_view = TRUE, acao_create = TRUE, acao_edit = TRUE, acao_delete = TRUE, col_cli_nome_fantasia = TRUE, col_cli_razao_social = TRUE, col_cli_cnpj = TRUE, col_cli_comprador = TRUE, col_cli_tel = TRUE, col_cli_email = TRUE, col_cli_cidade_uf = TRUE, col_cli_transportadora = TRUE, col_cli_status = TRUE, col_cli_owner = TRUE, col_end_tipo = TRUE, col_end_logradouro = TRUE, col_end_numero = TRUE, col_end_complemento = TRUE, col_end_bairro = TRUE, col_end_cidade = TRUE, col_end_uf = TRUE, col_end_cep = TRUE, col_ctt_nome = TRUE, col_ctt_cargo = TRUE, col_ctt_tel = TRUE, col_ctt_email = TRUE, col_ctt_tags = TRUE, col_ctt_status = TRUE, col_ctt_ult_interacao = TRUE
+UPDATE perm_cli SET modulo_ativo = TRUE, acao_view = TRUE, acao_search = TRUE, acao_create = TRUE, acao_export_csv = TRUE, acao_import_csv = TRUE, acao_report = TRUE, acao_email_bulk = TRUE, acao_details_view = TRUE, acao_edit = TRUE, acao_delete = TRUE, acao_contact_add = TRUE, acao_contact_edit = TRUE, acao_contact_remove = TRUE, acao_order_add = TRUE, acao_address_copy = TRUE, col_cli_nome_fantasia = TRUE, col_cli_cnpj = TRUE, col_cli_pais = TRUE, col_cli_cidade_uf = TRUE, col_cli_status = TRUE, col_cli_owner = TRUE, col_cli_razao_social = TRUE, col_cli_insc_estadual = TRUE, col_cli_site = TRUE, col_cli_origem = TRUE, col_ctt_nome = TRUE, col_ctt_cargo = TRUE, col_ctt_email = TRUE, col_ctt_tel = TRUE, col_ctt_fixo = TRUE, col_ord_numero = TRUE, col_ord_tipo = TRUE, col_ord_inicio = TRUE, col_ord_condicao = TRUE, col_ord_valor = TRUE, col_ord_status = TRUE, col_end_logradouro = TRUE, col_end_numero = TRUE, col_end_complemento = TRUE, col_end_bairro = TRUE, col_end_cidade = TRUE, col_end_pais = TRUE, col_end_uf = TRUE, col_end_cep = TRUE
   WHERE modelo_id IN (SELECT id FROM modelos_permissoes WHERE nome = 'Administrador');
 UPDATE perm_pros SET modulo_ativo = TRUE, acao_view = TRUE, acao_search = TRUE, acao_details_view = TRUE, acao_create = TRUE, acao_edit = TRUE, acao_delete = TRUE, acao_stage_update = TRUE, acao_next_step = TRUE, col_pros_id = TRUE, col_pros_entidade = TRUE, col_pros_origem = TRUE, col_pros_etapa = TRUE, col_pros_valor = TRUE, col_pros_prob = TRUE, col_pros_owner = TRUE, col_pros_proximo_passo = TRUE, col_pros_proximo_passo_data = TRUE, col_pros_atualizado_em = TRUE, col_hist_data = TRUE, col_hist_tipo = TRUE, col_hist_resumo = TRUE, col_hist_resp = TRUE
   WHERE modelo_id IN (SELECT id FROM modelos_permissoes WHERE nome = 'Administrador');

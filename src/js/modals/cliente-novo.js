@@ -179,14 +179,14 @@
     contatos.forEach((c, idx) => {
       const tr = document.createElement('tr');
       tr.innerHTML = `
-        <td class="py-4 px-4 text-white">${c.nome || ''}</td>
-        <td class="py-4 px-4 text-white">${c.cargo || ''}</td>
-        <td class="py-4 px-4 text-white">${c.email || ''}</td>
-        <td class="py-4 px-4 text-white">${c.telefone_celular || ''}</td>
-        <td class="py-4 px-4 text-white">${c.telefone_fixo || ''}</td>
+        <td data-perm-col="col_ctt_nome" class="py-4 px-4 text-white">${c.nome || ''}</td>
+        <td data-perm-col="col_ctt_cargo" class="py-4 px-4 text-white">${c.cargo || ''}</td>
+        <td data-perm-col="col_ctt_email" class="py-4 px-4 text-white">${c.email || ''}</td>
+        <td data-perm-col="col_ctt_tel" class="py-4 px-4 text-white">${c.telefone_celular || ''}</td>
+        <td data-perm-col="col_ctt_fixo" class="py-4 px-4 text-white">${c.telefone_fixo || ''}</td>
         <td class="py-4 px-4 text-left text-white">
           <div class="flex items-center justify-start gap-2">
-            <i class="fas fa-trash w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10 hover:text-white" style="color: var(--color-red)"></i>
+            <i data-perm="cli.contact.remove" class="fas fa-trash w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10 hover:text-white" style="color: var(--color-red)"></i>
           </div>
         </td>`;
       tr.querySelector('.fa-trash').addEventListener('click', () => {

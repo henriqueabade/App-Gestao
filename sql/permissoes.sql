@@ -230,7 +230,7 @@ CREATE TABLE IF NOT EXISTS perm_ped (
 );
 
 -- ---------------------------------------------------------------------
--- 7) Clientes  (perm_cli)  —  6 ações, 25 colunas
+-- 7) Clientes  (perm_cli)  —  15 ações, 29 colunas
 -- ---------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS perm_cli (
   modelo_id    INTEGER PRIMARY KEY REFERENCES modelos_permissoes(id) ON DELETE CASCADE,
@@ -239,37 +239,50 @@ CREATE TABLE IF NOT EXISTS perm_cli (
   -- Ações
   acao_view                          BOOLEAN NOT NULL DEFAULT FALSE,  -- cli.view · Ver lista
   acao_search                        BOOLEAN NOT NULL DEFAULT FALSE,  -- cli.search · Buscar/filtrar
-  acao_details_view                  BOOLEAN NOT NULL DEFAULT FALSE,  -- cli.details.view · Ver detalhes
   acao_create                        BOOLEAN NOT NULL DEFAULT FALSE,  -- cli.create · Cadastrar cliente
+  acao_export_csv                    BOOLEAN NOT NULL DEFAULT FALSE,  -- cli.export.csv · Exportar CSV
+  acao_import_csv                    BOOLEAN NOT NULL DEFAULT FALSE,  -- cli.import.csv · Importar CSV
+  acao_report                        BOOLEAN NOT NULL DEFAULT FALSE,  -- cli.report · Gerar relatório
+  acao_email_bulk                    BOOLEAN NOT NULL DEFAULT FALSE,  -- cli.email.bulk · Enviar e-mail em massa
+  acao_details_view                  BOOLEAN NOT NULL DEFAULT FALSE,  -- cli.details.view · Ver detalhes
   acao_edit                          BOOLEAN NOT NULL DEFAULT FALSE,  -- cli.edit · Editar cliente
   acao_delete                        BOOLEAN NOT NULL DEFAULT FALSE,  -- cli.delete · Excluir cliente
+  acao_contact_add                   BOOLEAN NOT NULL DEFAULT FALSE,  -- cli.contact.add · Adicionar contato
+  acao_contact_edit                  BOOLEAN NOT NULL DEFAULT FALSE,  -- cli.contact.edit · Editar contato
+  acao_contact_remove                BOOLEAN NOT NULL DEFAULT FALSE,  -- cli.contact.remove · Remover contato
+  acao_order_add                     BOOLEAN NOT NULL DEFAULT FALSE,  -- cli.order.add · Adicionar ordem
+  acao_address_copy                  BOOLEAN NOT NULL DEFAULT FALSE,  -- cli.address.copy · Copiar endereço
 
   -- Colunas visíveis
-  col_cli_nome_fantasia              BOOLEAN NOT NULL DEFAULT FALSE,  -- Nome fantasia
-  col_cli_razao_social               BOOLEAN NOT NULL DEFAULT FALSE,  -- Razão social
+  col_cli_nome_fantasia              BOOLEAN NOT NULL DEFAULT FALSE,  -- Nome
   col_cli_cnpj                       BOOLEAN NOT NULL DEFAULT FALSE,  -- CNPJ
-  col_cli_comprador                  BOOLEAN NOT NULL DEFAULT FALSE,  -- Comprador/contato
-  col_cli_tel                        BOOLEAN NOT NULL DEFAULT FALSE,  -- Telefone
-  col_cli_email                      BOOLEAN NOT NULL DEFAULT FALSE,  -- E-mail
-  col_cli_cidade_uf                  BOOLEAN NOT NULL DEFAULT FALSE,  -- Cidade/UF
-  col_cli_transportadora             BOOLEAN NOT NULL DEFAULT FALSE,  -- Transportadora
+  col_cli_pais                       BOOLEAN NOT NULL DEFAULT FALSE,  -- País
+  col_cli_cidade_uf                  BOOLEAN NOT NULL DEFAULT FALSE,  -- Estado
   col_cli_status                     BOOLEAN NOT NULL DEFAULT FALSE,  -- Status
   col_cli_owner                      BOOLEAN NOT NULL DEFAULT FALSE,  -- Dono
-  col_end_tipo                       BOOLEAN NOT NULL DEFAULT FALSE,  -- Tipo
-  col_end_logradouro                 BOOLEAN NOT NULL DEFAULT FALSE,  -- Logradouro
-  col_end_numero                     BOOLEAN NOT NULL DEFAULT FALSE,  -- Nº
-  col_end_complemento                BOOLEAN NOT NULL DEFAULT FALSE,  -- Compl.
+  col_cli_razao_social               BOOLEAN NOT NULL DEFAULT FALSE,  -- Razão social
+  col_cli_insc_estadual              BOOLEAN NOT NULL DEFAULT FALSE,  -- Inscrição estadual
+  col_cli_site                       BOOLEAN NOT NULL DEFAULT FALSE,  -- Site
+  col_cli_origem                     BOOLEAN NOT NULL DEFAULT FALSE,  -- Origem da captação
+  col_ctt_nome                       BOOLEAN NOT NULL DEFAULT FALSE,  -- Nome
+  col_ctt_cargo                      BOOLEAN NOT NULL DEFAULT FALSE,  -- Cargo
+  col_ctt_email                      BOOLEAN NOT NULL DEFAULT FALSE,  -- E-mail
+  col_ctt_tel                        BOOLEAN NOT NULL DEFAULT FALSE,  -- Tel. celular
+  col_ctt_fixo                       BOOLEAN NOT NULL DEFAULT FALSE,  -- Tel. fixo
+  col_ord_numero                     BOOLEAN NOT NULL DEFAULT FALSE,  -- Nº Ordem
+  col_ord_tipo                       BOOLEAN NOT NULL DEFAULT FALSE,  -- Tipo
+  col_ord_inicio                     BOOLEAN NOT NULL DEFAULT FALSE,  -- Início
+  col_ord_condicao                   BOOLEAN NOT NULL DEFAULT FALSE,  -- Cond. Pagamento
+  col_ord_valor                      BOOLEAN NOT NULL DEFAULT FALSE,  -- Valor
+  col_ord_status                     BOOLEAN NOT NULL DEFAULT FALSE,  -- Status
+  col_end_logradouro                 BOOLEAN NOT NULL DEFAULT FALSE,  -- Rua
+  col_end_numero                     BOOLEAN NOT NULL DEFAULT FALSE,  -- Número
+  col_end_complemento                BOOLEAN NOT NULL DEFAULT FALSE,  -- Complemento
   col_end_bairro                     BOOLEAN NOT NULL DEFAULT FALSE,  -- Bairro
   col_end_cidade                     BOOLEAN NOT NULL DEFAULT FALSE,  -- Cidade
-  col_end_uf                         BOOLEAN NOT NULL DEFAULT FALSE,  -- UF
-  col_end_cep                        BOOLEAN NOT NULL DEFAULT FALSE,  -- CEP
-  col_ctt_nome                       BOOLEAN NOT NULL DEFAULT FALSE,  -- Contato
-  col_ctt_cargo                      BOOLEAN NOT NULL DEFAULT FALSE,  -- Cargo
-  col_ctt_tel                        BOOLEAN NOT NULL DEFAULT FALSE,  -- Telefone
-  col_ctt_email                      BOOLEAN NOT NULL DEFAULT FALSE,  -- E-mail
-  col_ctt_tags                       BOOLEAN NOT NULL DEFAULT FALSE,  -- Tags
-  col_ctt_status                     BOOLEAN NOT NULL DEFAULT FALSE,  -- Status
-  col_ctt_ult_interacao              BOOLEAN NOT NULL DEFAULT FALSE  -- Últ. interação
+  col_end_pais                       BOOLEAN NOT NULL DEFAULT FALSE,  -- País
+  col_end_uf                         BOOLEAN NOT NULL DEFAULT FALSE,  -- Estado
+  col_end_cep                        BOOLEAN NOT NULL DEFAULT FALSE  -- CEP
 );
 
 -- ---------------------------------------------------------------------
@@ -566,8 +579,8 @@ INSERT INTO perm_ped (modelo_id, modulo_ativo, acao_view, acao_search, acao_view
 SELECT id, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE FROM modelos_permissoes WHERE nome = 'Administrador'
 ON CONFLICT (modelo_id) DO NOTHING;
 
-INSERT INTO perm_cli (modelo_id, modulo_ativo, acao_view, acao_search, acao_details_view, acao_create, acao_edit, acao_delete, col_cli_nome_fantasia, col_cli_razao_social, col_cli_cnpj, col_cli_comprador, col_cli_tel, col_cli_email, col_cli_cidade_uf, col_cli_transportadora, col_cli_status, col_cli_owner, col_end_tipo, col_end_logradouro, col_end_numero, col_end_complemento, col_end_bairro, col_end_cidade, col_end_uf, col_end_cep, col_ctt_nome, col_ctt_cargo, col_ctt_tel, col_ctt_email, col_ctt_tags, col_ctt_status, col_ctt_ult_interacao)
-SELECT id, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE FROM modelos_permissoes WHERE nome = 'Administrador'
+INSERT INTO perm_cli (modelo_id, modulo_ativo, acao_view, acao_search, acao_create, acao_export_csv, acao_import_csv, acao_report, acao_email_bulk, acao_details_view, acao_edit, acao_delete, acao_contact_add, acao_contact_edit, acao_contact_remove, acao_order_add, acao_address_copy, col_cli_nome_fantasia, col_cli_cnpj, col_cli_pais, col_cli_cidade_uf, col_cli_status, col_cli_owner, col_cli_razao_social, col_cli_insc_estadual, col_cli_site, col_cli_origem, col_ctt_nome, col_ctt_cargo, col_ctt_email, col_ctt_tel, col_ctt_fixo, col_ord_numero, col_ord_tipo, col_ord_inicio, col_ord_condicao, col_ord_valor, col_ord_status, col_end_logradouro, col_end_numero, col_end_complemento, col_end_bairro, col_end_cidade, col_end_pais, col_end_uf, col_end_cep)
+SELECT id, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE FROM modelos_permissoes WHERE nome = 'Administrador'
 ON CONFLICT (modelo_id) DO NOTHING;
 
 INSERT INTO perm_pros (modelo_id, modulo_ativo, acao_view, acao_search, acao_details_view, acao_create, acao_edit, acao_delete, acao_stage_update, acao_next_step, col_pros_id, col_pros_entidade, col_pros_origem, col_pros_etapa, col_pros_valor, col_pros_prob, col_pros_owner, col_pros_proximo_passo, col_pros_proximo_passo_data, col_pros_atualizado_em, col_hist_data, col_hist_tipo, col_hist_resumo, col_hist_resp)

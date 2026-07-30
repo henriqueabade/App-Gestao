@@ -124,7 +124,7 @@ function renderClientes(clientes) {
         tr.innerHTML = `
             <td data-perm-col="col_cli_nome_fantasia" class="px-6 py-4 whitespace-nowrap text-sm text-white">${c.nome_fantasia}</td>
             <td data-perm-col="col_cli_cnpj" class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-violet)">${c.cnpj}</td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-violet)">${c.pais || ''}</td>
+            <td data-perm-col="col_cli_pais" class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-violet)">${c.pais || ''}</td>
             <td data-perm-col="col_cli_cidade_uf" class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-violet)">${c.estado}</td>
             <td data-perm-col="col_cli_status" class="px-6 py-4 whitespace-nowrap">${badgeForStatus(c.status_cliente)}</td>
             <td data-perm-col="col_cli_owner" class="px-6 py-4 whitespace-nowrap text-sm text-white">${c.dono_cliente || ''}</td>
