@@ -1,12 +1,18 @@
 // ---------------------------------------------------------------------------
 // Preservação do trabalho em andamento (janela de 30 min).
 //
-// Ao perder a conexão / ser desconectado, guardamos onde o usuário estava e o
-// que já havia preenchido. Ao voltar (login dentro de 30 min), restauramos.
+// Ao ser DESCONECTADO — queda de internet/servidor/banco ou corte pelo
+// administrador — guardamos onde o usuário estava e o que já havia preenchido.
+// Ao voltar, restauramos; mas só para ELE e só dentro de 30 minutos.
 //
-// Antes, `window.collectState` era CHAMADO em três lugares mas nunca definido:
-// as chamadas ficavam protegidas por `if (window.collectState && ...)` e, na
-// prática, nada era salvo — a mensagem prometia algo que não acontecia.
+// Quem decide "posso restaurar?" é `src/js/utils/restauracao.js`, usado também
+// pela janela de login. Antes cada lado tinha a própria versão da regra e o
+// trabalho voltava onde não devia: sair pelo menu gravava estado como se fosse
+// queda, e um estado sem dono identificado era reposto para qualquer um que
+// logasse depois na mesma máquina.
+//
+// Só existe UM caminho para gravar: `EstadoTrabalho.salvarPorDesconexao(motivo)`.
+// Qualquer outro fim de sessão deve chamar `descartarTrabalhoGuardado()`.
 // ---------------------------------------------------------------------------
 (function () {
     const CHAVE_ESTADO = 'savedState';
@@ -145,16 +151,23 @@
 
     /**
      * Formato esperado pelo loginRenderer: { sectionId, storage, ... }
+     *
+     * `motivo` e `usuarioId` são o que permite decidir, na volta, SE e PARA QUEM
+     * restaurar. Sem esse carimbo o estado é descartado — inclusive os gravados
+     * por versões antigas, que salvavam também em saída voluntária.
      */
-    window.collectState = function collectState() {
+    window.collectState = function collectState(motivo) {
+        const usuarioBruto = localStorage.getItem('user') || null;
         try {
             const content = document.getElementById('content');
             const sectionId = content?.dataset?.activePage || 'dashboard';
             const modais = modaisAbertos();
             return {
                 sectionId,
+                motivo: motivo || null,
+                usuarioId: window.RestauracaoTrabalho?.idDoUsuario(usuarioBruto) ?? null,
                 salvoEm: Date.now(),
-                storage: { user: localStorage.getItem('user') || null },
+                storage: { user: usuarioBruto },
                 campos: coletarCampos(content),
                 modais,
                 // compatibilidade com estados salvos antes da pilha existir
@@ -162,9 +175,83 @@
             };
         } catch (err) {
             console.error('[estado] falha ao coletar o estado atual:', err);
-            return { sectionId: 'dashboard', storage: {} };
+            return {
+                sectionId: 'dashboard',
+                motivo: motivo || null,
+                usuarioId: window.RestauracaoTrabalho?.idDoUsuario(usuarioBruto) ?? null,
+                salvoEm: Date.now(),
+                storage: { user: usuarioBruto }
+            };
         }
     };
+
+    /**
+     * ÚNICO caminho para gravar o trabalho em andamento. Só grava quando o fim
+     * da sessão foi uma desconexão de verdade; qualquer outro motivo (saída pelo
+     * menu, inatividade, fechar o app) apaga o que houver, para não ressuscitar
+     * um trabalho antigo no próximo login.
+     */
+    async function salvarPorDesconexao(motivo) {
+        const restauravel = window.RestauracaoTrabalho?.MOTIVOS_RESTAURAVEIS?.has(String(motivo || ''));
+        if (!restauravel) {
+            console.info(`[estado] "${motivo}" não é desconexão: nada é guardado.`);
+            await descartarTrabalhoGuardado();
+            return false;
+        }
+
+        let estado = null;
+        try {
+            estado = window.collectState(motivo);
+        } catch (err) {
+            console.error('[estado] falha ao coletar o trabalho em andamento:', err);
+            return false;
+        }
+
+        if (!estado || !window.electronAPI?.saveState) return false;
+
+        try {
+            // Aguardado de propósito: logo depois a janela é fechada, e um
+            // invoke solto podia morrer junto sem gravar o arquivo.
+            await window.electronAPI.saveState(estado);
+            return true;
+        } catch (err) {
+            console.error('[estado] falha ao salvar o trabalho em andamento:', err);
+            return false;
+        }
+    }
+
+    /**
+     * Apaga o trabalho guardado (disco + repasse entre janelas), mas SÓ o que
+     * pertence a quem está saindo. Se o arquivo é de outra pessoa que caiu, ele
+     * fica onde está: ela ainda pode logar dentro dos 30 minutos. Sem essa
+     * ressalva, bastava alguém entrar e sair na mesma máquina para destruir o
+     * trabalho de quem tinha sido desconectado.
+     */
+    async function descartarTrabalhoGuardado() {
+        // Lê o dono AGORA, de forma síncrona: quem chama costuma limpar o
+        // localStorage logo em seguida e, depois do primeiro `await`, já não dá
+        // para saber quem estava logado.
+        const atualBruto = usuarioAtualBruto();
+        try { localStorage.removeItem(CHAVE_ESTADO); } catch (_) { /* ignora */ }
+
+        let guardado = null;
+        try {
+            guardado = await window.electronAPI?.loadState?.();
+        } catch (err) {
+            console.error('[estado] falha ao ler o trabalho guardado:', err);
+        }
+        if (!guardado) return;
+
+        const regra = window.RestauracaoTrabalho;
+        const dono = regra ? regra.donoDoEstado(guardado) : null;
+        const eu = regra ? regra.idDoUsuario(atualBruto) : null;
+        if (dono !== null && eu !== null && dono !== eu) {
+            console.info('[estado] trabalho guardado é de outro usuário; preservado.');
+            return;
+        }
+
+        try { await window.electronAPI?.clearState?.(); } catch (_) { /* ignora */ }
+    }
 
     /** Reaplica os campos guardados em uma raiz. */
     function restaurarCampos(raiz, campos) {
@@ -180,36 +267,29 @@
         return aplicados;
     }
 
-    const JANELA_MS = 30 * 60 * 1000;
-
-    /** Id do usuário logado agora nesta janela. */
-    function usuarioAtualId() {
+    /** Usuário logado agora nesta janela (bruto, como veio do localStorage). */
+    function usuarioAtualBruto() {
         try {
-            const bruto = localStorage.getItem('user');
-            return bruto ? (JSON.parse(bruto)?.id ?? null) : null;
-        } catch (_) {
-            return null;
-        }
-    }
-
-    /** Id do dono do trabalho guardado. */
-    function donoDoEstado(estado) {
-        try {
-            const bruto = estado?.storage?.user;
-            return bruto ? (JSON.parse(bruto)?.id ?? null) : null;
+            return localStorage.getItem('user');
         } catch (_) {
             return null;
         }
     }
 
     /**
-     * Lê o trabalho guardado.
+     * Lê o trabalho guardado e decide se ele pode voltar.
      *
-     * Antes dependia SÓ do repasse `disco -> localStorage` feito pela janela de
-     * login. Esse salto entre janelas tinha várias condições para dar certo
-     * (usuário ainda em localStorage, `savedState` ausente, ordem de execução)
-     * e, quando qualquer uma falhava, o estado era descartado em silêncio e
-     * nada voltava. Agora, se o repasse não trouxe nada, lemos direto do disco.
+     * A leitura tem duas fontes: o repasse `disco -> localStorage` feito pela
+     * janela de login e, como plano B, o disco direto — o salto entre janelas
+     * tinha várias condições para dar certo e, quando alguma falhava, o estado
+     * sumia em silêncio.
+     *
+     * O ponto delicado é QUANDO apagar. O arquivo só é consumido quando de fato
+     * é reposto (ou quando expirou / não era restaurável). Se ele pertence a
+     * OUTRO usuário, fica onde está: quem caiu ainda pode logar dentro dos 30
+     * minutos e encontrar o trabalho dele. Antes o arquivo era apagado antes
+     * mesmo de conferir o dono, então bastava outra pessoa logar na máquina para
+     * destruir o trabalho de quem tinha caído.
      */
     async function lerEstadoSalvo() {
         let estado = null;
@@ -220,7 +300,8 @@
         } catch (err) {
             console.error('[estado] savedState ilegível:', err);
         }
-        localStorage.removeItem(CHAVE_ESTADO);   // uso único, sempre
+        // O repasse entre janelas é sempre de uso único: já foi lido aqui.
+        try { localStorage.removeItem(CHAVE_ESTADO); } catch (_) { /* ignora */ }
 
         if (!estado && window.electronAPI?.loadState) {
             try {
@@ -230,24 +311,35 @@
             }
         }
 
-        // o arquivo é de uso único, tenha sido aproveitado ou não
-        try { await window.electronAPI?.clearState?.(); } catch (_) { /* ignora */ }
-
         if (!estado) return null;
 
-        if (estado.salvoEm && Date.now() - estado.salvoEm > JANELA_MS) {
-            console.info('[estado] trabalho guardado expirou (mais de 30 min).');
+        const regra = window.RestauracaoTrabalho;
+        if (!regra) {
+            console.error('[estado] regra de restauração indisponível; nada é reposto.');
             return null;
         }
 
-        // Só restauramos o trabalho de QUEM está logado agora.
-        const dono = donoDoEstado(estado);
-        const atual = usuarioAtualId();
-        if (dono !== null && atual !== null && String(dono) !== String(atual)) {
-            console.info('[estado] trabalho guardado pertence a outro usuário; descartado.');
+        const veredito = regra.podeRestaurar(estado, usuarioAtualBruto());
+        if (!veredito.ok) {
+            const mensagens = {
+                'saida-normal': 'a sessão anterior não terminou por desconexão',
+                'expirado': 'o trabalho guardado passou dos 30 minutos',
+                'sem-dono': 'não dá para saber de quem é o trabalho guardado',
+                'sem-usuario-atual': 'não dá para identificar quem está logando agora',
+                'outro-usuario': 'o trabalho guardado é de outro usuário'
+            };
+            console.info(`[estado] nada restaurado: ${mensagens[veredito.causa] || veredito.causa}.`);
+
+            // 'outro-usuario' é o único caso em que o arquivo continua válido
+            // para outra pessoa — os demais viraram lixo e podem sair.
+            if (veredito.causa !== 'outro-usuario') {
+                try { await window.electronAPI?.clearState?.(); } catch (_) { /* ignora */ }
+            }
             return null;
         }
 
+        // Vai ser reposto agora: consome o arquivo.
+        try { await window.electronAPI?.clearState?.(); } catch (_) { /* ignora */ }
         return estado;
     }
 
@@ -361,6 +453,8 @@
     window.EstadoTrabalho = {
         registrarConteudo,
         esquecerConteudo,
-        registrarModalAberto: window.__registrarModalAberto
+        registrarModalAberto: window.__registrarModalAberto,
+        salvarPorDesconexao,
+        descartarTrabalhoGuardado
     };
 })();

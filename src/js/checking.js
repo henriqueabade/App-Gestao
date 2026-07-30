@@ -76,27 +76,15 @@ async function handleDisconnect(reason) {
     localStorage.setItem('adminDisabled', reason === 'admin-pending' ? 'pending' : '1');
   }
 
-  // O estado precisa ser coletado ANTES de limpar o localStorage: collectState()
-  // carimba `storage.user` para o login saber de quem é o trabalho guardado.
-  // Limpando primeiro, o carimbo saía nulo e o loginRenderer descartava tudo —
-  // era por isso que nada era restaurado.
-  let estadoTrabalho = null;
-  if (typeof window.collectState === 'function') {
-    try {
-      estadoTrabalho = window.collectState();
-    } catch (err) {
-      console.error('Falha ao coletar o trabalho em andamento', err);
-    }
-  }
-
-  // E o salvamento precisa ser AGUARDADO: logo abaixo a janela é fechada, e um
-  // invoke não aguardado podia morrer junto com ela sem gravar o arquivo.
-  if (estadoTrabalho && window.electronAPI?.saveState) {
-    try {
-      await window.electronAPI.saveState(estadoTrabalho);
-    } catch (err) {
-      console.error('Falha ao salvar o trabalho em andamento', err);
-    }
+  // O trabalho precisa ser guardado ANTES de limpar o localStorage: o estado
+  // carimba quem é o dono, e sem esse carimbo nada pode ser restaurado depois.
+  // `salvarPorDesconexao` também é o porteiro: só grava se `reason` for mesmo
+  // uma desconexão (queda de rede/banco ou corte pelo administrador); qualquer
+  // outro motivo apaga o que houver guardado.
+  try {
+    await window.EstadoTrabalho?.salvarPorDesconexao?.(reason);
+  } catch (err) {
+    console.error('Falha ao salvar o trabalho em andamento', err);
   }
 
   try {

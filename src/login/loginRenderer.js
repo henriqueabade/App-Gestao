@@ -322,21 +322,12 @@ if (intro) {
     let saved = await window.electronAPI.loadState();
     if (saved) {
       try {
-        const savedUser = saved.storage && saved.storage.user
-          ? JSON.parse(saved.storage.user)
-          : null;
-        const current = parsedStoredUser;
-        // Repassamos quando dá para confirmar o dono. NÃO apagamos mais o
-        // arquivo do disco: o menu lê de lá como plano B e aplica o mesmo
-        // porteiro. Antes, qualquer falha aqui destruía o trabalho em silêncio
-        // e nada era restaurado.
-        if (
-          savedUser &&
-          current &&
-          savedUser.id === current.id &&
-          saved.sectionId &&
-          saved.sectionId !== 'dashboard'
-        ) {
+        // Regra única em src/js/utils/restauracao.js: só volta se a sessão
+        // anterior caiu (rede/banco/corte do admin) E o dono for quem está
+        // entrando agora. NÃO apagamos o arquivo do disco: o menu lê de lá como
+        // plano B e aplica exatamente o mesmo porteiro.
+        const veredito = window.RestauracaoTrabalho.podeRestaurar(saved, parsedStoredUser);
+        if (veredito.ok && saved.sectionId && saved.sectionId !== 'dashboard') {
           localStorage.setItem('savedState', JSON.stringify(saved));
         }
       } catch (err) {
@@ -574,7 +565,92 @@ if (intro) {
   const loginSubmitButton = loginForm?.querySelector('button[type="submit"]');
   const emailInput = document.getElementById('email');
   const emailSuggestions = document.getElementById('emailSuggestions');
+  const loginContainer = document.querySelector('.login-container');
+  const lastUserProfile = document.getElementById('lastUserProfile');
+  const lastUserAvatar = document.getElementById('lastUserAvatar');
+  const lastUserName = document.getElementById('lastUserName');
+  const changeUserButton = document.getElementById('changeUserButton');
   let activeEmailSuggestionIndex = -1;
+  let lastUserMode = false;
+
+  function getLastLoginUser() {
+    try {
+      const value = localStorage.getItem('lastLoginUser');
+      const user = value ? JSON.parse(value) : parsedStoredUser;
+      return user && (user.email || user.usuario || user.username) ? user : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function getUserLogin(user) {
+    return String(user?.email || user?.usuario || user?.username || '').trim();
+  }
+
+  function getUserName(user) {
+    return String(user?.nome || user?.name || user?.nome_completo || getUserLogin(user)).trim();
+  }
+
+  function getUserAvatar(user) {
+    return user?.avatarUrl || user?.avatar_url || user?.avatar || user?.fotoUrl ||
+      user?.foto_usuario || user?.foto || user?.foto_perfil_url || user?.foto_perfil || '';
+  }
+
+  async function resolveAvatarSource(source) {
+    if (!source || /^(data:|blob:|https?:\/\/|file:)/i.test(source)) return source;
+    try {
+      const baseUrl = await window.apiConfig.getApiBaseUrl();
+      return new URL(source, `${baseUrl}/`).href;
+    } catch (_) {
+      return source;
+    }
+  }
+
+  async function activateLastUserMode(user) {
+    if (!user || !emailInput || !lastUserProfile) return;
+    lastUserMode = true;
+    const login = getUserLogin(user);
+    const name = getUserName(user);
+    emailInput.value = login;
+    emailInput.readOnly = true;
+    emailInput.classList.add('is-locked');
+    emailInput.setAttribute('aria-label', `Usuário selecionado: ${login}`);
+    lastUserName.textContent = name;
+    lastUserAvatar.textContent = name.split(/\s+/).slice(0, 2).map((part) => part[0]).join('').toUpperCase();
+    const avatar = await resolveAvatarSource(getUserAvatar(user));
+    if (lastUserMode && avatar) {
+      const image = document.createElement('img');
+      image.alt = `Foto de perfil de ${name}`;
+      image.src = avatar;
+      image.addEventListener('error', () => {
+        if (lastUserMode) lastUserAvatar.textContent = name.split(/\s+/).slice(0, 2).map((part) => part[0]).join('').toUpperCase();
+      }, { once: true });
+      lastUserAvatar.replaceChildren(image);
+    }
+    lastUserProfile.classList.remove('hidden');
+    changeUserButton?.classList.remove('hidden');
+    loginContainer?.classList.add('has-last-user');
+    closeEmailSuggestions();
+    document.getElementById('password')?.focus();
+    if (typeof feather !== 'undefined') feather.replace();
+  }
+
+  function deactivateLastUserMode() {
+    lastUserMode = false;
+    emailInput.readOnly = false;
+    emailInput.value = '';
+    emailInput.classList.remove('is-locked');
+    emailInput.setAttribute('aria-label', 'E-mail ou usuário');
+    lastUserProfile?.classList.add('hidden');
+    changeUserButton?.classList.add('hidden');
+    loginContainer?.classList.remove('has-last-user');
+    emailInput.focus();
+    renderEmailSuggestions();
+  }
+
+  changeUserButton?.addEventListener('click', deactivateLastUserMode);
+  const lastLoginUser = getLastLoginUser();
+  if (lastLoginUser) activateLastUserMode(lastLoginUser);
 
   function loadRememberedEmails() {
     try {
@@ -642,6 +718,10 @@ if (intro) {
 
   function renderEmailSuggestions() {
     if (!emailSuggestions || !emailInput) return;
+    if (lastUserMode) {
+      closeEmailSuggestions();
+      return;
+    }
     const suggestions = filterRememberedEmails(emailInput.value);
     emailSuggestions.innerHTML = '';
     activeEmailSuggestionIndex = -1;
@@ -825,6 +905,16 @@ if (intro) {
         persistRememberedEmail(email);
       }
       if (result.user) localStorage.setItem('user', JSON.stringify(result.user));
+      if (result.user) {
+        const lastUser = {
+          id: result.user.id,
+          nome: getUserName(result.user),
+          email: getUserLogin(result.user) || email,
+          avatarUrl: getUserAvatar(result.user),
+          avatarVersion: result.user.avatarVersion || result.user.avatar_version || ''
+        };
+        localStorage.setItem('lastLoginUser', JSON.stringify(lastUser));
+      }
       localStorage.setItem('rememberUser', remember ? '1' : '0');
       sessionStorage.setItem('currentUser', JSON.stringify(result.user));
       await cacheUpdateStatus();
@@ -834,17 +924,11 @@ if (intro) {
         const diskState = await window.electronAPI.loadState();
         if (diskState) {
           try {
-            const savedUser = diskState.storage && diskState.storage.user
-              ? JSON.parse(diskState.storage.user)
-              : null;
-            // Mesma regra do bloco de auto-login: repassa quando confirma o
-            // dono e deixa o arquivo no disco para o menu ler como plano B.
-            if (
-              savedUser &&
-              savedUser.id === result.user.id &&
-              diskState.sectionId &&
-              diskState.sectionId !== 'dashboard'
-            ) {
+            // Mesma regra do bloco de auto-login: repassa quando a sessão
+            // anterior caiu e o dono é quem acabou de entrar; deixa o arquivo
+            // no disco para o menu ler como plano B.
+            const veredito = window.RestauracaoTrabalho.podeRestaurar(diskState, result.user);
+            if (veredito.ok && diskState.sectionId && diskState.sectionId !== 'dashboard') {
               localStorage.setItem('savedState', JSON.stringify(diskState));
             }
           } catch (err) {

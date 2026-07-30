@@ -481,9 +481,11 @@ window.addEventListener('DOMContentLoaded', () => {
   
 
 action('logout', () => {
-  if (window.collectState && window.electronAPI && window.electronAPI.saveState) {
-    window.electronAPI.saveState(window.collectState());
-  }
+  // Sair pelo menu é decisão do usuário, NÃO uma queda: nada é guardado e o que
+  // estiver guardado de uma desconexão anterior é apagado. Antes o estado era
+  // salvo aqui, então o próximo login restaurava um trabalho que a pessoa já
+  // tinha abandonado de propósito.
+  window.EstadoTrabalho?.descartarTrabalhoGuardado?.();
 
   if (window.stopServerCheck) window.stopServerCheck();
   localStorage.removeItem('offlineDisconnect');

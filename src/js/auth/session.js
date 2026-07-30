@@ -63,13 +63,12 @@
       console.warn('Não foi possível exibir aviso de inatividade.', err);
     }
 
-    if (window.collectState && window.electronAPI?.saveState) {
-      try {
-        const state = window.collectState();
-        await window.electronAPI.saveState(state);
-      } catch (err) {
-        console.warn('Falha ao salvar estado antes do logout por inatividade.', err);
-      }
+    // Inatividade NÃO é desconexão: o trabalho não é guardado, e o que estiver
+    // guardado de antes é descartado para não voltar no próximo login.
+    try {
+      await window.EstadoTrabalho?.descartarTrabalhoGuardado?.();
+    } catch (err) {
+      console.warn('Falha ao descartar o trabalho guardado no logout por inatividade.', err);
     }
 
     if (window.electronAPI) {
