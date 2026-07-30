@@ -273,9 +273,11 @@
   let itens = [];
   let dragging = null;
 
+  // Quantidades aceitam até 4 casas decimais (ver src/utils/numericInput.js).
   function formatNumber(val){
+    if (window.NumericInput) return window.NumericInput.format(val) || '0';
     const n = parseFloat(val) || 0;
-    return Number.isInteger(n) ? String(n) : n.toFixed(2);
+    return Number.isInteger(n) ? String(n) : n.toFixed(4).replace(/\.?0+$/, '');
   }
 
   function renderActionButtons(item){
@@ -295,7 +297,7 @@
     const original = item.quantidade;
     cell.innerHTML = `
       <div class="flex items-center justify-start space-x-1">
-        <input type="number" step="0.01" class="w-20 bg-input border border-inputBorder rounded text-white text-sm text-left" value="${item.quantidade}">
+        <input type="number" step="0.0001" class="w-20 bg-input border border-inputBorder rounded text-white text-sm text-left" value="${item.quantidade}">
         <i class="fas fa-check w-5 h-5 cursor-pointer p-1 rounded text-green-400 confirm-edit"></i>
         <i class="fas fa-times w-5 h-5 cursor-pointer p-1 rounded text-red-400 cancel-edit"></i>
       </div>`;
@@ -457,12 +459,20 @@
       }
     },
     adicionarProcessoItens(novos){
+      // A posição segue a ordem em que o usuário montou a lista no modal do
+      // processo. Parte-se da MAIOR ordem existente (e não de `itens.length`),
+      // para não colidir caso as ordens não estejam contíguas.
+      let proximaOrdem = itens.reduce(
+        (maior, it) => Math.max(maior, Number(it.ordem) || 0),
+        0
+      );
       novos.forEach(n => {
         const exists = itens.some(it => String(it.nome).trim().toLowerCase() === String(n.nome).trim().toLowerCase());
         if(exists){
           if(typeof showToast === 'function') showToast('Item já adicionado', 'error');
         } else {
-          n.ordem = itens.length + 1;
+          proximaOrdem += 1;
+          n.ordem = proximaOrdem;
           itens.push(n);
         }
       });

@@ -138,7 +138,7 @@
 
     function showFunctionUnavailableDialog(message){
       const overlay=document.createElement('div');
-      overlay.className='fixed inset-0 bg-black/50 flex items-center justify-center p-4';
+      overlay.className='app-message-overlay fixed inset-0 bg-black/50 flex items-center justify-center p-4';
       overlay.style.zIndex = 'var(--z-dialog)';
       overlay.innerHTML=`<div class="max-w-sm w-full glass-surface backdrop-blur-xl rounded-2xl border border-yellow-500/20 ring-1 ring-yellow-500/30 shadow-2xl/40 animate-modalFade"><div class="p-6 text-center"><h3 class="text-lg font-semibold mb-4 text-yellow-400">Função Indisponível</h3><p class="text-sm text-gray-300 mb-6">${message}</p><div class="flex justify-center"><button id="funcUnavailableOk" class="btn-neutral px-6 py-2 rounded-lg text-white font-medium">OK</button></div></div></div>`;
       document.body.appendChild(overlay);
@@ -383,10 +383,13 @@
       const frac = Number.isInteger(val) ? 0 : 2;
       return (val || 0).toLocaleString('pt-BR', { style:'currency', currency:'BRL', minimumFractionDigits: frac, maximumFractionDigits: frac });
     }
+    // Quantidades aceitam até 4 casas decimais: arredondar em 2 apagava valores
+    // pequenos digitados pelo usuário (0,0025 virava 0,01).
     function formatNumber(val){
+      if (window.NumericInput) return window.NumericInput.format(val) || '0';
       const num = parseFloat(val) || 0;
       if (Number.isInteger(num)) return String(num);
-      return (Math.ceil(num * 100) / 100).toFixed(2);
+      return num.toFixed(4).replace(/\.?0+$/, '');
     }
 
     let itens = [];
@@ -526,7 +529,7 @@
       const original = item.quantidade;
       cell.innerHTML = `
         <div class="flex items-center justify-start space-x-1">
-          <input type="number" step="0.01" class="w-20 bg-input border border-inputBorder rounded text-white text-sm text-left" value="${item.quantidade}">
+          <input type="number" step="0.0001" class="w-20 bg-input border border-inputBorder rounded text-white text-sm text-left" value="${item.quantidade}">
           <i class="fas fa-check w-5 h-5 cursor-pointer p-1 rounded text-green-400 confirm-edit"></i>
           <i class="fas fa-times w-5 h-5 cursor-pointer p-1 rounded text-red-400 cancel-edit"></i>
         </div>`;
@@ -589,7 +592,12 @@
         status: d.status || 'unchanged'
       }));
 
-      if(itens.length === 0){
+      // Itens marcados para exclusão continuam em `itens` (o submit precisa
+      // deles em `deletados`), mas não podem voltar para a tela quando um novo
+      // processo é registrado e força um re-render.
+      const visiveis = itens.filter(it => it.status !== 'deleted');
+
+      if(visiveis.length === 0){
         const tr = document.createElement('tr');
         tr.innerHTML = '<td colspan="6" class="py-4 text-left text-gray-400">Nenhum item encontrado</td>';
         tableBody.appendChild(tr);
@@ -599,7 +607,8 @@
 
       const grupos = {};
       itens.sort((a,b)=> (a.ordem||0)-(b.ordem||0));
-      itens.forEach(it => {
+      visiveis.sort((a,b)=> (a.ordem||0)-(b.ordem||0));
+      visiveis.forEach(it => {
         const procKey = it.processo || '—';
         if(!grupos[procKey]) grupos[procKey] = [];
         grupos[procKey].push(it);
@@ -703,7 +712,18 @@
     window.produtoEditarAPI = {
       adicionarProcessoItens(arr){
         if(!Array.isArray(arr) || arr.length === 0) return;
-        arr.forEach(it => itens.push({ ...it, status: 'new', ordem: itens.length + 1 }));
+        // A posição de cada insumo segue a ordem em que o usuário montou a
+        // lista no modal do processo. Parte-se da MAIOR ordem já existente e
+        // não de `itens.length`, que conta itens marcados como excluídos e
+        // ignora ordens não contíguas vindas do banco.
+        let proximaOrdem = itens.reduce(
+          (maior, it) => Math.max(maior, Number(it.ordem) || 0),
+          0
+        );
+        arr.forEach(it => {
+          proximaOrdem += 1;
+          itens.push({ ...it, status: 'new', ordem: proximaOrdem });
+        });
         renderItens(itens);
       },
       obterItens(){
@@ -1070,7 +1090,7 @@
               tableBody.innerHTML = itensData.map(it => `
                 <tr class="border-b border-white/5">
                   <td class="py-3 px-2 text-white">${it.nome ?? '—'}</td>
-                  <td class="py-3 px-2 text-left">${(Number.isInteger(it.quantidade)? it.quantidade : (parseFloat(it.quantidade)||0).toFixed(2))}</td>
+                  <td class="py-3 px-2 text-left">${formatNumber(it.quantidade)}</td>
                   <td class="py-3 px-2 text-left">${it.unidade ?? '—'}</td>
                   <td class="py-3 px-2 text-left text-white">
                     ${(it.preco_unitario||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'})}

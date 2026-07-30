@@ -1,4 +1,8 @@
 const pool = require('./db');
+const { normalizarCamposNumericos, paraDecimal } = require('./numeros');
+
+/** Campos que chegam do front como texto e precisam virar número decimal. */
+const CAMPOS_NUMERICOS_MATERIA = ['quantidade', 'preco_unitario'];
 
 function aplicarFiltroLocal(lista, filtro) {
   if (!filtro) return lista;
@@ -130,6 +134,7 @@ async function listarMaterias(filtro = '') {
 }
 
 async function adicionarMateria(dados) {
+  normalizarCamposNumericos(dados, CAMPOS_NUMERICOS_MATERIA);
   const { nome, quantidade, preco_unitario, categoria, unidade, infinito, processo, descricao } = dados;
   const duplicada = await fetchSingle('materia_prima', { nome, select: 'id,nome' });
   if (duplicada) {
@@ -155,6 +160,7 @@ async function adicionarMateria(dados) {
 }
 
 async function atualizarMateria(id, dados) {
+  normalizarCamposNumericos(dados, CAMPOS_NUMERICOS_MATERIA);
   const {
     nome,
     categoria,
@@ -233,7 +239,8 @@ async function registrarMovimentacao({
   }
 }
 
-async function registrarEntrada(id, quantidade, usuarioId = null) {
+async function registrarEntrada(id, quantidadeBruta, usuarioId = null) {
+  const quantidade = paraDecimal(quantidadeBruta) ?? 0;
   const materiaAtual = await fetchSingle('materia_prima', {
     id,
     select: 'id,quantidade'
@@ -258,7 +265,8 @@ async function registrarEntrada(id, quantidade, usuarioId = null) {
   return materia || null;
 }
 
-async function registrarSaida(id, quantidade, usuarioId = null) {
+async function registrarSaida(id, quantidadeBruta, usuarioId = null) {
+  const quantidade = paraDecimal(quantidadeBruta) ?? 0;
   const materiaAtual = await fetchSingle('materia_prima', {
     id,
     select: 'id,quantidade'
@@ -354,7 +362,8 @@ async function atualizarProdutosComInsumo(insumoId) {
   }
 }
 
-async function atualizarPreco(id, preco, usuarioId = null) {
+async function atualizarPreco(id, precoBruto, usuarioId = null) {
+  const preco = paraDecimal(precoBruto) ?? 0;
   const materiaAtual = await fetchSingle('materia_prima', {
     id,
     select: 'id,preco_unitario'
@@ -485,6 +494,50 @@ async function processoTemDependencias(nome) {
   return Boolean(dep);
 }
 
+/**
+ * Produtos que consomem um insumo — alimenta a seção "Utilizado em:" do popup
+ * de informações da matéria-prima. Retorna `[{ id, codigo, nome }]` sem
+ * repetições, ordenado pelo código.
+ */
+async function listarProdutosPorInsumo(insumoId) {
+  const id = Number(insumoId);
+  if (!Number.isFinite(id)) return [];
+
+  const vinculos = await getFiltrado('/produtos_insumos', {
+    select: 'produto_id,insumo_id',
+    insumo_id: id
+  });
+
+  const produtosIds = Array.from(
+    new Set(
+      (Array.isArray(vinculos) ? vinculos : [])
+        .map(vinculo => Number(vinculo?.produto_id))
+        .filter(Number.isFinite)
+    )
+  );
+
+  if (!produtosIds.length) return [];
+
+  const produtos = await getFiltrado('/produtos', { select: 'id,codigo,nome' });
+  const porId = new Map(
+    (Array.isArray(produtos) ? produtos : [])
+      .filter(produto => produto?.id !== undefined && produto?.id !== null)
+      .map(produto => [Number(produto.id), produto])
+  );
+
+  return produtosIds
+    .map(produtoId => porId.get(produtoId))
+    .filter(Boolean)
+    .map(produto => ({
+      id: produto.id,
+      codigo: produto.codigo ?? null,
+      nome: produto.nome ?? null
+    }))
+    .sort((a, b) =>
+      String(a.codigo || '').localeCompare(String(b.codigo || ''), 'pt-BR', { numeric: true })
+    );
+}
+
 module.exports = {
   listarMaterias,
   adicionarMateria,
@@ -502,5 +555,6 @@ module.exports = {
   removerUnidade,
   categoriaTemDependencias,
   unidadeTemDependencias,
-  processoTemDependencias
+  processoTemDependencias,
+  listarProdutosPorInsumo
 };

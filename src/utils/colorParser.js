@@ -26,15 +26,15 @@ function normalize(text = '') {
 // Dicionário de cores fornecido externamente.
 const colorDictionary = [
   {"name":"branco","hex":"#FFFFFF","keywords":["branco","white","neve","snow", "branca"]},
-  {"name":"preto","hex":"#000000","keywords":["preto","black","carvão","carvao","coal","jet", "ebano", "ébano" , "mármore nero marquina"]},
+  {"name":"preto","hex":"#000000","keywords":["preto", "preta","black","carvão","carvao","coal","jet", "ebano", "ébano" , "mármore nero marquina"]},
   {"name":"cinza","hex":"#808080","keywords":["cinza","cinzento","gray","grey","acinzentado"]},
   {"name":"cinza claro","hex":"#D3D3D3","keywords":["cinza claro","lightgray","light grey","gelo","ice"]},
   {"name":"cinza escuro","hex":"#505050","keywords":["cinza escuro","darkgray","dark grey","grafite","graphite","chumbo","lead"]},
-  {"name":"prata","hex":"#C0C0C0","keywords":["prata","silver","metalico prata","metalico prateado"]},
+  {"name":"prata","hex":"#868585","keywords":["prata","silver","metalico prata","metalico prateado"]},
   {"name":"off-white","hex":"#F5F5F5","keywords":["off white","off-white","offwhite","marfim claro","marfim suave","ivory light"]},
   {"name":"marfim","hex":"#FFFFF0","keywords":["marfim","ivory","creme claro", "mármore Branco Champagne Clássico"]},
   {"name":"bege","hex":"#F5DEB3","keywords":["bege","beige","areia clara","sand","trigo","wheat","nacarado"]},
-  {"name":"areia","hex":"#C2B280","keywords":["areia","sandstone","khaki claro","khaki light"]},
+  {"name":"areia","hex":"#C2B280","keywords":["areia","sandstone","khaki claro","khaki light", "quartzito nacarado"]},
   {"name":"caqui","hex":"#BDB76B","keywords":["caqui","khaki","oliva claro","army light"]},
   {"name":"taupe","hex":"#8B8589","keywords":["taupe","topo","toupe"]},
   {"name":"caramelo","hex":"#AF6F2F","keywords":["caramelo","caramel","toffee","butterscotch", "jequitiba"]},
@@ -68,7 +68,7 @@ const colorDictionary = [
   {"name":"verde","hex":"#008000","keywords":["verde","green", "mármore verde guatemala"]},
   {"name":"lima","hex":"#32CD32","keywords":["lima","limão","limao","lime","verde limão"]},
   {"name":"menta","hex":"#98FF98","keywords":["menta","mint"]},
-  {"name":"esmeralda","hex":"#50C878","keywords":["esmeralda","emerald"]},
+  {"name":"esmeralda","hex":"#50C878","keywords":["esmeralda","emerald", "quartzito green"]},
   {"name":"jade","hex":"#00A86B","keywords":["jade"]},
   {"name":"oliva","hex":"#808000","keywords":["oliva","olive","militar","army","verde oliva"]},
   {"name":"musgo","hex":"#556B2F","keywords":["musgo","moss","verde musgo","selva","jungle"]},
@@ -105,7 +105,7 @@ const colorDictionary = [
   {"name":"azul petróleo","hex":"#0E4D64","keywords":["azul petróleo","azul petroleo","deep teal"]},
   {"name":"cinza azulado","hex":"#6B7C93","keywords":["cinza azulado","blue gray","bluegrey"]},
   {"name":"nude","hex":"#E3C7A8","keywords":["nude","pele","skin","champagne rose"]},
-  {"name":"pêssego rosado","hex":"#FFC4B2","keywords":["pessego rosado","pêssego rosado","peach pink"]},
+  {"name":"pêssego rosado","hex":"#FFC4B2","keywords":["pessego rosado","pêssego rosado","peach pink", "cerâmica clara"]},
 
   {"name":"prata escuro","hex":"#A9A9A9","keywords":["prata escuro","dark silver"]},
   {"name":"dourado claro","hex":"#E1C16E","keywords":["dourado claro","light gold"]},
@@ -291,7 +291,7 @@ function applyModifiers(hex, mods) {
   return hslToHex(h, s, l);
 }
 
-const FALLBACK_HEX = resolveBaseColor('cinza') || '#808080';
+const FALLBACK_HEX = resolveBaseColor('transparente') || '#81818100';
 
 /**
  * Obtém um valor hexadecimal representando a cor do texto fornecido.

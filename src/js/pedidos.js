@@ -79,7 +79,7 @@ async function popularClientes() {
 
 function showFunctionUnavailableDialog(message) {
     const overlay = document.createElement('div');
-    overlay.className = 'fixed inset-0 bg-black/50 flex items-center justify-center p-4';
+    overlay.className = 'app-message-overlay fixed inset-0 bg-black/50 flex items-center justify-center p-4';
     overlay.style.zIndex = 'var(--z-dialog)';
     overlay.innerHTML = `<div class="max-w-sm w-full glass-surface backdrop-blur-xl rounded-2xl border border-yellow-500/20 ring-1 ring-yellow-500/30 shadow-2xl/40 animate-modalFade">
         <div class="p-6 text-center">
@@ -96,7 +96,7 @@ function showFunctionUnavailableDialog(message) {
 
 function showPdfUnavailableDialog() {
     const overlay = document.createElement('div');
-    overlay.className = 'fixed inset-0 bg-black/50 flex items-center justify-center p-4';
+    overlay.className = 'app-message-overlay fixed inset-0 bg-black/50 flex items-center justify-center p-4';
     overlay.style.zIndex = 'var(--z-dialog)';
     overlay.innerHTML = `<div class="max-w-sm w-full glass-surface backdrop-blur-xl rounded-2xl border border-red-500/20 ring-1 ring-red-500/30 shadow-2xl/40 animate-modalFade">
         <div class="p-6 text-center">
@@ -113,7 +113,7 @@ function showPdfUnavailableDialog() {
 
 function showStatusConfirmDialog(message, cb) {
     const overlay = document.createElement('div');
-    overlay.className = 'fixed inset-0 bg-black/50 flex items-center justify-center p-4';
+    overlay.className = 'app-message-overlay fixed inset-0 bg-black/50 flex items-center justify-center p-4';
     overlay.style.zIndex = 'var(--z-dialog)';
     overlay.innerHTML = `<div class="max-w-md w-full glass-surface backdrop-blur-xl rounded-2xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade">
         <div class="p-6 text-center">

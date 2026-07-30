@@ -1,4 +1,20 @@
 const pool = require('./db');
+const { normalizarCamposNumericos, paraDecimal } = require('./numeros');
+
+/** Campos que chegam do front como texto e precisam virar número decimal. */
+const CAMPOS_NUMERICOS_PRODUTO = [
+  'pct_fabricacao',
+  'pct_acabamento',
+  'pct_montagem',
+  'pct_embalagem',
+  'pct_markup',
+  'pct_comissao',
+  'pct_imposto',
+  'preco_base',
+  'preco_venda',
+  'quantidade_total'
+];
+const CAMPOS_NUMERICOS_ITEM = ['quantidade'];
 
 function extrairListaIn(valor) {
   if (typeof valor !== 'string') return null;
@@ -284,10 +300,15 @@ function comporItensComMaterias(itensBase = [], materiasPorId = new Map()) {
         total: precoUnitario * quantidade
       };
     })
+    // `ordem_insumo` é a posição que o usuário montou na tela (1, 2, 3...) e é
+    // gravada de forma contígua por processo. Ordenar primeiro pelo NOME do
+    // processo embaralhava os processos em ordem alfabética e escondia a
+    // sequência escolhida; agora a posição salva manda, com o processo apenas
+    // como desempate.
     .sort(
       (a, b) =>
-        String(a?.processo || '').localeCompare(String(b?.processo || '')) ||
-        Number(a?.ordem_insumo || 0) - Number(b?.ordem_insumo || 0)
+        Number(a?.ordem_insumo || 0) - Number(b?.ordem_insumo || 0) ||
+        String(a?.processo || '').localeCompare(String(b?.processo || ''))
     );
 }
 
@@ -749,6 +770,7 @@ async function listarItensProcessoProduto(codigo, etapa, busca = '', produtoId =
  * CRUD básico de produtos
  */
 async function adicionarProduto(dados) {
+  normalizarCamposNumericos(dados, CAMPOS_NUMERICOS_PRODUTO);
   const { codigo, nome, ncm, preco_venda, pct_markup, status } = dados;
   const categoria = dados.categoria || (nome ? String(nome).trim().split(' ')[0] : null);
   const required = {
@@ -791,6 +813,7 @@ async function adicionarProduto(dados) {
 }
 
 async function atualizarProduto(id, dados) {
+  normalizarCamposNumericos(dados, CAMPOS_NUMERICOS_PRODUTO);
   const { codigo, nome, preco_venda, pct_markup, status, ncm } = dados;
   const categoria = dados.categoria || (nome ? String(nome).trim().split(' ')[0] : null);
   const atuais = await fetchSingle('produtos', { id });
@@ -886,7 +909,7 @@ async function inserirLoteProduto({ produtoId, etapa, ultimoInsumoId, quantidade
     produto_id: produtoId,
     etapa_id: etapa,
     ultimo_insumo_id: ultimoInsumoId,
-    quantidade,
+    quantidade: paraDecimal(quantidade),
     data_hora_completa: new Date().toISOString()
   });
 }
@@ -896,7 +919,7 @@ async function inserirLoteProduto({ produtoId, etapa, ultimoInsumoId, quantidade
  */
 async function atualizarLoteProduto(id, quantidade) {
   return executarLotes('put', `/${id}`, {
-    quantidade,
+    quantidade: paraDecimal(quantidade),
     data_hora_completa: new Date().toISOString()
   });
 }
@@ -910,6 +933,15 @@ async function excluirLoteProduto(id) {
  */
 
 async function salvarProdutoDetalhado(codigoOriginal, produto, itens, produtoId) {
+  // Percentuais, preços e quantidades podem chegar como texto: converte para
+  // número (aceitando "," como separador) antes de qualquer cálculo ou gravação.
+  normalizarCamposNumericos(produto, CAMPOS_NUMERICOS_PRODUTO);
+  for (const lista of [itens?.inseridos, itens?.atualizados]) {
+    (Array.isArray(lista) ? lista : []).forEach(item =>
+      normalizarCamposNumericos(item, CAMPOS_NUMERICOS_ITEM)
+    );
+  }
+
   const {
     pct_fabricacao,
     pct_acabamento,

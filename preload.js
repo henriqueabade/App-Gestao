@@ -145,6 +145,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   // Módulo de Matéria-Prima
   listarMateriaPrima: (filtro) => ipcRenderer.invoke('listar-materia-prima', { filtro }),
+  listarProdutosPorInsumo: (insumoId) =>
+    ipcRenderer.invoke('listar-produtos-por-insumo', insumoId).catch((err) => {
+      console.error('listar-produtos-por-insumo error', err);
+      return [];
+    }),
   listarCategorias: () =>
     ipcRenderer.invoke('listar-categorias').catch((err) => {
       console.error('listar-categorias error', err);

@@ -42,9 +42,11 @@
   function formatCurrency(val){
     return (val || 0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
   }
+  // Quantidades aceitam até 4 casas decimais (ver src/utils/numericInput.js).
   function formatNumber(val){
+    if (window.NumericInput) return window.NumericInput.format(val) || '0';
     const n = parseFloat(val) || 0;
-    return Number.isInteger(n) ? String(n) : n.toFixed(2);
+    return Number.isInteger(n) ? String(n) : n.toFixed(4).replace(/\.?0+$/, '');
   }
 
   // totais
@@ -70,7 +72,7 @@
     const original = item.quantidade;
     cell.innerHTML = `
       <div class="flex items-center justify-center space-x-1">
-        <input type="number" step="0.01" class="w-20 bg-input border border-inputBorder rounded text-white text-sm text-left" value="${formatNumber(item.quantidade)}">
+        <input type="number" step="0.0001" class="w-20 bg-input border border-inputBorder rounded text-white text-sm text-left" value="${formatNumber(item.quantidade)}">
         <i class="fas fa-check w-5 h-5 cursor-pointer p-1 rounded text-green-400 confirm-edit"></i>
         <i class="fas fa-times w-5 h-5 cursor-pointer p-1 rounded text-red-400 cancel-edit"></i>
       </div>`;
@@ -259,7 +261,11 @@
     existentesArr.forEach(it => {
       existentesMap[String(it.insumo_id ?? it.id)] = it;
     });
-    const novosMap = {};
+    // Map (e não objeto literal): as chaves são ids numéricos e
+    // `Object.values` reordena chaves inteiras em ordem crescente, o que fazia
+    // os insumos chegarem ao produto embaralhados por id em vez de na ordem
+    // digitada aqui na lista.
+    const novosMap = new Map();
     for(const item of itens){
       const key = String(item.id);
       if(existentesMap[key]){
@@ -269,18 +275,19 @@
         }else if(acao === 'substituir' && typeof api.substituirItem === 'function'){
           api.substituirItem({ ...item, id: existentesMap[key].id });
         } // manter: não faz nada
-      }else if(novosMap[key]){
+      }else if(novosMap.has(key)){
         const acao = await showDuplicateDecision(item);
         if(acao === 'somar'){
-          novosMap[key].quantidade += item.quantidade;
+          novosMap.get(key).quantidade += item.quantidade;
         }else if(acao === 'substituir'){
-          novosMap[key] = item;
+          // Substituir mantém a posição original na lista.
+          novosMap.set(key, item);
         } // manter: não faz nada
       }else{
-        novosMap[key] = item;
+        novosMap.set(key, item);
       }
     }
-    const novos = Object.values(novosMap);
+    const novos = Array.from(novosMap.values());
     if(novos.length && typeof api.adicionarProcessoItens === 'function'){
       api.adicionarProcessoItens(novos);
     }

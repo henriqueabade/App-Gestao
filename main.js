@@ -39,7 +39,8 @@ const {
   removerUnidade,
   categoriaTemDependencias,
   unidadeTemDependencias,
-  processoTemDependencias
+  processoTemDependencias,
+  listarProdutosPorInsumo
 } = require('./backend/materiaPrima');
 const {
   listarProdutos,
@@ -3782,6 +3783,17 @@ function negadoIpc(chave) {
 
 ipcMain.handle('listar-materia-prima', async (_e, { filtro }) => {
   return listarMaterias(filtro);
+});
+// Alimenta a seção "Utilizado em:" do popup (i) da tabela de matéria-prima.
+// SEM guarda de permissão, igual a 'listar-materia-prima': é leitura do mesmo
+// popup que qualquer perfil com acesso ao módulo já enxerga.
+ipcMain.handle('listar-produtos-por-insumo', async (_e, insumoId) => {
+  try {
+    return await listarProdutosPorInsumo(insumoId);
+  } catch (err) {
+    console.error('Erro ao listar produtos que usam o insumo:', err);
+    return [];
+  }
 });
 ipcMain.handle('adicionar-materia-prima', async (_e, dados) => {
   if (!(await verificarPermissaoIpc('mp.create'))) return negadoIpc('mp.create');

@@ -24,9 +24,10 @@
     function currency(value) {
       return (Number(value) || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
     }
+    // Quantidades aceitam até 4 casas decimais (ver src/utils/numericInput.js).
     function number(value) {
       const parsed = Number(value) || 0;
-      return parsed.toLocaleString('pt-BR', { maximumFractionDigits: 2 });
+      return parsed.toLocaleString('pt-BR', { maximumFractionDigits: 4 });
     }
     function safe(value) {
       const node = document.createElement('span');

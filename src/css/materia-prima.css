@@ -313,6 +313,22 @@ body {
   line-height: 1.5; /* leading-relaxed */
 }
 
+/* Seção "Utilizado em:" — códigos dos produtos que consomem o insumo.
+   A lista pode ser longa, então rola dentro do próprio card. */
+.popup-usage-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  max-height: 6.5rem;
+  overflow-y: auto;
+}
+
+.popup-usage-list .badge {
+  background: rgba(255, 255, 255, 0.12);
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+}
+
 /* Modals and form elements */
 .bg-input { background: var(--color-input); }
 .border-inputBorder { border-color: var(--color-inputBorder); }

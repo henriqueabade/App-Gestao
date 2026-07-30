@@ -186,11 +186,79 @@ function formatDate(dateStr) {
     return date.toLocaleDateString('pt-BR', { timeZone: 'UTC' });
 }
 
+/**
+ * Custo médio na grade. O campo de preço aceita até 4 casas decimais, então
+ * arredondar em 2 aqui escondia o que o usuário digitou (0,0125 aparecia como
+ * 0,01). Mostra 2 casas no caso comum e vai até 4 só quando o valor tem.
+ */
+function formatarPreco(valor) {
+    return Number(valor || 0).toLocaleString('pt-BR', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 4
+    });
+}
+
 // Controle de popup de informações da matéria prima
 let materiais = [];
 // Mapa auxiliar para lookup rápido pelo id
 let materiaisMap = new Map();
 let currentRawMaterialPopup = null;
+
+const escaparHtml = valor =>
+    valor == null
+        ? ''
+        : String(valor).replace(/[&<>"']/g, ch =>
+            ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+
+// Cache por insumo: o popup abre no hover e reabre a cada passada do mouse, não
+// dá para consultar o back-end toda vez.
+const produtosPorInsumoCache = new Map();
+
+function buscarProdutosDoInsumo(insumoId) {
+    const chave = String(insumoId);
+    if (produtosPorInsumoCache.has(chave)) {
+        return produtosPorInsumoCache.get(chave);
+    }
+    const promessa = Promise.resolve(
+        window.electronAPI?.listarProdutosPorInsumo?.(insumoId) ?? []
+    ).catch(err => {
+        console.error('Erro ao listar produtos que usam o insumo', err);
+        produtosPorInsumoCache.delete(chave);   // permite nova tentativa
+        return null;
+    });
+    produtosPorInsumoCache.set(chave, promessa);
+    return promessa;
+}
+
+function renderizarUtilizadoEm(produtos) {
+    if (produtos === null) {
+        return '<p class="popup-description-text">Não foi possível carregar.</p>';
+    }
+    if (!Array.isArray(produtos) || produtos.length === 0) {
+        return '<p class="popup-description-text">Nenhum produto utiliza este insumo.</p>';
+    }
+    return produtos
+        .map(produto => {
+            const codigo = produto?.codigo || produto?.nome || produto?.id;
+            const titulo = produto?.nome ? ` title="${escaparHtml(produto.nome)}"` : '';
+            return `<span class="badge badge-neutral"${titulo}>${escaparHtml(codigo)}</span>`;
+        })
+        .join('');
+}
+
+/**
+ * Preenche a seção "Utilizado em:" depois que o popup já está na tela. Confere
+ * o id gravado no container porque o mouse pode ter trocado de linha (ou saído
+ * da tabela) enquanto a consulta acontecia.
+ */
+async function preencherUtilizadoEm(popup, insumoId) {
+    const container = popup?.querySelector('[data-usage-for]');
+    if (!container) return;
+    const produtos = await buscarProdutosDoInsumo(insumoId);
+    if (!popup.isConnected) return;
+    if (container.dataset.usageFor !== String(insumoId)) return;
+    container.innerHTML = renderizarUtilizadoEm(produtos);
+}
 
 function createPopupContent(item) {
     const infinitoBadge = item.infinito
@@ -232,6 +300,12 @@ function createPopupContent(item) {
           <p class="popup-info-label">Descrição Técnica:</p>
           <p class="popup-description-text">${item.descricao || ''}</p>
         </div>
+        <div class="popup-description-section">
+          <p class="popup-info-label">Utilizado em:</p>
+          <div class="popup-usage-list" data-usage-for="${escaparHtml(item.id)}">
+            <p class="popup-description-text">Carregando...</p>
+          </div>
+        </div>
       </div>
     </div>`;
 }
@@ -241,6 +315,8 @@ function showRawMaterialInfoPopup(target, item) {
     const { popup, left, top } = createPopup(target, createPopupContent(item), { onHide: hideRawMaterialInfoPopup });
     window.electronAPI?.log?.(`showRawMaterialInfoPopup left=${left} top=${top} id=${item.id}`);
     currentRawMaterialPopup = popup;
+    // A lista de produtos vem do back-end: preenche depois, sem travar o hover.
+    preencherUtilizadoEm(popup, item.id);
 }
 
 function hideRawMaterialInfoPopup() {
@@ -325,7 +401,7 @@ function createMateriaPrimaRow(item) {
         </td>
         <td data-perm-col="col_mp_estoque_atual" class="px-6 py-4 whitespace-nowrap text-base text-white">${quantidadeValor}</td>
         <td data-perm-col="col_mp_unidade" class="px-6 py-4 whitespace-nowrap text-base" style="color: var(--color-violet)">${item.unidade || ''}</td>
-        <td data-perm-col="col_mp_custo_medio" class="px-6 py-4 whitespace-nowrap text-base text-white">R$ ${preco.toFixed(2).replace('.', ',')}</td>
+        <td data-perm-col="col_mp_custo_medio" class="px-6 py-4 whitespace-nowrap text-base text-white">R$ ${formatarPreco(preco)}</td>
         <td class="px-6 py-4 whitespace-nowrap text-base text-left">
             <div class="flex items-center justify-start space-x-2">
                 <i data-perm="mp.edit" class="fas fa-edit w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Editar"></i>

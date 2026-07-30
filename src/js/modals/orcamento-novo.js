@@ -64,7 +64,7 @@
   }
   function showResetDialog(cb){
     const overlay=document.createElement('div');
-    overlay.className='fixed inset-0 bg-black/50 flex items-center justify-center p-4';
+    overlay.className='app-message-overlay fixed inset-0 bg-black/50 flex items-center justify-center p-4';
     overlay.style.zIndex = 'var(--z-dialog)';
     overlay.innerHTML=`<div class="max-w-md w-full glass-surface backdrop-blur-xl rounded-2xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade"><div class="p-6 text-center"><h3 class="text-lg font-semibold mb-4 text-yellow-300">Atenção</h3><p class="text-sm text-gray-300 mb-6">Esta ação irá reiniciar a condição de pagamento. Deseja continuar?</p><div class="flex justify-center gap-4"><button id="resetYes" class="btn-warning px-4 py-2 rounded-lg text-white font-medium">Sim</button><button id="resetNo" class="btn-neutral px-4 py-2 rounded-lg text-white font-medium">Não</button></div></div></div>`;
     document.body.appendChild(overlay);
@@ -73,7 +73,7 @@
   }
   function showBlockedDialog(){
     const overlay=document.createElement('div');
-    overlay.className='fixed inset-0 bg-black/50 flex items-center justify-center p-4';
+    overlay.className='app-message-overlay fixed inset-0 bg-black/50 flex items-center justify-center p-4';
     overlay.style.zIndex = 'var(--z-dialog)';
     overlay.innerHTML=`<div class="max-w-sm w-full glass-surface backdrop-blur-xl rounded-2xl border border-yellow-500/20 ring-1 ring-yellow-500/30 shadow-2xl/40 animate-modalFade"><div class="p-6 text-center"><h3 class="text-lg font-semibold mb-4 text-yellow-400">Condição de Pagamento Bloqueada</h3><p class="text-sm text-gray-300 mb-6">Para definir condição de pagamento é necessario adicionar itens ao orçamento primeiro!</p><div class="flex justify-center"><button id="blockedOk" class="btn-warning px-6 py-2 rounded-lg text-white font-medium active:scale-95">OK</button></div></div></div>`;
     document.body.appendChild(overlay);
@@ -82,7 +82,7 @@
 
   function showMissingDialog(fields){
     const overlay=document.createElement('div');
-    overlay.className='fixed inset-0 bg-black/50 flex items-center justify-center p-4';
+    overlay.className='app-message-overlay fixed inset-0 bg-black/50 flex items-center justify-center p-4';
     overlay.style.zIndex = 'var(--z-dialog)';
     overlay.innerHTML=`<div class="max-w-sm w-full glass-surface backdrop-blur-xl rounded-2xl border border-yellow-500/20 ring-1 ring-yellow-500/30 shadow-2xl/40 animate-modalFade"><div class="p-6 text-center"><h3 class="text-lg font-semibold mb-4 text-yellow-400">Dados Incompletos</h3><p class="text-sm text-gray-300 mb-6">Preencha os campos: ${fields.join(', ')}</p><div class="flex justify-center"><button id="missingOk" class="btn-warning px-6 py-2 rounded-lg text-white font-medium active:scale-95">OK</button></div></div></div>`;
     document.body.appendChild(overlay);
@@ -305,7 +305,7 @@
     const descVal = descCell.textContent.trim();
 
     qtyCell.innerHTML = `<input type="number" class="w-16 bg-input border border-inputBorder rounded px-2 py-1 text-white text-xs text-left focus:border-primary focus:ring-1 focus:ring-primary/50 transition" value="${qtyVal}" min="1">`;
-    descCell.innerHTML = `<input type="number" class="w-16 bg-input border border-inputBorder rounded px-2 py-1 text-white text-xs text-left focus:border-primary focus:ring-1 focus:ring-primary/50 transition" value="${descVal}" min="0" step="0.01">`;
+    descCell.innerHTML = `<input type="number" class="w-16 bg-input border border-inputBorder rounded px-2 py-1 text-white text-xs text-left focus:border-primary focus:ring-1 focus:ring-primary/50 transition" value="${descVal}" min="0" step="0.0001">`;
 
     actionsCell.innerHTML = `
       <i class="fas fa-check w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10 text-green-400"></i>
@@ -360,7 +360,7 @@
 
   function showDuplicateDialog(callback) {
     const overlay = document.createElement('div');
-    overlay.className = 'fixed inset-0 bg-black/50 flex items-center justify-center p-4';
+    overlay.className = 'app-message-overlay fixed inset-0 bg-black/50 flex items-center justify-center p-4';
     overlay.style.zIndex = 'var(--z-dialog)';
     overlay.innerHTML = `
       <div class="max-w-lg w-full glass-surface backdrop-blur-xl rounded-2xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade">
@@ -382,7 +382,7 @@
 
   function showActionDialog(message, cb){
     const overlay=document.createElement('div');
-    overlay.className='fixed inset-0 bg-black/50 flex items-center justify-center p-4';
+    overlay.className='app-message-overlay fixed inset-0 bg-black/50 flex items-center justify-center p-4';
     overlay.style.zIndex = 'var(--z-dialog)';
     overlay.innerHTML=`<div class="max-w-md w-full glass-surface backdrop-blur-xl rounded-2xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade"><div class="p-6 text-center"><h3 class="text-lg font-semibold mb-4 text-yellow-300">Atenção</h3><p class="text-sm text-gray-300 mb-6">${message}</p><div class="flex justify-center gap-4"><button id="actYes" class="btn-warning px-4 py-2 rounded-lg text-white font-medium">Sim</button><button id="actNo" class="btn-neutral px-4 py-2 rounded-lg text-white font-medium">Não</button></div></div></div>`;
     document.body.appendChild(overlay);

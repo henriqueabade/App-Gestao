@@ -39,11 +39,16 @@
                 <div id="appUpdateContainer" class="app-update-container hidden" aria-live="polite">
                     <div class="app-update-actions">
                         <div id="supAdminUpdateControl" class="sup-admin-updates hidden">
+                            <!-- data-sem-loading: a proteção contra duplo clique
+                                 continua valendo, mas o spinner padrão não pode
+                                 entrar aqui — esconderia a própria barra de
+                                 progresso da publicação, que vive dentro do botão. -->
                             <button
                                 id="supAdminUpdatesTrigger"
                                 type="button"
                                 class="sup-admin-updates-trigger"
                                 data-state="idle"
+                                data-sem-loading="true"
                                 aria-expanded="false"
                                 aria-haspopup="true"
                             >
@@ -70,6 +75,7 @@
                                     id="supAdminPublishAction"
                                     type="button"
                                     class="sup-admin-publish-action"
+                                    data-sem-loading="true"
                                 >
                                     <i id="supAdminPublishIcon" class="fas fa-cloud-upload-alt" aria-hidden="true"></i>
                                     <span id="supAdminPublishLabel">Publicar atualização</span>
@@ -307,6 +313,9 @@
 
     <!-- Script de controle do menu -->
     <script src="../utils/modal.js"></script>
+    <script src="../utils/dialogTopLayer.js"></script>
+    <script src="../utils/numericInput.js"></script>
+    <script src="../utils/botaoAcao.js"></script>
     <script src="../utils/colorParser.js"></script>
     <script src="../utils/colors.js"></script>
     <script src="../utils/activityTracker.js"></script>
