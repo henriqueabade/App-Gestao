@@ -192,183 +192,193 @@
                   </div>
                   <i class="fas fa-info-circle text-[var(--color-primary)]" title="Permissões do módulo"></i>
                 </div>
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="grid grid-cols-1 gap-6">
 
-                  <label class="usuarios-permissoes-item" data-search="ver lista visualizar">
-                    <input type="checkbox" name="mp.view" data-role="item" data-group="acoes-mp" data-item-type="action" class="w-4 h-4 mt-1" />
-                    <div>
-                      <span class="font-medium">Ver lista</span>
-                      <p class="text-sm text-gray-400">Visualizar grade de matérias-primas</p>
-                    </div>
-                  </label>
+                  <div>
+                    <h4 class="text-sm font-semibold text-gray-300 mb-3">Tela de Matéria-prima (lista)</h4>
+                    <div class="grid grid-cols-1 gap-4">
 
-                  <label class="usuarios-permissoes-item" data-search="buscar pesquisar filtrar">
-                    <input type="checkbox" name="mp.search" data-role="item" data-group="acoes-mp" data-item-type="action" class="w-4 h-4 mt-1" />
-                    <div>
-                      <span class="font-medium">Buscar/filtrar</span>
-                      <p class="text-sm text-gray-400">Habilitar filtros e ordenação</p>
-                    </div>
-                  </label>
+                      <label class="usuarios-permissoes-item" data-search="ver lista grade insumos matéria prima">
+                        <input type="checkbox" name="mp.view" data-role="item" data-group="acoes-mp" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Ver lista</span>
+                          <p class="text-sm text-gray-400">Exibir a grade de insumos</p>
+                        </div>
+                      </label>
 
-                  <label class="usuarios-permissoes-item" data-search="exportar relatorio dados">
-                    <input type="checkbox" name="mp.export" data-role="item" data-group="acoes-mp" data-item-type="action" class="w-4 h-4 mt-1" />
-                    <div>
-                      <span class="font-medium">Exportar lista</span>
-                      <p class="text-sm text-gray-400">Exportar dados visíveis (CSV/XLSX/PDF)</p>
-                    </div>
-                  </label>
+                      <label class="usuarios-permissoes-item" data-search="buscar filtrar processo categoria estoque">
+                        <input type="checkbox" name="mp.search" data-role="item" data-group="acoes-mp" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Buscar/filtrar</span>
+                          <p class="text-sm text-gray-400">Busca, filtros de processo/categoria, "0 Estoque" e botões Filtrar/Limpar</p>
+                        </div>
+                      </label>
 
-                  <label class="usuarios-permissoes-item" data-search="cadastrar criar novo">
-                    <input type="checkbox" name="mp.create" data-role="item" data-group="acoes-mp" data-item-type="action" class="w-4 h-4 mt-1" />
-                    <div>
-                      <span class="font-medium">Cadastrar MP</span>
-                      <p class="text-sm text-gray-400">Criar novos itens de matéria-prima</p>
-                    </div>
-                  </label>
+                      <label class="usuarios-permissoes-item" data-search="cadastrar criar novo insumo">
+                        <input type="checkbox" name="mp.create" data-role="item" data-group="acoes-mp" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Cadastrar insumo</span>
+                          <p class="text-sm text-gray-400">Botão "Novo Insumo"</p>
+                        </div>
+                      </label>
 
-                  <label class="usuarios-permissoes-item" data-search="editar modificar atualizar">
-                    <input type="checkbox" name="mp.edit" data-role="item" data-group="acoes-mp" data-item-type="action" class="w-4 h-4 mt-1" />
-                    <div>
-                      <span class="font-medium">Editar MP</span>
-                      <p class="text-sm text-gray-400">Alterar dados de matérias-primas</p>
-                    </div>
-                  </label>
+                      <label class="usuarios-permissoes-item" data-search="totais tipo infinitos acabando resumo">
+                        <input type="checkbox" name="mp.totals.view" data-role="item" data-group="acoes-mp" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Ver totais por tipo</span>
+                          <p class="text-sm text-gray-400">Painel "Totais por Tipo" (Infinitos / Acabando)</p>
+                        </div>
+                      </label>
 
-                  <label class="usuarios-permissoes-item" data-search="excluir remover deletar">
-                    <input type="checkbox" name="mp.delete" data-role="item" data-group="acoes-mp" data-item-type="action" class="w-4 h-4 mt-1" />
-                    <div>
-                      <span class="font-medium">Excluir MP</span>
-                      <p class="text-sm text-gray-400">Remover itens com validações</p>
                     </div>
-                  </label>
+                  </div>
 
-                  <label class="usuarios-permissoes-item" data-search="ver processos etapas">
-                    <input type="checkbox" name="mp.process.view" data-role="item" data-group="acoes-mp" data-item-type="action" class="w-4 h-4 mt-1" />
-                    <div>
-                      <span class="font-medium">Ver processos</span>
-                      <p class="text-sm text-gray-400">Visualizar etapas vinculadas</p>
-                    </div>
-                  </label>
+                  <div>
+                    <h4 class="text-sm font-semibold text-gray-300 mb-3">Ações na linha da tabela</h4>
+                    <div class="grid grid-cols-1 gap-4">
 
-                  <label class="usuarios-permissoes-item" data-search="criar processo etapas">
-                    <input type="checkbox" name="mp.process.create" data-role="item" data-group="acoes-mp" data-item-type="action" class="w-4 h-4 mt-1" />
-                    <div>
-                      <span class="font-medium">Cadastrar processo</span>
-                      <p class="text-sm text-gray-400">Definir novas etapas, custos e ordem</p>
-                    </div>
-                  </label>
+                      <label class="usuarios-permissoes-item" data-search="editar alterar insumo lápis">
+                        <input type="checkbox" name="mp.edit" data-role="item" data-group="acoes-mp" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Editar insumo</span>
+                          <p class="text-sm text-gray-400">Ícone de lápis — abre "Editar Insumo"</p>
+                        </div>
+                      </label>
 
-                  <label class="usuarios-permissoes-item" data-search="excluir processo remover">
-                    <input type="checkbox" name="mp.process.delete" data-role="item" data-group="acoes-mp" data-item-type="action" class="w-4 h-4 mt-1" />
-                    <div>
-                      <span class="font-medium">Excluir processo</span>
-                      <p class="text-sm text-gray-400">Remover processos cadastrados</p>
-                    </div>
-                  </label>
+                      <label class="usuarios-permissoes-item" data-search="excluir remover insumo lixeira">
+                        <input type="checkbox" name="mp.delete" data-role="item" data-group="acoes-mp" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Excluir insumo</span>
+                          <p class="text-sm text-gray-400">Ícone de lixeira e botão "Excluir Insumo"</p>
+                        </div>
+                      </label>
 
-                  <label class="usuarios-permissoes-item" data-search="ver categoria classificar">
-                    <input type="checkbox" name="mp.category.view" data-role="item" data-group="acoes-mp" data-item-type="action" class="w-4 h-4 mt-1" />
-                    <div>
-                      <span class="font-medium">Ver categorias</span>
-                      <p class="text-sm text-gray-400">Visualizar classificações e contagens</p>
                     </div>
-                  </label>
+                  </div>
 
-                  <label class="usuarios-permissoes-item" data-search="criar categoria adicionar">
-                    <input type="checkbox" name="mp.category.create" data-role="item" data-group="acoes-mp" data-item-type="action" class="w-4 h-4 mt-1" />
-                    <div>
-                      <span class="font-medium">Cadastrar categoria</span>
-                      <p class="text-sm text-gray-400">Criar novas categorias</p>
-                    </div>
-                  </label>
+                  <div>
+                    <h4 class="text-sm font-semibold text-gray-300 mb-3">Campos dos modais "Novo" e "Editar Insumo"</h4>
+                    <div class="grid grid-cols-1 gap-4">
 
-                  <label class="usuarios-permissoes-item" data-search="editar categoria alterar">
-                    <input type="checkbox" name="mp.category.edit" data-role="item" data-group="acoes-mp" data-item-type="action" class="w-4 h-4 mt-1" />
-                    <div>
-                      <span class="font-medium">Editar categoria</span>
-                      <p class="text-sm text-gray-400">Alterar nome, descrição e ordem</p>
-                    </div>
-                  </label>
+                      <label class="usuarios-permissoes-item" data-search="quantidade estoque editar">
+                        <input type="checkbox" name="mp.stock.edit" data-role="item" data-group="acoes-mp" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Editar quantidade em estoque</span>
+                          <p class="text-sm text-gray-400">Campo "Quantidade" do insumo</p>
+                        </div>
+                      </label>
 
-                  <label class="usuarios-permissoes-item" data-search="excluir categoria deletar">
-                    <input type="checkbox" name="mp.category.delete" data-role="item" data-group="acoes-mp" data-item-type="action" class="w-4 h-4 mt-1" />
-                    <div>
-                      <span class="font-medium">Excluir categoria</span>
-                      <p class="text-sm text-gray-400">Remover categorias com validações</p>
-                    </div>
-                  </label>
+                      <label class="usuarios-permissoes-item" data-search="estoque infinito alternar chave">
+                        <input type="checkbox" name="mp.stock.infinite_toggle" data-role="item" data-group="acoes-mp" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Alternar estoque infinito</span>
+                          <p class="text-sm text-gray-400">Chave "Estoque infinito" (só em Editar)</p>
+                        </div>
+                      </label>
 
-                  <label class="usuarios-permissoes-item" data-search="ver unidades medida">
-                    <input type="checkbox" name="mp.unit.view" data-role="item" data-group="acoes-mp" data-item-type="action" class="w-4 h-4 mt-1" />
-                    <div>
-                      <span class="font-medium">Ver unidades</span>
-                      <p class="text-sm text-gray-400">Listar unidades e precisões</p>
                     </div>
-                  </label>
+                  </div>
 
-                  <label class="usuarios-permissoes-item" data-search="criar unidade cadastrar">
-                    <input type="checkbox" name="mp.unit.create" data-role="item" data-group="acoes-mp" data-item-type="action" class="w-4 h-4 mt-1" />
-                    <div>
-                      <span class="font-medium">Cadastrar unidade</span>
-                      <p class="text-sm text-gray-400">Criar nova unidade de medida</p>
-                    </div>
-                  </label>
+                  <div>
+                    <h4 class="text-sm font-semibold text-gray-300 mb-3">Categorias (dentro dos modais de insumo)</h4>
+                    <div class="grid grid-cols-1 gap-4">
 
-                  <label class="usuarios-permissoes-item" data-search="editar unidade alterar">
-                    <input type="checkbox" name="mp.unit.edit" data-role="item" data-group="acoes-mp" data-item-type="action" class="w-4 h-4 mt-1" />
-                    <div>
-                      <span class="font-medium">Editar unidade</span>
-                      <p class="text-sm text-gray-400">Alterar descrição ou sigla</p>
-                    </div>
-                  </label>
+                      <label class="usuarios-permissoes-item" data-search="ver selecionar categoria">
+                        <input type="checkbox" name="mp.category.view" data-role="item" data-group="acoes-mp" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Selecionar categoria</span>
+                          <p class="text-sm text-gray-400">Seletor "Categoria"</p>
+                        </div>
+                      </label>
 
-                  <label class="usuarios-permissoes-item" data-search="excluir unidade deletar">
-                    <input type="checkbox" name="mp.unit.delete" data-role="item" data-group="acoes-mp" data-item-type="action" class="w-4 h-4 mt-1" />
-                    <div>
-                      <span class="font-medium">Excluir unidade</span>
-                      <p class="text-sm text-gray-400">Remover unidades em desuso</p>
-                    </div>
-                  </label>
+                      <label class="usuarios-permissoes-item" data-search="cadastrar criar categoria">
+                        <input type="checkbox" name="mp.category.create" data-role="item" data-group="acoes-mp" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Cadastrar categoria</span>
+                          <p class="text-sm text-gray-400">Botão + ao lado de Categoria</p>
+                        </div>
+                      </label>
 
-                  <label class="usuarios-permissoes-item" data-search="ver estoque saldo">
-                    <input type="checkbox" name="mp.stock.view" data-role="item" data-group="acoes-mp" data-item-type="action" class="w-4 h-4 mt-1" />
-                    <div>
-                      <span class="font-medium">Ver estoque</span>
-                      <p class="text-sm text-gray-400">Exibir saldo, mínimo e movimentações</p>
-                    </div>
-                  </label>
+                      <label class="usuarios-permissoes-item" data-search="excluir remover categoria">
+                        <input type="checkbox" name="mp.category.delete" data-role="item" data-group="acoes-mp" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Excluir categoria</span>
+                          <p class="text-sm text-gray-400">Botão − ao lado de Categoria</p>
+                        </div>
+                      </label>
 
-                  <label class="usuarios-permissoes-item" data-search="entrada estoque adicionar">
-                    <input type="checkbox" name="mp.stock.input" data-role="item" data-group="acoes-mp" data-item-type="action" class="w-4 h-4 mt-1" />
-                    <div>
-                      <span class="font-medium">Entrada de estoque</span>
-                      <p class="text-sm text-gray-400">Lançar compras ou ajustes positivos</p>
                     </div>
-                  </label>
+                  </div>
 
-                  <label class="usuarios-permissoes-item" data-search="saida estoque consumo">
-                    <input type="checkbox" name="mp.stock.output" data-role="item" data-group="acoes-mp" data-item-type="action" class="w-4 h-4 mt-1" />
-                    <div>
-                      <span class="font-medium">Saída de estoque</span>
-                      <p class="text-sm text-gray-400">Registrar consumo ou baixas</p>
-                    </div>
-                  </label>
+                  <div>
+                    <h4 class="text-sm font-semibold text-gray-300 mb-3">Unidades (dentro dos modais de insumo)</h4>
+                    <div class="grid grid-cols-1 gap-4">
 
-                  <label class="usuarios-permissoes-item" data-search="ajustar estoque corrigir">
-                    <input type="checkbox" name="mp.stock.adjust" data-role="item" data-group="acoes-mp" data-item-type="action" class="w-4 h-4 mt-1" />
-                    <div>
-                      <span class="font-medium">Ajustar estoque</span>
-                      <p class="text-sm text-gray-400">Permitir acerto direto de saldo</p>
-                    </div>
-                  </label>
+                      <label class="usuarios-permissoes-item" data-search="ver selecionar unidade">
+                        <input type="checkbox" name="mp.unit.view" data-role="item" data-group="acoes-mp" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Selecionar unidade</span>
+                          <p class="text-sm text-gray-400">Seletor "Unidade"</p>
+                        </div>
+                      </label>
 
-                  <label class="usuarios-permissoes-item" data-search="estoque infinito alternar">
-                    <input type="checkbox" name="mp.stock.infinite_toggle" data-role="item" data-group="acoes-mp" data-item-type="action" class="w-4 h-4 mt-1" />
-                    <div>
-                      <span class="font-medium">Alternar estoque infinito</span>
-                      <p class="text-sm text-gray-400">Marcar itens que ignoram controle</p>
+                      <label class="usuarios-permissoes-item" data-search="cadastrar criar unidade">
+                        <input type="checkbox" name="mp.unit.create" data-role="item" data-group="acoes-mp" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Cadastrar unidade</span>
+                          <p class="text-sm text-gray-400">Botão + ao lado de Unidade</p>
+                        </div>
+                      </label>
+
+                      <label class="usuarios-permissoes-item" data-search="excluir remover unidade">
+                        <input type="checkbox" name="mp.unit.delete" data-role="item" data-group="acoes-mp" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Excluir unidade</span>
+                          <p class="text-sm text-gray-400">Botão − ao lado de Unidade</p>
+                        </div>
+                      </label>
+
                     </div>
-                  </label>
+                  </div>
+
+                  <div>
+                    <h4 class="text-sm font-semibold text-gray-300 mb-3">Processos (dentro dos modais de insumo)</h4>
+                    <div class="grid grid-cols-1 gap-4">
+
+                      <label class="usuarios-permissoes-item" data-search="ver selecionar processo">
+                        <input type="checkbox" name="mp.process.view" data-role="item" data-group="acoes-mp" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Selecionar processo</span>
+                          <p class="text-sm text-gray-400">Seletor "Processo"</p>
+                        </div>
+                      </label>
+
+                      <label class="usuarios-permissoes-item" data-search="cadastrar criar processo">
+                        <input type="checkbox" name="mp.process.create" data-role="item" data-group="acoes-mp" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Cadastrar processo</span>
+                          <p class="text-sm text-gray-400">Botão + ao lado de Processo</p>
+                        </div>
+                      </label>
+
+                      <label class="usuarios-permissoes-item" data-search="excluir remover processo">
+                        <input type="checkbox" name="mp.process.delete" data-role="item" data-group="acoes-mp" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Excluir processo</span>
+                          <p class="text-sm text-gray-400">Botão − ao lado de Processo</p>
+                        </div>
+                      </label>
+
+                      <label class="usuarios-permissoes-item" data-search="ordem duplicada trocar última processo">
+                        <input type="checkbox" name="mp.process.order" data-role="item" data-group="acoes-mp" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Resolver ordem duplicada</span>
+                          <p class="text-sm text-gray-400">Botões "Trocar" e "Última" do aviso de ordem</p>
+                        </div>
+                      </label>
+
+                    </div>
+                  </div>
 
                 </div>
               </div>
@@ -397,22 +407,17 @@
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
 
                   <div>
-                    <h4 class="text-sm font-semibold text-gray-300 mb-3">Lista de MP</h4>
+                    <h4 class="text-sm font-semibold text-gray-300 mb-3">Tabela de matéria-prima (lista)</h4>
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
 
                       <label class="usuarios-permissoes-checkbox">
-                        <input type="checkbox" name="col_mp_codigo" data-role="item" data-group="colunas-mp" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">Código</span>
-                      </label>
-
-                      <label class="usuarios-permissoes-checkbox">
                         <input type="checkbox" name="col_mp_nome" data-role="item" data-group="colunas-mp" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">Matéria-prima</span>
+                        <span class="text-sm">Nome</span>
                       </label>
 
                       <label class="usuarios-permissoes-checkbox">
-                        <input type="checkbox" name="col_mp_categoria" data-role="item" data-group="colunas-mp" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">Categoria</span>
+                        <input type="checkbox" name="col_mp_estoque_atual" data-role="item" data-group="colunas-mp" data-item-type="column" class="w-4 h-4" />
+                        <span class="text-sm">Quantidade</span>
                       </label>
 
                       <label class="usuarios-permissoes-checkbox">
@@ -421,136 +426,20 @@
                       </label>
 
                       <label class="usuarios-permissoes-checkbox">
-                        <input type="checkbox" name="col_mp_estoque_atual" data-role="item" data-group="colunas-mp" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">Estoque atual</span>
-                      </label>
-
-                      <label class="usuarios-permissoes-checkbox">
-                        <input type="checkbox" name="col_mp_estoque_min" data-role="item" data-group="colunas-mp" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">Estoque mín.</span>
-                      </label>
-
-                      <label class="usuarios-permissoes-checkbox">
                         <input type="checkbox" name="col_mp_custo_medio" data-role="item" data-group="colunas-mp" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">Custo médio</span>
-                      </label>
-
-                      <label class="usuarios-permissoes-checkbox">
-                        <input type="checkbox" name="col_mp_fornecedor" data-role="item" data-group="colunas-mp" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">Fornecedor</span>
-                      </label>
-
-                      <label class="usuarios-permissoes-checkbox">
-                        <input type="checkbox" name="col_mp_status" data-role="item" data-group="colunas-mp" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">Status</span>
-                      </label>
-
-                      <label class="usuarios-permissoes-checkbox">
-                        <input type="checkbox" name="col_mp_atualizado_em" data-role="item" data-group="colunas-mp" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">Atualizado em</span>
+                        <span class="text-sm">Preço Unitário</span>
                       </label>
 
                     </div>
                   </div>
 
                   <div>
-                    <h4 class="text-sm font-semibold text-gray-300 mb-3">Movimentações de estoque</h4>
+                    <h4 class="text-sm font-semibold text-gray-300 mb-3">Campos dos modais "Novo" e "Editar Insumo"</h4>
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
 
                       <label class="usuarios-permissoes-checkbox">
-                        <input type="checkbox" name="col_mov_data" data-role="item" data-group="colunas-mp" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">Data</span>
-                      </label>
-
-                      <label class="usuarios-permissoes-checkbox">
-                        <input type="checkbox" name="col_mov_tipo" data-role="item" data-group="colunas-mp" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">Tipo</span>
-                      </label>
-
-                      <label class="usuarios-permissoes-checkbox">
-                        <input type="checkbox" name="col_mov_qtd" data-role="item" data-group="colunas-mp" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">Quantidade</span>
-                      </label>
-
-                      <label class="usuarios-permissoes-checkbox">
-                        <input type="checkbox" name="col_mov_ref" data-role="item" data-group="colunas-mp" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">Referência</span>
-                      </label>
-
-                      <label class="usuarios-permissoes-checkbox">
-                        <input type="checkbox" name="col_mov_usuario" data-role="item" data-group="colunas-mp" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">Usuário</span>
-                      </label>
-
-                    </div>
-                  </div>
-
-                  <div>
-                    <h4 class="text-sm font-semibold text-gray-300 mb-3">Processos</h4>
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-
-                      <label class="usuarios-permissoes-checkbox">
-                        <input type="checkbox" name="col_proc_nome" data-role="item" data-group="colunas-mp" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">Processo</span>
-                      </label>
-
-                      <label class="usuarios-permissoes-checkbox">
-                        <input type="checkbox" name="col_proc_duracao" data-role="item" data-group="colunas-mp" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">Duração</span>
-                      </label>
-
-                      <label class="usuarios-permissoes-checkbox">
-                        <input type="checkbox" name="col_proc_custo" data-role="item" data-group="colunas-mp" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">Custo</span>
-                      </label>
-
-                      <label class="usuarios-permissoes-checkbox">
-                        <input type="checkbox" name="col_proc_ordem" data-role="item" data-group="colunas-mp" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">Ordem</span>
-                      </label>
-
-                    </div>
-                  </div>
-
-                  <div>
-                    <h4 class="text-sm font-semibold text-gray-300 mb-3">Categorias</h4>
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-
-                      <label class="usuarios-permissoes-checkbox">
-                        <input type="checkbox" name="col_cat_nome" data-role="item" data-group="colunas-mp" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">Categoria</span>
-                      </label>
-
-                      <label class="usuarios-permissoes-checkbox">
-                        <input type="checkbox" name="col_cat_desc" data-role="item" data-group="colunas-mp" data-item-type="column" class="w-4 h-4" />
+                        <input type="checkbox" name="col_mp_campo_descricao" data-role="item" data-group="colunas-mp" data-item-type="column" class="w-4 h-4" />
                         <span class="text-sm">Descrição</span>
-                      </label>
-
-                      <label class="usuarios-permissoes-checkbox">
-                        <input type="checkbox" name="col_cat_itens" data-role="item" data-group="colunas-mp" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">Itens</span>
-                      </label>
-
-                    </div>
-                  </div>
-
-                  <div>
-                    <h4 class="text-sm font-semibold text-gray-300 mb-3">Unidades</h4>
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-
-                      <label class="usuarios-permissoes-checkbox">
-                        <input type="checkbox" name="col_uni_sigla" data-role="item" data-group="colunas-mp" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">Unidade</span>
-                      </label>
-
-                      <label class="usuarios-permissoes-checkbox">
-                        <input type="checkbox" name="col_uni_desc" data-role="item" data-group="colunas-mp" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">Descrição</span>
-                      </label>
-
-                      <label class="usuarios-permissoes-checkbox">
-                        <input type="checkbox" name="col_uni_precision" data-role="item" data-group="colunas-mp" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">Precisão</span>
                       </label>
 
                     </div>

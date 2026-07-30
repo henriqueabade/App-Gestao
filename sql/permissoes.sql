@@ -35,7 +35,7 @@ CREATE INDEX IF NOT EXISTS idx_usuarios_modelo_permissoes
   ON usuarios(modelo_permissoes_id);
 
 -- ---------------------------------------------------------------------
--- 3) Matéria-prima  (perm_mp)  —  22 ações, 25 colunas
+-- 3) Matéria-prima  (perm_mp)  —  18 ações, 5 colunas
 -- ---------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS perm_mp (
   modelo_id    INTEGER PRIMARY KEY REFERENCES modelos_permissoes(id) ON DELETE CASCADE,
@@ -44,53 +44,29 @@ CREATE TABLE IF NOT EXISTS perm_mp (
   -- Ações
   acao_view                          BOOLEAN NOT NULL DEFAULT FALSE,  -- mp.view · Ver lista
   acao_search                        BOOLEAN NOT NULL DEFAULT FALSE,  -- mp.search · Buscar/filtrar
-  acao_export                        BOOLEAN NOT NULL DEFAULT FALSE,  -- mp.export · Exportar lista
-  acao_create                        BOOLEAN NOT NULL DEFAULT FALSE,  -- mp.create · Cadastrar MP
-  acao_edit                          BOOLEAN NOT NULL DEFAULT FALSE,  -- mp.edit · Editar MP
-  acao_delete                        BOOLEAN NOT NULL DEFAULT FALSE,  -- mp.delete · Excluir MP
-  acao_process_view                  BOOLEAN NOT NULL DEFAULT FALSE,  -- mp.process.view · Ver processos
+  acao_create                        BOOLEAN NOT NULL DEFAULT FALSE,  -- mp.create · Cadastrar insumo
+  acao_totals_view                   BOOLEAN NOT NULL DEFAULT FALSE,  -- mp.totals.view · Ver totais por tipo
+  acao_edit                          BOOLEAN NOT NULL DEFAULT FALSE,  -- mp.edit · Editar insumo
+  acao_delete                        BOOLEAN NOT NULL DEFAULT FALSE,  -- mp.delete · Excluir insumo
+  acao_stock_edit                    BOOLEAN NOT NULL DEFAULT FALSE,  -- mp.stock.edit · Editar quantidade em estoque
+  acao_stock_infinite_toggle         BOOLEAN NOT NULL DEFAULT FALSE,  -- mp.stock.infinite_toggle · Alternar estoque infinito
+  acao_category_view                 BOOLEAN NOT NULL DEFAULT FALSE,  -- mp.category.view · Selecionar categoria
+  acao_category_create               BOOLEAN NOT NULL DEFAULT FALSE,  -- mp.category.create · Cadastrar categoria
+  acao_category_delete               BOOLEAN NOT NULL DEFAULT FALSE,  -- mp.category.delete · Excluir categoria
+  acao_unit_view                     BOOLEAN NOT NULL DEFAULT FALSE,  -- mp.unit.view · Selecionar unidade
+  acao_unit_create                   BOOLEAN NOT NULL DEFAULT FALSE,  -- mp.unit.create · Cadastrar unidade
+  acao_unit_delete                   BOOLEAN NOT NULL DEFAULT FALSE,  -- mp.unit.delete · Excluir unidade
+  acao_process_view                  BOOLEAN NOT NULL DEFAULT FALSE,  -- mp.process.view · Selecionar processo
   acao_process_create                BOOLEAN NOT NULL DEFAULT FALSE,  -- mp.process.create · Cadastrar processo
   acao_process_delete                BOOLEAN NOT NULL DEFAULT FALSE,  -- mp.process.delete · Excluir processo
-  acao_category_view                 BOOLEAN NOT NULL DEFAULT FALSE,  -- mp.category.view · Ver categorias
-  acao_category_create               BOOLEAN NOT NULL DEFAULT FALSE,  -- mp.category.create · Cadastrar categoria
-  acao_category_edit                 BOOLEAN NOT NULL DEFAULT FALSE,  -- mp.category.edit · Editar categoria
-  acao_category_delete               BOOLEAN NOT NULL DEFAULT FALSE,  -- mp.category.delete · Excluir categoria
-  acao_unit_view                     BOOLEAN NOT NULL DEFAULT FALSE,  -- mp.unit.view · Ver unidades
-  acao_unit_create                   BOOLEAN NOT NULL DEFAULT FALSE,  -- mp.unit.create · Cadastrar unidade
-  acao_unit_edit                     BOOLEAN NOT NULL DEFAULT FALSE,  -- mp.unit.edit · Editar unidade
-  acao_unit_delete                   BOOLEAN NOT NULL DEFAULT FALSE,  -- mp.unit.delete · Excluir unidade
-  acao_stock_view                    BOOLEAN NOT NULL DEFAULT FALSE,  -- mp.stock.view · Ver estoque
-  acao_stock_input                   BOOLEAN NOT NULL DEFAULT FALSE,  -- mp.stock.input · Entrada de estoque
-  acao_stock_output                  BOOLEAN NOT NULL DEFAULT FALSE,  -- mp.stock.output · Saída de estoque
-  acao_stock_adjust                  BOOLEAN NOT NULL DEFAULT FALSE,  -- mp.stock.adjust · Ajustar estoque
-  acao_stock_infinite_toggle         BOOLEAN NOT NULL DEFAULT FALSE,  -- mp.stock.infinite_toggle · Alternar estoque infinito
+  acao_process_order                 BOOLEAN NOT NULL DEFAULT FALSE,  -- mp.process.order · Resolver ordem duplicada
 
   -- Colunas visíveis
-  col_mp_codigo                      BOOLEAN NOT NULL DEFAULT FALSE,  -- Código
-  col_mp_nome                        BOOLEAN NOT NULL DEFAULT FALSE,  -- Matéria-prima
-  col_mp_categoria                   BOOLEAN NOT NULL DEFAULT FALSE,  -- Categoria
+  col_mp_nome                        BOOLEAN NOT NULL DEFAULT FALSE,  -- Nome
+  col_mp_estoque_atual               BOOLEAN NOT NULL DEFAULT FALSE,  -- Quantidade
   col_mp_unidade                     BOOLEAN NOT NULL DEFAULT FALSE,  -- Unidade
-  col_mp_estoque_atual               BOOLEAN NOT NULL DEFAULT FALSE,  -- Estoque atual
-  col_mp_estoque_min                 BOOLEAN NOT NULL DEFAULT FALSE,  -- Estoque mín.
-  col_mp_custo_medio                 BOOLEAN NOT NULL DEFAULT FALSE,  -- Custo médio
-  col_mp_fornecedor                  BOOLEAN NOT NULL DEFAULT FALSE,  -- Fornecedor
-  col_mp_status                      BOOLEAN NOT NULL DEFAULT FALSE,  -- Status
-  col_mp_atualizado_em               BOOLEAN NOT NULL DEFAULT FALSE,  -- Atualizado em
-  col_mov_data                       BOOLEAN NOT NULL DEFAULT FALSE,  -- Data
-  col_mov_tipo                       BOOLEAN NOT NULL DEFAULT FALSE,  -- Tipo
-  col_mov_qtd                        BOOLEAN NOT NULL DEFAULT FALSE,  -- Quantidade
-  col_mov_ref                        BOOLEAN NOT NULL DEFAULT FALSE,  -- Referência
-  col_mov_usuario                    BOOLEAN NOT NULL DEFAULT FALSE,  -- Usuário
-  col_proc_nome                      BOOLEAN NOT NULL DEFAULT FALSE,  -- Processo
-  col_proc_duracao                   BOOLEAN NOT NULL DEFAULT FALSE,  -- Duração
-  col_proc_custo                     BOOLEAN NOT NULL DEFAULT FALSE,  -- Custo
-  col_proc_ordem                     BOOLEAN NOT NULL DEFAULT FALSE,  -- Ordem
-  col_cat_nome                       BOOLEAN NOT NULL DEFAULT FALSE,  -- Categoria
-  col_cat_desc                       BOOLEAN NOT NULL DEFAULT FALSE,  -- Descrição
-  col_cat_itens                      BOOLEAN NOT NULL DEFAULT FALSE,  -- Itens
-  col_uni_sigla                      BOOLEAN NOT NULL DEFAULT FALSE,  -- Unidade
-  col_uni_desc                       BOOLEAN NOT NULL DEFAULT FALSE,  -- Descrição
-  col_uni_precision                  BOOLEAN NOT NULL DEFAULT FALSE  -- Precisão
+  col_mp_custo_medio                 BOOLEAN NOT NULL DEFAULT FALSE,  -- Preço Unitário
+  col_mp_campo_descricao             BOOLEAN NOT NULL DEFAULT FALSE  -- Descrição
 );
 
 -- ---------------------------------------------------------------------
@@ -560,8 +536,8 @@ INSERT INTO modelos_permissoes (nome, descricao)
 VALUES ('Administrador', 'Acesso total a todos os módulos')
 ON CONFLICT (nome) DO NOTHING;
 
-INSERT INTO perm_mp (modelo_id, modulo_ativo, acao_view, acao_search, acao_export, acao_create, acao_edit, acao_delete, acao_process_view, acao_process_create, acao_process_delete, acao_category_view, acao_category_create, acao_category_edit, acao_category_delete, acao_unit_view, acao_unit_create, acao_unit_edit, acao_unit_delete, acao_stock_view, acao_stock_input, acao_stock_output, acao_stock_adjust, acao_stock_infinite_toggle, col_mp_codigo, col_mp_nome, col_mp_categoria, col_mp_unidade, col_mp_estoque_atual, col_mp_estoque_min, col_mp_custo_medio, col_mp_fornecedor, col_mp_status, col_mp_atualizado_em, col_mov_data, col_mov_tipo, col_mov_qtd, col_mov_ref, col_mov_usuario, col_proc_nome, col_proc_duracao, col_proc_custo, col_proc_ordem, col_cat_nome, col_cat_desc, col_cat_itens, col_uni_sigla, col_uni_desc, col_uni_precision)
-SELECT id, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE FROM modelos_permissoes WHERE nome = 'Administrador'
+INSERT INTO perm_mp (modelo_id, modulo_ativo, acao_view, acao_search, acao_create, acao_totals_view, acao_edit, acao_delete, acao_stock_edit, acao_stock_infinite_toggle, acao_category_view, acao_category_create, acao_category_delete, acao_unit_view, acao_unit_create, acao_unit_delete, acao_process_view, acao_process_create, acao_process_delete, acao_process_order, col_mp_nome, col_mp_estoque_atual, col_mp_unidade, col_mp_custo_medio, col_mp_campo_descricao)
+SELECT id, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE FROM modelos_permissoes WHERE nome = 'Administrador'
 ON CONFLICT (modelo_id) DO NOTHING;
 
 INSERT INTO perm_prod (modelo_id, modulo_ativo, acao_view, acao_search, acao_create, acao_stock_view, acao_details_view, acao_edit, acao_delete, acao_item_add, acao_item_edit, acao_item_remove, acao_clear, acao_percent_edit, acao_collection_create, acao_collection_delete, acao_clone, acao_registro_toggle, acao_pdf, acao_stage_insert, acao_stage_item_add, acao_stage_item_edit, acao_stage_item_remove, acao_stage_clear, acao_stock_input, acao_stock_adjust, acao_stock_lote_delete, col_prod_sku, col_prod_nome, col_prod_colecao, col_prod_preco_base, col_prod_margem, col_prod_estoque, col_ins_mp, col_ins_qtd, col_ins_unidade, col_ins_custo_un, col_ins_custo_total, col_etapa_item, col_etapa_qtd, col_etapa_unidade, col_etapa_valor_un, col_etapa_valor_total, col_est_processo, col_est_ultimo_item, col_est_quantidade, col_est_alterado_em)

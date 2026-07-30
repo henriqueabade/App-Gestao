@@ -25,51 +25,27 @@ CREATE TABLE IF NOT EXISTS perm_mp (
 );
 ALTER TABLE perm_mp ADD COLUMN IF NOT EXISTS acao_view BOOLEAN NOT NULL DEFAULT FALSE;  -- mp.view · Ver lista
 ALTER TABLE perm_mp ADD COLUMN IF NOT EXISTS acao_search BOOLEAN NOT NULL DEFAULT FALSE;  -- mp.search · Buscar/filtrar
-ALTER TABLE perm_mp ADD COLUMN IF NOT EXISTS acao_export BOOLEAN NOT NULL DEFAULT FALSE;  -- mp.export · Exportar lista
-ALTER TABLE perm_mp ADD COLUMN IF NOT EXISTS acao_create BOOLEAN NOT NULL DEFAULT FALSE;  -- mp.create · Cadastrar MP
-ALTER TABLE perm_mp ADD COLUMN IF NOT EXISTS acao_edit BOOLEAN NOT NULL DEFAULT FALSE;  -- mp.edit · Editar MP
-ALTER TABLE perm_mp ADD COLUMN IF NOT EXISTS acao_delete BOOLEAN NOT NULL DEFAULT FALSE;  -- mp.delete · Excluir MP
-ALTER TABLE perm_mp ADD COLUMN IF NOT EXISTS acao_process_view BOOLEAN NOT NULL DEFAULT FALSE;  -- mp.process.view · Ver processos
+ALTER TABLE perm_mp ADD COLUMN IF NOT EXISTS acao_create BOOLEAN NOT NULL DEFAULT FALSE;  -- mp.create · Cadastrar insumo
+ALTER TABLE perm_mp ADD COLUMN IF NOT EXISTS acao_totals_view BOOLEAN NOT NULL DEFAULT FALSE;  -- mp.totals.view · Ver totais por tipo
+ALTER TABLE perm_mp ADD COLUMN IF NOT EXISTS acao_edit BOOLEAN NOT NULL DEFAULT FALSE;  -- mp.edit · Editar insumo
+ALTER TABLE perm_mp ADD COLUMN IF NOT EXISTS acao_delete BOOLEAN NOT NULL DEFAULT FALSE;  -- mp.delete · Excluir insumo
+ALTER TABLE perm_mp ADD COLUMN IF NOT EXISTS acao_stock_edit BOOLEAN NOT NULL DEFAULT FALSE;  -- mp.stock.edit · Editar quantidade em estoque
+ALTER TABLE perm_mp ADD COLUMN IF NOT EXISTS acao_stock_infinite_toggle BOOLEAN NOT NULL DEFAULT FALSE;  -- mp.stock.infinite_toggle · Alternar estoque infinito
+ALTER TABLE perm_mp ADD COLUMN IF NOT EXISTS acao_category_view BOOLEAN NOT NULL DEFAULT FALSE;  -- mp.category.view · Selecionar categoria
+ALTER TABLE perm_mp ADD COLUMN IF NOT EXISTS acao_category_create BOOLEAN NOT NULL DEFAULT FALSE;  -- mp.category.create · Cadastrar categoria
+ALTER TABLE perm_mp ADD COLUMN IF NOT EXISTS acao_category_delete BOOLEAN NOT NULL DEFAULT FALSE;  -- mp.category.delete · Excluir categoria
+ALTER TABLE perm_mp ADD COLUMN IF NOT EXISTS acao_unit_view BOOLEAN NOT NULL DEFAULT FALSE;  -- mp.unit.view · Selecionar unidade
+ALTER TABLE perm_mp ADD COLUMN IF NOT EXISTS acao_unit_create BOOLEAN NOT NULL DEFAULT FALSE;  -- mp.unit.create · Cadastrar unidade
+ALTER TABLE perm_mp ADD COLUMN IF NOT EXISTS acao_unit_delete BOOLEAN NOT NULL DEFAULT FALSE;  -- mp.unit.delete · Excluir unidade
+ALTER TABLE perm_mp ADD COLUMN IF NOT EXISTS acao_process_view BOOLEAN NOT NULL DEFAULT FALSE;  -- mp.process.view · Selecionar processo
 ALTER TABLE perm_mp ADD COLUMN IF NOT EXISTS acao_process_create BOOLEAN NOT NULL DEFAULT FALSE;  -- mp.process.create · Cadastrar processo
 ALTER TABLE perm_mp ADD COLUMN IF NOT EXISTS acao_process_delete BOOLEAN NOT NULL DEFAULT FALSE;  -- mp.process.delete · Excluir processo
-ALTER TABLE perm_mp ADD COLUMN IF NOT EXISTS acao_category_view BOOLEAN NOT NULL DEFAULT FALSE;  -- mp.category.view · Ver categorias
-ALTER TABLE perm_mp ADD COLUMN IF NOT EXISTS acao_category_create BOOLEAN NOT NULL DEFAULT FALSE;  -- mp.category.create · Cadastrar categoria
-ALTER TABLE perm_mp ADD COLUMN IF NOT EXISTS acao_category_edit BOOLEAN NOT NULL DEFAULT FALSE;  -- mp.category.edit · Editar categoria
-ALTER TABLE perm_mp ADD COLUMN IF NOT EXISTS acao_category_delete BOOLEAN NOT NULL DEFAULT FALSE;  -- mp.category.delete · Excluir categoria
-ALTER TABLE perm_mp ADD COLUMN IF NOT EXISTS acao_unit_view BOOLEAN NOT NULL DEFAULT FALSE;  -- mp.unit.view · Ver unidades
-ALTER TABLE perm_mp ADD COLUMN IF NOT EXISTS acao_unit_create BOOLEAN NOT NULL DEFAULT FALSE;  -- mp.unit.create · Cadastrar unidade
-ALTER TABLE perm_mp ADD COLUMN IF NOT EXISTS acao_unit_edit BOOLEAN NOT NULL DEFAULT FALSE;  -- mp.unit.edit · Editar unidade
-ALTER TABLE perm_mp ADD COLUMN IF NOT EXISTS acao_unit_delete BOOLEAN NOT NULL DEFAULT FALSE;  -- mp.unit.delete · Excluir unidade
-ALTER TABLE perm_mp ADD COLUMN IF NOT EXISTS acao_stock_view BOOLEAN NOT NULL DEFAULT FALSE;  -- mp.stock.view · Ver estoque
-ALTER TABLE perm_mp ADD COLUMN IF NOT EXISTS acao_stock_input BOOLEAN NOT NULL DEFAULT FALSE;  -- mp.stock.input · Entrada de estoque
-ALTER TABLE perm_mp ADD COLUMN IF NOT EXISTS acao_stock_output BOOLEAN NOT NULL DEFAULT FALSE;  -- mp.stock.output · Saída de estoque
-ALTER TABLE perm_mp ADD COLUMN IF NOT EXISTS acao_stock_adjust BOOLEAN NOT NULL DEFAULT FALSE;  -- mp.stock.adjust · Ajustar estoque
-ALTER TABLE perm_mp ADD COLUMN IF NOT EXISTS acao_stock_infinite_toggle BOOLEAN NOT NULL DEFAULT FALSE;  -- mp.stock.infinite_toggle · Alternar estoque infinito
-ALTER TABLE perm_mp ADD COLUMN IF NOT EXISTS col_mp_codigo BOOLEAN NOT NULL DEFAULT FALSE;  -- Código
-ALTER TABLE perm_mp ADD COLUMN IF NOT EXISTS col_mp_nome BOOLEAN NOT NULL DEFAULT FALSE;  -- Matéria-prima
-ALTER TABLE perm_mp ADD COLUMN IF NOT EXISTS col_mp_categoria BOOLEAN NOT NULL DEFAULT FALSE;  -- Categoria
+ALTER TABLE perm_mp ADD COLUMN IF NOT EXISTS acao_process_order BOOLEAN NOT NULL DEFAULT FALSE;  -- mp.process.order · Resolver ordem duplicada
+ALTER TABLE perm_mp ADD COLUMN IF NOT EXISTS col_mp_nome BOOLEAN NOT NULL DEFAULT FALSE;  -- Nome
+ALTER TABLE perm_mp ADD COLUMN IF NOT EXISTS col_mp_estoque_atual BOOLEAN NOT NULL DEFAULT FALSE;  -- Quantidade
 ALTER TABLE perm_mp ADD COLUMN IF NOT EXISTS col_mp_unidade BOOLEAN NOT NULL DEFAULT FALSE;  -- Unidade
-ALTER TABLE perm_mp ADD COLUMN IF NOT EXISTS col_mp_estoque_atual BOOLEAN NOT NULL DEFAULT FALSE;  -- Estoque atual
-ALTER TABLE perm_mp ADD COLUMN IF NOT EXISTS col_mp_estoque_min BOOLEAN NOT NULL DEFAULT FALSE;  -- Estoque mín.
-ALTER TABLE perm_mp ADD COLUMN IF NOT EXISTS col_mp_custo_medio BOOLEAN NOT NULL DEFAULT FALSE;  -- Custo médio
-ALTER TABLE perm_mp ADD COLUMN IF NOT EXISTS col_mp_fornecedor BOOLEAN NOT NULL DEFAULT FALSE;  -- Fornecedor
-ALTER TABLE perm_mp ADD COLUMN IF NOT EXISTS col_mp_status BOOLEAN NOT NULL DEFAULT FALSE;  -- Status
-ALTER TABLE perm_mp ADD COLUMN IF NOT EXISTS col_mp_atualizado_em BOOLEAN NOT NULL DEFAULT FALSE;  -- Atualizado em
-ALTER TABLE perm_mp ADD COLUMN IF NOT EXISTS col_mov_data BOOLEAN NOT NULL DEFAULT FALSE;  -- Data
-ALTER TABLE perm_mp ADD COLUMN IF NOT EXISTS col_mov_tipo BOOLEAN NOT NULL DEFAULT FALSE;  -- Tipo
-ALTER TABLE perm_mp ADD COLUMN IF NOT EXISTS col_mov_qtd BOOLEAN NOT NULL DEFAULT FALSE;  -- Quantidade
-ALTER TABLE perm_mp ADD COLUMN IF NOT EXISTS col_mov_ref BOOLEAN NOT NULL DEFAULT FALSE;  -- Referência
-ALTER TABLE perm_mp ADD COLUMN IF NOT EXISTS col_mov_usuario BOOLEAN NOT NULL DEFAULT FALSE;  -- Usuário
-ALTER TABLE perm_mp ADD COLUMN IF NOT EXISTS col_proc_nome BOOLEAN NOT NULL DEFAULT FALSE;  -- Processo
-ALTER TABLE perm_mp ADD COLUMN IF NOT EXISTS col_proc_duracao BOOLEAN NOT NULL DEFAULT FALSE;  -- Duração
-ALTER TABLE perm_mp ADD COLUMN IF NOT EXISTS col_proc_custo BOOLEAN NOT NULL DEFAULT FALSE;  -- Custo
-ALTER TABLE perm_mp ADD COLUMN IF NOT EXISTS col_proc_ordem BOOLEAN NOT NULL DEFAULT FALSE;  -- Ordem
-ALTER TABLE perm_mp ADD COLUMN IF NOT EXISTS col_cat_nome BOOLEAN NOT NULL DEFAULT FALSE;  -- Categoria
-ALTER TABLE perm_mp ADD COLUMN IF NOT EXISTS col_cat_desc BOOLEAN NOT NULL DEFAULT FALSE;  -- Descrição
-ALTER TABLE perm_mp ADD COLUMN IF NOT EXISTS col_cat_itens BOOLEAN NOT NULL DEFAULT FALSE;  -- Itens
-ALTER TABLE perm_mp ADD COLUMN IF NOT EXISTS col_uni_sigla BOOLEAN NOT NULL DEFAULT FALSE;  -- Unidade
-ALTER TABLE perm_mp ADD COLUMN IF NOT EXISTS col_uni_desc BOOLEAN NOT NULL DEFAULT FALSE;  -- Descrição
-ALTER TABLE perm_mp ADD COLUMN IF NOT EXISTS col_uni_precision BOOLEAN NOT NULL DEFAULT FALSE;  -- Precisão
+ALTER TABLE perm_mp ADD COLUMN IF NOT EXISTS col_mp_custo_medio BOOLEAN NOT NULL DEFAULT FALSE;  -- Preço Unitário
+ALTER TABLE perm_mp ADD COLUMN IF NOT EXISTS col_mp_campo_descricao BOOLEAN NOT NULL DEFAULT FALSE;  -- Descrição
 
 -- Produtos (perm_prod)
 CREATE TABLE IF NOT EXISTS perm_prod (
@@ -481,7 +457,7 @@ INSERT INTO perm_usuarios (modelo_id) SELECT id FROM modelos_permissoes ON CONFL
 INSERT INTO perm_financeiro (modelo_id) SELECT id FROM modelos_permissoes ON CONFLICT (modelo_id) DO NOTHING;
 
 -- Mantém o perfil "Administrador" com tudo liberado
-UPDATE perm_mp SET modulo_ativo = TRUE, acao_view = TRUE, acao_search = TRUE, acao_export = TRUE, acao_create = TRUE, acao_edit = TRUE, acao_delete = TRUE, acao_process_view = TRUE, acao_process_create = TRUE, acao_process_delete = TRUE, acao_category_view = TRUE, acao_category_create = TRUE, acao_category_edit = TRUE, acao_category_delete = TRUE, acao_unit_view = TRUE, acao_unit_create = TRUE, acao_unit_edit = TRUE, acao_unit_delete = TRUE, acao_stock_view = TRUE, acao_stock_input = TRUE, acao_stock_output = TRUE, acao_stock_adjust = TRUE, acao_stock_infinite_toggle = TRUE, col_mp_codigo = TRUE, col_mp_nome = TRUE, col_mp_categoria = TRUE, col_mp_unidade = TRUE, col_mp_estoque_atual = TRUE, col_mp_estoque_min = TRUE, col_mp_custo_medio = TRUE, col_mp_fornecedor = TRUE, col_mp_status = TRUE, col_mp_atualizado_em = TRUE, col_mov_data = TRUE, col_mov_tipo = TRUE, col_mov_qtd = TRUE, col_mov_ref = TRUE, col_mov_usuario = TRUE, col_proc_nome = TRUE, col_proc_duracao = TRUE, col_proc_custo = TRUE, col_proc_ordem = TRUE, col_cat_nome = TRUE, col_cat_desc = TRUE, col_cat_itens = TRUE, col_uni_sigla = TRUE, col_uni_desc = TRUE, col_uni_precision = TRUE
+UPDATE perm_mp SET modulo_ativo = TRUE, acao_view = TRUE, acao_search = TRUE, acao_create = TRUE, acao_totals_view = TRUE, acao_edit = TRUE, acao_delete = TRUE, acao_stock_edit = TRUE, acao_stock_infinite_toggle = TRUE, acao_category_view = TRUE, acao_category_create = TRUE, acao_category_delete = TRUE, acao_unit_view = TRUE, acao_unit_create = TRUE, acao_unit_delete = TRUE, acao_process_view = TRUE, acao_process_create = TRUE, acao_process_delete = TRUE, acao_process_order = TRUE, col_mp_nome = TRUE, col_mp_estoque_atual = TRUE, col_mp_unidade = TRUE, col_mp_custo_medio = TRUE, col_mp_campo_descricao = TRUE
   WHERE modelo_id IN (SELECT id FROM modelos_permissoes WHERE nome = 'Administrador');
 UPDATE perm_prod SET modulo_ativo = TRUE, acao_view = TRUE, acao_search = TRUE, acao_create = TRUE, acao_stock_view = TRUE, acao_details_view = TRUE, acao_edit = TRUE, acao_delete = TRUE, acao_item_add = TRUE, acao_item_edit = TRUE, acao_item_remove = TRUE, acao_clear = TRUE, acao_percent_edit = TRUE, acao_collection_create = TRUE, acao_collection_delete = TRUE, acao_clone = TRUE, acao_registro_toggle = TRUE, acao_pdf = TRUE, acao_stage_insert = TRUE, acao_stage_item_add = TRUE, acao_stage_item_edit = TRUE, acao_stage_item_remove = TRUE, acao_stage_clear = TRUE, acao_stock_input = TRUE, acao_stock_adjust = TRUE, acao_stock_lote_delete = TRUE, col_prod_sku = TRUE, col_prod_nome = TRUE, col_prod_colecao = TRUE, col_prod_preco_base = TRUE, col_prod_margem = TRUE, col_prod_estoque = TRUE, col_ins_mp = TRUE, col_ins_qtd = TRUE, col_ins_unidade = TRUE, col_ins_custo_un = TRUE, col_ins_custo_total = TRUE, col_etapa_item = TRUE, col_etapa_qtd = TRUE, col_etapa_unidade = TRUE, col_etapa_valor_un = TRUE, col_etapa_valor_total = TRUE, col_est_processo = TRUE, col_est_ultimo_item = TRUE, col_est_quantidade = TRUE, col_est_alterado_em = TRUE
   WHERE modelo_id IN (SELECT id FROM modelos_permissoes WHERE nome = 'Administrador');

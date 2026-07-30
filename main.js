@@ -3814,12 +3814,17 @@ ipcMain.handle('excluir-materia-prima', async (_e, info) => {
     return { success: false, message: err.message, code: err.code };
   }
 });
+// Entrada/saida de estoque de MP existem no backend mas NAO tem tela: nenhum
+// ponto do front chama estas rotas. As chaves `mp.stock.input`/`output` foram
+// retiradas do catalogo por isso — e `can()` nega chave desconhecida, o que
+// deixaria as rotas mortas. Ficam sob `mp.stock.edit`, a unica permissao que
+// governa alteracao de quantidade (o campo "Quantidade" do insumo).
 ipcMain.handle('registrar-entrada-materia-prima', async (_e, { id, quantidade }) => {
-  if (!(await verificarPermissaoIpc('mp.stock.input'))) return negadoIpc('mp.stock.input');
+  if (!(await verificarPermissaoIpc('mp.stock.edit'))) return negadoIpc('mp.stock.edit');
   return registrarEntrada(id, quantidade, currentUserSession?.id ?? null);
 });
 ipcMain.handle('registrar-saida-materia-prima', async (_e, { id, quantidade }) => {
-  if (!(await verificarPermissaoIpc('mp.stock.output'))) return negadoIpc('mp.stock.output');
+  if (!(await verificarPermissaoIpc('mp.stock.edit'))) return negadoIpc('mp.stock.edit');
   return registrarSaida(id, quantidade, currentUserSession?.id ?? null);
 });
 ipcMain.handle('atualizar-preco-materia-prima', async (_e, { id, preco }) => {

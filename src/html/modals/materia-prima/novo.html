@@ -25,7 +25,7 @@
 
       <!-- Categoria (floating em select + botão "+") -->
       <div class="relative">
-        <select id="categoria" name="categoria" required
+        <select id="categoria" data-perm="mp.category.view" name="categoria" required
                 class="peer w-full appearance-none bg-input border border-inputBorder rounded-lg px-4 pr-12 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition"
                 data-filled="false">
           <option value="" disabled selected hidden></option>
@@ -51,7 +51,7 @@
 
       <!-- Quantidade (floating) -->
       <div class="relative">
-        <input id="quantidade" name="quantidade" type="number" min="0" step="0.01" placeholder=" " required
+        <input id="quantidade" data-perm="mp.stock.edit" name="quantidade" type="number" min="0" step="0.01" placeholder=" " required
                class="peer w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-transparent focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
         <label for="quantidade"
                class="absolute left-4 top-1/2 -translate-y-1/2 text-base text-gray-300 pointer-events-none transition-all duration-150
@@ -64,7 +64,7 @@
 
       <!-- Unidade (floating em select + botão "+") -->
       <div class="relative">
-        <select id="unidade" name="unidade" required
+        <select id="unidade" data-perm="mp.unit.view" name="unidade" required
                 class="peer w-full appearance-none bg-input border border-inputBorder rounded-lg px-4 pr-12 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition"
                 data-filled="false">
           <option value="" disabled selected hidden></option>
@@ -103,7 +103,7 @@
 
       <!-- Processo (floating em select + botão "+") -->
       <div class="relative">
-        <select id="processo" name="processo" required
+        <select id="processo" data-perm="mp.process.view" name="processo" required
                 class="peer w-full appearance-none bg-input border border-inputBorder rounded-lg px-4 pr-12 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition"
                 data-filled="false">
           <option value="" disabled selected hidden></option>
@@ -129,7 +129,7 @@
 
       <!-- Descrição -->
       <div class="md:col-span-2">
-        <textarea id="descricao" name="descricao" placeholder="Descreva as especificações técnicas do insumo…"
+        <textarea id="descricao" data-perm-col="col_mp_campo_descricao" name="descricao" placeholder="Descreva as especificações técnicas do insumo…"
                   class="w-full h-28 bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 resize-none focus:border-primary focus:ring-2 focus:ring-primary/50 transition"></textarea>
       </div>
     </form>

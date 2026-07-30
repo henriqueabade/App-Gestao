@@ -14,150 +14,121 @@ const PERMISSIONS_CATALOG = {
         "key": "mp.view",
         "column": "acao_view",
         "label": "Ver lista",
-        "desc": "Visualizar grade de matérias-primas"
+        "desc": "Exibir a grade de insumos"
       },
       {
         "key": "mp.search",
         "column": "acao_search",
         "label": "Buscar/filtrar",
-        "desc": "Habilitar filtros e ordenação"
-      },
-      {
-        "key": "mp.export",
-        "column": "acao_export",
-        "label": "Exportar lista",
-        "desc": "Exportar dados visíveis (CSV/XLSX/PDF)"
+        "desc": "Busca, filtros de processo/categoria, \"0 Estoque\" e botões Filtrar/Limpar"
       },
       {
         "key": "mp.create",
         "column": "acao_create",
-        "label": "Cadastrar MP",
-        "desc": "Criar novos itens de matéria-prima"
+        "label": "Cadastrar insumo",
+        "desc": "Botão \"Novo Insumo\""
+      },
+      {
+        "key": "mp.totals.view",
+        "column": "acao_totals_view",
+        "label": "Ver totais por tipo",
+        "desc": "Painel \"Totais por Tipo\" (Infinitos / Acabando)"
       },
       {
         "key": "mp.edit",
         "column": "acao_edit",
-        "label": "Editar MP",
-        "desc": "Alterar dados de matérias-primas"
+        "label": "Editar insumo",
+        "desc": "Ícone de lápis — abre \"Editar Insumo\""
       },
       {
         "key": "mp.delete",
         "column": "acao_delete",
-        "label": "Excluir MP",
-        "desc": "Remover itens com validações"
+        "label": "Excluir insumo",
+        "desc": "Ícone de lixeira e botão \"Excluir Insumo\""
       },
       {
-        "key": "mp.process.view",
-        "column": "acao_process_view",
-        "label": "Ver processos",
-        "desc": "Visualizar etapas vinculadas"
-      },
-      {
-        "key": "mp.process.create",
-        "column": "acao_process_create",
-        "label": "Cadastrar processo",
-        "desc": "Definir novas etapas, custos e ordem"
-      },
-      {
-        "key": "mp.process.delete",
-        "column": "acao_process_delete",
-        "label": "Excluir processo",
-        "desc": "Remover processos cadastrados"
-      },
-      {
-        "key": "mp.category.view",
-        "column": "acao_category_view",
-        "label": "Ver categorias",
-        "desc": "Visualizar classificações e contagens"
-      },
-      {
-        "key": "mp.category.create",
-        "column": "acao_category_create",
-        "label": "Cadastrar categoria",
-        "desc": "Criar novas categorias"
-      },
-      {
-        "key": "mp.category.edit",
-        "column": "acao_category_edit",
-        "label": "Editar categoria",
-        "desc": "Alterar nome, descrição e ordem"
-      },
-      {
-        "key": "mp.category.delete",
-        "column": "acao_category_delete",
-        "label": "Excluir categoria",
-        "desc": "Remover categorias com validações"
-      },
-      {
-        "key": "mp.unit.view",
-        "column": "acao_unit_view",
-        "label": "Ver unidades",
-        "desc": "Listar unidades e precisões"
-      },
-      {
-        "key": "mp.unit.create",
-        "column": "acao_unit_create",
-        "label": "Cadastrar unidade",
-        "desc": "Criar nova unidade de medida"
-      },
-      {
-        "key": "mp.unit.edit",
-        "column": "acao_unit_edit",
-        "label": "Editar unidade",
-        "desc": "Alterar descrição ou sigla"
-      },
-      {
-        "key": "mp.unit.delete",
-        "column": "acao_unit_delete",
-        "label": "Excluir unidade",
-        "desc": "Remover unidades em desuso"
-      },
-      {
-        "key": "mp.stock.view",
-        "column": "acao_stock_view",
-        "label": "Ver estoque",
-        "desc": "Exibir saldo, mínimo e movimentações"
-      },
-      {
-        "key": "mp.stock.input",
-        "column": "acao_stock_input",
-        "label": "Entrada de estoque",
-        "desc": "Lançar compras ou ajustes positivos"
-      },
-      {
-        "key": "mp.stock.output",
-        "column": "acao_stock_output",
-        "label": "Saída de estoque",
-        "desc": "Registrar consumo ou baixas"
-      },
-      {
-        "key": "mp.stock.adjust",
-        "column": "acao_stock_adjust",
-        "label": "Ajustar estoque",
-        "desc": "Permitir acerto direto de saldo"
+        "key": "mp.stock.edit",
+        "column": "acao_stock_edit",
+        "label": "Editar quantidade em estoque",
+        "desc": "Campo \"Quantidade\" do insumo"
       },
       {
         "key": "mp.stock.infinite_toggle",
         "column": "acao_stock_infinite_toggle",
         "label": "Alternar estoque infinito",
-        "desc": "Marcar itens que ignoram controle"
+        "desc": "Chave \"Estoque infinito\" (só em Editar)"
+      },
+      {
+        "key": "mp.category.view",
+        "column": "acao_category_view",
+        "label": "Selecionar categoria",
+        "desc": "Seletor \"Categoria\""
+      },
+      {
+        "key": "mp.category.create",
+        "column": "acao_category_create",
+        "label": "Cadastrar categoria",
+        "desc": "Botão + ao lado de Categoria"
+      },
+      {
+        "key": "mp.category.delete",
+        "column": "acao_category_delete",
+        "label": "Excluir categoria",
+        "desc": "Botão − ao lado de Categoria"
+      },
+      {
+        "key": "mp.unit.view",
+        "column": "acao_unit_view",
+        "label": "Selecionar unidade",
+        "desc": "Seletor \"Unidade\""
+      },
+      {
+        "key": "mp.unit.create",
+        "column": "acao_unit_create",
+        "label": "Cadastrar unidade",
+        "desc": "Botão + ao lado de Unidade"
+      },
+      {
+        "key": "mp.unit.delete",
+        "column": "acao_unit_delete",
+        "label": "Excluir unidade",
+        "desc": "Botão − ao lado de Unidade"
+      },
+      {
+        "key": "mp.process.view",
+        "column": "acao_process_view",
+        "label": "Selecionar processo",
+        "desc": "Seletor \"Processo\""
+      },
+      {
+        "key": "mp.process.create",
+        "column": "acao_process_create",
+        "label": "Cadastrar processo",
+        "desc": "Botão + ao lado de Processo"
+      },
+      {
+        "key": "mp.process.delete",
+        "column": "acao_process_delete",
+        "label": "Excluir processo",
+        "desc": "Botão − ao lado de Processo"
+      },
+      {
+        "key": "mp.process.order",
+        "column": "acao_process_order",
+        "label": "Resolver ordem duplicada",
+        "desc": "Botões \"Trocar\" e \"Última\" do aviso de ordem"
       }
     ],
     "columns": [
       {
-        "key": "col_mp_codigo",
-        "column": "col_mp_codigo",
-        "label": "Código"
-      },
-      {
         "key": "col_mp_nome",
         "column": "col_mp_nome",
-        "label": "Matéria-prima"
+        "label": "Nome"
       },
       {
-        "key": "col_mp_categoria",
-        "column": "col_mp_categoria",
-        "label": "Categoria"
+        "key": "col_mp_estoque_atual",
+        "column": "col_mp_estoque_atual",
+        "label": "Quantidade"
       },
       {
         "key": "col_mp_unidade",
@@ -165,109 +136,14 @@ const PERMISSIONS_CATALOG = {
         "label": "Unidade"
       },
       {
-        "key": "col_mp_estoque_atual",
-        "column": "col_mp_estoque_atual",
-        "label": "Estoque atual"
-      },
-      {
-        "key": "col_mp_estoque_min",
-        "column": "col_mp_estoque_min",
-        "label": "Estoque mín."
-      },
-      {
         "key": "col_mp_custo_medio",
         "column": "col_mp_custo_medio",
-        "label": "Custo médio"
+        "label": "Preço Unitário"
       },
       {
-        "key": "col_mp_fornecedor",
-        "column": "col_mp_fornecedor",
-        "label": "Fornecedor"
-      },
-      {
-        "key": "col_mp_status",
-        "column": "col_mp_status",
-        "label": "Status"
-      },
-      {
-        "key": "col_mp_atualizado_em",
-        "column": "col_mp_atualizado_em",
-        "label": "Atualizado em"
-      },
-      {
-        "key": "col_mov_data",
-        "column": "col_mov_data",
-        "label": "Data"
-      },
-      {
-        "key": "col_mov_tipo",
-        "column": "col_mov_tipo",
-        "label": "Tipo"
-      },
-      {
-        "key": "col_mov_qtd",
-        "column": "col_mov_qtd",
-        "label": "Quantidade"
-      },
-      {
-        "key": "col_mov_ref",
-        "column": "col_mov_ref",
-        "label": "Referência"
-      },
-      {
-        "key": "col_mov_usuario",
-        "column": "col_mov_usuario",
-        "label": "Usuário"
-      },
-      {
-        "key": "col_proc_nome",
-        "column": "col_proc_nome",
-        "label": "Processo"
-      },
-      {
-        "key": "col_proc_duracao",
-        "column": "col_proc_duracao",
-        "label": "Duração"
-      },
-      {
-        "key": "col_proc_custo",
-        "column": "col_proc_custo",
-        "label": "Custo"
-      },
-      {
-        "key": "col_proc_ordem",
-        "column": "col_proc_ordem",
-        "label": "Ordem"
-      },
-      {
-        "key": "col_cat_nome",
-        "column": "col_cat_nome",
-        "label": "Categoria"
-      },
-      {
-        "key": "col_cat_desc",
-        "column": "col_cat_desc",
+        "key": "col_mp_campo_descricao",
+        "column": "col_mp_campo_descricao",
         "label": "Descrição"
-      },
-      {
-        "key": "col_cat_itens",
-        "column": "col_cat_itens",
-        "label": "Itens"
-      },
-      {
-        "key": "col_uni_sigla",
-        "column": "col_uni_sigla",
-        "label": "Unidade"
-      },
-      {
-        "key": "col_uni_desc",
-        "column": "col_uni_desc",
-        "label": "Descrição"
-      },
-      {
-        "key": "col_uni_precision",
-        "column": "col_uni_precision",
-        "label": "Precisão"
       }
     ]
   },

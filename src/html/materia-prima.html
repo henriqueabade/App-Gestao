@@ -29,13 +29,13 @@
         <!-- Search -->
         <div class="flex-1 min-w-0">
           <label class="block text-sm font-medium mb-2 text-white">Buscar Insumo</label>
-          <input id="materiaPrimaSearch" type="text" placeholder="Nome, Categoria ou Processo" class="input-glass text-white rounded-md px-4 py-3 w-full placeholder-white/50">
+          <input id="materiaPrimaSearch" data-perm="mp.search" type="text" placeholder="Nome, Categoria ou Processo" class="input-glass text-white rounded-md px-4 py-3 w-full placeholder-white/50">
         </div>
 
         <!-- Processo -->
         <div class="flex-1 min-w-0">
           <label class="block text-sm font-medium mb-2 text-white">Processo</label>
-          <select id="filtroProcesso" class="input-glass text-white rounded-md px-4 py-3 w-full">
+          <select id="filtroProcesso" data-perm="mp.search" class="input-glass text-white rounded-md px-4 py-3 w-full">
             <option value="">Todos</option>
           </select>
         </div>
@@ -43,13 +43,13 @@
         <!-- Categoria -->
         <div class="flex-1 min-w-0">
           <label class="block text-sm font-medium mb-2 text-white">Categoria</label>
-          <select id="filtroCategoria" class="input-glass text-white rounded-md px-4 py-3 w-full">
+          <select id="filtroCategoria" data-perm="mp.search" class="input-glass text-white rounded-md px-4 py-3 w-full">
             <option value="">Todas</option>
           </select>
         </div>
 
         <!-- Totais -->
-        <div class="flex flex-col flex-1 min-w-0">
+        <div class="flex flex-col flex-1 min-w-0" data-perm-hide="mp.totals.view">
           <label class="block text-sm font-medium mb-1 text-white flex items-center gap-2">Totais por Tipo <i id="totaisInfoIcon" class="info-icon"></i></label>
           <div id="totaisTags" class="flex flex-wrap gap-2">
             <!-- Tags geradas dinamicamente -->
@@ -59,7 +59,7 @@
         <!-- Zero Stock Toggle -->
         <div class="filter-toggle flex flex-col items-center space-y-1 flex-shrink-0" id="zeroStockbt">
           <label for="zeroStock" class="text-sm font-medium text-white whitespace-nowrap">0 Estoque</label>
-          <input type="checkbox" id="zeroStock" class="toggle" />
+          <input type="checkbox" id="zeroStock" data-perm="mp.search" class="toggle" />
         </div>
 
         <!-- Actions -->
@@ -76,7 +76,7 @@
     </div>
 
     <!-- Materials Table -->
-    <div id="materiaPrimaTableWrapper" class="glass-surface rounded-xl shadow-lg animate-fade-in-up table-scroll">
+    <div id="materiaPrimaTableWrapper" data-perm-hide="mp.view" class="glass-surface rounded-xl shadow-lg animate-fade-in-up table-scroll">
       <table class="w-full text-base">
         <thead class="bg-gray-50 sticky top-0" style="z-index:9999;">
           <tr>
@@ -102,7 +102,7 @@
       <p class="mt-1 text-sm text-white/70">Tente ajustar os filtros.</p>
       <div class="mt-6">
         <button
-          id="materiaPrimaEmptyNew"
+          id="materiaPrimaEmptyNew" data-perm="mp.create"
           type="button"
           class="btn-primary inline-flex items-center px-4 py-2 text-sm font-medium rounded-md text-white"
         >

@@ -63,15 +63,15 @@
         tr.className = 'border-b border-white/5 hover:bg-white/5 transition';
         const origemInsumo = d._origem === 'insumo';
         tr.innerHTML = `
-          <td class="py-4 px-4 text-gray-300">${d.etapa || ''}</td>
-          <td class="py-4 px-4 text-white font-medium">${d.ultimo_item || ''}</td>
-          <td class="py-4 px-4 text-left text-white font-medium">${d.quantidade ?? ''}</td>
-          <td class="py-4 px-4 text-gray-300">${origemInsumo ? '—' : formatDateTime(d.data_hora_completa)}</td>
+          <td data-perm-col="col_est_processo" class="py-4 px-4 text-gray-300">${d.etapa || ''}</td>
+          <td data-perm-col="col_est_ultimo_item" class="py-4 px-4 text-white font-medium">${d.ultimo_item || ''}</td>
+          <td data-perm-col="col_est_quantidade" class="py-4 px-4 text-left text-white font-medium">${d.quantidade ?? ''}</td>
+          <td data-perm-col="col_est_alterado_em" class="py-4 px-4 text-gray-300">${origemInsumo ? '—' : formatDateTime(d.data_hora_completa)}</td>
           <td class="py-4 px-4 text-left">
             <div class="flex items-center justify-start space-x-2">
               ${origemInsumo
                 ? '<span class="text-xs text-gray-400">Somente visualização</span>'
-                : '<i class="fas fa-edit w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Editar"></i><i class="fas fa-trash w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10 hover:text-white" style="color: var(--color-red)" title="Excluir"></i>'
+                : '<i data-perm="prod.stock.adjust" class="fas fa-edit w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Editar"></i><i data-perm="prod.stock.lote.delete" class="fas fa-trash w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10 hover:text-white" style="color: var(--color-red)" title="Excluir"></i>'
               }
             </div>
           </td>
