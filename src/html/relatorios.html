@@ -8,7 +8,7 @@
 
         <div class="flex flex-wrap items-center gap-3 justify-end relatorios-header-actions w-full lg:w-auto">
             <div class="relative">
-                <button id="relatoriosLoadTemplateBtn" class="btn-primary px-4 py-2 rounded-lg font-medium flex items-center gap-2">
+                <button id="relatoriosLoadTemplateBtn" data-perm="rel.preset.load" class="btn-primary px-4 py-2 rounded-lg font-medium flex items-center gap-2">
                     <i class="fas fa-layer-group"></i>
                     Carregar Modelo
                     <i class="fas fa-chevron-down text-xs"></i>
@@ -24,7 +24,7 @@
                 </div>
             </div>
 
-            <button id="relatoriosScheduleBtn" class="btn-warning px-4 py-2 rounded-lg font-medium">
+            <button id="relatoriosScheduleBtn" data-perm="rel.share.send" class="btn-warning px-4 py-2 rounded-lg font-medium">
                 <i class="fas fa-clock"></i>
                 Agendar
             </button>
@@ -388,10 +388,10 @@
                             </div>
 
                             <div id="bt-actions" class="flex items-center gap-2 flex-shrink-0">
-                                <button id="btnFiltrar" class="btn-secondary text-white rounded-md px-4 py-3 text-sm font-medium">
+                                <button id="btnFiltrar" data-perm="rel.search" class="btn-secondary text-white rounded-md px-4 py-3 text-sm font-medium">
                                     Filtrar
                                 </button>
-                                <button id="btnLimpar" class="btn-warning text-white rounded-md px-4 py-3 text-sm font-medium">
+                                <button id="btnLimpar" data-perm="rel.search" class="btn-warning text-white rounded-md px-4 py-3 text-sm font-medium">
                                     Limpar
                                 </button>
                             </div>

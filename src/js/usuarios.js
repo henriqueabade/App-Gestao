@@ -405,10 +405,41 @@ function escapeAttribute(valor) {
         .replace(/>/g, '&gt;');
 }
 
+// Base da API, guardada de forma sincrona: a renderizacao da tabela e sincrona
+// e nao pode esperar por uma Promise.
+let baseApiParaFotos = '';
+(async () => {
+    try {
+        baseApiParaFotos = (await window.apiConfig.getApiBaseUrl()) || '';
+    } catch (err) {
+        console.error('[usuarios] nao foi possivel resolver a base da API para as fotos.', err);
+    }
+})();
+
+/**
+ * A lista de usuários devolve a foto em `foto_perfil` como CAMINHO RELATIVO
+ * (ex.: "/imagens/perfis/13-....webp"). Esse campo não estava entre os
+ * candidatos — só variantes já absolutas como `foto_perfil_url`, que a rota da
+ * lista não produz. Resultado: o avatar caía sempre nas iniciais.
+ * Aqui incluímos `foto_perfil` e resolvemos o caminho contra a base da API
+ * (a página roda em file://, então um caminho relativo não resolveria sozinho).
+ */
+function resolverUrlDaFoto(valor) {
+    const bruto = String(valor || '').trim();
+    if (!bruto) return null;
+    if (/^(https?:|data:|blob:|file:)/i.test(bruto)) return bruto;
+    if (!baseApiParaFotos) return null;          // sem base não há como montar
+    const base = baseApiParaFotos.replace(/\/+$/, '');
+    const caminho = bruto.startsWith('/') ? bruto : `/${bruto}`;
+    return `${base}${caminho}`;
+}
+
 function obterAvatarUrl(usuario) {
     if (!usuario || typeof usuario !== 'object') return null;
     const candidatos = [
         usuario.foto_perfil_url,
+        usuario.foto_perfil,          // caminho relativo devolvido pela lista
+        usuario.fotoPerfil,
         usuario.foto_usuario,
         usuario.fotoUsuario,
         usuario.avatar,
@@ -421,12 +452,10 @@ function obterAvatarUrl(usuario) {
     const versao = extrairAvatarVersao(usuario);
 
     for (const candidato of candidatos) {
-        if (!candidato) continue;
-        if (typeof candidato === 'string') {
-            const trimmed = candidato.trim();
-            if (!trimmed) continue;
-            return aplicarCacheBuster(trimmed, versao);
-        }
+        if (!candidato || typeof candidato !== 'string') continue;
+        const url = resolverUrlDaFoto(candidato);
+        if (!url) continue;
+        return aplicarCacheBuster(url, versao);
     }
 
     return null;

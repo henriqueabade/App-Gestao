@@ -5,8 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Santíssimo Decor - Login</title>
   <link rel="stylesheet" href="../styles/tailwind-offline.css" />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
-  <link href="https://fonts.googleapis.com/css2?family=Raleway:wght@500&display=swap" rel="stylesheet" />
+  <!-- Fontes externas carregadas SEM bloquear a renderização: sem rede, elas
+       seguravam a tela até o timeout. O texto aparece na hora com a fonte de
+       sistema e troca sozinho quando (e se) a webfont chegar. -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'" />
+  <link href="https://fonts.googleapis.com/css2?family=Raleway:wght@500&display=swap" rel="stylesheet" media="print" onload="this.media='all'" />
   <link rel="stylesheet" href="login.css" />
   <link rel="stylesheet" href="../styles/warning.css" />
   <link rel="stylesheet" href="../styles/restricoes.css" />
@@ -148,16 +151,19 @@
   </div>
   <div id="exitOverlay" class="hidden fixed inset-0 bg-[#3d021f] opacity-0 flex items-center justify-center z-50"></div>
 
-  <!-- tsParticles UMD bundle -->
-  <script src="https://cdn.jsdelivr.net/npm/tsparticles@2.12.0/tsparticles.bundle.min.js"></script>
-  <!-- tsParticles Twinkle plugin -->
-  <script src="https://cdn.jsdelivr.net/npm/tsparticles-plugin-twinkle@2.12.0/tsparticles.twinkle.min.js"></script>
+  <!-- tsParticles UMD bundle (LOCAL).
+       Antes vinha de CDN. Quando a conexão caía, esta requisição ficava
+       pendurada até dar timeout: a página travava, o aviso de desconexão só
+       aparecia depois e o efeito nunca iniciava (o script jamais chegava).
+       O bundle já traz o plugin twinkle — o <script> separado dele apontava
+       para uma URL inválida e sempre falhou silenciosamente. -->
+  <script src="../vendor/tsparticles.bundle.min.js"></script>
   <!-- seu código de inicialização -->
   <script src="../js/apiConfig.js"></script>
   <script src="loginRenderer.js"></script>
   <!-- scripts adicionais -->
   <script src="../utils/userActions.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.js"></script>
+  <script src="../vendor/feather.min.js"></script>
   <script>
     feather.replace({ class: 'w-5 h-5' });
   </script>

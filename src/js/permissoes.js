@@ -228,9 +228,45 @@
     return moduloAtivo(page);
   }
 
+  // --------------------------------------------------------------------
+  // Observador do DOM.
+  //
+  // As tabelas são preenchidas DEPOIS que os dados chegam da API, então
+  // `aplicarAcoesEColunas` — que rodava uma única vez ao abrir o módulo —
+  // nunca via as linhas. Os botões de editar/excluir de cada linha nasciam
+  // liberados. O observador trata tudo que aparece depois.
+  // --------------------------------------------------------------------
+  let observador = null;
+
+  function tratarNovosNos(nos) {
+    if (!ESTADO.carregado || liberaTudo()) return;
+    nos.forEach(no => {
+      if (!no || no.nodeType !== 1) return;
+      // o próprio nó pode ser o alvo
+      if (no.hasAttribute?.('data-perm') || no.hasAttribute?.('data-perm-col')) {
+        aplicarAcoesEColunas(no.parentElement || document);
+        return;
+      }
+      if (no.querySelector?.('[data-perm], [data-perm-col]')) {
+        aplicarAcoesEColunas(no);
+      }
+    });
+  }
+
+  function observarDom() {
+    if (observador || typeof MutationObserver !== 'function') return;
+    observador = new MutationObserver(mutacoes => {
+      for (const m of mutacoes) {
+        if (m.addedNodes?.length) tratarNovosNos(Array.from(m.addedNodes));
+      }
+    });
+    observador.observe(document.body, { childList: true, subtree: true });
+  }
+
   async function init(raiz = document) {
     await carregar();
     aplicar(raiz);
+    observarDom();
     return ESTADO.permissoes;
   }
 

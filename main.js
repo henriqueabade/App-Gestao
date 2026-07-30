@@ -3419,6 +3419,20 @@ ipcMain.handle('login-usuario', async (event, dados) => {
     }
     limparTentativasLogin(dados?.email);
     setCurrentUserSession(user);
+
+    // Registra a ENTRADA. Isto só existia no caminho de auto-login: num login
+    // normal `ultima_entrada` ficava congelada numa data antiga enquanto
+    // `ultima_saida` era atualizada a cada saída. Como a coluna Situação
+    // compara as duas, TODO usuário aparecia Offline — inclusive quem estava
+    // logado naquele instante.
+    if (user?.id) {
+      try {
+        await registrarUltimaEntrada(user.id);
+      } catch (err) {
+        console.error('Falha ao registrar ultima entrada (login):', err);
+      }
+    }
+
     return { success: true, user };
   } catch (err) {
     let reason = err?.reason;

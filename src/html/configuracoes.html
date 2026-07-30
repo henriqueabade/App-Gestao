@@ -44,7 +44,7 @@
                                 <span>Atualizar foto</span>
                             </span>
                         </label>
-                        <button type="button" id="personalAvatarRemove" class="personal-avatar-remove">Remover foto</button>
+                        <button type="button" id="personalAvatarRemove" data-perm="cfg.prefs.edit" class="personal-avatar-remove">Remover foto</button>
                         <p class="personal-avatar-hint">Formatos JPG, PNG ou WebP, até 5&nbsp;MB.</p>
                     </div>
 
@@ -80,7 +80,7 @@
                 <div class="personal-feedback" id="personalDataFeedback" role="status" aria-live="polite"></div>
 
                 <div class="personal-data-actions">
-                    <button type="submit" id="personalDataSubmit" class="personal-button personal-button--primary">
+                    <button type="submit" id="personalDataSubmit" data-perm="cfg.prefs.edit" class="personal-button personal-button--primary">
                         <span class="personal-button-label">Salvar alterações</span>
                         <span class="personal-button-spinner app-loading-indicator app-loading-indicator--inline" aria-hidden="true"><span class="module-loading-orbit"></span><span class="module-loading-core"><img src="../assets/Logo.ico" alt=""></span></span>
                     </button>

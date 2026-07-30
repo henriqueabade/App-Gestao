@@ -18,7 +18,7 @@
                 <h1 class="text-2xl font-semibold mb-2">Produtos</h1>
                 <p style="color: var(--color-violet)">Gerencie seu catálogo de produtos e controle de estoque</p>
             </div>
-            <button id="btnNovoProduto" class="btn-primary text-white rounded-md px-6 py-3 font-medium">
+            <button id="btnNovoProduto" data-perm="prod.create" class="btn-primary text-white rounded-md px-6 py-3 font-medium">
                 <i class="fas fa-plus mr-2"></i>Novo Produto
             </button>
         </div>
@@ -74,10 +74,10 @@
 
                 <!-- Action Buttons -->
                 <div id="bt-actions" class="flex items-center gap-2 flex-shrink-0">
-                    <button id="btnFiltrar" class="btn-secondary text-white rounded-md px-4 py-3 text-sm font-medium">
+                    <button id="btnFiltrar" data-perm="prod.search" class="btn-secondary text-white rounded-md px-4 py-3 text-sm font-medium">
                         Filtrar
                     </button>
-                    <button id="btnLimpar" class="btn-warning text-white rounded-md px-4 py-3 text-sm font-medium">
+                    <button id="btnLimpar" data-perm="prod.search" class="btn-warning text-white rounded-md px-4 py-3 text-sm font-medium">
                         Limpar
                     </button>
                 </div>
@@ -89,12 +89,12 @@
             <table class="w-full produtos-table">
                 <thead class="bg-gray-50 sticky top-0">
                         <tr>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Código</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nome</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Coleção</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Preço de Venda</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Margem (%)</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Quantidade</th>
+                            <th data-perm-col="col_prod_sku" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Código</th>
+                            <th data-perm-col="col_prod_nome" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nome</th>
+                            <th data-perm-col="col_prod_categoria" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Coleção</th>
+                            <th data-perm-col="col_prod_preco_base" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Preço de Venda</th>
+                            <th data-perm-col="col_prod_margem" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Margem (%)</th>
+                            <th data-perm-col="col_prod_estoque" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Quantidade</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ações</th>
                         </tr>
                     </thead>

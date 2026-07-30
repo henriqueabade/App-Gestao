@@ -37,7 +37,7 @@
 
             <div class="usuarios-header__actions flex items-center gap-3">
                 <button
-                  id="btnModelosPermissao"
+                  id="btnModelosPermissao" data-perm="cfg.roles.edit"
                   type="button"
                   class="btn-bordo hidden px-4 py-2 rounded-md text-white font-medium flex items-center gap-2"
                 >
@@ -104,8 +104,8 @@
 
                 <!-- Action Buttons -->
                 <div id= "bt-actions" class="flex items-center gap-2">
-                    <button id="aplicarFiltro" class="btn-secondary text-white rounded-md px-4 h-12 text-sm font-medium">Filtrar</button>
-                    <button id="limparFiltro" class="btn-warning text-white rounded-md px-4 h-12 text-sm font-medium">Limpar</button>
+                    <button id="aplicarFiltro" data-perm="cfg.roles.view" class="btn-secondary text-white rounded-md px-4 h-12 text-sm font-medium">Filtrar</button>
+                    <button id="limparFiltro" data-perm="cfg.roles.view" class="btn-warning text-white rounded-md px-4 h-12 text-sm font-medium">Limpar</button>
                 </div>
             </div>
         </div>

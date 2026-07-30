@@ -6,7 +6,7 @@
             <h1 class="text-2xl font-semibold mb-2">Pedidos</h1>
             <p style="color: var(--color-violet)">Acompanhe o status de produção e entrega dos pedidos</p>
         </div>
-        <button id="converterOrcamentoBtn" class="btn-primary text-white rounded-md px-6 py-3 font-medium">
+        <button id="converterOrcamentoBtn" data-perm="orc.convert" class="btn-primary text-white rounded-md px-6 py-3 font-medium">
             <i class="fas fa-plus mr-2"></i>Converter Orçamento
         </button>
     </div>
@@ -57,10 +57,10 @@
 
             <!-- Action Buttons -->
             <div id="bt-actions" class="flex items-center gap-2 flex-shrink-0">
-                <button id="btnFiltrar" class="btn-secondary text-white rounded-md px-4 py-3 text-sm font-medium">
+                <button id="btnFiltrar" data-perm="ped.search" class="btn-secondary text-white rounded-md px-4 py-3 text-sm font-medium">
                     Filtrar
                 </button>
-                <button id="btnLimpar" class="btn-warning text-white rounded-md px-4 py-3 text-sm font-medium">
+                <button id="btnLimpar" data-perm="ped.search" class="btn-warning text-white rounded-md px-4 py-3 text-sm font-medium">
                     Limpar
                 </button>
             </div>

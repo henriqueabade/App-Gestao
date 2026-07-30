@@ -22,6 +22,11 @@ const DEFAULT_BEARER_TOKEN = normalizeToken(
 db.init({ tokenProvider: getToken });
 
 const app = express();
+
+// Origem da API remota, sem o sufixo /api — usada para repassar as imagens.
+const API_BASE_ORIGIN = (
+  process.env.API_BASE_URL || process.env.API_URL || 'https://api.santissimodecor.com.br'
+).replace(/\/+$/, '').replace(/\/api$/, '');
 app.use(cors());
 app.use(express.json({ limit: '3mb' }));
 
@@ -120,6 +125,26 @@ app.get('/api/contatos_cliente', async (req, res) => {
 app.use('/api/permissoes', require('./permissionsController'));
 app.use('/api/notifications', notificationsRouter);
 app.use(passwordResetRouter);
+// As fotos de perfil ficam na API remota (/imagens/perfis/...). O front resolve
+// URLs contra o backend LOCAL, que não servia esse caminho — o avatar caía
+// sempre nas iniciais. Repassamos a imagem por aqui.
+// (app.use e não app.get('/imagens/*'): no Express 5 o curinga precisa de nome)
+app.use('/imagens', async (req, res) => {
+  try {
+    const destino = `${API_BASE_ORIGIN}${req.originalUrl}`;
+    const resposta = await fetch(destino);
+    if (!resposta.ok) return res.sendStatus(resposta.status);
+    const tipo = resposta.headers.get('content-type');
+    if (tipo) res.set('Content-Type', tipo);
+    res.set('Cache-Control', 'public, max-age=300');
+    const buffer = Buffer.from(await resposta.arrayBuffer());
+    res.send(buffer);
+  } catch (err) {
+    console.error('Falha ao repassar imagem de perfil:', err?.message || err);
+    res.sendStatus(502);
+  }
+});
+
 app.use('/pdf', express.static(path.join(__dirname, '../src/pdf')));
 app.use('/styles', express.static(path.join(__dirname, '../src/styles')));
 app.use('/js', express.static(path.join(__dirname, '../src/js')));

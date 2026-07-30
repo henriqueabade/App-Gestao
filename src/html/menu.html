@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta
         http-equiv="Content-Security-Policy"
-        content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://fonts.googleapis.com; img-src 'self' data: blob: https://api.santissimodecor.com.br; font-src 'self' data: https://fonts.gstatic.com https://cdnjs.cloudflare.com; connect-src 'self' http://localhost:3000 https://api.santissimodecor.com.br; frame-ancestors 'none';"
+        content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://fonts.googleapis.com; img-src 'self' data: blob: http://localhost:3000 https://api.santissimodecor.com.br; font-src 'self' data: https://fonts.gstatic.com https://cdnjs.cloudflare.com; connect-src 'self' http://localhost:3000 https://api.santissimodecor.com.br; frame-ancestors 'none';"
     />
     <title>Santíssimo Decor - Dashboard</title>
     <link rel="stylesheet" href="../styles/tailwind-offline.css" />
@@ -321,7 +321,8 @@
     <script src="../js/menu.js"></script>
     <script src="../js/auth/session.js"></script>
     <script src="../utils/userActions.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.js"></script>
+    <!-- LOCAL: sem rede, o script de CDN segurava o carregamento do menu -->
+    <script src="../vendor/feather.min.js"></script>
     <script>
       feather.replace({ class: 'w-5 h-5' });
     </script>

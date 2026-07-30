@@ -12,7 +12,23 @@
   const tabelaBody = document.querySelector('#proximaEtapaTabela tbody');
   const totalEl = document.getElementById('proximaEtapaTotal');
 
-  const titulo = window.proximaEtapaTitulo || '';
+  /**
+   * Elementos com `id` viram variáveis globais no `window`. Como o <h2> tem
+   * id="proximaEtapaTitulo", quando ninguém atribui a string (é o caso da
+   * restauração após uma queda) `window.proximaEtapaTitulo` devolve o PRÓPRIO
+   * ELEMENTO: o cabeçalho virava "[object HTMLHeadingElement]" e o
+   * `titulo.toLowerCase()` do filtro de materiais estourava, deixando o select
+   * de itens vazio — não dava para registrar nada.
+   */
+  function lerTituloGlobal() {
+    const bruto = window.proximaEtapaTitulo;
+    if (!bruto) return '';
+    if (typeof bruto === 'string') return bruto;
+    if (bruto instanceof Element) return '';   // colisão de id: ignora
+    return String(bruto);
+  }
+
+  let titulo = lerTituloGlobal();
   if (tituloEl) tituloEl.textContent = titulo; // título dinâmico
 
   let materiais = [];
@@ -297,7 +313,15 @@
       // `row`/`totalEl` são nós do DOM: não podem ir para o JSON
       itens: itens.map(({ row, totalEl, ...dados }) => dados)
     }),
-    restaurar: (dados) => {
+    restaurar: async (dados) => {
+      // Repõe o título ANTES de qualquer coisa: é ele que filtra os materiais
+      // e nomeia o processo no cabeçalho.
+      if (dados?.titulo) {
+        titulo = String(dados.titulo);
+        window.proximaEtapaTitulo = titulo;
+        if (tituloEl) tituloEl.textContent = titulo;
+        await carregarMateriais();
+      }
       const guardados = Array.isArray(dados?.itens) ? dados.itens : [];
       if (!guardados.length) return;
       itens = [];
@@ -311,11 +335,13 @@
     }
   });
 
-  // carga filtrada
-  (async ()=>{
+  // Carga dos materiais do processo. Virou função nomeada porque a restauração
+  // precisa recarregá-la depois de repor o título — antes o select ficava vazio.
+  async function carregarMateriais(){
     try{
-      materiais = await window.electronAPI.listarMateriaPrima('');
-      materiais = (materiais||[]).filter(m=> (m.processo||'').toLowerCase() === titulo.toLowerCase());
+      const todos = await window.electronAPI.listarMateriaPrima('');
+      const alvo = String(titulo || '').toLowerCase();
+      materiais = (todos||[]).filter(m=> (m.processo||'').toLowerCase() === alvo);
       if(itemSelect){
         itemSelect.innerHTML = '<option value="">Nome do Item</option>' +
           materiais.map(m=>`<option value="${m.id}">${m.nome}</option>`).join('');
@@ -323,5 +349,6 @@
     }catch(err){
       console.error('Erro ao carregar matérias', err);
     }
-  })();
+  }
+  carregarMateriais();
 })();
