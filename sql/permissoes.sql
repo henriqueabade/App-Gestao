@@ -94,7 +94,7 @@ CREATE TABLE IF NOT EXISTS perm_mp (
 );
 
 -- ---------------------------------------------------------------------
--- 4) Produtos  (perm_prod)  —  20 ações, 30 colunas
+-- 4) Produtos  (perm_prod)  —  25 ações, 20 colunas
 -- ---------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS perm_prod (
   modelo_id    INTEGER PRIMARY KEY REFERENCES modelos_permissoes(id) ON DELETE CASCADE,
@@ -103,56 +103,51 @@ CREATE TABLE IF NOT EXISTS perm_prod (
   -- Ações
   acao_view                          BOOLEAN NOT NULL DEFAULT FALSE,  -- prod.view · Ver lista
   acao_search                        BOOLEAN NOT NULL DEFAULT FALSE,  -- prod.search · Buscar/filtrar
-  acao_export                        BOOLEAN NOT NULL DEFAULT FALSE,  -- prod.export · Exportar lista
   acao_create                        BOOLEAN NOT NULL DEFAULT FALSE,  -- prod.create · Cadastrar produto
+  acao_stock_view                    BOOLEAN NOT NULL DEFAULT FALSE,  -- prod.stock.view · Ver estoque
+  acao_details_view                  BOOLEAN NOT NULL DEFAULT FALSE,  -- prod.details.view · Visualizar produto
   acao_edit                          BOOLEAN NOT NULL DEFAULT FALSE,  -- prod.edit · Editar produto
   acao_delete                        BOOLEAN NOT NULL DEFAULT FALSE,  -- prod.delete · Excluir produto
-  acao_details_view                  BOOLEAN NOT NULL DEFAULT FALSE,  -- prod.details.view · Ver detalhes
-  acao_pdf                           BOOLEAN NOT NULL DEFAULT FALSE,  -- prod.pdf · Gerar PDF do produto
-  acao_stage_view                    BOOLEAN NOT NULL DEFAULT FALSE,  -- prod.stage.view · Ver etapas
-  acao_stage_advance                 BOOLEAN NOT NULL DEFAULT FALSE,  -- prod.stage.advance · Avançar etapa
-  acao_stage_insert                  BOOLEAN NOT NULL DEFAULT FALSE,  -- prod.stage.insert · Inserir etapa
-  acao_collection_view               BOOLEAN NOT NULL DEFAULT FALSE,  -- prod.collection.view · Ver coleções
+  acao_item_add                      BOOLEAN NOT NULL DEFAULT FALSE,  -- prod.item.add · Adicionar item
+  acao_item_edit                     BOOLEAN NOT NULL DEFAULT FALSE,  -- prod.item.edit · Editar item
+  acao_item_remove                   BOOLEAN NOT NULL DEFAULT FALSE,  -- prod.item.remove · Remover item
+  acao_clear                         BOOLEAN NOT NULL DEFAULT FALSE,  -- prod.clear · Limpar tudo
+  acao_percent_edit                  BOOLEAN NOT NULL DEFAULT FALSE,  -- prod.percent.edit · Editar percentagens
   acao_collection_create             BOOLEAN NOT NULL DEFAULT FALSE,  -- prod.collection.create · Cadastrar coleção
-  acao_collection_edit               BOOLEAN NOT NULL DEFAULT FALSE,  -- prod.collection.edit · Editar coleção
   acao_collection_delete             BOOLEAN NOT NULL DEFAULT FALSE,  -- prod.collection.delete · Excluir coleção
-  acao_stock_view                    BOOLEAN NOT NULL DEFAULT FALSE,  -- prod.stock.view · Ver estoque
-  acao_stock_input                   BOOLEAN NOT NULL DEFAULT FALSE,  -- prod.stock.input · Entrada de estoque
-  acao_stock_output                  BOOLEAN NOT NULL DEFAULT FALSE,  -- prod.stock.output · Saída de estoque
-  acao_stock_adjust                  BOOLEAN NOT NULL DEFAULT FALSE,  -- prod.stock.adjust · Ajuste de estoque
-  acao_stock_infinite_toggle         BOOLEAN NOT NULL DEFAULT FALSE,  -- prod.stock.infinite_toggle · Alternar estoque infinito
+  acao_clone                         BOOLEAN NOT NULL DEFAULT FALSE,  -- prod.clone · Clonar produto
+  acao_registro_toggle               BOOLEAN NOT NULL DEFAULT FALSE,  -- prod.registro.toggle · Alternar registro
+  acao_pdf                           BOOLEAN NOT NULL DEFAULT FALSE,  -- prod.pdf · Gerar PDF
+  acao_stage_insert                  BOOLEAN NOT NULL DEFAULT FALSE,  -- prod.stage.insert · Registrar processo
+  acao_stage_item_add                BOOLEAN NOT NULL DEFAULT FALSE,  -- prod.stage.item.add · Inserir item no processo
+  acao_stage_item_edit               BOOLEAN NOT NULL DEFAULT FALSE,  -- prod.stage.item.edit · Editar item do processo
+  acao_stage_item_remove             BOOLEAN NOT NULL DEFAULT FALSE,  -- prod.stage.item.remove · Excluir item do processo
+  acao_stage_clear                   BOOLEAN NOT NULL DEFAULT FALSE,  -- prod.stage.clear · Limpar itens do processo
+  acao_stock_input                   BOOLEAN NOT NULL DEFAULT FALSE,  -- prod.stock.input · Adicionar ao estoque
+  acao_stock_adjust                  BOOLEAN NOT NULL DEFAULT FALSE,  -- prod.stock.adjust · Somar ao existente
+  acao_stock_lote_delete             BOOLEAN NOT NULL DEFAULT FALSE,  -- prod.stock.lote.delete · Excluir lote de estoque
 
   -- Colunas visíveis
-  col_prod_sku                       BOOLEAN NOT NULL DEFAULT FALSE,  -- SKU
-  col_prod_nome                      BOOLEAN NOT NULL DEFAULT FALSE,  -- Produto
+  col_prod_sku                       BOOLEAN NOT NULL DEFAULT FALSE,  -- Código
+  col_prod_nome                      BOOLEAN NOT NULL DEFAULT FALSE,  -- Nome
   col_prod_colecao                   BOOLEAN NOT NULL DEFAULT FALSE,  -- Coleção
-  col_prod_categoria                 BOOLEAN NOT NULL DEFAULT FALSE,  -- Categoria
-  col_prod_preco_base                BOOLEAN NOT NULL DEFAULT FALSE,  -- Preço base
-  col_prod_custo_total               BOOLEAN NOT NULL DEFAULT FALSE,  -- Custo total
-  col_prod_margem                    BOOLEAN NOT NULL DEFAULT FALSE,  -- Margem
-  col_prod_estoque                   BOOLEAN NOT NULL DEFAULT FALSE,  -- Estoque
-  col_prod_etapa_atual               BOOLEAN NOT NULL DEFAULT FALSE,  -- Etapa atual
-  col_prod_status                    BOOLEAN NOT NULL DEFAULT FALSE,  -- Status
-  col_prod_atualizado_em             BOOLEAN NOT NULL DEFAULT FALSE,  -- Atualizado em
-  col_etp_ordem                      BOOLEAN NOT NULL DEFAULT FALSE,  -- Ordem
-  col_etp_nome                       BOOLEAN NOT NULL DEFAULT FALSE,  -- Etapa
-  col_etp_resp                       BOOLEAN NOT NULL DEFAULT FALSE,  -- Responsável
-  col_etp_inicio                     BOOLEAN NOT NULL DEFAULT FALSE,  -- Início
-  col_etp_fim                        BOOLEAN NOT NULL DEFAULT FALSE,  -- Fim
-  col_etp_tempo_real                 BOOLEAN NOT NULL DEFAULT FALSE,  -- Tempo real
-  col_ins_mp                         BOOLEAN NOT NULL DEFAULT FALSE,  -- MP
-  col_ins_qtd                        BOOLEAN NOT NULL DEFAULT FALSE,  -- Qtd.
-  col_ins_custo_un                   BOOLEAN NOT NULL DEFAULT FALSE,  -- Custo un.
-  col_ins_custo_total                BOOLEAN NOT NULL DEFAULT FALSE,  -- Custo total
+  col_prod_preco_base                BOOLEAN NOT NULL DEFAULT FALSE,  -- Preço de Venda
+  col_prod_margem                    BOOLEAN NOT NULL DEFAULT FALSE,  -- Margem (%)
+  col_prod_estoque                   BOOLEAN NOT NULL DEFAULT FALSE,  -- Quantidade
+  col_ins_mp                         BOOLEAN NOT NULL DEFAULT FALSE,  -- Nome do item
+  col_ins_qtd                        BOOLEAN NOT NULL DEFAULT FALSE,  -- Quantidade
   col_ins_unidade                    BOOLEAN NOT NULL DEFAULT FALSE,  -- Unidade
-  col_var_nome                       BOOLEAN NOT NULL DEFAULT FALSE,  -- Variação
-  col_var_estoque                    BOOLEAN NOT NULL DEFAULT FALSE,  -- Estoque
-  col_var_reservado                  BOOLEAN NOT NULL DEFAULT FALSE,  -- Reservado
-  col_var_disponivel                 BOOLEAN NOT NULL DEFAULT FALSE,  -- Disponível
-  col_col_nome                       BOOLEAN NOT NULL DEFAULT FALSE,  -- Coleção
-  col_col_periodo                    BOOLEAN NOT NULL DEFAULT FALSE,  -- Período
-  col_col_status                     BOOLEAN NOT NULL DEFAULT FALSE,  -- Status
-  col_col_itens                      BOOLEAN NOT NULL DEFAULT FALSE  -- Itens
+  col_ins_custo_un                   BOOLEAN NOT NULL DEFAULT FALSE,  -- Valor unitário
+  col_ins_custo_total                BOOLEAN NOT NULL DEFAULT FALSE,  -- Valor total
+  col_etapa_item                     BOOLEAN NOT NULL DEFAULT FALSE,  -- Item
+  col_etapa_qtd                      BOOLEAN NOT NULL DEFAULT FALSE,  -- Quantidade
+  col_etapa_unidade                  BOOLEAN NOT NULL DEFAULT FALSE,  -- Unidade
+  col_etapa_valor_un                 BOOLEAN NOT NULL DEFAULT FALSE,  -- Valor unitário (R$)
+  col_etapa_valor_total              BOOLEAN NOT NULL DEFAULT FALSE,  -- Valor total (R$)
+  col_est_processo                   BOOLEAN NOT NULL DEFAULT FALSE,  -- Processo atual
+  col_est_ultimo_item                BOOLEAN NOT NULL DEFAULT FALSE,  -- Último item
+  col_est_quantidade                 BOOLEAN NOT NULL DEFAULT FALSE,  -- Quantidade em estoque
+  col_est_alterado_em                BOOLEAN NOT NULL DEFAULT FALSE  -- Última alteração
 );
 
 -- ---------------------------------------------------------------------
@@ -569,8 +564,8 @@ INSERT INTO perm_mp (modelo_id, modulo_ativo, acao_view, acao_search, acao_expor
 SELECT id, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE FROM modelos_permissoes WHERE nome = 'Administrador'
 ON CONFLICT (modelo_id) DO NOTHING;
 
-INSERT INTO perm_prod (modelo_id, modulo_ativo, acao_view, acao_search, acao_export, acao_create, acao_edit, acao_delete, acao_details_view, acao_pdf, acao_stage_view, acao_stage_advance, acao_stage_insert, acao_collection_view, acao_collection_create, acao_collection_edit, acao_collection_delete, acao_stock_view, acao_stock_input, acao_stock_output, acao_stock_adjust, acao_stock_infinite_toggle, col_prod_sku, col_prod_nome, col_prod_colecao, col_prod_categoria, col_prod_preco_base, col_prod_custo_total, col_prod_margem, col_prod_estoque, col_prod_etapa_atual, col_prod_status, col_prod_atualizado_em, col_etp_ordem, col_etp_nome, col_etp_resp, col_etp_inicio, col_etp_fim, col_etp_tempo_real, col_ins_mp, col_ins_qtd, col_ins_custo_un, col_ins_custo_total, col_ins_unidade, col_var_nome, col_var_estoque, col_var_reservado, col_var_disponivel, col_col_nome, col_col_periodo, col_col_status, col_col_itens)
-SELECT id, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE FROM modelos_permissoes WHERE nome = 'Administrador'
+INSERT INTO perm_prod (modelo_id, modulo_ativo, acao_view, acao_search, acao_create, acao_stock_view, acao_details_view, acao_edit, acao_delete, acao_item_add, acao_item_edit, acao_item_remove, acao_clear, acao_percent_edit, acao_collection_create, acao_collection_delete, acao_clone, acao_registro_toggle, acao_pdf, acao_stage_insert, acao_stage_item_add, acao_stage_item_edit, acao_stage_item_remove, acao_stage_clear, acao_stock_input, acao_stock_adjust, acao_stock_lote_delete, col_prod_sku, col_prod_nome, col_prod_colecao, col_prod_preco_base, col_prod_margem, col_prod_estoque, col_ins_mp, col_ins_qtd, col_ins_unidade, col_ins_custo_un, col_ins_custo_total, col_etapa_item, col_etapa_qtd, col_etapa_unidade, col_etapa_valor_un, col_etapa_valor_total, col_est_processo, col_est_ultimo_item, col_est_quantidade, col_est_alterado_em)
+SELECT id, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE FROM modelos_permissoes WHERE nome = 'Administrador'
 ON CONFLICT (modelo_id) DO NOTHING;
 
 INSERT INTO perm_orc (modelo_id, modulo_ativo, acao_view, acao_search, acao_create, acao_edit, acao_view_details, acao_item_replace, acao_convert, acao_export, col_orc_num, col_orc_cliente, col_orc_vendedor, col_orc_data, col_orc_validade, col_orc_itens, col_orc_subtotal, col_orc_desc, col_orc_frete_outros, col_orc_total, col_orc_status, col_orc_it_nome, col_orc_it_sku, col_orc_it_qtd, col_orc_it_preco, col_orc_it_desc, col_orc_it_subtotal, col_orc_it_obs, col_orc_cond_pagto, col_orc_cond_parc, col_orc_cond_prazo, col_orc_cond_validade)

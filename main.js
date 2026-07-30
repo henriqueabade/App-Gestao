@@ -3894,6 +3894,7 @@ ipcMain.handle('remover-unidade', async (_e, nome) => {
   }
 });
 ipcMain.handle('remover-colecao', async (_e, nome) => {
+  if (!(await verificarPermissaoIpc('prod.collection.delete'))) return negadoIpc('prod.collection.delete');
   try {
     return await removerColecao(nome);
   } catch (err) {
@@ -3934,9 +3935,14 @@ ipcMain.handle('verificar-dependencia-processo', async (_e, nome) => {
   }
 });
 ipcMain.handle('listar-produtos', async () => {
+  // SEM guarda de 'prod.view': esta rota tambem alimenta os modais de Orcamentos
+  // (novo, editar, converter, substituir peca) e o modulo de Relatorios. Negar
+  // aqui quebraria esses modulos para quem nao tem acesso a Produtos. A lista de
+  // produtos em si e protegida pela visibilidade do modulo.
   return listarProdutos();
 });
 ipcMain.handle('obter-produto', async (_e, codigo) => {
+  if (!(await verificarPermissaoIpc('prod.details.view'))) return negadoIpc('prod.details.view');
   try {
     return await obterProduto(codigo);
   } catch (err) {
@@ -3966,6 +3972,7 @@ ipcMain.handle('excluir-produto', async (_e, info) => {
   }
 });
 ipcMain.handle('listar-detalhes-produto', async (_e, payload) => {
+  // SEM guarda: usada tambem por orcamento-converter e orcamento-substituir-peca.
   try {
     const produtoId = payload?.produtoId ?? payload?.id ?? payload;
     console.info('[IPC] listar-detalhes-produto entrada:', {
@@ -3996,7 +4003,11 @@ ipcMain.handle('atualizar-lote-produto', async (_e, { id, quantidade }) => {
   return atualizarLoteProduto(id, quantidade);
 });
 ipcMain.handle('excluir-lote-produto', async (_e, info) => {
-  if (!(await verificarPermissaoIpc('prod.stock.output'))) return negadoIpc('prod.stock.output');
+  // "lote" aqui e um LOTE DE ESTOQUE (linha do "Detalhe de Estoque"), nao um
+  // conjunto de produtos. O guarda apontava para `prod.stock.output`, chave que
+  // nao existe no catalogo — e `can()` nega chaves desconhecidas, o que
+  // bloqueava a acao para sempre.
+  if (!(await verificarPermissaoIpc('prod.stock.lote.delete'))) return negadoIpc('prod.stock.lote.delete');
   const id = typeof info === 'object' && info !== null ? info.id : info;
   if (id === undefined || id === null) {
     return { success: false, error: 'invalid-id' };
@@ -4018,6 +4029,7 @@ ipcMain.handle('adicionar-etapa-producao', async (_e, dados) => {
   return adicionarEtapaProducao(dados);
 });
 ipcMain.handle('remover-etapa-producao', async (_e, nome) => {
+  if (!(await verificarPermissaoIpc('prod.stage.item.remove'))) return negadoIpc('prod.stage.item.remove');
   try {
     return await removerEtapaProducao(nome);
   } catch (err) {

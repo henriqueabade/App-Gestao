@@ -602,167 +602,256 @@
                   </div>
                   <i class="fas fa-info-circle text-[var(--color-primary)]" title="Permissões do módulo"></i>
                 </div>
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="grid grid-cols-1 gap-6">
 
-                  <label class="usuarios-permissoes-item" data-search="ver produtos lista">
-                    <input type="checkbox" name="prod.view" data-role="item" data-group="acoes-prod" data-item-type="action" class="w-4 h-4 mt-1" />
-                    <div>
-                      <span class="font-medium">Ver lista</span>
-                      <p class="text-sm text-gray-400">Exibir grade de produtos</p>
-                    </div>
-                  </label>
+                  <div>
+                    <h4 class="text-sm font-semibold text-gray-300 mb-3">Tela de Produtos (lista)</h4>
+                    <div class="grid grid-cols-1 gap-4">
 
-                  <label class="usuarios-permissoes-item" data-search="buscar filtrar ordenar">
-                    <input type="checkbox" name="prod.search" data-role="item" data-group="acoes-prod" data-item-type="action" class="w-4 h-4 mt-1" />
-                    <div>
-                      <span class="font-medium">Buscar/filtrar</span>
-                      <p class="text-sm text-gray-400">Habilitar pesquisa e ordenação</p>
-                    </div>
-                  </label>
+                      <label class="usuarios-permissoes-item" data-search="ver lista grade produtos">
+                        <input type="checkbox" name="prod.view" data-role="item" data-group="acoes-prod" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Ver lista</span>
+                          <p class="text-sm text-gray-400">Exibir a grade de produtos</p>
+                        </div>
+                      </label>
 
-                  <label class="usuarios-permissoes-item" data-search="exportar relatorio">
-                    <input type="checkbox" name="prod.export" data-role="item" data-group="acoes-prod" data-item-type="action" class="w-4 h-4 mt-1" />
-                    <div>
-                      <span class="font-medium">Exportar lista</span>
-                      <p class="text-sm text-gray-400">Exportar dados de produtos</p>
-                    </div>
-                  </label>
+                      <label class="usuarios-permissoes-item" data-search="buscar filtrar ordenar pesquisa">
+                        <input type="checkbox" name="prod.search" data-role="item" data-group="acoes-prod" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Buscar/filtrar</span>
+                          <p class="text-sm text-gray-400">Campo de busca, filtros e botoes Filtrar/Limpar</p>
+                        </div>
+                      </label>
 
-                  <label class="usuarios-permissoes-item" data-search="cadastrar criar">
-                    <input type="checkbox" name="prod.create" data-role="item" data-group="acoes-prod" data-item-type="action" class="w-4 h-4 mt-1" />
-                    <div>
-                      <span class="font-medium">Cadastrar produto</span>
-                      <p class="text-sm text-gray-400">Criar novos SKUs e composições</p>
-                    </div>
-                  </label>
+                      <label class="usuarios-permissoes-item" data-search="cadastrar criar novo produto">
+                        <input type="checkbox" name="prod.create" data-role="item" data-group="acoes-prod" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Cadastrar produto</span>
+                          <p class="text-sm text-gray-400">Botao "Novo Produto"</p>
+                        </div>
+                      </label>
 
-                  <label class="usuarios-permissoes-item" data-search="editar produto alterar">
-                    <input type="checkbox" name="prod.edit" data-role="item" data-group="acoes-prod" data-item-type="action" class="w-4 h-4 mt-1" />
-                    <div>
-                      <span class="font-medium">Editar produto</span>
-                      <p class="text-sm text-gray-400">Alterar dados e insumos</p>
                     </div>
-                  </label>
+                  </div>
 
-                  <label class="usuarios-permissoes-item" data-search="excluir produto remover">
-                    <input type="checkbox" name="prod.delete" data-role="item" data-group="acoes-prod" data-item-type="action" class="w-4 h-4 mt-1" />
-                    <div>
-                      <span class="font-medium">Excluir produto</span>
-                      <p class="text-sm text-gray-400">Remover produtos respeitando vínculos</p>
-                    </div>
-                  </label>
+                  <div>
+                    <h4 class="text-sm font-semibold text-gray-300 mb-3">Ações na linha da tabela</h4>
+                    <div class="grid grid-cols-1 gap-4">
 
-                  <label class="usuarios-permissoes-item" data-search="detalhes ver custos">
-                    <input type="checkbox" name="prod.details.view" data-role="item" data-group="acoes-prod" data-item-type="action" class="w-4 h-4 mt-1" />
-                    <div>
-                      <span class="font-medium">Ver detalhes</span>
-                      <p class="text-sm text-gray-400">Acessar página completa do produto</p>
-                    </div>
-                  </label>
+                      <label class="usuarios-permissoes-item" data-search="ver estoque detalhe linha">
+                        <input type="checkbox" name="prod.stock.view" data-role="item" data-group="acoes-prod" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Ver estoque</span>
+                          <p class="text-sm text-gray-400">Ícone de estoque — abre "Detalhe de Estoque"</p>
+                        </div>
+                      </label>
 
-                  <label class="usuarios-permissoes-item" data-search="pdf gerar ficha imprimir exportar produto">
-                    <input type="checkbox" name="prod.pdf" data-role="item" data-group="acoes-prod" data-item-type="action" class="w-4 h-4 mt-1" />
-                    <div>
-                      <span class="font-medium">Gerar PDF do produto</span>
-                      <p class="text-sm text-gray-400">Baixar a ficha de cadastro do produto em PDF</p>
-                    </div>
-                  </label>
+                      <label class="usuarios-permissoes-item" data-search="visualizar detalhes olho">
+                        <input type="checkbox" name="prod.details.view" data-role="item" data-group="acoes-prod" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Visualizar produto</span>
+                          <p class="text-sm text-gray-400">Ícone de olho — abre "Visualizar Produto"</p>
+                        </div>
+                      </label>
 
-                  <label class="usuarios-permissoes-item" data-search="etapas ver produção">
-                    <input type="checkbox" name="prod.stage.view" data-role="item" data-group="acoes-prod" data-item-type="action" class="w-4 h-4 mt-1" />
-                    <div>
-                      <span class="font-medium">Ver etapas</span>
-                      <p class="text-sm text-gray-400">Listar etapas de produção</p>
-                    </div>
-                  </label>
+                      <label class="usuarios-permissoes-item" data-search="editar alterar lápis">
+                        <input type="checkbox" name="prod.edit" data-role="item" data-group="acoes-prod" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Editar produto</span>
+                          <p class="text-sm text-gray-400">Ícone de lápis — abre "Editar Produto"</p>
+                        </div>
+                      </label>
 
-                  <label class="usuarios-permissoes-item" data-search="avancar etapa produzir">
-                    <input type="checkbox" name="prod.stage.advance" data-role="item" data-group="acoes-prod" data-item-type="action" class="w-4 h-4 mt-1" />
-                    <div>
-                      <span class="font-medium">Avançar etapa</span>
-                      <p class="text-sm text-gray-400">Mover produto para próxima fase</p>
-                    </div>
-                  </label>
+                      <label class="usuarios-permissoes-item" data-search="excluir remover lixeira">
+                        <input type="checkbox" name="prod.delete" data-role="item" data-group="acoes-prod" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Excluir produto</span>
+                          <p class="text-sm text-gray-400">Ícone de lixeira — abre a confirmação</p>
+                        </div>
+                      </label>
 
-                  <label class="usuarios-permissoes-item" data-search="inserir etapa nova">
-                    <input type="checkbox" name="prod.stage.insert" data-role="item" data-group="acoes-prod" data-item-type="action" class="w-4 h-4 mt-1" />
-                    <div>
-                      <span class="font-medium">Inserir etapa</span>
-                      <p class="text-sm text-gray-400">Adicionar etapa intermediária</p>
                     </div>
-                  </label>
+                  </div>
 
-                  <label class="usuarios-permissoes-item" data-search="colecao ver lista">
-                    <input type="checkbox" name="prod.collection.view" data-role="item" data-group="acoes-prod" data-item-type="action" class="w-4 h-4 mt-1" />
-                    <div>
-                      <span class="font-medium">Ver coleções</span>
-                      <p class="text-sm text-gray-400">Listar coleções e produtos</p>
-                    </div>
-                  </label>
+                  <div>
+                    <h4 class="text-sm font-semibold text-gray-300 mb-3">Modal "Inserir Novo Produto"</h4>
+                    <div class="grid grid-cols-1 gap-4">
 
-                  <label class="usuarios-permissoes-item" data-search="colecao cadastrar criar">
-                    <input type="checkbox" name="prod.collection.create" data-role="item" data-group="acoes-prod" data-item-type="action" class="w-4 h-4 mt-1" />
-                    <div>
-                      <span class="font-medium">Cadastrar coleção</span>
-                      <p class="text-sm text-gray-400">Criar novas coleções</p>
-                    </div>
-                  </label>
+                      <label class="usuarios-permissoes-item" data-search="adicionar item insumo começar inserir">
+                        <input type="checkbox" name="prod.item.add" data-role="item" data-group="acoes-prod" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Adicionar item</span>
+                          <p class="text-sm text-gray-400">Botões "+ Começar" e "+ Inserir"</p>
+                        </div>
+                      </label>
 
-                  <label class="usuarios-permissoes-item" data-search="colecao editar alterar">
-                    <input type="checkbox" name="prod.collection.edit" data-role="item" data-group="acoes-prod" data-item-type="action" class="w-4 h-4 mt-1" />
-                    <div>
-                      <span class="font-medium">Editar coleção</span>
-                      <p class="text-sm text-gray-400">Alterar dados e status</p>
-                    </div>
-                  </label>
+                      <label class="usuarios-permissoes-item" data-search="editar item insumo lápis">
+                        <input type="checkbox" name="prod.item.edit" data-role="item" data-group="acoes-prod" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Editar item</span>
+                          <p class="text-sm text-gray-400">Ícone de lápis na coluna AÇÃO da tabela de itens</p>
+                        </div>
+                      </label>
 
-                  <label class="usuarios-permissoes-item" data-search="colecao excluir remover">
-                    <input type="checkbox" name="prod.collection.delete" data-role="item" data-group="acoes-prod" data-item-type="action" class="w-4 h-4 mt-1" />
-                    <div>
-                      <span class="font-medium">Excluir coleção</span>
-                      <p class="text-sm text-gray-400">Remover coleções com validações</p>
-                    </div>
-                  </label>
+                      <label class="usuarios-permissoes-item" data-search="remover excluir item insumo">
+                        <input type="checkbox" name="prod.item.remove" data-role="item" data-group="acoes-prod" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Remover item</span>
+                          <p class="text-sm text-gray-400">Ícone de lixeira na coluna AÇÃO da tabela de itens</p>
+                        </div>
+                      </label>
 
-                  <label class="usuarios-permissoes-item" data-search="estoque ver saldo">
-                    <input type="checkbox" name="prod.stock.view" data-role="item" data-group="acoes-prod" data-item-type="action" class="w-4 h-4 mt-1" />
-                    <div>
-                      <span class="font-medium">Ver estoque</span>
-                      <p class="text-sm text-gray-400">Exibir estoque de produto/variações</p>
-                    </div>
-                  </label>
+                      <label class="usuarios-permissoes-item" data-search="limpar tudo zerar">
+                        <input type="checkbox" name="prod.clear" data-role="item" data-group="acoes-prod" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Limpar tudo</span>
+                          <p class="text-sm text-gray-400">Botão "Limpar Tudo"</p>
+                        </div>
+                      </label>
 
-                  <label class="usuarios-permissoes-item" data-search="entrada estoque produto">
-                    <input type="checkbox" name="prod.stock.input" data-role="item" data-group="acoes-prod" data-item-type="action" class="w-4 h-4 mt-1" />
-                    <div>
-                      <span class="font-medium">Entrada de estoque</span>
-                      <p class="text-sm text-gray-400">Registrar entrada de produto acabado</p>
-                    </div>
-                  </label>
+                      <label class="usuarios-permissoes-item" data-search="markup comissão imposto percentagem">
+                        <input type="checkbox" name="prod.percent.edit" data-role="item" data-group="acoes-prod" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Editar percentagens</span>
+                          <p class="text-sm text-gray-400">Markup, comissão e imposto</p>
+                        </div>
+                      </label>
 
-                  <label class="usuarios-permissoes-item" data-search="saida estoque baixa">
-                    <input type="checkbox" name="prod.stock.output" data-role="item" data-group="acoes-prod" data-item-type="action" class="w-4 h-4 mt-1" />
-                    <div>
-                      <span class="font-medium">Saída de estoque</span>
-                      <p class="text-sm text-gray-400">Registrar baixas ou consumo</p>
-                    </div>
-                  </label>
+                      <label class="usuarios-permissoes-item" data-search="cadastrar criar coleção">
+                        <input type="checkbox" name="prod.collection.create" data-role="item" data-group="acoes-prod" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Cadastrar coleção</span>
+                          <p class="text-sm text-gray-400">Botão + ao lado de Coleção</p>
+                        </div>
+                      </label>
 
-                  <label class="usuarios-permissoes-item" data-search="ajuste estoque">
-                    <input type="checkbox" name="prod.stock.adjust" data-role="item" data-group="acoes-prod" data-item-type="action" class="w-4 h-4 mt-1" />
-                    <div>
-                      <span class="font-medium">Ajuste de estoque</span>
-                      <p class="text-sm text-gray-400">Ajustar saldo manualmente</p>
-                    </div>
-                  </label>
+                      <label class="usuarios-permissoes-item" data-search="excluir remover coleção">
+                        <input type="checkbox" name="prod.collection.delete" data-role="item" data-group="acoes-prod" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Excluir coleção</span>
+                          <p class="text-sm text-gray-400">Botão − ao lado de Coleção</p>
+                        </div>
+                      </label>
 
-                  <label class="usuarios-permissoes-item" data-search="estoque infinito alternar">
-                    <input type="checkbox" name="prod.stock.infinite_toggle" data-role="item" data-group="acoes-prod" data-item-type="action" class="w-4 h-4 mt-1" />
-                    <div>
-                      <span class="font-medium">Alternar estoque infinito</span>
-                      <p class="text-sm text-gray-400">Definir controle de saldo</p>
                     </div>
-                  </label>
+                  </div>
+
+                  <div>
+                    <h4 class="text-sm font-semibold text-gray-300 mb-3">Modal "Editar Produto"</h4>
+                    <div class="grid grid-cols-1 gap-4">
+
+                      <label class="usuarios-permissoes-item" data-search="clonar duplicar copiar">
+                        <input type="checkbox" name="prod.clone" data-role="item" data-group="acoes-prod" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Clonar produto</span>
+                          <p class="text-sm text-gray-400">Botão "Clonar"</p>
+                        </div>
+                      </label>
+
+                      <label class="usuarios-permissoes-item" data-search="alternar registro chave toggle">
+                        <input type="checkbox" name="prod.registro.toggle" data-role="item" data-group="acoes-prod" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Alternar registro</span>
+                          <p class="text-sm text-gray-400">Chave "Editar registro"</p>
+                        </div>
+                      </label>
+
+                    </div>
+                  </div>
+
+                  <div>
+                    <h4 class="text-sm font-semibold text-gray-300 mb-3">Modal "Visualizar Produto"</h4>
+                    <div class="grid grid-cols-1 gap-4">
+
+                      <label class="usuarios-permissoes-item" data-search="pdf gerar imprimir relatório">
+                        <input type="checkbox" name="prod.pdf" data-role="item" data-group="acoes-prod" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Gerar PDF</span>
+                          <p class="text-sm text-gray-400">Botão "Gerar PDF"</p>
+                        </div>
+                      </label>
+
+                    </div>
+                  </div>
+
+                  <div>
+                    <h4 class="text-sm font-semibold text-gray-300 mb-3">Modal "Registrar itens no processo"</h4>
+                    <div class="grid grid-cols-1 gap-4">
+
+                      <label class="usuarios-permissoes-item" data-search="registrar processo etapa">
+                        <input type="checkbox" name="prod.stage.insert" data-role="item" data-group="acoes-prod" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Registrar processo</span>
+                          <p class="text-sm text-gray-400">Botão "Registrar" do modal de processo</p>
+                        </div>
+                      </label>
+
+                      <label class="usuarios-permissoes-item" data-search="inserir item processo etapa">
+                        <input type="checkbox" name="prod.stage.item.add" data-role="item" data-group="acoes-prod" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Inserir item no processo</span>
+                          <p class="text-sm text-gray-400">Botão "+ Inserir"</p>
+                        </div>
+                      </label>
+
+                      <label class="usuarios-permissoes-item" data-search="editar item processo">
+                        <input type="checkbox" name="prod.stage.item.edit" data-role="item" data-group="acoes-prod" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Editar item do processo</span>
+                          <p class="text-sm text-gray-400">Ícone de lápis na tabela do processo</p>
+                        </div>
+                      </label>
+
+                      <label class="usuarios-permissoes-item" data-search="excluir item processo">
+                        <input type="checkbox" name="prod.stage.item.remove" data-role="item" data-group="acoes-prod" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Excluir item do processo</span>
+                          <p class="text-sm text-gray-400">Ícone de lixeira na tabela do processo</p>
+                        </div>
+                      </label>
+
+                      <label class="usuarios-permissoes-item" data-search="limpar itens processo">
+                        <input type="checkbox" name="prod.stage.clear" data-role="item" data-group="acoes-prod" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Limpar itens do processo</span>
+                          <p class="text-sm text-gray-400">Botão "Limpar Tudo" do modal de processo</p>
+                        </div>
+                      </label>
+
+                    </div>
+                  </div>
+
+                  <div>
+                    <h4 class="text-sm font-semibold text-gray-300 mb-3">Modais de Estoque</h4>
+                    <div class="grid grid-cols-1 gap-4">
+
+                      <label class="usuarios-permissoes-item" data-search="adicionar entrada estoque registrar">
+                        <input type="checkbox" name="prod.stock.input" data-role="item" data-group="acoes-prod" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Adicionar ao estoque</span>
+                          <p class="text-sm text-gray-400">Botão "+ Registrar" em "Adicionar produto ao estoque"</p>
+                        </div>
+                      </label>
+
+                      <label class="usuarios-permissoes-item" data-search="somar ajustar estoque existente">
+                        <input type="checkbox" name="prod.stock.adjust" data-role="item" data-group="acoes-prod" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Somar ao existente</span>
+                          <p class="text-sm text-gray-400">Botão "Somar" em "Item já registrado"</p>
+                        </div>
+                      </label>
+
+                      <label class="usuarios-permissoes-item" data-search="excluir remover lote estoque">
+                        <input type="checkbox" name="prod.stock.lote.delete" data-role="item" data-group="acoes-prod" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Excluir lote de estoque</span>
+                          <p class="text-sm text-gray-400">Ícone de lixeira na coluna AÇÕES do "Detalhe de Estoque"</p>
+                        </div>
+                      </label>
+
+                    </div>
+                  </div>
 
                 </div>
               </div>
@@ -791,17 +880,17 @@
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
 
                   <div>
-                    <h4 class="text-sm font-semibold text-gray-300 mb-3">Lista de produtos</h4>
+                    <h4 class="text-sm font-semibold text-gray-300 mb-3">Tabela de produtos (lista)</h4>
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
 
                       <label class="usuarios-permissoes-checkbox">
                         <input type="checkbox" name="col_prod_sku" data-role="item" data-group="colunas-prod" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">SKU</span>
+                        <span class="text-sm">Código</span>
                       </label>
 
                       <label class="usuarios-permissoes-checkbox">
                         <input type="checkbox" name="col_prod_nome" data-role="item" data-group="colunas-prod" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">Produto</span>
+                        <span class="text-sm">Nome</span>
                       </label>
 
                       <label class="usuarios-permissoes-checkbox">
@@ -810,107 +899,35 @@
                       </label>
 
                       <label class="usuarios-permissoes-checkbox">
-                        <input type="checkbox" name="col_prod_categoria" data-role="item" data-group="colunas-prod" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">Categoria</span>
-                      </label>
-
-                      <label class="usuarios-permissoes-checkbox">
                         <input type="checkbox" name="col_prod_preco_base" data-role="item" data-group="colunas-prod" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">Preço base</span>
-                      </label>
-
-                      <label class="usuarios-permissoes-checkbox">
-                        <input type="checkbox" name="col_prod_custo_total" data-role="item" data-group="colunas-prod" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">Custo total</span>
+                        <span class="text-sm">Preço de Venda</span>
                       </label>
 
                       <label class="usuarios-permissoes-checkbox">
                         <input type="checkbox" name="col_prod_margem" data-role="item" data-group="colunas-prod" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">Margem</span>
+                        <span class="text-sm">Margem (%)</span>
                       </label>
 
                       <label class="usuarios-permissoes-checkbox">
                         <input type="checkbox" name="col_prod_estoque" data-role="item" data-group="colunas-prod" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">Estoque</span>
-                      </label>
-
-                      <label class="usuarios-permissoes-checkbox">
-                        <input type="checkbox" name="col_prod_etapa_atual" data-role="item" data-group="colunas-prod" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">Etapa atual</span>
-                      </label>
-
-                      <label class="usuarios-permissoes-checkbox">
-                        <input type="checkbox" name="col_prod_status" data-role="item" data-group="colunas-prod" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">Status</span>
-                      </label>
-
-                      <label class="usuarios-permissoes-checkbox">
-                        <input type="checkbox" name="col_prod_atualizado_em" data-role="item" data-group="colunas-prod" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">Atualizado em</span>
+                        <span class="text-sm">Quantidade</span>
                       </label>
 
                     </div>
                   </div>
 
                   <div>
-                    <h4 class="text-sm font-semibold text-gray-300 mb-3">Etapas</h4>
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-
-                      <label class="usuarios-permissoes-checkbox">
-                        <input type="checkbox" name="col_etp_ordem" data-role="item" data-group="colunas-prod" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">Ordem</span>
-                      </label>
-
-                      <label class="usuarios-permissoes-checkbox">
-                        <input type="checkbox" name="col_etp_nome" data-role="item" data-group="colunas-prod" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">Etapa</span>
-                      </label>
-
-                      <label class="usuarios-permissoes-checkbox">
-                        <input type="checkbox" name="col_etp_resp" data-role="item" data-group="colunas-prod" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">Responsável</span>
-                      </label>
-
-                      <label class="usuarios-permissoes-checkbox">
-                        <input type="checkbox" name="col_etp_inicio" data-role="item" data-group="colunas-prod" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">Início</span>
-                      </label>
-
-                      <label class="usuarios-permissoes-checkbox">
-                        <input type="checkbox" name="col_etp_fim" data-role="item" data-group="colunas-prod" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">Fim</span>
-                      </label>
-
-                      <label class="usuarios-permissoes-checkbox">
-                        <input type="checkbox" name="col_etp_tempo_real" data-role="item" data-group="colunas-prod" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">Tempo real</span>
-                      </label>
-
-                    </div>
-                  </div>
-
-                  <div>
-                    <h4 class="text-sm font-semibold text-gray-300 mb-3">Insumos do produto</h4>
+                    <h4 class="text-sm font-semibold text-gray-300 mb-3">Tabela ITENS (Novo / Editar / Visualizar)</h4>
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
 
                       <label class="usuarios-permissoes-checkbox">
                         <input type="checkbox" name="col_ins_mp" data-role="item" data-group="colunas-prod" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">MP</span>
+                        <span class="text-sm">Nome do item</span>
                       </label>
 
                       <label class="usuarios-permissoes-checkbox">
                         <input type="checkbox" name="col_ins_qtd" data-role="item" data-group="colunas-prod" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">Qtd.</span>
-                      </label>
-
-                      <label class="usuarios-permissoes-checkbox">
-                        <input type="checkbox" name="col_ins_custo_un" data-role="item" data-group="colunas-prod" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">Custo un.</span>
-                      </label>
-
-                      <label class="usuarios-permissoes-checkbox">
-                        <input type="checkbox" name="col_ins_custo_total" data-role="item" data-group="colunas-prod" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">Custo total</span>
+                        <span class="text-sm">Quantidade</span>
                       </label>
 
                       <label class="usuarios-permissoes-checkbox">
@@ -918,58 +935,73 @@
                         <span class="text-sm">Unidade</span>
                       </label>
 
-                    </div>
-                  </div>
-
-                  <div>
-                    <h4 class="text-sm font-semibold text-gray-300 mb-3">Variações</h4>
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-
                       <label class="usuarios-permissoes-checkbox">
-                        <input type="checkbox" name="col_var_nome" data-role="item" data-group="colunas-prod" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">Variação</span>
+                        <input type="checkbox" name="col_ins_custo_un" data-role="item" data-group="colunas-prod" data-item-type="column" class="w-4 h-4" />
+                        <span class="text-sm">Valor unitário</span>
                       </label>
 
                       <label class="usuarios-permissoes-checkbox">
-                        <input type="checkbox" name="col_var_estoque" data-role="item" data-group="colunas-prod" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">Estoque</span>
-                      </label>
-
-                      <label class="usuarios-permissoes-checkbox">
-                        <input type="checkbox" name="col_var_reservado" data-role="item" data-group="colunas-prod" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">Reservado</span>
-                      </label>
-
-                      <label class="usuarios-permissoes-checkbox">
-                        <input type="checkbox" name="col_var_disponivel" data-role="item" data-group="colunas-prod" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">Disponível</span>
+                        <input type="checkbox" name="col_ins_custo_total" data-role="item" data-group="colunas-prod" data-item-type="column" class="w-4 h-4" />
+                        <span class="text-sm">Valor total</span>
                       </label>
 
                     </div>
                   </div>
 
                   <div>
-                    <h4 class="text-sm font-semibold text-gray-300 mb-3">Coleções</h4>
+                    <h4 class="text-sm font-semibold text-gray-300 mb-3">Tabela do modal "Registrar itens no processo"</h4>
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
 
                       <label class="usuarios-permissoes-checkbox">
-                        <input type="checkbox" name="col_col_nome" data-role="item" data-group="colunas-prod" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">Coleção</span>
+                        <input type="checkbox" name="col_etapa_item" data-role="item" data-group="colunas-prod" data-item-type="column" class="w-4 h-4" />
+                        <span class="text-sm">Item</span>
                       </label>
 
                       <label class="usuarios-permissoes-checkbox">
-                        <input type="checkbox" name="col_col_periodo" data-role="item" data-group="colunas-prod" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">Período</span>
+                        <input type="checkbox" name="col_etapa_qtd" data-role="item" data-group="colunas-prod" data-item-type="column" class="w-4 h-4" />
+                        <span class="text-sm">Quantidade</span>
                       </label>
 
                       <label class="usuarios-permissoes-checkbox">
-                        <input type="checkbox" name="col_col_status" data-role="item" data-group="colunas-prod" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">Status</span>
+                        <input type="checkbox" name="col_etapa_unidade" data-role="item" data-group="colunas-prod" data-item-type="column" class="w-4 h-4" />
+                        <span class="text-sm">Unidade</span>
                       </label>
 
                       <label class="usuarios-permissoes-checkbox">
-                        <input type="checkbox" name="col_col_itens" data-role="item" data-group="colunas-prod" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">Itens</span>
+                        <input type="checkbox" name="col_etapa_valor_un" data-role="item" data-group="colunas-prod" data-item-type="column" class="w-4 h-4" />
+                        <span class="text-sm">Valor unitário (R$)</span>
+                      </label>
+
+                      <label class="usuarios-permissoes-checkbox">
+                        <input type="checkbox" name="col_etapa_valor_total" data-role="item" data-group="colunas-prod" data-item-type="column" class="w-4 h-4" />
+                        <span class="text-sm">Valor total (R$)</span>
+                      </label>
+
+                    </div>
+                  </div>
+
+                  <div>
+                    <h4 class="text-sm font-semibold text-gray-300 mb-3">Tabela "Detalhe de Estoque"</h4>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+
+                      <label class="usuarios-permissoes-checkbox">
+                        <input type="checkbox" name="col_est_processo" data-role="item" data-group="colunas-prod" data-item-type="column" class="w-4 h-4" />
+                        <span class="text-sm">Processo atual</span>
+                      </label>
+
+                      <label class="usuarios-permissoes-checkbox">
+                        <input type="checkbox" name="col_est_ultimo_item" data-role="item" data-group="colunas-prod" data-item-type="column" class="w-4 h-4" />
+                        <span class="text-sm">Último item</span>
+                      </label>
+
+                      <label class="usuarios-permissoes-checkbox">
+                        <input type="checkbox" name="col_est_quantidade" data-role="item" data-group="colunas-prod" data-item-type="column" class="w-4 h-4" />
+                        <span class="text-sm">Quantidade em estoque</span>
+                      </label>
+
+                      <label class="usuarios-permissoes-checkbox">
+                        <input type="checkbox" name="col_est_alterado_em" data-role="item" data-group="colunas-prod" data-item-type="column" class="w-4 h-4" />
+                        <span class="text-sm">Última alteração</span>
                       </label>
 
                     </div>

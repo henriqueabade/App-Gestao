@@ -78,54 +78,49 @@ CREATE TABLE IF NOT EXISTS perm_prod (
 );
 ALTER TABLE perm_prod ADD COLUMN IF NOT EXISTS acao_view BOOLEAN NOT NULL DEFAULT FALSE;  -- prod.view · Ver lista
 ALTER TABLE perm_prod ADD COLUMN IF NOT EXISTS acao_search BOOLEAN NOT NULL DEFAULT FALSE;  -- prod.search · Buscar/filtrar
-ALTER TABLE perm_prod ADD COLUMN IF NOT EXISTS acao_export BOOLEAN NOT NULL DEFAULT FALSE;  -- prod.export · Exportar lista
 ALTER TABLE perm_prod ADD COLUMN IF NOT EXISTS acao_create BOOLEAN NOT NULL DEFAULT FALSE;  -- prod.create · Cadastrar produto
+ALTER TABLE perm_prod ADD COLUMN IF NOT EXISTS acao_stock_view BOOLEAN NOT NULL DEFAULT FALSE;  -- prod.stock.view · Ver estoque
+ALTER TABLE perm_prod ADD COLUMN IF NOT EXISTS acao_details_view BOOLEAN NOT NULL DEFAULT FALSE;  -- prod.details.view · Visualizar produto
 ALTER TABLE perm_prod ADD COLUMN IF NOT EXISTS acao_edit BOOLEAN NOT NULL DEFAULT FALSE;  -- prod.edit · Editar produto
 ALTER TABLE perm_prod ADD COLUMN IF NOT EXISTS acao_delete BOOLEAN NOT NULL DEFAULT FALSE;  -- prod.delete · Excluir produto
-ALTER TABLE perm_prod ADD COLUMN IF NOT EXISTS acao_details_view BOOLEAN NOT NULL DEFAULT FALSE;  -- prod.details.view · Ver detalhes
-ALTER TABLE perm_prod ADD COLUMN IF NOT EXISTS acao_pdf BOOLEAN NOT NULL DEFAULT FALSE;  -- prod.pdf · Gerar PDF do produto
-ALTER TABLE perm_prod ADD COLUMN IF NOT EXISTS acao_stage_view BOOLEAN NOT NULL DEFAULT FALSE;  -- prod.stage.view · Ver etapas
-ALTER TABLE perm_prod ADD COLUMN IF NOT EXISTS acao_stage_advance BOOLEAN NOT NULL DEFAULT FALSE;  -- prod.stage.advance · Avançar etapa
-ALTER TABLE perm_prod ADD COLUMN IF NOT EXISTS acao_stage_insert BOOLEAN NOT NULL DEFAULT FALSE;  -- prod.stage.insert · Inserir etapa
-ALTER TABLE perm_prod ADD COLUMN IF NOT EXISTS acao_collection_view BOOLEAN NOT NULL DEFAULT FALSE;  -- prod.collection.view · Ver coleções
+ALTER TABLE perm_prod ADD COLUMN IF NOT EXISTS acao_item_add BOOLEAN NOT NULL DEFAULT FALSE;  -- prod.item.add · Adicionar item
+ALTER TABLE perm_prod ADD COLUMN IF NOT EXISTS acao_item_edit BOOLEAN NOT NULL DEFAULT FALSE;  -- prod.item.edit · Editar item
+ALTER TABLE perm_prod ADD COLUMN IF NOT EXISTS acao_item_remove BOOLEAN NOT NULL DEFAULT FALSE;  -- prod.item.remove · Remover item
+ALTER TABLE perm_prod ADD COLUMN IF NOT EXISTS acao_clear BOOLEAN NOT NULL DEFAULT FALSE;  -- prod.clear · Limpar tudo
+ALTER TABLE perm_prod ADD COLUMN IF NOT EXISTS acao_percent_edit BOOLEAN NOT NULL DEFAULT FALSE;  -- prod.percent.edit · Editar percentagens
 ALTER TABLE perm_prod ADD COLUMN IF NOT EXISTS acao_collection_create BOOLEAN NOT NULL DEFAULT FALSE;  -- prod.collection.create · Cadastrar coleção
-ALTER TABLE perm_prod ADD COLUMN IF NOT EXISTS acao_collection_edit BOOLEAN NOT NULL DEFAULT FALSE;  -- prod.collection.edit · Editar coleção
 ALTER TABLE perm_prod ADD COLUMN IF NOT EXISTS acao_collection_delete BOOLEAN NOT NULL DEFAULT FALSE;  -- prod.collection.delete · Excluir coleção
-ALTER TABLE perm_prod ADD COLUMN IF NOT EXISTS acao_stock_view BOOLEAN NOT NULL DEFAULT FALSE;  -- prod.stock.view · Ver estoque
-ALTER TABLE perm_prod ADD COLUMN IF NOT EXISTS acao_stock_input BOOLEAN NOT NULL DEFAULT FALSE;  -- prod.stock.input · Entrada de estoque
-ALTER TABLE perm_prod ADD COLUMN IF NOT EXISTS acao_stock_output BOOLEAN NOT NULL DEFAULT FALSE;  -- prod.stock.output · Saída de estoque
-ALTER TABLE perm_prod ADD COLUMN IF NOT EXISTS acao_stock_adjust BOOLEAN NOT NULL DEFAULT FALSE;  -- prod.stock.adjust · Ajuste de estoque
-ALTER TABLE perm_prod ADD COLUMN IF NOT EXISTS acao_stock_infinite_toggle BOOLEAN NOT NULL DEFAULT FALSE;  -- prod.stock.infinite_toggle · Alternar estoque infinito
-ALTER TABLE perm_prod ADD COLUMN IF NOT EXISTS col_prod_sku BOOLEAN NOT NULL DEFAULT FALSE;  -- SKU
-ALTER TABLE perm_prod ADD COLUMN IF NOT EXISTS col_prod_nome BOOLEAN NOT NULL DEFAULT FALSE;  -- Produto
+ALTER TABLE perm_prod ADD COLUMN IF NOT EXISTS acao_clone BOOLEAN NOT NULL DEFAULT FALSE;  -- prod.clone · Clonar produto
+ALTER TABLE perm_prod ADD COLUMN IF NOT EXISTS acao_registro_toggle BOOLEAN NOT NULL DEFAULT FALSE;  -- prod.registro.toggle · Alternar registro
+ALTER TABLE perm_prod ADD COLUMN IF NOT EXISTS acao_pdf BOOLEAN NOT NULL DEFAULT FALSE;  -- prod.pdf · Gerar PDF
+ALTER TABLE perm_prod ADD COLUMN IF NOT EXISTS acao_stage_insert BOOLEAN NOT NULL DEFAULT FALSE;  -- prod.stage.insert · Registrar processo
+ALTER TABLE perm_prod ADD COLUMN IF NOT EXISTS acao_stage_item_add BOOLEAN NOT NULL DEFAULT FALSE;  -- prod.stage.item.add · Inserir item no processo
+ALTER TABLE perm_prod ADD COLUMN IF NOT EXISTS acao_stage_item_edit BOOLEAN NOT NULL DEFAULT FALSE;  -- prod.stage.item.edit · Editar item do processo
+ALTER TABLE perm_prod ADD COLUMN IF NOT EXISTS acao_stage_item_remove BOOLEAN NOT NULL DEFAULT FALSE;  -- prod.stage.item.remove · Excluir item do processo
+ALTER TABLE perm_prod ADD COLUMN IF NOT EXISTS acao_stage_clear BOOLEAN NOT NULL DEFAULT FALSE;  -- prod.stage.clear · Limpar itens do processo
+ALTER TABLE perm_prod ADD COLUMN IF NOT EXISTS acao_stock_input BOOLEAN NOT NULL DEFAULT FALSE;  -- prod.stock.input · Adicionar ao estoque
+ALTER TABLE perm_prod ADD COLUMN IF NOT EXISTS acao_stock_adjust BOOLEAN NOT NULL DEFAULT FALSE;  -- prod.stock.adjust · Somar ao existente
+ALTER TABLE perm_prod ADD COLUMN IF NOT EXISTS acao_stock_lote_delete BOOLEAN NOT NULL DEFAULT FALSE;  -- prod.stock.lote.delete · Excluir lote de estoque
+ALTER TABLE perm_prod ADD COLUMN IF NOT EXISTS col_prod_sku BOOLEAN NOT NULL DEFAULT FALSE;  -- Código
+ALTER TABLE perm_prod ADD COLUMN IF NOT EXISTS col_prod_nome BOOLEAN NOT NULL DEFAULT FALSE;  -- Nome
 ALTER TABLE perm_prod ADD COLUMN IF NOT EXISTS col_prod_colecao BOOLEAN NOT NULL DEFAULT FALSE;  -- Coleção
-ALTER TABLE perm_prod ADD COLUMN IF NOT EXISTS col_prod_categoria BOOLEAN NOT NULL DEFAULT FALSE;  -- Categoria
-ALTER TABLE perm_prod ADD COLUMN IF NOT EXISTS col_prod_preco_base BOOLEAN NOT NULL DEFAULT FALSE;  -- Preço base
-ALTER TABLE perm_prod ADD COLUMN IF NOT EXISTS col_prod_custo_total BOOLEAN NOT NULL DEFAULT FALSE;  -- Custo total
-ALTER TABLE perm_prod ADD COLUMN IF NOT EXISTS col_prod_margem BOOLEAN NOT NULL DEFAULT FALSE;  -- Margem
-ALTER TABLE perm_prod ADD COLUMN IF NOT EXISTS col_prod_estoque BOOLEAN NOT NULL DEFAULT FALSE;  -- Estoque
-ALTER TABLE perm_prod ADD COLUMN IF NOT EXISTS col_prod_etapa_atual BOOLEAN NOT NULL DEFAULT FALSE;  -- Etapa atual
-ALTER TABLE perm_prod ADD COLUMN IF NOT EXISTS col_prod_status BOOLEAN NOT NULL DEFAULT FALSE;  -- Status
-ALTER TABLE perm_prod ADD COLUMN IF NOT EXISTS col_prod_atualizado_em BOOLEAN NOT NULL DEFAULT FALSE;  -- Atualizado em
-ALTER TABLE perm_prod ADD COLUMN IF NOT EXISTS col_etp_ordem BOOLEAN NOT NULL DEFAULT FALSE;  -- Ordem
-ALTER TABLE perm_prod ADD COLUMN IF NOT EXISTS col_etp_nome BOOLEAN NOT NULL DEFAULT FALSE;  -- Etapa
-ALTER TABLE perm_prod ADD COLUMN IF NOT EXISTS col_etp_resp BOOLEAN NOT NULL DEFAULT FALSE;  -- Responsável
-ALTER TABLE perm_prod ADD COLUMN IF NOT EXISTS col_etp_inicio BOOLEAN NOT NULL DEFAULT FALSE;  -- Início
-ALTER TABLE perm_prod ADD COLUMN IF NOT EXISTS col_etp_fim BOOLEAN NOT NULL DEFAULT FALSE;  -- Fim
-ALTER TABLE perm_prod ADD COLUMN IF NOT EXISTS col_etp_tempo_real BOOLEAN NOT NULL DEFAULT FALSE;  -- Tempo real
-ALTER TABLE perm_prod ADD COLUMN IF NOT EXISTS col_ins_mp BOOLEAN NOT NULL DEFAULT FALSE;  -- MP
-ALTER TABLE perm_prod ADD COLUMN IF NOT EXISTS col_ins_qtd BOOLEAN NOT NULL DEFAULT FALSE;  -- Qtd.
-ALTER TABLE perm_prod ADD COLUMN IF NOT EXISTS col_ins_custo_un BOOLEAN NOT NULL DEFAULT FALSE;  -- Custo un.
-ALTER TABLE perm_prod ADD COLUMN IF NOT EXISTS col_ins_custo_total BOOLEAN NOT NULL DEFAULT FALSE;  -- Custo total
+ALTER TABLE perm_prod ADD COLUMN IF NOT EXISTS col_prod_preco_base BOOLEAN NOT NULL DEFAULT FALSE;  -- Preço de Venda
+ALTER TABLE perm_prod ADD COLUMN IF NOT EXISTS col_prod_margem BOOLEAN NOT NULL DEFAULT FALSE;  -- Margem (%)
+ALTER TABLE perm_prod ADD COLUMN IF NOT EXISTS col_prod_estoque BOOLEAN NOT NULL DEFAULT FALSE;  -- Quantidade
+ALTER TABLE perm_prod ADD COLUMN IF NOT EXISTS col_ins_mp BOOLEAN NOT NULL DEFAULT FALSE;  -- Nome do item
+ALTER TABLE perm_prod ADD COLUMN IF NOT EXISTS col_ins_qtd BOOLEAN NOT NULL DEFAULT FALSE;  -- Quantidade
 ALTER TABLE perm_prod ADD COLUMN IF NOT EXISTS col_ins_unidade BOOLEAN NOT NULL DEFAULT FALSE;  -- Unidade
-ALTER TABLE perm_prod ADD COLUMN IF NOT EXISTS col_var_nome BOOLEAN NOT NULL DEFAULT FALSE;  -- Variação
-ALTER TABLE perm_prod ADD COLUMN IF NOT EXISTS col_var_estoque BOOLEAN NOT NULL DEFAULT FALSE;  -- Estoque
-ALTER TABLE perm_prod ADD COLUMN IF NOT EXISTS col_var_reservado BOOLEAN NOT NULL DEFAULT FALSE;  -- Reservado
-ALTER TABLE perm_prod ADD COLUMN IF NOT EXISTS col_var_disponivel BOOLEAN NOT NULL DEFAULT FALSE;  -- Disponível
-ALTER TABLE perm_prod ADD COLUMN IF NOT EXISTS col_col_nome BOOLEAN NOT NULL DEFAULT FALSE;  -- Coleção
-ALTER TABLE perm_prod ADD COLUMN IF NOT EXISTS col_col_periodo BOOLEAN NOT NULL DEFAULT FALSE;  -- Período
-ALTER TABLE perm_prod ADD COLUMN IF NOT EXISTS col_col_status BOOLEAN NOT NULL DEFAULT FALSE;  -- Status
-ALTER TABLE perm_prod ADD COLUMN IF NOT EXISTS col_col_itens BOOLEAN NOT NULL DEFAULT FALSE;  -- Itens
+ALTER TABLE perm_prod ADD COLUMN IF NOT EXISTS col_ins_custo_un BOOLEAN NOT NULL DEFAULT FALSE;  -- Valor unitário
+ALTER TABLE perm_prod ADD COLUMN IF NOT EXISTS col_ins_custo_total BOOLEAN NOT NULL DEFAULT FALSE;  -- Valor total
+ALTER TABLE perm_prod ADD COLUMN IF NOT EXISTS col_etapa_item BOOLEAN NOT NULL DEFAULT FALSE;  -- Item
+ALTER TABLE perm_prod ADD COLUMN IF NOT EXISTS col_etapa_qtd BOOLEAN NOT NULL DEFAULT FALSE;  -- Quantidade
+ALTER TABLE perm_prod ADD COLUMN IF NOT EXISTS col_etapa_unidade BOOLEAN NOT NULL DEFAULT FALSE;  -- Unidade
+ALTER TABLE perm_prod ADD COLUMN IF NOT EXISTS col_etapa_valor_un BOOLEAN NOT NULL DEFAULT FALSE;  -- Valor unitário (R$)
+ALTER TABLE perm_prod ADD COLUMN IF NOT EXISTS col_etapa_valor_total BOOLEAN NOT NULL DEFAULT FALSE;  -- Valor total (R$)
+ALTER TABLE perm_prod ADD COLUMN IF NOT EXISTS col_est_processo BOOLEAN NOT NULL DEFAULT FALSE;  -- Processo atual
+ALTER TABLE perm_prod ADD COLUMN IF NOT EXISTS col_est_ultimo_item BOOLEAN NOT NULL DEFAULT FALSE;  -- Último item
+ALTER TABLE perm_prod ADD COLUMN IF NOT EXISTS col_est_quantidade BOOLEAN NOT NULL DEFAULT FALSE;  -- Quantidade em estoque
+ALTER TABLE perm_prod ADD COLUMN IF NOT EXISTS col_est_alterado_em BOOLEAN NOT NULL DEFAULT FALSE;  -- Última alteração
 
 -- Orçamentos (perm_orc)
 CREATE TABLE IF NOT EXISTS perm_orc (
@@ -488,7 +483,7 @@ INSERT INTO perm_financeiro (modelo_id) SELECT id FROM modelos_permissoes ON CON
 -- Mantém o perfil "Administrador" com tudo liberado
 UPDATE perm_mp SET modulo_ativo = TRUE, acao_view = TRUE, acao_search = TRUE, acao_export = TRUE, acao_create = TRUE, acao_edit = TRUE, acao_delete = TRUE, acao_process_view = TRUE, acao_process_create = TRUE, acao_process_delete = TRUE, acao_category_view = TRUE, acao_category_create = TRUE, acao_category_edit = TRUE, acao_category_delete = TRUE, acao_unit_view = TRUE, acao_unit_create = TRUE, acao_unit_edit = TRUE, acao_unit_delete = TRUE, acao_stock_view = TRUE, acao_stock_input = TRUE, acao_stock_output = TRUE, acao_stock_adjust = TRUE, acao_stock_infinite_toggle = TRUE, col_mp_codigo = TRUE, col_mp_nome = TRUE, col_mp_categoria = TRUE, col_mp_unidade = TRUE, col_mp_estoque_atual = TRUE, col_mp_estoque_min = TRUE, col_mp_custo_medio = TRUE, col_mp_fornecedor = TRUE, col_mp_status = TRUE, col_mp_atualizado_em = TRUE, col_mov_data = TRUE, col_mov_tipo = TRUE, col_mov_qtd = TRUE, col_mov_ref = TRUE, col_mov_usuario = TRUE, col_proc_nome = TRUE, col_proc_duracao = TRUE, col_proc_custo = TRUE, col_proc_ordem = TRUE, col_cat_nome = TRUE, col_cat_desc = TRUE, col_cat_itens = TRUE, col_uni_sigla = TRUE, col_uni_desc = TRUE, col_uni_precision = TRUE
   WHERE modelo_id IN (SELECT id FROM modelos_permissoes WHERE nome = 'Administrador');
-UPDATE perm_prod SET modulo_ativo = TRUE, acao_view = TRUE, acao_search = TRUE, acao_export = TRUE, acao_create = TRUE, acao_edit = TRUE, acao_delete = TRUE, acao_details_view = TRUE, acao_pdf = TRUE, acao_stage_view = TRUE, acao_stage_advance = TRUE, acao_stage_insert = TRUE, acao_collection_view = TRUE, acao_collection_create = TRUE, acao_collection_edit = TRUE, acao_collection_delete = TRUE, acao_stock_view = TRUE, acao_stock_input = TRUE, acao_stock_output = TRUE, acao_stock_adjust = TRUE, acao_stock_infinite_toggle = TRUE, col_prod_sku = TRUE, col_prod_nome = TRUE, col_prod_colecao = TRUE, col_prod_categoria = TRUE, col_prod_preco_base = TRUE, col_prod_custo_total = TRUE, col_prod_margem = TRUE, col_prod_estoque = TRUE, col_prod_etapa_atual = TRUE, col_prod_status = TRUE, col_prod_atualizado_em = TRUE, col_etp_ordem = TRUE, col_etp_nome = TRUE, col_etp_resp = TRUE, col_etp_inicio = TRUE, col_etp_fim = TRUE, col_etp_tempo_real = TRUE, col_ins_mp = TRUE, col_ins_qtd = TRUE, col_ins_custo_un = TRUE, col_ins_custo_total = TRUE, col_ins_unidade = TRUE, col_var_nome = TRUE, col_var_estoque = TRUE, col_var_reservado = TRUE, col_var_disponivel = TRUE, col_col_nome = TRUE, col_col_periodo = TRUE, col_col_status = TRUE, col_col_itens = TRUE
+UPDATE perm_prod SET modulo_ativo = TRUE, acao_view = TRUE, acao_search = TRUE, acao_create = TRUE, acao_stock_view = TRUE, acao_details_view = TRUE, acao_edit = TRUE, acao_delete = TRUE, acao_item_add = TRUE, acao_item_edit = TRUE, acao_item_remove = TRUE, acao_clear = TRUE, acao_percent_edit = TRUE, acao_collection_create = TRUE, acao_collection_delete = TRUE, acao_clone = TRUE, acao_registro_toggle = TRUE, acao_pdf = TRUE, acao_stage_insert = TRUE, acao_stage_item_add = TRUE, acao_stage_item_edit = TRUE, acao_stage_item_remove = TRUE, acao_stage_clear = TRUE, acao_stock_input = TRUE, acao_stock_adjust = TRUE, acao_stock_lote_delete = TRUE, col_prod_sku = TRUE, col_prod_nome = TRUE, col_prod_colecao = TRUE, col_prod_preco_base = TRUE, col_prod_margem = TRUE, col_prod_estoque = TRUE, col_ins_mp = TRUE, col_ins_qtd = TRUE, col_ins_unidade = TRUE, col_ins_custo_un = TRUE, col_ins_custo_total = TRUE, col_etapa_item = TRUE, col_etapa_qtd = TRUE, col_etapa_unidade = TRUE, col_etapa_valor_un = TRUE, col_etapa_valor_total = TRUE, col_est_processo = TRUE, col_est_ultimo_item = TRUE, col_est_quantidade = TRUE, col_est_alterado_em = TRUE
   WHERE modelo_id IN (SELECT id FROM modelos_permissoes WHERE nome = 'Administrador');
 UPDATE perm_orc SET modulo_ativo = TRUE, acao_view = TRUE, acao_search = TRUE, acao_create = TRUE, acao_edit = TRUE, acao_view_details = TRUE, acao_item_replace = TRUE, acao_convert = TRUE, acao_export = TRUE, col_orc_num = TRUE, col_orc_cliente = TRUE, col_orc_vendedor = TRUE, col_orc_data = TRUE, col_orc_validade = TRUE, col_orc_itens = TRUE, col_orc_subtotal = TRUE, col_orc_desc = TRUE, col_orc_frete_outros = TRUE, col_orc_total = TRUE, col_orc_status = TRUE, col_orc_it_nome = TRUE, col_orc_it_sku = TRUE, col_orc_it_qtd = TRUE, col_orc_it_preco = TRUE, col_orc_it_desc = TRUE, col_orc_it_subtotal = TRUE, col_orc_it_obs = TRUE, col_orc_cond_pagto = TRUE, col_orc_cond_parc = TRUE, col_orc_cond_prazo = TRUE, col_orc_cond_validade = TRUE
   WHERE modelo_id IN (SELECT id FROM modelos_permissoes WHERE nome = 'Administrador');

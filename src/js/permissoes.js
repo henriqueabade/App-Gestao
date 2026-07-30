@@ -10,6 +10,7 @@
  * Como marcar os elementos no HTML:
  *   <button data-perm="mp.delete">Excluir</button>          (ação -> desabilita)
  *   <th data-perm-col="col_mp_custo_medio">Custo médio</th>  (coluna -> some)
+ *   <div data-perm-hide="prod.view">…</div>                  (bloco -> some)
  *   <td data-perm-col="col_mp_custo_medio">…</td>
  *   <div class="sidebar-item" data-page="materia-prima">     (módulo -> some)
  */
@@ -175,6 +176,27 @@
       else desabilitar(el);
     });
 
+    // Blocos inteiros: some quando negado, volta quando liberado.
+    // Terceiro mecanismo, ao lado de `data-perm` (desabilita a ação, mantendo
+    // visível) e `data-perm-col` (esconde a coluna). É o que permissões do tipo
+    // "Ver lista" precisam: sem elas a grade não deve nem ser exibida — não faz
+    // sentido mostrar a tabela com todos os botões desabilitados.
+    raiz.querySelectorAll('[data-perm-hide]').forEach(el => {
+      const chave = el.getAttribute('data-perm-hide');
+      if (!chave) return;
+      if (pode(chave)) {
+        if (el.dataset.permOculto === '1') {
+          delete el.dataset.permOculto;
+          el.classList.remove('hidden');
+          el.style.display = '';
+        }
+      } else {
+        el.dataset.permOculto = '1';
+        el.classList.add('hidden');
+        el.style.display = 'none';
+      }
+    });
+
     // Colunas: sai da tabela quando negada, volta quando liberada.
     raiz.querySelectorAll('[data-perm-col]').forEach(el => {
       const chave = el.getAttribute('data-perm-col');
@@ -243,11 +265,12 @@
     nos.forEach(no => {
       if (!no || no.nodeType !== 1) return;
       // o próprio nó pode ser o alvo
-      if (no.hasAttribute?.('data-perm') || no.hasAttribute?.('data-perm-col')) {
+      if (no.hasAttribute?.('data-perm') || no.hasAttribute?.('data-perm-col')
+          || no.hasAttribute?.('data-perm-hide')) {
         aplicarAcoesEColunas(no.parentElement || document);
         return;
       }
-      if (no.querySelector?.('[data-perm], [data-perm-col]')) {
+      if (no.querySelector?.('[data-perm], [data-perm-col], [data-perm-hide]')) {
         aplicarAcoesEColunas(no);
       }
     });

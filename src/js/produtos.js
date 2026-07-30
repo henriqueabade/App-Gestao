@@ -124,7 +124,7 @@ function criarLinhaProduto(produto, index) {
             <td data-perm-col="col_prod_nome" class="px-6 py-4 whitespace-nowrap text-sm text-white">
                 <span class="cell-text" title="${produto.nome || ''}">${nome}</span>
             </td>
-            <td data-perm-col="col_prod_categoria" class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-violet)">
+            <td data-perm-col="col_prod_colecao" class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-violet)">
                 <span class="cell-text" title="${categoria}">${categoria}</span>
             </td>
             <td data-perm-col="col_prod_preco_base" class="px-6 py-4 whitespace-nowrap text-sm text-white">

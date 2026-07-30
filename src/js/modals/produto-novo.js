@@ -283,8 +283,8 @@
       cell.innerHTML = `
         <div class="flex items-center justify-start space-x-2">
           <i class="fas fa-bars w-5 h-5 cursor-move p-1 rounded drag-handle" style="color: var(--color-pen)" title="Reordenar"></i>
-          <i class="fas fa-edit w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10 edit-item" style="color: var(--color-primary)" title="Editar"></i>
-          <i class="fas fa-trash w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10 hover:text-white delete-item" style="color: var(--color-red)" title="Excluir"></i>
+          <i data-perm="prod.item.edit" class="fas fa-edit w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10 edit-item" style="color: var(--color-primary)" title="Editar"></i>
+          <i data-perm="prod.item.remove" class="fas fa-trash w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10 hover:text-white delete-item" style="color: var(--color-red)" title="Excluir"></i>
         </div>`;
     cell.querySelector('.edit-item').addEventListener('click', () => startEdit(item));
     cell.querySelector('.delete-item').addEventListener('click', () => startDelete(item));
@@ -383,11 +383,11 @@
         tr.dataset.processo = proc;
         tr.setAttribute('draggable','true');
         tr.innerHTML = `
-          <td class="py-3 px-2 text-white">${item.nome}</td>
-          <td class="py-3 px-2 text-left quantidade-cell"><span class="quantidade-text">${formatNumber(item.quantidade)}</span></td>
-          <td class="py-3 px-2 text-left">${item.unidade || ''}</td>
-          <td class="py-3 px-2 text-left text-white">${formatCurrency(item.preco_unitario)}</td>
-          <td class="py-3 px-2 text-left text-white item-total">${formatCurrency(item.quantidade * item.preco_unitario)}</td>
+          <td data-perm-col="col_ins_mp" class="py-3 px-2 text-white">${item.nome}</td>
+          <td data-perm-col="col_ins_qtd" class="py-3 px-2 text-left quantidade-cell"><span class="quantidade-text">${formatNumber(item.quantidade)}</span></td>
+          <td data-perm-col="col_ins_unidade" class="py-3 px-2 text-left">${item.unidade || ''}</td>
+          <td data-perm-col="col_ins_custo_un" class="py-3 px-2 text-left text-white">${formatCurrency(item.preco_unitario)}</td>
+          <td data-perm-col="col_ins_custo_total" class="py-3 px-2 text-left text-white item-total">${formatCurrency(item.quantidade * item.preco_unitario)}</td>
           <td class="py-3 px-2 text-left action-cell"></td>`;
         tableBody.appendChild(tr);
         item.row = tr;

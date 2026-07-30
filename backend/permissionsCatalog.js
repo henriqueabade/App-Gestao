@@ -282,133 +282,163 @@ const PERMISSIONS_CATALOG = {
         "key": "prod.view",
         "column": "acao_view",
         "label": "Ver lista",
-        "desc": "Exibir grade de produtos"
+        "desc": "Exibir a grade de produtos"
       },
       {
         "key": "prod.search",
         "column": "acao_search",
         "label": "Buscar/filtrar",
-        "desc": "Habilitar pesquisa e ordenação"
-      },
-      {
-        "key": "prod.export",
-        "column": "acao_export",
-        "label": "Exportar lista",
-        "desc": "Exportar dados de produtos"
+        "desc": "Campo de busca, filtros e botoes Filtrar/Limpar"
       },
       {
         "key": "prod.create",
         "column": "acao_create",
         "label": "Cadastrar produto",
-        "desc": "Criar novos SKUs e composições"
-      },
-      {
-        "key": "prod.edit",
-        "column": "acao_edit",
-        "label": "Editar produto",
-        "desc": "Alterar dados e insumos"
-      },
-      {
-        "key": "prod.delete",
-        "column": "acao_delete",
-        "label": "Excluir produto",
-        "desc": "Remover produtos respeitando vínculos"
-      },
-      {
-        "key": "prod.details.view",
-        "column": "acao_details_view",
-        "label": "Ver detalhes",
-        "desc": "Acessar página completa do produto"
-      },
-      {
-        "key": "prod.pdf",
-        "column": "acao_pdf",
-        "label": "Gerar PDF do produto",
-        "desc": "Baixar a ficha de cadastro do produto em PDF"
-      },
-      {
-        "key": "prod.stage.view",
-        "column": "acao_stage_view",
-        "label": "Ver etapas",
-        "desc": "Listar etapas de produção"
-      },
-      {
-        "key": "prod.stage.advance",
-        "column": "acao_stage_advance",
-        "label": "Avançar etapa",
-        "desc": "Mover produto para próxima fase"
-      },
-      {
-        "key": "prod.stage.insert",
-        "column": "acao_stage_insert",
-        "label": "Inserir etapa",
-        "desc": "Adicionar etapa intermediária"
-      },
-      {
-        "key": "prod.collection.view",
-        "column": "acao_collection_view",
-        "label": "Ver coleções",
-        "desc": "Listar coleções e produtos"
-      },
-      {
-        "key": "prod.collection.create",
-        "column": "acao_collection_create",
-        "label": "Cadastrar coleção",
-        "desc": "Criar novas coleções"
-      },
-      {
-        "key": "prod.collection.edit",
-        "column": "acao_collection_edit",
-        "label": "Editar coleção",
-        "desc": "Alterar dados e status"
-      },
-      {
-        "key": "prod.collection.delete",
-        "column": "acao_collection_delete",
-        "label": "Excluir coleção",
-        "desc": "Remover coleções com validações"
+        "desc": "Botao \"Novo Produto\""
       },
       {
         "key": "prod.stock.view",
         "column": "acao_stock_view",
         "label": "Ver estoque",
-        "desc": "Exibir estoque de produto/variações"
+        "desc": "Ícone de estoque — abre \"Detalhe de Estoque\""
+      },
+      {
+        "key": "prod.details.view",
+        "column": "acao_details_view",
+        "label": "Visualizar produto",
+        "desc": "Ícone de olho — abre \"Visualizar Produto\""
+      },
+      {
+        "key": "prod.edit",
+        "column": "acao_edit",
+        "label": "Editar produto",
+        "desc": "Ícone de lápis — abre \"Editar Produto\""
+      },
+      {
+        "key": "prod.delete",
+        "column": "acao_delete",
+        "label": "Excluir produto",
+        "desc": "Ícone de lixeira — abre a confirmação"
+      },
+      {
+        "key": "prod.item.add",
+        "column": "acao_item_add",
+        "label": "Adicionar item",
+        "desc": "Botões \"+ Começar\" e \"+ Inserir\""
+      },
+      {
+        "key": "prod.item.edit",
+        "column": "acao_item_edit",
+        "label": "Editar item",
+        "desc": "Ícone de lápis na coluna AÇÃO da tabela de itens"
+      },
+      {
+        "key": "prod.item.remove",
+        "column": "acao_item_remove",
+        "label": "Remover item",
+        "desc": "Ícone de lixeira na coluna AÇÃO da tabela de itens"
+      },
+      {
+        "key": "prod.clear",
+        "column": "acao_clear",
+        "label": "Limpar tudo",
+        "desc": "Botão \"Limpar Tudo\""
+      },
+      {
+        "key": "prod.percent.edit",
+        "column": "acao_percent_edit",
+        "label": "Editar percentagens",
+        "desc": "Markup, comissão e imposto"
+      },
+      {
+        "key": "prod.collection.create",
+        "column": "acao_collection_create",
+        "label": "Cadastrar coleção",
+        "desc": "Botão + ao lado de Coleção"
+      },
+      {
+        "key": "prod.collection.delete",
+        "column": "acao_collection_delete",
+        "label": "Excluir coleção",
+        "desc": "Botão − ao lado de Coleção"
+      },
+      {
+        "key": "prod.clone",
+        "column": "acao_clone",
+        "label": "Clonar produto",
+        "desc": "Botão \"Clonar\""
+      },
+      {
+        "key": "prod.registro.toggle",
+        "column": "acao_registro_toggle",
+        "label": "Alternar registro",
+        "desc": "Chave \"Editar registro\""
+      },
+      {
+        "key": "prod.pdf",
+        "column": "acao_pdf",
+        "label": "Gerar PDF",
+        "desc": "Botão \"Gerar PDF\""
+      },
+      {
+        "key": "prod.stage.insert",
+        "column": "acao_stage_insert",
+        "label": "Registrar processo",
+        "desc": "Botão \"Registrar\" do modal de processo"
+      },
+      {
+        "key": "prod.stage.item.add",
+        "column": "acao_stage_item_add",
+        "label": "Inserir item no processo",
+        "desc": "Botão \"+ Inserir\""
+      },
+      {
+        "key": "prod.stage.item.edit",
+        "column": "acao_stage_item_edit",
+        "label": "Editar item do processo",
+        "desc": "Ícone de lápis na tabela do processo"
+      },
+      {
+        "key": "prod.stage.item.remove",
+        "column": "acao_stage_item_remove",
+        "label": "Excluir item do processo",
+        "desc": "Ícone de lixeira na tabela do processo"
+      },
+      {
+        "key": "prod.stage.clear",
+        "column": "acao_stage_clear",
+        "label": "Limpar itens do processo",
+        "desc": "Botão \"Limpar Tudo\" do modal de processo"
       },
       {
         "key": "prod.stock.input",
         "column": "acao_stock_input",
-        "label": "Entrada de estoque",
-        "desc": "Registrar entrada de produto acabado"
-      },
-      {
-        "key": "prod.stock.output",
-        "column": "acao_stock_output",
-        "label": "Saída de estoque",
-        "desc": "Registrar baixas ou consumo"
+        "label": "Adicionar ao estoque",
+        "desc": "Botão \"+ Registrar\" em \"Adicionar produto ao estoque\""
       },
       {
         "key": "prod.stock.adjust",
         "column": "acao_stock_adjust",
-        "label": "Ajuste de estoque",
-        "desc": "Ajustar saldo manualmente"
+        "label": "Somar ao existente",
+        "desc": "Botão \"Somar\" em \"Item já registrado\""
       },
       {
-        "key": "prod.stock.infinite_toggle",
-        "column": "acao_stock_infinite_toggle",
-        "label": "Alternar estoque infinito",
-        "desc": "Definir controle de saldo"
+        "key": "prod.stock.lote.delete",
+        "column": "acao_stock_lote_delete",
+        "label": "Excluir lote de estoque",
+        "desc": "Ícone de lixeira na coluna AÇÕES do \"Detalhe de Estoque\""
       }
     ],
     "columns": [
       {
         "key": "col_prod_sku",
         "column": "col_prod_sku",
-        "label": "SKU"
+        "label": "Código"
       },
       {
         "key": "col_prod_nome",
         "column": "col_prod_nome",
-        "label": "Produto"
+        "label": "Nome"
       },
       {
         "key": "col_prod_colecao",
@@ -416,94 +446,29 @@ const PERMISSIONS_CATALOG = {
         "label": "Coleção"
       },
       {
-        "key": "col_prod_categoria",
-        "column": "col_prod_categoria",
-        "label": "Categoria"
-      },
-      {
         "key": "col_prod_preco_base",
         "column": "col_prod_preco_base",
-        "label": "Preço base"
-      },
-      {
-        "key": "col_prod_custo_total",
-        "column": "col_prod_custo_total",
-        "label": "Custo total"
+        "label": "Preço de Venda"
       },
       {
         "key": "col_prod_margem",
         "column": "col_prod_margem",
-        "label": "Margem"
+        "label": "Margem (%)"
       },
       {
         "key": "col_prod_estoque",
         "column": "col_prod_estoque",
-        "label": "Estoque"
-      },
-      {
-        "key": "col_prod_etapa_atual",
-        "column": "col_prod_etapa_atual",
-        "label": "Etapa atual"
-      },
-      {
-        "key": "col_prod_status",
-        "column": "col_prod_status",
-        "label": "Status"
-      },
-      {
-        "key": "col_prod_atualizado_em",
-        "column": "col_prod_atualizado_em",
-        "label": "Atualizado em"
-      },
-      {
-        "key": "col_etp_ordem",
-        "column": "col_etp_ordem",
-        "label": "Ordem"
-      },
-      {
-        "key": "col_etp_nome",
-        "column": "col_etp_nome",
-        "label": "Etapa"
-      },
-      {
-        "key": "col_etp_resp",
-        "column": "col_etp_resp",
-        "label": "Responsável"
-      },
-      {
-        "key": "col_etp_inicio",
-        "column": "col_etp_inicio",
-        "label": "Início"
-      },
-      {
-        "key": "col_etp_fim",
-        "column": "col_etp_fim",
-        "label": "Fim"
-      },
-      {
-        "key": "col_etp_tempo_real",
-        "column": "col_etp_tempo_real",
-        "label": "Tempo real"
+        "label": "Quantidade"
       },
       {
         "key": "col_ins_mp",
         "column": "col_ins_mp",
-        "label": "MP"
+        "label": "Nome do item"
       },
       {
         "key": "col_ins_qtd",
         "column": "col_ins_qtd",
-        "label": "Qtd."
-      },
-      {
-        "key": "col_ins_custo_un",
-        "column": "col_ins_custo_un",
-        "label": "Custo un."
-      },
-      {
-        "key": "col_ins_custo_total",
-        "column": "col_ins_custo_total",
-        "label": "Custo total"
+        "label": "Quantidade"
       },
       {
         "key": "col_ins_unidade",
@@ -511,44 +476,59 @@ const PERMISSIONS_CATALOG = {
         "label": "Unidade"
       },
       {
-        "key": "col_var_nome",
-        "column": "col_var_nome",
-        "label": "Variação"
+        "key": "col_ins_custo_un",
+        "column": "col_ins_custo_un",
+        "label": "Valor unitário"
       },
       {
-        "key": "col_var_estoque",
-        "column": "col_var_estoque",
-        "label": "Estoque"
+        "key": "col_ins_custo_total",
+        "column": "col_ins_custo_total",
+        "label": "Valor total"
       },
       {
-        "key": "col_var_reservado",
-        "column": "col_var_reservado",
-        "label": "Reservado"
+        "key": "col_etapa_item",
+        "column": "col_etapa_item",
+        "label": "Item"
       },
       {
-        "key": "col_var_disponivel",
-        "column": "col_var_disponivel",
-        "label": "Disponível"
+        "key": "col_etapa_qtd",
+        "column": "col_etapa_qtd",
+        "label": "Quantidade"
       },
       {
-        "key": "col_col_nome",
-        "column": "col_col_nome",
-        "label": "Coleção"
+        "key": "col_etapa_unidade",
+        "column": "col_etapa_unidade",
+        "label": "Unidade"
       },
       {
-        "key": "col_col_periodo",
-        "column": "col_col_periodo",
-        "label": "Período"
+        "key": "col_etapa_valor_un",
+        "column": "col_etapa_valor_un",
+        "label": "Valor unitário (R$)"
       },
       {
-        "key": "col_col_status",
-        "column": "col_col_status",
-        "label": "Status"
+        "key": "col_etapa_valor_total",
+        "column": "col_etapa_valor_total",
+        "label": "Valor total (R$)"
       },
       {
-        "key": "col_col_itens",
-        "column": "col_col_itens",
-        "label": "Itens"
+        "key": "col_est_processo",
+        "column": "col_est_processo",
+        "label": "Processo atual"
+      },
+      {
+        "key": "col_est_ultimo_item",
+        "column": "col_est_ultimo_item",
+        "label": "Último item"
+      },
+      {
+        "key": "col_est_quantidade",
+        "column": "col_est_quantidade",
+        "label": "Quantidade em estoque"
+      },
+      {
+        "key": "col_est_alterado_em",
+        "column": "col_est_alterado_em",
+        "label": "Última alteração"
       }
     ]
   },

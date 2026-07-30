@@ -10,7 +10,7 @@
       <h2 class="text-lg font-semibold text-white flex-1 text-center">INSERIR NOVO PRODUTO</h2>
         <div class="flex-1 flex items-center justify-end gap-3">
           <button type="submit" form="novoProdutoForm" class="btn-success px-4 py-2 rounded-lg text-white font-medium">Registrar</button>
-          <button type="button" id="limparNovoProduto" class="btn-danger px-4 py-2 rounded-lg text-white font-medium">Limpar Tudo</button>
+          <button type="button" id="limparNovoProduto" data-perm="prod.clear" class="btn-danger px-4 py-2 rounded-lg text-white font-medium">Limpar Tudo</button>
         </div>
       </header>
       <form id="novoProdutoForm" class="flex-1 overflow-y-auto modal-scroll">
@@ -57,7 +57,7 @@
               <option>Montagem</option>
               <option>Acabamento</option>
             </select>
-            <button id="comecarNovoProduto" type="button" class="btn-primary px-6 py-3 rounded-lg text-white font-medium">
+            <button id="comecarNovoProduto" data-perm="prod.item.add" type="button" class="btn-primary px-6 py-3 rounded-lg text-white font-medium">
               + Começar
             </button>
           </div>
@@ -86,15 +86,15 @@
                 </div>
                 <div class="flex justify-between items-center">
                   <span class="text-gray-300">Markup</span>
-                  <input id="markupInput" name="markup" type="number" value="0" required class="w-20 bg-input border border-inputBorder rounded px-3 py-1 text-white text-sm focus:border-primary focus:ring-1 focus:ring-primary/50 transition" />
+                  <input id="markupInput" data-perm="prod.percent.edit" name="markup" type="number" value="0" required class="w-20 bg-input border border-inputBorder rounded px-3 py-1 text-white text-sm focus:border-primary focus:ring-1 focus:ring-primary/50 transition" />
                 </div>
                 <div class="flex justify-between items-center">
                   <span class="text-gray-300">Comissão</span>
-                  <input id="commissionInput" name="commission" type="number" value="0" required class="w-20 bg-input border border-inputBorder rounded px-3 py-1 text-white text-sm focus:border-primary focus:ring-1 focus:ring-primary/50 transition" />
+                  <input id="commissionInput" data-perm="prod.percent.edit" name="commission" type="number" value="0" required class="w-20 bg-input border border-inputBorder rounded px-3 py-1 text-white text-sm focus:border-primary focus:ring-1 focus:ring-primary/50 transition" />
                 </div>
                 <div class="flex justify-between items-center">
                   <span class="text-gray-300">Imposto</span>
-                  <input id="taxInput" name="tax" type="number" value="0" required class="w-20 bg-input border border-inputBorder rounded px-3 py-1 text-white text-sm focus:border-primary focus:ring-1 focus:ring-primary/50 transition" />
+                  <input id="taxInput" data-perm="prod.percent.edit" name="tax" type="number" value="0" required class="w-20 bg-input border border-inputBorder rounded px-3 py-1 text-white text-sm focus:border-primary focus:ring-1 focus:ring-primary/50 transition" />
                 </div>
             </div>
           </div>
@@ -149,11 +149,11 @@
             <table id="itensTabela" class="w-full text-sm">
               <thead class="bg-gray-50 sticky top-0">
                 <tr class="border-b border-gray-200">
-                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">NOME DO ITEM</th>
-                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">QUANTIDADE</th>
-                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">UNIDADE</th>
-                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">VALOR UNITÁRIO</th>
-                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">VALOR TOTAL</th>
+                  <th data-perm-col="col_ins_mp" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">NOME DO ITEM</th>
+                  <th data-perm-col="col_ins_qtd" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">QUANTIDADE</th>
+                  <th data-perm-col="col_ins_unidade" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">UNIDADE</th>
+                  <th data-perm-col="col_ins_custo_un" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">VALOR UNITÁRIO</th>
+                  <th data-perm-col="col_ins_custo_total" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">VALOR TOTAL</th>
                   <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">AÇÃO</th>
                 </tr>
               </thead>
