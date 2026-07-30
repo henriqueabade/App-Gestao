@@ -181,19 +181,32 @@ router.delete('/modelo/:modeloId', async (req, res) => {
  * Middleware de proteção: use nas rotas sensíveis.
  *   router.delete('/:id', exigirPermissao('mp.delete'), handler)
  */
-function exigirPermissao(chave) {
+/**
+ * `chave` pode ser uma string OU uma função (req) => string, para casos em que a
+ * permissão depende do que está sendo feito. Exemplo: PUT /pedidos/:id/status
+ * muda o pedido para Enviado ou Entregue — checar sempre "confirmar" negava quem
+ * só tinha "dar como entregue" e, pior, deixava quem tinha "confirmar" despachar
+ * e entregar sem ter essas permissões.
+ */
+function exigirPermissao(chaveOuFn) {
   return async (req, res, next) => {
+    const bruto = typeof chaveOuFn === 'function' ? chaveOuFn(req) : chaveOuFn;
+    // Uma rota pode exigir MAIS DE UMA permissao: e o caso das rotas de
+    // orcamento que, ao aprovar, tambem convertem em pedido e abatem estoque.
+    // Nessas, exigir apenas uma das duas deixava passar quem nao tinha a outra.
+    const chaves = Array.isArray(bruto) ? bruto.filter(Boolean) : [bruto];
     try {
       const permissoes = await obterPermissoesEfetivas(req);
-      if (permissoesRepo.can(permissoes, chave)) return next();
+      const negada = chaves.find(c => !permissoesRepo.can(permissoes, c));
+      if (!negada) return next();
       return res.status(403).json({
         error: 'Permissão negada',
         code: 'FORBIDDEN',
-        permissao: chave
+        permissao: negada
       });
     } catch (err) {
       console.error('[permissoes] falha ao verificar permissão:', err?.message || err);
-      return res.status(403).json({ error: 'Permissão negada', code: 'FORBIDDEN', permissao: chave });
+      return res.status(403).json({ error: 'Permissão negada', code: 'FORBIDDEN', permissao: chaves[0] });
     }
   };
 }

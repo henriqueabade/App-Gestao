@@ -127,7 +127,7 @@ CREATE TABLE IF NOT EXISTS perm_prod (
 );
 
 -- ---------------------------------------------------------------------
--- 5) Orçamentos  (perm_orc)  —  8 ações, 22 colunas
+-- 5) Orçamentos  (perm_orc)  —  17 ações, 30 colunas
 -- ---------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS perm_orc (
   modelo_id    INTEGER PRIMARY KEY REFERENCES modelos_permissoes(id) ON DELETE CASCADE,
@@ -137,39 +137,56 @@ CREATE TABLE IF NOT EXISTS perm_orc (
   acao_view                          BOOLEAN NOT NULL DEFAULT FALSE,  -- orc.view · Ver lista
   acao_search                        BOOLEAN NOT NULL DEFAULT FALSE,  -- orc.search · Buscar/filtrar
   acao_create                        BOOLEAN NOT NULL DEFAULT FALSE,  -- orc.create · Criar orçamento
+  acao_view_details                  BOOLEAN NOT NULL DEFAULT FALSE,  -- orc.view.details · Visualizar orçamento
   acao_edit                          BOOLEAN NOT NULL DEFAULT FALSE,  -- orc.edit · Editar orçamento
-  acao_view_details                  BOOLEAN NOT NULL DEFAULT FALSE,  -- orc.view.details · Ver detalhes
-  acao_item_replace                  BOOLEAN NOT NULL DEFAULT FALSE,  -- orc.item.replace · Trocar item
   acao_convert                       BOOLEAN NOT NULL DEFAULT FALSE,  -- orc.convert · Converter em pedido
   acao_export                        BOOLEAN NOT NULL DEFAULT FALSE,  -- orc.export · Baixar PDF
+  acao_item_add                      BOOLEAN NOT NULL DEFAULT FALSE,  -- orc.item.add · Inserir item
+  acao_item_edit                     BOOLEAN NOT NULL DEFAULT FALSE,  -- orc.item.edit · Editar item
+  acao_item_remove                   BOOLEAN NOT NULL DEFAULT FALSE,  -- orc.item.remove · Remover item
+  acao_clear                         BOOLEAN NOT NULL DEFAULT FALSE,  -- orc.clear · Limpar tudo
+  acao_send                          BOOLEAN NOT NULL DEFAULT FALSE,  -- orc.send · Salvar e enviar
+  acao_status_change                 BOOLEAN NOT NULL DEFAULT FALSE,  -- orc.status.change · Alterar status
+  acao_clone                         BOOLEAN NOT NULL DEFAULT FALSE,  -- orc.clone · Clonar orçamento
+  acao_convert_decide                BOOLEAN NOT NULL DEFAULT FALSE,  -- orc.convert.decide · Decidir produção das peças
+  acao_convert_justify               BOOLEAN NOT NULL DEFAULT FALSE,  -- orc.convert.justify · Justificar saldo negativo
+  acao_item_replace                  BOOLEAN NOT NULL DEFAULT FALSE,  -- orc.item.replace · Substituir peça
 
   -- Colunas visíveis
-  col_orc_num                        BOOLEAN NOT NULL DEFAULT FALSE,  -- Nº orçamento
+  col_orc_num                        BOOLEAN NOT NULL DEFAULT FALSE,  -- Código
   col_orc_cliente                    BOOLEAN NOT NULL DEFAULT FALSE,  -- Cliente
-  col_orc_vendedor                   BOOLEAN NOT NULL DEFAULT FALSE,  -- Vendedor
   col_orc_data                       BOOLEAN NOT NULL DEFAULT FALSE,  -- Data
-  col_orc_validade                   BOOLEAN NOT NULL DEFAULT FALSE,  -- Validade
-  col_orc_itens                      BOOLEAN NOT NULL DEFAULT FALSE,  -- Itens
-  col_orc_subtotal                   BOOLEAN NOT NULL DEFAULT FALSE,  -- Subtotal
-  col_orc_desc                       BOOLEAN NOT NULL DEFAULT FALSE,  -- Descontos
-  col_orc_frete_outros               BOOLEAN NOT NULL DEFAULT FALSE,  -- Frete/outros
-  col_orc_total                      BOOLEAN NOT NULL DEFAULT FALSE,  -- Total
+  col_orc_total                      BOOLEAN NOT NULL DEFAULT FALSE,  -- Valor Total
+  col_orc_cond_pagto                 BOOLEAN NOT NULL DEFAULT FALSE,  -- Condição
   col_orc_status                     BOOLEAN NOT NULL DEFAULT FALSE,  -- Status
   col_orc_it_nome                    BOOLEAN NOT NULL DEFAULT FALSE,  -- Item
-  col_orc_it_sku                     BOOLEAN NOT NULL DEFAULT FALSE,  -- SKU
   col_orc_it_qtd                     BOOLEAN NOT NULL DEFAULT FALSE,  -- Qtd.
-  col_orc_it_preco                   BOOLEAN NOT NULL DEFAULT FALSE,  -- Preço
-  col_orc_it_desc                    BOOLEAN NOT NULL DEFAULT FALSE,  -- Desc.
-  col_orc_it_subtotal                BOOLEAN NOT NULL DEFAULT FALSE,  -- Subtotal
-  col_orc_it_obs                     BOOLEAN NOT NULL DEFAULT FALSE,  -- Observações
-  col_orc_cond_pagto                 BOOLEAN NOT NULL DEFAULT FALSE,  -- Pagamento
-  col_orc_cond_parc                  BOOLEAN NOT NULL DEFAULT FALSE,  -- Parcelas
-  col_orc_cond_prazo                 BOOLEAN NOT NULL DEFAULT FALSE,  -- Prazo
-  col_orc_cond_validade              BOOLEAN NOT NULL DEFAULT FALSE  -- Validade
+  col_orc_it_preco                   BOOLEAN NOT NULL DEFAULT FALSE,  -- Un R$
+  col_orc_it_preco_desc              BOOLEAN NOT NULL DEFAULT FALSE,  -- Un c/desconto
+  col_orc_it_desc                    BOOLEAN NOT NULL DEFAULT FALSE,  -- Desconto %
+  col_orc_it_subtotal                BOOLEAN NOT NULL DEFAULT FALSE,  -- Total R$
+  col_conv_peca                      BOOLEAN NOT NULL DEFAULT FALSE,  -- Peça
+  col_conv_qtd_orcada                BOOLEAN NOT NULL DEFAULT FALSE,  -- Qtd Orçada
+  col_conv_em_estoque                BOOLEAN NOT NULL DEFAULT FALSE,  -- Em Estoque
+  col_conv_pronta                    BOOLEAN NOT NULL DEFAULT FALSE,  -- Pronta
+  col_conv_produzir_total            BOOLEAN NOT NULL DEFAULT FALSE,  -- Produzir Total
+  col_conv_produzir_parcial          BOOLEAN NOT NULL DEFAULT FALSE,  -- Produzir Parcial
+  col_conv_status                    BOOLEAN NOT NULL DEFAULT FALSE,  -- Status
+  col_conv_ins_nome                  BOOLEAN NOT NULL DEFAULT FALSE,  -- Insumo
+  col_conv_ins_unidade               BOOLEAN NOT NULL DEFAULT FALSE,  -- Unidade
+  col_conv_ins_disponivel            BOOLEAN NOT NULL DEFAULT FALSE,  -- Disponível
+  col_conv_ins_necessario            BOOLEAN NOT NULL DEFAULT FALSE,  -- Necessário
+  col_conv_ins_saldo                 BOOLEAN NOT NULL DEFAULT FALSE,  -- Saldo (prev.)
+  col_conv_ins_etapa                 BOOLEAN NOT NULL DEFAULT FALSE,  -- Etapa
+  col_conv_ins_flags                 BOOLEAN NOT NULL DEFAULT FALSE,  -- Flags
+  col_orc_campo_dono                 BOOLEAN NOT NULL DEFAULT FALSE,  -- Dono
+  col_orc_campo_transportadora       BOOLEAN NOT NULL DEFAULT FALSE,  -- Transportadora
+  col_orc_campo_pagamento            BOOLEAN NOT NULL DEFAULT FALSE,  -- Forma de pagamento
+  col_orc_campo_observacoes          BOOLEAN NOT NULL DEFAULT FALSE  -- Observações
 );
 
 -- ---------------------------------------------------------------------
--- 6) Pedidos  (perm_ped)  —  12 ações, 23 colunas
+-- 6) Pedidos  (perm_ped)  —  10 ações, 22 colunas
 -- ---------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS perm_ped (
   modelo_id    INTEGER PRIMARY KEY REFERENCES modelos_permissoes(id) ON DELETE CASCADE,
@@ -178,41 +195,38 @@ CREATE TABLE IF NOT EXISTS perm_ped (
   -- Ações
   acao_view                          BOOLEAN NOT NULL DEFAULT FALSE,  -- ped.view · Ver lista
   acao_search                        BOOLEAN NOT NULL DEFAULT FALSE,  -- ped.search · Buscar/filtrar
-  acao_view_details                  BOOLEAN NOT NULL DEFAULT FALSE,  -- ped.view.details · Ver detalhes
-  acao_cancel                        BOOLEAN NOT NULL DEFAULT FALSE,  -- ped.cancel · Cancelar pedido
-  acao_stock_deduct                  BOOLEAN NOT NULL DEFAULT FALSE,  -- ped.stock.deduct · Abater estoque
-  acao_stock_restore_on_cancel       BOOLEAN NOT NULL DEFAULT FALSE,  -- ped.stock.restore_on_cancel · Restaurar estoque ao cancelar
+  acao_view_details                  BOOLEAN NOT NULL DEFAULT FALSE,  -- ped.view.details · Visualizar pedido
   acao_status_confirm                BOOLEAN NOT NULL DEFAULT FALSE,  -- ped.status.confirm · Confirmar pedido
-  acao_status_invoice                BOOLEAN NOT NULL DEFAULT FALSE,  -- ped.status.invoice · Faturar pedido
   acao_status_ship                   BOOLEAN NOT NULL DEFAULT FALSE,  -- ped.status.ship · Despachar pedido
   acao_status_deliver                BOOLEAN NOT NULL DEFAULT FALSE,  -- ped.status.deliver · Dar como entregue
-  acao_export                        BOOLEAN NOT NULL DEFAULT FALSE,  -- ped.export · Baixar PDF
   acao_report                        BOOLEAN NOT NULL DEFAULT FALSE,  -- ped.report · Ver relatório
+  acao_export                        BOOLEAN NOT NULL DEFAULT FALSE,  -- ped.export · Baixar PDF
+  acao_cancel                        BOOLEAN NOT NULL DEFAULT FALSE,  -- ped.cancel · Cancelar pedido
+  acao_stock_restore_on_cancel       BOOLEAN NOT NULL DEFAULT FALSE,  -- ped.stock.restore_on_cancel · Realocar estoque ao cancelar
 
   -- Colunas visíveis
-  col_ped_num                        BOOLEAN NOT NULL DEFAULT FALSE,  -- Nº pedido
+  col_ped_num                        BOOLEAN NOT NULL DEFAULT FALSE,  -- Código
   col_ped_cliente                    BOOLEAN NOT NULL DEFAULT FALSE,  -- Cliente
-  col_ped_vendedor                   BOOLEAN NOT NULL DEFAULT FALSE,  -- Vendedor
   col_ped_data                       BOOLEAN NOT NULL DEFAULT FALSE,  -- Data
-  col_ped_entrega                    BOOLEAN NOT NULL DEFAULT FALSE,  -- Entrega
-  col_ped_itens                      BOOLEAN NOT NULL DEFAULT FALSE,  -- Itens
-  col_ped_total                      BOOLEAN NOT NULL DEFAULT FALSE,  -- Total
-  col_ped_abate_estoque              BOOLEAN NOT NULL DEFAULT FALSE,  -- Abate estoque
-  col_ped_status                     BOOLEAN NOT NULL DEFAULT FALSE,  -- Status
+  col_ped_total                      BOOLEAN NOT NULL DEFAULT FALSE,  -- Valor Total
   col_ped_condicao                   BOOLEAN NOT NULL DEFAULT FALSE,  -- Condição
-  col_ped_origem                     BOOLEAN NOT NULL DEFAULT FALSE,  -- Origem
+  col_ped_status                     BOOLEAN NOT NULL DEFAULT FALSE,  -- Status
   col_ped_it_nome                    BOOLEAN NOT NULL DEFAULT FALSE,  -- Item
-  col_ped_it_sku                     BOOLEAN NOT NULL DEFAULT FALSE,  -- SKU
   col_ped_it_qtd                     BOOLEAN NOT NULL DEFAULT FALSE,  -- Qtd.
-  col_ped_it_preco                   BOOLEAN NOT NULL DEFAULT FALSE,  -- Preço
-  col_ped_it_desc                    BOOLEAN NOT NULL DEFAULT FALSE,  -- Desc.
-  col_ped_it_subtotal                BOOLEAN NOT NULL DEFAULT FALSE,  -- Subtotal
-  col_ped_it_situacao                BOOLEAN NOT NULL DEFAULT FALSE,  -- Situação
-  col_log_transportadora             BOOLEAN NOT NULL DEFAULT FALSE,  -- Transportadora
-  col_log_cod_rastreio               BOOLEAN NOT NULL DEFAULT FALSE,  -- Código rastreio
-  col_log_frete_valor                BOOLEAN NOT NULL DEFAULT FALSE,  -- Frete
-  col_log_data_envio                 BOOLEAN NOT NULL DEFAULT FALSE,  -- Enviado em
-  col_log_data_entrega               BOOLEAN NOT NULL DEFAULT FALSE  -- Entregue em
+  col_ped_it_preco                   BOOLEAN NOT NULL DEFAULT FALSE,  -- Un R$
+  col_ped_it_preco_desc              BOOLEAN NOT NULL DEFAULT FALSE,  -- Un c/desconto
+  col_ped_it_desc                    BOOLEAN NOT NULL DEFAULT FALSE,  -- Desconto %
+  col_ped_it_subtotal                BOOLEAN NOT NULL DEFAULT FALSE,  -- Total R$
+  col_canc_item                      BOOLEAN NOT NULL DEFAULT FALSE,  -- Item
+  col_canc_qtd                       BOOLEAN NOT NULL DEFAULT FALSE,  -- Quantidade
+  col_canc_restante                  BOOLEAN NOT NULL DEFAULT FALSE,  -- Quantidade Restante
+  col_canc_origem                    BOOLEAN NOT NULL DEFAULT FALSE,  -- Origem
+  col_canc_situacao                  BOOLEAN NOT NULL DEFAULT FALSE,  -- Situação
+  col_canc_destinos                  BOOLEAN NOT NULL DEFAULT FALSE,  -- Destinações
+  col_ped_campo_dono                 BOOLEAN NOT NULL DEFAULT FALSE,  -- Dono
+  col_ped_campo_transportadora       BOOLEAN NOT NULL DEFAULT FALSE,  -- Transportadora
+  col_ped_campo_pagamento            BOOLEAN NOT NULL DEFAULT FALSE,  -- Forma de pagamento
+  col_ped_campo_observacoes          BOOLEAN NOT NULL DEFAULT FALSE  -- Observações
 );
 
 -- ---------------------------------------------------------------------
@@ -544,12 +558,12 @@ INSERT INTO perm_prod (modelo_id, modulo_ativo, acao_view, acao_search, acao_cre
 SELECT id, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE FROM modelos_permissoes WHERE nome = 'Administrador'
 ON CONFLICT (modelo_id) DO NOTHING;
 
-INSERT INTO perm_orc (modelo_id, modulo_ativo, acao_view, acao_search, acao_create, acao_edit, acao_view_details, acao_item_replace, acao_convert, acao_export, col_orc_num, col_orc_cliente, col_orc_vendedor, col_orc_data, col_orc_validade, col_orc_itens, col_orc_subtotal, col_orc_desc, col_orc_frete_outros, col_orc_total, col_orc_status, col_orc_it_nome, col_orc_it_sku, col_orc_it_qtd, col_orc_it_preco, col_orc_it_desc, col_orc_it_subtotal, col_orc_it_obs, col_orc_cond_pagto, col_orc_cond_parc, col_orc_cond_prazo, col_orc_cond_validade)
-SELECT id, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE FROM modelos_permissoes WHERE nome = 'Administrador'
+INSERT INTO perm_orc (modelo_id, modulo_ativo, acao_view, acao_search, acao_create, acao_view_details, acao_edit, acao_convert, acao_export, acao_item_add, acao_item_edit, acao_item_remove, acao_clear, acao_send, acao_status_change, acao_clone, acao_convert_decide, acao_convert_justify, acao_item_replace, col_orc_num, col_orc_cliente, col_orc_data, col_orc_total, col_orc_cond_pagto, col_orc_status, col_orc_it_nome, col_orc_it_qtd, col_orc_it_preco, col_orc_it_preco_desc, col_orc_it_desc, col_orc_it_subtotal, col_conv_peca, col_conv_qtd_orcada, col_conv_em_estoque, col_conv_pronta, col_conv_produzir_total, col_conv_produzir_parcial, col_conv_status, col_conv_ins_nome, col_conv_ins_unidade, col_conv_ins_disponivel, col_conv_ins_necessario, col_conv_ins_saldo, col_conv_ins_etapa, col_conv_ins_flags, col_orc_campo_dono, col_orc_campo_transportadora, col_orc_campo_pagamento, col_orc_campo_observacoes)
+SELECT id, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE FROM modelos_permissoes WHERE nome = 'Administrador'
 ON CONFLICT (modelo_id) DO NOTHING;
 
-INSERT INTO perm_ped (modelo_id, modulo_ativo, acao_view, acao_search, acao_view_details, acao_cancel, acao_stock_deduct, acao_stock_restore_on_cancel, acao_status_confirm, acao_status_invoice, acao_status_ship, acao_status_deliver, acao_export, acao_report, col_ped_num, col_ped_cliente, col_ped_vendedor, col_ped_data, col_ped_entrega, col_ped_itens, col_ped_total, col_ped_abate_estoque, col_ped_status, col_ped_condicao, col_ped_origem, col_ped_it_nome, col_ped_it_sku, col_ped_it_qtd, col_ped_it_preco, col_ped_it_desc, col_ped_it_subtotal, col_ped_it_situacao, col_log_transportadora, col_log_cod_rastreio, col_log_frete_valor, col_log_data_envio, col_log_data_entrega)
-SELECT id, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE FROM modelos_permissoes WHERE nome = 'Administrador'
+INSERT INTO perm_ped (modelo_id, modulo_ativo, acao_view, acao_search, acao_view_details, acao_status_confirm, acao_status_ship, acao_status_deliver, acao_report, acao_export, acao_cancel, acao_stock_restore_on_cancel, col_ped_num, col_ped_cliente, col_ped_data, col_ped_total, col_ped_condicao, col_ped_status, col_ped_it_nome, col_ped_it_qtd, col_ped_it_preco, col_ped_it_preco_desc, col_ped_it_desc, col_ped_it_subtotal, col_canc_item, col_canc_qtd, col_canc_restante, col_canc_origem, col_canc_situacao, col_canc_destinos, col_ped_campo_dono, col_ped_campo_transportadora, col_ped_campo_pagamento, col_ped_campo_observacoes)
+SELECT id, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE FROM modelos_permissoes WHERE nome = 'Administrador'
 ON CONFLICT (modelo_id) DO NOTHING;
 
 INSERT INTO perm_cli (modelo_id, modulo_ativo, acao_view, acao_search, acao_details_view, acao_create, acao_edit, acao_delete, col_cli_nome_fantasia, col_cli_razao_social, col_cli_cnpj, col_cli_comprador, col_cli_tel, col_cli_email, col_cli_cidade_uf, col_cli_transportadora, col_cli_status, col_cli_owner, col_end_tipo, col_end_logradouro, col_end_numero, col_end_complemento, col_end_bairro, col_end_cidade, col_end_uf, col_end_cep, col_ctt_nome, col_ctt_cargo, col_ctt_tel, col_ctt_email, col_ctt_tags, col_ctt_status, col_ctt_ult_interacao)

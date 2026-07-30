@@ -7,7 +7,7 @@
       </div>
       <div class="flex items-center gap-3">
         <button id="voltarConverterOrcamento" class="btn-danger px-4 py-2 rounded-lg text-white font-medium">Cancelar</button>
-        <button id="confirmarConverterOrcamento" class="btn-primary px-5 py-2 rounded-lg text-white font-medium opacity-60 cursor-not-allowed" disabled>Confirmar Conversão</button>
+        <button id="confirmarConverterOrcamento" data-perm="orc.convert" class="btn-primary px-5 py-2 rounded-lg text-white font-medium opacity-60 cursor-not-allowed" disabled>Confirmar Conversão</button>
       </div>
     </header>
 
@@ -35,13 +35,13 @@
               <table class="w-full text-sm">
                 <thead>
                   <tr class="border-b border-white/10">
-                    <th class="text-left py-3 px-2 text-gray-300 font-medium whitespace-nowrap">Peça</th>
-                    <th class="text-left py-3 px-2 text-gray-300 font-medium whitespace-nowrap">Qtd Orçada</th>
-                    <th class="text-left py-3 px-2 text-gray-300 font-medium whitespace-nowrap">Em Estoque</th>
-                    <th class="text-left py-3 px-2 text-gray-300 font-medium whitespace-nowrap">Pronta</th>
-                    <th class="text-left py-3 px-2 text-gray-300 font-medium whitespace-nowrap">Produzir Total</th>
-                    <th class="text-left py-3 px-2 text-gray-300 font-medium whitespace-nowrap">Produzir Parcial</th>
-                    <th class="text-left py-3 px-2 text-gray-300 font-medium whitespace-nowrap">Status</th>
+                    <th data-perm-col="col_conv_peca" class="text-left py-3 px-2 text-gray-300 font-medium whitespace-nowrap">Peça</th>
+                    <th data-perm-col="col_conv_qtd_orcada" class="text-left py-3 px-2 text-gray-300 font-medium whitespace-nowrap">Qtd Orçada</th>
+                    <th data-perm-col="col_conv_em_estoque" class="text-left py-3 px-2 text-gray-300 font-medium whitespace-nowrap">Em Estoque</th>
+                    <th data-perm-col="col_conv_pronta" class="text-left py-3 px-2 text-gray-300 font-medium whitespace-nowrap">Pronta</th>
+                    <th data-perm-col="col_conv_produzir_total" class="text-left py-3 px-2 text-gray-300 font-medium whitespace-nowrap">Produzir Total</th>
+                    <th data-perm-col="col_conv_produzir_parcial" class="text-left py-3 px-2 text-gray-300 font-medium whitespace-nowrap">Produzir Parcial</th>
+                    <th data-perm-col="col_conv_status" class="text-left py-3 px-2 text-gray-300 font-medium whitespace-nowrap">Status</th>
                     <th class="text-left py-3 px-2 text-gray-300 font-medium whitespace-nowrap">Ações</th>
                   </tr>
                 </thead>
@@ -72,13 +72,13 @@
               <table class="w-full text-sm">
                 <thead>
                   <tr class="border-b border-white/10">
-                    <th class="text-left py-3 px-2 text-gray-300 font-medium">Insumo</th>
-                    <th class="text-left py-3 px-2 text-gray-300 font-medium">Unidade</th>
-                    <th class="text-left py-3 px-2 text-gray-300 font-medium">Disponível</th>
-                    <th class="text-left py-3 px-2 text-gray-300 font-medium">Necessário</th>
-                    <th class="text-left py-3 px-2 text-gray-300 font-medium">Saldo (prev.)</th>
-                    <th class="text-left py-3 px-2 text-gray-300 font-medium">Etapa</th>
-                    <th class="text-left py-3 px-2 text-gray-300 font-medium">Flags</th>
+                    <th data-perm-col="col_conv_ins_nome" class="text-left py-3 px-2 text-gray-300 font-medium">Insumo</th>
+                    <th data-perm-col="col_conv_ins_unidade" class="text-left py-3 px-2 text-gray-300 font-medium">Unidade</th>
+                    <th data-perm-col="col_conv_ins_disponivel" class="text-left py-3 px-2 text-gray-300 font-medium">Disponível</th>
+                    <th data-perm-col="col_conv_ins_necessario" class="text-left py-3 px-2 text-gray-300 font-medium">Necessário</th>
+                    <th data-perm-col="col_conv_ins_saldo" class="text-left py-3 px-2 text-gray-300 font-medium">Saldo (prev.)</th>
+                    <th data-perm-col="col_conv_ins_etapa" class="text-left py-3 px-2 text-gray-300 font-medium">Etapa</th>
+                    <th data-perm-col="col_conv_ins_flags" class="text-left py-3 px-2 text-gray-300 font-medium">Flags</th>
                   </tr>
                 </thead>
                 <tbody id="converterInsumosBody"></tbody>
@@ -86,7 +86,7 @@
             </div>
             <div class="mt-6">
               <label class="block text-sm font-medium text-gray-300 mb-2">Nota de decisão para saldo negativo <span id="converterDecisionNoteRequired" class="text-red-400 hidden">* obrigatória</span></label>
-              <textarea id="converterDecisionNote" rows="3" placeholder="Justifique a decisão para insumos com saldo negativo..." class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition resize-none"></textarea>
+              <textarea id="converterDecisionNote" data-perm="orc.convert.justify" rows="3" placeholder="Justifique a decisão para insumos com saldo negativo..." class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition resize-none"></textarea>
             </div>
           </div>
         </div>

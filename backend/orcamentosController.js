@@ -392,7 +392,25 @@ router.post('/', exigirPermissao('orc.create'), async (req, res) => {
   }
 });
 
-router.put('/:id', exigirPermissao('orc.edit'), async (req, res) => {
+// Estas duas rotas fazem MAIS do que o nome sugere: quando a situacao vira
+// "Aprovado", elas tambem convertem o orcamento em pedido (e o pedido abate
+// estoque). Guardar so com `orc.edit` ou so com `orc.convert` deixava dois
+// furos: quem podia editar disparava a conversao sem ter permissao para isso, e
+// quem tinha `orc.convert` mudava qualquer status (Rejeitado, Expirado) sem ter
+// `orc.status.change`. Agora cada rota pede exatamente o que vai executar.
+function permissoesDeStatus(req) {
+  const chaves = ['orc.status.change'];
+  if (String(req.body?.situacao || '').trim() === 'Aprovado') chaves.push('orc.convert');
+  return chaves;
+}
+
+function permissoesDeEdicao(req) {
+  const chaves = ['orc.edit'];
+  if (String(req.body?.situacao || '').trim() === 'Aprovado') chaves.push('orc.convert');
+  return chaves;
+}
+
+router.put('/:id', exigirPermissao(permissoesDeEdicao), async (req, res) => {
   const { id } = req.params;
   const body = req.body || {};
   const itens = Array.isArray(body.itens) ? body.itens : [];
@@ -463,7 +481,7 @@ router.put('/:id', exigirPermissao('orc.edit'), async (req, res) => {
   }
 });
 
-router.patch('/:id/status', exigirPermissao('orc.convert'), async (req, res) => {
+router.patch('/:id/status', exigirPermissao(permissoesDeStatus), async (req, res) => {
   const { id } = req.params;
   const { situacao } = req.body;
   try {
@@ -494,7 +512,7 @@ router.patch('/:id/status', exigirPermissao('orc.convert'), async (req, res) => 
   }
 });
 
-router.post('/:id/clone', exigirPermissao('orc.create'), async (req, res) => {
+router.post('/:id/clone', exigirPermissao(['orc.clone', 'orc.create']), async (req, res) => {
   const { id } = req.params;
   try {
     const api = createApiClient(req);

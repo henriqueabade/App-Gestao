@@ -942,71 +942,192 @@
                   </div>
                   <i class="fas fa-info-circle text-[var(--color-primary)]" title="Permissões do módulo"></i>
                 </div>
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="grid grid-cols-1 gap-6">
 
-                  <label class="usuarios-permissoes-item" data-search="ver lista orcamentos">
-                    <input type="checkbox" name="orc.view" data-role="item" data-group="acoes-orc" data-item-type="action" class="w-4 h-4 mt-1" />
-                    <div>
-                      <span class="font-medium">Ver lista</span>
-                      <p class="text-sm text-gray-400">Exibir lista de orçamentos</p>
-                    </div>
-                  </label>
+                  <div>
+                    <h4 class="text-sm font-semibold text-gray-300 mb-3">Tela de Orçamentos (lista)</h4>
+                    <div class="grid grid-cols-1 gap-4">
 
-                  <label class="usuarios-permissoes-item" data-search="buscar filtrar">
-                    <input type="checkbox" name="orc.search" data-role="item" data-group="acoes-orc" data-item-type="action" class="w-4 h-4 mt-1" />
-                    <div>
-                      <span class="font-medium">Buscar/filtrar</span>
-                      <p class="text-sm text-gray-400">Habilitar filtros e ordenação</p>
-                    </div>
-                  </label>
+                      <label class="usuarios-permissoes-item" data-search="ver lista grade orçamentos">
+                        <input type="checkbox" name="orc.view" data-role="item" data-group="acoes-orc" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Ver lista</span>
+                          <p class="text-sm text-gray-400">Exibir a grade de orçamentos</p>
+                        </div>
+                      </label>
 
-                  <label class="usuarios-permissoes-item" data-search="criar orcamento novo">
-                    <input type="checkbox" name="orc.create" data-role="item" data-group="acoes-orc" data-item-type="action" class="w-4 h-4 mt-1" />
-                    <div>
-                      <span class="font-medium">Criar orçamento</span>
-                      <p class="text-sm text-gray-400">Abrir novo orçamento com itens</p>
-                    </div>
-                  </label>
+                      <label class="usuarios-permissoes-item" data-search="buscar filtrar status período dono cliente">
+                        <input type="checkbox" name="orc.search" data-role="item" data-group="acoes-orc" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Buscar/filtrar</span>
+                          <p class="text-sm text-gray-400">Filtros de status, período, dono e cliente + Filtrar/Limpar</p>
+                        </div>
+                      </label>
 
-                  <label class="usuarios-permissoes-item" data-search="editar orcamento alterar">
-                    <input type="checkbox" name="orc.edit" data-role="item" data-group="acoes-orc" data-item-type="action" class="w-4 h-4 mt-1" />
-                    <div>
-                      <span class="font-medium">Editar orçamento</span>
-                      <p class="text-sm text-gray-400">Alterar itens, preços e validade</p>
-                    </div>
-                  </label>
+                      <label class="usuarios-permissoes-item" data-search="criar cadastrar novo orçamento">
+                        <input type="checkbox" name="orc.create" data-role="item" data-group="acoes-orc" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Criar orçamento</span>
+                          <p class="text-sm text-gray-400">Botão "Novo Orçamento"</p>
+                        </div>
+                      </label>
 
-                  <label class="usuarios-permissoes-item" data-search="detalhes ver orçamento">
-                    <input type="checkbox" name="orc.view.details" data-role="item" data-group="acoes-orc" data-item-type="action" class="w-4 h-4 mt-1" />
-                    <div>
-                      <span class="font-medium">Ver detalhes</span>
-                      <p class="text-sm text-gray-400">Acessar visão completa do orçamento</p>
                     </div>
-                  </label>
+                  </div>
 
-                  <label class="usuarios-permissoes-item" data-search="trocar item substituir">
-                    <input type="checkbox" name="orc.item.replace" data-role="item" data-group="acoes-orc" data-item-type="action" class="w-4 h-4 mt-1" />
-                    <div>
-                      <span class="font-medium">Trocar item</span>
-                      <p class="text-sm text-gray-400">Substituir item recalculando total</p>
-                    </div>
-                  </label>
+                  <div>
+                    <h4 class="text-sm font-semibold text-gray-300 mb-3">Ações na linha da tabela</h4>
+                    <div class="grid grid-cols-1 gap-4">
 
-                  <label class="usuarios-permissoes-item" data-search="converter pedido">
-                    <input type="checkbox" name="orc.convert" data-role="item" data-group="acoes-orc" data-item-type="action" class="w-4 h-4 mt-1" />
-                    <div>
-                      <span class="font-medium">Converter em pedido</span>
-                      <p class="text-sm text-gray-400">Gerar pedido a partir de orçamento</p>
-                    </div>
-                  </label>
+                      <label class="usuarios-permissoes-item" data-search="visualizar detalhes olho">
+                        <input type="checkbox" name="orc.view.details" data-role="item" data-group="acoes-orc" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Visualizar orçamento</span>
+                          <p class="text-sm text-gray-400">Ícone de olho — abre "Visualizar Orçamento"</p>
+                        </div>
+                      </label>
 
-                  <label class="usuarios-permissoes-item" data-search="pdf baixar exportar download">
-                    <input type="checkbox" name="orc.export" data-role="item" data-group="acoes-orc" data-item-type="action" class="w-4 h-4 mt-1" />
-                    <div>
-                      <span class="font-medium">Baixar PDF</span>
-                      <p class="text-sm text-gray-400">Gerar e baixar o PDF do orçamento</p>
+                      <label class="usuarios-permissoes-item" data-search="editar alterar lápis">
+                        <input type="checkbox" name="orc.edit" data-role="item" data-group="acoes-orc" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Editar orçamento</span>
+                          <p class="text-sm text-gray-400">Ícone de lápis — abre "Editar Orçamento"</p>
+                        </div>
+                      </label>
+
+                      <label class="usuarios-permissoes-item" data-search="converter pedido conversão">
+                        <input type="checkbox" name="orc.convert" data-role="item" data-group="acoes-orc" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Converter em pedido</span>
+                          <p class="text-sm text-gray-400">Ícone de conversão da linha e botão "Converter em Pedido"</p>
+                        </div>
+                      </label>
+
+                      <label class="usuarios-permissoes-item" data-search="pdf baixar download exportar">
+                        <input type="checkbox" name="orc.export" data-role="item" data-group="acoes-orc" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Baixar PDF</span>
+                          <p class="text-sm text-gray-400">Ícone de download da linha</p>
+                        </div>
+                      </label>
+
                     </div>
-                  </label>
+                  </div>
+
+                  <div>
+                    <h4 class="text-sm font-semibold text-gray-300 mb-3">Itens (modais "Novo" e "Editar Orçamento")</h4>
+                    <div class="grid grid-cols-1 gap-4">
+
+                      <label class="usuarios-permissoes-item" data-search="inserir adicionar item peça">
+                        <input type="checkbox" name="orc.item.add" data-role="item" data-group="acoes-orc" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Inserir item</span>
+                          <p class="text-sm text-gray-400">Botão "+ Inserir"</p>
+                        </div>
+                      </label>
+
+                      <label class="usuarios-permissoes-item" data-search="editar item peça lápis">
+                        <input type="checkbox" name="orc.item.edit" data-role="item" data-group="acoes-orc" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Editar item</span>
+                          <p class="text-sm text-gray-400">Ícone de lápis na coluna AÇ. da tabela de itens</p>
+                        </div>
+                      </label>
+
+                      <label class="usuarios-permissoes-item" data-search="remover excluir item peça">
+                        <input type="checkbox" name="orc.item.remove" data-role="item" data-group="acoes-orc" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Remover item</span>
+                          <p class="text-sm text-gray-400">Ícone de lixeira na coluna AÇ. da tabela de itens</p>
+                        </div>
+                      </label>
+
+                      <label class="usuarios-permissoes-item" data-search="limpar tudo zerar">
+                        <input type="checkbox" name="orc.clear" data-role="item" data-group="acoes-orc" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Limpar tudo</span>
+                          <p class="text-sm text-gray-400">Botão "Limpar Tudo" do modal Novo</p>
+                        </div>
+                      </label>
+
+                    </div>
+                  </div>
+
+                  <div>
+                    <h4 class="text-sm font-semibold text-gray-300 mb-3">Modal "Novo Orçamento"</h4>
+                    <div class="grid grid-cols-1 gap-4">
+
+                      <label class="usuarios-permissoes-item" data-search="salvar enviar email orçamento">
+                        <input type="checkbox" name="orc.send" data-role="item" data-group="acoes-orc" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Salvar e enviar</span>
+                          <p class="text-sm text-gray-400">Botão "Salvar e Enviar"</p>
+                        </div>
+                      </label>
+
+                    </div>
+                  </div>
+
+                  <div>
+                    <h4 class="text-sm font-semibold text-gray-300 mb-3">Modal "Editar Orçamento"</h4>
+                    <div class="grid grid-cols-1 gap-4">
+
+                      <label class="usuarios-permissoes-item" data-search="status rascunho pendente aprovado rejeitado expirado">
+                        <input type="checkbox" name="orc.status.change" data-role="item" data-group="acoes-orc" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Alterar status</span>
+                          <p class="text-sm text-gray-400">Seletor de status (Rascunho / Pendente / Aprovado / Rejeitado / Expirado)</p>
+                        </div>
+                      </label>
+
+                      <label class="usuarios-permissoes-item" data-search="clonar duplicar copiar">
+                        <input type="checkbox" name="orc.clone" data-role="item" data-group="acoes-orc" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Clonar orçamento</span>
+                          <p class="text-sm text-gray-400">Botão "Clonar" em Editar e em Visualizar</p>
+                        </div>
+                      </label>
+
+                    </div>
+                  </div>
+
+                  <div>
+                    <h4 class="text-sm font-semibold text-gray-300 mb-3">Modal "Revisar Conversão de Orçamento"</h4>
+                    <div class="grid grid-cols-1 gap-4">
+
+                      <label class="usuarios-permissoes-item" data-search="produzir total parcial decidir conversão">
+                        <input type="checkbox" name="orc.convert.decide" data-role="item" data-group="acoes-orc" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Decidir produção das peças</span>
+                          <p class="text-sm text-gray-400">Colunas "Produzir Total" e "Produzir Parcial"</p>
+                        </div>
+                      </label>
+
+                      <label class="usuarios-permissoes-item" data-search="justificar justificativa saldo negativo">
+                        <input type="checkbox" name="orc.convert.justify" data-role="item" data-group="acoes-orc" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Justificar saldo negativo</span>
+                          <p class="text-sm text-gray-400">Campo de justificativa da conversão</p>
+                        </div>
+                      </label>
+
+                    </div>
+                  </div>
+
+                  <div>
+                    <h4 class="text-sm font-semibold text-gray-300 mb-3">Modal "Substituir Peça"</h4>
+                    <div class="grid grid-cols-1 gap-4">
+
+                      <label class="usuarios-permissoes-item" data-search="substituir trocar peça alternativa">
+                        <input type="checkbox" name="orc.item.replace" data-role="item" data-group="acoes-orc" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Substituir peça</span>
+                          <p class="text-sm text-gray-400">Botão "Confirmar Substituição"</p>
+                        </div>
+                      </label>
+
+                    </div>
+                  </div>
 
                 </div>
               </div>
@@ -1035,12 +1156,12 @@
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
 
                   <div>
-                    <h4 class="text-sm font-semibold text-gray-300 mb-3">Lista de orçamentos</h4>
+                    <h4 class="text-sm font-semibold text-gray-300 mb-3">Tabela de orçamentos (lista)</h4>
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
 
                       <label class="usuarios-permissoes-checkbox">
                         <input type="checkbox" name="col_orc_num" data-role="item" data-group="colunas-orc" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">Nº orçamento</span>
+                        <span class="text-sm">Código</span>
                       </label>
 
                       <label class="usuarios-permissoes-checkbox">
@@ -1049,43 +1170,18 @@
                       </label>
 
                       <label class="usuarios-permissoes-checkbox">
-                        <input type="checkbox" name="col_orc_vendedor" data-role="item" data-group="colunas-orc" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">Vendedor</span>
-                      </label>
-
-                      <label class="usuarios-permissoes-checkbox">
                         <input type="checkbox" name="col_orc_data" data-role="item" data-group="colunas-orc" data-item-type="column" class="w-4 h-4" />
                         <span class="text-sm">Data</span>
                       </label>
 
                       <label class="usuarios-permissoes-checkbox">
-                        <input type="checkbox" name="col_orc_validade" data-role="item" data-group="colunas-orc" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">Validade</span>
-                      </label>
-
-                      <label class="usuarios-permissoes-checkbox">
-                        <input type="checkbox" name="col_orc_itens" data-role="item" data-group="colunas-orc" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">Itens</span>
-                      </label>
-
-                      <label class="usuarios-permissoes-checkbox">
-                        <input type="checkbox" name="col_orc_subtotal" data-role="item" data-group="colunas-orc" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">Subtotal</span>
-                      </label>
-
-                      <label class="usuarios-permissoes-checkbox">
-                        <input type="checkbox" name="col_orc_desc" data-role="item" data-group="colunas-orc" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">Descontos</span>
-                      </label>
-
-                      <label class="usuarios-permissoes-checkbox">
-                        <input type="checkbox" name="col_orc_frete_outros" data-role="item" data-group="colunas-orc" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">Frete/outros</span>
-                      </label>
-
-                      <label class="usuarios-permissoes-checkbox">
                         <input type="checkbox" name="col_orc_total" data-role="item" data-group="colunas-orc" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">Total</span>
+                        <span class="text-sm">Valor Total</span>
+                      </label>
+
+                      <label class="usuarios-permissoes-checkbox">
+                        <input type="checkbox" name="col_orc_cond_pagto" data-role="item" data-group="colunas-orc" data-item-type="column" class="w-4 h-4" />
+                        <span class="text-sm">Condição</span>
                       </label>
 
                       <label class="usuarios-permissoes-checkbox">
@@ -1097,17 +1193,12 @@
                   </div>
 
                   <div>
-                    <h4 class="text-sm font-semibold text-gray-300 mb-3">Itens do orçamento</h4>
+                    <h4 class="text-sm font-semibold text-gray-300 mb-3">Tabela de itens (Novo / Editar / Visualizar)</h4>
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
 
                       <label class="usuarios-permissoes-checkbox">
                         <input type="checkbox" name="col_orc_it_nome" data-role="item" data-group="colunas-orc" data-item-type="column" class="w-4 h-4" />
                         <span class="text-sm">Item</span>
-                      </label>
-
-                      <label class="usuarios-permissoes-checkbox">
-                        <input type="checkbox" name="col_orc_it_sku" data-role="item" data-group="colunas-orc" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">SKU</span>
                       </label>
 
                       <label class="usuarios-permissoes-checkbox">
@@ -1117,49 +1208,133 @@
 
                       <label class="usuarios-permissoes-checkbox">
                         <input type="checkbox" name="col_orc_it_preco" data-role="item" data-group="colunas-orc" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">Preço</span>
+                        <span class="text-sm">Un R$</span>
+                      </label>
+
+                      <label class="usuarios-permissoes-checkbox">
+                        <input type="checkbox" name="col_orc_it_preco_desc" data-role="item" data-group="colunas-orc" data-item-type="column" class="w-4 h-4" />
+                        <span class="text-sm">Un c/desconto</span>
                       </label>
 
                       <label class="usuarios-permissoes-checkbox">
                         <input type="checkbox" name="col_orc_it_desc" data-role="item" data-group="colunas-orc" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">Desc.</span>
+                        <span class="text-sm">Desconto %</span>
                       </label>
 
                       <label class="usuarios-permissoes-checkbox">
                         <input type="checkbox" name="col_orc_it_subtotal" data-role="item" data-group="colunas-orc" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">Subtotal</span>
-                      </label>
-
-                      <label class="usuarios-permissoes-checkbox">
-                        <input type="checkbox" name="col_orc_it_obs" data-role="item" data-group="colunas-orc" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">Observações</span>
+                        <span class="text-sm">Total R$</span>
                       </label>
 
                     </div>
                   </div>
 
                   <div>
-                    <h4 class="text-sm font-semibold text-gray-300 mb-3">Condições</h4>
+                    <h4 class="text-sm font-semibold text-gray-300 mb-3">Tabela de Peças (modal de conversão)</h4>
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
 
                       <label class="usuarios-permissoes-checkbox">
-                        <input type="checkbox" name="col_orc_cond_pagto" data-role="item" data-group="colunas-orc" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">Pagamento</span>
+                        <input type="checkbox" name="col_conv_peca" data-role="item" data-group="colunas-orc" data-item-type="column" class="w-4 h-4" />
+                        <span class="text-sm">Peça</span>
                       </label>
 
                       <label class="usuarios-permissoes-checkbox">
-                        <input type="checkbox" name="col_orc_cond_parc" data-role="item" data-group="colunas-orc" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">Parcelas</span>
+                        <input type="checkbox" name="col_conv_qtd_orcada" data-role="item" data-group="colunas-orc" data-item-type="column" class="w-4 h-4" />
+                        <span class="text-sm">Qtd Orçada</span>
                       </label>
 
                       <label class="usuarios-permissoes-checkbox">
-                        <input type="checkbox" name="col_orc_cond_prazo" data-role="item" data-group="colunas-orc" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">Prazo</span>
+                        <input type="checkbox" name="col_conv_em_estoque" data-role="item" data-group="colunas-orc" data-item-type="column" class="w-4 h-4" />
+                        <span class="text-sm">Em Estoque</span>
                       </label>
 
                       <label class="usuarios-permissoes-checkbox">
-                        <input type="checkbox" name="col_orc_cond_validade" data-role="item" data-group="colunas-orc" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">Validade</span>
+                        <input type="checkbox" name="col_conv_pronta" data-role="item" data-group="colunas-orc" data-item-type="column" class="w-4 h-4" />
+                        <span class="text-sm">Pronta</span>
+                      </label>
+
+                      <label class="usuarios-permissoes-checkbox">
+                        <input type="checkbox" name="col_conv_produzir_total" data-role="item" data-group="colunas-orc" data-item-type="column" class="w-4 h-4" />
+                        <span class="text-sm">Produzir Total</span>
+                      </label>
+
+                      <label class="usuarios-permissoes-checkbox">
+                        <input type="checkbox" name="col_conv_produzir_parcial" data-role="item" data-group="colunas-orc" data-item-type="column" class="w-4 h-4" />
+                        <span class="text-sm">Produzir Parcial</span>
+                      </label>
+
+                      <label class="usuarios-permissoes-checkbox">
+                        <input type="checkbox" name="col_conv_status" data-role="item" data-group="colunas-orc" data-item-type="column" class="w-4 h-4" />
+                        <span class="text-sm">Status</span>
+                      </label>
+
+                    </div>
+                  </div>
+
+                  <div>
+                    <h4 class="text-sm font-semibold text-gray-300 mb-3">Tabela de Insumos (modal de conversão)</h4>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+
+                      <label class="usuarios-permissoes-checkbox">
+                        <input type="checkbox" name="col_conv_ins_nome" data-role="item" data-group="colunas-orc" data-item-type="column" class="w-4 h-4" />
+                        <span class="text-sm">Insumo</span>
+                      </label>
+
+                      <label class="usuarios-permissoes-checkbox">
+                        <input type="checkbox" name="col_conv_ins_unidade" data-role="item" data-group="colunas-orc" data-item-type="column" class="w-4 h-4" />
+                        <span class="text-sm">Unidade</span>
+                      </label>
+
+                      <label class="usuarios-permissoes-checkbox">
+                        <input type="checkbox" name="col_conv_ins_disponivel" data-role="item" data-group="colunas-orc" data-item-type="column" class="w-4 h-4" />
+                        <span class="text-sm">Disponível</span>
+                      </label>
+
+                      <label class="usuarios-permissoes-checkbox">
+                        <input type="checkbox" name="col_conv_ins_necessario" data-role="item" data-group="colunas-orc" data-item-type="column" class="w-4 h-4" />
+                        <span class="text-sm">Necessário</span>
+                      </label>
+
+                      <label class="usuarios-permissoes-checkbox">
+                        <input type="checkbox" name="col_conv_ins_saldo" data-role="item" data-group="colunas-orc" data-item-type="column" class="w-4 h-4" />
+                        <span class="text-sm">Saldo (prev.)</span>
+                      </label>
+
+                      <label class="usuarios-permissoes-checkbox">
+                        <input type="checkbox" name="col_conv_ins_etapa" data-role="item" data-group="colunas-orc" data-item-type="column" class="w-4 h-4" />
+                        <span class="text-sm">Etapa</span>
+                      </label>
+
+                      <label class="usuarios-permissoes-checkbox">
+                        <input type="checkbox" name="col_conv_ins_flags" data-role="item" data-group="colunas-orc" data-item-type="column" class="w-4 h-4" />
+                        <span class="text-sm">Flags</span>
+                      </label>
+
+                    </div>
+                  </div>
+
+                  <div>
+                    <h4 class="text-sm font-semibold text-gray-300 mb-3">Campos dos modais de orçamento</h4>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+
+                      <label class="usuarios-permissoes-checkbox">
+                        <input type="checkbox" name="col_orc_campo_dono" data-role="item" data-group="colunas-orc" data-item-type="column" class="w-4 h-4" />
+                        <span class="text-sm">Dono</span>
+                      </label>
+
+                      <label class="usuarios-permissoes-checkbox">
+                        <input type="checkbox" name="col_orc_campo_transportadora" data-role="item" data-group="colunas-orc" data-item-type="column" class="w-4 h-4" />
+                        <span class="text-sm">Transportadora</span>
+                      </label>
+
+                      <label class="usuarios-permissoes-checkbox">
+                        <input type="checkbox" name="col_orc_campo_pagamento" data-role="item" data-group="colunas-orc" data-item-type="column" class="w-4 h-4" />
+                        <span class="text-sm">Forma de pagamento</span>
+                      </label>
+
+                      <label class="usuarios-permissoes-checkbox">
+                        <input type="checkbox" name="col_orc_campo_observacoes" data-role="item" data-group="colunas-orc" data-item-type="column" class="w-4 h-4" />
+                        <span class="text-sm">Observações</span>
                       </label>
 
                     </div>
@@ -1211,103 +1386,108 @@
                   </div>
                   <i class="fas fa-info-circle text-[var(--color-primary)]" title="Permissões do módulo"></i>
                 </div>
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="grid grid-cols-1 gap-6">
 
-                  <label class="usuarios-permissoes-item" data-search="ver lista pedidos">
-                    <input type="checkbox" name="ped.view" data-role="item" data-group="acoes-ped" data-item-type="action" class="w-4 h-4 mt-1" />
-                    <div>
-                      <span class="font-medium">Ver lista</span>
-                      <p class="text-sm text-gray-400">Exibir pedidos com status</p>
-                    </div>
-                  </label>
+                  <div>
+                    <h4 class="text-sm font-semibold text-gray-300 mb-3">Tela de Pedidos (lista)</h4>
+                    <div class="grid grid-cols-1 gap-4">
 
-                  <label class="usuarios-permissoes-item" data-search="buscar filtrar">
-                    <input type="checkbox" name="ped.search" data-role="item" data-group="acoes-ped" data-item-type="action" class="w-4 h-4 mt-1" />
-                    <div>
-                      <span class="font-medium">Buscar/filtrar</span>
-                      <p class="text-sm text-gray-400">Habilitar filtros e ordenação</p>
-                    </div>
-                  </label>
+                      <label class="usuarios-permissoes-item" data-search="ver lista grade pedidos">
+                        <input type="checkbox" name="ped.view" data-role="item" data-group="acoes-ped" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Ver lista</span>
+                          <p class="text-sm text-gray-400">Exibir a grade de pedidos</p>
+                        </div>
+                      </label>
 
-                  <label class="usuarios-permissoes-item" data-search="ver detalhes pedido">
-                    <input type="checkbox" name="ped.view.details" data-role="item" data-group="acoes-ped" data-item-type="action" class="w-4 h-4 mt-1" />
-                    <div>
-                      <span class="font-medium">Ver detalhes</span>
-                      <p class="text-sm text-gray-400">Abrir visão completa do pedido</p>
-                    </div>
-                  </label>
+                      <label class="usuarios-permissoes-item" data-search="buscar filtrar status período dono cliente">
+                        <input type="checkbox" name="ped.search" data-role="item" data-group="acoes-ped" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Buscar/filtrar</span>
+                          <p class="text-sm text-gray-400">Filtros de status, período, dono e cliente + Filtrar/Limpar</p>
+                        </div>
+                      </label>
 
-                  <label class="usuarios-permissoes-item" data-search="cancelar pedido">
-                    <input type="checkbox" name="ped.cancel" data-role="item" data-group="acoes-ped" data-item-type="action" class="w-4 h-4 mt-1" />
-                    <div>
-                      <span class="font-medium">Cancelar pedido</span>
-                      <p class="text-sm text-gray-400">Cancelar com regras de estoque/financeiro</p>
                     </div>
-                  </label>
+                  </div>
 
-                  <label class="usuarios-permissoes-item" data-search="abater estoque">
-                    <input type="checkbox" name="ped.stock.deduct" data-role="item" data-group="acoes-ped" data-item-type="action" class="w-4 h-4 mt-1" />
-                    <div>
-                      <span class="font-medium">Abater estoque</span>
-                      <p class="text-sm text-gray-400">Baixar estoque dos itens</p>
-                    </div>
-                  </label>
+                  <div>
+                    <h4 class="text-sm font-semibold text-gray-300 mb-3">Ações na linha da tabela</h4>
+                    <div class="grid grid-cols-1 gap-4">
 
-                  <label class="usuarios-permissoes-item" data-search="restaurar estoque cancelar">
-                    <input type="checkbox" name="ped.stock.restore_on_cancel" data-role="item" data-group="acoes-ped" data-item-type="action" class="w-4 h-4 mt-1" />
-                    <div>
-                      <span class="font-medium">Restaurar estoque ao cancelar</span>
-                      <p class="text-sm text-gray-400">Reverter baixas quando cancelado</p>
-                    </div>
-                  </label>
+                      <label class="usuarios-permissoes-item" data-search="visualizar detalhes olho pedido">
+                        <input type="checkbox" name="ped.view.details" data-role="item" data-group="acoes-ped" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Visualizar pedido</span>
+                          <p class="text-sm text-gray-400">Ícone de olho — abre "Visualizar Pedido"</p>
+                        </div>
+                      </label>
 
-                  <label class="usuarios-permissoes-item" data-search="confirmar pedido">
-                    <input type="checkbox" name="ped.status.confirm" data-role="item" data-group="acoes-ped" data-item-type="action" class="w-4 h-4 mt-1" />
-                    <div>
-                      <span class="font-medium">Confirmar pedido</span>
-                      <p class="text-sm text-gray-400">Marcar pedido como confirmado</p>
-                    </div>
-                  </label>
+                      <label class="usuarios-permissoes-item" data-search="confirmar concluir pedido status">
+                        <input type="checkbox" name="ped.status.confirm" data-role="item" data-group="acoes-ped" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Confirmar pedido</span>
+                          <p class="text-sm text-gray-400">Ícone "Concluir" quando o pedido aguarda confirmação</p>
+                        </div>
+                      </label>
 
-                  <label class="usuarios-permissoes-item" data-search="faturar pedido">
-                    <input type="checkbox" name="ped.status.invoice" data-role="item" data-group="acoes-ped" data-item-type="action" class="w-4 h-4 mt-1" />
-                    <div>
-                      <span class="font-medium">Faturar pedido</span>
-                      <p class="text-sm text-gray-400">Gerar faturamento</p>
-                    </div>
-                  </label>
+                      <label class="usuarios-permissoes-item" data-search="despachar enviar produção status">
+                        <input type="checkbox" name="ped.status.ship" data-role="item" data-group="acoes-ped" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Despachar pedido</span>
+                          <p class="text-sm text-gray-400">Ícone "Concluir" quando o pedido está em Produção</p>
+                        </div>
+                      </label>
 
-                  <label class="usuarios-permissoes-item" data-search="despachar pedido">
-                    <input type="checkbox" name="ped.status.ship" data-role="item" data-group="acoes-ped" data-item-type="action" class="w-4 h-4 mt-1" />
-                    <div>
-                      <span class="font-medium">Despachar pedido</span>
-                      <p class="text-sm text-gray-400">Registrar expedição e rastreio</p>
-                    </div>
-                  </label>
+                      <label class="usuarios-permissoes-item" data-search="entregue entrega status">
+                        <input type="checkbox" name="ped.status.deliver" data-role="item" data-group="acoes-ped" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Dar como entregue</span>
+                          <p class="text-sm text-gray-400">Ícone "Concluir" quando o pedido está Enviado</p>
+                        </div>
+                      </label>
 
-                  <label class="usuarios-permissoes-item" data-search="entregar pedido">
-                    <input type="checkbox" name="ped.status.deliver" data-role="item" data-group="acoes-ped" data-item-type="action" class="w-4 h-4 mt-1" />
-                    <div>
-                      <span class="font-medium">Dar como entregue</span>
-                      <p class="text-sm text-gray-400">Concluir entrega com registro</p>
-                    </div>
-                  </label>
+                      <label class="usuarios-permissoes-item" data-search="relatório ver pedido">
+                        <input type="checkbox" name="ped.report" data-role="item" data-group="acoes-ped" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Ver relatório</span>
+                          <p class="text-sm text-gray-400">Ícone de relatório da linha</p>
+                        </div>
+                      </label>
 
-                  <label class="usuarios-permissoes-item" data-search="pdf baixar exportar download">
-                    <input type="checkbox" name="ped.export" data-role="item" data-group="acoes-ped" data-item-type="action" class="w-4 h-4 mt-1" />
-                    <div>
-                      <span class="font-medium">Baixar PDF</span>
-                      <p class="text-sm text-gray-400">Gerar e baixar o PDF do pedido</p>
-                    </div>
-                  </label>
+                      <label class="usuarios-permissoes-item" data-search="pdf baixar download exportar">
+                        <input type="checkbox" name="ped.export" data-role="item" data-group="acoes-ped" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Baixar PDF</span>
+                          <p class="text-sm text-gray-400">Ícone de download da linha</p>
+                        </div>
+                      </label>
 
-                  <label class="usuarios-permissoes-item" data-search="relatorio report prancheta">
-                    <input type="checkbox" name="ped.report" data-role="item" data-group="acoes-ped" data-item-type="action" class="w-4 h-4 mt-1" />
-                    <div>
-                      <span class="font-medium">Ver relatório</span>
-                      <p class="text-sm text-gray-400">Abrir o relatório do pedido</p>
                     </div>
-                  </label>
+                  </div>
+
+                  <div>
+                    <h4 class="text-sm font-semibold text-gray-300 mb-3">Modal "Cancelar Pedido"</h4>
+                    <div class="grid grid-cols-1 gap-4">
+
+                      <label class="usuarios-permissoes-item" data-search="cancelar pedido confirmar cancelamento">
+                        <input type="checkbox" name="ped.cancel" data-role="item" data-group="acoes-ped" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Cancelar pedido</span>
+                          <p class="text-sm text-gray-400">Botão "Cancelar" no Visualizar e "Confirmar Cancelamento"</p>
+                        </div>
+                      </label>
+
+                      <label class="usuarios-permissoes-item" data-search="realocar destinação estoque devolver cancelar">
+                        <input type="checkbox" name="ped.stock.restore_on_cancel" data-role="item" data-group="acoes-ped" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Realocar estoque ao cancelar</span>
+                          <p class="text-sm text-gray-400">Coluna "Destinações" e botão "Reiniciar Destinação"</p>
+                        </div>
+                      </label>
+
+                    </div>
+                  </div>
 
                 </div>
               </div>
@@ -1336,12 +1516,12 @@
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
 
                   <div>
-                    <h4 class="text-sm font-semibold text-gray-300 mb-3">Lista de pedidos</h4>
+                    <h4 class="text-sm font-semibold text-gray-300 mb-3">Tabela de pedidos (lista)</h4>
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
 
                       <label class="usuarios-permissoes-checkbox">
                         <input type="checkbox" name="col_ped_num" data-role="item" data-group="colunas-ped" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">Nº pedido</span>
+                        <span class="text-sm">Código</span>
                       </label>
 
                       <label class="usuarios-permissoes-checkbox">
@@ -1350,38 +1530,13 @@
                       </label>
 
                       <label class="usuarios-permissoes-checkbox">
-                        <input type="checkbox" name="col_ped_vendedor" data-role="item" data-group="colunas-ped" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">Vendedor</span>
-                      </label>
-
-                      <label class="usuarios-permissoes-checkbox">
                         <input type="checkbox" name="col_ped_data" data-role="item" data-group="colunas-ped" data-item-type="column" class="w-4 h-4" />
                         <span class="text-sm">Data</span>
                       </label>
 
                       <label class="usuarios-permissoes-checkbox">
-                        <input type="checkbox" name="col_ped_entrega" data-role="item" data-group="colunas-ped" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">Entrega</span>
-                      </label>
-
-                      <label class="usuarios-permissoes-checkbox">
-                        <input type="checkbox" name="col_ped_itens" data-role="item" data-group="colunas-ped" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">Itens</span>
-                      </label>
-
-                      <label class="usuarios-permissoes-checkbox">
                         <input type="checkbox" name="col_ped_total" data-role="item" data-group="colunas-ped" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">Total</span>
-                      </label>
-
-                      <label class="usuarios-permissoes-checkbox">
-                        <input type="checkbox" name="col_ped_abate_estoque" data-role="item" data-group="colunas-ped" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">Abate estoque</span>
-                      </label>
-
-                      <label class="usuarios-permissoes-checkbox">
-                        <input type="checkbox" name="col_ped_status" data-role="item" data-group="colunas-ped" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">Status</span>
+                        <span class="text-sm">Valor Total</span>
                       </label>
 
                       <label class="usuarios-permissoes-checkbox">
@@ -1390,25 +1545,20 @@
                       </label>
 
                       <label class="usuarios-permissoes-checkbox">
-                        <input type="checkbox" name="col_ped_origem" data-role="item" data-group="colunas-ped" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">Origem</span>
+                        <input type="checkbox" name="col_ped_status" data-role="item" data-group="colunas-ped" data-item-type="column" class="w-4 h-4" />
+                        <span class="text-sm">Status</span>
                       </label>
 
                     </div>
                   </div>
 
                   <div>
-                    <h4 class="text-sm font-semibold text-gray-300 mb-3">Itens do pedido</h4>
+                    <h4 class="text-sm font-semibold text-gray-300 mb-3">Tabela de itens (modal "Visualizar Pedido")</h4>
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
 
                       <label class="usuarios-permissoes-checkbox">
                         <input type="checkbox" name="col_ped_it_nome" data-role="item" data-group="colunas-ped" data-item-type="column" class="w-4 h-4" />
                         <span class="text-sm">Item</span>
-                      </label>
-
-                      <label class="usuarios-permissoes-checkbox">
-                        <input type="checkbox" name="col_ped_it_sku" data-role="item" data-group="colunas-ped" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">SKU</span>
                       </label>
 
                       <label class="usuarios-permissoes-checkbox">
@@ -1418,54 +1568,86 @@
 
                       <label class="usuarios-permissoes-checkbox">
                         <input type="checkbox" name="col_ped_it_preco" data-role="item" data-group="colunas-ped" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">Preço</span>
+                        <span class="text-sm">Un R$</span>
+                      </label>
+
+                      <label class="usuarios-permissoes-checkbox">
+                        <input type="checkbox" name="col_ped_it_preco_desc" data-role="item" data-group="colunas-ped" data-item-type="column" class="w-4 h-4" />
+                        <span class="text-sm">Un c/desconto</span>
                       </label>
 
                       <label class="usuarios-permissoes-checkbox">
                         <input type="checkbox" name="col_ped_it_desc" data-role="item" data-group="colunas-ped" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">Desc.</span>
+                        <span class="text-sm">Desconto %</span>
                       </label>
 
                       <label class="usuarios-permissoes-checkbox">
                         <input type="checkbox" name="col_ped_it_subtotal" data-role="item" data-group="colunas-ped" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">Subtotal</span>
-                      </label>
-
-                      <label class="usuarios-permissoes-checkbox">
-                        <input type="checkbox" name="col_ped_it_situacao" data-role="item" data-group="colunas-ped" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">Situação</span>
+                        <span class="text-sm">Total R$</span>
                       </label>
 
                     </div>
                   </div>
 
                   <div>
-                    <h4 class="text-sm font-semibold text-gray-300 mb-3">Logística/expedição</h4>
+                    <h4 class="text-sm font-semibold text-gray-300 mb-3">Tabela do modal "Cancelar Pedido"</h4>
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
 
                       <label class="usuarios-permissoes-checkbox">
-                        <input type="checkbox" name="col_log_transportadora" data-role="item" data-group="colunas-ped" data-item-type="column" class="w-4 h-4" />
+                        <input type="checkbox" name="col_canc_item" data-role="item" data-group="colunas-ped" data-item-type="column" class="w-4 h-4" />
+                        <span class="text-sm">Item</span>
+                      </label>
+
+                      <label class="usuarios-permissoes-checkbox">
+                        <input type="checkbox" name="col_canc_qtd" data-role="item" data-group="colunas-ped" data-item-type="column" class="w-4 h-4" />
+                        <span class="text-sm">Quantidade</span>
+                      </label>
+
+                      <label class="usuarios-permissoes-checkbox">
+                        <input type="checkbox" name="col_canc_restante" data-role="item" data-group="colunas-ped" data-item-type="column" class="w-4 h-4" />
+                        <span class="text-sm">Quantidade Restante</span>
+                      </label>
+
+                      <label class="usuarios-permissoes-checkbox">
+                        <input type="checkbox" name="col_canc_origem" data-role="item" data-group="colunas-ped" data-item-type="column" class="w-4 h-4" />
+                        <span class="text-sm">Origem</span>
+                      </label>
+
+                      <label class="usuarios-permissoes-checkbox">
+                        <input type="checkbox" name="col_canc_situacao" data-role="item" data-group="colunas-ped" data-item-type="column" class="w-4 h-4" />
+                        <span class="text-sm">Situação</span>
+                      </label>
+
+                      <label class="usuarios-permissoes-checkbox">
+                        <input type="checkbox" name="col_canc_destinos" data-role="item" data-group="colunas-ped" data-item-type="column" class="w-4 h-4" />
+                        <span class="text-sm">Destinações</span>
+                      </label>
+
+                    </div>
+                  </div>
+
+                  <div>
+                    <h4 class="text-sm font-semibold text-gray-300 mb-3">Campos do modal "Visualizar Pedido"</h4>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+
+                      <label class="usuarios-permissoes-checkbox">
+                        <input type="checkbox" name="col_ped_campo_dono" data-role="item" data-group="colunas-ped" data-item-type="column" class="w-4 h-4" />
+                        <span class="text-sm">Dono</span>
+                      </label>
+
+                      <label class="usuarios-permissoes-checkbox">
+                        <input type="checkbox" name="col_ped_campo_transportadora" data-role="item" data-group="colunas-ped" data-item-type="column" class="w-4 h-4" />
                         <span class="text-sm">Transportadora</span>
                       </label>
 
                       <label class="usuarios-permissoes-checkbox">
-                        <input type="checkbox" name="col_log_cod_rastreio" data-role="item" data-group="colunas-ped" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">Código rastreio</span>
+                        <input type="checkbox" name="col_ped_campo_pagamento" data-role="item" data-group="colunas-ped" data-item-type="column" class="w-4 h-4" />
+                        <span class="text-sm">Forma de pagamento</span>
                       </label>
 
                       <label class="usuarios-permissoes-checkbox">
-                        <input type="checkbox" name="col_log_frete_valor" data-role="item" data-group="colunas-ped" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">Frete</span>
-                      </label>
-
-                      <label class="usuarios-permissoes-checkbox">
-                        <input type="checkbox" name="col_log_data_envio" data-role="item" data-group="colunas-ped" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">Enviado em</span>
-                      </label>
-
-                      <label class="usuarios-permissoes-checkbox">
-                        <input type="checkbox" name="col_log_data_entrega" data-role="item" data-group="colunas-ped" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">Entregue em</span>
+                        <input type="checkbox" name="col_ped_campo_observacoes" data-role="item" data-group="colunas-ped" data-item-type="column" class="w-4 h-4" />
+                        <span class="text-sm">Observações</span>
                       </label>
 
                     </div>

@@ -195,12 +195,12 @@
       const tr = document.createElement('tr');
       tr.className = 'border-b border-white/10';
       tr.innerHTML = `
-        <td class="text-left text-white" title="${escapeAttr(item.nome || '')}">${item.nome || ''}</td>
-        <td class="text-left text-white">${fmtNumber(qtd)}</td>
-        <td class="text-left text-white">${fmtNumber(valorUnit)}</td>
-        <td class="text-left text-white">${fmtNumber(valorUnitDesc)}</td>
-        <td class="text-left text-white">${fmtNumber(descPagPrc + descEspPrc)}</td>
-        <td class="text-left text-white">${fmtCurrency(valorTotal)}</td>
+        <td data-perm-col="col_ped_it_nome" class="text-left text-white" title="${escapeAttr(item.nome || '')}">${item.nome || ''}</td>
+        <td data-perm-col="col_ped_it_qtd" class="text-left text-white">${fmtNumber(qtd)}</td>
+        <td data-perm-col="col_ped_it_preco" class="text-left text-white">${fmtNumber(valorUnit)}</td>
+        <td data-perm-col="col_ped_it_preco_desc" class="text-left text-white">${fmtNumber(valorUnitDesc)}</td>
+        <td data-perm-col="col_ped_it_desc" class="text-left text-white">${fmtNumber(descPagPrc + descEspPrc)}</td>
+        <td data-perm-col="col_ped_it_subtotal" class="text-left text-white">${fmtCurrency(valorTotal)}</td>
         <td class="text-left modal-actions-disabled actions-cell">
           <div class="flex items-center justify-start gap-2">
             <i class="fas fa-edit w-5 h-5 p-1 rounded icon-disabled" style="color: var(--color-primary)"></i>

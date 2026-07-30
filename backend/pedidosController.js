@@ -21,7 +21,20 @@ router.get('/', exigirPermissao('ped.view'), async (req, res) => {
 });
 
 // Atualiza o status de um pedido
-router.put('/:id/status', exigirPermissao('ped.status.confirm'), async (req, res) => {
+// A permissão depende do destino: Enviado -> despachar, Entregue -> entregue,
+// qualquer outro -> confirmar.
+function permissaoDeStatus(req) {
+  const destino = String(req.body?.status || '').trim().toLowerCase();
+  // O CANCELAMENTO tambem chega por aqui (o modal envia status: 'Cancelado').
+  // Sem esta linha, quem tinha apenas "confirmar pedido" conseguiria cancelar e
+  // disparar a realocacao de estoque.
+  if (destino === 'cancelado') return 'ped.cancel';
+  if (destino === 'enviado') return 'ped.status.ship';
+  if (destino === 'entregue') return 'ped.status.deliver';
+  return 'ped.status.confirm';
+}
+
+router.put('/:id/status', exigirPermissao(permissaoDeStatus), async (req, res) => {
   const { status } = req.body;
   const { id } = req.params;
   try {

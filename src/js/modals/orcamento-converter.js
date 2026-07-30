@@ -516,7 +516,7 @@
         : 'Substituir';
       const replaceButtonHtml = `
         <button class="${replaceButtonClasses.join(' ')}"
-          data-action="replace" data-approved="${isApproved ? 'true' : 'false'}" title="${replaceButtonTitle}" aria-label="Substituir">
+          data-perm="orc.item.replace" data-action="replace" data-approved="${isApproved ? 'true' : 'false'}" title="${replaceButtonTitle}" aria-label="Substituir">
           <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
             <path d="M4.5 7.5A7.5 7.5 0 0112 4.5a7.5 7.5 0 017.5 7.5"></path>
             <path d="M19.5 12v4.5H15"></path>
@@ -530,7 +530,7 @@
         : `<svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 12.75l6 6 9-13.5"></path></svg>`;
       const toggleButtonHtml = `
         <button class="${actionClass} w-8 h-8 flex items-center justify-center rounded ${isApproved ? 'text-white' : 'text-black'} focus:outline-none focus:ring-2 focus:ring-white/40"
-          data-action="toggle-approval" title="${actionLabel}" aria-label="${actionLabel}">
+          data-perm="orc.convert.decide" data-action="toggle-approval" title="${actionLabel}" aria-label="${actionLabel}">
           ${actionIcon}
         </button>`;
 
@@ -541,13 +541,13 @@
         </span>` : '';
 
       tr.innerHTML = `
-        <td class="py-3 px-2 ${primaryTextClass}">${r.nome || ''}</td>
-        <td class="py-3 px-2 text-left ${primaryTextClass}">${r.qtd}</td>
-        <td class="py-3 px-2 text-left ${primaryTextClass}">${r.em_estoque ?? 0}</td>
-        <td class="py-3 px-2 text-left ${primaryTextClass}">${r.pronta ?? 0}</td>
-        <td class="py-3 px-2 text-left ${primaryTextClass}">${r.produzir_total ?? 0}</td>
-        <td class="py-3 px-2 text-left ${primaryTextClass}">${r.produzir_parcial ?? 0} ${infoSpan}</td>
-        <td class="py-3 px-2 text-left">${statusHtml}</td>
+        <td data-perm-col="col_conv_peca" class="py-3 px-2 ${primaryTextClass}">${r.nome || ''}</td>
+        <td data-perm-col="col_conv_qtd_orcada" class="py-3 px-2 text-left ${primaryTextClass}">${r.qtd}</td>
+        <td data-perm-col="col_conv_em_estoque" class="py-3 px-2 text-left ${primaryTextClass}">${r.em_estoque ?? 0}</td>
+        <td data-perm-col="col_conv_pronta" class="py-3 px-2 text-left ${primaryTextClass}">${r.pronta ?? 0}</td>
+        <td data-perm-col="col_conv_produzir_total" class="py-3 px-2 text-left ${primaryTextClass}">${r.produzir_total ?? 0}</td>
+        <td data-perm-col="col_conv_produzir_parcial" class="py-3 px-2 text-left ${primaryTextClass}">${r.produzir_parcial ?? 0} ${infoSpan}</td>
+        <td data-perm-col="col_conv_status" class="py-3 px-2 text-left">${statusHtml}</td>
         <td class="py-3 px-2 text-left">
           <div class="flex justify-start gap-1">
             ${viewButtonHtml}
@@ -1136,13 +1136,13 @@ async function computeInsumosAndRender(options = {}) {
           flags.push('<span class="badge-info px-2 py-0.5 rounded text-[10px]" title="Saldo previsto correto">correto</span>');
         }
         tr.innerHTML = `
-          <td class="py-3 px-2 text-white">${v.nome}</td>
-          <td class="py-3 px-2 text-left text-gray-300">${v.un || stock.unidade || ''}</td>
-          <td class="py-3 px-2 text-left">${disponivel === Infinity ? '<span class="badge-success px-2 py-0.5 rounded text-[10px]">infinito</span>' : '<span class="text-white">' + disponivel.toLocaleString('pt-BR') + '</span>'}</td>
-          <td class="py-3 px-2 text-left text-white">${Number(v.necessario || 0).toLocaleString('pt-BR')}</td>
-          <td class="py-3 px-2 text-left">${negative ? '<span class="status-alert font-medium" title="Saldo previsto negativo">' + saldo.toLocaleString('pt-BR') + '</span>' : (saldo === Infinity ? '<span class="badge-success px-2 py-0.5 rounded text-[10px]">infinito</span>' : '<span class="status-ok font-medium">' + saldo.toLocaleString('pt-BR') + '</span>')}</td>
-          <td class="py-3 px-2 text-left text-white">${v.etapa || '-'}</td>
-          <td class="py-3 px-2 text-left text-white">${flags.join(' ')}</td>`;
+          <td data-perm-col="col_conv_ins_nome" class="py-3 px-2 text-white">${v.nome}</td>
+          <td data-perm-col="col_conv_ins_unidade" class="py-3 px-2 text-left text-gray-300">${v.un || stock.unidade || ''}</td>
+          <td data-perm-col="col_conv_ins_disponivel" class="py-3 px-2 text-left">${disponivel === Infinity ? '<span class="badge-success px-2 py-0.5 rounded text-[10px]">infinito</span>' : '<span class="text-white">' + disponivel.toLocaleString('pt-BR') + '</span>'}</td>
+          <td data-perm-col="col_conv_ins_necessario" class="py-3 px-2 text-left text-white">${Number(v.necessario || 0).toLocaleString('pt-BR')}</td>
+          <td data-perm-col="col_conv_ins_saldo" class="py-3 px-2 text-left">${negative ? '<span class="status-alert font-medium" title="Saldo previsto negativo">' + saldo.toLocaleString('pt-BR') + '</span>' : (saldo === Infinity ? '<span class="badge-success px-2 py-0.5 rounded text-[10px]">infinito</span>' : '<span class="status-ok font-medium">' + saldo.toLocaleString('pt-BR') + '</span>')}</td>
+          <td data-perm-col="col_conv_ins_etapa" class="py-3 px-2 text-left text-white">${v.etapa || '-'}</td>
+          <td data-perm-col="col_conv_ins_flags" class="py-3 px-2 text-left text-white">${flags.join(' ')}</td>`;
         insumosBody.appendChild(tr);
       });
     } else {

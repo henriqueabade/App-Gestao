@@ -106,33 +106,50 @@ CREATE TABLE IF NOT EXISTS perm_orc (
 ALTER TABLE perm_orc ADD COLUMN IF NOT EXISTS acao_view BOOLEAN NOT NULL DEFAULT FALSE;  -- orc.view · Ver lista
 ALTER TABLE perm_orc ADD COLUMN IF NOT EXISTS acao_search BOOLEAN NOT NULL DEFAULT FALSE;  -- orc.search · Buscar/filtrar
 ALTER TABLE perm_orc ADD COLUMN IF NOT EXISTS acao_create BOOLEAN NOT NULL DEFAULT FALSE;  -- orc.create · Criar orçamento
+ALTER TABLE perm_orc ADD COLUMN IF NOT EXISTS acao_view_details BOOLEAN NOT NULL DEFAULT FALSE;  -- orc.view.details · Visualizar orçamento
 ALTER TABLE perm_orc ADD COLUMN IF NOT EXISTS acao_edit BOOLEAN NOT NULL DEFAULT FALSE;  -- orc.edit · Editar orçamento
-ALTER TABLE perm_orc ADD COLUMN IF NOT EXISTS acao_view_details BOOLEAN NOT NULL DEFAULT FALSE;  -- orc.view.details · Ver detalhes
-ALTER TABLE perm_orc ADD COLUMN IF NOT EXISTS acao_item_replace BOOLEAN NOT NULL DEFAULT FALSE;  -- orc.item.replace · Trocar item
 ALTER TABLE perm_orc ADD COLUMN IF NOT EXISTS acao_convert BOOLEAN NOT NULL DEFAULT FALSE;  -- orc.convert · Converter em pedido
 ALTER TABLE perm_orc ADD COLUMN IF NOT EXISTS acao_export BOOLEAN NOT NULL DEFAULT FALSE;  -- orc.export · Baixar PDF
-ALTER TABLE perm_orc ADD COLUMN IF NOT EXISTS col_orc_num BOOLEAN NOT NULL DEFAULT FALSE;  -- Nº orçamento
+ALTER TABLE perm_orc ADD COLUMN IF NOT EXISTS acao_item_add BOOLEAN NOT NULL DEFAULT FALSE;  -- orc.item.add · Inserir item
+ALTER TABLE perm_orc ADD COLUMN IF NOT EXISTS acao_item_edit BOOLEAN NOT NULL DEFAULT FALSE;  -- orc.item.edit · Editar item
+ALTER TABLE perm_orc ADD COLUMN IF NOT EXISTS acao_item_remove BOOLEAN NOT NULL DEFAULT FALSE;  -- orc.item.remove · Remover item
+ALTER TABLE perm_orc ADD COLUMN IF NOT EXISTS acao_clear BOOLEAN NOT NULL DEFAULT FALSE;  -- orc.clear · Limpar tudo
+ALTER TABLE perm_orc ADD COLUMN IF NOT EXISTS acao_send BOOLEAN NOT NULL DEFAULT FALSE;  -- orc.send · Salvar e enviar
+ALTER TABLE perm_orc ADD COLUMN IF NOT EXISTS acao_status_change BOOLEAN NOT NULL DEFAULT FALSE;  -- orc.status.change · Alterar status
+ALTER TABLE perm_orc ADD COLUMN IF NOT EXISTS acao_clone BOOLEAN NOT NULL DEFAULT FALSE;  -- orc.clone · Clonar orçamento
+ALTER TABLE perm_orc ADD COLUMN IF NOT EXISTS acao_convert_decide BOOLEAN NOT NULL DEFAULT FALSE;  -- orc.convert.decide · Decidir produção das peças
+ALTER TABLE perm_orc ADD COLUMN IF NOT EXISTS acao_convert_justify BOOLEAN NOT NULL DEFAULT FALSE;  -- orc.convert.justify · Justificar saldo negativo
+ALTER TABLE perm_orc ADD COLUMN IF NOT EXISTS acao_item_replace BOOLEAN NOT NULL DEFAULT FALSE;  -- orc.item.replace · Substituir peça
+ALTER TABLE perm_orc ADD COLUMN IF NOT EXISTS col_orc_num BOOLEAN NOT NULL DEFAULT FALSE;  -- Código
 ALTER TABLE perm_orc ADD COLUMN IF NOT EXISTS col_orc_cliente BOOLEAN NOT NULL DEFAULT FALSE;  -- Cliente
-ALTER TABLE perm_orc ADD COLUMN IF NOT EXISTS col_orc_vendedor BOOLEAN NOT NULL DEFAULT FALSE;  -- Vendedor
 ALTER TABLE perm_orc ADD COLUMN IF NOT EXISTS col_orc_data BOOLEAN NOT NULL DEFAULT FALSE;  -- Data
-ALTER TABLE perm_orc ADD COLUMN IF NOT EXISTS col_orc_validade BOOLEAN NOT NULL DEFAULT FALSE;  -- Validade
-ALTER TABLE perm_orc ADD COLUMN IF NOT EXISTS col_orc_itens BOOLEAN NOT NULL DEFAULT FALSE;  -- Itens
-ALTER TABLE perm_orc ADD COLUMN IF NOT EXISTS col_orc_subtotal BOOLEAN NOT NULL DEFAULT FALSE;  -- Subtotal
-ALTER TABLE perm_orc ADD COLUMN IF NOT EXISTS col_orc_desc BOOLEAN NOT NULL DEFAULT FALSE;  -- Descontos
-ALTER TABLE perm_orc ADD COLUMN IF NOT EXISTS col_orc_frete_outros BOOLEAN NOT NULL DEFAULT FALSE;  -- Frete/outros
-ALTER TABLE perm_orc ADD COLUMN IF NOT EXISTS col_orc_total BOOLEAN NOT NULL DEFAULT FALSE;  -- Total
+ALTER TABLE perm_orc ADD COLUMN IF NOT EXISTS col_orc_total BOOLEAN NOT NULL DEFAULT FALSE;  -- Valor Total
+ALTER TABLE perm_orc ADD COLUMN IF NOT EXISTS col_orc_cond_pagto BOOLEAN NOT NULL DEFAULT FALSE;  -- Condição
 ALTER TABLE perm_orc ADD COLUMN IF NOT EXISTS col_orc_status BOOLEAN NOT NULL DEFAULT FALSE;  -- Status
 ALTER TABLE perm_orc ADD COLUMN IF NOT EXISTS col_orc_it_nome BOOLEAN NOT NULL DEFAULT FALSE;  -- Item
-ALTER TABLE perm_orc ADD COLUMN IF NOT EXISTS col_orc_it_sku BOOLEAN NOT NULL DEFAULT FALSE;  -- SKU
 ALTER TABLE perm_orc ADD COLUMN IF NOT EXISTS col_orc_it_qtd BOOLEAN NOT NULL DEFAULT FALSE;  -- Qtd.
-ALTER TABLE perm_orc ADD COLUMN IF NOT EXISTS col_orc_it_preco BOOLEAN NOT NULL DEFAULT FALSE;  -- Preço
-ALTER TABLE perm_orc ADD COLUMN IF NOT EXISTS col_orc_it_desc BOOLEAN NOT NULL DEFAULT FALSE;  -- Desc.
-ALTER TABLE perm_orc ADD COLUMN IF NOT EXISTS col_orc_it_subtotal BOOLEAN NOT NULL DEFAULT FALSE;  -- Subtotal
-ALTER TABLE perm_orc ADD COLUMN IF NOT EXISTS col_orc_it_obs BOOLEAN NOT NULL DEFAULT FALSE;  -- Observações
-ALTER TABLE perm_orc ADD COLUMN IF NOT EXISTS col_orc_cond_pagto BOOLEAN NOT NULL DEFAULT FALSE;  -- Pagamento
-ALTER TABLE perm_orc ADD COLUMN IF NOT EXISTS col_orc_cond_parc BOOLEAN NOT NULL DEFAULT FALSE;  -- Parcelas
-ALTER TABLE perm_orc ADD COLUMN IF NOT EXISTS col_orc_cond_prazo BOOLEAN NOT NULL DEFAULT FALSE;  -- Prazo
-ALTER TABLE perm_orc ADD COLUMN IF NOT EXISTS col_orc_cond_validade BOOLEAN NOT NULL DEFAULT FALSE;  -- Validade
+ALTER TABLE perm_orc ADD COLUMN IF NOT EXISTS col_orc_it_preco BOOLEAN NOT NULL DEFAULT FALSE;  -- Un R$
+ALTER TABLE perm_orc ADD COLUMN IF NOT EXISTS col_orc_it_preco_desc BOOLEAN NOT NULL DEFAULT FALSE;  -- Un c/desconto
+ALTER TABLE perm_orc ADD COLUMN IF NOT EXISTS col_orc_it_desc BOOLEAN NOT NULL DEFAULT FALSE;  -- Desconto %
+ALTER TABLE perm_orc ADD COLUMN IF NOT EXISTS col_orc_it_subtotal BOOLEAN NOT NULL DEFAULT FALSE;  -- Total R$
+ALTER TABLE perm_orc ADD COLUMN IF NOT EXISTS col_conv_peca BOOLEAN NOT NULL DEFAULT FALSE;  -- Peça
+ALTER TABLE perm_orc ADD COLUMN IF NOT EXISTS col_conv_qtd_orcada BOOLEAN NOT NULL DEFAULT FALSE;  -- Qtd Orçada
+ALTER TABLE perm_orc ADD COLUMN IF NOT EXISTS col_conv_em_estoque BOOLEAN NOT NULL DEFAULT FALSE;  -- Em Estoque
+ALTER TABLE perm_orc ADD COLUMN IF NOT EXISTS col_conv_pronta BOOLEAN NOT NULL DEFAULT FALSE;  -- Pronta
+ALTER TABLE perm_orc ADD COLUMN IF NOT EXISTS col_conv_produzir_total BOOLEAN NOT NULL DEFAULT FALSE;  -- Produzir Total
+ALTER TABLE perm_orc ADD COLUMN IF NOT EXISTS col_conv_produzir_parcial BOOLEAN NOT NULL DEFAULT FALSE;  -- Produzir Parcial
+ALTER TABLE perm_orc ADD COLUMN IF NOT EXISTS col_conv_status BOOLEAN NOT NULL DEFAULT FALSE;  -- Status
+ALTER TABLE perm_orc ADD COLUMN IF NOT EXISTS col_conv_ins_nome BOOLEAN NOT NULL DEFAULT FALSE;  -- Insumo
+ALTER TABLE perm_orc ADD COLUMN IF NOT EXISTS col_conv_ins_unidade BOOLEAN NOT NULL DEFAULT FALSE;  -- Unidade
+ALTER TABLE perm_orc ADD COLUMN IF NOT EXISTS col_conv_ins_disponivel BOOLEAN NOT NULL DEFAULT FALSE;  -- Disponível
+ALTER TABLE perm_orc ADD COLUMN IF NOT EXISTS col_conv_ins_necessario BOOLEAN NOT NULL DEFAULT FALSE;  -- Necessário
+ALTER TABLE perm_orc ADD COLUMN IF NOT EXISTS col_conv_ins_saldo BOOLEAN NOT NULL DEFAULT FALSE;  -- Saldo (prev.)
+ALTER TABLE perm_orc ADD COLUMN IF NOT EXISTS col_conv_ins_etapa BOOLEAN NOT NULL DEFAULT FALSE;  -- Etapa
+ALTER TABLE perm_orc ADD COLUMN IF NOT EXISTS col_conv_ins_flags BOOLEAN NOT NULL DEFAULT FALSE;  -- Flags
+ALTER TABLE perm_orc ADD COLUMN IF NOT EXISTS col_orc_campo_dono BOOLEAN NOT NULL DEFAULT FALSE;  -- Dono
+ALTER TABLE perm_orc ADD COLUMN IF NOT EXISTS col_orc_campo_transportadora BOOLEAN NOT NULL DEFAULT FALSE;  -- Transportadora
+ALTER TABLE perm_orc ADD COLUMN IF NOT EXISTS col_orc_campo_pagamento BOOLEAN NOT NULL DEFAULT FALSE;  -- Forma de pagamento
+ALTER TABLE perm_orc ADD COLUMN IF NOT EXISTS col_orc_campo_observacoes BOOLEAN NOT NULL DEFAULT FALSE;  -- Observações
 
 -- Pedidos (perm_ped)
 CREATE TABLE IF NOT EXISTS perm_ped (
@@ -141,39 +158,36 @@ CREATE TABLE IF NOT EXISTS perm_ped (
 );
 ALTER TABLE perm_ped ADD COLUMN IF NOT EXISTS acao_view BOOLEAN NOT NULL DEFAULT FALSE;  -- ped.view · Ver lista
 ALTER TABLE perm_ped ADD COLUMN IF NOT EXISTS acao_search BOOLEAN NOT NULL DEFAULT FALSE;  -- ped.search · Buscar/filtrar
-ALTER TABLE perm_ped ADD COLUMN IF NOT EXISTS acao_view_details BOOLEAN NOT NULL DEFAULT FALSE;  -- ped.view.details · Ver detalhes
-ALTER TABLE perm_ped ADD COLUMN IF NOT EXISTS acao_cancel BOOLEAN NOT NULL DEFAULT FALSE;  -- ped.cancel · Cancelar pedido
-ALTER TABLE perm_ped ADD COLUMN IF NOT EXISTS acao_stock_deduct BOOLEAN NOT NULL DEFAULT FALSE;  -- ped.stock.deduct · Abater estoque
-ALTER TABLE perm_ped ADD COLUMN IF NOT EXISTS acao_stock_restore_on_cancel BOOLEAN NOT NULL DEFAULT FALSE;  -- ped.stock.restore_on_cancel · Restaurar estoque ao cancelar
+ALTER TABLE perm_ped ADD COLUMN IF NOT EXISTS acao_view_details BOOLEAN NOT NULL DEFAULT FALSE;  -- ped.view.details · Visualizar pedido
 ALTER TABLE perm_ped ADD COLUMN IF NOT EXISTS acao_status_confirm BOOLEAN NOT NULL DEFAULT FALSE;  -- ped.status.confirm · Confirmar pedido
-ALTER TABLE perm_ped ADD COLUMN IF NOT EXISTS acao_status_invoice BOOLEAN NOT NULL DEFAULT FALSE;  -- ped.status.invoice · Faturar pedido
 ALTER TABLE perm_ped ADD COLUMN IF NOT EXISTS acao_status_ship BOOLEAN NOT NULL DEFAULT FALSE;  -- ped.status.ship · Despachar pedido
 ALTER TABLE perm_ped ADD COLUMN IF NOT EXISTS acao_status_deliver BOOLEAN NOT NULL DEFAULT FALSE;  -- ped.status.deliver · Dar como entregue
-ALTER TABLE perm_ped ADD COLUMN IF NOT EXISTS acao_export BOOLEAN NOT NULL DEFAULT FALSE;  -- ped.export · Baixar PDF
 ALTER TABLE perm_ped ADD COLUMN IF NOT EXISTS acao_report BOOLEAN NOT NULL DEFAULT FALSE;  -- ped.report · Ver relatório
-ALTER TABLE perm_ped ADD COLUMN IF NOT EXISTS col_ped_num BOOLEAN NOT NULL DEFAULT FALSE;  -- Nº pedido
+ALTER TABLE perm_ped ADD COLUMN IF NOT EXISTS acao_export BOOLEAN NOT NULL DEFAULT FALSE;  -- ped.export · Baixar PDF
+ALTER TABLE perm_ped ADD COLUMN IF NOT EXISTS acao_cancel BOOLEAN NOT NULL DEFAULT FALSE;  -- ped.cancel · Cancelar pedido
+ALTER TABLE perm_ped ADD COLUMN IF NOT EXISTS acao_stock_restore_on_cancel BOOLEAN NOT NULL DEFAULT FALSE;  -- ped.stock.restore_on_cancel · Realocar estoque ao cancelar
+ALTER TABLE perm_ped ADD COLUMN IF NOT EXISTS col_ped_num BOOLEAN NOT NULL DEFAULT FALSE;  -- Código
 ALTER TABLE perm_ped ADD COLUMN IF NOT EXISTS col_ped_cliente BOOLEAN NOT NULL DEFAULT FALSE;  -- Cliente
-ALTER TABLE perm_ped ADD COLUMN IF NOT EXISTS col_ped_vendedor BOOLEAN NOT NULL DEFAULT FALSE;  -- Vendedor
 ALTER TABLE perm_ped ADD COLUMN IF NOT EXISTS col_ped_data BOOLEAN NOT NULL DEFAULT FALSE;  -- Data
-ALTER TABLE perm_ped ADD COLUMN IF NOT EXISTS col_ped_entrega BOOLEAN NOT NULL DEFAULT FALSE;  -- Entrega
-ALTER TABLE perm_ped ADD COLUMN IF NOT EXISTS col_ped_itens BOOLEAN NOT NULL DEFAULT FALSE;  -- Itens
-ALTER TABLE perm_ped ADD COLUMN IF NOT EXISTS col_ped_total BOOLEAN NOT NULL DEFAULT FALSE;  -- Total
-ALTER TABLE perm_ped ADD COLUMN IF NOT EXISTS col_ped_abate_estoque BOOLEAN NOT NULL DEFAULT FALSE;  -- Abate estoque
-ALTER TABLE perm_ped ADD COLUMN IF NOT EXISTS col_ped_status BOOLEAN NOT NULL DEFAULT FALSE;  -- Status
+ALTER TABLE perm_ped ADD COLUMN IF NOT EXISTS col_ped_total BOOLEAN NOT NULL DEFAULT FALSE;  -- Valor Total
 ALTER TABLE perm_ped ADD COLUMN IF NOT EXISTS col_ped_condicao BOOLEAN NOT NULL DEFAULT FALSE;  -- Condição
-ALTER TABLE perm_ped ADD COLUMN IF NOT EXISTS col_ped_origem BOOLEAN NOT NULL DEFAULT FALSE;  -- Origem
+ALTER TABLE perm_ped ADD COLUMN IF NOT EXISTS col_ped_status BOOLEAN NOT NULL DEFAULT FALSE;  -- Status
 ALTER TABLE perm_ped ADD COLUMN IF NOT EXISTS col_ped_it_nome BOOLEAN NOT NULL DEFAULT FALSE;  -- Item
-ALTER TABLE perm_ped ADD COLUMN IF NOT EXISTS col_ped_it_sku BOOLEAN NOT NULL DEFAULT FALSE;  -- SKU
 ALTER TABLE perm_ped ADD COLUMN IF NOT EXISTS col_ped_it_qtd BOOLEAN NOT NULL DEFAULT FALSE;  -- Qtd.
-ALTER TABLE perm_ped ADD COLUMN IF NOT EXISTS col_ped_it_preco BOOLEAN NOT NULL DEFAULT FALSE;  -- Preço
-ALTER TABLE perm_ped ADD COLUMN IF NOT EXISTS col_ped_it_desc BOOLEAN NOT NULL DEFAULT FALSE;  -- Desc.
-ALTER TABLE perm_ped ADD COLUMN IF NOT EXISTS col_ped_it_subtotal BOOLEAN NOT NULL DEFAULT FALSE;  -- Subtotal
-ALTER TABLE perm_ped ADD COLUMN IF NOT EXISTS col_ped_it_situacao BOOLEAN NOT NULL DEFAULT FALSE;  -- Situação
-ALTER TABLE perm_ped ADD COLUMN IF NOT EXISTS col_log_transportadora BOOLEAN NOT NULL DEFAULT FALSE;  -- Transportadora
-ALTER TABLE perm_ped ADD COLUMN IF NOT EXISTS col_log_cod_rastreio BOOLEAN NOT NULL DEFAULT FALSE;  -- Código rastreio
-ALTER TABLE perm_ped ADD COLUMN IF NOT EXISTS col_log_frete_valor BOOLEAN NOT NULL DEFAULT FALSE;  -- Frete
-ALTER TABLE perm_ped ADD COLUMN IF NOT EXISTS col_log_data_envio BOOLEAN NOT NULL DEFAULT FALSE;  -- Enviado em
-ALTER TABLE perm_ped ADD COLUMN IF NOT EXISTS col_log_data_entrega BOOLEAN NOT NULL DEFAULT FALSE;  -- Entregue em
+ALTER TABLE perm_ped ADD COLUMN IF NOT EXISTS col_ped_it_preco BOOLEAN NOT NULL DEFAULT FALSE;  -- Un R$
+ALTER TABLE perm_ped ADD COLUMN IF NOT EXISTS col_ped_it_preco_desc BOOLEAN NOT NULL DEFAULT FALSE;  -- Un c/desconto
+ALTER TABLE perm_ped ADD COLUMN IF NOT EXISTS col_ped_it_desc BOOLEAN NOT NULL DEFAULT FALSE;  -- Desconto %
+ALTER TABLE perm_ped ADD COLUMN IF NOT EXISTS col_ped_it_subtotal BOOLEAN NOT NULL DEFAULT FALSE;  -- Total R$
+ALTER TABLE perm_ped ADD COLUMN IF NOT EXISTS col_canc_item BOOLEAN NOT NULL DEFAULT FALSE;  -- Item
+ALTER TABLE perm_ped ADD COLUMN IF NOT EXISTS col_canc_qtd BOOLEAN NOT NULL DEFAULT FALSE;  -- Quantidade
+ALTER TABLE perm_ped ADD COLUMN IF NOT EXISTS col_canc_restante BOOLEAN NOT NULL DEFAULT FALSE;  -- Quantidade Restante
+ALTER TABLE perm_ped ADD COLUMN IF NOT EXISTS col_canc_origem BOOLEAN NOT NULL DEFAULT FALSE;  -- Origem
+ALTER TABLE perm_ped ADD COLUMN IF NOT EXISTS col_canc_situacao BOOLEAN NOT NULL DEFAULT FALSE;  -- Situação
+ALTER TABLE perm_ped ADD COLUMN IF NOT EXISTS col_canc_destinos BOOLEAN NOT NULL DEFAULT FALSE;  -- Destinações
+ALTER TABLE perm_ped ADD COLUMN IF NOT EXISTS col_ped_campo_dono BOOLEAN NOT NULL DEFAULT FALSE;  -- Dono
+ALTER TABLE perm_ped ADD COLUMN IF NOT EXISTS col_ped_campo_transportadora BOOLEAN NOT NULL DEFAULT FALSE;  -- Transportadora
+ALTER TABLE perm_ped ADD COLUMN IF NOT EXISTS col_ped_campo_pagamento BOOLEAN NOT NULL DEFAULT FALSE;  -- Forma de pagamento
+ALTER TABLE perm_ped ADD COLUMN IF NOT EXISTS col_ped_campo_observacoes BOOLEAN NOT NULL DEFAULT FALSE;  -- Observações
 
 -- Clientes (perm_cli)
 CREATE TABLE IF NOT EXISTS perm_cli (
@@ -461,9 +475,9 @@ UPDATE perm_mp SET modulo_ativo = TRUE, acao_view = TRUE, acao_search = TRUE, ac
   WHERE modelo_id IN (SELECT id FROM modelos_permissoes WHERE nome = 'Administrador');
 UPDATE perm_prod SET modulo_ativo = TRUE, acao_view = TRUE, acao_search = TRUE, acao_create = TRUE, acao_stock_view = TRUE, acao_details_view = TRUE, acao_edit = TRUE, acao_delete = TRUE, acao_item_add = TRUE, acao_item_edit = TRUE, acao_item_remove = TRUE, acao_clear = TRUE, acao_percent_edit = TRUE, acao_collection_create = TRUE, acao_collection_delete = TRUE, acao_clone = TRUE, acao_registro_toggle = TRUE, acao_pdf = TRUE, acao_stage_insert = TRUE, acao_stage_item_add = TRUE, acao_stage_item_edit = TRUE, acao_stage_item_remove = TRUE, acao_stage_clear = TRUE, acao_stock_input = TRUE, acao_stock_adjust = TRUE, acao_stock_lote_delete = TRUE, col_prod_sku = TRUE, col_prod_nome = TRUE, col_prod_colecao = TRUE, col_prod_preco_base = TRUE, col_prod_margem = TRUE, col_prod_estoque = TRUE, col_ins_mp = TRUE, col_ins_qtd = TRUE, col_ins_unidade = TRUE, col_ins_custo_un = TRUE, col_ins_custo_total = TRUE, col_etapa_item = TRUE, col_etapa_qtd = TRUE, col_etapa_unidade = TRUE, col_etapa_valor_un = TRUE, col_etapa_valor_total = TRUE, col_est_processo = TRUE, col_est_ultimo_item = TRUE, col_est_quantidade = TRUE, col_est_alterado_em = TRUE
   WHERE modelo_id IN (SELECT id FROM modelos_permissoes WHERE nome = 'Administrador');
-UPDATE perm_orc SET modulo_ativo = TRUE, acao_view = TRUE, acao_search = TRUE, acao_create = TRUE, acao_edit = TRUE, acao_view_details = TRUE, acao_item_replace = TRUE, acao_convert = TRUE, acao_export = TRUE, col_orc_num = TRUE, col_orc_cliente = TRUE, col_orc_vendedor = TRUE, col_orc_data = TRUE, col_orc_validade = TRUE, col_orc_itens = TRUE, col_orc_subtotal = TRUE, col_orc_desc = TRUE, col_orc_frete_outros = TRUE, col_orc_total = TRUE, col_orc_status = TRUE, col_orc_it_nome = TRUE, col_orc_it_sku = TRUE, col_orc_it_qtd = TRUE, col_orc_it_preco = TRUE, col_orc_it_desc = TRUE, col_orc_it_subtotal = TRUE, col_orc_it_obs = TRUE, col_orc_cond_pagto = TRUE, col_orc_cond_parc = TRUE, col_orc_cond_prazo = TRUE, col_orc_cond_validade = TRUE
+UPDATE perm_orc SET modulo_ativo = TRUE, acao_view = TRUE, acao_search = TRUE, acao_create = TRUE, acao_view_details = TRUE, acao_edit = TRUE, acao_convert = TRUE, acao_export = TRUE, acao_item_add = TRUE, acao_item_edit = TRUE, acao_item_remove = TRUE, acao_clear = TRUE, acao_send = TRUE, acao_status_change = TRUE, acao_clone = TRUE, acao_convert_decide = TRUE, acao_convert_justify = TRUE, acao_item_replace = TRUE, col_orc_num = TRUE, col_orc_cliente = TRUE, col_orc_data = TRUE, col_orc_total = TRUE, col_orc_cond_pagto = TRUE, col_orc_status = TRUE, col_orc_it_nome = TRUE, col_orc_it_qtd = TRUE, col_orc_it_preco = TRUE, col_orc_it_preco_desc = TRUE, col_orc_it_desc = TRUE, col_orc_it_subtotal = TRUE, col_conv_peca = TRUE, col_conv_qtd_orcada = TRUE, col_conv_em_estoque = TRUE, col_conv_pronta = TRUE, col_conv_produzir_total = TRUE, col_conv_produzir_parcial = TRUE, col_conv_status = TRUE, col_conv_ins_nome = TRUE, col_conv_ins_unidade = TRUE, col_conv_ins_disponivel = TRUE, col_conv_ins_necessario = TRUE, col_conv_ins_saldo = TRUE, col_conv_ins_etapa = TRUE, col_conv_ins_flags = TRUE, col_orc_campo_dono = TRUE, col_orc_campo_transportadora = TRUE, col_orc_campo_pagamento = TRUE, col_orc_campo_observacoes = TRUE
   WHERE modelo_id IN (SELECT id FROM modelos_permissoes WHERE nome = 'Administrador');
-UPDATE perm_ped SET modulo_ativo = TRUE, acao_view = TRUE, acao_search = TRUE, acao_view_details = TRUE, acao_cancel = TRUE, acao_stock_deduct = TRUE, acao_stock_restore_on_cancel = TRUE, acao_status_confirm = TRUE, acao_status_invoice = TRUE, acao_status_ship = TRUE, acao_status_deliver = TRUE, acao_export = TRUE, acao_report = TRUE, col_ped_num = TRUE, col_ped_cliente = TRUE, col_ped_vendedor = TRUE, col_ped_data = TRUE, col_ped_entrega = TRUE, col_ped_itens = TRUE, col_ped_total = TRUE, col_ped_abate_estoque = TRUE, col_ped_status = TRUE, col_ped_condicao = TRUE, col_ped_origem = TRUE, col_ped_it_nome = TRUE, col_ped_it_sku = TRUE, col_ped_it_qtd = TRUE, col_ped_it_preco = TRUE, col_ped_it_desc = TRUE, col_ped_it_subtotal = TRUE, col_ped_it_situacao = TRUE, col_log_transportadora = TRUE, col_log_cod_rastreio = TRUE, col_log_frete_valor = TRUE, col_log_data_envio = TRUE, col_log_data_entrega = TRUE
+UPDATE perm_ped SET modulo_ativo = TRUE, acao_view = TRUE, acao_search = TRUE, acao_view_details = TRUE, acao_status_confirm = TRUE, acao_status_ship = TRUE, acao_status_deliver = TRUE, acao_report = TRUE, acao_export = TRUE, acao_cancel = TRUE, acao_stock_restore_on_cancel = TRUE, col_ped_num = TRUE, col_ped_cliente = TRUE, col_ped_data = TRUE, col_ped_total = TRUE, col_ped_condicao = TRUE, col_ped_status = TRUE, col_ped_it_nome = TRUE, col_ped_it_qtd = TRUE, col_ped_it_preco = TRUE, col_ped_it_preco_desc = TRUE, col_ped_it_desc = TRUE, col_ped_it_subtotal = TRUE, col_canc_item = TRUE, col_canc_qtd = TRUE, col_canc_restante = TRUE, col_canc_origem = TRUE, col_canc_situacao = TRUE, col_canc_destinos = TRUE, col_ped_campo_dono = TRUE, col_ped_campo_transportadora = TRUE, col_ped_campo_pagamento = TRUE, col_ped_campo_observacoes = TRUE
   WHERE modelo_id IN (SELECT id FROM modelos_permissoes WHERE nome = 'Administrador');
 UPDATE perm_cli SET modulo_ativo = TRUE, acao_view = TRUE, acao_search = TRUE, acao_details_view = TRUE, acao_create = TRUE, acao_edit = TRUE, acao_delete = TRUE, col_cli_nome_fantasia = TRUE, col_cli_razao_social = TRUE, col_cli_cnpj = TRUE, col_cli_comprador = TRUE, col_cli_tel = TRUE, col_cli_email = TRUE, col_cli_cidade_uf = TRUE, col_cli_transportadora = TRUE, col_cli_status = TRUE, col_cli_owner = TRUE, col_end_tipo = TRUE, col_end_logradouro = TRUE, col_end_numero = TRUE, col_end_complemento = TRUE, col_end_bairro = TRUE, col_end_cidade = TRUE, col_end_uf = TRUE, col_end_cep = TRUE, col_ctt_nome = TRUE, col_ctt_cargo = TRUE, col_ctt_tel = TRUE, col_ctt_email = TRUE, col_ctt_tags = TRUE, col_ctt_status = TRUE, col_ctt_ult_interacao = TRUE
   WHERE modelo_id IN (SELECT id FROM modelos_permissoes WHERE nome = 'Administrador');

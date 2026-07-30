@@ -4,7 +4,7 @@
       <div class="flex items-center gap-3">
         <button id="voltarVisualizarPedido" class="btn-neutral px-4 py-2 rounded-lg text-white font-medium flex items-center gap-2">← Voltar</button>
         <div class="relative">
-          <select id="visualizarPedidoDono" class="peer w-48 appearance-none bg-input border border-inputBorder rounded-lg px-4 pr-12 py-2 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" data-filled="false" disabled></select>
+          <select id="visualizarPedidoDono" data-perm-col="col_ped_campo_dono" class="peer w-48 appearance-none bg-input border border-inputBorder rounded-lg px-4 pr-12 py-2 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" data-filled="false" disabled></select>
           <label for="visualizarPedidoDono" class="absolute left-4 top-1/2 -translate-y-1/2 text-base text-gray-300 pointer-events-none transition-all duration-150 peer-focus:top-0 peer-focus:-translate-y-full peer-focus:text-xs peer-focus:text-primary peer-data-[filled=true]:top-0 peer-data-[filled=true]:-translate-y-full peer-data-[filled=true]:text-xs">Dono</label>
           <i class="fas fa-chevron-down absolute right-4 top-1/2 -translate-y-1/2 text-gray-300 pointer-events-none"></i>
         </div>
@@ -42,12 +42,12 @@
             <i class="fas fa-chevron-down absolute right-4 top-1/2 -translate-y-1/2 text-gray-300 pointer-events-none"></i>
           </div>
           <div class="relative">
-            <select id="visualizarPedidoTransportadora" class="peer w-full appearance-none bg-input border border-inputBorder rounded-lg px-4 pr-12 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" data-filled="false" disabled></select>
+            <select id="visualizarPedidoTransportadora" data-perm-col="col_ped_campo_transportadora" class="peer w-full appearance-none bg-input border border-inputBorder rounded-lg px-4 pr-12 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" data-filled="false" disabled></select>
             <label for="visualizarPedidoTransportadora" class="absolute left-4 top-1/2 -translate-y-1/2 text-base text-gray-300 pointer-events-none transition-all duration-150 peer-focus:top-0 peer-focus:-translate-y-full peer-focus:text-xs peer-focus:text-primary peer-data-[filled=true]:top-0 peer-data-[filled=true]:-translate-y-full peer-data-[filled=true]:text-xs">Transportadora</label>
             <i class="fas fa-chevron-down absolute right-4 top-1/2 -translate-y-1/2 text-gray-300 pointer-events-none"></i>
           </div>
           <div class="relative">
-            <select id="visualizarPedidoFormaPagamento" class="peer w-full appearance-none bg-input border border-inputBorder rounded-lg px-4 pr-12 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" data-filled="false" disabled>
+            <select id="visualizarPedidoFormaPagamento" data-perm-col="col_ped_campo_pagamento" class="peer w-full appearance-none bg-input border border-inputBorder rounded-lg px-4 pr-12 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" data-filled="false" disabled>
               <option value="" disabled hidden></option>
               <option value="boleto">Boleto</option>
               <option value="pix">Pix</option>
@@ -57,7 +57,7 @@
             <i class="fas fa-chevron-down absolute right-4 top-1/2 -translate-y-1/2 text-gray-300 pointer-events-none"></i>
           </div>
           <div class="relative lg:col-span-2">
-            <textarea id="visualizarPedidoObservacoes" rows="2" placeholder=" " class="peer w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-transparent focus:border-primary focus:ring-2 focus:ring-primary/50 transition" disabled></textarea>
+            <textarea id="visualizarPedidoObservacoes" data-perm-col="col_ped_campo_observacoes" rows="2" placeholder=" " class="peer w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-transparent focus:border-primary focus:ring-2 focus:ring-primary/50 transition" disabled></textarea>
             <label for="visualizarPedidoObservacoes" class="absolute left-4 top-3 text-base text-gray-300 pointer-events-none transition-all duration-150 peer-placeholder-shown:top-3 peer-placeholder-shown:text-base peer-focus:-top-2 peer-focus:text-xs peer-focus:text-primary peer-valid:-top-2 peer-valid:text-xs peer-data-[filled=true]:-top-2 peer-data-[filled=true]:text-xs">Observações</label>
           </div>
         </div>
@@ -80,12 +80,12 @@
             <table id="pedidoItens" class="w-full items-table">
               <thead class="bg-gray-50 sticky top-0">
                 <tr class="border-b border-gray-200">
-                  <th class="text-left text-gray-500 font-semibold uppercase">ITEM</th>
-                  <th class="text-left text-gray-500 font-semibold uppercase">QTD</th>
-                  <th class="text-left text-gray-500 font-semibold uppercase">UN R$</th>
-                  <th class="text-left text-gray-500 font-semibold uppercase">UN C/DSC</th>
-                  <th class="text-left text-gray-500 font-semibold uppercase">DSC%</th>
-                  <th class="text-left text-gray-500 font-semibold uppercase">TOT R$</th>
+                  <th data-perm-col="col_ped_it_nome" class="text-left text-gray-500 font-semibold uppercase">ITEM</th>
+                  <th data-perm-col="col_ped_it_qtd" class="text-left text-gray-500 font-semibold uppercase">QTD</th>
+                  <th data-perm-col="col_ped_it_preco" class="text-left text-gray-500 font-semibold uppercase">UN R$</th>
+                  <th data-perm-col="col_ped_it_preco_desc" class="text-left text-gray-500 font-semibold uppercase">UN C/DSC</th>
+                  <th data-perm-col="col_ped_it_desc" class="text-left text-gray-500 font-semibold uppercase">DSC%</th>
+                  <th data-perm-col="col_ped_it_subtotal" class="text-left text-gray-500 font-semibold uppercase">TOT R$</th>
                   <th class="text-left text-gray-500 font-semibold uppercase">AÇ.</th>
                 </tr>
               </thead>
@@ -99,7 +99,7 @@
     <footer class="flex items-center justify-between gap-3 px-8 py-6 border-t border-white/10 flex-shrink-0">
       <span class="badge-success px-6 py-3 rounded-full text-lg font-semibold">Valor Total: <span id="totalPedidoFooter">R$ 0,00</span></span>
       <div class="flex gap-3">
-        <button id="cancelarVisualizarPedido" class="btn-danger px-4 py-2 rounded-lg text-white font-medium">Cancelar</button>
+        <button id="cancelarVisualizarPedido" data-perm="ped.cancel" class="btn-danger px-4 py-2 rounded-lg text-white font-medium">Cancelar</button>
         <button id="voltarVisualizarPedidoFooter" class="btn-neutral px-4 py-2 rounded-lg text-white font-medium">Voltar</button>
       </div>
     </footer>

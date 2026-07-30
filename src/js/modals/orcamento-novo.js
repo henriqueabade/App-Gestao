@@ -101,7 +101,7 @@
     if(condicaoSelect.value==='vista'){
       pagamentoBox.innerHTML=`
         <div class="relative w-40">
-          <input id="novoPrazoVista" name="prazo" type="number" min="0" placeholder=" " required class="peer w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-transparent focus:border-primary focus:ring-2 focus:ring-primary/50 transition" data-filled="false" />
+          <i data-perm="orc.item.edit"nput id="novoPrazoVista" name="prazo" type="number" min="0" placeholder=" " required class="peer w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-transparent focus:border-primary focus:ring-2 focus:ring-primary/50 transition" data-filled="false" />
           <label for="novoPrazoVista" class="absolute left-4 top-1/2 -translate-y-1/2 text-base text-gray-300 pointer-events-none transition-all duration-150 peer-placeholder-shown:top-1/2 peer-placeholder-shown:-translate-y-1/2 peer-placeholder-shown:text-base peer-focus:top-0 peer-focus:-translate-y-full peer-focus:text-xs peer-focus:text-primary peer-valid:top-0 peer-valid:-translate-y-full peer-valid:text-xs peer-data-[filled=true]:top-0 peer-data-[filled=true]:-translate-y-full peer-data-[filled=true]:text-xs">Prazo (dias)</label>
         </div>`;
       pagamentoBox.classList.remove('hidden');
@@ -336,7 +336,7 @@
           descCell.textContent = parseFloat(descInput.value).toFixed(2);
           actionsCell.innerHTML = `
             <i class="fas fa-edit w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)"></i>
-            <i class="fas fa-trash w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10 text-red-400"></i>
+            <i data-perm="orc.item.remove" class="fas fa-trash w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10 text-red-400"></i>
           `;
           updateLineTotal(tr);
           attachRowEvents(tr);
@@ -419,12 +419,12 @@
     tr.dataset.id = prodId;
     tr.className = 'border-b border-white/10';
     tr.innerHTML = `
-        <td class="text-left text-white" title="${escapeAttr(product.nome)}">${product.nome}</td>
-        <td class="text-left text-white">${qtd}</td>
-        <td class="text-left text-white">${product.valor.toFixed(2)}</td>
-        <td class="text-left text-white">0.00</td>
-        <td class="text-left text-white">${defaultDesc.toFixed(2)}</td>
-        <td class="text-left text-white total-cell"></td>
+        <td data-perm-col="col_orc_it_nome" class="text-left text-white" title="${escapeAttr(product.nome)}">${product.nome}</td>
+        <td data-perm-col="col_orc_it_qtd" class="text-left text-white">${qtd}</td>
+        <td data-perm-col="col_orc_it_preco" class="text-left text-white">${product.valor.toFixed(2)}</td>
+        <td data-perm-col="col_orc_it_preco_desc" class="text-left text-white">0.00</td>
+        <td data-perm-col="col_orc_it_desc" class="text-left text-white">${defaultDesc.toFixed(2)}</td>
+        <td data-perm-col="col_orc_it_subtotal" class="text-left text-white total-cell"></td>
         <td class="text-left actions-cell">
           <i class="fas fa-edit w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)"></i>
           <i class="fas fa-trash w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10 text-red-400"></i>

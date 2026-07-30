@@ -419,56 +419,110 @@ const PERMISSIONS_CATALOG = {
         "key": "orc.view",
         "column": "acao_view",
         "label": "Ver lista",
-        "desc": "Exibir lista de orçamentos"
+        "desc": "Exibir a grade de orçamentos"
       },
       {
         "key": "orc.search",
         "column": "acao_search",
         "label": "Buscar/filtrar",
-        "desc": "Habilitar filtros e ordenação"
+        "desc": "Filtros de status, período, dono e cliente + Filtrar/Limpar"
       },
       {
         "key": "orc.create",
         "column": "acao_create",
         "label": "Criar orçamento",
-        "desc": "Abrir novo orçamento com itens"
+        "desc": "Botão \"Novo Orçamento\""
+      },
+      {
+        "key": "orc.view.details",
+        "column": "acao_view_details",
+        "label": "Visualizar orçamento",
+        "desc": "Ícone de olho — abre \"Visualizar Orçamento\""
       },
       {
         "key": "orc.edit",
         "column": "acao_edit",
         "label": "Editar orçamento",
-        "desc": "Alterar itens, preços e validade"
-      },
-      {
-        "key": "orc.view.details",
-        "column": "acao_view_details",
-        "label": "Ver detalhes",
-        "desc": "Acessar visão completa do orçamento"
-      },
-      {
-        "key": "orc.item.replace",
-        "column": "acao_item_replace",
-        "label": "Trocar item",
-        "desc": "Substituir item recalculando total"
+        "desc": "Ícone de lápis — abre \"Editar Orçamento\""
       },
       {
         "key": "orc.convert",
         "column": "acao_convert",
         "label": "Converter em pedido",
-        "desc": "Gerar pedido a partir de orçamento"
+        "desc": "Ícone de conversão da linha e botão \"Converter em Pedido\""
       },
       {
         "key": "orc.export",
         "column": "acao_export",
         "label": "Baixar PDF",
-        "desc": "Gerar e baixar o PDF do orçamento"
+        "desc": "Ícone de download da linha"
+      },
+      {
+        "key": "orc.item.add",
+        "column": "acao_item_add",
+        "label": "Inserir item",
+        "desc": "Botão \"+ Inserir\""
+      },
+      {
+        "key": "orc.item.edit",
+        "column": "acao_item_edit",
+        "label": "Editar item",
+        "desc": "Ícone de lápis na coluna AÇ. da tabela de itens"
+      },
+      {
+        "key": "orc.item.remove",
+        "column": "acao_item_remove",
+        "label": "Remover item",
+        "desc": "Ícone de lixeira na coluna AÇ. da tabela de itens"
+      },
+      {
+        "key": "orc.clear",
+        "column": "acao_clear",
+        "label": "Limpar tudo",
+        "desc": "Botão \"Limpar Tudo\" do modal Novo"
+      },
+      {
+        "key": "orc.send",
+        "column": "acao_send",
+        "label": "Salvar e enviar",
+        "desc": "Botão \"Salvar e Enviar\""
+      },
+      {
+        "key": "orc.status.change",
+        "column": "acao_status_change",
+        "label": "Alterar status",
+        "desc": "Seletor de status (Rascunho / Pendente / Aprovado / Rejeitado / Expirado)"
+      },
+      {
+        "key": "orc.clone",
+        "column": "acao_clone",
+        "label": "Clonar orçamento",
+        "desc": "Botão \"Clonar\" em Editar e em Visualizar"
+      },
+      {
+        "key": "orc.convert.decide",
+        "column": "acao_convert_decide",
+        "label": "Decidir produção das peças",
+        "desc": "Colunas \"Produzir Total\" e \"Produzir Parcial\""
+      },
+      {
+        "key": "orc.convert.justify",
+        "column": "acao_convert_justify",
+        "label": "Justificar saldo negativo",
+        "desc": "Campo de justificativa da conversão"
+      },
+      {
+        "key": "orc.item.replace",
+        "column": "acao_item_replace",
+        "label": "Substituir peça",
+        "desc": "Botão \"Confirmar Substituição\""
       }
     ],
     "columns": [
       {
         "key": "col_orc_num",
         "column": "col_orc_num",
-        "label": "Nº orçamento"
+        "label": "Código"
       },
       {
         "key": "col_orc_cliente",
@@ -476,44 +530,19 @@ const PERMISSIONS_CATALOG = {
         "label": "Cliente"
       },
       {
-        "key": "col_orc_vendedor",
-        "column": "col_orc_vendedor",
-        "label": "Vendedor"
-      },
-      {
         "key": "col_orc_data",
         "column": "col_orc_data",
         "label": "Data"
       },
       {
-        "key": "col_orc_validade",
-        "column": "col_orc_validade",
-        "label": "Validade"
-      },
-      {
-        "key": "col_orc_itens",
-        "column": "col_orc_itens",
-        "label": "Itens"
-      },
-      {
-        "key": "col_orc_subtotal",
-        "column": "col_orc_subtotal",
-        "label": "Subtotal"
-      },
-      {
-        "key": "col_orc_desc",
-        "column": "col_orc_desc",
-        "label": "Descontos"
-      },
-      {
-        "key": "col_orc_frete_outros",
-        "column": "col_orc_frete_outros",
-        "label": "Frete/outros"
-      },
-      {
         "key": "col_orc_total",
         "column": "col_orc_total",
-        "label": "Total"
+        "label": "Valor Total"
+      },
+      {
+        "key": "col_orc_cond_pagto",
+        "column": "col_orc_cond_pagto",
+        "label": "Condição"
       },
       {
         "key": "col_orc_status",
@@ -526,11 +555,6 @@ const PERMISSIONS_CATALOG = {
         "label": "Item"
       },
       {
-        "key": "col_orc_it_sku",
-        "column": "col_orc_it_sku",
-        "label": "SKU"
-      },
-      {
         "key": "col_orc_it_qtd",
         "column": "col_orc_it_qtd",
         "label": "Qtd."
@@ -538,42 +562,112 @@ const PERMISSIONS_CATALOG = {
       {
         "key": "col_orc_it_preco",
         "column": "col_orc_it_preco",
-        "label": "Preço"
+        "label": "Un R$"
+      },
+      {
+        "key": "col_orc_it_preco_desc",
+        "column": "col_orc_it_preco_desc",
+        "label": "Un c/desconto"
       },
       {
         "key": "col_orc_it_desc",
         "column": "col_orc_it_desc",
-        "label": "Desc."
+        "label": "Desconto %"
       },
       {
         "key": "col_orc_it_subtotal",
         "column": "col_orc_it_subtotal",
-        "label": "Subtotal"
+        "label": "Total R$"
       },
       {
-        "key": "col_orc_it_obs",
-        "column": "col_orc_it_obs",
+        "key": "col_conv_peca",
+        "column": "col_conv_peca",
+        "label": "Peça"
+      },
+      {
+        "key": "col_conv_qtd_orcada",
+        "column": "col_conv_qtd_orcada",
+        "label": "Qtd Orçada"
+      },
+      {
+        "key": "col_conv_em_estoque",
+        "column": "col_conv_em_estoque",
+        "label": "Em Estoque"
+      },
+      {
+        "key": "col_conv_pronta",
+        "column": "col_conv_pronta",
+        "label": "Pronta"
+      },
+      {
+        "key": "col_conv_produzir_total",
+        "column": "col_conv_produzir_total",
+        "label": "Produzir Total"
+      },
+      {
+        "key": "col_conv_produzir_parcial",
+        "column": "col_conv_produzir_parcial",
+        "label": "Produzir Parcial"
+      },
+      {
+        "key": "col_conv_status",
+        "column": "col_conv_status",
+        "label": "Status"
+      },
+      {
+        "key": "col_conv_ins_nome",
+        "column": "col_conv_ins_nome",
+        "label": "Insumo"
+      },
+      {
+        "key": "col_conv_ins_unidade",
+        "column": "col_conv_ins_unidade",
+        "label": "Unidade"
+      },
+      {
+        "key": "col_conv_ins_disponivel",
+        "column": "col_conv_ins_disponivel",
+        "label": "Disponível"
+      },
+      {
+        "key": "col_conv_ins_necessario",
+        "column": "col_conv_ins_necessario",
+        "label": "Necessário"
+      },
+      {
+        "key": "col_conv_ins_saldo",
+        "column": "col_conv_ins_saldo",
+        "label": "Saldo (prev.)"
+      },
+      {
+        "key": "col_conv_ins_etapa",
+        "column": "col_conv_ins_etapa",
+        "label": "Etapa"
+      },
+      {
+        "key": "col_conv_ins_flags",
+        "column": "col_conv_ins_flags",
+        "label": "Flags"
+      },
+      {
+        "key": "col_orc_campo_dono",
+        "column": "col_orc_campo_dono",
+        "label": "Dono"
+      },
+      {
+        "key": "col_orc_campo_transportadora",
+        "column": "col_orc_campo_transportadora",
+        "label": "Transportadora"
+      },
+      {
+        "key": "col_orc_campo_pagamento",
+        "column": "col_orc_campo_pagamento",
+        "label": "Forma de pagamento"
+      },
+      {
+        "key": "col_orc_campo_observacoes",
+        "column": "col_orc_campo_observacoes",
         "label": "Observações"
-      },
-      {
-        "key": "col_orc_cond_pagto",
-        "column": "col_orc_cond_pagto",
-        "label": "Pagamento"
-      },
-      {
-        "key": "col_orc_cond_parc",
-        "column": "col_orc_cond_parc",
-        "label": "Parcelas"
-      },
-      {
-        "key": "col_orc_cond_prazo",
-        "column": "col_orc_cond_prazo",
-        "label": "Prazo"
-      },
-      {
-        "key": "col_orc_cond_validade",
-        "column": "col_orc_cond_validade",
-        "label": "Validade"
       }
     ]
   },
@@ -588,80 +682,68 @@ const PERMISSIONS_CATALOG = {
         "key": "ped.view",
         "column": "acao_view",
         "label": "Ver lista",
-        "desc": "Exibir pedidos com status"
+        "desc": "Exibir a grade de pedidos"
       },
       {
         "key": "ped.search",
         "column": "acao_search",
         "label": "Buscar/filtrar",
-        "desc": "Habilitar filtros e ordenação"
+        "desc": "Filtros de status, período, dono e cliente + Filtrar/Limpar"
       },
       {
         "key": "ped.view.details",
         "column": "acao_view_details",
-        "label": "Ver detalhes",
-        "desc": "Abrir visão completa do pedido"
-      },
-      {
-        "key": "ped.cancel",
-        "column": "acao_cancel",
-        "label": "Cancelar pedido",
-        "desc": "Cancelar com regras de estoque/financeiro"
-      },
-      {
-        "key": "ped.stock.deduct",
-        "column": "acao_stock_deduct",
-        "label": "Abater estoque",
-        "desc": "Baixar estoque dos itens"
-      },
-      {
-        "key": "ped.stock.restore_on_cancel",
-        "column": "acao_stock_restore_on_cancel",
-        "label": "Restaurar estoque ao cancelar",
-        "desc": "Reverter baixas quando cancelado"
+        "label": "Visualizar pedido",
+        "desc": "Ícone de olho — abre \"Visualizar Pedido\""
       },
       {
         "key": "ped.status.confirm",
         "column": "acao_status_confirm",
         "label": "Confirmar pedido",
-        "desc": "Marcar pedido como confirmado"
-      },
-      {
-        "key": "ped.status.invoice",
-        "column": "acao_status_invoice",
-        "label": "Faturar pedido",
-        "desc": "Gerar faturamento"
+        "desc": "Ícone \"Concluir\" quando o pedido aguarda confirmação"
       },
       {
         "key": "ped.status.ship",
         "column": "acao_status_ship",
         "label": "Despachar pedido",
-        "desc": "Registrar expedição e rastreio"
+        "desc": "Ícone \"Concluir\" quando o pedido está em Produção"
       },
       {
         "key": "ped.status.deliver",
         "column": "acao_status_deliver",
         "label": "Dar como entregue",
-        "desc": "Concluir entrega com registro"
-      },
-      {
-        "key": "ped.export",
-        "column": "acao_export",
-        "label": "Baixar PDF",
-        "desc": "Gerar e baixar o PDF do pedido"
+        "desc": "Ícone \"Concluir\" quando o pedido está Enviado"
       },
       {
         "key": "ped.report",
         "column": "acao_report",
         "label": "Ver relatório",
-        "desc": "Abrir o relatório do pedido"
+        "desc": "Ícone de relatório da linha"
+      },
+      {
+        "key": "ped.export",
+        "column": "acao_export",
+        "label": "Baixar PDF",
+        "desc": "Ícone de download da linha"
+      },
+      {
+        "key": "ped.cancel",
+        "column": "acao_cancel",
+        "label": "Cancelar pedido",
+        "desc": "Botão \"Cancelar\" no Visualizar e \"Confirmar Cancelamento\""
+      },
+      {
+        "key": "ped.stock.restore_on_cancel",
+        "column": "acao_stock_restore_on_cancel",
+        "label": "Realocar estoque ao cancelar",
+        "desc": "Coluna \"Destinações\" e botão \"Reiniciar Destinação\""
       }
     ],
     "columns": [
       {
         "key": "col_ped_num",
         "column": "col_ped_num",
-        "label": "Nº pedido"
+        "label": "Código"
       },
       {
         "key": "col_ped_cliente",
@@ -669,39 +751,14 @@ const PERMISSIONS_CATALOG = {
         "label": "Cliente"
       },
       {
-        "key": "col_ped_vendedor",
-        "column": "col_ped_vendedor",
-        "label": "Vendedor"
-      },
-      {
         "key": "col_ped_data",
         "column": "col_ped_data",
         "label": "Data"
       },
       {
-        "key": "col_ped_entrega",
-        "column": "col_ped_entrega",
-        "label": "Entrega"
-      },
-      {
-        "key": "col_ped_itens",
-        "column": "col_ped_itens",
-        "label": "Itens"
-      },
-      {
         "key": "col_ped_total",
         "column": "col_ped_total",
-        "label": "Total"
-      },
-      {
-        "key": "col_ped_abate_estoque",
-        "column": "col_ped_abate_estoque",
-        "label": "Abate estoque"
-      },
-      {
-        "key": "col_ped_status",
-        "column": "col_ped_status",
-        "label": "Status"
+        "label": "Valor Total"
       },
       {
         "key": "col_ped_condicao",
@@ -709,19 +766,14 @@ const PERMISSIONS_CATALOG = {
         "label": "Condição"
       },
       {
-        "key": "col_ped_origem",
-        "column": "col_ped_origem",
-        "label": "Origem"
+        "key": "col_ped_status",
+        "column": "col_ped_status",
+        "label": "Status"
       },
       {
         "key": "col_ped_it_nome",
         "column": "col_ped_it_nome",
         "label": "Item"
-      },
-      {
-        "key": "col_ped_it_sku",
-        "column": "col_ped_it_sku",
-        "label": "SKU"
       },
       {
         "key": "col_ped_it_qtd",
@@ -731,47 +783,72 @@ const PERMISSIONS_CATALOG = {
       {
         "key": "col_ped_it_preco",
         "column": "col_ped_it_preco",
-        "label": "Preço"
+        "label": "Un R$"
+      },
+      {
+        "key": "col_ped_it_preco_desc",
+        "column": "col_ped_it_preco_desc",
+        "label": "Un c/desconto"
       },
       {
         "key": "col_ped_it_desc",
         "column": "col_ped_it_desc",
-        "label": "Desc."
+        "label": "Desconto %"
       },
       {
         "key": "col_ped_it_subtotal",
         "column": "col_ped_it_subtotal",
-        "label": "Subtotal"
+        "label": "Total R$"
       },
       {
-        "key": "col_ped_it_situacao",
-        "column": "col_ped_it_situacao",
+        "key": "col_canc_item",
+        "column": "col_canc_item",
+        "label": "Item"
+      },
+      {
+        "key": "col_canc_qtd",
+        "column": "col_canc_qtd",
+        "label": "Quantidade"
+      },
+      {
+        "key": "col_canc_restante",
+        "column": "col_canc_restante",
+        "label": "Quantidade Restante"
+      },
+      {
+        "key": "col_canc_origem",
+        "column": "col_canc_origem",
+        "label": "Origem"
+      },
+      {
+        "key": "col_canc_situacao",
+        "column": "col_canc_situacao",
         "label": "Situação"
       },
       {
-        "key": "col_log_transportadora",
-        "column": "col_log_transportadora",
+        "key": "col_canc_destinos",
+        "column": "col_canc_destinos",
+        "label": "Destinações"
+      },
+      {
+        "key": "col_ped_campo_dono",
+        "column": "col_ped_campo_dono",
+        "label": "Dono"
+      },
+      {
+        "key": "col_ped_campo_transportadora",
+        "column": "col_ped_campo_transportadora",
         "label": "Transportadora"
       },
       {
-        "key": "col_log_cod_rastreio",
-        "column": "col_log_cod_rastreio",
-        "label": "Código rastreio"
+        "key": "col_ped_campo_pagamento",
+        "column": "col_ped_campo_pagamento",
+        "label": "Forma de pagamento"
       },
       {
-        "key": "col_log_frete_valor",
-        "column": "col_log_frete_valor",
-        "label": "Frete"
-      },
-      {
-        "key": "col_log_data_envio",
-        "column": "col_log_data_envio",
-        "label": "Enviado em"
-      },
-      {
-        "key": "col_log_data_entrega",
-        "column": "col_log_data_entrega",
-        "label": "Entregue em"
+        "key": "col_ped_campo_observacoes",
+        "column": "col_ped_campo_observacoes",
+        "label": "Observações"
       }
     ]
   },

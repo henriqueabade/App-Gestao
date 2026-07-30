@@ -17,7 +17,7 @@
             <!-- Status Filter -->
             <div class="flex-1 min-w-0">
                 <label class="block text-sm font-medium mb-2 text-white">Status</label>
-                <select id="filterStatus" class="input-glass text-white rounded-md px-4 py-3 w-full">
+                <select id="filterStatus" data-perm="orc.search" class="input-glass text-white rounded-md px-4 py-3 w-full">
                     <option value="">Todos os Status</option>
                     <option value="Rascunho">Rascunho</option>
                     <option value="Pendente">Pendente</option>
@@ -30,7 +30,7 @@
             <!-- Period Filter -->
             <div class="flex-1 min-w-0">
                 <label class="block text-sm font-medium mb-2 text-white">Período</label>
-                <select id="filterPeriod" class="input-glass text-white rounded-md px-4 py-3 w-full">
+                <select id="filterPeriod" data-perm="orc.search" class="input-glass text-white rounded-md px-4 py-3 w-full">
                     <option value="">Todos os Períodos</option>
                     <option value="Semana">Semana</option>
                     <option value="Mês">Mês</option>
@@ -43,7 +43,7 @@
             <!-- Salesperson Filter -->
             <div class="flex-1 min-w-0">
                 <label class="block text-sm font-medium mb-2 text-white">Dono</label>
-                <select id="filterOwner" class="input-glass text-white rounded-md px-4 py-3 w-full">
+                <select id="filterOwner" data-perm="orc.search" class="input-glass text-white rounded-md px-4 py-3 w-full">
                     <option value="">Todos os Donos</option>
                 </select>
             </div>
@@ -51,7 +51,7 @@
             <!-- Client Filter -->
             <div class="flex-1 min-w-0">
                 <label class="block text-sm font-medium mb-2 text-white">Cliente</label>
-                <select id="filterClient" class="input-glass text-white rounded-md px-4 py-3 w-full">
+                <select id="filterClient" data-perm="orc.search" class="input-glass text-white rounded-md px-4 py-3 w-full">
                     <option value="">Todos os Clientes</option>
                 </select>
             </div>
@@ -69,7 +69,7 @@
 </div>
 
     <!-- Quotes Table -->
-    <div id="orcamentosTableWrapper" class="glass-surface rounded-xl shadow-lg animate-fade-in-up table-scroll">
+    <div id="orcamentosTableWrapper" data-perm-hide="orc.view" class="glass-surface rounded-xl shadow-lg animate-fade-in-up table-scroll">
         <table class="w-full">
             <thead class="bg-gray-50 sticky top-0">
                 <tr>
@@ -95,7 +95,7 @@
       <p class="mt-1 text-sm text-white/70">Tente ajustar os filtros.</p>
       <div class="mt-6">
         <button
-          id="orcamentosEmptyNew"
+          id="orcamentosEmptyNew" data-perm="orc.create"
           type="button"
           class="btn-primary inline-flex items-center px-4 py-2 text-sm font-medium rounded-md text-white"
         >

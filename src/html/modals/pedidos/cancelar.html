@@ -40,12 +40,12 @@
             <table class="w-full text-sm">
               <thead>
                 <tr class="border-b border-white/10 text-gray-300 text-xs uppercase">
-                  <th class="text-left py-3 px-4 font-medium">Item</th>
-                  <th class="text-left py-3 px-4 font-medium">Quantidade</th>
-                  <th class="text-left py-3 px-4 font-medium">Quantidade Restante</th>
-                  <th class="text-left py-3 px-4 font-medium">Origem</th>
-                  <th class="text-left py-3 px-4 font-medium">Situação</th>
-                  <th class="text-left py-3 px-4 font-medium">Destinações</th>
+                  <th data-perm-col="col_canc_item" class="text-left py-3 px-4 font-medium">Item</th>
+                  <th data-perm-col="col_canc_qtd" class="text-left py-3 px-4 font-medium">Quantidade</th>
+                  <th data-perm-col="col_canc_restante" class="text-left py-3 px-4 font-medium">Quantidade Restante</th>
+                  <th data-perm-col="col_canc_origem" class="text-left py-3 px-4 font-medium">Origem</th>
+                  <th data-perm-col="col_canc_situacao" class="text-left py-3 px-4 font-medium">Situação</th>
+                  <th data-perm-col="col_canc_destinos" class="text-left py-3 px-4 font-medium">Destinações</th>
                 </tr>
               </thead>
               <tbody id="cancelarPedidoItens"></tbody>
@@ -75,7 +75,7 @@
 
     <footer class="flex justify-end items-center gap-4 px-8 py-6 border-t border-white/10 flex-shrink-0">
       <button id="cancelarPedidoFecharFooter" class="btn-danger px-6 py-3 rounded-lg text-white font-medium">Voltar Sem Cancelar</button>
-      <button id="cancelarPedidoResetDestinos" class="btn-secondary px-6 py-3 rounded-lg text-white font-medium hidden">Reiniciar Destinação</button>
+      <button id="cancelarPedidoResetDestinos" data-perm="ped.stock.restore_on_cancel" class="btn-secondary px-6 py-3 rounded-lg text-white font-medium hidden">Reiniciar Destinação</button>
       <button id="cancelarPedidoConfirmar" data-perm="ped.cancel" class="btn-success px-6 py-3 rounded-lg text-white font-medium" disabled>
         Confirmar Cancelamento
       </button>

@@ -106,12 +106,12 @@
       const tr = document.createElement('tr');
       tr.className = 'border-b border-white/10';
       tr.innerHTML = `
-        <td class="text-left text-white" title="${escapeAttr(it.nome)}">${it.nome}</td>
-        <td class="text-left text-white">${qtd}</td>
-        <td class="text-left text-white">${valorUnit.toFixed(2)}</td>
-        <td class="text-left text-white">${valorUnitDesc.toFixed(2)}</td>
-        <td class="text-left text-white">${(descPagPrc + descEspPrc).toFixed(2)}</td>
-        <td class="text-left text-white">${valorTotal.toFixed(2)}</td>
+        <td data-perm-col="col_orc_it_nome" class="text-left text-white" title="${escapeAttr(it.nome)}">${it.nome}</td>
+        <td data-perm-col="col_orc_it_qtd" class="text-left text-white">${qtd}</td>
+        <td data-perm-col="col_orc_it_preco" class="text-left text-white">${valorUnit.toFixed(2)}</td>
+        <td data-perm-col="col_orc_it_preco_desc" class="text-left text-white">${valorUnitDesc.toFixed(2)}</td>
+        <td data-perm-col="col_orc_it_desc" class="text-left text-white">${(descPagPrc + descEspPrc).toFixed(2)}</td>
+        <td data-perm-col="col_orc_it_subtotal" class="text-left text-white">${valorTotal.toFixed(2)}</td>
         <td class="text-left actions-cell">
           <i class="fas fa-edit w-5 h-5 p-1 rounded icon-disabled" style="color: var(--color-primary)"></i>
           <i class="fas fa-trash w-5 h-5 p-1 rounded text-red-400 icon-disabled"></i>

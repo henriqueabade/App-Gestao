@@ -1136,26 +1136,32 @@
       const situacao = statusFallback(item) || '—';
 
       const nameTd = document.createElement('td');
+      nameTd.setAttribute('data-perm-col', 'col_canc_item');
       nameTd.className = 'px-4 py-3 text-left text-sm text-white';
       nameTd.textContent = name;
 
       const qtyTd = document.createElement('td');
+      qtyTd.setAttribute('data-perm-col', 'col_canc_qtd');
       qtyTd.className = 'px-4 py-3 text-left text-sm text-white';
       qtyTd.textContent = formatNumber(quantity);
 
       const remainingTd = document.createElement('td');
+      remainingTd.setAttribute('data-perm-col', 'col_canc_restante');
       remainingTd.className = 'px-4 py-3 text-left text-sm font-semibold text-orange-200';
       remainingTd.textContent = formatNumber(quantity);
 
       const origemTd = document.createElement('td');
+      origemTd.setAttribute('data-perm-col', 'col_canc_origem');
       origemTd.className = 'px-4 py-3 text-left text-sm text-gray-200';
       origemTd.textContent = origem;
 
       const situacaoTd = document.createElement('td');
+      situacaoTd.setAttribute('data-perm-col', 'col_canc_situacao');
       situacaoTd.className = 'px-4 py-3 text-left text-sm text-gray-200';
       situacaoTd.textContent = situacao;
 
       const actionTd = document.createElement('td');
+      actionTd.setAttribute('data-perm-col', 'col_canc_destinos');
       actionTd.className = 'px-4 py-3 text-left text-sm';
       const actionsWrapper = document.createElement('div');
       actionsWrapper.className = 'flex flex-col items-center gap-3';
