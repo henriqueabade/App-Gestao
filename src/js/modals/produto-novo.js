@@ -397,8 +397,23 @@
         renderActionButtons(item);
       });
     });
+    sincronizarOrdemComTabela();
     setupDragAndDrop();
     atualizaTotal();
+  }
+
+  /**
+   * Depois de desenhar, `ordem` passa a ser exatamente a posição na tela. A
+   * tabela é agrupada por processo, então um insumo acrescentado depois a um
+   * processo antigo aparece dentro do grupo dele mas carregava um `ordem` maior
+   * que o dos processos seguintes — e era esse número que ia para o banco. É a
+   * mesma renumeração que o arrastar-e-soltar já fazia.
+   */
+  function sincronizarOrdemComTabela(){
+    Array.from(tableBody.querySelectorAll('tr.item-row')).forEach((linha, idx) => {
+      const item = itens.find(i => i.row === linha);
+      if(item) item.ordem = idx + 1;
+    });
   }
 
   function setupDragAndDrop(){

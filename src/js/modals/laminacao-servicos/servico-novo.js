@@ -146,12 +146,22 @@
     return token;
   }
 
+  /**
+   * O padrão do app é: no front o campo guarda SEMPRE "." como separador
+   * decimal (ver src/utils/numericInput.js). A versão anterior apagava todos os
+   * pontos tratando-os como separador de milhar, então "1.5" — exatamente o que
+   * os campos passaram a produzir — era enviado ao back-end como 15.
+   */
   function prepararNumero(valor) {
     if (valor === null || valor === undefined) return null;
+    if (typeof valor === 'number') return Number.isFinite(valor) ? valor : null;
     const limpo = String(valor).trim();
     if (!limpo) return null;
-    const normalizado = limpo.replace(/\./g, '').replace(',', '.');
-    const parsed = Number(normalizado);
+    if (window.NumericInput) {
+      const numero = window.NumericInput.parse(limpo);
+      return Number.isFinite(numero) ? numero : null;
+    }
+    const parsed = Number(limpo.replace(',', '.'));
     return Number.isFinite(parsed) ? parsed : null;
   }
 
@@ -162,8 +172,19 @@
     });
   }
 
-  function restringirNumeros(input) {
+  /**
+   * Delega ao NumericInput (até 4 casas, "," vira "." e só um separador). O
+   * filtro antigo deixava passar vários pontos/vírgulas e casas decimais sem
+   * limite, fugindo do padrão dos demais módulos.
+   */
+  function restringirNumeros(input, { decimais } = {}) {
     if (!input) return;
+    if (decimais !== undefined) input.dataset.numericDecimals = String(decimais);
+    input.dataset.numeric = 'true';
+    if (window.NumericInput) {
+      window.NumericInput.prepare(input);
+      return;
+    }
     input.addEventListener('input', () => {
       input.value = input.value.replace(/[^0-9,.-]/g, '');
     });
@@ -216,7 +237,8 @@
   restringirNumeros(amarradoAlturaMediaInput);
   restringirNumeros(amarradoLarguraMaiorInput);
   restringirNumeros(amarradoQuantidadeInput);
-  restringirNumeros(amarradoSequenciaInput);
+  // Sequência é posição na lista: número inteiro.
+  restringirNumeros(amarradoSequenciaInput, { decimais: 0 });
 
   function definirCampoDependente(input, deveBloquear) {
     if (!input) return;

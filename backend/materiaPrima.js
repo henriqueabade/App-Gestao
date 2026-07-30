@@ -504,38 +504,46 @@ async function listarProdutosPorInsumo(insumoId) {
   if (!Number.isFinite(id)) return [];
 
   const vinculos = await getFiltrado('/produtos_insumos', {
-    select: 'produto_id,insumo_id',
+    select: 'produto_id,produto_codigo,insumo_id',
     insumo_id: id
   });
 
-  const produtosIds = Array.from(
-    new Set(
-      (Array.isArray(vinculos) ? vinculos : [])
-        .map(vinculo => Number(vinculo?.produto_id))
-        .filter(Number.isFinite)
-    )
-  );
-
-  if (!produtosIds.length) return [];
+  const lista = Array.isArray(vinculos) ? vinculos : [];
+  if (!lista.length) return [];
 
   const produtos = await getFiltrado('/produtos', { select: 'id,codigo,nome' });
-  const porId = new Map(
-    (Array.isArray(produtos) ? produtos : [])
-      .filter(produto => produto?.id !== undefined && produto?.id !== null)
-      .map(produto => [Number(produto.id), produto])
-  );
+  const porId = new Map();
+  const porCodigo = new Map();
+  for (const produto of Array.isArray(produtos) ? produtos : []) {
+    if (produto?.id !== undefined && produto?.id !== null) {
+      porId.set(Number(produto.id), produto);
+    }
+    if (produto?.codigo) {
+      porCodigo.set(String(produto.codigo).trim().toLowerCase(), produto);
+    }
+  }
 
-  return produtosIds
-    .map(produtoId => porId.get(produtoId))
-    .filter(Boolean)
-    .map(produto => ({
+  // `produtos_insumos` guarda produto_id E produto_codigo. Vínculos antigos
+  // podem ter só o código, então a resolução tenta os dois — senão o insumo
+  // apareceria como "não utilizado" mesmo estando em uso.
+  const encontrados = new Map();
+  for (const vinculo of lista) {
+    const porIdentificador = porId.get(Number(vinculo?.produto_id));
+    const porCodigoVinculo = vinculo?.produto_codigo
+      ? porCodigo.get(String(vinculo.produto_codigo).trim().toLowerCase())
+      : null;
+    const produto = porIdentificador || porCodigoVinculo;
+    if (!produto || encontrados.has(produto.id)) continue;
+    encontrados.set(produto.id, {
       id: produto.id,
       codigo: produto.codigo ?? null,
       nome: produto.nome ?? null
-    }))
-    .sort((a, b) =>
-      String(a.codigo || '').localeCompare(String(b.codigo || ''), 'pt-BR', { numeric: true })
-    );
+    });
+  }
+
+  return Array.from(encontrados.values()).sort((a, b) =>
+    String(a.codigo || '').localeCompare(String(b.codigo || ''), 'pt-BR', { numeric: true })
+  );
 }
 
 module.exports = {

@@ -43,6 +43,13 @@
     // Mantém só dígitos e separadores; "," passa a "."
     texto = texto.replace(/[^\d.,]/g, '').replace(/,/g, '.');
 
+    // Campo inteiro (data-numeric-decimals="0"): corta no separador em vez de
+    // apenas removê-lo — senão "3,5" viraria 35 em vez de 3.
+    if (maxDecimals <= 0) {
+      texto = texto.split('.')[0];
+      return (negativo && texto !== '' ? '-' : '') + texto;
+    }
+
     // Preserva apenas o primeiro separador decimal
     const primeiro = texto.indexOf('.');
     if (primeiro !== -1) {
