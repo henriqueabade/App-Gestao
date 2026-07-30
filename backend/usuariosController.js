@@ -1,4 +1,5 @@
 // backend/usuariosController.js
+const { sanitizarSaida } = require('./sanitizarSaida');
 const express = require('express');
 const { createApiClient } = require('./apiHttpClient');
 const { getToken } = require('./tokenStore');
@@ -194,7 +195,12 @@ router.get('/', async (req, res) => {
   try {
     const api = createInternalApiClient();
     const usuarios = await api.get('/api/usuarios', { query: req.query });
-    res.json(Array.isArray(usuarios) ? usuarios : []);
+    // Esta rota devolvia os registros CRUS do upstream — incluindo o hash bcrypt
+    // da senha e os tokens de confirmacao/aprovacao. A interface nunca precisou
+    // desses campos. Nao ha guarda de permissao aqui de proposito: a lista de
+    // usuarios alimenta os seletores de "Dono" em Pedidos e Orcamentos, que
+    // qualquer perfil pode usar. O que era grave era o vazamento dos campos.
+    res.json(sanitizarSaida(Array.isArray(usuarios) ? usuarios : []));
   } catch (err) {
     console.error('Erro ao listar usuários:', err);
     res

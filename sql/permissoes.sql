@@ -320,7 +320,7 @@ CREATE TABLE IF NOT EXISTS perm_pros (
 );
 
 -- ---------------------------------------------------------------------
--- 9) Contatos  (perm_ctt)  —  12 ações, 15 colunas
+-- 9) Contatos  (perm_ctt)  —  8 ações, 5 colunas
 -- ---------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS perm_ctt (
   modelo_id    INTEGER PRIMARY KEY REFERENCES modelos_permissoes(id) ON DELETE CASCADE,
@@ -329,33 +329,19 @@ CREATE TABLE IF NOT EXISTS perm_ctt (
   -- Ações
   acao_view                          BOOLEAN NOT NULL DEFAULT FALSE,  -- ctt.view · Ver lista
   acao_search                        BOOLEAN NOT NULL DEFAULT FALSE,  -- ctt.search · Buscar/filtrar
-  acao_details_view                  BOOLEAN NOT NULL DEFAULT FALSE,  -- ctt.details.view · Ver detalhes
   acao_create                        BOOLEAN NOT NULL DEFAULT FALSE,  -- ctt.create · Cadastrar contato
+  acao_export_csv                    BOOLEAN NOT NULL DEFAULT FALSE,  -- ctt.export.csv · Exportar CSV
+  acao_import_csv                    BOOLEAN NOT NULL DEFAULT FALSE,  -- ctt.import.csv · Importar CSV
+  acao_report                        BOOLEAN NOT NULL DEFAULT FALSE,  -- ctt.report · Gerar relatório
+  acao_email_bulk                    BOOLEAN NOT NULL DEFAULT FALSE,  -- ctt.email.bulk · Enviar e-mail em massa
   acao_edit                          BOOLEAN NOT NULL DEFAULT FALSE,  -- ctt.edit · Editar contato
-  acao_link_client                   BOOLEAN NOT NULL DEFAULT FALSE,  -- ctt.link.client · Vincular a cliente
-  acao_unlink_client                 BOOLEAN NOT NULL DEFAULT FALSE,  -- ctt.unlink.client · Desvincular de cliente
-  acao_log_add                       BOOLEAN NOT NULL DEFAULT FALSE,  -- ctt.log.add · Registrar interação
-  acao_log_view                      BOOLEAN NOT NULL DEFAULT FALSE,  -- ctt.log.view · Ver interações
-  acao_status_update                 BOOLEAN NOT NULL DEFAULT FALSE,  -- ctt.status.update · Atualizar status
-  acao_tag_manage                    BOOLEAN NOT NULL DEFAULT FALSE,  -- ctt.tag.manage · Gerenciar tags
-  acao_delete                        BOOLEAN NOT NULL DEFAULT FALSE,  -- ctt.delete · Excluir contato
 
   -- Colunas visíveis
-  col_ctt_nome                       BOOLEAN NOT NULL DEFAULT FALSE,  -- Contato
-  col_ctt_cliente                    BOOLEAN NOT NULL DEFAULT FALSE,  -- Cliente
-  col_ctt_cargo                      BOOLEAN NOT NULL DEFAULT FALSE,  -- Cargo
-  col_ctt_tel                        BOOLEAN NOT NULL DEFAULT FALSE,  -- Telefone
-  col_ctt_email                      BOOLEAN NOT NULL DEFAULT FALSE,  -- E-mail
-  col_ctt_origem                     BOOLEAN NOT NULL DEFAULT FALSE,  -- Origem
-  col_ctt_tags                       BOOLEAN NOT NULL DEFAULT FALSE,  -- Tags
-  col_ctt_status                     BOOLEAN NOT NULL DEFAULT FALSE,  -- Status
-  col_ctt_ult_interacao              BOOLEAN NOT NULL DEFAULT FALSE,  -- Últ. interação
-  col_ctt_owner                      BOOLEAN NOT NULL DEFAULT FALSE,  -- Dono
-  col_log_data                       BOOLEAN NOT NULL DEFAULT FALSE,  -- Data
-  col_log_canal                      BOOLEAN NOT NULL DEFAULT FALSE,  -- Canal
-  col_log_assunto                    BOOLEAN NOT NULL DEFAULT FALSE,  -- Assunto
-  col_log_detalhes                   BOOLEAN NOT NULL DEFAULT FALSE,  -- Detalhes
-  col_log_resp                       BOOLEAN NOT NULL DEFAULT FALSE  -- Responsável
+  col_ctt_nome                       BOOLEAN NOT NULL DEFAULT FALSE,  -- Nome
+  col_ctt_tipo                       BOOLEAN NOT NULL DEFAULT FALSE,  -- Tipo
+  col_ctt_cliente                    BOOLEAN NOT NULL DEFAULT FALSE,  -- Empresa
+  col_ctt_tel                        BOOLEAN NOT NULL DEFAULT FALSE,  -- Celular
+  col_ctt_fixo                       BOOLEAN NOT NULL DEFAULT FALSE  -- Telefone
 );
 
 -- ---------------------------------------------------------------------
@@ -587,8 +573,8 @@ INSERT INTO perm_pros (modelo_id, modulo_ativo, acao_view, acao_search, acao_det
 SELECT id, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE FROM modelos_permissoes WHERE nome = 'Administrador'
 ON CONFLICT (modelo_id) DO NOTHING;
 
-INSERT INTO perm_ctt (modelo_id, modulo_ativo, acao_view, acao_search, acao_details_view, acao_create, acao_edit, acao_link_client, acao_unlink_client, acao_log_add, acao_log_view, acao_status_update, acao_tag_manage, acao_delete, col_ctt_nome, col_ctt_cliente, col_ctt_cargo, col_ctt_tel, col_ctt_email, col_ctt_origem, col_ctt_tags, col_ctt_status, col_ctt_ult_interacao, col_ctt_owner, col_log_data, col_log_canal, col_log_assunto, col_log_detalhes, col_log_resp)
-SELECT id, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE FROM modelos_permissoes WHERE nome = 'Administrador'
+INSERT INTO perm_ctt (modelo_id, modulo_ativo, acao_view, acao_search, acao_create, acao_export_csv, acao_import_csv, acao_report, acao_email_bulk, acao_edit, col_ctt_nome, col_ctt_tipo, col_ctt_cliente, col_ctt_tel, col_ctt_fixo)
+SELECT id, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE FROM modelos_permissoes WHERE nome = 'Administrador'
 ON CONFLICT (modelo_id) DO NOTHING;
 
 INSERT INTO perm_rel (modelo_id, modulo_ativo, acao_view, acao_search, acao_run, acao_export_csv, acao_export_xlsx, acao_export_pdf, acao_preset_save, acao_preset_load, acao_preset_manage, acao_share_link, acao_share_send, col_rel_estq_nome, col_rel_estq_categoria, col_rel_estq_unidade, col_rel_estq_qtd, col_rel_estq_preco, col_rel_estq_processo, col_rel_estq_status, col_rel_prod_codigo, col_rel_prod_nome, col_rel_prod_colecao, col_rel_prod_preco_venda, col_rel_prod_margem, col_rel_prod_qtd, col_rel_prod_status, col_rel_cli_nome, col_rel_cli_cnpj, col_rel_cli_pais, col_rel_cli_estado, col_rel_cli_status, col_rel_cli_dono, col_rel_ctt_contato, col_rel_ctt_tipo, col_rel_ctt_empresa, col_rel_ctt_celular, col_rel_ctt_telefone, col_rel_ctt_email, col_rel_pros_nome, col_rel_pros_email, col_rel_pros_status, col_rel_pros_responsavel, col_rel_orc_codigo, col_rel_orc_cliente, col_rel_orc_data, col_rel_orc_valor, col_rel_orc_condicao, col_rel_orc_status, col_rel_ped_codigo, col_rel_ped_cliente, col_rel_ped_data, col_rel_ped_valor, col_rel_ped_condicao, col_rel_ped_status, col_rel_usr_avatar, col_rel_usr_nome, col_rel_usr_email, col_rel_usr_perfil, col_rel_usr_situacao, col_rel_usr_status)

@@ -2337,103 +2337,92 @@
                   </div>
                   <i class="fas fa-info-circle text-[var(--color-primary)]" title="Permissões do módulo"></i>
                 </div>
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="grid grid-cols-1 gap-6">
 
-                  <label class="usuarios-permissoes-item" data-search="ver lista contatos">
-                    <input type="checkbox" name="ctt.view" data-role="item" data-group="acoes-ctt" data-item-type="action" class="w-4 h-4 mt-1" />
-                    <div>
-                      <span class="font-medium">Ver lista</span>
-                      <p class="text-sm text-gray-400">Exibir lista de contatos</p>
-                    </div>
-                  </label>
+                  <div>
+                    <h4 class="text-sm font-semibold text-gray-300 mb-3">Tela de Contatos (lista)</h4>
+                    <div class="grid grid-cols-1 gap-4">
 
-                  <label class="usuarios-permissoes-item" data-search="buscar filtrar">
-                    <input type="checkbox" name="ctt.search" data-role="item" data-group="acoes-ctt" data-item-type="action" class="w-4 h-4 mt-1" />
-                    <div>
-                      <span class="font-medium">Buscar/filtrar</span>
-                      <p class="text-sm text-gray-400">Pesquisa por nome, cargo, tags</p>
-                    </div>
-                  </label>
+                      <label class="usuarios-permissoes-item" data-search="ver lista grade contatos">
+                        <input type="checkbox" name="ctt.view" data-role="item" data-group="acoes-ctt" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Ver lista</span>
+                          <p class="text-sm text-gray-400">Exibir a grade de contatos</p>
+                        </div>
+                      </label>
 
-                  <label class="usuarios-permissoes-item" data-search="ver detalhes contato">
-                    <input type="checkbox" name="ctt.details.view" data-role="item" data-group="acoes-ctt" data-item-type="action" class="w-4 h-4 mt-1" />
-                    <div>
-                      <span class="font-medium">Ver detalhes</span>
-                      <p class="text-sm text-gray-400">Mostrar dados completos e vínculos</p>
-                    </div>
-                  </label>
+                      <label class="usuarios-permissoes-item" data-search="buscar filtrar limpar">
+                        <input type="checkbox" name="ctt.search" data-role="item" data-group="acoes-ctt" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Buscar/filtrar</span>
+                          <p class="text-sm text-gray-400">Botões Filtrar e Limpar</p>
+                        </div>
+                      </label>
 
-                  <label class="usuarios-permissoes-item" data-search="cadastrar contato">
-                    <input type="checkbox" name="ctt.create" data-role="item" data-group="acoes-ctt" data-item-type="action" class="w-4 h-4 mt-1" />
-                    <div>
-                      <span class="font-medium">Cadastrar contato</span>
-                      <p class="text-sm text-gray-400">Criar novo contato</p>
-                    </div>
-                  </label>
+                      <label class="usuarios-permissoes-item" data-search="cadastrar criar novo contato">
+                        <input type="checkbox" name="ctt.create" data-role="item" data-group="acoes-ctt" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Cadastrar contato</span>
+                          <p class="text-sm text-gray-400">Botão "Novo Contato" (aqui e o ícone da linha de Clientes)</p>
+                        </div>
+                      </label>
 
-                  <label class="usuarios-permissoes-item" data-search="editar contato">
-                    <input type="checkbox" name="ctt.edit" data-role="item" data-group="acoes-ctt" data-item-type="action" class="w-4 h-4 mt-1" />
-                    <div>
-                      <span class="font-medium">Editar contato</span>
-                      <p class="text-sm text-gray-400">Alterar dados e status</p>
                     </div>
-                  </label>
+                  </div>
 
-                  <label class="usuarios-permissoes-item" data-search="vincular cliente">
-                    <input type="checkbox" name="ctt.link.client" data-role="item" data-group="acoes-ctt" data-item-type="action" class="w-4 h-4 mt-1" />
-                    <div>
-                      <span class="font-medium">Vincular a cliente</span>
-                      <p class="text-sm text-gray-400">Relacionar contato a cliente</p>
-                    </div>
-                  </label>
+                  <div>
+                    <h4 class="text-sm font-semibold text-gray-300 mb-3">Painel "Ações Rápidas"</h4>
+                    <div class="grid grid-cols-1 gap-4">
 
-                  <label class="usuarios-permissoes-item" data-search="desvincular cliente">
-                    <input type="checkbox" name="ctt.unlink.client" data-role="item" data-group="acoes-ctt" data-item-type="action" class="w-4 h-4 mt-1" />
-                    <div>
-                      <span class="font-medium">Desvincular de cliente</span>
-                      <p class="text-sm text-gray-400">Remover vínculo com cliente</p>
-                    </div>
-                  </label>
+                      <label class="usuarios-permissoes-item" data-search="exportar csv baixar planilha">
+                        <input type="checkbox" name="ctt.export.csv" data-role="item" data-group="acoes-ctt" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Exportar CSV</span>
+                          <p class="text-sm text-gray-400">Botão "Exportar CSV"</p>
+                        </div>
+                      </label>
 
-                  <label class="usuarios-permissoes-item" data-search="registrar interacao">
-                    <input type="checkbox" name="ctt.log.add" data-role="item" data-group="acoes-ctt" data-item-type="action" class="w-4 h-4 mt-1" />
-                    <div>
-                      <span class="font-medium">Registrar interação</span>
-                      <p class="text-sm text-gray-400">Adicionar log de interação</p>
-                    </div>
-                  </label>
+                      <label class="usuarios-permissoes-item" data-search="importar csv carregar planilha">
+                        <input type="checkbox" name="ctt.import.csv" data-role="item" data-group="acoes-ctt" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Importar CSV</span>
+                          <p class="text-sm text-gray-400">Botão "Importar CSV"</p>
+                        </div>
+                      </label>
 
-                  <label class="usuarios-permissoes-item" data-search="ver interacoes">
-                    <input type="checkbox" name="ctt.log.view" data-role="item" data-group="acoes-ctt" data-item-type="action" class="w-4 h-4 mt-1" />
-                    <div>
-                      <span class="font-medium">Ver interações</span>
-                      <p class="text-sm text-gray-400">Listar histórico do contato</p>
-                    </div>
-                  </label>
+                      <label class="usuarios-permissoes-item" data-search="relatório gerar contatos">
+                        <input type="checkbox" name="ctt.report" data-role="item" data-group="acoes-ctt" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Gerar relatório</span>
+                          <p class="text-sm text-gray-400">Botão "Gerar Relatório"</p>
+                        </div>
+                      </label>
 
-                  <label class="usuarios-permissoes-item" data-search="atualizar status contato">
-                    <input type="checkbox" name="ctt.status.update" data-role="item" data-group="acoes-ctt" data-item-type="action" class="w-4 h-4 mt-1" />
-                    <div>
-                      <span class="font-medium">Atualizar status</span>
-                      <p class="text-sm text-gray-400">Definir ativo/inativo/qualificação</p>
-                    </div>
-                  </label>
+                      <label class="usuarios-permissoes-item" data-search="email massa disparo enviar">
+                        <input type="checkbox" name="ctt.email.bulk" data-role="item" data-group="acoes-ctt" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Enviar e-mail em massa</span>
+                          <p class="text-sm text-gray-400">Botão "Enviar E-mail em Massa"</p>
+                        </div>
+                      </label>
 
-                  <label class="usuarios-permissoes-item" data-search="gerenciar tags">
-                    <input type="checkbox" name="ctt.tag.manage" data-role="item" data-group="acoes-ctt" data-item-type="action" class="w-4 h-4 mt-1" />
-                    <div>
-                      <span class="font-medium">Gerenciar tags</span>
-                      <p class="text-sm text-gray-400">Criar ou atribuir tags</p>
                     </div>
-                  </label>
+                  </div>
 
-                  <label class="usuarios-permissoes-item" data-search="excluir contato">
-                    <input type="checkbox" name="ctt.delete" data-role="item" data-group="acoes-ctt" data-item-type="action" class="w-4 h-4 mt-1" />
-                    <div>
-                      <span class="font-medium">Excluir contato</span>
-                      <p class="text-sm text-gray-400">Remover contato com validações</p>
+                  <div>
+                    <h4 class="text-sm font-semibold text-gray-300 mb-3">Ações na linha da tabela</h4>
+                    <div class="grid grid-cols-1 gap-4">
+
+                      <label class="usuarios-permissoes-item" data-search="editar alterar contato lápis">
+                        <input type="checkbox" name="ctt.edit" data-role="item" data-group="acoes-ctt" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Editar contato</span>
+                          <p class="text-sm text-gray-400">Ícone de lápis da linha</p>
+                        </div>
+                      </label>
+
                     </div>
-                  </label>
+                  </div>
 
                 </div>
               </div>
@@ -2462,89 +2451,32 @@
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
 
                   <div>
-                    <h4 class="text-sm font-semibold text-gray-300 mb-3">Lista de contatos</h4>
+                    <h4 class="text-sm font-semibold text-gray-300 mb-3">Tabela de contatos (lista)</h4>
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
 
                       <label class="usuarios-permissoes-checkbox">
                         <input type="checkbox" name="col_ctt_nome" data-role="item" data-group="colunas-ctt" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">Contato</span>
+                        <span class="text-sm">Nome</span>
+                      </label>
+
+                      <label class="usuarios-permissoes-checkbox">
+                        <input type="checkbox" name="col_ctt_tipo" data-role="item" data-group="colunas-ctt" data-item-type="column" class="w-4 h-4" />
+                        <span class="text-sm">Tipo</span>
                       </label>
 
                       <label class="usuarios-permissoes-checkbox">
                         <input type="checkbox" name="col_ctt_cliente" data-role="item" data-group="colunas-ctt" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">Cliente</span>
-                      </label>
-
-                      <label class="usuarios-permissoes-checkbox">
-                        <input type="checkbox" name="col_ctt_cargo" data-role="item" data-group="colunas-ctt" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">Cargo</span>
+                        <span class="text-sm">Empresa</span>
                       </label>
 
                       <label class="usuarios-permissoes-checkbox">
                         <input type="checkbox" name="col_ctt_tel" data-role="item" data-group="colunas-ctt" data-item-type="column" class="w-4 h-4" />
+                        <span class="text-sm">Celular</span>
+                      </label>
+
+                      <label class="usuarios-permissoes-checkbox">
+                        <input type="checkbox" name="col_ctt_fixo" data-role="item" data-group="colunas-ctt" data-item-type="column" class="w-4 h-4" />
                         <span class="text-sm">Telefone</span>
-                      </label>
-
-                      <label class="usuarios-permissoes-checkbox">
-                        <input type="checkbox" name="col_ctt_email" data-role="item" data-group="colunas-ctt" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">E-mail</span>
-                      </label>
-
-                      <label class="usuarios-permissoes-checkbox">
-                        <input type="checkbox" name="col_ctt_origem" data-role="item" data-group="colunas-ctt" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">Origem</span>
-                      </label>
-
-                      <label class="usuarios-permissoes-checkbox">
-                        <input type="checkbox" name="col_ctt_tags" data-role="item" data-group="colunas-ctt" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">Tags</span>
-                      </label>
-
-                      <label class="usuarios-permissoes-checkbox">
-                        <input type="checkbox" name="col_ctt_status" data-role="item" data-group="colunas-ctt" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">Status</span>
-                      </label>
-
-                      <label class="usuarios-permissoes-checkbox">
-                        <input type="checkbox" name="col_ctt_ult_interacao" data-role="item" data-group="colunas-ctt" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">Últ. interação</span>
-                      </label>
-
-                      <label class="usuarios-permissoes-checkbox">
-                        <input type="checkbox" name="col_ctt_owner" data-role="item" data-group="colunas-ctt" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">Dono</span>
-                      </label>
-
-                    </div>
-                  </div>
-
-                  <div>
-                    <h4 class="text-sm font-semibold text-gray-300 mb-3">Interações</h4>
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-
-                      <label class="usuarios-permissoes-checkbox">
-                        <input type="checkbox" name="col_log_data" data-role="item" data-group="colunas-ctt" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">Data</span>
-                      </label>
-
-                      <label class="usuarios-permissoes-checkbox">
-                        <input type="checkbox" name="col_log_canal" data-role="item" data-group="colunas-ctt" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">Canal</span>
-                      </label>
-
-                      <label class="usuarios-permissoes-checkbox">
-                        <input type="checkbox" name="col_log_assunto" data-role="item" data-group="colunas-ctt" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">Assunto</span>
-                      </label>
-
-                      <label class="usuarios-permissoes-checkbox">
-                        <input type="checkbox" name="col_log_detalhes" data-role="item" data-group="colunas-ctt" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">Detalhes</span>
-                      </label>
-
-                      <label class="usuarios-permissoes-checkbox">
-                        <input type="checkbox" name="col_log_resp" data-role="item" data-group="colunas-ctt" data-item-type="column" class="w-4 h-4" />
-                        <span class="text-sm">Responsável</span>
                       </label>
 
                     </div>

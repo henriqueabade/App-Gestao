@@ -21,6 +21,8 @@ const DEFAULT_BEARER_TOKEN = normalizeToken(
 
 db.init({ tokenProvider: getToken });
 
+const { sanitizarSaida } = require('./sanitizarSaida');
+
 const app = express();
 
 // Origem da API remota, sem o sufixo /api — usada para repassar as imagens.
@@ -104,7 +106,8 @@ function invalidateCache(table) {
   apiCache.delete(table);
 }
 
-app.get('/api/contatos_cliente', async (req, res) => {
+// Sem guarda, esta rota expunha todos os contatos de todos os clientes.
+app.get('/api/contatos_cliente', require('./permissionsController').exigirPermissao('ctt.view'), async (req, res) => {
   try {
     // Cria o cliente com base na requisição atual (injeta token automaticamente)
     const api = createApiClient(req);
@@ -112,7 +115,7 @@ app.get('/api/contatos_cliente', async (req, res) => {
     const query = req._parsedUrl.search || '';
 
     // Agora sim, o cliente possui o método .get()
-    const data = await api.get(`/api/contatos_cliente${query}`);
+    const data = sanitizarSaida(await api.get(`/api/contatos_cliente${query}`));
 
     res.status(200).json(data);
   } catch (err) {
@@ -149,11 +152,20 @@ app.use('/pdf', express.static(path.join(__dirname, '../src/pdf')));
 app.use('/styles', express.static(path.join(__dirname, '../src/styles')));
 app.use('/js', express.static(path.join(__dirname, '../src/js')));
 
+// Tabelas que o proxy generico NUNCA deve servir ao renderer. Sem esta lista,
+// qualquer usuario lia as proprias tabelas de permissao (perm_*) e os modelos de
+// perfil — ou seja, dava para inspecionar e mapear todo o controle de acesso.
+// O backend le essas tabelas pelo cliente da API remota, nao por aqui.
+const TABELAS_BLOQUEADAS = /^(perm_|modelos_permissoes$|usuarios$)/i;
+
 app.get('/api/:table', async (req, res) => {
   const { table } = req.params;
   if (!table) {
     res.status(400).json({ error: 'Tabela inválida' });
     return;
+  }
+  if (TABELAS_BLOQUEADAS.test(table)) {
+    return res.status(403).json({ error: 'Acesso negado a esta tabela', code: 'FORBIDDEN' });
   }
 
   try {
@@ -165,7 +177,8 @@ app.get('/api/:table', async (req, res) => {
       return;
     }
 
-    const data = await api.get(`/api/${table}`, { query: req.query });
+    const bruto = await api.get(`/api/${table}`, { query: req.query });
+    const data = sanitizarSaida(bruto);
     writeCache(table, cacheKey, data);
     res.status(200).json(data);
   } catch (err) {

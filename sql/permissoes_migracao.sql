@@ -274,31 +274,17 @@ CREATE TABLE IF NOT EXISTS perm_ctt (
 );
 ALTER TABLE perm_ctt ADD COLUMN IF NOT EXISTS acao_view BOOLEAN NOT NULL DEFAULT FALSE;  -- ctt.view · Ver lista
 ALTER TABLE perm_ctt ADD COLUMN IF NOT EXISTS acao_search BOOLEAN NOT NULL DEFAULT FALSE;  -- ctt.search · Buscar/filtrar
-ALTER TABLE perm_ctt ADD COLUMN IF NOT EXISTS acao_details_view BOOLEAN NOT NULL DEFAULT FALSE;  -- ctt.details.view · Ver detalhes
 ALTER TABLE perm_ctt ADD COLUMN IF NOT EXISTS acao_create BOOLEAN NOT NULL DEFAULT FALSE;  -- ctt.create · Cadastrar contato
+ALTER TABLE perm_ctt ADD COLUMN IF NOT EXISTS acao_export_csv BOOLEAN NOT NULL DEFAULT FALSE;  -- ctt.export.csv · Exportar CSV
+ALTER TABLE perm_ctt ADD COLUMN IF NOT EXISTS acao_import_csv BOOLEAN NOT NULL DEFAULT FALSE;  -- ctt.import.csv · Importar CSV
+ALTER TABLE perm_ctt ADD COLUMN IF NOT EXISTS acao_report BOOLEAN NOT NULL DEFAULT FALSE;  -- ctt.report · Gerar relatório
+ALTER TABLE perm_ctt ADD COLUMN IF NOT EXISTS acao_email_bulk BOOLEAN NOT NULL DEFAULT FALSE;  -- ctt.email.bulk · Enviar e-mail em massa
 ALTER TABLE perm_ctt ADD COLUMN IF NOT EXISTS acao_edit BOOLEAN NOT NULL DEFAULT FALSE;  -- ctt.edit · Editar contato
-ALTER TABLE perm_ctt ADD COLUMN IF NOT EXISTS acao_link_client BOOLEAN NOT NULL DEFAULT FALSE;  -- ctt.link.client · Vincular a cliente
-ALTER TABLE perm_ctt ADD COLUMN IF NOT EXISTS acao_unlink_client BOOLEAN NOT NULL DEFAULT FALSE;  -- ctt.unlink.client · Desvincular de cliente
-ALTER TABLE perm_ctt ADD COLUMN IF NOT EXISTS acao_log_add BOOLEAN NOT NULL DEFAULT FALSE;  -- ctt.log.add · Registrar interação
-ALTER TABLE perm_ctt ADD COLUMN IF NOT EXISTS acao_log_view BOOLEAN NOT NULL DEFAULT FALSE;  -- ctt.log.view · Ver interações
-ALTER TABLE perm_ctt ADD COLUMN IF NOT EXISTS acao_status_update BOOLEAN NOT NULL DEFAULT FALSE;  -- ctt.status.update · Atualizar status
-ALTER TABLE perm_ctt ADD COLUMN IF NOT EXISTS acao_tag_manage BOOLEAN NOT NULL DEFAULT FALSE;  -- ctt.tag.manage · Gerenciar tags
-ALTER TABLE perm_ctt ADD COLUMN IF NOT EXISTS acao_delete BOOLEAN NOT NULL DEFAULT FALSE;  -- ctt.delete · Excluir contato
-ALTER TABLE perm_ctt ADD COLUMN IF NOT EXISTS col_ctt_nome BOOLEAN NOT NULL DEFAULT FALSE;  -- Contato
-ALTER TABLE perm_ctt ADD COLUMN IF NOT EXISTS col_ctt_cliente BOOLEAN NOT NULL DEFAULT FALSE;  -- Cliente
-ALTER TABLE perm_ctt ADD COLUMN IF NOT EXISTS col_ctt_cargo BOOLEAN NOT NULL DEFAULT FALSE;  -- Cargo
-ALTER TABLE perm_ctt ADD COLUMN IF NOT EXISTS col_ctt_tel BOOLEAN NOT NULL DEFAULT FALSE;  -- Telefone
-ALTER TABLE perm_ctt ADD COLUMN IF NOT EXISTS col_ctt_email BOOLEAN NOT NULL DEFAULT FALSE;  -- E-mail
-ALTER TABLE perm_ctt ADD COLUMN IF NOT EXISTS col_ctt_origem BOOLEAN NOT NULL DEFAULT FALSE;  -- Origem
-ALTER TABLE perm_ctt ADD COLUMN IF NOT EXISTS col_ctt_tags BOOLEAN NOT NULL DEFAULT FALSE;  -- Tags
-ALTER TABLE perm_ctt ADD COLUMN IF NOT EXISTS col_ctt_status BOOLEAN NOT NULL DEFAULT FALSE;  -- Status
-ALTER TABLE perm_ctt ADD COLUMN IF NOT EXISTS col_ctt_ult_interacao BOOLEAN NOT NULL DEFAULT FALSE;  -- Últ. interação
-ALTER TABLE perm_ctt ADD COLUMN IF NOT EXISTS col_ctt_owner BOOLEAN NOT NULL DEFAULT FALSE;  -- Dono
-ALTER TABLE perm_ctt ADD COLUMN IF NOT EXISTS col_log_data BOOLEAN NOT NULL DEFAULT FALSE;  -- Data
-ALTER TABLE perm_ctt ADD COLUMN IF NOT EXISTS col_log_canal BOOLEAN NOT NULL DEFAULT FALSE;  -- Canal
-ALTER TABLE perm_ctt ADD COLUMN IF NOT EXISTS col_log_assunto BOOLEAN NOT NULL DEFAULT FALSE;  -- Assunto
-ALTER TABLE perm_ctt ADD COLUMN IF NOT EXISTS col_log_detalhes BOOLEAN NOT NULL DEFAULT FALSE;  -- Detalhes
-ALTER TABLE perm_ctt ADD COLUMN IF NOT EXISTS col_log_resp BOOLEAN NOT NULL DEFAULT FALSE;  -- Responsável
+ALTER TABLE perm_ctt ADD COLUMN IF NOT EXISTS col_ctt_nome BOOLEAN NOT NULL DEFAULT FALSE;  -- Nome
+ALTER TABLE perm_ctt ADD COLUMN IF NOT EXISTS col_ctt_tipo BOOLEAN NOT NULL DEFAULT FALSE;  -- Tipo
+ALTER TABLE perm_ctt ADD COLUMN IF NOT EXISTS col_ctt_cliente BOOLEAN NOT NULL DEFAULT FALSE;  -- Empresa
+ALTER TABLE perm_ctt ADD COLUMN IF NOT EXISTS col_ctt_tel BOOLEAN NOT NULL DEFAULT FALSE;  -- Celular
+ALTER TABLE perm_ctt ADD COLUMN IF NOT EXISTS col_ctt_fixo BOOLEAN NOT NULL DEFAULT FALSE;  -- Telefone
 
 -- Relatórios (perm_rel)
 CREATE TABLE IF NOT EXISTS perm_rel (
@@ -496,7 +482,7 @@ UPDATE perm_cli SET modulo_ativo = TRUE, acao_view = TRUE, acao_search = TRUE, a
   WHERE modelo_id IN (SELECT id FROM modelos_permissoes WHERE nome = 'Administrador');
 UPDATE perm_pros SET modulo_ativo = TRUE, acao_view = TRUE, acao_search = TRUE, acao_details_view = TRUE, acao_create = TRUE, acao_edit = TRUE, acao_delete = TRUE, acao_stage_update = TRUE, acao_next_step = TRUE, col_pros_id = TRUE, col_pros_entidade = TRUE, col_pros_origem = TRUE, col_pros_etapa = TRUE, col_pros_valor = TRUE, col_pros_prob = TRUE, col_pros_owner = TRUE, col_pros_proximo_passo = TRUE, col_pros_proximo_passo_data = TRUE, col_pros_atualizado_em = TRUE, col_hist_data = TRUE, col_hist_tipo = TRUE, col_hist_resumo = TRUE, col_hist_resp = TRUE
   WHERE modelo_id IN (SELECT id FROM modelos_permissoes WHERE nome = 'Administrador');
-UPDATE perm_ctt SET modulo_ativo = TRUE, acao_view = TRUE, acao_search = TRUE, acao_details_view = TRUE, acao_create = TRUE, acao_edit = TRUE, acao_link_client = TRUE, acao_unlink_client = TRUE, acao_log_add = TRUE, acao_log_view = TRUE, acao_status_update = TRUE, acao_tag_manage = TRUE, acao_delete = TRUE, col_ctt_nome = TRUE, col_ctt_cliente = TRUE, col_ctt_cargo = TRUE, col_ctt_tel = TRUE, col_ctt_email = TRUE, col_ctt_origem = TRUE, col_ctt_tags = TRUE, col_ctt_status = TRUE, col_ctt_ult_interacao = TRUE, col_ctt_owner = TRUE, col_log_data = TRUE, col_log_canal = TRUE, col_log_assunto = TRUE, col_log_detalhes = TRUE, col_log_resp = TRUE
+UPDATE perm_ctt SET modulo_ativo = TRUE, acao_view = TRUE, acao_search = TRUE, acao_create = TRUE, acao_export_csv = TRUE, acao_import_csv = TRUE, acao_report = TRUE, acao_email_bulk = TRUE, acao_edit = TRUE, col_ctt_nome = TRUE, col_ctt_tipo = TRUE, col_ctt_cliente = TRUE, col_ctt_tel = TRUE, col_ctt_fixo = TRUE
   WHERE modelo_id IN (SELECT id FROM modelos_permissoes WHERE nome = 'Administrador');
 UPDATE perm_rel SET modulo_ativo = TRUE, acao_view = TRUE, acao_search = TRUE, acao_run = TRUE, acao_export_csv = TRUE, acao_export_xlsx = TRUE, acao_export_pdf = TRUE, acao_preset_save = TRUE, acao_preset_load = TRUE, acao_preset_manage = TRUE, acao_share_link = TRUE, acao_share_send = TRUE, col_rel_estq_nome = TRUE, col_rel_estq_categoria = TRUE, col_rel_estq_unidade = TRUE, col_rel_estq_qtd = TRUE, col_rel_estq_preco = TRUE, col_rel_estq_processo = TRUE, col_rel_estq_status = TRUE, col_rel_prod_codigo = TRUE, col_rel_prod_nome = TRUE, col_rel_prod_colecao = TRUE, col_rel_prod_preco_venda = TRUE, col_rel_prod_margem = TRUE, col_rel_prod_qtd = TRUE, col_rel_prod_status = TRUE, col_rel_cli_nome = TRUE, col_rel_cli_cnpj = TRUE, col_rel_cli_pais = TRUE, col_rel_cli_estado = TRUE, col_rel_cli_status = TRUE, col_rel_cli_dono = TRUE, col_rel_ctt_contato = TRUE, col_rel_ctt_tipo = TRUE, col_rel_ctt_empresa = TRUE, col_rel_ctt_celular = TRUE, col_rel_ctt_telefone = TRUE, col_rel_ctt_email = TRUE, col_rel_pros_nome = TRUE, col_rel_pros_email = TRUE, col_rel_pros_status = TRUE, col_rel_pros_responsavel = TRUE, col_rel_orc_codigo = TRUE, col_rel_orc_cliente = TRUE, col_rel_orc_data = TRUE, col_rel_orc_valor = TRUE, col_rel_orc_condicao = TRUE, col_rel_orc_status = TRUE, col_rel_ped_codigo = TRUE, col_rel_ped_cliente = TRUE, col_rel_ped_data = TRUE, col_rel_ped_valor = TRUE, col_rel_ped_condicao = TRUE, col_rel_ped_status = TRUE, col_rel_usr_avatar = TRUE, col_rel_usr_nome = TRUE, col_rel_usr_email = TRUE, col_rel_usr_perfil = TRUE, col_rel_usr_situacao = TRUE, col_rel_usr_status = TRUE
   WHERE modelo_id IN (SELECT id FROM modelos_permissoes WHERE nome = 'Administrador');

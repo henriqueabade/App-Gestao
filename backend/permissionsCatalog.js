@@ -1238,150 +1238,76 @@ const PERMISSIONS_CATALOG = {
         "key": "ctt.view",
         "column": "acao_view",
         "label": "Ver lista",
-        "desc": "Exibir lista de contatos"
+        "desc": "Exibir a grade de contatos"
       },
       {
         "key": "ctt.search",
         "column": "acao_search",
         "label": "Buscar/filtrar",
-        "desc": "Pesquisa por nome, cargo, tags"
-      },
-      {
-        "key": "ctt.details.view",
-        "column": "acao_details_view",
-        "label": "Ver detalhes",
-        "desc": "Mostrar dados completos e vínculos"
+        "desc": "Botões Filtrar e Limpar"
       },
       {
         "key": "ctt.create",
         "column": "acao_create",
         "label": "Cadastrar contato",
-        "desc": "Criar novo contato"
+        "desc": "Botão \"Novo Contato\" (aqui e o ícone da linha de Clientes)"
+      },
+      {
+        "key": "ctt.export.csv",
+        "column": "acao_export_csv",
+        "label": "Exportar CSV",
+        "desc": "Botão \"Exportar CSV\""
+      },
+      {
+        "key": "ctt.import.csv",
+        "column": "acao_import_csv",
+        "label": "Importar CSV",
+        "desc": "Botão \"Importar CSV\""
+      },
+      {
+        "key": "ctt.report",
+        "column": "acao_report",
+        "label": "Gerar relatório",
+        "desc": "Botão \"Gerar Relatório\""
+      },
+      {
+        "key": "ctt.email.bulk",
+        "column": "acao_email_bulk",
+        "label": "Enviar e-mail em massa",
+        "desc": "Botão \"Enviar E-mail em Massa\""
       },
       {
         "key": "ctt.edit",
         "column": "acao_edit",
         "label": "Editar contato",
-        "desc": "Alterar dados e status"
-      },
-      {
-        "key": "ctt.link.client",
-        "column": "acao_link_client",
-        "label": "Vincular a cliente",
-        "desc": "Relacionar contato a cliente"
-      },
-      {
-        "key": "ctt.unlink.client",
-        "column": "acao_unlink_client",
-        "label": "Desvincular de cliente",
-        "desc": "Remover vínculo com cliente"
-      },
-      {
-        "key": "ctt.log.add",
-        "column": "acao_log_add",
-        "label": "Registrar interação",
-        "desc": "Adicionar log de interação"
-      },
-      {
-        "key": "ctt.log.view",
-        "column": "acao_log_view",
-        "label": "Ver interações",
-        "desc": "Listar histórico do contato"
-      },
-      {
-        "key": "ctt.status.update",
-        "column": "acao_status_update",
-        "label": "Atualizar status",
-        "desc": "Definir ativo/inativo/qualificação"
-      },
-      {
-        "key": "ctt.tag.manage",
-        "column": "acao_tag_manage",
-        "label": "Gerenciar tags",
-        "desc": "Criar ou atribuir tags"
-      },
-      {
-        "key": "ctt.delete",
-        "column": "acao_delete",
-        "label": "Excluir contato",
-        "desc": "Remover contato com validações"
+        "desc": "Ícone de lápis da linha"
       }
     ],
     "columns": [
       {
         "key": "col_ctt_nome",
         "column": "col_ctt_nome",
-        "label": "Contato"
+        "label": "Nome"
+      },
+      {
+        "key": "col_ctt_tipo",
+        "column": "col_ctt_tipo",
+        "label": "Tipo"
       },
       {
         "key": "col_ctt_cliente",
         "column": "col_ctt_cliente",
-        "label": "Cliente"
-      },
-      {
-        "key": "col_ctt_cargo",
-        "column": "col_ctt_cargo",
-        "label": "Cargo"
+        "label": "Empresa"
       },
       {
         "key": "col_ctt_tel",
         "column": "col_ctt_tel",
+        "label": "Celular"
+      },
+      {
+        "key": "col_ctt_fixo",
+        "column": "col_ctt_fixo",
         "label": "Telefone"
-      },
-      {
-        "key": "col_ctt_email",
-        "column": "col_ctt_email",
-        "label": "E-mail"
-      },
-      {
-        "key": "col_ctt_origem",
-        "column": "col_ctt_origem",
-        "label": "Origem"
-      },
-      {
-        "key": "col_ctt_tags",
-        "column": "col_ctt_tags",
-        "label": "Tags"
-      },
-      {
-        "key": "col_ctt_status",
-        "column": "col_ctt_status",
-        "label": "Status"
-      },
-      {
-        "key": "col_ctt_ult_interacao",
-        "column": "col_ctt_ult_interacao",
-        "label": "Últ. interação"
-      },
-      {
-        "key": "col_ctt_owner",
-        "column": "col_ctt_owner",
-        "label": "Dono"
-      },
-      {
-        "key": "col_log_data",
-        "column": "col_log_data",
-        "label": "Data"
-      },
-      {
-        "key": "col_log_canal",
-        "column": "col_log_canal",
-        "label": "Canal"
-      },
-      {
-        "key": "col_log_assunto",
-        "column": "col_log_assunto",
-        "label": "Assunto"
-      },
-      {
-        "key": "col_log_detalhes",
-        "column": "col_log_detalhes",
-        "label": "Detalhes"
-      },
-      {
-        "key": "col_log_resp",
-        "column": "col_log_resp",
-        "label": "Responsável"
       }
     ]
   },
