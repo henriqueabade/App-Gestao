@@ -1,5 +1,5 @@
 <div id="novoOrcamentoOverlay" class="fixed inset-0 z-[1002] bg-black/50 flex items-center justify-center p-4 pt-[4vw]">
-  <div role="dialog" aria-modal="true" tabindex="0" class="w-full max-w-7xl max-h-[90vh] glass-surface backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade slide-in overflow-hidden flex flex-col relative">
+  <div role="dialog" aria-modal="true" tabindex="0" class="w-full max-w-7xl h-[90vh] glass-surface backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade slide-in overflow-hidden flex flex-col relative">
     <header class="relative flex items-center justify-between px-8 py-5 border-b border-white/10 flex-shrink-0">
         <div class="flex items-center gap-3">
           <button id="voltarNovoOrcamento" class="btn-neutral px-4 py-2 rounded-lg text-white font-medium flex items-center gap-2">← Voltar</button>
@@ -17,8 +17,8 @@
           <button type="button" id="limparNovoOrcamento" data-perm="orc.clear" class="btn-danger px-4 py-2 rounded-lg text-white font-medium">Limpar Tudo</button>
         </div>
       </header>
-      <form id="novoOrcamentoForm" class="flex-1 overflow-y-auto modal-scroll"><!-- Scroll do Novo Orçamento restrito ao corpo (entre header e footer), igual Editar Orçamento -->
-      <div class="px-8 py-6 space-y-6">
+      <form id="novoOrcamentoForm" class="flex-1 min-h-0 overflow-hidden">
+      <div class="px-8 py-6 h-full min-h-0 flex flex-col gap-6">
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <div class="relative">
             <select id="novoCliente" name="cliente" required class="peer w-full appearance-none bg-input border border-inputBorder rounded-lg px-4 pr-12 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" data-filled="false">
@@ -74,7 +74,7 @@
 
       <div id="novoPagamento" class="glass-surface rounded-xl p-6 hidden"></div>
 
-      <div>
+      <div class="flex-1 min-h-0 flex flex-col">
         <div class="flex items-center justify-between mb-6">
             <h3 class="text-lg font-semibold text-white">Itens</h3>
             <div class="flex flex-wrap gap-2 text-sm ml-4">
@@ -103,7 +103,7 @@
             </div>
           </div>
 
-          <div class="glass-surface rounded-xl shadow-lg animate-fade-in-up table-scroll items-table-scroll">
+          <div class="glass-surface rounded-xl shadow-lg animate-fade-in-up table-scroll items-table-scroll flex-1 min-h-0 overflow-auto modal-scroll">
             <table id="novoItensTabela" class="w-full items-table">
               <thead class="bg-gray-50 sticky top-0">
                 <tr class="border-b border-gray-200">
