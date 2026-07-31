@@ -98,6 +98,47 @@ function normalizeToken(rawToken) {
   return trimmed;
 }
 
+/**
+ * TRAVA DE SEGURANÇA: nenhum teste pode falar com a API real.
+ *
+ * Motivo: este client aponta para a API de produção por padrão e se autentica
+ * com o JWT gravado em data/authToken.json (a sessão real de quem usa o app).
+ * Os testes sobem um Express com os routers de verdade; qualquer rota que faça
+ * proxy (e várias fazem, inclusive DELETE /usuarios/:id) executava a operação
+ * NO BANCO DE PRODUÇÃO. Foi assim que um usuário sumiu do nada.
+ *
+ * Os testes montam o banco com pg-mem e trocam o módulo ./db, mas isso não
+ * intercepta este client — ele fala HTTP, não SQL. Por isso a trava é aqui.
+ *
+ * Sob `node --test` só é permitido falar com host local (os mocks). Qualquer
+ * outro destino falha ANTES do fetch, sem sair pacote na rede.
+ */
+const MODO_TESTE = Boolean(
+  process.env.NODE_TEST_CONTEXT ||
+  process.env.NODE_ENV === 'test' ||
+  process.argv.includes('--test')
+);
+
+function ehHostLocal(urlString) {
+  try {
+    const { hostname } = new URL(urlString);
+    return ['localhost', '127.0.0.1', '::1', '0.0.0.0'].includes(hostname);
+  } catch (err) {
+    return false;
+  }
+}
+
+function garantirDestinoSeguroEmTeste(method, url) {
+  if (!MODO_TESTE || ehHostLocal(url)) return;
+  const error = new Error(
+    `[api-http-client] BLOQUEADO: teste tentou ${method} em "${url}". ` +
+    'Testes não podem acessar a API real. Aponte API_BASE_URL para um mock local ' +
+    '(ex.: process.env.API_BASE_URL = "http://localhost:4500") antes de carregar o controller.'
+  );
+  error.status = 599;
+  throw error;
+}
+
 function createApiClient(req) {
   function resolveBearer() {
     const stored = normalizeToken(getToken());
@@ -130,6 +171,10 @@ function createApiClient(req) {
 
     const normalizedPath = path.startsWith('/') ? path : `/${path}`;
     const url = `${API_BASE_URL}${normalizedPath}${buildQueryString(query)}`;
+
+    // Antes de qualquer coisa sair na rede.
+    garantirDestinoSeguroEmTeste(method, url);
+
     const headers = {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${bearer}`

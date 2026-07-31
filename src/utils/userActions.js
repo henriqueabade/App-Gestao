@@ -5,7 +5,6 @@ window.addEventListener('DOMContentLoaded', () => {
   const summaryButton = document.getElementById('userSummary');
   const identityContainer = document.getElementById('userIdentity');
   const appUpdates = window.AppUpdates || null;
-  const usuariosMenuItem = document.querySelector('[data-page="usuarios"]');
 
   const QUICK_ACTIONS_STORAGE_KEY = 'menu.quickActions';
   const QUICK_ACTIONS_EVENT = 'menu-quick-actions-changed';
@@ -132,19 +131,11 @@ window.addEventListener('DOMContentLoaded', () => {
       user.perfilNome ||
       user.role ||
       '';
-    const isSupAdmin = perfil === 'Sup Admin';
-    const isAdmin = perfil === 'Admin';
-    const hasAdminAccess = isSupAdmin || isAdmin;
-
-    if (usuariosMenuItem) {
-      if (hasAdminAccess) {
-        usuariosMenuItem.classList.remove('hidden');
-        usuariosMenuItem.removeAttribute('aria-hidden');
-      } else {
-        usuariosMenuItem.classList.add('hidden');
-        usuariosMenuItem.setAttribute('aria-hidden', 'true');
-      }
-    }
+    // A visibilidade do módulo "Usuários" no menu NÃO é mais decidida pelo
+    // perfil aqui. Quem manda é o modelo de permissão (Módulo ativo), aplicado
+    // por src/js/permissoes.js sobre todo `.sidebar-item[data-page]`.
+    // Deixar este bloco escondendo o item por perfil anulava a permissão:
+    // mesmo marcado no modelo, o item continuava sumindo da tela.
 
     if (nameEl) nameEl.textContent = nome;
     if (profileEl) profileEl.textContent = perfil || 'Sem Perfil';

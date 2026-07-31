@@ -138,9 +138,26 @@ function getCurrentUserFromStorage() {
     }
 }
 
-function canAccessUsuariosModule() {
-    const perfil = getCurrentUserFromStorage()?.perfil;
-    return perfil === 'Sup Admin' || perfil === 'Admin';
+/**
+ * Quem pode abrir um módulo é decidido SOMENTE pelo modelo de permissão.
+ *
+ * Antes o módulo "usuarios" era liberado por perfil ("Sup Admin"/"Admin") em
+ * código, ignorando o que estava marcado no perfil do usuário. Agora vale
+ * apenas a permissão: se o módulo está ativo no modelo, o usuário entra.
+ *
+ * Falha em aberto de propósito: enquanto as permissões não carregaram (ou a
+ * API está fora), a navegação continua liberada — o backend é quem recusa de
+ * fato (403). Travar aqui deixaria o app inutilizável por um problema de rede.
+ */
+function podeAbrirModulo(page) {
+    const permissoes = window.Permissoes;
+    if (!permissoes || typeof permissoes.podeAbrirPagina !== 'function') return true;
+    try {
+        return permissoes.podeAbrirPagina(page);
+    } catch (error) {
+        console.warn('Não foi possível verificar a permissão do módulo', page, error);
+        return true;
+    }
 }
 
 const MENU_DEFAULT_PAGE_KEY = 'menu.defaultPage';
@@ -3199,7 +3216,7 @@ async function loadPage(page, options = {}) {
         return;
     }
 
-    if (page === 'usuarios' && !canAccessUsuariosModule()) {
+    if (!podeAbrirModulo(page)) {
         const fallbackPage = options?.fallbackPage && options.fallbackPage !== 'usuarios'
             ? options.fallbackPage : MENU_DEFAULT_PAGE_FALLBACK;
         return loadPage(fallbackPage, { ...options, fallbackPage: undefined, skipNavigationUpdate: false });
