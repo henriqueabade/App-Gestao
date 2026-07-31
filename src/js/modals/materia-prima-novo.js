@@ -1,7 +1,6 @@
 (function(){
   const overlay = document.getElementById('novoInsumoOverlay');
   const close = () => Modal.close('novoInsumo');
-  overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
   document.getElementById('fecharNovoInsumo').addEventListener('click', close);
   document.getElementById('cancelarNovoInsumo').addEventListener('click', close);
   document.addEventListener('keydown', function esc(e){ if(e.key==='Escape'){ close(); document.removeEventListener('keydown', esc); } });
@@ -59,6 +58,31 @@
       console.error('Erro ao carregar opções', err);
     }
   }
+
+  // ------------------------------------------------------------------
+  // Preservação do trabalho (ver docs/restauracao-de-trabalho.md)
+  //
+  // Nome, quantidade, preço e descrição voltam pela varredura genérica. O que
+  // ela NÃO alcança são Categoria, Unidade e Processo: os três são preenchidos
+  // por `fetch` em `carregarOpcoes()`, e atribuir `value` antes das <option>
+  // chegarem não faz nada — o navegador descarta em silêncio.
+  // ------------------------------------------------------------------
+  window.EstadoTrabalho?.registrarConteudo?.('novoInsumo', {
+    capturar: () => ({
+      categoria: form.categoria?.value || '',
+      unidade: form.unidade?.value || '',
+      processo: form.processo?.value || ''
+    }),
+    restaurar: async (dados) => {
+      const repor = window.EstadoTrabalho?.reporSelect;
+      if (!repor || !dados) return;
+      await Promise.all([
+        repor(form.categoria, dados.categoria),
+        repor(form.unidade, dados.unidade),
+        repor(form.processo, dados.processo)
+      ]);
+    }
+  });
 
   form.addEventListener('submit', async e => {
     e.preventDefault();

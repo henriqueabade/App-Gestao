@@ -8,7 +8,6 @@
     }
     Modal.close('novoProduto');
   };
-  overlay.addEventListener('click', e => { if(e.target === overlay) close(); });
   document.getElementById('voltarNovoProduto').addEventListener('click', close);
   document.addEventListener('keydown', function esc(e){ if(e.key==='Escape'){ close(); document.removeEventListener('keydown', esc); } });
 
@@ -636,14 +635,27 @@
   window.EstadoTrabalho?.registrarConteudo?.('novoProduto', {
     capturar: () => ({
       // row/totalEl são nós do DOM e não podem ir para o JSON
-      itens: itens.map(({ row, totalEl, ...dados }) => dados)
+      itens: itens.map(({ row, totalEl, ...dados }) => dados),
+      // Coleção e Etapa são preenchidas por `fetch`: atribuir `value` antes das
+      // <option> chegarem não faz nada, então a varredura genérica as perde.
+      colecao: colecaoSelect?.value || '',
+      etapa: etapaSelect?.value || ''
     }),
-    restaurar: (dados) => {
+    restaurar: async (dados) => {
       const guardados = Array.isArray(dados?.itens) ? dados.itens : [];
-      if (!guardados.length) return;
-      itens = guardados.map(d => ({ ...d }));
-      renderItens();
-      updateTotals();
+      if (guardados.length) {
+        itens = guardados.map(d => ({ ...d }));
+        renderItens();
+        updateTotals();
+      }
+
+      const repor = window.EstadoTrabalho?.reporSelect;
+      if (repor) {
+        await Promise.all([
+          repor(colecaoSelect, dados?.colecao),
+          repor(etapaSelect, dados?.etapa)
+        ]);
+      }
     }
   });
 

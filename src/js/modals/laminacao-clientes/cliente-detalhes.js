@@ -6,7 +6,6 @@
     return fetch(`${baseUrl}${path}`, options);
   }
   const close = () => Modal.close('detalhesCliente');
-  overlay.addEventListener('click', e => { if(e.target === overlay) close(); });
   const voltar = document.getElementById('voltarDetalhesCliente');
   if(voltar) voltar.addEventListener('click', close);
   document.addEventListener('keydown', function esc(e){ if(e.key==='Escape'){ close(); document.removeEventListener('keydown', esc); }});

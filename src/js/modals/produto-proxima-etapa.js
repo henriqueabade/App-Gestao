@@ -306,14 +306,23 @@
   }
 
   // Fecha ao clicar fora do conteúdo
-  overlay.addEventListener('click',(e)=>{ if(e.target===overlay) closeOverlay(); });
   if(voltarBtn) voltarBtn.addEventListener('click', closeOverlay);
 
   // Preservação do trabalho: ver comentário equivalente em
   // produto-proxima-etapa-novo.js — `itens` é estado interno do modal.
   window.EstadoTrabalho?.registrarConteudo?.('proximaEtapa', {
     capturar: () => ({
+      // O título é o nome do processo e é ele que filtra os materiais. Vai
+      // também no `__contexto` para já valer na PRIMEIRA execução do script —
+      // no `restaurar` ele chega tarde e obriga a recarregar a lista.
+      // `produtoEditarAPI` NÃO vai aqui de propósito: é um objeto vivo, com
+      // funções, recriado pelo "Editar Produto" — que a pilha reabre antes.
+      __contexto: { proximaEtapaTitulo: titulo },
       titulo,
+      // O item escolhido no seletor ainda não foi inserido na lista. Ele é
+      // repovoado por `carregarMateriais()`, que apaga a seleção — por isso é
+      // reposto aqui, e não pela varredura genérica de campos.
+      itemSelecionado: itemSelect?.value || '',
       itens: itens.map(({ row, totalEl, ...dados }) => dados)
     }),
     restaurar: async (dados) => {
@@ -325,16 +334,21 @@
         if (tituloEl) tituloEl.textContent = titulo;
         await carregarMateriais();
       }
+
       const guardados = Array.isArray(dados?.itens) ? dados.itens : [];
-      if (!guardados.length) return;
-      itens = [];
-      if (tabelaBody) tabelaBody.innerHTML = '';
-      guardados.forEach(dado => {
-        const item = { ...dado };
-        itens.push(item);
-        renderItem(item);
-      });
-      updateTotal();
+      if (guardados.length) {
+        itens = [];
+        if (tabelaBody) tabelaBody.innerHTML = '';
+        guardados.forEach(dado => {
+          const item = { ...dado };
+          itens.push(item);
+          renderItem(item);
+        });
+        updateTotal();
+      }
+
+      // Depois de `carregarMateriais()`, senão a lista recém-montada apagaria.
+      await window.EstadoTrabalho?.reporSelect?.(itemSelect, dados?.itemSelecionado);
     }
   });
 

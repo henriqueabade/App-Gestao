@@ -1,7 +1,12 @@
 (function(){
   const overlay = document.getElementById('excluirInsumoOverlay');
   const close = () => Modal.close('excluirInsumo');
-  overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+
+  // Sem devolver `window.materiaExcluir`, o modal reabre e o botão de confirmar
+  // não faz nada (ver docs/restauracao-de-trabalho.md).
+  window.EstadoTrabalho?.registrarContexto?.('excluirInsumo',
+    () => ({ materiaExcluir: window.materiaExcluir }));
+
   document.getElementById('cancelarExcluirInsumo').addEventListener('click', close);
   document.addEventListener('keydown', function esc(e){ if(e.key==='Escape'){ close(); document.removeEventListener('keydown', esc); } });
   document.getElementById('confirmarExcluirInsumo').addEventListener('click', async () => {

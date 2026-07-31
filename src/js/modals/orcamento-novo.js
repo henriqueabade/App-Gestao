@@ -14,7 +14,6 @@
     .replace(/>/g, '&gt;')
     .replace(/'/g, '&#39;');
   const close = () => Modal.close(overlayId);
-  overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
   document.addEventListener('keydown', function esc(e){ if(e.key === 'Escape'){ close(); document.removeEventListener('keydown', esc); } });
 
   const form = document.getElementById('novoOrcamentoForm');
@@ -445,6 +444,125 @@
       produtoSelect.setAttribute('data-filled', 'false');
       document.getElementById('itemQtd').value = 1;
     });
+  });
+
+  // ------------------------------------------------------------------
+  // Preservação do trabalho (ver docs/restauracao-de-trabalho.md)
+  //
+  // Nada aqui volta pela varredura genérica de campos:
+  //  - os itens são LINHAS de tabela montadas no DOM, não inputs;
+  //  - a condição de pagamento monta o bloco de prazo/parcelamento por JS, e
+  //    esse bloco nem existe no instante em que os campos são repostos;
+  //  - o parcelamento guarda o próprio estado dentro de `window.Parcelamento`;
+  //  - os selects de cliente/contato/transportadora/dono são preenchidos por
+  //    `fetch`, e atribuir `value` antes das opções chegarem não faz nada.
+  // ------------------------------------------------------------------
+  function lerLinhaItem(tr) {
+    return {
+      id: tr.dataset.id,
+      nome: tr.children[0].textContent,
+      qtd: tr.children[1].textContent.trim(),
+      valor: tr.children[2].textContent.trim(),
+      valorDesc: tr.children[3].textContent.trim(),
+      desc: tr.children[4].textContent.trim()
+    };
+  }
+
+  function montarLinhaItem(dados) {
+    const tr = document.createElement('tr');
+    tr.dataset.id = dados.id;
+    tr.className = 'border-b border-white/10';
+    tr.innerHTML = `
+        <td data-perm-col="col_orc_it_nome" class="text-left text-white" title="${escapeAttr(dados.nome)}">${escapeAttr(dados.nome)}</td>
+        <td data-perm-col="col_orc_it_qtd" class="text-left text-white">${escapeAttr(dados.qtd)}</td>
+        <td data-perm-col="col_orc_it_preco" class="text-left text-white">${escapeAttr(dados.valor)}</td>
+        <td data-perm-col="col_orc_it_preco_desc" class="text-left text-white">${escapeAttr(dados.valorDesc)}</td>
+        <td data-perm-col="col_orc_it_desc" class="text-left text-white">${escapeAttr(dados.desc)}</td>
+        <td data-perm-col="col_orc_it_subtotal" class="text-left text-white total-cell"></td>
+        <td class="text-left actions-cell">
+          <i class="fas fa-edit w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)"></i>
+          <i class="fas fa-trash w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10 text-red-400"></i>
+        </td>`;
+    itensTbody.appendChild(tr);
+    updateLineTotal(tr);
+    attachRowEvents(tr);
+  }
+
+  window.EstadoTrabalho?.registrarConteudo?.(overlayId, {
+    capturar: () => ({
+      itens: Array.from(itensTbody.children).map(lerLinhaItem),
+      condicao: condicaoSelect.value,
+      condicaoDefinida,
+      prevCondicao,
+      prazoVista: document.getElementById('novoPrazoVista')?.value ?? '',
+      parcelamento: window.Parcelamento?.getData?.('novoParcelamento') || null,
+      selects: {
+        novoCliente: clienteSelect.value,
+        novoContato: contatoSelect.value,
+        novoTransportadora: transportadoraSelect.value,
+        novoFormaPagamento: formaPagamentoSelect.value,
+        novoDono: donoSelect.value
+      }
+    }),
+    restaurar: async (dados) => {
+      if (!dados) return;
+
+      // 1) Itens primeiro: é o total deles que libera a condição de pagamento.
+      itensTbody.innerHTML = '';
+      (Array.isArray(dados.itens) ? dados.itens : []).forEach(montarLinhaItem);
+
+      // `prevCondicao` precisa valer o que valia quando os descontos foram
+      // calculados, senão `applyDefaultDiscounts` recalcularia tudo errado.
+      prevCondicao = dados.prevCondicao ?? prevCondicao;
+      recalcTotals();
+
+      // 2) Selects assíncronos. Cliente antes de contato/transportadora: o
+      // `change` do cliente é quem dispara o carregamento dos outros dois.
+      const repor = window.EstadoTrabalho?.reporSelect;
+      const selects = dados.selects || {};
+      if (repor) {
+        await repor(clienteSelect, selects.novoCliente);
+        await Promise.all([
+          repor(contatoSelect, selects.novoContato),
+          repor(transportadoraSelect, selects.novoTransportadora),
+          repor(donoSelect, selects.novoDono),
+          repor(formaPagamentoSelect, selects.novoFormaPagamento)
+        ]);
+      }
+
+      // 3) Condição de pagamento: reconstrói o bloco antes de repor o conteúdo.
+      if (dados.condicao) {
+        condicaoSelect.disabled = false;
+        condicaoSelect.style.pointerEvents = 'auto';
+        condicaoSelect.value = dados.condicao;
+        condicaoSelect.setAttribute('data-filled', 'true');
+        condicaoDefinida = Boolean(dados.condicaoDefinida);
+
+        if (dados.condicao === 'vista') {
+          updateCondicao();   // síncrona: só monta o campo de prazo
+          const prazoInput = document.getElementById('novoPrazoVista');
+          if (prazoInput && dados.prazoVista) {
+            prazoInput.value = dados.prazoVista;
+            prazoInput.dispatchEvent(new Event('input', { bubbles: true }));
+          }
+        } else if (dados.condicao === 'prazo') {
+          // De propósito NÃO chamamos `updateCondicao()` aqui: ela dispara
+          // `Parcelamento.init` SEM prefill de forma assíncrona (o script é
+          // carregado sob demanda) e apagaria as parcelas logo depois de
+          // reposta. Montamos o mesmo container e inicializamos uma vez só,
+          // já com os dados guardados.
+          pagamentoBox.classList.remove('hidden');
+          pagamentoBox.innerHTML = '<div id="novoParcelamento"></div>';
+          await loadParcelamento();
+          const p = dados.parcelamento;
+          window.Parcelamento?.init('novoParcelamento', {
+            getTotal: () => parseCurrencyToCents(document.getElementById('novoTotal').textContent),
+            prefill: p ? { count: p.count, mode: p.mode, items: p.items } : undefined
+          });
+        }
+        recalcTotals();
+      }
+    }
   });
 
     function saveQuote(status) {

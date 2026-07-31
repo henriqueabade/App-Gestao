@@ -6,12 +6,21 @@
     return fetch(`${baseUrl}${path}`, options);
   }
   const close = () => Modal.close('detalhesCliente');
-  overlay.addEventListener('click', e => { if(e.target === overlay) close(); });
   const voltar = document.getElementById('voltarDetalhesCliente');
   if(voltar) voltar.addEventListener('click', close);
   document.addEventListener('keydown', function esc(e){ if(e.key==='Escape'){ close(); document.removeEventListener('keydown', esc); }});
 
   const cliente = window.clienteDetalhes;
+
+  // Preservação do trabalho (ver docs/restauracao-de-trabalho.md).
+  // Aqui não há nada a digitar — a tela é só leitura —, mas o modal precisa
+  // saber QUAL cliente mostrar. Sem devolver `window.clienteDetalhes`, ele
+  // reabria em branco depois de uma queda.
+  window.EstadoTrabalho?.registrarConteudo?.('detalhesCliente', {
+    capturar: () => ({ __contexto: { clienteDetalhes: cliente } }),
+    restaurar: () => {}
+  });
+
   if(!window.geoService){
     await new Promise((resolve, reject) => {
       const s = document.createElement('script');

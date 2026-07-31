@@ -307,7 +307,6 @@
 
             const closeDialog = result => {
                 document.removeEventListener('keydown', handleKeydown);
-                overlay.removeEventListener('click', handleOverlayClick);
                 optionEntries.forEach(entry => {
                     entry.checkbox.removeEventListener('change', onCheckboxChange);
                 });
@@ -318,12 +317,6 @@
                     document.body.classList.remove('overflow-hidden');
                 }
                 resolve(result);
-            };
-
-            const handleOverlayClick = event => {
-                if (event.target === overlay) {
-                    closeDialog(null);
-                }
             };
 
             const handleKeydown = event => {
@@ -344,7 +337,6 @@
                 });
             });
 
-            overlay.addEventListener('click', handleOverlayClick);
             document.addEventListener('keydown', handleKeydown);
 
             document.body.appendChild(overlay);

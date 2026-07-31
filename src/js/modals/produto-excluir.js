@@ -9,7 +9,11 @@
     document.body.appendChild(ov);
     ov.querySelector('#errOk').addEventListener('click',()=>ov.remove());
   }
-  overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+  // Sem devolver `window.produtoExcluir`, o modal reabre e o botão de confirmar
+  // não faz nada (ver docs/restauracao-de-trabalho.md).
+  window.EstadoTrabalho?.registrarContexto?.('excluirProduto',
+    () => ({ produtoExcluir: window.produtoExcluir }));
+
   document.getElementById('cancelarExcluirProduto').addEventListener('click', close);
   document.addEventListener('keydown', function esc(e){ if(e.key==='Escape'){ close(); document.removeEventListener('keydown', esc); } });
   document.getElementById('confirmarExcluirProduto').addEventListener('click', async () => {

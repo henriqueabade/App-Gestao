@@ -204,3 +204,60 @@ test('corte pelo administrador restaura normalmente', async () => {
 
   assert.strictEqual(resultado.restaurou, true);
 });
+
+// --- Corrida com o login ---------------------------------------------------
+//
+// A janela do dashboard é criada pela de login e chega no `load` — onde a
+// restauração dispara — podendo ser ANTES de o `localStorage.user` existir.
+// Era o que fazia a restauração parar de funcionar por completo.
+
+test('restaura mesmo quando o usuário só aparece depois do dashboard abrir', async () => {
+  const { janela: origem, disco } = montarAmbiente({ usuarioLogado: X });
+  await origem.EstadoTrabalho.salvarPorDesconexao('offline');
+  const estadoGravado = disco.arquivo.state;
+
+  // dashboard sobe SEM usuário no localStorage
+  const { janela, armazenamento } = montarAmbiente({ usuarioLogado: null });
+  janela.electronAPI.loadState = async () => estadoGravado;
+  let apagou = false;
+  janela.electronAPI.clearState = async () => { apagou = true; };
+
+  // o login grava o usuário 400ms depois
+  setTimeout(() => armazenamento.set('user', JSON.stringify(X)), 400);
+
+  let paginaPedida = null;
+  const restaurou = await janela.restaurarTrabalhoInterrompido(async p => { paginaPedida = p; });
+
+  assert.strictEqual(restaurou, true, 'deve esperar o usuário em vez de desistir');
+  assert.strictEqual(paginaPedida, 'produtos');
+  assert.strictEqual(apagou, true, 'restaurado é de uso único');
+});
+
+test('usuário que nunca aparece NÃO faz o trabalho ser apagado', async () => {
+  const { janela: origem, disco } = montarAmbiente({ usuarioLogado: X });
+  await origem.EstadoTrabalho.salvarPorDesconexao('offline');
+  const estadoGravado = disco.arquivo.state;
+
+  const { janela } = montarAmbiente({ usuarioLogado: null });
+  janela.electronAPI.loadState = async () => estadoGravado;
+  let apagou = false;
+  janela.electronAPI.clearState = async () => { apagou = true; };
+
+  const restaurou = await janela.restaurarTrabalhoInterrompido(async () => {});
+
+  assert.strictEqual(restaurou, false);
+  assert.strictEqual(apagou, false, 'sem saber de quem é a vez, o trabalho fica guardado');
+});
+
+test('motivo posterior não-restaurável não apaga o que a queda já guardou', async () => {
+  const { janela, disco } = montarAmbiente({ usuarioLogado: X });
+
+  // O monitor pode disparar duas vezes com motivos diferentes.
+  await janela.EstadoTrabalho.salvarPorDesconexao('offline');
+  assert.ok(disco.arquivo, 'a queda guardou');
+
+  await janela.EstadoTrabalho.salvarPorDesconexao('user-removed');
+
+  assert.ok(disco.arquivo, 'o segundo motivo não pode destruir o trabalho guardado');
+  assert.strictEqual(disco.arquivo.state.motivo, 'offline');
+});

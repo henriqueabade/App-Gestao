@@ -679,8 +679,10 @@
       return;
     }
     if (loadProfileIfNoUser && !applicationContext.usuarioId) {
-      loadProfile(key);
-      return;
+      // Devolve a promessa para quem precisa esperar o perfil terminar de
+      // carregar — é o caso da restauração, que só pode repor as marcações
+      // DEPOIS, senão `applyNormalizedPayload` sobrescreveria tudo.
+      return loadProfile(key);
     }
     if (elements.profileSelect) {
       elements.profileSelect.value = key;
@@ -1190,18 +1192,6 @@
     applySearch(event.target.value || '');
   }
 
-  function handleOverlayClick(event) {
-    if (event.target === overlay) {
-      closeModal();
-    }
-  }
-
-  function handleSaveOverlayClick(event) {
-    if (event.target === saveOverlay) {
-      fecharModalSalvar();
-    }
-  }
-
   function handleKeydown(event) {
     if (event.key !== 'Escape') return;
     if (saveOverlay && !saveOverlay.classList.contains('hidden')) {
@@ -1215,8 +1205,6 @@
 
   function closeModal() {
     document.removeEventListener('keydown', handleKeydown);
-    overlay.removeEventListener('click', handleOverlayClick);
-    saveOverlay?.removeEventListener('click', handleSaveOverlayClick);
     // Remove o overlay de salvamento que foi movido para o <body>, senão ele
     // ficaria órfão na página após fechar o modal.
     if (saveOverlay && saveOverlay.parentElement === document.body) {
@@ -1406,10 +1394,8 @@
     elements.duplicate?.addEventListener('click', handleDuplicate);
     elements.remove?.addEventListener('click', handleDelete);
     elements.search?.addEventListener('input', handleSearchInput);
-    overlay.addEventListener('click', handleOverlayClick);
     document.addEventListener('keydown', handleKeydown);
     if (saveOverlay) {
-      saveOverlay.addEventListener('click', handleSaveOverlayClick);
     }
     saveCloseBtn?.addEventListener('click', fecharModalSalvar);
     saveCancelBtn?.addEventListener('click', fecharModalSalvar);
@@ -1431,22 +1417,124 @@
   setAllModulesState(true);
   updateProfileButtons();
   applySearch('');
-  const profilesLoadingPromise = loadProfilesFromApi();
-  if (profilesLoadingPromise && typeof profilesLoadingPromise.then === 'function') {
-    profilesLoadingPromise
-      .then(() => {
-        syncProfileSelectionFromContext({ loadProfileIfNoUser: !applicationContext.usuarioId });
-      })
-      .catch(err => {
+  // Promessa da carga inicial. A restauração PRECISA esperar por ela: tanto
+  // `syncProfileSelectionFromContext` quanto `loadUserPermissions` terminam
+  // chamando `applyNormalizedPayload`, que sobrescreve TODAS as caixas. Repor
+  // antes disso seria trabalho perdido.
+  const carregamentoInicial = (async () => {
+    const profilesLoadingPromise = loadProfilesFromApi();
+    if (profilesLoadingPromise && typeof profilesLoadingPromise.then === 'function') {
+      try {
+        await profilesLoadingPromise;
+      } catch (err) {
         console.error('Erro ao sincronizar modelos de permissões:', err);
-      });
-  } else {
-    syncProfileSelectionFromContext({ loadProfileIfNoUser: !applicationContext.usuarioId });
+      }
+    }
+    // Aguardado: sem usuário definido, isto carrega um MODELO e preenche todas
+    // as caixas de forma assíncrona.
+    try {
+      await syncProfileSelectionFromContext({ loadProfileIfNoUser: !applicationContext.usuarioId });
+    } catch (err) {
+      console.error('Erro ao sincronizar modelo de permissões:', err);
+    }
+
+    if (applicationContext.usuarioId) {
+      try {
+        await loadUserPermissions(applicationContext.usuarioId);
+      } catch (err) {
+        console.error('Erro ao carregar permissões do usuário:', err);
+      }
+    }
+  })();
+
+  // ------------------------------------------------------------------
+  // Preservação do trabalho (ver docs/restauracao-de-trabalho.md)
+  //
+  // Aqui a varredura genérica de campos NÃO serve. Ela só guarda valores
+  // "preenchidos" e ignora `false`, então uma caixa que o usuário DESMARCOU
+  // voltaria marcada — e desmarcar é metade do trabalho numa tela de permissão.
+  // Guardamos o estado das duas formas (marcado E desmarcado), no mesmo formato
+  // que `applyNormalizedPayload` já sabe aplicar.
+  //
+  // O `__contexto` também é obrigatório: o modal lê
+  // `window.usuariosPermissoesContext` e o APAGA em seguida, então sem ele a
+  // tela reabre sem saber de qual usuário/modelo são as permissões.
+  // ------------------------------------------------------------------
+  function capturarMarcacoes() {
+    const marcacoes = {};
+    overlay.querySelectorAll('input[type="checkbox"][data-role="item"]').forEach(cb => {
+      const nome = cb.name || cb.value;
+      if (nome) marcacoes[nome] = cb.checked;
+    });
+    elements.moduleToggles.forEach(toggle => {
+      const id = toggle.dataset.moduleToggle;
+      const input = toggle.querySelector('input[type="checkbox"]');
+      if (id) marcacoes[`module_${id}`] = Boolean(input?.checked);
+    });
+    return marcacoes;
   }
 
-  if (applicationContext.usuarioId) {
-    loadUserPermissions(applicationContext.usuarioId);
+  function capturarAcordeoes() {
+    const estados = {};
+    overlay.querySelectorAll('[data-accordion-content]').forEach(content => {
+      const id = content.dataset.accordionContent;
+      if (id) estados[id] = content.classList.contains('is-open');
+    });
+    return estados;
   }
+
+  window.EstadoTrabalho?.registrarConteudo?.(overlayId, {
+    capturar: () => ({
+      __contexto: { usuariosPermissoesContext: context },
+      marcacoes: capturarMarcacoes(),
+      perfilSelecionado: elements.profileSelect?.value || '',
+      busca: elements.search?.value || '',
+      aba: elements.tabs.find(t => t.classList.contains('usuarios-permissoes-tab--active'))
+        ?.dataset.permissionTabTrigger || '',
+      acordeoes: capturarAcordeoes(),
+      dialogoSalvar: saveOverlay && !saveOverlay.classList.contains('hidden')
+        ? {
+          nome: saveNameInput?.value || '',
+          descricao: saveDescriptionInput?.value || '',
+          contexto: { ...state.saveContext }
+        }
+        : null
+    }),
+    restaurar: async (dados) => {
+      if (!dados) return;
+
+      // Espera a carga inicial, senão ela sobrescreveria tudo logo depois.
+      try {
+        await carregamentoInicial;
+      } catch (_) { /* já logado acima */ }
+
+      // O `change` do seletor de perfil só atualiza rótulos e botões — não
+      // recarrega as permissões —, então pode vir antes das marcações.
+      await window.EstadoTrabalho?.reporSelect?.(elements.profileSelect, dados.perfilSelecionado);
+
+      if (dados.marcacoes && typeof dados.marcacoes === 'object') {
+        applyNormalizedPayload(dados.marcacoes);
+      }
+
+      if (elements.search) {
+        elements.search.value = dados.busca || '';
+        applySearch(dados.busca || '');
+      }
+      if (dados.aba) setTab(dados.aba);
+      Object.entries(dados.acordeoes || {}).forEach(([id, aberto]) => setAccordionState(id, aberto));
+
+      // O diálogo de salvar é um overlay interno; se estava aberto, volta com
+      // o que já havia sido digitado.
+      if (dados.dialogoSalvar) {
+        abrirModalSalvar(
+          { name: dados.dialogoSalvar.nome, description: dados.dialogoSalvar.descricao },
+          dados.dialogoSalvar.contexto || {}
+        );
+      }
+
+      updateProfileButtons();
+    }
+  });
 
   if (typeof Modal?.signalReady === 'function') {
     Modal.signalReady(overlayId);

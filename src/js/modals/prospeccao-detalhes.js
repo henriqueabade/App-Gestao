@@ -2,7 +2,6 @@
   const overlay = document.getElementById('detalhesProspeccaoOverlay');
   if(!overlay) return;
   const close = () => Modal.close('detalhesProspeccao');
-  overlay.addEventListener('click', e => { if(e.target === overlay) close(); });
   const btnBack = document.getElementById('voltarDetalhesProspeccao');
   if(btnBack) btnBack.addEventListener('click', close);
   document.addEventListener('keydown', function esc(e){ if(e.key==='Escape'){ close(); document.removeEventListener('keydown', esc); }});

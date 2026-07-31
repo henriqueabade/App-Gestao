@@ -13,7 +13,6 @@
     .replace(/>/g, '&gt;')
     .replace(/'/g, '&#39;');
   const close = () => Modal.close(overlayId);
-  overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
   document.addEventListener('keydown', function esc(e){ if(e.key === 'Escape'){ close(); document.removeEventListener('keydown', esc); } });
   const form = document.getElementById('editarOrcamentoForm');
 
@@ -573,6 +572,125 @@
         document.getElementById('novoItemQtd').value = 1;
       });
     });
+
+  // ------------------------------------------------------------------
+  // Preservação do trabalho (ver docs/restauracao-de-trabalho.md)
+  //
+  // Além do mesmo estado do "Novo Orçamento" (linhas da tabela, condição de
+  // pagamento, parcelamento e selects assíncronos), aqui é preciso guardar QUAL
+  // orçamento está aberto: o script lê `window.selectedQuoteId`, definido pela
+  // tela que abriu o modal. Na restauração ninguém passa por lá, então sem o
+  // `__contexto` o modal reabria sem saber o que editar.
+  // ------------------------------------------------------------------
+  function lerLinhaItemEditar(tr) {
+    return {
+      id: tr.dataset.id || '',
+      nome: tr.children[0].textContent,
+      qtd: tr.children[1].textContent.trim(),
+      valor: tr.children[2].textContent.trim(),
+      valorDesc: tr.children[3].textContent.trim(),
+      desc: tr.children[4].textContent.trim()
+    };
+  }
+
+  function montarLinhaItemEditar(dados) {
+    const tr = document.createElement('tr');
+    tr.className = 'border-b border-white/10';
+    if (dados.id) tr.dataset.id = dados.id;
+    tr.innerHTML = `
+        <td data-perm-col="col_orc_it_nome" class="text-left text-white" title="${escapeAttr(dados.nome)}">${escapeAttr(dados.nome)}</td>
+        <td data-perm-col="col_orc_it_qtd" class="text-left text-white">${escapeAttr(dados.qtd)}</td>
+        <td data-perm-col="col_orc_it_preco" class="text-left text-white">${escapeAttr(dados.valor)}</td>
+        <td data-perm-col="col_orc_it_preco_desc" class="text-left text-white">${escapeAttr(dados.valorDesc)}</td>
+        <td data-perm-col="col_orc_it_desc" class="text-left text-white">${escapeAttr(dados.desc)}</td>
+        <td data-perm-col="col_orc_it_subtotal" class="text-left text-white total-cell"></td>
+        <td class="text-left actions-cell">
+          <i class="fas fa-edit w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)"></i>
+          <i class="fas fa-trash w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10 text-red-400"></i>
+        </td>
+      `;
+    itensTbody.appendChild(tr);
+    updateLineTotal(tr);
+    attachRowEvents(tr);
+  }
+
+  window.EstadoTrabalho?.registrarConteudo?.(overlayId, {
+    capturar: () => ({
+      // Só o id: ao reabrir, o próprio modal busca o orçamento atualizado na
+      // API. Guardar o `quoteData` inteiro deixaria o estado grande e velho.
+      __contexto: { selectedQuoteId: id },
+      itens: Array.from(itensTbody.children).map(lerLinhaItemEditar),
+      condicao: editarCondicao.value,
+      condicaoDefinida,
+      prevCondicao,
+      prazoVista: document.getElementById('editarPrazoVista')?.value ?? '',
+      parcelamento: window.Parcelamento?.getData?.('editarParcelamento') || null,
+      selects: {
+        editarCliente: editarCliente.value,
+        editarContato: editarContato.value,
+        editarTransportadora: editarTransportadora.value,
+        editarFormaPagamento: editarFormaPagamento.value,
+        editarDono: donoSelect.value
+      },
+      validade: editarValidade?.value ?? ''
+    }),
+    restaurar: async (dados) => {
+      if (!dados) return;
+
+      // 1) Itens: substituem por completo o que veio da API, porque o que o
+      // usuário tinha na tela é mais novo que o banco.
+      itensTbody.innerHTML = '';
+      (Array.isArray(dados.itens) ? dados.itens : []).forEach(montarLinhaItemEditar);
+      prevCondicao = dados.prevCondicao ?? prevCondicao;
+      recalcTotals();
+
+      // 2) Selects assíncronos: cliente antes, pois o `change` dele é quem
+      // carrega contatos e transportadoras.
+      const repor = window.EstadoTrabalho?.reporSelect;
+      const selects = dados.selects || {};
+      if (repor) {
+        await repor(editarCliente, selects.editarCliente);
+        await Promise.all([
+          repor(editarContato, selects.editarContato),
+          repor(editarTransportadora, selects.editarTransportadora),
+          repor(donoSelect, selects.editarDono),
+          repor(editarFormaPagamento, selects.editarFormaPagamento)
+        ]);
+      }
+      if (editarValidade && dados.validade) editarValidade.value = dados.validade;
+
+      // 3) Condição de pagamento.
+      if (dados.condicao) {
+        editarCondicao.disabled = false;
+        editarCondicao.style.pointerEvents = 'auto';
+        editarCondicao.value = dados.condicao;
+        editarCondicao.setAttribute('data-filled', 'true');
+        condicaoDefinida = Boolean(dados.condicaoDefinida);
+
+        if (dados.condicao === 'vista') {
+          updateCondicao();
+          const prazoInput = document.getElementById('editarPrazoVista');
+          if (prazoInput && dados.prazoVista) {
+            prazoInput.value = dados.prazoVista;
+            prazoInput.dispatchEvent(new Event('input', { bubbles: true }));
+          }
+        } else if (dados.condicao === 'prazo') {
+          // `updateCondicao` inicializa o parcelamento de forma assíncrona;
+          // fazemos o init uma vez só, já com o prefill, para não haver duas
+          // inicializações concorrendo e a última apagar as parcelas.
+          pagamentoBox.classList.remove('hidden');
+          pagamentoBox.innerHTML = '<div id="editarParcelamento"></div>';
+          await loadParcelamento();
+          const p = dados.parcelamento;
+          window.Parcelamento?.init('editarParcelamento', {
+            getTotal: () => parseCurrencyToCents(document.getElementById('totalOrcamento').textContent),
+            prefill: p ? { count: p.count, mode: p.mode, items: p.items } : undefined
+          });
+        }
+        recalcTotals();
+      }
+    }
+  });
 
   function recalcTotals() {
     let subtotal = 0;

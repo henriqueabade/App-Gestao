@@ -5,7 +5,6 @@
     return fetch(`${baseUrl}${path}`, options);
   }
   const close = () => Modal.close('excluirCliente');
-  overlay.addEventListener('click', e => { if(e.target === overlay) close(); });
   document.getElementById('cancelarExcluirCliente').addEventListener('click', close);
   document.addEventListener('keydown', function esc(e){ if(e.key==='Escape'){ close(); document.removeEventListener('keydown', esc); } });
   document.getElementById('confirmarExcluirCliente').addEventListener('click', async () => {

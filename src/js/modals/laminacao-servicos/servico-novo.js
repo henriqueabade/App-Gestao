@@ -11,9 +11,6 @@
     }
   };
 
-  overlay.addEventListener('click', (event) => {
-    if (event.target === overlay) close();
-  });
   document.getElementById('voltarNovoServico')?.addEventListener('click', close);
   document.getElementById('cancelarNovoServico')?.addEventListener('click', close);
 

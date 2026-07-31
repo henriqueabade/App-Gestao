@@ -2,7 +2,6 @@
   const overlay = document.getElementById('novoContatoClienteOverlay');
   if(!overlay) return;
   const close = () => Modal.close('novoContatoCliente');
-  overlay.addEventListener('click', e => { if(e.target === overlay) close(); });
   document.getElementById('voltarNovoContatoCliente')?.addEventListener('click', close);
   document.addEventListener('keydown', function esc(e){ if(e.key==='Escape'){ close(); document.removeEventListener('keydown', esc); }});
 

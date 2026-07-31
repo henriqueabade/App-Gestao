@@ -7,7 +7,6 @@
     catch (err) { console.error(err); }
     Modal.close(overlayId);
   };
-  overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
 
   let readyMarked = false;
   const markReady = (reveal = true) => {
@@ -641,7 +640,6 @@
     document.body.appendChild(overlay);
     const closeDialog = () => { if (overlay.isConnected) overlay.remove(); };
     overlay.querySelector('#pieceApprovedOk')?.addEventListener('click', closeDialog, { once: true });
-    overlay.addEventListener('click', e => { if (e.target === overlay) closeDialog(); });
   }
 
   // Reúne todos os motivos que impedem a conversão. Fonte única da verdade
@@ -1209,6 +1207,45 @@ async function computeInsumosAndRender(options = {}) {
     });
     if (insumosTituloPeca) insumosTituloPeca.textContent = 'Totais';
     recomputeStocks(); renderRows(); validate(); await computeInsumosAndRender({ message: 'Carregando insumos...' });
+
+    // ------------------------------------------------------------------
+    // Preservação do trabalho (ver docs/restauracao-de-trabalho.md)
+    //
+    // Aqui o usuário decide, peça a peça: aprova, substitui e reparte a
+    // quantidade entre "usar pronta" e "produzir". Tudo isso vive em `rows`,
+    // um array interno — a tabela é só o desenho dele. E o modal não abre sem
+    // `window.quoteConversionContext`, que é definido pela tela de orçamentos,
+    // por isso ele vai no `__contexto`.
+    //
+    // Registrado depois da carga inicial: assim a restauração sobrescreve as
+    // linhas recém-montadas pelas que o usuário já tinha trabalhado.
+    // ------------------------------------------------------------------
+    window.EstadoTrabalho?.registrarConteudo?.(overlayId, {
+      capturar: () => ({
+        __contexto: { quoteConversionContext: ctx },
+        rows: rows.map(r => ({ ...r })),
+        decisionNote: decisionNote()?.value ?? ''
+      }),
+      restaurar: async (dados) => {
+        if (!Array.isArray(dados?.rows) || !dados.rows.length) return;
+
+        rows = dados.rows.map(r => ({ ...r, approved: !!r.approved }));
+        rows.forEach(r => { if (r._origId === undefined) r._origId = r.produto_id; });
+
+        const nota = decisionNote();
+        if (nota && typeof dados.decisionNote === 'string') {
+          nota.value = dados.decisionNote;
+          nota.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+
+        // `recomputeStocks` reavalia o estoque com os números de AGORA; as
+        // decisões do usuário (aprovação, substituição, nota) continuam valendo.
+        recomputeStocks();
+        renderRows();
+        validate();
+        await computeInsumosAndRender({ message: 'Recalculando insumos...' });
+      }
+    });
   })();
 
   initPromise

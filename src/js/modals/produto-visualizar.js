@@ -4,6 +4,11 @@
     if (!overlay) return;
 
     const selected = window.produtoVisualizar;
+
+    // Sem devolver `window.produtoVisualizar`, o modal reabre em branco
+    // (ver docs/restauracao-de-trabalho.md). A tela é só leitura.
+    window.EstadoTrabalho?.registrarContexto?.('visualizarProduto',
+      () => ({ produtoVisualizar: selected }));
     const byId = id => document.getElementById(id);
     const fields = {
       nome: byId('nomeInput'), codigo: byId('codigoInput'), ncm: byId('ncmInput'),
@@ -19,7 +24,6 @@
 
     const close = () => Modal.close('visualizarProduto');
     byId('voltarVisualizarProduto')?.addEventListener('click', close);
-    overlay.addEventListener('click', event => { if (event.target === overlay) close(); });
 
     function currency(value) {
       return (Number(value) || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });

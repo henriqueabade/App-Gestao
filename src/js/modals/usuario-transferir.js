@@ -247,11 +247,6 @@
     }
   };
 
-  overlay.addEventListener('click', (event) => {
-    if (event.target === overlay) {
-      close();
-    }
-  });
   document.addEventListener('keydown', handleKeydown);
   cancelarBtn?.addEventListener('click', close);
   confirmarBtn?.addEventListener('click', confirmarTransferencia);
@@ -264,6 +259,28 @@
   renderResumo();
   renderUsuariosDisponiveis();
   atualizarEmailDestino();
+
+  // ------------------------------------------------------------------
+  // Preservação do trabalho (ver docs/restauracao-de-trabalho.md)
+  //
+  // TUDO nesta tela vem de `window.usuarioTransferenciaContext` — o usuário a
+  // ser transferido, as associações e a lista de destinos —, e o modal APAGA
+  // esse global logo na abertura. Sem devolvê-lo, a tela reabre vazia.
+  // A escolha do destino é o único dado que o usuário produz aqui.
+  // ------------------------------------------------------------------
+  window.EstadoTrabalho?.registrarConteudo?.(overlayId, {
+    capturar: () => ({
+      __contexto: { usuarioTransferenciaContext: context },
+      destino: selectEl?.value || ''
+    }),
+    restaurar: async (dados) => {
+      if (!dados?.destino) return;
+      // A lista de destinos é montada do próprio contexto, de forma síncrona,
+      // mas `reporSelect` protege caso a ordem mude no futuro.
+      const aplicou = await window.EstadoTrabalho?.reporSelect?.(selectEl, dados.destino);
+      if (aplicou) atualizarEmailDestino();
+    }
+  });
 
   window.dispatchEvent(new CustomEvent('modalSpinnerLoaded', { detail: overlayId }));
 })();

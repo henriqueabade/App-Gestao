@@ -114,6 +114,24 @@ quando ele sai do DOM, o hospedeiro se fecha e se remove sozinho.
 `data-sem-top-layer="true"` deixa um overlay de fora (útil para spinners, que não
 levam a classe de diálogo justamente por isso).
 
+### Clicar fora NÃO fecha — não reintroduza
+
+Modal e caixa de mensagem só fecham por **botão** (Fechar/Voltar/Cancelar) ou
+**Esc**. O padrão abaixo foi removido de todo o app a pedido do usuário: fechar
+sem querer, no meio de um preenchimento longo, custava o trabalho inteiro.
+
+```js
+// NÃO faça isto:
+overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+```
+
+Ao criar um modal novo, garanta que exista pelo menos um botão de fechar — é a
+única saída além do Esc.
+
+Cuidado ao ler o código: `overlay.addEventListener('mousedown', warn, true)` em
+`cliente-detalhes` **não** é clicar-para-fechar; é o aviso de campo somente
+leitura. Deve continuar existindo.
+
 ---
 
 ## 3. Botões (`BotaoAcao`)
@@ -149,6 +167,20 @@ ignorados, porque já têm o bloqueio do `permissoes.js`.
 | --- | --- |
 | `data-sem-loading="true"` | Mantém a trava de duplo clique, mas nunca aplica o spinner. Use quando o botão tem indicador próprio dentro dele (ex.: barra de progresso da publicação) |
 | `data-sem-guarda="true"`  | Desliga a trava e o visual |
+
+### O rastreio segue a ação inteira
+
+A trava **não** é um tempo fixo: ela dura enquanto houver chamada pendente,
+mesmo quando o `fetch` está numa função auxiliar que o handler nem aguarda —
+o padrão de `salvarNovoServico`, por exemplo:
+
+```js
+botao.addEventListener('click', () => { salvarDados(); });   // sem await
+```
+
+O rastreador continua ativo enquanto novas promessas nascerem, então o `fetch`
+disparado lá dentro (mesmo depois de um `await getApiBaseUrl()`) entra na conta.
+Coberto por `src/js/__tests__/botaoAcao.test.js`.
 
 ### API explícita
 

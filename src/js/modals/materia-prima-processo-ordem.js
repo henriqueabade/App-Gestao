@@ -16,8 +16,6 @@
     Modal.close('ordemDuplicada');
   };
 
-  function onOverlay(e){ if(e.target === overlay) close(); }
-  overlay.addEventListener('click', onOverlay);
   cancelarBtn.addEventListener('click', close);
 
   async function atualizarSelects(nome){

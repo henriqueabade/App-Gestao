@@ -1,7 +1,11 @@
 (function(){
   const overlay = document.getElementById('excluirLoteOverlay');
   const close = () => Modal.close('excluirLote');
-  overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+  // Sem devolver `window.loteExcluir`, o modal reabre e o botão de confirmar
+  // não faz nada (ver docs/restauracao-de-trabalho.md).
+  window.EstadoTrabalho?.registrarContexto?.('excluirLote',
+    () => ({ loteExcluir: window.loteExcluir }));
+
   document.getElementById('cancelarExcluirLote').addEventListener('click', close);
   document.addEventListener('keydown', function esc(e){ if(e.key==='Escape'){ close(); document.removeEventListener('keydown', esc); } });
   document.getElementById('confirmarExcluirLote').addEventListener('click', async () => {

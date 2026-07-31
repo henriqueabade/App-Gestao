@@ -8,7 +8,6 @@
     baseOverlay.classList.remove('pointer-events-none', 'blur-sm');
   }
 
-  overlay.addEventListener('click', e => { if(e.target === overlay) closeOverlay(); });
   voltarBtn.addEventListener('click', closeOverlay);
   document.addEventListener('keydown', function esc(e){ if(e.key==='Escape'){ closeOverlay(); document.removeEventListener('keydown', esc); } });
 
@@ -18,6 +17,33 @@
   const itemMensagem = document.getElementById('itemMensagem');
   const quantidadeInput = overlay.querySelector('input[type="number"]');
   const produto = window.produtoDetalhes;
+
+  // ------------------------------------------------------------------
+  // Preservação do trabalho (ver docs/restauracao-de-trabalho.md)
+  //
+  // Este modal abre POR CIMA do "Detalhes do Produto" e usa o mesmo global —
+  // na restauração a pilha inteira é reaberta, então o contexto precisa voltar
+  // aqui também. Além disso o Processo é preenchido por `fetch` e o Item só é
+  // liberado depois que um processo é escolhido: os dois se perdiam.
+  // ------------------------------------------------------------------
+  window.EstadoTrabalho?.registrarConteudo?.('inserirEstoque', {
+    capturar: () => ({
+      __contexto: { produtoDetalhes: window.produtoDetalhes },
+      processo: processoSelect?.value || '',
+      item: itemInput?.value || ''
+    }),
+    restaurar: async (dados) => {
+      if (!dados) return;
+      const repor = window.EstadoTrabalho?.reporSelect;
+      if (repor) await repor(processoSelect, dados.processo);
+      // O campo de item só é habilitado depois do processo, por isso vem depois.
+      if (itemInput && dados.item) {
+        itemInput.value = dados.item;
+        itemInput.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+    }
+  });
+
   const produtoId = produto?.id || null;
   const lotes = Array.isArray(produto?.lotes) ? produto.lotes : [];
   const ultimoLote = lotes.length ? lotes[0] : null;

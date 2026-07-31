@@ -1656,14 +1656,6 @@ const AppUpdates = (() => {
                 resolve(result);
             };
 
-            overlay.addEventListener('click', event => {
-                if (event.target === overlay && !resolvedCancelLabel) {
-                    cleanup(true);
-                } else if (event.target === overlay && resolvedCancelLabel) {
-                    cleanup(false);
-                }
-            });
-
             confirmBtn.addEventListener('click', () => cleanup(true));
             if (cancelBtn) {
                 cancelBtn.addEventListener('click', () => cleanup(false));
@@ -1846,12 +1838,6 @@ const AppUpdates = (() => {
             confirmBtn.addEventListener('click', () => {
                 if (confirmBtn.disabled) return;
                 cleanup(normalize(input.value));
-            });
-
-            overlay.addEventListener('click', event => {
-                if (event.target === overlay) {
-                    cleanup(null);
-                }
             });
 
             overlay.addEventListener('keydown', event => {

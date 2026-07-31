@@ -1,7 +1,6 @@
 (function(){
   const overlay = document.getElementById('detalhesProdutoOverlay');
   const close = () => Modal.close('detalhesProduto');
-  overlay.addEventListener('click', e => { if(e.target === overlay) close(); });
   const voltar = document.getElementById('voltarDetalhesProduto');
   if (voltar) voltar.addEventListener('click', close);
   document.addEventListener('keydown', function esc(e){ if(e.key==='Escape'){ close(); document.removeEventListener('keydown', esc); } });
@@ -13,6 +12,13 @@
   });
 
   const item = window.produtoDetalhes;
+
+  // Sem devolver `window.produtoDetalhes`, o modal reabre sem título, sem
+  // código e sem lotes (ver docs/restauracao-de-trabalho.md). O conteúdo em si
+  // vem do banco a cada abertura, então não há mais nada a repor.
+  window.EstadoTrabalho?.registrarContexto?.('detalhesProduto',
+    () => ({ produtoDetalhes: item }));
+
   if(item){
     const titulo = document.getElementById('detalheTitulo');
     if(titulo) titulo.textContent = `DETALHE DE ESTOQUE – ${item.nome || ''}`;

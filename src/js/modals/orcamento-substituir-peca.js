@@ -82,9 +82,6 @@
     Modal.close(overlayId);
   };
 
-  overlay.addEventListener('click', e => {
-    if (e.target === overlay) closeModal();
-  });
 
   overlay.querySelectorAll('[data-action="close"]').forEach(btn => {
     btn.addEventListener('click', closeModal);
@@ -1092,6 +1089,29 @@
     await renderReplaceModalList({ forceReload: true });
     updateReplaceModalConfirmButton();
   };
+
+  // ------------------------------------------------------------------
+  // Preservação do trabalho (ver docs/restauracao-de-trabalho.md)
+  //
+  // Este modal é aberto POR CIMA do "Converter Orçamento" e não existe sem
+  // `window.substituirPecaContext` — sem ele, sai fora logo na abertura. Como a
+  // restauração reabre a pilha inteira, o contexto precisa voltar antes.
+  //
+  // A escolha em si (peça selecionada, busca) é transitória e o usuário refaz em
+  // dois cliques; o que não pode acontecer é o modal reabrir quebrado.
+  // ------------------------------------------------------------------
+  window.EstadoTrabalho?.registrarConteudo?.(overlayId, {
+    capturar: () => ({
+      __contexto: { substituirPecaContext: context },
+      buscaAtual: replaceModalRefs?.search?.value ?? ''
+    }),
+    restaurar: (dados) => {
+      if (dados?.buscaAtual && replaceModalRefs?.search) {
+        replaceModalRefs.search.value = dados.buscaAtual;
+        replaceModalRefs.search.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+    }
+  });
 
   try {
     if (typeof window.withModalLoading === 'function') {

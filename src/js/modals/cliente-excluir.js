@@ -5,7 +5,12 @@
     return fetch(`${baseUrl}${path}`, options);
   }
   const close = () => Modal.close('excluirCliente');
-  overlay.addEventListener('click', e => { if(e.target === overlay) close(); });
+
+  // Sem devolver `window.clienteExcluir`, o modal reabre e o botão de confirmar
+  // não faz nada (ver docs/restauracao-de-trabalho.md).
+  window.EstadoTrabalho?.registrarContexto?.('excluirCliente',
+    () => ({ clienteExcluir: window.clienteExcluir }));
+
   document.getElementById('cancelarExcluirCliente').addEventListener('click', close);
   document.addEventListener('keydown', function esc(e){ if(e.key==='Escape'){ close(); document.removeEventListener('keydown', esc); } });
   document.getElementById('confirmarExcluirCliente').addEventListener('click', async () => {

@@ -1,7 +1,11 @@
 (function(){
   const overlay = document.getElementById('somarEstoqueOverlay');
   const close = () => Modal.close('somarEstoque');
-  overlay.addEventListener('click', e => { if(e.target === overlay) close(); });
+  // Sem devolver `window.somarEstoqueInfo`, o modal reabre e o botão de
+  // confirmar não faz nada (ver docs/restauracao-de-trabalho.md).
+  window.EstadoTrabalho?.registrarContexto?.('somarEstoque',
+    () => ({ somarEstoqueInfo: window.somarEstoqueInfo }));
+
   document.getElementById('cancelarSomarEstoque').addEventListener('click', close);
   document.addEventListener('keydown', function esc(e){ if(e.key==='Escape'){ close(); document.removeEventListener('keydown', esc); } });
   document.getElementById('confirmarSomarEstoque').addEventListener('click', async () => {

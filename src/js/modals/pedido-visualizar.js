@@ -19,12 +19,19 @@
     document.removeEventListener('keydown', esc);
   };
   const esc = e => { if (e.key === 'Escape') close(); };
-  overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
   document.addEventListener('keydown', esc);
   overlay.querySelector('#voltarVisualizarPedido')?.addEventListener('click', close);
   overlay.querySelector('#voltarVisualizarPedidoFooter')?.addEventListener('click', close);
 
   const id = window.selectedOrderId;
+
+  // Tela só de leitura, mas sem devolver `window.selectedOrderId` o script sai
+  // na linha seguinte e o modal reabre vazio (ver
+  // docs/restauracao-de-trabalho.md). É também daqui que sai o contexto do
+  // "Cancelar Pedido", então perder isso quebraria o cancelamento inteiro.
+  window.EstadoTrabalho?.registrarContexto?.(overlayId,
+    () => ({ selectedOrderId: window.selectedOrderId }));
+
   if (!id) return;
 
   const clienteSel = overlay.querySelector('#visualizarPedidoCliente');

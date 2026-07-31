@@ -1,7 +1,6 @@
 (function(){
   const overlay = document.getElementById('novaCategoriaOverlay');
   const close = () => Modal.close('novaCategoria');
-  overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
   document.getElementById('fecharNovaCategoria').addEventListener('click', close);
   document.addEventListener('keydown', function esc(e){ if(e.key==='Escape'){ close(); document.removeEventListener('keydown', esc); }});
   const form = document.getElementById('novaCategoriaForm');

@@ -120,11 +120,6 @@
     }
   }
 
-  overlay.addEventListener('click', (event) => {
-    if (event.target === overlay) {
-      close();
-    }
-  });
 
   const voltarBtn = document.getElementById('voltarEditarUsuario');
   voltarBtn?.addEventListener('click', close);
@@ -730,5 +725,85 @@
     }
   }
 
-  carregarDetalhes();
+  // Guardamos a promessa: a restauração precisa esperar por ela, porque
+  // `preencherDadosBasicos` sobrescreve todos os campos com o que veio do banco.
+  const carregamentoInicial = carregarDetalhes();
+
+  // ------------------------------------------------------------------
+  // Preservação do trabalho (ver docs/restauracao-de-trabalho.md)
+  //
+  // Três coisas não voltam sozinhas:
+  //  1. QUAL usuário está sendo editado — `window.usuarioEditar` e
+  //     `window.usuarioEditarContext` são lidos e APAGADOS na abertura.
+  //  2. Os campos de texto: a varredura genérica até os captura, mas
+  //     `carregarDetalhes()` chega depois e sobrescreve com o valor do banco.
+  //     Por isso repomos aqui, DEPOIS da carga.
+  //  3. As permissões: são botões `aria-pressed`, não caixas de seleção. Não
+  //     existe campo de formulário para a varredura enxergar — o estado vive
+  //     em `permissoesState`.
+  // ------------------------------------------------------------------
+  window.EstadoTrabalho?.registrarConteudo?.('editarUsuario', {
+    capturar: () => ({
+      __contexto: {
+        usuarioEditar: usuarioBase,
+        usuarioEditarContext: contexto
+      },
+      campos: {
+        nome: inputs.nome?.value || '',
+        email: inputs.email?.value || '',
+        telefone: inputs.telefone?.value || '',
+        status: inputs.status?.value || '',
+        observacoes: inputs.observacoes?.value || ''
+      },
+      perfil: inputs.perfil?.value || '',
+      // Só o que o usuário pode ter mudado. As chaves são as mesmas que
+      // `normalizarPermissoes`/`normalizarAcoes` produzem: `modulo` e `nome`.
+      permissoes: permissoesState.map(modulo => ({
+        modulo: modulo.modulo ?? null,
+        acoes: (modulo.acoes || []).map(acao => ({
+          nome: acao.nome ?? null,
+          permitido: Boolean(acao.permitido)
+        }))
+      })),
+      aba: tabs.find(t => t.getAttribute('aria-selected') === 'true')?.id || null
+    }),
+    restaurar: async (dados) => {
+      if (!dados) return;
+
+      try {
+        await carregamentoInicial;
+      } catch (_) { /* já tratado em carregarDetalhes */ }
+
+      Object.entries(dados.campos || {}).forEach(([chave, valor]) => {
+        const campo = inputs[chave];
+        if (!campo || valor === '') return;
+        campo.value = valor;
+        campo.dispatchEvent(new Event('input', { bubbles: true }));
+      });
+
+      // O combo de perfil é preenchido por `fetch`; espera as opções chegarem.
+      await window.EstadoTrabalho?.reporSelect?.(inputs.perfil, dados.perfil);
+
+      // Reaplica os interruptores por chave — a ordem do banco pode ter mudado.
+      const guardadas = Array.isArray(dados.permissoes) ? dados.permissoes : [];
+      if (guardadas.length && permissoesState.length) {
+        const porModulo = new Map(guardadas.map(m => [String(m.modulo), m]));
+        permissoesState.forEach(modulo => {
+          const guardado = porModulo.get(String(modulo.modulo));
+          if (!guardado) return;
+          const porAcao = new Map((guardado.acoes || []).map(a => [String(a.nome), a]));
+          (modulo.acoes || []).forEach(acao => {
+            const guardadaAcao = porAcao.get(String(acao.nome));
+            if (guardadaAcao) acao.permitido = Boolean(guardadaAcao.permitido);
+          });
+        });
+        renderPermissoes();
+      }
+
+      if (dados.aba) {
+        const aba = document.getElementById(dados.aba);
+        if (aba) aba.click();
+      }
+    }
+  });
 })();

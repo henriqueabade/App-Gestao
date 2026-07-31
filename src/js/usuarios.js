@@ -174,12 +174,6 @@ function showUsuariosConfirmDialog({
             }
         };
 
-        overlay.addEventListener('click', (event) => {
-            if (event.target === overlay) {
-                cleanup(false);
-            }
-        });
-
         overlay.querySelector('[data-action="confirm"]').addEventListener('click', () => cleanup(true));
         overlay.querySelector('[data-action="cancel"]').addEventListener('click', () => cleanup(false));
 

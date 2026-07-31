@@ -38,19 +38,12 @@
 
   const close = () => {
     document.removeEventListener('keydown', onEsc);
-    overlay.removeEventListener('click', onOverlayClick);
     Modal.close(overlayId);
   };
 
   const onEsc = (event) => {
     if (event.key === 'Escape') {
       event.preventDefault();
-      close();
-    }
-  };
-
-  const onOverlayClick = (event) => {
-    if (event.target === overlay) {
       close();
     }
   };
@@ -305,7 +298,6 @@
   overlay.classList.remove('hidden');
   overlay.removeAttribute('aria-hidden');
 
-  overlay.addEventListener('click', onOverlayClick);
   document.addEventListener('keydown', onEsc);
   elements.voltar?.addEventListener('click', close);
 

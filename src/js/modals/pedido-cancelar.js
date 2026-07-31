@@ -95,9 +95,6 @@
   ].filter(Boolean);
   closeButtons.forEach(btn => btn.addEventListener('click', close));
 
-  overlay.addEventListener('click', e => {
-    if (e.target === overlay) close();
-  });
   document.addEventListener('keydown', esc);
 
   const formatDate = value => {
@@ -519,9 +516,6 @@
         }
       };
 
-      overlay.addEventListener('click', e => {
-        if (e.target === overlay) close(null);
-      });
 
       overlay.querySelector('[data-action="cancel"]')?.addEventListener('click', () => close(null));
       overlay.querySelector('[data-action="confirm"]')?.addEventListener('click', confirm);
@@ -585,9 +579,6 @@
         }
       };
 
-      overlay.addEventListener('click', e => {
-        if (e.target === overlay) close(false);
-      });
 
       overlay.querySelector('[data-action="confirm"]')?.addEventListener('click', () => close(true));
       overlay.querySelector('[data-action="cancel"]')?.addEventListener('click', () => close(false));
@@ -995,7 +986,6 @@
     }, 300);
   }
 
-  drawerOverlay?.addEventListener('click', closeDrawer);
   document.getElementById('cancelarPedidoDrawerFechar')?.addEventListener('click', closeDrawer);
 
   async function handleSimpleAction(key, action) {
@@ -1294,6 +1284,74 @@
       markReady(true);
     }
   };
+
+  // ------------------------------------------------------------------
+  // Preservação do trabalho (ver docs/restauracao-de-trabalho.md)
+  //
+  // O que o usuário monta aqui é o DESTINO de cada item do pedido cancelado —
+  // quanto volta ao estoque, quanto é descartado e quanto vai para outros
+  // pedidos. Isso vive em `destinationState`, um Map interno: nenhuma varredura
+  // de DOM consegue repor. E o modal só existe se `window.cancelarPedidoContext`
+  // estiver definido (quem define é o modal de visualizar), por isso o pedido
+  // inteiro vai no `__contexto`.
+  //
+  // Registrado ANTES do `await` de carregar os pedidos disponíveis: é o que
+  // garante que a restauração encontre o modal já registrado.
+  // ------------------------------------------------------------------
+  window.EstadoTrabalho?.registrarConteudo?.(overlayId, {
+    capturar: () => ({
+      __contexto: { cancelarPedidoContext: context },
+      destinos: Array.from(destinationState.entries()).map(([key, state]) => ({
+        key,
+        stock: normalizeQuantity(state.stock),
+        discard: normalizeQuantity(state.discard),
+        reallocations: (state.reallocations || []).map(entry => ({
+          orderId: entry.orderId,
+          quantity: normalizeQuantity(entry.quantity)
+        }))
+      }))
+    }),
+    restaurar: async (dados) => {
+      const destinos = Array.isArray(dados?.destinos) ? dados.destinos : [];
+      if (!destinos.length) return;
+
+      // Neste ponto a lista de pedidos disponíveis já terminou de carregar (o
+      // script faz o `await` antes de a restauração ser chamada), então dá para
+      // conferir se os pedidos das realocações ainda existem.
+      const pedidosValidos = new Set(
+        (Array.isArray(availableOrders) ? availableOrders : [])
+          .map(o => String(o.id ?? o.orderId ?? ''))
+          .filter(Boolean)
+      );
+      let realocacoesDescartadas = 0;
+
+      destinos.forEach(destino => {
+        // O item pode ter sumido do pedido enquanto o usuário esteve fora.
+        if (!destinationState.has(destino.key)) return;
+        const state = destinationState.get(destino.key);
+
+        state.stock = normalizeQuantity(destino.stock);
+        state.discard = normalizeQuantity(destino.discard);
+        state.reallocations = (destino.reallocations || []).filter(entry => {
+          const existe = !pedidosValidos.size || pedidosValidos.has(String(entry.orderId));
+          if (!existe) realocacoesDescartadas += 1;
+          return existe;
+        }).map(entry => ({ orderId: entry.orderId, quantity: normalizeQuantity(entry.quantity) }));
+
+        recalcRemaining(state);
+        updateItemDestinationsUI(destino.key);
+      });
+
+      refreshOrdersUI();
+
+      if (realocacoesDescartadas && typeof showToast === 'function') {
+        showToast(
+          `${realocacoesDescartadas} realocação(ões) não voltaram: o pedido de destino não está mais disponível.`,
+          'info'
+        );
+      }
+    }
+  });
 
   rebuildMatches();
   refreshOrdersUI();

@@ -54,7 +54,6 @@
       }
       Modal.close('editarProduto');
     };
-    overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
     const voltarBtn = document.getElementById('voltarEditarProduto');
     if (voltarBtn) voltarBtn.addEventListener('click', close);
     const form = document.getElementById('editarProdutoForm');
@@ -717,13 +716,29 @@
     // nem reabrindo o modal manualmente eles voltavam.
     window.EstadoTrabalho?.registrarConteudo?.('editarProduto', {
       capturar: () => ({
-        itens: itens.map(({ row, totalEl, ...dados }) => dados)
+        // Sem devolver `window.produtoSelecionado` o script sai logo no começo
+        // ("Produto inválido ou sem ID") e nem chega a restaurar os itens.
+        __contexto: { produtoSelecionado },
+        itens: itens.map(({ row, totalEl, ...dados }) => dados),
+        // Coleção e Etapa são preenchidas por `fetch`: atribuir `value` antes
+        // das <option> chegarem não faz nada.
+        colecao: colecaoSelect?.value || '',
+        etapa: etapaSelect?.value || ''
       }),
-      restaurar: (dados) => {
+      restaurar: async (dados) => {
         const guardados = Array.isArray(dados?.itens) ? dados.itens : [];
-        if (!guardados.length) return;
-        renderItens(guardados);   // reatribui `itens` e redesenha
-        updateTotals();
+        if (guardados.length) {
+          renderItens(guardados);   // reatribui `itens` e redesenha
+          updateTotals();
+        }
+
+        const repor = window.EstadoTrabalho?.reporSelect;
+        if (repor) {
+          await Promise.all([
+            repor(colecaoSelect, dados?.colecao),
+            repor(etapaSelect, dados?.etapa)
+          ]);
+        }
       }
     });
 

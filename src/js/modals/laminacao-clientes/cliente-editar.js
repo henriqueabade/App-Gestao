@@ -6,7 +6,6 @@
     return fetch(`${baseUrl}${path}`, options);
   }
   const close = () => Modal.close('editarCliente');
-  overlay.addEventListener('click', e => { if(e.target === overlay) close(); });
   const voltar = document.getElementById('voltarEditarCliente');
   if(voltar) voltar.addEventListener('click', close);
   document.getElementById('cancelarEditarCliente')?.addEventListener('click', close);

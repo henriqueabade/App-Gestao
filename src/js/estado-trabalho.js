@@ -113,6 +113,26 @@
         conteudos.set(id, manipuladores);
     }
 
+    /**
+     * Atalho para o caso mais comum: o modal não tem estado próprio a repor,
+     * mas precisa saber O QUE abrir. É a situação de todo modal de detalhes,
+     * visualização e confirmação de exclusão — eles leem um global
+     * (`window.produtoExcluir`, `window.materiaSelecionada`...) definido pela
+     * tela que os abriu. Sem isso reabrem em branco ou com o botão sem efeito.
+     *
+     *   window.EstadoTrabalho?.registrarContexto?.('excluirProduto',
+     *     () => ({ produtoExcluir: item }));
+     *
+     * Recebe uma FUNÇÃO porque o global pode mudar enquanto o modal está aberto.
+     */
+    function registrarContexto(overlayId, obterContexto) {
+        if (typeof obterContexto !== 'function') return;
+        registrarConteudo(overlayId, {
+            capturar: () => ({ __contexto: obterContexto() }),
+            restaurar: () => {}
+        });
+    }
+
     function esquecerConteudo(overlayId) {
         const id = idDoOverlay({ overlayId });
         if (id) conteudos.delete(id);
@@ -185,6 +205,9 @@
         }
     };
 
+    /** Vira `true` assim que uma queda guarda o trabalho nesta sessão. */
+    let jaGravouNestaSessao = false;
+
     /**
      * ÚNICO caminho para gravar o trabalho em andamento. Só grava quando o fim
      * da sessão foi uma desconexão de verdade; qualquer outro motivo (saída pelo
@@ -194,6 +217,13 @@
     async function salvarPorDesconexao(motivo) {
         const restauravel = window.RestauracaoTrabalho?.MOTIVOS_RESTAURAVEIS?.has(String(motivo || ''));
         if (!restauravel) {
+            // O monitor pode disparar mais de uma vez com motivos diferentes
+            // (ex.: 'offline' e, logo depois, 'user-removed'). Se já guardamos o
+            // trabalho nesta sessão, um motivo posterior não pode apagá-lo.
+            if (jaGravouNestaSessao) {
+                console.info(`[estado] "${motivo}" ignorado: o trabalho já foi guardado por uma queda.`);
+                return false;
+            }
             console.info(`[estado] "${motivo}" não é desconexão: nada é guardado.`);
             await descartarTrabalhoGuardado();
             return false;
@@ -213,6 +243,8 @@
             // Aguardado de propósito: logo depois a janela é fechada, e um
             // invoke solto podia morrer junto sem gravar o arquivo.
             await window.electronAPI.saveState(estado);
+            jaGravouNestaSessao = true;
+            console.info(`[estado] trabalho guardado (motivo: ${motivo}, módulo: ${estado.sectionId}).`);
             return true;
         } catch (err) {
             console.error('[estado] falha ao salvar o trabalho em andamento:', err);
@@ -253,6 +285,41 @@
         try { await window.electronAPI?.clearState?.(); } catch (_) { /* ignora */ }
     }
 
+    /**
+     * Repõe o valor de um `<select>` que é preenchido por `fetch`.
+     *
+     * Atribuir `select.value` antes de as `<option>` chegarem não faz nada — o
+     * navegador descarta silenciosamente um valor que não existe na lista. Como
+     * quase todo modal popula os selects de forma assíncrona, restaurar "na
+     * hora" perdia cliente, contato, transportadora e afins sem nenhum aviso.
+     * Aqui esperamos a opção aparecer antes de aplicar.
+     *
+     * @returns {Promise<boolean>} se o valor foi realmente aplicado.
+     */
+    async function reporSelect(select, valor, limiteMs = 10000) {
+        if (!select) return false;
+        const alvo = valor === null || valor === undefined ? '' : String(valor);
+        if (alvo === '') return false;
+
+        const inicio = Date.now();
+        const temOpcao = () => Array.from(select.options || []).some(o => o.value === alvo);
+
+        while (!temOpcao() && Date.now() - inicio < limiteMs) {
+            await new Promise(resolve => setTimeout(resolve, 100));
+        }
+
+        if (!temOpcao()) {
+            console.warn(`[estado] opção "${alvo}" não apareceu em ${select.id || 'select'}.`);
+            return false;
+        }
+
+        select.value = alvo;
+        select.setAttribute('data-filled', alvo !== '' ? 'true' : 'false');
+        select.dispatchEvent(new Event('input', { bubbles: true }));
+        select.dispatchEvent(new Event('change', { bubbles: true }));
+        return true;
+    }
+
     /** Reaplica os campos guardados em uma raiz. */
     function restaurarCampos(raiz, campos) {
         if (!raiz || !Array.isArray(campos)) return 0;
@@ -274,6 +341,40 @@
         } catch (_) {
             return null;
         }
+    }
+
+    /**
+     * Quanto tempo esperamos o login terminar de gravar o usuário. Só custa
+     * alguma coisa quando existe trabalho guardado E o usuário não aparece —
+     * no caminho normal a primeira leitura já resolve.
+     */
+    const ESPERA_USUARIO_MS = 5000;
+
+    /**
+     * Espera o usuário logado aparecer.
+     *
+     * A janela do dashboard é criada pela de login e chega no `load` — onde a
+     * restauração dispara — podendo ser ANTES de o `localStorage.user` estar
+     * gravado. Nesse instante não dá para saber de quem é o trabalho guardado.
+     * Desistir aí matava a restauração inteira, em silêncio; e a versão antiga
+     * "resolvia" isso restaurando para qualquer um, que era justamente o defeito
+     * de trabalho aparecendo para o usuário errado. Esperar é o único caminho
+     * que atende às duas coisas.
+     */
+    async function aguardarUsuarioAtual(limiteMs = ESPERA_USUARIO_MS) {
+        const regra = window.RestauracaoTrabalho;
+        const inicio = Date.now();
+        let bruto = usuarioAtualBruto();
+
+        while (!regra?.idDoUsuario(bruto) && Date.now() - inicio < limiteMs) {
+            await new Promise(resolve => setTimeout(resolve, 100));
+            bruto = usuarioAtualBruto();
+        }
+
+        if (!regra?.idDoUsuario(bruto)) {
+            console.warn(`[estado] usuário logado não apareceu em ${limiteMs}ms.`);
+        }
+        return bruto;
     }
 
     /**
@@ -311,7 +412,17 @@
             }
         }
 
-        if (!estado) return null;
+        if (!estado) {
+            console.info('[estado] nenhum trabalho guardado para restaurar.');
+            return null;
+        }
+
+        console.info('[estado] trabalho encontrado:', {
+            motivo: estado.motivo,
+            modulo: estado.sectionId,
+            dono: estado.usuarioId,
+            modais: (estado.modais || []).map(m => m.overlayId)
+        });
 
         const regra = window.RestauracaoTrabalho;
         if (!regra) {
@@ -319,7 +430,8 @@
             return null;
         }
 
-        const veredito = regra.podeRestaurar(estado, usuarioAtualBruto());
+        // Só esperamos pelo usuário quando existe algo para restaurar.
+        const veredito = regra.podeRestaurar(estado, await aguardarUsuarioAtual());
         if (!veredito.ok) {
             const mensagens = {
                 'saida-normal': 'a sessão anterior não terminou por desconexão',
@@ -330,9 +442,14 @@
             };
             console.info(`[estado] nada restaurado: ${mensagens[veredito.causa] || veredito.causa}.`);
 
-            // 'outro-usuario' é o único caso em que o arquivo continua válido
-            // para outra pessoa — os demais viraram lixo e podem sair.
-            if (veredito.causa !== 'outro-usuario') {
+            // O arquivo só é destruído quando virou lixo de verdade. Nos dois
+            // casos abaixo ele ainda pode servir a alguém e FICA:
+            //  - 'outro-usuario': o dono pode logar dentro dos 30 min;
+            //  - 'sem-usuario-atual': não sabemos de quem é a vez — apagar aqui
+            //    perderia o trabalho por uma questão de tempo.
+            const preservar = veredito.causa === 'outro-usuario'
+                || veredito.causa === 'sem-usuario-atual';
+            if (!preservar) {
                 try { await window.electronAPI?.clearState?.(); } catch (_) { /* ignora */ }
             }
             return null;
@@ -391,7 +508,36 @@
     async function reabrirERestaurar(modal, manterAbertos = false) {
         if (!modal || !modal.overlayId) return;
 
+        // Modais de EDIÇÃO leem um global para saber o que abrir
+        // (`window.selectedQuoteId`, `window.pedidoSelecionado`...). Quem define
+        // esse global é a tela que abriu o modal, e na restauração ela não passa
+        // por ali — o modal reabria vazio ou com erro. Por isso o modal pode
+        // gravar um `__contexto` serializável no que captura, e nós o
+        // devolvemos ao `window` ANTES de o script do modal rodar.
+        const contexto = modal.conteudo?.__contexto;
+        if (contexto && typeof contexto === 'object') {
+            for (const [chave, valor] of Object.entries(contexto)) {
+                try {
+                    window[chave] = valor;
+                } catch (err) {
+                    console.error(`[estado] não foi possível repor o contexto "${chave}":`, err);
+                }
+            }
+        }
+
         const ab = modal.abertura;
+
+        // Mesmo listener que o `openModalWithSpinner` instala: os modais que
+        // avisam quando terminaram de carregar aparecem na hora, sem depender
+        // do desbloqueio por tempo do `aguardarModal`.
+        const revelarAoCarregar = evento => {
+            if (evento?.detail !== ab?.overlayId) return;
+            document.getElementById(modal.overlayId)?.classList.remove('hidden');
+            document.getElementById('modalLoading')?.remove();
+        };
+        window.addEventListener('modalSpinnerLoaded', revelarAoCarregar);
+        window.addEventListener('orcamentoModalLoaded', revelarAoCarregar);
+
         if (ab && ab.htmlPath && window.Modal?.open) {
             try {
                 await window.Modal.open(ab.htmlPath, ab.scriptPath, ab.overlayId, manterAbertos);
@@ -407,6 +553,8 @@
         }
 
         const overlay = await aguardarModal(modal.overlayId);
+        window.removeEventListener('modalSpinnerLoaded', revelarAoCarregar);
+        window.removeEventListener('orcamentoModalLoaded', revelarAoCarregar);
         if (!overlay) {
             console.warn('[estado] o modal ' + modal.overlayId + ' nao reapareceu; conteudo nao restaurado.');
             return;
@@ -418,7 +566,11 @@
 
         // itens/linhas que o modal guarda em estado interno
         if (modal.conteudo) {
-            const manipuladores = conteudos.get(modal.overlayId);
+            // O modal só declara `restaurar` depois de montar a própria tela, e
+            // vários fazem `await` (buscar pedidos, produtos...) antes disso.
+            // Sem esperar, caíamos no aviso de "não registrou restaurar" e o
+            // conteúdo não voltava — justamente nos modais mais pesados.
+            const manipuladores = await aguardarRegistro(modal.overlayId);
             if (manipuladores && typeof manipuladores.restaurar === 'function') {
                 try {
                     await manipuladores.restaurar(modal.conteudo);
@@ -431,30 +583,69 @@
         }
     }
 
-    /** Espera o modal reaparecer (até 20s). Resolve com o overlay ou null. */
-    function aguardarModal(overlayId) {
+    /**
+     * Espera o modal declarar `registrarConteudo`. Resolve com os manipuladores
+     * ou `undefined` se ele não registrar nada dentro do limite.
+     */
+    async function aguardarRegistro(overlayId, limiteMs = 15000) {
+        const inicio = Date.now();
+        while (!conteudos.has(overlayId) && Date.now() - inicio < limiteMs) {
+            await new Promise(resolve => setTimeout(resolve, 100));
+        }
+        return conteudos.get(overlayId);
+    }
+
+    /**
+     * Espera o modal reaparecer (até 20s). Resolve com o overlay ou null.
+     *
+     * Vários overlays nascem com a classe `hidden` no HTML e só são revelados
+     * pelo `openModalWithSpinner`, que escuta `modalSpinnerLoaded`. Na
+     * restauração quem reabre é o `Modal.open` direto, sem esse listener — o
+     * modal existia mas ficava invisível para sempre e a restauração desistia.
+     * Era exatamente por isso que "Novo Produto" voltava e "Editar Produto"
+     * não: o primeiro já nasce visível, o segundo não.
+     *
+     * Aqui revelamos por conta própria assim que o overlay tem conteúdo.
+     */
+    function aguardarModal(overlayId, revelarAposMs = 800) {
         return new Promise(resolve => {
             const limite = Date.now() + 20000;
+            let vistoEm = null;
             const timer = setInterval(() => {
                 const overlay = document.getElementById(overlayId);
-                const pronto = overlay && !overlay.classList.contains('hidden')
-                    && overlay.querySelector(CAMPOS);
-                if (pronto) {
-                    clearInterval(timer);
-                    resolve(overlay);
-                } else if (Date.now() > limite) {
+                if (overlay) {
+                    if (vistoEm === null) vistoEm = Date.now();
+                    const temCampos = Boolean(overlay.querySelector(CAMPOS));
+                    if (
+                        overlay.classList.contains('hidden')
+                        && temCampos
+                        && Date.now() - vistoEm >= revelarAposMs
+                    ) {
+                        overlay.classList.remove('hidden');
+                        overlay.removeAttribute('aria-hidden');
+                        document.getElementById('modalLoading')?.remove();
+                    }
+                    if (!overlay.classList.contains('hidden') && temCampos) {
+                        clearInterval(timer);
+                        resolve(overlay);
+                        return;
+                    }
+                }
+                if (Date.now() > limite) {
                     clearInterval(timer);
                     resolve(null);
                 }
-            }, 200);
+            }, 100);
         });
     }
 
     window.EstadoTrabalho = {
         registrarConteudo,
+        registrarContexto,
         esquecerConteudo,
         registrarModalAberto: window.__registrarModalAberto,
         salvarPorDesconexao,
-        descartarTrabalhoGuardado
+        descartarTrabalhoGuardado,
+        reporSelect
     };
 })();

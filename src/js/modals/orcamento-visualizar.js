@@ -14,12 +14,18 @@
     .replace(/'/g, '&#39;');
   const close = () => Modal.close(overlayId);
   const esc = e => { if (e.key === 'Escape') { close(); document.removeEventListener('keydown', esc); } };
-  overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
   document.addEventListener('keydown', esc);
   document.getElementById('voltarVisualizarOrcamento').addEventListener('click', close);
   document.getElementById('voltarVisualizarOrcamentoFooter').addEventListener('click', close);
 
   const id = window.selectedQuoteId;
+
+  // Tela só de leitura, mas sem devolver `window.selectedQuoteId` o script sai
+  // na linha seguinte e o modal reabre vazio (ver
+  // docs/restauracao-de-trabalho.md).
+  window.EstadoTrabalho?.registrarContexto?.(overlayId,
+    () => ({ selectedQuoteId: window.selectedQuoteId }));
+
   if (!id) return;
   try {
     const resp = await fetchApi(`/api/orcamentos/${id}`);

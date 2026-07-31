@@ -1,7 +1,6 @@
 (function(){
   const overlay = document.getElementById('editarInsumoOverlay');
   const close = () => Modal.close('editarInsumo');
-  overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
   document.getElementById('fecharEditarInsumo').addEventListener('click', close);
   document.getElementById('cancelarEditarInsumo').addEventListener('click', close);
   document.addEventListener('keydown', function esc(e){ if(e.key==='Escape'){ close(); document.removeEventListener('keydown', esc); } });
@@ -9,6 +8,35 @@
   const quantidadeInput = form.quantidade;
   const infinitoCheckbox = form.infinito;
   const item = window.materiaSelecionada;
+
+  // ------------------------------------------------------------------
+  // Preservação do trabalho (ver docs/restauracao-de-trabalho.md)
+  //
+  // Duas coisas se perdiam aqui:
+  //  1. QUAL insumo está sendo editado — o script lê `window.materiaSelecionada`,
+  //     definido pela grade. Sem isso o modal reabria em branco e salvaria por
+  //     cima de um insumo indefinido. Vai no `__contexto`.
+  //  2. Categoria, Unidade e Processo, preenchidos por `fetch`: atribuir `value`
+  //     antes das <option> chegarem não faz nada.
+  // O restante dos campos volta pela varredura genérica.
+  // ------------------------------------------------------------------
+  window.EstadoTrabalho?.registrarConteudo?.('editarInsumo', {
+    capturar: () => ({
+      __contexto: { materiaSelecionada: item },
+      categoria: form.categoria?.value || '',
+      unidade: form.unidade?.value || '',
+      processo: form.processo?.value || ''
+    }),
+    restaurar: async (dados) => {
+      const repor = window.EstadoTrabalho?.reporSelect;
+      if (!repor || !dados) return;
+      await Promise.all([
+        repor(form.categoria, dados.categoria),
+        repor(form.unidade, dados.unidade),
+        repor(form.processo, dados.processo)
+      ]);
+    }
+  });
 
   document.getElementById('addCategoriaEditar').addEventListener('click', () => {
     Modal.open('modals/materia-prima/categoria-novo.html', '../js/modals/materia-prima-categoria-novo.js', 'novaCategoria', true);
