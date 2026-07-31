@@ -3234,7 +3234,10 @@ async function loadPage(page, options = {}) {
     } catch (err) {
         console.error('[conexao] falha ao solicitar verificacao imediata:', err);
     }
-    const usesLoadingMask = page !== 'configuracoes';
+    // Todos os módulos usam a máscara de carregamento, inclusive Configurações:
+    // sem ela a tela aparecia montando aos pedaços, com cara de bug. A máscara
+    // segura a revelação até tudo estar pronto (mínimo de 1s, ver abaixo).
+    const usesLoadingMask = true;
     const ipcLoadToken = usesLoadingMask ? window.electronAPI?.beginModuleLoading?.() : null;
 
     content.dataset.activePage = page;
