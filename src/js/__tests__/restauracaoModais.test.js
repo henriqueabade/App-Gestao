@@ -14,13 +14,33 @@ const RAIZ = path.join(__dirname, '..', '..', '..');
  *   2. a restauração espera o modal declarar `registrarConteudo`, porque quase
  *      todos fazem `await` (buscar produtos, pedidos...) antes de registrar.
  */
-function montarAmbiente({ usuario = { id: 7 }, estadoNoDisco = null } = {}) {
-  const armazenamento = new Map([['user', JSON.stringify(usuario)]]);
-  const localStorage = {
-    getItem: k => (armazenamento.has(k) ? armazenamento.get(k) : null),
-    setItem: (k, v) => armazenamento.set(k, String(v)),
-    removeItem: k => armazenamento.delete(k)
+function criarArmazenamento(inicial = []) {
+  const dados = new Map(inicial);
+  return {
+    getItem: k => (dados.has(k) ? dados.get(k) : null),
+    setItem: (k, v) => dados.set(k, String(v)),
+    removeItem: k => dados.delete(k)
   };
+}
+
+/**
+ * @param {'local'|'sessao'|'nenhum'} ondeEstaUsuario
+ *   ONDE o usuário logado está guardado. Não é detalhe de teste: o dashboard
+ *   real MOVE o usuário para o `sessionStorage` e apaga o `localStorage` quando
+ *   não há "lembrar-me" (`src/utils/userActions.js`). Ler só o `localStorage`
+ *   foi o que matou a restauração inteira.
+ */
+function montarAmbiente({
+  usuario = { id: 7 },
+  estadoNoDisco = null,
+  ondeEstaUsuario = 'local'
+} = {}) {
+  const bruto = JSON.stringify(usuario);
+  const localStorage = criarArmazenamento(ondeEstaUsuario === 'local' ? [['user', bruto]] : []);
+  const sessionStorage = criarArmazenamento(
+    ondeEstaUsuario === 'sessao' ? [['currentUser', bruto]] : []
+  );
+  let limpezas = 0;
 
   const registroDeAberturas = [];
   const overlays = new Map();
@@ -49,6 +69,7 @@ function montarAmbiente({ usuario = { id: 7 }, estadoNoDisco = null } = {}) {
   const ouvintes = new Map();
   const janela = {
     localStorage,
+    sessionStorage,
     console,
     Event: class { constructor(t) { this.type = t; } },
     setTimeout, clearTimeout, setInterval, clearInterval,
@@ -60,7 +81,7 @@ function montarAmbiente({ usuario = { id: 7 }, estadoNoDisco = null } = {}) {
     electronAPI: {
       async saveState() { return true; },
       async loadState() { return estadoNoDisco; },
-      async clearState() { return true; }
+      async clearState() { limpezas += 1; return true; }
     },
     document: {
       getElementById: id => (id === 'content' ? content : overlays.get(id) || null),
@@ -82,7 +103,15 @@ function montarAmbiente({ usuario = { id: 7 }, estadoNoDisco = null } = {}) {
     (ouvintes.get(tipo) || new Set()).forEach(fn => fn({ type: tipo, detail }));
   };
 
-  return { janela, registroDeAberturas, overlays, criarOverlay, disparar };
+  return {
+    janela,
+    registroDeAberturas,
+    overlays,
+    criarOverlay,
+    disparar,
+    /** Quantas vezes o arquivo do disco foi consumido. */
+    limpezas: () => limpezas
+  };
 }
 
 const X = { id: 7 };
@@ -293,4 +322,94 @@ test('reporSelect desiste (sem travar) quando a opção nunca aparece', async ()
 
   assert.strictEqual(aplicou, false);
   assert.strictEqual(select.value, '', 'não pode inventar um valor que não existe');
+});
+
+// ===================================================================
+// A REGRESSÃO QUE MATOU A RESTAURAÇÃO INTEIRA
+//
+// `src/utils/userActions.js`, ao montar o dashboard, faz:
+//
+//     sessionStorage.setItem('currentUser', stored);
+//     if (localStorage.getItem('rememberUser') !== '1') {
+//       localStorage.removeItem('user');
+//     }
+//
+// Isso roda na execução dos scripts, ANTES do `load` em que a restauração
+// dispara. Como o `estado-trabalho.js` lia só o `localStorage`, o veredito era
+// sempre "não dá para identificar quem está logando agora": nenhum módulo,
+// nenhum modal, nada — e o arquivo do disco ficava intocado, provando que a
+// restauração nem chegou a tentar.
+//
+// Estes testes fixam as DUAS pontas: o carimbo do dono ao salvar e a
+// identificação do dono ao repor.
+// ===================================================================
+
+test('restaura com o usuário APENAS no sessionStorage (sem "lembrar-me")', async () => {
+  const conteudo = { itens: [{ id: '1' }] };
+  const { janela, overlays, criarOverlay, limpezas } = montarAmbiente({
+    estadoNoDisco: estadoComModal(conteudo),
+    ondeEstaUsuario: 'sessao'          // exatamente o que o dashboard real faz
+  });
+
+  let recebido = null;
+  const paginas = [];
+  janela.Modal = {
+    async open(_html, _script, overlayId) {
+      const id = `${overlayId}Overlay`;
+      overlays.set(id, criarOverlay(id));
+      janela.EstadoTrabalho.registrarConteudo(overlayId, {
+        capturar: () => ({}),
+        restaurar: dados => { recebido = dados; }
+      });
+    }
+  };
+
+  const restaurou = await janela.restaurarTrabalhoInterrompido(async p => { paginas.push(p); });
+
+  assert.strictEqual(restaurou, true, 'o usuário no sessionStorage precisa contar como dono');
+  assert.deepStrictEqual(paginas, ['orcamentos'], 'o módulo tem de voltar');
+  assert.ok(recebido, 'o conteúdo do modal tem de voltar');
+  assert.strictEqual(limpezas(), 1, 'restaurado com sucesso: o arquivo é consumido');
+});
+
+test('o dono é carimbado mesmo com o usuário só no sessionStorage', async () => {
+  const { janela, overlays, criarOverlay } = montarAmbiente({ ondeEstaUsuario: 'sessao' });
+
+  const aberto = criarOverlay('novoProdutoOverlay');
+  overlays.set('novoProdutoOverlay', aberto);
+  janela.document.querySelectorAll = () => [aberto];
+
+  const estado = janela.collectState('offline');
+
+  assert.strictEqual(estado.usuarioId, '7',
+    'sem o carimbo do dono o estado é descartado como "sem dono" na volta');
+  assert.ok(estado.storage.user, 'o usuário bruto também precisa ir junto');
+});
+
+test('sem usuário em lugar nenhum: não restaura E preserva o trabalho', async () => {
+  const { janela, limpezas } = montarAmbiente({
+    estadoNoDisco: estadoComModal({ itens: [] }),
+    ondeEstaUsuario: 'nenhum'
+  });
+
+  const restaurou = await janela.restaurarTrabalhoInterrompido(async () => {});
+
+  assert.strictEqual(restaurou, false, 'sem saber de quem é, não se restaura para ninguém');
+  assert.strictEqual(limpezas(), 0,
+    'o arquivo FICA: quem caiu ainda pode logar dentro dos 30 minutos');
+});
+
+test('falha no meio da reposição preserva o trabalho guardado', async () => {
+  const { janela, limpezas } = montarAmbiente({
+    estadoNoDisco: estadoComModal({ itens: [] })
+  });
+
+  // o módulo não carrega (rede ainda instável logo depois da queda)
+  const restaurou = await janela.restaurarTrabalhoInterrompido(async () => {
+    throw new Error('falha ao carregar o módulo');
+  });
+
+  assert.strictEqual(restaurou, false);
+  assert.strictEqual(limpezas(), 0,
+    'apagar aqui perderia o trabalho sem nunca tê-lo mostrado; a próxima tentativa ainda o encontra');
 });

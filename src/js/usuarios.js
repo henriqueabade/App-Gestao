@@ -973,15 +973,16 @@ function renderUsuarios(lista) {
             'ultimaSaida',
             'ultima_saida'
         ]);
+        // `ultima_atividade` NÃO entra aqui: ela é carimbada a cada entrada
+        // (`registrarUltimaEntrada`) e mostrar a hora do login no lugar da hora
+        // da alteração é pior que admitir que não há registro.
         const ultimaAlteracaoValor = obterPrimeiroValor(u, [
             'ultimaAlteracaoEm',
             'ultima_alteracao_em',
             'ultimaAlteracao',
             'ultima_alteracao',
             'ultimaAcaoEm',
-            'ultima_acao_em',
-            'ultimaAtividadeEm',
-            'ultima_atividade_em'
+            'ultima_acao_em'
         ]);
         const ultimaDescricaoValor = obterPrimeiroValor(u, [
             'ultimaAlteracaoDescricao',
@@ -1009,11 +1010,25 @@ function renderUsuarios(lista) {
                 ? ultimaEntradaTexto
                 : escapeHtml(formatarDataHoraCompleta(ultimoLoginValor));
         const ultimaSaidaTexto = escapeHtml(formatarDataHoraCompleta(ultimaSaidaValor));
-        const ultimaAlteracaoTexto = escapeHtml(formatarDataHoraCompleta(ultimaAlteracaoValor));
         const ultimaDescricaoTexto = formatarDescricaoAlteracao(
             ultimaDescricaoValor,
             localUltimaAlteracao,
             especificacaoUltimaAlteracao
+        );
+        // Registros gravados antes da correção da saída ficaram com o módulo e
+        // sem a data. "Sem registro" ao lado de "Usuário alterou o módulo X" lê
+        // como defeito; o que houve foi a data ter sido perdida. Distinguir os
+        // dois casos é mais honesto que esconder qualquer um deles.
+        const temAlteracaoRegistrada = Boolean(
+            (localUltimaAlteracao && String(localUltimaAlteracao).trim())
+            || (especificacaoUltimaAlteracao && String(especificacaoUltimaAlteracao).trim())
+            || (ultimaDescricaoValor && String(ultimaDescricaoValor).trim())
+        );
+        const ultimaAlteracaoBruta = formatarDataHoraCompleta(ultimaAlteracaoValor);
+        const ultimaAlteracaoTexto = escapeHtml(
+            ultimaAlteracaoBruta === 'Sem registro' && temAlteracaoRegistrada
+                ? 'Data não registrada'
+                : ultimaAlteracaoBruta
         );
         const horaAtivacaoValor = obterPrimeiroValor(u, [
             'horaAtivacaoEm',

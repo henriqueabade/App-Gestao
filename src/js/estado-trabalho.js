@@ -177,7 +177,11 @@
      * por versões antigas, que salvavam também em saída voluntária.
      */
     window.collectState = function collectState(motivo) {
-        const usuarioBruto = localStorage.getItem('user') || null;
+        // `usuarioAtualBruto` e não `localStorage.user`: numa sessão sem
+        // "lembrar-me" o usuário já foi movido para o `sessionStorage` e o
+        // `localStorage` está vazio. Carimbar `usuarioId: null` aqui condenava o
+        // estado a ser descartado como "sem dono" na volta.
+        const usuarioBruto = usuarioAtualBruto();
         try {
             const content = document.getElementById('content');
             const sectionId = content?.dataset?.activePage || 'dashboard';
@@ -334,8 +338,30 @@
         return aplicados;
     }
 
-    /** Usuário logado agora nesta janela (bruto, como veio do localStorage). */
+    /**
+     * Usuário logado agora NESTA janela, bruto.
+     *
+     * Le as duas fontes, na mesma ordem que o resto do app (`menu.js`,
+     * `userActions.js`) — e essa ordem não é um detalhe:
+     *
+     * `src/utils/userActions.js`, ao montar o dashboard, MOVE o usuário do
+     * `localStorage` para o `sessionStorage` e, quando não há "lembrar-me",
+     * APAGA o `localStorage.user`. Isso acontece durante a execução dos scripts,
+     * ou seja, ANTES do `load` em que a restauração dispara. Enquanto aqui se
+     * lia apenas o `localStorage`, o veredito era sempre "não dá para
+     * identificar quem está logando agora": a restauração desistia calada e
+     * NENHUM módulo ou modal voltava — mesmo com o trabalho intacto no disco.
+     *
+     * O `sessionStorage` é por janela, que é exatamente a semântica desejada:
+     * "quem está logado nesta janela".
+     */
     function usuarioAtualBruto() {
+        try {
+            if (typeof sessionStorage !== 'undefined') {
+                const daSessao = sessionStorage.getItem('currentUser');
+                if (daSessao) return daSessao;
+            }
+        } catch (_) { /* segue para o localStorage */ }
         try {
             return localStorage.getItem('user');
         } catch (_) {
@@ -455,9 +481,17 @@
             return null;
         }
 
-        // Vai ser reposto agora: consome o arquivo.
-        try { await window.electronAPI?.clearState?.(); } catch (_) { /* ignora */ }
+        // O arquivo NÃO é apagado aqui. Ele só é consumido depois que a
+        // reposição termina sem estourar (`consumirTrabalhoGuardado`): se algo
+        // falhar no meio — um módulo que não carrega, um modal que não abre —,
+        // apagar agora perderia o trabalho de vez. Preservado, a próxima
+        // tentativa dentro dos 30 minutos ainda encontra tudo.
         return estado;
+    }
+
+    /** Uso único: o trabalho já voltou para a tela. */
+    async function consumirTrabalhoGuardado() {
+        try { await window.electronAPI?.clearState?.(); } catch (_) { /* ignora */ }
     }
 
     /**
@@ -487,14 +521,22 @@
                 await reabrirERestaurar(modais[i], i > 0);
             }
 
+            // Chegou até aqui: o trabalho está de volta na tela e o arquivo pode
+            // ser consumido. Antes ele era apagado ANTES de repor — bastava um
+            // erro no meio para o trabalho sumir sem ter voltado.
+            await consumirTrabalhoGuardado();
+
             if (aplicados > 0 || modais.length) {
                 if (typeof window.showToast === 'function') {
                     window.showToast('Restauramos o que você estava preenchendo antes da desconexão.', 'info');
                 }
             }
+            console.info(`[estado] trabalho restaurado (módulo: ${estado.sectionId}, modais: ${modais.length}).`);
             return true;
         } catch (err) {
-            console.error('[estado] falha ao restaurar o trabalho:', err);
+            // De propósito NÃO consumimos o arquivo: o trabalho continua guardado
+            // e a próxima tentativa, dentro dos 30 minutos, pode dar certo.
+            console.error('[estado] falha ao restaurar o trabalho; o guardado foi preservado:', err);
             return false;
         }
     };

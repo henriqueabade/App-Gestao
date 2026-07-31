@@ -80,6 +80,50 @@ apaga importa:
 Essa última linha é o detalhe que evita o pior caso: X cai, Y entra e sai na
 mesma máquina, e o trabalho de X sobrevive para quando X voltar.
 
+## Onde mora o usuário logado (a pegadinha que quebrou tudo)
+
+`estado-trabalho.js` responde "quem está logado agora?" em `usuarioAtualBruto()`,
+e a resposta **precisa** olhar as duas fontes, nesta ordem:
+
+```js
+sessionStorage.getItem('currentUser')   // primeiro
+localStorage.getItem('user')            // depois
+```
+
+O motivo é `src/utils/userActions.js`, que ao montar o dashboard faz:
+
+```js
+sessionStorage.setItem('currentUser', stored);
+if (localStorage.getItem('rememberUser') !== '1') {
+  localStorage.removeItem('user');      // ← some do localStorage
+}
+```
+
+Isso acontece durante a execução dos scripts, ou seja **antes** do `load` em que
+a restauração dispara. Enquanto aqui se lia apenas o `localStorage`, toda sessão
+sem "lembrar-me" caía no veredito `sem-usuario-atual`: nenhum módulo, nenhum
+modal, nada — em qualquer módulo, o tempo inteiro.
+
+O sintoma era enganoso porque a regra estava certa e o estado era gravado
+perfeitamente. O que denunciava era o **arquivo intocado no disco**: como
+`sem-usuario-atual` preserva o arquivo, ele sobrevivia à tentativa de
+restauração — prova de que a restauração nem tinha chegado a tentar.
+
+O mesmo valia para o `collectState`, que carimbava `usuarioId: null` e condenava
+o estado a ser descartado como "sem dono" na volta. As duas pontas usam
+`usuarioAtualBruto()` hoje, e há teste para cada uma
+(`restauracaoModais.test.js`). Ao mexer em qualquer uma delas, lembre: o
+`sessionStorage` é por janela, que é exatamente a semântica de "quem está logado
+NESTA janela".
+
+## O arquivo só é consumido depois de restaurar
+
+`lerEstadoSalvo()` **não** apaga o arquivo. Quem apaga é
+`consumirTrabalhoGuardado()`, chamado só quando a reposição termina sem estourar.
+Se um módulo não carregar ou um modal não abrir, o trabalho continua guardado e a
+próxima tentativa dentro dos 30 minutos ainda o encontra. Apagar antes de repor
+significava perder o trabalho sem nunca tê-lo mostrado.
+
 ## Fazendo um modal voltar por inteiro
 
 A varredura genérica repõe `input`, `select` e `textarea` que estão no overlay.

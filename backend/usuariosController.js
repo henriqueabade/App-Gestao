@@ -223,22 +223,39 @@ router.get('/lista', async (req, res) => {
     // porque as colunas simplesmente não vinham na resposta.
     const camposBase = 'id,nome,email,perfil,status,permissoes,foto_usuario,avatar_version';
     const camposAtividade = 'modelo_permissoes_id,data_ativacao,ultimo_login,ultima_entrada,ultima_saida,ultima_alteracao,ultima_atividade';
+    // O popover de atividade mostra QUANDO, ONDE e O QUÊ da última alteração.
+    // Sem estas colunas no select ele só conseguia montar meia frase.
+    const camposAlteracao = 'ultima_alteracao_em,local_ultima_alteracao,especificacao_ultima_alteracao';
 
-    const query = {
-      select: `${camposBase},${camposAtividade}`,
-      order: 'nome',
-      ...req.query
-    };
+    const query = { order: 'nome', ...req.query };
 
-    let usuarios;
-    try {
-      usuarios = await api.get('/api/usuarios', { query });
-    } catch (err) {
-      // Se alguma coluna de atividade ainda não existir na tabela, o upstream
-      // recusa o select inteiro. Nesse caso, cai para os campos base.
-      console.warn('[usuarios] select estendido falhou; usando campos base.', err?.message || err);
-      usuarios = await api.get('/api/usuarios', { ...query, select: camposBase });
+    // Degradação em etapas. O select é tudo-ou-nada no upstream: uma coluna que
+    // ainda não exista derruba a consulta inteira. Antes a única alternativa era
+    // desabar direto para os campos base — e aí a tela perdia TODA a atividade
+    // por causa de uma coluna só. Agora cada etapa desiste apenas do que a
+    // anterior tinha a mais.
+    // Um `select` explícito de quem chamou continua mandando, como antes.
+    const tentativas = req.query?.select
+      ? [req.query.select]
+      : [
+        `${camposBase},${camposAtividade},${camposAlteracao}`,
+        `${camposBase},${camposAtividade}`,
+        camposBase
+      ];
+
+    let usuarios = null;
+    let ultimoErro = null;
+    for (const select of tentativas) {
+      try {
+        usuarios = await api.get('/api/usuarios', { query: { ...query, select } });
+        ultimoErro = null;
+        break;
+      } catch (err) {
+        ultimoErro = err;
+        console.warn(`[usuarios] select "${select}" falhou; tentando um mais enxuto.`, err?.message || err);
+      }
     }
+    if (ultimoErro) throw ultimoErro;
     const payload = Array.isArray(usuarios)
       ? usuarios.map(user => normalizeAvatar(user))
       : [];
