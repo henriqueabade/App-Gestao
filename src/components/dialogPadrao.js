@@ -44,50 +44,37 @@
     Object.assign(dialog.style, {
       padding: '0',
       border: 'none',
-      background: 'transparent'
+      background: 'transparent',
+      // O cartão usa `w-full`: sem uma largura no hospedeiro ele encolheria
+      // para o tamanho do texto e a caixa ficaria espremida.
+      width: 'min(32rem, calc(100vw - 2rem))',
+      maxWidth: 'none',
+      color: '#fff'
     });
 
+    // Mesma aparência das caixas montadas à mão pelos modais (o "Item já
+    // adicionado" de Orçamentos é o modelo): cartão `glass-surface`, título,
+    // texto e os botões do próprio app. Antes daqui saía um cartão preto com
+    // estilos inline que não combinava com nada — dois padrões de diálogo
+    // convivendo na mesma tela.
+    const alinhamento = /\n/.test(String(message || '')) ? 'text-left' : 'text-center';
     dialog.innerHTML = `
-      <div style="
-        background: rgba(20,20,20,.92);
-        backdrop-filter: blur(18px);
-        color: #fff;
-        padding: 24px;
-        border-radius: 16px;
-        max-width: 420px;
-        width: 100%;
-        box-shadow: 0 30px 90px rgba(0,0,0,.8);
-        text-align: center;
-      ">
-        <h2 style="font-size:18px;font-weight:600;margin-bottom:12px">
-          ${escapeHtml(title || (isConfirm ? 'Confirmação' : 'Aviso'))}
-        </h2>
-
-        <p style="opacity:.85;margin-bottom:20px;white-space:pre-line${/\n/.test(String(message || '')) ? ';text-align:left' : ''}">
-          ${escapeHtml(message || '')}
-        </p>
-
-        <div style="display:flex;justify-content:center;gap:16px">
-          ${isConfirm ? `
-            <button data-cancel style="
-              padding:8px 18px;
-              border-radius:8px;
-              background:#444;
-              color:#fff;
-              border:none;
-            ">${cancelLabel}</button>
-          ` : ''}
-
-          <button data-confirm style="
-            padding:8px 18px;
-            border-radius:8px;
-            background:#c8b24a;
-            color:#000;
-            font-weight:600;
-            border:none;
-          ">
-            ${isConfirm ? confirmLabel : okLabel}
-          </button>
+      <div class="max-w-lg w-full glass-surface backdrop-blur-xl rounded-2xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade">
+        <div class="p-6 text-center">
+          <h3 class="text-lg font-semibold mb-4 text-white">
+            ${escapeHtml(title || (isConfirm ? 'Confirmação' : 'Aviso'))}
+          </h3>
+          <p class="text-sm text-gray-300 mb-6 ${alinhamento}" style="white-space:pre-line">
+            ${escapeHtml(message || '')}
+          </p>
+          <div class="flex justify-center gap-4">
+            <button data-confirm class="${isConfirm ? 'btn-warning' : 'btn-primary'} px-4 py-2 rounded-lg text-white font-medium">
+              ${isConfirm ? confirmLabel : okLabel}
+            </button>
+            ${isConfirm ? `
+              <button data-cancel class="btn-neutral px-4 py-2 rounded-lg text-white font-medium">${cancelLabel}</button>
+            ` : ''}
+          </div>
         </div>
       </div>
     `;

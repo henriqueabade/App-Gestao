@@ -34,17 +34,31 @@ function permissaoDeStatus(req) {
   return 'ped.status.confirm';
 }
 
+/**
+ * Cada status tem a SUA coluna de data. O cancelamento estava de fora: o pedido
+ * virava "Cancelado" e `data_cancelamento` continuava nula, então o balão que
+ * aparece ao passar o mouse sobre o status só sabia dizer quando a produção
+ * tinha começado — nunca quando o pedido foi cancelado.
+ */
+function payloadDeStatus(status, agora = new Date()) {
+  const payload = { situacao: status };
+  const quando = agora.toISOString();
+  if (status === 'Enviado') {
+    payload.data_envio = quando;
+  } else if (status === 'Entregue') {
+    payload.data_entrega = quando;
+  } else if (status === 'Cancelado') {
+    payload.data_cancelamento = quando;
+  }
+  return payload;
+}
+
 router.put('/:id/status', exigirPermissao(permissaoDeStatus), async (req, res) => {
   const { status } = req.body;
   const { id } = req.params;
   try {
     const api = createApiClient(req);
-    const payload = { situacao: status };
-    if (status === 'Enviado') {
-      payload.data_envio = new Date().toISOString();
-    } else if (status === 'Entregue') {
-      payload.data_entrega = new Date().toISOString();
-    }
+    const payload = payloadDeStatus(status);
     await api.put(`/api/pedidos/${id}`, payload);
     res.json({ success: true });
   } catch (err) {
@@ -75,3 +89,6 @@ router.get('/:id', exigirPermissao('ped.view.details'), async (req, res) => {
   }
 });
 module.exports = router;
+// Exposto para teste: a regra "cada status grava a sua data" precisa de guarda
+// própria, sem depender de subir banco.
+module.exports.payloadDeStatus = payloadDeStatus;

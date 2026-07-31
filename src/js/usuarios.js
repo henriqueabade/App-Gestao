@@ -489,35 +489,43 @@ function formatarSegmentoDescricao(parte) {
     return escapeHtml(parte);
 }
 
+/**
+ * Monta a frase de "Alteração registrada".
+ *
+ * A leitura precisa responder duas coisas: EM QUE MÓDULO a pessoa mexeu e O QUE
+ * ela fez. Antes, quando só existia o módulo, saía "Usuário alterou o módulo
+ * Produtos" — verdadeiro e inútil. Agora o módulo vira um rótulo e o detalhe
+ * vem logo em seguida:
+ *
+ *   Produtos — Atualizou o produto 12 (nome Mesa Lateral)
+ *
+ * Sem o detalhe, ainda dizemos o módulo; sem o módulo, só o detalhe.
+ */
 function formatarDescricaoAlteracao(descricao, local, especificacao) {
     const localLimpo = local && String(local).trim();
     const especificacaoLimpa = especificacao && String(especificacao).trim();
 
     if (localLimpo || especificacaoLimpa) {
-        const partes = [];
+        const detalhes = !especificacaoLimpa ? [] : especificacaoLimpa
+            .split('|')
+            .map(parte => parte.trim())
+            .filter(Boolean)
+            .filter(parte => {
+                const normalizado = normalizarParaComparacao(parte);
+                if (normalizado.startsWith('motivo')) return false;
+                if (localLimpo && normalizado.startsWith('modulo')) return false;
+                return true;
+            })
+            .map(formatarSegmentoDescricao);
+
+        if (localLimpo && detalhes.length) {
+            return `<strong>${escapeHtml(localLimpo)}</strong> — ${detalhes.join(' | ')}`;
+        }
+        if (detalhes.length) {
+            return detalhes.join(' | ');
+        }
         if (localLimpo) {
-            partes.push(`Usuário alterou o módulo ${escapeHtml(localLimpo)}`);
-        }
-        if (especificacaoLimpa) {
-            const detalhesEspecificacao = especificacaoLimpa
-                .split('|')
-                .map(parte => parte.trim())
-                .filter(Boolean)
-                .filter(parte => {
-                    const normalizado = normalizarParaComparacao(parte);
-                    if (normalizado.startsWith('motivo')) return false;
-                    if (localLimpo && normalizado.startsWith('modulo')) return false;
-                    return true;
-                })
-                .map(formatarSegmentoDescricao);
-
-            if (detalhesEspecificacao.length) {
-                partes.push(`mudando ${detalhesEspecificacao.join(' | ')}`);
-            }
-        }
-
-        if (partes.length) {
-            return partes.join(', ');
+            return `<strong>${escapeHtml(localLimpo)}</strong> — alteração sem detalhe registrado`;
         }
     }
 

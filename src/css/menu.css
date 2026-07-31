@@ -920,6 +920,31 @@ body.text-white {
     -webkit-backdrop-filter: blur(16px);
 }
 
+/* ------------------------------------------------------------------
+   Botões da caixa de diálogo padrão.
+
+   `btn-warning`, `btn-neutral` e `btn-danger` são definidos no CSS de CADA
+   módulo (pedidos.css, orcamentos.css...), que só é carregado quando aquele
+   módulo abre. O `DialogPadrao` aparece em qualquer lugar — inclusive no
+   dashboard, onde nenhum desses CSS está presente —, então ele não pode
+   depender deles: sem estas regras o diálogo abriria com botões transparentes.
+   Repetimos aqui, restritas ao próprio diálogo, para ele ser autossuficiente.
+   ------------------------------------------------------------------ */
+dialog[data-dialog-padrao] .btn-primary { background: var(--color-primary); transition: all 150ms ease; }
+dialog[data-dialog-padrao] .btn-primary:hover { background: var(--color-primary-light); transform: scale(1.05); }
+dialog[data-dialog-padrao] .btn-warning { background: var(--color-bordeaux); transition: all 150ms ease; }
+dialog[data-dialog-padrao] .btn-warning:hover { background: rgba(106, 21, 44, 0.8); transform: scale(1.05); }
+dialog[data-dialog-padrao] .btn-neutral { background: rgba(255, 255, 255, 0.1); transition: all 150ms ease; }
+dialog[data-dialog-padrao] .btn-neutral:hover { background: rgba(255, 255, 255, 0.15); transform: scale(1.05); }
+dialog[data-dialog-padrao] .btn-danger { background: var(--color-red); transition: all 150ms ease; }
+dialog[data-dialog-padrao] .btn-danger:hover { background: rgba(255, 88, 88, 0.8); transform: scale(1.05); }
+/* O cartão do diálogo precisa do mesmo fundo, mesmo fora de um módulo. */
+dialog[data-dialog-padrao] .glass-surface {
+    background: var(--color-surface);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+}
+
 header.glass-surface {
     background: rgba(255, 255, 255, 0.12);
 }

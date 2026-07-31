@@ -33,6 +33,56 @@ async function updateUsuarioCampos(id, campos) {
   }
 }
 
+/**
+ * Monta os campos da "última alteração" a partir de uma ação.
+ *
+ * Quando, onde e o quê descrevem UM evento: ou vão os três, ou não vai nenhum.
+ * Devolve `{}` quando não há alteração de verdade — e `{}` faz o
+ * `updateUsuarioCampos` não gravar nada, em vez de escrever vazio por cima do
+ * que já estava lá.
+ */
+function camposDaAlteracao(acao = {}, quandoPadrao = null) {
+  const modulo = typeof acao.modulo === 'string' ? acao.modulo.trim() : '';
+  const descricao = typeof acao.descricao === 'string' ? acao.descricao.trim() : '';
+  if (!modulo && !descricao) return {};
+
+  const quando = normalizarData(acao.timestamp, quandoPadrao || new Date());
+  if (!quando) return {};
+
+  const campos = {
+    ultima_alteracao: quando,
+    ultima_alteracao_em: quando,
+    ultima_acao_em: quando
+  };
+  if (modulo) {
+    campos.local_ultima_alteracao = modulo;
+    campos.local_ultima_acao = modulo;
+  }
+  if (descricao) {
+    campos.especificacao_ultima_alteracao = descricao;
+    campos.especificacao_ultima_acao = descricao;
+  }
+  return campos;
+}
+
+/**
+ * Registra a última alteração ASSIM QUE ELA ACONTECE.
+ *
+ * Antes isso só era gravado na saída do usuário, e o efeito prático era que a
+ * tela de Gestão de Usuários nunca mostrava nada de quem estava trabalhando —
+ * e, se o app fechasse de forma anormal (queda, corte de energia), o registro
+ * se perdia inteiro. Quem chama é o processo principal, com folga entre uma
+ * gravação e outra para não transformar cada clique num PUT.
+ */
+async function registrarUltimaAlteracao(usuarioId, acao = {}) {
+  const campos = camposDaAlteracao(acao);
+  if (!Object.keys(campos).length) return false;
+  // A alteração também é atividade: mantém o usuário como "online" na listagem.
+  campos.ultima_atividade = campos.ultima_alteracao;
+  campos.ultima_atividade_em = campos.ultima_alteracao;
+  return updateUsuarioCampos(usuarioId, campos);
+}
+
 async function registrarUltimaEntrada(usuarioId, data = new Date()) {
   const entrada = normalizarData(data, new Date());
   const campos = {
@@ -59,31 +109,13 @@ async function registrarUltimaEntrada(usuarioId, data = new Date()) {
 async function registrarUltimaSaida(usuarioId, info = {}) {
   const saida = normalizarData(info.saida, new Date());
 
-  const campos = {
-    ultima_saida: saida,
-    ultima_saida_em: saida
-  };
-
-  const ultimaAcao = info.ultimaAcao || {};
-  const modulo = typeof ultimaAcao.modulo === 'string' ? ultimaAcao.modulo.trim() : '';
-  const descricao = typeof ultimaAcao.descricao === 'string' ? ultimaAcao.descricao.trim() : '';
   // A alteração aconteceu nesta sessão, que termina agora: sem carimbo próprio,
   // a saída é o instante mais próximo que se pode afirmar com honestidade.
-  const quando = normalizarData(ultimaAcao.timestamp, (modulo || descricao) ? saida : null);
-
-  if (quando && (modulo || descricao)) {
-    campos.ultima_alteracao = quando;
-    campos.ultima_alteracao_em = quando;
-    campos.ultima_acao_em = quando;
-    if (modulo) {
-      campos.local_ultima_alteracao = modulo;
-      campos.local_ultima_acao = modulo;
-    }
-    if (descricao) {
-      campos.especificacao_ultima_alteracao = descricao;
-      campos.especificacao_ultima_acao = descricao;
-    }
-  }
+  const campos = {
+    ultima_saida: saida,
+    ultima_saida_em: saida,
+    ...camposDaAlteracao(info.ultimaAcao || {}, saida)
+  };
 
   await updateUsuarioCampos(usuarioId, campos);
 }
@@ -91,5 +123,7 @@ async function registrarUltimaSaida(usuarioId, info = {}) {
 module.exports = {
   registrarUltimaEntrada,
   registrarUltimaSaida,
+  registrarUltimaAlteracao,
+  camposDaAlteracao,
   updateUsuarioCampos
 };

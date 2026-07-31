@@ -18,7 +18,11 @@ const {
   isNetworkError,
   ensureDatabaseReady
 } = require('./backend/backend');
-const { registrarUltimaSaida, registrarUltimaEntrada } = require('./backend/userActivity');
+const {
+  registrarUltimaSaida,
+  registrarUltimaEntrada,
+  registrarUltimaAlteracao
+} = require('./backend/userActivity');
 const { createApiClient } = require('./backend/apiHttpClient');
 const { getToken } = require('./backend/tokenStore');
 const fs = require('fs');
@@ -1785,6 +1789,76 @@ function normalizeIpcAction(action) {
   return { module: meta.module, description };
 }
 
+// Nome no singular do recurso + gênero, para a frase sair em português de
+// gente ("o orçamento 9", "do orçamento 9", "da transportadora 4").
+const NOMES_DE_RECURSO = {
+  orcamentos: { artigo: 'o', nome: 'orçamento' },
+  orcamentos_itens: { artigo: 'o', nome: 'item do orçamento' },
+  orcamento_parcelas: { artigo: 'a', nome: 'parcela do orçamento' },
+  pedidos: { artigo: 'o', nome: 'pedido' },
+  pedidos_itens: { artigo: 'o', nome: 'item do pedido' },
+  pedido_parcelas: { artigo: 'a', nome: 'parcela do pedido' },
+  clientes: { artigo: 'o', nome: 'cliente' },
+  contatos: { artigo: 'o', nome: 'contato' },
+  contatos_cliente: { artigo: 'o', nome: 'contato do cliente' },
+  transportadoras: { artigo: 'a', nome: 'transportadora' },
+  usuarios: { artigo: 'o', nome: 'usuário' },
+  materia_prima: { artigo: 'o', nome: 'insumo' },
+  produtos: { artigo: 'o', nome: 'produto' },
+  colecao: { artigo: 'a', nome: 'coleção' },
+  categoria: { artigo: 'a', nome: 'categoria' },
+  etapas_producao: { artigo: 'a', nome: 'etapa de produção' },
+  ordens_producao: { artigo: 'a', nome: 'ordem de produção' },
+  modelos_permissoes: { artigo: 'o', nome: 'modelo de permissões' },
+  clientes_laminacao: { artigo: 'o', nome: 'cliente de laminação' }
+};
+
+const VERBOS_POR_METODO = {
+  POST: 'Criou',
+  PUT: 'Atualizou',
+  PATCH: 'Atualizou',
+  DELETE: 'Excluiu'
+};
+
+/** Campos do corpo que valem a pena aparecer para quem lê o histórico. */
+const CAMPOS_INTERESSANTES = [
+  ['situacao', 'situação'],
+  ['status', 'status'],
+  ['nome', 'nome'],
+  ['numero', 'número'],
+  ['quantidade', 'quantidade'],
+  ['preco_unitario', 'preço unitário'],
+  ['valor_final', 'valor']
+];
+
+function detalharCorpo(bodySummary) {
+  if (!bodySummary) return '';
+  let corpo = null;
+  try {
+    corpo = JSON.parse(bodySummary);
+  } catch (_) {
+    return '';
+  }
+  if (!corpo || typeof corpo !== 'object' || Array.isArray(corpo)) return '';
+
+  const partes = [];
+  for (const [chave, rotulo] of CAMPOS_INTERESSANTES) {
+    const valor = corpo[chave];
+    if (valor === undefined || valor === null || valor === '') continue;
+    if (typeof valor === 'object') continue;
+    partes.push(`${rotulo} ${valor}`);
+    if (partes.length >= 3) break;
+  }
+  return partes.length ? ` (${partes.join(', ')})` : '';
+}
+
+/**
+ * Traduz uma chamada de API em uma frase legível.
+ *
+ * Antes daqui saía o caminho cru — "PUT orcamentos/9 :: {...}" —, que no
+ * popover de Gestão de Usuários não dizia nada a ninguém. O usuário precisa ler
+ * O QUE foi feito, não o verbo HTTP.
+ */
 function normalizeFetchAction(action) {
   if (!action || !action.url) return null;
   if (action.ok === false) return null;
@@ -1801,11 +1875,29 @@ function normalizeFetchAction(action) {
       API_MODULE_TITLES[normalizedKey] ||
       API_MODULE_TITLES[rawModule] ||
       capitalizeModuleName(rawModule);
-    const pathInfo = segments.slice(apiIndex + 1).join('/');
-    const summary = action.bodySummary ? ` :: ${action.bodySummary}` : '';
+
+    const restante = segments.slice(apiIndex + 2);
+    const identificador = restante.find(parte => /^\d+$/.test(parte)) || '';
+    const subRecurso = restante.find(parte => !/^\d+$/.test(parte)) || '';
+    const recurso = NOMES_DE_RECURSO[normalizedKey]
+      || { artigo: 'o', nome: `registro em ${module}` };
+    const verbo = VERBOS_POR_METODO[method] || 'Alterou';
+    const detalhes = detalharCorpo(action.bodySummary);
+    const sufixoId = identificador ? ` ${identificador}` : '';
+
+    // `/pedidos/3/status` e afins: o que mudou é o sub-recurso, não o registro.
+    if (subRecurso) {
+      const alvo = subRecurso === 'status' ? 'o status' : subRecurso.replace(/[-_]/g, ' ');
+      const contracao = recurso.artigo === 'a' ? 'da' : 'do';
+      return {
+        module,
+        description: `Alterou ${alvo} ${contracao} ${recurso.nome}${sufixoId}${detalhes}`
+      };
+    }
+
     return {
       module,
-      description: `${method} ${pathInfo}${summary}`
+      description: `${verbo} ${recurso.artigo} ${recurso.nome}${sufixoId}${detalhes}`
     };
   } catch (err) {
     return null;
@@ -1833,16 +1925,85 @@ function normalizeUserAction(action) {
   };
 }
 
+// ---------------------------------------------------------------------------
+// Registro da última alteração
+//
+// Isso era gravado SÓ na saída do usuário. Duas consequências ruins: a tela de
+// Gestão de Usuários nunca mostrava nada de quem estava trabalhando naquele
+// momento, e um fechamento anormal (queda de energia, travamento) levava o
+// registro inteiro embora.
+//
+// Agora a alteração é gravada assim que acontece, com um respiro entre uma
+// gravação e outra para não transformar cada clique num PUT: a primeira ação
+// espera `ATRASO_ALTERACAO_MS` (janela em que várias ações seguidas viram uma
+// gravação só) e nunca passa de `INTERVALO_MAX_ALTERACAO_MS` sem gravar.
+// ---------------------------------------------------------------------------
+const ATRASO_ALTERACAO_MS = 4000;
+const INTERVALO_MAX_ALTERACAO_MS = 30000;
+let alteracaoTimer = null;
+let alteracaoPendente = null;
+let alteracaoPendenteDesde = 0;
+
+function acaoParaRegistro(acao) {
+  if (!acao) return null;
+  return {
+    timestamp: acao.timestamp,
+    modulo: acao.module,
+    descricao: acao.description
+  };
+}
+
+async function gravarAlteracaoPendente() {
+  if (alteracaoTimer) {
+    clearTimeout(alteracaoTimer);
+    alteracaoTimer = null;
+  }
+  const acao = alteracaoPendente;
+  alteracaoPendente = null;
+  alteracaoPendenteDesde = 0;
+  if (!acao || !currentUserSession) return;
+  try {
+    await registrarUltimaAlteracao(currentUserSession.id, acao);
+  } catch (err) {
+    console.error('Falha ao registrar a última alteração do usuário:', err);
+  }
+}
+
+function agendarGravacaoDaAlteracao(acao) {
+  alteracaoPendente = acaoParaRegistro(acao);
+  if (!alteracaoPendente) return;
+  if (!alteracaoPendenteDesde) alteracaoPendenteDesde = Date.now();
+
+  const esperouDemais = Date.now() - alteracaoPendenteDesde >= INTERVALO_MAX_ALTERACAO_MS;
+  if (esperouDemais) {
+    gravarAlteracaoPendente();
+    return;
+  }
+
+  if (alteracaoTimer) clearTimeout(alteracaoTimer);
+  alteracaoTimer = setTimeout(() => {
+    alteracaoTimer = null;
+    gravarAlteracaoPendente();
+  }, ATRASO_ALTERACAO_MS);
+  // Não segura o encerramento do app por causa de um timer de 4s.
+  if (typeof alteracaoTimer.unref === 'function') alteracaoTimer.unref();
+}
+
 async function persistUserExit(reason) {
   if (!currentUserSession || isPersistingExit) return;
   isPersistingExit = true;
+  // O que estava agendado precisa entrar na mesma gravação da saída, senão o
+  // timer morre com a janela e a última alteração se perde.
+  if (alteracaoTimer) {
+    clearTimeout(alteracaoTimer);
+    alteracaoTimer = null;
+  }
+  alteracaoPendente = null;
+  alteracaoPendenteDesde = 0;
+
   const payload = { saida: new Date() };
   if (lastRecordedAction) {
-    payload.ultimaAcao = {
-      timestamp: lastRecordedAction.timestamp,
-      modulo: lastRecordedAction.module,
-      descricao: lastRecordedAction.description
-    };
+    payload.ultimaAcao = acaoParaRegistro(lastRecordedAction);
   }
   try {
     await registrarUltimaSaida(currentUserSession.id, payload);
@@ -4365,6 +4526,7 @@ ipcMain.handle('record-user-action', async (_event, action) => {
   if (!normalized) return false;
   if (!lastRecordedAction || normalized.timestamp >= lastRecordedAction.timestamp) {
     lastRecordedAction = normalized;
+    agendarGravacaoDaAlteracao(normalized);
   }
   markMonitorInteraction('user-action');
   return true;
