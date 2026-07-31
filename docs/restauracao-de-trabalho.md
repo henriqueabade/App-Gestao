@@ -172,7 +172,15 @@ conta própria assim que ele tem conteúdo.
 | Orçamentos | **completo** (5 modais) |
 | Pedidos | **completo** (2 modais) |
 | Usuários | **completo** (3 modais) |
-| Laminação | **pendente** — cliente novo/editar e serviço novo (peças e amarrados) |
+| Laminação — clientes | **completo** (cliente novo/editar) |
+| Laminação — serviços | **pendente** — serviço novo (peças e amarrados) |
+
+Os modais de cliente da laminação usam os mesmos ids de overlay da gestão
+(`novoCliente`, `editarCliente`), mas isso não confunde a restauração: o que é
+guardado é o `htmlPath`/`scriptPath` da abertura, e os dois módulos nunca estão
+abertos ao mesmo tempo. O `clienteEditarPreferencias` de propósito **não** volta —
+ele carrega o `abrirNovoContato`, que abriria o modal de contato sozinho por cima
+do que a restauração já está reabrindo.
 
 Modais somente leitura (`*-visualizar`, `*-detalhes`) não têm o que repor, mas
 ainda precisam do `__contexto` para saber o que exibir — senão reabrem em branco.

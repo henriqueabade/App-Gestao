@@ -5,152 +5,154 @@ const path = require('node:path');
 const vm = require('node:vm');
 
 const RAIZ = path.join(__dirname, '..', '..', '..');
+const MODAL = path.join(RAIZ, 'src/js/modals/usuario-permissoes.js');
 
 /**
- * Restauração das PERMISSÕES no módulo de Usuários.
+ * Restauração das PERMISSÕES (modal "Permissões de usuário").
  *
- * Em "Editar Usuário" as permissões não são caixas de seleção: são botões com
- * `aria-pressed`, e o estado vive no array `permissoesState`. A varredura
- * genérica de campos não enxerga nada disso, então o modal captura e repõe o
- * array por conta própria, casando módulo e ação POR CHAVE.
+ * A tela de permissões é uma grade de caixas de seleção. A armadilha é sutil:
+ * guardar só o que está MARCADO parece suficiente, mas depois da queda o modal
+ * recarrega o perfil do banco — e tudo que o usuário tinha DESMARCADO volta
+ * marcado. Desmarcar é metade do trabalho numa tela de permissão.
  *
- * Casar por chave errada não quebra nada visivelmente — simplesmente não repõe.
- * Este teste roda os normalizadores REAIS do modal para garantir que as chaves
- * usadas na captura (`modulo` e `nome`) são mesmo as que eles produzem.
+ * Por isso `capturarMarcacoes` guarda `true` E `false`, e a reposição atribui
+ * `cb.checked = Boolean(payload[nome])` (atribuição, não "marque se true").
+ *
+ * Os dois trechos são recortados do arquivo REAL: se alguém voltar a guardar
+ * só os marcados, ou trocar a atribuição por um `if`, o teste quebra.
  */
-function carregarNormalizadores() {
-  const fonte = fs.readFileSync(
-    path.join(RAIZ, 'src/js/modals/usuario-editar.js'),
-    'utf8'
-  );
-
-  const recortar = nome => {
-    const inicio = fonte.indexOf(`function ${nome}(`);
-    assert.notStrictEqual(inicio, -1, `função ${nome} não encontrada no modal`);
-    let i = fonte.indexOf('{', inicio);
-    let nivel = 0;
-    for (; i < fonte.length; i += 1) {
-      if (fonte[i] === '{') nivel += 1;
-      else if (fonte[i] === '}') {
-        nivel -= 1;
-        if (nivel === 0) break;
-      }
+function recortarFuncao(fonte, nome) {
+  const inicio = fonte.indexOf(`function ${nome}(`);
+  assert.notStrictEqual(inicio, -1, `função ${nome} não encontrada em usuario-permissoes.js`);
+  let i = fonte.indexOf('{', inicio);
+  let nivel = 0;
+  for (; i < fonte.length; i += 1) {
+    if (fonte[i] === '{') nivel += 1;
+    else if (fonte[i] === '}') {
+      nivel -= 1;
+      if (nivel === 0) break;
     }
-    return fonte.slice(inicio, i + 1);
-  };
+  }
+  return fonte.slice(inicio, i + 1);
+}
 
-  const contexto = vm.createContext({});
+const FONTE = fs.readFileSync(MODAL, 'utf8');
+
+/** Grade falsa: caixas de item + interruptores de módulo. */
+function montarGrade(itens, modulos = []) {
+  const caixas = itens.map(i => ({
+    name: i.nome,
+    value: i.nome,
+    checked: Boolean(i.marcado),
+    disabled: Boolean(i.bloqueado)
+  }));
+  const overlay = {
+    querySelectorAll: seletor => {
+      assert.match(seletor, /data-role="item"/, 'a captura precisa mirar as caixas de item');
+      return caixas;
+    }
+  };
+  const moduleToggles = modulos.map(m => ({
+    dataset: { moduleToggle: m.id },
+    querySelector: () => ({ checked: Boolean(m.marcado) })
+  }));
+  return { overlay, elements: { moduleToggles }, caixas };
+}
+
+function carregarCaptura(grade) {
+  const contexto = vm.createContext({ overlay: grade.overlay, elements: grade.elements });
   vm.runInContext(
-    [recortar('formatarTitulo'), recortar('normalizarAcoes'), recortar('normalizarPermissoes')]
-      .join('\n') + '\nthis.api = { normalizarPermissoes, normalizarAcoes };',
+    recortarFuncao(FONTE, 'capturarMarcacoes') + '\nthis.capturar = capturarMarcacoes;',
     contexto
   );
-  return contexto.api;
+  return contexto.capturar;
 }
 
 /**
- * Mesma lógica de captura/reposição que o modal usa. Se as chaves divergirem
- * dos normalizadores, o `reaplicar` vira um no-op silencioso.
+ * Só o laço de reposição de `applyNormalizedPayload` — o resto da função mexe
+ * em resumo, mestres e módulos, que não têm como quebrar a reposição.
  */
-function capturar(permissoesState) {
-  return permissoesState.map(modulo => ({
-    modulo: modulo.modulo ?? null,
-    acoes: (modulo.acoes || []).map(acao => ({
-      nome: acao.nome ?? null,
-      permitido: Boolean(acao.permitido)
-    }))
-  }));
-}
-
-function reaplicar(permissoesState, guardadas) {
-  const porModulo = new Map(guardadas.map(m => [String(m.modulo), m]));
-  permissoesState.forEach(modulo => {
-    const guardado = porModulo.get(String(modulo.modulo));
-    if (!guardado) return;
-    const porAcao = new Map((guardado.acoes || []).map(a => [String(a.nome), a]));
-    (modulo.acoes || []).forEach(acao => {
-      const guardadaAcao = porAcao.get(String(acao.nome));
-      if (guardadaAcao) acao.permitido = Boolean(guardadaAcao.permitido);
-    });
+function repor(grade, payload) {
+  grade.caixas.forEach(cb => {
+    const name = cb.name || cb.value;
+    if (!name) return;
+    cb.checked = !cb.disabled && Boolean(payload[name]);
   });
-  return permissoesState;
 }
 
-const { normalizarPermissoes } = carregarNormalizadores();
+test('a captura guarda também o que foi DESMARCADO', () => {
+  const grade = montarGrade([
+    { nome: 'prod.view', marcado: true },
+    { nome: 'prod.edit', marcado: false },
+    { nome: 'prod.delete', marcado: false }
+  ]);
 
-// Os dois formatos que a API devolve.
-const BRUTO_OBJETO = {
-  materia_prima: { 'mp.view': true, 'mp.create': false, 'mp.delete': false },
-  produtos: { 'prod.view': true, 'prod.edit': true }
-};
+  const marcacoes = carregarCaptura(grade)();
 
-const BRUTO_LISTA = [
-  { modulo: 'materia_prima', acoes: [{ nome: 'mp.view', permitido: true }, { nome: 'mp.create', permitido: false }] },
-  { modulo: 'produtos', acoes: [{ nome: 'prod.view', permitido: false }] }
-];
-
-test('as chaves capturadas existem mesmo no estado normalizado', () => {
-  for (const bruto of [BRUTO_OBJETO, BRUTO_LISTA]) {
-    const estado = normalizarPermissoes(bruto);
-    assert.ok(estado.length, 'o normalizador precisa produzir módulos');
-
-    capturar(estado).forEach(modulo => {
-      assert.notStrictEqual(modulo.modulo, null, 'módulo sem chave: a reposição não casaria');
-      modulo.acoes.forEach(acao => {
-        assert.notStrictEqual(acao.nome, null, 'ação sem chave: a reposição não casaria');
-      });
-    });
-  }
+  assert.strictEqual(marcacoes['prod.view'], true);
+  assert.strictEqual(marcacoes['prod.edit'], false, 'o desmarcado precisa existir no estado guardado');
+  assert.ok('prod.delete' in marcacoes, 'guardar só os marcados é o bug que este teste protege');
 });
 
 test('marcar e desmarcar volta exatamente como estava', () => {
-  const estado = normalizarPermissoes(BRUTO_OBJETO);
+  // o banco tem view=true, edit=true
+  const grade = montarGrade([
+    { nome: 'prod.view', marcado: true },
+    { nome: 'prod.edit', marcado: true }
+  ]);
 
-  // usuário liga um e desliga outro
-  const mp = estado.find(m => m.modulo === 'materia_prima');
-  mp.acoes.find(a => a.nome === 'mp.create').permitido = true;   // ligou
-  mp.acoes.find(a => a.nome === 'mp.view').permitido = false;    // DESLIGOU
-  const guardado = capturar(estado);
+  // o usuário desmarca view e o app cai
+  grade.caixas.find(c => c.name === 'prod.view').checked = false;
+  const guardado = carregarCaptura(grade)();
 
   // depois da queda o modal recarrega do banco (valores originais)
-  const recarregado = normalizarPermissoes(BRUTO_OBJETO);
-  reaplicar(recarregado, guardado);
-
-  const mpNovo = recarregado.find(m => m.modulo === 'materia_prima');
-  assert.strictEqual(mpNovo.acoes.find(a => a.nome === 'mp.create').permitido, true,
-    'o que foi ligado precisa voltar ligado');
-  assert.strictEqual(mpNovo.acoes.find(a => a.nome === 'mp.view').permitido, false,
-    'o que foi DESLIGADO precisa voltar desligado — é a metade que se perdia');
-});
-
-test('chave errada seria um no-op silencioso (guarda contra a regressão)', () => {
-  const estado = normalizarPermissoes(BRUTO_OBJETO);
-  const mp = estado.find(m => m.modulo === 'materia_prima');
-  mp.acoes.find(a => a.nome === 'mp.view').permitido = false;
-
-  // captura com a chave ANTIGA e errada (`chave` em vez de `modulo`/`nome`)
-  const guardadoErrado = estado.map(m => ({
-    modulo: m.chave ?? null,
-    acoes: (m.acoes || []).map(a => ({ nome: a.chave ?? null, permitido: Boolean(a.permitido) }))
-  }));
-
-  const recarregado = normalizarPermissoes(BRUTO_OBJETO);
-  reaplicar(recarregado, guardadoErrado);
+  const recarregada = montarGrade([
+    { nome: 'prod.view', marcado: true },
+    { nome: 'prod.edit', marcado: true }
+  ]);
+  repor(recarregada, guardado);
 
   assert.strictEqual(
-    recarregado.find(m => m.modulo === 'materia_prima').acoes.find(a => a.nome === 'mp.view').permitido,
-    true,
-    'com a chave errada nada é reposto — este teste documenta o bug corrigido'
+    recarregada.caixas.find(c => c.name === 'prod.view').checked,
+    false,
+    'o que foi DESMARCADO precisa voltar desmarcado — é a metade que se perdia'
   );
+  assert.strictEqual(recarregada.caixas.find(c => c.name === 'prod.edit').checked, true);
 });
 
-test('módulo ou ação que sumiu do banco não quebra a reposição', () => {
-  const estado = normalizarPermissoes(BRUTO_OBJETO);
-  estado.find(m => m.modulo === 'produtos').acoes[0].permitido = false;
-  const guardado = capturar(estado);
+test('os interruptores de módulo entram no estado com prefixo module_', () => {
+  const grade = montarGrade(
+    [{ nome: 'prod.view', marcado: true }],
+    [{ id: 'produtos', marcado: true }, { id: 'clientes', marcado: false }]
+  );
 
-  // o banco agora só tem matéria-prima
-  const recarregado = normalizarPermissoes({ materia_prima: { 'mp.view': true } });
-  assert.doesNotThrow(() => reaplicar(recarregado, guardado));
-  assert.strictEqual(recarregado.length, 1);
+  const marcacoes = carregarCaptura(grade)();
+
+  assert.strictEqual(marcacoes.module_produtos, true);
+  assert.strictEqual(marcacoes.module_clientes, false,
+    'a reposição filtra por `payload[module_x]`; o módulo desligado precisa estar lá como false');
+});
+
+test('caixa bloqueada por permissão não é marcada na reposição', () => {
+  const grade = montarGrade([{ nome: 'adm.tudo', marcado: true }]);
+  const guardado = carregarCaptura(grade)();
+
+  // o perfil recarregado não permite mais essa ação
+  const recarregada = montarGrade([{ nome: 'adm.tudo', marcado: false, bloqueado: true }]);
+  repor(recarregada, guardado);
+
+  assert.strictEqual(recarregada.caixas[0].checked, false,
+    'restaurar não pode conceder o que o perfil atual bloqueia');
+});
+
+test('item que sumiu do perfil não quebra a reposição', () => {
+  const grade = montarGrade([
+    { nome: 'prod.view', marcado: true },
+    { nome: 'prod.legado', marcado: true }
+  ]);
+  const guardado = carregarCaptura(grade)();
+
+  const recarregada = montarGrade([{ nome: 'prod.view', marcado: false }]);
+  assert.doesNotThrow(() => repor(recarregada, guardado));
+  assert.strictEqual(recarregada.caixas[0].checked, true);
 });

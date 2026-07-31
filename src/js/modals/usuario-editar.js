@@ -137,25 +137,6 @@
   }
 
   const podeEditarDados = contexto.podeEditarDados !== false;
-  const podeGerenciarPermissoes = contexto.podeGerenciarPermissoes === true;
-  const deveMostrarPermissoes = usuarioBase.perfil === 'Sup Admin';
-
-  const tabTemplate = overlay.querySelector('#usuarioPermissoesTabTemplate');
-  if (deveMostrarPermissoes && tabTemplate?.content?.firstElementChild) {
-    const permissoesTab = tabTemplate.content.firstElementChild.cloneNode(true);
-    tabTemplate.replaceWith(permissoesTab);
-  } else {
-    tabTemplate?.remove();
-  }
-
-  const panelTemplate = overlay.querySelector('#usuarioPermissoesPanelTemplate');
-  let permissoesPanel = null;
-  if (deveMostrarPermissoes && panelTemplate?.content?.firstElementChild) {
-    permissoesPanel = panelTemplate.content.firstElementChild.cloneNode(true);
-    panelTemplate.replaceWith(permissoesPanel);
-  } else {
-    panelTemplate?.remove();
-  }
 
   const tabs = Array.from(overlay.querySelectorAll('[role="tab"]'));
   const panels = Array.from(overlay.querySelectorAll('[role="tabpanel"]'));
@@ -243,11 +224,9 @@
   }
 
   const salvarBtn = document.getElementById('salvarEditarUsuario');
-  if (!podeEditarDados && !podeGerenciarPermissoes) {
+  if (!podeEditarDados) {
     salvarBtn?.setAttribute('disabled', 'disabled');
   }
-
-  let permissoesState = [];
 
   function formatarTitulo(valor) {
     if (!valor) return '';
@@ -258,93 +237,6 @@
       .filter(Boolean)
       .map((parte) => parte.charAt(0).toUpperCase() + parte.slice(1))
       .join(' ');
-  }
-
-  function normalizarAcoes(acoes) {
-    if (!acoes) return [];
-    if (Array.isArray(acoes)) {
-      return acoes
-        .map((acao, index) => {
-          if (typeof acao === 'string') {
-            const chaveBruta = acao.trim();
-            const chave = (chaveBruta || `acao_${index + 1}`)
-              .toString()
-              .trim()
-              .replace(/\s+/g, '_');
-            return {
-              nome: chave,
-              label: formatarTitulo(chave),
-              permitido: true,
-            };
-          }
-          if (acao && typeof acao === 'object') {
-            const permitido = acao.permitido ?? acao.enabled ?? acao.habilitado ?? acao.valor ?? acao.value ?? false;
-            const chaveBase = acao.nome || acao.acao || acao.id || acao.chave || '';
-            const fallback = (acao.label || acao.rotulo || `acao_${index + 1}`)
-              .toString()
-              .trim()
-              .toLowerCase()
-              .replace(/[^a-z0-9]+/gi, '_')
-              .replace(/^_+|_+$/g, '');
-            const chave = (chaveBase || fallback || `acao_${index + 1}`)
-              .toString()
-              .trim()
-              .replace(/\s+/g, '_');
-            return {
-              nome: chave,
-              label: acao.label || acao.rotulo || formatarTitulo(chave),
-              permitido: Boolean(permitido),
-            };
-          }
-          return null;
-        })
-        .filter(Boolean);
-    }
-    if (typeof acoes === 'object') {
-      return Object.entries(acoes).map(([nome, valor], index) => {
-        const permitido = typeof valor === 'object'
-          ? valor.permitido ?? valor.enabled ?? valor.habilitado ?? valor.valor ?? valor.value ?? false
-          : valor;
-        const chave = nome
-          .toString()
-          .trim()
-          .replace(/\s+/g, '_')
-          .replace(/^_+|_+$/g, '') || `acao_${Math.max(index + 1, 1)}`;
-        const fonteRotulo = typeof valor === 'object' && valor !== null
-          ? valor.label || valor.rotulo
-          : undefined;
-        return {
-          nome: chave,
-          label: formatarTitulo(fonteRotulo || nome),
-          permitido: Boolean(permitido),
-        };
-      });
-    }
-    return [];
-  }
-
-  function normalizarPermissoes(raw) {
-    if (!raw) return [];
-    if (Array.isArray(raw)) {
-      return raw
-        .map((item, index) => {
-          if (!item) return null;
-          const modulo = item.modulo || item.nome || item.id || `Modulo_${index + 1}`;
-          const label = item.rotulo || item.label || formatarTitulo(modulo);
-          const acoes = normalizarAcoes(item.acoes || item.permissoes || item.actions);
-          return { modulo, label, acoes };
-        })
-        .filter((item) => item && item.acoes.length);
-    }
-    if (typeof raw === 'object') {
-      return Object.entries(raw)
-        .map(([modulo, valor]) => {
-          const acoes = normalizarAcoes(valor);
-          return { modulo, label: formatarTitulo(modulo), acoes };
-        })
-        .filter((item) => item.acoes.length);
-    }
-    return [];
   }
 
   function formatarDataHora(valor) {
@@ -516,70 +408,6 @@
     atualizarBadge(derivarStatus(usuario));
   }
 
-  function renderPermissoes() {
-    if (!permissoesPanel) return;
-    const container = permissoesPanel.querySelector('#usuarioPermissoesContainer');
-    if (!container) return;
-    container.innerHTML = '';
-
-    if (!permissoesState.length) {
-      const vazio = document.createElement('p');
-      vazio.className = 'usuario-permissoes-empty';
-      vazio.textContent = 'Nenhuma permissão configurada para este usuário.';
-      container.appendChild(vazio);
-      return;
-    }
-
-    permissoesState.forEach((modulo, moduloIndex) => {
-      const card = document.createElement('article');
-      card.className = 'usuario-permissao-card';
-
-      const header = document.createElement('div');
-      header.className = 'usuario-permissao-card__header';
-      header.innerHTML = `<h4 class="usuario-permissao-card__titulo">${modulo.label}</h4>`;
-      card.appendChild(header);
-
-      const acoesWrapper = document.createElement('div');
-      acoesWrapper.className = 'usuario-permissao-card__acoes';
-
-      modulo.acoes.forEach((acao, acaoIndex) => {
-        const toggle = document.createElement('button');
-        toggle.type = 'button';
-        toggle.className = 'usuario-permissao-toggle';
-        toggle.dataset.moduloIndex = String(moduloIndex);
-        toggle.dataset.acaoIndex = String(acaoIndex);
-        toggle.setAttribute('aria-pressed', acao.permitido ? 'true' : 'false');
-        if (!podeGerenciarPermissoes) {
-          toggle.setAttribute('disabled', 'disabled');
-          toggle.classList.add('usuario-permissao-toggle--disabled');
-        }
-        toggle.innerHTML = `
-          <span class="usuario-permissao-toggle__label">${acao.label}</span>
-          <span class="usuario-permissao-toggle__pill" aria-hidden="true">
-            <span class="usuario-permissao-toggle__knob"></span>
-          </span>
-        `;
-        toggle.classList.toggle('usuario-permissao-toggle--on', acao.permitido);
-        toggle.addEventListener('click', () => {
-          const pressed = toggle.getAttribute('aria-pressed') === 'true';
-          const novo = !pressed;
-          toggle.setAttribute('aria-pressed', novo ? 'true' : 'false');
-          toggle.classList.toggle('usuario-permissao-toggle--on', novo);
-          permissoesState[moduloIndex].acoes[acaoIndex].permitido = novo;
-        });
-        acoesWrapper.appendChild(toggle);
-      });
-
-      card.appendChild(acoesWrapper);
-      container.appendChild(card);
-    });
-  }
-
-  function montarPermissoes(rawPermissoes) {
-    permissoesState = normalizarPermissoes(rawPermissoes);
-    renderPermissoes();
-  }
-
   /**
    * Preenche o combo "Perfil" com os perfis reais (modelos de permissão +
    * perfis já usados por usuários). Mantém o valor atual do usuário mesmo que
@@ -639,16 +467,6 @@
     };
   }
 
-  function coletarPermissoesPayload() {
-    return permissoesState.map((modulo) => ({
-      modulo: modulo.modulo,
-      permissoes: modulo.acoes.reduce((acc, acao) => {
-        acc[acao.nome] = acao.permitido;
-        return acc;
-      }, {}),
-    }));
-  }
-
   async function salvarAlteracoes() {
     if (!salvarBtn || salvarBtn.disabled) return;
     limparMensagem();
@@ -670,19 +488,6 @@
           throw new Error(texto || 'Não foi possível salvar os dados pessoais.');
         }
         respostas.push(await respDados.json());
-      }
-
-      if (deveMostrarPermissoes && podeGerenciarPermissoes) {
-        const respPerm = await fetchApi(`/api/usuarios/${usuarioBase.id}/permissoes`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ permissoes: coletarPermissoesPayload() }),
-        });
-        if (!respPerm.ok) {
-          const texto = await respPerm.text();
-          throw new Error(texto || 'Não foi possível salvar as permissões.');
-        }
-        respostas.push(await respPerm.json());
       }
 
       exibirMensagem('sucesso', 'Alterações salvas com sucesso!');
@@ -709,14 +514,6 @@
       const data = await resp.json();
       const usuario = data.usuario || data;
       preencherDadosBasicos(usuario);
-      if (deveMostrarPermissoes && podeGerenciarPermissoes) {
-        const permissoes = data.permissoes || usuario.permissoes || usuario['permissões'] || usuario.permissions;
-        montarPermissoes(permissoes);
-      } else if (deveMostrarPermissoes) {
-        const permissoes = data.permissoes || usuario.permissoes || usuario['permissões'] || usuario.permissions;
-        permissoesState = normalizarPermissoes(permissoes);
-        renderPermissoes();
-      }
     } catch (err) {
       console.error('Erro ao carregar usuário:', err);
       exibirMensagem('erro', err.message || 'Falha ao carregar dados do usuário.');
@@ -732,15 +529,12 @@
   // ------------------------------------------------------------------
   // Preservação do trabalho (ver docs/restauracao-de-trabalho.md)
   //
-  // Três coisas não voltam sozinhas:
+  // Duas coisas não voltam sozinhas:
   //  1. QUAL usuário está sendo editado — `window.usuarioEditar` e
   //     `window.usuarioEditarContext` são lidos e APAGADOS na abertura.
   //  2. Os campos de texto: a varredura genérica até os captura, mas
   //     `carregarDetalhes()` chega depois e sobrescreve com o valor do banco.
   //     Por isso repomos aqui, DEPOIS da carga.
-  //  3. As permissões: são botões `aria-pressed`, não caixas de seleção. Não
-  //     existe campo de formulário para a varredura enxergar — o estado vive
-  //     em `permissoesState`.
   // ------------------------------------------------------------------
   window.EstadoTrabalho?.registrarConteudo?.('editarUsuario', {
     capturar: () => ({
@@ -756,15 +550,6 @@
         observacoes: inputs.observacoes?.value || ''
       },
       perfil: inputs.perfil?.value || '',
-      // Só o que o usuário pode ter mudado. As chaves são as mesmas que
-      // `normalizarPermissoes`/`normalizarAcoes` produzem: `modulo` e `nome`.
-      permissoes: permissoesState.map(modulo => ({
-        modulo: modulo.modulo ?? null,
-        acoes: (modulo.acoes || []).map(acao => ({
-          nome: acao.nome ?? null,
-          permitido: Boolean(acao.permitido)
-        }))
-      })),
       aba: tabs.find(t => t.getAttribute('aria-selected') === 'true')?.id || null
     }),
     restaurar: async (dados) => {
@@ -783,22 +568,6 @@
 
       // O combo de perfil é preenchido por `fetch`; espera as opções chegarem.
       await window.EstadoTrabalho?.reporSelect?.(inputs.perfil, dados.perfil);
-
-      // Reaplica os interruptores por chave — a ordem do banco pode ter mudado.
-      const guardadas = Array.isArray(dados.permissoes) ? dados.permissoes : [];
-      if (guardadas.length && permissoesState.length) {
-        const porModulo = new Map(guardadas.map(m => [String(m.modulo), m]));
-        permissoesState.forEach(modulo => {
-          const guardado = porModulo.get(String(modulo.modulo));
-          if (!guardado) return;
-          const porAcao = new Map((guardado.acoes || []).map(a => [String(a.nome), a]));
-          (modulo.acoes || []).forEach(acao => {
-            const guardadaAcao = porAcao.get(String(acao.nome));
-            if (guardadaAcao) acao.permitido = Boolean(guardadaAcao.permitido);
-          });
-        });
-        renderPermissoes();
-      }
 
       if (dados.aba) {
         const aba = document.getElementById(dados.aba);

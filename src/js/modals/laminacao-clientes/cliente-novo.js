@@ -222,6 +222,68 @@
     renderContatos();
   });
 
+  // ------------------------------------------------------------------
+  // Preservação do trabalho (ver docs/restauracao-de-trabalho.md)
+  //
+  // Mesma situação do Novo Cliente da gestão: a varredura genérica repõe os
+  // campos de texto e as chaves "igual ao registro". O que ela NÃO alcança:
+  //  - `contatos`, que é um array interno (a tabela é só o desenho dele);
+  //  - a aba em que a pessoa estava, já que o modal sempre abre na primeira;
+  //  - "Dono", preenchido por `fetch`;
+  //  - País/Estado dos três endereços: são selects em cascata e o de estado
+  //    nasce vazio e desabilitado, só carregando quando o país muda.
+  // ------------------------------------------------------------------
+  const PREFIXOS_ENDERECO = ['reg', 'cob', 'ent'];
+
+  function lerEnderecoGeo() {
+    const saida = {};
+    PREFIXOS_ENDERECO.forEach(prefixo => {
+      saida[prefixo] = {
+        pais: document.getElementById(`${prefixo}Pais`)?.value || '',
+        estado: document.getElementById(`${prefixo}Estado`)?.value || ''
+      };
+    });
+    return saida;
+  }
+
+  window.EstadoTrabalho?.registrarConteudo?.('novoCliente', {
+    capturar: () => ({
+      contatos: contatos.map(c => ({ ...c })),
+      abaAtiva: tabs.find(t => t.getAttribute('aria-selected') === 'true')?.id || null,
+      dono: document.getElementById('empresaDono')?.value || '',
+      enderecos: lerEnderecoGeo()
+    }),
+    restaurar: async (dados) => {
+      if (!dados) return;
+
+      if (Array.isArray(dados.contatos) && dados.contatos.length) {
+        contatos.length = 0;
+        dados.contatos.forEach(c => contatos.push({ ...c }));
+        renderContatos();
+      }
+
+      const repor = window.EstadoTrabalho?.reporSelect;
+      if (repor) {
+        await repor(document.getElementById('empresaDono'), dados.dono);
+
+        // País PRIMEIRO: é o `change` dele que carrega a lista de estados.
+        for (const prefixo of PREFIXOS_ENDERECO) {
+          const guardado = dados.enderecos?.[prefixo];
+          if (!guardado?.pais) continue;
+          await repor(document.getElementById(`${prefixo}Pais`), guardado.pais);
+          await repor(document.getElementById(`${prefixo}Estado`), guardado.estado);
+        }
+      }
+
+      // Aba por último: reposicionar antes faria os campos serem preenchidos
+      // com painéis escondidos, e o `scrollIntoView` de validação se perderia.
+      if (dados.abaAtiva) {
+        const aba = document.getElementById(dados.abaAtiva);
+        if (aba) activateTab(aba, { setFocus: false });
+      }
+    }
+  });
+
   function coletarDados(){
     const getVal = id => (document.getElementById(id)?.value || '').trim();
     const missing = [];

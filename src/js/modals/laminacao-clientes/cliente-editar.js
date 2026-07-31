@@ -461,18 +461,82 @@
       }
     });
   }
-  // Preservação do trabalho: `contatos` é estado interno deste modal — os
-  // contatos adicionados/editados não são <input> na tela, então só voltam da
-  // desconexão se o próprio modal disser como salvá-los e repô-los.
+  // ------------------------------------------------------------------
+  // Preservação do trabalho (ver docs/restauracao-de-trabalho.md)
+  //
+  // Este modal só sabe QUEM editar por `window.clienteEditar`, definido pela
+  // grade de clientes da laminação. Na restauração ninguém passa por lá, então
+  // sem o `__contexto` ele reabria em branco — nem o título aparecia.
+  //
+  // `contatos` é estado interno: os adicionados/editados não são <input> na
+  // tela. E é preciso guardar quais foram EXCLUÍDOS, porque o modal recarrega a
+  // lista do banco ao reabrir e sem isso os contatos apagados voltam vivos.
+  // País/Estado e "Dono" seguem o mesmo cuidado do Novo Cliente (selects em
+  // cascata e por `fetch`).
+  //
+  // `clienteEditarPreferencias` de propósito NÃO volta: ele carrega o
+  // `abrirNovoContato`, que abriria o modal de contato sozinho — e esse modal,
+  // se estava aberto, já é restaurado por conta própria.
+  // ------------------------------------------------------------------
+  const PREFIXOS_ENDERECO = ['reg', 'cob', 'ent'];
+
+  function lerEnderecoGeo() {
+    const saida = {};
+    PREFIXOS_ENDERECO.forEach(prefixo => {
+      saida[prefixo] = {
+        pais: document.getElementById(`${prefixo}Pais`)?.value || '',
+        estado: document.getElementById(`${prefixo}Estado`)?.value || ''
+      };
+    });
+    return saida;
+  }
+
   window.EstadoTrabalho?.registrarConteudo?.('editarCliente', {
     capturar: () => ({
-      contatos: contatos.map(({ row, ...dados }) => dados)
+      __contexto: { clienteEditar: cliente },
+      // `row` é nó do DOM e não pode ir para o JSON
+      contatos: contatos.map(({ row, ...dados }) => dados),
+      contatosExcluidos: contatosExcluidos.slice(),
+      abaAtiva: tabs.find(t => t.getAttribute('aria-selected') === 'true')?.id || null,
+      dono: document.getElementById('empresaDono')?.value || '',
+      enderecos: lerEnderecoGeo()
     }),
-    restaurar: (dados) => {
-      const guardados = Array.isArray(dados?.contatos) ? dados.contatos : [];
-      if (!guardados.length) return;
-      contatos = guardados.map(d => ({ ...d }));
-      renderContatos();
+    restaurar: async (dados) => {
+      if (!dados) return;
+
+      const guardados = Array.isArray(dados.contatos) ? dados.contatos : [];
+      if (guardados.length) {
+        contatos = guardados.map(d => ({ ...d }));
+        renderContatos();
+      }
+
+      // Reaplica as exclusões por cima da lista recarregada do banco.
+      const excluidos = Array.isArray(dados.contatosExcluidos) ? dados.contatosExcluidos : [];
+      if (excluidos.length) {
+        contatosExcluidos.length = 0;
+        excluidos.forEach(id => contatosExcluidos.push(id));
+        const removidos = new Set(excluidos.map(String));
+        contatos = contatos.filter(c => !removidos.has(String(c.id)));
+        renderContatos();
+      }
+
+      const repor = window.EstadoTrabalho?.reporSelect;
+      if (repor) {
+        await repor(document.getElementById('empresaDono'), dados.dono);
+
+        // País PRIMEIRO: é o `change` dele que carrega a lista de estados.
+        for (const prefixo of PREFIXOS_ENDERECO) {
+          const guardado = dados.enderecos?.[prefixo];
+          if (!guardado?.pais) continue;
+          await repor(document.getElementById(`${prefixo}Pais`), guardado.pais);
+          await repor(document.getElementById(`${prefixo}Estado`), guardado.estado);
+        }
+      }
+
+      if (dados.abaAtiva) {
+        const aba = document.getElementById(dados.abaAtiva);
+        if (aba) activateTab(aba, { setFocus: false });
+      }
     }
   });
 })();

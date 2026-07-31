@@ -11,9 +11,6 @@
     <nav class="px-8 border-b border-white/10 flex-shrink-0" role="tablist">
       <div class="usuario-modal-tablist overflow-x-auto scrollbar-hide">
         <button id="tab-dados-usuario" role="tab" aria-selected="true" aria-controls="panel-dados-usuario" tabindex="0" class="usuario-modal-tab usuario-modal-tab--active">Dados Pessoais</button>
-        <template id="usuarioPermissoesTabTemplate">
-          <button id="tab-permissoes-usuario" role="tab" aria-selected="false" aria-controls="panel-permissoes-usuario" tabindex="-1" class="usuario-modal-tab">Permissões</button>
-        </template>
       </div>
     </nav>
 
@@ -68,23 +65,6 @@
           </div>
         </div>
       </section>
-      <template id="usuarioPermissoesPanelTemplate">
-        <section id="panel-permissoes-usuario" role="tabpanel" aria-labelledby="tab-permissoes-usuario" class="px-8 py-6 hidden">
-          <div class="flex flex-col gap-6">
-            <header class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-              <div>
-                <h3 class="text-lg font-semibold text-white">Permissões por módulo</h3>
-                <p class="text-sm text-gray-300">Ative ou desative as ações que este usuário pode executar em cada módulo do sistema.</p>
-              </div>
-              <div id="usuarioPermissoesLegenda" class="flex items-center gap-3 text-xs text-gray-300">
-                <span class="usuario-toggle-legend usuario-toggle-legend--ativo">Ativo</span>
-                <span class="usuario-toggle-legend usuario-toggle-legend--inativo">Inativo</span>
-              </div>
-            </header>
-            <div id="usuarioPermissoesContainer" class="usuario-permissoes-grid"></div>
-          </div>
-        </section>
-      </template>
     </div>
 
     <footer class="px-8 py-5 border-t border-white/10 flex flex-col md:flex-row md:items-center md:justify-between gap-4 flex-shrink-0">

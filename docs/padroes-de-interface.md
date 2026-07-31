@@ -1,15 +1,16 @@
 # Padrões de interface: números, diálogos e botões
 
-Três utilitários globais, carregados em `src/html/menu.html` (e os aplicáveis em
+Utilitários globais, carregados em `src/html/menu.html` (e os aplicáveis em
 `src/login/login.html`), resolvem de uma vez regras que antes eram repetidas — ou
-esquecidas — em cada módulo. Todos funcionam por conta própria: **não é preciso
-chamar nada em um módulo novo**, basta seguir o padrão de marcação.
+esquecidas — em cada módulo. Os três primeiros funcionam por conta própria: **não
+é preciso chamar nada em um módulo novo**, basta seguir o padrão de marcação.
 
 | Utilitário | Arquivo | O que resolve |
 | --- | --- | --- |
 | `NumericInput`  | `src/utils/numericInput.js`  | Todo campo numérico aceita até 4 casas decimais e sempre guarda `.` |
 | `DialogTopLayer`| `src/utils/dialogTopLayer.js` | Toda caixa de diálogo fica à frente de qualquer outro elemento |
 | `BotaoAcao`     | `src/utils/botaoAcao.js`      | Nenhum botão aceita duplo clique; fica carregando até a ação terminar |
+| `AtualizacaoObrigatoria` | `src/utils/atualizacaoObrigatoria.js` | Versão atrasada não usa o app: caixa sem saída, um botão só |
 
 ---
 
@@ -195,3 +196,48 @@ await window.BotaoAcao.run(botao, () => tarefa());
 
 `bind`/`bindSubmit` marcam o elemento com `data-acao-gerida="true"`, e a rede
 automática passa a não mexer nele.
+
+---
+
+## 4. Atualização obrigatória (`AtualizacaoObrigatoria`)
+
+**Regra:** se a versão instalada estiver **abaixo** da disponível — qualquer
+diferença, já que `0.0.1` é o menor passo possível — o usuário entra
+normalmente, mas encontra uma caixa **acima de tudo, que não fecha**, com um
+único botão: *Atualizar*.
+
+### Por que ela não fecha
+
+É um `<dialog>` com `showModal()`: além de entrar na *top layer* (acima de
+qualquer z-index), ela deixa **o resto do documento inerte**. Sobre isso:
+
+- não existe botão de fechar, cancelar ou voltar — só o *Atualizar*;
+- o evento `cancel` é cancelado, então **Esc não fecha**;
+- `showModal()` não fecha por clique no fundo;
+- se algum código chamar `close()`, a caixa **se reabre sozinha**.
+
+### Quem decide, e quando
+
+A decisão fica no `AppUpdates` (`src/js/menu.js`), em `getForcedUpdateTarget()`,
+e é reavaliada a cada status novo e ao definir o perfil do usuário. Ela exige
+atualizar quando, **ao mesmo tempo**:
+
+1. já houve login (`state.user` definido);
+2. o status é `update-available` ou `downloaded` — ou seja, existe pacote;
+3. `compareSemanticVersions(local, disponível) === -1`;
+4. `electronAPI.downloadUpdate`/`installUpdate` existem.
+
+As condições 2 e 4 não são detalhe: **prender alguém numa caixa sem saída para
+uma atualização que não pode ser baixada travaria o app**. Publicação do Sup
+Admin em andamento também adia a caixa, que volta a ser avaliada no status
+seguinte.
+
+### O botão
+
+Passa por `BotaoAcao.bind`, então herda a trava de duplo clique e o visual de
+carregando. Quem baixa e instala é `applyUpdateNow()` — **o mesmo caminho** do
+"Aplicar atualização" do menu, extraído justamente para não existirem duas
+implementações que possam divergir. Se falhar, a caixa mostra o erro e o botão
+volta como *Tentar novamente*; ela continua sem saída.
+
+Coberto por `src/js/__tests__/atualizacaoObrigatoria.test.js`.

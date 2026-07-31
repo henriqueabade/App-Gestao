@@ -2130,6 +2130,44 @@ const AppUpdates = (() => {
         }
     }
 
+    /**
+     * Baixa e instala a atualização. É o miolo do "Aplicar atualização" do
+     * usuário — extraído para que a caixa de atualização OBRIGATÓRIA use
+     * exatamente o mesmo caminho, em vez de uma segunda implementação que
+     * poderia divergir. Rejeita em caso de falha; quem chama decide como avisar.
+     */
+    async function applyUpdateNow() {
+        markUserInitiatedUpdate({ inProgress: true });
+        state.actionBusy = true;
+        state.userControl.pendingAction = true;
+        setUserMode('updating', { panelOpen: false, spinnerMessage: 'Baixando atualização...' });
+
+        try {
+            const api = window.electronAPI || {};
+            if (!api.downloadUpdate || !api.installUpdate) {
+                throw new Error('Atualização automática indisponível neste ambiente.');
+            }
+
+            const downloadResult = await api.downloadUpdate();
+            if (downloadResult?.status === 'error') {
+                throw new Error(downloadResult?.statusMessage || 'Falha ao baixar a atualização.');
+            }
+
+            const installResult = await api.installUpdate();
+            if (installResult === false) {
+                throw new Error('Não foi possível iniciar a instalação da atualização.');
+            }
+            return true;
+        } catch (err) {
+            state.userControl.pendingAction = false;
+            state.actionBusy = false;
+            clearUserInitiatedUpdate({ force: true });
+            hideUserSpinner();
+            setUserMode('available', { panelOpen: false });
+            throw err;
+        }
+    }
+
     async function handleUserUpdateAction(event) {
         event.preventDefault();
         if (state.actionBusy) return;
@@ -2152,32 +2190,9 @@ const AppUpdates = (() => {
             return;
         }
 
-        markUserInitiatedUpdate({ inProgress: true });
-        state.actionBusy = true;
-        state.userControl.pendingAction = true;
-        setUserMode('updating', { panelOpen: false, spinnerMessage: 'Baixando atualização...' });
-
         try {
-            const api = window.electronAPI || {};
-            if (!api.downloadUpdate || !api.installUpdate) {
-                throw new Error('Atualização automática indisponível neste ambiente.');
-            }
-
-            const downloadResult = await api.downloadUpdate();
-            if (downloadResult?.status === 'error') {
-                throw new Error(downloadResult?.statusMessage || 'Falha ao baixar a atualização.');
-            }
-
-            const installResult = await api.installUpdate();
-            if (installResult === false) {
-                throw new Error('Não foi possível iniciar a instalação da atualização.');
-            }
+            await applyUpdateNow();
         } catch (err) {
-            state.userControl.pendingAction = false;
-            state.actionBusy = false;
-            clearUserInitiatedUpdate({ force: true });
-            hideUserSpinner();
-            setUserMode('available', { panelOpen: false });
             await showUpdateDialog({
                 title: 'Erro na atualização',
                 message: err?.message || 'Não foi possível aplicar a atualização.',
@@ -2185,6 +2200,55 @@ const AppUpdates = (() => {
             });
             runAutomaticCheck({ silent: true });
         }
+    }
+
+    // ------------------------------------------------------------------
+    // Atualização obrigatória
+    //
+    // Se a versão instalada está ABAIXO da disponível — qualquer diferença, já
+    // que 0.0.1 é o menor passo —, o usuário entra normalmente mas encontra uma
+    // caixa que não fecha, com um único botão. Ela só aparece quando a
+    // atualização é de fato aplicável (existe pacote e o instalador está
+    // disponível): prender alguém numa caixa sem saída para um update que não
+    // pode ser baixado seria travar o app.
+    // ------------------------------------------------------------------
+    const FORCE_UPDATE_READY_STATUSES = new Set(['update-available', 'downloaded']);
+
+    function getForcedUpdateTarget() {
+        const local = state.localVersion;
+        if (!local) return null;
+
+        const status = state.updateStatus?.status;
+        if (!FORCE_UPDATE_READY_STATUSES.has(status)) return null;
+
+        const disponivel = state.updateStatus?.latestVersion || state.availableVersion;
+        if (!disponivel) return null;
+
+        // -1 => a local é mais velha. Qualquer diferença conta.
+        if (compareSemanticVersions(local, disponivel) !== -1) return null;
+
+        const api = window.electronAPI || {};
+        if (!api.downloadUpdate || !api.installUpdate) return null;
+
+        return { local, disponivel };
+    }
+
+    function evaluateForcedUpdate() {
+        if (!window.AtualizacaoObrigatoria?.exigir) return;
+        // Sem usuário definido ainda não houve login: não é hora de exigir nada.
+        if (!state.user || !Object.keys(state.user).length) return;
+        // No meio de uma publicação do Sup Admin a caixa atrapalharia; ela volta
+        // a ser avaliada no próximo status.
+        if (state.publishState?.publishing === true) return;
+
+        const alvo = getForcedUpdateTarget();
+        if (!alvo) return;
+
+        window.AtualizacaoObrigatoria.exigir({
+            versaoLocal: alvo.local,
+            versaoDisponivel: alvo.disponivel,
+            aoAtualizar: () => applyUpdateNow()
+        });
     }
 
     function closeUserPanel() {
@@ -2791,6 +2855,10 @@ const AppUpdates = (() => {
         refreshUpdateSummaries();
         persistState();
 
+        // O status pode já ter chegado antes do login; nesse caso `setUpdateStatus`
+        // não roda de novo e é aqui que a caixa obrigatória precisa ser avaliada.
+        evaluateForcedUpdate();
+
         const applyResult = result => {
             if (!result || typeof result !== 'object') return;
             setUpdateStatus(result, { silent: true });
@@ -2862,6 +2930,30 @@ const AppUpdates = (() => {
         state.lastStatus = effectiveStatus?.status || null;
         refreshUpdateSummaries();
         persistState();
+
+        // Todo status novo passa por aqui — inclusive o que chega da verificação
+        // agendada logo depois do login. É o gatilho da caixa obrigatória.
+        updateForcedUpdateStage(effectiveStatus?.status || null);
+        evaluateForcedUpdate();
+    }
+
+    /**
+     * Reflete o andamento real na caixa obrigatória. O spinner do botão só diz
+     * "trabalhando"; quem diz em que passo está é o status vindo do main.
+     */
+    function updateForcedUpdateStage(status) {
+        const forcada = window.AtualizacaoObrigatoria;
+        if (!forcada?.estaAberta?.()) return;
+        if (status === 'downloading') forcada.definirEtapa('Baixando atualização...');
+        else if (status === 'installing') forcada.definirEtapa('Aplicando atualização...');
+        else if (status === 'error') {
+            forcada.relatarErro(
+                state.updateStatus?.statusMessage ||
+                state.updateStatus?.error?.friendlyMessage ||
+                state.updateStatus?.error?.message ||
+                'Não foi possível aplicar a atualização.'
+            );
+        }
     }
 
     function setPublishState(newState, options = {}) {
@@ -2899,6 +2991,8 @@ const AppUpdates = (() => {
         }
         refreshUpdateSummaries();
         persistState();
+        // Uma publicação que termina muda a versão disponível: reavalia.
+        evaluateForcedUpdate();
     }
 
     function handlePublishError(payload) {
