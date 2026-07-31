@@ -552,4 +552,32 @@ router.post('/:id/clone', exigirPermissao(['orc.clone', 'orc.create']), async (r
   }
 });
 
+/**
+ * DELETE /orcamentos/:id  — exclusão restrita (ação visível só ao Sup Admin).
+ * Remove itens e parcelas antes do orçamento, para não deixar órfãos.
+ */
+router.delete('/:id', exigirPermissao('orc.delete'), async (req, res) => {
+  const { id } = req.params;
+  try {
+    const api = createApiClient(req);
+
+    const [itens, parcelas] = await Promise.all([
+      api.get('/api/orcamentos_itens', { query: { orcamento_id: id } }).catch(() => []),
+      api.get('/api/orcamento_parcelas', { query: { orcamento_id: id } }).catch(() => [])
+    ]);
+    for (const item of Array.isArray(itens) ? itens : []) {
+      if (item?.id) await api.delete(`/api/orcamentos_itens/${item.id}`).catch(() => {});
+    }
+    for (const parc of Array.isArray(parcelas) ? parcelas : []) {
+      if (parc?.id) await api.delete(`/api/orcamento_parcelas/${parc.id}`).catch(() => {});
+    }
+
+    await api.delete(`/api/orcamentos/${id}`);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Erro ao excluir orçamento:', err);
+    res.status(err.status || 500).json({ error: 'Erro ao excluir orçamento' });
+  }
+});
+
 module.exports = router;

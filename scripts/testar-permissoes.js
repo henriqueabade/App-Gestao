@@ -56,7 +56,9 @@ function makeApi() {
   perms.mp.ativo = true;
   perms.mp.acoes['mp.view'] = true;
   perms.mp.acoes['mp.delete'] = true;
-  perms.mp.colunas['col_mp_codigo'] = true;
+  const colA = PERMISSIONS_CATALOG.mp.columns[0].key;   // 1a coluna real do catalogo
+  const colB = PERMISSIONS_CATALOG.mp.columns[1].key;   // 2a (fica desmarcada)
+  perms.mp.colunas[colA] = true;
   perms.orc.ativo = true;
   perms.orc.acoes['orc.convert'] = true;
 
@@ -67,8 +69,8 @@ function makeApi() {
   ok(lido.mp.ativo === true && lido.mp.acoes['mp.view'] === true && lido.mp.acoes['mp.delete'] === true,
     'round-trip: ações marcadas voltam true');
   ok(lido.mp.acoes['mp.edit'] === false, 'round-trip: ação não marcada volta false');
-  ok(lido.mp.colunas['col_mp_codigo'] === true && lido.mp.colunas['col_mp_nome'] === false,
-    'round-trip: colunas preservadas');
+  ok(lido.mp.colunas[colA] === true && lido.mp.colunas[colB] === false,
+    `round-trip: colunas preservadas (${colA}=true, ${colB}=false)`);
   ok(lido.orc.acoes['orc.convert'] === true && lido.cli.ativo === false,
     'round-trip: módulos independentes');
 

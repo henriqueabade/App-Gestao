@@ -452,6 +452,12 @@ const PERMISSIONS_CATALOG = {
         "desc": "Ícone de conversão da linha e botão \"Converter em Pedido\""
       },
       {
+        "key": "orc.delete",
+        "column": "acao_delete",
+        "label": "Excluir orçamento",
+        "desc": "Exclui o orçamento da linha (restrito ao Sup Admin)"
+      },
+      {
         "key": "orc.export",
         "column": "acao_export",
         "label": "Baixar PDF",
@@ -719,6 +725,12 @@ const PERMISSIONS_CATALOG = {
         "column": "acao_report",
         "label": "Ver relatório",
         "desc": "Ícone de relatório da linha"
+      },
+      {
+        "key": "ped.delete",
+        "column": "acao_delete",
+        "label": "Excluir pedido",
+        "desc": "Exclui o pedido da linha (restrito ao Sup Admin)"
       },
       {
         "key": "ped.export",
@@ -1830,6 +1842,128 @@ const PERMISSIONS_CATALOG = {
     ],
     "columns": []
   },
+  "usuarios": {
+    "code": "usuarios",
+    "label": "Usuários",
+    "page": "usuarios",
+    "table": "perm_usuarios",
+    "configured": true,
+    "actions": [
+      {
+        "key": "usuarios.view",
+        "column": "acao_view",
+        "label": "Ver lista",
+        "desc": "Visualizar a grade de usuários"
+      },
+      {
+        "key": "usuarios.search",
+        "column": "acao_search",
+        "label": "Buscar/filtrar",
+        "desc": "Habilitar busca e filtros de perfil/status"
+      },
+      {
+        "key": "usuarios.create",
+        "column": "acao_create",
+        "label": "Cadastrar usuário",
+        "desc": "Criar novos usuários no sistema"
+      },
+      {
+        "key": "usuarios.edit",
+        "column": "acao_edit",
+        "label": "Editar usuário",
+        "desc": "Alterar dados pessoais, perfil e status"
+      },
+      {
+        "key": "usuarios.delete",
+        "column": "acao_delete",
+        "label": "Excluir usuário",
+        "desc": "Remover usuários do sistema"
+      },
+      {
+        "key": "usuarios.status.toggle",
+        "column": "acao_status_toggle",
+        "label": "Ativar/desativar acesso",
+        "desc": "Ligar ou desligar o acesso de um usuário"
+      },
+      {
+        "key": "usuarios.activity.view",
+        "column": "acao_activity_view",
+        "label": "Ver atividade",
+        "desc": "Consultar último login e alterações registradas"
+      },
+      {
+        "key": "usuarios.approve",
+        "column": "acao_approve",
+        "label": "Aprovar cadastro",
+        "desc": "Liberar o acesso de usuários aguardando aprovação"
+      },
+      {
+        "key": "usuarios.roles.view",
+        "column": "acao_roles_view",
+        "label": "Ver modelos de permissão",
+        "desc": "Abrir os modelos (perfis) de permissão"
+      },
+      {
+        "key": "usuarios.roles.manage",
+        "column": "acao_roles_manage",
+        "label": "Gerenciar modelos de permissão",
+        "desc": "Criar, editar, duplicar e excluir perfis"
+      },
+      {
+        "key": "usuarios.roles.assign",
+        "column": "acao_roles_assign",
+        "label": "Aplicar perfil ao usuário",
+        "desc": "Vincular um modelo de permissão a um usuário"
+      }
+    ],
+    "columns": [
+      {
+        "key": "col_usr_avatar",
+        "column": "col_usr_avatar",
+        "label": "Avatar"
+      },
+      {
+        "key": "col_usr_nome",
+        "column": "col_usr_nome",
+        "label": "Nome"
+      },
+      {
+        "key": "col_usr_email",
+        "column": "col_usr_email",
+        "label": "E-mail"
+      },
+      {
+        "key": "col_usr_perfil",
+        "column": "col_usr_perfil",
+        "label": "Perfil"
+      },
+      {
+        "key": "col_usr_situacao",
+        "column": "col_usr_situacao",
+        "label": "Situação (online/offline)"
+      },
+      {
+        "key": "col_usr_status",
+        "column": "col_usr_status",
+        "label": "Status"
+      },
+      {
+        "key": "col_usr_ultimo_login",
+        "column": "col_usr_ultimo_login",
+        "label": "Último login"
+      },
+      {
+        "key": "col_usr_ultima_alteracao",
+        "column": "col_usr_ultima_alteracao",
+        "label": "Última alteração"
+      },
+      {
+        "key": "col_usr_acoes",
+        "column": "col_usr_acoes",
+        "label": "Ações"
+      }
+    ]
+  },
   "dashboard": {
     "code": "dashboard",
     "label": "Dashboard",
@@ -1889,15 +2023,6 @@ const PERMISSIONS_CATALOG = {
     "label": "IA",
     "page": "ia",
     "table": "perm_ia",
-    "configured": false,
-    "actions": [],
-    "columns": []
-  },
-  "usuarios": {
-    "code": "usuarios",
-    "label": "Usuários",
-    "page": "usuarios",
-    "table": "perm_usuarios",
     "configured": false,
     "actions": [],
     "columns": []

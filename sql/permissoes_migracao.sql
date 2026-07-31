@@ -109,6 +109,7 @@ ALTER TABLE perm_orc ADD COLUMN IF NOT EXISTS acao_create BOOLEAN NOT NULL DEFAU
 ALTER TABLE perm_orc ADD COLUMN IF NOT EXISTS acao_view_details BOOLEAN NOT NULL DEFAULT FALSE;  -- orc.view.details · Visualizar orçamento
 ALTER TABLE perm_orc ADD COLUMN IF NOT EXISTS acao_edit BOOLEAN NOT NULL DEFAULT FALSE;  -- orc.edit · Editar orçamento
 ALTER TABLE perm_orc ADD COLUMN IF NOT EXISTS acao_convert BOOLEAN NOT NULL DEFAULT FALSE;  -- orc.convert · Converter em pedido
+ALTER TABLE perm_orc ADD COLUMN IF NOT EXISTS acao_delete BOOLEAN NOT NULL DEFAULT FALSE;  -- orc.delete · Excluir orçamento
 ALTER TABLE perm_orc ADD COLUMN IF NOT EXISTS acao_export BOOLEAN NOT NULL DEFAULT FALSE;  -- orc.export · Baixar PDF
 ALTER TABLE perm_orc ADD COLUMN IF NOT EXISTS acao_item_add BOOLEAN NOT NULL DEFAULT FALSE;  -- orc.item.add · Inserir item
 ALTER TABLE perm_orc ADD COLUMN IF NOT EXISTS acao_item_edit BOOLEAN NOT NULL DEFAULT FALSE;  -- orc.item.edit · Editar item
@@ -163,6 +164,7 @@ ALTER TABLE perm_ped ADD COLUMN IF NOT EXISTS acao_status_confirm BOOLEAN NOT NU
 ALTER TABLE perm_ped ADD COLUMN IF NOT EXISTS acao_status_ship BOOLEAN NOT NULL DEFAULT FALSE;  -- ped.status.ship · Despachar pedido
 ALTER TABLE perm_ped ADD COLUMN IF NOT EXISTS acao_status_deliver BOOLEAN NOT NULL DEFAULT FALSE;  -- ped.status.deliver · Dar como entregue
 ALTER TABLE perm_ped ADD COLUMN IF NOT EXISTS acao_report BOOLEAN NOT NULL DEFAULT FALSE;  -- ped.report · Ver relatório
+ALTER TABLE perm_ped ADD COLUMN IF NOT EXISTS acao_delete BOOLEAN NOT NULL DEFAULT FALSE;  -- ped.delete · Excluir pedido
 ALTER TABLE perm_ped ADD COLUMN IF NOT EXISTS acao_export BOOLEAN NOT NULL DEFAULT FALSE;  -- ped.export · Baixar PDF
 ALTER TABLE perm_ped ADD COLUMN IF NOT EXISTS acao_cancel BOOLEAN NOT NULL DEFAULT FALSE;  -- ped.cancel · Cancelar pedido
 ALTER TABLE perm_ped ADD COLUMN IF NOT EXISTS acao_stock_restore_on_cancel BOOLEAN NOT NULL DEFAULT FALSE;  -- ped.stock.restore_on_cancel · Realocar estoque ao cancelar
@@ -395,6 +397,32 @@ ALTER TABLE perm_cfg ADD COLUMN IF NOT EXISTS acao_categories_edit BOOLEAN NOT N
 ALTER TABLE perm_cfg ADD COLUMN IF NOT EXISTS acao_roles_view BOOLEAN NOT NULL DEFAULT FALSE;  -- cfg.roles.view · Ver perfis de permissão
 ALTER TABLE perm_cfg ADD COLUMN IF NOT EXISTS acao_roles_edit BOOLEAN NOT NULL DEFAULT FALSE;  -- cfg.roles.edit · Editar perfis de permissão
 
+-- Usuários (perm_usuarios)
+CREATE TABLE IF NOT EXISTS perm_usuarios (
+  modelo_id    INTEGER PRIMARY KEY REFERENCES modelos_permissoes(id) ON DELETE CASCADE,
+  modulo_ativo BOOLEAN NOT NULL DEFAULT FALSE
+);
+ALTER TABLE perm_usuarios ADD COLUMN IF NOT EXISTS acao_view BOOLEAN NOT NULL DEFAULT FALSE;  -- usuarios.view · Ver lista
+ALTER TABLE perm_usuarios ADD COLUMN IF NOT EXISTS acao_search BOOLEAN NOT NULL DEFAULT FALSE;  -- usuarios.search · Buscar/filtrar
+ALTER TABLE perm_usuarios ADD COLUMN IF NOT EXISTS acao_create BOOLEAN NOT NULL DEFAULT FALSE;  -- usuarios.create · Cadastrar usuário
+ALTER TABLE perm_usuarios ADD COLUMN IF NOT EXISTS acao_edit BOOLEAN NOT NULL DEFAULT FALSE;  -- usuarios.edit · Editar usuário
+ALTER TABLE perm_usuarios ADD COLUMN IF NOT EXISTS acao_delete BOOLEAN NOT NULL DEFAULT FALSE;  -- usuarios.delete · Excluir usuário
+ALTER TABLE perm_usuarios ADD COLUMN IF NOT EXISTS acao_status_toggle BOOLEAN NOT NULL DEFAULT FALSE;  -- usuarios.status.toggle · Ativar/desativar acesso
+ALTER TABLE perm_usuarios ADD COLUMN IF NOT EXISTS acao_activity_view BOOLEAN NOT NULL DEFAULT FALSE;  -- usuarios.activity.view · Ver atividade
+ALTER TABLE perm_usuarios ADD COLUMN IF NOT EXISTS acao_approve BOOLEAN NOT NULL DEFAULT FALSE;  -- usuarios.approve · Aprovar cadastro
+ALTER TABLE perm_usuarios ADD COLUMN IF NOT EXISTS acao_roles_view BOOLEAN NOT NULL DEFAULT FALSE;  -- usuarios.roles.view · Ver modelos de permissão
+ALTER TABLE perm_usuarios ADD COLUMN IF NOT EXISTS acao_roles_manage BOOLEAN NOT NULL DEFAULT FALSE;  -- usuarios.roles.manage · Gerenciar modelos de permissão
+ALTER TABLE perm_usuarios ADD COLUMN IF NOT EXISTS acao_roles_assign BOOLEAN NOT NULL DEFAULT FALSE;  -- usuarios.roles.assign · Aplicar perfil ao usuário
+ALTER TABLE perm_usuarios ADD COLUMN IF NOT EXISTS col_usr_avatar BOOLEAN NOT NULL DEFAULT FALSE;  -- Avatar
+ALTER TABLE perm_usuarios ADD COLUMN IF NOT EXISTS col_usr_nome BOOLEAN NOT NULL DEFAULT FALSE;  -- Nome
+ALTER TABLE perm_usuarios ADD COLUMN IF NOT EXISTS col_usr_email BOOLEAN NOT NULL DEFAULT FALSE;  -- E-mail
+ALTER TABLE perm_usuarios ADD COLUMN IF NOT EXISTS col_usr_perfil BOOLEAN NOT NULL DEFAULT FALSE;  -- Perfil
+ALTER TABLE perm_usuarios ADD COLUMN IF NOT EXISTS col_usr_situacao BOOLEAN NOT NULL DEFAULT FALSE;  -- Situação (online/offline)
+ALTER TABLE perm_usuarios ADD COLUMN IF NOT EXISTS col_usr_status BOOLEAN NOT NULL DEFAULT FALSE;  -- Status
+ALTER TABLE perm_usuarios ADD COLUMN IF NOT EXISTS col_usr_ultimo_login BOOLEAN NOT NULL DEFAULT FALSE;  -- Último login
+ALTER TABLE perm_usuarios ADD COLUMN IF NOT EXISTS col_usr_ultima_alteracao BOOLEAN NOT NULL DEFAULT FALSE;  -- Última alteração
+ALTER TABLE perm_usuarios ADD COLUMN IF NOT EXISTS col_usr_acoes BOOLEAN NOT NULL DEFAULT FALSE;  -- Ações
+
 -- Dashboard (perm_dashboard)
 CREATE TABLE IF NOT EXISTS perm_dashboard (
   modelo_id    INTEGER PRIMARY KEY REFERENCES modelos_permissoes(id) ON DELETE CASCADE,
@@ -437,12 +465,6 @@ CREATE TABLE IF NOT EXISTS perm_ia (
   modulo_ativo BOOLEAN NOT NULL DEFAULT FALSE
 );
 
--- Usuários (perm_usuarios)
-CREATE TABLE IF NOT EXISTS perm_usuarios (
-  modelo_id    INTEGER PRIMARY KEY REFERENCES modelos_permissoes(id) ON DELETE CASCADE,
-  modulo_ativo BOOLEAN NOT NULL DEFAULT FALSE
-);
-
 -- Financeiro (perm_financeiro)
 CREATE TABLE IF NOT EXISTS perm_financeiro (
   modelo_id    INTEGER PRIMARY KEY REFERENCES modelos_permissoes(id) ON DELETE CASCADE,
@@ -460,6 +482,7 @@ INSERT INTO perm_ctt (modelo_id) SELECT id FROM modelos_permissoes ON CONFLICT (
 INSERT INTO perm_rel (modelo_id) SELECT id FROM modelos_permissoes ON CONFLICT (modelo_id) DO NOTHING;
 INSERT INTO perm_tarefas (modelo_id) SELECT id FROM modelos_permissoes ON CONFLICT (modelo_id) DO NOTHING;
 INSERT INTO perm_cfg (modelo_id) SELECT id FROM modelos_permissoes ON CONFLICT (modelo_id) DO NOTHING;
+INSERT INTO perm_usuarios (modelo_id) SELECT id FROM modelos_permissoes ON CONFLICT (modelo_id) DO NOTHING;
 INSERT INTO perm_dashboard (modelo_id) SELECT id FROM modelos_permissoes ON CONFLICT (modelo_id) DO NOTHING;
 INSERT INTO perm_calendario (modelo_id) SELECT id FROM modelos_permissoes ON CONFLICT (modelo_id) DO NOTHING;
 INSERT INTO perm_lam_clientes (modelo_id) SELECT id FROM modelos_permissoes ON CONFLICT (modelo_id) DO NOTHING;
@@ -467,7 +490,6 @@ INSERT INTO perm_lam_servicos (modelo_id) SELECT id FROM modelos_permissoes ON C
 INSERT INTO perm_lam_precificacao (modelo_id) SELECT id FROM modelos_permissoes ON CONFLICT (modelo_id) DO NOTHING;
 INSERT INTO perm_lam_relatorios (modelo_id) SELECT id FROM modelos_permissoes ON CONFLICT (modelo_id) DO NOTHING;
 INSERT INTO perm_ia (modelo_id) SELECT id FROM modelos_permissoes ON CONFLICT (modelo_id) DO NOTHING;
-INSERT INTO perm_usuarios (modelo_id) SELECT id FROM modelos_permissoes ON CONFLICT (modelo_id) DO NOTHING;
 INSERT INTO perm_financeiro (modelo_id) SELECT id FROM modelos_permissoes ON CONFLICT (modelo_id) DO NOTHING;
 
 -- Mantém o perfil "Administrador" com tudo liberado
@@ -475,9 +497,9 @@ UPDATE perm_mp SET modulo_ativo = TRUE, acao_view = TRUE, acao_search = TRUE, ac
   WHERE modelo_id IN (SELECT id FROM modelos_permissoes WHERE nome = 'Administrador');
 UPDATE perm_prod SET modulo_ativo = TRUE, acao_view = TRUE, acao_search = TRUE, acao_create = TRUE, acao_stock_view = TRUE, acao_details_view = TRUE, acao_edit = TRUE, acao_delete = TRUE, acao_item_add = TRUE, acao_item_edit = TRUE, acao_item_remove = TRUE, acao_clear = TRUE, acao_percent_edit = TRUE, acao_collection_create = TRUE, acao_collection_delete = TRUE, acao_clone = TRUE, acao_registro_toggle = TRUE, acao_pdf = TRUE, acao_stage_insert = TRUE, acao_stage_item_add = TRUE, acao_stage_item_edit = TRUE, acao_stage_item_remove = TRUE, acao_stage_clear = TRUE, acao_stock_input = TRUE, acao_stock_adjust = TRUE, acao_stock_lote_delete = TRUE, col_prod_sku = TRUE, col_prod_nome = TRUE, col_prod_colecao = TRUE, col_prod_preco_base = TRUE, col_prod_margem = TRUE, col_prod_estoque = TRUE, col_ins_mp = TRUE, col_ins_qtd = TRUE, col_ins_unidade = TRUE, col_ins_custo_un = TRUE, col_ins_custo_total = TRUE, col_etapa_item = TRUE, col_etapa_qtd = TRUE, col_etapa_unidade = TRUE, col_etapa_valor_un = TRUE, col_etapa_valor_total = TRUE, col_est_processo = TRUE, col_est_ultimo_item = TRUE, col_est_quantidade = TRUE, col_est_alterado_em = TRUE
   WHERE modelo_id IN (SELECT id FROM modelos_permissoes WHERE nome = 'Administrador');
-UPDATE perm_orc SET modulo_ativo = TRUE, acao_view = TRUE, acao_search = TRUE, acao_create = TRUE, acao_view_details = TRUE, acao_edit = TRUE, acao_convert = TRUE, acao_export = TRUE, acao_item_add = TRUE, acao_item_edit = TRUE, acao_item_remove = TRUE, acao_clear = TRUE, acao_send = TRUE, acao_status_change = TRUE, acao_clone = TRUE, acao_convert_decide = TRUE, acao_convert_justify = TRUE, acao_item_replace = TRUE, col_orc_num = TRUE, col_orc_cliente = TRUE, col_orc_data = TRUE, col_orc_total = TRUE, col_orc_cond_pagto = TRUE, col_orc_status = TRUE, col_orc_it_nome = TRUE, col_orc_it_qtd = TRUE, col_orc_it_preco = TRUE, col_orc_it_preco_desc = TRUE, col_orc_it_desc = TRUE, col_orc_it_subtotal = TRUE, col_conv_peca = TRUE, col_conv_qtd_orcada = TRUE, col_conv_em_estoque = TRUE, col_conv_pronta = TRUE, col_conv_produzir_total = TRUE, col_conv_produzir_parcial = TRUE, col_conv_status = TRUE, col_conv_ins_nome = TRUE, col_conv_ins_unidade = TRUE, col_conv_ins_disponivel = TRUE, col_conv_ins_necessario = TRUE, col_conv_ins_saldo = TRUE, col_conv_ins_etapa = TRUE, col_conv_ins_flags = TRUE, col_orc_campo_dono = TRUE, col_orc_campo_transportadora = TRUE, col_orc_campo_pagamento = TRUE, col_orc_campo_observacoes = TRUE
+UPDATE perm_orc SET modulo_ativo = TRUE, acao_view = TRUE, acao_search = TRUE, acao_create = TRUE, acao_view_details = TRUE, acao_edit = TRUE, acao_convert = TRUE, acao_delete = TRUE, acao_export = TRUE, acao_item_add = TRUE, acao_item_edit = TRUE, acao_item_remove = TRUE, acao_clear = TRUE, acao_send = TRUE, acao_status_change = TRUE, acao_clone = TRUE, acao_convert_decide = TRUE, acao_convert_justify = TRUE, acao_item_replace = TRUE, col_orc_num = TRUE, col_orc_cliente = TRUE, col_orc_data = TRUE, col_orc_total = TRUE, col_orc_cond_pagto = TRUE, col_orc_status = TRUE, col_orc_it_nome = TRUE, col_orc_it_qtd = TRUE, col_orc_it_preco = TRUE, col_orc_it_preco_desc = TRUE, col_orc_it_desc = TRUE, col_orc_it_subtotal = TRUE, col_conv_peca = TRUE, col_conv_qtd_orcada = TRUE, col_conv_em_estoque = TRUE, col_conv_pronta = TRUE, col_conv_produzir_total = TRUE, col_conv_produzir_parcial = TRUE, col_conv_status = TRUE, col_conv_ins_nome = TRUE, col_conv_ins_unidade = TRUE, col_conv_ins_disponivel = TRUE, col_conv_ins_necessario = TRUE, col_conv_ins_saldo = TRUE, col_conv_ins_etapa = TRUE, col_conv_ins_flags = TRUE, col_orc_campo_dono = TRUE, col_orc_campo_transportadora = TRUE, col_orc_campo_pagamento = TRUE, col_orc_campo_observacoes = TRUE
   WHERE modelo_id IN (SELECT id FROM modelos_permissoes WHERE nome = 'Administrador');
-UPDATE perm_ped SET modulo_ativo = TRUE, acao_view = TRUE, acao_search = TRUE, acao_view_details = TRUE, acao_status_confirm = TRUE, acao_status_ship = TRUE, acao_status_deliver = TRUE, acao_report = TRUE, acao_export = TRUE, acao_cancel = TRUE, acao_stock_restore_on_cancel = TRUE, col_ped_num = TRUE, col_ped_cliente = TRUE, col_ped_data = TRUE, col_ped_total = TRUE, col_ped_condicao = TRUE, col_ped_status = TRUE, col_ped_it_nome = TRUE, col_ped_it_qtd = TRUE, col_ped_it_preco = TRUE, col_ped_it_preco_desc = TRUE, col_ped_it_desc = TRUE, col_ped_it_subtotal = TRUE, col_canc_item = TRUE, col_canc_qtd = TRUE, col_canc_restante = TRUE, col_canc_origem = TRUE, col_canc_situacao = TRUE, col_canc_destinos = TRUE, col_ped_campo_dono = TRUE, col_ped_campo_transportadora = TRUE, col_ped_campo_pagamento = TRUE, col_ped_campo_observacoes = TRUE
+UPDATE perm_ped SET modulo_ativo = TRUE, acao_view = TRUE, acao_search = TRUE, acao_view_details = TRUE, acao_status_confirm = TRUE, acao_status_ship = TRUE, acao_status_deliver = TRUE, acao_report = TRUE, acao_delete = TRUE, acao_export = TRUE, acao_cancel = TRUE, acao_stock_restore_on_cancel = TRUE, col_ped_num = TRUE, col_ped_cliente = TRUE, col_ped_data = TRUE, col_ped_total = TRUE, col_ped_condicao = TRUE, col_ped_status = TRUE, col_ped_it_nome = TRUE, col_ped_it_qtd = TRUE, col_ped_it_preco = TRUE, col_ped_it_preco_desc = TRUE, col_ped_it_desc = TRUE, col_ped_it_subtotal = TRUE, col_canc_item = TRUE, col_canc_qtd = TRUE, col_canc_restante = TRUE, col_canc_origem = TRUE, col_canc_situacao = TRUE, col_canc_destinos = TRUE, col_ped_campo_dono = TRUE, col_ped_campo_transportadora = TRUE, col_ped_campo_pagamento = TRUE, col_ped_campo_observacoes = TRUE
   WHERE modelo_id IN (SELECT id FROM modelos_permissoes WHERE nome = 'Administrador');
 UPDATE perm_cli SET modulo_ativo = TRUE, acao_view = TRUE, acao_search = TRUE, acao_create = TRUE, acao_export_csv = TRUE, acao_import_csv = TRUE, acao_report = TRUE, acao_email_bulk = TRUE, acao_details_view = TRUE, acao_edit = TRUE, acao_delete = TRUE, acao_contact_add = TRUE, acao_contact_edit = TRUE, acao_contact_remove = TRUE, acao_order_add = TRUE, acao_address_copy = TRUE, col_cli_nome_fantasia = TRUE, col_cli_cnpj = TRUE, col_cli_pais = TRUE, col_cli_cidade_uf = TRUE, col_cli_status = TRUE, col_cli_owner = TRUE, col_cli_razao_social = TRUE, col_cli_insc_estadual = TRUE, col_cli_site = TRUE, col_cli_origem = TRUE, col_ctt_nome = TRUE, col_ctt_cargo = TRUE, col_ctt_email = TRUE, col_ctt_tel = TRUE, col_ctt_fixo = TRUE, col_ord_numero = TRUE, col_ord_tipo = TRUE, col_ord_inicio = TRUE, col_ord_condicao = TRUE, col_ord_valor = TRUE, col_ord_status = TRUE, col_end_logradouro = TRUE, col_end_numero = TRUE, col_end_complemento = TRUE, col_end_bairro = TRUE, col_end_cidade = TRUE, col_end_pais = TRUE, col_end_uf = TRUE, col_end_cep = TRUE
   WHERE modelo_id IN (SELECT id FROM modelos_permissoes WHERE nome = 'Administrador');
@@ -490,6 +512,8 @@ UPDATE perm_rel SET modulo_ativo = TRUE, acao_view = TRUE, acao_tab_select = TRU
 UPDATE perm_tarefas SET modulo_ativo = TRUE, acao_view = TRUE, acao_create = TRUE, acao_edit = TRUE, acao_delete = TRUE, acao_assign = TRUE, acao_calendar_view = TRUE, col_tsk_titulo = TRUE, col_tsk_resp = TRUE, col_tsk_prazo = TRUE, col_tsk_status = TRUE, col_tsk_prioridade = TRUE, col_evt_titulo = TRUE, col_evt_inicio = TRUE, col_evt_fim = TRUE, col_evt_local = TRUE, col_evt_participantes = TRUE, col_evt_status = TRUE
   WHERE modelo_id IN (SELECT id FROM modelos_permissoes WHERE nome = 'Administrador');
 UPDATE perm_cfg SET modulo_ativo = TRUE, acao_view = TRUE, acao_profile_edit = TRUE, acao_password_change = TRUE, acao_avatar_edit = TRUE, acao_prefs_edit = TRUE, acao_theme_edit = TRUE, acao_notifications_edit = TRUE, acao_quickactions_edit = TRUE, acao_categories_edit = TRUE, acao_roles_view = TRUE, acao_roles_edit = TRUE
+  WHERE modelo_id IN (SELECT id FROM modelos_permissoes WHERE nome = 'Administrador');
+UPDATE perm_usuarios SET modulo_ativo = TRUE, acao_view = TRUE, acao_search = TRUE, acao_create = TRUE, acao_edit = TRUE, acao_delete = TRUE, acao_status_toggle = TRUE, acao_activity_view = TRUE, acao_approve = TRUE, acao_roles_view = TRUE, acao_roles_manage = TRUE, acao_roles_assign = TRUE, col_usr_avatar = TRUE, col_usr_nome = TRUE, col_usr_email = TRUE, col_usr_perfil = TRUE, col_usr_situacao = TRUE, col_usr_status = TRUE, col_usr_ultimo_login = TRUE, col_usr_ultima_alteracao = TRUE, col_usr_acoes = TRUE
   WHERE modelo_id IN (SELECT id FROM modelos_permissoes WHERE nome = 'Administrador');
 UPDATE perm_dashboard SET modulo_ativo = TRUE
   WHERE modelo_id IN (SELECT id FROM modelos_permissoes WHERE nome = 'Administrador');
@@ -504,8 +528,6 @@ UPDATE perm_lam_precificacao SET modulo_ativo = TRUE
 UPDATE perm_lam_relatorios SET modulo_ativo = TRUE
   WHERE modelo_id IN (SELECT id FROM modelos_permissoes WHERE nome = 'Administrador');
 UPDATE perm_ia SET modulo_ativo = TRUE
-  WHERE modelo_id IN (SELECT id FROM modelos_permissoes WHERE nome = 'Administrador');
-UPDATE perm_usuarios SET modulo_ativo = TRUE
   WHERE modelo_id IN (SELECT id FROM modelos_permissoes WHERE nome = 'Administrador');
 UPDATE perm_financeiro SET modulo_ativo = TRUE
   WHERE modelo_id IN (SELECT id FROM modelos_permissoes WHERE nome = 'Administrador');

@@ -1003,6 +1003,14 @@
                         </div>
                       </label>
 
+                      <label class="usuarios-permissoes-item" data-search="excluir apagar deletar orcamento remover">
+                        <input type="checkbox" name="orc.delete" data-role="item" data-group="acoes-orc" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Excluir orçamento</span>
+                          <p class="text-sm text-gray-400">Exclui o orçamento da linha (restrito ao Sup Admin)</p>
+                        </div>
+                      </label>
+
                       <label class="usuarios-permissoes-item" data-search="pdf baixar download exportar">
                         <input type="checkbox" name="orc.export" data-role="item" data-group="acoes-orc" data-item-type="action" class="w-4 h-4 mt-1" />
                         <div>
@@ -1452,6 +1460,14 @@
                         <div>
                           <span class="font-medium">Ver relatório</span>
                           <p class="text-sm text-gray-400">Ícone de relatório da linha</p>
+                        </div>
+                      </label>
+
+                      <label class="usuarios-permissoes-item" data-search="excluir apagar deletar pedido remover">
+                        <input type="checkbox" name="ped.delete" data-role="item" data-group="acoes-ped" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Excluir pedido</span>
+                          <p class="text-sm text-gray-400">Exclui o pedido da linha (restrito ao Sup Admin)</p>
                         </div>
                       </label>
 
@@ -3624,10 +3640,195 @@
             </label>
           </div>
           <div data-module-content="usuarios" class="space-y-6">
-            <p class="text-sm text-gray-400 italic">
-              Este módulo ainda não possui ações e colunas configuradas. Por enquanto,
-              apenas a visibilidade no menu (Módulo ativo) é controlada aqui.
-            </p>
+            <article class="usuarios-permissoes-accordion">
+              <button class="usuarios-permissoes-accordion__toggle" data-accordion-toggle="acoes-usuarios" aria-expanded="false">
+                <span class="flex items-center gap-3">
+                  <i class="fas fa-bolt text-[var(--color-primary)]"></i>
+                  <span class="font-semibold text-lg text-[var(--color-primary)]">Ações</span>
+                </span>
+                <i class="fas fa-chevron-down"></i>
+              </button>
+              <div
+                class="usuarios-permissoes-accordion__content glass-surface rounded-2xl border border-white/10 p-4"
+                data-accordion-content="acoes-usuarios"
+                data-group-container="acoes-usuarios"
+              >
+                <div class="flex items-center justify-between mb-4 pb-3 border-b border-white/10">
+                  <div class="flex items-center gap-3">
+                    <input type="checkbox" id="usuariosPermissoesMasterAcoesUsuarios" data-role="master" data-group="acoes-usuarios" class="w-4 h-4" />
+                    <label for="usuariosPermissoesMasterAcoesUsuarios" class="font-medium">Selecionar tudo</label>
+                    <span class="text-sm text-gray-400" data-group-count="acoes-usuarios">(0 selecionadas)</span>
+                  </div>
+                  <i class="fas fa-info-circle text-[var(--color-primary)]" title="Ações do módulo"></i>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+
+                  <label class="usuarios-permissoes-item" data-search="ver lista usuarios visualizar">
+                    <input type="checkbox" name="usuarios.view" data-role="item" data-group="acoes-usuarios" data-item-type="action" class="w-4 h-4 mt-1" />
+                    <div>
+                      <span class="font-medium">Ver lista</span>
+                      <p class="text-sm text-gray-400">Visualizar a grade de usuários</p>
+                    </div>
+                  </label>
+
+                  <label class="usuarios-permissoes-item" data-search="buscar filtrar pesquisar">
+                    <input type="checkbox" name="usuarios.search" data-role="item" data-group="acoes-usuarios" data-item-type="action" class="w-4 h-4 mt-1" />
+                    <div>
+                      <span class="font-medium">Buscar/filtrar</span>
+                      <p class="text-sm text-gray-400">Habilitar busca e filtros de perfil/status</p>
+                    </div>
+                  </label>
+
+                  <label class="usuarios-permissoes-item" data-search="novo criar cadastrar usuario">
+                    <input type="checkbox" name="usuarios.create" data-role="item" data-group="acoes-usuarios" data-item-type="action" class="w-4 h-4 mt-1" />
+                    <div>
+                      <span class="font-medium">Cadastrar usuário</span>
+                      <p class="text-sm text-gray-400">Criar novos usuários no sistema</p>
+                    </div>
+                  </label>
+
+                  <label class="usuarios-permissoes-item" data-search="editar alterar dados">
+                    <input type="checkbox" name="usuarios.edit" data-role="item" data-group="acoes-usuarios" data-item-type="action" class="w-4 h-4 mt-1" />
+                    <div>
+                      <span class="font-medium">Editar usuário</span>
+                      <p class="text-sm text-gray-400">Alterar dados pessoais, perfil e status</p>
+                    </div>
+                  </label>
+
+                  <label class="usuarios-permissoes-item" data-search="excluir apagar remover deletar">
+                    <input type="checkbox" name="usuarios.delete" data-role="item" data-group="acoes-usuarios" data-item-type="action" class="w-4 h-4 mt-1" />
+                    <div>
+                      <span class="font-medium">Excluir usuário</span>
+                      <p class="text-sm text-gray-400">Remover usuários do sistema</p>
+                    </div>
+                  </label>
+
+                  <label class="usuarios-permissoes-item" data-search="ativar desativar acesso tomada">
+                    <input type="checkbox" name="usuarios.status.toggle" data-role="item" data-group="acoes-usuarios" data-item-type="action" class="w-4 h-4 mt-1" />
+                    <div>
+                      <span class="font-medium">Ativar/desativar acesso</span>
+                      <p class="text-sm text-gray-400">Ligar ou desligar o acesso de um usuário</p>
+                    </div>
+                  </label>
+
+                  <label class="usuarios-permissoes-item" data-search="atividade login historico">
+                    <input type="checkbox" name="usuarios.activity.view" data-role="item" data-group="acoes-usuarios" data-item-type="action" class="w-4 h-4 mt-1" />
+                    <div>
+                      <span class="font-medium">Ver atividade</span>
+                      <p class="text-sm text-gray-400">Consultar último login e alterações registradas</p>
+                    </div>
+                  </label>
+
+                  <label class="usuarios-permissoes-item" data-search="aprovar liberar cadastro">
+                    <input type="checkbox" name="usuarios.approve" data-role="item" data-group="acoes-usuarios" data-item-type="action" class="w-4 h-4 mt-1" />
+                    <div>
+                      <span class="font-medium">Aprovar cadastro</span>
+                      <p class="text-sm text-gray-400">Liberar o acesso de usuários aguardando aprovação</p>
+                    </div>
+                  </label>
+
+                  <label class="usuarios-permissoes-item" data-search="modelos perfis permissao ver">
+                    <input type="checkbox" name="usuarios.roles.view" data-role="item" data-group="acoes-usuarios" data-item-type="action" class="w-4 h-4 mt-1" />
+                    <div>
+                      <span class="font-medium">Ver modelos de permissão</span>
+                      <p class="text-sm text-gray-400">Abrir os modelos (perfis) de permissão</p>
+                    </div>
+                  </label>
+
+                  <label class="usuarios-permissoes-item" data-search="modelos perfis gerenciar criar excluir">
+                    <input type="checkbox" name="usuarios.roles.manage" data-role="item" data-group="acoes-usuarios" data-item-type="action" class="w-4 h-4 mt-1" />
+                    <div>
+                      <span class="font-medium">Gerenciar modelos de permissão</span>
+                      <p class="text-sm text-gray-400">Criar, editar, duplicar e excluir perfis</p>
+                    </div>
+                  </label>
+
+                  <label class="usuarios-permissoes-item" data-search="aplicar vincular perfil usuario">
+                    <input type="checkbox" name="usuarios.roles.assign" data-role="item" data-group="acoes-usuarios" data-item-type="action" class="w-4 h-4 mt-1" />
+                    <div>
+                      <span class="font-medium">Aplicar perfil ao usuário</span>
+                      <p class="text-sm text-gray-400">Vincular um modelo de permissão a um usuário</p>
+                    </div>
+                  </label>
+                </div>
+              </div>
+            </article>
+
+            <article class="usuarios-permissoes-accordion">
+              <button class="usuarios-permissoes-accordion__toggle" data-accordion-toggle="colunas-usuarios" aria-expanded="false">
+                <span class="flex items-center gap-3">
+                  <i class="fas fa-columns text-[var(--color-primary)]"></i>
+                  <span class="font-semibold text-lg text-[var(--color-primary)]">Colunas</span>
+                </span>
+                <i class="fas fa-chevron-down"></i>
+              </button>
+              <div
+                class="usuarios-permissoes-accordion__content glass-surface rounded-2xl border border-white/10 p-4"
+                data-accordion-content="colunas-usuarios"
+                data-group-container="colunas-usuarios"
+              >
+                <div class="flex items-center justify-between mb-4 pb-3 border-b border-white/10">
+                  <div class="flex items-center gap-3">
+                    <input type="checkbox" id="usuariosPermissoesMasterColunasUsuarios" data-role="master" data-group="colunas-usuarios" class="w-4 h-4" />
+                    <label for="usuariosPermissoesMasterColunasUsuarios" class="font-medium">Selecionar tudo</label>
+                    <span class="text-sm text-gray-400" data-group-count="colunas-usuarios">(0 selecionadas)</span>
+                  </div>
+                  <i class="fas fa-info-circle text-[var(--color-primary)]" title="Colunas do módulo"></i>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div>
+                    <h4 class="text-sm font-semibold text-gray-300 mb-3">Grade de usuários</h4>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+
+                      <label class="usuarios-permissoes-checkbox">
+                        <input type="checkbox" name="col_usr_avatar" data-role="item" data-group="colunas-usuarios" data-item-type="column" class="w-4 h-4" />
+                        <span class="text-sm">Avatar</span>
+                      </label>
+
+                      <label class="usuarios-permissoes-checkbox">
+                        <input type="checkbox" name="col_usr_nome" data-role="item" data-group="colunas-usuarios" data-item-type="column" class="w-4 h-4" />
+                        <span class="text-sm">Nome</span>
+                      </label>
+
+                      <label class="usuarios-permissoes-checkbox">
+                        <input type="checkbox" name="col_usr_email" data-role="item" data-group="colunas-usuarios" data-item-type="column" class="w-4 h-4" />
+                        <span class="text-sm">E-mail</span>
+                      </label>
+
+                      <label class="usuarios-permissoes-checkbox">
+                        <input type="checkbox" name="col_usr_perfil" data-role="item" data-group="colunas-usuarios" data-item-type="column" class="w-4 h-4" />
+                        <span class="text-sm">Perfil</span>
+                      </label>
+
+                      <label class="usuarios-permissoes-checkbox">
+                        <input type="checkbox" name="col_usr_situacao" data-role="item" data-group="colunas-usuarios" data-item-type="column" class="w-4 h-4" />
+                        <span class="text-sm">Situação (online/offline)</span>
+                      </label>
+
+                      <label class="usuarios-permissoes-checkbox">
+                        <input type="checkbox" name="col_usr_status" data-role="item" data-group="colunas-usuarios" data-item-type="column" class="w-4 h-4" />
+                        <span class="text-sm">Status</span>
+                      </label>
+
+                      <label class="usuarios-permissoes-checkbox">
+                        <input type="checkbox" name="col_usr_ultimo_login" data-role="item" data-group="colunas-usuarios" data-item-type="column" class="w-4 h-4" />
+                        <span class="text-sm">Último login</span>
+                      </label>
+
+                      <label class="usuarios-permissoes-checkbox">
+                        <input type="checkbox" name="col_usr_ultima_alteracao" data-role="item" data-group="colunas-usuarios" data-item-type="column" class="w-4 h-4" />
+                        <span class="text-sm">Última alteração</span>
+                      </label>
+
+                      <label class="usuarios-permissoes-checkbox">
+                        <input type="checkbox" name="col_usr_acoes" data-role="item" data-group="colunas-usuarios" data-item-type="column" class="w-4 h-4" />
+                        <span class="text-sm">Ações</span>
+                      </label>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </article>
           </div>
         </section>
 

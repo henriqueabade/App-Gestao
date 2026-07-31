@@ -127,7 +127,7 @@ CREATE TABLE IF NOT EXISTS perm_prod (
 );
 
 -- ---------------------------------------------------------------------
--- 5) Orçamentos  (perm_orc)  —  17 ações, 30 colunas
+-- 5) Orçamentos  (perm_orc)  —  18 ações, 30 colunas
 -- ---------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS perm_orc (
   modelo_id    INTEGER PRIMARY KEY REFERENCES modelos_permissoes(id) ON DELETE CASCADE,
@@ -140,6 +140,7 @@ CREATE TABLE IF NOT EXISTS perm_orc (
   acao_view_details                  BOOLEAN NOT NULL DEFAULT FALSE,  -- orc.view.details · Visualizar orçamento
   acao_edit                          BOOLEAN NOT NULL DEFAULT FALSE,  -- orc.edit · Editar orçamento
   acao_convert                       BOOLEAN NOT NULL DEFAULT FALSE,  -- orc.convert · Converter em pedido
+  acao_delete                        BOOLEAN NOT NULL DEFAULT FALSE,  -- orc.delete · Excluir orçamento
   acao_export                        BOOLEAN NOT NULL DEFAULT FALSE,  -- orc.export · Baixar PDF
   acao_item_add                      BOOLEAN NOT NULL DEFAULT FALSE,  -- orc.item.add · Inserir item
   acao_item_edit                     BOOLEAN NOT NULL DEFAULT FALSE,  -- orc.item.edit · Editar item
@@ -186,7 +187,7 @@ CREATE TABLE IF NOT EXISTS perm_orc (
 );
 
 -- ---------------------------------------------------------------------
--- 6) Pedidos  (perm_ped)  —  10 ações, 22 colunas
+-- 6) Pedidos  (perm_ped)  —  11 ações, 22 colunas
 -- ---------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS perm_ped (
   modelo_id    INTEGER PRIMARY KEY REFERENCES modelos_permissoes(id) ON DELETE CASCADE,
@@ -200,6 +201,7 @@ CREATE TABLE IF NOT EXISTS perm_ped (
   acao_status_ship                   BOOLEAN NOT NULL DEFAULT FALSE,  -- ped.status.ship · Despachar pedido
   acao_status_deliver                BOOLEAN NOT NULL DEFAULT FALSE,  -- ped.status.deliver · Dar como entregue
   acao_report                        BOOLEAN NOT NULL DEFAULT FALSE,  -- ped.report · Ver relatório
+  acao_delete                        BOOLEAN NOT NULL DEFAULT FALSE,  -- ped.delete · Excluir pedido
   acao_export                        BOOLEAN NOT NULL DEFAULT FALSE,  -- ped.export · Baixar PDF
   acao_cancel                        BOOLEAN NOT NULL DEFAULT FALSE,  -- ped.cancel · Cancelar pedido
   acao_stock_restore_on_cancel       BOOLEAN NOT NULL DEFAULT FALSE,  -- ped.stock.restore_on_cancel · Realocar estoque ao cancelar
@@ -470,7 +472,39 @@ CREATE TABLE IF NOT EXISTS perm_cfg (
 );
 
 -- ---------------------------------------------------------------------
--- 13) Dashboard  (perm_dashboard)  —  módulo ainda não configurado (somente modulo_ativo)
+-- 13) Usuários  (perm_usuarios)  —  11 ações, 9 colunas
+-- ---------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS perm_usuarios (
+  modelo_id    INTEGER PRIMARY KEY REFERENCES modelos_permissoes(id) ON DELETE CASCADE,
+  modulo_ativo BOOLEAN NOT NULL DEFAULT FALSE,
+
+  -- Ações
+  acao_view                          BOOLEAN NOT NULL DEFAULT FALSE,  -- usuarios.view · Ver lista
+  acao_search                        BOOLEAN NOT NULL DEFAULT FALSE,  -- usuarios.search · Buscar/filtrar
+  acao_create                        BOOLEAN NOT NULL DEFAULT FALSE,  -- usuarios.create · Cadastrar usuário
+  acao_edit                          BOOLEAN NOT NULL DEFAULT FALSE,  -- usuarios.edit · Editar usuário
+  acao_delete                        BOOLEAN NOT NULL DEFAULT FALSE,  -- usuarios.delete · Excluir usuário
+  acao_status_toggle                 BOOLEAN NOT NULL DEFAULT FALSE,  -- usuarios.status.toggle · Ativar/desativar acesso
+  acao_activity_view                 BOOLEAN NOT NULL DEFAULT FALSE,  -- usuarios.activity.view · Ver atividade
+  acao_approve                       BOOLEAN NOT NULL DEFAULT FALSE,  -- usuarios.approve · Aprovar cadastro
+  acao_roles_view                    BOOLEAN NOT NULL DEFAULT FALSE,  -- usuarios.roles.view · Ver modelos de permissão
+  acao_roles_manage                  BOOLEAN NOT NULL DEFAULT FALSE,  -- usuarios.roles.manage · Gerenciar modelos de permissão
+  acao_roles_assign                  BOOLEAN NOT NULL DEFAULT FALSE,  -- usuarios.roles.assign · Aplicar perfil ao usuário
+
+  -- Colunas visíveis
+  col_usr_avatar                     BOOLEAN NOT NULL DEFAULT FALSE,  -- Avatar
+  col_usr_nome                       BOOLEAN NOT NULL DEFAULT FALSE,  -- Nome
+  col_usr_email                      BOOLEAN NOT NULL DEFAULT FALSE,  -- E-mail
+  col_usr_perfil                     BOOLEAN NOT NULL DEFAULT FALSE,  -- Perfil
+  col_usr_situacao                   BOOLEAN NOT NULL DEFAULT FALSE,  -- Situação (online/offline)
+  col_usr_status                     BOOLEAN NOT NULL DEFAULT FALSE,  -- Status
+  col_usr_ultimo_login               BOOLEAN NOT NULL DEFAULT FALSE,  -- Último login
+  col_usr_ultima_alteracao           BOOLEAN NOT NULL DEFAULT FALSE,  -- Última alteração
+  col_usr_acoes                      BOOLEAN NOT NULL DEFAULT FALSE  -- Ações
+);
+
+-- ---------------------------------------------------------------------
+-- 14) Dashboard  (perm_dashboard)  —  módulo ainda não configurado (somente modulo_ativo)
 -- ---------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS perm_dashboard (
   modelo_id    INTEGER PRIMARY KEY REFERENCES modelos_permissoes(id) ON DELETE CASCADE,
@@ -478,7 +512,7 @@ CREATE TABLE IF NOT EXISTS perm_dashboard (
 );
 
 -- ---------------------------------------------------------------------
--- 14) Calendário  (perm_calendario)  —  módulo ainda não configurado (somente modulo_ativo)
+-- 15) Calendário  (perm_calendario)  —  módulo ainda não configurado (somente modulo_ativo)
 -- ---------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS perm_calendario (
   modelo_id    INTEGER PRIMARY KEY REFERENCES modelos_permissoes(id) ON DELETE CASCADE,
@@ -486,7 +520,7 @@ CREATE TABLE IF NOT EXISTS perm_calendario (
 );
 
 -- ---------------------------------------------------------------------
--- 15) Laminação · Clientes  (perm_lam_clientes)  —  módulo ainda não configurado (somente modulo_ativo)
+-- 16) Laminação · Clientes  (perm_lam_clientes)  —  módulo ainda não configurado (somente modulo_ativo)
 -- ---------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS perm_lam_clientes (
   modelo_id    INTEGER PRIMARY KEY REFERENCES modelos_permissoes(id) ON DELETE CASCADE,
@@ -494,7 +528,7 @@ CREATE TABLE IF NOT EXISTS perm_lam_clientes (
 );
 
 -- ---------------------------------------------------------------------
--- 16) Laminação · Serviços  (perm_lam_servicos)  —  módulo ainda não configurado (somente modulo_ativo)
+-- 17) Laminação · Serviços  (perm_lam_servicos)  —  módulo ainda não configurado (somente modulo_ativo)
 -- ---------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS perm_lam_servicos (
   modelo_id    INTEGER PRIMARY KEY REFERENCES modelos_permissoes(id) ON DELETE CASCADE,
@@ -502,7 +536,7 @@ CREATE TABLE IF NOT EXISTS perm_lam_servicos (
 );
 
 -- ---------------------------------------------------------------------
--- 17) Laminação · Precificação  (perm_lam_precificacao)  —  módulo ainda não configurado (somente modulo_ativo)
+-- 18) Laminação · Precificação  (perm_lam_precificacao)  —  módulo ainda não configurado (somente modulo_ativo)
 -- ---------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS perm_lam_precificacao (
   modelo_id    INTEGER PRIMARY KEY REFERENCES modelos_permissoes(id) ON DELETE CASCADE,
@@ -510,7 +544,7 @@ CREATE TABLE IF NOT EXISTS perm_lam_precificacao (
 );
 
 -- ---------------------------------------------------------------------
--- 18) Laminação · Relatórios  (perm_lam_relatorios)  —  módulo ainda não configurado (somente modulo_ativo)
+-- 19) Laminação · Relatórios  (perm_lam_relatorios)  —  módulo ainda não configurado (somente modulo_ativo)
 -- ---------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS perm_lam_relatorios (
   modelo_id    INTEGER PRIMARY KEY REFERENCES modelos_permissoes(id) ON DELETE CASCADE,
@@ -518,17 +552,9 @@ CREATE TABLE IF NOT EXISTS perm_lam_relatorios (
 );
 
 -- ---------------------------------------------------------------------
--- 19) IA  (perm_ia)  —  módulo ainda não configurado (somente modulo_ativo)
+-- 20) IA  (perm_ia)  —  módulo ainda não configurado (somente modulo_ativo)
 -- ---------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS perm_ia (
-  modelo_id    INTEGER PRIMARY KEY REFERENCES modelos_permissoes(id) ON DELETE CASCADE,
-  modulo_ativo BOOLEAN NOT NULL DEFAULT FALSE
-);
-
--- ---------------------------------------------------------------------
--- 20) Usuários  (perm_usuarios)  —  módulo ainda não configurado (somente modulo_ativo)
--- ---------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS perm_usuarios (
   modelo_id    INTEGER PRIMARY KEY REFERENCES modelos_permissoes(id) ON DELETE CASCADE,
   modulo_ativo BOOLEAN NOT NULL DEFAULT FALSE
 );
@@ -556,12 +582,12 @@ INSERT INTO perm_prod (modelo_id, modulo_ativo, acao_view, acao_search, acao_cre
 SELECT id, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE FROM modelos_permissoes WHERE nome = 'Administrador'
 ON CONFLICT (modelo_id) DO NOTHING;
 
-INSERT INTO perm_orc (modelo_id, modulo_ativo, acao_view, acao_search, acao_create, acao_view_details, acao_edit, acao_convert, acao_export, acao_item_add, acao_item_edit, acao_item_remove, acao_clear, acao_send, acao_status_change, acao_clone, acao_convert_decide, acao_convert_justify, acao_item_replace, col_orc_num, col_orc_cliente, col_orc_data, col_orc_total, col_orc_cond_pagto, col_orc_status, col_orc_it_nome, col_orc_it_qtd, col_orc_it_preco, col_orc_it_preco_desc, col_orc_it_desc, col_orc_it_subtotal, col_conv_peca, col_conv_qtd_orcada, col_conv_em_estoque, col_conv_pronta, col_conv_produzir_total, col_conv_produzir_parcial, col_conv_status, col_conv_ins_nome, col_conv_ins_unidade, col_conv_ins_disponivel, col_conv_ins_necessario, col_conv_ins_saldo, col_conv_ins_etapa, col_conv_ins_flags, col_orc_campo_dono, col_orc_campo_transportadora, col_orc_campo_pagamento, col_orc_campo_observacoes)
-SELECT id, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE FROM modelos_permissoes WHERE nome = 'Administrador'
+INSERT INTO perm_orc (modelo_id, modulo_ativo, acao_view, acao_search, acao_create, acao_view_details, acao_edit, acao_convert, acao_delete, acao_export, acao_item_add, acao_item_edit, acao_item_remove, acao_clear, acao_send, acao_status_change, acao_clone, acao_convert_decide, acao_convert_justify, acao_item_replace, col_orc_num, col_orc_cliente, col_orc_data, col_orc_total, col_orc_cond_pagto, col_orc_status, col_orc_it_nome, col_orc_it_qtd, col_orc_it_preco, col_orc_it_preco_desc, col_orc_it_desc, col_orc_it_subtotal, col_conv_peca, col_conv_qtd_orcada, col_conv_em_estoque, col_conv_pronta, col_conv_produzir_total, col_conv_produzir_parcial, col_conv_status, col_conv_ins_nome, col_conv_ins_unidade, col_conv_ins_disponivel, col_conv_ins_necessario, col_conv_ins_saldo, col_conv_ins_etapa, col_conv_ins_flags, col_orc_campo_dono, col_orc_campo_transportadora, col_orc_campo_pagamento, col_orc_campo_observacoes)
+SELECT id, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE FROM modelos_permissoes WHERE nome = 'Administrador'
 ON CONFLICT (modelo_id) DO NOTHING;
 
-INSERT INTO perm_ped (modelo_id, modulo_ativo, acao_view, acao_search, acao_view_details, acao_status_confirm, acao_status_ship, acao_status_deliver, acao_report, acao_export, acao_cancel, acao_stock_restore_on_cancel, col_ped_num, col_ped_cliente, col_ped_data, col_ped_total, col_ped_condicao, col_ped_status, col_ped_it_nome, col_ped_it_qtd, col_ped_it_preco, col_ped_it_preco_desc, col_ped_it_desc, col_ped_it_subtotal, col_canc_item, col_canc_qtd, col_canc_restante, col_canc_origem, col_canc_situacao, col_canc_destinos, col_ped_campo_dono, col_ped_campo_transportadora, col_ped_campo_pagamento, col_ped_campo_observacoes)
-SELECT id, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE FROM modelos_permissoes WHERE nome = 'Administrador'
+INSERT INTO perm_ped (modelo_id, modulo_ativo, acao_view, acao_search, acao_view_details, acao_status_confirm, acao_status_ship, acao_status_deliver, acao_report, acao_delete, acao_export, acao_cancel, acao_stock_restore_on_cancel, col_ped_num, col_ped_cliente, col_ped_data, col_ped_total, col_ped_condicao, col_ped_status, col_ped_it_nome, col_ped_it_qtd, col_ped_it_preco, col_ped_it_preco_desc, col_ped_it_desc, col_ped_it_subtotal, col_canc_item, col_canc_qtd, col_canc_restante, col_canc_origem, col_canc_situacao, col_canc_destinos, col_ped_campo_dono, col_ped_campo_transportadora, col_ped_campo_pagamento, col_ped_campo_observacoes)
+SELECT id, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE FROM modelos_permissoes WHERE nome = 'Administrador'
 ON CONFLICT (modelo_id) DO NOTHING;
 
 INSERT INTO perm_cli (modelo_id, modulo_ativo, acao_view, acao_search, acao_create, acao_export_csv, acao_import_csv, acao_report, acao_email_bulk, acao_details_view, acao_edit, acao_delete, acao_contact_add, acao_contact_edit, acao_contact_remove, acao_order_add, acao_address_copy, col_cli_nome_fantasia, col_cli_cnpj, col_cli_pais, col_cli_cidade_uf, col_cli_status, col_cli_owner, col_cli_razao_social, col_cli_insc_estadual, col_cli_site, col_cli_origem, col_ctt_nome, col_ctt_cargo, col_ctt_email, col_ctt_tel, col_ctt_fixo, col_ord_numero, col_ord_tipo, col_ord_inicio, col_ord_condicao, col_ord_valor, col_ord_status, col_end_logradouro, col_end_numero, col_end_complemento, col_end_bairro, col_end_cidade, col_end_pais, col_end_uf, col_end_cep)
@@ -586,6 +612,10 @@ ON CONFLICT (modelo_id) DO NOTHING;
 
 INSERT INTO perm_cfg (modelo_id, modulo_ativo, acao_view, acao_profile_edit, acao_password_change, acao_avatar_edit, acao_prefs_edit, acao_theme_edit, acao_notifications_edit, acao_quickactions_edit, acao_categories_edit, acao_roles_view, acao_roles_edit)
 SELECT id, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE FROM modelos_permissoes WHERE nome = 'Administrador'
+ON CONFLICT (modelo_id) DO NOTHING;
+
+INSERT INTO perm_usuarios (modelo_id, modulo_ativo, acao_view, acao_search, acao_create, acao_edit, acao_delete, acao_status_toggle, acao_activity_view, acao_approve, acao_roles_view, acao_roles_manage, acao_roles_assign, col_usr_avatar, col_usr_nome, col_usr_email, col_usr_perfil, col_usr_situacao, col_usr_status, col_usr_ultimo_login, col_usr_ultima_alteracao, col_usr_acoes)
+SELECT id, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE FROM modelos_permissoes WHERE nome = 'Administrador'
 ON CONFLICT (modelo_id) DO NOTHING;
 
 INSERT INTO perm_dashboard (modelo_id, modulo_ativo)
@@ -613,10 +643,6 @@ SELECT id, TRUE FROM modelos_permissoes WHERE nome = 'Administrador'
 ON CONFLICT (modelo_id) DO NOTHING;
 
 INSERT INTO perm_ia (modelo_id, modulo_ativo)
-SELECT id, TRUE FROM modelos_permissoes WHERE nome = 'Administrador'
-ON CONFLICT (modelo_id) DO NOTHING;
-
-INSERT INTO perm_usuarios (modelo_id, modulo_ativo)
 SELECT id, TRUE FROM modelos_permissoes WHERE nome = 'Administrador'
 ON CONFLICT (modelo_id) DO NOTHING;
 

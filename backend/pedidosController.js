@@ -88,6 +88,34 @@ router.get('/:id', exigirPermissao('ped.view.details'), async (req, res) => {
     res.status(err.status || 500).json({ error: 'Erro ao buscar pedido' });
   }
 });
+/**
+ * DELETE /pedidos/:id  — exclusão restrita (ação visível só ao Sup Admin).
+ * Remove itens e parcelas antes do pedido, para não deixar órfãos.
+ */
+router.delete('/:id', exigirPermissao('ped.delete'), async (req, res) => {
+  const { id } = req.params;
+  try {
+    const api = createApiClient(req);
+
+    const [itens, parcelas] = await Promise.all([
+      api.get('/api/pedidos_itens', { query: { pedido_id: id } }).catch(() => []),
+      api.get('/api/pedido_parcelas', { query: { pedido_id: id } }).catch(() => [])
+    ]);
+    for (const item of Array.isArray(itens) ? itens : []) {
+      if (item?.id) await api.delete(`/api/pedidos_itens/${item.id}`).catch(() => {});
+    }
+    for (const parc of Array.isArray(parcelas) ? parcelas : []) {
+      if (parc?.id) await api.delete(`/api/pedido_parcelas/${parc.id}`).catch(() => {});
+    }
+
+    await api.delete(`/api/pedidos/${id}`);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Erro ao excluir pedido:', err);
+    res.status(err.status || 500).json({ error: 'Erro ao excluir pedido' });
+  }
+});
+
 module.exports = router;
 // Exposto para teste: a regra "cada status grava a sua data" precisa de guarda
 // própria, sem depender de subir banco.

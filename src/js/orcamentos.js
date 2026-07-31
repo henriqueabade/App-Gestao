@@ -7,6 +7,48 @@ async function fetchApi(path, options) {
     return fetch(`${baseUrl}${path}`, options);
 }
 
+/**
+ * Exclusão restrita ao Sup Admin.
+ * O botão nasce com a classe "hidden": ele só é revelado para o Sup Admin,
+ * de modo que os demais perfis não veem — nem sabem — que a ação existe.
+ */
+async function ehSupAdminAtual() {
+    try {
+        const resp = await fetchApi('/api/permissoes/efetivas');
+        const dados = await resp.json();
+        return Boolean(dados?.supAdmin);
+    } catch (err) {
+        console.error('Não foi possível verificar o perfil do usuário', err);
+        return false;   // na dúvida, não revela
+    }
+}
+
+async function revelarAcoesSupAdmin(raiz = document) {
+    if (!(await ehSupAdminAtual())) return;
+    raiz.querySelectorAll('.acao-sup-admin').forEach(el => el.classList.remove('hidden'));
+}
+
+/** Confirmação de exclusão (usada apenas pelo Sup Admin). */
+function confirmarExclusaoSupAdmin(mensagem, cb) {
+    const overlay = document.createElement('div');
+    overlay.className = 'fixed inset-0 bg-black/50 flex items-center justify-center p-4';
+    overlay.style.zIndex = 'var(--z-dialog)';
+    overlay.innerHTML = `
+        <div class="max-w-md w-full glass-surface backdrop-blur-xl rounded-2xl border border-red-500/20 ring-1 ring-red-500/30 shadow-2xl/40 animate-modalFade">
+            <div class="p-6 text-center">
+                <h3 class="text-lg font-semibold mb-4 text-red-400">Confirmar exclusão</h3>
+                <p class="text-sm text-gray-300 mb-6">${mensagem}</p>
+                <div class="flex justify-center gap-4">
+                    <button id="excluirSim" class="btn-danger px-4 py-2 rounded-lg text-white font-medium">Excluir</button>
+                    <button id="excluirNao" class="btn-neutral px-4 py-2 rounded-lg text-white font-medium">Cancelar</button>
+                </div>
+            </div>
+        </div>`;
+    document.body.appendChild(overlay);
+    overlay.querySelector('#excluirSim').addEventListener('click', () => { overlay.remove(); cb(true); });
+    overlay.querySelector('#excluirNao').addEventListener('click', () => { overlay.remove(); cb(false); });
+}
+
 function parseIsoDateToLocal(iso) {
     if (!iso || typeof iso !== 'string' || !iso.includes('-')) return null;
     const [year, month, day] = iso.split('-').map(Number);
@@ -249,6 +291,7 @@ async function carregarOrcamentos() {
                         <i data-perm="orc.convert" class="fas fa-money-bill-wave w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10 ${convertClass}" style="color: var(--color-primary)" title="${convertTitle}"></i>
                         <i data-perm="orc.view.details" class="fas fa-eye w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Visualizar"></i>
                         <i data-perm="orc.edit" class="fas fa-edit w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10 ${editClass}" style="color: var(--color-primary)" title="Editar"></i>
+                        <i data-perm="orc.delete" class="fas fa-trash w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10 acao-sup-admin hidden" title="Excluir orçamento" style="color: var(--color-red)"></i>
                         <i data-perm="orc.export" class="fas fa-download w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10 ${downloadClass}" style="color: var(--color-primary)" title="${downloadTitle}"></i>
                     </div>
                 </td>`;
@@ -259,6 +302,29 @@ async function carregarOrcamentos() {
             ownerSelect.innerHTML = '<option value="">Todos os Donos</option>' +
                 [...owners].map(d => `<option value="${d}">${d}</option>`).join('');
         }
+        revelarAcoesSupAdmin(tbody);
+
+        tbody.querySelectorAll('.fa-trash').forEach(icon => {
+            icon.addEventListener('click', async e => {
+                e.stopPropagation();
+                const tr = e.currentTarget.closest('tr');
+                const o = data[Number(tr.dataset.index)] ?? data.find(x => String(x.numero) === tr.cells[0]?.textContent?.trim());
+                if (!o) return;
+                confirmarExclusaoSupAdmin(`Excluir definitivamente o orçamento ${o.numero}? Esta ação não pode ser desfeita.`, async ok => {
+                    if (!ok) return;
+                    try {
+                        const resp = await fetchApi(`/api/orcamentos/${encodeURIComponent(o.id)}`, { method: 'DELETE' });
+                        if (!resp.ok) throw new Error(await resp.text());
+                        window.showToast?.(`Orçamento ${o.numero} excluído.`, 'success');
+                        carregarOrcamentos();
+                    } catch (err) {
+                        console.error('Erro ao excluir orçamento', err);
+                        window.showToast?.('Não foi possível excluir o orçamento.', 'error');
+                    }
+                });
+            });
+        });
+
         tbody.querySelectorAll('.fa-edit').forEach(icon => {
             icon.addEventListener('click', async e => {
                 e.stopPropagation();

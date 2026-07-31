@@ -19,7 +19,8 @@ const MODULE_LABELS = {
   ctt: ['Contatos', 'contatos'],
   rel: ['Relatórios', 'relatorios'],
   tarefas: ['Tarefas', 'tarefas'],
-  cfg: ['Configurações', 'configuracoes']
+  cfg: ['Configurações', 'configuracoes'],
+  usuarios: ['Usuários', 'usuarios']
 };
 
 // Módulos existentes no menu que ainda NÃO têm ações/colunas configuradas.
@@ -32,7 +33,6 @@ const PENDING_MODULES = [
   ['lam_precificacao', 'Laminação · Precificação', 'laminacao-precificacao'],
   ['lam_relatorios', 'Laminação · Relatórios', 'laminacao-relatorios'],
   ['ia', 'IA', 'ia'],
-  ['usuarios', 'Usuários', 'usuarios'],
   ['financeiro', 'Financeiro', 'financeiro']
 ];
 
@@ -71,6 +71,10 @@ for (const it of items) {
 }
 
 for (const [code, label, page] of PENDING_MODULES) {
+  // Nunca sobrescreve um módulo que já foi mapeado com ações/colunas —
+  // era assim que "usuarios" voltava a ficar vazio depois de configurado.
+  const existente = modules.get(code);
+  if (existente && (existente.actions.length || existente.columns.length)) continue;
   modules.set(code, { code, label, page, configured: false, actions: [], columns: [] });
 }
 

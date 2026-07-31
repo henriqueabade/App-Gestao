@@ -111,6 +111,43 @@ function showPdfUnavailableDialog() {
     overlay.querySelector('#pdfUnavailableOk').addEventListener('click', () => overlay.remove());
 }
 
+/** Exclusão restrita ao Sup Admin: o botão só é revelado para esse perfil. */
+async function ehSupAdminAtual() {
+    try {
+        const resp = await fetchApi('/api/permissoes/efetivas');
+        const dados = await resp.json();
+        return Boolean(dados?.supAdmin);
+    } catch (err) {
+        console.error('Não foi possível verificar o perfil do usuário', err);
+        return false;
+    }
+}
+
+async function revelarAcoesSupAdmin(raiz = document) {
+    if (!(await ehSupAdminAtual())) return;
+    raiz.querySelectorAll('.acao-sup-admin').forEach(el => el.classList.remove('hidden'));
+}
+
+function confirmarExclusaoSupAdmin(mensagem, cb) {
+    const overlay = document.createElement('div');
+    overlay.className = 'fixed inset-0 bg-black/50 flex items-center justify-center p-4';
+    overlay.style.zIndex = 'var(--z-dialog)';
+    overlay.innerHTML = `
+        <div class="max-w-md w-full glass-surface backdrop-blur-xl rounded-2xl border border-red-500/20 ring-1 ring-red-500/30 shadow-2xl/40 animate-modalFade">
+            <div class="p-6 text-center">
+                <h3 class="text-lg font-semibold mb-4 text-red-400">Confirmar exclusão</h3>
+                <p class="text-sm text-gray-300 mb-6">${mensagem}</p>
+                <div class="flex justify-center gap-4">
+                    <button id="excluirSim" class="btn-danger px-4 py-2 rounded-lg text-white font-medium">Excluir</button>
+                    <button id="excluirNao" class="btn-neutral px-4 py-2 rounded-lg text-white font-medium">Cancelar</button>
+                </div>
+            </div>
+        </div>`;
+    document.body.appendChild(overlay);
+    overlay.querySelector('#excluirSim').addEventListener('click', () => { overlay.remove(); cb(true); });
+    overlay.querySelector('#excluirNao').addEventListener('click', () => { overlay.remove(); cb(false); });
+}
+
 function showStatusConfirmDialog(message, cb) {
     const overlay = document.createElement('div');
     overlay.className = 'app-message-overlay fixed inset-0 bg-black/50 flex items-center justify-center p-4';
@@ -237,6 +274,7 @@ async function carregarPedidos() {
                         <i data-perm="ped.view.details" class="fas fa-eye w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Visualizar"></i>
                         <i data-perm="${statusPerm}" class="fas fa-check w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Concluir"></i>
                         <i data-perm="ped.report" class="fas fa-clipboard w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Relatório"></i>
+                        <i data-perm="ped.delete" class="fas fa-trash w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10 acao-sup-admin hidden" title="Excluir pedido" style="color: var(--color-red)"></i>
                         <i data-perm="ped.export" class="fas fa-download w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10 ${downloadClass}" style="color: var(--color-primary)" title="${downloadTitle}"></i>
                     </div>
                 </td>`;
@@ -276,6 +314,30 @@ async function carregarPedidos() {
         }
 
 
+
+        revelarAcoesSupAdmin(tbody);
+
+        tbody.querySelectorAll('.fa-trash').forEach(icon => {
+            icon.addEventListener('click', async e => {
+                e.stopPropagation();
+                const tr = e.currentTarget.closest('tr');
+                const numero = tr?.cells?.[0]?.textContent?.trim();
+                const p = data.find(x => String(x.numero) === numero);
+                if (!p) return;
+                confirmarExclusaoSupAdmin(`Excluir definitivamente o pedido ${p.numero}? Esta ação não pode ser desfeita.`, async ok => {
+                    if (!ok) return;
+                    try {
+                        const resp = await fetchApi(`/api/pedidos/${encodeURIComponent(p.id)}`, { method: 'DELETE' });
+                        if (!resp.ok) throw new Error(await resp.text());
+                        window.showToast?.(`Pedido ${p.numero} excluído.`, 'success');
+                        carregarPedidos();
+                    } catch (err) {
+                        console.error('Erro ao excluir pedido', err);
+                        window.showToast?.('Não foi possível excluir o pedido.', 'error');
+                    }
+                });
+            });
+        });
 
         tbody.querySelectorAll('.fa-eye').forEach(icon => {
 
