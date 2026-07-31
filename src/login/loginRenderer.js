@@ -264,6 +264,29 @@ if (intro) {
     }, delay);
   }
 
+  /**
+   * Guarda quem entrou por último — é o que monta o cartão com foto e nome na
+   * próxima abertura. O carimbo de horário é gravado AQUI, no instante do
+   * login: quando a tela de login volta a aparecer não há sessão nem rede
+   * garantida para perguntar isso a ninguém.
+   */
+  function registrarUltimoUsuario(usuario, emailDigitado = '') {
+    if (!usuario) return;
+    try {
+      const lastUser = {
+        id: usuario.id,
+        nome: getUserName(usuario),
+        email: getUserLogin(usuario) || emailDigitado,
+        avatarUrl: getUserAvatar(usuario),
+        avatarVersion: usuario.avatarVersion || usuario.avatar_version || '',
+        ultimoLoginEm: new Date().toISOString()
+      };
+      localStorage.setItem('lastLoginUser', JSON.stringify(lastUser));
+    } catch (err) {
+      console.error('Não foi possível guardar o último usuário.', err);
+    }
+  }
+
   async function attemptStoredAutoLogin(user, storedUserValue) {
     try {
       const result = await window.electronAPI.autoLogin(user);
@@ -271,6 +294,9 @@ if (intro) {
         clearPendingAutoLoginRetry();
         const cachedUser = storedUserValue || (result.user ? JSON.stringify(result.user) : null);
         if (cachedUser) sessionStorage.setItem('currentUser', cachedUser);
+        // O auto-login também é um login: sem isto o cartão continuaria
+        // mostrando a data de uma entrada manual antiga.
+        registrarUltimoUsuario(result.user || user, getUserLogin(user));
         await cacheUpdateStatus();
         await window.electronAPI.requestConnectionCheck?.({ forceDeep: true });
         return true;
@@ -569,6 +595,7 @@ if (intro) {
   const lastUserProfile = document.getElementById('lastUserProfile');
   const lastUserAvatar = document.getElementById('lastUserAvatar');
   const lastUserName = document.getElementById('lastUserName');
+  const lastUserLoginAt = document.getElementById('lastUserLoginAt');
   const changeUserButton = document.getElementById('changeUserButton');
   let activeEmailSuggestionIndex = -1;
   let lastUserMode = false;
@@ -589,6 +616,32 @@ if (intro) {
 
   function getUserName(user) {
     return String(user?.nome || user?.name || user?.nome_completo || getUserLogin(user)).trim();
+  }
+
+  /**
+   * Quando este usuário entrou pela última vez.
+   *
+   * O carimbo é gravado no próprio login (`lastLoginUser.ultimoLoginEm`), então
+   * na volta à tela ele já está lá — sem depender de rede nem de sessão ativa,
+   * que é justamente o que não existe nesse momento. Cadastros antigos, salvos
+   * antes disto, simplesmente não trazem a data e a linha não aparece.
+   */
+  function getUltimoLoginEm(user) {
+    const bruto = user?.ultimoLoginEm || user?.ultimo_login_em || user?.ultimaEntrada || user?.ultima_entrada;
+    if (!bruto) return null;
+    const data = bruto instanceof Date ? bruto : new Date(bruto);
+    return Number.isNaN(data.getTime()) ? null : data;
+  }
+
+  function formatarUltimoLogin(data) {
+    if (!data) return '';
+    return data.toLocaleString('pt-BR', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
   }
 
   function getUserAvatar(user) {
@@ -616,6 +669,18 @@ if (intro) {
     emailInput.classList.add('is-locked');
     emailInput.setAttribute('aria-label', `Usuário selecionado: ${login}`);
     lastUserName.textContent = name;
+
+    const ultimoLogin = getUltimoLoginEm(user);
+    if (lastUserLoginAt) {
+      if (ultimoLogin) {
+        lastUserLoginAt.textContent = `Último login: ${formatarUltimoLogin(ultimoLogin)}`;
+        lastUserLoginAt.classList.remove('hidden');
+      } else {
+        lastUserLoginAt.textContent = '';
+        lastUserLoginAt.classList.add('hidden');
+      }
+    }
+
     lastUserAvatar.textContent = name.split(/\s+/).slice(0, 2).map((part) => part[0]).join('').toUpperCase();
     const avatar = await resolveAvatarSource(getUserAvatar(user));
     if (lastUserMode && avatar) {
@@ -642,6 +707,7 @@ if (intro) {
     emailInput.classList.remove('is-locked');
     emailInput.setAttribute('aria-label', 'E-mail ou usuário');
     lastUserProfile?.classList.add('hidden');
+    lastUserLoginAt?.classList.add('hidden');
     changeUserButton?.classList.add('hidden');
     loginContainer?.classList.remove('has-last-user');
     emailInput.focus();
@@ -906,14 +972,7 @@ if (intro) {
       }
       if (result.user) localStorage.setItem('user', JSON.stringify(result.user));
       if (result.user) {
-        const lastUser = {
-          id: result.user.id,
-          nome: getUserName(result.user),
-          email: getUserLogin(result.user) || email,
-          avatarUrl: getUserAvatar(result.user),
-          avatarVersion: result.user.avatarVersion || result.user.avatar_version || ''
-        };
-        localStorage.setItem('lastLoginUser', JSON.stringify(lastUser));
+        registrarUltimoUsuario(result.user, email);
       }
       localStorage.setItem('rememberUser', remember ? '1' : '0');
       sessionStorage.setItem('currentUser', JSON.stringify(result.user));

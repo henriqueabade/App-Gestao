@@ -179,6 +179,14 @@ function openVisualizarPedidoModal(id) {
     window.selectedOrderId = id;
     openPedidoModal('modals/pedidos/visualizar.html', '../js/modals/pedido-visualizar.js', 'visualizarPedido');
 }
+
+function abrirConverterOrcamentos() {
+    openPedidoModal(
+        'modals/pedidos/converter-orcamentos.html',
+        '../js/modals/pedido-converter-orcamentos.js',
+        'converterOrcamentos'
+    );
+}
 async function carregarPedidos() {
     try {
         const resp = await fetchApi('/api/pedidos');
@@ -348,6 +356,13 @@ async function carregarPedidos() {
     }
 }
 
+// O módulo é injetado dentro de um IIFE, então nada daqui é global por conta
+// própria. Os modais que mexem em pedidos (converter orçamentos, cancelar)
+// precisam recarregar a listagem depois de agir — `pedido-cancelar.js` já
+// chamava `window.carregarPedidos`, que nunca existiu: a lista ficava velha até
+// o usuário trocar de tela.
+window.carregarPedidos = carregarPedidos;
+
 function aplicarFiltro() {
     const status = document.getElementById('filterStatus')?.value || '';
     const periodo = document.getElementById('filterPeriod')?.value || '';
@@ -409,9 +424,7 @@ function initPedidos() {
 
     const converterBtn = document.getElementById('converterOrcamentoBtn');
     if (converterBtn) {
-        converterBtn.addEventListener('click', () => {
-            showFunctionUnavailableDialog('Conversão de orçamento ainda não implementada.');
-        });
+        converterBtn.addEventListener('click', abrirConverterOrcamentos);
     }
     document.getElementById('pedidosEmptyNew')?.addEventListener('click', () => {
         document.getElementById('converterOrcamentoBtn')?.click();

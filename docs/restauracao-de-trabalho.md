@@ -214,7 +214,7 @@ conta própria assim que ele tem conteúdo.
 | Matéria-prima | **completo** (12 modais) |
 | Clientes | **completo** (5 modais) |
 | Orçamentos | **completo** (5 modais) |
-| Pedidos | **completo** (2 modais) |
+| Pedidos | **completo** (3 modais) |
 | Usuários | **completo** (3 modais) |
 | Laminação — clientes | **completo** (cliente novo/editar) |
 | Laminação — serviços | **pendente** — serviço novo (peças e amarrados) |

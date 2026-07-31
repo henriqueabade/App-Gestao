@@ -5,6 +5,11 @@
       ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[m])
     );
 
+  // A mensagem é renderizada com `white-space: pre-line`, então um "\n" vira
+  // quebra de linha de verdade. Sem isso toda lista enviada em várias linhas
+  // (orçamentos a converter, itens que falharam) desabava num parágrafo único e
+  // ilegível. O alinhamento à esquerda só entra quando há mais de uma linha:
+  // mensagem curta continua centralizada, como sempre foi.
   function createDialog({
     title,
     message,
@@ -58,7 +63,7 @@
           ${escapeHtml(title || (isConfirm ? 'Confirmação' : 'Aviso'))}
         </h2>
 
-        <p style="opacity:.85;margin-bottom:20px">
+        <p style="opacity:.85;margin-bottom:20px;white-space:pre-line${/\n/.test(String(message || '')) ? ';text-align:left' : ''}">
           ${escapeHtml(message || '')}
         </p>
 

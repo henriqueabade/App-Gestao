@@ -155,6 +155,21 @@ body > div > .min-h-screen {
   font-weight: 600;
 }
 
+/* Quando foi a última vez que esta pessoa entrou. Fica logo abaixo do nome,
+   discreto: é informação de conferência ("sou eu mesmo, entrei ontem"), não
+   um dado que deva competir com o nome. */
+.last-user-login-at {
+  margin-top: 0.15rem;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 0.75rem;
+  font-weight: 400;
+  letter-spacing: 0.01em;
+}
+
+.last-user-login-at.hidden {
+  display: none;
+}
+
 .email-input-wrapper { position: relative; }
 
 .email-input-wrapper #email.is-locked {
