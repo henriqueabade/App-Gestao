@@ -111,7 +111,7 @@ body[data-current-module="usuarios"] #content.no-scroll .table-scroll {
 
 /* Tabelas compactas de itens (pedidos e orçamentos) */
 .items-table {
-  table-layout: auto;
+  table-layout: fixed;
   width: 100%;
   border-collapse: collapse;
 }
@@ -121,7 +121,8 @@ body[data-current-module="usuarios"] #content.no-scroll .table-scroll {
   padding-block: clamp(0.28rem, 0.24rem + 0.22vw, 0.5rem);
   padding-inline: clamp(0.4rem, 0.3rem + 0.3vw, 0.7rem);
   font-size: clamp(0.78rem, 0.72rem + 0.35vw, 1.05rem);
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: anywhere;
   line-height: 1.25;
 }
 
@@ -130,8 +131,7 @@ body[data-current-module="usuarios"] #content.no-scroll .table-scroll {
 }
 
 .items-table td {
-  overflow: hidden;
-  text-overflow: ellipsis;
+  overflow: visible;
 }
 
 .items-table td.actions-cell {
@@ -140,48 +140,45 @@ body[data-current-module="usuarios"] #content.no-scroll .table-scroll {
 
 .items-table th:nth-child(1),
 .items-table td:nth-child(1) {
-  min-width: clamp(10rem, 20vw, 24rem);
-  max-width: clamp(12rem, 28vw, 28rem);
+  width: 38%;
+  word-break: break-word;
 }
 
 .items-table th:nth-child(2),
 .items-table td:nth-child(2) {
-  min-width: clamp(3.5rem, 5vw, 6rem);
-  max-width: clamp(4rem, 6.5vw, 7.5rem);
+  width: 8%;
 }
 
 .items-table th:nth-child(3),
 .items-table td:nth-child(3) {
-  min-width: clamp(6rem, 10vw, 11rem);
-  max-width: clamp(7rem, 12vw, 13rem);
+  width: 11%;
 }
 
 .items-table th:nth-child(4),
 .items-table td:nth-child(4) {
-  min-width: clamp(6.5rem, 11vw, 12rem);
-  max-width: clamp(7.5rem, 13vw, 14rem);
+  width: 13%;
 }
 
 .items-table th:nth-child(5),
 .items-table td:nth-child(5) {
-  min-width: clamp(4.5rem, 6vw, 7.5rem);
-  max-width: clamp(5rem, 7vw, 8.5rem);
+  width: 9%;
 }
 
 .items-table th:nth-child(6),
 .items-table td:nth-child(6) {
-  min-width: clamp(6.5rem, 11vw, 12.5rem);
-  max-width: clamp(7.5rem, 13vw, 14.5rem);
+  width: 13%;
 }
 
 .items-table th:nth-child(7),
 .items-table td:nth-child(7) {
-  min-width: clamp(4.2rem, 6vw, 7rem);
-  max-width: clamp(4.8rem, 7vw, 8rem);
+  width: 8%;
 }
 
 .items-table-scroll {
   overflow-x: hidden;
+  overflow-y: auto;
+  max-height: clamp(12rem, 32vh, 24rem);
+  overscroll-behavior: contain;
 }
 
 @media (max-width: 768px) {

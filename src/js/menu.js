@@ -3539,7 +3539,46 @@ document.querySelectorAll('.sidebar-item[data-page], .submenu-item[data-page]').
     });
 });
 
-window.addEventListener('load', () => {
+/**
+ * Traz as preferências de menu do banco e reflete no cache local.
+ *
+ * O banco é a fonte de verdade (acompanha o usuário em qualquer máquina); o
+ * localStorage continua sendo o cache que o menu lê de forma síncrona.
+ * Falha em silêncio: sem rede, vale o que já estava salvo localmente.
+ */
+async function carregarPreferenciasMenuDoBanco() {
+    if (typeof localStorage === 'undefined') return;
+    if (typeof window.apiConfig?.getApiBaseUrl !== 'function') return;
+
+    try {
+        const base = (await window.apiConfig.getApiBaseUrl()) || '';
+        const resposta = await fetch(`${base}/api/usuarios/me/preferencias-menu`, {
+            credentials: 'include'
+        });
+        if (!resposta.ok) throw new Error(`HTTP ${resposta.status}`);
+        const dados = await resposta.json();
+
+        const modulo = String(dados?.menu_modulo_inicial || '').toLowerCase();
+        if (modulo === 'last' || normalizeModulePage(modulo)) {
+            localStorage.setItem(MENU_DEFAULT_PAGE_KEY, modulo);
+        }
+
+        localStorage.setItem(MENU_CRM_EXPANDED_KEY, dados?.menu_crm_expandido === true ? '1' : '0');
+
+        const barra = String(dados?.menu_barra_lateral || '').toLowerCase();
+        if (VALID_SIDEBAR_BEHAVIORS.has(barra)) {
+            localStorage.setItem(MENU_SIDEBAR_BEHAVIOR_KEY, barra);
+            // A preferência já havia sido lida na carga do script: reaplica.
+            applySidebarBehaviorPreference(barra);
+        }
+    } catch (error) {
+        console.warn('[menu] preferências do banco indisponíveis; usando as locais.', error);
+    }
+}
+
+window.addEventListener('load', async () => {
+    await carregarPreferenciasMenuDoBanco();
+
     const defaultPagePreference = readStoredDefaultPage();
     const lastVisitedPage = readStoredLastPage();
     const pageToLoad = defaultPagePreference === 'last'

@@ -420,6 +420,90 @@ const MenuStartupPreferences = (() => {
         };
     }
 
+    // -----------------------------------------------------------------------
+    // Sincronia com o banco.
+    //
+    // O localStorage continua sendo o cache local (leitura síncrona, o menu
+    // precisa disso na hora de montar). O banco é a fonte de verdade: é lido
+    // no login e regravado a cada alteração, então a preferência acompanha o
+    // usuário em qualquer máquina.
+    // -----------------------------------------------------------------------
+
+    const ENDPOINT = '/api/usuarios/me/preferencias-menu';
+
+    async function baseUrl() {
+        if (!window.apiConfig || typeof window.apiConfig.getApiBaseUrl !== 'function') return null;
+        try {
+            return (await window.apiConfig.getApiBaseUrl()) || '';
+        } catch (error) {
+            return null;
+        }
+    }
+
+    /** Lê do banco e reflete no cache local. Silencioso: nunca trava o menu. */
+    async function carregarDoBanco() {
+        const base = await baseUrl();
+        if (base === null) return null;
+        try {
+            const resposta = await fetch(`${base}${ENDPOINT}`, { credentials: 'include' });
+            if (!resposta.ok) throw new Error(`HTTP ${resposta.status}`);
+            const dados = await resposta.json();
+
+            const preferencias = {
+                defaultPage: normalizeDefaultPage(dados?.menu_modulo_inicial),
+                crmExpanded: dados?.menu_crm_expandido === true,
+                sidebarBehavior: normalizeSidebarBehavior(dados?.menu_barra_lateral)
+            };
+
+            saveDefaultPage(preferencias.defaultPage);
+            saveCrmExpanded(preferencias.crmExpanded);
+            saveSidebarBehavior(preferencias.sidebarBehavior);
+            return preferencias;
+        } catch (error) {
+            console.warn('[menu] preferências do banco indisponíveis; usando as locais.', error);
+            return null;
+        }
+    }
+
+    /** Grava no banco o estado atual (o que já está no cache local). */
+    async function salvarNoBanco(parcial = {}) {
+        const base = await baseUrl();
+        if (base === null) return false;
+
+        const atual = { ...load(), ...parcial };
+        try {
+            const resposta = await fetch(`${base}${ENDPOINT}`, {
+                method: 'PUT',
+                credentials: 'include',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    menu_modulo_inicial: normalizeDefaultPage(atual.defaultPage),
+                    menu_crm_expandido: Boolean(atual.crmExpanded),
+                    menu_barra_lateral: normalizeSidebarBehavior(atual.sidebarBehavior)
+                })
+            });
+            return resposta.ok;
+        } catch (error) {
+            console.warn('[menu] não foi possível salvar as preferências no banco.', error);
+            return false;
+        }
+    }
+
+    /**
+     * Módulos que o usuário realmente pode escolher como inicial.
+     * Um módulo negado no modelo de permissão não pode virar tela de entrada.
+     */
+    function moduloPermitido(page) {
+        if (page === 'last') return true;
+        const permissoes = window.Permissoes;
+        if (!permissoes || typeof permissoes.moduloAtivo !== 'function') return true;
+        try {
+            return permissoes.moduloAtivo(page);
+        } catch (error) {
+            return true;
+        }
+    }
+
     return {
         STORAGE_KEYS,
         DEFAULT_STATE,
@@ -431,7 +515,10 @@ const MenuStartupPreferences = (() => {
         saveCrmExpanded,
         readLastVisitedPage,
         saveSidebarBehavior,
-        readSidebarBehavior
+        readSidebarBehavior,
+        carregarDoBanco,
+        salvarNoBanco,
+        moduloPermitido
     };
 })();
 
@@ -1379,6 +1466,7 @@ const MenuStartupPreferences = (() => {
 
     function applyStartupPreferencesToUI() {
         if (!moduleElement) return;
+        filtrarModulosPorPermissao();
         if (dom.defaultPageSelect) {
             dom.defaultPageSelect.value = startupPreferences.defaultPage;
         }
@@ -1400,10 +1488,51 @@ const MenuStartupPreferences = (() => {
     }
 
     function handleDefaultPageChange(event) {
-        const normalized = MenuStartupPreferences.normalizeDefaultPage(event.target.value);
+        let normalized = MenuStartupPreferences.normalizeDefaultPage(event.target.value);
+        // Rede de segurança: módulo negado nunca vira tela de entrada, mesmo que
+        // o valor chegue por caminho que não passou pelo filtro do select.
+        if (!MenuStartupPreferences.moduloPermitido(normalized)) {
+            normalized = MenuStartupPreferences.DEFAULT_STATE.defaultPage;
+            if (typeof window.showToast === 'function') {
+                window.showToast('Você não tem permissão para esse módulo inicial.', 'error');
+            }
+        }
         startupPreferences.defaultPage = normalized;
         MenuStartupPreferences.saveDefaultPage(normalized);
+        MenuStartupPreferences.salvarNoBanco({ defaultPage: normalized });
         applyStartupPreferencesToUI();
+    }
+
+    /**
+     * Tira do seletor os módulos que o usuário não pode abrir.
+     * Roda também depois que as permissões carregam (são assíncronas).
+     */
+    function filtrarModulosPorPermissao() {
+        const select = dom.defaultPageSelect;
+        if (!select) return;
+
+        let selecionadoCaiu = false;
+        Array.from(select.options).forEach(option => {
+            const permitido = MenuStartupPreferences.moduloPermitido(option.value);
+            option.hidden = !permitido;
+            option.disabled = !permitido;
+            if (!permitido && option.value === startupPreferences.defaultPage) {
+                selecionadoCaiu = true;
+            }
+        });
+
+        // A escolha guardada deixou de ser permitida: cai para o padrão e
+        // regrava, para não ficar apontando para um módulo bloqueado.
+        if (selecionadoCaiu) {
+            const padrao = MenuStartupPreferences.DEFAULT_STATE.defaultPage;
+            startupPreferences.defaultPage = padrao;
+            MenuStartupPreferences.saveDefaultPage(padrao);
+            MenuStartupPreferences.salvarNoBanco({ defaultPage: padrao });
+            select.value = padrao;
+            if (dom.defaultPageStatus) {
+                dom.defaultPageStatus.textContent = formatDefaultPageStatus(padrao);
+            }
+        }
     }
 
     function applyQuickActionsToUI() {
@@ -1431,6 +1560,7 @@ const MenuStartupPreferences = (() => {
         const expanded = event.target.checked;
         startupPreferences.crmExpanded = expanded;
         MenuStartupPreferences.saveCrmExpanded(expanded);
+        MenuStartupPreferences.salvarNoBanco({ crmExpanded: expanded });
         applyStartupPreferencesToUI();
     }
 
@@ -1438,6 +1568,7 @@ const MenuStartupPreferences = (() => {
         const behavior = MenuStartupPreferences.normalizeSidebarBehavior(event.target.value);
         startupPreferences.sidebarBehavior = behavior;
         MenuStartupPreferences.saveSidebarBehavior(behavior);
+        MenuStartupPreferences.salvarNoBanco({ sidebarBehavior: behavior });
         applyStartupPreferencesToUI();
     }
 
@@ -1652,6 +1783,14 @@ const MenuStartupPreferences = (() => {
         initProfileSection();
         applyStateToUI();
         handlePendingPersonalDataFocus();
+
+        // As permissões chegam de forma assíncrona; quando terminarem, refaz o
+        // filtro do seletor (senão a tela abre listando módulo bloqueado).
+        if (window.Permissoes?.carregar) {
+            Promise.resolve(window.Permissoes.carregar())
+                .then(() => applyStartupPreferencesToUI())
+                .catch(() => {});
+        }
     }
 
     init();

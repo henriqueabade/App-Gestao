@@ -420,7 +420,7 @@ input[type="date"]:valid::-webkit-datetime-edit {
 
 #orcamentoItens th:first-child,
 #orcamentoItens td:first-child {
-    width: 24%;
+    width: 38%;
 }
 
 #orcamentoItens th:last-child,

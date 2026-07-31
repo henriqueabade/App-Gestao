@@ -792,6 +792,85 @@ router.patch('/:id/status', async (req, res) => {
   }
 });
 
+// ---------------------------------------------------------------------------
+// Preferências de inicialização do menu (colunas criadas por sql/mudancausuario.sql)
+//
+// Antes isso vivia só no localStorage: cada máquina tinha a sua e nada era
+// lido no login. Agora fica no usuário e acompanha ele em qualquer máquina.
+// ---------------------------------------------------------------------------
+
+const MENU_PAGINAS_VALIDAS = new Set([
+  'last', 'dashboard', 'materia-prima', 'produtos', 'orcamentos', 'pedidos',
+  'clientes', 'prospeccoes', 'contatos', 'calendario', 'tarefas', 'ia',
+  'usuarios', 'financeiro', 'relatorios', 'laminacao-clientes',
+  'laminacao-servicos', 'laminacao-precificacao', 'laminacao-relatorios',
+  'configuracoes'
+]);
+
+const MENU_BARRAS_VALIDAS = new Set(['auto', 'fixed']);
+
+const MENU_PREFS_PADRAO = Object.freeze({
+  menu_modulo_inicial: 'dashboard',
+  menu_crm_expandido: false,
+  menu_barra_lateral: 'fixed'
+});
+
+function normalizarPreferenciasMenu(origem = {}) {
+  const modulo = String(origem.menu_modulo_inicial || '').trim().toLowerCase();
+  const barra = String(origem.menu_barra_lateral || '').trim().toLowerCase();
+  return {
+    menu_modulo_inicial: MENU_PAGINAS_VALIDAS.has(modulo)
+      ? modulo
+      : MENU_PREFS_PADRAO.menu_modulo_inicial,
+    menu_crm_expandido: origem.menu_crm_expandido === true
+      || origem.menu_crm_expandido === 'true'
+      || origem.menu_crm_expandido === 1,
+    menu_barra_lateral: MENU_BARRAS_VALIDAS.has(barra)
+      ? barra
+      : MENU_PREFS_PADRAO.menu_barra_lateral
+  };
+}
+
+function resolverUsuarioAtual(req) {
+  const tokenFromRequest = req.headers?.authorization || getToken();
+  return extractUserIdFromToken(tokenFromRequest);
+}
+
+/** GET /usuarios/me/preferencias-menu */
+router.get('/me/preferencias-menu', async (req, res) => {
+  try {
+    const userId = resolverUsuarioAtual(req);
+    if (!userId) return res.json({ ...MENU_PREFS_PADRAO });
+
+    const api = createInternalApiClient();
+    const usuario = await api.get(`/api/usuarios/${userId}`);
+    res.json(normalizarPreferenciasMenu(usuario || {}));
+  } catch (err) {
+    // Migração ainda não aplicada, API fora, etc.: devolve o padrão em vez de
+    // quebrar o carregamento do menu.
+    console.warn('Não foi possível ler as preferências de menu; usando o padrão.', err?.message || err);
+    res.json({ ...MENU_PREFS_PADRAO });
+  }
+});
+
+/** PUT /usuarios/me/preferencias-menu */
+router.put('/me/preferencias-menu', async (req, res) => {
+  try {
+    const userId = resolverUsuarioAtual(req);
+    if (!userId) {
+      return res.status(401).json({ error: 'Sessão não identificada' });
+    }
+
+    const preferencias = normalizarPreferenciasMenu(req.body || {});
+    const api = createInternalApiClient();
+    await api.put(`/api/usuarios/${userId}`, preferencias);
+    res.json(preferencias);
+  } catch (err) {
+    console.error('Erro ao salvar preferências de menu:', err);
+    res.status(err.status || 500).json({ error: 'Erro ao salvar preferências de menu' });
+  }
+});
+
 /**
  * GET /usuarios/:id
  */
