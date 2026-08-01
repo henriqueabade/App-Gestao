@@ -3181,6 +3181,49 @@ function createModuleLoadingMask(page, title, description = 'Preparando dados, f
     return mask;
 }
 
+// ---------------------------------------------------------------------------
+// Espera pelas requisições HTTP do módulo.
+//
+// `waitForModuleLoading` (preload) só enxerga chamadas IPC. Módulos que buscam
+// dados por fetch — Configurações é um deles — terminavam de "carregar" antes
+// de terem qualquer dado: a máscara saía no 1s e os campos iam sendo
+// preenchidos depois, na frente do usuário. Aqui contamos os fetch em voo e
+// só liberamos quando eles silenciam.
+// ---------------------------------------------------------------------------
+let fetchesEmVoo = 0;
+let ultimaAtividadeFetch = Date.now();
+
+(function instrumentarFetch() {
+    if (typeof window.fetch !== 'function' || window.__fetchInstrumentado) return;
+    const originalFetch = window.fetch.bind(window);
+    window.__fetchInstrumentado = true;
+    window.fetch = (...args) => {
+        fetchesEmVoo += 1;
+        ultimaAtividadeFetch = Date.now();
+        return originalFetch(...args).finally(() => {
+            fetchesEmVoo = Math.max(0, fetchesEmVoo - 1);
+            ultimaAtividadeFetch = Date.now();
+        });
+    };
+})();
+
+function aguardarDadosDoModulo({ quietMs = 250, timeoutMs = 8000 } = {}) {
+    const inicio = Date.now();
+    return new Promise(resolve => {
+        const checar = () => {
+            const agora = Date.now();
+            const silencioso = fetchesEmVoo === 0 && agora - ultimaAtividadeFetch >= quietMs;
+            // O teto evita que um módulo com requisição pendurada trave a tela.
+            if (silencioso || agora - inicio >= timeoutMs) {
+                resolve({ expirou: agora - inicio >= timeoutMs });
+                return;
+            }
+            setTimeout(checar, 40);
+        };
+        checar();
+    });
+}
+
 function readModuleIntroduction(module, fallbackTitle) {
     const heading = module?.querySelector('h1');
     const description = heading?.parentElement?.querySelector('p');
@@ -3247,6 +3290,11 @@ async function loadPage(page, options = {}) {
     const MIN_MODULE_SPINNER_MS = 1000;
     const inicioSpinnerModulo = Date.now();
     content.classList.toggle('is-module-loading', usesLoadingMask);
+    // #content tem altura fixa e rola por dentro; a máscara é position:absolute
+    // ancorada no topo da área rolável. Vindo de um módulo que estava rolado,
+    // ela nascia fora da vista — dava a impressão de que o spinner "sumia" e a
+    // tela ficava vazia. Voltar ao topo garante que a máscara apareça sempre.
+    content.scrollTop = 0;
     content.replaceChildren(...(usesLoadingMask ? [createModuleLoadingMask(page, moduleTitle)] : []));
 
     document.getElementById('page-style')?.remove();
@@ -3311,6 +3359,14 @@ async function loadPage(page, options = {}) {
         if (usesLoadingMask && ipcLoadToken && window.electronAPI?.waitForModuleLoading) {
             const result = await window.electronAPI.waitForModuleLoading(ipcLoadToken);
             if (result?.timedOut) console.warn(`Tempo limite ao aguardar os dados de ${page}.`);
+        }
+
+        // Além do IPC, espera o que o módulo pediu por HTTP. Passar de 1s aqui
+        // é aceitável: a regra é revelar só depois de tudo pronto.
+        if (usesLoadingMask) {
+            const espera = await aguardarDadosDoModulo();
+            if (espera?.expirou) console.warn(`Tempo limite ao aguardar as requisições de ${page}.`);
+            if (loadId !== moduleLoadSequence) return;
         }
 
         if (loadId !== moduleLoadSequence) return;

@@ -175,9 +175,13 @@ body[data-current-module="usuarios"] #content.no-scroll .table-scroll {
 }
 
 .items-table-scroll {
+  /* Mantém a área de itens estável entre os quatro modais. Quando a janela
+     não comportar esta altura, quem rola é o corpo do modal; as linhas que
+     excederem a área continuam rolando somente dentro da tabela. */
+  flex: 0 0 clamp(12rem, 32vh, 24rem);
+  height: clamp(12rem, 32vh, 24rem);
   overflow-x: hidden;
   overflow-y: auto;
-  max-height: clamp(12rem, 32vh, 24rem);
   overscroll-behavior: contain;
 }
 

@@ -955,6 +955,38 @@ header.glass-surface {
     -webkit-backdrop-filter: blur(24px);
 }
 
+/* ---------------------------------------------------------------------
+   Padrão do cabeçalho de módulo (título + descrição).
+
+   Mora aqui porque menu.css é o único CSS sempre carregado: o CSS de
+   módulo é trocado a cada navegação, então nenhum módulo consegue
+   divergir do padrão.
+
+   Antes a cor da descrição saía de var(--color-violet), que cada CSS de
+   módulo redefinia por conta própria (#A394A7). Os módulos que não
+   redefiniam — Dashboard e Financeiro — caíam no valor do tema
+   (#cecbcf) e ficavam visivelmente mais claros. O título tinha problema
+   equivalente: vinha por herança, e `.relatorios-module { color:#fff }`
+   deixava o de Relatórios branco puro em vez de 88% de opacidade.
+
+   Regra direta no elemento vence herança, então isto se impõe sobre
+   qualquer cor herdada do contêiner do módulo.
+   --------------------------------------------------------------------- */
+.module-header__title {
+    font-size: 1.5rem;
+    line-height: 2rem;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.88);
+    margin-bottom: 0.5rem;
+}
+
+.module-header__description {
+    font-size: 1rem;
+    line-height: 1.5rem;
+    color: #A394A7;
+    margin: 0;
+}
+
 /* Animação de entrada dos cards */
 .animate-fade-in-up {
     animation: fadeInUp 0.6s ease-out forwards;
