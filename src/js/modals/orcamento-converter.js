@@ -747,7 +747,13 @@
       items: rows.map(r => ({
         produto_id: r.produto_id,
         qtd_usar_pronta: Number(r.pronta || 0),
-        qtd_a_produzir: Number(r.a_produzir || 0)
+        qtd_a_produzir: Number(r.a_produzir || 0),
+        // As peças aproveitadas pela METADE também saem do estoque de produtos:
+        // o lote foi consumido, mesmo que a peça ainda precise ser terminada.
+        // `qtd_a_produzir` já as inclui (é parcial + total), então sem esta
+        // lista o backend não tinha como saber quais lotes baixar.
+        qtd_produzir_parcial: Number(r.produzir_parcial || 0),
+        parciais: Array.isArray(r.parciais) ? r.parciais : []
       }))
     };
     try {
@@ -963,6 +969,17 @@ async function computeInsumosAndRender(options = {}) {
 
       partialRecords.forEach(record => addFaltantes(record.order, record.qty));
       if (produceTotal > 0) addFaltantes(Number.NEGATIVE_INFINITY, produceTotal);
+
+      // Guardado na linha para a confirmação poder ENVIAR os parciais.
+      // Sem isto o backend só recebia "pronta" e "a produzir": as peças
+      // aproveitadas pela metade nunca eram abatidas do estoque de produtos,
+      // e o lote continuava lá depois de já ter sido usado no pedido.
+      r.parciais = Array.from(partialRecords.values()).map(record => ({
+        ultimo_insumo_id: Number.isFinite(Number(record.lastId)) ? Number(record.lastId) : null,
+        quantidade: Number(record.qty || 0),
+        ordem: Number(record.order || 0),
+        processo: record.process || ''
+      })).filter(p => p.quantidade > 0);
 
       r.faltantes = Array.from(faltantesMap.values());
 

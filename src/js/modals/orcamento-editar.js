@@ -839,6 +839,19 @@
     if (currentStatus === 'Aprovado' && lastConversionData) {
       body.conversao = lastConversionData;
     }
+    // ------------------------------------------------------------------
+    // Máscara de espera.
+    //
+    // A conversão cria o pedido, grava os faltantes e abate estoque — leva
+    // alguns segundos. Antes o modal de revisão fechava na hora do clique e a
+    // tela ficava muda: o usuário não sabia se tinha convertido, dado erro ou
+    // se ainda estava rodando. A máscara sai só quando a resposta chega, e aí
+    // vem o toast de sucesso ou de erro.
+    // ------------------------------------------------------------------
+    const espera = currentStatus === 'Aprovado'
+      ? mostrarEsperaConversao(`Convertendo ${data.numero} e aplicando o estoque...`)
+      : null;
+
     try {
       const resp = await fetchApi(`/api/orcamentos/${id}`, {
         method: 'PUT',
@@ -862,7 +875,31 @@
     } catch (err) {
       console.error(err);
       showToast('Erro ao atualizar orçamento', 'error');
+    } finally {
+      // No `finally`: com erro a máscara também precisa sair, senão a tela fica
+      // presa em "convertendo" para sempre.
+      espera?.fechar();
     }
+  }
+
+  /** Máscara de carregamento no padrão do app (mesma do menu). */
+  function mostrarEsperaConversao(mensagem) {
+    const overlay = document.createElement('div');
+    overlay.className = 'fixed inset-0 bg-black/60 backdrop-blur-sm flex flex-col items-center justify-center gap-4';
+    overlay.style.zIndex = 'var(--z-dialog)';
+    overlay.setAttribute('role', 'alert');
+    // Não é caixa de diálogo: não pode ir para a top layer nem tornar o
+    // documento inerte (ver src/utils/dialogTopLayer.js).
+    overlay.setAttribute('data-sem-top-layer', 'true');
+    overlay.innerHTML = `
+      <div class="app-loading-indicator app-loading-indicator--compact" aria-hidden="true">
+        <span class="module-loading-orbit"></span>
+        <span class="module-loading-core"><img src="../assets/Logo.ico" alt=""></span>
+      </div>
+      <p class="text-sm text-white font-medium"></p>`;
+    overlay.querySelector('p').textContent = mensagem;
+    document.body.appendChild(overlay);
+    return { fechar: () => { if (overlay.isConnected) overlay.remove(); } };
   }
 
   // Abre o modal de conversão mantendo este modal de edição no fundo
@@ -908,6 +945,8 @@
           lastConversionData = {
             decisaoNote: changes.conversao.decisionNote || '',
             podeSaldoNegativo: !!changes.conversao.hasNegative,
+            // Os itens seguem inteiros — inclusive `parciais`, que é o que diz
+            // ao backend quais lotes pela metade abater do estoque.
             itens: Array.isArray(changes.conversao.items) ? changes.conversao.items : []
           };
         }

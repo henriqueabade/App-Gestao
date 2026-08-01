@@ -44,7 +44,8 @@ const {
   categoriaTemDependencias,
   unidadeTemDependencias,
   processoTemDependencias,
-  listarProdutosPorInsumo
+  listarProdutosPorInsumo,
+  listarInsumosPorProduto
 } = require('./backend/materiaPrima');
 const {
   listarProdutos,
@@ -3953,6 +3954,14 @@ ipcMain.handle('listar-produtos-por-insumo', async (_e, insumoId) => {
     return await listarProdutosPorInsumo(insumoId);
   } catch (err) {
     console.error('Erro ao listar produtos que usam o insumo:', err);
+    return [];
+  }
+});
+ipcMain.handle('listar-insumos-por-produto', async (_e, termo) => {
+  try {
+    return await listarInsumosPorProduto(termo);
+  } catch (err) {
+    console.error('Erro ao pesquisar insumos usados pelo produto:', err);
     return [];
   }
 });

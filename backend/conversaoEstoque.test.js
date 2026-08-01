@@ -48,7 +48,9 @@ test('peça tirada pronta do estoque NÃO consome insumo', () => {
   });
 
   assert.deepEqual(plano.consumoPorInsumo, [], 'a peça já estava produzida: gastar insumo de novo seria contar duas vezes');
-  assert.deepEqual(plano.pecasDeEstoque, [{ pedido_item_id: 100, produto_id: 1, quantidade: 3 }]);
+  assert.equal(plano.pecasDeEstoque.length, 1);
+  assert.equal(plano.pecasDeEstoque[0].pedido_item_id, 100);
+  assert.equal(plano.pecasDeEstoque[0].quantidade, 3);
 });
 
 test('parte pronta e parte produzida: só a parte produzida consome', () => {
@@ -59,7 +61,8 @@ test('parte pronta e parte produzida: só a parte produzida consome', () => {
   });
 
   assert.equal(plano.consumoPorInsumo.find(c => c.insumo_id === 10).quantidade, 6, 'só as 3 produzidas');
-  assert.deepEqual(plano.pecasDeEstoque, [{ pedido_item_id: 100, produto_id: 1, quantidade: 2 }]);
+  assert.equal(plano.pecasDeEstoque.length, 1);
+  assert.equal(plano.pecasDeEstoque[0].quantidade, 2);
 });
 
 test('o abatimento leva o necessário INTEIRO, mesmo faltando em estoque', () => {
@@ -237,4 +240,76 @@ test('lote zerado é ignorado', () => {
   );
   assert.deepEqual(consumos, []);
   assert.equal(restante, 5);
+});
+
+// ===================================================================
+// Peças aproveitadas PELA METADE
+//
+// O lote parou no meio da rota e a peça ainda será terminada — mas o lote sai
+// do estoque igual, porque já foi comprometido com este pedido. Deixá-lo lá o
+// oferece de novo para outro pedido: o mesmo lote seria vendido duas vezes.
+// Foi exatamente isso que aconteceu em produção.
+// ===================================================================
+
+test('peça parcial também é abatida do estoque de produtos', () => {
+  const plano = planejarConsumo({
+    itens: [{
+      pedido_item_id: 100,
+      produto_id: 1,
+      quantidade: 5,
+      qtd_usar_pronta: 1,
+      qtd_a_produzir: 4,
+      parciais: [{ ultimo_insumo_id: 10, quantidade: 3, ordem: 1 }]
+    }],
+    rotaPorProduto: ROTA,
+    estoquePorInsumo: estoque({ 10: { quantidade: 100 }, 20: { quantidade: 100 } })
+  });
+
+  assert.equal(plano.pecasDeEstoque.length, 2, 'a pronta E a parcial saem do estoque');
+
+  const inteira = plano.pecasDeEstoque.find(p => !p.parcial);
+  assert.equal(inteira.quantidade, 1);
+  assert.equal(inteira.ultimo_insumo_id, null, 'peça inteira: lote no fim da rota');
+
+  const parcial = plano.pecasDeEstoque.find(p => p.parcial);
+  assert.equal(parcial.quantidade, 3);
+  assert.equal(parcial.ultimo_insumo_id, 10, 'é este insumo que identifica onde o lote parou');
+});
+
+test('sem parciais informados, nada de parcial é abatido', () => {
+  const plano = planejarConsumo({
+    itens: [{ pedido_item_id: 100, produto_id: 1, quantidade: 5, qtd_usar_pronta: 1, qtd_a_produzir: 4 }],
+    rotaPorProduto: ROTA,
+    estoquePorInsumo: estoque({ 10: { quantidade: 100 }, 20: { quantidade: 100 } })
+  });
+
+  assert.equal(plano.pecasDeEstoque.length, 1, 'só a peça pronta');
+  assert.equal(plano.pecasDeEstoque[0].parcial, false);
+});
+
+test('parcial com quantidade zero ou inválida é ignorado', () => {
+  const plano = planejarConsumo({
+    itens: [{
+      pedido_item_id: 100, produto_id: 1, quantidade: 5, qtd_a_produzir: 5,
+      parciais: [
+        { ultimo_insumo_id: 10, quantidade: 0 },
+        { ultimo_insumo_id: 10, quantidade: -2 },
+        { ultimo_insumo_id: 10 }
+      ]
+    }],
+    rotaPorProduto: ROTA,
+    estoquePorInsumo: estoque({ 10: { quantidade: 100 }, 20: { quantidade: 100 } })
+  });
+
+  assert.deepEqual(plano.pecasDeEstoque, [], 'lote fantasma não pode ser baixado');
+});
+
+test('o lote parcial escolhido é o que parou no insumo certo', () => {
+  const lotes = [
+    { id: 1, quantidade: 4, ultimo_insumo_id: 10, data_hora_completa: '2026-01-01' }, // parou no corte
+    { id: 2, quantidade: 4, ultimo_insumo_id: 20, data_hora_completa: '2026-01-02' }  // parou no acabamento
+  ];
+  const { consumos } = escolherLotes(lotes, 3, 10);
+  assert.equal(consumos.length, 1);
+  assert.equal(consumos[0].lote_id, 1, 'pegar o lote do outro ponto entregaria peça no estágio errado');
 });

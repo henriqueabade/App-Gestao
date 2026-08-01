@@ -150,6 +150,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
       console.error('listar-produtos-por-insumo error', err);
       return [];
     }),
+  listarInsumosPorProduto: (termo) =>
+    ipcRenderer.invoke('listar-insumos-por-produto', termo).catch((err) => {
+      console.error('listar-insumos-por-produto error', err);
+      return [];
+    }),
   listarCategorias: () =>
     ipcRenderer.invoke('listar-categorias').catch((err) => {
       console.error('listar-categorias error', err);

@@ -331,7 +331,11 @@ async function converterOrcamentoEmPedido(api, id, conversao = null) {
       produto_id: item?.produto_id,
       quantidade: payloadItem.quantidade,
       qtd_usar_pronta: payloadItem.qtd_usar_pronta,
-      qtd_a_produzir: payloadItem.qtd_a_produzir
+      qtd_a_produzir: payloadItem.qtd_a_produzir,
+      // `parciais` NÃO vira coluna de pedidos_itens (a tabela não tem esse
+      // campo): ela só atravessa até o abatimento, para o estoque saber quais
+      // lotes pela metade foram comprometidos com este pedido.
+      parciais: Array.isArray(decisao?.parciais) ? decisao.parciais : []
     });
     proximoItemId = usado + 1;
   }

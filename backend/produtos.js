@@ -187,6 +187,19 @@ function obterCacheLotes(agora, queryKey) {
   return lotesCache;
 }
 
+/**
+ * Joga o cache fora.
+ *
+ * O cache de lotes vale 30 s, e NADA o invalidava ao gravar. O efeito era que,
+ * logo depois de inserir, editar ou excluir um lote, a coluna "Quantidade" da
+ * grade de Produtos continuava mostrando o valor velho — o app relia, mas relia
+ * o cache. Quem escreve precisa derrubá-lo: um número de estoque errado na tela
+ * leva a decisão errada de produção.
+ */
+function invalidarCacheLotes() {
+  lotesCache = null;
+}
+
 function salvarCacheLotes(agora, queryKey, lotes) {
   const lista = Array.isArray(lotes) ? lotes : [];
   lotesCache = {
@@ -905,27 +918,32 @@ async function excluirProduto(id) {
  * @returns {Promise<Object>}            Registro completo do lote recém inserido.
  */
 async function inserirLoteProduto({ produtoId, etapa, ultimoInsumoId, quantidade }) {
-  return executarLotes('post', '', {
+  const criado = await executarLotes('post', '', {
     produto_id: produtoId,
     etapa_id: etapa,
     ultimo_insumo_id: ultimoInsumoId,
     quantidade: paraDecimal(quantidade),
     data_hora_completa: new Date().toISOString()
   });
+  invalidarCacheLotes();
+  return criado;
 }
 
 /**
  * Atualiza um lote (quantidade + data)
  */
 async function atualizarLoteProduto(id, quantidade) {
-  return executarLotes('put', `/${id}`, {
+  const atualizado = await executarLotes('put', `/${id}`, {
     quantidade: paraDecimal(quantidade),
     data_hora_completa: new Date().toISOString()
   });
+  invalidarCacheLotes();
+  return atualizado;
 }
 
 async function excluirLoteProduto(id) {
   await executarLotes('delete', `/${id}`);
+  invalidarCacheLotes();
 }
 
 /**
@@ -1287,6 +1305,9 @@ module.exports = {
   inserirLoteProduto,
   atualizarLoteProduto,
   excluirLoteProduto,
+  // Exportado para quem mexe em lotes por fora daqui (a conversão de orçamento
+  // baixa lotes direto pela API da requisição) poder derrubar o cache também.
+  invalidarCacheLotes,
   salvarProdutoDetalhado,
   listarColecoes,
   adicionarColecao,

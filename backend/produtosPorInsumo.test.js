@@ -77,3 +77,30 @@ test('listarProdutosPorInsumo devolve lista vazia quando ninguém usa o insumo',
 
   assert.deepStrictEqual(await listarProdutosPorInsumo(123), []);
 });
+
+test('listarInsumosPorProduto pesquisa nome ou código e retorna apenas vínculos reais', async () => {
+  const { listarInsumosPorProduto } = carregarComTabelas({
+    produtos: [
+      { id: 10, codigo: 'P-010', nome: 'Aquário Redondo' },
+      { id: 11, codigo: 'P-011', nome: 'Mesa Lateral' }
+    ],
+    produtos_insumos: [
+      { produto_id: 10, produto_codigo: 'P-010', insumo_id: 4 },
+      { produto_id: 10, produto_codigo: 'P-010', insumo_id: 7 },
+      { produto_id: 11, produto_codigo: 'P-011', insumo_id: 9 }
+    ]
+  });
+
+  assert.deepStrictEqual(await listarInsumosPorProduto('aquário'), [4, 7]);
+  assert.deepStrictEqual(await listarInsumosPorProduto('P-011'), [9]);
+  assert.deepStrictEqual(await listarInsumosPorProduto('produto inexistente'), []);
+});
+
+test('listarInsumosPorProduto aceita vínculo antigo somente com produto_codigo', async () => {
+  const { listarInsumosPorProduto } = carregarComTabelas({
+    produtos: [{ id: 20, codigo: 'ABC-20', nome: 'Banco' }],
+    produtos_insumos: [{ produto_id: null, produto_codigo: 'abc-20', insumo_id: 12 }]
+  });
+
+  assert.deepStrictEqual(await listarInsumosPorProduto('abc-20'), [12]);
+});

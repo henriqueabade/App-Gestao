@@ -89,7 +89,30 @@ function planejarConsumo({ itens = [], rotaPorProduto = new Map(), estoquePorIns
       pecasDeEstoque.push({
         pedido_item_id: pedidoItemId,
         produto_id: produtoId,
-        quantidade: arredondar(usarPronta)
+        quantidade: arredondar(usarPronta),
+        // Peça inteira: o lote está no FIM da rota.
+        ultimo_insumo_id: null,
+        parcial: false
+      });
+    }
+
+    // Peças aproveitadas pela METADE. O lote parou no meio da rota e vai ser
+    // terminado — mas ele SAI do estoque igual, porque já foi comprometido com
+    // este pedido. Antes só a peça inteira era abatida e o lote parcial ficava
+    // no estoque como se estivesse livre, disponível para outro pedido.
+    for (const parcial of (Array.isArray(item?.parciais) ? item.parciais : [])) {
+      const quantidade = paraNumero(parcial?.quantidade);
+      if (!(quantidade > 0)) continue;
+      pecasDeEstoque.push({
+        pedido_item_id: pedidoItemId,
+        produto_id: produtoId,
+        quantidade: arredondar(quantidade),
+        // Aqui o lote NÃO está no fim da rota: é este insumo que identifica em
+        // que ponto ele parou.
+        ultimo_insumo_id: Number.isFinite(Number(parcial?.ultimo_insumo_id))
+          ? Number(parcial.ultimo_insumo_id)
+          : null,
+        parcial: true
       });
     }
 

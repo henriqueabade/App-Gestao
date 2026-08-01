@@ -99,11 +99,22 @@ async function popularFiltros(lista) {
     }
 }
 
-function aplicarFiltros() {
+let sequenciaBuscaProduto = 0;
+
+async function aplicarFiltros() {
     const termo = (document.getElementById('materiaPrimaSearch')?.value || '').toLowerCase();
     const processo = document.getElementById('filtroProcesso')?.value || '';
     const categoria = document.getElementById('filtroCategoria')?.value || '';
     const zeroEstoque = document.getElementById('zeroStock')?.checked;
+
+    const sequenciaAtual = ++sequenciaBuscaProduto;
+    let idsUsadosPeloProduto = new Set();
+    if (termo.trim()) {
+        const ids = await (window.electronAPI?.listarInsumosPorProduto?.(termo.trim()) ?? []);
+        // Uma resposta antiga nunca deve substituir a pesquisa mais recente.
+        if (sequenciaAtual !== sequenciaBuscaProduto) return;
+        idsUsadosPeloProduto = new Set((Array.isArray(ids) ? ids : []).map(String));
+    }
 
     let filtrados = todosMateriais.filter(m => {
         const isCritical = !m.infinito && Number(m.quantidade) < 10;
@@ -111,6 +122,7 @@ function aplicarFiltros() {
             (m.nome || '').toLowerCase().includes(termo) ||
             (m.categoria || '').toLowerCase().includes(termo) ||
             (m.processo || '').toLowerCase().includes(termo) ||
+            idsUsadosPeloProduto.has(String(m.id)) ||
             (m.infinito ? 'infinito'.includes(termo) : false) ||
             (isCritical && ['acabando', 'critico', 'crítico'].some(k => k.includes(termo)));
         const matchProc = !processo || m.processo === processo;
@@ -302,7 +314,7 @@ function createPopupContent(item) {
         </div>
         <div class="popup-description-section">
           <p class="popup-info-label">Utilizado em:</p>
-          <div class="popup-usage-list" data-usage-for="${escaparHtml(item.id)}">
+          <div class="popup-usage-list modal-scroll" data-usage-for="${escaparHtml(item.id)}">
             <p class="popup-description-text">Carregando...</p>
           </div>
         </div>

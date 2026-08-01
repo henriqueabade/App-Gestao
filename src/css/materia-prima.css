@@ -321,6 +321,7 @@ body {
   gap: 0.25rem;
   max-height: 6.5rem;
   overflow-y: auto;
+  padding-right: 0.25rem;
 }
 
 .popup-usage-list .badge {

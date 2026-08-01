@@ -21,6 +21,7 @@
 
 const { planejarConsumo, escolherLotes, arredondar } = require('./conversaoEstoque');
 const { registrarSaida } = require('./materiaPrima');
+const { invalidarCacheLotes } = require('./produtos');
 
 const TABELA_FALTANTES = 'pedidos_itens_faltantes';
 const TABELA_EXT = 'pedido_itens_ext';
@@ -172,15 +173,18 @@ async function aplicarConversaoNoEstoque(api, {
       continue;
     }
 
-    const { consumos, restante } = escolherLotes(
-      lotes,
-      peca.quantidade,
-      ultimoInsumoPorProduto.get(peca.produto_id)
-    );
+    // Peça inteira procura lote no FIM da rota; peça parcial procura o lote que
+    // parou exatamente no insumo informado pela revisão.
+    const alvo = peca.parcial
+      ? peca.ultimo_insumo_id
+      : ultimoInsumoPorProduto.get(peca.produto_id);
+
+    const { consumos, restante } = escolherLotes(lotes, peca.quantidade, alvo);
 
     if (restante > 0) {
       avisos.push(
-        `O produto ${peca.produto_id} não tinha ${peca.quantidade} pronta(s) em estoque: ` +
+        `O produto ${peca.produto_id} não tinha ${peca.quantidade} ` +
+        `${peca.parcial ? 'peça(s) parcial(is)' : 'pronta(s)'} em estoque: ` +
         `faltaram ${restante}. O pedido foi criado; confira o estoque.`
       );
     }
@@ -230,6 +234,13 @@ async function aplicarConversaoNoEstoque(api, {
     } catch (err) {
       avisos.push(`Falha ao abater "${consumo.insumo_nome}": ${err?.message || err}`);
     }
+  }
+
+  // Os lotes foram baixados direto pela API da requisição, sem passar pelo
+  // `produtos.js` — o cache de 30 s dele ficaria mostrando o estoque de antes
+  // da conversão na grade de Produtos.
+  if (plano.pecasDeEstoque.length) {
+    try { invalidarCacheLotes(); } catch (_) { /* cache é otimização, não regra */ }
   }
 
   resumo.temFalta = plano.temFalta;

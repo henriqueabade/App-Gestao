@@ -546,6 +546,43 @@ async function listarProdutosPorInsumo(insumoId) {
   );
 }
 
+/**
+ * Localiza os insumos realmente vinculados aos produtos cujo nome ou código
+ * contém o texto pesquisado. A resolução aceita também vínculos antigos que
+ * guardam apenas `produto_codigo`.
+ */
+async function listarInsumosPorProduto(termo) {
+  const busca = String(termo || '').trim().toLowerCase();
+  if (!busca) return [];
+
+  const produtos = await getFiltrado('/produtos', { select: 'id,codigo,nome' });
+  const encontrados = (Array.isArray(produtos) ? produtos : []).filter(produto =>
+    String(produto?.nome || '').toLowerCase().includes(busca) ||
+    String(produto?.codigo || '').toLowerCase().includes(busca)
+  );
+  if (!encontrados.length) return [];
+
+  const ids = new Set(encontrados.map(produto => String(produto.id)));
+  const codigos = new Set(
+    encontrados
+      .map(produto => String(produto?.codigo || '').trim().toLowerCase())
+      .filter(Boolean)
+  );
+  const vinculos = await getFiltrado('/produtos_insumos', {
+    select: 'produto_id,produto_codigo,insumo_id'
+  });
+
+  return Array.from(new Set(
+    (Array.isArray(vinculos) ? vinculos : [])
+      .filter(vinculo =>
+        ids.has(String(vinculo?.produto_id)) ||
+        codigos.has(String(vinculo?.produto_codigo || '').trim().toLowerCase())
+      )
+      .map(vinculo => Number(vinculo?.insumo_id))
+      .filter(Number.isFinite)
+  ));
+}
+
 module.exports = {
   listarMaterias,
   adicionarMateria,
@@ -564,5 +601,6 @@ module.exports = {
   categoriaTemDependencias,
   unidadeTemDependencias,
   processoTemDependencias,
-  listarProdutosPorInsumo
+  listarProdutosPorInsumo,
+  listarInsumosPorProduto
 };
