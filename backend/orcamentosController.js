@@ -1,8 +1,31 @@
 const express = require('express');
 const { createApiClient } = require('./apiHttpClient');
 const { exigirPermissao } = require('./permissionsController');
+const { aplicarConversaoNoEstoque } = require('./conversaoAplicar');
 
 const router = express.Router();
+
+/**
+ * Id do usuário que está fazendo a requisição, lido do JWT.
+ *
+ * `decisao_estoque_by` existia na tabela e nunca era preenchido: a decisão de
+ * usar estoque ou produzir do zero ficava sem dono. Numa ação que mexe em
+ * estoque, saber QUEM decidiu não é enfeite — é o que permite auditar e
+ * estornar depois.
+ */
+function idDoUsuarioDaRequisicao(req) {
+  try {
+    const bruto = String(req?.headers?.authorization || '').replace(/^Bearer\s+/i, '').trim();
+    const parte = bruto.split('.')[1];
+    if (!parte) return null;
+    const json = Buffer.from(parte.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8');
+    const payload = JSON.parse(json);
+    const id = payload.id ?? payload.userId ?? payload.sub ?? null;
+    return Number.isFinite(Number(id)) ? Number(id) : null;
+  } catch (_) {
+    return null;
+  }
+}
 
 // Descobre a maior sequência numérica já usada em "numero" (ORC1, ORC2, ...).
 // Precisa varrer TODOS os registros: usar apenas o último por id.desc gera
@@ -296,14 +319,20 @@ async function converterOrcamentoEmPedido(api, id, conversao = null) {
   // pedidos_itens.id e pedido_parcelas.id também são NOT NULL sem auto-incremento:
   // geramos ids sequenciais a partir do maior id existente, com retentativa.
   let proximoItemId = (await getMaxId(api, 'pedidos_itens')) + 1;
+  // Guardamos o id de cada peça criada: sem ele não há como dizer "falta X para
+  // a peça Y" nem de qual lote a peça pronta saiu.
+  const pecasCriadas = [];
   for (const item of Array.isArray(itens) ? itens : []) {
     const decisao = decisaoPorProduto.get(Number(item?.produto_id)) || {};
-    const usado = await inserirLinhaComId(
-      api,
-      'pedidos_itens',
-      buildPedidoItemPayload(item, pedidoId, decisao),
-      proximoItemId
-    );
+    const payloadItem = buildPedidoItemPayload(item, pedidoId, decisao);
+    const usado = await inserirLinhaComId(api, 'pedidos_itens', payloadItem, proximoItemId);
+    pecasCriadas.push({
+      pedido_item_id: usado,
+      produto_id: item?.produto_id,
+      quantidade: payloadItem.quantidade,
+      qtd_usar_pronta: payloadItem.qtd_usar_pronta,
+      qtd_a_produzir: payloadItem.qtd_a_produzir
+    });
     proximoItemId = usado + 1;
   }
 
@@ -320,7 +349,30 @@ async function converterOrcamentoEmPedido(api, id, conversao = null) {
     proximoParcelaId = usado + 1;
   }
 
-  return { pedido: { id: pedidoId, numero }, jaExistia: false };
+  // ------------------------------------------------------------------
+  // Estoque: registra o que faltava e abate o que foi decidido.
+  //
+  // Depois das parcelas, e sem poder derrubar a conversão: o pedido já existe
+  // neste ponto. Um erro aqui volta como aviso para a interface mostrar, em vez
+  // de fazer o usuário achar que a conversão inteira falhou.
+  // ------------------------------------------------------------------
+  let estoque = null;
+  try {
+    estoque = await aplicarConversaoNoEstoque(api, {
+      pedidoId,
+      itens: pecasCriadas,
+      usuarioId: conversao && Number.isFinite(Number(conversao.decisaoBy))
+        ? Number(conversao.decisaoBy)
+        : null,
+      inserirLinhaComId,
+      getMaxId
+    });
+  } catch (err) {
+    console.error('Falha ao aplicar a decisão de estoque da conversão:', err);
+    estoque = { avisos: [`Falha ao aplicar a decisão de estoque: ${err?.message || err}`] };
+  }
+
+  return { pedido: { id: pedidoId, numero }, jaExistia: false, estoque };
 }
 
 router.get('/', exigirPermissao('orc.view'), async (req, res) => {
@@ -463,10 +515,15 @@ router.put('/:id', exigirPermissao(permissoesDeEdicao), async (req, res) => {
     let convertido = false;
     let convertErro = null;
     let pedido = null;
+    let estoqueResumo = null;
     if (body.situacao === 'Aprovado') {
       try {
-        const resultado = await converterOrcamentoEmPedido(api, id, body.conversao);
+        const resultado = await converterOrcamentoEmPedido(api, id, {
+          ...(body.conversao || {}),
+          decisaoBy: idDoUsuarioDaRequisicao(req)
+        });
         pedido = resultado.pedido;
+        estoqueResumo = resultado.estoque || null;
         convertido = true;
       } catch (convErr) {
         convertErro = convErr?.body?.detalhe || convErr?.body?.error || convErr?.message || 'Falha ao converter em pedido';
@@ -474,7 +531,7 @@ router.put('/:id', exigirPermissao(permissoesDeEdicao), async (req, res) => {
       }
     }
 
-    res.json({ success: true, convertido, convertErro, pedido });
+    res.json({ success: true, convertido, convertErro, pedido, estoque: estoqueResumo });
   } catch (err) {
     console.error('Erro ao atualizar orçamento:', err);
     res.status(err.status || 500).json({ error: 'Erro ao atualizar orçamento' });
@@ -495,17 +552,26 @@ router.patch('/:id/status', exigirPermissao(permissoesDeStatus), async (req, res
     let convertido = false;
     let convertErro = null;
     let pedido = null;
+    let estoqueResumo = null;
     if (situacao === 'Aprovado') {
       try {
-        const resultado = await converterOrcamentoEmPedido(api, id);
+        // A conversão em lote (botão "Converter Orçamento", em Pedidos) chega
+        // por aqui. Ela não passa pela revisão peça a peça, então a decisão de
+        // estoque vem no corpo quando existir; o dono da decisão é sempre
+        // registrado, para que o pedido saiba QUEM converteu.
+        const resultado = await converterOrcamentoEmPedido(api, id, {
+          ...(req.body?.conversao || {}),
+          decisaoBy: idDoUsuarioDaRequisicao(req)
+        });
         pedido = resultado.pedido;
+        estoqueResumo = resultado.estoque || null;
         convertido = true;
       } catch (convErr) {
         convertErro = convErr?.body?.detalhe || convErr?.body?.error || convErr?.message || 'Falha ao converter em pedido';
         console.error('Erro ao converter orçamento em pedido:', convErr);
       }
     }
-    res.json({ success: true, convertido, convertErro, pedido });
+    res.json({ success: true, convertido, convertErro, pedido, estoque: estoqueResumo });
   } catch (err) {
     console.error('Erro ao atualizar status do orçamento:', err);
     res.status(err.status || 500).json({ error: 'Erro ao atualizar status do orçamento' });

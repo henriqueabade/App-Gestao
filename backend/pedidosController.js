@@ -116,6 +116,171 @@ router.delete('/:id', exigirPermissao('ped.delete'), async (req, res) => {
   }
 });
 
+/**
+ * GET /pedidos/:id/relatorio-producao
+ *
+ * Devolve a FOTO congelada na conversão, agrupada por processo — uma folha por
+ * processo no relatório. Nada é recalculado aqui de propósito: o papel que vai
+ * para a produção tem de dizer o que foi decidido quando o pedido foi criado,
+ * não o que o estoque parece agora.
+ */
+router.get('/:id/relatorio-producao', exigirPermissao('ped.report'), async (req, res) => {
+  const { id } = req.params;
+  try {
+    const api = createApiClient(req);
+
+    const [pedido, itens, faltantes] = await Promise.all([
+      api.get(`/api/pedidos/${id}`),
+      api.get('/api/pedidos_itens', { query: { pedido_id: id } }).catch(() => []),
+      api.get('/api/pedidos_itens_faltantes', { query: { pedido_id: id } }).catch(() => [])
+    ]);
+
+    if (!pedido || pedido.error === 'Not found') {
+      return res.status(404).json({ error: 'Pedido não encontrado' });
+    }
+
+    const listaItens = Array.isArray(itens) ? itens : [];
+    const listaFaltantes = Array.isArray(faltantes) ? faltantes : [];
+
+    // Nome da peça por id, para o relatório mostrar "Peça x" com o nome real.
+    const nomePorItem = new Map(listaItens.map(i => [Number(i.id), i.nome || i.codigo || `Item ${i.id}`]));
+
+    // ------------------------------------------------------------------
+    // O QUE CADA PEÇA CONSOME (a tabela de cima do relatório).
+    //
+    // Vem da rota do produto × `qtd_a_produzir` — e `qtd_a_produzir` está
+    // congelado em pedidos_itens desde a conversão, então a quantidade não muda
+    // depois. Só as peças PRODUZIDAS entram: peça tirada pronta do estoque não
+    // vai ser fabricada, e listá-la mandaria a produção refazer o que já existe.
+    // ------------------------------------------------------------------
+    const rotaCache = new Map();
+    async function rotaDoProduto(produtoId) {
+      const chave = Number(produtoId);
+      if (rotaCache.has(chave)) return rotaCache.get(chave);
+      const bruta = await api.get('/api/produtos_insumos', { query: { produto_id: chave } }).catch(() => []);
+      const lista = Array.isArray(bruta) ? bruta : [];
+      const rota = [];
+      for (const passo of lista) {
+        const materia = await api.get(`/api/materia_prima/${passo.insumo_id}`).catch(() => null);
+        rota.push({
+          insumo_id: Number(passo.insumo_id),
+          por_unidade: Number(passo.quantidade) || 0,
+          ordem_insumo: passo.ordem_insumo,
+          insumo_nome: materia?.nome || `Insumo ${passo.insumo_id}`,
+          unidade: materia?.unidade || '',
+          processo: materia?.processo || 'Sem processo'
+        });
+      }
+      rota.sort((a, b) => Number(a.ordem_insumo || 0) - Number(b.ordem_insumo || 0));
+      rotaCache.set(chave, rota);
+      return rota;
+    }
+
+    // processo -> peça -> insumos
+    const processos = new Map();
+
+    const registrar = (processo, pecaId, dados) => {
+      const nome = processo || 'Sem processo';
+      if (!processos.has(nome)) processos.set(nome, new Map());
+      const pecas = processos.get(nome);
+      if (!pecas.has(pecaId)) {
+        pecas.set(pecaId, {
+          pedido_item_id: pecaId,
+          peca: nomePorItem.get(pecaId) || `Peça ${pecaId}`,
+          itens: []
+        });
+      }
+      pecas.get(pecaId).itens.push(dados);
+    };
+
+    for (const peca of listaItens) {
+      const aProduzir = Number(peca.qtd_a_produzir) || 0;
+      if (!(aProduzir > 0)) continue;
+      const rota = await rotaDoProduto(peca.produto_id);
+      for (const passo of rota) {
+        const quantidade = Math.round((passo.por_unidade * aProduzir + Number.EPSILON) * 10000) / 10000;
+        if (!(quantidade > 0)) continue;
+        registrar(passo.processo, Number(peca.id), {
+          insumo_nome: passo.insumo_nome,
+          unidade: passo.unidade,
+          quantidade,
+          ordem_insumo: passo.ordem_insumo
+        });
+      }
+    }
+
+    // ------------------------------------------------------------------
+    // O QUE FALTOU (a tabela de baixo). Sai da foto congelada na conversão —
+    // recalcular contra o estoque de hoje daria um número diferente do que foi
+    // decidido, e é o decidido que a produção precisa ver.
+    // ------------------------------------------------------------------
+    const faltaPorProcesso = new Map();
+    for (const f of listaFaltantes) {
+      const processo = f.processo || 'Sem processo';
+      if (!faltaPorProcesso.has(processo)) faltaPorProcesso.set(processo, new Map());
+      const mapa = faltaPorProcesso.get(processo);
+      const chave = `${f.insumo_nome}__${f.unidade}`;
+      const atual = mapa.get(chave)
+        || { insumo_nome: f.insumo_nome, unidade: f.unidade, quantidade: 0 };
+      atual.quantidade = Math.round((atual.quantidade + (Number(f.quantidade) || 0) + Number.EPSILON) * 10000) / 10000;
+      mapa.set(chave, atual);
+      // Um processo que só aparece nos faltantes ainda precisa de folha.
+      if (!processos.has(processo)) processos.set(processo, new Map());
+    }
+
+    const relatorio = Array.from(processos.entries())
+      .map(([processo, pecas]) => {
+        const listaPecas = Array.from(pecas.values()).map(p => ({
+          ...p,
+          itens: p.itens.slice().sort(
+            (a, b) => Number(a.ordem_insumo || 0) - Number(b.ordem_insumo || 0)
+              || String(a.insumo_nome).localeCompare(String(b.insumo_nome), 'pt-BR')
+          )
+        }));
+
+        // Total do processo: o mesmo insumo somado entre todas as peças.
+        const totais = new Map();
+        for (const peca of listaPecas) {
+          for (const item of peca.itens) {
+            const chave = `${item.insumo_nome}__${item.unidade}`;
+            const atual = totais.get(chave)
+              || { insumo_nome: item.insumo_nome, unidade: item.unidade, quantidade: 0 };
+            atual.quantidade = Math.round((atual.quantidade + item.quantidade + Number.EPSILON) * 10000) / 10000;
+            totais.set(chave, atual);
+          }
+        }
+
+        const porNome = (a, b) => String(a.insumo_nome).localeCompare(String(b.insumo_nome), 'pt-BR');
+        return {
+          processo,
+          pecas: listaPecas,
+          // Soma de tudo que o processo consome, entre as peças.
+          totais: Array.from(totais.values()).sort(porNome),
+          // Só o que não havia em estoque — vem da foto da conversão.
+          faltantes: Array.from((faltaPorProcesso.get(processo) || new Map()).values()).sort(porNome)
+        };
+      })
+      .sort((a, b) => String(a.processo).localeCompare(String(b.processo), 'pt-BR'));
+
+    res.json({
+      pedido: {
+        id: pedido.id,
+        numero: pedido.numero,
+        cliente_id: pedido.cliente_id,
+        data_emissao: pedido.data_emissao,
+        situacao: pedido.situacao,
+        dono: pedido.dono,
+        decisao_estoque_note: pedido.decisao_estoque_note,
+        pode_saldo_negativo: pedido.pode_saldo_negativo
+      },
+      processos: relatorio
+    });
+  } catch (err) {
+    console.error('Erro ao montar o relatório de produção:', err);
+    res.status(err.status || 500).json({ error: 'Erro ao montar o relatório de produção' });
+  }
+});
+
 module.exports = router;
 // Exposto para teste: a regra "cada status grava a sua data" precisa de guarda
 // própria, sem depender de subir banco.

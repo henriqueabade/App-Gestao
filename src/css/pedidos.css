@@ -373,3 +373,115 @@ input[type="date"]:valid::-webkit-datetime-edit {
 .status-tooltip div + div {
     margin-top: 0.25rem;
 }
+
+/* ==========================================================================
+   Relatório de produção
+   --------------------------------------------------------------------------
+   Duas regras de papel mandam neste bloco:
+
+   1. PAISAGEM — `@page { size: A4 landscape }`.
+   2. UM PROCESSO POR FOLHA. Cada `.rp-folha` tem `break-after: page`, e
+      `break-inside: auto` de propósito: um processo grande PODE continuar na
+      folha seguinte; o que não pode é o processo B começar no espaço que
+      sobrou da folha do processo A.
+
+   Na tela as folhas aparecem como cartões claros, para o usuário conferir
+   antes de imprimir. Na impressão, tudo que não é a folha desaparece.
+   ========================================================================== */
+
+.rp-folha {
+    background: #fff;
+    color: #111;
+    border-radius: 0.5rem;
+    padding: 1.5rem 1.75rem;
+    margin-bottom: 1.5rem;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+}
+
+.rp-cabecalho {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+    border-bottom: 2px solid #111;
+    padding-bottom: 0.75rem;
+    margin-bottom: 1rem;
+}
+
+.rp-cabecalho h2 { font-size: 1.05rem; font-weight: 700; }
+.rp-cabecalho p { font-size: 0.8rem; color: #444; margin-top: 0.15rem; }
+
+.rp-processo-nome {
+    font-size: 1.1rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+}
+
+.rp-tabela {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 1.1rem;
+    font-size: 0.85rem;
+}
+
+.rp-tabela th,
+.rp-tabela td {
+    border: 1px solid #999;
+    padding: 0.35rem 0.6rem;
+    text-align: left;
+    vertical-align: top;
+}
+
+/* As faixas cinza dos seus modelos: processo, peça e totais. */
+.rp-faixa-processo th { background: #808080; color: #fff; text-align: center; font-weight: 700; }
+.rp-faixa-peca td     { background: #d9d9d9; color: #111; text-align: center; font-weight: 600; }
+.rp-faixa-total th    { background: #808080; color: #fff; text-align: center; font-weight: 700; }
+.rp-faixa-falta th    { background: #6a6a6a; color: #fff; text-align: center; font-weight: 700; }
+
+.rp-item { width: 45%; }
+.rp-qtd  { width: 35%; }
+.rp-un   { width: 20%; }
+
+@media print {
+    @page { size: A4 landscape; margin: 10mm; }
+
+    /* Só a folha vai ao papel. */
+    body.imprimindo-relatorio-producao > *:not(#relatorioProducaoOverlay) { display: none !important; }
+
+    body.imprimindo-relatorio-producao #relatorioProducaoOverlay {
+        position: static !important;
+        display: block !important;
+        background: none !important;
+        padding: 0 !important;
+    }
+    /* Cabeçalho e botões do modal não existem no papel. */
+    body.imprimindo-relatorio-producao #relatorioProducaoOverlay header,
+    body.imprimindo-relatorio-producao #relatorioProducaoOverlay .modal-scroll { all: unset; }
+    body.imprimindo-relatorio-producao #relatorioProducaoOverlay > div > header { display: none !important; }
+
+    body.imprimindo-relatorio-producao .rp-folha {
+        box-shadow: none;
+        border-radius: 0;
+        margin: 0;
+        padding: 0;
+        break-after: page;
+        page-break-after: always;
+        /* `auto` de propósito: processo grande continua na folha seguinte. */
+        break-inside: auto;
+    }
+    body.imprimindo-relatorio-producao .rp-folha:last-child {
+        break-after: auto;
+        page-break-after: auto;
+    }
+
+    /* Uma linha de tabela nunca é partida ao meio entre duas folhas. */
+    body.imprimindo-relatorio-producao .rp-tabela tr { break-inside: avoid; page-break-inside: avoid; }
+    /* A faixa de uma peça não fica órfã no pé da folha. */
+    body.imprimindo-relatorio-producao .rp-faixa-peca { break-after: avoid; page-break-after: avoid; }
+    /* Cabeçalho de tabela repete quando ela atravessa folhas. */
+    body.imprimindo-relatorio-producao .rp-tabela thead { display: table-header-group; }
+}
+
+.rp-vazio { text-align: center; font-style: italic; color: #555; }

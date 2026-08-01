@@ -217,6 +217,17 @@ function openVisualizarPedidoModal(id) {
     openPedidoModal('modals/pedidos/visualizar.html', '../js/modals/pedido-visualizar.js', 'visualizarPedido');
 }
 
+function abrirRelatorioProducao(pedidoId, cliente) {
+    if (!pedidoId) return;
+    window.relatorioProducaoContext = { pedidoId, cliente };
+    window.selectedOrderId = pedidoId;
+    openPedidoModal(
+        'modals/pedidos/relatorio-producao.html',
+        '../js/modals/pedido-relatorio-producao.js',
+        'relatorioProducao'
+    );
+}
+
 function abrirConverterOrcamentos() {
     openPedidoModal(
         'modals/pedidos/converter-orcamentos.html',
@@ -358,15 +369,11 @@ async function carregarPedidos() {
 
 
         tbody.querySelectorAll('.fa-clipboard').forEach(icon => {
-
             icon.addEventListener('click', e => {
-
                 e.stopPropagation();
-
-                showFunctionUnavailableDialog('Fun??o em desenvolvimento.');
-
+                const tr = e.currentTarget.closest('tr');
+                abrirRelatorioProducao(tr?.dataset.id, tr?.cells?.[1]?.innerText?.trim() || '');
             });
-
         });
 
         tbody.querySelectorAll('.fa-download').forEach(icon => {

@@ -247,6 +247,63 @@
     return disponiveis.filter(o => selecionados.has(String(o.id)));
   }
 
+  // ------------------------------------------------------------------
+  // Revisão de estoque, orçamento a orçamento
+  //
+  // Converter sem passar por aqui grava "produzir tudo do zero" em silêncio:
+  // peças prontas ficam paradas no estoque e o insumo é gasto de novo. Por isso
+  // o lote não converte direto — ele enfileira a MESMA revisão que o ícone de
+  // converter em Orçamentos abre (editar + converter, com
+  // `autoOpenQuoteConversion`), e espera a decisão de cada um.
+  // ------------------------------------------------------------------
+  const ID_OVERLAY_EDITAR = 'editarOrcamentoOverlay';
+  const ID_OVERLAY_REVISAO = 'converterOrcamentoOverlay';
+
+  const esperar = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+  function revisaoNaTela() {
+    return Boolean(
+      document.getElementById(ID_OVERLAY_EDITAR) || document.getElementById(ID_OVERLAY_REVISAO)
+    );
+  }
+
+  /** Espera a revisão aparecer e, depois, sumir — os dois desfechos fecham. */
+  async function esperarFimDaRevisao(limiteAberturaMs = 20000) {
+    const ateAbrir = Date.now() + limiteAberturaMs;
+    while (!revisaoNaTela() && Date.now() < ateAbrir) await esperar(150);
+    if (!revisaoNaTela()) throw new Error('A revisão de estoque não abriu.');
+
+    // Sem limite aqui de propósito: quem decide o tempo é o usuário, olhando
+    // peça a peça. Impor um teto abortaria uma revisão legítima e demorada.
+    while (revisaoNaTela()) await esperar(250);
+    // Deixa o fechamento assentar antes de abrir o próximo.
+    await esperar(400);
+  }
+
+  /**
+   * @returns {Promise<'convertido'|'ignorado'>} — a fonte da verdade é o banco:
+   * se o orçamento ficou "Aprovado", a conversão aconteceu.
+   */
+  async function revisarEConverter(orcamento) {
+    window.autoOpenQuoteConversion = { id: orcamento.id, skipInnerSpinner: true, deferReveal: false };
+    window.selectedQuoteId = orcamento.id;
+
+    await Modal.open(
+      'modals/orcamentos/editar.html',
+      '../js/modals/orcamento-editar.js',
+      'editarOrcamento',
+      true
+    );
+
+    await esperarFimDaRevisao();
+    window.autoOpenQuoteConversion = null;
+
+    const resp = await fetchApi(`/api/orcamentos/${orcamento.id}`);
+    if (!resp.ok) throw new Error(`Não foi possível confirmar a conversão (HTTP ${resp.status})`);
+    const atual = await resp.json();
+    return normalizar(atual?.situacao) === 'aprovado' ? 'convertido' : 'ignorado';
+  }
+
   async function converter() {
     const escolhidos = orcamentosSelecionados();
     if (!escolhidos.length) {
@@ -263,32 +320,29 @@
       message:
         `Tem certeza que deseja converter ${escolhidos.length === 1 ? 'este orçamento' : `estes ${escolhidos.length} orçamentos`}?\n\n` +
         `${lista}\n\n` +
-        'Eles passam para Aprovado e viram pedidos em Produção.',
+        (escolhidos.length === 1
+          ? 'A revisão de estoque será aberta para você escolher o que usar pronto e o que produzir.'
+          : 'A revisão de estoque será aberta para cada um, em sequência, para você escolher o que usar pronto e o que produzir.'),
       confirmText: 'Sim, converter',
       cancelText: 'Não'
     });
     if (!confirmado) return;
 
+    // Fecha a seleção antes da primeira revisão: os dois modais disputariam a
+    // tela, e a revisão precisa dela inteira.
+    close();
+
     const convertidos = [];
+    const ignorados = [];
     const falhas = [];
 
-    // Um a um, de propósito: cada conversão mexe em estoque e a falha de uma
-    // não pode impedir as outras. O que falhou é dito com nome e motivo.
+    // Um a um, de propósito: cada conversão mexe em estoque e a falha (ou a
+    // desistência) de uma não pode impedir as outras.
     for (const orcamento of escolhidos) {
       try {
-        const resp = await fetchApi(`/api/orcamentos/${orcamento.id}/status`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ situacao: 'Aprovado' })
-        });
-        const corpo = await resp.json().catch(() => ({}));
-        if (!resp.ok) {
-          throw new Error(corpo?.error || `Falha ao converter (HTTP ${resp.status})`);
-        }
-        if (corpo?.convertido === false && corpo?.convertErro) {
-          throw new Error(corpo.convertErro);
-        }
-        convertidos.push(orcamento);
+        const situacao = await revisarEConverter(orcamento);
+        if (situacao === 'convertido') convertidos.push(orcamento);
+        else ignorados.push(orcamento);
       } catch (err) {
         console.error(`Erro ao converter orçamento ${orcamento.numero || orcamento.id}`, err);
         falhas.push({ orcamento, motivo: err?.message || 'Erro inesperado' });
@@ -304,18 +358,28 @@
       );
     }
 
+    const linhasResumo = [];
+    if (ignorados.length) {
+      linhasResumo.push(
+        `Não convertidos (revisão cancelada):\n` +
+        ignorados.map(o => `• ${o.numero || o.id}`).join('\n')
+      );
+    }
     if (falhas.length) {
+      linhasResumo.push(
+        `Com erro:\n` +
+        falhas.map(f => `• ${f.orcamento.numero || f.orcamento.id}: ${f.motivo}`).join('\n')
+      );
+    }
+    if (linhasResumo.length) {
       await window.DialogPadrao?.info?.({
-        title: convertidos.length ? 'Conversão parcial' : 'Não foi possível converter',
-        message: falhas
-          .map(f => `• ${f.orcamento.numero || f.orcamento.id}: ${f.motivo}`)
-          .join('\n')
+        title: convertidos.length ? 'Conversão parcial' : 'Nenhum orçamento convertido',
+        message: linhasResumo.join('\n\n')
       });
     }
 
-    // Fecha e devolve o usuário à lista de pedidos já atualizada — é lá que os
-    // pedidos recém-criados aparecem.
-    close();
+    // A seleção já foi fechada antes da primeira revisão; aqui só resta
+    // atualizar a lista, onde os pedidos recém-criados aparecem.
     if (typeof window.carregarPedidos === 'function') {
       try {
         await window.carregarPedidos();
