@@ -262,7 +262,17 @@ router.get('/:id/relatorio-producao', exigirPermissao('ped.report'), async (req,
       })
       .sort((a, b) => String(a.processo).localeCompare(String(b.processo), 'pt-BR'));
 
+    // Não há o que produzir: todas as peças saíram prontas do estoque. É
+    // diferente de "pedido sem registro" (convertido antes desta versão), e a
+    // tela precisa dizer qual dos dois é — senão parece defeito.
+    const temItens = listaItens.length > 0;
+    const somentePecasProntas = temItens
+      && listaItens.every(i => !(Number(i.qtd_a_produzir) > 0))
+      && listaItens.some(i => Number(i.qtd_usar_pronta) > 0);
+
     res.json({
+      somentePecasProntas,
+      temItens,
       pedido: {
         id: pedido.id,
         numero: pedido.numero,

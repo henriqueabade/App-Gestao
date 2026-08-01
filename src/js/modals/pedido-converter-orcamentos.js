@@ -261,6 +261,38 @@
 
   const esperar = ms => new Promise(resolve => setTimeout(resolve, ms));
 
+  /**
+   * Máscara de "trabalhando" no estilo do app.
+   *
+   * A conversão mexe em estoque e leva alguns segundos. Antes o modal fechava
+   * na hora e o usuário ficava sem saber se deu certo, se deu erro ou se ainda
+   * estava rodando. Agora a tela diz o que está acontecendo, e só depois vem a
+   * mensagem de resultado.
+   */
+  function abrirEspera(mensagem) {
+    const overlay = document.createElement('div');
+    overlay.className = 'fixed inset-0 bg-black/60 backdrop-blur-sm flex flex-col items-center justify-center gap-4';
+    overlay.style.zIndex = 'var(--z-dialog)';
+    overlay.setAttribute('role', 'alert');
+    // `data-sem-top-layer`: é máscara de espera, não caixa de diálogo — não
+    // pode entrar na top layer e travar o resto do documento.
+    overlay.setAttribute('data-sem-top-layer', 'true');
+    overlay.innerHTML = `
+      <div class="app-loading-indicator app-loading-indicator--compact" aria-hidden="true">
+        <span class="module-loading-orbit"></span>
+        <span class="module-loading-core"><img src="../assets/Logo.ico" alt=""></span>
+      </div>
+      <p class="text-sm text-white font-medium" data-role="mensagem">${escaparHtml(mensagem)}</p>`;
+    document.body.appendChild(overlay);
+    return {
+      atualizar: texto => {
+        const alvo = overlay.querySelector('[data-role="mensagem"]');
+        if (alvo) alvo.textContent = texto;
+      },
+      fechar: () => { if (overlay.isConnected) overlay.remove(); }
+    };
+  }
+
   function revisaoNaTela() {
     return Boolean(
       document.getElementById(ID_OVERLAY_EDITAR) || document.getElementById(ID_OVERLAY_REVISAO)
@@ -298,10 +330,39 @@
     await esperarFimDaRevisao();
     window.autoOpenQuoteConversion = null;
 
-    const resp = await fetchApi(`/api/orcamentos/${orcamento.id}`);
-    if (!resp.ok) throw new Error(`Não foi possível confirmar a conversão (HTTP ${resp.status})`);
-    const atual = await resp.json();
-    return normalizar(atual?.situacao) === 'aprovado' ? 'convertido' : 'ignorado';
+    // A revisão fechou, mas a conversão pode ainda estar rodando no servidor
+    // (criar pedido, gravar faltantes, abater estoque). Enquanto isso a tela
+    // mostra a espera em vez de ficar muda.
+    const espera = abrirEspera(
+      `Convertendo ${orcamento.numero || orcamento.id} e aplicando o estoque...`
+    );
+    try {
+      return await confirmarConversao(orcamento);
+    } finally {
+      espera.fechar();
+    }
+  }
+
+  /**
+   * Espera o orçamento aparecer como "Aprovado".
+   *
+   * A fonte da verdade é o banco: a revisão pode ter sido cancelada (nunca
+   * aprova) ou a conversão pode demorar. Perguntamos algumas vezes antes de
+   * concluir que o usuário desistiu — concluir cedo demais marcaria como
+   * "não convertido" algo que converteu.
+   */
+  async function confirmarConversao(orcamento, tentativas = 12, intervaloMs = 1000) {
+    for (let i = 0; i < tentativas; i += 1) {
+      const resp = await fetchApi(`/api/orcamentos/${orcamento.id}`);
+      if (!resp.ok) throw new Error(`Não foi possível confirmar a conversão (HTTP ${resp.status})`);
+      const atual = await resp.json();
+      if (normalizar(atual?.situacao) === 'aprovado') return 'convertido';
+      // A primeira leitura já basta quando a revisão foi cancelada: nesse caso
+      // nenhuma conversão foi disparada e o status não vai mudar. Ainda assim
+      // damos alguns ciclos, porque a gravação pode estar em andamento.
+      await esperar(intervaloMs);
+    }
+    return 'ignorado';
   }
 
   async function converter() {

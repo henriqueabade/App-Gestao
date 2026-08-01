@@ -344,6 +344,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getDisplays: () => ipcRenderer.invoke('get-displays'),
   setDisplay: (id) => ipcRenderer.invoke('set-display', id),
   openPdf: (id, tipo) => ipcRenderer.invoke('open-pdf', { id, tipo }),
+  salvarHtmlComoPdf: (payload) => ipcRenderer.invoke('salvar-html-como-pdf', payload),
   openExternal: (url) => ipcRenderer.invoke('open-external', url),
   openExternalHtml: (html) => ipcRenderer.invoke('open-external-html', html),
   recordActivity: (info) => {

@@ -4,8 +4,10 @@
 
   function closeOverlay(){
     Modal.close('inserirEstoque');
-    const baseOverlay = document.getElementById('detalhesProdutoOverlay');
-    baseOverlay.classList.remove('pointer-events-none', 'blur-sm');
+    // Optional: na restauração este modal pode voltar sem o "Detalhes do
+    // Produto" por baixo, e o acesso direto estourava ao fechar.
+    document.getElementById('detalhesProdutoOverlay')
+      ?.classList.remove('pointer-events-none', 'blur-sm');
   }
 
   voltarBtn.addEventListener('click', closeOverlay);
@@ -15,7 +17,12 @@
   const itemInput = document.getElementById('itemInput');
   const itemOptions = document.getElementById('itemOptions');
   const itemMensagem = document.getElementById('itemMensagem');
-  const quantidadeInput = overlay.querySelector('input[type="number"]');
+  // Por id, e não por `input[type=number]`: o `NumericInput` converte o campo
+  // para `type="text"` assim que a página carrega, e o seletor antigo devolvia
+  // `null` — o `Number(null.value)` estourava dentro do submit e o botão
+  // "Registrar" não fazia absolutamente nada, sem erro visível.
+  const quantidadeInput = document.getElementById('quantidadeEstoqueInput')
+    || overlay.querySelector('[name="quantidade"]');
   const produto = window.produtoDetalhes;
 
   // ------------------------------------------------------------------
@@ -160,9 +167,22 @@
   carregarProcessos();
 
   const form = overlay.querySelector('form');
+
+  /** Limpa o formulário e atualiza a grade de produtos e os detalhes. */
+  function limparERecarregar(){
+    processoSelect.value = '';
+    itemInput.value = '';
+    itemOptions.innerHTML = '';
+    itemInput.disabled = true;
+    if(quantidadeInput) quantidadeInput.value = '';
+    window.reloadDetalhesProduto?.();
+    // Pelo `window`, explicitamente: a coluna "Quantidade" da grade de Produtos
+    // sai daqui e ficava com o valor velho depois de registrar.
+    window.carregarProdutos?.();
+  }
+
   if(form){
-    form.addEventListener('submit', async e => {
-      e.preventDefault();
+    const registrar = async () => {
       const etapa = processoSelect.value;
       const itemNome = itemInput.value.trim();
       const option = Array.from(itemOptions.querySelectorAll('option')).find(o => o.value === itemNome);
@@ -191,15 +211,7 @@
           },
           etapa: etapaNome,
           itemNome: itemNome,
-          reload: () => {
-            processoSelect.value = '';
-            itemInput.value = '';
-            itemOptions.innerHTML = '';
-            itemInput.disabled = true;
-            quantidadeInput.value = '';
-            window.reloadDetalhesProduto?.();
-            if(typeof carregarProdutos === 'function') carregarProdutos();
-          }
+          reload: limparERecarregar
         };
         Modal.open('modals/produtos/estoque-somar.html', '../js/modals/produto-estoque-somar.js', 'somarEstoque', true);
         return;
@@ -223,17 +235,25 @@
           }
         });
         showToast('Produto inserido', 'success');
-        processoSelect.value = '';
-        itemInput.value = '';
-        itemOptions.innerHTML = '';
-        itemInput.disabled = true;
-        quantidadeInput.value = '';
-        window.reloadDetalhesProduto?.();
-        if(typeof carregarProdutos === 'function') carregarProdutos();
+        limparERecarregar();
       }catch(err){
         console.error(err);
         showToast('Erro ao inserir produto', 'error');
       }
-    });
+    };
+
+    // `bindSubmit` cobre o clique E o Enter, e mantém o botão travado até a
+    // gravação terminar: dois envios aqui criariam dois lotes do mesmo item.
+    if (window.BotaoAcao?.bindSubmit) {
+      window.BotaoAcao.bindSubmit(form, registrar);
+    } else {
+      let ocupado = false;
+      form.addEventListener('submit', async e => {
+        e.preventDefault();
+        if (ocupado) return;
+        ocupado = true;
+        try { await registrar(); } finally { ocupado = false; }
+      });
+    }
   }
 })();

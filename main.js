@@ -4666,6 +4666,79 @@ ipcMain.handle('get-saved-display', () => {
   return currentDisplayId || null;
 });
 
+/**
+ * Salva um HTML pronto como PDF em paisagem.
+ *
+ * O relatório de produção é montado no renderer (é lá que estão os dados já
+ * agrupados por processo). Em vez de remontar tudo no processo principal,
+ * recebemos o HTML já formado e reusamos o mesmo caminho do PDF de pedido:
+ * janela oculta -> `printToPDF` -> diálogo de salvar.
+ *
+ * O HTML vai para um arquivo temporário em vez de `data:` URL porque data URLs
+ * têm limite de tamanho e um relatório com muitos processos estoura.
+ */
+ipcMain.handle('salvar-html-como-pdf', async (_event, { html, nomeSugerido, titulo } = {}) => {
+  if (!html || typeof html !== 'string') {
+    return { success: false, message: 'Nada para gerar.' };
+  }
+
+  const nomeBase = String(nomeSugerido || 'relatorio')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9_-]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '') || 'relatorio';
+
+  const arquivoTemp = path.join(
+    app.getPath('temp'),
+    `sd-${nomeBase}-${Date.now()}.html`
+  );
+
+  let janela = null;
+  try {
+    await fs.promises.writeFile(arquivoTemp, html, 'utf8');
+
+    janela = new BrowserWindow({
+      show: false,
+      webPreferences: { offscreen: true, javascript: false }
+    });
+    await janela.loadFile(arquivoTemp);
+
+    const pdf = await janela.webContents.printToPDF({
+      printBackground: true,
+      pageSize: 'A4',
+      landscape: true,
+      margins: { top: 0, bottom: 0, left: 0, right: 0 }
+    });
+
+    const dono = getPrimaryMonitorWindow();
+    const opcoes = {
+      title: titulo || 'Salvar relatório em PDF',
+      defaultPath: path.join(app.getPath('documents'), `${nomeBase}.pdf`),
+      filters: [{ name: 'Arquivos PDF', extensions: ['pdf'] }]
+    };
+    const { canceled, filePath } = dono
+      ? await dialog.showSaveDialog(dono, opcoes)
+      : await dialog.showSaveDialog(opcoes);
+
+    if (canceled || !filePath) return { success: false, canceled: true };
+
+    await fs.promises.mkdir(path.dirname(filePath), { recursive: true });
+    await fs.promises.writeFile(filePath, pdf);
+
+    const erroAoAbrir = await shell.openPath(filePath);
+    return erroAoAbrir
+      ? { success: true, filePath, opened: false, message: `PDF salvo, mas não abriu: ${erroAoAbrir}` }
+      : { success: true, filePath, opened: true };
+  } catch (err) {
+    console.error('Erro ao gerar PDF a partir de HTML:', err);
+    return { success: false, message: err?.message || 'Erro ao gerar o PDF.' };
+  } finally {
+    if (janela && !janela.isDestroyed()) janela.close();
+    fs.promises.unlink(arquivoTemp).catch(() => {});
+  }
+});
+
 ipcMain.handle('open-pdf', async (_event, { id, tipo }) => {
   const requestId = `req-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
   const prefix = `[pdf:${requestId}]`;

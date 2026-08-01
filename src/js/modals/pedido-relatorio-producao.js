@@ -121,11 +121,11 @@
       </section>`;
   }
 
-  function renderizarVazio(mensagem) {
+  function renderizarVazio(mensagem, icone = 'fa-clipboard-list') {
     corpo.innerHTML = `
-      <div class="py-16 text-center">
-        <i class="fas fa-clipboard-list text-4xl text-gray-500 mb-4"></i>
-        <p class="text-gray-300 font-medium">${escapar(mensagem)}</p>
+      <div class="py-16 px-6 text-center max-w-2xl mx-auto">
+        <i class="fas ${escapar(icone)} text-4xl text-gray-500 mb-4"></i>
+        <p class="text-gray-300 font-medium" style="white-space: pre-line">${escapar(mensagem)}</p>
       </div>`;
     if (btnImprimir) btnImprimir.disabled = true;
   }
@@ -145,9 +145,24 @@
       }
 
       if (!Array.isArray(dados.processos) || !dados.processos.length) {
-        renderizarVazio(
-          'Este pedido não tem registro de produção. Só pedidos convertidos depois desta versão têm a foto do que faltava.'
-        );
+        // Três motivos diferentes para não haver folha. Dizer qual é evita que
+        // o usuário leia ausência de relatório como defeito.
+        if (dados.somentePecasProntas) {
+          renderizarVazio(
+            'Não há relatório de produção para este pedido.\n\n'
+            + 'Todas as peças foram atendidas com produtos prontos do estoque — '
+            + 'nada precisa ser fabricado e nenhum insumo foi consumido.',
+            'fa-box-open'
+          );
+        } else if (!dados.temItens) {
+          renderizarVazio('Este pedido não tem itens.');
+        } else {
+          renderizarVazio(
+            'Este pedido não tem registro de produção.\n\n'
+            + 'A foto do que faltava passou a ser gravada na conversão a partir desta versão; '
+            + 'pedidos convertidos antes disso não têm esse registro.'
+          );
+        }
         return;
       }
 
@@ -159,20 +174,91 @@
     }
   }
 
-  btnImprimir?.addEventListener('click', () => {
-    // `print()` da própria janela: o CSS de impressão esconde tudo menos a
-    // folha, então o que sai no papel é só o relatório.
-    document.body.classList.add('imprimindo-relatorio-producao');
-    const limpar = () => {
-      document.body.classList.remove('imprimindo-relatorio-producao');
-      window.removeEventListener('afterprint', limpar);
-    };
-    window.addEventListener('afterprint', limpar);
-    window.print();
-    // Alguns ambientes não disparam `afterprint`; a limpeza tardia evita a tela
-    // ficar presa no modo de impressão.
-    setTimeout(limpar, 3000);
-  });
+  // ------------------------------------------------------------------
+  // Gerar o PDF
+  //
+  // A folha é enviada pronta para o processo principal, que a renderiza numa
+  // janela oculta e chama `printToPDF` — o mesmo caminho do PDF de pedido, já
+  // provado. O CSS vai por link para o `pedidos.css` real: duplicar os estilos
+  // aqui garantiria que o papel e a tela divergissem com o tempo.
+  //
+  // Gerar leva alguns segundos. Sem dizer isso na tela, o usuário acha que
+  // travou — por isso o botão vira "Gerando PDF..." e o aviso aparece.
+  // ------------------------------------------------------------------
+  function montarDocumentoParaPdf(pedidoNumero) {
+    const cssPedidos = new URL('../css/pedidos.css', document.baseURI).href;
+    const cssTailwind = new URL('../styles/tailwind-offline.css', document.baseURI).href;
+    return `<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8" />
+<title>Relatório de Produção — ${escapar(pedidoNumero)}</title>
+<link rel="stylesheet" href="${cssTailwind}" />
+<link rel="stylesheet" href="${cssPedidos}" />
+<style>
+  /* A janela do PDF não tem o tema do app: fundo branco e as folhas soltas. */
+  body { background: #fff; margin: 0; font-family: Arial, Helvetica, sans-serif; }
+  .rp-folha { box-shadow: none; border-radius: 0; margin: 0; padding: 0; }
+</style>
+</head>
+<body>${corpo.innerHTML}</body>
+</html>`;
+  }
+
+  function mostrarProgresso(ligado, texto) {
+    if (!btnImprimir) return;
+    btnImprimir.innerHTML = ligado
+      ? `<i class="fas fa-circle-notch fa-spin"></i> ${escapar(texto || 'Gerando PDF...')}`
+      : '<i class="fas fa-print"></i> Imprimir';
+    const aviso = document.getElementById('relatorioProducaoAviso');
+    if (aviso) {
+      aviso.textContent = ligado ? (texto || 'Gerando o PDF do relatório...') : '';
+      aviso.classList.toggle('hidden', !ligado);
+    }
+  }
+
+  async function gerarPdf() {
+    if (!corpo?.innerHTML?.trim()) return;
+
+    mostrarProgresso(true, 'Gerando o PDF do relatório...');
+    try {
+      if (!window.electronAPI?.salvarHtmlComoPdf) {
+        throw new Error('Geração de PDF indisponível neste ambiente.');
+      }
+      const numero = subtitulo?.textContent?.replace(/^Pedido\s*/i, '').trim() || pedidoId;
+      const resultado = await window.electronAPI.salvarHtmlComoPdf({
+        html: montarDocumentoParaPdf(numero),
+        nomeSugerido: `relatorio-producao-${numero}`,
+        titulo: 'Salvar Relatório de Produção em PDF'
+      });
+
+      if (resultado?.canceled) {
+        window.showToast?.('Geração cancelada.', 'info');
+      } else if (resultado?.success) {
+        window.showToast?.(resultado.message || 'Relatório salvo em PDF.', 'success');
+      } else {
+        throw new Error(resultado?.message || 'Não foi possível gerar o PDF.');
+      }
+    } catch (err) {
+      console.error('Erro ao gerar o PDF do relatório de produção', err);
+      window.showToast?.(err?.message || 'Erro ao gerar o PDF.', 'error');
+    } finally {
+      mostrarProgresso(false);
+    }
+  }
+
+  // `BotaoAcao.bind` dá a trava de duplo clique; o texto de progresso é nosso,
+  // porque o spinner padrão esconderia o rótulo e não diria o que está havendo.
+  if (window.BotaoAcao?.bind) {
+    window.BotaoAcao.bind(btnImprimir, gerarPdf, { visual: false });
+  } else {
+    let gerando = false;
+    btnImprimir?.addEventListener('click', async () => {
+      if (gerando) return;
+      gerando = true;
+      try { await gerarPdf(); } finally { gerando = false; }
+    });
+  }
 
   await carregar();
 

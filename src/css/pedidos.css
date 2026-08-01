@@ -447,41 +447,38 @@ input[type="date"]:valid::-webkit-datetime-edit {
 @media print {
     @page { size: A4 landscape; margin: 10mm; }
 
-    /* Só a folha vai ao papel. */
-    body.imprimindo-relatorio-producao > *:not(#relatorioProducaoOverlay) { display: none !important; }
-
-    body.imprimindo-relatorio-producao #relatorioProducaoOverlay {
-        position: static !important;
-        display: block !important;
-        background: none !important;
-        padding: 0 !important;
-    }
-    /* Cabeçalho e botões do modal não existem no papel. */
-    body.imprimindo-relatorio-producao #relatorioProducaoOverlay header,
-    body.imprimindo-relatorio-producao #relatorioProducaoOverlay .modal-scroll { all: unset; }
-    body.imprimindo-relatorio-producao #relatorioProducaoOverlay > div > header { display: none !important; }
-
-    body.imprimindo-relatorio-producao .rp-folha {
+    /* --- Regras da FOLHA: valem nos dois caminhos --- 
+       Impressão pela janela do app e geração do PDF em janela oculta usam o
+       mesmo CSS. Por isso estas regras NÃO são presas ao overlay: na janela do
+       PDF ele não existe. */
+    .rp-folha {
         box-shadow: none;
         border-radius: 0;
         margin: 0;
         padding: 0;
         break-after: page;
         page-break-after: always;
-        /* `auto` de propósito: processo grande continua na folha seguinte. */
+        /* "auto" de propósito: processo grande continua na folha seguinte. */
         break-inside: auto;
     }
-    body.imprimindo-relatorio-producao .rp-folha:last-child {
-        break-after: auto;
-        page-break-after: auto;
-    }
+    .rp-folha:last-child { break-after: auto; page-break-after: auto; }
 
     /* Uma linha de tabela nunca é partida ao meio entre duas folhas. */
-    body.imprimindo-relatorio-producao .rp-tabela tr { break-inside: avoid; page-break-inside: avoid; }
+    .rp-tabela tr { break-inside: avoid; page-break-inside: avoid; }
     /* A faixa de uma peça não fica órfã no pé da folha. */
-    body.imprimindo-relatorio-producao .rp-faixa-peca { break-after: avoid; page-break-after: avoid; }
+    .rp-faixa-peca { break-after: avoid; page-break-after: avoid; }
     /* Cabeçalho de tabela repete quando ela atravessa folhas. */
-    body.imprimindo-relatorio-producao .rp-tabela thead { display: table-header-group; }
+    .rp-tabela thead { display: table-header-group; }
+
+    /* --- Só quando se imprime de dentro do app: some com o resto --- */
+    body.imprimindo-relatorio-producao > *:not(#relatorioProducaoOverlay) { display: none !important; }
+    body.imprimindo-relatorio-producao #relatorioProducaoOverlay {
+        position: static !important;
+        display: block !important;
+        background: none !important;
+        padding: 0 !important;
+    }
+    body.imprimindo-relatorio-producao #relatorioProducaoOverlay > div > header { display: none !important; }
 }
 
 .rp-vazio { text-align: center; font-style: italic; color: #555; }
