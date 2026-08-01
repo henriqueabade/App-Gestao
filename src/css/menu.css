@@ -987,6 +987,16 @@ header.glass-surface {
     margin: 0;
 }
 
+/* O cabeçalho não participa da animação dos cards. Além de manter o título
+   estável durante a entrada do módulo, isto garante que sua distância da
+   barra superior seja idêntica à de Produtos. */
+.module-header {
+    margin-top: 0;
+    transform: none !important;
+    animation: none !important;
+    opacity: 1 !important;
+}
+
 /* Animação de entrada dos cards */
 .animate-fade-in-up {
     animation: fadeInUp 0.6s ease-out forwards;

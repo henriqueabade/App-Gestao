@@ -1379,9 +1379,9 @@ const MenuStartupPreferences = (() => {
     }
 
     function initProfileSection() {
-        if (!dom.profile.section) return;
+        if (!dom.profile.section) return Promise.resolve();
         prefillProfileFromStorage();
-        loadProfileData();
+        return loadProfileData();
     }
 
 
@@ -1779,8 +1779,9 @@ const MenuStartupPreferences = (() => {
         currentTheme = MenuThemePreferences.getCurrent();
         startupPreferences = MenuStartupPreferences.load();
         quickActionsPreferences = MenuQuickActionsPreferences.load();
-        bindDom();
-        initProfileSection();
+        const initialized = bindDom();
+        if (!initialized) return moduleElement?.moduleReadyPromise || Promise.resolve();
+        const profileReady = initProfileSection();
         applyStateToUI();
         handlePendingPersonalDataFocus();
 
@@ -1791,15 +1792,13 @@ const MenuStartupPreferences = (() => {
                 .then(() => applyStartupPreferencesToUI())
                 .catch(() => {});
         }
+        // Contrato explícito com o carregador do menu. Assim a máscara não
+        // depende de adivinhar quando as consultas assíncronas começaram.
+        moduleElement.moduleReadyPromise = Promise.resolve(profileReady);
+        return moduleElement.moduleReadyPromise;
     }
 
     init();
-
-    document.addEventListener('module-change', (event) => {
-        if (event?.detail?.page === PAGE_ID) {
-            init();
-        }
-    });
 
     window.addEventListener('menu-theme-change', (event) => {
         const theme = MenuThemePreferences.normalize(event?.detail?.theme);

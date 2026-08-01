@@ -3356,6 +3356,19 @@ async function loadPage(page, options = {}) {
             console.warn(`Script do módulo ${page} indisponível`, scriptErr);
         }
 
+        // Módulos podem publicar uma promessa com sua inicialização real.
+        // Configurações usa este contrato para incluir a carga do perfil;
+        // esperar apenas o fetch global deixava uma janela de corrida na
+        // primeira abertura.
+        if (usesLoadingMask && module.moduleReadyPromise) {
+            try {
+                await module.moduleReadyPromise;
+            } catch (moduleReadyError) {
+                console.warn(`Inicialização de ${page} concluída com erro.`, moduleReadyError);
+            }
+            if (loadId !== moduleLoadSequence) return;
+        }
+
         if (usesLoadingMask && ipcLoadToken && window.electronAPI?.waitForModuleLoading) {
             const result = await window.electronAPI.waitForModuleLoading(ipcLoadToken);
             if (result?.timedOut) console.warn(`Tempo limite ao aguardar os dados de ${page}.`);
