@@ -60,7 +60,7 @@ function montarAmbiente() {
   const { aplicarConversaoNoEstoque } = require(caminhoAlvo);
 
   const lotes = lotesIniciais();
-  const gravacoes = { faltantes: [], ext: [], lotesAtualizados: [] };
+  const gravacoes = { faltantes: [], ext: [], lotesAtualizados: [], movimentos: [], reservas: [], eventos: [] };
 
   const api = {
     async get(rota, opcoes = {}) {
@@ -77,6 +77,9 @@ function montarAmbiente() {
     },
     async post(rota, payload) {
       if (rota.includes('pedidos_itens_faltantes')) gravacoes.faltantes.push(payload);
+      else if (rota.includes('estoque_movimentos')) { gravacoes.movimentos.push(payload); return { id: 900 + gravacoes.movimentos.length }; }
+      else if (rota.includes('reservas_estoque')) { gravacoes.reservas.push(payload); return { id: 700 + gravacoes.reservas.length }; }
+      else if (rota.includes('pedido_historico_eventos')) { gravacoes.eventos.push(payload); return { id: 800 }; }
       else gravacoes.ext.push(payload);
       return { ok: true };
     },
@@ -335,6 +338,240 @@ test('o lote PRONTO não é confundido com parcial na derivação', async () => 
       amb.lotes.find(l => l.id === 502).quantidade, 2,
       'as 2 restantes vieram do lote parcial, não do pronto contado duas vezes'
     );
+  } finally {
+    amb.restaurar();
+  }
+});
+
+// ===================================================================
+// Abatimento PELO ID DO LOTE
+//
+// É o caminho principal: a revisão guarda em memória qual linha de
+// produtos_em_cada_ponto foi escolhida e manda o id junto. O abatimento não
+// procura nada — usa o id. Procurar era o que falhava com os parciais.
+// ===================================================================
+
+test('abate exatamente o lote cujo id a revisão escolheu', async () => {
+  const amb = montarAmbiente();
+  try {
+    await amb.aplicarConversaoNoEstoque(amb.api, {
+      pedidoId: 99,
+      itens: [{
+        pedido_item_id: 1000, produto_id: 7, quantidade: 3,
+        qtd_usar_pronta: 1, qtd_a_produzir: 2, decisaoInformada: true,
+        lotes: [
+          { lote_id: 501, quantidade: 1, ultimo_insumo_id: 30, ordem: 3, parcial: false },
+          { lote_id: 503, quantidade: 2, ultimo_insumo_id: 10, ordem: 1, parcial: true }
+        ]
+      }],
+      getMaxId: amb.getMaxId,
+      inserirLinhaComId: amb.inserirLinhaComId
+    });
+
+    assert.equal(amb.lotes.find(l => l.id === 501).quantidade, 3, 'lote pronto: 4 - 1');
+    assert.equal(
+      amb.lotes.find(l => l.id === 503).quantidade, 0,
+      'o lote 503 foi o ESCOLHIDO, mesmo havendo o 502 mais adiantado disponível'
+    );
+    assert.equal(amb.lotes.find(l => l.id === 502).quantidade, 4, 'o 502 não foi tocado');
+  } finally {
+    amb.restaurar();
+  }
+});
+
+test('o id escolhido manda também na conta dos insumos', async () => {
+  const amb = montarAmbiente();
+  try {
+    await amb.aplicarConversaoNoEstoque(amb.api, {
+      pedidoId: 99,
+      itens: [{
+        pedido_item_id: 1000, produto_id: 7, quantidade: 2,
+        qtd_usar_pronta: 0, qtd_a_produzir: 2, decisaoInformada: true,
+        // As 2 peças saem do lote 503, que parou no CORTE (ordem 1).
+        lotes: [{ lote_id: 503, quantidade: 2, ultimo_insumo_id: 10, ordem: 1, parcial: true }]
+      }],
+      getMaxId: amb.getMaxId,
+      inserirLinhaComId: amb.inserirLinhaComId
+    });
+
+    const por = id => amb.saidasDeInsumo.find(s => s.id === id)?.quantidade ?? 0;
+    assert.equal(por(10), 0, 'já foram cortadas');
+    assert.equal(por(20), 2, 'faltam montar: 2 × 1');
+    assert.equal(por(30), 8, 'faltam embalar: 2 × 4');
+  } finally {
+    amb.restaurar();
+  }
+});
+
+test('lote que sumiu entre a revisão e a confirmação vira aviso, não baixa errada', async () => {
+  const amb = montarAmbiente();
+  try {
+    const resumo = await amb.aplicarConversaoNoEstoque(amb.api, {
+      pedidoId: 99,
+      itens: [{
+        pedido_item_id: 1000, produto_id: 7, quantidade: 1,
+        qtd_usar_pronta: 0, qtd_a_produzir: 1, decisaoInformada: true,
+        lotes: [{ lote_id: 999, quantidade: 1, ultimo_insumo_id: 20, ordem: 2, parcial: true }]
+      }],
+      getMaxId: amb.getMaxId,
+      inserirLinhaComId: amb.inserirLinhaComId
+    });
+
+    assert.deepEqual(amb.gravacoes.lotesAtualizados, [], 'não pode baixar outro lote no lugar');
+    assert.ok(resumo.avisos.some(a => /não existe mais/i.test(a)), 'o usuário precisa saber');
+  } finally {
+    amb.restaurar();
+  }
+});
+
+test('lote com menos do que foi escolhido baixa o que há e avisa a diferença', async () => {
+  const amb = montarAmbiente();
+  try {
+    const resumo = await amb.aplicarConversaoNoEstoque(amb.api, {
+      pedidoId: 99,
+      itens: [{
+        pedido_item_id: 1000, produto_id: 7, quantidade: 5,
+        qtd_usar_pronta: 0, qtd_a_produzir: 5, decisaoInformada: true,
+        // O lote 503 só tem 2.
+        lotes: [{ lote_id: 503, quantidade: 5, ultimo_insumo_id: 10, ordem: 1, parcial: true }]
+      }],
+      getMaxId: amb.getMaxId,
+      inserirLinhaComId: amb.inserirLinhaComId
+    });
+
+    assert.equal(amb.lotes.find(l => l.id === 503).quantidade, 0, 'zera o que havia');
+    assert.ok(resumo.avisos.some(a => /faltaram/i.test(a)), 'a diferença precisa ser dita');
+  } finally {
+    amb.restaurar();
+  }
+});
+
+// ===================================================================
+// O RAZÃO DE ESTOQUE
+//
+// Cada tabela responde a uma pergunta diferente, e a separação é o que faz o
+// cancelamento funcionar: `pedido_itens_ext` diz o que DEVOLVER (veio do
+// estoque) e `reservas_estoque` diz o que ENTRA como peça nova (foi produzida).
+// Misturar as duas ou devolve peça que nunca existiu, ou perde peça que existia.
+// ===================================================================
+
+test('peça do estoque vai para pedido_itens_ext; do zero NÃO vai', async () => {
+  const amb = montarAmbiente();
+  try {
+    await amb.aplicarConversaoNoEstoque(amb.api, {
+      pedidoId: 99,
+      itens: [{
+        pedido_item_id: 1000, produto_id: 7, quantidade: 5,
+        qtd_usar_pronta: 1, qtd_a_produzir: 4, decisaoInformada: true,
+        // 1 pronta do estoque; as outras 3 são do zero.
+        lotes: [{ lote_id: 501, quantidade: 1, ultimo_insumo_id: 30, ordem: 3, parcial: false }]
+      }],
+      getMaxId: amb.getMaxId,
+      inserirLinhaComId: amb.inserirLinhaComId
+    });
+
+    const ext = amb.gravacoes.ext.filter(r => r.tabela === 'pedido_itens_ext');
+    assert.equal(ext.length, 1, 'só a peça que veio do estoque');
+    assert.equal(ext[0].quantidade, 1);
+    assert.equal(ext[0].id_pedido, 99, 'o pedido precisa estar na linha');
+  } finally {
+    amb.restaurar();
+  }
+});
+
+test('peça do zero vira reserva em produção, com o último insumo', async () => {
+  const amb = montarAmbiente();
+  try {
+    await amb.aplicarConversaoNoEstoque(amb.api, {
+      pedidoId: 99,
+      itens: [{
+        pedido_item_id: 1000, produto_id: 7, quantidade: 3,
+        qtd_usar_pronta: 0, qtd_a_produzir: 3,
+        decisaoInformada: true, qtd_produzir_parcial: 0
+      }],
+      getMaxId: amb.getMaxId,
+      inserirLinhaComId: amb.inserirLinhaComId
+    });
+
+    assert.equal(amb.gravacoes.reservas.length, 1);
+    const reserva = amb.gravacoes.reservas[0];
+    assert.equal(reserva.quantidade, 3);
+    assert.equal(reserva.status, 'producao', 'nasce em produção — a peça ainda será fabricada');
+    assert.equal(reserva.item_id, 7);
+    assert.equal(reserva.ultimo_insumo_id, 30, 'a peça nasce completa: último passo da rota');
+    assert.equal(reserva.pedido_id, 99);
+  } finally {
+    amb.restaurar();
+  }
+});
+
+test('cada peça e cada insumo geram movimento no razão', async () => {
+  const amb = montarAmbiente();
+  try {
+    await amb.aplicarConversaoNoEstoque(amb.api, {
+      pedidoId: 99,
+      itens: [{
+        pedido_item_id: 1000, produto_id: 7, quantidade: 3,
+        qtd_usar_pronta: 1, qtd_a_produzir: 2, decisaoInformada: true,
+        lotes: [
+          { lote_id: 501, quantidade: 1, ultimo_insumo_id: 30, ordem: 3, parcial: false },
+          { lote_id: 502, quantidade: 2, ultimo_insumo_id: 20, ordem: 2, parcial: true }
+        ]
+      }],
+      getMaxId: amb.getMaxId,
+      inserirLinhaComId: amb.inserirLinhaComId
+    });
+
+    const tipos = amb.gravacoes.movimentos.map(m => m.tipo_movimento);
+    assert.ok(tipos.every(t => typeof t === 'string' && t), 'todo movimento precisa de tipo');
+    assert.equal(amb.gravacoes.movimentos.filter(m => m.tipo_item === 'peca').length, 2, 'a pronta e a parcial');
+    assert.ok(amb.gravacoes.movimentos.some(m => m.tipo_item === 'insumo'), 'os insumos');
+
+    const daPeca = amb.gravacoes.movimentos.find(m => m.lote_id === 502);
+    assert.equal(daPeca.tipo_item, 'peca', 'o enum do banco usa "peca", não "produto"');
+    assert.equal(daPeca.lote_id, 502, 'o lote exato, para o estorno saber onde devolver');
+    assert.equal(daPeca.ultimo_insumo_id, 20, 'e em que ponto da rota ela estava');
+    assert.equal(daPeca.pedido_id, 99);
+  } finally {
+    amb.restaurar();
+  }
+});
+
+test('o pedido ganha um evento de conversão no histórico', async () => {
+  const amb = montarAmbiente();
+  try {
+    await amb.aplicarConversaoNoEstoque(amb.api, {
+      pedidoId: 99,
+      itens: [{ pedido_item_id: 1000, produto_id: 7, quantidade: 1, qtd_usar_pronta: 0, qtd_a_produzir: 1 }],
+      getMaxId: amb.getMaxId,
+      inserirLinhaComId: amb.inserirLinhaComId
+    });
+
+    assert.equal(amb.gravacoes.eventos.length, 1);
+    assert.equal(amb.gravacoes.eventos[0].tipo_evento, 'conversao');
+    assert.equal(amb.gravacoes.eventos[0].pedido_id, 99);
+    assert.match(amb.gravacoes.eventos[0].descricao, /reserva/i, 'a descrição diz o que foi feito');
+  } finally {
+    amb.restaurar();
+  }
+});
+
+test('tudo pronto do estoque não cria reserva de produção', async () => {
+  const amb = montarAmbiente();
+  try {
+    await amb.aplicarConversaoNoEstoque(amb.api, {
+      pedidoId: 99,
+      itens: [{
+        pedido_item_id: 1000, produto_id: 7, quantidade: 3,
+        qtd_usar_pronta: 3, qtd_a_produzir: 0, decisaoInformada: true,
+        lotes: [{ lote_id: 501, quantidade: 3, ultimo_insumo_id: 30, ordem: 3, parcial: false }]
+      }],
+      getMaxId: amb.getMaxId,
+      inserirLinhaComId: amb.inserirLinhaComId
+    });
+
+    assert.deepEqual(amb.gravacoes.reservas, [], 'nada será produzido: não há o que reservar');
+    assert.equal(amb.gravacoes.ext.filter(r => r.tabela === 'pedido_itens_ext').length, 1);
   } finally {
     amb.restaurar();
   }

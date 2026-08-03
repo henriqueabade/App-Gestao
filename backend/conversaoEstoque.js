@@ -85,18 +85,52 @@ function planejarConsumo({ itens = [], rotaPorProduto = new Map(), estoquePorIns
       ? Math.max(0, quantidade - usarPronta)
       : Math.max(0, Math.min(paraNumero(item.qtd_a_produzir), quantidade - usarPronta));
 
-    if (usarPronta > 0) {
+    const rota = rotaPorProduto.get(produtoId) || rotaPorProduto.get(String(produtoId)) || [];
+
+    // ------------------------------------------------------------------
+    // Lotes escolhidos NA REVISÃO, por id.
+    //
+    // Quando a revisão diz exatamente quais linhas de `produtos_em_cada_ponto`
+    // foram usadas, o abatimento é direto: não há procura, não há empate, não
+    // há lote parecido. Era a falta disso que fazia o parcial nunca sair do
+    // estoque — o backend saía caçando um lote compatível e não achava.
+    // ------------------------------------------------------------------
+    const lotesEscolhidos = (Array.isArray(item?.lotes) ? item.lotes : [])
+      .map(lote => ({
+        lote_id: lote?.lote_id ?? lote?.id ?? null,
+        quantidade: paraNumero(lote?.quantidade),
+        ultimo_insumo_id: Number.isFinite(Number(lote?.ultimo_insumo_id))
+          ? Number(lote.ultimo_insumo_id)
+          : null,
+        ordem: lote?.ordem === undefined || lote?.ordem === null ? null : paraNumero(lote.ordem),
+        parcial: Boolean(lote?.parcial)
+      }))
+      .filter(lote => lote.lote_id !== null && lote.quantidade > 0);
+
+    if (lotesEscolhidos.length) {
+      for (const lote of lotesEscolhidos) {
+        pecasDeEstoque.push({
+          pedido_item_id: pedidoItemId,
+          produto_id: produtoId,
+          quantidade: arredondar(lote.quantidade),
+          lote_id: lote.lote_id,
+          ultimo_insumo_id: lote.ultimo_insumo_id,
+          parcial: lote.parcial
+        });
+      }
+    } else if (usarPronta > 0) {
+      // Sem os ids (revisão antiga, plano de substituição), volta ao caminho
+      // por busca — que funciona para a peça inteira.
       pecasDeEstoque.push({
         pedido_item_id: pedidoItemId,
         produto_id: produtoId,
         quantidade: arredondar(usarPronta),
-        // Peça inteira: o lote está no FIM da rota.
+        lote_id: null,
         ultimo_insumo_id: null,
         parcial: false
       });
     }
 
-    const rota = rotaPorProduto.get(produtoId) || rotaPorProduto.get(String(produtoId)) || [];
     const ordemPorInsumo = new Map(
       rota.map(passo => [Number(passo?.insumo_id), paraNumero(passo?.ordem_insumo)])
     );
@@ -114,37 +148,39 @@ function planejarConsumo({ itens = [], rotaPorProduto = new Map(), estoquePorIns
     //     ninguém vai usar e imprime um relatório pedindo material a mais —
     //     estoque falso para menos, relatório falso para mais.
     // ------------------------------------------------------------------
-    const parciais = (Array.isArray(item?.parciais) ? item.parciais : [])
-      .map(parcial => {
-        const insumoId = Number.isFinite(Number(parcial?.ultimo_insumo_id))
-          ? Number(parcial.ultimo_insumo_id)
-          : null;
-        // A ordem informada pela revisão manda; se não vier, descobrimos pela
-        // rota a partir do insumo em que o lote parou.
-        const ordemInformada = parcial?.ordem === undefined || parcial?.ordem === null
-          ? null
-          : paraNumero(parcial.ordem);
-        const ordem = ordemInformada !== null
-          ? ordemInformada
-          : (ordemPorInsumo.has(insumoId) ? ordemPorInsumo.get(insumoId) : 0);
-        return {
-          quantidade: paraNumero(parcial?.quantidade),
-          ultimo_insumo_id: insumoId,
-          ordem
-        };
-      })
-      .filter(parcial => parcial.quantidade > 0);
+    const comOrdem = origem => {
+      const insumoId = Number.isFinite(Number(origem?.ultimo_insumo_id))
+        ? Number(origem.ultimo_insumo_id)
+        : null;
+      // A ordem informada pela revisão manda; se não vier, descobrimos pela
+      // rota a partir do insumo em que o lote parou.
+      const ordemInformada = origem?.ordem === undefined || origem?.ordem === null
+        ? null
+        : paraNumero(origem.ordem);
+      const ordem = ordemInformada !== null
+        ? ordemInformada
+        : (ordemPorInsumo.has(insumoId) ? ordemPorInsumo.get(insumoId) : 0);
+      return { quantidade: paraNumero(origem?.quantidade), ultimo_insumo_id: insumoId, ordem };
+    };
 
-    for (const parcial of parciais) {
-      pecasDeEstoque.push({
-        pedido_item_id: pedidoItemId,
-        produto_id: produtoId,
-        quantidade: arredondar(parcial.quantidade),
-        // Aqui o lote NÃO está no fim da rota: é este insumo que identifica em
-        // que ponto ele parou.
-        ultimo_insumo_id: parcial.ultimo_insumo_id,
-        parcial: true
-      });
+    // Quando os lotes vieram por id, eles JÁ foram lançados em `pecasDeEstoque`
+    // acima — aqui os parciais servem só para a conta dos insumos.
+    const parciais = lotesEscolhidos.length
+      ? lotesEscolhidos.filter(lote => lote.parcial).map(comOrdem).filter(p => p.quantidade > 0)
+      : (Array.isArray(item?.parciais) ? item.parciais : []).map(comOrdem).filter(p => p.quantidade > 0);
+
+    if (!lotesEscolhidos.length) {
+      for (const parcial of parciais) {
+        pecasDeEstoque.push({
+          pedido_item_id: pedidoItemId,
+          produto_id: produtoId,
+          quantidade: arredondar(parcial.quantidade),
+          lote_id: null,
+          // Sem o id do lote, é este insumo que identifica onde ele parou.
+          ultimo_insumo_id: parcial.ultimo_insumo_id,
+          parcial: true
+        });
+      }
     }
 
     if (!(aProduzir > 0)) continue;

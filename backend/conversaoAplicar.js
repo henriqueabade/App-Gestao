@@ -22,6 +22,13 @@
 const { planejarConsumo, escolherLotes, arredondar } = require('./conversaoEstoque');
 const { registrarSaida } = require('./materiaPrima');
 const { invalidarCacheLotes } = require('./produtos');
+const {
+  EVENTO,
+  registrarPecaDoEstoque,
+  registrarReservaDeProducao,
+  registrarConsumoDeInsumo,
+  registrarEventoDoPedido
+} = require('./estoqueLedger');
 
 const TABELA_FALTANTES = 'pedidos_itens_faltantes';
 const TABELA_EXT = 'pedido_itens_ext';
@@ -174,6 +181,7 @@ async function aplicarConversaoNoEstoque(api, {
     faltantesGravados: 0,
     pecasDeEstoqueGravadas: 0,
     insumosAbatidos: 0,
+    reservasCriadas: 0,
     avisos
   };
 
@@ -281,13 +289,37 @@ async function aplicarConversaoNoEstoque(api, {
       continue;
     }
 
-    // Peça inteira procura lote no FIM da rota; peça parcial procura o lote que
-    // parou exatamente no insumo informado pela revisão.
-    const alvo = peca.parcial
-      ? peca.ultimo_insumo_id
-      : ultimoInsumoPorProduto.get(peca.produto_id);
-
-    const { consumos, restante } = escolherLotes(lotes, peca.quantidade, alvo);
+    // Caminho principal: a revisão disse EXATAMENTE qual linha do estoque foi
+    // escolhida. Sem procura, sem empate, sem lote parecido.
+    let consumos;
+    let restante;
+    if (peca.lote_id !== null && peca.lote_id !== undefined) {
+      const lote = lotes.find(l => String(l?.id) === String(peca.lote_id));
+      if (!lote) {
+        avisos.push(
+          `O lote ${peca.lote_id} do produto ${peca.produto_id} não existe mais: ` +
+          'alguém pode tê-lo consumido entre a revisão e a confirmação. Confira o estoque.'
+        );
+        continue;
+      }
+      const disponivel = paraNumero(lote.quantidade);
+      const usar = Math.min(disponivel, peca.quantidade);
+      consumos = usar > 0 ? [{
+        lote_id: lote.id,
+        ultimo_insumo_id: lote.ultimo_insumo_id ?? null,
+        etapa_id: lote.etapa_id ?? null,
+        quantidade: arredondar(usar),
+        quantidade_restante_no_lote: arredondar(disponivel - usar)
+      }] : [];
+      restante = arredondar(peca.quantidade - usar);
+    } else {
+      // Sem id (revisão antiga ou plano de substituição): peça inteira procura
+      // lote no FIM da rota; parcial procura o que parou no insumo informado.
+      const alvo = peca.parcial
+        ? peca.ultimo_insumo_id
+        : ultimoInsumoPorProduto.get(peca.produto_id);
+      ({ consumos, restante } = escolherLotes(lotes, peca.quantidade, alvo));
+    }
 
     if (restante > 0) {
       avisos.push(
@@ -308,21 +340,64 @@ async function aplicarConversaoNoEstoque(api, {
         continue;
       }
 
-      // Registro de qual ponto da rota saiu — é o que permite o estorno.
-      try {
-        if (proximoExtId === null) proximoExtId = (await getMaxId(api, TABELA_EXT)) + 1;
-        const usado = await inserirLinhaComId(api, TABELA_EXT, {
-          pedido_item_id: peca.pedido_item_id,
-          ultimo_insumo_id: consumo.ultimo_insumo_id,
-          etapa_id: consumo.etapa_id,
-          quantidade: consumo.quantidade
-        }, proximoExtId);
-        proximoExtId = usado + 1;
-        resumo.pecasDeEstoqueGravadas += 1;
-      } catch (err) {
-        avisos.push(`Falha ao registrar a peça retirada do estoque: ${err?.message || err}`);
-      }
+      // Razão: a peça veio do estoque. Vai para `pedido_itens_ext` (o que
+      // devolver num cancelamento) e para `estoque_movimentos` (o que
+      // aconteceu, unitário, com data e autor).
+      const resultado = await registrarPecaDoEstoque(api, {
+        pedidoId,
+        pedidoItemId: peca.pedido_item_id,
+        produtoId: peca.produto_id,
+        loteId: consumo.lote_id,
+        ultimoInsumoId: consumo.ultimo_insumo_id,
+        etapaId: consumo.etapa_id,
+        quantidade: consumo.quantidade,
+        parcial: Boolean(peca.parcial),
+        usuarioId
+      }, { inserirLinhaComId, getMaxId, proximoId: proximoExtId }, avisos);
+      proximoExtId = resultado.proximoId;
+      resumo.pecasDeEstoqueGravadas += 1;
     }
+  }
+
+  // ------------------------------------------------------------------
+  // Peças que serão PRODUZIDAS DO ZERO
+  //
+  // Não entram em `pedido_itens_ext`: elas nunca estiveram no estoque, e
+  // registrá-las lá faria o cancelamento "devolver" algo que nunca saiu de lá.
+  // Vão para `reservas_estoque` com status "producao" — uma promessa de peça,
+  // que no cancelamento vira peça de verdade no estoque.
+  // ------------------------------------------------------------------
+  // Só as PARCIAIS descontam do que será produzido. `qtd_a_produzir` já é
+  // "parcial + do zero"; as peças prontas estão fora dessa conta desde sempre.
+  // A versão anterior subtraía o total vindo do estoque (pronta + parcial) e
+  // reservava peça a mais ou a menos conforme o caso — foi o que gerou uma
+  // reserva de 1 num pedido cuja peça tinha saído inteira do estoque.
+  const parcialPorItem = new Map();
+  for (const p of plano.pecasDeEstoque) {
+    if (!p.parcial) continue;
+    const chave = String(p.pedido_item_id);
+    parcialPorItem.set(chave, (parcialPorItem.get(chave) || 0) + paraNumero(p.quantidade));
+  }
+
+  for (const peca of pecasComParciais) {
+    const aProduzir = Number(peca?.qtd_a_produzir) || 0;
+    if (!(aProduzir > 0)) continue;
+    const totalParcial = parcialPorItem.get(String(peca.pedido_item_id)) || 0;
+    const doZero = arredondar(Math.max(0, aProduzir - totalParcial));
+    if (!(doZero > 0)) continue;
+
+    const produtoId = Number(peca.produto_id);
+    const rota = rotaPorProduto.get(produtoId) || [];
+    const reservaId = await registrarReservaDeProducao(api, {
+      pedidoId,
+      pedidoItemId: peca.pedido_item_id,
+      produtoId,
+      // A peça nasce completa: o último insumo da rota é onde ela vai parar.
+      ultimoInsumoId: rota.length ? rota[rota.length - 1].insumo_id : null,
+      quantidade: doZero,
+      usuarioId
+    }, avisos);
+    if (reservaId) resumo.reservasCriadas += 1;
   }
 
   // ------------------------------------------------------------------
@@ -339,10 +414,29 @@ async function aplicarConversaoNoEstoque(api, {
     try {
       await registrarSaida(consumo.insumo_id, consumo.quantidade, usuarioId);
       resumo.insumosAbatidos += 1;
+      // O razão registra o consumo ligado ao PEDIDO — `registrarSaida` só grava
+      // no histórico do insumo, que não sabe para quem foi.
+      await registrarConsumoDeInsumo(api, {
+        pedidoId,
+        insumoId: consumo.insumo_id,
+        quantidade: consumo.quantidade,
+        usuarioId
+      }, avisos);
     } catch (err) {
       avisos.push(`Falha ao abater "${consumo.insumo_nome}": ${err?.message || err}`);
     }
   }
+
+  // Evento do pedido: o que aconteceu com ELE, não com o estoque.
+  await registrarEventoDoPedido(api, {
+    pedidoId,
+    tipoEvento: EVENTO.CONVERSAO,
+    descricao:
+      `Convertido do orçamento. ${resumo.pecasDeEstoqueGravadas} peça(s) do estoque, `
+      + `${resumo.reservasCriadas} reserva(s) de produção, `
+      + `${resumo.insumosAbatidos} insumo(s) abatido(s).`,
+    usuarioId
+  }, avisos);
 
   // Os lotes foram baixados direto pela API da requisição, sem passar pelo
   // `produtos.js` — o cache de 30 s dele ficaria mostrando o estoque de antes

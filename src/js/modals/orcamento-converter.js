@@ -753,7 +753,11 @@
         // `qtd_a_produzir` já as inclui (é parcial + total), então sem esta
         // lista o backend não tinha como saber quais lotes baixar.
         qtd_produzir_parcial: Number(r.produzir_parcial || 0),
-        parciais: Array.isArray(r.parciais) ? r.parciais : []
+        parciais: Array.isArray(r.parciais) ? r.parciais : [],
+        // Os IDs das linhas de estoque escolhidas. O abatimento usa isto e não
+        // precisa procurar nada — é a diferença entre baixar o lote certo e não
+        // baixar nada.
+        lotes: Array.isArray(r.lotesSelecionados) ? r.lotesSelecionados : []
       }))
     };
     try {
@@ -815,6 +819,10 @@ async function computeInsumosAndRender(options = {}) {
       r.pronta = 0;
       r.em_estoque = 0;
       r.a_produzir = 0;
+      // Zerados a cada recálculo: sobra de um cálculo anterior mandaria o
+      // abatimento baixar um lote que a escolha atual não usa mais.
+      r.parciais = [];
+      r.lotesSelecionados = [];
       r.codigo = codigo;
       if (!codigo) continue;
 
@@ -920,24 +928,61 @@ async function computeInsumosAndRender(options = {}) {
       if (!usedPlanData) {
         const lotes = forceAll ? [] : rawLotes;
         const partialCandidates = [];
+        const readyCandidates = [];
         lotes.forEach(l => {
           const qty = Number(l.quantidade || 0);
           if (!(qty > 0)) return;
           const lastId = Number(l.ultimo_insumo_id || 0);
           const ord = orderById.get(lastId) || 0;
-          if (ord >= maxOrder && maxOrder > 0) readyQty += qty;
-          else {
-            partialCandidates.push({
-              order: ord,
-              qty,
-              lastId,
-              lastName: l.ultimo_item || '',
-              process: l.etapa || '',
-              usedAt: l.data_hora_completa || ''
-            });
+          const candidato = {
+            // O ID DO LOTE (produtos_em_cada_ponto.id). É ele que identifica a
+            // linha exata do estoque; sem guardá-lo, o abatimento tinha de sair
+            // PROCURANDO um lote parecido depois — e não achava os parciais.
+            loteId: l.id,
+            order: ord,
+            qty,
+            lastId,
+            lastName: l.ultimo_item || '',
+            process: l.etapa || '',
+            usedAt: l.data_hora_completa || ''
+          };
+          if (ord >= maxOrder && maxOrder > 0) {
+            readyQty += qty;
+            readyCandidates.push(candidato);
+          } else {
+            partialCandidates.push(candidato);
           }
         });
         const qtd = Number(r.qtd || 0);
+
+        // ------------------------------------------------------------------
+        // Identidade do que foi escolhido.
+        //
+        // Guardado só em memória, enquanto o modal está aberto: quais linhas do
+        // estoque e quanto de cada uma. Na confirmação isso viaja com a
+        // conversão e o abatimento usa os ids diretamente — sem consultar de
+        // novo e sem adivinhar qual lote era.
+        // ------------------------------------------------------------------
+        const lotesSelecionados = [];
+        // Prontas primeiro, do lote mais antigo (FIFO), até cobrir o pedido.
+        let restantePronta = Math.min(readyQty, qtd);
+        readyCandidates
+          .slice()
+          .sort((a, b) => (new Date(a.usedAt || 0).getTime() || 0) - (new Date(b.usedAt || 0).getTime() || 0))
+          .forEach(candidate => {
+            if (restantePronta <= 0) return;
+            const usar = Math.min(candidate.qty, restantePronta);
+            if (usar <= 0) return;
+            restantePronta -= usar;
+            lotesSelecionados.push({
+              lote_id: candidate.loteId,
+              quantidade: usar,
+              ultimo_insumo_id: candidate.lastId,
+              ordem: candidate.order,
+              parcial: false
+            });
+          });
+
         let needed = Math.max(0, qtd - readyQty);
         partialCandidates.sort((a, b) => b.order - a.order);
         for (const candidate of partialCandidates) {
@@ -946,8 +991,16 @@ async function computeInsumosAndRender(options = {}) {
           if (take > 0) {
             needed -= take;
             registerPartial(candidate.order, take, candidate);
+            lotesSelecionados.push({
+              lote_id: candidate.loteId,
+              quantidade: take,
+              ultimo_insumo_id: candidate.lastId,
+              ordem: candidate.order,
+              parcial: true
+            });
           }
         }
+        r.lotesSelecionados = lotesSelecionados;
         partialQtyTotal = Array.from(partialRecords.values()).reduce((acc, item) => acc + Number(item.qty || 0), 0);
         produceTotal = Math.max(0, Number(r.qtd || 0) - readyQty - partialQtyTotal);
         r.pronta = readyQty;

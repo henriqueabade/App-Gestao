@@ -1,4 +1,5 @@
 const pool = require('./db');
+const { MOV, ITEM, registrarMovimento } = require('./estoqueLedger');
 const { normalizarCamposNumericos, paraDecimal } = require('./numeros');
 
 /** Campos que chegam do front como texto e precisam virar número decimal. */
@@ -917,6 +918,27 @@ async function excluirProduto(id) {
  * @param {number} params.quantidade     Quantidade de itens produzidos no lote.
  * @returns {Promise<Object>}            Registro completo do lote recém inserido.
  */
+/**
+ * Adaptador do razão para o cliente global.
+ *
+ * `estoqueLedger` fala com o cliente da requisição, cujos caminhos levam
+ * `/api`. Aqui usamos o `pool`, cuja base JÁ inclui `/api` — sem tirar o
+ * prefixo, a URL sairia duplicada e todo movimento falharia.
+ */
+const razaoPeloPool = {
+  post: (rota, payload) => pool.post(String(rota).replace(/^\/api/, ''), payload)
+};
+
+/** Lê o lote antes de mexer: o razão precisa saber de qual peça se trata. */
+async function lerLote(id) {
+  try {
+    const lote = await pool.get(`${LOTES_ENDPOINT}/${id}`);
+    return lote && !lote.error ? lote : null;
+  } catch (_) {
+    return null;
+  }
+}
+
 async function inserirLoteProduto({ produtoId, etapa, ultimoInsumoId, quantidade }) {
   const criado = await executarLotes('post', '', {
     produto_id: produtoId,
@@ -926,6 +948,18 @@ async function inserirLoteProduto({ produtoId, etapa, ultimoInsumoId, quantidade
     data_hora_completa: new Date().toISOString()
   });
   invalidarCacheLotes();
+
+  // Peça entrando no estoque pela tela de Produtos. O razão registra POR PEÇA:
+  // sem isso, o estoque muda e não sobra rastro de quem colocou nem quando.
+  await registrarMovimento(razaoPeloPool, {
+    tipoMovimento: MOV.ENTRADA,
+    tipoItem: ITEM.PECA,
+    itemId: produtoId,
+    quantidade: paraDecimal(quantidade),
+    loteId: criado?.id ?? null,
+    ultimoInsumoId,
+    nota: 'Entrada pelo módulo de Produtos'
+  });
   return criado;
 }
 
@@ -933,17 +967,47 @@ async function inserirLoteProduto({ produtoId, etapa, ultimoInsumoId, quantidade
  * Atualiza um lote (quantidade + data)
  */
 async function atualizarLoteProduto(id, quantidade) {
+  // A diferença é o que interessa ao razão: subiu ou desceu, e quanto.
+  const antes = await lerLote(id);
+  const anterior = Number(antes?.quantidade) || 0;
+  const nova = Number(paraDecimal(quantidade)) || 0;
+
   const atualizado = await executarLotes('put', `/${id}`, {
     quantidade: paraDecimal(quantidade),
     data_hora_completa: new Date().toISOString()
   });
   invalidarCacheLotes();
+
+  const diferenca = nova - anterior;
+  if (diferenca !== 0) {
+    await registrarMovimento(razaoPeloPool, {
+      tipoMovimento: diferenca > 0 ? MOV.ENTRADA : MOV.SAIDA,
+      tipoItem: ITEM.PECA,
+      itemId: antes?.produto_id ?? null,
+      quantidade: Math.abs(diferenca),
+      loteId: id,
+      ultimoInsumoId: antes?.ultimo_insumo_id ?? null,
+      nota: `Ajuste pelo módulo de Produtos (${anterior} → ${nova})`
+    });
+  }
   return atualizado;
 }
 
 async function excluirLoteProduto(id) {
+  // Lido ANTES de excluir: depois não há mais de onde tirar a identidade.
+  const antes = await lerLote(id);
   await executarLotes('delete', `/${id}`);
   invalidarCacheLotes();
+
+  await registrarMovimento(razaoPeloPool, {
+    tipoMovimento: MOV.SAIDA,
+    tipoItem: ITEM.PECA,
+    itemId: antes?.produto_id ?? null,
+    quantidade: Number(antes?.quantidade) || 0,
+    loteId: id,
+    ultimoInsumoId: antes?.ultimo_insumo_id ?? null,
+    nota: 'Lote excluído pelo módulo de Produtos'
+  });
 }
 
 /**

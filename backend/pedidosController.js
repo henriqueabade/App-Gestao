@@ -1,6 +1,26 @@
 const express = require('express');
 const { createApiClient } = require('./apiHttpClient');
 const { exigirPermissao } = require('./permissionsController');
+const {
+  RESERVA,
+  EVENTO,
+  registrarEventoDoPedido,
+  atualizarStatusDasReservas
+} = require('./estoqueLedger');
+
+/** Id do usuário da requisição, lido do JWT (mesmo critério de orcamentosController). */
+function idDoUsuarioDaRequisicao(req) {
+  try {
+    const bruto = String(req?.headers?.authorization || '').replace(/^Bearer\s+/i, '').trim();
+    const parte = bruto.split('.')[1];
+    if (!parte) return null;
+    const json = Buffer.from(parte.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8');
+    const id = JSON.parse(json).id ?? null;
+    return Number.isFinite(Number(id)) ? Number(id) : null;
+  } catch (_) {
+    return null;
+  }
+}
 
 const router = express.Router();
 
@@ -60,7 +80,34 @@ router.put('/:id/status', exigirPermissao(permissaoDeStatus), async (req, res) =
     const api = createApiClient(req);
     const payload = payloadDeStatus(status);
     await api.put(`/api/pedidos/${id}`, payload);
-    res.json({ success: true });
+
+    // ------------------------------------------------------------------
+    // Razão: o status do pedido move as reservas de produção.
+    //
+    // Enviado/Entregue = as peças reservadas foram produzidas e saíram, então a
+    // reserva encerra como "finalizado". Cancelado NÃO é tratado aqui: devolver
+    // peça ao estoque é operação própria, com decisão do usuário, e fazê-la de
+    // carona numa troca de status esconderia o que aconteceu.
+    // ------------------------------------------------------------------
+    const avisos = [];
+    if (status === 'Enviado' || status === 'Entregue') {
+      await atualizarStatusDasReservas(api, id, RESERVA.FINALIZADO, avisos);
+    }
+    const eventoPorStatus = {
+      Enviado: EVENTO.ABATIMENTO,
+      Entregue: EVENTO.EDICAO,
+      Cancelado: EVENTO.CANCELAMENTO
+    };
+    if (eventoPorStatus[status]) {
+      await registrarEventoDoPedido(api, {
+        pedidoId: id,
+        tipoEvento: eventoPorStatus[status],
+        descricao: `Pedido marcado como ${status}.`,
+        usuarioId: idDoUsuarioDaRequisicao(req)
+      }, avisos);
+    }
+
+    res.json({ success: true, avisos });
   } catch (err) {
     console.error('Erro ao atualizar status do pedido:', err);
     res.status(err.status || 500).json({ error: 'Erro ao atualizar status do pedido' });
