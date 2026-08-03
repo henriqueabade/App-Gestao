@@ -88,6 +88,25 @@ function buildQueryString(params = {}) {
   return qs ? `?${qs}` : '';
 }
 
+/**
+ * O que a API disse, junto do número do status.
+ *
+ * A API responde erro assim: `{ error: "Erro no INSERT", detalhe: "<mensagem
+ * do Postgres>" }`. O `detalhe` é onde vem "violates foreign key constraint
+ * X", "null value in column Y" — o diagnóstico pronto. Guardá-lo só em
+ * `error.body` e mostrar apenas "500" transformava qualquer falha de escrita
+ * em adivinhação: foi assim que uma violação de chave estrangeira em
+ * `pedido_itens_ext` passou três rodadas de investigação sem ser vista.
+ */
+function descreverFalha(corpo) {
+  if (!corpo || typeof corpo !== 'object') return '';
+  const partes = [corpo.error, corpo.detalhe || corpo.detail || corpo.message]
+    .map(p => (typeof p === 'string' ? p.trim() : ''))
+    .filter(Boolean);
+  if (!partes.length) return '';
+  return ` — ${[...new Set(partes)].join(': ')}`;
+}
+
 function normalizeToken(rawToken) {
   if (typeof rawToken !== 'string') return '';
   const trimmed = rawToken.trim();
@@ -194,7 +213,9 @@ function createApiClient(req) {
     }
 
     if (!response.ok) {
-      const error = new Error(`Falha na requisição ${method} ${normalizedPath}: ${response.status}`);
+      const error = new Error(
+        `Falha na requisição ${method} ${normalizedPath}: ${response.status}${descreverFalha(data)}`
+      );
       error.status = response.status;
       error.body = data;
       throw error;

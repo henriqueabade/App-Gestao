@@ -25,12 +25,18 @@ const MATERIAS = {
   30: { id: 30, nome: 'Etiqueta', unidade: 'un', processo: 'Embalagem', quantidade: 1000 }
 };
 
-/** Lotes: um pronto (parou na etiqueta) e dois parciais. */
+/**
+ * Lotes: um pronto (parou na etiqueta) e dois parciais.
+ *
+ * `produtos_em_cada_ponto.etapa_id` guarda o NOME do processo, como em
+ * produção. Ele NÃO vai para `pedido_itens_ext.etapa_id`: apesar do nome, essa
+ * coluna tem FK para o próprio lote (produtos_em_cada_ponto.id).
+ */
 function lotesIniciais() {
   return [
-    { id: 501, produto_id: 7, quantidade: 4, ultimo_insumo_id: 30, etapa_id: 3, data_hora_completa: '2026-01-03' },
-    { id: 502, produto_id: 7, quantidade: 4, ultimo_insumo_id: 20, etapa_id: 2, data_hora_completa: '2026-01-02' },
-    { id: 503, produto_id: 7, quantidade: 2, ultimo_insumo_id: 10, etapa_id: 1, data_hora_completa: '2026-01-01' }
+    { id: 501, produto_id: 7, quantidade: 4, ultimo_insumo_id: 30, etapa_id: 'Embalagem', data_hora_completa: '2026-01-03' },
+    { id: 502, produto_id: 7, quantidade: 4, ultimo_insumo_id: 20, etapa_id: 'Montagem', data_hora_completa: '2026-01-02' },
+    { id: 503, produto_id: 7, quantidade: 2, ultimo_insumo_id: 10, etapa_id: 'Corte', data_hora_completa: '2026-01-01' }
   ];
 }
 
@@ -238,8 +244,28 @@ test('o ponto de onde a peça saiu fica registrado, para permitir o estorno', as
 
     const registros = amb.gravacoes.ext.filter(r => r.tabela === 'pedido_itens_ext');
     assert.equal(registros.length, 2, 'um registro por lote consumido: o pronto e o parcial');
-    assert.ok(registros.some(r => Number(r.ultimo_insumo_id) === 30), 'o lote pronto');
-    assert.ok(registros.some(r => Number(r.ultimo_insumo_id) === 20), 'o lote parcial');
+
+    // `pedido_itens_ext.ultimo_insumo_id` tem FK para produtos_insumos(id): o
+    // que vai gravado é a LINHA DA ROTA (1, 2, 3), não o insumo (10, 20, 30).
+    // Mandar o id do insumo violava a FK, a API devolvia 500, e como o razão
+    // não derruba a conversão isso virava um aviso e a tabela ficava vazia.
+    // Os números do fixture são diferentes de propósito, para que trocar um
+    // pelo outro quebre aqui.
+    assert.ok(registros.some(r => Number(r.ultimo_insumo_id) === 3), 'o lote pronto (passo 3 da rota)');
+    assert.ok(registros.some(r => Number(r.ultimo_insumo_id) === 2), 'o lote parcial (passo 2 da rota)');
+    assert.ok(
+      registros.every(r => ![10, 20, 30].includes(Number(r.ultimo_insumo_id))),
+      'nenhum registro pode levar o id do insumo: é isso que a chave estrangeira recusa'
+    );
+
+    // `etapa_id` tem FK para produtos_em_cada_ponto(id): o que vai gravado é o
+    // LOTE de onde a peça saiu — 501 (pronto) e 502 (parcial) —, não a etapa.
+    // É esta coluna que diz ao estorno para qual linha do estoque devolver.
+    assert.deepEqual(
+      registros.map(r => Number(r.etapa_id)).sort(),
+      [501, 502],
+      'a coluna etapa_id guarda o lote de origem, apesar do nome'
+    );
   } finally {
     amb.restaurar();
   }

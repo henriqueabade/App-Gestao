@@ -74,6 +74,10 @@ async function carregarRotas(api, produtoIds) {
         const materia = materias.get(Number(i?.insumo_id)) || {};
         return {
           insumo_id: Number(i?.insumo_id),
+          // Id da LINHA da rota (produtos_insumos.id), que não é o mesmo que o
+          // id do insumo. `pedido_itens_ext.ultimo_insumo_id` tem FK para cá, e
+          // não para materia_prima — ver `passoDaRotaPorProduto`.
+          passo_id: Number.isFinite(Number(i?.id)) ? Number(i.id) : null,
           quantidade: paraNumero(i?.quantidade),
           ordem_insumo: i?.ordem_insumo ?? null,
           nome: materia?.nome || '',
@@ -88,6 +92,35 @@ async function carregarRotas(api, produtoIds) {
   }
 
   return { rotaPorProduto, ultimoInsumoPorProduto, materias };
+}
+
+/**
+ * Tradução entre dois "ultimo_insumo_id" que têm o mesmo nome e sentidos
+ * diferentes — a armadilha que deixou `pedido_itens_ext` vazia.
+ *
+ *   `produtos_em_cada_ponto.ultimo_insumo_id` -> id da MATÉRIA-PRIMA (ex.: 177)
+ *   `pedido_itens_ext.ultimo_insumo_id`       -> id da LINHA DA ROTA, com FK
+ *                                                para produtos_insumos (ex.: 4680)
+ *
+ * Mandar o primeiro onde se espera o segundo viola
+ * `pedido_itens_ext_ultimo_insumo_id_fkey`, e a API devolve 500. Como registrar
+ * no razão nunca derruba a conversão, o erro virava um aviso e a tabela ficava
+ * vazia — o estoque era abatido certo, mas sem o registro que o estorno lê.
+ *
+ * @returns {Map<number, Map<number, number>>} produto -> (insumo -> linha da rota)
+ */
+function mapearPassosDaRota(rotaPorProduto) {
+  const porProduto = new Map();
+  for (const [produtoId, rota] of rotaPorProduto.entries()) {
+    const porInsumo = new Map();
+    for (const passo of rota) {
+      if (Number.isFinite(passo?.insumo_id) && Number.isFinite(passo?.passo_id)) {
+        porInsumo.set(passo.insumo_id, passo.passo_id);
+      }
+    }
+    porProduto.set(produtoId, porInsumo);
+  }
+  return porProduto;
 }
 
 /** Saldo atual dos insumos que a conversão vai tocar. */
@@ -200,6 +233,7 @@ async function aplicarConversaoNoEstoque(api, {
   const produtoIds = Array.from(new Set(pecas.map(i => Number(i.produto_id))));
   const { rotaPorProduto, ultimoInsumoPorProduto } = await carregarRotas(api, produtoIds);
   const estoquePorInsumo = await carregarEstoqueInsumos(api, rotaPorProduto);
+  const passoDaRotaPorProduto = mapearPassosDaRota(rotaPorProduto);
 
   // ------------------------------------------------------------------
   // Parciais: confiar, mas não depender.
@@ -365,7 +399,9 @@ async function aplicarConversaoNoEstoque(api, {
         produtoId: peca.produto_id,
         loteId: consumo.lote_id,
         ultimoInsumoId: consumo.ultimo_insumo_id,
-        etapaId: consumo.etapa_id,
+        // A FK de `pedido_itens_ext` exige a linha da rota, não o insumo.
+        passoDaRotaId: passoDaRotaPorProduto
+          .get(Number(peca.produto_id))?.get(Number(consumo.ultimo_insumo_id)) ?? null,
         quantidade: consumo.quantidade,
         parcial: Boolean(peca.parcial),
         usuarioId

@@ -146,7 +146,7 @@ async function registrarPecaDoEstoque(api, {
   produtoId,
   loteId,
   ultimoInsumoId,
-  etapaId,
+  passoDaRotaId = null,
   quantidade,
   parcial = false,
   usuarioId = null
@@ -159,19 +159,31 @@ async function registrarPecaDoEstoque(api, {
     if (idParaUsar === null || idParaUsar === undefined) {
       idParaUsar = (await getMaxId(api, 'pedido_itens_ext')) + 1;
     }
-    // `produtos_em_cada_ponto.etapa_id` é TEXTO (guarda "Embalagem",
-    // "Acabamento"), mas `pedido_itens_ext.etapa_id` é BIGINT. Mandar o nome
-    // do processo aqui fazia o INSERT falhar por tipo — e como a falha virava
-    // só um aviso, a tabela ficava vazia sem ninguém perceber, enquanto o
-    // movimento (que não tem essa coluna) gravava normalmente.
-    const etapaNumerica = Number.isFinite(Number(etapaId)) && String(etapaId).trim() !== ''
-      ? Number(etapaId)
+    // ---------------------------------------------------------------------
+    // NÃO se guie pelos nomes das colunas aqui: as duas chaves estrangeiras
+    // desta tabela apontam para lugares diferentes do que o nome sugere, e foi
+    // exatamente isso que a manteve VAZIA enquanto o resto do razão gravava.
+    //
+    //   ultimo_insumo_id -> produtos_insumos(id)        = LINHA DA ROTA
+    //                       (e não materia_prima(id), o id do insumo)
+    //   etapa_id         -> produtos_em_cada_ponto(id)  = LOTE do estoque
+    //                       (e não etapas_producao(id), a etapa)
+    //
+    // Como o razão nunca derruba a operação que o chamou, cada 500 desses
+    // virava um aviso e a conversão seguia — estoque abatido certo, registro
+    // nenhum. As duas FKs foram confirmadas contra o banco, uma de cada vez.
+    //
+    // Em `estoque_movimentos` os nomes valem ao pé da letra: lá não há FK e
+    // `ultimo_insumo_id` é mesmo o id do insumo.
+    // ---------------------------------------------------------------------
+    const loteNumerico = Number.isFinite(Number(loteId)) && String(loteId).trim() !== ''
+      ? Number(loteId)
       : null;
 
     const linha = {
       pedido_item_id: pedidoItemId,
-      ultimo_insumo_id: ultimoInsumoId,
-      etapa_id: etapaNumerica,
+      ultimo_insumo_id: passoDaRotaId ?? null,
+      etapa_id: loteNumerico,
       quantidade: qtd,
       id_pedido: pedidoId
     };

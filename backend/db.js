@@ -130,16 +130,31 @@ async function request(method, path, options = {}) {
   }
 
   if (!response.ok) {
-    const error = new Error(`Erro na requisição ${method} ${normalizedPath}: ${response.status}`);
+    // O corpo vem ANTES da mensagem: é nele que a API põe o `detalhe` com o
+    // erro real do Postgres. Montar o texto sem ele deixava só o número do
+    // status, que não diz nada sobre a causa.
+    const corpo = await safeJson(response);
+    const error = new Error(
+      `Erro na requisição ${method} ${normalizedPath}: ${response.status}${descreverFalha(corpo)}`
+    );
     error.code = 'api-request-failed';
     error.status = response.status;
-    error.body = await safeJson(response);
+    error.body = corpo;
     updateStateFailure(error);
     throw error;
   }
 
   updateStateSuccess();
   return safeJson(response);
+}
+
+/** O que a API disse no corpo do erro (`{ error, detalhe }`), quando disse. */
+function descreverFalha(corpo) {
+  if (!corpo || typeof corpo !== 'object') return '';
+  const partes = [corpo.error, corpo.detalhe || corpo.detail || corpo.message]
+    .map(p => (typeof p === 'string' ? p.trim() : ''))
+    .filter(Boolean);
+  return partes.length ? ` — ${[...new Set(partes)].join(': ')}` : '';
 }
 
 async function safeJson(response) {

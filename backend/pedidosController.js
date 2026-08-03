@@ -222,6 +222,10 @@ router.get('/:id/relatorio-producao', exigirPermissao('ped.report'), async (req,
         const materia = await api.get(`/api/materia_prima/${passo.insumo_id}`).catch(() => null);
         rota.push({
           insumo_id: Number(passo.insumo_id),
+          // Id da LINHA da rota — é ele que `pedido_itens_ext.ultimo_insumo_id`
+          // guarda (a coluna tem FK para produtos_insumos, não para
+          // materia_prima). Sem ele não dá para saber onde a peça parou.
+          passo_id: Number(passo.id),
           por_unidade: Number(passo.quantidade) || 0,
           ordem_insumo: passo.ordem_insumo,
           insumo_nome: materia?.nome || `Insumo ${passo.insumo_id}`,
@@ -257,17 +261,22 @@ router.get('/:id/relatorio-producao', exigirPermissao('ped.report'), async (req,
       const rota = await rotaDoProduto(peca.produto_id);
       if (!rota.length) continue;
 
-      const insumoFinal = rota[rota.length - 1].insumo_id;
-      const ordemPorInsumo = new Map(rota.map(p => [Number(p.insumo_id), Number(p.ordem_insumo) || 0]));
+      // O ponto de parada é lido pelo id da LINHA da rota, não pelo id do
+      // insumo: é assim que a coluna é gravada (FK para produtos_insumos).
+      // Comparar com id de insumo não encontra nada, a ordem cai para 0 e a
+      // peça meio pronta passa a ser cobrada como se fosse do zero — material a
+      // mais no papel que vai para a produção.
+      const passoFinal = rota[rota.length - 1].passo_id;
+      const ordemPorPasso = new Map(rota.map(p => [Number(p.passo_id), Number(p.ordem_insumo) || 0]));
 
       // Peças aproveitadas pela METADE: já passaram por parte da rota. Cobrar a
       // rota inteira delas no relatório mandaria a produção separar material
       // para processos que essas peças já tinham passado.
       const parciais = (extPorItem.get(Number(peca.id)) || [])
-        .filter(r => Number(r.ultimo_insumo_id) !== Number(insumoFinal))
+        .filter(r => Number(r.ultimo_insumo_id) !== Number(passoFinal))
         .map(r => ({
           quantidade: Number(r.quantidade) || 0,
-          ordem: ordemPorInsumo.get(Number(r.ultimo_insumo_id)) ?? 0
+          ordem: ordemPorPasso.get(Number(r.ultimo_insumo_id)) ?? 0
         }))
         .filter(p => p.quantidade > 0);
 
