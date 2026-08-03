@@ -135,6 +135,17 @@ router.get('/:id/relatorio-producao', exigirPermissao('ped.report'), async (req,
       api.get('/api/pedidos_itens_faltantes', { query: { pedido_id: id } }).catch(() => [])
     ]);
 
+    // De qual ponto da rota cada peça saiu do estoque. É isto que diferencia
+    // uma peça que precisa ser feita do zero de uma que já está meio pronta —
+    // e, portanto, o que o relatório deve pedir de material.
+    const extPorItem = new Map();
+    for (const peca of (Array.isArray(itens) ? itens : [])) {
+      const registros = await api
+        .get('/api/pedido_itens_ext', { query: { pedido_item_id: peca.id } })
+        .catch(() => []);
+      extPorItem.set(Number(peca.id), Array.isArray(registros) ? registros : []);
+    }
+
     if (!pedido || pedido.error === 'Not found') {
       return res.status(404).json({ error: 'Pedido não encontrado' });
     }
@@ -197,8 +208,30 @@ router.get('/:id/relatorio-producao', exigirPermissao('ped.report'), async (req,
       const aProduzir = Number(peca.qtd_a_produzir) || 0;
       if (!(aProduzir > 0)) continue;
       const rota = await rotaDoProduto(peca.produto_id);
+      if (!rota.length) continue;
+
+      const insumoFinal = rota[rota.length - 1].insumo_id;
+      const ordemPorInsumo = new Map(rota.map(p => [Number(p.insumo_id), Number(p.ordem_insumo) || 0]));
+
+      // Peças aproveitadas pela METADE: já passaram por parte da rota. Cobrar a
+      // rota inteira delas no relatório mandaria a produção separar material
+      // para processos que essas peças já tinham passado.
+      const parciais = (extPorItem.get(Number(peca.id)) || [])
+        .filter(r => Number(r.ultimo_insumo_id) !== Number(insumoFinal))
+        .map(r => ({
+          quantidade: Number(r.quantidade) || 0,
+          ordem: ordemPorInsumo.get(Number(r.ultimo_insumo_id)) ?? 0
+        }))
+        .filter(p => p.quantidade > 0);
+
+      const totalParcial = parciais.reduce((acc, p) => acc + p.quantidade, 0);
+      const doZero = Math.max(0, aProduzir - totalParcial);
+
       for (const passo of rota) {
-        const quantidade = Math.round((passo.por_unidade * aProduzir + Number.EPSILON) * 10000) / 10000;
+        const ordemDoPasso = Number(passo.ordem_insumo) || 0;
+        const unidades = doZero
+          + parciais.reduce((acc, p) => acc + (ordemDoPasso > p.ordem ? p.quantidade : 0), 0);
+        const quantidade = Math.round((passo.por_unidade * unidades + Number.EPSILON) * 10000) / 10000;
         if (!(quantidade > 0)) continue;
         registrar(passo.processo, Number(peca.id), {
           insumo_nome: passo.insumo_nome,

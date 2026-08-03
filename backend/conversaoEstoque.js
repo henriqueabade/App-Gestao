@@ -96,33 +96,80 @@ function planejarConsumo({ itens = [], rotaPorProduto = new Map(), estoquePorIns
       });
     }
 
-    // Peças aproveitadas pela METADE. O lote parou no meio da rota e vai ser
-    // terminado — mas ele SAI do estoque igual, porque já foi comprometido com
-    // este pedido. Antes só a peça inteira era abatida e o lote parcial ficava
-    // no estoque como se estivesse livre, disponível para outro pedido.
-    for (const parcial of (Array.isArray(item?.parciais) ? item.parciais : [])) {
-      const quantidade = paraNumero(parcial?.quantidade);
-      if (!(quantidade > 0)) continue;
+    const rota = rotaPorProduto.get(produtoId) || rotaPorProduto.get(String(produtoId)) || [];
+    const ordemPorInsumo = new Map(
+      rota.map(passo => [Number(passo?.insumo_id), paraNumero(passo?.ordem_insumo)])
+    );
+
+    // ------------------------------------------------------------------
+    // Peças aproveitadas PELA METADE
+    //
+    // Duas coisas, e as duas estavam erradas:
+    //
+    //  1. O lote SAI do estoque. Ele foi comprometido com este pedido; deixá-lo
+    //     lá o oferece de novo para outro pedido.
+    //  2. Ela consome SÓ O QUE FALTA. O lote já passou pelos processos até um
+    //     ponto da rota, e esses insumos já foram gastos quando ele foi
+    //     produzido. Cobrar a rota inteira de novo abate matéria-prima que
+    //     ninguém vai usar e imprime um relatório pedindo material a mais —
+    //     estoque falso para menos, relatório falso para mais.
+    // ------------------------------------------------------------------
+    const parciais = (Array.isArray(item?.parciais) ? item.parciais : [])
+      .map(parcial => {
+        const insumoId = Number.isFinite(Number(parcial?.ultimo_insumo_id))
+          ? Number(parcial.ultimo_insumo_id)
+          : null;
+        // A ordem informada pela revisão manda; se não vier, descobrimos pela
+        // rota a partir do insumo em que o lote parou.
+        const ordemInformada = parcial?.ordem === undefined || parcial?.ordem === null
+          ? null
+          : paraNumero(parcial.ordem);
+        const ordem = ordemInformada !== null
+          ? ordemInformada
+          : (ordemPorInsumo.has(insumoId) ? ordemPorInsumo.get(insumoId) : 0);
+        return {
+          quantidade: paraNumero(parcial?.quantidade),
+          ultimo_insumo_id: insumoId,
+          ordem
+        };
+      })
+      .filter(parcial => parcial.quantidade > 0);
+
+    for (const parcial of parciais) {
       pecasDeEstoque.push({
         pedido_item_id: pedidoItemId,
         produto_id: produtoId,
-        quantidade: arredondar(quantidade),
+        quantidade: arredondar(parcial.quantidade),
         // Aqui o lote NÃO está no fim da rota: é este insumo que identifica em
         // que ponto ele parou.
-        ultimo_insumo_id: Number.isFinite(Number(parcial?.ultimo_insumo_id))
-          ? Number(parcial.ultimo_insumo_id)
-          : null,
+        ultimo_insumo_id: parcial.ultimo_insumo_id,
         parcial: true
       });
     }
 
     if (!(aProduzir > 0)) continue;
 
-    const rota = rotaPorProduto.get(produtoId) || rotaPorProduto.get(String(produtoId)) || [];
+    // `qtd_a_produzir` = parcial + do zero. Só o "do zero" paga a rota inteira.
+    const totalParcial = parciais.reduce((acc, p) => acc + p.quantidade, 0);
+    const doZero = Math.max(0, arredondar(aProduzir - totalParcial));
+
+    /** Quantas unidades passam por este passo da rota. */
+    const unidadesNoPasso = passo => {
+      const ordemDoPasso = paraNumero(passo?.ordem_insumo);
+      // As produzidas do zero passam por tudo; as parciais, só pelo que vem
+      // DEPOIS do ponto onde pararam.
+      const dosParciais = parciais.reduce(
+        (acc, p) => acc + (ordemDoPasso > p.ordem ? p.quantidade : 0),
+        0
+      );
+      return doZero + dosParciais;
+    };
+
     for (const passo of rota) {
       const insumoId = Number(passo?.insumo_id);
       const porUnidade = paraNumero(passo?.quantidade);
-      const necessario = arredondar(porUnidade * aProduzir);
+      const unidades = unidadesNoPasso(passo);
+      const necessario = arredondar(porUnidade * unidades);
       if (!(necessario > 0)) continue;
 
       const estoque = disponivel.get(insumoId) || { quantidade: 0, infinito: false };

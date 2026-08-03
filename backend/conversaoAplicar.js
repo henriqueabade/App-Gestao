@@ -104,6 +104,55 @@ async function carregarEstoqueInsumos(api, rotaPorProduto) {
 }
 
 /**
+ * Descobre, a partir do estoque, quais lotes pela metade dá para aproveitar.
+ *
+ * Espelha a regra da revisão: só lotes que NÃO estão no fim da rota, do mais
+ * adiantado para o menos adiantado (menos trabalho restante primeiro), até
+ * cobrir a quantidade necessária.
+ *
+ * @returns {Array<{ ultimo_insumo_id: number, quantidade: number, ordem: number }>}
+ */
+function derivarParciais({
+  lotes = [],
+  rota = [],
+  ultimoInsumoFinal = null,
+  quantidadeNecessaria = 0,
+  reservadoNoFinal = 0
+} = {}) {
+  let restante = paraNumero(quantidadeNecessaria);
+  if (!(restante > 0) || !rota.length) return [];
+
+  const ordemPorInsumo = new Map(rota.map(p => [Number(p.insumo_id), paraNumero(p.ordem_insumo)]));
+
+  const candidatos = lotes
+    .map(lote => ({
+      ultimo_insumo_id: Number(lote?.ultimo_insumo_id),
+      // O lote pronto já é consumido pela peça inteira; o que sobra dele não
+      // vale como parcial (ele não está "pela metade").
+      disponivel: paraNumero(lote?.quantidade)
+        - (Number(lote?.ultimo_insumo_id) === Number(ultimoInsumoFinal) ? paraNumero(reservadoNoFinal) : 0),
+      ordem: ordemPorInsumo.get(Number(lote?.ultimo_insumo_id)) ?? 0
+    }))
+    .filter(c => c.disponivel > 0)
+    .filter(c => Number(c.ultimo_insumo_id) !== Number(ultimoInsumoFinal))
+    .sort((a, b) => b.ordem - a.ordem);
+
+  const escolhidos = new Map();
+  for (const candidato of candidatos) {
+    if (!(restante > 0)) break;
+    const usar = Math.min(candidato.disponivel, restante);
+    if (!(usar > 0)) continue;
+    const atual = escolhidos.get(candidato.ultimo_insumo_id)
+      || { ultimo_insumo_id: candidato.ultimo_insumo_id, quantidade: 0, ordem: candidato.ordem };
+    atual.quantidade = arredondar(atual.quantidade + usar);
+    escolhidos.set(candidato.ultimo_insumo_id, atual);
+    restante = arredondar(restante - usar);
+  }
+
+  return Array.from(escolhidos.values());
+}
+
+/**
  * @param {object} api            cliente da requisição
  * @param {object} entrada
  * @param {number} entrada.pedidoId
@@ -135,7 +184,66 @@ async function aplicarConversaoNoEstoque(api, {
   const { rotaPorProduto, ultimoInsumoPorProduto } = await carregarRotas(api, produtoIds);
   const estoquePorInsumo = await carregarEstoqueInsumos(api, rotaPorProduto);
 
-  const plano = planejarConsumo({ itens: pecas, rotaPorProduto, estoquePorInsumo });
+  // ------------------------------------------------------------------
+  // Parciais: confiar, mas não depender.
+  //
+  // A revisão envia quais lotes pela metade foram escolhidos. Se essa lista não
+  // vier — payload antigo, revisão pulada, conversão em lote —, NÃO podemos
+  // simplesmente tratar tudo como "produzir do zero": seria abater matéria-prima
+  // que não será usada e deixar o lote parcial no estoque como se estivesse
+  // livre. Então derivamos do próprio estoque, com a mesma regra da revisão:
+  // aproveita-se primeiro o lote MAIS ADIANTADO na rota, que é o que exige
+  // menos trabalho restante.
+  // ------------------------------------------------------------------
+  const lotesPorProduto = new Map();
+  for (const produtoId of produtoIds) {
+    const dados = await api
+      .get(`/api/${TABELA_LOTES}`, { query: { produto_id: produtoId } })
+      .catch(() => []);
+    lotesPorProduto.set(produtoId, Array.isArray(dados) ? dados : []);
+  }
+
+  const pecasComParciais = pecas.map(peca => {
+    const informados = Array.isArray(peca?.parciais) ? peca.parciais : [];
+    if (informados.length) return peca;
+
+    const aProduzir = Number(peca?.qtd_a_produzir) || 0;
+    if (!(aProduzir > 0)) return peca;
+
+    // Quando a revisão FOI feita e disse "produzir do zero", isso é uma escolha
+    // do usuário e tem de ser respeitada — derivar aqui consumiria um lote que
+    // ele decidiu não usar. Só derivamos em duas situações:
+    //   a) não houve revisão (conversão sem decisão registrada);
+    //   b) a revisão se contradiz: informou que há parcial no total
+    //      (`qtd_produzir_parcial`) mas não listou quais lotes.
+    const houveRevisao = peca?.decisaoInformada === true;
+    const totalParcialInformado = Number(peca?.qtd_produzir_parcial) || 0;
+    const revisaoInconsistente = houveRevisao && totalParcialInformado > 0;
+    if (houveRevisao && !revisaoInconsistente) return peca;
+
+    const produtoId = Number(peca.produto_id);
+    const derivados = derivarParciais({
+      lotes: lotesPorProduto.get(produtoId) || [],
+      rota: rotaPorProduto.get(produtoId) || [],
+      ultimoInsumoFinal: ultimoInsumoPorProduto.get(produtoId),
+      quantidadeNecessaria: aProduzir,
+      // O que a peça pronta já vai levar não pode ser contado de novo.
+      reservadoNoFinal: Number(peca?.qtd_usar_pronta) || 0
+    });
+
+    if (!derivados.length) return peca;
+    const total = derivados.reduce((a, d) => a + d.quantidade, 0);
+    avisos.push(
+      revisaoInconsistente
+        ? `Produto ${produtoId}: a revisão indicou ${totalParcialInformado} peça(s) parcial(is) `
+          + `mas não disse quais lotes; ${total} foram aproveitados do estoque.`
+        : `Produto ${produtoId}: conversão sem revisão de estoque; `
+          + `${total} peça(s) parcial(is) foram aproveitadas do estoque.`
+    );
+    return { ...peca, parciais: derivados };
+  });
+
+  const plano = planejarConsumo({ itens: pecasComParciais, rotaPorProduto, estoquePorInsumo });
 
   // ------------------------------------------------------------------
   // 3. O que faltava — a foto que o relatório e o estorno vão ler

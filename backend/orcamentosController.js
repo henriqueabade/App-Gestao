@@ -335,7 +335,13 @@ async function converterOrcamentoEmPedido(api, id, conversao = null) {
       // `parciais` NÃO vira coluna de pedidos_itens (a tabela não tem esse
       // campo): ela só atravessa até o abatimento, para o estoque saber quais
       // lotes pela metade foram comprometidos com este pedido.
-      parciais: Array.isArray(decisao?.parciais) ? decisao.parciais : []
+      parciais: Array.isArray(decisao?.parciais) ? decisao.parciais : [],
+      qtd_produzir_parcial: Number(decisao?.qtd_produzir_parcial) || 0,
+      // Diferencia "a revisão disse produzir do zero" de "não houve revisão".
+      // Sem isso o abatimento não teria como respeitar a escolha do usuário
+      // sem, ao mesmo tempo, deixar a conversão sem revisão tratando lote
+      // parcial como inexistente.
+      decisaoInformada: decisaoPorProduto.has(Number(item?.produto_id))
     });
     proximoItemId = usado + 1;
   }
