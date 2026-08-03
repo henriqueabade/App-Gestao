@@ -168,14 +168,25 @@ async function registrarPecaDoEstoque(api, {
       ? Number(etapaId)
       : null;
 
-    const usado = await inserirLinhaComId(api, 'pedido_itens_ext', {
+    const linha = {
       pedido_item_id: pedidoItemId,
       ultimo_insumo_id: ultimoInsumoId,
       etapa_id: etapaNumerica,
       quantidade: qtd,
       id_pedido: pedidoId
-    }, idParaUsar);
-    idParaUsar = usado + 1;
+    };
+
+    // PRIMEIRO sem id, como todas as outras tabelas do razão que funcionam
+    // (estoque_movimentos, reservas_estoque, faltantes). Esta era a ÚNICA que
+    // mandava id explícito, e era a única que ficava vazia — se a coluna tem
+    // default/identity, o id de fora é justamente o que faz o INSERT falhar.
+    try {
+      await api.post('/api/pedido_itens_ext', linha);
+    } catch (semId) {
+      // Sem default: aí sim precisa do id calculado.
+      const usado = await inserirLinhaComId(api, 'pedido_itens_ext', linha, idParaUsar);
+      idParaUsar = usado + 1;
+    }
   } catch (err) {
     avisos.push(`Falha ao registrar a peça retirada do estoque: ${err?.message || err}`);
   }

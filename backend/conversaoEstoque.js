@@ -160,7 +160,14 @@ function planejarConsumo({ itens = [], rotaPorProduto = new Map(), estoquePorIns
       const ordem = ordemInformada !== null
         ? ordemInformada
         : (ordemPorInsumo.has(insumoId) ? ordemPorInsumo.get(insumoId) : 0);
-      return { quantidade: paraNumero(origem?.quantidade), ultimo_insumo_id: insumoId, ordem };
+      return {
+        quantidade: paraNumero(origem?.quantidade),
+        ultimo_insumo_id: insumoId,
+        // Quando a origem sabe de qual lote se trata, o id vem junto e o
+        // abatimento não precisa procurar nada.
+        lote_id: origem?.lote_id ?? null,
+        ordem
+      };
     };
 
     // Quando os lotes vieram por id, eles JÁ foram lançados em `pecasDeEstoque`
@@ -175,8 +182,9 @@ function planejarConsumo({ itens = [], rotaPorProduto = new Map(), estoquePorIns
           pedido_item_id: pedidoItemId,
           produto_id: produtoId,
           quantidade: arredondar(parcial.quantidade),
-          lote_id: null,
-          // Sem o id do lote, é este insumo que identifica onde ele parou.
+          // Com o id, o abatimento vai direto na linha certa; sem ele, cai na
+          // busca pelo ponto da rota (caminho antigo, menos preciso).
+          lote_id: parcial.lote_id ?? null,
           ultimo_insumo_id: parcial.ultimo_insumo_id,
           parcial: true
         });

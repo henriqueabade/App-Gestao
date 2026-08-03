@@ -341,7 +341,8 @@ async function converterOrcamentoEmPedido(api, id, conversao = null) {
       // Sem isso o abatimento não teria como respeitar a escolha do usuário
       // sem, ao mesmo tempo, deixar a conversão sem revisão tratando lote
       // parcial como inexistente.
-      decisaoInformada: decisaoPorProduto.has(Number(item?.produto_id))
+      decisaoInformada: decisaoPorProduto.has(Number(item?.produto_id)),
+      forcarProduzirDoZero: decisao?.forcarProduzirDoZero === true
     });
     proximoItemId = usado + 1;
   }

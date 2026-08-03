@@ -133,6 +133,10 @@ function derivarParciais({
 
   const candidatos = lotes
     .map(lote => ({
+      // O ID DO LOTE viaja junto. Antes eu devolvia só o `ultimo_insumo_id` e o
+      // abatimento saía PROCURANDO um lote com aquele insumo — a mesma busca
+      // que já tinha falhado com os parciais. Com o id não há procura nenhuma.
+      lote_id: lote?.id ?? null,
       ultimo_insumo_id: Number(lote?.ultimo_insumo_id),
       // O lote pronto já é consumido pela peça inteira; o que sobra dele não
       // vale como parcial (ele não está "pela metade").
@@ -141,22 +145,27 @@ function derivarParciais({
       ordem: ordemPorInsumo.get(Number(lote?.ultimo_insumo_id)) ?? 0
     }))
     .filter(c => c.disponivel > 0)
+    .filter(c => c.lote_id !== null)
     .filter(c => Number(c.ultimo_insumo_id) !== Number(ultimoInsumoFinal))
     .sort((a, b) => b.ordem - a.ordem);
 
-  const escolhidos = new Map();
+  // Um item POR LOTE, não por insumo: dois lotes no mesmo ponto da rota são
+  // duas linhas de estoque diferentes e cada uma precisa ser baixada na sua.
+  const escolhidos = [];
   for (const candidato of candidatos) {
     if (!(restante > 0)) break;
     const usar = Math.min(candidato.disponivel, restante);
     if (!(usar > 0)) continue;
-    const atual = escolhidos.get(candidato.ultimo_insumo_id)
-      || { ultimo_insumo_id: candidato.ultimo_insumo_id, quantidade: 0, ordem: candidato.ordem };
-    atual.quantidade = arredondar(atual.quantidade + usar);
-    escolhidos.set(candidato.ultimo_insumo_id, atual);
+    escolhidos.push({
+      lote_id: candidato.lote_id,
+      ultimo_insumo_id: candidato.ultimo_insumo_id,
+      quantidade: arredondar(usar),
+      ordem: candidato.ordem
+    });
     restante = arredondar(restante - usar);
   }
 
-  return Array.from(escolhidos.values());
+  return escolhidos;
 }
 
 /**
@@ -212,22 +221,32 @@ async function aplicarConversaoNoEstoque(api, {
   }
 
   const pecasComParciais = pecas.map(peca => {
-    const informados = Array.isArray(peca?.parciais) ? peca.parciais : [];
-    if (informados.length) return peca;
-
+    // A lista que a revisão manda NÃO serve para abater: ela diz em que ponto
+    // da rota a peça parou, mas não DE QUAL LINHA do estoque ela sai. Sem o id
+    // do lote o abatimento volta a procurar — e procurar é o que vinha
+    // falhando ("faltaram 2", "faltaram 3", com os lotes ali no banco).
+    //
+    // Por isso a resolução dos lotes é SEMPRE feita aqui, contra o estoque de
+    // verdade. O que a revisão informou continua valendo como quantidade; o
+    // "onde" é resolvido por id.
     const aProduzir = Number(peca?.qtd_a_produzir) || 0;
     if (!(aProduzir > 0)) return peca;
 
-    // Quando a revisão FOI feita e disse "produzir do zero", isso é uma escolha
-    // do usuário e tem de ser respeitada — derivar aqui consumiria um lote que
-    // ele decidiu não usar. Só derivamos em duas situações:
-    //   a) não houve revisão (conversão sem decisão registrada);
-    //   b) a revisão se contradiz: informou que há parcial no total
-    //      (`qtd_produzir_parcial`) mas não listou quais lotes.
-    const houveRevisao = peca?.decisaoInformada === true;
-    const totalParcialInformado = Number(peca?.qtd_produzir_parcial) || 0;
-    const revisaoInconsistente = houveRevisao && totalParcialInformado > 0;
-    if (houveRevisao && !revisaoInconsistente) return peca;
+    // ------------------------------------------------------------------
+    // Quando derivar
+    //
+    // A regra antiga era "só derive se não houve revisão". Ela partia de que a
+    // revisão SEMPRE informa os parciais — e não informa: o caminho do modal
+    // "Substituir Peça" (replacementPlan) monta o plano por outro lugar e a
+    // lista chega vazia. O resultado foi 5 peças parciais escolhidas na tela e
+    // ZERO abatidas do estoque.
+    //
+    // Agora a regra é a do estoque, não a do formulário: se vamos produzir e
+    // existe lote pela metade disponível, ele é aproveitado. A ÚNICA coisa que
+    // impede é o usuário ter dito explicitamente "produzir tudo do zero" —
+    // ignorar isso consumiria um lote que ele decidiu não usar.
+    // ------------------------------------------------------------------
+    if (peca?.forcarProduzirDoZero === true) return peca;
 
     const produtoId = Number(peca.produto_id);
     const derivados = derivarParciais({
@@ -239,15 +258,12 @@ async function aplicarConversaoNoEstoque(api, {
       reservadoNoFinal: Number(peca?.qtd_usar_pronta) || 0
     });
 
-    if (!derivados.length) return peca;
-    const total = derivados.reduce((a, d) => a + d.quantidade, 0);
-    avisos.push(
-      revisaoInconsistente
-        ? `Produto ${produtoId}: a revisão indicou ${totalParcialInformado} peça(s) parcial(is) `
-          + `mas não disse quais lotes; ${total} foram aproveitados do estoque.`
-        : `Produto ${produtoId}: conversão sem revisão de estoque; `
-          + `${total} peça(s) parcial(is) foram aproveitadas do estoque.`
-    );
+    // Nenhum lote pela metade disponível: tudo será produzido do zero, e as
+    // "parciais" que a revisão informou não têm lastro no estoque.
+    if (!derivados.length) return { ...peca, parciais: [] };
+
+    // Os derivados SUBSTITUEM o que veio da revisão de propósito: só eles
+    // carregam o id da linha do estoque.
     return { ...peca, parciais: derivados };
   });
 

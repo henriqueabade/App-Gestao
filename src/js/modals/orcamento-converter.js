@@ -757,7 +757,10 @@
         // Os IDs das linhas de estoque escolhidas. O abatimento usa isto e não
         // precisa procurar nada — é a diferença entre baixar o lote certo e não
         // baixar nada.
-        lotes: Array.isArray(r.lotesSelecionados) ? r.lotesSelecionados : []
+        lotes: Array.isArray(r.lotesSelecionados) ? r.lotesSelecionados : [],
+        // Única coisa que impede o backend de aproveitar lote pela metade do
+        // estoque: o usuário ter dito explicitamente para produzir tudo do zero.
+        forcarProduzirDoZero: !!r.forceProduceAll
       }))
     };
     try {

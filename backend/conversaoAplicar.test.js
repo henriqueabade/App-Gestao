@@ -80,6 +80,7 @@ function montarAmbiente() {
       else if (rota.includes('estoque_movimentos')) { gravacoes.movimentos.push(payload); return { id: 900 + gravacoes.movimentos.length }; }
       else if (rota.includes('reservas_estoque')) { gravacoes.reservas.push(payload); return { id: 700 + gravacoes.reservas.length }; }
       else if (rota.includes('pedido_historico_eventos')) { gravacoes.eventos.push(payload); return { id: 800 }; }
+      else if (rota.includes('pedido_itens_ext')) { gravacoes.ext.push({ tabela: 'pedido_itens_ext', ...payload }); return { id: 600 + gravacoes.ext.length }; }
       else gravacoes.ext.push(payload);
       return { ok: true };
     },
@@ -138,8 +139,8 @@ test('a peça PARCIAL é de fato baixada do lote — não só a pronta', async (
 
     assert.equal(lotePronto.quantidade, 3, 'a peça pronta saiu do estoque (4 - 1)');
     assert.equal(
-      loteParcial.quantidade, 2,
-      'a peça PARCIAL também tem de sair (4 - 2). Era exatamente isto que não acontecia: '
+      loteParcial.quantidade, 1,
+      'a peça PARCIAL também tem de sair (4 - 3). Era exatamente isto que não acontecia: '
       + 'o lote continuava no estoque, disponível para ser vendido de novo.'
     );
   } finally {
@@ -167,10 +168,11 @@ test('a parcial consome só os insumos que FALTAM, não a rota inteira', async (
 
     const por = id => amb.saidasDeInsumo.find(s => s.id === id)?.quantidade ?? 0;
 
-    // 1 unidade do zero passa por tudo; as 2 parciais só pela Embalagem.
-    assert.equal(por(10), 2, 'Madeira: só 1 unidade do zero × 2 = 2 (as parciais já foram cortadas)');
-    assert.equal(por(20), 1, 'Elástico: só 1 unidade do zero × 1 = 1 (as parciais já foram montadas)');
-    assert.equal(por(30), 12, 'Etiqueta: as 3 unidades passam pela embalagem × 4 = 12');
+    // As 3 saem do lote parado na Montagem: nenhuma volta ao Corte nem à
+    // Montagem, só falta embalar.
+    assert.equal(por(10), 0, 'Madeira: nenhuma unidade precisa ser cortada de novo');
+    assert.equal(por(20), 0, 'Elástico: nenhuma precisa ser montada de novo');
+    assert.equal(por(30), 12, 'Etiqueta: as 3 passam pela embalagem × 4 = 12');
 
     // Sem a correção seriam 6, 3 e 12: matéria-prima abatida a mais para
     // processos que essas peças já tinham passado.
@@ -188,7 +190,7 @@ test('produzir tudo do zero continua pagando a rota inteira', async () => {
       itens: [{
         pedido_item_id: 1000, produto_id: 7, quantidade: 3,
         qtd_usar_pronta: 0, qtd_a_produzir: 3,
-        decisaoInformada: true, qtd_produzir_parcial: 0
+        decisaoInformada: true, qtd_produzir_parcial: 0, forcarProduzirDoZero: true
       }],
       getMaxId: amb.getMaxId,
       inserirLinhaComId: amb.inserirLinhaComId
@@ -298,26 +300,25 @@ test('sem revisão, os lotes parciais são aproveitados a partir do estoque', as
   }
 });
 
-test('a revisão que se contradiz é corrigida, e o aviso é dado', async () => {
+test('mandar produzir do zero protege o lote parcial de ser consumido', async () => {
   const amb = montarAmbiente();
   try {
-    const resumo = await amb.aplicarConversaoNoEstoque(amb.api, {
+    await amb.aplicarConversaoNoEstoque(amb.api, {
       pedidoId: 99,
-      // Diz que há 2 parciais no total, mas não lista quais lotes.
       itens: [{
         pedido_item_id: 1000, produto_id: 7, quantidade: 3,
         qtd_usar_pronta: 0, qtd_a_produzir: 3,
-        decisaoInformada: true, qtd_produzir_parcial: 2, parciais: []
+        decisaoInformada: true, forcarProduzirDoZero: true
       }],
       getMaxId: amb.getMaxId,
       inserirLinhaComId: amb.inserirLinhaComId
     });
 
-    assert.notEqual(amb.lotes.find(l => l.id === 502).quantidade, 4, 'o lote parcial tem de sair do estoque');
-    assert.ok(
-      resumo.avisos.some(a => /parcial/i.test(a)),
-      'quando o sistema decide por conta própria, ele precisa dizer'
+    assert.equal(
+      amb.lotes.find(l => l.id === 502).quantidade, 4,
+      "o usuário decidiu produzir do zero: consumir o lote dele desfaria a escolha"
     );
+    assert.equal(amb.gravacoes.reservas.length, 1, "as 3 viram reserva de produção");
   } finally {
     amb.restaurar();
   }
@@ -487,7 +488,7 @@ test('peça do zero vira reserva em produção, com o último insumo', async () 
       itens: [{
         pedido_item_id: 1000, produto_id: 7, quantidade: 3,
         qtd_usar_pronta: 0, qtd_a_produzir: 3,
-        decisaoInformada: true, qtd_produzir_parcial: 0
+        decisaoInformada: true, forcarProduzirDoZero: true
       }],
       getMaxId: amb.getMaxId,
       inserirLinhaComId: amb.inserirLinhaComId
@@ -572,6 +573,80 @@ test('tudo pronto do estoque não cria reserva de produção', async () => {
 
     assert.deepEqual(amb.gravacoes.reservas, [], 'nada será produzido: não há o que reservar');
     assert.equal(amb.gravacoes.ext.filter(r => r.tabela === 'pedido_itens_ext').length, 1);
+  } finally {
+    amb.restaurar();
+  }
+});
+
+// ===================================================================
+// O CENÁRIO REAL QUE FALHOU (pedido 61 / ORC22)
+//
+// Produto com 3 lotes: um pronto (Embalagem) e dois pela metade (Montagem e
+// Acabamento). A revisão pediu 1 pronta + 2 + 3 parciais + 1 do zero.
+//
+// O que acontecia: as duas parciais eram CALCULADAS certo e depois o
+// abatimento saía procurando um lote pelo `ultimo_insumo_id` e não achava —
+// "faltaram 2", "faltaram 3". Agora o id do lote viaja junto e não há procura.
+// ===================================================================
+
+test('parcial derivado baixa o lote pelo id, sem procurar', async () => {
+  const amb = montarAmbiente();
+  try {
+    const resumo = await amb.aplicarConversaoNoEstoque(amb.api, {
+      pedidoId: 99,
+      itens: [{
+        pedido_item_id: 1000,
+        produto_id: 7,
+        quantidade: 7,
+        qtd_usar_pronta: 1,   // 1 do lote pronto (501)
+        qtd_a_produzir: 6     // 4 parciais disponíveis + 2 do zero
+      }],
+      getMaxId: amb.getMaxId,
+      inserirLinhaComId: amb.inserirLinhaComId
+    });
+
+    assert.equal(amb.lotes.find(l => l.id === 501).quantidade, 3, 'a pronta saiu (4 - 1)');
+    assert.equal(
+      amb.lotes.find(l => l.id === 502).quantidade, 0,
+      'o lote da Montagem foi todo aproveitado — antes ele nem era tocado'
+    );
+    assert.equal(
+      amb.lotes.find(l => l.id === 503).quantidade, 0,
+      'o lote do Corte também'
+    );
+
+    assert.ok(
+      !resumo.avisos.some(a => /faltaram/i.test(a)),
+      'não pode sobrar aviso de "faltaram": os lotes existiam e foram achados pelo id'
+    );
+  } finally {
+    amb.restaurar();
+  }
+});
+
+test('dois lotes no mesmo ponto da rota são baixados cada um na sua linha', async () => {
+  const amb = montarAmbiente();
+  try {
+    // Dois lotes parados no MESMO insumo (20): antes eles eram agrupados por
+    // insumo e o abatimento tentava tirar tudo de um só.
+    amb.lotes.push({
+      id: 504, produto_id: 7, quantidade: 3, ultimo_insumo_id: 20,
+      etapa_id: 2, data_hora_completa: '2026-02-01'
+    });
+
+    await amb.aplicarConversaoNoEstoque(amb.api, {
+      pedidoId: 99,
+      itens: [{
+        pedido_item_id: 1000, produto_id: 7, quantidade: 6,
+        qtd_usar_pronta: 0, qtd_a_produzir: 6
+      }],
+      getMaxId: amb.getMaxId,
+      inserirLinhaComId: amb.inserirLinhaComId
+    });
+
+    const baixados = amb.gravacoes.lotesAtualizados.map(l => l.id);
+    assert.ok(baixados.includes(502), 'o lote 502 foi baixado');
+    assert.ok(baixados.includes(504), 'o lote 504, no mesmo ponto, também');
   } finally {
     amb.restaurar();
   }
