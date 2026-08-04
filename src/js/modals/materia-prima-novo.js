@@ -84,6 +84,18 @@
     }
   });
 
+  /** Atualiza a grade do módulo sem deixar um erro dela contaminar o salvamento. */
+  function recarregarGrade() {
+    try {
+      if (typeof carregarMateriais === 'function') {
+        Promise.resolve(carregarMateriais()).catch(err =>
+          console.error('Falha ao recarregar a lista de insumos', err));
+      }
+    } catch (err) {
+      console.error('Falha ao recarregar a lista de insumos', err);
+    }
+  }
+
   // `BotaoAcao.bindSubmit` e não `addEventListener('submit')`: ele trava o
   // reenvio (clique repetido E Enter) e deixa o botão carregando até a promessa
   // terminar. Sem isso o salvamento acontecia em silêncio — o insumo entrava no
@@ -108,10 +120,10 @@
       await window.electronAPI.adicionarMateriaPrima(dados);
       showToast('Insumo registrado com sucesso!', 'success');
       close();
-      // A grade do módulo tem de refletir o que acabou de entrar. Sem `await`
-      // aqui o modal fechava antes de a lista recarregar e o insumo novo só
-      // aparecia depois de trocar de tela.
-      if (typeof carregarMateriais === 'function') await carregarMateriais();
+      // A recarga da grade fica FORA do try do salvamento: um erro aqui não
+      // desfaz o que já foi gravado, e cair no catch de baixo faria o usuário
+      // ler "não foi possível registrar" depois de o insumo ter entrado.
+      recarregarGrade();
     }catch(err){
       console.error(err);
       if (err.message === 'DUPLICADO' || err.code === 'DUPLICADO') {

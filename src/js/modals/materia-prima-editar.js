@@ -120,6 +120,18 @@
     window.materiaExcluir = item;
     Modal.open('modals/materia-prima/excluir.html', '../js/modals/materia-prima-excluir.js', 'excluirInsumo');
   });
+  /** Ver a nota gêmea em materia-prima-novo.js. */
+  function recarregarGrade() {
+    try {
+      if (typeof carregarMateriais === 'function') {
+        Promise.resolve(carregarMateriais()).catch(err =>
+          console.error('Falha ao recarregar a lista de insumos', err));
+      }
+    } catch (err) {
+      console.error('Falha ao recarregar a lista de insumos', err);
+    }
+  }
+
   // Ver a nota em materia-prima-novo.js: `bindSubmit` trava o reenvio e mostra
   // o carregamento, que é o que faltava para o usuário saber que salvou.
   async function salvar() {
@@ -153,7 +165,7 @@
       await window.electronAPI.atualizarMateriaPrima(item.id, payload);
       showToast('Insumo atualizado com sucesso!', 'success');
       close();
-      if (typeof carregarMateriais === 'function') await carregarMateriais();
+      recarregarGrade();
     }catch(err){
       console.error(err);
       if (err.message === 'DUPLICADO' || err.code === 'DUPLICADO') {

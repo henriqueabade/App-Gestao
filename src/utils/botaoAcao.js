@@ -164,8 +164,26 @@
       };
     });
 
+    // A atribuição simples pode falhar EM SILÊNCIO: `contextBridge` publica a
+    // ponte como propriedade não-gravável, e fora de modo estrito escrever nela
+    // não lança — apenas não faz nada. O `catch` sozinho não percebia isso, e o
+    // resultado era o rastreador nunca ver as promessas: o botão era liberado na
+    // janela mínima (350 ms) e nenhum carregamento aparecia, em nenhum lugar do
+    // app. Por isso a atribuição é CONFERIDA, com `defineProperty` como segunda
+    // tentativa.
     try {
       window.electronAPI = envolvido;
+    } catch (_) { /* tentativa seguinte */ }
+
+    if (window.electronAPI === envolvido) return;
+
+    try {
+      Object.defineProperty(window, 'electronAPI', {
+        value: envolvido,
+        configurable: true,
+        writable: true,
+        enumerable: true
+      });
     } catch (err) {
       console.error('[botaoAcao] não foi possível instrumentar electronAPI', err);
     }
@@ -269,12 +287,29 @@
   /**
    * Um `<button>` sem `type` dentro de um form já é botão de envio, por isso o
    * seletor explícito não basta.
+   *
+   * E o botão NEM SEMPRE está dentro do formulário: vários modais do app põem
+   * Cancelar/Salvar num rodapé fora dele e ligam por `form="idDoForm"`, que o
+   * HTML permite. Procurando só entre os descendentes, a busca voltava `null` —
+   * e sem botão não há onde mostrar o carregando nem o que travar contra o
+   * segundo clique. Era o caso dos modais de Matéria-Prima: a ação rodava, mas
+   * a tela não dava sinal nenhum de que algo estava acontecendo.
    */
   function localizarBotaoEnvio(form) {
-    return (
-      form.querySelector('button[type="submit"], input[type="submit"]')
-      || form.querySelector('button:not([type="button"]):not([type="reset"])')
-    );
+    const dentro = form.querySelector('button[type="submit"], input[type="submit"]');
+    if (dentro) return dentro;
+
+    if (form.id) {
+      const escapado = typeof CSS !== 'undefined' && typeof CSS.escape === 'function'
+        ? CSS.escape(form.id)
+        : form.id;
+      const fora = document.querySelector(
+        `button[type="submit"][form="${escapado}"], input[type="submit"][form="${escapado}"]`
+      );
+      if (fora) return fora;
+    }
+
+    return form.querySelector('button:not([type="button"]):not([type="reset"])');
   }
 
   function onClickCaptura(evento) {

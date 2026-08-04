@@ -187,16 +187,17 @@ async function atualizarMateria(id, dados, usuarioId = null) {
     descricao
   } = dados;
 
-  // Como estava ANTES. A edição mexe em quantidade e preço e não deixava
-  // rastro nenhum: o histórico só conhecia as baixas por pedido, então um
-  // insumo podia ir de 1000 para 10 pela tela sem uma linha sequer dizendo
-  // quem fez, quando, e de quanto para quanto.
-  const anterior = await fetchSingle('materia_prima', {
-    id,
-    select: 'id,quantidade,preco_unitario'
-  });
-
-  const existente = await fetchSingle('materia_prima', { nome, select: 'id,nome' });
+  // Duas leituras independentes, em paralelo — encadeá-las dobrava a espera
+  // antes de o salvamento sequer começar.
+  //
+  // `anterior` é como o insumo estava ANTES. A edição mexe em quantidade e
+  // preço e não deixava rastro nenhum: o histórico só conhecia as baixas por
+  // pedido, então um insumo podia ir de 1000 para 10 pela tela sem uma linha
+  // sequer dizendo quem fez, quando, e de quanto para quanto.
+  const [anterior, existente] = await Promise.all([
+    fetchSingle('materia_prima', { id, select: 'id,quantidade,preco_unitario' }),
+    fetchSingle('materia_prima', { nome, select: 'id,nome' })
+  ]);
   if (existente && existente.id !== id) {
     const err = new Error('DUPLICADO');
     err.code = 'DUPLICADO';
@@ -431,52 +432,63 @@ async function registrarSaida(id, quantidadeBruta, usuarioId = null, contexto = 
   return materia || null;
 }
 
+/**
+ * Recalcula o preço dos produtos que usam um insumo.
+ *
+ * CUSTO: esta função é a parte cara de salvar um insumo, e era ela que fazia a
+ * tela parecer travada. A versão anterior lia, POR PRODUTO, a tabela inteira de
+ * matéria-prima, os dados do produto e os itens dele — três idas à API para cada
+ * um, em série. Um insumo usado em 40 produtos custava mais de 120 requisições
+ * enfileiradas; numa API remota isso são dezenas de segundos com o modal parado
+ * e o banco já gravado.
+ *
+ * Agora são TRÊS leituras no total, e as gravações vão em paralelo (com limite,
+ * para não afogar a API).
+ */
+const GRAVACOES_SIMULTANEAS = 6;
+
 async function atualizarProdutosComInsumo(insumoId) {
-  const produtosRelacionados = await getFiltrado('/produtos_insumos', {
-    select: 'produto_id,insumo_id',
-    insumo_id: insumoId
-  });
+  // As três leituras de uma vez: preços, rotas e produtos. Nenhuma depende das
+  // outras, então não há motivo para esperar uma para começar a seguinte.
+  const [materias, todasAsRotas, todosOsProdutos] = await Promise.all([
+    getFiltrado('/materia_prima', { select: 'id,preco_unitario' }),
+    getFiltrado('/produtos_insumos', { select: 'produto_id,insumo_id,quantidade' }),
+    getFiltrado('/produtos', {
+      select: 'id,codigo,pct_fabricacao,pct_acabamento,pct_montagem,pct_embalagem,pct_markup,pct_comissao,pct_imposto'
+    })
+  ]);
 
-  const produtosIds = new Set(
-    (Array.isArray(produtosRelacionados) ? produtosRelacionados : [])
-      .map(r => r?.produto_id)
-      .filter(Boolean)
-  );
-
-  // A TABELA INTEIRA de matéria-prima, UMA vez.
-  //
-  // Esta leitura estava DENTRO do laço abaixo, e ela não depende do produto:
-  // um insumo usado em 40 produtos baixava as ~400 linhas de matéria-prima 40
-  // vezes. Numa API remota isso são dezenas de segundos com a tela parada — era
-  // por isso que salvar um insumo parecia não fazer nada, embora o banco já
-  // tivesse gravado: a resposta só voltava muito depois.
-  const materias = await getFiltrado('/materia_prima', {
-    select: 'id,preco_unitario'
-  });
   const precoPorMateria = new Map();
   for (const materia of (Array.isArray(materias) ? materias : [])) {
     const materiaId = Number(materia?.id);
-    if (Number.isFinite(materiaId)) precoPorMateria.set(materiaId, materia);
+    if (Number.isFinite(materiaId)) precoPorMateria.set(materiaId, Number(materia?.preco_unitario) || 0);
   }
 
-  for (const produtoId of produtosIds) {
-    const produto = await fetchSingle('produtos', {
-      select:
-        'id,codigo,pct_fabricacao,pct_acabamento,pct_montagem,pct_embalagem,pct_markup,pct_comissao,pct_imposto',
-      id: produtoId
-    });
+  const itensPorProduto = new Map();
+  const produtosAfetados = new Set();
+  for (const linha of (Array.isArray(todasAsRotas) ? todasAsRotas : [])) {
+    const produtoId = Number(linha?.produto_id);
+    if (!Number.isFinite(produtoId)) continue;
+    if (!itensPorProduto.has(produtoId)) itensPorProduto.set(produtoId, []);
+    itensPorProduto.get(produtoId).push(linha);
+    if (String(linha?.insumo_id) === String(insumoId)) produtosAfetados.add(produtoId);
+  }
 
+  const produtoPorId = new Map();
+  for (const produto of (Array.isArray(todosOsProdutos) ? todosOsProdutos : [])) {
+    const produtoId = Number(produto?.id);
+    if (Number.isFinite(produtoId)) produtoPorId.set(produtoId, produto);
+  }
+
+  const gravacoes = [];
+  for (const produtoId of produtosAfetados) {
+    const produto = produtoPorId.get(produtoId);
     if (!produto?.id) continue;
 
-    const itens = await getFiltrado('/produtos_insumos', {
-      select: 'quantidade,insumo_id',
-      produto_id: produtoId
-    });
-
-    const base = (Array.isArray(itens) ? itens : []).reduce((acc, item) => {
+    const itens = itensPorProduto.get(produtoId) || [];
+    const base = itens.reduce((acc, item) => {
       const quantidade = Number(item?.quantidade) || 0;
-      const precoUnitario = Number(precoPorMateria.get(Number(item?.insumo_id))?.preco_unitario) || 0;
-      return acc + quantidade * precoUnitario;
+      return acc + quantidade * (precoPorMateria.get(Number(item?.insumo_id)) || 0);
     }, 0);
 
     const pctFab = Number(produto.pct_fabricacao) || 0;
@@ -496,11 +508,16 @@ async function atualizarProdutosComInsumo(insumoId) {
     const impostoVal = denom !== 0 ? (pctImp / 100) * (custoTotal / denom) : 0;
     const valorVenda = custoTotal + comissaoVal + impostoVal;
 
-    await pool.put(`/produtos/${produto.id}`, {
+    gravacoes.push(() => pool.put(`/produtos/${produto.id}`, {
       preco_base: base,
       preco_venda: valorVenda,
       data: new Date().toISOString()
-    });
+    }));
+  }
+
+  // Em lotes: tudo de uma vez afogaria a API com dezenas de PUTs simultâneos.
+  for (let i = 0; i < gravacoes.length; i += GRAVACOES_SIMULTANEAS) {
+    await Promise.all(gravacoes.slice(i, i + GRAVACOES_SIMULTANEAS).map(fn => fn()));
   }
 }
 

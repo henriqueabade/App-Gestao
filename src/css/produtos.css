@@ -257,6 +257,18 @@ textarea:disabled::placeholder {
     table-layout: fixed;
 }
 
+.produtos-table thead {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+}
+
+.produtos-table thead th {
+    position: relative;
+    z-index: 6;
+    background: var(--neutral-100);
+}
+
 .produtos-table th,
 .produtos-table td {
     white-space: nowrap;
