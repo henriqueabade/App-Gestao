@@ -939,7 +939,13 @@ async function lerLote(id) {
   }
 }
 
-async function inserirLoteProduto({ produtoId, etapa, ultimoInsumoId, quantidade }) {
+/**
+ * @param {number|null} usuarioId  quem fez. Vem do IPC, que conhece a sessão.
+ *   Sem ele o movimento ia para o razão com `created_by` vazio: dava para ver
+ *   que o estoque mudou à mão, e não QUEM mudou — justamente a pergunta que um
+ *   ajuste manual levanta.
+ */
+async function inserirLoteProduto({ produtoId, etapa, ultimoInsumoId, quantidade, usuarioId = null }) {
   const criado = await executarLotes('post', '', {
     produto_id: produtoId,
     etapa_id: etapa,
@@ -958,7 +964,8 @@ async function inserirLoteProduto({ produtoId, etapa, ultimoInsumoId, quantidade
     quantidade: paraDecimal(quantidade),
     loteId: criado?.id ?? null,
     ultimoInsumoId,
-    nota: 'Entrada pelo módulo de Produtos'
+    nota: 'Entrada pelo módulo de Produtos',
+    usuarioId
   });
   return criado;
 }
@@ -966,7 +973,7 @@ async function inserirLoteProduto({ produtoId, etapa, ultimoInsumoId, quantidade
 /**
  * Atualiza um lote (quantidade + data)
  */
-async function atualizarLoteProduto(id, quantidade) {
+async function atualizarLoteProduto(id, quantidade, usuarioId = null) {
   // A diferença é o que interessa ao razão: subiu ou desceu, e quanto.
   const antes = await lerLote(id);
   const anterior = Number(antes?.quantidade) || 0;
@@ -987,13 +994,14 @@ async function atualizarLoteProduto(id, quantidade) {
       quantidade: Math.abs(diferenca),
       loteId: id,
       ultimoInsumoId: antes?.ultimo_insumo_id ?? null,
-      nota: `Ajuste pelo módulo de Produtos (${anterior} → ${nova})`
+      nota: `Ajuste pelo módulo de Produtos (${anterior} → ${nova})`,
+      usuarioId
     });
   }
   return atualizado;
 }
 
-async function excluirLoteProduto(id) {
+async function excluirLoteProduto(id, usuarioId = null) {
   // Lido ANTES de excluir: depois não há mais de onde tirar a identidade.
   const antes = await lerLote(id);
   await executarLotes('delete', `/${id}`);
@@ -1006,7 +1014,8 @@ async function excluirLoteProduto(id) {
     quantidade: Number(antes?.quantidade) || 0,
     loteId: id,
     ultimoInsumoId: antes?.ultimo_insumo_id ?? null,
-    nota: 'Lote excluído pelo módulo de Produtos'
+    nota: 'Lote excluído pelo módulo de Produtos',
+    usuarioId
   });
 }
 

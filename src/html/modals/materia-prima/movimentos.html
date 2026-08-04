@@ -1,0 +1,26 @@
+<div id="movimentosInsumoOverlay" class="hidden fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4">
+  <!-- Altura FIXA, como nos outros relatórios: o histórico não tem tamanho
+       previsível, e com `max-h` o modal cresceria junto do conteúdo em vez de
+       rolar por dentro. -->
+  <div role="dialog" aria-modal="true" tabindex="0" class="w-full max-w-6xl h-[90vh] bg-surface/60 backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade slide-in overflow-hidden flex flex-col">
+    <header class="flex flex-wrap items-center justify-between gap-4 px-8 py-5 border-b border-white/10 flex-shrink-0">
+      <div class="flex-1">
+        <h2 class="text-lg font-semibold text-white">Auditoria do Insumo</h2>
+        <p id="movimentosInsumoSubtitulo" class="text-sm text-gray-300"></p>
+      </div>
+      <div class="flex items-center gap-3">
+        <button id="fecharMovimentosInsumo" class="btn-danger px-4 py-2 rounded-lg text-white font-medium">Fechar</button>
+        <button id="imprimirMovimentosInsumo" data-perm="mp.movimentos.view" class="btn-primary px-6 py-2 rounded-lg text-white font-medium flex items-center gap-2" disabled>
+          <i class="fas fa-print"></i> Imprimir
+        </button>
+      </div>
+    </header>
+
+    <!-- `min-h-0`: sem isso um filho `flex-1` não encolhe abaixo do conteúdo e
+         a barra de rolagem nunca aparece. -->
+    <div class="flex-1 min-h-0 overflow-y-auto modal-scroll">
+      <p id="movimentosInsumoAviso" class="hidden px-8 pt-4 text-sm text-primary" role="status" aria-live="polite"></p>
+      <div id="movimentosInsumoCorpo" class="px-8 py-6"></div>
+    </div>
+  </div>
+</div>

@@ -416,6 +416,7 @@ function createMateriaPrimaRow(item) {
         <td data-perm-col="col_mp_custo_medio" class="px-6 py-4 whitespace-nowrap text-base text-white">R$ ${formatarPreco(preco)}</td>
         <td class="px-6 py-4 whitespace-nowrap text-base text-left">
             <div class="flex items-center justify-start space-x-2">
+                <i data-perm="mp.movimentos.view" class="fas fa-clipboard-list w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-blue)" title="Relatório de movimentações"></i>
                 <i data-perm="mp.edit" class="fas fa-edit w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Editar"></i>
                 <i data-perm="mp.delete" class="fas fa-trash w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10 hover:text-white" style="color: var(--color-red)" title="Excluir"></i>
             </div>
@@ -427,8 +428,10 @@ function createMateriaPrimaRow(item) {
         bindRawMaterialInfoIcon(infoIcon);
     }
 
+    const movBtn = tr.querySelector('.fa-clipboard-list');
     const editBtn = tr.querySelector('.fa-edit');
     const delBtn = tr.querySelector('.fa-trash');
+    if (movBtn) movBtn.addEventListener('click', e => { e.stopPropagation(); abrirMovimentosInsumo(item); });
     if (editBtn) editBtn.addEventListener('click', e => { e.stopPropagation(); abrirEditarInsumo(item); });
     if (delBtn) delBtn.addEventListener('click', e => { e.stopPropagation(); abrirExcluirInsumo(item); });
 
@@ -498,6 +501,12 @@ function abrirNovoInsumo() {
 function abrirEditarInsumo(item) {
     window.materiaSelecionada = item;
     openModalWithSpinner('modals/materia-prima/editar.html', '../js/modals/materia-prima-editar.js', 'editarInsumo');
+}
+
+/** Auditoria do insumo: tudo que entrou, saiu e por quê. */
+function abrirMovimentosInsumo(item) {
+    window.insumoMovimentos = item;
+    openModalWithSpinner('modals/materia-prima/movimentos.html', '../js/modals/materia-prima-movimentos.js', 'movimentosInsumo');
 }
 
 function abrirExcluirInsumo(item) {

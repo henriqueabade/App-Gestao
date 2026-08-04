@@ -521,6 +521,241 @@ async function atualizarProdutosComInsumo(insumoId) {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Auditoria de UM insumo
+//
+// Três tabelas falam sobre matéria-prima, e elas NÃO são somáveis:
+//
+//   materia_prima_movimentacoes  toda alteração de saldo/preço, com o saldo
+//                                antes e depois. É o histórico completo.
+//   estoque_movimentos           só o consumo por conversão de pedido, mas com
+//                                o pedido, a peça e a reserva. É contexto.
+//   pedidos_itens_faltantes      o que faltou numa conversão. NÃO é movimento:
+//                                nada saiu do estoque por causa dela.
+//
+// A conversão de um orçamento grava nas DUAS primeiras. Listar as duas seguidas
+// mostraria cada baixa duas vezes e dobraria o total. Por isso
+// `materia_prima_movimentacoes` é a espinha (uma linha por evento) e o razão
+// entra só para ENRIQUECER a linha correspondente — nunca como linha própria.
+//
+// O pareamento não pode ser feito pela data crua: `criado_em` é `timestamp` sem
+// fuso e `created_at` é `timestamptz`, então o MESMO instante volta das duas com
+// horas diferentes. Ver `descobrirDeslocamento`.
+// ---------------------------------------------------------------------------
+
+/** Como cada tipo se lê, e se soma ou subtrai do saldo. */
+const LEITURA_MP = {
+  entrada_manual: { rotulo: 'Entrada manual', sinal: 1 },
+  saida_manual: { rotulo: 'Retirada manual', sinal: -1 },
+  entrada_pedido: { rotulo: 'Devolvido por cancelamento', sinal: 1 },
+  saida_pedido: { rotulo: 'Consumido em pedido', sinal: -1 },
+  ajuste_quantidade: { rotulo: 'Quantidade ajustada na edição', sinal: 0 },
+  ajuste_preco: { rotulo: 'Preço alterado', sinal: 0 },
+  cadastro: { rotulo: 'Insumo cadastrado', sinal: 1 },
+  exclusao: { rotulo: 'Insumo excluído', sinal: -1 },
+  // Vocabulário antigo, de antes de os tipos serem específicos. Sem estas duas
+  // o histórico começaria mudo justamente na parte mais velha.
+  entrada: { rotulo: 'Entrada (registro antigo)', sinal: 1 },
+  saida: { rotulo: 'Saída (registro antigo)', sinal: -1 },
+  preco: { rotulo: 'Preço alterado (registro antigo)', sinal: 0 }
+};
+
+function instante(valor) {
+  const t = new Date(valor).getTime();
+  return Number.isFinite(t) ? t : null;
+}
+
+/**
+ * Descobre o deslocamento sistemático entre as duas tabelas.
+ *
+ * `criado_em` (sem fuso) e `created_at` (com fuso) descrevem o mesmo instante e
+ * voltam com uma diferença FIXA — o fuso do servidor. Em vez de fixar "-3h" no
+ * código (que quebraria no horário de verão ou noutro servidor), o deslocamento
+ * é medido: entre os pares de mesma quantidade, a diferença que mais se repete
+ * é o fuso. Com ele, o pareamento fica exato.
+ */
+function descobrirDeslocamento(movimentosDoRazao, movimentosDoInsumo) {
+  const contagem = new Map();
+  for (const razao of movimentosDoRazao) {
+    const tRazao = instante(razao.created_at);
+    if (tRazao === null) continue;
+    for (const mp of movimentosDoInsumo) {
+      if (Number(mp.quantidade) !== Number(razao.quantidade)) continue;
+      const tMp = instante(mp.criado_em);
+      if (tMp === null) continue;
+      // Arredondado ao minuto: os dois registros são gravados com alguns
+      // milissegundos de diferença, e o que importa é o degrau de fuso.
+      const passo = Math.round((tRazao - tMp) / 60000) * 60000;
+      contagem.set(passo, (contagem.get(passo) || 0) + 1);
+    }
+  }
+
+  let melhor = 0;
+  let maior = 0;
+  for (const [passo, vezes] of contagem.entries()) {
+    if (vezes > maior) { maior = vezes; melhor = passo; }
+  }
+  return melhor;
+}
+
+/** Tolerância do pareamento depois de corrigido o fuso. */
+const JANELA_PAREAMENTO_MS = 10000;
+
+async function listarMovimentosInsumo(insumoId) {
+  const id = Number(insumoId);
+  if (!Number.isFinite(id)) return { insumo: null, movimentos: [], faltas: [] };
+
+  const [insumo, historico, razaoBruto, faltasBrutas, usuariosBrutos, pedidosBrutos] = await Promise.all([
+    pool.get(`/materia_prima/${id}`).catch(() => null),
+    pool.get('/materia_prima_movimentacoes', { query: { insumo_id: id } }).catch(() => []),
+    // `tipo_item: 'insumo'` é obrigatório: `estoque_movimentos` guarda PEÇA e
+    // INSUMO na mesma tabela, e o `item_id` de uma peça pode coincidir com o de
+    // um insumo. Sem o filtro, o histórico de um insumo mostraria movimentos de
+    // uma peça que só compartilha o número.
+    pool.get('/estoque_movimentos', { query: { item_id: id, tipo_item: 'insumo' } }).catch(() => []),
+    pool.get('/pedidos_itens_faltantes', { query: { insumo_id: id } }).catch(() => []),
+    pool.get('/usuarios').catch(() => []),
+    pool.get('/pedidos').catch(() => [])
+  ]);
+
+  const doInsumo = (Array.isArray(historico) ? historico : [])
+    .filter(m => String(m?.insumo_id) === String(id));
+  const doRazao = (Array.isArray(razaoBruto) ? razaoBruto : [])
+    .filter(m => String(m?.tipo_item) === 'insumo' && String(m?.item_id) === String(id));
+
+  const indexar = lista => {
+    const mapa = new Map();
+    for (const linha of (Array.isArray(lista) ? lista : [])) {
+      if (linha?.id !== undefined && linha?.id !== null) mapa.set(Number(linha.id), linha);
+    }
+    return mapa;
+  };
+  const usuarios = indexar(usuariosBrutos);
+  const pedidos = indexar(pedidosBrutos);
+
+  // ---------------------------------------------------------------
+  // Pareamento: qual linha do razão descreve qual linha do histórico
+  // ---------------------------------------------------------------
+  const deslocamento = descobrirDeslocamento(doRazao, doInsumo);
+  const razaoDisponivel = doRazao.slice();
+  const contextoPorMovimento = new Map();
+
+  for (const mp of doInsumo) {
+    const tMp = instante(mp.criado_em);
+    if (tMp === null) continue;
+
+    let melhorIndice = -1;
+    let melhorDistancia = Infinity;
+    for (let i = 0; i < razaoDisponivel.length; i++) {
+      const razao = razaoDisponivel[i];
+      if (Number(razao.quantidade) !== Number(mp.quantidade)) continue;
+      const tRazao = instante(razao.created_at);
+      if (tRazao === null) continue;
+      const distancia = Math.abs((tRazao - deslocamento) - tMp);
+      if (distancia < melhorDistancia) { melhorDistancia = distancia; melhorIndice = i; }
+    }
+
+    if (melhorIndice >= 0 && melhorDistancia <= JANELA_PAREAMENTO_MS) {
+      // Sai da lista: cada linha do razão explica UMA linha do histórico. Sem
+      // isso, duas baixas iguais no mesmo pedido apontariam para a mesma origem.
+      contextoPorMovimento.set(mp.id, razaoDisponivel.splice(melhorIndice, 1)[0]);
+    }
+  }
+
+  const linhas = doInsumo.map(mp => {
+    const leitura = LEITURA_MP[mp.tipo] || { rotulo: mp.tipo || 'Movimento', sinal: 0 };
+    const contexto = contextoPorMovimento.get(mp.id) || null;
+    const pedido = contexto ? pedidos.get(Number(contexto.pedido_id)) : null;
+    const quantidade = Number(mp.quantidade) || 0;
+    const autor = mp.usuario_id ?? contexto?.created_by ?? null;
+
+    return {
+      id: mp.id,
+      data: mp.criado_em || null,
+      tipo: mp.tipo,
+      descricao: leitura.rotulo,
+      quantidade,
+      // Positivo entrou, negativo saiu. As tabelas guardam sempre positivo e
+      // deixam o sentido no tipo; quem lê um extrato espera o sinal.
+      efeito: leitura.sinal === 0 ? null : leitura.sinal * quantidade,
+      saldo_anterior: mp.quantidade_anterior ?? null,
+      saldo_atual: mp.quantidade_atual ?? null,
+      preco_anterior: mp.preco_anterior ?? null,
+      preco_atual: mp.preco_atual ?? null,
+      origem: pedido
+        ? `Pedido ${pedido.numero || pedido.id}`
+        : (mp.pedido_id ? `Pedido ${mp.pedido_id}` : 'Módulo de Matéria-Prima'),
+      pedido_numero: pedido?.numero || null,
+      pedido_item_id: contexto?.pedido_item_id || null,
+      reserva_id: contexto?.reserva_id || null,
+      saldo_negativo_autorizado: contexto?.saldo_negativo_autorizado === true,
+      observacao: mp.observacao || contexto?.decision_note || null,
+      usuario: usuarios.get(Number(autor))?.nome || null
+    };
+  });
+
+  // Consumo que está no razão e NÃO tem par no histórico. Não deveria existir —
+  // toda baixa passa por `registrarSaida` —, mas se existir é melhor mostrar do
+  // que sumir com o registro: é justamente o tipo de buraco que uma auditoria
+  // precisa denunciar.
+  for (const orfao of razaoDisponivel) {
+    const pedido = pedidos.get(Number(orfao.pedido_id));
+    const quantidade = Number(orfao.quantidade) || 0;
+    linhas.push({
+      id: `razao-${orfao.id}`,
+      data: orfao.created_at || null,
+      tipo: orfao.tipo_movimento,
+      descricao: 'Consumido em pedido (sem par no histórico)',
+      quantidade,
+      efeito: -quantidade,
+      saldo_anterior: null,
+      saldo_atual: null,
+      preco_anterior: null,
+      preco_atual: null,
+      origem: pedido ? `Pedido ${pedido.numero || pedido.id}` : 'Conversão de pedido',
+      pedido_numero: pedido?.numero || null,
+      pedido_item_id: orfao.pedido_item_id || null,
+      reserva_id: orfao.reserva_id || null,
+      saldo_negativo_autorizado: orfao.saldo_negativo_autorizado === true,
+      observacao: orfao.decision_note || null,
+      usuario: usuarios.get(Number(orfao.created_by))?.nome || null
+    });
+  }
+
+  linhas.sort((a, b) => new Date(b.data || 0) - new Date(a.data || 0));
+
+  // Faltas: contexto, não movimento. Ficam numa seção à parte de propósito —
+  // somá-las ao extrato inventaria uma saída que nunca houve.
+  const faltas = (Array.isArray(faltasBrutas) ? faltasBrutas : [])
+    .filter(f => String(f?.insumo_id) === String(id))
+    .map(f => {
+      const pedido = pedidos.get(Number(f.pedido_id));
+      return {
+        data: f.criado_em || null,
+        pedido: pedido ? (pedido.numero || pedido.id) : f.pedido_id,
+        processo: f.processo || '—',
+        quantidade: Number(f.quantidade) || 0
+      };
+    })
+    .sort((a, b) => new Date(b.data || 0) - new Date(a.data || 0));
+
+  return {
+    insumo: insumo && !insumo.error
+      ? {
+        id: insumo.id,
+        nome: insumo.nome,
+        unidade: insumo.unidade,
+        categoria: insumo.categoria,
+        processo: insumo.processo,
+        quantidade: insumo.quantidade,
+        preco_unitario: insumo.preco_unitario
+      }
+      : { id },
+    movimentos: linhas,
+    faltas
+  };
+}
+
 async function atualizarPreco(id, precoBruto, usuarioId = null) {
   const preco = paraDecimal(precoBruto) ?? 0;
   const materiaAtual = await fetchSingle('materia_prima', {
@@ -750,6 +985,7 @@ module.exports = {
   excluirMateria,
   registrarEntrada,
   registrarSaida,
+  listarMovimentosInsumo,
   atualizarPreco,
   listarCategorias,
   listarUnidades,

@@ -18,11 +18,19 @@
 -- ===========================================================================
 ALTER TABLE perm_prod
   ADD COLUMN IF NOT EXISTS acao_movimentos_view BOOLEAN NOT NULL DEFAULT FALSE;
-  -- prod.movimentos.view · Ver movimentações
+  -- prod.movimentos.view · Ver movimentações da peça
+
+ALTER TABLE perm_mp
+  ADD COLUMN IF NOT EXISTS acao_movimentos_view BOOLEAN NOT NULL DEFAULT FALSE;
+  -- mp.movimentos.view · Ver auditoria do insumo
 
 -- O Sup Admin tem tudo, por definição. Sem isto, quem administra o sistema
 -- teria de se dar a permissão à mão para ver o próprio relatório.
 UPDATE perm_prod
+   SET acao_movimentos_view = TRUE
+ WHERE modelo_id IN (SELECT id FROM modelos_permissoes WHERE LOWER(nome) LIKE '%sup admin%');
+
+UPDATE perm_mp
    SET acao_movimentos_view = TRUE
  WHERE modelo_id IN (SELECT id FROM modelos_permissoes WHERE LOWER(nome) LIKE '%sup admin%');
 
@@ -60,7 +68,7 @@ SELECT table_name, column_name, data_type, is_nullable
   FROM information_schema.columns
  WHERE table_schema = 'public'
    AND (
-     (table_name = 'perm_prod' AND column_name = 'acao_movimentos_view')
+     (table_name IN ('perm_prod', 'perm_mp') AND column_name = 'acao_movimentos_view')
      OR (table_name = 'materia_prima_movimentacoes' AND column_name IN ('pedido_id', 'observacao'))
    )
  ORDER BY table_name, column_name;

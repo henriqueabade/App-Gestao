@@ -34,6 +34,7 @@ const {
   excluirMateria,
   registrarEntrada,
   registrarSaida,
+  listarMovimentosInsumo,
   atualizarPreco,
   listarCategorias,
   listarUnidades,
@@ -4010,6 +4011,16 @@ ipcMain.handle('registrar-saida-materia-prima', async (_e, { id, quantidade }) =
   if (!(await verificarPermissaoIpc('mp.stock.edit'))) return negadoIpc('mp.stock.edit');
   return registrarSaida(id, quantidade, currentUserSession?.id ?? null);
 });
+ipcMain.handle('listar-movimentos-insumo', async (_e, payload) => {
+  if (!(await verificarPermissaoIpc('mp.movimentos.view'))) return negadoIpc('mp.movimentos.view');
+  try {
+    const insumoId = payload?.insumoId ?? payload?.id ?? payload;
+    return { success: true, ...(await listarMovimentosInsumo(insumoId)) };
+  } catch (err) {
+    console.error('Erro ao listar movimentos do insumo:', err);
+    return { success: false, message: err.message };
+  }
+});
 ipcMain.handle('atualizar-preco-materia-prima', async (_e, { id, preco }) => {
   if (!(await verificarPermissaoIpc('mp.edit'))) return negadoIpc('mp.edit');
   return atualizarPreco(id, preco, currentUserSession?.id ?? null);
@@ -4194,11 +4205,13 @@ ipcMain.handle('listar-detalhes-produto', async (_e, payload) => {
 });
 ipcMain.handle('inserir-lote-produto', async (_e, dados) => {
   if (!(await verificarPermissaoIpc('prod.stock.input'))) return negadoIpc('prod.stock.input');
-  return inserirLoteProduto(dados);
+  // Quem fez sai daqui: só o processo principal conhece a sessão. Sem passar
+  // adiante, o movimento ia para o razão sem autor.
+  return inserirLoteProduto({ ...dados, usuarioId: currentUserSession?.id ?? null });
 });
 ipcMain.handle('atualizar-lote-produto', async (_e, { id, quantidade }) => {
   if (!(await verificarPermissaoIpc('prod.stock.adjust'))) return negadoIpc('prod.stock.adjust');
-  return atualizarLoteProduto(id, quantidade);
+  return atualizarLoteProduto(id, quantidade, currentUserSession?.id ?? null);
 });
 ipcMain.handle('excluir-lote-produto', async (_e, info) => {
   // "lote" aqui e um LOTE DE ESTOQUE (linha do "Detalhe de Estoque"), nao um
@@ -4210,7 +4223,7 @@ ipcMain.handle('excluir-lote-produto', async (_e, info) => {
   if (id === undefined || id === null) {
     return { success: false, error: 'invalid-id' };
   }
-  await excluirLoteProduto(id);
+  await excluirLoteProduto(id, currentUserSession?.id ?? null);
   return { success: true };
 });
 ipcMain.handle('listar-insumos-produto', async (_e, payload) => {

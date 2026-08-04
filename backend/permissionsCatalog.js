@@ -35,6 +35,12 @@ const PERMISSIONS_CATALOG = {
         "desc": "Painel \"Totais por Tipo\" (Infinitos / Acabando)"
       },
       {
+        "key": "mp.movimentos.view",
+        "column": "acao_movimentos_view",
+        "label": "Ver auditoria do insumo",
+        "desc": "Ícone de relatório — abre o histórico de movimentações do insumo"
+      },
+      {
         "key": "mp.edit",
         "column": "acao_edit",
         "label": "Editar insumo",
