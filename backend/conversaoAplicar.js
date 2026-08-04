@@ -144,27 +144,16 @@ async function carregarEstoqueInsumos(api, rotaPorProduto) {
 }
 
 /**
- * Descobre, a partir do estoque, quais lotes pela metade dá para aproveitar.
+ * Lotes pela metade que dá para aproveitar, do mais adiantado na rota para o
+ * menos adiantado (menos trabalho restante primeiro).
  *
- * Espelha a regra da revisão: só lotes que NÃO estão no fim da rota, do mais
- * adiantado para o menos adiantado (menos trabalho restante primeiro), até
- * cobrir a quantidade necessária.
- *
- * @returns {Array<{ ultimo_insumo_id: number, quantidade: number, ordem: number }>}
+ * `disponivel` é mutável de propósito: quem consome vai descontando, para que
+ * dois pontos de parada nunca disputem a mesma unidade do mesmo lote.
  */
-function derivarParciais({
-  lotes = [],
-  rota = [],
-  ultimoInsumoFinal = null,
-  quantidadeNecessaria = 0,
-  reservadoNoFinal = 0
-} = {}) {
-  let restante = paraNumero(quantidadeNecessaria);
-  if (!(restante > 0) || !rota.length) return [];
-
+function prepararCandidatos({ lotes = [], rota = [], ultimoInsumoFinal = null, reservadoNoFinal = 0 }) {
   const ordemPorInsumo = new Map(rota.map(p => [Number(p.insumo_id), paraNumero(p.ordem_insumo)]));
 
-  const candidatos = lotes
+  return lotes
     .map(lote => ({
       // O ID DO LOTE viaja junto. Antes eu devolvia só o `ultimo_insumo_id` e o
       // abatimento saía PROCURANDO um lote com aquele insumo — a mesma busca
@@ -181,14 +170,18 @@ function derivarParciais({
     .filter(c => c.lote_id !== null)
     .filter(c => Number(c.ultimo_insumo_id) !== Number(ultimoInsumoFinal))
     .sort((a, b) => b.ordem - a.ordem);
+}
 
+/** Tira `quantidade` dos candidatos dados, na ordem em que vierem. */
+function consumir(candidatos, quantidade, escolhidos) {
+  let restante = paraNumero(quantidade);
   // Um item POR LOTE, não por insumo: dois lotes no mesmo ponto da rota são
   // duas linhas de estoque diferentes e cada uma precisa ser baixada na sua.
-  const escolhidos = [];
   for (const candidato of candidatos) {
     if (!(restante > 0)) break;
     const usar = Math.min(candidato.disponivel, restante);
     if (!(usar > 0)) continue;
+    candidato.disponivel = arredondar(candidato.disponivel - usar);
     escolhidos.push({
       lote_id: candidato.lote_id,
       ultimo_insumo_id: candidato.ultimo_insumo_id,
@@ -197,8 +190,97 @@ function derivarParciais({
     });
     restante = arredondar(restante - usar);
   }
+  return restante;
+}
 
+/**
+ * Sem revisão informada: aproveita o que houver, do mais adiantado para o
+ * menos adiantado, até cobrir o necessário.
+ *
+ * @returns {Array<{ lote_id: number, ultimo_insumo_id: number, quantidade: number, ordem: number }>}
+ */
+function derivarParciais({
+  lotes = [],
+  rota = [],
+  ultimoInsumoFinal = null,
+  quantidadeNecessaria = 0,
+  reservadoNoFinal = 0
+} = {}) {
+  if (!(paraNumero(quantidadeNecessaria) > 0) || !rota.length) return [];
+  const candidatos = prepararCandidatos({ lotes, rota, ultimoInsumoFinal, reservadoNoFinal });
+  const escolhidos = [];
+  consumir(candidatos, quantidadeNecessaria, escolhidos);
   return escolhidos;
+}
+
+/**
+ * COM revisão informada: cada ponto de parada leva a quantidade que foi
+ * escolhida na tela.
+ *
+ * A regra anterior era "resolva sempre pelo estoque, do mais adiantado para o
+ * menos adiantado", e ela desfazia a decisão do usuário: quem pedia 2 peças
+ * paradas na Montagem e 3 paradas no Acabamento recebia as 5 tiradas só da
+ * Montagem, porque é o lote mais adiantado e tinha saldo para todas. O estoque
+ * fechava, o relatório não: a produção receberia peças em estágio diferente do
+ * que a folha manda fazer.
+ *
+ * O que a revisão manda é a QUANTIDADE por ponto. De qual LINHA do estoque cada
+ * uma sai continua sendo resolvido aqui, contra o estoque de verdade — o modal
+ * "Substituir Peça" não envia o id do lote, e procurar lote por semelhança era
+ * o que fazia os parciais não serem abatidos.
+ *
+ * O ponto é casado pelo insumo quando ele vem preenchido e, quando não vem
+ * (esse mesmo modal manda `ultimo_insumo_id: 0`), pela ordem na rota.
+ */
+function distribuirParciaisInformados({
+  informados = [],
+  lotes = [],
+  rota = [],
+  ultimoInsumoFinal = null,
+  quantidadeNecessaria = 0,
+  reservadoNoFinal = 0
+} = {}) {
+  const teto = paraNumero(quantidadeNecessaria);
+  if (!(teto > 0) || !rota.length) return { escolhidos: [], naoCasado: 0 };
+
+  const candidatos = prepararCandidatos({ lotes, rota, ultimoInsumoFinal, reservadoNoFinal });
+  const escolhidos = [];
+  let disponivelParaPedir = teto;
+  let naoCasado = 0;
+
+  const pedidos = informados
+    .map(info => ({
+      insumo: Number(info?.ultimo_insumo_id),
+      ordem: paraNumero(info?.ordem),
+      quantidade: paraNumero(info?.quantidade)
+    }))
+    .filter(p => p.quantidade > 0)
+    .sort((a, b) => b.ordem - a.ordem);
+
+  for (const pedido of pedidos) {
+    if (!(disponivelParaPedir > 0)) break;
+    const querido = Math.min(pedido.quantidade, disponivelParaPedir);
+
+    const doPonto = candidatos.filter(c => (
+      Number.isFinite(pedido.insumo) && pedido.insumo > 0
+        ? Number(c.ultimo_insumo_id) === pedido.insumo
+        : c.ordem === pedido.ordem
+    ));
+
+    const sobrou = consumir(doPonto, querido, escolhidos);
+    disponivelParaPedir = arredondar(disponivelParaPedir - (querido - sobrou));
+    // O ponto escolhido não tinha tudo o que foi pedido. O resto não some: cai
+    // no aproveitamento geral abaixo, como se a revisão não o tivesse citado.
+    naoCasado = arredondar(naoCasado + sobrou);
+  }
+
+  if (naoCasado > 0 && disponivelParaPedir > 0) {
+    const resto = Math.min(naoCasado, disponivelParaPedir);
+    const aindaSobrando = consumir(candidatos.filter(c => c.disponivel > 0), resto, escolhidos);
+    naoCasado = arredondar(resto - (resto - aindaSobrando));
+  }
+
+  return { escolhidos, naoCasado };
 }
 
 /**
@@ -255,14 +337,13 @@ async function aplicarConversaoNoEstoque(api, {
   }
 
   const pecasComParciais = pecas.map(peca => {
-    // A lista que a revisão manda NÃO serve para abater: ela diz em que ponto
-    // da rota a peça parou, mas não DE QUAL LINHA do estoque ela sai. Sem o id
-    // do lote o abatimento volta a procurar — e procurar é o que vinha
-    // falhando ("faltaram 2", "faltaram 3", com os lotes ali no banco).
+    // A lista que a revisão manda diz QUANTAS peças saem de cada ponto da rota,
+    // mas não DE QUAL LINHA do estoque elas saem. Sem o id do lote o abatimento
+    // volta a procurar — e procurar é o que vinha falhando ("faltaram 2",
+    // "faltaram 3", com os lotes ali no banco).
     //
-    // Por isso a resolução dos lotes é SEMPRE feita aqui, contra o estoque de
-    // verdade. O que a revisão informou continua valendo como quantidade; o
-    // "onde" é resolvido por id.
+    // Então cada coisa no seu lugar: a quantidade por ponto é a que o usuário
+    // escolheu; o "de qual linha" é resolvido aqui, contra o estoque de verdade.
     const aProduzir = Number(peca?.qtd_a_produzir) || 0;
     if (!(aProduzir > 0)) return peca;
 
@@ -283,14 +364,35 @@ async function aplicarConversaoNoEstoque(api, {
     if (peca?.forcarProduzirDoZero === true) return peca;
 
     const produtoId = Number(peca.produto_id);
-    const derivados = derivarParciais({
+    const comum = {
       lotes: lotesPorProduto.get(produtoId) || [],
       rota: rotaPorProduto.get(produtoId) || [],
       ultimoInsumoFinal: ultimoInsumoPorProduto.get(produtoId),
       quantidadeNecessaria: aProduzir,
       // O que a peça pronta já vai levar não pode ser contado de novo.
       reservadoNoFinal: Number(peca?.qtd_usar_pronta) || 0
-    });
+    };
+
+    const informados = (Array.isArray(peca?.parciais) ? peca.parciais : [])
+      .filter(p => paraNumero(p?.quantidade) > 0);
+
+    // Com escolha na tela, ela manda. Sem escolha, aproveita-se o que houver —
+    // é o caso da conversão em lote e do payload antigo, onde tratar tudo como
+    // "produzir do zero" abateria matéria-prima que não será usada e deixaria o
+    // lote parcial no estoque como se estivesse livre.
+    let derivados;
+    if (informados.length) {
+      const { escolhidos, naoCasado } = distribuirParciaisInformados({ ...comum, informados });
+      if (naoCasado > 0) {
+        avisos.push(
+          `O produto ${produtoId} não tinha ${naoCasado} peça(s) no ponto da rota ` +
+          'escolhido na revisão. Elas entraram para produção do zero; confira o estoque.'
+        );
+      }
+      derivados = escolhidos;
+    } else {
+      derivados = derivarParciais(comum);
+    }
 
     // Nenhum lote pela metade disponível: tudo será produzido do zero, e as
     // "parciais" que a revisão informou não têm lastro no estoque.

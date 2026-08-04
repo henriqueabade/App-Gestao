@@ -145,9 +145,9 @@ test('a peça PARCIAL é de fato baixada do lote — não só a pronta', async (
 
     assert.equal(lotePronto.quantidade, 3, 'a peça pronta saiu do estoque (4 - 1)');
     assert.equal(
-      loteParcial.quantidade, 1,
-      'a peça PARCIAL também tem de sair (4 - 3). Era exatamente isto que não acontecia: '
-      + 'o lote continuava no estoque, disponível para ser vendido de novo.'
+      loteParcial.quantidade, 2,
+      'a peça PARCIAL também tem de sair (4 - 2, as 2 que a revisão escolheu). Era exatamente '
+      + 'isto que não acontecia: o lote continuava no estoque, disponível para ser vendido de novo.'
     );
   } finally {
     amb.restaurar();
@@ -174,14 +174,76 @@ test('a parcial consome só os insumos que FALTAM, não a rota inteira', async (
 
     const por = id => amb.saidasDeInsumo.find(s => s.id === id)?.quantidade ?? 0;
 
-    // As 3 saem do lote parado na Montagem: nenhuma volta ao Corte nem à
-    // Montagem, só falta embalar.
-    assert.equal(por(10), 0, 'Madeira: nenhuma unidade precisa ser cortada de novo');
-    assert.equal(por(20), 0, 'Elástico: nenhuma precisa ser montada de novo');
-    assert.equal(por(30), 12, 'Etiqueta: as 3 passam pela embalagem × 4 = 12');
+    // 1 unidade do zero passa por tudo; as 2 parciais só pela Embalagem.
+    assert.equal(por(10), 2, 'Madeira: só 1 unidade do zero × 2 = 2 (as parciais já foram cortadas)');
+    assert.equal(por(20), 1, 'Elástico: só 1 unidade do zero × 1 = 1 (as parciais já foram montadas)');
+    assert.equal(por(30), 12, 'Etiqueta: as 3 unidades passam pela embalagem × 4 = 12');
 
     // Sem a correção seriam 6, 3 e 12: matéria-prima abatida a mais para
     // processos que essas peças já tinham passado.
+  } finally {
+    amb.restaurar();
+  }
+});
+
+test('a escolha da revisão manda: cada ponto de parada leva a sua quantidade', async () => {
+  const amb = montarAmbiente();
+  try {
+    // O caso real: o usuário pediu 2 do lote parado na Montagem (502) e 2 do
+    // lote parado no Corte (503). O 502 sozinho tem saldo para as 4 — e era
+    // isso que acontecia: as 4 saíam todas dele, porque é o mais adiantado.
+    await amb.aplicarConversaoNoEstoque(amb.api, {
+      pedidoId: 99,
+      itens: [{
+        pedido_item_id: 1000, produto_id: 7, quantidade: 4,
+        qtd_usar_pronta: 0, qtd_a_produzir: 4,
+        parciais: [
+          { ultimo_insumo_id: 20, quantidade: 2, ordem: 2 },
+          { ultimo_insumo_id: 10, quantidade: 2, ordem: 1 }
+        ]
+      }],
+      getMaxId: amb.getMaxId,
+      inserirLinhaComId: amb.inserirLinhaComId
+    });
+
+    assert.equal(
+      amb.lotes.find(l => l.id === 502).quantidade, 2,
+      'o lote da Montagem cede as 2 escolhidas (4 - 2), não as 4 que caberiam nele'
+    );
+    assert.equal(
+      amb.lotes.find(l => l.id === 503).quantidade, 0,
+      'o lote do Corte cede as 2 escolhidas — antes ele nem era tocado'
+    );
+  } finally {
+    amb.restaurar();
+  }
+});
+
+test('ponto escolhido sem saldo suficiente: o que falta sai de outro lote parcial', async () => {
+  const amb = montarAmbiente();
+  try {
+    // O lote 503 (Corte) só tem 2, mas a revisão pediu 3 dele.
+    const resumo = await amb.aplicarConversaoNoEstoque(amb.api, {
+      pedidoId: 99,
+      itens: [{
+        pedido_item_id: 1000, produto_id: 7, quantidade: 3,
+        qtd_usar_pronta: 0, qtd_a_produzir: 3,
+        parciais: [{ ultimo_insumo_id: 10, quantidade: 3, ordem: 1 }]
+      }],
+      getMaxId: amb.getMaxId,
+      inserirLinhaComId: amb.inserirLinhaComId
+    });
+
+    assert.equal(amb.lotes.find(l => l.id === 503).quantidade, 0, 'leva as 2 que existiam');
+    assert.equal(
+      amb.lotes.find(l => l.id === 502).quantidade, 3,
+      'a unidade que faltou sai do outro lote parcial em vez de virar produção do zero — '
+      + 'o usuário decidiu aproveitar estoque, e há estoque para aproveitar'
+    );
+    assert.ok(
+      resumo.avisos.every(a => !/ponto da rota/.test(a)),
+      'coberto por outro lote parcial, não há o que avisar'
+    );
   } finally {
     amb.restaurar();
   }

@@ -251,6 +251,10 @@
           key: `${entry.order}-${entry.lastInsumoId ?? 'final'}-${index}`,
           order: entry.order || 0,
           available: Math.max(0, Number(entry.available || 0)),
+          // O insumo IDENTIFICA o ponto de parada. Ele era calculado acima e
+          // descartado aqui, então a escolha chegava ao backend como
+          // `ultimo_insumo_id: 0` e o ponto só podia ser adivinhado pela ordem.
+          lastInsumoId: Number.isFinite(Number(entry.lastInsumoId)) ? Number(entry.lastInsumoId) : null,
           lastItemName: entry.lastItemName || fallbackName,
           processName: entry.processName || fallbackProcess,
           isFinal: !!entry.isFinal

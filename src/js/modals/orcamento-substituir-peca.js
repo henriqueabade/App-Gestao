@@ -162,6 +162,9 @@
           key: `${entry.order}-${entry.lastInsumoId ?? 'final'}-${index}`,
           order: entry.order || 0,
           available: Math.max(0, Number(entry.available || 0)),
+          // Sem isto o ponto de parada chega ao backend sem identidade e a
+          // escolha "2 da Montagem, 3 do Acabamento" vira só um total.
+          lastInsumoId: Number.isFinite(Number(entry.lastInsumoId)) ? Number(entry.lastInsumoId) : null,
           lastItemName: entry.lastItemName || fallbackName,
           processName: entry.processName || fallbackProcess,
           isFinal: !!entry.isFinal
@@ -421,6 +424,9 @@
         productCode: variant.product?.codigo || '',
         processName: variant.stage?.processName || '',
         lastItemName: variant.stage?.lastItemName || '',
+        lastInsumoId: Number.isFinite(Number(variant.stage?.lastInsumoId))
+          ? Number(variant.stage.lastInsumoId)
+          : null,
         order: Number(variant.stage?.order || 0),
         isFinal: !!variant.stage?.isFinal,
         isCurrentProduct: !!variant.isCurrentProduct,
@@ -465,6 +471,7 @@
         productCode: row?.codigo || '',
         processName: entry?.processName || '',
         lastItemName: entry?.lastItemName || '',
+        lastInsumoId: Number.isFinite(Number(entry?.lastInsumoId)) ? Number(entry.lastInsumoId) : null,
         order: Number(entry?.order || 0),
         isFinal: !!entry?.isFinal,
         isCurrentProduct: true
