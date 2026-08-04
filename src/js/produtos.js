@@ -138,6 +138,7 @@ function criarLinhaProduto(produto, index) {
             </td>
             <td class="px-6 py-4 whitespace-nowrap text-left action-cell">
                 <div class="flex items-center justify-start space-x-2">
+                    <i data-perm="prod.movimentos.view" class="fas fa-clipboard-list w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" data-action="movimentos" data-index="${index}" title="Relatório de movimentações" style="color: var(--color-blue)"></i>
                     <i data-perm="prod.stock.view" class="fas fa-box w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" data-action="stock" data-index="${index}" title="Estoque" style="color: var(--color-primary)"></i>
                     <i data-perm="prod.details.view" class="fas fa-eye w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" data-action="view" data-index="${index}" title="Visualizar produto" style="color: var(--color-primary)"></i>
                     <i data-perm="prod.edit" class="fas fa-edit w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" data-action="edit" data-index="${index}" title="Editar" style="color: var(--color-primary)"></i>
@@ -201,6 +202,9 @@ function garantirEventosAcoesProdutos() {
                 break;
             case 'stock':
                 abrirDetalhesProduto(produto);
+                break;
+            case 'movimentos':
+                abrirMovimentosProduto(produto);
                 break;
             case 'edit':
                 abrirEditarProduto(produto);
@@ -699,6 +703,17 @@ function abrirDetalhesProduto(prod) {
     const produtoCompleto = listaProdutos.find(item => item?.id === prod.id) || prod;
     window.produtoDetalhes = produtoCompleto;
     openModalWithSpinner('modals/produtos/detalhes.html', '../js/modals/produto-detalhes.js', 'detalhesProduto');
+}
+
+/** Histórico de estoque da peça: tudo que entrou, saiu e por quê. */
+function abrirMovimentosProduto(prod) {
+    if (!prod || prod.id == null) {
+        showToast('Produto inválido', 'error');
+        return;
+    }
+    const produtoCompleto = listaProdutos.find(item => item?.id === prod.id) || prod;
+    window.produtoMovimentos = produtoCompleto;
+    openModalWithSpinner('modals/produtos/movimentos.html', '../js/modals/produto-movimentos.js', 'movimentosProduto');
 }
 
 function abrirVisualizarProduto(prod) {

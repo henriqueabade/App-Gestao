@@ -10,6 +10,13 @@
         <p id="relatorioProducaoSubtitulo" class="text-sm text-gray-300"></p>
       </div>
       <div class="flex items-center gap-3">
+        <!-- Alterna entre a folha de produção (por processo) e a lista de peças
+             (por peça). São recortes diferentes do mesmo pedido: a folha diz o
+             que cada processo consome; esta diz de onde cada peça veio e quanto
+             falta para ela ficar pronta. -->
+        <button id="verPecasRelatorio" data-perm="ped.report" class="btn-secondary px-4 py-2 rounded-lg text-white font-medium flex items-center gap-2">
+          <i class="fas fa-cubes"></i> <span id="verPecasRelatorioTexto">Peças</span>
+        </button>
         <button id="fecharRelatorioProducao" class="btn-danger px-4 py-2 rounded-lg text-white font-medium">Fechar</button>
         <button id="imprimirRelatorioProducao" data-perm="ped.report" class="btn-primary px-6 py-2 rounded-lg text-white font-medium flex items-center gap-2" disabled>
           <i class="fas fa-print"></i> Imprimir

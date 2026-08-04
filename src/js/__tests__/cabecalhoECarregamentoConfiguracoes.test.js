@@ -24,3 +24,15 @@ test('configurações publica sua promessa e o menu aguarda a inicialização', 
     'o evento do menu não deve disparar uma segunda carga do perfil');
   assert.match(menu, /await module\.moduleReadyPromise/);
 });
+
+test('máscara de módulo centraliza o spinner na viewport, não no conteúdo longo', () => {
+  const css = fs.readFileSync(path.join(SRC, 'css', 'menu.css'), 'utf8');
+  const regra = css.match(/\.module-loading-mask\s*\{([^}]*)\}/s)?.[1] || '';
+
+  assert.match(regra, /height:\s*calc\(100vh\s*-\s*6\.5rem\)/,
+    'a máscara deve ocupar somente a área visível disponível do módulo');
+  assert.match(regra, /bottom:\s*auto/,
+    'a máscara não pode esticar até o fim do conteúdo do módulo');
+  assert.doesNotMatch(regra, /inset:\s*0\s*;/,
+    'inset: 0 centralizaria o spinner na altura total do conteúdo');
+});

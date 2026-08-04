@@ -1354,8 +1354,119 @@ async function buscarCategoriasProdutos() {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Histórico de estoque de UMA peça
+//
+// O razão (`estoque_movimentos`) guarda tudo em ids: item 215, pedido 64, lote
+// 104, usuário 13. Isso serve à máquina e não serve a ninguém que precise
+// entender o que aconteceu. Aqui os ids viram nomes, e cada movimento vira uma
+// frase: o que foi, de onde veio, quanto, e quem fez.
+// ---------------------------------------------------------------------------
+
+/** Como cada tipo de movimento se lê, e se soma ou subtrai do estoque. */
+const LEITURA_DO_MOVIMENTO = {
+  entrada_estoque: { rotulo: 'Entrada no estoque', sinal: 1 },
+  saida_estoque: { rotulo: 'Retirada do estoque', sinal: -1 },
+  ajuste_estoque: { rotulo: 'Ajuste de estoque', sinal: 0 },
+  consumo_peca_pronta: { rotulo: 'Usada pronta em pedido', sinal: -1 },
+  consumo_peca_parcial: { rotulo: 'Usada pela metade em pedido', sinal: -1 },
+  retorno_cancelamento: { rotulo: 'Devolvida por cancelamento', sinal: 1 },
+  reserva: { rotulo: 'Reservada para produção', sinal: 0 },
+  transferencia: { rotulo: 'Transferida entre pedidos', sinal: 0 },
+  cancelamento: { rotulo: 'Cancelamento', sinal: 0 },
+  negativa: { rotulo: 'Saldo negativo', sinal: -1 },
+  // Vocabulário antigo, de antes de o razão distinguir peça pronta de parcial.
+  // Sem estas duas entradas os movimentos gravados antes apareceriam com o nome
+  // cru e sem sinal — o histórico começaria mudo justamente na parte velha.
+  reversao: { rotulo: 'Estorno', sinal: 1 },
+  abatimento: { rotulo: 'Abatimento (registro antigo)', sinal: -1 }
+};
+
+async function listarMovimentosProduto(produtoId) {
+  const id = Number(produtoId);
+  if (!Number.isFinite(id)) return { produto: null, movimentos: [] };
+
+  const [produto, movimentosBrutos] = await Promise.all([
+    pool.get(`/produtos/${id}`).catch(() => null),
+    pool.get('/estoque_movimentos', { query: { item_id: id, tipo_item: 'peca' } }).catch(() => [])
+  ]);
+
+  const movimentos = (Array.isArray(movimentosBrutos) ? movimentosBrutos : [])
+    .filter(m => String(m?.tipo_item) === 'peca' && String(m?.item_id) === String(id));
+
+  // UMA leitura por tabela, indexada em memória.
+  //
+  // A primeira versão buscava linha a linha (`/pedidos/57`, `/usuarios/13`,
+  // `/produtos_em_cada_ponto/104`...). Uma peça com 60 movimentos gerava mais de
+  // uma centena de requisições EM SÉRIE, e o modal ficava girando sem nunca
+  // terminar. As quatro tabelas juntas têm menos linhas que isso.
+  const indexar = lista => {
+    const mapa = new Map();
+    for (const linha of (Array.isArray(lista) ? lista : [])) {
+      if (linha?.id !== undefined && linha?.id !== null) mapa.set(Number(linha.id), linha);
+    }
+    return mapa;
+  };
+
+  const [pedidos, usuarios, lotes, insumos] = await Promise.all([
+    pool.get('/pedidos').then(indexar).catch(() => new Map()),
+    pool.get('/usuarios').then(indexar).catch(() => new Map()),
+    pool.get(LOTES_ENDPOINT).then(indexar).catch(() => new Map()),
+    pool.get('/materia_prima').then(indexar).catch(() => new Map())
+  ]);
+
+  const linhas = movimentos.map(m => {
+    const leitura = LEITURA_DO_MOVIMENTO[m.tipo_movimento]
+      || { rotulo: m.tipo_movimento || 'Movimento', sinal: 0 };
+    const pedido = pedidos.get(Number(m.pedido_id));
+    const lote = lotes.get(Number(m.lote_id));
+    const insumo = insumos.get(Number(m.ultimo_insumo_id));
+    const quantidade = Number(m.quantidade) || 0;
+
+    return {
+      id: m.id,
+      data: m.created_at || null,
+      tipo: m.tipo_movimento,
+      descricao: leitura.rotulo,
+      // Positivo entrou, negativo saiu. O razão guarda sempre positivo e deixa
+      // o sentido no tipo; quem lê um extrato espera o sinal.
+      quantidade,
+      efeito: leitura.sinal === 0 ? null : leitura.sinal * quantidade,
+      origem: pedido
+        ? `Pedido ${pedido.numero || pedido.id}`
+        : (m.decision_note ? 'Ajuste manual' : 'Módulo de Produtos'),
+      pedido_numero: pedido?.numero || null,
+      pedido_item_id: m.pedido_item_id || null,
+      etapa: lote?.etapa_id || null,
+      parou_no_item: insumo?.nome || null,
+      observacao: m.decision_note || null,
+      saldo_negativo_autorizado: m.saldo_negativo_autorizado === true,
+      usuario: usuarios.get(Number(m.created_by))?.nome || null
+    };
+  });
+
+  // Mais recente primeiro: é a pergunta que se faz primeiro sobre um estoque.
+  linhas.sort((a, b) => new Date(b.data || 0) - new Date(a.data || 0));
+
+  // O estoque da peça NÃO é uma coluna de `produtos`: ele é a soma dos lotes em
+  // `produtos_em_cada_ponto`, que é o que a grade do módulo mostra. Ler
+  // `produto.quantidade` trazia `undefined` e o cabeçalho saía vazio.
+  let emEstoque = 0;
+  for (const lote of lotes.values()) {
+    if (String(lote?.produto_id) === String(id)) emEstoque += Number(lote?.quantidade) || 0;
+  }
+
+  return {
+    produto: produto && !produto.error
+      ? { id: produto.id, codigo: produto.codigo, nome: produto.nome, quantidade: emEstoque }
+      : { id, quantidade: emEstoque },
+    movimentos: linhas
+  };
+}
+
 module.exports = {
   listarProdutos,
+  listarMovimentosProduto,
   listarDetalhesProduto,
   obterProduto,
   listarInsumosProduto,

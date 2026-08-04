@@ -42,6 +42,12 @@
   const subtitulo = document.getElementById('relatorioProducaoSubtitulo');
   const btnImprimir = document.getElementById('imprimirRelatorioProducao');
 
+  // Estado da alternância folha <-> peças. Declarado aqui, junto do resto do
+  // estado do modal, porque `renderizarVazio` (mais abaixo) também escreve nele.
+  let mostrandoPecas = false;
+  let htmlDoRelatorio = '';
+  let htmlDasPecas = '';
+
   function escapar(texto) {
     if (texto === null || texto === undefined) return '';
     return String(texto)
@@ -122,12 +128,119 @@
   }
 
   function renderizarVazio(mensagem, icone = 'fa-clipboard-list') {
-    corpo.innerHTML = `
+    // Guardado também em `htmlDoRelatorio` para que voltar da lista de peças
+    // reencontre a explicação, e não uma tela em branco.
+    htmlDoRelatorio = `
       <div class="py-16 px-6 text-center max-w-2xl mx-auto">
         <i class="fas ${escapar(icone)} text-4xl text-gray-500 mb-4"></i>
         <p class="text-gray-300 font-medium" style="white-space: pre-line">${escapar(mensagem)}</p>
       </div>`;
+    corpo.innerHTML = htmlDoRelatorio;
     if (btnImprimir) btnImprimir.disabled = true;
+  }
+
+  // ------------------------------------------------------------------
+  // Lista de peças
+  //
+  // Outro recorte do mesmo pedido: a folha de produção é organizada por
+  // PROCESSO (o que cada processo consome) e por isso não responde "de onde
+  // veio esta peça e quanto falta para ela ficar pronta". Esta tabela responde.
+  //
+  // Fica no mesmo modal, alternando o miolo, porque é a mesma pergunta vista de
+  // outro ângulo — e assim o botão Imprimir serve às duas sem nenhuma regra
+  // extra: ele imprime o que estiver na tela.
+  // ------------------------------------------------------------------
+  const btnPecas = document.getElementById('verPecasRelatorio');
+  const btnPecasTexto = document.getElementById('verPecasRelatorioTexto');
+
+  function tabelaDePecas(dados) {
+    const linhas = Array.isArray(dados?.pecas) ? dados.pecas : [];
+    if (!linhas.length) {
+      return `
+        <div class="py-16 px-6 text-center max-w-2xl mx-auto">
+          <i class="fas fa-cubes text-4xl text-gray-500 mb-4"></i>
+          <p class="text-gray-300 font-medium">Este pedido não tem peças registradas na conversão.</p>
+        </div>`;
+    }
+
+    const corpoTabela = linhas.map(l => {
+      // "Faltam 0" numa peça acabada se lê como erro; melhor dizer que está
+      // pronta e reservar o número para quem ainda tem rota pela frente.
+      const falta = l.itens_faltantes > 0
+        ? `${escapar(l.itens_faltantes)} de ${escapar(l.itens_da_rota)}`
+        : 'Nenhum — peça pronta';
+      // Sem as classes de largura: elas são para a folha de três colunas e aqui
+      // são seis — as porcentagens somariam mais de 100% e brigariam.
+      return `
+        <tr>
+          <td>${escapar(l.peca)}</td>
+          <td>${escapar(l.origem)}</td>
+          <td>${escapar(formatarQuantidade(l.quantidade))}</td>
+          <td>${escapar(l.etapa)}</td>
+          <td>${escapar(l.item_parada)}</td>
+          <td>${escapar(falta)}</td>
+        </tr>`;
+    }).join('');
+
+    return `
+      <section class="rp-folha">
+        <header class="rp-cabecalho">
+          <div>
+            <h2>Pedido ${escapar(dados.pedido?.numero || dados.pedido?.id || '')}</h2>
+            <p>${escapar(contexto.cliente || '')} &middot; emitido em ${escapar(formatarData(dados.pedido?.data_emissao))}</p>
+          </div>
+          <div class="rp-processo-nome">PEÇAS</div>
+        </header>
+
+        <table class="rp-tabela rp-tabela-larga">
+          <thead>
+            <tr class="rp-faixa-processo"><th colspan="6">Peças selecionadas na conversão</th></tr>
+            <tr class="rp-faixa-peca">
+              <th>Peça</th><th>Origem</th><th>Qtd.</th>
+              <th>Etapa</th><th>Parou no item</th><th>Itens para finalizar</th>
+            </tr>
+          </thead>
+          <tbody>${corpoTabela}</tbody>
+        </table>
+      </section>`;
+  }
+
+  async function alternarPecas() {
+    if (!corpo) return;
+
+    if (mostrandoPecas) {
+      corpo.innerHTML = htmlDoRelatorio;
+      mostrandoPecas = false;
+      if (btnPecasTexto) btnPecasTexto.textContent = 'Peças';
+      if (btnImprimir) btnImprimir.disabled = !htmlDoRelatorio.trim();
+      return;
+    }
+
+    if (!htmlDasPecas) {
+      corpo.innerHTML = '<p class="px-8 py-6 text-gray-300">Carregando as peças...</p>';
+      try {
+        const resp = await fetchApi(`/api/pedidos/${pedidoId}/pecas-selecionadas`);
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        htmlDasPecas = tabelaDePecas(await resp.json());
+      } catch (err) {
+        console.error('Erro ao carregar as peças do pedido', err);
+        htmlDasPecas = '';
+        corpo.innerHTML = htmlDoRelatorio;
+        window.showToast?.('Não foi possível carregar as peças do pedido.', 'error');
+        return;
+      }
+    }
+
+    corpo.innerHTML = htmlDasPecas;
+    mostrandoPecas = true;
+    if (btnPecasTexto) btnPecasTexto.textContent = 'Relatório';
+    if (btnImprimir) btnImprimir.disabled = false;
+  }
+
+  if (window.BotaoAcao?.bind) {
+    window.BotaoAcao.bind(btnPecas, alternarPecas, { visual: false });
+  } else {
+    btnPecas?.addEventListener('click', alternarPecas);
   }
 
   async function carregar() {
@@ -166,7 +279,8 @@
         return;
       }
 
-      corpo.innerHTML = dados.processos.map(g => folhaDoProcesso(g, dados.pedido || {})).join('');
+      htmlDoRelatorio = dados.processos.map(g => folhaDoProcesso(g, dados.pedido || {})).join('');
+      corpo.innerHTML = htmlDoRelatorio;
       if (btnImprimir) btnImprimir.disabled = false;
     } catch (err) {
       console.error('Erro ao carregar o relatório de produção', err);
@@ -179,14 +293,14 @@
   //
   // A folha é enviada pronta para o processo principal, que a renderiza numa
   // janela oculta e chama `printToPDF` — o mesmo caminho do PDF de pedido, já
-  // provado. O CSS vai por link para o `pedidos.css` real: duplicar os estilos
+  // provado. O CSS vai por link para o arquivo real: duplicar os estilos
   // aqui garantiria que o papel e a tela divergissem com o tempo.
   //
   // Gerar leva alguns segundos. Sem dizer isso na tela, o usuário acha que
   // travou — por isso o botão vira "Gerando PDF..." e o aviso aparece.
   // ------------------------------------------------------------------
   function montarDocumentoParaPdf(pedidoNumero) {
-    const cssPedidos = new URL('../css/pedidos.css', document.baseURI).href;
+    const cssPedidos = new URL('../css/folha-relatorio.css', document.baseURI).href;
     const cssTailwind = new URL('../styles/tailwind-offline.css', document.baseURI).href;
     return `<!doctype html>
 <html lang="pt-BR">
@@ -226,10 +340,12 @@
         throw new Error('Geração de PDF indisponível neste ambiente.');
       }
       const numero = subtitulo?.textContent?.replace(/^Pedido\s*/i, '').trim() || pedidoId;
+      // O botão imprime o que está na tela; o nome do arquivo tem de acompanhar,
+      // senão a lista de peças sai salva como "relatório de produção".
       const resultado = await window.electronAPI.salvarHtmlComoPdf({
         html: montarDocumentoParaPdf(numero),
-        nomeSugerido: `relatorio-producao-${numero}`,
-        titulo: 'Salvar Relatório de Produção em PDF'
+        nomeSugerido: mostrandoPecas ? `pecas-${numero}` : `relatorio-producao-${numero}`,
+        titulo: mostrandoPecas ? 'Salvar Peças do Pedido em PDF' : 'Salvar Relatório de Produção em PDF'
       });
 
       if (resultado?.canceled) {

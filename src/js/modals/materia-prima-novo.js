@@ -84,8 +84,11 @@
     }
   });
 
-  form.addEventListener('submit', async e => {
-    e.preventDefault();
+  // `BotaoAcao.bindSubmit` e não `addEventListener('submit')`: ele trava o
+  // reenvio (clique repetido E Enter) e deixa o botão carregando até a promessa
+  // terminar. Sem isso o salvamento acontecia em silêncio — o insumo entrava no
+  // banco e a tela não dava sinal nenhum de que algo estava em curso.
+  async function salvar() {
     const quantidade = parseFloat(form.quantidade.value);
     const dados = {
       nome: form.nome.value.trim(),
@@ -105,16 +108,28 @@
       await window.electronAPI.adicionarMateriaPrima(dados);
       showToast('Insumo registrado com sucesso!', 'success');
       close();
-      carregarMateriais();
+      // A grade do módulo tem de refletir o que acabou de entrar. Sem `await`
+      // aqui o modal fechava antes de a lista recarregar e o insumo novo só
+      // aparecia depois de trocar de tela.
+      if (typeof carregarMateriais === 'function') await carregarMateriais();
     }catch(err){
       console.error(err);
       if (err.message === 'DUPLICADO' || err.code === 'DUPLICADO') {
         Modal.open('modals/materia-prima/duplicado.html', '../js/modals/materia-prima-duplicado.js', 'duplicado', true);
       } else {
-        showToast('Erro ao registrar, insumo já existe', 'error');
+        // A mensagem antiga afirmava "insumo já existe" para QUALQUER falha —
+        // inclusive queda de rede —, mandando o usuário procurar um duplicado
+        // que não existe. O duplicado tem caminho próprio, logo acima.
+        showToast(err?.message || 'Não foi possível registrar o insumo.', 'error');
       }
     }
-  });
+  }
+
+  if (window.BotaoAcao?.bindSubmit) {
+    window.BotaoAcao.bindSubmit(form, salvar);
+  } else {
+    form.addEventListener('submit', e => { e.preventDefault(); salvar(); });
+  }
 
   carregarOpcoes();
 })();

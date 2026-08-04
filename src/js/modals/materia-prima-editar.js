@@ -120,8 +120,9 @@
     window.materiaExcluir = item;
     Modal.open('modals/materia-prima/excluir.html', '../js/modals/materia-prima-excluir.js', 'excluirInsumo');
   });
-  form.addEventListener('submit', async e => {
-    e.preventDefault();
+  // Ver a nota em materia-prima-novo.js: `bindSubmit` trava o reenvio e mostra
+  // o carregamento, que é o que faltava para o usuário saber que salvou.
+  async function salvar() {
     const quantidade = infinitoCheckbox.checked ? null : parseFloat(form.quantidade.value);
     const dados = {
       nome: form.nome.value.trim(),
@@ -152,14 +153,22 @@
       await window.electronAPI.atualizarMateriaPrima(item.id, payload);
       showToast('Insumo atualizado com sucesso!', 'success');
       close();
-      carregarMateriais();
+      if (typeof carregarMateriais === 'function') await carregarMateriais();
     }catch(err){
       console.error(err);
       if (err.message === 'DUPLICADO' || err.code === 'DUPLICADO') {
         Modal.open('modals/materia-prima/duplicado.html', '../js/modals/materia-prima-duplicado.js', 'duplicado', true);
       } else {
-        showToast('Erro ao atualizar, insumo já existe', 'error');
+        // Antes qualquer erro virava "insumo já existe", o que mandava procurar
+        // um duplicado inexistente quando o problema era outro.
+        showToast(err?.message || 'Não foi possível atualizar o insumo.', 'error');
       }
     }
-  });
+  }
+
+  if (window.BotaoAcao?.bindSubmit) {
+    window.BotaoAcao.bindSubmit(form, salvar);
+  } else {
+    form.addEventListener('submit', e => { e.preventDefault(); salvar(); });
+  }
 })();

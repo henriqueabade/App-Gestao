@@ -171,6 +171,22 @@ router.delete('/:id', exigirPermissao('ped.delete'), async (req, res) => {
  * para a produção tem de dizer o que foi decidido quando o pedido foi criado,
  * não o que o estoque parece agora.
  */
+/**
+ * Toda a matéria-prima, indexada por id, numa requisição só.
+ *
+ * A tabela tem algumas centenas de linhas; buscar uma por vez (`/materia_prima/:id`
+ * dentro de um laço) custava dezenas de idas à API por relatório e era a causa
+ * principal da lentidão. Uma leitura e um índice em memória resolvem.
+ */
+async function carregarMateriaPrima(api) {
+  const lista = await api.get('/api/materia_prima').catch(() => []);
+  const porId = new Map();
+  for (const materia of (Array.isArray(lista) ? lista : [])) {
+    if (materia?.id !== undefined && materia?.id !== null) porId.set(Number(materia.id), materia);
+  }
+  return porId;
+}
+
 router.get('/:id/relatorio-producao', exigirPermissao('ped.report'), async (req, res) => {
   const { id } = req.params;
   try {
@@ -185,12 +201,18 @@ router.get('/:id/relatorio-producao', exigirPermissao('ped.report'), async (req,
     // De qual ponto da rota cada peça saiu do estoque. É isto que diferencia
     // uma peça que precisa ser feita do zero de uma que já está meio pronta —
     // e, portanto, o que o relatório deve pedir de material.
+    //
+    // UMA consulta para o pedido inteiro, agrupada aqui. Antes era uma por
+    // peça: um pedido com dez itens fazia dez idas à API só para isto, e o
+    // relatório demorava por causa disso.
     const extPorItem = new Map();
-    for (const peca of (Array.isArray(itens) ? itens : [])) {
-      const registros = await api
-        .get('/api/pedido_itens_ext', { query: { pedido_item_id: peca.id } })
-        .catch(() => []);
-      extPorItem.set(Number(peca.id), Array.isArray(registros) ? registros : []);
+    const extDoPedido = await api
+      .get('/api/pedido_itens_ext', { query: { id_pedido: id } })
+      .catch(() => []);
+    for (const registro of (Array.isArray(extDoPedido) ? extDoPedido : [])) {
+      const chave = Number(registro.pedido_item_id);
+      if (!extPorItem.has(chave)) extPorItem.set(chave, []);
+      extPorItem.get(chave).push(registro);
     }
 
     if (!pedido || pedido.error === 'Not found') {
@@ -211,6 +233,11 @@ router.get('/:id/relatorio-producao', exigirPermissao('ped.report'), async (req,
     // depois. Só as peças PRODUZIDAS entram: peça tirada pronta do estoque não
     // vai ser fabricada, e listá-la mandaria a produção refazer o que já existe.
     // ------------------------------------------------------------------
+    // Toda a matéria-prima de uma vez. Buscar insumo a insumo (`/materia_prima/:id`
+    // dentro do laço da rota) fazia uma requisição por passo de cada produto —
+    // 15 passos × 3 produtos = 45 idas à API para montar uma folha.
+    const materiaPorId = await carregarMateriaPrima(api);
+
     const rotaCache = new Map();
     async function rotaDoProduto(produtoId) {
       const chave = Number(produtoId);
@@ -219,7 +246,7 @@ router.get('/:id/relatorio-producao', exigirPermissao('ped.report'), async (req,
       const lista = Array.isArray(bruta) ? bruta : [];
       const rota = [];
       for (const passo of lista) {
-        const materia = await api.get(`/api/materia_prima/${passo.insumo_id}`).catch(() => null);
+        const materia = materiaPorId.get(Number(passo.insumo_id)) || null;
         rota.push({
           insumo_id: Number(passo.insumo_id),
           // Id da LINHA da rota — é ele que `pedido_itens_ext.ultimo_insumo_id`
@@ -377,6 +404,131 @@ router.get('/:id/relatorio-producao', exigirPermissao('ped.report'), async (req,
   } catch (err) {
     console.error('Erro ao montar o relatório de produção:', err);
     res.status(err.status || 500).json({ error: 'Erro ao montar o relatório de produção' });
+  }
+});
+
+/**
+ * Peças escolhidas na conversão, uma linha por origem.
+ *
+ * Responde três perguntas que o relatório de produção não responde, porque ele
+ * é organizado por PROCESSO e não por peça:
+ *
+ *   - de onde veio cada peça (pronta do estoque, pela metade, ou do zero);
+ *   - em que ponto da rota ela está parada — etapa e item;
+ *   - quantos itens da rota ainda faltam para ela ficar pronta.
+ *
+ * Sai do registro congelado na conversão, não de recálculo: `pedido_itens_ext`
+ * para o que veio do estoque e `reservas_estoque` para o que será produzido.
+ */
+router.get('/:id/pecas-selecionadas', exigirPermissao('ped.report'), async (req, res) => {
+  const { id } = req.params;
+  try {
+    const api = createApiClient(req);
+
+    const [pedido, itens] = await Promise.all([
+      api.get(`/api/pedidos/${id}`),
+      api.get('/api/pedidos_itens', { query: { pedido_id: id } }).catch(() => [])
+    ]);
+
+    if (!pedido || pedido.error === 'Not found') {
+      return res.status(404).json({ error: 'Pedido não encontrado' });
+    }
+
+    const listaItens = Array.isArray(itens) ? itens : [];
+
+    // Tudo o que o pedido inteiro precisa, em paralelo e de uma vez só. A
+    // primeira versão buscava por item e por insumo dentro dos laços, e num
+    // pedido com vários produtos isso virava dezenas de requisições em série.
+    const [reservas, extDoPedido, materiaPorId] = await Promise.all([
+      api.get('/api/reservas_estoque', { query: { pedido_id: id } }).catch(() => []),
+      api.get('/api/pedido_itens_ext', { query: { id_pedido: id } }).catch(() => []),
+      carregarMateriaPrima(api)
+    ]);
+
+    const extPorItem = new Map();
+    for (const registro of (Array.isArray(extDoPedido) ? extDoPedido : [])) {
+      const chave = Number(registro.pedido_item_id);
+      if (!extPorItem.has(chave)) extPorItem.set(chave, []);
+      extPorItem.get(chave).push(registro);
+    }
+
+    // Rota por produto, com o id da LINHA (produtos_insumos.id) — é ele que
+    // `pedido_itens_ext.ultimo_insumo_id` guarda.
+    const rotaCache = new Map();
+    async function rotaDoProduto(produtoId) {
+      const chave = Number(produtoId);
+      if (rotaCache.has(chave)) return rotaCache.get(chave);
+      const bruta = await api
+        .get('/api/produtos_insumos', { query: { produto_id: chave } })
+        .catch(() => []);
+      const lista = Array.isArray(bruta) ? bruta : [];
+      const rota = lista.map(passo => {
+        const materia = materiaPorId.get(Number(passo.insumo_id)) || null;
+        return {
+          passo_id: Number(passo.id),
+          insumo_id: Number(passo.insumo_id),
+          ordem_insumo: Number(passo.ordem_insumo) || 0,
+          insumo_nome: materia?.nome || `Insumo ${passo.insumo_id}`,
+          processo: materia?.processo || 'Sem processo'
+        };
+      });
+      rota.sort((a, b) => a.ordem_insumo - b.ordem_insumo);
+      rotaCache.set(chave, rota);
+      return rota;
+    }
+
+    const linhas = [];
+
+    for (const item of listaItens) {
+      const pecaNome = item.nome || item.codigo || `Item ${item.id}`;
+      const rota = await rotaDoProduto(item.produto_id);
+      const totalDaRota = rota.length;
+      const doEstoque = extPorItem.get(Number(item.id)) || [];
+
+      for (const reg of doEstoque) {
+        const passo = rota.find(p => Number(p.passo_id) === Number(reg.ultimo_insumo_id)) || null;
+        const ordem = passo ? passo.ordem_insumo : totalDaRota;
+        // O último passo da rota é a peça acabada: nada falta.
+        const faltam = Math.max(0, totalDaRota - ordem);
+        linhas.push({
+          peca: pecaNome,
+          codigo: item.codigo || '',
+          origem: faltam === 0 ? 'Pronta do estoque' : 'Parcial do estoque',
+          quantidade: Number(reg.quantidade) || 0,
+          etapa: passo?.processo || (faltam === 0 ? 'Finalizada' : '—'),
+          item_parada: passo?.insumo_nome || '—',
+          lote_id: reg.etapa_id ?? null,
+          itens_faltantes: faltam,
+          itens_da_rota: totalDaRota
+        });
+      }
+
+      for (const reserva of (Array.isArray(reservas) ? reservas : [])) {
+        if (String(reserva.pedido_item_id) !== String(item.id)) continue;
+        linhas.push({
+          peca: pecaNome,
+          codigo: item.codigo || '',
+          origem: 'Produzir do zero',
+          quantidade: Number(reserva.quantidade) || 0,
+          // Do zero é o começo da rota: nada foi feito ainda.
+          etapa: rota.length ? rota[0].processo : '—',
+          item_parada: '—',
+          lote_id: null,
+          itens_faltantes: totalDaRota,
+          itens_da_rota: totalDaRota,
+          reserva_status: reserva.status || null
+        });
+      }
+    }
+
+    res.json({
+      pedido: { id: pedido.id, numero: pedido.numero, data_emissao: pedido.data_emissao },
+      temItens: listaItens.length > 0,
+      pecas: linhas
+    });
+  } catch (err) {
+    console.error('Erro ao listar as peças selecionadas:', err);
+    res.status(err.status || 500).json({ error: 'Erro ao listar as peças selecionadas' });
   }
 });
 

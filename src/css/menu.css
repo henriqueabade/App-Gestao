@@ -1453,9 +1453,12 @@ header.glass-surface {
 
 .module-loading-mask {
     position: absolute;
-    inset: 0;
+    top: 0;
+    right: 0;
+    bottom: auto;
+    left: 0;
     z-index: 30;
-    min-height: calc(100vh - 6.5rem);
+    height: calc(100vh - 6.5rem);
     display: flex;
     flex-direction: column;
     align-items: center;

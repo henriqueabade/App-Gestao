@@ -249,6 +249,77 @@ test('ponto escolhido sem saldo suficiente: o que falta sai de outro lote parcia
   }
 });
 
+test('o movimento de insumo diz de qual peça saiu e sob qual reserva', async () => {
+  const amb = montarAmbiente();
+  try {
+    await amb.aplicarConversaoNoEstoque(amb.api, {
+      pedidoId: 99,
+      itens: [{
+        pedido_item_id: 1000, produto_id: 7, quantidade: 2,
+        qtd_usar_pronta: 0, qtd_a_produzir: 2, forcarProduzirDoZero: true
+      }],
+      getMaxId: amb.getMaxId,
+      inserirLinhaComId: amb.inserirLinhaComId
+    });
+
+    const deInsumo = amb.gravacoes.movimentos.filter(m => m.tipo_item === 'insumo');
+    assert.ok(deInsumo.length, 'houve consumo de insumo');
+    assert.ok(
+      deInsumo.every(m => Number(m.pedido_item_id) === 1000),
+      'todo movimento de insumo aponta a peça que o consumiu — a coluna vivia vazia'
+    );
+
+    const idDaReserva = 700 + 1; // o mock devolve 700 + n
+    assert.ok(
+      deInsumo.every(m => Number(m.reserva_id) === idDaReserva),
+      'e aponta a reserva de produção que vai usar aquele insumo'
+    );
+  } finally {
+    amb.restaurar();
+  }
+});
+
+test('saldo que fecha negativo sai marcado e com a justificativa', async () => {
+  const amb = montarAmbiente();
+  const original = MATERIAS[30];
+  try {
+    // Etiqueta: 5 em estoque, 8 necessárias (2 peças × 4).
+    MATERIAS[30] = { ...original, quantidade: 5 };
+
+    await amb.aplicarConversaoNoEstoque(amb.api, {
+      pedidoId: 99,
+      itens: [{
+        pedido_item_id: 1000, produto_id: 7, quantidade: 2,
+        qtd_usar_pronta: 0, qtd_a_produzir: 2, forcarProduzirDoZero: true
+      }],
+      podeSaldoNegativo: true,
+      decisaoNote: 'Cliente aprovou a compra do material que falta.',
+      getMaxId: amb.getMaxId,
+      inserirLinhaComId: amb.inserirLinhaComId
+    });
+
+    const etiqueta = amb.gravacoes.movimentos.find(
+      m => m.tipo_item === 'insumo' && Number(m.item_id) === 30
+    );
+    assert.equal(etiqueta.saldo_negativo_autorizado, true, 'o que ficou negativo é marcado');
+    assert.equal(
+      etiqueta.decision_note, 'Cliente aprovou a compra do material que falta.',
+      'com o porquê junto — sem isso o razão mostra um saldo negativo sem explicação'
+    );
+
+    // Quem NÃO ficou negativo não pode ser marcado: a coluna existe para achar
+    // as exceções, e marcar todas a tornaria inútil.
+    const madeira = amb.gravacoes.movimentos.find(
+      m => m.tipo_item === 'insumo' && Number(m.item_id) === 10
+    );
+    assert.equal(madeira.saldo_negativo_autorizado, null, 'estoque suficiente não vira exceção');
+    assert.equal(madeira.decision_note, null);
+  } finally {
+    MATERIAS[30] = original;
+    amb.restaurar();
+  }
+});
+
 test('produzir tudo do zero continua pagando a rota inteira', async () => {
   const amb = montarAmbiente();
   try {

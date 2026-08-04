@@ -54,6 +54,7 @@ const {
   atualizarProduto,
   excluirProduto,
   listarDetalhesProduto,
+  listarMovimentosProduto,
   listarInsumosProduto,
   listarEtapasProducao,
   adicionarEtapaProducao,
@@ -3968,7 +3969,7 @@ ipcMain.handle('listar-insumos-por-produto', async (_e, termo) => {
 ipcMain.handle('adicionar-materia-prima', async (_e, dados) => {
   if (!(await verificarPermissaoIpc('mp.create'))) return negadoIpc('mp.create');
   try {
-    const materia = await adicionarMateria(dados);
+    const materia = await adicionarMateria(dados, currentUserSession?.id ?? null);
     return { success: true, materia };
   } catch (err) {
     return { success: false, message: err.message, code: err.code };
@@ -3977,7 +3978,7 @@ ipcMain.handle('adicionar-materia-prima', async (_e, dados) => {
 ipcMain.handle('atualizar-materia-prima', async (_e, { id, dados }) => {
   if (!(await verificarPermissaoIpc('mp.edit'))) return negadoIpc('mp.edit');
   try {
-    const materia = await atualizarMateria(id, dados);
+    const materia = await atualizarMateria(id, dados, currentUserSession?.id ?? null);
     return { success: true, materia };
   } catch (err) {
     return { success: false, message: err.message, code: err.code };
@@ -3990,7 +3991,7 @@ ipcMain.handle('excluir-materia-prima', async (_e, info) => {
     if (id === undefined || id === null) {
       return { success: false, message: 'ID inválido', code: 'invalid-id' };
     }
-    await excluirMateria(id);
+    await excluirMateria(id, currentUserSession?.id ?? null);
     return { success: true };
   } catch (err) {
     return { success: false, message: err.message, code: err.code };
@@ -4156,6 +4157,16 @@ ipcMain.handle('excluir-produto', async (_e, info) => {
     return { success: true };
   } catch (err) {
     return { error: err.message };
+  }
+});
+ipcMain.handle('listar-movimentos-produto', async (_e, payload) => {
+  if (!(await verificarPermissaoIpc('prod.movimentos.view'))) return negadoIpc('prod.movimentos.view');
+  try {
+    const produtoId = payload?.produtoId ?? payload?.id ?? payload;
+    return { success: true, ...(await listarMovimentosProduto(produtoId)) };
+  } catch (err) {
+    console.error('Erro ao listar movimentos do produto:', err);
+    return { success: false, message: err.message };
   }
 });
 ipcMain.handle('listar-detalhes-produto', async (_e, payload) => {

@@ -375,6 +375,10 @@ async function converterOrcamentoEmPedido(api, id, conversao = null) {
       usuarioId: conversao && Number.isFinite(Number(conversao.decisaoBy))
         ? Number(conversao.decisaoBy)
         : null,
+      podeSaldoNegativo: conversao?.podeSaldoNegativo === true,
+      decisaoNote: typeof conversao?.decisaoNote === 'string' && conversao.decisaoNote.trim()
+        ? conversao.decisaoNote.trim()
+        : null,
       inserirLinhaComId,
       getMaxId
     });

@@ -1,0 +1,125 @@
+/* ==========================================================================
+   Folha de relatório — compartilhada
+   --------------------------------------------------------------------------
+   Estava dentro de `pedidos.css`, e por isso só existia na página de Pedidos.
+   O relatório de movimentações de uma peça (módulo de Produtos) usa a MESMA
+   folha, e copiá-la para lá garantiria que as duas divergissem com o tempo —
+   que é justamente o que o modal já evitava ao linkar o CSS real na geração do
+   PDF em vez de embutir estilos.
+
+   Quem usa: `modals/pedidos/relatorio-producao.html` e
+   `modals/produtos/movimentos.html`, na tela e no PDF.
+
+   Duas regras de papel mandam neste bloco:
+
+   1. PAISAGEM — `@page { size: A4 landscape }`.
+   2. UM PROCESSO POR FOLHA. Cada `.rp-folha` tem `break-after: page`, e
+      `break-inside: auto` de propósito: um processo grande PODE continuar na
+      folha seguinte; o que não pode é o processo B começar no espaço que
+      sobrou da folha do processo A.
+
+   Na tela as folhas aparecem como cartões claros, para o usuário conferir
+   antes de imprimir. Na impressão, tudo que não é a folha desaparece.
+   ========================================================================== */
+
+.rp-folha {
+    background: #fff;
+    color: #111;
+    border-radius: 0.5rem;
+    padding: 1.5rem 1.75rem;
+    margin-bottom: 1.5rem;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+}
+
+.rp-cabecalho {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+    border-bottom: 2px solid #111;
+    padding-bottom: 0.75rem;
+    margin-bottom: 1rem;
+}
+
+.rp-cabecalho h2 { font-size: 1.05rem; font-weight: 700; }
+.rp-cabecalho p { font-size: 0.8rem; color: #444; margin-top: 0.15rem; }
+
+.rp-processo-nome {
+    font-size: 1.1rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+}
+
+.rp-tabela {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 1.1rem;
+    font-size: 0.85rem;
+}
+
+.rp-tabela th,
+.rp-tabela td {
+    border: 1px solid #999;
+    padding: 0.35rem 0.6rem;
+    text-align: left;
+    vertical-align: top;
+}
+
+/* As faixas cinza dos seus modelos: processo, peça e totais. */
+.rp-faixa-processo th { background: #808080; color: #fff; text-align: center; font-weight: 700; }
+.rp-faixa-peca td     { background: #d9d9d9; color: #111; text-align: center; font-weight: 600; }
+.rp-faixa-total th    { background: #808080; color: #fff; text-align: center; font-weight: 700; }
+.rp-faixa-falta th    { background: #6a6a6a; color: #fff; text-align: center; font-weight: 700; }
+
+/* Larguras da folha de TRÊS colunas (item, quantidade, unidade). Tabelas com
+   mais colunas — como o histórico de uma peça — não usam estas classes: as
+   porcentagens somam 100% e brigariam entre si. */
+.rp-item { width: 45%; }
+.rp-qtd  { width: 35%; }
+.rp-un   { width: 20%; }
+
+/* Folha larga: o navegador distribui as colunas pelo conteúdo. */
+.rp-tabela-larga td,
+.rp-tabela-larga th { width: auto; white-space: normal; }
+.rp-tabela-larga { font-size: 0.78rem; }
+
+@media print {
+    @page { size: A4 landscape; margin: 10mm; }
+
+    /* --- Regras da FOLHA: valem nos dois caminhos --- 
+       Impressão pela janela do app e geração do PDF em janela oculta usam o
+       mesmo CSS. Por isso estas regras NÃO são presas ao overlay: na janela do
+       PDF ele não existe. */
+    .rp-folha {
+        box-shadow: none;
+        border-radius: 0;
+        margin: 0;
+        padding: 0;
+        break-after: page;
+        page-break-after: always;
+        /* "auto" de propósito: processo grande continua na folha seguinte. */
+        break-inside: auto;
+    }
+    .rp-folha:last-child { break-after: auto; page-break-after: auto; }
+
+    /* Uma linha de tabela nunca é partida ao meio entre duas folhas. */
+    .rp-tabela tr { break-inside: avoid; page-break-inside: avoid; }
+    /* A faixa de uma peça não fica órfã no pé da folha. */
+    .rp-faixa-peca { break-after: avoid; page-break-after: avoid; }
+    /* Cabeçalho de tabela repete quando ela atravessa folhas. */
+    .rp-tabela thead { display: table-header-group; }
+
+    /* --- Só quando se imprime de dentro do app: some com o resto --- */
+    body.imprimindo-relatorio-producao > *:not(#relatorioProducaoOverlay) { display: none !important; }
+    body.imprimindo-relatorio-producao #relatorioProducaoOverlay {
+        position: static !important;
+        display: block !important;
+        background: none !important;
+        padding: 0 !important;
+    }
+    body.imprimindo-relatorio-producao #relatorioProducaoOverlay > div > header { display: none !important; }
+}
+
+.rp-vazio { text-align: center; font-style: italic; color: #555; }

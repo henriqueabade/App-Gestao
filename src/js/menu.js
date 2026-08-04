@@ -3290,10 +3290,10 @@ async function loadPage(page, options = {}) {
     const MIN_MODULE_SPINNER_MS = 1000;
     const inicioSpinnerModulo = Date.now();
     content.classList.toggle('is-module-loading', usesLoadingMask);
-    // #content tem altura fixa e rola por dentro; a máscara é position:absolute
-    // ancorada no topo da área rolável. Vindo de um módulo que estava rolado,
-    // ela nascia fora da vista — dava a impressão de que o spinner "sumia" e a
-    // tela ficava vazia. Voltar ao topo garante que a máscara apareça sempre.
+    // A máscara é ancorada no topo da área do módulo e tem a altura da viewport
+    // disponível (definida em menu.css), não a altura total do conteúdo. Isso é
+    // importante em módulos longos, cuja montagem não pode deslocar o centro do
+    // spinner. Voltar ao topo também garante que a máscara apareça sempre.
     content.scrollTop = 0;
     content.replaceChildren(...(usesLoadingMask ? [createModuleLoadingMask(page, moduleTitle)] : []));
 

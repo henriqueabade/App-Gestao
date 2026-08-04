@@ -133,7 +133,7 @@ async function listarMaterias(filtro = '') {
   }
 }
 
-async function adicionarMateria(dados) {
+async function adicionarMateria(dados, usuarioId = null) {
   normalizarCamposNumericos(dados, CAMPOS_NUMERICOS_MATERIA);
   const { nome, quantidade, preco_unitario, categoria, unidade, infinito, processo, descricao } = dados;
   const duplicada = await fetchSingle('materia_prima', { nome, select: 'id,nome' });
@@ -156,10 +156,25 @@ async function adicionarMateria(dados) {
     data_preco: new Date().toISOString()
   };
 
-  return pool.post('/materia_prima', payload);
+  const criada = await pool.post('/materia_prima', payload);
+
+  // O saldo inicial é a primeira movimentação do insumo. Sem ela o histórico
+  // começa do nada e nunca fecha com o estoque.
+  await registrarMovimentacao({
+    insumoId: criada?.id ?? null,
+    tipo: TIPO_MP.CADASTRO,
+    quantidadeAlterada: Number(quantidade) || 0,
+    quantidadeAnterior: 0,
+    quantidadeAtual: Number(quantidade) || 0,
+    precoAtual: Number(preco_unitario) || 0,
+    usuarioId,
+    observacao: 'Insumo cadastrado'
+  });
+
+  return criada;
 }
 
-async function atualizarMateria(id, dados) {
+async function atualizarMateria(id, dados, usuarioId = null) {
   normalizarCamposNumericos(dados, CAMPOS_NUMERICOS_MATERIA);
   const {
     nome,
@@ -171,6 +186,15 @@ async function atualizarMateria(id, dados) {
     infinito,
     descricao
   } = dados;
+
+  // Como estava ANTES. A edição mexe em quantidade e preço e não deixava
+  // rastro nenhum: o histórico só conhecia as baixas por pedido, então um
+  // insumo podia ir de 1000 para 10 pela tela sem uma linha sequer dizendo
+  // quem fez, quando, e de quanto para quanto.
+  const anterior = await fetchSingle('materia_prima', {
+    id,
+    select: 'id,quantidade,preco_unitario'
+  });
 
   const existente = await fetchSingle('materia_prima', { nome, select: 'id,nome' });
   if (existente && existente.id !== id) {
@@ -194,6 +218,43 @@ async function atualizarMateria(id, dados) {
 
   const atualizado = await pool.put(`/materia_prima/${id}`, payload);
 
+  // Uma linha por coisa que mudou de fato. Editar o nome não gera movimento;
+  // mexer na quantidade ou no preço, sim.
+  const quantidadeAntes = anterior ? Number(anterior.quantidade) || 0 : null;
+  const quantidadeDepois = Number(atualizado?.quantidade ?? quantidade);
+  if (
+    quantidadeAntes !== null
+    && Number.isFinite(quantidadeDepois)
+    && arredondarQuatro(quantidadeAntes) !== arredondarQuatro(quantidadeDepois)
+  ) {
+    await registrarMovimentacao({
+      insumoId: id,
+      tipo: TIPO_MP.AJUSTE_QUANTIDADE,
+      quantidadeAlterada: arredondarQuatro(Math.abs(quantidadeDepois - quantidadeAntes)),
+      quantidadeAnterior: quantidadeAntes,
+      quantidadeAtual: quantidadeDepois,
+      usuarioId,
+      observacao: 'Quantidade alterada na edição do insumo'
+    });
+  }
+
+  const precoAntes = anterior ? Number(anterior.preco_unitario) || 0 : null;
+  const precoDepois = Number(atualizado?.preco_unitario ?? preco_unitario);
+  if (
+    precoAntes !== null
+    && Number.isFinite(precoDepois)
+    && arredondarQuatro(precoAntes) !== arredondarQuatro(precoDepois)
+  ) {
+    await registrarMovimentacao({
+      insumoId: id,
+      tipo: TIPO_MP.AJUSTE_PRECO,
+      precoAnterior: precoAntes,
+      precoAtual: precoDepois,
+      usuarioId,
+      observacao: 'Preço alterado na edição do insumo'
+    });
+  }
+
   let warning;
   if (preco_unitario !== undefined) {
     try {
@@ -207,8 +268,70 @@ async function atualizarMateria(id, dados) {
   return warning ? { ...atualizado, warning } : atualizado;
 }
 
-async function excluirMateria(id) {
+async function excluirMateria(id, usuarioId = null) {
+  // A movimentação vai ANTES da exclusão: depois o saldo já não existe para
+  // ser lido, e a última linha do histórico ficaria sem o número que sumiu.
+  const anterior = await fetchSingle('materia_prima', {
+    id,
+    select: 'id,quantidade,preco_unitario'
+  }).catch(() => null);
+
   await pool.delete(`/materia_prima/${id}`);
+
+  await registrarMovimentacao({
+    insumoId: id,
+    tipo: TIPO_MP.EXCLUSAO,
+    quantidadeAlterada: anterior ? Number(anterior.quantidade) || 0 : null,
+    quantidadeAnterior: anterior ? Number(anterior.quantidade) || 0 : null,
+    quantidadeAtual: 0,
+    precoAnterior: anterior ? Number(anterior.preco_unitario) || 0 : null,
+    usuarioId,
+    observacao: 'Insumo excluído'
+  });
+}
+
+/**
+ * Vocabulário do histórico da matéria-prima.
+ *
+ * Antes tudo era "entrada", "saida" ou "preco" — e com isso o histórico não
+ * respondia a pergunta que interessa: uma saída de 6 caixas por causa de um
+ * pedido ficava idêntica a uma retirada feita à mão, e alterar a quantidade
+ * pela tela de edição não deixava rastro nenhum.
+ *
+ * A tabela não tem coluna de observação nem de pedido (ver sql/novascolunas4.sql);
+ * até que tenha, o TIPO é o único lugar que diz de onde a alteração veio.
+ */
+const TIPO_MP = {
+  /** Abatido por conversão de orçamento em pedido. */
+  SAIDA_PEDIDO: 'saida_pedido',
+  /** Devolvido por cancelamento/estorno de pedido. */
+  ENTRADA_PEDIDO: 'entrada_pedido',
+  /** Retirada/entrada feita à mão no módulo de Matéria-Prima. */
+  SAIDA_MANUAL: 'saida_manual',
+  ENTRADA_MANUAL: 'entrada_manual',
+  /** Quantidade corrigida na edição do insumo (não é entrada nem saída). */
+  AJUSTE_QUANTIDADE: 'ajuste_quantidade',
+  /** Preço unitário alterado. */
+  AJUSTE_PRECO: 'ajuste_preco',
+  /** Insumo criado. */
+  CADASTRO: 'cadastro',
+  /** Insumo excluído — a última linha antes de ele sumir. */
+  EXCLUSAO: 'exclusao'
+};
+
+/** 4 casas — a precisão das colunas numéricas. Compara sem ruído de float. */
+function arredondarQuatro(valor) {
+  const n = Number(valor);
+  if (!Number.isFinite(n)) return 0;
+  return Math.round((n + Number.EPSILON) * 10000) / 10000;
+}
+
+/** Nome do tipo conforme a origem, para entrada e saída. */
+function tipoPorOrigem(direcao, origem) {
+  if (origem === 'pedido') {
+    return direcao === 'entrada' ? TIPO_MP.ENTRADA_PEDIDO : TIPO_MP.SAIDA_PEDIDO;
+  }
+  return direcao === 'entrada' ? TIPO_MP.ENTRADA_MANUAL : TIPO_MP.SAIDA_MANUAL;
 }
 
 async function registrarMovimentacao({
@@ -219,10 +342,16 @@ async function registrarMovimentacao({
   quantidadeAtual = null,
   precoAnterior = null,
   precoAtual = null,
-  usuarioId = null
+  usuarioId = null,
+  pedidoId = null,
+  observacao = null
 }) {
   if (!insumoId || !tipo) return;
   try {
+    // `pedido_id` e `observacao` só existem depois de sql/novascolunas4.sql. A
+    // API monta o INSERT a partir das colunas que a tabela realmente tem e
+    // ignora o resto, então mandar antes da hora não quebra nada — passa a
+    // gravar sozinho quando as colunas existirem (e a API for reiniciada).
     await pool.post('/materia_prima_movimentacoes', {
       insumo_id: insumoId,
       tipo,
@@ -232,6 +361,8 @@ async function registrarMovimentacao({
       preco_anterior: precoAnterior,
       preco_atual: precoAtual,
       usuario_id: usuarioId,
+      pedido_id: pedidoId,
+      observacao,
       criado_em: new Date().toISOString()
     });
   } catch (err) {
@@ -239,7 +370,12 @@ async function registrarMovimentacao({
   }
 }
 
-async function registrarEntrada(id, quantidadeBruta, usuarioId = null) {
+/**
+ * @param {object} contexto  de onde veio a movimentação:
+ *   `{ origem: 'pedido'|'manual', pedidoId, nota }`. O padrão é manual, que é
+ *   o caso do próprio módulo de Matéria-Prima.
+ */
+async function registrarEntrada(id, quantidadeBruta, usuarioId = null, contexto = {}) {
   const quantidade = paraDecimal(quantidadeBruta) ?? 0;
   const materiaAtual = await fetchSingle('materia_prima', {
     id,
@@ -255,17 +391,19 @@ async function registrarEntrada(id, quantidadeBruta, usuarioId = null) {
 
   await registrarMovimentacao({
     insumoId: id,
-    tipo: 'entrada',
+    tipo: tipoPorOrigem('entrada', contexto?.origem),
     quantidadeAlterada: quantidade,
     quantidadeAnterior,
     quantidadeAtual,
-    usuarioId
+    usuarioId,
+    pedidoId: contexto?.pedidoId ?? null,
+    observacao: contexto?.nota ?? null
   });
 
   return materia || null;
 }
 
-async function registrarSaida(id, quantidadeBruta, usuarioId = null) {
+async function registrarSaida(id, quantidadeBruta, usuarioId = null, contexto = {}) {
   const quantidade = paraDecimal(quantidadeBruta) ?? 0;
   const materiaAtual = await fetchSingle('materia_prima', {
     id,
@@ -281,11 +419,13 @@ async function registrarSaida(id, quantidadeBruta, usuarioId = null) {
 
   await registrarMovimentacao({
     insumoId: id,
-    tipo: 'saida',
+    tipo: tipoPorOrigem('saida', contexto?.origem),
     quantidadeAlterada: quantidade,
     quantidadeAnterior,
     quantidadeAtual,
-    usuarioId
+    usuarioId,
+    pedidoId: contexto?.pedidoId ?? null,
+    observacao: contexto?.nota ?? null
   });
 
   return materia || null;
@@ -303,6 +443,22 @@ async function atualizarProdutosComInsumo(insumoId) {
       .filter(Boolean)
   );
 
+  // A TABELA INTEIRA de matéria-prima, UMA vez.
+  //
+  // Esta leitura estava DENTRO do laço abaixo, e ela não depende do produto:
+  // um insumo usado em 40 produtos baixava as ~400 linhas de matéria-prima 40
+  // vezes. Numa API remota isso são dezenas de segundos com a tela parada — era
+  // por isso que salvar um insumo parecia não fazer nada, embora o banco já
+  // tivesse gravado: a resposta só voltava muito depois.
+  const materias = await getFiltrado('/materia_prima', {
+    select: 'id,preco_unitario'
+  });
+  const precoPorMateria = new Map();
+  for (const materia of (Array.isArray(materias) ? materias : [])) {
+    const materiaId = Number(materia?.id);
+    if (Number.isFinite(materiaId)) precoPorMateria.set(materiaId, materia);
+  }
+
   for (const produtoId of produtosIds) {
     const produto = await fetchSingle('produtos', {
       select:
@@ -317,23 +473,9 @@ async function atualizarProdutosComInsumo(insumoId) {
       produto_id: produtoId
     });
 
-    const idsMateria = Array.from(
-      new Set((Array.isArray(itens) ? itens : []).map(item => item?.insumo_id).filter(id => id !== undefined && id !== null))
-    );
-    const materias = await getFiltrado('/materia_prima', {
-      select: 'id,preco_unitario'
-    });
-    const materiaPorId = new Map();
-    const idsMateriaSet = new Set(idsMateria.map(id => Number(id)));
-    for (const materia of materias) {
-      const materiaId = Number(materia?.id);
-      if (!Number.isFinite(materiaId) || !idsMateriaSet.has(materiaId)) continue;
-      materiaPorId.set(materiaId, materia);
-    }
-
     const base = (Array.isArray(itens) ? itens : []).reduce((acc, item) => {
       const quantidade = Number(item?.quantidade) || 0;
-      const precoUnitario = Number(materiaPorId.get(Number(item?.insumo_id))?.preco_unitario) || 0;
+      const precoUnitario = Number(precoPorMateria.get(Number(item?.insumo_id))?.preco_unitario) || 0;
       return acc + quantidade * precoUnitario;
     }, 0);
 
@@ -378,10 +520,11 @@ async function atualizarPreco(id, precoBruto, usuarioId = null) {
   const precoAtual = materia ? Number(materia.preco_unitario) || 0 : 0;
   await registrarMovimentacao({
     insumoId: id,
-    tipo: 'preco',
+    tipo: TIPO_MP.AJUSTE_PRECO,
     precoAnterior,
     precoAtual,
-    usuarioId
+    usuarioId,
+    observacao: 'Preço atualizado'
   });
   await atualizarProdutosComInsumo(id);
   return materia || null;

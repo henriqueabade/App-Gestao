@@ -227,9 +227,32 @@ function planejarConsumo({ itens = [], rotaPorProduto = new Map(), estoquePorIns
         unidade: passo?.unidade || '',
         processo: passo?.processo || '',
         infinito: Boolean(estoque.infinito),
-        quantidade: 0
+        quantidade: 0,
+        // Saldo de ANTES de qualquer abatimento deste plano. `disponivel` vai
+        // sendo comido peça a peça, então tem de ser lido da entrada original.
+        saldo_inicial: paraNumero(
+          (estoquePorInsumo.get(insumoId) || estoquePorInsumo.get(String(insumoId)))?.quantidade
+        ),
+        // Quem consumiu o quê. Sem isto o razão só sabia o total do pedido, e
+        // `estoque_movimentos.pedido_item_id` ficava vazio em todo movimento de
+        // insumo: dava para ver que 6 caixas saíram, mas não para QUAL peça.
+        porItem: []
       };
       atual.quantidade = arredondar(atual.quantidade + necessario);
+
+      const jaDaPeca = atual.porItem.find(d => String(d.pedido_item_id) === String(pedidoItemId));
+      if (jaDaPeca) {
+        jaDaPeca.quantidade = arredondar(jaDaPeca.quantidade + necessario);
+      } else {
+        atual.porItem.push({
+          pedido_item_id: pedidoItemId,
+          produto_id: produtoId,
+          quantidade: necessario,
+          ordem_insumo: passo?.ordem_insumo ?? null,
+          processo: passo?.processo || ''
+        });
+      }
+
       consumoPorInsumo.set(insumoId, atual);
 
       if (estoque.infinito) continue;
@@ -254,8 +277,18 @@ function planejarConsumo({ itens = [], rotaPorProduto = new Map(), estoquePorIns
     }
   }
 
+  // Onde o saldo terminou. É isto que decide se o movimento sai marcado como
+  // saldo negativo autorizado — antes a coluna ficava vazia mesmo quando o
+  // insumo tinha fechado em -109, e não havia como saber, olhando o razão, que
+  // aquele abatimento tinha passado do que existia.
+  const consumos = Array.from(consumoPorInsumo.values()).filter(c => !c.infinito);
+  for (const consumo of consumos) {
+    consumo.saldo_final = arredondar(consumo.saldo_inicial - consumo.quantidade);
+    consumo.ficou_negativo = consumo.saldo_final < 0;
+  }
+
   return {
-    consumoPorInsumo: Array.from(consumoPorInsumo.values()).filter(c => !c.infinito),
+    consumoPorInsumo: consumos,
     faltantes,
     pecasDeEstoque,
     temFalta: faltantes.length > 0

@@ -226,6 +226,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     return result;
   },
   listarDetalhesProduto: (params) => ipcRenderer.invoke('listar-detalhes-produto', params),
+  listarMovimentosProduto: (params) => ipcRenderer.invoke('listar-movimentos-produto', params),
   inserirLoteProduto: async (dados) => {
     const result = await ipcRenderer.invoke('inserir-lote-produto', dados);
     recordIpcAction('inserir-lote-produto', dados, result);

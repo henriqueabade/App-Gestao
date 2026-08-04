@@ -297,6 +297,11 @@ async function aplicarConversaoNoEstoque(api, {
   pedidoId,
   itens = [],
   usuarioId = null,
+  // Autorização e justificativa dadas na revisão da conversão. Chegavam do
+  // modal e paravam aqui: os movimentos que zeravam o saldo iam para o razão
+  // sem dizer que a negativação tinha sido consentida nem por quê.
+  podeSaldoNegativo = false,
+  decisaoNote = null,
   inserirLinhaComId,
   getMaxId
 } = {}) {
@@ -533,6 +538,11 @@ async function aplicarConversaoNoEstoque(api, {
     parcialPorItem.set(chave, (parcialPorItem.get(chave) || 0) + paraNumero(p.quantidade));
   }
 
+  // peça -> reserva que vai produzi-la. O abatimento da matéria-prima logo
+  // abaixo usa este mapa para dizer, em cada movimento, para qual reserva
+  // aquele insumo está indo.
+  const reservaPorItem = new Map();
+
   for (const peca of pecasComParciais) {
     const aProduzir = Number(peca?.qtd_a_produzir) || 0;
     if (!(aProduzir > 0)) continue;
@@ -551,7 +561,10 @@ async function aplicarConversaoNoEstoque(api, {
       quantidade: doZero,
       usuarioId
     }, avisos);
-    if (reservaId) resumo.reservasCriadas += 1;
+    if (reservaId) {
+      resumo.reservasCriadas += 1;
+      reservaPorItem.set(String(peca.pedido_item_id), reservaId);
+    }
   }
 
   // ------------------------------------------------------------------
@@ -566,16 +579,40 @@ async function aplicarConversaoNoEstoque(api, {
     if (!(consumo.quantidade > 0)) continue;
     if (!Number.isFinite(consumo.insumo_id)) continue;
     try {
-      await registrarSaida(consumo.insumo_id, consumo.quantidade, usuarioId);
-      resumo.insumosAbatidos += 1;
-      // O razão registra o consumo ligado ao PEDIDO — `registrarSaida` só grava
-      // no histórico do insumo, que não sabe para quem foi.
-      await registrarConsumoDeInsumo(api, {
+      // O saldo é abatido de uma vez só: é UMA alteração no estoque do insumo,
+      // e quebrá-la em várias faria o histórico da matéria-prima mostrar cinco
+      // saídas onde houve uma.
+      await registrarSaida(consumo.insumo_id, consumo.quantidade, usuarioId, {
+        origem: 'pedido',
         pedidoId,
-        insumoId: consumo.insumo_id,
-        quantidade: consumo.quantidade,
-        usuarioId
-      }, avisos);
+        nota: consumo.ficou_negativo ? decisaoNote : null
+      });
+      resumo.insumosAbatidos += 1;
+
+      // Já o RAZÃO é por peça. `registrarSaida` só grava no histórico do
+      // insumo, que não sabe para quem foi; aqui fica registrado qual peça
+      // consumiu quanto, e sob qual reserva de produção ela será feita.
+      const porPeca = Array.isArray(consumo.porItem) && consumo.porItem.length
+        ? consumo.porItem
+        : [{ pedido_item_id: null, quantidade: consumo.quantidade }];
+
+      for (const parte of porPeca) {
+        if (!(paraNumero(parte.quantidade) > 0)) continue;
+        await registrarConsumoDeInsumo(api, {
+          pedidoId,
+          pedidoItemId: parte.pedido_item_id ?? null,
+          // Peça aproveitada pela metade não tem reserva: ela já existia.
+          reservaId: reservaPorItem.get(String(parte.pedido_item_id)) ?? null,
+          insumoId: consumo.insumo_id,
+          quantidade: parte.quantidade,
+          // Só marca onde o saldo REALMENTE fechou negativo. Marcar todos
+          // esvaziaria o sentido da coluna: ela existe para achar, no meio de
+          // centenas de linhas, as que passaram do que havia.
+          saldoNegativoAutorizado: consumo.ficou_negativo ? Boolean(podeSaldoNegativo) : null,
+          nota: consumo.ficou_negativo ? decisaoNote : null,
+          usuarioId
+        }, avisos);
+      }
     } catch (err) {
       avisos.push(`Falha ao abater "${consumo.insumo_nome}": ${err?.message || err}`);
     }

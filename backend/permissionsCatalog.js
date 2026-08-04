@@ -173,6 +173,12 @@ const PERMISSIONS_CATALOG = {
         "desc": "Botao \"Novo Produto\""
       },
       {
+        "key": "prod.movimentos.view",
+        "column": "acao_movimentos_view",
+        "label": "Ver movimentações",
+        "desc": "Ícone de relatório — abre o histórico de estoque da peça"
+      },
+      {
         "key": "prod.stock.view",
         "column": "acao_stock_view",
         "label": "Ver estoque",

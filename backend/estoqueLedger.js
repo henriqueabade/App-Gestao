@@ -256,9 +256,21 @@ async function registrarReservaDeProducao(api, {
   }
 }
 
-/** Insumo abatido para produzir. */
+/**
+ * Insumo abatido para produzir.
+ *
+ * `pedidoItemId` e `reservaId` são o que liga o insumo à PEÇA que o consumiu:
+ * sem eles o razão só respondia "saíram 6 caixas neste pedido", nunca "saíram
+ * para produzir a peça 27, cuja produção está reservada sob o id 12".
+ *
+ * `reservaId` só existe para peça produzida DO ZERO. Peça aproveitada pela
+ * metade não tem reserva — ela já existia no estoque, e o que se gasta nela é
+ * só o que falta da rota.
+ */
 async function registrarConsumoDeInsumo(api, {
   pedidoId,
+  pedidoItemId = null,
+  reservaId = null,
   insumoId,
   quantidade,
   saldoNegativoAutorizado = null,
@@ -271,6 +283,8 @@ async function registrarConsumoDeInsumo(api, {
     itemId: insumoId,
     quantidade,
     pedidoId,
+    pedidoItemId,
+    reservaId,
     saldoNegativoAutorizado,
     nota,
     usuarioId
