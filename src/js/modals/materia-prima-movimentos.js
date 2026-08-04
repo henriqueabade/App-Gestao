@@ -123,6 +123,8 @@
         <td>${escapar(efeitoFormatado(m))}</td>
         <td>${escapar(saldoOuPreco(m))}</td>
         <td>${escapar(m.origem || '—')}</td>
+        <!-- Só o código: o nome da peça é longo demais para caber na folha. -->
+        <td>${escapar(m.peca_codigo || '—')}</td>
         <td>${escapar(m.usuario || '—')}</td>
         <td>${escapar(
           m.saldo_negativo_autorizado
@@ -158,10 +160,10 @@
 
         <table class="rp-tabela rp-tabela-larga">
           <thead>
-            <tr class="rp-faixa-processo"><th colspan="7">Histórico</th></tr>
+            <tr class="rp-faixa-processo"><th colspan="8">Histórico</th></tr>
             <tr class="rp-faixa-peca">
               <th>Data</th><th>O que houve</th><th>Efeito</th><th>Saldo / Preço</th>
-              <th>Origem</th><th>Quem fez</th><th>Observação</th>
+              <th>Origem</th><th>Peça</th><th>Quem fez</th><th>Observação</th>
             </tr>
           </thead>
           <tbody>${linhas}</tbody>

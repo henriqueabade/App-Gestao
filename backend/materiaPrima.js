@@ -549,6 +549,8 @@ const LEITURA_MP = {
   saida_manual: { rotulo: 'Retirada manual', sinal: -1 },
   entrada_pedido: { rotulo: 'Devolvido por cancelamento', sinal: 1 },
   saida_pedido: { rotulo: 'Consumido em pedido', sinal: -1 },
+  // O sentido do ajuste NÃO cabe numa constante: depende de para onde o saldo
+  // foi. Ver `lerAjuste`.
   ajuste_quantidade: { rotulo: 'Quantidade ajustada na edição', sinal: 0 },
   ajuste_preco: { rotulo: 'Preço alterado', sinal: 0 },
   cadastro: { rotulo: 'Insumo cadastrado', sinal: 1 },
@@ -559,6 +561,24 @@ const LEITURA_MP = {
   saida: { rotulo: 'Saída (registro antigo)', sinal: -1 },
   preco: { rotulo: 'Preço alterado (registro antigo)', sinal: 0 }
 };
+
+/**
+ * Um ajuste manual é entrada ou saída conforme o saldo tenha subido ou descido.
+ *
+ * Antes ele saía sem sinal ("—") e ficava de fora dos totais: corrigir 100 para
+ * 1.000.000 pela tela não aparecia como entrada em lugar nenhum, e o resumo
+ * dizia "total que entrou: 0" num insumo que tinha acabado de ganhar um milhão.
+ */
+function lerAjuste(movimento, leituraPadrao) {
+  const antes = Number(movimento?.quantidade_anterior);
+  const depois = Number(movimento?.quantidade_atual);
+  if (!Number.isFinite(antes) || !Number.isFinite(depois) || antes === depois) {
+    return leituraPadrao;
+  }
+  return depois > antes
+    ? { rotulo: 'Entrada por ajuste manual', sinal: 1 }
+    : { rotulo: 'Saída por ajuste manual', sinal: -1 };
+}
 
 function instante(valor) {
   const t = new Date(valor).getTime();
@@ -605,7 +625,7 @@ async function listarMovimentosInsumo(insumoId) {
   const id = Number(insumoId);
   if (!Number.isFinite(id)) return { insumo: null, movimentos: [], faltas: [] };
 
-  const [insumo, historico, razaoBruto, faltasBrutas, usuariosBrutos, pedidosBrutos] = await Promise.all([
+  const [insumo, historico, razaoBruto, faltasBrutas, usuariosBrutos, pedidosBrutos, itensBrutos] = await Promise.all([
     pool.get(`/materia_prima/${id}`).catch(() => null),
     pool.get('/materia_prima_movimentacoes', { query: { insumo_id: id } }).catch(() => []),
     // `tipo_item: 'insumo'` é obrigatório: `estoque_movimentos` guarda PEÇA e
@@ -615,7 +635,10 @@ async function listarMovimentosInsumo(insumoId) {
     pool.get('/estoque_movimentos', { query: { item_id: id, tipo_item: 'insumo' } }).catch(() => []),
     pool.get('/pedidos_itens_faltantes', { query: { insumo_id: id } }).catch(() => []),
     pool.get('/usuarios').catch(() => []),
-    pool.get('/pedidos').catch(() => [])
+    pool.get('/pedidos').catch(() => []),
+    // Para dizer QUAL PEÇA daquele pedido consumiu o insumo. Uma leitura só,
+    // indexada em memória — buscar item a item seria uma requisição por linha.
+    pool.get('/pedidos_itens').catch(() => [])
   ]);
 
   const doInsumo = (Array.isArray(historico) ? historico : [])
@@ -632,6 +655,7 @@ async function listarMovimentosInsumo(insumoId) {
   };
   const usuarios = indexar(usuariosBrutos);
   const pedidos = indexar(pedidosBrutos);
+  const itensDePedido = indexar(itensBrutos);
 
   // ---------------------------------------------------------------
   // Pareamento: qual linha do razão descreve qual linha do histórico
@@ -662,8 +686,38 @@ async function listarMovimentosInsumo(insumoId) {
     }
   }
 
+  // Peças por pedido, para o caso de o movimento antigo não dizer qual foi.
+  const itensPorPedido = new Map();
+  for (const item of itensDePedido.values()) {
+    const pedidoId = Number(item?.pedido_id);
+    if (!Number.isFinite(pedidoId)) continue;
+    if (!itensPorPedido.has(pedidoId)) itensPorPedido.set(pedidoId, []);
+    itensPorPedido.get(pedidoId).push(item);
+  }
+
+  /**
+   * Só o código da peça: o nome completo não caberia na folha.
+   *
+   * Movimentos gravados antes do registro por peça não têm `pedido_item_id`.
+   * Quando o pedido tem UMA peça só, não há dúvida de para onde o insumo foi —
+   * então o código é resolvido pelo pedido. Com duas ou mais, fica em branco:
+   * num relatório de auditoria, chutar é pior que admitir que não se sabe.
+   */
+  const codigoDaPeca = (pedidoItemId, pedidoId) => {
+    const direto = itensDePedido.get(Number(pedidoItemId));
+    if (direto) return direto.codigo || direto.nome || `Item ${pedidoItemId}`;
+
+    const doPedido = itensPorPedido.get(Number(pedidoId)) || [];
+    if (doPedido.length === 1) {
+      const unico = doPedido[0];
+      return unico.codigo || unico.nome || `Item ${unico.id}`;
+    }
+    return null;
+  };
+
   const linhas = doInsumo.map(mp => {
-    const leitura = LEITURA_MP[mp.tipo] || { rotulo: mp.tipo || 'Movimento', sinal: 0 };
+    const padrao = LEITURA_MP[mp.tipo] || { rotulo: mp.tipo || 'Movimento', sinal: 0 };
+    const leitura = mp.tipo === 'ajuste_quantidade' ? lerAjuste(mp, padrao) : padrao;
     const contexto = contextoPorMovimento.get(mp.id) || null;
     const pedido = contexto ? pedidos.get(Number(contexto.pedido_id)) : null;
     const quantidade = Number(mp.quantidade) || 0;
@@ -687,6 +741,7 @@ async function listarMovimentosInsumo(insumoId) {
         : (mp.pedido_id ? `Pedido ${mp.pedido_id}` : 'Módulo de Matéria-Prima'),
       pedido_numero: pedido?.numero || null,
       pedido_item_id: contexto?.pedido_item_id || null,
+      peca_codigo: codigoDaPeca(contexto?.pedido_item_id, contexto?.pedido_id),
       reserva_id: contexto?.reserva_id || null,
       saldo_negativo_autorizado: contexto?.saldo_negativo_autorizado === true,
       observacao: mp.observacao || contexto?.decision_note || null,
@@ -715,6 +770,7 @@ async function listarMovimentosInsumo(insumoId) {
       origem: pedido ? `Pedido ${pedido.numero || pedido.id}` : 'Conversão de pedido',
       pedido_numero: pedido?.numero || null,
       pedido_item_id: orfao.pedido_item_id || null,
+      peca_codigo: codigoDaPeca(orfao.pedido_item_id, orfao.pedido_id),
       reserva_id: orfao.reserva_id || null,
       saldo_negativo_autorizado: orfao.saldo_negativo_autorizado === true,
       observacao: orfao.decision_note || null,

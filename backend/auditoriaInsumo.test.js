@@ -29,6 +29,10 @@ const HISTORICO = [
     quantidade_anterior: 1215, quantidade_atual: 1209, criado_em: semFuso(30), usuario_id: 13 },
   { id: 3, insumo_id: 151, tipo: 'ajuste_quantidade', quantidade: 4,
     quantidade_anterior: 1219, quantidade_atual: 1215, criado_em: semFuso(10), usuario_id: 13,
+    observacao: 'Quantidade alterada na edição do insumo' },
+  // Ajuste para CIMA: o saldo subiu, então é entrada.
+  { id: 4, insumo_id: 151, tipo: 'ajuste_quantidade', quantidade: 200,
+    quantidade_anterior: 1019, quantidade_atual: 1219, criado_em: semFuso(5), usuario_id: 13,
     observacao: 'Quantidade alterada na edição do insumo' }
 ];
 
@@ -44,10 +48,13 @@ const RAZAO = [
     quantidade: 99, pedido_id: 69, created_at: comFuso(52), created_by: 13 }
 ];
 
-function montarAmbiente() {
+function montarAmbiente(sobrescrever = {}) {
   const caminhoDb = require.resolve('./db');
   const caminhoAlvo = require.resolve('./materiaPrima');
   const anterior = require.cache[caminhoDb];
+
+  const razao = sobrescrever.razao || RAZAO;
+  const historico = sobrescrever.historico || HISTORICO;
 
   const fake = {
     async get(rota, opcoes = {}) {
@@ -56,15 +63,23 @@ function montarAmbiente() {
         return { id: 151, nome: 'Etiqueta do Produto', unidade: 'Pç', quantidade: 1189, preco_unitario: 0.03 };
       }
       if (rota === '/materia_prima_movimentacoes') {
-        return HISTORICO.filter(m => String(m.insumo_id) === String(q.insumo_id));
+        return historico.filter(m => String(m.insumo_id) === String(q.insumo_id));
       }
       if (rota === '/estoque_movimentos') {
-        return RAZAO.filter(m =>
+        return razao.filter(m =>
           String(m.item_id) === String(q.item_id) && String(m.tipo_item) === String(q.tipo_item));
       }
       if (rota === '/pedidos_itens_faltantes') return [];
       if (rota === '/usuarios') return [{ id: 13, nome: 'Henrique Viana Abade' }];
-      if (rota === '/pedidos') return [{ id: 69, numero: 'PED22' }, { id: 68, numero: 'PED21' }];
+      if (rota === '/pedidos') {
+        return sobrescrever.pedidos || [{ id: 69, numero: 'PED22' }, { id: 68, numero: 'PED21' }];
+      }
+      if (rota === '/pedidos_itens') {
+        return sobrescrever.itens || [
+          { id: 10, pedido_id: 69, codigo: 'AVSØ 0114 MUI', nome: 'Apaga Velas Silvia - 1' },
+          { id: 28, pedido_id: 68, codigo: 'BAGR 3580 GRA', nome: 'Bandeja Acervo - G' }
+        ];
+      }
       return [];
     }
   };
@@ -93,13 +108,13 @@ test('o mesmo evento gravado nas duas tabelas vira UMA linha', async () => {
     const r = await amb.listarMovimentosInsumo(151);
 
     assert.equal(
-      r.movimentos.length, 3,
-      '3 eventos: duas baixas por pedido e um ajuste. Somar as tabelas daria 5 '
-      + 'e o total que saiu apareceria dobrado.'
+      r.movimentos.length, 4,
+      '4 eventos: duas baixas por pedido e dois ajustes. Somar as tabelas daria '
+      + '6 e o total que saiu apareceria dobrado.'
     );
 
     const saiu = r.movimentos.reduce((acc, m) => acc + (m.efeito < 0 ? -m.efeito : 0), 0);
-    assert.equal(saiu, 26, 'saiu 20 + 6 — não 52');
+    assert.equal(saiu, 30, 'saiu 20 + 6 (pedidos) + 4 (ajuste para baixo) — não o dobro');
   } finally {
     amb.restaurar();
   }
@@ -118,9 +133,76 @@ test('a linha ganha o pedido de origem, apesar da diferença de fuso', async () 
     assert.equal(de20.saldo_anterior, 1209);
     assert.equal(de20.saldo_atual, 1189);
 
-    const ajuste = r.movimentos.find(m => m.tipo === 'ajuste_quantidade');
+    assert.equal(de20.peca_codigo, 'AVSØ 0114 MUI', 'e de qual peça, pelo código');
+
+    const de6 = r.movimentos.find(m => m.quantidade === 6);
+    assert.equal(de6.peca_codigo, 'BAGR 3580 GRA', 'cada baixa aponta a sua peça');
+
+    const ajuste = r.movimentos.find(m => m.quantidade === 4);
     assert.equal(ajuste.pedido_numero, null, 'ajuste manual não tem pedido');
     assert.equal(ajuste.origem, 'Módulo de Matéria-Prima');
+    assert.equal(ajuste.peca_codigo, null, 'nem peça');
+  } finally {
+    amb.restaurar();
+  }
+});
+
+test('movimento antigo sem peça: resolve pelo pedido quando não há dúvida', async () => {
+  const amb = montarAmbiente({
+    // Como os registros gravados antes de o razão anotar a peça: só o pedido.
+    razao: [
+      { id: 910, tipo_movimento: 'consumo_insumo', tipo_item: 'insumo', item_id: 151,
+        quantidade: 20, pedido_id: 69, pedido_item_id: null,
+        created_at: comFuso(52), created_by: 13 },
+      { id: 911, tipo_movimento: 'consumo_insumo', tipo_item: 'insumo', item_id: 151,
+        quantidade: 6, pedido_id: 70, pedido_item_id: null,
+        created_at: comFuso(30), created_by: 13 }
+    ],
+    pedidos: [{ id: 69, numero: 'PED22' }, { id: 70, numero: 'PED23' }],
+    itens: [
+      // PED22 tem UMA peça: o insumo só pode ter ido para ela.
+      { id: 10, pedido_id: 69, codigo: 'AVSØ 0114 MUI', nome: 'Apaga Velas Silvia - 1' },
+      // PED23 tem DUAS: aí não dá para saber.
+      { id: 40, pedido_id: 70, codigo: 'BAGR 3580 GRA', nome: 'Bandeja Acervo - G' },
+      { id: 41, pedido_id: 70, codigo: 'BAME 3070 MEN', nome: 'Bandeja Acervo - M' }
+    ]
+  });
+  try {
+    const r = await amb.listarMovimentosInsumo(151);
+
+    const de20 = r.movimentos.find(m => m.quantidade === 20);
+    assert.equal(
+      de20.peca_codigo, 'AVSØ 0114 MUI',
+      'pedido de uma peça só: não há dúvida de para onde o insumo foi'
+    );
+
+    const de6 = r.movimentos.find(m => m.quantidade === 6);
+    assert.equal(
+      de6.peca_codigo, null,
+      'pedido com duas peças: em auditoria, chutar é pior que admitir que não se sabe'
+    );
+  } finally {
+    amb.restaurar();
+  }
+});
+
+test('ajuste manual é ENTRADA se o saldo subiu e SAÍDA se desceu', async () => {
+  const amb = montarAmbiente();
+  try {
+    const r = await amb.listarMovimentosInsumo(151);
+
+    const paraCima = r.movimentos.find(m => m.quantidade === 200);
+    assert.equal(paraCima.descricao, 'Entrada por ajuste manual');
+    assert.equal(paraCima.efeito, 200, '1019 -> 1219: entraram 200');
+
+    const paraBaixo = r.movimentos.find(m => m.quantidade === 4);
+    assert.equal(paraBaixo.descricao, 'Saída por ajuste manual');
+    assert.equal(paraBaixo.efeito, -4, '1219 -> 1215: saíram 4');
+
+    // Antes o ajuste saía sem sinal e ficava FORA dos totais: um insumo podia
+    // ganhar 200 pela tela e o resumo dizer "total que entrou: 0".
+    const entrou = r.movimentos.reduce((acc, m) => acc + (m.efeito > 0 ? m.efeito : 0), 0);
+    assert.equal(entrou, 200, 'o ajuste para cima conta no total que entrou');
   } finally {
     amb.restaurar();
   }
