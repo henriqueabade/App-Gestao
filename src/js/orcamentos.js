@@ -314,12 +314,21 @@ async function carregarOrcamentos() {
                     if (!ok) return;
                     try {
                         const resp = await fetchApi(`/api/orcamentos/${encodeURIComponent(o.id)}`, { method: 'DELETE' });
-                        if (!resp.ok) throw new Error(await resp.text());
+                        const corpo = await resp.json().catch(() => null);
+                        if (!resp.ok) {
+                            // Ver a nota gêmea em pedidos.js: sem o motivo do
+                            // backend sobrava "não foi possível" e nada a fazer.
+                            throw new Error(corpo?.detalhe || corpo?.error || `HTTP ${resp.status}`);
+                        }
                         window.showToast?.(`Orçamento ${o.numero} excluído.`, 'success');
+                        if (Array.isArray(corpo?.avisos) && corpo.avisos.length) {
+                            console.warn('Exclusão do orçamento com avisos:', corpo.avisos);
+                            window.showToast?.(`Excluído com ${corpo.avisos.length} aviso(s). Veja o console.`, 'info');
+                        }
                         carregarOrcamentos();
                     } catch (err) {
                         console.error('Erro ao excluir orçamento', err);
-                        window.showToast?.('Não foi possível excluir o orçamento.', 'error');
+                        window.showToast?.(err?.message || 'Não foi possível excluir o orçamento.', 'error');
                     }
                 });
             });

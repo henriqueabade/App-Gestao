@@ -1,6 +1,7 @@
 const express = require('express');
 const { createApiClient } = require('./apiHttpClient');
-const { exigirPermissao } = require('./permissionsController');
+const { exigirPermissao, exigirSupAdmin } = require('./permissionsController');
+const { excluirPedidoEmCascata } = require('./exclusaoEmCascata');
 const {
   RESERVA,
   EVENTO,
@@ -136,30 +137,31 @@ router.get('/:id', exigirPermissao('ped.view.details'), async (req, res) => {
   }
 });
 /**
- * DELETE /pedidos/:id  — exclusão restrita (ação visível só ao Sup Admin).
- * Remove itens e parcelas antes do pedido, para não deixar órfãos.
+ * DELETE /pedidos/:id  — exclusão restrita ao Sup Admin.
+ *
+ * A versão anterior apagava só itens e parcelas, e batia em
+ * `estoque_movimentos_pedido_id_fkey`: um pedido convertido espalha linhas por
+ * oito tabelas. Agora a limpeza é feita por `exclusaoEmCascata`, que sabe a
+ * ordem e — mais importante — tem uma lista branca do que pode apagar.
+ *
+ * Duas travas, não uma: a permissão `ped.delete` (que só o modelo do Sup Admin
+ * recebe) E a checagem do perfil. Numa operação irreversível, depender só da
+ * configuração de um modelo de permissões é frágil demais.
  */
-router.delete('/:id', exigirPermissao('ped.delete'), async (req, res) => {
+router.delete('/:id', exigirPermissao('ped.delete'), exigirSupAdmin, async (req, res) => {
   const { id } = req.params;
   try {
     const api = createApiClient(req);
-
-    const [itens, parcelas] = await Promise.all([
-      api.get('/api/pedidos_itens', { query: { pedido_id: id } }).catch(() => []),
-      api.get('/api/pedido_parcelas', { query: { pedido_id: id } }).catch(() => [])
-    ]);
-    for (const item of Array.isArray(itens) ? itens : []) {
-      if (item?.id) await api.delete(`/api/pedidos_itens/${item.id}`).catch(() => {});
-    }
-    for (const parc of Array.isArray(parcelas) ? parcelas : []) {
-      if (parc?.id) await api.delete(`/api/pedido_parcelas/${parc.id}`).catch(() => {});
-    }
-
-    await api.delete(`/api/pedidos/${id}`);
-    res.json({ success: true });
+    const { removidos, avisos } = await excluirPedidoEmCascata(api, id);
+    res.json({ success: true, removidos, avisos });
   } catch (err) {
     console.error('Erro ao excluir pedido:', err);
-    res.status(err.status || 500).json({ error: 'Erro ao excluir pedido' });
+    res.status(err.status || 500).json({
+      error: 'Erro ao excluir pedido',
+      // O motivo real do banco vai junto: sem ele, restava "500" na tela e a
+      // causa (qual chave estrangeira prendeu) ficava só no log.
+      detalhe: err?.body?.detalhe || err?.message || null
+    });
   }
 });
 

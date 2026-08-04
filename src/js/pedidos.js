@@ -339,12 +339,24 @@ async function carregarPedidos() {
                     if (!ok) return;
                     try {
                         const resp = await fetchApi(`/api/pedidos/${encodeURIComponent(p.id)}`, { method: 'DELETE' });
-                        if (!resp.ok) throw new Error(await resp.text());
+                        const corpo = await resp.json().catch(() => null);
+                        if (!resp.ok) {
+                            // O motivo vem do backend (qual chave prendeu, ou
+                            // "restrito ao Sup Admin"). Sem ele sobrava só
+                            // "não foi possível" e não dava para agir.
+                            throw new Error(corpo?.detalhe || corpo?.error || `HTTP ${resp.status}`);
+                        }
                         window.showToast?.(`Pedido ${p.numero} excluído.`, 'success');
+                        // Se alguma dependente resistiu, o pedido saiu mas
+                        // sobrou lixo: é melhor dizer do que fingir que não.
+                        if (Array.isArray(corpo?.avisos) && corpo.avisos.length) {
+                            console.warn('Exclusão do pedido com avisos:', corpo.avisos);
+                            window.showToast?.(`Excluído com ${corpo.avisos.length} aviso(s). Veja o console.`, 'info');
+                        }
                         carregarPedidos();
                     } catch (err) {
                         console.error('Erro ao excluir pedido', err);
-                        window.showToast?.('Não foi possível excluir o pedido.', 'error');
+                        window.showToast?.(err?.message || 'Não foi possível excluir o pedido.', 'error');
                     }
                 });
             });

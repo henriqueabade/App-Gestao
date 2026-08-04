@@ -211,7 +211,31 @@ function exigirPermissao(chaveOuFn) {
   };
 }
 
+/**
+ * Guarda de rota para o que SÓ o Sup Admin pode fazer.
+ *
+ * Vale junto com `exigirPermissao`, não no lugar dela: a permissão diz que a
+ * ação está habilitada para o modelo; esta diz que o perfil é o certo. Em
+ * exclusão irreversível, uma configuração errada de modelo não pode ser a única
+ * coisa entre o usuário e o dado apagado.
+ */
+function exigirSupAdmin(req, res, next) {
+  carregarUsuarioAtual(req)
+    .then(usuario => {
+      if (permissoesRepo.isSupAdmin(usuario)) return next();
+      return res.status(403).json({
+        error: 'Ação restrita ao Sup Admin',
+        code: 'FORBIDDEN_SUP_ADMIN'
+      });
+    })
+    .catch(err => {
+      console.error('[permissoes] falha ao verificar Sup Admin:', err?.message || err);
+      res.status(403).json({ error: 'Ação restrita ao Sup Admin', code: 'FORBIDDEN_SUP_ADMIN' });
+    });
+}
+
 module.exports = router;
 module.exports.exigirPermissao = exigirPermissao;
+module.exports.exigirSupAdmin = exigirSupAdmin;
 module.exports.obterPermissoesEfetivas = obterPermissoesEfetivas;
 module.exports.limparCachePermissoes = limparCache;
