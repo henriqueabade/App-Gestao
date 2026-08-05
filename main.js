@@ -3505,6 +3505,67 @@ ipcMain.handle('perfil:remover-imagem', () =>
   requestAuthenticatedProfile('/api/perfil/imagem', { method: 'DELETE' })
 );
 
+/**
+ * Foto de OUTRO usuário (cadastro pelo Sup Admin no modal "Novo usuário").
+ *
+ * Mesmo caminho que funciona em Configurações: multipart para o servidor, que
+ * é quem grava a imagem. Antes a dataURL era enviada no INSERT e ia parar na
+ * coluna como texto — não é assim que a foto sobe.
+ *
+ * Duas diferenças em relação a `perfil:enviar-imagem`:
+ *   - o alvo é o id do usuário criado, não o dono do token;
+ *   - NÃO usa requestAuthenticatedProfile, porque aquele helper grava a
+ *     resposta em currentUserSession — a sessão do Sup Admin passaria a ser a
+ *     do usuário recém-criado.
+ */
+ipcMain.handle('usuarios:enviar-imagem', async (_event, payload) => {
+  // Trocar a foto de outra pessoa é a mesma alçada de cadastrá-la.
+  if (!(await verificarPermissaoIpc('usuarios.create'))) {
+    const erro = new Error('Você não tem permissão para esta ação.');
+    erro.status = 403;
+    throw erro;
+  }
+
+  const usuarioId = Number(payload?.usuarioId);
+  if (!Number.isInteger(usuarioId) || usuarioId <= 0) {
+    throw new Error('Usuário inválido para o envio da imagem.');
+  }
+
+  const type = String(payload?.type || '').toLowerCase();
+  const bytes = payload?.bytes instanceof Uint8Array
+    ? payload.bytes
+    : new Uint8Array(payload?.bytes || []);
+
+  if (!PROFILE_IMAGE_TYPES.has(type)) throw new Error('Selecione uma imagem JPG, PNG ou WebP.');
+  if (!bytes.byteLength || bytes.byteLength > PROFILE_IMAGE_MAX_BYTES) {
+    throw new Error('A imagem deve ter no máximo 5 MB.');
+  }
+
+  const token = getToken();
+  if (!token) {
+    const error = new Error('Sessão expirada. Entre novamente.');
+    error.status = 401;
+    throw error;
+  }
+
+  const formData = new FormData();
+  formData.append('imagem', new Blob([bytes], { type }), String(payload?.name || 'perfil'));
+
+  const response = await fetch(`https://api.santissimodecor.com.br/api/perfil/imagem/${usuarioId}`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body: formData
+  });
+
+  const corpo = await response.json().catch(() => null);
+  if (!response.ok) {
+    const error = new Error(corpo?.message || corpo?.erro || 'Não foi possível enviar a foto do usuário.');
+    error.status = response.status;
+    throw error;
+  }
+  return unwrapProfileUser(corpo);
+});
+
 ipcMain.handle('registrar-usuario', async (_event, dados) => {
   try {
     await registrarUsuario(dados.name, dados.email, dados.password);

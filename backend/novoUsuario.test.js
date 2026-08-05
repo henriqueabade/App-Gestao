@@ -20,7 +20,7 @@ const CAMINHOS = {
   permissoes: require.resolve('./permissionsController')
 };
 
-async function montar({ existentes = [], permitir = true, falharFoto = false } = {}) {
+async function montar({ existentes = [], permitir = true } = {}) {
   const recebidos = [];
 
   const upstream = http.createServer((req, res) => {
@@ -28,11 +28,6 @@ async function montar({ existentes = [], permitir = true, falharFoto = false } =
     req.on('data', p => { corpo += p; });
     req.on('end', () => {
       recebidos.push({ metodo: req.method, url: req.url, corpo: corpo ? JSON.parse(corpo) : null });
-
-      if (req.method === 'PUT' && falharFoto) {
-        res.writeHead(500, { 'content-type': 'application/json' });
-        return res.end(JSON.stringify({ error: 'upload indisponível' }));
-      }
 
       res.writeHead(200, { 'content-type': 'application/json' });
       if (req.method === 'GET') return res.end(JSON.stringify(existentes));
@@ -186,53 +181,25 @@ test('valida os campos obrigatórios antes de tocar no banco', async () => {
   }
 });
 
-test('a foto NÃO vai no INSERT: sobe pelo endpoint de avatar do usuário criado', async () => {
-  const pngMinimo = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUg==';
-
-  const ok = await montar();
+test('nenhuma imagem entra no INSERT e o id volta para a etapa da foto', async () => {
+  const ctx = await montar();
   try {
-    const resposta = await cadastrar(ok.porta, { ...VALIDO, avatar: pngMinimo });
-    assert.strictEqual(resposta.status, 201);
-
-    // O INSERT tem de sair limpo — era aqui que a dataURL ia parar na coluna errada.
-    const criacao = ok.recebidos.find(r => r.metodo === 'POST');
-    assert.strictEqual(criacao.corpo.foto_usuario, undefined, 'a foto não pode ir no INSERT');
-    assert.strictEqual(criacao.corpo.avatar_version, undefined, 'nem a versão da foto');
-
-    // A imagem sobe depois, pelo endpoint próprio, já com o id retornado.
-    const envioFoto = ok.recebidos.find(r => r.metodo === 'PUT');
-    assert.ok(envioFoto, 'deveria ter chamado o endpoint de avatar');
-    assert.match(envioFoto.url, /\/api\/usuarios\/77\/avatar/, 'deve mirar o usuário recém-criado');
-    assert.strictEqual(envioFoto.corpo.avatar, pngMinimo);
-    assert.ok(envioFoto.corpo.avatar_version, 'deveria versionar para quebrar cache');
-
-    assert.strictEqual((await resposta.json()).aviso, undefined, 'sem aviso quando a foto sobe');
-  } finally {
-    await ok.encerrar();
-  }
-
-  const ruim = await montar();
-  try {
-    const resposta = await cadastrar(ruim.porta, { ...VALIDO, avatar: 'data:image/gif;base64,R0lGOD' });
-    assert.strictEqual(resposta.status, 400);
-    assert.match((await resposta.json()).error, /PNG ou JPEG/i);
-  } finally {
-    await ruim.encerrar();
-  }
-});
-
-test('falha no envio da foto não desfaz o cadastro — avisa e segue', async () => {
-  const ctx = await montar({ falharFoto: true });
-  try {
+    // Mesmo que a tela mande algo parecido com foto, não pode ir para o banco:
+    // a imagem sobe em multipart pelo servidor, não como texto numa coluna.
     const resposta = await cadastrar(ctx.porta, {
       ...VALIDO,
       avatar: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUg=='
     });
+    assert.strictEqual(resposta.status, 201);
 
-    assert.strictEqual(resposta.status, 201, 'o usuário foi criado e já pode entrar');
-    const corpo = await resposta.json();
-    assert.match(corpo.aviso, /foto/i, 'deveria avisar que a foto não subiu');
-    assert.ok(ctx.recebidos.some(r => r.metodo === 'POST'), 'a criação tem de permanecer');
+    const criacao = ctx.recebidos.find(r => r.metodo === 'POST');
+    assert.strictEqual(criacao.corpo.foto_usuario, undefined, 'a foto não pode ir no INSERT');
+    assert.strictEqual(criacao.corpo.avatar, undefined, 'nem em outro campo de imagem');
+    assert.strictEqual(criacao.corpo.avatar_version, undefined, 'nem a versão da foto');
+
+    // Sem o id a tela não conseguiria enviar a imagem em seguida.
+    assert.strictEqual((await resposta.json()).id, 77, 'deveria devolver o id do usuário criado');
+    assert.ok(!ctx.recebidos.some(r => r.metodo === 'PUT'), 'o cadastro não mexe em avatar');
   } finally {
     await ctx.encerrar();
   }

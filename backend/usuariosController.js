@@ -928,9 +928,6 @@ function validarNovoUsuario(body = {}) {
   if (senha.length < 6) recusar('A senha deve ter ao menos 6 caracteres.');
   if (!perfil) recusar('Selecione o perfil do usuário.');
 
-  const avatarBruto = body.avatar || body.foto_usuario || '';
-  const avatar = texto(avatarBruto) ? validateAvatarPayload(avatarBruto) : null;
-
   const modeloId = Number(body.modeloPermissoesId ?? body.modelo_permissoes_id);
 
   return {
@@ -940,7 +937,6 @@ function validarNovoUsuario(body = {}) {
     perfil,
     telefone: texto(body.telefone),
     observacoes: texto(body.observacoes ?? body.descricao),
-    avatar,
     modeloPermissoesId: Number.isInteger(modeloId) && modeloId > 0 ? modeloId : null
   };
 }
@@ -999,45 +995,19 @@ router.post('/', exigirPermissaoUsuarios('usuarios.create'), async (req, res) =>
 
     const criado = await api.post('/api/usuarios', payload);
 
-    // ------------------------------------------------------------------
-    // Foto: vai em uma etapa separada, pelo endpoint de avatar.
-    //
-    // Antes eu enfiava a dataURL direto em `foto_usuario` no INSERT — errado
-    // por dois motivos: a coluna guarda os BYTES da imagem (o leitor em
-    // avatarToRenderableSource trata Buffer e `\x` hexadecimal), e quem grava
-    // ali é o servidor, não o cliente. O caminho certo é o mesmo endpoint que
-    // o app já usa para trocar a própria foto.
-    //
-    // Falha aqui NÃO desfaz o cadastro: o usuário já existe e já pode entrar;
-    // devolvemos um aviso para a tela contar o que faltou.
-    // ------------------------------------------------------------------
-    let avisoFoto = null;
-    const idCriado = criado?.id ?? criado?.usuario?.id ?? null;
-
-    if (dados.avatar && idCriado) {
-      try {
-        const avatarVersion = Date.now();
-        await api.put(`/api/usuarios/${idCriado}/avatar`, {
-          avatar: dados.avatar,
-          avatarVersion,
-          avatar_version: avatarVersion,
-          foto_usuario: dados.avatar
-        });
-      } catch (fotoErr) {
-        console.error('Usuário criado, mas a foto não subiu:', fotoErr?.message || fotoErr);
-        avisoFoto = 'O usuário foi cadastrado, mas não foi possível enviar a foto. Edite o usuário para tentar de novo.';
-      }
-    } else if (dados.avatar && !idCriado) {
-      avisoFoto = 'O usuário foi cadastrado, mas a foto não pôde ser enviada (id não retornado pela API).';
-    }
+    // A FOTO NÃO PASSA POR AQUI. Ela sobe depois, em multipart, pelo mesmo
+    // caminho que Configurações usa (IPC 'usuarios:enviar-imagem' → servidor),
+    // porque quem grava a imagem é o servidor. Mandar a dataURL no INSERT
+    // gravava texto numa coluna que guarda bytes — era esse o defeito.
+    // Devolvemos o id para a tela conseguir enviar a imagem em seguida.
 
     // O novo usuário já tem perfil: o cache de permissões precisa enxergá-lo.
     try { require('./permissionsController').limparCachePermissoes(); } catch (_) {}
 
     res.status(201).json({
       usuario: normalizeAvatar(criado || {}),
-      message: 'Usuário cadastrado com sucesso.',
-      ...(avisoFoto ? { aviso: avisoFoto } : {})
+      id: criado?.id ?? criado?.usuario?.id ?? null,
+      message: 'Usuário cadastrado com sucesso.'
     });
   } catch (err) {
     console.error('Erro ao criar usuário:', err);

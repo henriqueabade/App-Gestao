@@ -135,6 +135,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   login: (email, password) => ipcRenderer.invoke('login-usuario', { email, password }),
   obterPerfil: () => ipcRenderer.invoke('perfil:obter'),
   enviarImagemPerfil: (file) => ipcRenderer.invoke('perfil:enviar-imagem', file),
+  // Foto de outro usuário (cadastro pelo Sup Admin): mesmo multipart, mirando o id.
+  enviarImagemUsuario: (payload) => ipcRenderer.invoke('usuarios:enviar-imagem', payload),
   removerImagemPerfil: () => ipcRenderer.invoke('perfil:remover-imagem'),
   register: async (name, email, password) => {
     const result = await ipcRenderer.invoke('registrar-usuario', { name, email, password });

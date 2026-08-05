@@ -10,8 +10,9 @@
   const overlay = document.getElementById('novoUsuarioOverlay');
   if (!overlay) return;
 
-  const AVATAR_MAX_BYTES = 1_048_576;               // igual ao limite do backend
-  const TIPOS_FOTO = ['image/png', 'image/jpeg'];
+  // Mesmos limites de Configurações — é o mesmo endpoint do servidor.
+  const AVATAR_MAX_BYTES = 5 * 1024 * 1024;
+  const TIPOS_FOTO = new Set(['image/jpeg', 'image/png', 'image/webp']);
 
   async function fetchApi(path, options) {
     const baseUrl = await window.apiConfig.getApiBaseUrl();
@@ -34,7 +35,10 @@
   const mensagemEl = document.getElementById('novoUsuarioMensagem');
   const adicionarBtn = document.getElementById('adicionarNovoUsuario');
 
-  let fotoDataUrl = null;
+  // Guardamos o ARQUIVO, não uma dataURL: a imagem sobe em multipart para o
+  // servidor depois que o usuário é criado, igual a Configurações.
+  let fotoArquivo = null;
+  let fotoPreviewUrl = null;
 
   // ---------------------------------------------------------------- mensagens
   function exibirMensagem(tipo, texto) {
@@ -51,6 +55,7 @@
   // ------------------------------------------------------------------ fechar
   const close = () => {
     document.removeEventListener('keydown', onEscKey);
+    descartarPreview();          // objectURL não some sozinho
     Modal.close('novoUsuario');
   };
 
@@ -78,13 +83,18 @@
       .toUpperCase() || 'US';
   }
 
+  function descartarPreview() {
+    if (fotoPreviewUrl) URL.revokeObjectURL(fotoPreviewUrl);
+    fotoPreviewUrl = null;
+  }
+
   function pintarAvatar() {
     if (!avatarEl) return;
     avatarEl.innerHTML = '';
-    if (fotoDataUrl) {
+    if (fotoPreviewUrl) {
       avatarEl.classList.add('has-image');
       const img = document.createElement('img');
-      img.src = fotoDataUrl;
+      img.src = fotoPreviewUrl;
       img.alt = 'Foto do novo usuário';
       img.className = 'usuario-avatar__image';
       avatarEl.appendChild(img);
@@ -96,35 +106,35 @@
     }
   }
 
-  inputs.nome?.addEventListener('input', () => { if (!fotoDataUrl) pintarAvatar(); });
+  inputs.nome?.addEventListener('input', () => { if (!fotoPreviewUrl) pintarAvatar(); });
 
   fotoInput?.addEventListener('change', () => {
     const arquivo = fotoInput.files?.[0];
     if (!arquivo) return;
 
-    if (!TIPOS_FOTO.includes(arquivo.type)) {
-      exibirMensagem('erro', 'A foto precisa ser PNG ou JPEG.');
+    if (!TIPOS_FOTO.has(String(arquivo.type || '').toLowerCase())) {
+      exibirMensagem('erro', 'Escolha uma imagem JPG, PNG ou WebP.');
       fotoInput.value = '';
       return;
     }
     if (arquivo.size > AVATAR_MAX_BYTES) {
-      exibirMensagem('erro', 'A foto excede o limite de 1 MB.');
+      exibirMensagem('erro', 'A imagem deve ter no máximo 5 MB.');
       fotoInput.value = '';
       return;
     }
 
-    const leitor = new FileReader();
-    leitor.onload = () => {
-      fotoDataUrl = String(leitor.result || '') || null;
-      limparMensagem();
-      pintarAvatar();
-    };
-    leitor.onerror = () => exibirMensagem('erro', 'Não foi possível ler a imagem escolhida.');
-    leitor.readAsDataURL(arquivo);
+    // Pré-visualização por objectURL, como em Configurações: nada de converter
+    // para dataURL — o que sobe é o arquivo.
+    descartarPreview();
+    fotoArquivo = arquivo;
+    fotoPreviewUrl = URL.createObjectURL(arquivo);
+    limparMensagem();
+    pintarAvatar();
   });
 
   removerFotoBtn?.addEventListener('click', () => {
-    fotoDataUrl = null;
+    fotoArquivo = null;
+    descartarPreview();
     if (fotoInput) fotoInput.value = '';
     pintarAvatar();
   });
@@ -170,8 +180,7 @@
       senha: inputs.senha?.value || '',
       senhaConfirma: inputs.senhaConfirma?.value || '',
       observacoes: inputs.observacoes?.value.trim() || '',
-      modeloPermissoesId: opcao?.dataset?.modeloId ? Number(opcao.dataset.modeloId) : null,
-      avatar: fotoDataUrl
+      modeloPermissoesId: opcao?.dataset?.modeloId ? Number(opcao.dataset.modeloId) : null
     };
   }
 
@@ -196,8 +205,7 @@
         perfil: dados.perfil,
         senha: dados.senha,
         observacoes: dados.observacoes,
-        modeloPermissoesId: dados.modeloPermissoesId,
-        avatar: dados.avatar || undefined
+        modeloPermissoesId: dados.modeloPermissoesId
       })
     });
 
@@ -208,6 +216,24 @@
       throw new Error(corpo?.error || 'Não foi possível cadastrar o usuário.');
     }
     return corpo;
+  }
+
+  /**
+   * Sobe a foto pelo MESMO caminho de Configurações: multipart para o
+   * servidor, que é quem grava a imagem. A única diferença é o alvo — o
+   * usuário recém-criado, e não o dono da sessão.
+   */
+  async function enviarFoto(usuarioId) {
+    if (!fotoArquivo || !usuarioId) return;
+    if (typeof window.electronAPI?.enviarImagemUsuario !== 'function') {
+      throw new Error('Recurso de imagem de perfil indisponível.');
+    }
+    await window.electronAPI.enviarImagemUsuario({
+      usuarioId,
+      name: fotoArquivo.name,
+      type: fotoArquivo.type,
+      bytes: new Uint8Array(await fotoArquivo.arrayBuffer())
+    });
   }
 
   // Trava do fluxo inteiro (inclui a caixa de diálogo): sem ela um duplo clique
@@ -249,12 +275,24 @@
       const executar = async () => {
         const resultado = await enviar(dados);
 
-        // O cadastro pode dar certo e a foto não subir; nesse caso o backend
-        // devolve um aviso. Mostramos e demoramos mais para fechar, para dar
-        // tempo de ler — o usuário já está criado e já consegue entrar.
-        if (resultado?.aviso) {
-          exibirMensagem('erro', resultado.aviso);
-          window.showToast?.(resultado.aviso, 'warning');
+        // A foto é uma segunda etapa. Se ela falhar, o cadastro NÃO é desfeito
+        // — o usuário já existe e já consegue entrar; avisamos o que faltou e
+        // demoramos mais para fechar, para dar tempo de ler.
+        let aviso = null;
+        const idCriado = resultado?.id ?? resultado?.usuario?.id ?? null;
+        if (fotoArquivo) {
+          try {
+            await enviarFoto(idCriado);
+          } catch (fotoErr) {
+            console.error('Usuário criado, mas a foto não subiu:', fotoErr);
+            aviso = `Usuário cadastrado, mas a foto não subiu (${fotoErr?.message || 'falha no envio'}). `
+                  + 'Edite o usuário para tentar de novo.';
+          }
+        }
+
+        if (aviso) {
+          exibirMensagem('erro', aviso);
+          window.showToast?.(aviso, 'warning');
         } else {
           exibirMensagem('sucesso', resultado?.message || 'Usuário cadastrado com sucesso!');
           window.showToast?.(`Usuário ${dados.nome} cadastrado com sucesso.`, 'success');
@@ -263,7 +301,7 @@
         window.dispatchEvent(new CustomEvent('usuarioAtualizado', {
           detail: { criado: true, usuario: resultado?.usuario || null }
         }));
-        setTimeout(close, resultado?.aviso ? 2800 : 400);
+        setTimeout(close, aviso ? 2800 : 400);
       };
 
       // Véu de carregamento padrão do app (a logo em órbita), o mesmo dos
