@@ -98,6 +98,80 @@
     }
   }
 
+  /**
+   * Confirmação no padrão do app, no lugar de `window.confirm`.
+   *
+   * Mesma moldura dos outros diálogos (vidro, borda vermelha para ação
+   * destrutiva) e o mesmo comportamento: Esc e clique fora cancelam. Devolve
+   * uma promessa para o chamador poder `await`.
+   */
+  function confirmarNoPadrao(linhas = []) {
+    return new Promise(resolve => {
+      const overlay = document.createElement('div');
+      overlay.className = 'app-message-overlay fixed inset-0 bg-black/50 flex items-center justify-center p-4';
+      overlay.style.zIndex = 'var(--z-dialog)';
+      overlay.innerHTML = `
+        <div class="max-w-md w-full glass-surface backdrop-blur-xl rounded-2xl border border-red-500/20 ring-1 ring-red-500/30 shadow-2xl/40 animate-modalFade">
+          <div class="p-6 space-y-4">
+            <div class="text-center">
+              <h3 class="text-lg font-semibold text-red-400">Confirmar cancelamento</h3>
+              <p class="text-sm text-gray-300 mt-1">Esta ação reverte peças e insumos e não pode ser desfeita.</p>
+            </div>
+            ${linhas.length ? `
+              <ul class="space-y-1 text-sm text-gray-200 bg-white/5 border border-white/10 rounded-lg p-3">
+                ${linhas.map(l => `<li>• ${l}</li>`).join('')}
+              </ul>` : ''}
+            <div class="flex justify-center gap-3 pt-1">
+              <button type="button" data-acao="nao" class="btn-neutral px-5 py-2 rounded-lg text-white font-medium">Voltar</button>
+              <button type="button" data-acao="sim" class="btn-danger px-5 py-2 rounded-lg text-white font-medium">Confirmar cancelamento</button>
+            </div>
+          </div>
+        </div>`;
+      document.body.appendChild(overlay);
+
+      const encerrar = valor => {
+        document.removeEventListener('keydown', aoTeclar);
+        overlay.remove();
+        resolve(valor);
+      };
+      function aoTeclar(e) { if (e.key === 'Escape') encerrar(false); }
+
+      overlay.querySelector('[data-acao="sim"]')?.addEventListener('click', () => encerrar(true));
+      overlay.querySelector('[data-acao="nao"]')?.addEventListener('click', () => encerrar(false));
+      overlay.addEventListener('click', e => { if (e.target === overlay) encerrar(false); });
+      document.addEventListener('keydown', aoTeclar);
+    });
+  }
+
+  /**
+   * Em que ponto da rota esta linha vai voltar, por extenso.
+   *
+   * "Apaga Velas Silvia" repetido três vezes no resumo não diz nada: é o
+   * ÚLTIMO ITEM que distingue a peça pronta da que para na Montagem.
+   */
+  function rotuloDoDestino(key) {
+    const info = itemInfo.get(String(key));
+    const dados = estornoPorItem.get(String(info?.item?.id ?? key));
+    if (!dados?.rota?.length) return '';
+
+    const state = destinationState.get(String(key));
+    const escolhida = (state?.stockPorEtapa || [])[0];
+    const total = dados.rota.length;
+
+    // Sem escolha explícita, volta como estava: o ponto de origem do grupo.
+    const ordem = escolhida && escolhida.ordem !== null && escolhida.ordem !== undefined
+      ? Number(escolhida.ordem)
+      : Number(info?.grupo?.ordem_origem ?? total);
+
+    if (!(ordem > 0)) return 'Não volta ao estoque — só o material é estornado';
+
+    const passo = dados.rota.find(p => Number(p.ordem) === ordem);
+    if (!passo) return '';
+    const faltam = total - ordem;
+    return `${ordem}/${total} — ${passo.insumo_nome}`
+      + (faltam > 0 ? ` · ${faltam} item(ns) voltam para a matéria-prima` : ' · peça pronta');
+  }
+
   /** Menor ponto em que ALGUMA unidade desta peça pode voltar. */
   function pisoDoItem(key) {
     const dados = estornoPorItem.get(String(key));
@@ -963,8 +1037,15 @@
         const btn = document.createElement('button');
         btn.type = 'button';
         btn.className = 'w-full flex items-center justify-between gap-3 bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-left text-xs text-gray-200 hover:border-primary/40 transition';
+        // O nome do produto se repete em todas as linhas quando o item veio de
+        // pontos diferentes da rota — três linhas iguais, sem dizer qual é qual.
+        // O DESTINO escolhido é o que as distingue.
+        const destino = rotuloDoDestino(item.key);
         btn.innerHTML = `
-          <span>${item.name}</span>
+          <span class="flex flex-col">
+            <span>${item.name}</span>
+            ${destino ? `<span class="text-[11px] text-emerald-200/80">${destino}</span>` : ''}
+          </span>
           <span class="text-white font-semibold">${formatUnitsLabel(item.quantity)}</span>
         `;
         btn.addEventListener('click', () => handleSimpleAction(item.key, 'stock'));
@@ -1591,18 +1672,28 @@
       });
     });
 
-    const messageLines = ['Confirmar cancelamento do pedido?'];
-    if (totalReallocate > 0) messageLines.push(`• ${formatUnitsLabel(totalReallocate)} serão realocadas para outros pedidos.`);
-    if (totalStock > 0) messageLines.push(`• ${formatUnitsLabel(totalStock)} retornarão ao estoque.`);
-    if (totalDiscard > 0) messageLines.push(`• ${formatUnitsLabel(totalDiscard)} serão descartadas.`);
+    const linhas = [];
+    if (totalReallocate > 0) linhas.push(`${formatUnitsLabel(totalReallocate)} serão realocadas para outros pedidos.`);
+    if (totalStock > 0) linhas.push(`${formatUnitsLabel(totalStock)} retornarão ao estoque.`);
+    if (totalDiscard > 0) linhas.push(`${formatUnitsLabel(totalDiscard)} serão descartadas.`);
 
-    if (!window.confirm(messageLines.join('\n'))) return;
+    // `window.confirm` é a caixa do sistema operacional: fundo branco, botões
+    // em inglês, nada a ver com o resto do app — e num Electron ela ainda
+    // congela a janela inteira enquanto está aberta.
+    if (!(await confirmarNoPadrao(linhas))) return;
 
     const originalText = confirmBtn.textContent;
     confirmBtn.disabled = true;
     confirmBtn.textContent = 'Cancelando...';
 
+    // O véu padrão do app, com a logo: o estorno percorre lotes e insumos um a
+    // um e leva segundos. Sem ele a tela fica muda e convida a clicar de novo.
+    const comVeu = window.BotaoAcao?.comCarregamento
+      ? (fn) => window.BotaoAcao.comCarregamento(fn, `Cancelando o pedido ${pedido.numero || ''}...`.trim())
+      : (fn) => fn();
+
     try {
+      await comVeu(async () => {
       const resp = await fetchApi(`/api/pedidos/${pedidoId}/status`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -1637,9 +1728,13 @@
         }
       }
       close();
+      });
     } catch (err) {
       console.error('Erro ao cancelar pedido', err);
-      if (typeof showToast === 'function') showToast('Erro ao cancelar pedido.', 'error');
+      // A causa real vem do backend (qual chave, ou o que falhou no estorno).
+      if (typeof showToast === 'function') {
+        showToast(err?.message || 'Erro ao cancelar pedido.', 'error');
+      }
       confirmBtn.disabled = false;
       confirmBtn.textContent = originalText;
       return;

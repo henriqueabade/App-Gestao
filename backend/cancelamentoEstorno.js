@@ -52,8 +52,25 @@ function arredondar(valor) {
   return Math.round((paraNumero(valor) + Number.EPSILON) * 10000) / 10000;
 }
 
-/** Rota do produto, ordenada. `passo_id` é o id da linha em produtos_insumos. */
-async function carregarRota(api, produtoId, cache) {
+/** Toda a matéria-prima indexada por id, numa leitura só. */
+async function carregarInsumos(api) {
+  const lista = await api.get('/api/materia_prima').catch(() => []);
+  const porId = new Map();
+  for (const m of (Array.isArray(lista) ? lista : [])) {
+    if (m?.id !== undefined && m?.id !== null) porId.set(Number(m.id), m);
+  }
+  return porId;
+}
+
+/**
+ * Rota do produto, ordenada. `passo_id` é o id da linha em produtos_insumos.
+ *
+ * O NOME e o PROCESSO de cada passo vêm da matéria-prima e viajam junto: é com
+ * eles que o lote criado no estorno nasce completo. Sem o processo, o lote
+ * entrava no estoque com a coluna "Processo atual" vazia — uma peça sem etapa,
+ * que a tela de Detalhe de Estoque mostra como "—" e ninguém sabe o que é.
+ */
+async function carregarRota(api, produtoId, cache, insumos) {
   const chave = Number(produtoId);
   if (cache.has(chave)) return cache.get(chave);
 
@@ -61,12 +78,17 @@ async function carregarRota(api, produtoId, cache) {
     .get('/api/produtos_insumos', { query: { produto_id: chave } })
     .catch(() => []);
   const rota = (Array.isArray(bruta) ? bruta : [])
-    .map(p => ({
-      passo_id: Number(p.id),
-      insumo_id: Number(p.insumo_id),
-      por_unidade: paraNumero(p.quantidade),
-      ordem: paraNumero(p.ordem_insumo)
-    }))
+    .map(p => {
+      const materia = insumos?.get(Number(p.insumo_id)) || null;
+      return {
+        passo_id: Number(p.id),
+        insumo_id: Number(p.insumo_id),
+        insumo_nome: materia?.nome || `Insumo ${p.insumo_id}`,
+        processo: materia?.processo || '',
+        por_unidade: paraNumero(p.quantidade),
+        ordem: paraNumero(p.ordem_insumo)
+      };
+    })
     .filter(p => Number.isFinite(p.insumo_id))
     .sort((a, b) => a.ordem - b.ordem);
 
@@ -215,10 +237,13 @@ async function estornarCancelamento(api, {
 
   const porItem = agruparAcoes(acoes);
 
-  const [itens, doEstoque, reservas] = await Promise.all([
+  const [itens, doEstoque, reservas, insumos] = await Promise.all([
     api.get('/api/pedidos_itens', { query: { pedido_id: pedidoId } }).catch(() => []),
     api.get('/api/pedido_itens_ext', { query: { id_pedido: pedidoId } }).catch(() => []),
-    api.get('/api/reservas_estoque', { query: { pedido_id: pedidoId } }).catch(() => [])
+    api.get('/api/reservas_estoque', { query: { pedido_id: pedidoId } }).catch(() => []),
+    // Nome e processo de cada insumo: é com eles que o lote criado no estorno
+    // nasce completo, em vez de entrar no estoque sem etapa.
+    carregarInsumos(api)
   ]);
 
   const listaItens = (Array.isArray(itens) ? itens : [])
@@ -249,7 +274,7 @@ async function estornarCancelamento(api, {
     if (!decisoes || !decisoes.length) continue;
 
     const produtoId = Number(item.produto_id);
-    const rota = await carregarRota(api, produtoId, cacheRotas);
+    const rota = await carregarRota(api, produtoId, cacheRotas, insumos);
     const ordemFinal = rota.length ? rota[rota.length - 1].ordem : 0;
 
     const grupos = montarGrupos({
@@ -439,16 +464,12 @@ async function estornarCancelamento(api, {
  * onde cada unidade veio (o PISO do estágio) e a rota inteira (o TETO).
  */
 async function opcoesDeEstorno(api, pedidoId) {
-  const [itens, doEstoque, reservas, materias] = await Promise.all([
+  const [itens, doEstoque, reservas, insumos] = await Promise.all([
     api.get('/api/pedidos_itens', { query: { pedido_id: pedidoId } }).catch(() => []),
     api.get('/api/pedido_itens_ext', { query: { id_pedido: pedidoId } }).catch(() => []),
     api.get('/api/reservas_estoque', { query: { pedido_id: pedidoId } }).catch(() => []),
-    api.get('/api/materia_prima').catch(() => [])
+    carregarInsumos(api)
   ]);
-
-  const nomeInsumo = new Map(
-    (Array.isArray(materias) ? materias : []).map(m => [Number(m.id), m])
-  );
 
   const extPorItem = new Map();
   for (const reg of (Array.isArray(doEstoque) ? doEstoque : [])) {
@@ -466,7 +487,7 @@ async function opcoesDeEstorno(api, pedidoId) {
 
   for (const item of (Array.isArray(itens) ? itens : [])) {
     const chave = String(item.id);
-    const rota = await carregarRota(api, item.produto_id, cacheRotas);
+    const rota = await carregarRota(api, item.produto_id, cacheRotas, insumos);
     const grupos = montarGrupos({
       extDoItem: extPorItem.get(chave) || [],
       reserva: reservaPorItem.get(chave),
@@ -482,8 +503,9 @@ async function opcoesDeEstorno(api, pedidoId) {
       rota: rota.map(p => ({
         ordem: p.ordem,
         insumo_id: p.insumo_id,
-        insumo_nome: nomeInsumo.get(p.insumo_id)?.nome || `Insumo ${p.insumo_id}`,
-        processo: nomeInsumo.get(p.insumo_id)?.processo || ''
+        // A rota já vem com nome e processo resolvidos — ver `carregarRota`.
+        insumo_nome: p.insumo_nome,
+        processo: p.processo
       })),
       grupos: grupos.map(g => ({
         origem: g.origem,

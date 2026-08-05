@@ -47,7 +47,15 @@ function montarApi({ ext = [], reserva = 0, lotes = {} } = {}) {
           : [];
       }
       if (rota === '/api/produtos_insumos') return ROTA;
-      if (rota === '/api/materia_prima') return [];
+      if (rota === '/api/materia_prima') {
+        // Cada insumo tem nome e PROCESSO: é com o processo que o lote criado
+        // no estorno nasce completo.
+        return ROTA.map(p => ({
+          id: p.insumo_id,
+          nome: `Insumo ${p.ordem_insumo}`,
+          processo: p.ordem_insumo >= 13 ? 'Embalagem' : 'Montagem'
+        }));
+      }
       if (rota === '/api/produtos_em_cada_ponto') return Object.values(estado);
       if (rota.startsWith('/api/produtos_em_cada_ponto/')) {
         return estado[Number(rota.split('/').pop())] || { error: 'não encontrado' };
@@ -340,6 +348,28 @@ test('cada grupo recebe a SUA decisão, não a do grupo mais adiantado', async (
   // Passo 8: as 4 parciais (que pararam em 7) + as 2 do zero.
   assert.equal(ins.de(8), 6, '4 parciais + 2 do zero');
   assert.equal(ins.de(15), 6, 'e a pronta não entra em nenhum: ela não gastou nada');
+});
+
+test('o lote criado no estorno nasce COMPLETO: processo, insumo e produto', async () => {
+  const api = montarApi({ reserva: 1 });
+  const ins = coletorDeInsumos();
+
+  await estornarCancelamento(api, {
+    pedidoId: 99,
+    acoes: [{ item: { id: 1000 }, action: 'stock', quantity: 1, ordem: 12 }],
+    registrarEntradaInsumo: ins.fn
+  });
+
+  const novo = api.gravacoes.lotesNovos[0];
+  assert.ok(novo, 'o lote tem de ser criado');
+  assert.equal(Number(novo.produto_id), 7);
+  assert.equal(Number(novo.ultimo_insumo_id), passoDaOrdem(12).insumo_id);
+  assert.equal(
+    novo.etapa_id, 'Montagem',
+    'o PROCESSO tem de vir junto: sem ele o lote entra no estoque com a coluna '
+    + '"Processo atual" vazia, e ninguém sabe o que aquela peça é'
+  );
+  assert.ok(novo.data_hora_completa, 'e a data da alteração');
 });
 
 test('opcoesDeEstorno diz o piso e o teto de cada peça', async () => {
