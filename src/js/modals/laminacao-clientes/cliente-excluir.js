@@ -1,4 +1,15 @@
 (function(){
+  /**
+   * Clique protegido: trava o segundo clique e mostra o carregando até a ação
+   * terminar. Exclusão é irreversível e a resposta pode demorar — sem isso a
+   * tela ficava muda e convidava a clicar de novo.
+   */
+  const aoConfirmar = (el, handler) => {
+    if (!el) return;
+    if (window.BotaoAcao?.bind) window.BotaoAcao.bind(el, handler);
+    else el.addEventListener('click', handler);
+  };
+
   const overlay = document.getElementById('excluirClienteOverlay');
   async function fetchApi(path, options) {
     const baseUrl = await window.apiConfig.getApiBaseUrl();
@@ -7,7 +18,7 @@
   const close = () => Modal.close('excluirCliente');
   document.getElementById('cancelarExcluirCliente').addEventListener('click', close);
   document.addEventListener('keydown', function esc(e){ if(e.key==='Escape'){ close(); document.removeEventListener('keydown', esc); } });
-  document.getElementById('confirmarExcluirCliente').addEventListener('click', async () => {
+  aoConfirmar(document.getElementById('confirmarExcluirCliente'), async () => {
     const cliente = window.clienteExcluir;
     if(!cliente) return;
     try{

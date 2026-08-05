@@ -28,6 +28,14 @@ async function revelarAcoesSupAdmin(raiz = document) {
     raiz.querySelectorAll('.acao-sup-admin').forEach(el => el.classList.remove('hidden'));
 }
 
+/** Ver a nota gêmea em pedidos.js. */
+function comCarregamento(fn, texto) {
+    if (window.BotaoAcao?.comCarregamento) {
+        return window.BotaoAcao.comCarregamento(fn, texto);
+    }
+    return fn();
+}
+
 /** Confirmação de exclusão (usada apenas pelo Sup Admin). */
 function confirmarExclusaoSupAdmin(mensagem, cb) {
     const overlay = document.createElement('div');
@@ -312,6 +320,9 @@ async function carregarOrcamentos() {
                 if (!o) return;
                 confirmarExclusaoSupAdmin(`Excluir definitivamente o orçamento ${o.numero}? Esta ação não pode ser desfeita.`, async ok => {
                     if (!ok) return;
+                    // Ver a nota gêmea em pedidos.js: depois do diálogo não há
+                    // botão para marcar, e a espera ficava muda.
+                    await comCarregamento(async () => {
                     try {
                         const resp = await fetchApi(`/api/orcamentos/${encodeURIComponent(o.id)}`, { method: 'DELETE' });
                         const corpo = await resp.json().catch(() => null);
@@ -330,6 +341,7 @@ async function carregarOrcamentos() {
                         console.error('Erro ao excluir orçamento', err);
                         window.showToast?.(err?.message || 'Não foi possível excluir o orçamento.', 'error');
                     }
+                    }, `Excluindo o orçamento ${o.numero}...`);
                 });
             });
         });

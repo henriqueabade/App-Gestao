@@ -128,6 +128,19 @@ async function revelarAcoesSupAdmin(raiz = document) {
     raiz.querySelectorAll('.acao-sup-admin').forEach(el => el.classList.remove('hidden'));
 }
 
+/**
+ * Véu de carregamento durante uma ação longa.
+ *
+ * Se `botaoAcao.js` não estiver carregado a ação ainda roda — sem o aviso
+ * visual, mas sem quebrar. Um recurso de interface não pode impedir a operação.
+ */
+function comCarregamento(fn, texto) {
+    if (window.BotaoAcao?.comCarregamento) {
+        return window.BotaoAcao.comCarregamento(fn, texto);
+    }
+    return fn();
+}
+
 function confirmarExclusaoSupAdmin(mensagem, cb) {
     const overlay = document.createElement('div');
     overlay.className = 'fixed inset-0 bg-black/50 flex items-center justify-center p-4';
@@ -337,6 +350,11 @@ async function carregarPedidos() {
                 if (!p) return;
                 confirmarExclusaoSupAdmin(`Excluir definitivamente o pedido ${p.numero}? Esta ação não pode ser desfeita.`, async ok => {
                     if (!ok) return;
+                    // A exclusão em cascata percorre uma dúzia de tabelas e pode
+                    // levar segundos. O clique na lixeira já terminou e o diálogo
+                    // já fechou, então não há botão para marcar: o véu é o que
+                    // mostra que está em curso e impede um segundo clique.
+                    await comCarregamento(async () => {
                     try {
                         const resp = await fetchApi(`/api/pedidos/${encodeURIComponent(p.id)}`, { method: 'DELETE' });
                         const corpo = await resp.json().catch(() => null);
@@ -358,6 +376,7 @@ async function carregarPedidos() {
                         console.error('Erro ao excluir pedido', err);
                         window.showToast?.(err?.message || 'Não foi possível excluir o pedido.', 'error');
                     }
+                    }, `Excluindo o pedido ${p.numero}...`);
                 });
             });
         });

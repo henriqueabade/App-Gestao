@@ -88,6 +88,36 @@
         pointer-events: none;
       }
       @keyframes botaoAcaoGirar { to { transform: rotate(360deg); } }
+
+      /* Véu de ação em andamento — ver \`comCarregamento\`. */
+      #botaoAcaoVeu {
+        position: fixed;
+        inset: 0;
+        z-index: 3000;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 0.9rem;
+        background: rgba(0, 0, 0, 0.55);
+        backdrop-filter: blur(2px);
+        cursor: progress;
+      }
+      #botaoAcaoVeu .botaoAcaoVeu-roda {
+        width: 2.5rem;
+        height: 2.5rem;
+        border-radius: 9999px;
+        border: 3px solid rgba(255, 255, 255, 0.25);
+        border-top-color: #fff;
+        animation: botaoAcaoGirar 0.7s linear infinite;
+      }
+      #botaoAcaoVeu .botaoAcaoVeu-texto {
+        color: #fff;
+        font-size: 0.95rem;
+        font-weight: 500;
+        text-align: center;
+        max-width: 22rem;
+      }
     `;
     (document.head || document.documentElement).appendChild(style);
   }
@@ -395,6 +425,52 @@
   }
 
   /**
+   * Véu de "ação em andamento", para quando NÃO existe botão a marcar.
+   *
+   * É o caso das exclusões confirmadas por caixa de diálogo: o usuário clica na
+   * lixeira, o diálogo abre, ele confirma — e só ENTÃO a requisição sai. Nesse
+   * ponto o diálogo já fechou e o clique original terminou há muito tempo, então
+   * não há nem botão nem rastreador para segurar o carregando. O resultado era
+   * um vão de vários segundos com a tela parada e nada indicando que algo estava
+   * acontecendo — tempo em que o usuário clica de novo achando que travou.
+   *
+   * O véu cobre a tela: além de mostrar que está em curso, impede o segundo
+   * clique em qualquer lugar, que é o que se quer numa exclusão.
+   *
+   * @param {Function} fn     ação assíncrona
+   * @param {string}   texto  o que está acontecendo, na voz do usuário
+   */
+  let veuAtivo = 0;
+
+  async function comCarregamento(fn, texto = 'Processando...') {
+    if (typeof fn !== 'function') return undefined;
+
+    injetarEstilos();
+    veuAtivo += 1;
+
+    let veu = document.getElementById('botaoAcaoVeu');
+    if (!veu) {
+      veu = document.createElement('div');
+      veu.id = 'botaoAcaoVeu';
+      veu.setAttribute('role', 'status');
+      veu.setAttribute('aria-live', 'polite');
+      veu.innerHTML = '<div class="botaoAcaoVeu-roda"></div><p class="botaoAcaoVeu-texto"></p>';
+      document.body.appendChild(veu);
+    }
+    const alvoTexto = veu.querySelector('.botaoAcaoVeu-texto');
+    if (alvoTexto) alvoTexto.textContent = texto;
+
+    try {
+      return await fn();
+    } finally {
+      // Contador, não remoção direta: duas ações simultâneas não podem fazer a
+      // primeira a terminar tirar o véu da que ainda está rodando.
+      veuAtivo = Math.max(0, veuAtivo - 1);
+      if (veuAtivo === 0) document.getElementById('botaoAcaoVeu')?.remove();
+    }
+  }
+
+  /**
    * Registra um handler de clique já protegido. Use no lugar de
    * `el.addEventListener('click', handler)` para ações que fazem I/O.
    */
@@ -456,6 +532,7 @@
     run,
     bind,
     bindSubmit,
+    comCarregamento,
     liberar,
     marcarOcupado,
     CLASSE_CARREGANDO

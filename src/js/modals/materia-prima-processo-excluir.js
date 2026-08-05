@@ -1,4 +1,15 @@
 ;(function(){
+  /**
+   * Clique protegido: trava o segundo clique e mostra o carregando até a ação
+   * terminar. Exclusão é irreversível e a resposta pode demorar — sem isso a
+   * tela ficava muda e convidava a clicar de novo.
+   */
+  const aoConfirmar = (el, handler) => {
+    if (!el) return;
+    if (window.BotaoAcao?.bind) window.BotaoAcao.bind(el, handler);
+    else el.addEventListener('click', handler);
+  };
+
   const close = () => Modal.close('excluirProcesso');
 
   document.getElementById('fecharExcluirProcesso').addEventListener('click', close);
@@ -24,7 +35,7 @@
 
   const confirmTxt = document.getElementById('confirmExcluirProcesso');
   let confirm = false;
-  document.getElementById('excluirProcesso').addEventListener('click', async () => {
+  aoConfirmar(document.getElementById('excluirProcesso'), async () => {
     const nome = select.value;
     if (!nome) return;
     if (!confirm) {
