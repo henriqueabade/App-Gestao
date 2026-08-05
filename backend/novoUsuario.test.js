@@ -20,7 +20,7 @@ const CAMINHOS = {
   permissoes: require.resolve('./permissionsController')
 };
 
-async function montar({ existentes = [], permitir = true } = {}) {
+async function montar({ existentes = [], permitir = true, criado = { id: 77, nome: 'Novo', email: 'novo@empresa.com' } } = {}) {
   const recebidos = [];
 
   const upstream = http.createServer((req, res) => {
@@ -31,7 +31,7 @@ async function montar({ existentes = [], permitir = true } = {}) {
 
       res.writeHead(200, { 'content-type': 'application/json' });
       if (req.method === 'GET') return res.end(JSON.stringify(existentes));
-      return res.end(JSON.stringify({ id: 77, nome: 'Novo', email: 'novo@empresa.com' }));
+      return res.end(JSON.stringify(criado));
     });
   });
   await new Promise(r => upstream.listen(0, '127.0.0.1', r));
@@ -200,6 +200,21 @@ test('nenhuma imagem entra no INSERT e o id volta para a etapa da foto', async (
     // Sem o id a tela não conseguiria enviar a imagem em seguida.
     assert.strictEqual((await resposta.json()).id, 77, 'deveria devolver o id do usuário criado');
     assert.ok(!ctx.recebidos.some(r => r.metodo === 'PUT'), 'o cadastro não mexe em avatar');
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+
+test('extrai o id quando a API retorna o usuário criado em array', async () => {
+  const ctx = await montar({ criado: [{ id: 88, nome: 'Array', email: 'array@empresa.com' }] });
+  try {
+    const resposta = await cadastrar(ctx.porta, { ...VALIDO, email: 'array@empresa.com' });
+    assert.strictEqual(resposta.status, 201);
+
+    const corpo = await resposta.json();
+    assert.strictEqual(corpo.id, 88, 'o modal precisa receber o id para enviar a foto em seguida');
+    assert.strictEqual(corpo.usuario.id, 88);
   } finally {
     await ctx.encerrar();
   }

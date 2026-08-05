@@ -121,6 +121,39 @@ function normalizeAvatar(usuario = {}) {
   return normalized;
 }
 
+
+function extrairUsuarioCriado(payload) {
+  if (Array.isArray(payload)) {
+    return payload.find(item => item && typeof item === 'object') || null;
+  }
+  if (payload?.usuario && typeof payload.usuario === 'object') {
+    return payload.usuario;
+  }
+  if (payload?.data && typeof payload.data === 'object') {
+    return extrairUsuarioCriado(payload.data);
+  }
+  return payload && typeof payload === 'object' ? payload : null;
+}
+
+function extrairUsuarioId(payload) {
+  const usuario = extrairUsuarioCriado(payload);
+  const candidatos = [
+    usuario?.id,
+    usuario?.usuario_id,
+    usuario?.user_id,
+    payload?.id,
+    payload?.usuarioId,
+    payload?.usuario_id
+  ];
+
+  for (const candidato of candidatos) {
+    const numero = Number(candidato);
+    if (Number.isInteger(numero) && numero > 0) return numero;
+  }
+
+  return null;
+}
+
 function validateAvatarPayload(dataUrl) {
   const trimmed = typeof dataUrl === 'string' ? dataUrl.trim() : '';
   if (!trimmed) {
@@ -994,6 +1027,8 @@ router.post('/', exigirPermissaoUsuarios('usuarios.create'), async (req, res) =>
     }
 
     const criado = await api.post('/api/usuarios', payload);
+    const usuarioCriado = extrairUsuarioCriado(criado) || {};
+    const usuarioId = extrairUsuarioId(criado);
 
     // A FOTO NÃO PASSA POR AQUI. Ela sobe depois, em multipart, pelo mesmo
     // caminho que Configurações usa (IPC 'usuarios:enviar-imagem' → servidor),
@@ -1005,8 +1040,8 @@ router.post('/', exigirPermissaoUsuarios('usuarios.create'), async (req, res) =>
     try { require('./permissionsController').limparCachePermissoes(); } catch (_) {}
 
     res.status(201).json({
-      usuario: normalizeAvatar(criado || {}),
-      id: criado?.id ?? criado?.usuario?.id ?? null,
+      usuario: normalizeAvatar(usuarioCriado),
+      id: usuarioId,
       message: 'Usuário cadastrado com sucesso.'
     });
   } catch (err) {
@@ -1069,6 +1104,8 @@ router.delete('/:id', async (req, res) => {
   }
 });
 
+router.extrairUsuarioCriado = extrairUsuarioCriado;
+router.extrairUsuarioId = extrairUsuarioId;
 module.exports = router;
 module.exports.normalizeAvatar = normalizeAvatar;
 module.exports.avatarToRenderableSource = avatarToRenderableSource;

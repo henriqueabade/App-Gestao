@@ -228,7 +228,7 @@
     if (typeof window.electronAPI?.enviarImagemUsuario !== 'function') {
       throw new Error('Recurso de imagem de perfil indisponível.');
     }
-    await window.electronAPI.enviarImagemUsuario({
+    return window.electronAPI.enviarImagemUsuario({
       usuarioId,
       name: fotoArquivo.name,
       type: fotoArquivo.type,
@@ -279,10 +279,14 @@
         // — o usuário já existe e já consegue entrar; avisamos o que faltou e
         // demoramos mais para fechar, para dar tempo de ler.
         let aviso = null;
+        let usuarioComFoto = resultado?.usuario || null;
         const idCriado = resultado?.id ?? resultado?.usuario?.id ?? null;
         if (fotoArquivo) {
           try {
-            await enviarFoto(idCriado);
+            const fotoResultado = await enviarFoto(idCriado);
+            if (fotoResultado && typeof fotoResultado === 'object') {
+              usuarioComFoto = { ...(usuarioComFoto || {}), ...fotoResultado, id: idCriado };
+            }
           } catch (fotoErr) {
             console.error('Usuário criado, mas a foto não subiu:', fotoErr);
             aviso = `Usuário cadastrado, mas a foto não subiu (${fotoErr?.message || 'falha no envio'}). `
@@ -299,7 +303,7 @@
         }
 
         window.dispatchEvent(new CustomEvent('usuarioAtualizado', {
-          detail: { criado: true, usuario: resultado?.usuario || null }
+          detail: { criado: true, usuario: usuarioComFoto }
         }));
         setTimeout(close, aviso ? 2800 : 400);
       };
