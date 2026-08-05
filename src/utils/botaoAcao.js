@@ -103,14 +103,6 @@
         backdrop-filter: blur(2px);
         cursor: progress;
       }
-      #botaoAcaoVeu .botaoAcaoVeu-roda {
-        width: 2.5rem;
-        height: 2.5rem;
-        border-radius: 9999px;
-        border: 3px solid rgba(255, 255, 255, 0.25);
-        border-top-color: #fff;
-        animation: botaoAcaoGirar 0.7s linear infinite;
-      }
       #botaoAcaoVeu .botaoAcaoVeu-texto {
         color: #fff;
         font-size: 0.95rem;
@@ -454,7 +446,14 @@
       veu.id = 'botaoAcaoVeu';
       veu.setAttribute('role', 'status');
       veu.setAttribute('aria-live', 'polite');
-      veu.innerHTML = '<div class="botaoAcaoVeu-roda"></div><p class="botaoAcaoVeu-texto"></p>';
+      // O MESMO indicador do resto do app (a logo em órbita), e não uma roda
+      // própria: dois carregando diferentes na mesma tela leem-se como dois
+      // sistemas diferentes.
+      veu.innerHTML =
+        '<div class="app-loading-indicator app-loading-indicator--compact" aria-hidden="true">'
+        + '<span class="module-loading-orbit"></span>'
+        + '<span class="module-loading-core"><img src="../assets/Logo.ico" alt=""></span>'
+        + '</div><p class="botaoAcaoVeu-texto"></p>';
       document.body.appendChild(veu);
     }
     const alvoTexto = veu.querySelector('.botaoAcaoVeu-texto');

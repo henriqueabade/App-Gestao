@@ -33,9 +33,11 @@
         }
       };
       await window.electronAPI.excluirLoteProduto(payload);
+      // Tabela primeiro, aviso depois — ver a nota gêmea em
+      // modals/cliente-excluir.js.
+      await item.reload?.();
       showToast('Lote excluído', 'success');
       close();
-      item.reload?.();
       window.loteExcluir = null;
     } catch (err) {
       console.error(err);

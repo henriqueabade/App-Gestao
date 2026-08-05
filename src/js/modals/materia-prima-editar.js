@@ -121,12 +121,9 @@
     Modal.open('modals/materia-prima/excluir.html', '../js/modals/materia-prima-excluir.js', 'excluirInsumo');
   });
   /** Ver a nota gêmea em materia-prima-novo.js. */
-  function recarregarGrade() {
+  async function recarregarGrade() {
     try {
-      if (typeof carregarMateriais === 'function') {
-        Promise.resolve(carregarMateriais()).catch(err =>
-          console.error('Falha ao recarregar a lista de insumos', err));
-      }
+      if (typeof carregarMateriais === 'function') await carregarMateriais();
     } catch (err) {
       console.error('Falha ao recarregar a lista de insumos', err);
     }
@@ -163,9 +160,9 @@
       } : null;
       const payload = metaAntes ? { ...dados, __meta: { antes: metaAntes } } : dados;
       await window.electronAPI.atualizarMateriaPrima(item.id, payload);
+      await recarregarGrade();
       showToast('Insumo atualizado com sucesso!', 'success');
       close();
-      recarregarGrade();
     }catch(err){
       console.error(err);
       if (err.message === 'DUPLICADO' || err.code === 'DUPLICADO') {

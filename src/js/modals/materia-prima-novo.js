@@ -84,13 +84,16 @@
     }
   });
 
-  /** Atualiza a grade do módulo sem deixar um erro dela contaminar o salvamento. */
-  function recarregarGrade() {
+  /**
+   * Atualiza a grade do módulo sem deixar um erro dela contaminar o salvamento.
+   *
+   * `await`, e ANTES do aviso de sucesso: com a recarga solta, o modal fechava
+   * com "registrado com sucesso" e o insumo novo só aparecia na tabela alguns
+   * instantes depois — tempo em que o usuário acha que não salvou.
+   */
+  async function recarregarGrade() {
     try {
-      if (typeof carregarMateriais === 'function') {
-        Promise.resolve(carregarMateriais()).catch(err =>
-          console.error('Falha ao recarregar a lista de insumos', err));
-      }
+      if (typeof carregarMateriais === 'function') await carregarMateriais();
     } catch (err) {
       console.error('Falha ao recarregar a lista de insumos', err);
     }
@@ -118,12 +121,12 @@
     }
     try{
       await window.electronAPI.adicionarMateriaPrima(dados);
+      // A recarga trata o próprio erro: um problema aqui não desfaz o que já
+      // foi gravado, e cair no catch de baixo faria o usuário ler "não foi
+      // possível registrar" depois de o insumo ter entrado.
+      await recarregarGrade();
       showToast('Insumo registrado com sucesso!', 'success');
       close();
-      // A recarga da grade fica FORA do try do salvamento: um erro aqui não
-      // desfaz o que já foi gravado, e cair no catch de baixo faria o usuário
-      // ler "não foi possível registrar" depois de o insumo ter entrado.
-      recarregarGrade();
     }catch(err){
       console.error(err);
       if (err.message === 'DUPLICADO' || err.code === 'DUPLICADO') {

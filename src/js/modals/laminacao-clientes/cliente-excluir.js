@@ -25,13 +25,15 @@
       const resp = await fetchApi(`/api/clientes_laminacao/${cliente.id}`, { method: 'DELETE' });
       const data = await resp.json().catch(() => ({}));
       if(resp.ok){
-        showToast('Cliente excluído com sucesso!', 'success');
-        close();
+        // Tabela primeiro, aviso depois — ver a nota gêmea em
+        // modals/cliente-excluir.js.
         if (typeof carregarClientes === 'function') {
           await carregarClientes(true);
         } else {
           window.dispatchEvent(new Event('clienteExcluido'));
         }
+        showToast('Cliente excluído com sucesso!', 'success');
+        close();
       }else{
         showToast(data.error || 'Erro ao excluir cliente', 'error');
         close();

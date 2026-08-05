@@ -26,20 +26,20 @@
           processo: item.processo
         }
       });
-      showToast('Insumo excluído com sucesso!', 'success');
-      close();
-      Modal.close('editarInsumo');
-      // Fora do try do salvamento: um erro ao recarregar a grade não pode
-      // aparecer como "não foi possível excluir" depois de a exclusão ter dado
-      // certo.
+      // A grade é atualizada ANTES do aviso, e ainda sob o carregando do botão:
+      // ler "excluído com sucesso" com a linha ainda na tela faz o usuário
+      // concluir que não funcionou.
+      //
+      // O erro da recarga é engolido de propósito: ele não pode aparecer como
+      // "não foi possível excluir" depois de a exclusão ter dado certo.
       try {
-        if (typeof carregarMateriais === 'function') {
-          Promise.resolve(carregarMateriais()).catch(e =>
-            console.error('Falha ao recarregar a lista de insumos', e));
-        }
+        if (typeof carregarMateriais === 'function') await carregarMateriais();
       } catch (e) {
         console.error('Falha ao recarregar a lista de insumos', e);
       }
+      showToast('Insumo excluído com sucesso!', 'success');
+      close();
+      Modal.close('editarInsumo');
     }catch(err){
       console.error(err);
       // "existe em um produto" é a causa mais comum, mas não a única — dizer

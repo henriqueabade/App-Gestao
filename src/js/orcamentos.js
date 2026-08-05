@@ -247,9 +247,13 @@ function openConversionFlow(id) {
 
 async function carregarOrcamentos() {
     try {
-        const resp = await fetchApi('/api/orcamentos');
+        // Ver a nota gêmea em pedidos.js: em paralelo, e os clientes só na
+        // primeira vez — o cache de nomes é aditivo e não expira.
+        const [resp] = await Promise.all([
+            fetchApi('/api/orcamentos'),
+            cacheClientes.size ? Promise.resolve() : carregarClientes()
+        ]);
         const data = await resp.json();
-        await carregarClientes();
         const tbody = document.getElementById('orcamentosTabela');
         tbody.innerHTML = '';
         const statusClasses = {
@@ -331,12 +335,13 @@ async function carregarOrcamentos() {
                             // backend sobrava "não foi possível" e nada a fazer.
                             throw new Error(corpo?.detalhe || corpo?.error || `HTTP ${resp.status}`);
                         }
+                        // Tabela primeiro, aviso depois — ainda sob o carregando.
+                        await carregarOrcamentos();
                         window.showToast?.(`Orçamento ${o.numero} excluído.`, 'success');
                         if (Array.isArray(corpo?.avisos) && corpo.avisos.length) {
                             console.warn('Exclusão do orçamento com avisos:', corpo.avisos);
                             window.showToast?.(`Excluído com ${corpo.avisos.length} aviso(s). Veja o console.`, 'info');
                         }
-                        carregarOrcamentos();
                     } catch (err) {
                         console.error('Erro ao excluir orçamento', err);
                         window.showToast?.(err?.message || 'Não foi possível excluir o orçamento.', 'error');

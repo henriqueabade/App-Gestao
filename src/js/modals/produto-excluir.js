@@ -46,7 +46,8 @@
           status: item.status
         }
       });
-      showToast('Produto excluído com sucesso!', 'success');
+      // Tabela primeiro, aviso depois — ver a nota gêmea em
+      // modals/cliente-excluir.js.
       try{
         if (typeof carregarProdutos === 'function') {
           await carregarProdutos();
@@ -54,6 +55,7 @@
       }catch(err){
         showErrorDialog(err.message || 'Erro ao atualizar a lista de produtos');
       }
+      showToast('Produto excluído com sucesso!', 'success');
       close();
     }catch(err){
       confirmButton.disabled = false;

@@ -250,9 +250,17 @@ function abrirConverterOrcamentos() {
 }
 async function carregarPedidos() {
     try {
-        const resp = await fetchApi('/api/pedidos');
+        // Em PARALELO, e os clientes só na primeira vez.
+        //
+        // A lista de clientes era buscada a cada recarga da tabela, e ANTES de
+        // os pedidos começarem a ser buscados — duas idas à rede em fila para
+        // montar uma tela só. O cache de nomes é aditivo e não expira, então
+        // depois da primeira carga não há nada de novo a buscar.
+        const [resp] = await Promise.all([
+            fetchApi('/api/pedidos'),
+            cacheClientes.size ? Promise.resolve() : carregarClientes()
+        ]);
         const data = await resp.json();
-        await carregarClientes();
         const tbody = document.getElementById('pedidosTabela');
         tbody.innerHTML = '';
         const statusClasses = {
@@ -364,6 +372,11 @@ async function carregarPedidos() {
                             // "não foi possível" e não dava para agir.
                             throw new Error(corpo?.detalhe || corpo?.error || `HTTP ${resp.status}`);
                         }
+                        // A tabela é atualizada ANTES do aviso de sucesso, e
+                        // ainda sob o carregando. Ao contrário, o usuário lia
+                        // "excluído" com a linha ainda na tela e concluía que
+                        // não tinha funcionado.
+                        await carregarPedidos();
                         window.showToast?.(`Pedido ${p.numero} excluído.`, 'success');
                         // Se alguma dependente resistiu, o pedido saiu mas
                         // sobrou lixo: é melhor dizer do que fingir que não.
@@ -371,7 +384,6 @@ async function carregarPedidos() {
                             console.warn('Exclusão do pedido com avisos:', corpo.avisos);
                             window.showToast?.(`Excluído com ${corpo.avisos.length} aviso(s). Veja o console.`, 'info');
                         }
-                        carregarPedidos();
                     } catch (err) {
                         console.error('Erro ao excluir pedido', err);
                         window.showToast?.(err?.message || 'Não foi possível excluir o pedido.', 'error');
