@@ -2,7 +2,7 @@ const express = require('express');
 const { createApiClient } = require('./apiHttpClient');
 const { exigirPermissao, exigirSupAdmin } = require('./permissionsController');
 const { excluirPedidoEmCascata } = require('./exclusaoEmCascata');
-const { estornarCancelamento } = require('./cancelamentoEstorno');
+const { estornarCancelamento, opcoesDeEstorno } = require('./cancelamentoEstorno');
 const { registrarEntrada } = require('./materiaPrima');
 const {
   RESERVA,
@@ -564,6 +564,23 @@ router.get('/:id/pecas-selecionadas', exigirPermissao('ped.report'), async (req,
   } catch (err) {
     console.error('Erro ao listar as peças selecionadas:', err);
     res.status(err.status || 500).json({ error: 'Erro ao listar as peças selecionadas' });
+  }
+});
+
+/**
+ * GET /pedidos/:id/estorno-opcoes
+ *
+ * O que a tela de cancelamento precisa para deixar o usuário escolher EM QUE
+ * PONTO DA ROTA cada peça volta: a rota completa (o teto da escolha) e, por
+ * peça, de onde cada unidade veio (o piso — ninguém desmonta uma peça).
+ */
+router.get('/:id/estorno-opcoes', exigirPermissao('ped.cancel'), async (req, res) => {
+  try {
+    const api = createApiClient(req);
+    res.json(await opcoesDeEstorno(api, req.params.id));
+  } catch (err) {
+    console.error('Erro ao montar as opções de estorno:', err);
+    res.status(err.status || 500).json({ error: 'Erro ao montar as opções de estorno' });
   }
 });
 

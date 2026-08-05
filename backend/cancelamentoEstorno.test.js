@@ -1,62 +1,63 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { estornarCancelamento } = require('./cancelamentoEstorno');
+const { estornarCancelamento, opcoesDeEstorno } = require('./cancelamentoEstorno');
 
 /**
- * Estorno do cancelamento.
+ * Estorno do cancelamento, escolhendo o ESTÁGIO de retorno de cada peça.
  *
- * O que se protege aqui é a CONTA: estoque devolvido a mais é produto que não
- * existe, devolvido a menos é produto que some. As duas pontas custam caro, e
- * nenhuma aparece no dia seguinte — aparecem no inventário, meses depois.
+ * O que se protege aqui é a conta: estoque devolvido a mais é produto que não
+ * existe, devolvido a menos é produto que some. Nenhuma das duas aparece no dia
+ * seguinte — aparecem no inventário, meses depois.
  *
- * Cenário: pedido 99, peça 1000 (produto 7, rota de 3 passos), 5 unidades:
- *   2 saíram do lote 501 (prontas)
- *   1 saiu do lote 502 (pela metade)
- *   2 seriam produzidas do zero (reserva 900)
+ * Rota de 15 passos, 1 unidade de cada insumo por passo, para a conferência ser
+ * direta: "voltaram os passos 13, 14 e 15" vira "voltou 1 de cada um deles".
  */
-const ROTA = [
-  { id: 1, produto_id: 7, insumo_id: 10, quantidade: 2, ordem_insumo: 1 },
-  { id: 2, produto_id: 7, insumo_id: 20, quantidade: 1, ordem_insumo: 2 },
-  { id: 3, produto_id: 7, insumo_id: 30, quantidade: 4, ordem_insumo: 3 }
-];
+const ROTA = Array.from({ length: 15 }, (_, i) => ({
+  id: 100 + i + 1,          // passo_id
+  produto_id: 7,
+  insumo_id: 10 + i + 1,    // insumo 11..25
+  quantidade: 1,
+  ordem_insumo: i + 1
+}));
 
-function montarApi() {
-  const lotes = {
-    501: { id: 501, produto_id: 7, quantidade: 1, ultimo_insumo_id: 30, etapa_id: 'Embalagem' },
-    502: { id: 502, produto_id: 7, quantidade: 0, ultimo_insumo_id: 20, etapa_id: 'Montagem' }
-  };
+const passoDaOrdem = ordem => ROTA.find(p => p.ordem_insumo === ordem);
+
+/**
+ * @param {object} cenario
+ *   `ext`: linhas de pedido_itens_ext (peças que vieram do estoque)
+ *   `reserva`: quantidade que seria produzida do zero
+ */
+function montarApi({ ext = [], reserva = 0, lotes = {} } = {}) {
+  const estado = { ...lotes };
   const gravacoes = { movimentos: [], realocacoes: [], lotesNovos: [], reservas: [] };
   let proximoLote = 900;
 
   return {
-    lotes,
+    lotes: estado,
     gravacoes,
     async get(rota, opcoes = {}) {
       const q = opcoes?.query || {};
       if (rota === '/api/pedidos_itens') {
-        return [{ id: 1000, pedido_id: 99, produto_id: 7, quantidade: 5 }];
+        return [{ id: 1000, pedido_id: 99, produto_id: 7, quantidade: 99, nome: 'Peça X', codigo: 'PX' }];
       }
-      if (rota === '/api/pedido_itens_ext') {
-        return [
-          { id: 1, id_pedido: 99, pedido_item_id: 1000, quantidade: 2, ultimo_insumo_id: 3, etapa_id: 501 },
-          { id: 2, id_pedido: 99, pedido_item_id: 1000, quantidade: 1, ultimo_insumo_id: 2, etapa_id: 502 }
-        ];
-      }
+      if (rota === '/api/pedido_itens_ext') return ext;
       if (rota === '/api/reservas_estoque') {
-        return [{ id: 900, pedido_id: 99, pedido_item_id: 1000, quantidade: 2, status: 'producao' }];
+        return reserva > 0
+          ? [{ id: 900, pedido_id: 99, pedido_item_id: 1000, quantidade: reserva, status: 'producao' }]
+          : [];
       }
-      if (rota === '/api/produtos_insumos') {
-        return ROTA.filter(r => String(r.produto_id) === String(q.produto_id));
-      }
+      if (rota === '/api/produtos_insumos') return ROTA;
+      if (rota === '/api/materia_prima') return [];
+      if (rota === '/api/produtos_em_cada_ponto') return Object.values(estado);
       if (rota.startsWith('/api/produtos_em_cada_ponto/')) {
-        return lotes[Number(rota.split('/').pop())] || { error: 'não encontrado' };
+        return estado[Number(rota.split('/').pop())] || { error: 'não encontrado' };
       }
       return [];
     },
     async put(rota, payload) {
       if (rota.startsWith('/api/produtos_em_cada_ponto/')) {
         const id = Number(rota.split('/').pop());
-        if (lotes[id]) lotes[id].quantidade = payload.quantidade;
+        if (estado[id]) estado[id].quantidade = payload.quantidade;
       }
       if (rota.startsWith('/api/reservas_estoque/')) {
         gravacoes.reservas.push({ id: rota.split('/').pop(), ...payload });
@@ -74,161 +75,287 @@ function montarApi() {
       }
       if (rota === '/api/produtos_em_cada_ponto') {
         proximoLote += 1;
-        lotes[proximoLote] = { id: proximoLote, ...payload };
+        estado[proximoLote] = { id: proximoLote, ...payload, quantidade: 0 };
         gravacoes.lotesNovos.push({ id: proximoLote, ...payload });
-        return { id: proximoLote };
+        return { id: proximoLote, ...payload, quantidade: 0 };
       }
       return { ok: true };
     }
   };
 }
 
-/** Coletor no lugar do `registrarEntrada` da matéria-prima. */
 function coletorDeInsumos() {
-  const devolvidos = [];
-  const fn = async (insumoId, quantidade) => { devolvidos.push({ insumoId, quantidade }); };
-  return { devolvidos, fn };
+  const devolvidos = new Map();
+  const fn = async (insumoId, quantidade) => {
+    devolvidos.set(Number(insumoId), (devolvidos.get(Number(insumoId)) || 0) + Number(quantidade));
+  };
+  return { devolvidos, fn, de: ordem => devolvidos.get(passoDaOrdem(ordem).insumo_id) || 0 };
 }
 
-test('peça do estoque volta para o LOTE de onde saiu', async () => {
-  const api = montarApi();
-  const insumos = coletorDeInsumos();
+// ---------------------------------------------------------------------------
+// Os cinco cenários descritos pelo usuário
+// ---------------------------------------------------------------------------
+
+test('peça do zero devolvida no ponto 12/15: peça entra em 12 e os passos 13-15 voltam', async () => {
+  const api = montarApi({ reserva: 1 });
+  const ins = coletorDeInsumos();
 
   await estornarCancelamento(api, {
     pedidoId: 99,
-    acoes: [{ item: { id: 1000 }, action: 'stock', quantity: 3 }],
-    registrarEntradaInsumo: insumos.fn
+    acoes: [{ item: { id: 1000 }, action: 'stock', quantity: 1, ordem: 12 }],
+    registrarEntradaInsumo: ins.fn
   });
 
-  assert.equal(api.lotes[501].quantidade, 3, 'as 2 prontas voltaram ao lote 501 (1 + 2)');
-  assert.equal(api.lotes[502].quantidade, 1, 'a parcial voltou ao lote 502 (0 + 1)');
-  assert.equal(api.gravacoes.lotesNovos.length, 0, 'nenhum lote novo: elas têm origem conhecida');
-  assert.equal(
-    insumos.devolvidos.length, 0,
-    'peça que veio do estoque não devolve matéria-prima: o material dela foi '
-    + 'consumido num pedido antigo, não neste'
-  );
-});
-
-test('peça produzida do zero entra no estoque como lote no fim da rota', async () => {
-  const api = montarApi();
-  const insumos = coletorDeInsumos();
-
-  // 5 de volta: 3 têm lote de origem, 2 eram do zero.
-  await estornarCancelamento(api, {
-    pedidoId: 99,
-    acoes: [{ item: { id: 1000 }, action: 'stock', quantity: 5 }],
-    registrarEntradaInsumo: insumos.fn
-  });
-
-  assert.equal(api.gravacoes.lotesNovos.length, 1, 'as 2 do zero viram UM lote novo');
   const novo = api.gravacoes.lotesNovos[0];
-  assert.equal(novo.quantidade, 2);
-  assert.equal(novo.ultimo_insumo_id, 30, 'no fim da rota: a peça está acabada');
+  assert.ok(novo, 'não havia lote no ponto 12: tem de ser criado, senão a peça se perde');
+  assert.equal(novo.ultimo_insumo_id, passoDaOrdem(12).insumo_id);
+  assert.equal(api.lotes[novo.id].quantidade, 1);
+
+  assert.equal(ins.de(13), 1, 'o passo 13 não foi percorrido: volta');
+  assert.equal(ins.de(14), 1);
+  assert.equal(ins.de(15), 1);
+  assert.equal(ins.de(12), 0, 'o passo 12 foi percorrido: a peça está nele');
+  assert.equal(ins.de(1), 0);
+  assert.equal(ins.devolvidos.size, 3, 'exatamente os 3 que faltavam');
+});
+
+test('peça do zero revertida (estágio 0): nenhuma peça e os 15 insumos voltam', async () => {
+  const api = montarApi({ reserva: 1 });
+  const ins = coletorDeInsumos();
+
+  const { resumo } = await estornarCancelamento(api, {
+    pedidoId: 99,
+    acoes: [{ item: { id: 1000 }, action: 'discard', quantity: 1 }],
+    registrarEntradaInsumo: ins.fn
+  });
+
+  assert.equal(api.gravacoes.lotesNovos.length, 0, 'a peça nunca existiu: nada entra no estoque');
+  assert.equal(resumo.pecasDevolvidas, 0);
+  assert.equal(ins.devolvidos.size, 15, 'a rota inteira volta');
+  assert.equal(ins.de(1), 1);
+  assert.equal(ins.de(15), 1);
+});
+
+test('peça que entrou pela metade em 5/15, revertida: volta ao lote de origem e os passos 6-15 voltam', async () => {
+  const api = montarApi({
+    ext: [{ id: 1, id_pedido: 99, pedido_item_id: 1000, quantidade: 1, ultimo_insumo_id: passoDaOrdem(5).id, etapa_id: 501 }],
+    lotes: { 501: { id: 501, produto_id: 7, quantidade: 0, ultimo_insumo_id: passoDaOrdem(5).insumo_id } }
+  });
+  const ins = coletorDeInsumos();
+
+  await estornarCancelamento(api, {
+    pedidoId: 99,
+    acoes: [{ item: { id: 1000 }, action: 'discard', quantity: 1 }],
+    registrarEntradaInsumo: ins.fn
+  });
+
+  assert.equal(api.lotes[501].quantidade, 1, 'volta para o MESMO lote de onde saiu');
+  assert.equal(api.gravacoes.lotesNovos.length, 0);
+  assert.equal(ins.devolvidos.size, 10, 'os 10 passos que este pedido pagou para completá-la');
+  assert.equal(ins.de(6), 1);
+  assert.equal(ins.de(15), 1);
   assert.equal(
-    insumos.devolvidos.length, 0,
-    'a peça EXISTE: o material virou peça. Devolver os dois contaria o mesmo '
-    + 'material duas vezes'
+    ins.de(5), 0,
+    'os passos 1 a 5 foram pagos por OUTRO pedido: devolvê-los criaria material do nada'
+  );
+  assert.equal(ins.de(1), 0);
+});
+
+test('peça pronta (15/15) devolvida: entra no estoque e a matéria-prima não muda', async () => {
+  const api = montarApi({
+    ext: [{ id: 1, id_pedido: 99, pedido_item_id: 1000, quantidade: 1, ultimo_insumo_id: passoDaOrdem(15).id, etapa_id: 502 }],
+    lotes: { 502: { id: 502, produto_id: 7, quantidade: 3, ultimo_insumo_id: passoDaOrdem(15).insumo_id } }
+  });
+  const ins = coletorDeInsumos();
+
+  await estornarCancelamento(api, {
+    pedidoId: 99,
+    acoes: [{ item: { id: 1000 }, action: 'stock', quantity: 1 }],
+    registrarEntradaInsumo: ins.fn
+  });
+
+  assert.equal(api.lotes[502].quantidade, 4, 'a peça pronta volta ao lote (3 + 1)');
+  assert.equal(
+    ins.devolvidos.size, 0,
+    'ela chegou pronta: este pedido não gastou insumo nenhum com ela'
   );
 });
 
-test('descarte devolve a matéria-prima só das peças que seriam produzidas do zero', async () => {
-  const api = montarApi();
-  const insumos = coletorDeInsumos();
+test('realocação de uma peça que usava 5/15: volta ao estoque em 5 e os 10 restantes voltam', async () => {
+  const api = montarApi({
+    ext: [{ id: 1, id_pedido: 99, pedido_item_id: 1000, quantidade: 1, ultimo_insumo_id: passoDaOrdem(5).id, etapa_id: 501 }],
+    lotes: { 501: { id: 501, produto_id: 7, quantidade: 0, ultimo_insumo_id: passoDaOrdem(5).insumo_id } }
+  });
+  const ins = coletorDeInsumos();
 
-  // Descarta as 5: 3 vieram do estoque, 2 seriam do zero.
-  await estornarCancelamento(api, {
+  const { resumo } = await estornarCancelamento(api, {
     pedidoId: 99,
-    acoes: [{ item: { id: 1000 }, action: 'discard', quantity: 5 }],
-    registrarEntradaInsumo: insumos.fn
+    acoes: [{ item: { id: 1000 }, action: 'reallocate', orderId: 77, quantity: 1 }],
+    registrarEntradaInsumo: ins.fn
   });
 
-  assert.equal(api.lotes[501].quantidade, 1, 'nada volta para os lotes: foi descartado');
-  assert.equal(api.lotes[502].quantidade, 0);
-
-  const por = id => insumos.devolvidos.find(d => d.insumoId === id)?.quantidade ?? 0;
-  // Só as 2 do zero pagam material, e pela rota inteira.
-  assert.equal(por(10), 4, '2 unidades × 2');
-  assert.equal(por(20), 2, '2 × 1');
-  assert.equal(por(30), 8, '2 × 4');
+  assert.equal(api.lotes[501].quantidade, 1, 'a peça volta como estava quando foi escolhida');
+  assert.equal(ins.devolvidos.size, 10, 'e o que foi gasto para completá-la volta');
+  assert.equal(resumo.pecasRealocadas, 1);
+  assert.equal(api.gravacoes.realocacoes[0].pedido_id_destino, 77, 'com o destino registrado');
 });
 
-test('devolver ao estoque NÃO devolve matéria-prima junto', async () => {
-  const api = montarApi();
-  const insumos = coletorDeInsumos();
+// ---------------------------------------------------------------------------
+// Travas
+// ---------------------------------------------------------------------------
+
+test('não dá para devolver uma peça num ponto ANTERIOR ao que ela entrou', async () => {
+  const api = montarApi({
+    ext: [{ id: 1, id_pedido: 99, pedido_item_id: 1000, quantidade: 1, ultimo_insumo_id: passoDaOrdem(10).id, etapa_id: 501 }],
+    lotes: { 501: { id: 501, produto_id: 7, quantidade: 0, ultimo_insumo_id: passoDaOrdem(10).insumo_id } }
+  });
+  const ins = coletorDeInsumos();
+
+  const { avisos } = await estornarCancelamento(api, {
+    pedidoId: 99,
+    // Ninguém desmonta uma peça: ela entrou em 10, não pode voltar em 3.
+    acoes: [{ item: { id: 1000 }, action: 'stock', quantity: 1, ordem: 3 }],
+    registrarEntradaInsumo: ins.fn
+  });
+
+  assert.equal(api.lotes[501].quantidade, 1, 'foi devolvida no ponto de origem');
+  assert.equal(ins.devolvidos.size, 5, 'e só os passos 11 a 15 voltam');
+  assert.ok(avisos.some(a => /não pode voltar no ponto/.test(a)), 'e o usuário é avisado');
+});
+
+test('o mesmo item pode ser devolvido em pontos diferentes, até cobrir tudo', async () => {
+  const api = montarApi({ reserva: 3 });
+  const ins = coletorDeInsumos();
 
   await estornarCancelamento(api, {
     pedidoId: 99,
     acoes: [
-      { item: { id: 1000 }, action: 'stock', quantity: 4 },
+      { item: { id: 1000 }, action: 'stock', quantity: 1, ordem: 15 },
+      { item: { id: 1000 }, action: 'stock', quantity: 1, ordem: 10 },
       { item: { id: 1000 }, action: 'discard', quantity: 1 }
     ],
-    registrarEntradaInsumo: insumos.fn
+    registrarEntradaInsumo: ins.fn
   });
 
-  // Das 5: 4 voltam (3 de lote + 1 do zero) e 1 é descartada — e essa 1 é do
-  // zero, então só ela paga material.
-  const por = id => insumos.devolvidos.find(d => d.insumoId === id)?.quantidade ?? 0;
-  assert.equal(por(10), 2, '1 unidade × 2 — não as 5');
-  assert.equal(por(30), 4, '1 × 4');
+  // 1 acabada (0 insumos) + 1 no ponto 10 (passos 11-15 = 5) + 1 revertida (15).
+  assert.equal(ins.de(15), 2, 'a acabada não devolve; as outras duas sim');
+  assert.equal(ins.de(11), 2);
+  assert.equal(ins.de(10), 1, 'só a revertida devolve o passo 10');
+  assert.equal(ins.de(1), 1);
+  assert.equal(api.gravacoes.lotesNovos.length, 2, 'um lote no ponto 15 e outro no 10');
 });
 
-test('realocação não devolve nada: a peça troca de dono', async () => {
-  const api = montarApi();
-  const insumos = coletorDeInsumos();
+test('decisão além do que o pedido tinha é ignorada, com aviso', async () => {
+  const api = montarApi({ reserva: 1 });
+  const ins = coletorDeInsumos();
 
-  const { resumo } = await estornarCancelamento(api, {
+  const { avisos, resumo } = await estornarCancelamento(api, {
     pedidoId: 99,
-    acoes: [{ item: { id: 1000 }, action: 'reallocate', orderId: 77, quantity: 2 }],
-    registrarEntradaInsumo: insumos.fn
+    acoes: [{ item: { id: 1000 }, action: 'discard', quantity: 5 }],
+    registrarEntradaInsumo: ins.fn
   });
 
-  assert.equal(api.lotes[501].quantidade, 1, 'o lote não muda');
-  assert.equal(insumos.devolvidos.length, 0, 'nem o material');
-  assert.equal(resumo.pecasRealocadas, 2);
-
-  assert.equal(api.gravacoes.realocacoes.length, 1, 'fica registrado para onde foi');
-  assert.equal(api.gravacoes.realocacoes[0].pedido_id_destino, 77);
-  assert.ok(
-    api.gravacoes.movimentos.some(m => m.tipo_movimento === 'transferencia'),
-    'e há um movimento de transferência ligando os dois pedidos'
-  );
+  assert.equal(ins.de(1), 1, 'só 1 unidade existia: devolver 5 inventaria material');
+  assert.equal(resumo.pecasNaoDevolvidas, 1);
+  assert.ok(avisos.some(a => /além do que o pedido tinha/.test(a)));
 });
 
 test('sem decisão do usuário, nada é mexido', async () => {
-  const api = montarApi();
-  const insumos = coletorDeInsumos();
-
-  const { resumo } = await estornarCancelamento(api, {
-    pedidoId: 99,
-    acoes: [],
-    registrarEntradaInsumo: insumos.fn
+  const api = montarApi({
+    ext: [{ id: 1, id_pedido: 99, pedido_item_id: 1000, quantidade: 2, ultimo_insumo_id: passoDaOrdem(15).id, etapa_id: 502 }],
+    lotes: { 502: { id: 502, produto_id: 7, quantidade: 3, ultimo_insumo_id: passoDaOrdem(15).insumo_id } }
   });
+  const ins = coletorDeInsumos();
 
-  assert.equal(api.lotes[501].quantidade, 1, 'devolver "por padrão" seria inventar a decisão');
-  assert.equal(resumo.pecasDevolvidas, 0);
-  assert.equal(insumos.devolvidos.length, 0);
-  // A reserva encerra de qualquer forma: a promessa deste pedido não vale mais.
-  assert.ok(api.gravacoes.reservas.some(r => r.status === 'retornada'));
+  await estornarCancelamento(api, { pedidoId: 99, acoes: [], registrarEntradaInsumo: ins.fn });
+
+  assert.equal(api.lotes[502].quantidade, 3, 'devolver "por padrão" seria inventar a decisão');
+  assert.equal(ins.devolvidos.size, 0);
+  assert.ok(api.gravacoes.reservas.every(r => r.status === 'retornada'));
 });
 
-test('todo movimento do estorno fica no razão, com pedido e peça', async () => {
-  const api = montarApi();
-  const insumos = coletorDeInsumos();
+test('cada devolução deixa rastro: pedido, peça, lote e autor', async () => {
+  const api = montarApi({ reserva: 1 });
+  const ins = coletorDeInsumos();
 
   await estornarCancelamento(api, {
     pedidoId: 99,
     usuarioId: 13,
-    acoes: [{ item: { id: 1000 }, action: 'stock', quantity: 3 }],
-    registrarEntradaInsumo: insumos.fn
+    acoes: [{ item: { id: 1000 }, action: 'stock', quantity: 1, ordem: 12 }],
+    registrarEntradaInsumo: ins.fn
   });
 
-  const retornos = api.gravacoes.movimentos.filter(m => m.tipo_movimento === 'retorno_cancelamento');
-  assert.equal(retornos.length, 2, 'um por lote devolvido');
-  assert.ok(
-    retornos.every(m => Number(m.pedido_id) === 99 && Number(m.pedido_item_id) === 1000),
-    'cada movimento diz de qual pedido e de qual peça veio'
+  const daPeca = api.gravacoes.movimentos.find(
+    m => m.tipo_movimento === 'retorno_cancelamento' && m.tipo_item === 'peca'
   );
-  assert.ok(retornos.every(m => Number(m.created_by) === 13), 'e quem fez');
-  assert.ok(retornos.every(m => m.lote_id), 'e para qual lote voltou');
+  assert.ok(daPeca, 'a peça devolvida vira movimento');
+  assert.equal(Number(daPeca.pedido_id), 99);
+  assert.equal(Number(daPeca.pedido_item_id), 1000);
+  assert.ok(daPeca.lote_id, 'com o lote em que entrou');
+  assert.equal(Number(daPeca.created_by), 13);
+
+  const deInsumo = api.gravacoes.movimentos.filter(
+    m => m.tipo_movimento === 'retorno_cancelamento' && m.tipo_item === 'insumo'
+  );
+  assert.equal(deInsumo.length, 3, 'e cada insumo devolvido também — uma linha por insumo');
+});
+
+test('cada grupo recebe a SUA decisão, não a do grupo mais adiantado', async () => {
+  // O caso do print: 7 unidades da mesma peça em três origens diferentes.
+  const api = montarApi({
+    ext: [
+      { id: 1, id_pedido: 99, pedido_item_id: 1000, quantidade: 1, ultimo_insumo_id: passoDaOrdem(15).id, etapa_id: 502 },
+      { id: 2, id_pedido: 99, pedido_item_id: 1000, quantidade: 4, ultimo_insumo_id: passoDaOrdem(7).id, etapa_id: 503 }
+    ],
+    reserva: 2,
+    lotes: {
+      502: { id: 502, produto_id: 7, quantidade: 0, ultimo_insumo_id: passoDaOrdem(15).insumo_id },
+      503: { id: 503, produto_id: 7, quantidade: 0, ultimo_insumo_id: passoDaOrdem(7).insumo_id }
+    }
+  });
+  const ins = coletorDeInsumos();
+
+  await estornarCancelamento(api, {
+    pedidoId: 99,
+    acoes: [
+      // A pronta volta pronta: não devolve material.
+      { item: { id: 1000 }, action: 'stock', quantity: 1, ordem: 15,
+        grupo: { origem: 'estoque', ordem_origem: 15, lote_id: 502 } },
+      // As 4 da Montagem voltam como estavam: devolvem os passos 8..15.
+      { item: { id: 1000 }, action: 'stock', quantity: 4, ordem: 7,
+        grupo: { origem: 'estoque', ordem_origem: 7, lote_id: 503 } },
+      // As 2 do zero são revertidas: devolvem a rota inteira.
+      { item: { id: 1000 }, action: 'discard', quantity: 2, ordem: 0,
+        grupo: { origem: 'producao', ordem_origem: 0, lote_id: null } }
+    ],
+    registrarEntradaInsumo: ins.fn
+  });
+
+  assert.equal(api.lotes[502].quantidade, 1, 'a pronta voltou ao lote dela');
+  assert.equal(api.lotes[503].quantidade, 4, 'as 4 parciais voltaram ao lote delas');
+
+  // Passo 1: só as 2 do zero pagaram por ele.
+  assert.equal(ins.de(1), 2, 'os passos iniciais são só das peças do zero');
+  assert.equal(ins.de(7), 2, 'o passo 7 também: as parciais já estavam nele');
+  // Passo 8: as 4 parciais (que pararam em 7) + as 2 do zero.
+  assert.equal(ins.de(8), 6, '4 parciais + 2 do zero');
+  assert.equal(ins.de(15), 6, 'e a pronta não entra em nenhum: ela não gastou nada');
+});
+
+test('opcoesDeEstorno diz o piso e o teto de cada peça', async () => {
+  const api = montarApi({
+    ext: [{ id: 1, id_pedido: 99, pedido_item_id: 1000, quantidade: 2, ultimo_insumo_id: passoDaOrdem(5).id, etapa_id: 501 }],
+    reserva: 3
+  });
+
+  const { itens } = await opcoesDeEstorno(api, 99);
+  const item = itens[0];
+
+  assert.equal(item.rota.length, 15, 'a rota inteira é o TETO das opções');
+  const doEstoque = item.grupos.find(g => g.origem === 'estoque');
+  const daProducao = item.grupos.find(g => g.origem === 'producao');
+  assert.equal(doEstoque.ordem_origem, 5, 'as 2 do estoque não podem voltar antes do ponto 5');
+  assert.equal(doEstoque.quantidade, 2);
+  assert.equal(daProducao.ordem_origem, 0, 'as 3 do zero podem voltar de qualquer ponto, ou nenhum');
+  assert.equal(daProducao.quantidade, 3);
 });

@@ -68,6 +68,42 @@
   const destinationState = new Map();
   const itemInfo = new Map();
   const itemKeys = [];
+
+  // ------------------------------------------------------------------
+  // Opções de estorno: em QUE PONTO DA ROTA cada peça pode voltar.
+  //
+  // Uma peça não volta só "para o estoque": ela volta num estágio. Devolver uma
+  // peça parada no insumo 12 de 15 significa que ela entra no estoque naquele
+  // ponto e que os 3 passos restantes, que esta conversão já pagou, voltam para
+  // a matéria-prima. Sem essa escolha, o estorno só sabia devolver tudo ou nada.
+  //
+  // O backend manda, por peça: a rota inteira (o TETO) e de onde cada unidade
+  // veio (o PISO — ninguém desmonta uma peça para devolvê-la mais atrás).
+  // ------------------------------------------------------------------
+  const estornoPorItem = new Map();
+
+  async function carregarOpcoesDeEstorno() {
+    if (!pedidoId) return;
+    try {
+      const resp = await fetchApi(`/api/pedidos/${pedidoId}/estorno-opcoes`);
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const dados = await resp.json();
+      (dados?.itens || []).forEach(item => {
+        estornoPorItem.set(String(item.pedido_item_id), item);
+      });
+    } catch (err) {
+      // Sem as opções a tela continua funcionando: o estorno volta a ser
+      // "como estava", que é o comportamento seguro.
+      console.error('Não foi possível carregar as opções de estorno', err);
+    }
+  }
+
+  /** Menor ponto em que ALGUMA unidade desta peça pode voltar. */
+  function pisoDoItem(key) {
+    const dados = estornoPorItem.get(String(key));
+    if (!dados?.grupos?.length) return null;
+    return Math.min(...dados.grupos.map(g => Number(g.ordem_origem) || 0));
+  }
   let currentReallocationKey = null;
   let availableOrders = Array.isArray(context.availableOrders) ? context.availableOrders : null;
   let ordersLoading = false;
@@ -435,7 +471,13 @@
     }
   }
 
-  function openQuantityDialog({ title, description, max, initial, confirmLabel = 'Confirmar' }) {
+  /**
+   * @param {Array} etapas  quando informado, o diálogo também pergunta em que
+   *   ponto da rota a peça volta: `{ ordem, rotulo, selecionada }`. Sem isso o
+   *   retorno é só a quantidade, como era antes.
+   * @returns {Promise<number|{quantidade:number, ordem:number|null}|null>}
+   */
+  function openQuantityDialog({ title, description, max, initial, confirmLabel = 'Confirmar', etapas = [] }) {
     return new Promise(resolve => {
       const overlay = document.createElement('div');
       overlay.className = 'app-message-overlay fixed inset-0 bg-black/50 flex items-center justify-center p-4';
@@ -455,6 +497,16 @@
               <p class="text-xs text-gray-400">Disponível: ${formatUnitsLabel(safeMax)}.</p>
               <p class="text-xs text-red-400 hidden" data-error></p>
             </div>
+            ${etapas.length ? `
+            <div class="space-y-2">
+              <label class="text-xs uppercase tracking-wide text-gray-400">Volta em qual ponto da produção?</label>
+              <select data-etapa class="w-full bg-input border border-inputBorder rounded-lg px-3 py-2 text-white">
+                ${etapas.map(e => `<option value="${e.ordem}"${e.selecionada ? ' selected' : ''}>${e.rotulo}</option>`).join('')}
+              </select>
+              <p class="text-xs text-gray-400">
+                A peça entra no estoque nesse ponto, e o que faltava para terminá-la volta para a matéria-prima.
+              </p>
+            </div>` : ''}
             <div class="flex justify-end gap-3 pt-2">
               <button type="button" data-action="cancel" class="btn-neutral px-4 py-2 rounded-lg text-white font-medium">Cancelar</button>
               <button type="button" data-action="confirm" class="btn-primary px-4 py-2 rounded-lg text-white font-medium">${confirmLabel}</button>
@@ -503,6 +555,14 @@
         }
         if (value > safeMax) {
           showError(`Informe um valor menor ou igual a ${formatUnitsLabel(safeMax)}.`);
+          return;
+        }
+        // Com escolha de etapa o retorno vira objeto; sem ela continua sendo o
+        // número, para não mexer em quem já chamava este diálogo.
+        if (etapas.length) {
+          const select = overlay.querySelector('[data-etapa]');
+          const ordem = select ? Number(select.value) : null;
+          close({ quantidade: value, ordem: Number.isFinite(ordem) ? ordem : null });
           return;
         }
         close(value);
@@ -1012,19 +1072,77 @@
       discard: `Informe a quantidade de ${info?.name || 'itens'} que será descartada.`
     };
 
-    const quantity = await openQuantityDialog({
+    // Só o retorno ao estoque pergunta o ponto da rota. Descarte é sempre
+    // "voltar como estava": a peça não avança, ela some do pedido.
+    const etapas = action === 'stock' ? etapasDisponiveis(key) : [];
+
+    const resposta = await openQuantityDialog({
       title: titles[action] || 'Definir quantidade',
       description: descriptions[action] || '',
       max,
       initial: currentValue,
-      confirmLabel: 'Salvar'
+      confirmLabel: 'Salvar',
+      etapas
     });
 
-    if (quantity === null) return;
+    if (resposta === null) return;
 
-    state[action] = normalizeQuantity(quantity);
+    const quantidade = typeof resposta === 'object' ? resposta.quantidade : resposta;
+    const ordem = typeof resposta === 'object' ? resposta.ordem : null;
+
+    if (action === 'stock') {
+      // Uma entrada POR PONTO da rota: o mesmo item pode voltar em pedaços —
+      // duas acabadas, três paradas no meio — até cobrir a quantidade do pedido.
+      state.stockPorEtapa = (state.stockPorEtapa || []).filter(e => e.ordem !== ordem);
+      if (quantidade > 0) state.stockPorEtapa.push({ ordem, quantidade: normalizeQuantity(quantidade) });
+      state.stock = (state.stockPorEtapa || []).reduce((s, e) => s + normalizeQuantity(e.quantidade), 0);
+    } else {
+      state[action] = normalizeQuantity(quantidade);
+    }
+
     updateItemDestinationsUI(key);
     refreshOrdersUI();
+  }
+
+  /**
+   * Pontos em que esta peça pode voltar: do PISO (de onde ela veio) até o fim
+   * da rota. Abaixo do piso não se oferece — ninguém desmonta uma peça.
+   *
+   * O ponto 0 ("não devolver a peça") só aparece quando há unidades que seriam
+   * produzidas do zero: elas nunca existiram, então podem simplesmente não
+   * voltar, devolvendo só o material.
+   */
+  function etapasDisponiveis(key) {
+    const info = itemInfo.get(String(key));
+    const dados = estornoPorItem.get(String(info?.item?.id ?? key));
+    if (!dados?.rota?.length) return [];
+
+    // O piso é o do GRUPO desta linha, não o do item: as peças paradas na
+    // Montagem não podem voltar antes dali, mesmo que outras do mesmo item
+    // tenham vindo do zero.
+    const piso = info?.grupo ? (Number(info.grupo.ordem_origem) || 0) : (pisoDoItem(info?.item?.id) ?? 0);
+    const total = dados.rota.length;
+    const state = destinationState.get(String(key));
+    const jaEscolhido = (state?.stockPorEtapa || [])[0]?.ordem;
+
+    const opcoes = [];
+    if (piso === 0) {
+      opcoes.push({
+        ordem: 0,
+        rotulo: 'Não devolver a peça — estornar todo o material',
+        selecionada: jaEscolhido === 0
+      });
+    }
+    for (const passo of dados.rota) {
+      if (passo.ordem < piso) continue;
+      opcoes.push({
+        ordem: passo.ordem,
+        rotulo: `${passo.ordem}/${total} — ${passo.insumo_nome}${passo.processo ? ` (${passo.processo})` : ''}`,
+        // O fim da rota é o padrão: peça acabada é o caso mais comum.
+        selecionada: jaEscolhido === undefined ? passo.ordem === total : jaEscolhido === passo.ordem
+      });
+    }
+    return opcoes;
   }
 
   function handleReallocateClick(key) {
@@ -1106,6 +1224,59 @@
     statusTag.classList.remove('hidden');
   }
 
+  /**
+   * Uma linha POR GRUPO, não por item do pedido.
+   *
+   * Sete unidades da mesma peça podem ter vindo de três lugares — uma pronta,
+   * quatro paradas na Montagem, duas no Acabamento. A tabela mostrava as sete
+   * numa linha só, como se estivessem todas no mesmo ponto, e obrigava a
+   * escolher UM destino para o conjunto. Só que o estorno depende do ponto de
+   * cada grupo: as quatro da Montagem devolvem 8 passos de material, as duas do
+   * Acabamento devolvem 3, e a pronta não devolve nada. Um destino só para as
+   * sete daria uma conta errada em pelo menos dois dos três grupos.
+   */
+  function expandirPorGrupo(lista) {
+    const linhas = [];
+    lista.forEach((item, index) => {
+      const dados = estornoPorItem.get(String(item.id));
+      const grupos = dados?.grupos || [];
+
+      // Sem as opções (pedido antigo, ou a consulta falhou), a linha continua
+      // sendo a do item inteiro — o comportamento de antes.
+      if (!grupos.length) {
+        linhas.push({ item, index, grupo: null, key: String(item.id ?? index) });
+        return;
+      }
+
+      const total = dados.rota.length;
+      grupos.forEach((grupo, posicao) => {
+        const passo = dados.rota.find(p => Number(p.ordem) === Number(grupo.ordem_origem)) || null;
+        const pronta = grupo.origem !== 'producao' && Number(grupo.ordem_origem) >= total;
+        linhas.push({
+          item,
+          index,
+          key: `${item.id}::${posicao}`,
+          grupo: {
+            ...grupo,
+            itemId: item.id,
+            rotuloOrigem: grupo.origem === 'producao'
+              ? 'Produzir do zero'
+              : (pronta ? 'Pronta do estoque' : 'Parcial do estoque'),
+            rotuloEtapa: grupo.origem === 'producao'
+              ? 'Não iniciada'
+              : `${grupo.ordem_origem}/${total} — ${passo?.insumo_nome || '—'}`
+          }
+        });
+      });
+    });
+    return linhas;
+  }
+
+  // ANTES de montar a tabela: é a resposta desta consulta que diz quantas
+  // linhas cada item tem. Buscá-la depois deixaria a tela mostrando o formato
+  // antigo por um instante e obrigaria a redesenhar tudo.
+  await carregarOpcoesDeEstorno();
+
   itemKeys.length = 0;
   destinationState.clear();
   if (itensBody) itensBody.innerHTML = '';
@@ -1113,17 +1284,18 @@
     itensEmpty?.classList.remove('hidden');
   } else {
     itensEmpty?.classList.add('hidden');
-    itens.forEach((item, index) => {
-      const key = String(item.id ?? index);
+    expandirPorGrupo(itens).forEach(({ item, index, grupo, key }) => {
       const tr = document.createElement('tr');
       tr.className = 'border-b border-white/10';
       tr.dataset.key = key;
 
       const name = nameFallback(item, index);
-      const quantity = extractQuantity(item);
+      // A quantidade da LINHA é a do grupo — não a do item inteiro. Era daí que
+      // vinham as "7 unidades" repetidas em cada linha.
+      const quantity = grupo ? normalizeQuantity(grupo.quantidade) : extractQuantity(item);
       const quantityLabel = formatQuantity(quantity);
-      const origem = origemFallback(item) || '—';
-      const situacao = statusFallback(item) || '—';
+      const origem = grupo ? grupo.rotuloOrigem : (origemFallback(item) || '—');
+      const situacao = grupo ? grupo.rotuloEtapa : (statusFallback(item) || '—');
 
       const nameTd = document.createElement('td');
       nameTd.setAttribute('data-perm-col', 'col_canc_item');
@@ -1188,6 +1360,7 @@
       const signature = buildItemSignature(item);
       itemInfo.set(key, {
         item,
+        grupo,
         name,
         quantity,
         quantityLabel,
@@ -1375,13 +1548,34 @@
     destinationState.forEach((state, key) => {
       const info = itemInfo.get(key);
       if (!info) return;
-      const base = { item: info.item || null };
+      // `grupo` diz a QUAL conjunto de unidades esta decisão pertence. Sem ele
+      // o backend teria de adivinhar, e adivinharia errado sempre que o mesmo
+      // item viesse de pontos diferentes da rota.
+      const base = {
+        item: info.item || null,
+        grupo: info.grupo
+          ? {
+            origem: info.grupo.origem,
+            ordem_origem: info.grupo.ordem_origem,
+            lote_id: info.grupo.lote_id ?? null
+          }
+          : null
+      };
 
-      const stockQty = normalizeQuantity(state.stock);
-      if (stockQty > 0) {
-        actions.push({ ...base, action: 'stock', quantity: stockQty });
-        totalStock += stockQty;
-      }
+      // Uma ação por PONTO da rota: é o que permite devolver duas acabadas e
+      // três paradas no meio no mesmo item. Sem escolha de ponto (opções não
+      // carregaram), vai uma ação só, sem `ordem` — e o backend devolve tudo
+      // como estava, que é o comportamento seguro.
+      const porEtapa = Array.isArray(state.stockPorEtapa) && state.stockPorEtapa.length
+        ? state.stockPorEtapa
+        : (normalizeQuantity(state.stock) > 0 ? [{ ordem: null, quantidade: state.stock }] : []);
+
+      porEtapa.forEach(entrada => {
+        const qty = normalizeQuantity(entrada.quantidade);
+        if (qty <= 0) return;
+        actions.push({ ...base, action: 'stock', quantity: qty, ordem: entrada.ordem });
+        totalStock += qty;
+      });
 
       const discardQty = normalizeQuantity(state.discard);
       if (discardQty > 0) {
@@ -1454,4 +1648,9 @@
 
   confirmBtn?.addEventListener('click', confirm);
   updateValidation();
+
+  // Em segundo plano: a tela abre e funciona sem isso, e as opções de ponto da
+  // rota aparecem assim que chegam. Bloquear a abertura por causa delas seria
+  // pagar uma ida à rede antes de o usuário sequer decidir cancelar.
+  carregarOpcoesDeEstorno();
 })();

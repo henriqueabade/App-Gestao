@@ -1,40 +1,36 @@
 /**
  * Estorno de um pedido cancelado.
  *
- * O QUE O CANCELAMENTO DESFAZ
- * ---------------------------
- * A conversão fez três coisas com o estoque, e cada uma volta de um jeito:
+ * A REGRA, EM UMA FRASE
+ * ---------------------
+ *   Devolve-se a peça no ESTÁGIO escolhido, e volta para a matéria-prima tudo o
+ *   que ESTA conversão consumiu DEPOIS daquele estágio.
  *
- *   1. Tirou PEÇAS de lotes (`pedido_itens_ext` diz de qual lote saiu cada uma).
- *   2. Prometeu peças a PRODUZIR (`reservas_estoque`, status "producao").
- *   3. Abateu MATÉRIA-PRIMA para produzir as peças do item 2.
+ * Parece simples porque é — e cobre todos os casos que pareciam diferentes:
  *
- * A DECISÃO É DO USUÁRIO, NÃO NOSSA
- * ---------------------------------
- * O modal de cancelamento pergunta, peça a peça, o que fazer: devolver ao
- * estoque, descartar, ou realocar para outro pedido. Essas decisões chegavam ao
- * backend e eram DESCARTADAS — o pedido virava "Cancelado" e nada voltava.
+ *   | situação                                   | estágio | peça       | insumos     |
+ *   |--------------------------------------------|---------|------------|-------------|
+ *   | peça do zero, devolvida em 12/15           | 12      | lote em 12 | 13,14,15    |
+ *   | peça do zero, revertida (excluir)          | 0       | nenhuma    | todos os 15 |
+ *   | peça que entrou pela metade em 5/15,       |         |            |             |
+ *   |   revertida (excluir ou realocar)          | 5       | lote em 5  | 6..15       |
+ *   | peça pronta (15/15), devolvida             | 15      | lote em 15 | nenhum      |
  *
- * As três ações significam:
+ * O ESTÁGIO TEM PISO E TETO
+ * -------------------------
+ *  - PISO: a origem da unidade, o ponto em que ela ENTROU no pedido. Uma peça
+ *    que chegou pronta não pode voltar pela metade — ninguém a desmontou.
+ *  - TETO: o fim da rota. Não existe estágio além do último insumo cadastrado.
  *
- *   `stock`      a peça EXISTE e volta para o estoque.
- *   `discard`    a peça não existe e não vai existir.
- *   `reallocate` a peça vai servir a outro pedido.
+ * Peça produzida do zero tem piso 0, e estágio 0 quer dizer "nenhuma peça":
+ * ela nunca existiu, então só há material a devolver.
  *
- * MATÉRIA-PRIMA
- * -------------
- * Só volta no `discard`, e só a das peças que seriam produzidas DO ZERO. O
- * porquê de cada parte dessa frase:
- *
- *  - `stock`: a peça existe, então o material virou peça. Devolver os dois
- *    contaria o mesmo material duas vezes.
- *  - peça que veio do estoque: o material dela foi consumido num pedido antigo,
- *    não neste. Não há o que devolver aqui.
- *  - peça pela metade: o material dos passos que faltavam foi consumido para
- *    terminá-la. Se ela é descartada, esse material foi perdido junto.
- *
- * O que sobra é o caso comum: o pedido é cancelado antes de a produção começar,
- * o material tinha sido abatido na conversão por antecipação, e volta.
+ * POR QUE SÓ O QUE ESTA CONVERSÃO CONSUMIU
+ * ----------------------------------------
+ * Uma peça que entrou pela metade já tinha os passos até ali pagos por outro
+ * pedido, num outro momento. Devolvê-los aqui criaria material do nada. O que
+ * este pedido tirou do estoque foi apenas o trecho da rota que faltava — e é
+ * exatamente esse trecho, menos o que foi de fato produzido, que volta.
  */
 
 const {
@@ -56,42 +52,10 @@ function arredondar(valor) {
   return Math.round((paraNumero(valor) + Number.EPSILON) * 10000) / 10000;
 }
 
-/**
- * Decisões do modal, agrupadas por peça do pedido.
- *
- * O modal manda uma linha por ação (`{ item, action, quantity, orderId }`), e a
- * mesma peça pode aparecer em várias — parte volta ao estoque, parte é
- * descartada, parte vai para outro pedido.
- */
-function agruparAcoes(acoes = []) {
-  const porItem = new Map();
-
-  for (const acao of (Array.isArray(acoes) ? acoes : [])) {
-    const itemId = acao?.item?.id ?? acao?.item ?? null;
-    if (itemId === null || itemId === undefined) continue;
-    const chave = String(itemId);
-
-    if (!porItem.has(chave)) {
-      porItem.set(chave, { devolver: 0, descartar: 0, realocar: [] });
-    }
-    const alvo = porItem.get(chave);
-    const quantidade = paraNumero(acao?.quantity);
-    if (!(quantidade > 0)) continue;
-
-    if (acao.action === 'stock') alvo.devolver = arredondar(alvo.devolver + quantidade);
-    else if (acao.action === 'discard') alvo.descartar = arredondar(alvo.descartar + quantidade);
-    else if (acao.action === 'reallocate') {
-      alvo.realocar.push({ pedidoDestino: acao.orderId ?? null, quantidade });
-    }
-  }
-
-  return porItem;
-}
-
-/** Rota do produto, ordenada, com o nome de cada insumo. */
-async function carregarRota(api, produtoId, cacheRotas) {
+/** Rota do produto, ordenada. `passo_id` é o id da linha em produtos_insumos. */
+async function carregarRota(api, produtoId, cache) {
   const chave = Number(produtoId);
-  if (cacheRotas.has(chave)) return cacheRotas.get(chave);
+  if (cache.has(chave)) return cache.get(chave);
 
   const bruta = await api
     .get('/api/produtos_insumos', { query: { produto_id: chave } })
@@ -103,51 +67,133 @@ async function carregarRota(api, produtoId, cacheRotas) {
       por_unidade: paraNumero(p.quantidade),
       ordem: paraNumero(p.ordem_insumo)
     }))
+    .filter(p => Number.isFinite(p.insumo_id))
     .sort((a, b) => a.ordem - b.ordem);
 
-  cacheRotas.set(chave, rota);
+  cache.set(chave, rota);
   return rota;
 }
 
 /**
- * Devolve `quantidade` ao lote de onde a peça saiu.
+ * De onde cada unidade do item veio, com o estágio (ordem na rota) em que
+ * entrou no pedido.
  *
- * O lote é lido pelo id gravado em `pedido_itens_ext.etapa_id` — apesar do nome,
- * essa coluna aponta para `produtos_em_cada_ponto`. Se o lote não existir mais
- * (foi excluído no meio do caminho), a peça vira um lote novo no mesmo ponto da
- * rota, em vez de sumir.
+ * É o PISO de cada grupo: a unidade não pode ser devolvida num ponto anterior
+ * ao que ela já estava quando foi escolhida.
  */
-async function devolverAoLote(api, { loteId, produtoId, ultimoInsumoId, etapa, quantidade }, avisos) {
-  if (!(quantidade > 0)) return null;
+function montarGrupos({ extDoItem, reserva, rota }) {
+  const grupos = [];
 
-  if (loteId !== null && loteId !== undefined) {
-    const lote = await api.get(`${TABELA_LOTES}/${loteId}`).catch(() => null);
-    if (lote && !lote.error) {
-      const nova = arredondar(paraNumero(lote.quantidade) + quantidade);
-      await api.put(`${TABELA_LOTES}/${loteId}`, {
-        quantidade: nova,
-        data_hora_completa: new Date().toISOString()
-      });
-      return Number(loteId);
+  for (const reg of extDoItem) {
+    const passo = rota.find(p => Number(p.passo_id) === Number(reg.ultimo_insumo_id)) || null;
+    grupos.push({
+      origem: 'estoque',
+      ordem_origem: passo ? passo.ordem : (rota.length ? rota[rota.length - 1].ordem : 0),
+      lote_id: reg.etapa_id ?? null,
+      quantidade: paraNumero(reg.quantidade),
+      restante: paraNumero(reg.quantidade)
+    });
+  }
+
+  const doZero = paraNumero(reserva?.quantidade);
+  if (doZero > 0) {
+    grupos.push({
+      origem: 'producao',
+      ordem_origem: 0,
+      lote_id: null,
+      quantidade: doZero,
+      restante: doZero
+    });
+  }
+
+  // Do mais adiantado para o menos: quem devolve "uma peça no estágio 12" quer
+  // a que estava mais perto disso, não a que teria de ser produzida do zero.
+  grupos.sort((a, b) => b.ordem_origem - a.ordem_origem);
+  return grupos;
+}
+
+/**
+ * Lote do produto naquele ponto da rota — o existente, ou um novo.
+ *
+ * O estoque de peças é organizado por PONTO DA ROTA, não por peça solta. Se o
+ * usuário devolve uma peça num estágio que ainda não tem lote, o lote é criado:
+ * sem isso a peça não teria onde entrar e o estorno simplesmente a perderia.
+ */
+async function lotePara(api, { produtoId, passo, lotePreferido }, cacheLotes, avisos) {
+  if (lotePreferido !== null && lotePreferido !== undefined) {
+    const lote = await api.get(`${TABELA_LOTES}/${lotePreferido}`).catch(() => null);
+    if (lote && !lote.error && Number(lote.ultimo_insumo_id) === Number(passo?.insumo_id)) {
+      return lote;
     }
-    avisos.push(`O lote ${loteId} não existe mais: a peça voltou como lote novo.`);
+  }
+
+  const chave = `${produtoId}:${passo?.insumo_id}`;
+  if (cacheLotes.has(chave)) return cacheLotes.get(chave);
+
+  const existentes = await api
+    .get(TABELA_LOTES, { query: { produto_id: produtoId } })
+    .catch(() => []);
+  const achado = (Array.isArray(existentes) ? existentes : [])
+    .find(l => Number(l.ultimo_insumo_id) === Number(passo?.insumo_id));
+
+  if (achado) {
+    cacheLotes.set(chave, achado);
+    return achado;
   }
 
   const criado = await api.post(TABELA_LOTES, {
     produto_id: produtoId,
-    etapa_id: etapa ?? null,
-    ultimo_insumo_id: ultimoInsumoId ?? null,
-    quantidade,
+    etapa_id: passo?.processo ?? null,
+    ultimo_insumo_id: passo?.insumo_id ?? null,
+    quantidade: 0,
     data_hora_completa: new Date().toISOString()
+  }).catch(err => {
+    avisos.push(`Falha ao criar o lote do produto ${produtoId} no ponto ${passo?.insumo_id}: ${err?.message || err}`);
+    return null;
   });
-  return criado?.id ?? null;
+
+  if (criado) cacheLotes.set(chave, { ...criado, quantidade: 0 });
+  return cacheLotes.get(chave) || null;
+}
+
+/** Decisões do modal, agrupadas por peça do pedido. */
+function agruparAcoes(acoes = []) {
+  const porItem = new Map();
+
+  for (const acao of (Array.isArray(acoes) ? acoes : [])) {
+    const itemId = acao?.item?.id ?? acao?.item ?? null;
+    const quantidade = paraNumero(acao?.quantity ?? acao?.quantidade);
+    if (itemId === null || itemId === undefined || !(quantidade > 0)) continue;
+
+    const chave = String(itemId);
+    if (!porItem.has(chave)) porItem.set(chave, []);
+    porItem.get(chave).push({
+      acao: acao.action || acao.acao || 'stock',
+      quantidade,
+      // De qual conjunto de unidades esta decisão é. A tela manda uma linha por
+      // grupo (uma pronta, quatro na Montagem, duas no Acabamento), e cada uma
+      // devolve um trecho diferente da rota. Sem esta referência a decisão
+      // cairia no grupo mais adiantado disponível — certo por acaso, errado na
+      // maioria das vezes.
+      grupo: acao.grupo || null,
+      // `null` = "voltar como estava": o estágio de destino é o de origem.
+      // É o que "excluir" e "realocar" fazem, e o padrão quando a tela antiga
+      // (sem escolha de estágio) manda a decisão.
+      ordemDestino: acao.ordem === undefined || acao.ordem === null
+        ? null
+        : paraNumero(acao.ordem),
+      pedidoDestino: acao.orderId ?? acao.pedidoDestino ?? null
+    });
+  }
+
+  return porItem;
 }
 
 /**
  * @param {object} api
  * @param {object} entrada
  * @param {number} entrada.pedidoId
- * @param {Array}  entrada.acoes      decisões do modal de cancelamento
+ * @param {Array}  entrada.acoes  `{ item, action, quantity, ordem, orderId }`
  * @param {number|null} entrada.usuarioId
  * @param {Function} entrada.registrarEntradaInsumo  `registrarEntrada` da
  *   matéria-prima, injetada para o teste não precisar de rede.
@@ -161,7 +207,7 @@ async function estornarCancelamento(api, {
   const avisos = [];
   const resumo = {
     pecasDevolvidas: 0,
-    pecasDescartadas: 0,
+    pecasNaoDevolvidas: 0,
     pecasRealocadas: 0,
     insumosDevolvidos: 0,
     reservasRetornadas: 0
@@ -177,6 +223,7 @@ async function estornarCancelamento(api, {
 
   const listaItens = (Array.isArray(itens) ? itens : [])
     .filter(i => String(i?.pedido_id) === String(pedidoId));
+
   const extPorItem = new Map();
   for (const reg of (Array.isArray(doEstoque) ? doEstoque : [])) {
     const chave = String(reg.pedido_item_id);
@@ -190,175 +237,196 @@ async function estornarCancelamento(api, {
   }
 
   const cacheRotas = new Map();
+  const cacheLotes = new Map();
+  /** insumo -> quantidade a devolver, somada e gravada uma vez só no fim. */
+  const insumosAVoltar = new Map();
 
   for (const item of listaItens) {
     const chave = String(item.id);
-    const decisao = porItem.get(chave);
+    const decisoes = porItem.get(chave);
     // Sem decisão para esta peça, nada é mexido. Cancelar não pode devolver
-    // estoque "por padrão": é justamente a escolha que o modal foi feito para
-    // capturar.
-    if (!decisao) continue;
+    // estoque "por padrão": é a escolha que o modal existe para capturar.
+    if (!decisoes || !decisoes.length) continue;
 
     const produtoId = Number(item.produto_id);
     const rota = await carregarRota(api, produtoId, cacheRotas);
-    const doZeroDaPeca = paraNumero(reservaPorItem.get(chave)?.quantidade);
+    const ordemFinal = rota.length ? rota[rota.length - 1].ordem : 0;
 
-    // ----------------------------------------------------------------
-    // 1. Devolver ao estoque
-    //
-    // Primeiro as peças que SAÍRAM de lotes: elas voltam para o lote de origem,
-    // no mesmo ponto da rota em que estavam. Só o que sobrar da devolução é
-    // tratado como peça produzida do zero.
-    // ----------------------------------------------------------------
-    let aDevolver = decisao.devolver;
+    const grupos = montarGrupos({
+      extDoItem: extPorItem.get(chave) || [],
+      reserva: reservaPorItem.get(chave),
+      rota
+    });
 
-    for (const reg of (extPorItem.get(chave) || [])) {
-      if (!(aDevolver > 0)) break;
-      const disponivel = paraNumero(reg.quantidade);
-      const devolver = Math.min(disponivel, aDevolver);
-      if (!(devolver > 0)) continue;
+    for (const decisao of decisoes) {
+      let aTratar = decisao.quantidade;
 
-      const passo = rota.find(p => Number(p.passo_id) === Number(reg.ultimo_insumo_id)) || null;
-      const loteId = await devolverAoLote(api, {
-        loteId: reg.etapa_id,
-        produtoId,
-        ultimoInsumoId: passo?.insumo_id ?? null,
-        etapa: null,
-        quantidade: devolver
-      }, avisos);
+      while (aTratar > 0) {
+        // A tela diz de qual grupo é a decisão. Quando não diz (payload antigo),
+        // cai no mais adiantado disponível — `montarGrupos` já ordenou assim.
+        const grupo = decisao.grupo
+          ? grupos.find(g =>
+            g.restante > 0
+            && String(g.origem) === String(decisao.grupo.origem)
+            && Number(g.ordem_origem) === Number(decisao.grupo.ordem_origem)
+            && String(g.lote_id ?? '') === String(decisao.grupo.lote_id ?? ''))
+          : grupos.find(g => g.restante > 0);
 
-      await registrarMovimento(api, {
-        tipoMovimento: MOV.RETORNO,
-        tipoItem: ITEM.PECA,
-        itemId: produtoId,
-        quantidade: devolver,
-        pedidoId,
-        pedidoItemId: item.id,
-        loteId,
-        ultimoInsumoId: passo?.insumo_id ?? null,
-        nota: 'Devolvida ao estoque no cancelamento do pedido',
-        usuarioId
-      }, avisos);
+        if (!grupo) {
+          avisos.push(
+            `A peça ${item.id} recebeu decisão para ${arredondar(aTratar)} unidade(s) `
+            + 'além do que o pedido tinha. O excedente foi ignorado.'
+          );
+          break;
+        }
 
-      resumo.pecasDevolvidas = arredondar(resumo.pecasDevolvidas + devolver);
-      aDevolver = arredondar(aDevolver - devolver);
-    }
+        const unidades = Math.min(grupo.restante, aTratar);
+        grupo.restante = arredondar(grupo.restante - unidades);
+        aTratar = arredondar(aTratar - unidades);
 
-    // O que sobrou seria produzido do zero e o usuário disse que a peça existe:
-    // ela entra no estoque acabada, no fim da rota.
-    if (aDevolver > 0) {
-      const ultimoPasso = rota.length ? rota[rota.length - 1] : null;
-      const loteId = await devolverAoLote(api, {
-        loteId: null,
-        produtoId,
-        ultimoInsumoId: ultimoPasso?.insumo_id ?? null,
-        etapa: null,
-        quantidade: aDevolver
-      }, avisos);
+        // O destino não pode ser ANTES da origem: ninguém desmonta uma peça.
+        // Sem estágio escolhido, volta como estava — é o que "excluir" e
+        // "realocar" significam.
+        const pedido = decisao.ordemDestino === null ? grupo.ordem_origem : decisao.ordemDestino;
+        const ordemDestino = Math.min(Math.max(pedido, grupo.ordem_origem), ordemFinal);
+        if (decisao.ordemDestino !== null && decisao.ordemDestino < grupo.ordem_origem) {
+          avisos.push(
+            `A peça ${item.id} entrou no pedido no ponto ${grupo.ordem_origem} da rota e `
+            + `não pode voltar no ponto ${decisao.ordemDestino}: foi devolvida no ponto de origem.`
+          );
+        }
 
-      await registrarMovimento(api, {
-        tipoMovimento: MOV.RETORNO,
-        tipoItem: ITEM.PECA,
-        itemId: produtoId,
-        quantidade: aDevolver,
-        pedidoId,
-        pedidoItemId: item.id,
-        loteId,
-        ultimoInsumoId: ultimoPasso?.insumo_id ?? null,
-        nota: 'Peça produzida entrou no estoque no cancelamento do pedido',
-        usuarioId
-      }, avisos);
+        // --------------------------------------------------------------
+        // A PEÇA
+        //
+        // Estágio 0 é o único caso sem peça: ela seria produzida do zero e o
+        // usuário a está revertendo, então nunca existiu.
+        // --------------------------------------------------------------
+        if (ordemDestino > 0) {
+          const passoDestino = rota.find(p => p.ordem === ordemDestino)
+            || rota[rota.length - 1]
+            || null;
+          const lote = await lotePara(api, {
+            produtoId,
+            passo: passoDestino,
+            lotePreferido: ordemDestino === grupo.ordem_origem ? grupo.lote_id : null
+          }, cacheLotes, avisos);
 
-      resumo.pecasDevolvidas = arredondar(resumo.pecasDevolvidas + aDevolver);
-    }
+          if (lote) {
+            const nova = arredondar(paraNumero(lote.quantidade) + unidades);
+            await api.put(`${TABELA_LOTES}/${lote.id}`, {
+              quantidade: nova,
+              data_hora_completa: new Date().toISOString()
+            }).catch(err => avisos.push(`Falha ao devolver ao lote ${lote.id}: ${err?.message || err}`));
+            lote.quantidade = nova;
 
-    // ----------------------------------------------------------------
-    // 2. Descarte
-    //
-    // A peça não volta. A MATÉRIA-PRIMA volta — mas só a das unidades que
-    // seriam produzidas do zero, e só até o total delas. Ver o cabeçalho.
-    // ----------------------------------------------------------------
-    if (decisao.descartar > 0) {
-      resumo.pecasDescartadas = arredondar(resumo.pecasDescartadas + decisao.descartar);
-
-      await registrarMovimento(api, {
-        tipoMovimento: MOV.SAIDA,
-        tipoItem: ITEM.PECA,
-        itemId: produtoId,
-        quantidade: decisao.descartar,
-        pedidoId,
-        pedidoItemId: item.id,
-        nota: 'Descartada no cancelamento do pedido',
-        usuarioId
-      }, avisos);
-
-      const unidadesDeMaterial = Math.min(decisao.descartar, doZeroDaPeca);
-      if (unidadesDeMaterial > 0 && typeof registrarEntradaInsumo === 'function') {
-        for (const passo of rota) {
-          const quantidade = arredondar(passo.por_unidade * unidadesDeMaterial);
-          if (!(quantidade > 0)) continue;
-          try {
-            await registrarEntradaInsumo(passo.insumo_id, quantidade, usuarioId, {
-              origem: 'pedido',
-              pedidoId,
-              nota: 'Devolvido no cancelamento do pedido'
-            });
             await registrarMovimento(api, {
-              tipoMovimento: MOV.RETORNO_INSUMO,
-              tipoItem: ITEM.INSUMO,
-              itemId: passo.insumo_id,
-              quantidade,
+              tipoMovimento: MOV.RETORNO,
+              tipoItem: ITEM.PECA,
+              itemId: produtoId,
+              quantidade: unidades,
               pedidoId,
               pedidoItemId: item.id,
-              nota: 'Devolvido no cancelamento do pedido',
+              loteId: lote.id,
+              ultimoInsumoId: passoDestino?.insumo_id ?? null,
+              nota: decisao.acao === 'reallocate'
+                ? `Realocada para o pedido ${decisao.pedidoDestino}: voltou ao estoque no ponto ${ordemDestino} da rota`
+                : `Cancelamento: devolvida ao estoque no ponto ${ordemDestino} da rota`,
               usuarioId
             }, avisos);
-            resumo.insumosDevolvidos += 1;
-          } catch (err) {
-            avisos.push(`Falha ao devolver o insumo ${passo.insumo_id}: ${err?.message || err}`);
+
+            resumo.pecasDevolvidas = arredondar(resumo.pecasDevolvidas + unidades);
           }
+        } else {
+          resumo.pecasNaoDevolvidas = arredondar(resumo.pecasNaoDevolvidas + unidades);
+        }
+
+        // --------------------------------------------------------------
+        // A MATÉRIA-PRIMA
+        //
+        // Volta o trecho da rota que ESTA conversão pagou e que a peça não
+        // percorreu: depois do destino, até o fim. Os passos anteriores à
+        // origem foram pagos por outro pedido — devolvê-los criaria material
+        // do nada.
+        // --------------------------------------------------------------
+        for (const passo of rota) {
+          if (!(passo.ordem > ordemDestino)) continue;
+          if (!(passo.ordem > grupo.ordem_origem)) continue;
+          const quantidade = arredondar(passo.por_unidade * unidades);
+          if (!(quantidade > 0)) continue;
+          insumosAVoltar.set(
+            passo.insumo_id,
+            arredondar((insumosAVoltar.get(passo.insumo_id) || 0) + quantidade)
+          );
+        }
+
+        // --------------------------------------------------------------
+        // A REALOCAÇÃO
+        //
+        // Não muda o estoque — quem mudou foi o bloco acima. O que ela
+        // acrescenta é o vínculo: para qual pedido esta peça foi.
+        // --------------------------------------------------------------
+        if (decisao.acao === 'reallocate') {
+          const movimentoId = await registrarMovimento(api, {
+            tipoMovimento: MOV.TRANSFERENCIA,
+            tipoItem: ITEM.PECA,
+            itemId: produtoId,
+            quantidade: unidades,
+            pedidoId,
+            pedidoItemId: item.id,
+            nota: `Realocada para o pedido ${decisao.pedidoDestino} no cancelamento`,
+            usuarioId
+          }, avisos);
+
+          await api.post('/api/realocacoes', {
+            movimento_id_origem: movimentoId,
+            pedido_id_destino: decisao.pedidoDestino,
+            created_at: new Date().toISOString(),
+            created_by: usuarioId
+          }).catch(err => avisos.push(
+            `Falha ao registrar a realocação para o pedido ${decisao.pedidoDestino}: ${err?.message || err}`
+          ));
+
+          resumo.pecasRealocadas = arredondar(resumo.pecasRealocadas + unidades);
         }
       }
     }
+  }
 
-    // ----------------------------------------------------------------
-    // 3. Realocação para outro pedido
-    //
-    // Nada volta ao estoque: a peça troca de dono. Fica registrada em
-    // `realocacoes` e num movimento de transferência, que é o que permite
-    // depois responder "para onde foi a peça deste pedido cancelado?".
-    // ----------------------------------------------------------------
-    for (const destino of decisao.realocar) {
-      if (!(destino.quantidade > 0)) continue;
-
-      const movimentoId = await registrarMovimento(api, {
-        tipoMovimento: MOV.TRANSFERENCIA,
-        tipoItem: ITEM.PECA,
-        itemId: produtoId,
-        quantidade: destino.quantidade,
+  // ------------------------------------------------------------------
+  // A matéria-prima volta somada por insumo.
+  //
+  // Uma entrada por insumo, não uma por peça: o histórico da matéria-prima
+  // registra ALTERAÇÕES DE SALDO, e cinco linhas de "voltou 2" para o mesmo
+  // insumo no mesmo instante contam a mesma história pior.
+  // ------------------------------------------------------------------
+  for (const [insumoId, quantidade] of insumosAVoltar.entries()) {
+    if (!(quantidade > 0)) continue;
+    try {
+      if (typeof registrarEntradaInsumo === 'function') {
+        await registrarEntradaInsumo(insumoId, quantidade, usuarioId, {
+          origem: 'pedido',
+          pedidoId,
+          nota: 'Devolvido no cancelamento do pedido'
+        });
+      }
+      await registrarMovimento(api, {
+        tipoMovimento: MOV.RETORNO_INSUMO,
+        tipoItem: ITEM.INSUMO,
+        itemId: insumoId,
+        quantidade,
         pedidoId,
-        pedidoItemId: item.id,
-        nota: `Realocada para o pedido ${destino.pedidoDestino} no cancelamento`,
+        nota: 'Devolvido no cancelamento do pedido',
         usuarioId
       }, avisos);
-
-      try {
-        await api.post('/api/realocacoes', {
-          movimento_id_origem: movimentoId,
-          pedido_id_destino: destino.pedidoDestino,
-          created_at: new Date().toISOString(),
-          created_by: usuarioId
-        });
-      } catch (err) {
-        avisos.push(`Falha ao registrar a realocação para o pedido ${destino.pedidoDestino}: ${err?.message || err}`);
-      }
-
-      resumo.pecasRealocadas = arredondar(resumo.pecasRealocadas + destino.quantidade);
+      resumo.insumosDevolvidos += 1;
+    } catch (err) {
+      avisos.push(`Falha ao devolver o insumo ${insumoId}: ${err?.message || err}`);
     }
   }
 
-  // As reservas de produção encerram como "retornada": a promessa de peça deste
-  // pedido não vale mais, qualquer que tenha sido o destino escolhido.
+  // As reservas encerram como "retornada": a promessa de peça deste pedido não
+  // vale mais, qualquer que tenha sido o destino escolhido.
   resumo.reservasRetornadas = await atualizarStatusDasReservas(
     api, pedidoId, RESERVA.RETORNADA, avisos
   );
@@ -366,4 +434,67 @@ async function estornarCancelamento(api, {
   return { resumo, avisos };
 }
 
-module.exports = { estornarCancelamento, agruparAcoes };
+/**
+ * O que a tela de cancelamento precisa para montar as escolhas: por peça, de
+ * onde cada unidade veio (o PISO do estágio) e a rota inteira (o TETO).
+ */
+async function opcoesDeEstorno(api, pedidoId) {
+  const [itens, doEstoque, reservas, materias] = await Promise.all([
+    api.get('/api/pedidos_itens', { query: { pedido_id: pedidoId } }).catch(() => []),
+    api.get('/api/pedido_itens_ext', { query: { id_pedido: pedidoId } }).catch(() => []),
+    api.get('/api/reservas_estoque', { query: { pedido_id: pedidoId } }).catch(() => []),
+    api.get('/api/materia_prima').catch(() => [])
+  ]);
+
+  const nomeInsumo = new Map(
+    (Array.isArray(materias) ? materias : []).map(m => [Number(m.id), m])
+  );
+
+  const extPorItem = new Map();
+  for (const reg of (Array.isArray(doEstoque) ? doEstoque : [])) {
+    const chave = String(reg.pedido_item_id);
+    if (!extPorItem.has(chave)) extPorItem.set(chave, []);
+    extPorItem.get(chave).push(reg);
+  }
+  const reservaPorItem = new Map();
+  for (const r of (Array.isArray(reservas) ? reservas : [])) {
+    reservaPorItem.set(String(r.pedido_item_id), r);
+  }
+
+  const cacheRotas = new Map();
+  const saida = [];
+
+  for (const item of (Array.isArray(itens) ? itens : [])) {
+    const chave = String(item.id);
+    const rota = await carregarRota(api, item.produto_id, cacheRotas);
+    const grupos = montarGrupos({
+      extDoItem: extPorItem.get(chave) || [],
+      reserva: reservaPorItem.get(chave),
+      rota
+    });
+
+    saida.push({
+      pedido_item_id: item.id,
+      produto_id: item.produto_id,
+      nome: item.nome || item.codigo || `Item ${item.id}`,
+      codigo: item.codigo || '',
+      quantidade: paraNumero(item.quantidade),
+      rota: rota.map(p => ({
+        ordem: p.ordem,
+        insumo_id: p.insumo_id,
+        insumo_nome: nomeInsumo.get(p.insumo_id)?.nome || `Insumo ${p.insumo_id}`,
+        processo: nomeInsumo.get(p.insumo_id)?.processo || ''
+      })),
+      grupos: grupos.map(g => ({
+        origem: g.origem,
+        ordem_origem: g.ordem_origem,
+        lote_id: g.lote_id,
+        quantidade: g.quantidade
+      }))
+    });
+  }
+
+  return { pedido_id: pedidoId, itens: saida };
+}
+
+module.exports = { estornarCancelamento, opcoesDeEstorno, agruparAcoes, montarGrupos };
