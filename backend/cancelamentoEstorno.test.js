@@ -372,6 +372,65 @@ test('o lote criado no estorno nasce COMPLETO: processo, insumo e produto', asyn
   assert.ok(novo.data_hora_completa, 'e a data da alteração');
 });
 
+test('o MESMO grupo dividido em vários destinos respeita o saldo dele', async () => {
+  // 4 unidades paradas em 7/15. O usuário devolve 2 acabadas e 2 em 10/15.
+  const api = montarApi({
+    ext: [{ id: 1, id_pedido: 99, pedido_item_id: 1000, quantidade: 4, ultimo_insumo_id: passoDaOrdem(7).id, etapa_id: 503 }],
+    lotes: { 503: { id: 503, produto_id: 7, quantidade: 0, ultimo_insumo_id: passoDaOrdem(7).insumo_id } }
+  });
+  const ins = coletorDeInsumos();
+
+  const { resumo } = await estornarCancelamento(api, {
+    pedidoId: 99,
+    acoes: [
+      { item: { id: 1000 }, action: 'stock', quantity: 2, ordem: 15,
+        grupo: { origem: 'estoque', ordem_origem: 7, lote_id: 503 } },
+      { item: { id: 1000 }, action: 'stock', quantity: 2, ordem: 10,
+        grupo: { origem: 'estoque', ordem_origem: 7, lote_id: 503 } }
+    ],
+    registrarEntradaInsumo: ins.fn
+  });
+
+  assert.equal(resumo.pecasDevolvidas, 4, 'as 4 do grupo, nem uma a mais');
+
+  // 2 acabadas não devolvem nada; 2 em 10/15 devolvem os passos 11..15.
+  assert.equal(ins.de(11), 2, 'só as 2 que pararam em 10 devolvem o passo 11');
+  assert.equal(ins.de(15), 2);
+  assert.equal(
+    ins.de(8), 0,
+    'o passo 8 foi percorrido pelos DOIS destinos (um parou em 10, outro em 15): '
+    + 'esse material virou peça e não volta'
+  );
+  assert.equal(ins.de(7), 0, 'o passo 7 é a origem: não volta para ninguém');
+
+  const novo = api.gravacoes.lotesNovos.find(l => Number(l.ultimo_insumo_id) === passoDaOrdem(10).insumo_id);
+  assert.ok(novo, 'as 2 de 10/15 criaram o lote naquele ponto');
+});
+
+test('destinos que somam mais que o grupo não inventam peças', async () => {
+  const api = montarApi({
+    ext: [{ id: 1, id_pedido: 99, pedido_item_id: 1000, quantidade: 4, ultimo_insumo_id: passoDaOrdem(7).id, etapa_id: 503 }],
+    lotes: { 503: { id: 503, produto_id: 7, quantidade: 0, ultimo_insumo_id: passoDaOrdem(7).insumo_id } }
+  });
+  const ins = coletorDeInsumos();
+
+  const { resumo, avisos } = await estornarCancelamento(api, {
+    pedidoId: 99,
+    acoes: [
+      { item: { id: 1000 }, action: 'stock', quantity: 4, ordem: 15,
+        grupo: { origem: 'estoque', ordem_origem: 7, lote_id: 503 } },
+      // A tela impede, mas se passar (duas abas, payload adulterado) o backend
+      // não pode devolver 8 peças de um grupo que tinha 4.
+      { item: { id: 1000 }, action: 'stock', quantity: 4, ordem: 10,
+        grupo: { origem: 'estoque', ordem_origem: 7, lote_id: 503 } }
+    ],
+    registrarEntradaInsumo: ins.fn
+  });
+
+  assert.equal(resumo.pecasDevolvidas, 4, 'o grupo tinha 4: o excedente é recusado');
+  assert.ok(avisos.some(a => /além do que o pedido tinha/.test(a)));
+});
+
 test('opcoesDeEstorno diz o piso e o teto de cada peça', async () => {
   const api = montarApi({
     ext: [{ id: 1, id_pedido: 99, pedido_item_id: 1000, quantidade: 2, ultimo_insumo_id: passoDaOrdem(5).id, etapa_id: 501 }],

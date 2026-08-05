@@ -81,6 +81,21 @@ router.put('/:id/status', exigirPermissao(permissaoDeStatus), async (req, res) =
   const { id } = req.params;
   try {
     const api = createApiClient(req);
+
+    // Cancelar um pedido JÁ cancelado devolveria o estoque uma segunda vez:
+    // as peças entrariam nos lotes de novo e os insumos voltariam em dobro,
+    // criando material que não existe. A trava é aqui, no backend, porque
+    // esconder o botão não impede uma segunda aba nem um duplo envio.
+    if (status === 'Cancelado') {
+      const atual = await api.get(`/api/pedidos/${id}`).catch(() => null);
+      if (String(atual?.situacao || '').trim().toLowerCase() === 'cancelado') {
+        return res.status(409).json({
+          error: 'Este pedido já está cancelado.',
+          code: 'JA_CANCELADO'
+        });
+      }
+    }
+
     const payload = payloadDeStatus(status);
     await api.put(`/api/pedidos/${id}`, payload);
 

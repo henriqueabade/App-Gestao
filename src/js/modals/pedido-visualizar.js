@@ -287,6 +287,17 @@
       if (typeof showToast === 'function') showToast('Não foi possível carregar os dados do pedido.', 'error');
       return;
     }
+
+    // Cancelar duas vezes devolveria o estoque em dobro. O backend recusa de
+    // qualquer forma; aqui a recusa vira uma frase em vez de um erro.
+    const situacao = String(window.cancelarPedidoContext.status || '').trim().toLowerCase();
+    if (situacao === 'cancelado') {
+      if (typeof showToast === 'function') {
+        showToast('Este pedido já está cancelado.', 'info');
+      }
+      return;
+    }
+
     close();
     const openCancelModal = async () => {
       await Modal.open('modals/pedidos/cancelar.html', '../js/modals/pedido-cancelar.js', 'cancelarPedido');

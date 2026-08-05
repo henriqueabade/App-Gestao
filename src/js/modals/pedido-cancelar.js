@@ -143,33 +143,48 @@
     });
   }
 
+  /** "9/15 — Tag de Papel" para um ponto da rota. */
+  function rotuloDoPonto(dados, ordem) {
+    const total = dados.rota.length;
+    if (!(ordem > 0)) return 'Produzir do zero';
+    const passo = dados.rota.find(p => Number(p.ordem) === Number(ordem));
+    return `${ordem}/${total} — ${passo?.insumo_nome || '—'}`;
+  }
+
   /**
-   * Em que ponto da rota esta linha vai voltar, por extenso.
+   * A decisão inteira numa linha: DE ONDE a peça veio e PARA ONDE vai.
    *
-   * "Apaga Velas Silvia" repetido três vezes no resumo não diz nada: é o
-   * ÚLTIMO ITEM que distingue a peça pronta da que para na Montagem.
+   * Só o destino não basta. Devolver em 12/15 significa uma coisa se a peça
+   * entrou pronta e outra bem diferente se ela entrou em 3/15 — no segundo caso
+   * ela avançou nove passos, e é o trecho restante que volta para a
+   * matéria-prima. Sem a origem ao lado, o usuário não tem como conferir a conta.
    */
-  function rotuloDoDestino(key) {
+  function rotuloDoCaminho(key, indice = 0) {
     const info = itemInfo.get(String(key));
     const dados = estornoPorItem.get(String(info?.item?.id ?? key));
     if (!dados?.rota?.length) return '';
 
-    const state = destinationState.get(String(key));
-    const escolhida = (state?.stockPorEtapa || [])[0];
     const total = dados.rota.length;
+    const state = destinationState.get(String(key));
+    const escolhida = (state?.stockPorEtapa || [])[indice];
 
-    // Sem escolha explícita, volta como estava: o ponto de origem do grupo.
-    const ordem = escolhida && escolhida.ordem !== null && escolhida.ordem !== undefined
+    const origem = Number(info?.grupo?.ordem_origem ?? total);
+    const destino = escolhida && escolhida.ordem !== null && escolhida.ordem !== undefined
       ? Number(escolhida.ordem)
-      : Number(info?.grupo?.ordem_origem ?? total);
+      : origem;
 
-    if (!(ordem > 0)) return 'Não volta ao estoque — só o material é estornado';
+    if (!(destino > 0)) {
+      return `${rotuloDoPonto(dados, origem)} → não volta ao estoque · ${total} item(ns) para a matéria-prima`;
+    }
 
-    const passo = dados.rota.find(p => Number(p.ordem) === ordem);
-    if (!passo) return '';
-    const faltam = total - ordem;
-    return `${ordem}/${total} — ${passo.insumo_nome}`
-      + (faltam > 0 ? ` · ${faltam} item(ns) voltam para a matéria-prima` : ' · peça pronta');
+    const faltam = total - destino;
+    const caminho = destino === origem
+      ? `${rotuloDoPonto(dados, origem)} (volta como estava)`
+      : `${rotuloDoPonto(dados, origem)} → ${rotuloDoPonto(dados, destino)}`;
+
+    return caminho + (faltam > 0
+      ? ` · ${faltam} item(ns) voltam para a matéria-prima`
+      : ' · peça pronta');
   }
 
   /** Menor ponto em que ALGUMA unidade desta peça pode voltar. */
@@ -947,11 +962,17 @@
     destinationState.forEach((state, key) => {
       const info = itemInfo.get(key);
       if (!info) return;
-      const stockQty = normalizeQuantity(state.stock);
       const discardQty = normalizeQuantity(state.discard);
-      if (stockQty > 0) {
-        stockEntries.push({ key, name: info.name, quantity: stockQty });
-      }
+
+      // Uma linha por DESTINO, não por grupo: o mesmo lote pode ser devolvido
+      // em pontos diferentes (2 acabadas e 2 paradas no meio), e somar as
+      // quatro numa linha só esconderia exatamente a informação que faz o
+      // usuário conferir se distribuiu certo.
+      (state.stockPorEtapa || []).forEach((entrada, indice) => {
+        const qty = normalizeQuantity(entrada.quantidade);
+        if (qty <= 0) return;
+        stockEntries.push({ key, indice, name: info.name, quantity: qty });
+      });
       if (discardQty > 0) {
         discardEntries.push({ key, name: info.name, quantity: discardQty });
       }
@@ -1038,17 +1059,18 @@
         btn.type = 'button';
         btn.className = 'w-full flex items-center justify-between gap-3 bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-left text-xs text-gray-200 hover:border-primary/40 transition';
         // O nome do produto se repete em todas as linhas quando o item veio de
-        // pontos diferentes da rota — três linhas iguais, sem dizer qual é qual.
-        // O DESTINO escolhido é o que as distingue.
-        const destino = rotuloDoDestino(item.key);
+        // pontos diferentes da rota. O que as distingue é DE ONDE a peça veio e
+        // PARA ONDE ela vai — a decisão inteira numa linha.
+        const caminho = rotuloDoCaminho(item.key, item.indice);
         btn.innerHTML = `
           <span class="flex flex-col">
             <span>${item.name}</span>
-            ${destino ? `<span class="text-[11px] text-emerald-200/80">${destino}</span>` : ''}
+            ${caminho ? `<span class="text-[11px] text-emerald-200/80">${caminho}</span>` : ''}
           </span>
           <span class="text-white font-semibold">${formatUnitsLabel(item.quantity)}</span>
         `;
-        btn.addEventListener('click', () => handleSimpleAction(item.key, 'stock'));
+        // Clicar edita ESTA entrada, não o grupo inteiro.
+        btn.addEventListener('click', () => handleSimpleAction(item.key, 'stock', item.indice));
         list.appendChild(btn);
       });
       wrapper.appendChild(list);
@@ -1129,10 +1151,24 @@
 
   document.getElementById('cancelarPedidoDrawerFechar')?.addEventListener('click', closeDrawer);
 
-  async function handleSimpleAction(key, action) {
+  /**
+   * @param {number} indiceEdicao  qual destino está sendo editado. -1 (padrão)
+   *   cria um novo, limitado ao que AINDA não tem destino.
+   */
+  async function handleSimpleAction(key, action, indiceEdicao = -1) {
     const info = itemInfo.get(key);
     const state = ensureDestinationState(key, info?.quantity || 0);
-    const currentValue = normalizeQuantity(state[action] || 0);
+
+    // O teto de um NOVO destino é o saldo ainda livre do grupo, não o total.
+    // Antes o teto era "restante + tudo o que já foi para o estoque", e com
+    // isso a segunda escolha podia repetir unidades já destinadas: um grupo de
+    // 4 aceitava 4 num ponto e mais 4 em outro, devolvendo 8 peças que não
+    // existiam. Editando uma entrada, o teto inclui a quantidade dela.
+    const entradas = action === 'stock' ? (state.stockPorEtapa || []) : [];
+    const emEdicao = indiceEdicao >= 0 ? entradas[indiceEdicao] : null;
+    const currentValue = action === 'stock'
+      ? normalizeQuantity(emEdicao?.quantidade || 0)
+      : normalizeQuantity(state[action] || 0);
     const max = normalizeQuantity(state.remaining + currentValue);
     if (max <= 0 && currentValue <= 0) {
       const message = 'Todas as unidades deste item já possuem destino definido.';
@@ -1155,7 +1191,7 @@
 
     // Só o retorno ao estoque pergunta o ponto da rota. Descarte é sempre
     // "voltar como estava": a peça não avança, ela some do pedido.
-    const etapas = action === 'stock' ? etapasDisponiveis(key) : [];
+    const etapas = action === 'stock' ? etapasDisponiveis(key, indiceEdicao) : [];
 
     const resposta = await openQuantityDialog({
       title: titles[action] || 'Definir quantidade',
@@ -1172,11 +1208,27 @@
     const ordem = typeof resposta === 'object' ? resposta.ordem : null;
 
     if (action === 'stock') {
-      // Uma entrada POR PONTO da rota: o mesmo item pode voltar em pedaços —
-      // duas acabadas, três paradas no meio — até cobrir a quantidade do pedido.
-      state.stockPorEtapa = (state.stockPorEtapa || []).filter(e => e.ordem !== ordem);
-      if (quantidade > 0) state.stockPorEtapa.push({ ordem, quantidade: normalizeQuantity(quantidade) });
-      state.stock = (state.stockPorEtapa || []).reduce((s, e) => s + normalizeQuantity(e.quantidade), 0);
+      // Uma entrada POR PONTO da rota: o mesmo grupo pode voltar em pedaços —
+      // duas acabadas, duas paradas no meio — até cobrir a quantidade dele.
+      const lista = state.stockPorEtapa || [];
+
+      if (emEdicao) {
+        if (quantidade > 0) {
+          emEdicao.quantidade = normalizeQuantity(quantidade);
+          emEdicao.ordem = ordem;
+        } else {
+          lista.splice(indiceEdicao, 1);
+        }
+      } else if (quantidade > 0) {
+        // Escolher o mesmo ponto duas vezes SOMA, em vez de criar uma linha
+        // repetida no resumo.
+        const mesmoPonto = lista.find(e => e.ordem === ordem);
+        if (mesmoPonto) mesmoPonto.quantidade = normalizeQuantity(mesmoPonto.quantidade + quantidade);
+        else lista.push({ ordem, quantidade: normalizeQuantity(quantidade) });
+      }
+
+      state.stockPorEtapa = lista.filter(e => normalizeQuantity(e.quantidade) > 0);
+      state.stock = state.stockPorEtapa.reduce((s, e) => s + normalizeQuantity(e.quantidade), 0);
     } else {
       state[action] = normalizeQuantity(quantidade);
     }
@@ -1193,7 +1245,7 @@
    * produzidas do zero: elas nunca existiram, então podem simplesmente não
    * voltar, devolvendo só o material.
    */
-  function etapasDisponiveis(key) {
+  function etapasDisponiveis(key, indiceEdicao = -1) {
     const info = itemInfo.get(String(key));
     const dados = estornoPorItem.get(String(info?.item?.id ?? key));
     if (!dados?.rota?.length) return [];
@@ -1204,7 +1256,11 @@
     const piso = info?.grupo ? (Number(info.grupo.ordem_origem) || 0) : (pisoDoItem(info?.item?.id) ?? 0);
     const total = dados.rota.length;
     const state = destinationState.get(String(key));
-    const jaEscolhido = (state?.stockPorEtapa || [])[0]?.ordem;
+    // Editando um destino, o ponto dele vem marcado. Criando um novo, nada
+    // vem marcado e o padrão é o fim da rota.
+    const jaEscolhido = indiceEdicao >= 0
+      ? (state?.stockPorEtapa || [])[indiceEdicao]?.ordem
+      : undefined;
 
     const opcoes = [];
     if (piso === 0) {
