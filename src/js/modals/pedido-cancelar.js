@@ -1414,9 +1414,11 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: 'Cancelado', acoes: actions })
       });
-      if (!resp.ok) throw new Error('Falha ao cancelar pedido');
-      if (typeof showToast === 'function') showToast('Pedido cancelado com sucesso.', 'success');
-      close();
+      const corpo = await resp.json().catch(() => null);
+      if (!resp.ok) throw new Error(corpo?.detalhe || corpo?.error || 'Falha ao cancelar pedido');
+
+      // A tabela é atualizada ANTES do aviso: ler "cancelado" com o pedido
+      // ainda em Produção faz o usuário concluir que não funcionou.
       if (typeof window.carregarPedidos === 'function') {
         try {
           await window.carregarPedidos();
@@ -1424,6 +1426,23 @@
           console.error('Erro ao recarregar pedidos', err);
         }
       }
+
+      // O que voltou ao estoque é o que interessa saber depois de cancelar —
+      // "cancelado com sucesso" sozinho não diz se o estorno aconteceu.
+      const e = corpo?.estorno;
+      const resumo = e
+        ? `Pedido cancelado. ${e.pecasDevolvidas} peça(s) ao estoque, `
+          + `${e.pecasDescartadas} descartada(s), ${e.pecasRealocadas} realocada(s).`
+        : 'Pedido cancelado com sucesso.';
+      if (typeof showToast === 'function') showToast(resumo, 'success');
+
+      if (Array.isArray(corpo?.avisos) && corpo.avisos.length) {
+        console.warn('Cancelamento com avisos:', corpo.avisos);
+        if (typeof showToast === 'function') {
+          showToast(`${corpo.avisos.length} aviso(s) no estorno. Veja o console.`, 'info');
+        }
+      }
+      close();
     } catch (err) {
       console.error('Erro ao cancelar pedido', err);
       if (typeof showToast === 'function') showToast('Erro ao cancelar pedido.', 'error');

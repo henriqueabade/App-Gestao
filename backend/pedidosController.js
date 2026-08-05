@@ -2,6 +2,8 @@ const express = require('express');
 const { createApiClient } = require('./apiHttpClient');
 const { exigirPermissao, exigirSupAdmin } = require('./permissionsController');
 const { excluirPedidoEmCascata } = require('./exclusaoEmCascata');
+const { estornarCancelamento } = require('./cancelamentoEstorno');
+const { registrarEntrada } = require('./materiaPrima');
 const {
   RESERVA,
   EVENTO,
@@ -91,8 +93,32 @@ router.put('/:id/status', exigirPermissao(permissaoDeStatus), async (req, res) =
     // carona numa troca de status esconderia o que aconteceu.
     // ------------------------------------------------------------------
     const avisos = [];
+    let estorno = null;
+
     if (status === 'Enviado' || status === 'Entregue') {
       await atualizarStatusDasReservas(api, id, RESERVA.FINALIZADO, avisos);
+    }
+
+    // O cancelamento DESFAZ o que a conversão fez, peça a peça, conforme o que
+    // o usuário escolheu no modal (devolver, descartar ou realocar). Essas
+    // escolhas chegavam aqui e eram descartadas: o pedido virava "Cancelado" e
+    // nada voltava ao estoque.
+    if (status === 'Cancelado') {
+      try {
+        const resultado = await estornarCancelamento(api, {
+          pedidoId: id,
+          acoes: req.body?.acoes,
+          usuarioId: idDoUsuarioDaRequisicao(req),
+          registrarEntradaInsumo: registrarEntrada
+        });
+        estorno = resultado.resumo;
+        avisos.push(...resultado.avisos);
+      } catch (err) {
+        // O pedido JÁ está cancelado neste ponto. Derrubar a resposta faria o
+        // usuário tentar de novo e cancelar duas vezes; o erro vira aviso.
+        console.error('Falha ao estornar o cancelamento:', err);
+        avisos.push(`Falha ao estornar o estoque: ${err?.message || err}`);
+      }
     }
     const eventoPorStatus = {
       Enviado: EVENTO.ABATIMENTO,
@@ -103,12 +129,19 @@ router.put('/:id/status', exigirPermissao(permissaoDeStatus), async (req, res) =
       await registrarEventoDoPedido(api, {
         pedidoId: id,
         tipoEvento: eventoPorStatus[status],
-        descricao: `Pedido marcado como ${status}.`,
+        // No cancelamento o evento diz o que voltou: sem isso o histórico
+        // registra "Cancelado" e não explica o que aconteceu com o estoque.
+        descricao: estorno
+          ? `Pedido cancelado. ${estorno.pecasDevolvidas} peça(s) devolvida(s), `
+            + `${estorno.pecasDescartadas} descartada(s), `
+            + `${estorno.pecasRealocadas} realocada(s), `
+            + `${estorno.insumosDevolvidos} insumo(s) devolvido(s).`
+          : `Pedido marcado como ${status}.`,
         usuarioId: idDoUsuarioDaRequisicao(req)
       }, avisos);
     }
 
-    res.json({ success: true, avisos });
+    res.json({ success: true, avisos, estorno });
   } catch (err) {
     console.error('Erro ao atualizar status do pedido:', err);
     res.status(err.status || 500).json({ error: 'Erro ao atualizar status do pedido' });
