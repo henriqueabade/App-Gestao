@@ -214,6 +214,14 @@
   // abriria duas confirmações e poderia cadastrar o usuário duas vezes.
   let emAndamento = false;
 
+  /** Trava o botão e deixa isso VISÍVEL enquanto a ação não termina. */
+  function travarBotao(travado) {
+    if (!adicionarBtn) return;
+    adicionarBtn.disabled = travado;
+    adicionarBtn.classList.toggle('btn-loading', travado);
+    adicionarBtn.setAttribute('aria-busy', travado ? 'true' : 'false');
+  }
+
   async function aoClicarAdicionar() {
     if (emAndamento) return;
     limparMensagem();
@@ -226,6 +234,7 @@
     }
 
     emAndamento = true;
+    travarBotao(true);            // já trava na abertura do diálogo
     try {
       const confirmou = await window.DialogPadrao.confirm({
         title: 'Adicionar usuário',
@@ -237,23 +246,32 @@
       // "Não" apenas volta para o modal — nada é enviado e nada se perde.
       if (!confirmou) return;
 
-      // O clique que abriu o diálogo deixou o botão marcado como ocupado pela
-      // guarda global; soltamos para que `run` possa reassumir e mostrar o
-      // carregamento durante a gravação de verdade.
-      window.BotaoAcao?.liberar?.(adicionarBtn);
-
       const executar = async () => {
         const resultado = await enviar(dados);
-        exibirMensagem('sucesso', resultado?.message || 'Usuário cadastrado com sucesso!');
+
+        // O cadastro pode dar certo e a foto não subir; nesse caso o backend
+        // devolve um aviso. Mostramos e demoramos mais para fechar, para dar
+        // tempo de ler — o usuário já está criado e já consegue entrar.
+        if (resultado?.aviso) {
+          exibirMensagem('erro', resultado.aviso);
+          window.showToast?.(resultado.aviso, 'warning');
+        } else {
+          exibirMensagem('sucesso', resultado?.message || 'Usuário cadastrado com sucesso!');
+          window.showToast?.(`Usuário ${dados.nome} cadastrado com sucesso.`, 'success');
+        }
+
         window.dispatchEvent(new CustomEvent('usuarioAtualizado', {
           detail: { criado: true, usuario: resultado?.usuario || null }
         }));
-        window.showToast?.(`Usuário ${dados.nome} cadastrado com sucesso.`, 'success');
-        setTimeout(close, 400);
+        setTimeout(close, resultado?.aviso ? 2800 : 400);
       };
 
-      if (typeof window.BotaoAcao?.run === 'function') {
-        await window.BotaoAcao.run(adicionarBtn, executar);
+      // Véu de carregamento padrão do app (a logo em órbita), o mesmo dos
+      // módulos e da abertura de modais. Fica na tela até a resposta chegar —
+      // `BotaoAcao.run` não servia aqui: ele só marca o botão e o indicador
+      // pode nem aparecer quando a resposta é rápida.
+      if (typeof window.BotaoAcao?.comCarregamento === 'function') {
+        await window.BotaoAcao.comCarregamento(executar, 'Cadastrando usuário...');
       } else {
         await executar();
       }
@@ -262,6 +280,7 @@
       exibirMensagem('erro', err.message || 'Falha ao cadastrar o usuário.');
     } finally {
       emAndamento = false;
+      travarBotao(false);
     }
   }
 

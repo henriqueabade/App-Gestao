@@ -1,5 +1,6 @@
 // backend/usuariosController.js
 const { sanitizarSaida } = require('./sanitizarSaida');
+const bcrypt = require('bcrypt');
 const express = require('express');
 const { createApiClient } = require('./apiHttpClient');
 const { getToken } = require('./tokenStore');
@@ -905,6 +906,9 @@ function exigirPermissaoUsuarios(chave) {
 
 const RE_EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
+/** Mesmo custo usado na redefinição de senha, para todo hash sair igual. */
+const CUSTO_BCRYPT = 12;
+
 /** Valida o formulário de cadastro interno e devolve os dados já normalizados. */
 function validarNovoUsuario(body = {}) {
   const recusar = (mensagem, status = 400) => {
@@ -970,7 +974,10 @@ router.post('/', exigirPermissaoUsuarios('usuarios.create'), async (req, res) =>
     const payload = {
       nome: dados.nome,
       email: dados.email,
-      senha: dados.senha,           // o upstream é quem aplica o hash
+      // A coluna `senha` guarda SOMENTE hash bcrypt — é o que o login compara.
+      // Quem hasheia é a aplicação, não o upstream (mesmo custo 12 usado na
+      // redefinição de senha, em backend/passwordResetRoutes.js).
+      senha: await bcrypt.hash(dados.senha, CUSTO_BCRYPT),
       perfil: dados.perfil,
       telefone: dados.telefone,
       descricao: dados.observacoes,
@@ -986,22 +993,51 @@ router.post('/', exigirPermissaoUsuarios('usuarios.create'), async (req, res) =>
       confirmacao_token: null
     };
 
-    if (dados.avatar) {
-      payload.foto_usuario = dados.avatar;
-      payload.avatar_version = Date.now();
-    }
     if (dados.modeloPermissoesId) {
       payload.modelo_permissoes_id = dados.modeloPermissoesId;
     }
 
     const criado = await api.post('/api/usuarios', payload);
 
+    // ------------------------------------------------------------------
+    // Foto: vai em uma etapa separada, pelo endpoint de avatar.
+    //
+    // Antes eu enfiava a dataURL direto em `foto_usuario` no INSERT — errado
+    // por dois motivos: a coluna guarda os BYTES da imagem (o leitor em
+    // avatarToRenderableSource trata Buffer e `\x` hexadecimal), e quem grava
+    // ali é o servidor, não o cliente. O caminho certo é o mesmo endpoint que
+    // o app já usa para trocar a própria foto.
+    //
+    // Falha aqui NÃO desfaz o cadastro: o usuário já existe e já pode entrar;
+    // devolvemos um aviso para a tela contar o que faltou.
+    // ------------------------------------------------------------------
+    let avisoFoto = null;
+    const idCriado = criado?.id ?? criado?.usuario?.id ?? null;
+
+    if (dados.avatar && idCriado) {
+      try {
+        const avatarVersion = Date.now();
+        await api.put(`/api/usuarios/${idCriado}/avatar`, {
+          avatar: dados.avatar,
+          avatarVersion,
+          avatar_version: avatarVersion,
+          foto_usuario: dados.avatar
+        });
+      } catch (fotoErr) {
+        console.error('Usuário criado, mas a foto não subiu:', fotoErr?.message || fotoErr);
+        avisoFoto = 'O usuário foi cadastrado, mas não foi possível enviar a foto. Edite o usuário para tentar de novo.';
+      }
+    } else if (dados.avatar && !idCriado) {
+      avisoFoto = 'O usuário foi cadastrado, mas a foto não pôde ser enviada (id não retornado pela API).';
+    }
+
     // O novo usuário já tem perfil: o cache de permissões precisa enxergá-lo.
     try { require('./permissionsController').limparCachePermissoes(); } catch (_) {}
 
     res.status(201).json({
       usuario: normalizeAvatar(criado || {}),
-      message: 'Usuário cadastrado com sucesso.'
+      message: 'Usuário cadastrado com sucesso.',
+      ...(avisoFoto ? { aviso: avisoFoto } : {})
     });
   } catch (err) {
     console.error('Erro ao criar usuário:', err);

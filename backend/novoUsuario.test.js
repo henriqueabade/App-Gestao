@@ -10,6 +10,7 @@ const test = require('node:test');
 const assert = require('node:assert');
 const http = require('node:http');
 const express = require('express');
+const bcrypt = require('bcrypt');
 
 const TOKEN = `x.${Buffer.from(JSON.stringify({ id: 9 })).toString('base64')}.y`;
 
@@ -19,7 +20,7 @@ const CAMINHOS = {
   permissoes: require.resolve('./permissionsController')
 };
 
-async function montar({ existentes = [], permitir = true } = {}) {
+async function montar({ existentes = [], permitir = true, falharFoto = false } = {}) {
   const recebidos = [];
 
   const upstream = http.createServer((req, res) => {
@@ -27,6 +28,12 @@ async function montar({ existentes = [], permitir = true } = {}) {
     req.on('data', p => { corpo += p; });
     req.on('end', () => {
       recebidos.push({ metodo: req.method, url: req.url, corpo: corpo ? JSON.parse(corpo) : null });
+
+      if (req.method === 'PUT' && falharFoto) {
+        res.writeHead(500, { 'content-type': 'application/json' });
+        return res.end(JSON.stringify({ error: 'upload indisponível' }));
+      }
+
       res.writeHead(200, { 'content-type': 'application/json' });
       if (req.method === 'GET') return res.end(JSON.stringify(existentes));
       return res.end(JSON.stringify({ id: 77, nome: 'Novo', email: 'novo@empresa.com' }));
@@ -105,12 +112,45 @@ test('cadastra o usuário já liberado, sem confirmação nem aprovação', asyn
     assert.strictEqual(c.confirmacao_token, null, 'não pode ficar pendente de confirmação');
 
     assert.strictEqual(c.email, 'maria.souza@empresa.com', 'e-mail deve ser normalizado');
-    assert.strictEqual(c.senha, 'segredo123', 'a senha vai em texto: o upstream aplica o hash');
     assert.strictEqual(c.perfil, 'Comercial');
     assert.strictEqual(c.descricao, 'Equipe de vendas');
   } finally {
     await ctx.encerrar();
   }
+});
+
+test('grava a senha apenas como hash bcrypt, nunca em texto', async () => {
+  const ctx = await montar();
+  try {
+    const resposta = await cadastrar(ctx.porta, VALIDO);
+    assert.strictEqual(resposta.status, 201);
+
+    const enviada = ctx.recebidos.find(r => r.metodo === 'POST').corpo.senha;
+
+    assert.notStrictEqual(enviada, VALIDO.senha, 'a senha NÃO pode trafegar/gravar crua');
+    assert.doesNotMatch(enviada, /segredo123/, 'a senha original não pode aparecer no valor gravado');
+    assert.match(enviada, /^\$2[aby]\$\d{2}\$/, 'deveria ser um hash bcrypt');
+
+    // O que realmente importa: o login precisa conseguir validar por este hash.
+    assert.ok(await bcrypt.compare(VALIDO.senha, enviada), 'o hash tem de conferir com a senha digitada');
+    assert.ok(!(await bcrypt.compare('senhaErrada', enviada)), 'senha errada não pode conferir');
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('duas contas com a mesma senha geram hashes diferentes (salt por registro)', async () => {
+  const hashes = [];
+  for (const email of ['a@empresa.com', 'b@empresa.com']) {
+    const ctx = await montar();
+    try {
+      await cadastrar(ctx.porta, { ...VALIDO, email });
+      hashes.push(ctx.recebidos.find(r => r.metodo === 'POST').corpo.senha);
+    } finally {
+      await ctx.encerrar();
+    }
+  }
+  assert.notStrictEqual(hashes[0], hashes[1], 'hashes iguais indicariam ausência de salt');
 });
 
 test('recusa e-mail já cadastrado com mensagem clara', async () => {
@@ -146,16 +186,27 @@ test('valida os campos obrigatórios antes de tocar no banco', async () => {
   }
 });
 
-test('aceita foto e recusa imagem fora do padrão', async () => {
+test('a foto NÃO vai no INSERT: sobe pelo endpoint de avatar do usuário criado', async () => {
   const pngMinimo = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUg==';
 
   const ok = await montar();
   try {
     const resposta = await cadastrar(ok.porta, { ...VALIDO, avatar: pngMinimo });
     assert.strictEqual(resposta.status, 201);
+
+    // O INSERT tem de sair limpo — era aqui que a dataURL ia parar na coluna errada.
     const criacao = ok.recebidos.find(r => r.metodo === 'POST');
-    assert.strictEqual(criacao.corpo.foto_usuario, pngMinimo);
-    assert.ok(criacao.corpo.avatar_version, 'deveria versionar a foto para quebrar cache');
+    assert.strictEqual(criacao.corpo.foto_usuario, undefined, 'a foto não pode ir no INSERT');
+    assert.strictEqual(criacao.corpo.avatar_version, undefined, 'nem a versão da foto');
+
+    // A imagem sobe depois, pelo endpoint próprio, já com o id retornado.
+    const envioFoto = ok.recebidos.find(r => r.metodo === 'PUT');
+    assert.ok(envioFoto, 'deveria ter chamado o endpoint de avatar');
+    assert.match(envioFoto.url, /\/api\/usuarios\/77\/avatar/, 'deve mirar o usuário recém-criado');
+    assert.strictEqual(envioFoto.corpo.avatar, pngMinimo);
+    assert.ok(envioFoto.corpo.avatar_version, 'deveria versionar para quebrar cache');
+
+    assert.strictEqual((await resposta.json()).aviso, undefined, 'sem aviso quando a foto sobe');
   } finally {
     await ok.encerrar();
   }
@@ -167,6 +218,23 @@ test('aceita foto e recusa imagem fora do padrão', async () => {
     assert.match((await resposta.json()).error, /PNG ou JPEG/i);
   } finally {
     await ruim.encerrar();
+  }
+});
+
+test('falha no envio da foto não desfaz o cadastro — avisa e segue', async () => {
+  const ctx = await montar({ falharFoto: true });
+  try {
+    const resposta = await cadastrar(ctx.porta, {
+      ...VALIDO,
+      avatar: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUg=='
+    });
+
+    assert.strictEqual(resposta.status, 201, 'o usuário foi criado e já pode entrar');
+    const corpo = await resposta.json();
+    assert.match(corpo.aviso, /foto/i, 'deveria avisar que a foto não subiu');
+    assert.ok(ctx.recebidos.some(r => r.metodo === 'POST'), 'a criação tem de permanecer');
+  } finally {
+    await ctx.encerrar();
   }
 });
 
