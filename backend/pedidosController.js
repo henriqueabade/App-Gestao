@@ -146,9 +146,12 @@ router.put('/:id/status', exigirPermissao(permissaoDeStatus), async (req, res) =
         tipoEvento: eventoPorStatus[status],
         // No cancelamento o evento diz o que voltou: sem isso o histórico
         // registra "Cancelado" e não explica o que aconteceu com o estoque.
+        // `pecasNaoDevolvidas` e não `pecasDescartadas`: o campo foi renomeado
+        // quando o descarte virou "voltar no estágio 0", e o nome antigo saía
+        // como `undefined` no histórico.
         descricao: estorno
-          ? `Pedido cancelado. ${estorno.pecasDevolvidas} peça(s) devolvida(s), `
-            + `${estorno.pecasDescartadas} descartada(s), `
+          ? `Pedido cancelado. ${estorno.pecasDevolvidas} peça(s) devolvida(s) ao estoque, `
+            + `${estorno.pecasNaoDevolvidas} não devolvida(s), `
             + `${estorno.pecasRealocadas} realocada(s), `
             + `${estorno.insumosDevolvidos} insumo(s) devolvido(s).`
           : `Pedido marcado como ${status}.`,
@@ -535,11 +538,14 @@ router.get('/:id/pecas-selecionadas', exigirPermissao('ped.report'), async (req,
       const totalDaRota = rota.length;
       const doEstoque = extPorItem.get(Number(item.id)) || [];
 
+      let parciaisDoEstoque = 0;
+
       for (const reg of doEstoque) {
         const passo = rota.find(p => Number(p.passo_id) === Number(reg.ultimo_insumo_id)) || null;
         const ordem = passo ? passo.ordem_insumo : totalDaRota;
         // O último passo da rota é a peça acabada: nada falta.
         const faltam = Math.max(0, totalDaRota - ordem);
+        if (faltam > 0) parciaisDoEstoque += Number(reg.quantidade) || 0;
         linhas.push({
           peca: pecaNome,
           codigo: item.codigo || '',
@@ -553,20 +559,35 @@ router.get('/:id/pecas-selecionadas', exigirPermissao('ped.report'), async (req,
         });
       }
 
-      for (const reserva of (Array.isArray(reservas) ? reservas : [])) {
-        if (String(reserva.pedido_item_id) !== String(item.id)) continue;
+      // ----------------------------------------------------------------
+      // Peças produzidas DO ZERO
+      //
+      // A conta é `qtd_a_produzir` menos o que foi aproveitado pela metade — a
+      // MESMA que a conversão fez ao abater os insumos. Antes esta linha saía
+      // de `reservas_estoque`, e um pedido cuja reserva não tivesse sido
+      // gravada aparecia no relatório sem NENHUMA peça do zero, mesmo tendo
+      // consumido a rota inteira de todas elas.
+      //
+      // A reserva serve para dizer o STATUS (em produção, finalizada,
+      // retornada) — não para dizer quantas são.
+      // ----------------------------------------------------------------
+      const aProduzir = Number(item.qtd_a_produzir) || 0;
+      const doZero = Math.max(0, aProduzir - parciaisDoEstoque);
+      if (doZero > 0) {
+        const reserva = (Array.isArray(reservas) ? reservas : [])
+          .find(r => String(r.pedido_item_id) === String(item.id)) || null;
         linhas.push({
           peca: pecaNome,
           codigo: item.codigo || '',
           origem: 'Produzir do zero',
-          quantidade: Number(reserva.quantidade) || 0,
+          quantidade: doZero,
           // Do zero é o começo da rota: nada foi feito ainda.
           etapa: rota.length ? rota[0].processo : '—',
           item_parada: '—',
           lote_id: null,
           itens_faltantes: totalDaRota,
           itens_da_rota: totalDaRota,
-          reserva_status: reserva.status || null
+          reserva_status: reserva?.status || null
         });
       }
     }

@@ -1773,7 +1773,8 @@
       const e = corpo?.estorno;
       const resumo = e
         ? `Pedido cancelado. ${e.pecasDevolvidas} peça(s) ao estoque, `
-          + `${e.pecasDescartadas} descartada(s), ${e.pecasRealocadas} realocada(s).`
+          + `${e.pecasNaoDevolvidas} não devolvida(s), ${e.pecasRealocadas} realocada(s), `
+          + `${e.insumosDevolvidos} insumo(s) devolvido(s).`
         : 'Pedido cancelado com sucesso.';
       if (typeof showToast === 'function') showToast(resumo, 'success');
 

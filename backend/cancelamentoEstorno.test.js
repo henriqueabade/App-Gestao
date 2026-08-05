@@ -27,7 +27,7 @@ const passoDaOrdem = ordem => ROTA.find(p => p.ordem_insumo === ordem);
  *   `ext`: linhas de pedido_itens_ext (peças que vieram do estoque)
  *   `reserva`: quantidade que seria produzida do zero
  */
-function montarApi({ ext = [], reserva = 0, lotes = {} } = {}) {
+function montarApi({ ext = [], reserva = 0, lotes = {}, qtdAProduzir = null } = {}) {
   const estado = { ...lotes };
   const gravacoes = { movimentos: [], realocacoes: [], lotesNovos: [], reservas: [] };
   let proximoLote = 900;
@@ -38,7 +38,13 @@ function montarApi({ ext = [], reserva = 0, lotes = {} } = {}) {
     async get(rota, opcoes = {}) {
       const q = opcoes?.query || {};
       if (rota === '/api/pedidos_itens') {
-        return [{ id: 1000, pedido_id: 99, produto_id: 7, quantidade: 99, nome: 'Peça X', codigo: 'PX' }];
+        return [{
+          id: 1000, pedido_id: 99, produto_id: 7, quantidade: 99,
+          nome: 'Peça X', codigo: 'PX',
+          // `qtd_a_produzir` é a fonte da quantidade "do zero"; os cenários que
+          // não a informam caem na reserva, como os pedidos antigos.
+          ...(qtdAProduzir === null ? {} : { qtd_a_produzir: qtdAProduzir })
+        }];
       }
       if (rota === '/api/pedido_itens_ext') return ext;
       if (rota === '/api/reservas_estoque') {
@@ -429,6 +435,42 @@ test('destinos que somam mais que o grupo não inventam peças', async () => {
 
   assert.equal(resumo.pecasDevolvidas, 4, 'o grupo tinha 4: o excedente é recusado');
   assert.ok(avisos.some(a => /além do que o pedido tinha/.test(a)));
+});
+
+test('SEM reserva gravada, as peças do zero continuam existindo para o estorno', async () => {
+  // O caso do PED18: a conversão abateu a rota inteira de 6 peças do zero, mas
+  // a reserva não chegou a ser gravada. Lendo a quantidade da reserva, o grupo
+  // "do zero" sumia e o cancelamento não devolvia NADA — nem peça, nem insumo.
+  const api = montarApi({ reserva: 0, qtdAProduzir: 6 });
+  const ins = coletorDeInsumos();
+
+  const { resumo } = await estornarCancelamento(api, {
+    pedidoId: 99,
+    acoes: [{ item: { id: 1000 }, action: 'discard', quantity: 6, ordem: 0,
+      grupo: { origem: 'producao', ordem_origem: 0, lote_id: null } }],
+    registrarEntradaInsumo: ins.fn
+  });
+
+  assert.equal(resumo.pecasNaoDevolvidas, 6, 'as 6 existem, mesmo sem reserva');
+  assert.equal(ins.devolvidos.size, 15, 'e a rota inteira volta para cada uma');
+  assert.equal(ins.de(1), 6, '6 unidades × 1 por passo');
+  assert.equal(ins.de(15), 6);
+});
+
+test('do zero = qtd_a_produzir menos o que veio pela metade', async () => {
+  // 6 a produzir, das quais 4 foram cobertas por um lote parado em 7/15.
+  const api = montarApi({
+    qtdAProduzir: 6,
+    ext: [{ id: 1, id_pedido: 99, pedido_item_id: 1000, quantidade: 4, ultimo_insumo_id: passoDaOrdem(7).id, etapa_id: 503 }],
+    lotes: { 503: { id: 503, produto_id: 7, quantidade: 0, ultimo_insumo_id: passoDaOrdem(7).insumo_id } }
+  });
+
+  const { itens } = await opcoesDeEstorno(api, 99);
+  const grupos = itens[0].grupos;
+  const daProducao = grupos.find(g => g.origem === 'producao');
+
+  assert.ok(daProducao, 'o grupo do zero tem de existir');
+  assert.equal(daProducao.quantidade, 2, '6 a produzir - 4 aproveitadas pela metade');
 });
 
 test('opcoesDeEstorno diz o piso e o teto de cada peça', async () => {

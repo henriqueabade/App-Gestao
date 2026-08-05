@@ -103,21 +103,49 @@ async function carregarRota(api, produtoId, cache, insumos) {
  * É o PISO de cada grupo: a unidade não pode ser devolvida num ponto anterior
  * ao que ela já estava quando foi escolhida.
  */
-function montarGrupos({ extDoItem, reserva, rota }) {
+function montarGrupos({ extDoItem, reserva, rota, item }) {
   const grupos = [];
+  const ordemFinal = rota.length ? rota[rota.length - 1].ordem : 0;
+  let parciaisDoEstoque = 0;
 
   for (const reg of extDoItem) {
     const passo = rota.find(p => Number(p.passo_id) === Number(reg.ultimo_insumo_id)) || null;
+    const ordemOrigem = passo ? passo.ordem : ordemFinal;
+    const quantidade = paraNumero(reg.quantidade);
+    // Peça PELA METADE é a que não estava no fim da rota. É dela que sai a
+    // conta de quantas unidades sobraram para produzir do zero.
+    if (ordemOrigem < ordemFinal) parciaisDoEstoque += quantidade;
+
     grupos.push({
       origem: 'estoque',
-      ordem_origem: passo ? passo.ordem : (rota.length ? rota[rota.length - 1].ordem : 0),
+      ordem_origem: ordemOrigem,
       lote_id: reg.etapa_id ?? null,
-      quantidade: paraNumero(reg.quantidade),
-      restante: paraNumero(reg.quantidade)
+      quantidade,
+      restante: quantidade
     });
   }
 
-  const doZero = paraNumero(reserva?.quantidade);
+  // ------------------------------------------------------------------
+  // Quantas seriam produzidas do zero
+  //
+  // A conta vem de `pedidos_itens.qtd_a_produzir` menos o que foi aproveitado
+  // pela metade — a MESMA conta que a conversão fez ao abater os insumos.
+  //
+  // Antes esta quantidade era lida de `reservas_estoque`, e isso quebrava
+  // exatamente onde mais dói: se a reserva não tivesse sido gravada (falha de
+  // rede na conversão, pedido convertido antes de as reservas existirem), o
+  // grupo "do zero" simplesmente não aparecia. O cancelamento então marcava o
+  // pedido como cancelado e não devolvia NADA — nem as peças, nem os insumos
+  // que já tinham sido abatidos. Foi o que aconteceu com o PED18.
+  //
+  // A reserva continua servindo de reforço: se `qtd_a_produzir` não vier, ela
+  // responde.
+  // ------------------------------------------------------------------
+  const aProduzir = paraNumero(item?.qtd_a_produzir);
+  const doZero = aProduzir > 0
+    ? arredondar(Math.max(0, aProduzir - parciaisDoEstoque))
+    : paraNumero(reserva?.quantidade);
+
   if (doZero > 0) {
     grupos.push({
       origem: 'producao',
@@ -280,7 +308,8 @@ async function estornarCancelamento(api, {
     const grupos = montarGrupos({
       extDoItem: extPorItem.get(chave) || [],
       reserva: reservaPorItem.get(chave),
-      rota
+      rota,
+      item
     });
 
     for (const decisao of decisoes) {
@@ -491,7 +520,8 @@ async function opcoesDeEstorno(api, pedidoId) {
     const grupos = montarGrupos({
       extDoItem: extPorItem.get(chave) || [],
       reserva: reservaPorItem.get(chave),
-      rota
+      rota,
+      item
     });
 
     saida.push({
