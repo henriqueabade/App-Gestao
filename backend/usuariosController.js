@@ -888,18 +888,126 @@ router.get('/:id', async (req, res) => {
 });
 
 /**
- * POST /usuarios
+ * Guarda de permissão com require tardio.
+ *
+ * permissionsController volta a exigir este módulo em tempo de execução; pedir
+ * ele no topo fecharia um ciclo de require e uma das metades chegaria vazia.
  */
-router.post('/', async (req, res) => {
+function exigirPermissaoUsuarios(chave) {
+  return (req, res, next) => {
+    try {
+      return require('./permissionsController').exigirPermissao(chave)(req, res, next);
+    } catch (err) {
+      return next(err);
+    }
+  };
+}
+
+const RE_EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+
+/** Valida o formulário de cadastro interno e devolve os dados já normalizados. */
+function validarNovoUsuario(body = {}) {
+  const recusar = (mensagem, status = 400) => {
+    const erro = new Error(mensagem);
+    erro.status = status;
+    throw erro;
+  };
+  const texto = valor => (typeof valor === 'string' ? valor.trim() : '');
+
+  const nome = texto(body.nome);
+  const email = texto(body.email).toLowerCase();
+  const senha = typeof body.senha === 'string' ? body.senha : '';
+  const perfil = texto(body.perfil);
+
+  if (nome.length < 3) recusar('Informe o nome completo do usuário.');
+  if (!RE_EMAIL.test(email)) recusar('Informe um e-mail válido.');
+  if (senha.length < 6) recusar('A senha deve ter ao menos 6 caracteres.');
+  if (!perfil) recusar('Selecione o perfil do usuário.');
+
+  const avatarBruto = body.avatar || body.foto_usuario || '';
+  const avatar = texto(avatarBruto) ? validateAvatarPayload(avatarBruto) : null;
+
+  const modeloId = Number(body.modeloPermissoesId ?? body.modelo_permissoes_id);
+
+  return {
+    nome,
+    email,
+    senha,
+    perfil,
+    telefone: texto(body.telefone),
+    observacoes: texto(body.observacoes ?? body.descricao),
+    avatar,
+    modeloPermissoesId: Number.isInteger(modeloId) && modeloId > 0 ? modeloId : null
+  };
+}
+
+/**
+ * POST /usuarios
+ *
+ * Cadastro feito pelo Sup Admin dentro do app.
+ *
+ * Diferente do auto-cadastro da tela de login, aqui o usuário já nasce
+ * liberado: quem está cadastrando é exatamente quem aprovaria depois, então
+ * confirmar e-mail e aguardar aprovação só atrasariam o acesso. Os campos de
+ * liberação são os mesmos usados por ativarUsuarioAprovado(), para que os dois
+ * caminhos deixem o registro no mesmo estado.
+ */
+router.post('/', exigirPermissaoUsuarios('usuarios.create'), async (req, res) => {
   try {
+    const dados = validarNovoUsuario(req.body);
     const api = createInternalApiClient();
-    const created = await api.post('/api/usuarios', buildPayload(req.body));
-    res.status(201).json(created);
+
+    // E-mail repetido devolve mensagem clara em vez do erro cru da constraint.
+    const existentes = await api
+      .get('/api/usuarios', { query: { email: dados.email, select: 'id,email' } })
+      .catch(() => []);
+    const lista = Array.isArray(existentes) ? existentes : existentes ? [existentes] : [];
+    if (lista.some(u => String(u?.email || '').trim().toLowerCase() === dados.email)) {
+      return res.status(409).json({ error: 'Já existe um usuário cadastrado com esse e-mail.' });
+    }
+
+    const agora = new Date().toISOString();
+    const payload = {
+      nome: dados.nome,
+      email: dados.email,
+      senha: dados.senha,           // o upstream é quem aplica o hash
+      perfil: dados.perfil,
+      telefone: dados.telefone,
+      descricao: dados.observacoes,
+      // Nasce ativo: sem confirmação de e-mail e sem fila de aprovação.
+      status: 'ativo',
+      verificado: true,
+      confirmacao: true,
+      email_confirmado: true,
+      email_confirmado_em: agora,
+      hora_ativacao: agora,
+      data_ativacao: agora,
+      aprovacao_token: null,
+      confirmacao_token: null
+    };
+
+    if (dados.avatar) {
+      payload.foto_usuario = dados.avatar;
+      payload.avatar_version = Date.now();
+    }
+    if (dados.modeloPermissoesId) {
+      payload.modelo_permissoes_id = dados.modeloPermissoesId;
+    }
+
+    const criado = await api.post('/api/usuarios', payload);
+
+    // O novo usuário já tem perfil: o cache de permissões precisa enxergá-lo.
+    try { require('./permissionsController').limparCachePermissoes(); } catch (_) {}
+
+    res.status(201).json({
+      usuario: normalizeAvatar(criado || {}),
+      message: 'Usuário cadastrado com sucesso.'
+    });
   } catch (err) {
     console.error('Erro ao criar usuário:', err);
     res
       .status(err.status || 500)
-      .json({ error: 'Erro ao criar usuário' });
+      .json({ error: err.status ? err.message : 'Erro ao criar usuário' });
   }
 });
 

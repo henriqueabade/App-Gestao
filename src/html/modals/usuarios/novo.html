@@ -1,0 +1,79 @@
+<div id="novoUsuarioOverlay" class="hidden fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4 pt-[4vw]">
+  <div class="w-full max-w-5xl max-h-[90vh] glass-surface backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade slide-in overflow-hidden flex flex-col">
+    <header class="grid grid-cols-3 items-center px-8 py-5 border-b border-white/10 flex-shrink-0">
+      <button id="voltarNovoUsuario" class="btn-neutral px-4 py-2 rounded-lg text-white font-medium flex items-center gap-2 justify-self-start">← Voltar</button>
+      <h2 class="text-lg font-semibold text-white text-center truncate">Novo usuário</h2>
+      <div class="flex items-center justify-end gap-3">
+        <span class="text-xs px-3 py-1 rounded-full uppercase tracking-wide badge-success">Acesso imediato</span>
+      </div>
+    </header>
+
+    <div class="flex-1 overflow-y-auto modal-scroll">
+      <section class="px-8 py-6 space-y-8">
+        <div class="grid grid-cols-1 md:grid-cols-12 gap-8">
+
+          <!-- Foto -->
+          <div class="md:col-span-3 flex flex-col items-center gap-4">
+            <div id="novoUsuarioAvatar" class="w-28 h-28 rounded-full glass-surface border border-white/20 flex items-center justify-center text-3xl font-semibold text-primary">US</div>
+            <label for="novoUsuarioFoto" class="btn-neutral px-4 py-2 rounded-lg text-white font-medium cursor-pointer flex items-center gap-2">
+              <i class="fas fa-camera"></i>
+              <span>Escolher foto</span>
+              <input id="novoUsuarioFoto" type="file" accept="image/png,image/jpeg" class="hidden" />
+            </label>
+            <button type="button" id="novoUsuarioRemoverFoto" class="hidden text-sm text-red-300 underline">Remover foto</button>
+            <p class="text-xs text-gray-400 text-center">PNG ou JPEG, até 1&nbsp;MB.</p>
+          </div>
+
+          <!-- Dados -->
+          <div class="md:col-span-9">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <label for="novoUsuarioNome" class="block text-sm font-medium text-gray-300 mb-2">Nome completo <span class="text-red-400">*</span></label>
+                <input id="novoUsuarioNome" type="text" autocomplete="off" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" placeholder="Nome do usuário" />
+              </div>
+              <div>
+                <label for="novoUsuarioEmail" class="block text-sm font-medium text-gray-300 mb-2">E-mail <span class="text-red-400">*</span></label>
+                <input id="novoUsuarioEmail" type="email" autocomplete="off" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" placeholder="email@empresa.com" />
+              </div>
+              <div>
+                <label for="novoUsuarioTelefone" class="block text-sm font-medium text-gray-300 mb-2">Telefone</label>
+                <input id="novoUsuarioTelefone" type="tel" autocomplete="off" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" placeholder="(11) 99999-0000" />
+              </div>
+              <div>
+                <label for="novoUsuarioPerfil" class="block text-sm font-medium text-gray-300 mb-2">Perfil <span class="text-red-400">*</span></label>
+                <select id="novoUsuarioPerfil" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition select-arrow appearance-none">
+                  <option value="">Selecione</option>
+                </select>
+              </div>
+              <div>
+                <label for="novoUsuarioSenha" class="block text-sm font-medium text-gray-300 mb-2">Senha <span class="text-red-400">*</span></label>
+                <input id="novoUsuarioSenha" type="password" autocomplete="new-password" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" placeholder="Mínimo de 6 caracteres" />
+              </div>
+              <div>
+                <label for="novoUsuarioSenhaConfirma" class="block text-sm font-medium text-gray-300 mb-2">Confirmar senha <span class="text-red-400">*</span></label>
+                <input id="novoUsuarioSenhaConfirma" type="password" autocomplete="new-password" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" placeholder="Repita a senha" />
+              </div>
+              <div class="md:col-span-2">
+                <label for="novoUsuarioObservacoes" class="block text-sm font-medium text-gray-300 mb-2">Observações</label>
+                <textarea id="novoUsuarioObservacoes" rows="3" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition resize-none" placeholder="Notas internas sobre o usuário"></textarea>
+              </div>
+            </div>
+
+            <p class="text-sm text-gray-400 mt-6 flex items-start gap-2">
+              <i class="fas fa-circle-info mt-0.5 text-[var(--color-primary)]"></i>
+              <span>Cadastro feito por você já entra liberado: sem confirmação de e-mail e sem fila de aprovação. O usuário pode entrar assim que receber a senha.</span>
+            </p>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <footer class="px-8 py-5 border-t border-white/10 flex flex-col md:flex-row md:items-center md:justify-between gap-4 flex-shrink-0">
+      <div id="novoUsuarioMensagem" class="hidden text-sm"></div>
+      <div class="flex items-center gap-4 justify-end w-full md:w-auto">
+        <button id="cancelarNovoUsuario" class="btn-danger px-6 py-2 rounded-lg text-white font-medium min-w-[120px]">Cancelar</button>
+        <button id="adicionarNovoUsuario" data-perm="usuarios.create" class="btn-success px-6 py-2 rounded-lg text-white font-medium min-w-[120px]">Adicionar</button>
+      </div>
+    </footer>
+  </div>
+</div>
