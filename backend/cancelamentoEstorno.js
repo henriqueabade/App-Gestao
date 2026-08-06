@@ -309,13 +309,21 @@ async function entregarAoPedidoDestino(api, {
   rota,
   pedidoOrigem,
   rotuloOrigem,
+  pedidoItemDestino,
+  grupoDestino,
+  cacheLotes,
   usuarioId
 }, avisos) {
   const itensDestino = await api
     .get('/api/pedidos_itens', { query: { pedido_id: pedidoDestino } })
     .catch(() => []);
-  const alvo = (Array.isArray(itensDestino) ? itensDestino : [])
-    .find(i => String(i.produto_id) === String(produtoId));
+  const lista = Array.isArray(itensDestino) ? itensDestino : [];
+  // A tela diz QUAL peça do destino esta substitui. Sem isso, cai na primeira
+  // do mesmo produto — certo quando há uma só, adivinhação quando há várias.
+  const alvo = (pedidoItemDestino
+    ? lista.find(i => String(i.id) === String(pedidoItemDestino))
+    : null)
+    || lista.find(i => String(i.produto_id) === String(produtoId));
 
   if (!alvo) {
     avisos.push(
@@ -356,6 +364,64 @@ async function entregarAoPedidoDestino(api, {
     }).catch(err => avisos.push(
       `Falha ao registrar a peça recebida no ${rotuloDestino}: ${err?.message || err}`
     ));
+  }
+
+  // 1b. A peça que o destino JÁ TINHA e foi substituída volta ao estoque.
+  //
+  // Quando o lugar ocupado era de uma peça vinda do estoque (e não de uma que
+  // seria produzida do zero), essa peça fica livre: o destino não precisa mais
+  // dela. Deixá-la presa ao pedido a perderia — ela existe fisicamente e tem
+  // de estar disponível para outro uso.
+  if (grupoDestino && String(grupoDestino.origem) === 'estoque') {
+    const ordemLiberada = paraNumero(grupoDestino.ordem_origem);
+    const passoLiberado = rota.find(p => p.ordem === ordemLiberada) || null;
+
+    const doDestino = await api
+      .get('/api/pedido_itens_ext', { query: { pedido_item_id: alvo.id } })
+      .catch(() => []);
+    const linha = (Array.isArray(doDestino) ? doDestino : [])
+      .find(r => Number(r.ultimo_insumo_id) === Number(passoLiberado?.passo_id));
+
+    if (linha) {
+      // Quantas peças de fato saem do pedido: lido ANTES da atualização, senão
+      // se lê o valor já alterado e o resultado é zero — a peça sumiria em vez
+      // de voltar ao estoque.
+      const liberadas = Math.min(unidades, paraNumero(linha.quantidade));
+      const sobra = arredondar(Math.max(0, paraNumero(linha.quantidade) - unidades));
+
+      await api.put(`/api/pedido_itens_ext/${linha.id}`, { quantidade: sobra })
+        .catch(err => avisos.push(
+          `Falha ao liberar a peça substituída no ${rotuloDestino}: ${err?.message || err}`
+        ));
+
+      const lote = await lotePara(api, {
+        produtoId,
+        passo: passoLiberado,
+        lotePreferido: linha.etapa_id ?? null
+      }, cacheLotes, avisos);
+
+      if (lote && liberadas > 0) {
+        const nova = arredondar(paraNumero(lote.quantidade) + liberadas);
+        await api.put(`${TABELA_LOTES}/${lote.id}`, {
+          quantidade: nova,
+          data_hora_completa: new Date().toISOString()
+        }).catch(err => avisos.push(`Falha ao devolver ao lote ${lote.id}: ${err?.message || err}`));
+        lote.quantidade = nova;
+
+        await registrarMovimento(api, {
+          tipoMovimento: MOV.RETORNO,
+          tipoItem: ITEM.PECA,
+          itemId: produtoId,
+          quantidade: liberadas,
+          pedidoId: pedidoDestino,
+          pedidoItemId: alvo.id,
+          loteId: lote.id,
+          ultimoInsumoId: passoLiberado?.insumo_id ?? null,
+          nota: `Liberada ao estoque: substituída por peça realocada do ${rotuloOrigem}`,
+          usuarioId
+        }, avisos);
+      }
+    }
   }
 
   // 2. A composição: o que chega pronto sai da conta do que seria produzido.
@@ -446,6 +512,9 @@ function agruparAcoes(acoes = []) {
       // cairia no grupo mais adiantado disponível — certo por acaso, errado na
       // maioria das vezes.
       grupo: acao.grupo || null,
+      // Realocação: qual peça do pedido de DESTINO esta substitui.
+      pedidoItemDestino: acao.pedidoItemDestino ?? null,
+      grupoDestino: acao.grupoDestino || null,
       // `null` = "voltar como estava": o estágio de destino é o de origem.
       // É o que "excluir" e "realocar" fazem, e o padrão quando a tela antiga
       // (sem escolha de estágio) manda a decisão.
@@ -725,6 +794,9 @@ async function estornarCancelamento(api, {
             rota,
             pedidoOrigem: pedidoId,
             rotuloOrigem: rotuloDoPedido,
+            pedidoItemDestino: decisao.pedidoItemDestino,
+            grupoDestino: decisao.grupoDestino,
+            cacheLotes,
             usuarioId
           }, avisos);
 

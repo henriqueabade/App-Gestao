@@ -143,6 +143,20 @@
     });
   }
 
+  /**
+   * O ponto de ORIGEM da linha, por extenso.
+   *
+   * Realocação e descarte não escolhem estágio — a peça vai (ou volta) como
+   * está. Sem este rótulo, o resumo mostrava quatro linhas idênticas com o nome
+   * do produto e nada que as distinguisse.
+   */
+  function rotuloDaOrigem(key) {
+    const info = itemInfo.get(String(key));
+    const dados = estornoPorItem.get(String(info?.item?.id ?? key));
+    if (!dados?.rota?.length || !info?.grupo) return '';
+    return rotuloDoPonto(dados, Number(info.grupo.ordem_origem));
+  }
+
   /** "9/15 — Tag de Papel" para um ponto da rota. */
   function rotuloDoPonto(dados, ordem) {
     const total = dados.rota.length;
@@ -185,6 +199,75 @@
     return caminho + (faltam > 0
       ? ` · ${faltam} item(ns) voltam para a matéria-prima`
       : ' · peça pronta');
+  }
+
+  // ------------------------------------------------------------------
+  // Composição dos pedidos de DESTINO
+  //
+  // Realocar é SUBSTITUIR: a peça que sai daqui ocupa o lugar de uma peça de
+  // lá. Sem saber quais peças o destino tem — e em que ponto da rota cada uma
+  // está —, a tela só sabia dizer "7 unidades compatíveis", repetido em linhas
+  // idênticas, sem identificar nada e sem descontar o que já foi substituído.
+  // ------------------------------------------------------------------
+  const composicaoDestino = new Map();
+
+  async function carregarComposicaoDestino(pedidoId) {
+    const chave = String(pedidoId);
+    if (composicaoDestino.has(chave)) return composicaoDestino.get(chave);
+    try {
+      const resp = await fetchApi(`/api/pedidos/${pedidoId}/estorno-opcoes`);
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const dados = await resp.json();
+      composicaoDestino.set(chave, dados?.itens || []);
+    } catch (err) {
+      console.error(`Não foi possível ler a composição do pedido ${pedidoId}`, err);
+      composicaoDestino.set(chave, []);
+    }
+    return composicaoDestino.get(chave);
+  }
+
+  /**
+   * Grupos do pedido de destino que podem ser substituídos, já descontando o
+   * que foi atribuído nesta tela.
+   */
+  function gruposDoDestino(pedidoId, produtoId) {
+    const itens = composicaoDestino.get(String(pedidoId)) || [];
+    const doProduto = itens.filter(i => String(i.produto_id) === String(produtoId));
+    const total = doProduto[0]?.rota?.length || 0;
+
+    const grupos = [];
+    doProduto.forEach(item => {
+      (item.grupos || []).forEach(grupo => {
+        const chaveGrupo = `${pedidoId}::${item.pedido_item_id}::${grupo.origem}::${grupo.ordem_origem}`;
+        grupos.push({
+          chave: chaveGrupo,
+          pedidoItemId: item.pedido_item_id,
+          origem: grupo.origem,
+          ordemOrigem: Number(grupo.ordem_origem) || 0,
+          quantidade: normalizeQuantity(grupo.quantidade),
+          jaSubstituido: substituicoesPorGrupo(chaveGrupo),
+          rotulo: grupo.origem === 'producao'
+            ? 'Produzir do zero'
+            : `${grupo.ordem_origem}/${total} — ${
+              (item.rota || []).find(p => Number(p.ordem) === Number(grupo.ordem_origem))?.insumo_nome || '—'
+            }`
+        });
+      });
+    });
+    return grupos;
+  }
+
+  /** Quantas unidades já foram atribuídas a este grupo do destino. */
+  function substituicoesPorGrupo(chaveGrupo) {
+    let total = 0;
+    destinationState.forEach(state => {
+      (state.reallocations || []).forEach(entry => {
+        if (String(entry.grupoDestino) === String(chaveGrupo)) {
+          total += normalizeQuantity(entry.quantity);
+        }
+      });
+    });
+    return total;
   }
 
   /** Menor ponto em que ALGUMA unidade desta peça pode voltar. */
@@ -650,8 +733,15 @@
         // número, para não mexer em quem já chamava este diálogo.
         if (etapas.length) {
           const select = overlay.querySelector('[data-etapa]');
-          const ordem = select ? Number(select.value) : null;
-          close({ quantidade: value, ordem: Number.isFinite(ordem) ? ordem : null });
+          const bruto = select ? select.value : null;
+          // O valor é numérico quando são pontos da rota e texto quando são
+          // grupos do pedido de destino. Forçar `Number` transformava a chave
+          // do grupo em NaN e a escolha se perdia.
+          const numero = Number(bruto);
+          close({
+            quantidade: value,
+            ordem: bruto !== null && bruto !== '' && Number.isFinite(numero) ? numero : bruto
+          });
           return;
         }
         close(value);
@@ -867,7 +957,32 @@
       const { order, items } = entry;
       const meta = getOrderMeta(order);
       const badgeClass = isOrderInProduction(order) ? 'badge-warning' : 'badge-neutral';
-      const itemsList = (items || []).map(match => `
+      // As peças do DESTINO, agrupadas por ponto da rota — não uma linha por
+      // peça deste pedido repetindo o mesmo total. Cada linha diz o estágio, o
+      // quanto existe lá e o quanto já foi substituído nesta tela.
+      const produtoId = (items || [])[0]
+        ? itemInfo.get((items || [])[0].key)?.item?.produto_id
+        : null;
+      const grupos = produtoId ? gruposDoDestino(order.id, produtoId) : [];
+
+      const itemsList = grupos.length
+        ? grupos.map(grupo => {
+          const livre = normalizeQuantity(grupo.quantidade - grupo.jaSubstituido);
+          const usado = grupo.jaSubstituido > 0
+            ? `<span class="text-[11px] text-primary-200">${formatUnitsLabel(grupo.jaSubstituido)} já substituída(s)</span>`
+            : '';
+          return `
+            <div class="flex items-center justify-between gap-3 bg-white/5 rounded-lg px-3 py-2 border ${livre > 0 ? 'border-white/10' : 'border-white/5 opacity-50'}">
+              <span class="flex flex-col">
+                <span class="text-xs text-gray-200">${grupo.rotulo}</span>
+                ${usado}
+              </span>
+              <span class="text-xs font-semibold ${livre > 0 ? 'text-white' : 'text-gray-500'}">
+                ${formatUnitsLabel(livre)} de ${formatUnitsLabel(grupo.quantidade)}
+              </span>
+            </div>`;
+        }).join('')
+        : (items || []).map(match => `
         <div class="flex items-center justify-between gap-3 bg-white/5 rounded-lg px-3 py-2 border border-white/10">
           <span class="text-xs text-gray-200">${match.name}</span>
           <span class="text-xs font-semibold text-white">${match.quantityLabel}</span>
@@ -974,14 +1089,21 @@
         stockEntries.push({ key, indice, name: info.name, quantity: qty });
       });
       if (discardQty > 0) {
-        discardEntries.push({ key, name: info.name, quantity: discardQty });
+        // O descarte devolve a peça ao ponto de ORIGEM — é esse o rótulo que
+        // distingue as linhas quando o mesmo produto veio de vários lotes.
+        discardEntries.push({
+          key, name: info.name, quantity: discardQty, rotulo: rotuloDaOrigem(key)
+        });
       }
       (state.reallocations || []).forEach(entry => {
         const qty = normalizeQuantity(entry.quantity);
         if (qty <= 0) return;
         const bucket = reallocationMap.get(entry.orderId) || { orderId: entry.orderId, total: 0, items: [] };
         bucket.total += qty;
-        bucket.items.push({ key, name: info.name, quantity: qty });
+        // Na realocação a peça vai como está: o rótulo é o ponto de origem.
+        bucket.items.push({
+          key, name: info.name, quantity: qty, rotulo: rotuloDaOrigem(key)
+        });
         reallocationMap.set(entry.orderId, bucket);
       });
     });
@@ -1025,8 +1147,12 @@
             const btn = document.createElement('button');
             btn.type = 'button';
             btn.className = 'w-full flex items-center justify-between gap-3 bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-left text-xs text-gray-200 hover:border-primary/40 transition';
+            // Nome + PONTO da rota: sem o ponto, quatro linhas iguais.
             btn.innerHTML = `
-              <span>${item.name}</span>
+              <span class="flex flex-col">
+                <span>${item.name}</span>
+                ${item.rotulo ? `<span class="text-[11px] text-gray-400">${item.rotulo}</span>` : ''}
+              </span>
               <span class="text-white font-semibold">${formatUnitsLabel(item.quantity)}</span>
             `;
             btn.addEventListener('click', () => openReallocationQuantity(item.key, bucket.orderId));
@@ -1098,8 +1224,13 @@
         const btn = document.createElement('button');
         btn.type = 'button';
         btn.className = 'w-full flex items-center justify-between gap-3 bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-left text-xs text-gray-200 hover:border-primary/40 transition';
+        // Descarte devolve ao lote de ORIGEM: é o ponto dela que identifica a
+        // linha, não o nome do produto repetido.
         btn.innerHTML = `
-          <span>${item.name}</span>
+          <span class="flex flex-col">
+            <span>${item.name}</span>
+            ${item.rotulo ? `<span class="text-[11px] text-red-200/70">${item.rotulo} · volta ao lote de origem</span>` : ''}
+          </span>
           <span class="text-white font-semibold">${formatUnitsLabel(item.quantity)}</span>
         `;
         btn.addEventListener('click', () => handleSimpleAction(item.key, 'discard'));
@@ -1323,23 +1454,77 @@
       return false;
     }
 
-    const quantity = await openQuantityDialog({
+    // QUAL peça do destino esta vai substituir.
+    //
+    // Realocar é substituir: sem dizer o lugar que a peça ocupa, o destino não
+    // sabe o que deixou de precisar produzir, e o mesmo grupo poderia receber
+    // mais peças do que tem lugar.
+    await carregarComposicaoDestino(orderId);
+    const grupos = gruposDoDestino(orderId, info?.item?.produto_id)
+      .filter(g => normalizeQuantity(g.quantidade - g.jaSubstituido) > 0
+        || String(g.chave) === String(existing?.grupoDestino));
+
+    if (!grupos.length) {
+      const message = `Todas as peças do ${formatOrderLabel(orderId)} já foram substituídas.`;
+      if (typeof showToast === 'function') showToast(message, 'info');
+      return false;
+    }
+
+    const resposta = await openQuantityDialog({
       title: `Realocar para ${formatOrderLabel(orderId)}`,
-      description: `Informe a quantidade de ${info?.name || 'itens'} que será realocada para este pedido.`,
+      description: `Informe a quantidade de ${info?.name || 'itens'} e qual peça do pedido de destino ela substitui.`,
       max: available,
       initial: currentValue,
-      confirmLabel: 'Salvar realocação'
+      confirmLabel: 'Salvar realocação',
+      // Reaproveita o seletor do diálogo: aqui ele lista os GRUPOS do destino.
+      etapas: grupos.map(g => ({
+        ordem: g.chave,
+        rotulo: `${g.rotulo} — ${formatUnitsLabel(normalizeQuantity(g.quantidade - g.jaSubstituido))} disponível(is)`,
+        selecionada: String(g.chave) === String(existing?.grupoDestino)
+      }))
     });
 
-    if (quantity === null) return false;
+    if (resposta === null) return false;
+
+    const quantity = typeof resposta === 'object' ? resposta.quantidade : resposta;
+    const grupoDestino = typeof resposta === 'object' ? resposta.ordem : null;
+    const grupoEscolhido = grupos.find(g => String(g.chave) === String(grupoDestino)) || grupos[0];
+
+    const livreNoGrupo = normalizeQuantity(
+      grupoEscolhido.quantidade - grupoEscolhido.jaSubstituido
+      + (String(grupoEscolhido.chave) === String(existing?.grupoDestino) ? currentValue : 0)
+    );
+    if (normalizeQuantity(quantity) > livreNoGrupo) {
+      const message = `O grupo escolhido do ${formatOrderLabel(orderId)} tem apenas `
+        + `${formatUnitsLabel(livreNoGrupo)} para substituir.`;
+      if (typeof showToast === 'function') showToast(message, 'warning');
+      return false;
+    }
 
     const normalized = normalizeQuantity(quantity);
     if (normalized <= 0) {
       state.reallocations = (state.reallocations || []).filter(entry => String(entry.orderId) !== String(orderId));
     } else if (existing) {
       existing.quantity = normalized;
+      existing.grupoDestino = grupoEscolhido.chave;
+      existing.pedidoItemDestino = grupoEscolhido.pedidoItemId;
+      existing.grupoDestinoInfo = {
+        origem: grupoEscolhido.origem,
+        ordem_origem: grupoEscolhido.ordemOrigem
+      };
     } else {
-      state.reallocations.push({ orderId, quantity: normalized });
+      state.reallocations.push({
+        orderId,
+        quantity: normalized,
+        // Guarda QUAL peça do destino esta substitui: é o que desconta o saldo
+        // daquele grupo e o que o backend usa para saber o que liberar lá.
+        grupoDestino: grupoEscolhido.chave,
+        pedidoItemDestino: grupoEscolhido.pedidoItemId,
+        grupoDestinoInfo: {
+          origem: grupoEscolhido.origem,
+          ordem_origem: grupoEscolhido.ordemOrigem
+        }
+      });
     }
     updateItemDestinationsUI(key);
     refreshOrdersUI();
@@ -1723,7 +1908,16 @@
       (state.reallocations || []).forEach(entry => {
         const qty = normalizeQuantity(entry.quantity);
         if (qty <= 0) return;
-        actions.push({ ...base, action: 'reallocate', orderId: entry.orderId, quantity: qty });
+        actions.push({
+          ...base,
+          action: 'reallocate',
+          orderId: entry.orderId,
+          quantity: qty,
+          // Qual peça do destino esta substitui — sem isso o backend teria de
+          // adivinhar o lugar que ela ocupa lá.
+          pedidoItemDestino: entry.pedidoItemDestino ?? null,
+          grupoDestino: entry.grupoDestinoInfo ?? null
+        });
         totalReallocate += qty;
       });
     });

@@ -350,6 +350,51 @@ test('realocação de peça PRONTA: o destino devolve a rota inteira', async () 
   assert.equal(ins.porPedido(77).get(passoDaOrdem(15).insumo_id), 3);
 });
 
+test('substituir uma peça que o destino tinha do estoque LIBERA aquela peça', async () => {
+  // O caso que o usuário descreveu: uma peça pronta do destino é substituída
+  // por uma que chega em 10/15. A pronta fica livre e volta ao estoque — ela
+  // existe fisicamente e não pode ficar presa a um pedido que não a usa mais.
+  const api = montarApi({
+    ext: [{ id: 1, id_pedido: 99, pedido_item_id: 1000, quantidade: 1, ultimo_insumo_id: passoDaOrdem(10).id, etapa_id: 501 }],
+    lotes: {
+      501: { id: 501, produto_id: 7, quantidade: 0, ultimo_insumo_id: passoDaOrdem(10).insumo_id },
+      502: { id: 502, produto_id: 7, quantidade: 0, ultimo_insumo_id: passoDaOrdem(15).insumo_id }
+    },
+    destino: {
+      qtdAProduzir: 0,
+      qtdUsarPronta: 1,
+      // O destino tem 1 peça PRONTA vinda do estoque, do lote 502.
+      extInicial: [{
+        id: 5000, id_pedido: 77, pedido_item_id: 2000, quantidade: 1,
+        ultimo_insumo_id: passoDaOrdem(15).id, etapa_id: 502
+      }]
+    }
+  });
+  const ins = coletorDeInsumos();
+
+  await estornarCancelamento(api, {
+    pedidoId: 99,
+    acoes: [{
+      item: { id: 1000 }, action: 'reallocate', orderId: 77, quantity: 1,
+      pedidoItemDestino: 2000,
+      grupoDestino: { origem: 'estoque', ordem_origem: 15 }
+    }],
+    registrarEntradaInsumo: ins.fn
+  });
+
+  assert.equal(
+    api.lotes[502].quantidade, 1,
+    'a peça pronta do destino foi substituída e voltou ao lote dela'
+  );
+  assert.ok(
+    api.gravacoes.movimentos.some(m =>
+      m.tipo_movimento === 'retorno_cancelamento'
+      && Number(m.pedido_id) === 77
+      && /substituída por peça realocada/.test(m.decision_note || '')),
+    'com movimento no pedido de DESTINO, dizendo o motivo'
+  );
+});
+
 test('realocação registra os DOIS lados: item e movimento de destino', async () => {
   const api = montarApi({
     ext: [{ id: 1, id_pedido: 99, pedido_item_id: 1000, quantidade: 1, ultimo_insumo_id: passoDaOrdem(5).id, etapa_id: 501 }],
