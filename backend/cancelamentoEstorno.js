@@ -208,6 +208,72 @@ async function lotePara(api, { produtoId, passo, lotePreferido }, cacheLotes, av
   return cacheLotes.get(chave) || null;
 }
 
+/**
+ * O que um pedido AINDA precisa de matéria-prima, pela composição atual.
+ *
+ * É a mesma conta da conversão: peça do zero paga a rota inteira; peça que
+ * entrou pela metade paga só os passos DEPOIS de onde parou; peça pronta não
+ * paga nada.
+ *
+ * Serve para calcular a devolução da realocação por DIFERENÇA — necessidade
+ * antes menos necessidade depois. Somar "o material já incorporado nas peças
+ * recebidas" parece equivalente e não é: se o pedido recebe mais peças do que
+ * ia produzir, o excedente não substitui produção nenhuma, e somar devolveria
+ * material que ninguém tinha abatido. Foi o que aconteceu no PED24, que
+ * recebeu 7 peças tendo apenas 6 do zero e ganhou uma ficha técnica inteira a
+ * mais de volta.
+ */
+async function necessidadeDoPedido(api, pedidoId, cacheRotas, insumos) {
+  const [itens, ext] = await Promise.all([
+    api.get('/api/pedidos_itens', { query: { pedido_id: pedidoId } }).catch(() => []),
+    api.get('/api/pedido_itens_ext', { query: { id_pedido: pedidoId } }).catch(() => [])
+  ]);
+
+  const extPorItem = new Map();
+  for (const reg of (Array.isArray(ext) ? ext : [])) {
+    const chave = String(reg.pedido_item_id);
+    if (!extPorItem.has(chave)) extPorItem.set(chave, []);
+    extPorItem.get(chave).push(reg);
+  }
+
+  const necessidade = new Map();
+
+  for (const item of (Array.isArray(itens) ? itens : [])) {
+    const rota = await carregarRota(api, item.produto_id, cacheRotas, insumos);
+    if (!rota.length) continue;
+    const ordemFinal = rota[rota.length - 1].ordem;
+
+    const parciais = [];
+    let totalParcial = 0;
+    for (const reg of (extPorItem.get(String(item.id)) || [])) {
+      const passo = rota.find(p => Number(p.passo_id) === Number(reg.ultimo_insumo_id)) || null;
+      const ordem = passo ? passo.ordem : ordemFinal;
+      const quantidade = paraNumero(reg.quantidade);
+      if (ordem < ordemFinal && quantidade > 0) {
+        parciais.push({ ordem, quantidade });
+        totalParcial += quantidade;
+      }
+    }
+
+    const doZero = Math.max(0, arredondar(paraNumero(item.qtd_a_produzir) - totalParcial));
+
+    for (const passo of rota) {
+      const dosParciais = parciais.reduce(
+        (acc, p) => acc + (passo.ordem > p.ordem ? p.quantidade : 0), 0
+      );
+      const unidades = doZero + dosParciais;
+      const quantidade = arredondar(passo.por_unidade * unidades);
+      if (!(quantidade > 0)) continue;
+      necessidade.set(
+        passo.insumo_id,
+        arredondar((necessidade.get(passo.insumo_id) || 0) + quantidade)
+      );
+    }
+  }
+
+  return necessidade;
+}
+
 /** Cabeçalho do pedido, para usar o NÚMERO em vez do id nas mensagens. */
 async function carregarPedidoDestino(api, pedidoId, cache) {
   const chave = String(pedidoId);
@@ -263,15 +329,34 @@ async function entregarAoPedidoDestino(api, {
   const ordemFinal = rota.length ? rota[rota.length - 1].ordem : 0;
 
   // 1. A peça, no destino, veio do estoque.
-  await api.post('/api/pedido_itens_ext', {
-    pedido_item_id: alvo.id,
-    ultimo_insumo_id: passo?.passo_id ?? null,
-    etapa_id: loteOrigem ?? null,
-    quantidade: unidades,
-    id_pedido: pedidoDestino
-  }).catch(err => avisos.push(
-    `Falha ao registrar a peça recebida no ${rotuloDestino}: ${err?.message || err}`
-  ));
+  //
+  // A tabela tem chave única em (pedido_item_id, ultimo_insumo_id): se o
+  // destino já tem peças naquele mesmo ponto da rota, o INSERT falha. O certo
+  // é SOMAR ao registro existente — são as mesmas peças, no mesmo estágio, do
+  // mesmo item.
+  const jaExistentes = await api
+    .get('/api/pedido_itens_ext', { query: { pedido_item_id: alvo.id } })
+    .catch(() => []);
+  const mesmoPonto = (Array.isArray(jaExistentes) ? jaExistentes : [])
+    .find(r => Number(r.ultimo_insumo_id) === Number(passo?.passo_id));
+
+  if (mesmoPonto) {
+    await api.put(`/api/pedido_itens_ext/${mesmoPonto.id}`, {
+      quantidade: arredondar(paraNumero(mesmoPonto.quantidade) + unidades)
+    }).catch(err => avisos.push(
+      `Falha ao somar a peça recebida no ${rotuloDestino}: ${err?.message || err}`
+    ));
+  } else {
+    await api.post('/api/pedido_itens_ext', {
+      pedido_item_id: alvo.id,
+      ultimo_insumo_id: passo?.passo_id ?? null,
+      etapa_id: loteOrigem ?? null,
+      quantidade: unidades,
+      id_pedido: pedidoDestino
+    }).catch(err => avisos.push(
+      `Falha ao registrar a peça recebida no ${rotuloDestino}: ${err?.message || err}`
+    ));
+  }
 
   // 2. A composição: o que chega pronto sai da conta do que seria produzido.
   //    Peça pela metade não mexe em `qtd_a_produzir` — o relatório já desconta
@@ -287,15 +372,41 @@ async function entregarAoPedidoDestino(api, {
     ));
   }
 
-  // 3. A reserva do destino encolhe: menos peças a produzir do zero.
-  const reservas = await api
-    .get('/api/reservas_estoque', { query: { pedido_id: pedidoDestino } })
-    .catch(() => []);
+  // 3. A reserva do destino passa a refletir a composição NOVA.
+  //
+  // Subtrair as unidades recebidas da quantidade gravada não funciona: a
+  // reserva do PED24 estava com 1 e recebeu 7, o que dava -6 e batia na
+  // constraint `quantidade > 0`. O número certo é recalculado da composição —
+  // quantas peças ainda serão produzidas do zero depois da chegada.
+  const [reservas, extAtual] = await Promise.all([
+    api.get('/api/reservas_estoque', { query: { pedido_id: pedidoDestino } }).catch(() => []),
+    api.get('/api/pedido_itens_ext', { query: { pedido_item_id: alvo.id } }).catch(() => [])
+  ]);
   const reserva = (Array.isArray(reservas) ? reservas : [])
     .find(r => String(r.pedido_item_id) === String(alvo.id));
+
   if (reserva) {
-    const nova = arredondar(Math.max(0, paraNumero(reserva.quantidade) - unidades));
-    await api.put(`/api/reservas_estoque/${reserva.id}`, { quantidade: nova })
+    let parciais = 0;
+    for (const reg of (Array.isArray(extAtual) ? extAtual : [])) {
+      const p = rota.find(x => Number(x.passo_id) === Number(reg.ultimo_insumo_id)) || null;
+      const ordem = p ? p.ordem : ordemFinal;
+      if (ordem < ordemFinal) parciais += paraNumero(reg.quantidade);
+    }
+    // `alvo` foi lido ANTES da atualização de `qtd_a_produzir`; a subtração da
+    // peça pronta entra aqui para a conta usar o valor novo.
+    const aProduzirNovo = ordemDestino >= ordemFinal && ordemFinal > 0
+      ? Math.max(0, arredondar(aProduzir - unidades))
+      : aProduzir;
+    const doZeroNovo = Math.max(0, arredondar(aProduzirNovo - parciais));
+
+    // Zero não é permitido pela constraint — e faz sentido: uma reserva que
+    // não vale mais está ENCERRADA, não vazia. O status diz isso; apagar a
+    // quantidade apagaria o que chegou a ser prometido.
+    const payload = doZeroNovo > 0
+      ? { quantidade: doZeroNovo }
+      : { status: RESERVA.RETORNADA };
+
+    await api.put(`/api/reservas_estoque/${reserva.id}`, payload)
       .catch(err => avisos.push(`Falha ao ajustar a reserva do ${rotuloDestino}: ${err?.message || err}`));
   }
 
@@ -376,7 +487,16 @@ async function estornarCancelamento(api, {
     pecasNaoDevolvidas: 0,
     /** Foram para outro pedido — não passam pelo estoque. */
     pecasRealocadas: 0,
+    /** Quantos MOVIMENTOS de insumo foram gravados. */
     insumosDevolvidos: 0,
+    /**
+     * Quantos TIPOS distintos de insumo voltaram.
+     *
+     * O mesmo insumo pode voltar duas vezes — uma pelo pedido cancelado, outra
+     * pelo pedido de destino da realocação. Contar movimentos e chamá-los de
+     * "tipos" dizia "30 tipos de insumo" onde havia 15.
+     */
+    tiposDeInsumo: 0,
     reservasRetornadas: 0,
     /** Soma do que fisicamente entrou em lote, para conferência rápida. */
     get pecasDevolvidas() {
@@ -416,14 +536,15 @@ async function estornarCancelamento(api, {
   /** insumo -> quantidade a devolver, somada e gravada uma vez só no fim. */
   const insumosAVoltar = new Map();
   /**
-   * pedido de destino -> (insumo -> quantidade).
+   * pedido de destino -> necessidade de matéria-prima ANTES da realocação.
    *
-   * A matéria-prima devolvida pelo DESTINO da realocação é dele, não deste
-   * pedido: ele deixou de precisar produzir o trecho que a peça já traz pronto.
-   * Somar tudo num balaio só faria o histórico de cada insumo atribuir a
-   * devolução ao pedido errado.
+   * A devolução do destino é a DIFERENÇA entre esta foto e a necessidade
+   * depois — nunca "o material das peças recebidas". Ver `necessidadeDoPedido`.
+   * E é gravada no nome DELE, não deste pedido: quem deixou de produzir foi ele.
    */
-  const insumosDoDestino = new Map();
+  const necessidadeAntes = new Map();
+  /** Tipos distintos de insumo que voltaram, para o histórico não dizer 30 onde há 15. */
+  const tiposQueVoltaram = new Set();
 
   // Número do próprio pedido, para as mensagens não citarem o id cru.
   const cabecalho = await carregarPedidoDestino(api, pedidoId, cachePedidos);
@@ -570,6 +691,15 @@ async function estornarCancelamento(api, {
           const destino = await carregarPedidoDestino(api, decisao.pedidoDestino, cachePedidos);
           const rotuloDestino = destino?.numero || `#${decisao.pedidoDestino}`;
 
+          // Necessidade do destino ANTES de qualquer mudança. A devolução dele
+          // é a diferença entre esta foto e a de depois — ver `necessidadeDoPedido`.
+          if (!necessidadeAntes.has(decisao.pedidoDestino)) {
+            necessidadeAntes.set(
+              decisao.pedidoDestino,
+              await necessidadeDoPedido(api, decisao.pedidoDestino, cacheRotas, insumos)
+            );
+          }
+
           const movimentoId = await registrarMovimento(api, {
             tipoMovimento: MOV.TRANSFERENCIA,
             tipoItem: ITEM.PECA,
@@ -611,17 +741,6 @@ async function estornarCancelamento(api, {
             `Falha ao registrar a realocação para o ${rotuloDestino}: ${err?.message || err}`
           ));
 
-          // O destino não precisa mais produzir o trecho que a peça já traz
-          // pronto: passos 1..ordemDestino voltam para a matéria-prima DELE.
-          for (const passo of rota) {
-            if (!(passo.ordem <= ordemDestino)) continue;
-            const quantidade = arredondar(passo.por_unidade * unidades);
-            if (!(quantidade > 0)) continue;
-            const atual = insumosDoDestino.get(decisao.pedidoDestino) || new Map();
-            atual.set(passo.insumo_id, arredondar((atual.get(passo.insumo_id) || 0) + quantidade));
-            insumosDoDestino.set(decisao.pedidoDestino, atual);
-          }
-
           resumo.pecasRealocadas = arredondar(resumo.pecasRealocadas + unidades);
         }
       }
@@ -655,6 +774,7 @@ async function estornarCancelamento(api, {
         usuarioId
       }, avisos);
       resumo.insumosDevolvidos += 1;
+      tiposQueVoltaram.add(Number(insumoId));
     } catch (err) {
       avisos.push(`Falha ao devolver o insumo ${insumoId}: ${err?.message || err}`);
     }
@@ -667,9 +787,20 @@ async function estornarCancelamento(api, {
   // trecho foi ele. No histórico do insumo a devolução aparece ligada ao
   // pedido que a causou, que é o que uma auditoria precisa responder.
   // ------------------------------------------------------------------
-  for (const [pedidoDestino, porInsumo] of insumosDoDestino.entries()) {
+  for (const [pedidoDestino, antes] of necessidadeAntes.entries()) {
     const destino = await carregarPedidoDestino(api, pedidoDestino, cachePedidos);
     const rotulo = destino?.numero || `#${pedidoDestino}`;
+
+    // A composição do destino já foi alterada acima; esta é a foto de depois.
+    const depois = await necessidadeDoPedido(api, pedidoDestino, cacheRotas, insumos);
+
+    const porInsumo = new Map();
+    for (const [insumoId, quantidadeAntes] of antes.entries()) {
+      const diferenca = arredondar(quantidadeAntes - (depois.get(insumoId) || 0));
+      // Só o que DEIXOU de ser necessário. Diferença negativa significaria que
+      // o pedido passou a precisar de mais — o que a realocação nunca causa.
+      if (diferenca > 0) porInsumo.set(insumoId, diferenca);
+    }
 
     for (const [insumoId, quantidade] of porInsumo.entries()) {
       if (!(quantidade > 0)) continue;
@@ -691,6 +822,7 @@ async function estornarCancelamento(api, {
           usuarioId
         }, avisos);
         resumo.insumosDevolvidos += 1;
+        tiposQueVoltaram.add(Number(insumoId));
       } catch (err) {
         avisos.push(`Falha ao devolver o insumo ${insumoId} do ${rotulo}: ${err?.message || err}`);
       }
@@ -711,6 +843,7 @@ async function estornarCancelamento(api, {
     api, pedidoId, RESERVA.RETORNADA, avisos
   );
 
+  resumo.tiposDeInsumo = tiposQueVoltaram.size;
   return { resumo, avisos };
 }
 

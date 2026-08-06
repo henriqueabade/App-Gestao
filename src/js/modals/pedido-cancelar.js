@@ -1775,16 +1775,32 @@
         ? `Pedido cancelado. ${(e.pecasAoEstoque ?? 0) + (e.pecasRestauradasNoLote ?? 0)} peça(s) ao estoque, `
           + `${e.pecasRealocadas ?? 0} realocada(s), `
           + `${e.pecasNaoDevolvidas ?? 0} não retornaram, `
-          + `${e.insumosDevolvidos ?? 0} insumo(s) devolvido(s).`
+          + `${e.tiposDeInsumo ?? 0} tipo(s) de insumo devolvido(s).`
         : 'Pedido cancelado com sucesso.';
-      if (typeof showToast === 'function') showToast(resumo, 'success');
 
-      if (Array.isArray(corpo?.avisos) && corpo.avisos.length) {
-        console.warn('Cancelamento com avisos:', corpo.avisos);
+      // COM FALHAS NÃO É SUCESSO.
+      //
+      // O cancelamento em si não tem volta — o pedido já está marcado —, mas
+      // dizer "concluído" em verde quando parte do estorno falhou é pior que
+      // não dizer nada: o usuário fecha a tela achando que o estoque está
+      // certo, e o erro só aparece no inventário.
+      const falhas = Array.isArray(corpo?.avisos) ? corpo.avisos : [];
+      if (falhas.length) {
+        console.warn('Cancelamento com falhas no estorno:', falhas);
         if (typeof showToast === 'function') {
-          showToast(`${corpo.avisos.length} aviso(s) no estorno. Veja o console.`, 'info');
+          showToast(
+            `Pedido cancelado, mas ${falhas.length} etapa(s) do estorno FALHARAM. `
+            + 'Confira o estoque antes de seguir — detalhes no console.',
+            'error'
+          );
         }
+        // O modal fica aberto: há o que conferir antes de sair.
+        confirmBtn.disabled = false;
+        confirmBtn.textContent = originalText;
+        return;
       }
+
+      if (typeof showToast === 'function') showToast(resumo, 'success');
       close();
       });
     } catch (err) {

@@ -27,7 +27,16 @@ const passoDaOrdem = ordem => ROTA.find(p => p.ordem_insumo === ordem);
  *   `ext`: linhas de pedido_itens_ext (peças que vieram do estoque)
  *   `reserva`: quantidade que seria produzida do zero
  */
-function montarApi({ ext = [], reserva = 0, lotes = {}, qtdAProduzir = null } = {}) {
+function montarApi({ ext = [], reserva = 0, lotes = {}, qtdAProduzir = null, destino = {} } = {}) {
+  // Composição do pedido de DESTINO, que muda ao receber peças. O mock a
+  // mantém viva para que a "necessidade depois" seja calculada de verdade.
+  const itemDestino = {
+    id: 2000, pedido_id: 77, produto_id: 7, quantidade: 6,
+    qtd_a_produzir: destino.qtdAProduzir ?? 6,
+    qtd_usar_pronta: destino.qtdUsarPronta ?? 0,
+    nome: 'Peça X', codigo: 'PX'
+  };
+  const extDestinoAtual = [...(destino.extInicial || [])];
   const estado = { ...lotes };
   const gravacoes = {
     movimentos: [], realocacoes: [], lotesNovos: [], reservas: [],
@@ -44,12 +53,7 @@ function montarApi({ ext = [], reserva = 0, lotes = {}, qtdAProduzir = null } = 
       if (rota === '/api/pedidos/77') return { id: 77, numero: 'PED77' };
       if (rota === '/api/pedidos_itens') {
         // O pedido de DESTINO tem a mesma peça, para receber a realocação.
-        if (String(q.pedido_id) === '77') {
-          return [{
-            id: 2000, pedido_id: 77, produto_id: 7, quantidade: 6,
-            qtd_a_produzir: 6, qtd_usar_pronta: 0, nome: 'Peça X', codigo: 'PX'
-          }];
-        }
+        if (String(q.pedido_id) === '77') return [itemDestino];
         return [{
           id: 1000, pedido_id: 99, produto_id: 7, quantidade: 99,
           nome: 'Peça X', codigo: 'PX',
@@ -59,7 +63,9 @@ function montarApi({ ext = [], reserva = 0, lotes = {}, qtdAProduzir = null } = 
         }];
       }
       if (rota === '/api/pedido_itens_ext') {
-        return String(q.id_pedido) === '77' ? [] : ext;
+        if (String(q.id_pedido) === '77') return extDestinoAtual;
+        if (String(q.pedido_item_id) === '2000') return extDestinoAtual;
+        return ext;
       }
       if (rota === '/api/reservas_estoque') {
         if (String(q.pedido_id) === '77') {
@@ -95,6 +101,14 @@ function montarApi({ ext = [], reserva = 0, lotes = {}, qtdAProduzir = null } = 
       }
       if (rota.startsWith('/api/pedidos_itens/')) {
         gravacoes.itensAtualizados.push({ id: rota.split('/').pop(), ...payload });
+        // A composição do destino muda de verdade: é dela que sai a
+        // "necessidade depois".
+        if (String(rota.split('/').pop()) === '2000') Object.assign(itemDestino, payload);
+      }
+      if (rota.startsWith('/api/pedido_itens_ext/')) {
+        const id = Number(rota.split('/').pop());
+        const linha = extDestinoAtual.find(r => Number(r.id) === id);
+        if (linha) Object.assign(linha, payload);
       }
       return { ok: true };
     },
@@ -109,7 +123,9 @@ function montarApi({ ext = [], reserva = 0, lotes = {}, qtdAProduzir = null } = 
       }
       if (rota === '/api/pedido_itens_ext') {
         gravacoes.extDestino.push(payload);
-        return { id: 9000 + gravacoes.extDestino.length };
+        const criado = { id: 9000 + gravacoes.extDestino.length, ...payload };
+        extDestinoAtual.push(criado);
+        return criado;
       }
       if (rota === '/api/pedido_historico_eventos') {
         gravacoes.eventos.push(payload);
@@ -286,6 +302,33 @@ test('realocação: a ORIGEM devolve o que ia gastar, o DESTINO o que já não p
     ins.porPedido(77).get(passoDaOrdem(6).insumo_id), undefined,
     'o passo 6 é do lado da origem: contá-lo nos dois criaria material do nada'
   );
+});
+
+test('o destino devolve pela DIFERENÇA, não pelo material das peças recebidas', async () => {
+  // O caso do PED24: ele ia produzir 6 do zero e recebeu 7 peças prontas.
+  // Somar "o material das 7" devolveria uma ficha técnica inteira a mais —
+  // material que ninguém abateu. O certo é: necessidade antes (6 fichas)
+  // menos necessidade depois (0) = 6 fichas.
+  const api = montarApi({
+    ext: [{ id: 1, id_pedido: 99, pedido_item_id: 1000, quantidade: 7, ultimo_insumo_id: passoDaOrdem(15).id, etapa_id: 502 }],
+    lotes: { 502: { id: 502, produto_id: 7, quantidade: 0, ultimo_insumo_id: passoDaOrdem(15).insumo_id } },
+    destino: { qtdAProduzir: 6, extInicial: [] }
+  });
+  const ins = coletorDeInsumos();
+
+  await estornarCancelamento(api, {
+    pedidoId: 99,
+    acoes: [{ item: { id: 1000 }, action: 'reallocate', orderId: 77, quantity: 7 }],
+    registrarEntradaInsumo: ins.fn
+  });
+
+  const doDestino = ins.porPedido(77);
+  assert.equal(
+    doDestino.get(passoDaOrdem(1).insumo_id), 6,
+    'seis fichas, não sete: só 6 peças substituíam produção'
+  );
+  assert.equal(doDestino.get(passoDaOrdem(15).insumo_id), 6);
+  assert.equal(doDestino.size, 15, 'a rota inteira, uma vez por insumo');
 });
 
 test('realocação de peça PRONTA: o destino devolve a rota inteira', async () => {

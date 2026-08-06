@@ -155,7 +155,11 @@ router.put('/:id/status', exigirPermissao(permissaoDeStatus), async (req, res) =
             + `${estorno.pecasRestauradasNoLote ?? 0} descartada(s) com restauração do lote de origem, `
             + `${estorno.pecasNaoDevolvidas ?? 0} não retornaram como produto, `
             + `${estorno.pecasRealocadas ?? 0} realocada(s) para outro pedido, `
-            + `${estorno.insumosDevolvidos ?? 0} tipo(s) de insumo devolvido(s).`
+            // Tipos DISTINTOS e movimentos são coisas diferentes: o mesmo
+            // insumo pode voltar duas vezes (pelo pedido e pelo destino da
+            // realocação), e chamar 30 movimentos de "30 tipos" era falso.
+            + `${estorno.tiposDeInsumo ?? 0} tipo(s) de insumo devolvido(s) `
+            + `em ${estorno.insumosDevolvidos ?? 0} movimento(s) de estoque.`
           : `Pedido marcado como ${status}.`,
         usuarioId: idDoUsuarioDaRequisicao(req)
       }, avisos);
