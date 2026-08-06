@@ -424,15 +424,27 @@ async function entregarAoPedidoDestino(api, {
     }
   }
 
-  // 2. A composição: o que chega pronto sai da conta do que seria produzido.
+  // 2. A composição muda pela DIFERENÇA entre a peça que chega e a que sai.
+  //
   //    Peça pela metade não mexe em `qtd_a_produzir` — o relatório já desconta
-  //    as parciais ao calcular quantas sobram para o zero.
+  //    as parciais ao calcular quantas sobram para o zero. E substituir uma
+  //    peça PRONTA do destino por outra pronta não muda nada: ele continua
+  //    usando uma peça pronta, só que outra. Somar sem descontar contava a
+  //    mesma unidade duas vezes em `qtd_usar_pronta` e apagava uma unidade de
+  //    `qtd_a_produzir` que continuava a ser produzida.
+  const chegaPronta = ordemFinal > 0 && ordemDestino >= ordemFinal;
+  const saiPronta = ordemFinal > 0
+    && Boolean(grupoDestino)
+    && String(grupoDestino.origem) === 'estoque'
+    && paraNumero(grupoDestino.ordem_origem) >= ordemFinal;
+  const deltaPronta = (chegaPronta ? unidades : 0) - (saiPronta ? unidades : 0);
+
   const aProduzir = paraNumero(alvo.qtd_a_produzir);
   const usarPronta = paraNumero(alvo.qtd_usar_pronta);
-  if (ordemDestino >= ordemFinal && ordemFinal > 0) {
+  if (deltaPronta !== 0) {
     await api.put(`/api/pedidos_itens/${alvo.id}`, {
-      qtd_usar_pronta: arredondar(usarPronta + unidades),
-      qtd_a_produzir: arredondar(Math.max(0, aProduzir - unidades))
+      qtd_usar_pronta: arredondar(Math.max(0, usarPronta + deltaPronta)),
+      qtd_a_produzir: arredondar(Math.max(0, aProduzir - deltaPronta))
     }).catch(err => avisos.push(
       `Falha ao atualizar a composição do ${rotuloDestino}: ${err?.message || err}`
     ));
@@ -458,11 +470,9 @@ async function entregarAoPedidoDestino(api, {
       const ordem = p ? p.ordem : ordemFinal;
       if (ordem < ordemFinal) parciais += paraNumero(reg.quantidade);
     }
-    // `alvo` foi lido ANTES da atualização de `qtd_a_produzir`; a subtração da
-    // peça pronta entra aqui para a conta usar o valor novo.
-    const aProduzirNovo = ordemDestino >= ordemFinal && ordemFinal > 0
-      ? Math.max(0, arredondar(aProduzir - unidades))
-      : aProduzir;
+    // `alvo` foi lido ANTES da atualização de `qtd_a_produzir`; a mesma
+    // diferença aplicada acima entra aqui para a conta usar o valor novo.
+    const aProduzirNovo = Math.max(0, arredondar(aProduzir - deltaPronta));
     const doZeroNovo = Math.max(0, arredondar(aProduzirNovo - parciais));
 
     // Zero não é permitido pela constraint — e faz sentido: uma reserva que

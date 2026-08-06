@@ -395,6 +395,75 @@ test('substituir uma peça que o destino tinha do estoque LIBERA aquela peça', 
   );
 });
 
+test('peça pronta trocada por peça pronta NÃO muda a composição do destino', async () => {
+  // O destino usa 1 peça pronta do estoque. Ela é substituída por outra peça
+  // pronta que vem do pedido cancelado: ele continua usando UMA peça pronta,
+  // só que outra. Somar sem descontar contava a mesma unidade duas vezes em
+  // `qtd_usar_pronta` e apagava de `qtd_a_produzir` uma unidade que continua
+  // sendo produzida.
+  const api = montarApi({
+    ext: [{ id: 1, id_pedido: 99, pedido_item_id: 1000, quantidade: 1, ultimo_insumo_id: passoDaOrdem(15).id, etapa_id: 502 }],
+    lotes: { 502: { id: 502, produto_id: 7, quantidade: 0, ultimo_insumo_id: passoDaOrdem(15).insumo_id } },
+    destino: {
+      qtdAProduzir: 0,
+      qtdUsarPronta: 1,
+      extInicial: [{
+        id: 5000, id_pedido: 77, pedido_item_id: 2000, quantidade: 1,
+        ultimo_insumo_id: passoDaOrdem(15).id, etapa_id: 502
+      }]
+    }
+  });
+  const ins = coletorDeInsumos();
+
+  await estornarCancelamento(api, {
+    pedidoId: 99,
+    acoes: [{
+      item: { id: 1000 }, action: 'reallocate', orderId: 77, quantity: 1,
+      pedidoItemDestino: 2000,
+      grupoDestino: { origem: 'estoque', ordem_origem: 15 }
+    }],
+    registrarEntradaInsumo: ins.fn
+  });
+
+  assert.equal(
+    api.gravacoes.itensAtualizados.filter(i => String(i.id) === '2000').length, 0,
+    'a composição do destino não é tocada: entra uma pronta e sai uma pronta'
+  );
+  assert.equal(api.lotes[502].quantidade, 1, 'a peça substituída volta ao lote dela');
+  assert.equal(
+    ins.porPedido(77).size, 0,
+    'e nada volta para a matéria-prima: o destino não deixou de produzir nada'
+  );
+});
+
+test('peça pronta no lugar de uma que seria produzida do zero MUDA a composição', async () => {
+  const api = montarApi({
+    ext: [{ id: 1, id_pedido: 99, pedido_item_id: 1000, quantidade: 1, ultimo_insumo_id: passoDaOrdem(15).id, etapa_id: 502 }],
+    lotes: { 502: { id: 502, produto_id: 7, quantidade: 0, ultimo_insumo_id: passoDaOrdem(15).insumo_id } },
+    destino: { qtdAProduzir: 6, qtdUsarPronta: 0 }
+  });
+  const ins = coletorDeInsumos();
+
+  await estornarCancelamento(api, {
+    pedidoId: 99,
+    acoes: [{
+      item: { id: 1000 }, action: 'reallocate', orderId: 77, quantity: 1,
+      pedidoItemDestino: 2000,
+      grupoDestino: { origem: 'producao', ordem_origem: 0 }
+    }],
+    registrarEntradaInsumo: ins.fn
+  });
+
+  const atualizacao = api.gravacoes.itensAtualizados.find(i => String(i.id) === '2000');
+  assert.ok(atualizacao, 'o destino deixa de produzir uma unidade');
+  assert.equal(Number(atualizacao.qtd_usar_pronta), 1);
+  assert.equal(Number(atualizacao.qtd_a_produzir), 5);
+  assert.equal(
+    ins.porPedido(77).get(passoDaOrdem(1).insumo_id), 1,
+    'e a matéria-prima da unidade que ele não produz mais volta em nome dele'
+  );
+});
+
 test('realocação registra os DOIS lados: item e movimento de destino', async () => {
   const api = montarApi({
     ext: [{ id: 1, id_pedido: 99, pedido_item_id: 1000, quantidade: 1, ultimo_insumo_id: passoDaOrdem(5).id, etapa_id: 501 }],
