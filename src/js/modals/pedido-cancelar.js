@@ -1772,9 +1772,10 @@
       // "cancelado com sucesso" sozinho não diz se o estorno aconteceu.
       const e = corpo?.estorno;
       const resumo = e
-        ? `Pedido cancelado. ${e.pecasDevolvidas} peça(s) ao estoque, `
-          + `${e.pecasNaoDevolvidas} não devolvida(s), ${e.pecasRealocadas} realocada(s), `
-          + `${e.insumosDevolvidos} insumo(s) devolvido(s).`
+        ? `Pedido cancelado. ${(e.pecasAoEstoque ?? 0) + (e.pecasRestauradasNoLote ?? 0)} peça(s) ao estoque, `
+          + `${e.pecasRealocadas ?? 0} realocada(s), `
+          + `${e.pecasNaoDevolvidas ?? 0} não retornaram, `
+          + `${e.insumosDevolvidos ?? 0} insumo(s) devolvido(s).`
         : 'Pedido cancelado com sucesso.';
       if (typeof showToast === 'function') showToast(resumo, 'success');
 

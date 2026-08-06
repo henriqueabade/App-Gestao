@@ -710,7 +710,15 @@ test('o pedido ganha um evento de conversão no histórico', async () => {
     assert.equal(amb.gravacoes.eventos.length, 1);
     assert.equal(amb.gravacoes.eventos[0].tipo_evento, 'conversao');
     assert.equal(amb.gravacoes.eventos[0].pedido_id, 99);
-    assert.match(amb.gravacoes.eventos[0].descricao, /reserva/i, 'a descrição diz o que foi feito');
+    // UNIDADES, não linhas: a descrição contava REGISTROS, e um pedido com 14
+    // peças vindas de seis lotes aparecia no histórico como "6 peça(s)".
+    // Aqui a única unidade vem de um lote parcial, então é 1 do estoque e 0 do
+    // zero — os dois números aparecem, para o total sempre fechar.
+    assert.equal(
+      amb.gravacoes.eventos[0].descricao,
+      'Convertido do orçamento. 1 peça(s) retiradas do estoque, '
+      + '0 peça(s) para produção do zero, 1 tipo(s) de insumo movimentado(s).'
+    );
   } finally {
     amb.restaurar();
   }

@@ -146,14 +146,16 @@ router.put('/:id/status', exigirPermissao(permissaoDeStatus), async (req, res) =
         tipoEvento: eventoPorStatus[status],
         // No cancelamento o evento diz o que voltou: sem isso o histórico
         // registra "Cancelado" e não explica o que aconteceu com o estoque.
-        // `pecasNaoDevolvidas` e não `pecasDescartadas`: o campo foi renomeado
-        // quando o descarte virou "voltar no estágio 0", e o nome antigo saía
-        // como `undefined` no histórico.
+        // Cada destino contado à parte, e `?? 0` em todos: um campo renomeado
+        // fazia o histórico gravar "undefined descartada(s)" — texto que não
+        // dá para auditar nem corrigir depois.
         descricao: estorno
-          ? `Pedido cancelado. ${estorno.pecasDevolvidas} peça(s) devolvida(s) ao estoque, `
-            + `${estorno.pecasNaoDevolvidas} não devolvida(s), `
-            + `${estorno.pecasRealocadas} realocada(s), `
-            + `${estorno.insumosDevolvidos} insumo(s) devolvido(s).`
+          ? 'Pedido cancelado. '
+            + `${estorno.pecasAoEstoque ?? 0} peça(s) retornaram ao estoque, `
+            + `${estorno.pecasRestauradasNoLote ?? 0} descartada(s) com restauração do lote de origem, `
+            + `${estorno.pecasNaoDevolvidas ?? 0} não retornaram como produto, `
+            + `${estorno.pecasRealocadas ?? 0} realocada(s) para outro pedido, `
+            + `${estorno.insumosDevolvidos ?? 0} tipo(s) de insumo devolvido(s).`
           : `Pedido marcado como ${status}.`,
         usuarioId: idDoUsuarioDaRequisicao(req)
       }, avisos);

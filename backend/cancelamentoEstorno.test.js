@@ -29,7 +29,10 @@ const passoDaOrdem = ordem => ROTA.find(p => p.ordem_insumo === ordem);
  */
 function montarApi({ ext = [], reserva = 0, lotes = {}, qtdAProduzir = null } = {}) {
   const estado = { ...lotes };
-  const gravacoes = { movimentos: [], realocacoes: [], lotesNovos: [], reservas: [] };
+  const gravacoes = {
+    movimentos: [], realocacoes: [], lotesNovos: [], reservas: [],
+    extDestino: [], eventos: [], itensAtualizados: []
+  };
   let proximoLote = 900;
 
   return {
@@ -37,7 +40,16 @@ function montarApi({ ext = [], reserva = 0, lotes = {}, qtdAProduzir = null } = 
     gravacoes,
     async get(rota, opcoes = {}) {
       const q = opcoes?.query || {};
+      if (rota === '/api/pedidos/99') return { id: 99, numero: 'PED99' };
+      if (rota === '/api/pedidos/77') return { id: 77, numero: 'PED77' };
       if (rota === '/api/pedidos_itens') {
+        // O pedido de DESTINO tem a mesma peça, para receber a realocação.
+        if (String(q.pedido_id) === '77') {
+          return [{
+            id: 2000, pedido_id: 77, produto_id: 7, quantidade: 6,
+            qtd_a_produzir: 6, qtd_usar_pronta: 0, nome: 'Peça X', codigo: 'PX'
+          }];
+        }
         return [{
           id: 1000, pedido_id: 99, produto_id: 7, quantidade: 99,
           nome: 'Peça X', codigo: 'PX',
@@ -46,8 +58,13 @@ function montarApi({ ext = [], reserva = 0, lotes = {}, qtdAProduzir = null } = 
           ...(qtdAProduzir === null ? {} : { qtd_a_produzir: qtdAProduzir })
         }];
       }
-      if (rota === '/api/pedido_itens_ext') return ext;
+      if (rota === '/api/pedido_itens_ext') {
+        return String(q.id_pedido) === '77' ? [] : ext;
+      }
       if (rota === '/api/reservas_estoque') {
+        if (String(q.pedido_id) === '77') {
+          return [{ id: 950, pedido_id: 77, pedido_item_id: 2000, quantidade: 6, status: 'producao' }];
+        }
         return reserva > 0
           ? [{ id: 900, pedido_id: 99, pedido_item_id: 1000, quantidade: reserva, status: 'producao' }]
           : [];
@@ -76,6 +93,9 @@ function montarApi({ ext = [], reserva = 0, lotes = {}, qtdAProduzir = null } = 
       if (rota.startsWith('/api/reservas_estoque/')) {
         gravacoes.reservas.push({ id: rota.split('/').pop(), ...payload });
       }
+      if (rota.startsWith('/api/pedidos_itens/')) {
+        gravacoes.itensAtualizados.push({ id: rota.split('/').pop(), ...payload });
+      }
       return { ok: true };
     },
     async post(rota, payload) {
@@ -86,6 +106,14 @@ function montarApi({ ext = [], reserva = 0, lotes = {}, qtdAProduzir = null } = 
       if (rota === '/api/realocacoes') {
         gravacoes.realocacoes.push(payload);
         return { id: 8000 };
+      }
+      if (rota === '/api/pedido_itens_ext') {
+        gravacoes.extDestino.push(payload);
+        return { id: 9000 + gravacoes.extDestino.length };
+      }
+      if (rota === '/api/pedido_historico_eventos') {
+        gravacoes.eventos.push(payload);
+        return { id: 9500 };
       }
       if (rota === '/api/produtos_em_cada_ponto') {
         proximoLote += 1;
@@ -100,10 +128,26 @@ function montarApi({ ext = [], reserva = 0, lotes = {}, qtdAProduzir = null } = 
 
 function coletorDeInsumos() {
   const devolvidos = new Map();
-  const fn = async (insumoId, quantidade) => {
-    devolvidos.set(Number(insumoId), (devolvidos.get(Number(insumoId)) || 0) + Number(quantidade));
+  // Por pedido: a devolução do DESTINO de uma realocação é dele, não do pedido
+  // cancelado — e o histórico do insumo tem de atribuí-la a quem a causou.
+  const porPedidoMap = new Map();
+
+  const fn = async (insumoId, quantidade, _usuarioId, contexto = {}) => {
+    const id = Number(insumoId);
+    devolvidos.set(id, (devolvidos.get(id) || 0) + Number(quantidade));
+
+    const pedido = Number(contexto?.pedidoId);
+    if (!porPedidoMap.has(pedido)) porPedidoMap.set(pedido, new Map());
+    const doPedido = porPedidoMap.get(pedido);
+    doPedido.set(id, (doPedido.get(id) || 0) + Number(quantidade));
   };
-  return { devolvidos, fn, de: ordem => devolvidos.get(passoDaOrdem(ordem).insumo_id) || 0 };
+
+  return {
+    devolvidos,
+    fn,
+    de: ordem => devolvidos.get(passoDaOrdem(ordem).insumo_id) || 0,
+    porPedido: pedidoId => porPedidoMap.get(Number(pedidoId)) || new Map()
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -195,7 +239,7 @@ test('peça pronta (15/15) devolvida: entra no estoque e a matéria-prima não m
   );
 });
 
-test('realocação de uma peça que usava 5/15: volta ao estoque em 5 e os 10 restantes voltam', async () => {
+test('realocação NÃO devolve a peça ao estoque: ela troca de dono', async () => {
   const api = montarApi({
     ext: [{ id: 1, id_pedido: 99, pedido_item_id: 1000, quantidade: 1, ultimo_insumo_id: passoDaOrdem(5).id, etapa_id: 501 }],
     lotes: { 501: { id: 501, produto_id: 7, quantidade: 0, ultimo_insumo_id: passoDaOrdem(5).insumo_id } }
@@ -208,10 +252,120 @@ test('realocação de uma peça que usava 5/15: volta ao estoque em 5 e os 10 re
     registrarEntradaInsumo: ins.fn
   });
 
-  assert.equal(api.lotes[501].quantidade, 1, 'a peça volta como estava quando foi escolhida');
-  assert.equal(ins.devolvidos.size, 10, 'e o que foi gasto para completá-la volta');
+  assert.equal(
+    api.lotes[501].quantidade, 0,
+    'devolver ao lote E entregar ao outro pedido colocaria a mesma unidade em '
+    + 'dois lugares — foi o que inflou o estoque no teste do PED22'
+  );
   assert.equal(resumo.pecasRealocadas, 1);
-  assert.equal(api.gravacoes.realocacoes[0].pedido_id_destino, 77, 'com o destino registrado');
+  assert.equal(resumo.pecasAoEstoque, 0, 'ela não passa pelo estoque geral');
+});
+
+test('realocação: a ORIGEM devolve o que ia gastar, o DESTINO o que já não precisa', async () => {
+  // Peça parada em 5/15 sai do pedido 99 para o 77.
+  const api = montarApi({
+    ext: [{ id: 1, id_pedido: 99, pedido_item_id: 1000, quantidade: 1, ultimo_insumo_id: passoDaOrdem(5).id, etapa_id: 501 }],
+    lotes: { 501: { id: 501, produto_id: 7, quantidade: 0, ultimo_insumo_id: passoDaOrdem(5).insumo_id } }
+  });
+  const ins = coletorDeInsumos();
+
+  await estornarCancelamento(api, {
+    pedidoId: 99,
+    acoes: [{ item: { id: 1000 }, action: 'reallocate', orderId: 77, quantity: 1 }],
+    registrarEntradaInsumo: ins.fn
+  });
+
+  // A conta é simétrica e fecha a rota inteira, sem sobreposição:
+  //   origem devolve 6..15 (não vai produzir)
+  //   destino devolve 1..5 (recebe pronto o que ia fazer)
+  assert.equal(ins.porPedido(99).size, 10, 'a origem devolve os passos 6 a 15');
+  assert.equal(ins.porPedido(77).size, 5, 'o destino devolve os passos 1 a 5');
+  assert.equal(ins.porPedido(99).get(passoDaOrdem(6).insumo_id), 1);
+  assert.equal(ins.porPedido(77).get(passoDaOrdem(5).insumo_id), 1);
+  assert.equal(
+    ins.porPedido(77).get(passoDaOrdem(6).insumo_id), undefined,
+    'o passo 6 é do lado da origem: contá-lo nos dois criaria material do nada'
+  );
+});
+
+test('realocação de peça PRONTA: o destino devolve a rota inteira', async () => {
+  const api = montarApi({
+    ext: [{ id: 1, id_pedido: 99, pedido_item_id: 1000, quantidade: 3, ultimo_insumo_id: passoDaOrdem(15).id, etapa_id: 502 }],
+    lotes: { 502: { id: 502, produto_id: 7, quantidade: 0, ultimo_insumo_id: passoDaOrdem(15).insumo_id } }
+  });
+  const ins = coletorDeInsumos();
+
+  await estornarCancelamento(api, {
+    pedidoId: 99,
+    acoes: [{ item: { id: 1000 }, action: 'reallocate', orderId: 77, quantity: 3 }],
+    registrarEntradaInsumo: ins.fn
+  });
+
+  assert.equal(ins.porPedido(99).size, 0, 'a origem não gastou nada com peça pronta');
+  assert.equal(ins.porPedido(77).size, 15, 'o destino não produz mais NADA dessas peças');
+  assert.equal(ins.porPedido(77).get(passoDaOrdem(1).insumo_id), 3, '3 unidades × 1 por passo');
+  assert.equal(ins.porPedido(77).get(passoDaOrdem(15).insumo_id), 3);
+});
+
+test('realocação registra os DOIS lados: item e movimento de destino', async () => {
+  const api = montarApi({
+    ext: [{ id: 1, id_pedido: 99, pedido_item_id: 1000, quantidade: 1, ultimo_insumo_id: passoDaOrdem(5).id, etapa_id: 501 }],
+    lotes: { 501: { id: 501, produto_id: 7, quantidade: 0, ultimo_insumo_id: passoDaOrdem(5).insumo_id } }
+  });
+  const ins = coletorDeInsumos();
+
+  await estornarCancelamento(api, {
+    pedidoId: 99,
+    acoes: [{ item: { id: 1000 }, action: 'reallocate', orderId: 77, quantity: 1 }],
+    registrarEntradaInsumo: ins.fn
+  });
+
+  const rea = api.gravacoes.realocacoes[0];
+  assert.ok(rea, 'a realocação é registrada');
+  assert.equal(Number(rea.pedido_id_destino), 77);
+  assert.ok(rea.movimento_id_origem, 'com o movimento de saída');
+  assert.equal(
+    Number(rea.pedido_item_id_destino), 2000,
+    'e o item do pedido de destino que recebeu — sem isso ninguém sabe qual '
+    + 'composição atualizar'
+  );
+  assert.ok(rea.movimento_id_destino, 'e o movimento de entrada do outro lado');
+
+  // A peça passa a constar como vinda do estoque no DESTINO.
+  const extDestino = api.gravacoes.extDestino[0];
+  assert.ok(extDestino, 'o destino ganha a peça em pedido_itens_ext');
+  assert.equal(Number(extDestino.id_pedido), 77);
+  assert.equal(Number(extDestino.pedido_item_id), 2000);
+  assert.equal(Number(extDestino.quantidade), 1);
+
+  // E o histórico do destino registra o recebimento.
+  assert.ok(
+    api.gravacoes.eventos.some(e => Number(e.pedido_id) === 77),
+    'o pedido de destino recebe evento no histórico'
+  );
+});
+
+test('a mensagem cita o NÚMERO do pedido, não o id', async () => {
+  const api = montarApi({
+    ext: [{ id: 1, id_pedido: 99, pedido_item_id: 1000, quantidade: 1, ultimo_insumo_id: passoDaOrdem(5).id, etapa_id: 501 }],
+    lotes: { 501: { id: 501, produto_id: 7, quantidade: 0, ultimo_insumo_id: passoDaOrdem(5).insumo_id } }
+  });
+  const ins = coletorDeInsumos();
+
+  await estornarCancelamento(api, {
+    pedidoId: 99,
+    acoes: [{ item: { id: 1000 }, action: 'reallocate', orderId: 77, quantity: 1 }],
+    registrarEntradaInsumo: ins.fn
+  });
+
+  const transferencia = api.gravacoes.movimentos.find(
+    m => m.tipo_movimento === 'transferencia' && Number(m.pedido_id) === 99
+  );
+  assert.match(
+    transferencia.decision_note, /PED77/,
+    '"realocada para o pedido 63" não diz nada a quem conhece o pedido como PED17'
+  );
+  assert.doesNotMatch(transferencia.decision_note, /pedido 77\b/);
 });
 
 // ---------------------------------------------------------------------------

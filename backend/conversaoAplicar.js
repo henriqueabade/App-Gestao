@@ -309,6 +309,11 @@ async function aplicarConversaoNoEstoque(api, {
   const resumo = {
     faltantesGravados: 0,
     pecasDeEstoqueGravadas: 0,
+    // UNIDADES, ao lado das contagens de registro. As duas coisas são úteis —
+    // "quantos lotes toquei" e "quantas peças saíram" —, e confundi-las fez o
+    // histórico dizer 6 onde eram 14.
+    unidadesDoEstoque: 0,
+    unidadesParaProduzir: 0,
     insumosAbatidos: 0,
     reservasCriadas: 0,
     avisos
@@ -515,6 +520,7 @@ async function aplicarConversaoNoEstoque(api, {
       }, { inserirLinhaComId, getMaxId, proximoId: proximoExtId }, avisos);
       proximoExtId = resultado.proximoId;
       resumo.pecasDeEstoqueGravadas += 1;
+      resumo.unidadesDoEstoque = arredondar(resumo.unidadesDoEstoque + paraNumero(consumo.quantidade));
     }
   }
 
@@ -561,6 +567,9 @@ async function aplicarConversaoNoEstoque(api, {
       quantidade: doZero,
       usuarioId
     }, avisos);
+    // As unidades contam mesmo que a reserva falhe: elas foram produzidas do
+    // zero de qualquer forma, e o histórico tem de dizer isso.
+    resumo.unidadesParaProduzir = arredondar(resumo.unidadesParaProduzir + doZero);
     if (reservaId) {
       resumo.reservasCriadas += 1;
       reservaPorItem.set(String(peca.pedido_item_id), reservaId);
@@ -622,10 +631,16 @@ async function aplicarConversaoNoEstoque(api, {
   await registrarEventoDoPedido(api, {
     pedidoId,
     tipoEvento: EVENTO.CONVERSAO,
+    // UNIDADES, não linhas.
+    //
+    // `pecasDeEstoqueGravadas` e `reservasCriadas` contam REGISTROS: um pedido
+    // com 14 peças vindas de seis lotes gravava "6 peça(s) do estoque", e sete
+    // peças do zero numa reserva só viravam "1 reserva(s)". O número existia,
+    // mas não era o número que alguém procura ao ler o histórico.
     descricao:
-      `Convertido do orçamento. ${resumo.pecasDeEstoqueGravadas} peça(s) do estoque, `
-      + `${resumo.reservasCriadas} reserva(s) de produção, `
-      + `${resumo.insumosAbatidos} insumo(s) abatido(s).`,
+      `Convertido do orçamento. ${resumo.unidadesDoEstoque} peça(s) retiradas do estoque, `
+      + `${resumo.unidadesParaProduzir} peça(s) para produção do zero, `
+      + `${resumo.insumosAbatidos} tipo(s) de insumo movimentado(s).`,
     usuarioId
   }, avisos);
 
