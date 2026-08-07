@@ -1258,26 +1258,6 @@ header.glass-surface {
     transition: all 0.2s ease;
 }
 
-/* Transição suave do conteúdo principal ao expandir/recolher sidebar */
-main#mainContent {
-    transition: margin-left 300ms ease !important;
-    will-change: margin-left;
-}
-
-main#mainContent.main-content-expanded {
-    margin-left: 240px;
-}
-
-@media (max-width: 1023px) {
-    main#mainContent.main-content-expanded {
-        margin-left: 200px;
-    }
-}
-
-main#mainContent.main-content-collapsed {
-    margin-left: 64px;
-}
-
 .sidebar-collapsed .brand__text {
     /* Esconde texto ao recolher */
     opacity: 0;
