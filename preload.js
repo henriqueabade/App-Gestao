@@ -245,7 +245,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
     if (payload.id === undefined || payload.id === null) {
       throw new Error('ID do lote não informado');
     }
-    const result = await ipcRenderer.invoke('excluir-lote-produto', payload.id);
+    // O objeto inteiro, não só o id: é por ele que viaja a escolha de devolver
+    // (ou não) a matéria-prima da peça excluída. Mandando só o id, a escolha
+    // se perdia no caminho e nada era devolvido.
+    const result = await ipcRenderer.invoke('excluir-lote-produto', {
+      id: payload.id,
+      devolverInsumos: payload.devolverInsumos === true
+    });
     recordIpcAction('excluir-lote-produto', payload, result);
     return result;
   },

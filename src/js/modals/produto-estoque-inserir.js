@@ -216,12 +216,25 @@
         Modal.open('modals/produtos/estoque-somar.html', '../js/modals/produto-estoque-somar.js', 'somarEstoque', true);
         return;
       }
+      // A peça só entra no estoque depois de alguém dizer se ela foi produzida
+      // agora. Sem essa resposta o estoque de peças subia e o de matéria-prima
+      // ficava parado — o sistema passava a acreditar em material que já tinha
+      // virado peça.
+      const abaterInsumos = await window.InsumosDaPeca?.perguntar({
+        direcao: 'saida',
+        unidades: quantidade,
+        peca: produto.nome || produto.codigo || '',
+        ponto: `${etapaNome} · ${itemNome}`
+      });
+      if (abaterInsumos === null || abaterInsumos === undefined) return;
+
       try{
-        await window.electronAPI.inserirLoteProduto({
+        const resultado = await window.electronAPI.inserirLoteProduto({
           produtoId: produto.id,
           etapa,
           ultimoInsumoId: itemId,
           quantidade,
+          abaterInsumos,
           __meta: {
             produto: {
               id: produto.id,
@@ -231,10 +244,12 @@
             etapa: etapaNome,
             etapaId: processoSelecionadoId || null,
             itemNome,
-            quantidade
+            quantidade,
+            abaterInsumos
           }
         });
-        showToast('Produto inserido', 'success');
+        const extra = window.InsumosDaPeca?.resumo(resultado, abaterInsumos) || '';
+        showToast(`Produto inserido.${extra}`, extra.includes('ATENÇÃO') ? 'warning' : 'success');
         limparERecarregar();
       }catch(err){
         console.error(err);

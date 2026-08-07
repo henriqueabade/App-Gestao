@@ -35,9 +35,16 @@ router.post('/password-reset-request', async (req, res) => {
       created_at: new Date().toISOString()
     });
 
-    await sendResetEmail(normalizedEmail, token);
+    const envio = await sendResetEmail(normalizedEmail, token);
 
-    res.status(200).json({ success: true });
+    // `emailEnviado` diz se a mensagem SAIU. Responder só `success: true` fazia
+    // a tela prometer um e-mail mesmo quando o envio estava desligado por
+    // configuração — o token era criado e ninguém recebia o link.
+    res.status(200).json({
+      success: true,
+      emailEnviado: envio?.enviado !== false,
+      motivo: envio?.motivo || null
+    });
   } catch (err) {
     console.error('password-reset-request error', err);
 

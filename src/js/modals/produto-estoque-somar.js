@@ -50,11 +50,28 @@
     const quantidadeAtual = Number(info.existing.quantidade);
     const informada = Number(info.adicionar) || 0;
     const novaQtd = modo === 'substituir' ? informada : (Number(quantidadeAtual) || 0) + informada;
+    const diferenca = novaQtd - (Number(quantidadeAtual) || 0);
+
+    // A mesma pergunta da inserção: a diferença de peças saiu de matéria-prima
+    // ou não? "Substituir" pode até DIMINUIR o lote — e aí a pergunta se
+    // inverte, porque o material volta.
+    let ajustarInsumos = false;
+    if (diferenca !== 0) {
+      const resposta = await window.InsumosDaPeca?.perguntar({
+        direcao: diferenca > 0 ? 'saida' : 'entrada',
+        unidades: Math.abs(diferenca),
+        peca: info.produto?.nome || info.produto?.codigo || '',
+        ponto: `${info.etapa || info.existing.etapa || ''} · ${info.itemNome || info.existing.ultimo_item || ''}`
+      });
+      if (resposta === null || resposta === undefined) return;
+      ajustarInsumos = resposta;
+    }
 
     try {
-      await window.electronAPI.atualizarLoteProduto({
+      const resultado = await window.electronAPI.atualizarLoteProduto({
         id: info.existing.id,
         quantidade: novaQtd,
+        ajustarInsumos,
         __meta: {
           produto: info.produto,
           etapa: info.etapa || info.existing.etapa,
@@ -62,10 +79,15 @@
           quantidadeAnterior: Number.isNaN(quantidadeAtual) ? undefined : quantidadeAtual,
           quantidadeNova: novaQtd,
           alteracao: Number.isNaN(quantidadeAtual) ? undefined : novaQtd - quantidadeAtual,
-          modo
+          modo,
+          ajustarInsumos
         }
       });
-      showToast(modo === 'substituir' ? 'Quantidade substituída' : 'Quantidade somada', 'success');
+      const extra = window.InsumosDaPeca?.resumo(resultado, ajustarInsumos) || '';
+      showToast(
+        `${modo === 'substituir' ? 'Quantidade substituída' : 'Quantidade somada'}.${extra}`,
+        extra.includes('ATENÇÃO') ? 'warning' : 'success'
+      );
       close();
       // Recarrega os detalhes E a listagem de produtos: a coluna "Quantidade"
       // da grade sai daqui, e sem isso ela ficava mostrando o valor velho.

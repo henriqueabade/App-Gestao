@@ -6,11 +6,14 @@ const { getLogoAttachment, renderLogoImage } = require('./logo');
  * Envia o e-mail de redefinição de senha
  * @param {string} to — e-mail de destino
  * @param {string} token — token gerado pela rota
+ * @returns {Promise<{enviado: boolean, motivo: string|null}>} se saiu de fato —
+ *   com o envio desligado por configuração, nada é enviado e quem chamou
+ *   precisa saber disso para não prometer um e-mail que não existe.
  */
 async function sendResetEmail(to, token) {
   const resetLink = `${process.env.APP_URL}/reset-password?token=${token}`;
 
-  await sendMail({
+  return sendMail({
     envelope: { from: process.env.FROM_EMAIL, to },
     fromOverride: `"Santíssimo Decor" <${process.env.FROM_EMAIL}>`,
     to,

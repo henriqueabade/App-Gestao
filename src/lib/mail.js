@@ -40,15 +40,23 @@ async function sendMail(options) {
     throw new Error('Parâmetro "subject" é obrigatório para envio de e-mail.');
   }
 
+  // O RETORNO DIZ SE O E-MAIL SAIU.
+  //
+  // Antes esta função resolvia igual nos dois casos, e quem chamava não tinha
+  // como saber que o envio estava desligado por configuração. A tela então
+  // afirmava "enviamos um e-mail" enquanto nada tinha sido enviado — e o
+  // usuário esperava por uma mensagem que nunca chegaria.
   if (!isEmailSendingEnabled()) {
+    const motivo = 'envio de e-mail desativado no servidor (EMAIL_SENDING_ENABLED)';
     console.info(
       `Email disabled (EMAIL_SENDING_ENABLED=false) – skipped sending to ${to}` +
         (finalOptions.subject ? ` (subject="${finalOptions.subject}")` : '')
     );
-    return Promise.resolve();
+    return { enviado: false, motivo };
   }
 
   await transporter.sendMail(finalOptions);
+  return { enviado: true, motivo: null };
 }
 
 module.exports = {

@@ -585,7 +585,12 @@ const LEITURA_MP = {
 const SENTIDO_DO_RAZAO = {
   retorno_cancelamento: 1,
   consumo_insumo: -1,
-  negativa: -1
+  negativa: -1,
+  // Insumo movimentado por causa de uma peça lançada ou retirada à mão no
+  // módulo de Produtos. Sem estes dois o pareamento não sabia o sentido e podia
+  // explicar uma entrada com a saída de outra operação do mesmo instante.
+  entrada_estoque: 1,
+  saida_estoque: -1
 };
 
 /**

@@ -3548,22 +3548,56 @@ ipcMain.handle('usuarios:enviar-imagem', async (_event, payload) => {
     throw error;
   }
 
-  const formData = new FormData();
-  formData.append('imagem', new Blob([bytes], { type }), String(payload?.name || 'perfil'));
+  const nomeArquivo = String(payload?.name || 'perfil');
+  const criarFormData = () => {
+    const formData = new FormData();
+    // Mesmo campo usado por `perfil:enviar-imagem`; alguns ambientes também
+    // leem o id no corpo, então mandamos ambos sem depender disso.
+    formData.append('imagem', new Blob([bytes], { type }), nomeArquivo);
+    formData.append('usuarioId', String(usuarioId));
+    formData.append('usuario_id', String(usuarioId));
+    return formData;
+  };
 
-  const response = await fetch(`https://api.santissimodecor.com.br/api/perfil/imagem/${usuarioId}`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${token}` },
-    body: formData
-  });
+  const idSeguro = encodeURIComponent(String(usuarioId));
+  const endpoints = [
+    // Endpoint novo/específico para trocar a imagem de outro usuário.
+    { method: 'POST', path: `/api/usuarios/${idSeguro}/imagem` },
+    { method: 'POST', path: `/api/usuarios/${idSeguro}/foto` },
+    { method: 'PUT', path: `/api/usuarios/${idSeguro}/avatar` },
+    // Compatibilidade com a tentativa anterior e variações comuns da API.
+    { method: 'POST', path: `/api/perfil/${idSeguro}/imagem` },
+    { method: 'POST', path: `/api/perfil/imagem/${idSeguro}` }
+  ];
 
-  const corpo = await response.json().catch(() => null);
-  if (!response.ok) {
-    const error = new Error(corpo?.message || corpo?.erro || 'Não foi possível enviar a foto do usuário.');
-    error.status = response.status;
-    throw error;
+  let ultimoErro = null;
+  for (const endpoint of endpoints) {
+    const response = await fetch(`https://api.santissimodecor.com.br${endpoint.path}`, {
+      method: endpoint.method,
+      headers: { Authorization: `Bearer ${token}` },
+      body: criarFormData()
+    });
+
+    const corpo = await response.json().catch(() => null);
+    if (response.ok) {
+      return unwrapProfileUser(corpo);
+    }
+
+    ultimoErro = { status: response.status, corpo, endpoint };
+    // 404 significa apenas que este ambiente não expõe aquela variação da rota;
+    // tente a próxima. Outros erros são reais (permissão, validação, etc.).
+    if (response.status !== 404) break;
   }
-  return unwrapProfileUser(corpo);
+
+  const error = new Error(
+    ultimoErro?.corpo?.message ||
+    ultimoErro?.corpo?.erro ||
+    ultimoErro?.corpo?.error ||
+    'Não foi possível enviar a foto do usuário.'
+  );
+  error.status = ultimoErro?.status;
+  error.endpoint = ultimoErro?.endpoint?.path;
+  throw error;
 });
 
 ipcMain.handle('registrar-usuario', async (_event, dados) => {
@@ -3585,30 +3619,111 @@ const LOGIN_MAX_TENTATIVAS = 3;
 const LOGIN_JANELA_MS = 15 * 60 * 1000;
 const tentativasLogin = new Map();   // email -> { falhas, expiraEm }
 
+// ---------------------------------------------------------------------------
+// O bloqueio precisa SOBREVIVER AO FECHAMENTO DO APP.
+//
+// Enquanto as tentativas viviam só neste Map, o bloqueio durava o que durasse o
+// processo: fechar e reabrir zerava a contagem e as três tentativas voltavam,
+// indefinidamente. Um bloqueio que se desfaz fechando a janela não é bloqueio.
+//
+// O arquivo fica em `userData` (a mesma pasta de `session-state.json`). Isso
+// prende as tentativas A ESTA MÁQUINA — que é o alcance possível sem tocar no
+// banco. Bloqueio válido em qualquer máquina exigiria coluna em `usuarios` e
+// passa a ser decisão de esquema, não deste arquivo.
+// ---------------------------------------------------------------------------
+let arquivoTentativas = null;
+let tentativasCarregadas = false;
+
+function caminhoDasTentativas() {
+  if (!arquivoTentativas) {
+    arquivoTentativas = path.join(app.getPath('userData'), 'login-attempts.json');
+  }
+  return arquivoTentativas;
+}
+
+function carregarTentativas() {
+  if (tentativasCarregadas) return;
+  tentativasCarregadas = true;
+  try {
+    const bruto = fs.readFileSync(caminhoDasTentativas(), 'utf8');
+    const dados = JSON.parse(bruto);
+    const agora = Date.now();
+    for (const [email, item] of Object.entries(dados || {})) {
+      // Entrada vencida não volta: o arquivo não pode acumular bloqueio velho.
+      if (!item || Number(item.expiraEm) <= agora) continue;
+      tentativasLogin.set(email, {
+        falhas: Number(item.falhas) || 0,
+        expiraEm: Number(item.expiraEm)
+      });
+    }
+  } catch (err) {
+    // Arquivo ausente na primeira execução é o caso normal. Corrompido também
+    // não pode impedir o login — perde-se a contagem, não o acesso.
+    if (err?.code !== 'ENOENT') {
+      console.warn('[login] não foi possível ler as tentativas salvas:', err?.message || err);
+    }
+  }
+}
+
+function salvarTentativas() {
+  try {
+    const dados = {};
+    const agora = Date.now();
+    for (const [email, item] of tentativasLogin.entries()) {
+      if (item.expiraEm > agora) dados[email] = item;
+    }
+    fs.writeFileSync(caminhoDasTentativas(), JSON.stringify(dados), 'utf8');
+  } catch (err) {
+    console.error('[login] não foi possível salvar as tentativas:', err?.message || err);
+  }
+}
+
 function chaveTentativa(email) {
   return String(email || '').trim().toLowerCase();
 }
 
 function lerTentativas(email) {
+  carregarTentativas();
   const k = chaveTentativa(email);
   const item = tentativasLogin.get(k);
   if (!item) return 0;
-  if (Date.now() > item.expiraEm) { tentativasLogin.delete(k); return 0; }
+  if (Date.now() > item.expiraEm) {
+    tentativasLogin.delete(k);
+    salvarTentativas();
+    return 0;
+  }
   return item.falhas;
+}
+
+/** Quanto falta para o bloqueio expirar, em minutos arredondados para cima. */
+function minutosParaLiberar(email) {
+  carregarTentativas();
+  const item = tentativasLogin.get(chaveTentativa(email));
+  if (!item) return 0;
+  return Math.max(1, Math.ceil((item.expiraEm - Date.now()) / 60000));
 }
 
 function registrarFalhaLogin(email) {
   const k = chaveTentativa(email);
   const atual = lerTentativas(email);
   tentativasLogin.set(k, { falhas: atual + 1, expiraEm: Date.now() + LOGIN_JANELA_MS });
+  salvarTentativas();
   return atual + 1;
 }
 
 function limparTentativasLogin(email) {
-  tentativasLogin.delete(chaveTentativa(email));
+  carregarTentativas();
+  if (tentativasLogin.delete(chaveTentativa(email))) salvarTentativas();
 }
 
-/** Dispara o e-mail de redefinição. Nunca revela se o e-mail existe. */
+/**
+ * Dispara o e-mail de redefinição. Nunca revela se o e-mail existe.
+ *
+ * @returns {Promise<{enviado: boolean, motivo: string|null}>} — e o retorno
+ *   IMPORTA: a tela dizia "enviamos um e-mail" sempre, inclusive quando o envio
+ *   estava desligado por configuração (`EMAIL_SENDING_ENABLED=false`) e nada
+ *   saía. O usuário ficava esperando uma mensagem que nunca chegaria.
+ */
 async function enviarRedefinicaoPorBloqueio(email) {
   try {
     const base = `http://localhost:${currentApiPort ?? configuredApiPort ?? DEFAULT_API_PORT}`;
@@ -3617,20 +3732,54 @@ async function enviarRedefinicaoPorBloqueio(email) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email })
     });
-    // 404 = e-mail não cadastrado: silencioso de propósito (não vazamos isso).
-    console.info('[login] redefinicao por bloqueio, status:', resp.status);
+    const corpo = await resp.json().catch(() => null);
+
+    // 404 = e-mail não cadastrado: silencioso para fora (não vazamos isso), mas
+    // registrado aqui — sem o log, "não chegou e-mail" fica sem explicação.
+    if (!resp.ok) {
+      const motivo = corpo?.error || `HTTP ${resp.status}`;
+      console.warn('[login] redefinicao por bloqueio NÃO enviada:', motivo);
+      return { enviado: false, motivo };
+    }
+
+    if (corpo?.emailEnviado === false) {
+      console.warn('[login] redefinicao por bloqueio NÃO enviada:', corpo?.motivo || 'motivo não informado');
+      return { enviado: false, motivo: corpo?.motivo || null };
+    }
+
+    console.info('[login] redefinicao por bloqueio enviada para o e-mail cadastrado.');
+    return { enviado: true, motivo: null };
   } catch (err) {
     console.error('[login] falha ao enviar redefinicao por bloqueio:', err?.message || err);
+    return { enviado: false, motivo: err?.message || String(err) };
   }
 }
 
+/** A mensagem do bloqueio, com o tempo restante e a verdade sobre o e-mail. */
+function mensagemDeBloqueio(email, envio) {
+  const minutos = minutosParaLiberar(email);
+  const tempo = minutos > 0
+    ? ` Tente novamente em ${minutos} minuto(s).`
+    : '';
+  if (!envio) return `Número máximo de tentativas de login atingido.${tempo}`;
+  return envio.enviado
+    ? `Número máximo de tentativas de login atingido.${tempo}`
+      + ' Enviamos um e-mail para redefinição de senha ao endereço cadastrado.'
+    : `Número máximo de tentativas de login atingido.${tempo}`
+      + ' Não foi possível enviar o e-mail de redefinição — procure o administrador.';
+}
+
 ipcMain.handle('login-usuario', async (event, dados) => {
-  // Conta já bloqueada por excesso de tentativas nesta janela?
+  // Conta já bloqueada por excesso de tentativas nesta janela? A contagem vem
+  // do disco, então fechar e reabrir o app não devolve tentativas.
   if (lerTentativas(dados?.email) >= LOGIN_MAX_TENTATIVAS) {
     return {
       success: false,
       code: 'max-attempts',
-      message: 'Número máximo de tentativas de login atingido. Enviamos um e-mail para redefinição de senha ao endereço cadastrado.'
+      // Sem reenviar o e-mail: já foi disparado quando o bloqueio começou, e
+      // repetir a cada tentativa encheria a caixa de quem nem pediu.
+      emailEnviado: null,
+      message: mensagemDeBloqueio(dados?.email, null)
     };
   }
 
@@ -3677,11 +3826,12 @@ ipcMain.handle('login-usuario', async (event, dados) => {
     if (credencialInvalida) {
       const falhas = registrarFalhaLogin(dados?.email);
       if (falhas >= LOGIN_MAX_TENTATIVAS) {
-        await enviarRedefinicaoPorBloqueio(dados?.email);
+        const envio = await enviarRedefinicaoPorBloqueio(dados?.email);
         return {
           success: false,
           code: 'max-attempts',
-          message: 'Número máximo de tentativas de login atingido. Enviamos um e-mail para redefinição de senha ao endereço cadastrado.'
+          emailEnviado: envio.enviado,
+          message: mensagemDeBloqueio(dados?.email, envio)
         };
       }
       const restantes = LOGIN_MAX_TENTATIVAS - falhas;
@@ -4270,9 +4420,13 @@ ipcMain.handle('inserir-lote-produto', async (_e, dados) => {
   // adiante, o movimento ia para o razão sem autor.
   return inserirLoteProduto({ ...dados, usuarioId: currentUserSession?.id ?? null });
 });
-ipcMain.handle('atualizar-lote-produto', async (_e, { id, quantidade }) => {
+ipcMain.handle('atualizar-lote-produto', async (_e, { id, quantidade, ajustarInsumos }) => {
   if (!(await verificarPermissaoIpc('prod.stock.adjust'))) return negadoIpc('prod.stock.adjust');
-  return atualizarLoteProduto(id, quantidade, currentUserSession?.id ?? null);
+  // A escolha de mexer (ou não) na matéria-prima vem da tela e viaja junto: é
+  // decisão de quem registra, não padrão do sistema.
+  return atualizarLoteProduto(id, quantidade, currentUserSession?.id ?? null, {
+    ajustarInsumos: ajustarInsumos === true
+  });
 });
 ipcMain.handle('excluir-lote-produto', async (_e, info) => {
   // "lote" aqui e um LOTE DE ESTOQUE (linha do "Detalhe de Estoque"), nao um
@@ -4284,8 +4438,10 @@ ipcMain.handle('excluir-lote-produto', async (_e, info) => {
   if (id === undefined || id === null) {
     return { success: false, error: 'invalid-id' };
   }
-  await excluirLoteProduto(id, currentUserSession?.id ?? null);
-  return { success: true };
+  const resultado = await excluirLoteProduto(id, currentUserSession?.id ?? null, {
+    devolverInsumos: info?.devolverInsumos === true
+  });
+  return { success: true, ...resultado };
 });
 ipcMain.handle('listar-insumos-produto', async (_e, payload) => {
   const params = typeof payload === 'object' && payload !== null

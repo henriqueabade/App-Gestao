@@ -140,9 +140,20 @@ function showAdminDisabledError(modo) {
 }
 
 let maxAttemptsErrorShown = false;
-function showMaxAttemptsError(mensagem) {
+/**
+ * @param {boolean|null} emailEnviado  `null` quando o bloqueio já estava ativo
+ *   e nenhum envio foi tentado agora. Prometer um e-mail que não saiu deixa o
+ *   usuário esperando por uma mensagem que nunca chega — pior que dizer que
+ *   ele não foi enviado.
+ */
+function showMaxAttemptsError(mensagem, emailEnviado = null) {
   if (maxAttemptsErrorShown) return;
   maxAttemptsErrorShown = true;
+  const rodape = emailEnviado === true
+    ? 'Enviamos um e-mail de redefinição de senha para o endereço cadastrado. Verifique sua caixa de entrada.'
+    : (emailEnviado === false
+      ? 'Não foi possível enviar o e-mail de redefinição de senha. Procure o administrador para liberar o acesso.'
+      : 'Aguarde o tempo indicado ou procure o administrador para liberar o acesso.');
   const overlay = document.createElement('div');
   overlay.className = 'warning-overlay';
   overlay.innerHTML = `
@@ -155,7 +166,7 @@ function showMaxAttemptsError(mensagem) {
       <h2 class="warning-title">Login Bloqueado</h2>
       <p class="warning-text">${mensagem || 'Número máximo de tentativas de login atingido.'}</p>
       <hr class="warning-divider">
-      <p class="warning-text-small">Enviamos um e-mail de redefinição de senha para o endereço cadastrado. Verifique sua caixa de entrada.</p>
+      <p class="warning-text-small">${rodape}</p>
       <button id="maxAttemptsOk" class="warning-button pulse">OK</button>
     </div>`;
   document.body.appendChild(overlay);
@@ -946,7 +957,7 @@ if (intro) {
         clearPendingLoginRetry();
         lastLoginAttempt = null;
         if (result.code === 'max-attempts') {
-          showMaxAttemptsError(message);
+          showMaxAttemptsError(message, result.emailEnviado ?? null);
         } else if (result.code === 'invalid-credentials') {
           // mensagem específica: erro de usuário/senha (não genérica)
           showToast(message || 'Usuário ou senha incorretos.', 'error');
@@ -1161,7 +1172,17 @@ if (intro) {
       });
 
       if (resp.ok) {
-        showToast('E-mail enviado!', 'success');
+        // O token foi criado; o e-mail pode não ter saído (envio desligado no
+        // servidor). Dizer "enviado" nesse caso deixa o usuário esperando.
+        const dados = await resp.json().catch(() => null);
+        if (dados?.emailEnviado === false) {
+          showToast(
+            'Não foi possível enviar o e-mail de redefinição. Procure o administrador.',
+            'error'
+          );
+        } else {
+          showToast('E-mail enviado!', 'success');
+        }
       } else {
         let errorMessage = '';
         try {

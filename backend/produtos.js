@@ -929,6 +929,111 @@ const razaoPeloPool = {
   post: (rota, payload) => pool.post(String(rota).replace(/^\/api/, ''), payload)
 };
 
+// ---------------------------------------------------------------------------
+// A MATÉRIA-PRIMA DE UMA PEÇA MEXIDA À MÃO
+//
+// Colocar uma peça no estoque pela tela de Produtos é dizer que ela existe. Se
+// ela existe, alguém a produziu — e produzir consome insumo. Enquanto essa
+// baixa não era feita, o estoque de peças subia e o de matéria-prima ficava
+// parado: o sistema passava a acreditar em material que já tinha virado peça.
+//
+// Mas nem toda entrada é produção: pode ser correção de inventário, devolução
+// de cliente, peça comprada pronta. Por isso a baixa é uma ESCOLHA de quem
+// registra, feita na hora, e não um automatismo.
+//
+// O trecho consumido é a rota ATÉ o ponto da peça: uma peça em 10/15 gastou os
+// dez primeiros passos, não os quinze.
+// ---------------------------------------------------------------------------
+
+/**
+ * Os passos da rota que uma peça parada em `ultimoInsumoId` já consumiu.
+ *
+ * `produtos_em_cada_ponto.ultimo_insumo_id` guarda o id da MATÉRIA-PRIMA (e não
+ * o da linha da rota — ver a nota em `estoqueLedger.registrarPecaDoEstoque`).
+ * A comparação aqui é com `produtos_insumos.insumo_id`, por isso.
+ */
+async function rotaConsumidaAte(produtoId, ultimoInsumoId) {
+  const bruta = await pool
+    .get('/produtos_insumos', { query: { produto_id: produtoId } })
+    .catch(() => []);
+  const rota = (Array.isArray(bruta) ? bruta : [])
+    .map(passo => ({
+      insumo_id: Number(passo.insumo_id),
+      por_unidade: Number(paraDecimal(passo.quantidade)) || 0,
+      ordem: Number(passo.ordem_insumo) || 0
+    }))
+    .filter(passo => Number.isFinite(passo.insumo_id))
+    .sort((a, b) => a.ordem - b.ordem);
+
+  if (!rota.length) return [];
+
+  const parada = rota.find(passo => Number(passo.insumo_id) === Number(ultimoInsumoId));
+  // Sem saber onde a peça parou, o mais seguro é não mexer em nada: chutar a
+  // rota inteira debitaria material que talvez nunca tenha sido usado.
+  if (!parada) return [];
+
+  return rota.filter(passo => passo.ordem <= parada.ordem);
+}
+
+/**
+ * Abate (ou devolve) a matéria-prima de `unidades` peças paradas num ponto.
+ *
+ * Grava nas DUAS auditorias, como todo o resto: `materia_prima_movimentacoes`
+ * (o saldo antes/depois, pelo mesmo caminho do módulo de Matéria-Prima) e
+ * `estoque_movimentos` (o vínculo com a peça e o lote).
+ *
+ * @param {'saida'|'entrada'} direcao
+ * @returns {Promise<{insumos: number, falhas: string[]}>}
+ */
+async function movimentarInsumosDaPeca({
+  produtoId,
+  ultimoInsumoId,
+  unidades,
+  direcao,
+  loteId = null,
+  usuarioId = null,
+  nota
+}) {
+  const quantidadePecas = Number(paraDecimal(unidades)) || 0;
+  if (!(quantidadePecas > 0)) return { insumos: 0, falhas: [] };
+
+  const passos = await rotaConsumidaAte(produtoId, ultimoInsumoId);
+  if (!passos.length) return { insumos: 0, falhas: [] };
+
+  // Carregado aqui e não no topo: `materiaPrima` já requer este arquivo, e o
+  // require no topo fecharia o ciclo.
+  const { registrarEntrada, registrarSaida } = require('./materiaPrima');
+  const aplicar = direcao === 'entrada' ? registrarEntrada : registrarSaida;
+
+  const falhas = [];
+  let insumos = 0;
+
+  for (const passo of passos) {
+    const quantidade = Number(paraDecimal(passo.por_unidade * quantidadePecas)) || 0;
+    if (!(quantidade > 0)) continue;
+    try {
+      await aplicar(passo.insumo_id, quantidade, usuarioId, { origem: 'manual', nota });
+      await registrarMovimento(razaoPeloPool, {
+        tipoMovimento: direcao === 'entrada' ? MOV.ENTRADA : MOV.CONSUMO_INSUMO,
+        tipoItem: ITEM.INSUMO,
+        itemId: passo.insumo_id,
+        quantidade,
+        loteId,
+        ultimoInsumoId: passo.insumo_id,
+        nota,
+        usuarioId
+      });
+      insumos += 1;
+    } catch (err) {
+      // Uma falha aqui não desfaz a peça que já entrou no estoque — mas tem de
+      // aparecer, senão o saldo de matéria-prima fica errado em silêncio.
+      falhas.push(`Insumo ${passo.insumo_id}: ${err?.message || err}`);
+    }
+  }
+
+  return { insumos, falhas };
+}
+
 /** Lê o lote antes de mexer: o razão precisa saber de qual peça se trata. */
 async function lerLote(id) {
   try {
@@ -945,7 +1050,16 @@ async function lerLote(id) {
  *   que o estoque mudou à mão, e não QUEM mudou — justamente a pergunta que um
  *   ajuste manual levanta.
  */
-async function inserirLoteProduto({ produtoId, etapa, ultimoInsumoId, quantidade, usuarioId = null }) {
+async function inserirLoteProduto({
+  produtoId,
+  etapa,
+  ultimoInsumoId,
+  quantidade,
+  usuarioId = null,
+  // Quem registra decide: a peça foi PRODUZIDA agora (e o insumo sai do
+  // estoque) ou só está sendo lançada (correção, devolução, compra pronta)?
+  abaterInsumos = false
+}) {
   const criado = await executarLotes('post', '', {
     produto_id: produtoId,
     etapa_id: etapa,
@@ -964,16 +1078,31 @@ async function inserirLoteProduto({ produtoId, etapa, ultimoInsumoId, quantidade
     quantidade: paraDecimal(quantidade),
     loteId: criado?.id ?? null,
     ultimoInsumoId,
-    nota: 'Entrada pelo módulo de Produtos',
+    nota: abaterInsumos
+      ? 'Entrada pelo módulo de Produtos (matéria-prima abatida)'
+      : 'Entrada pelo módulo de Produtos (sem abater matéria-prima)',
     usuarioId
   });
-  return criado;
+
+  const insumos = abaterInsumos
+    ? await movimentarInsumosDaPeca({
+      produtoId,
+      ultimoInsumoId,
+      unidades: quantidade,
+      direcao: 'saida',
+      loteId: criado?.id ?? null,
+      usuarioId,
+      nota: 'Consumido para a peça lançada no estoque pelo módulo de Produtos'
+    })
+    : { insumos: 0, falhas: [] };
+
+  return { ...criado, insumosMovimentados: insumos.insumos, falhasInsumos: insumos.falhas };
 }
 
 /**
  * Atualiza um lote (quantidade + data)
  */
-async function atualizarLoteProduto(id, quantidade, usuarioId = null) {
+async function atualizarLoteProduto(id, quantidade, usuarioId = null, { ajustarInsumos = false } = {}) {
   // A diferença é o que interessa ao razão: subiu ou desceu, e quanto.
   const antes = await lerLote(id);
   const anterior = Number(antes?.quantidade) || 0;
@@ -985,8 +1114,11 @@ async function atualizarLoteProduto(id, quantidade, usuarioId = null) {
   });
   invalidarCacheLotes();
 
-  const diferenca = nova - anterior;
+  const diferenca = Number(paraDecimal(nova - anterior)) || 0;
+  let insumos = { insumos: 0, falhas: [] };
+
   if (diferenca !== 0) {
+    const abateu = ajustarInsumos ? ' · matéria-prima ajustada' : '';
     await registrarMovimento(razaoPeloPool, {
       tipoMovimento: diferenca > 0 ? MOV.ENTRADA : MOV.SAIDA,
       tipoItem: ITEM.PECA,
@@ -994,16 +1126,35 @@ async function atualizarLoteProduto(id, quantidade, usuarioId = null) {
       quantidade: Math.abs(diferenca),
       loteId: id,
       ultimoInsumoId: antes?.ultimo_insumo_id ?? null,
-      nota: `Ajuste pelo módulo de Produtos (${anterior} → ${nova})`,
+      nota: `Ajuste pelo módulo de Produtos (${anterior} → ${nova})${abateu}`,
       usuarioId
     });
+
+    // Subiu = peças a mais, que alguém produziu: o insumo sai. Desceu = peças
+    // que deixaram de existir: o insumo volta. As duas direções são a mesma
+    // pergunta, feita na tela antes de confirmar.
+    if (ajustarInsumos && antes?.produto_id) {
+      insumos = await movimentarInsumosDaPeca({
+        produtoId: antes.produto_id,
+        ultimoInsumoId: antes.ultimo_insumo_id,
+        unidades: Math.abs(diferenca),
+        direcao: diferenca > 0 ? 'saida' : 'entrada',
+        loteId: id,
+        usuarioId,
+        nota: diferenca > 0
+          ? 'Consumido no ajuste de estoque de peças pelo módulo de Produtos'
+          : 'Devolvido no ajuste de estoque de peças pelo módulo de Produtos'
+      });
+    }
   }
-  return atualizado;
+
+  return { ...atualizado, insumosMovimentados: insumos.insumos, falhasInsumos: insumos.falhas };
 }
 
-async function excluirLoteProduto(id, usuarioId = null) {
+async function excluirLoteProduto(id, usuarioId = null, { devolverInsumos = false } = {}) {
   // Lido ANTES de excluir: depois não há mais de onde tirar a identidade.
   const antes = await lerLote(id);
+  const quantidade = Number(antes?.quantidade) || 0;
   await executarLotes('delete', `/${id}`);
   invalidarCacheLotes();
 
@@ -1011,12 +1162,30 @@ async function excluirLoteProduto(id, usuarioId = null) {
     tipoMovimento: MOV.SAIDA,
     tipoItem: ITEM.PECA,
     itemId: antes?.produto_id ?? null,
-    quantidade: Number(antes?.quantidade) || 0,
+    quantidade,
     loteId: id,
     ultimoInsumoId: antes?.ultimo_insumo_id ?? null,
-    nota: 'Lote excluído pelo módulo de Produtos',
+    nota: devolverInsumos
+      ? 'Lote excluído pelo módulo de Produtos (matéria-prima devolvida)'
+      : 'Lote excluído pelo módulo de Produtos (sem devolver matéria-prima)',
     usuarioId
   });
+
+  // As peças deixaram de existir. Se elas nunca chegaram a ser produzidas —
+  // lançamento errado, por exemplo —, o material que constava nelas volta.
+  const insumos = devolverInsumos && antes?.produto_id
+    ? await movimentarInsumosDaPeca({
+      produtoId: antes.produto_id,
+      ultimoInsumoId: antes.ultimo_insumo_id,
+      unidades: quantidade,
+      direcao: 'entrada',
+      loteId: id,
+      usuarioId,
+      nota: 'Devolvido na exclusão do lote pelo módulo de Produtos'
+    })
+    : { insumos: 0, falhas: [] };
+
+  return { insumosMovimentados: insumos.insumos, falhasInsumos: insumos.falhas };
 }
 
 /**

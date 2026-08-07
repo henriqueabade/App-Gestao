@@ -22,21 +22,36 @@
   aoConfirmar(document.getElementById('confirmarExcluirLote'), async () => {
     const item = window.loteExcluir;
     if(!item) return;
+
+    // Excluir o lote apaga peças do estoque. Elas chegaram a existir (e o
+    // material foi junto) ou o lançamento estava errado (e o material volta)?
+    // A mesma pergunta das outras telas, com as mesmas palavras.
+    const devolverInsumos = await window.InsumosDaPeca?.perguntar({
+      direcao: 'entrada',
+      unidades: item.quantidade,
+      peca: item.produto?.nome || item.produto?.codigo || '',
+      ponto: `${item.etapa || ''} · ${item.itemNome || ''}`
+    });
+    if (devolverInsumos === null || devolverInsumos === undefined) return;
+
     try {
       const payload = {
         id: item.id,
+        devolverInsumos,
         __meta: {
           produto: item.produto,
           etapa: item.etapa,
           itemNome: item.itemNome,
-          quantidade: item.quantidade
+          quantidade: item.quantidade,
+          devolverInsumos
         }
       };
-      await window.electronAPI.excluirLoteProduto(payload);
+      const resultado = await window.electronAPI.excluirLoteProduto(payload);
       // Tabela primeiro, aviso depois — ver a nota gêmea em
       // modals/cliente-excluir.js.
       await item.reload?.();
-      showToast('Lote excluído', 'success');
+      const extra = window.InsumosDaPeca?.resumo(resultado, devolverInsumos) || '';
+      showToast(`Lote excluído.${extra}`, extra.includes('ATENÇÃO') ? 'warning' : 'success');
       close();
       window.loteExcluir = null;
     } catch (err) {

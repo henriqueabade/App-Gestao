@@ -114,11 +114,33 @@
     const [confirmBtn, cancelBtn] = actionsCell.querySelectorAll('i');
     confirmBtn.addEventListener('click', async () => {
       const novaQtd = Number(input.value);
+      const quantidadeAtual = Number(original);
+      const diferenca = novaQtd - (isNaN(quantidadeAtual) ? 0 : quantidadeAtual);
+
+      // Mexer no número de peças à mão é afirmar que peças passaram a existir
+      // (ou deixaram de existir). O material que corresponde a elas tem de
+      // acompanhar — ou não, se for correção de inventário. Quem registra
+      // decide, aqui, antes de gravar.
+      let ajustarInsumos = false;
+      if (diferenca !== 0) {
+        const resposta = await window.InsumosDaPeca?.perguntar({
+          direcao: diferenca > 0 ? 'saida' : 'entrada',
+          unidades: Math.abs(diferenca),
+          peca: item?.nome || item?.codigo || '',
+          ponto: `${dados.etapa || ''} · ${dados.ultimo_item || ''}`
+        });
+        if (resposta === null || resposta === undefined) {
+          carregarDetalhes(item.id);
+          return;
+        }
+        ajustarInsumos = resposta;
+      }
+
       try {
-        const quantidadeAtual = Number(original);
-        await window.electronAPI.atualizarLoteProduto({
+        const resultado = await window.electronAPI.atualizarLoteProduto({
           id: dados.id,
           quantidade: novaQtd,
+          ajustarInsumos,
           __meta: {
             produto: {
               id: item.id,
@@ -129,10 +151,12 @@
             itemNome: dados.ultimo_item,
             quantidadeAnterior: isNaN(quantidadeAtual) ? undefined : quantidadeAtual,
             quantidadeNova: novaQtd,
-            alteracao: isNaN(quantidadeAtual) ? undefined : novaQtd - quantidadeAtual
+            alteracao: isNaN(quantidadeAtual) ? undefined : novaQtd - quantidadeAtual,
+            ajustarInsumos
           }
         });
-        showToast('Quantidade atualizada', 'success');
+        const extra = window.InsumosDaPeca?.resumo(resultado, ajustarInsumos) || '';
+        showToast(`Quantidade atualizada.${extra}`, extra.includes('ATENÇÃO') ? 'warning' : 'success');
         carregarDetalhes(item.id);
         if (typeof carregarProdutos === 'function') carregarProdutos();
       } catch (err) {
