@@ -157,13 +157,19 @@ test('a destinação do cancelamento sai legível, com a falha quando houve', as
           },
           {
             pedido_item_id: 2000, tipo_destino: 'realocacao', quantidade: 2,
-            ultimo_insumo_id: passo(15).passo_id, pedido_id_destino: 77
+            ultimo_insumo_id: passo(15).passo_id, pedido_id_destino: 77, realocacao_id: 14
           },
           {
             pedido_item_id: 2000, tipo_destino: 'retorno_estoque', quantidade: 1,
             ultimo_insumo_id: passo(12).passo_id, falha: 'lote não encontrado'
           }
         ];
+      }
+      if (rota === '/api/realocacoes') {
+        return [{
+          id: 14, tipo_destino_substituido: 'pronta',
+          ultimo_insumo_id_substituido: passo(15).passo_id
+        }];
       }
       if (rota.startsWith('/api/pedidos/')) return { id: 77, numero: 'PED77' };
       return [];
@@ -175,13 +181,41 @@ test('a destinação do cancelamento sai legível, com a falha quando houve', as
   assert.equal(linhas.length, 3);
   assert.equal(linhas[0].rotulo, 'Descartada (restaurou o lote de origem)');
   assert.equal(linhas[0].estagio_origem, 'Insumo 9 9/15');
+  assert.equal(linhas[0].substituiu, null, 'quem volta ao estoque não substitui nada');
+
   assert.equal(linhas[1].rotulo, 'Realocada para outro pedido');
   assert.equal(linhas[1].pedido_destino, 'PED77');
+  // Sem isto, "realocada para o PED77" não fecha a história: substituir uma
+  // produção do zero e substituir uma peça pronta são consequências diferentes.
+  assert.equal(linhas[1].substituiu, 'Pronta 15/15 (pronta)');
+
   assert.equal(
     linhas[2].falha, 'lote não encontrado',
     'o que falhou fica visível no relatório: sem transação, é assim que se sabe '
     + 'o que conferir à mão'
   );
+});
+
+test('a destinação diz quando o lugar era de uma produção do zero', async () => {
+  const api = {
+    async get(rota) {
+      if (rota === '/api/cancelamento_destinacoes') {
+        return [{
+          pedido_item_id: 2000, tipo_destino: 'realocacao', quantidade: 4,
+          ultimo_insumo_id: passo(14).passo_id, pedido_id_destino: 77, realocacao_id: 10
+        }];
+      }
+      if (rota === '/api/realocacoes') {
+        return [{ id: 10, tipo_destino_substituido: 'producao_zero' }];
+      }
+      if (rota.startsWith('/api/pedidos/')) return { id: 77, numero: 'PED77' };
+      return [];
+    }
+  };
+
+  const [linha] = await destinacoesDoCancelamento(api, 99, rotaDoProduto, ITENS);
+  assert.equal(linha.estagio_origem, 'Insumo 14 14/15');
+  assert.equal(linha.substituiu, 'Produção do zero');
 });
 
 test('sem as tabelas da auditoria, as seções somem sem derrubar o relatório', async () => {

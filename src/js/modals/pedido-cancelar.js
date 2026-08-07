@@ -2289,7 +2289,10 @@
         ? `Pedido cancelado. ${(e.pecasAoEstoque ?? 0) + (e.pecasRestauradasNoLote ?? 0)} peça(s) ao estoque, `
           + `${e.pecasRealocadas ?? 0} realocada(s), `
           + `${e.pecasNaoDevolvidas ?? 0} não retornaram, `
-          + `${e.tiposDeInsumo ?? 0} tipo(s) de insumo devolvido(s).`
+          + `${e.tiposDeInsumo ?? 0} tipo(s) de insumo movimentado(s)`
+          + ((e.insumosConsumidos ?? 0) > 0
+            ? ` (${e.insumosConsumidos} consumo(s) no pedido de destino).`
+            : '.')
         : 'Pedido cancelado com sucesso.';
 
       // COM FALHAS NÃO É SUCESSO.

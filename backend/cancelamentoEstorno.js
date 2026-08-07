@@ -640,19 +640,35 @@ async function registrarRealocacao(api, dados, avisos) {
 }
 
 /**
- * O que DEIXOU de ser necessário entre duas fotos.
+ * O que mudou na necessidade do pedido, NOS DOIS SENTIDOS.
  *
- * Só diferença positiva: negativa significaria que o pedido passou a precisar
- * de mais material, o que uma realocação nunca causa — e devolver um número
- * negativo aumentaria o consumo em vez de estornar.
+ * A versão anterior só olhava para um lado — "o que deixou de ser necessário" —
+ * partindo da ideia de que a realocação nunca aumenta a necessidade do destino.
+ * Ela aumenta: quando a peça que chega está MENOS adiantada que a peça que ela
+ * substitui, o destino passa a ter de percorrer o trecho que falta. Substituir
+ * uma peça pronta 15/15 por uma parada em 10/15 obriga o destino a gastar os
+ * cinco passos restantes, e esse material tem de sair do estoque como sairia
+ * numa conversão. Sem este lado, o insumo ficava com saldo a mais no sistema e
+ * a menos na prateleira.
+ *
+ * @returns {{devolver: Map, consumir: Map}} sempre com quantidades positivas —
+ *   o sentido está em qual das duas listas o insumo caiu.
  */
-function diferencaDeNecessidade(antes, depois) {
-  const porInsumo = new Map();
-  for (const [insumoId, quantidadeAntes] of antes.entries()) {
-    const diferenca = arredondar(quantidadeAntes - (depois.get(insumoId) || 0));
-    if (diferenca > 0) porInsumo.set(insumoId, diferenca);
+function variacaoDeNecessidade(antes, depois) {
+  const devolver = new Map();
+  const consumir = new Map();
+
+  // A união das chaves: um insumo pode aparecer só DEPOIS (o destino não
+  // precisava dele e passou a precisar), e varrer apenas `antes` o perderia.
+  const insumos = new Set([...antes.keys(), ...depois.keys()]);
+
+  for (const insumoId of insumos) {
+    const diferenca = arredondar((antes.get(insumoId) || 0) - (depois.get(insumoId) || 0));
+    if (diferenca > 0) devolver.set(insumoId, diferenca);
+    else if (diferenca < 0) consumir.set(insumoId, arredondar(-diferenca));
   }
-  return porInsumo;
+
+  return { devolver, consumir };
 }
 
 /**
@@ -697,6 +713,52 @@ async function devolverInsumos(api, {
       tiposQueVoltaram.add(Number(insumoId));
     } catch (err) {
       avisos.push(`Falha ao devolver o insumo ${insumoId}: ${err?.message || err}`);
+    }
+  }
+}
+
+/**
+ * Tira do estoque o material que o pedido de destino PASSOU a precisar.
+ *
+ * É o espelho de `devolverInsumos`, para o caso em que a peça recebida está
+ * menos adiantada que a que ela substituiu: o destino herda o trecho que falta
+ * da rota e vai consumi-lo, exatamente como numa conversão.
+ */
+async function consumirInsumos(api, {
+  porInsumo,
+  pedidoId,
+  realocacaoId = null,
+  nota,
+  usuarioId,
+  registrarSaidaInsumo,
+  resumo,
+  tiposQueVoltaram
+}, avisos) {
+  for (const [insumoId, quantidade] of porInsumo.entries()) {
+    if (!(quantidade > 0)) continue;
+    try {
+      if (typeof registrarSaidaInsumo === 'function') {
+        await registrarSaidaInsumo(insumoId, quantidade, usuarioId, {
+          origem: 'pedido',
+          pedidoId,
+          realocacaoId,
+          nota
+        });
+      }
+      await registrarMovimento(api, {
+        tipoMovimento: MOV.CONSUMO_INSUMO,
+        tipoItem: ITEM.INSUMO,
+        itemId: insumoId,
+        quantidade,
+        pedidoId,
+        realocacaoId,
+        nota,
+        usuarioId
+      }, avisos);
+      resumo.insumosConsumidos += 1;
+      tiposQueVoltaram.add(Number(insumoId));
+    } catch (err) {
+      avisos.push(`Falha ao consumir o insumo ${insumoId}: ${err?.message || err}`);
     }
   }
 }
@@ -811,12 +873,15 @@ function agruparAcoes(acoes = []) {
  * @param {number|null} entrada.usuarioId
  * @param {Function} entrada.registrarEntradaInsumo  `registrarEntrada` da
  *   matéria-prima, injetada para o teste não precisar de rede.
+ * @param {Function} entrada.registrarSaidaInsumo  `registrarSaida`, para o caso
+ *   em que a substituição faz o destino precisar de MAIS material.
  */
 async function estornarCancelamento(api, {
   pedidoId,
   acoes = [],
   usuarioId = null,
-  registrarEntradaInsumo = null
+  registrarEntradaInsumo = null,
+  registrarSaidaInsumo = null
 } = {}) {
   const avisos = [];
   // Contagens SEPARADAS por tipo de destino. Um total só não conta a história:
@@ -831,8 +896,16 @@ async function estornarCancelamento(api, {
     pecasNaoDevolvidas: 0,
     /** Foram para outro pedido — não passam pelo estoque. */
     pecasRealocadas: 0,
-    /** Quantos MOVIMENTOS de insumo foram gravados. */
+    /** Quantos MOVIMENTOS de devolução de insumo foram gravados. */
     insumosDevolvidos: 0,
+    /**
+     * Quantos movimentos de CONSUMO de insumo foram gravados.
+     *
+     * Existe porque a realocação pode aumentar a necessidade do destino: peça
+     * menos adiantada no lugar de uma mais adiantada faz o destino ter de
+     * percorrer o trecho que falta.
+     */
+    insumosConsumidos: 0,
     /**
      * Quantos TIPOS distintos de insumo voltaram.
      *
@@ -1221,20 +1294,37 @@ async function estornarCancelamento(api, {
               : `O ${rotuloDestino} não recebeu a peça na composição dele.`
           }, avisos);
 
-          // A matéria-prima que o destino deixou de precisar POR CAUSA DESTA
-          // substituição, gravada já ligada a ela.
+          // A matéria-prima que o destino deixou de precisar — ou que passou a
+          // precisar — POR CAUSA DESTA substituição, já ligada a ela.
           const depois = await necessidadeDoPedido(api, decisao.pedidoDestino, cacheRotas, insumos);
+          const substituido = NOME_DO_TIPO_SUBSTITUIDO[recebido?.tipoDestinoSubstituido] || 'uma peça';
+          const variacao = variacaoDeNecessidade(antes, depois);
+
           await devolverInsumos(api, {
-            porInsumo: diferencaDeNecessidade(antes, depois),
+            porInsumo: variacao.devolver,
             pedidoId: decisao.pedidoDestino,
             realocacaoId,
-            nota: `Devolvido: substituição de ${NOME_DO_TIPO_SUBSTITUIDO[recebido?.tipoDestinoSubstituido] || 'uma peça'} `
-              + `por peça recebida do ${rotuloDoPedido}`,
+            nota: `Devolvido: substituição de ${substituido} por peça recebida do ${rotuloDoPedido}`,
             usuarioId,
             registrarEntradaInsumo,
             resumo,
             tiposQueVoltaram
           }, avisos);
+
+          // A peça que chegou pode estar MENOS adiantada que a que saiu: aí o
+          // destino herda o trecho que falta e tem de gastá-lo.
+          await consumirInsumos(api, {
+            porInsumo: variacao.consumir,
+            pedidoId: decisao.pedidoDestino,
+            realocacaoId,
+            nota: `Consumido: a peça recebida do ${rotuloDoPedido} está menos adiantada que `
+              + `${substituido} e o restante da rota ainda será produzido aqui`,
+            usuarioId,
+            registrarSaidaInsumo,
+            resumo,
+            tiposQueVoltaram
+          }, avisos);
+
           necessidadeAtual.set(decisao.pedidoDestino, depois);
 
           resumo.pecasRealocadas = arredondar(resumo.pecasRealocadas + unidades);

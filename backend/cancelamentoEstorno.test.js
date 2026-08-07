@@ -1164,3 +1164,168 @@ test('etapa que falhou fica registrada, não some no meio do estorno', async () 
   assert.match(registro.falha, /não voltou ao estoque/);
   assert.ok(avisos.length > 0, 'e o usuário é avisado — nada de toast verde');
 });
+
+/** Coleta as SAÍDAS de insumo, o espelho de `coletorDeInsumos`. */
+function coletorDeConsumo() {
+  const consumidos = new Map();
+  const porRealocacaoMap = new Map();
+
+  const fn = async (insumoId, quantidade, _usuarioId, contexto = {}) => {
+    const id = Number(insumoId);
+    consumidos.set(id, (consumidos.get(id) || 0) + Number(quantidade));
+    const realocacao = contexto?.realocacaoId ?? null;
+    if (realocacao !== null && realocacao !== undefined) {
+      if (!porRealocacaoMap.has(realocacao)) porRealocacaoMap.set(realocacao, new Map());
+      const daRealocacao = porRealocacaoMap.get(realocacao);
+      daRealocacao.set(id, (daRealocacao.get(id) || 0) + Number(quantidade));
+    }
+  };
+
+  return {
+    consumidos,
+    fn,
+    de: ordem => consumidos.get(passoDaOrdem(ordem).insumo_id) || 0,
+    porRealocacao: id => porRealocacaoMap.get(id) || new Map()
+  };
+}
+
+test('peça MENOS adiantada no lugar de uma pronta CONSOME a diferença', async () => {
+  // O caso da realocacao_id 14: uma peça em 10/15 substituiu uma peça pronta do
+  // destino. O destino passou a ter de percorrer os passos 11 a 15 — material
+  // que ninguém tinha abatido. Antes, a conta só olhava para um lado e este
+  // caso não gerava movimento nenhum: saldo alto no sistema, baixo na
+  // prateleira.
+  const api = montarApi({
+    ext: [{ id: 1, id_pedido: 99, pedido_item_id: 1000, quantidade: 1, ultimo_insumo_id: passoDaOrdem(10).id, etapa_id: 510 }],
+    lotes: { 510: { id: 510, produto_id: 7, quantidade: 0, ultimo_insumo_id: passoDaOrdem(10).insumo_id } },
+    destino: {
+      qtdAProduzir: 0,
+      qtdUsarPronta: 1,
+      extInicial: [{
+        id: 5000, id_pedido: 77, pedido_item_id: 2000, quantidade: 1,
+        ultimo_insumo_id: passoDaOrdem(15).id, etapa_id: 502
+      }]
+    }
+  });
+  const ins = coletorDeInsumos();
+  const saidas = coletorDeConsumo();
+
+  const { resumo } = await estornarCancelamento(api, {
+    pedidoId: 99,
+    acoes: [{
+      item: { id: 1000 }, action: 'reallocate', orderId: 77, quantity: 1,
+      grupo: { origem: 'estoque', ordem_origem: 10, lote_id: 510 },
+      pedidoItemDestino: 2000,
+      grupoDestino: { origem: 'estoque', ordem_origem: 15 }
+    }],
+    registrarEntradaInsumo: ins.fn,
+    registrarSaidaInsumo: saidas.fn
+  });
+
+  // A peça chegou em 10/15: faltam os passos 11..15, 1 unidade de cada.
+  for (const ordem of [11, 12, 13, 14, 15]) {
+    assert.equal(saidas.de(ordem), 1, `o passo ${ordem} passou a ser necessário no destino`);
+  }
+  // E nada ANTES do ponto 10 é tocado: aquele trecho já estava pago na peça.
+  for (const ordem of [1, 5, 10]) {
+    assert.equal(saidas.de(ordem), 0, `o passo ${ordem} já veio pronto na peça`);
+  }
+  assert.equal(resumo.insumosConsumidos, 5);
+
+  // Os DOIS lados existem e se anulam no saldo: a origem devolve o trecho que
+  // ia gastar para terminar a peça, o destino gasta o mesmo trecho porque agora
+  // é ele quem vai terminá-la. O saldo do estoque não muda; o que muda é a
+  // quem o consumo pertence — e era esse segundo movimento que faltava.
+  for (const ordem of [11, 12, 13, 14, 15]) {
+    assert.equal(
+      ins.porPedido(99).get(passoDaOrdem(ordem).insumo_id), 1,
+      `o passo ${ordem} volta pela origem`
+    );
+    assert.equal(saidas.de(ordem), 1, `e sai de novo pelo destino`);
+  }
+
+  // O consumo fica amarrado à substituição, como a devolução já ficava.
+  const realocacaoId = api.gravacoes.realocacoes[0].id;
+  assert.equal(saidas.porRealocacao(realocacaoId).size, 5);
+
+  const movimentos = api.gravacoes.movimentos
+    .filter(m => m.tipo_item === 'insumo' && Number(m.pedido_id) === 77);
+  assert.equal(movimentos.length, 5);
+  assert.ok(
+    movimentos.every(m => m.tipo_movimento === 'consumo_insumo' && m.realocacao_id === realocacaoId),
+    'com tipo de consumo e a referência da realocação'
+  );
+});
+
+test('mesmo estágio dos dois lados não movimenta matéria-prima', async () => {
+  // A realocacao_id 12 do relatório: 14/15 substituiu 14/15. A necessidade do
+  // destino não mudou, então não pode haver movimento nenhum — nem devolução
+  // nem consumo.
+  const api = montarApi({
+    ext: [{ id: 1, id_pedido: 99, pedido_item_id: 1000, quantidade: 1, ultimo_insumo_id: passoDaOrdem(14).id, etapa_id: 514 }],
+    lotes: { 514: { id: 514, produto_id: 7, quantidade: 0, ultimo_insumo_id: passoDaOrdem(14).insumo_id } },
+    destino: {
+      qtdAProduzir: 0,
+      qtdUsarPronta: 0,
+      extInicial: [{
+        id: 5000, id_pedido: 77, pedido_item_id: 2000, quantidade: 1,
+        ultimo_insumo_id: passoDaOrdem(14).id, etapa_id: 514
+      }]
+    }
+  });
+  const ins = coletorDeInsumos();
+  const saidas = coletorDeConsumo();
+
+  await estornarCancelamento(api, {
+    pedidoId: 99,
+    acoes: [{
+      item: { id: 1000 }, action: 'reallocate', orderId: 77, quantity: 1,
+      grupo: { origem: 'estoque', ordem_origem: 14, lote_id: 514 },
+      pedidoItemDestino: 2000,
+      grupoDestino: { origem: 'estoque', ordem_origem: 14 }
+    }],
+    registrarEntradaInsumo: ins.fn,
+    registrarSaidaInsumo: saidas.fn
+  });
+
+  assert.equal(ins.porPedido(77).size, 0, 'nada devolvido');
+  assert.equal(saidas.consumidos.size, 0, 'nada consumido');
+});
+
+test('peça MAIS adiantada no lugar de uma parcial devolve a diferença', async () => {
+  // O outro sentido, que já funcionava — a guarda existe para que a correção
+  // do consumo não estrague a devolução.
+  const api = montarApi({
+    ext: [{ id: 1, id_pedido: 99, pedido_item_id: 1000, quantidade: 1, ultimo_insumo_id: passoDaOrdem(15).id, etapa_id: 502 }],
+    lotes: { 502: { id: 502, produto_id: 7, quantidade: 0, ultimo_insumo_id: passoDaOrdem(15).insumo_id } },
+    destino: {
+      qtdAProduzir: 1,
+      qtdUsarPronta: 0,
+      extInicial: [{
+        id: 5000, id_pedido: 77, pedido_item_id: 2000, quantidade: 1,
+        ultimo_insumo_id: passoDaOrdem(10).id, etapa_id: 510
+      }]
+    }
+  });
+  const ins = coletorDeInsumos();
+  const saidas = coletorDeConsumo();
+
+  await estornarCancelamento(api, {
+    pedidoId: 99,
+    acoes: [{
+      item: { id: 1000 }, action: 'reallocate', orderId: 77, quantity: 1,
+      grupo: { origem: 'estoque', ordem_origem: 15, lote_id: 502 },
+      pedidoItemDestino: 2000,
+      grupoDestino: { origem: 'estoque', ordem_origem: 10 }
+    }],
+    registrarEntradaInsumo: ins.fn,
+    registrarSaidaInsumo: saidas.fn
+  });
+
+  // O destino tinha uma peça em 10/15 e ia gastar 11..15; agora recebeu uma
+  // pronta e aquele trecho volta.
+  for (const ordem of [11, 12, 13, 14, 15]) {
+    assert.equal(ins.porPedido(77).get(passoDaOrdem(ordem).insumo_id), 1, `passo ${ordem} devolvido`);
+  }
+  assert.equal(saidas.consumidos.size, 0, 'e nada é consumido');
+});

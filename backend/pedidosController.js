@@ -3,7 +3,7 @@ const { createApiClient } = require('./apiHttpClient');
 const { exigirPermissao, exigirSupAdmin } = require('./permissionsController');
 const { excluirPedidoEmCascata } = require('./exclusaoEmCascata');
 const { estornarCancelamento, opcoesDeEstorno } = require('./cancelamentoEstorno');
-const { registrarEntrada } = require('./materiaPrima');
+const { registrarEntrada, registrarSaida } = require('./materiaPrima');
 const {
   alteracoesRecebidas,
   reconstruirSelecaoOriginal,
@@ -127,7 +127,12 @@ router.put('/:id/status', exigirPermissao(permissaoDeStatus), async (req, res) =
           pedidoId: id,
           acoes: req.body?.acoes,
           usuarioId: idDoUsuarioDaRequisicao(req),
-          registrarEntradaInsumo: registrarEntrada
+          registrarEntradaInsumo: registrarEntrada,
+          // A realocação pode AUMENTAR a necessidade do destino: peça menos
+          // adiantada no lugar de uma mais adiantada. Esse material sai do
+          // estoque, e sem isto o saldo ficava alto no sistema e baixo na
+          // prateleira.
+          registrarSaidaInsumo: registrarSaida
         });
         estorno = resultado.resumo;
         avisos.push(...resultado.avisos);
@@ -188,8 +193,13 @@ router.put('/:id/status', exigirPermissao(permissaoDeStatus), async (req, res) =
             // Tipos DISTINTOS e movimentos são coisas diferentes: o mesmo
             // insumo pode voltar duas vezes (pelo pedido e pelo destino da
             // realocação), e chamar 30 movimentos de "30 tipos" era falso.
-            + `${estorno.tiposDeInsumo ?? 0} tipo(s) de insumo devolvido(s) `
-            + `em ${estorno.insumosDevolvidos ?? 0} movimento(s) de estoque.`
+            + `${estorno.tiposDeInsumo ?? 0} tipo(s) de insumo movimentado(s) `
+            + `em ${estorno.insumosDevolvidos ?? 0} devolução(ões)`
+            // A realocação também pode CONSUMIR: peça menos adiantada no lugar
+            // de uma mais adiantada faz o destino ter de terminar o resto.
+            + ((estorno.insumosConsumidos ?? 0) > 0
+              ? ` e ${estorno.insumosConsumidos} consumo(s) no pedido de destino.`
+              : '.')
             // E o que foi feito com CADA peça. O parágrafo acima diz os totais;
             // sem o detalhe, o histórico não permite conferir de onde eles
             // vieram — que é justamente o que uma auditoria precisa.

@@ -236,3 +236,44 @@ test('quem fez a alteração aparece em cada linha', async () => {
     amb.restaurar();
   }
 });
+
+test('devolução e consumo no mesmo instante não trocam de pedido', async () => {
+  // O que uma realocação produz: o pedido de origem DEVOLVE 1 unidade do insumo
+  // e o de destino CONSOME 1 unidade do mesmo insumo, no mesmo instante e com a
+  // mesma quantidade. Parear só por quantidade e horário podia explicar a
+  // entrada com a saída do outro pedido — e o extrato mostraria o pedido
+  // errado ao lado do movimento.
+  const amb = montarAmbiente({
+    historico: [
+      { id: 1, insumo_id: 151, tipo: 'entrada_pedido', quantidade: 1,
+        quantidade_anterior: 10, quantidade_atual: 11, criado_em: semFuso(52),
+        usuario_id: 13, pedido_id: 69 },
+      { id: 2, insumo_id: 151, tipo: 'saida_pedido', quantidade: 1,
+        quantidade_anterior: 11, quantidade_atual: 10, criado_em: semFuso(52),
+        usuario_id: 13, pedido_id: 68 }
+    ],
+    // O consumo vem PRIMEIRO na lista de propósito: parear pela menor distância
+    // de tempo pegaria este para explicar a entrada, que é o erro que se quer
+    // impedir.
+    razao: [
+      { id: 901, tipo_movimento: 'consumo_insumo', tipo_item: 'insumo', item_id: 151,
+        quantidade: 1, pedido_id: 68, created_at: comFuso(52), created_by: 13 },
+      { id: 900, tipo_movimento: 'retorno_cancelamento', tipo_item: 'insumo', item_id: 151,
+        quantidade: 1, pedido_id: 69, created_at: comFuso(52), created_by: 13 }
+    ]
+  });
+
+  try {
+    const r = await amb.listarMovimentosInsumo(151);
+
+    assert.equal(r.movimentos.length, 2, 'dois eventos, não quatro nem um');
+
+    const entrada = r.movimentos.find(m => m.efeito > 0);
+    const saida = r.movimentos.find(m => m.efeito < 0);
+
+    assert.equal(entrada.pedido_numero, 'PED22', 'a devolução é do pedido cancelado');
+    assert.equal(saida.pedido_numero, 'PED21', 'e o consumo é do pedido de destino');
+  } finally {
+    amb.restaurar();
+  }
+});

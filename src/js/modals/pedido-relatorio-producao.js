@@ -229,16 +229,18 @@
           <td>${escapar(formatarQuantidade(d.quantidade))}</td>
           <td>${escapar(d.estagio_origem)}</td>
           <td>${escapar(d.pedido_destino || '—')}</td>
+          <td>${escapar(d.substituiu || '—')}</td>
           <td>${d.falha ? `<strong>${escapar(d.falha)}</strong>` : 'OK'}</td>
         </tr>`).join('');
 
     return `
         <table class="rp-tabela rp-tabela-larga">
           <thead>
-            <tr class="rp-faixa-processo"><th colspan="6">Destinação no cancelamento</th></tr>
+            <tr class="rp-faixa-processo"><th colspan="7">Destinação no cancelamento</th></tr>
             <tr class="rp-faixa-peca">
               <th>Peça</th><th>Destino</th><th>Qtd.</th>
-              <th>Estágio de origem</th><th>Pedido de destino</th><th>Resultado</th>
+              <th>Estágio de origem</th><th>Pedido de destino</th>
+              <th>Substituiu</th><th>Resultado</th>
             </tr>
           </thead>
           <tbody>${corpo}</tbody>

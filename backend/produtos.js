@@ -1380,6 +1380,10 @@ const LEITURA_DO_MOVIMENTO = {
   consumo_peca_pronta: { rotulo: 'Usada pronta em pedido', sinal: -1 },
   consumo_peca_parcial: { rotulo: 'Usada pela metade em pedido', sinal: -1 },
   retorno_cancelamento: { rotulo: 'Devolvida por cancelamento', sinal: 1 },
+  // Descarte também SOMA: a peça volta ao lote de origem como estava. Sem esta
+  // entrada o movimento aparecia com o nome cru e efeito "—", como se não
+  // tivesse mexido no estoque — e ele mexeu.
+  descarte_cancelamento: { rotulo: 'Descartada — lote de origem restaurado', sinal: 1 },
   reserva: { rotulo: 'Reservada para produção', sinal: 0 },
   transferencia: { rotulo: 'Transferida entre pedidos', sinal: 0 },
   cancelamento: { rotulo: 'Cancelamento', sinal: 0 },

@@ -387,8 +387,13 @@ async function registrarEntrada(id, quantidadeBruta, usuarioId = null, contexto 
     id,
     select: 'id,quantidade'
   });
-  const quantidadeAnterior = materiaAtual ? Number(materiaAtual.quantidade) || 0 : 0;
-  const quantidadeAtual = quantidadeAnterior + (Number(quantidade) || 0);
+  const quantidadeAnterior = arredondarQuatro(materiaAtual?.quantidade);
+  // Arredondar em 4 casas — a precisão da coluna — e NUNCA menos que isso.
+  // Sem este passo, a soma binária grava 993.5824999999999 e a leitura
+  // seguinte parte de um valor levemente errado; com menos de 4 casas, cada
+  // movimento perde um pedaço e a perda se acumula sem nunca aparecer numa
+  // conferência isolada.
+  const quantidadeAtual = arredondarQuatro(quantidadeAnterior + (Number(quantidade) || 0));
 
   const materia = await pool.put(`/materia_prima/${id}`, {
     quantidade: quantidadeAtual,
@@ -416,8 +421,9 @@ async function registrarSaida(id, quantidadeBruta, usuarioId = null, contexto = 
     id,
     select: 'id,quantidade'
   });
-  const quantidadeAnterior = materiaAtual ? Number(materiaAtual.quantidade) || 0 : 0;
-  const quantidadeAtual = quantidadeAnterior - (Number(quantidade) || 0);
+  const quantidadeAnterior = arredondarQuatro(materiaAtual?.quantidade);
+  // Ver a nota gêmea em `registrarEntrada`: 4 casas, nem uma a menos.
+  const quantidadeAtual = arredondarQuatro(quantidadeAnterior - (Number(quantidade) || 0));
 
   const materia = await pool.put(`/materia_prima/${id}`, {
     quantidade: quantidadeAtual,
@@ -569,6 +575,20 @@ const LEITURA_MP = {
 };
 
 /**
+ * Para que lado cada movimento do RAZÃO empurra o saldo do insumo.
+ *
+ * Serve para parear cada linha do razão com a linha certa do histórico: sem o
+ * sentido, uma devolução e um consumo do mesmo insumo, da mesma quantidade e no
+ * mesmo instante — o que uma realocação produz — podiam ser trocados um pelo
+ * outro, e o extrato mostraria o pedido errado.
+ */
+const SENTIDO_DO_RAZAO = {
+  retorno_cancelamento: 1,
+  consumo_insumo: -1,
+  negativa: -1
+};
+
+/**
  * Um ajuste manual é entrada ou saída conforme o saldo tenha subido ou descido.
  *
  * Antes ele saía sem sinal ("—") e ficava de fora dos totais: corrigir 100 para
@@ -674,11 +694,28 @@ async function listarMovimentosInsumo(insumoId) {
     const tMp = instante(mp.criado_em);
     if (tMp === null) continue;
 
+    const sentidoDoHistorico = (LEITURA_MP[mp.tipo] || {}).sinal ?? 0;
+
     let melhorIndice = -1;
     let melhorDistancia = Infinity;
     for (let i = 0; i < razaoDisponivel.length; i++) {
       const razao = razaoDisponivel[i];
       if (Number(razao.quantidade) !== Number(mp.quantidade)) continue;
+
+      // MESMO SENTIDO. Uma realocação pode devolver 1 unidade de um insumo pelo
+      // pedido de origem e consumir 1 unidade do MESMO insumo pelo pedido de
+      // destino no mesmo instante. Sem esta checagem, a entrada de um lado
+      // podia ser explicada pela saída do outro — e o extrato mostraria o
+      // pedido errado ao lado do movimento.
+      const sentidoDoRazao = SENTIDO_DO_RAZAO[razao.tipo_movimento] ?? 0;
+      if (sentidoDoHistorico !== 0 && sentidoDoRazao !== 0 && sentidoDoHistorico !== sentidoDoRazao) {
+        continue;
+      }
+      // E, quando os dois dizem o pedido, tem de ser o mesmo pedido.
+      if (razao.pedido_id && mp.pedido_id && String(razao.pedido_id) !== String(mp.pedido_id)) {
+        continue;
+      }
+
       const tRazao = instante(razao.created_at);
       if (tRazao === null) continue;
       const distancia = Math.abs((tRazao - deslocamento) - tMp);

@@ -168,6 +168,18 @@ async function destinacoesDoCancelamento(api, pedidoId, rotaDoProduto, listaIten
   const lista = Array.isArray(brutas) ? brutas : [];
   if (!lista.length) return [];
 
+  // O que cada realocação substituiu do outro lado.
+  //
+  // "Realocada para o PED23" não fecha a história: substituir uma produção do
+  // zero e substituir uma peça pronta são consequências completamente
+  // diferentes lá. O dado já existe em `realocacoes`; faltava trazê-lo.
+  const realocacoes = await api
+    .get('/api/realocacoes', { query: { pedido_id_origem: pedidoId } })
+    .catch(() => []);
+  const substituicaoPorId = new Map(
+    (Array.isArray(realocacoes) ? realocacoes : []).map(r => [String(r.id), r])
+  );
+
   const itensPorId = new Map(listaItens.map(i => [String(i.id), i]));
   const numeroPorPedido = new Map();
   const saida = [];
@@ -182,6 +194,10 @@ async function destinacoesDoCancelamento(api, pedidoId, rotaDoProduto, listaIten
       numeroPorPedido.set(String(destinoId), pedidoDestino?.numero || `#${destinoId}`);
     }
 
+    const realocacao = dest.realocacao_id === null || dest.realocacao_id === undefined
+      ? null
+      : substituicaoPorId.get(String(dest.realocacao_id)) || null;
+
     saida.push({
       peca: item?.nome || item?.codigo || '—',
       tipo: dest.tipo_destino,
@@ -189,6 +205,14 @@ async function destinacoesDoCancelamento(api, pedidoId, rotaDoProduto, listaIten
       quantidade: Number(dest.quantidade) || 0,
       estagio_origem: rotuloDoPasso(rota, dest.ultimo_insumo_id),
       pedido_destino: destinoId === null ? null : numeroPorPedido.get(String(destinoId)),
+      // Só a realocação substitui alguma coisa; nas outras destinações a peça
+      // volta ao estoque e não ocupa lugar nenhum.
+      substituiu: !realocacao
+        ? null
+        : (realocacao.tipo_destino_substituido === 'producao_zero'
+          ? 'Produção do zero'
+          : `${rotuloDoPasso(rota, realocacao.ultimo_insumo_id_substituido)}`
+            + (realocacao.tipo_destino_substituido === 'pronta' ? ' (pronta)' : '')),
       falha: dest.falha || null,
       data: dest.created_at || null
     });
