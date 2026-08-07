@@ -3485,11 +3485,13 @@ function setActiveNavigation(page) {
 // Expande a sidebar quando necessário
 function expandSidebar() {
     if (!sidebarExpanded) {
-        sidebar.classList.remove('sidebar-collapsed');
-        sidebar.classList.add('sidebar-expanded');
-        const offset = window.innerWidth >= 1024 ? '240px' : '200px';
-        mainContent.style.marginLeft = offset;
-        if (companyName) companyName.classList.remove('collapsed');
+        requestAnimationFrame(() => {
+            sidebar.classList.remove('sidebar-collapsed');
+            sidebar.classList.add('sidebar-expanded');
+            mainContent.classList.remove('main-content-collapsed');
+            mainContent.classList.add('main-content-expanded');
+            if (companyName) companyName.classList.remove('collapsed');
+        });
 
         // Aguarda a animação de expansão finalizar para exibir o texto
         const showText = () => sidebar.classList.add('sidebar-text-visible');
@@ -3529,10 +3531,11 @@ function collapseSidebar() {
     requestAnimationFrame(() => {
         sidebar.classList.remove('sidebar-expanded');
         sidebar.classList.add('sidebar-collapsed');
+        mainContent.classList.remove('main-content-expanded');
+        mainContent.classList.add('main-content-collapsed');
+        if (companyName) companyName.classList.add('collapsed');
     });
 
-    mainContent.style.marginLeft = '64px';
-    if (companyName) companyName.classList.add('collapsed');
     sidebarExpanded = false;
 
     setTimeout(finalizeCollapse, 250);
@@ -3677,11 +3680,9 @@ window.addEventListener('load', async () => {
     }
 });
 
-// Ajustes responsivos ao redimensionar
+// Ajustes responsivos ao redimensionar (as classes CSS tratam o margin-left)
 window.addEventListener('resize', () => {
-    if (sidebarExpanded) {
-        mainContent.style.marginLeft = window.innerWidth >= 1024 ? '240px' : '200px';
-    }
+    // Nada aqui necessário — as media queries no CSS cuidam de mainContent
 });
 
 window.addEventListener('menu-sidebar-behavior-change', (event) => {
