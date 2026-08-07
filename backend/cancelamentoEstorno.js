@@ -290,12 +290,19 @@ async function carregarPedidoDestino(api, pedidoId, cache) {
  * Sem isto a transferência ficava pela metade — o pedido de origem registrava
  * a saída e o destino não sabia de nada. Três coisas acontecem aqui:
  *
- *  1. A peça passa a constar como VINDA DO ESTOQUE no destino
+ *  1. A peça substituída SAI do destino e volta ao lote dela — primeiro passo
+ *     de propósito: é o que pode ser recusado, e abortar aqui não deixa nada
+ *     pela metade.
+ *  2. A peça recebida passa a constar como VINDA DO ESTOQUE no destino
  *     (`pedido_itens_ext`), no ponto da rota em que ela chegou.
- *  2. A composição do destino muda: uma unidade que ele ia produzir do zero
+ *  3. A composição do destino muda: uma unidade que ele ia produzir do zero
  *     agora chega pronta ou pela metade. É isso que faz o relatório dele
  *     mostrar a nova realidade em vez da antiga.
- *  3. Fica um movimento de entrada, cujo id volta para `realocacoes`.
+ *  4. Fica um movimento de entrada, cujo id volta para `realocacoes`.
+ *
+ * Os passos que MOVEM PEÇA não têm `.catch`: uma falha ali sobe e aborta o
+ * cancelamento inteiro. Engolir o erro e seguir foi o que produziu uma peça
+ * liberada ao estoque e ainda contada dentro do pedido.
  *
  * @returns {{
  *   pedidoItemId: number|null, movimentoId: number|null,
@@ -369,37 +376,12 @@ async function entregarAoPedidoDestino(api, {
     tipoDestinoSubstituido
   };
 
-  // 1. A peça, no destino, veio do estoque.
+  // 1. A peça que o destino JÁ TINHA e foi substituída SAI do pedido.
   //
-  // A tabela tem chave única em (pedido_item_id, ultimo_insumo_id): se o
-  // destino já tem peças naquele mesmo ponto da rota, o INSERT falha. O certo
-  // é SOMAR ao registro existente — são as mesmas peças, no mesmo estágio, do
-  // mesmo item.
-  const jaExistentes = await api
-    .get('/api/pedido_itens_ext', { query: { pedido_item_id: alvo.id } })
-    .catch(() => []);
-  const mesmoPonto = (Array.isArray(jaExistentes) ? jaExistentes : [])
-    .find(r => Number(r.ultimo_insumo_id) === Number(passo?.passo_id));
-
-  if (mesmoPonto) {
-    await api.put(`/api/pedido_itens_ext/${mesmoPonto.id}`, {
-      quantidade: arredondar(paraNumero(mesmoPonto.quantidade) + unidades)
-    }).catch(err => avisos.push(
-      `Falha ao somar a peça recebida no ${rotuloDestino}: ${err?.message || err}`
-    ));
-  } else {
-    await api.post('/api/pedido_itens_ext', {
-      pedido_item_id: alvo.id,
-      ultimo_insumo_id: passo?.passo_id ?? null,
-      etapa_id: loteOrigem ?? null,
-      quantidade: unidades,
-      id_pedido: pedidoDestino
-    }).catch(err => avisos.push(
-      `Falha ao registrar a peça recebida no ${rotuloDestino}: ${err?.message || err}`
-    ));
-  }
-
-  // 1b. A peça que o destino JÁ TINHA e foi substituída volta ao estoque.
+  // Vem ANTES de registrar a peça que chega, e isso é deliberado: é o passo que
+  // pode ser recusado pelo banco, e abortar aqui deixa o destino exatamente
+  // como estava. Na ordem inversa, a peça recebida já estaria gravada e o
+  // destino ficaria com uma peça a mais.
   //
   // Quando o lugar ocupado era de uma peça vinda do estoque (e não de uma que
   // seria produzida do zero), essa peça fica livre: o destino não precisa mais
@@ -419,18 +401,29 @@ async function entregarAoPedidoDestino(api, {
       // Quantas peças de fato saem do pedido: lido ANTES da atualização, senão
       // se lê o valor já alterado e o resultado é zero — a peça sumiria em vez
       // de voltar ao estoque.
-      const liberadas = Math.min(unidades, paraNumero(linha.quantidade));
-      const sobra = arredondar(Math.max(0, paraNumero(linha.quantidade) - unidades));
+      const disponivel = paraNumero(linha.quantidade);
+      const liberadas = Math.min(unidades, disponivel);
+      const sobra = arredondar(disponivel - liberadas);
 
       // O grupo substituído, para a auditoria: qual linha de `pedido_itens_ext`
       // encolheu e em que ponto da rota ela estava.
       auditoria.extIdSubstituido = linha.id ?? null;
       auditoria.passoIdSubstituido = passoLiberado?.passo_id ?? null;
 
-      await api.put(`/api/pedido_itens_ext/${linha.id}`, { quantidade: sobra })
-        .catch(err => avisos.push(
-          `Falha ao liberar a peça substituída no ${rotuloDestino}: ${err?.message || err}`
-        ));
+      // SALDO ZERO É EXCLUSÃO, NÃO ATUALIZAÇÃO.
+      //
+      // A tabela tem `quantidade > 0`, e com razão: linha de peça com zero
+      // unidades não é um registro, é lixo. Gravar 0 era recusado pelo banco, o
+      // erro virava aviso, o fluxo seguia — e a peça terminava LIBERADA ao lote
+      // e ainda contada dentro do pedido. Uma peça em dois lugares.
+      //
+      // Sem `.catch`: se este passo falhar, a substituição inteira é abortada
+      // pelo chamador. Continuar depois dele é o que produzia a peça fantasma.
+      if (sobra > 0) {
+        await api.put(`/api/pedido_itens_ext/${linha.id}`, { quantidade: sobra });
+      } else {
+        await api.delete(`/api/pedido_itens_ext/${linha.id}`);
+      }
 
       const lote = await lotePara(api, {
         produtoId,
@@ -440,10 +433,13 @@ async function entregarAoPedidoDestino(api, {
 
       if (lote && liberadas > 0) {
         const nova = arredondar(paraNumero(lote.quantidade) + liberadas);
+        // Também sem `.catch`: a peça já saiu do pedido; se não entrar no lote,
+        // ela desapareceu. Abortar aqui é o único jeito de a operação não
+        // terminar com uma peça a menos no mundo.
         await api.put(`${TABELA_LOTES}/${lote.id}`, {
           quantidade: nova,
           data_hora_completa: new Date().toISOString()
-        }).catch(err => avisos.push(`Falha ao devolver ao lote ${lote.id}: ${err?.message || err}`));
+        });
         lote.quantidade = nova;
         auditoria.loteIdSubstituido = lote.id ?? null;
 
@@ -466,7 +462,39 @@ async function entregarAoPedidoDestino(api, {
     }
   }
 
-  // 2. A composição muda pela DIFERENÇA entre a peça que chega e a que sai.
+  // 2. A peça que CHEGA passa a constar no destino, vinda do estoque.
+  //
+  // A tabela tem chave única em (pedido_item_id, ultimo_insumo_id): se o
+  // destino já tem peças naquele mesmo ponto da rota, o INSERT falha. O certo
+  // é SOMAR ao registro existente — são as mesmas peças, no mesmo estágio, do
+  // mesmo item.
+  //
+  // A leitura é feita AGORA, depois da liberação: a linha do passo 1 pode ter
+  // sido excluída, e usar uma lista lida antes disso tentaria somar numa linha
+  // que não existe mais.
+  const jaExistentes = await api
+    .get('/api/pedido_itens_ext', { query: { pedido_item_id: alvo.id } })
+    .catch(() => []);
+  const mesmoPonto = (Array.isArray(jaExistentes) ? jaExistentes : [])
+    .find(r => Number(r.ultimo_insumo_id) === Number(passo?.passo_id));
+
+  // Sem `.catch` pelo mesmo motivo: a peça já saiu do pedido de origem. Se ela
+  // não entrar aqui, sumiu.
+  if (mesmoPonto) {
+    await api.put(`/api/pedido_itens_ext/${mesmoPonto.id}`, {
+      quantidade: arredondar(paraNumero(mesmoPonto.quantidade) + unidades)
+    });
+  } else {
+    await api.post('/api/pedido_itens_ext', {
+      pedido_item_id: alvo.id,
+      ultimo_insumo_id: passo?.passo_id ?? null,
+      etapa_id: loteOrigem ?? null,
+      quantidade: unidades,
+      id_pedido: pedidoDestino
+    });
+  }
+
+  // 3. A composição muda pela DIFERENÇA entre a peça que chega e a que sai.
   //
   //    Peça pela metade não mexe em `qtd_a_produzir` — o relatório já desconta
   //    as parciais ao calcular quantas sobram para o zero. E substituir uma
@@ -492,7 +520,7 @@ async function entregarAoPedidoDestino(api, {
     ));
   }
 
-  // 3. A reserva do destino passa a refletir a composição NOVA.
+  // 4. A reserva do destino passa a refletir a composição NOVA.
   //
   // Subtrair as unidades recebidas da quantidade gravada não funciona: a
   // reserva do PED24 estava com 1 e recebeu 7, o que dava -6 e batia na
@@ -1241,7 +1269,20 @@ async function estornarCancelamento(api, {
             usuarioId
           }, avisos);
 
-          const recebido = await entregarAoPedidoDestino(api, {
+          // A ENTREGA PODE FALHAR — e falhar aqui não pode virar aviso.
+          //
+          // Se o destino não conseguir soltar a peça substituída (ou receber a
+          // nova), seguir em frente deixa a peça em dois lugares: liberada ao
+          // lote e ainda contada dentro do pedido. Foi o que aconteceu quando a
+          // linha de `pedido_itens_ext` tinha exatamente 1 unidade e a
+          // substituição levava essa unidade: o UPDATE para zero era recusado
+          // pela constraint, o erro virava aviso e o fluxo continuava.
+          //
+          // A falha fica registrada em `cancelamento_destinacoes` e sobe: o
+          // cancelamento inteiro é interrompido e o pedido NÃO é cancelado.
+          let recebido;
+          try {
+            recebido = await entregarAoPedidoDestino(api, {
             pedidoDestino: decisao.pedidoDestino,
             rotuloDestino,
             produtoId,
@@ -1256,7 +1297,26 @@ async function estornarCancelamento(api, {
             movimentoOrigemId: movimentoId,
             cacheLotes,
             usuarioId
-          }, avisos);
+            }, avisos);
+          } catch (err) {
+            const motivo = `Falha ao entregar a peça ao ${rotuloDestino}: ${err?.message || err}`;
+            await registrarDestinacao(api, {
+              ...destinacaoBase,
+              tipoDestino: 'realocacao',
+              ordemDestino,
+              pedidoDestino: decisao.pedidoDestino,
+              movimentoId,
+              falha: motivo
+            }, avisos);
+
+            const critico = new Error(
+              `${motivo} O cancelamento foi interrompido e o pedido NÃO foi cancelado. `
+              + 'Confira o pedido de destino antes de tentar de novo.'
+            );
+            critico.code = 'ESTORNO_INCONSISTENTE';
+            critico.avisos = avisos;
+            throw critico;
+          }
 
           const realocacaoId = await registrarRealocacao(api, {
             movimentoOrigem: movimentoId,

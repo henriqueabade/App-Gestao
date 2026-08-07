@@ -149,6 +149,21 @@ router.put('/:id/status', exigirPermissao(permissaoDeStatus), async (req, res) =
             detalhe: err.message
           });
         }
+
+        // Uma etapa que MOVE PEÇA falhou no meio. Marcar o pedido como
+        // cancelado aqui seria declarar concluído um estorno que não terminou —
+        // e foi assim que uma peça acabou liberada ao estoque e ainda contada
+        // dentro do pedido de destino. O pedido continua ativo, a falha está
+        // registrada em `cancelamento_destinacoes` e o que já foi gravado vem
+        // na resposta para ser conferido.
+        if (err?.code === 'ESTORNO_INCONSISTENTE') {
+          return res.status(409).json({
+            error: 'O estorno foi interrompido: o pedido NÃO foi cancelado.',
+            code: err.code,
+            detalhe: err.message,
+            avisos: err.avisos || []
+          });
+        }
         // Qualquer outra falha: o estorno pode ter gravado parte. Não cancelar
         // seria pior — as peças já saíram dos lotes. Cancela, e o aviso diz o
         // que conferir.

@@ -2269,6 +2269,13 @@
         if (corpo?.code === 'DECISOES_INVALIDAS' && Array.isArray(corpo.problemas) && corpo.problemas.length) {
           throw new Error(`${corpo.problemas.join(' ')} Nada foi alterado.`);
         }
+        // Estorno interrompido no meio: o pedido continua ativo, mas parte do
+        // trabalho pode ter sido gravada. O usuário precisa saber as duas
+        // coisas — e o console guarda o detalhe do que já foi.
+        if (corpo?.code === 'ESTORNO_INCONSISTENTE') {
+          console.error('Estorno interrompido:', corpo.detalhe, corpo.avisos);
+          throw new Error(corpo.detalhe || corpo.error);
+        }
         throw new Error(corpo?.detalhe || corpo?.error || 'Falha ao cancelar pedido');
       }
 

@@ -40,7 +40,8 @@ function montarApi({ ext = [], reserva = 0, lotes = {}, qtdAProduzir = null, des
   const estado = { ...lotes };
   const gravacoes = {
     movimentos: [], realocacoes: [], lotesNovos: [], reservas: [],
-    extDestino: [], eventos: [], itensAtualizados: [], destinacoes: []
+    extDestino: [], eventos: [], itensAtualizados: [], destinacoes: [],
+    extRemovidos: []
   };
   let proximoLote = 900;
   let proximaRealocacao = 8000;
@@ -107,9 +108,33 @@ function montarApi({ ext = [], reserva = 0, lotes = {}, qtdAProduzir = null, des
         if (String(rota.split('/').pop()) === '2000') Object.assign(itemDestino, payload);
       }
       if (rota.startsWith('/api/pedido_itens_ext/')) {
+        // A CONSTRAINT DO BANCO, aqui dentro.
+        //
+        // `pedido_itens_ext` exige `quantidade > 0`. O mock aceitava zero em
+        // silêncio, e por isso nenhum teste pegou o caso em que a substituição
+        // leva a ÚLTIMA unidade de um grupo: no banco de verdade o UPDATE era
+        // recusado, o erro virava aviso e a peça terminava liberada ao lote e
+        // ainda contada dentro do pedido.
+        if (payload.quantidade !== undefined && Number(payload.quantidade) <= 0) {
+          throw new Error(
+            'new row for relation "pedido_itens_ext" violates check constraint '
+            + '"pedido_itens_ext_quantidade_check"'
+          );
+        }
         const id = Number(rota.split('/').pop());
         const linha = extDestinoAtual.find(r => Number(r.id) === id);
         if (linha) Object.assign(linha, payload);
+      }
+      return { ok: true };
+    },
+    async delete(rota) {
+      if (rota.startsWith('/api/pedido_itens_ext/')) {
+        const id = Number(rota.split('/').pop());
+        const posicao = extDestinoAtual.findIndex(r => Number(r.id) === id);
+        if (posicao >= 0) {
+          gravacoes.extRemovidos.push(extDestinoAtual[posicao]);
+          extDestinoAtual.splice(posicao, 1);
+        }
       }
       return { ok: true };
     },
@@ -1328,4 +1353,118 @@ test('peça MAIS adiantada no lugar de uma parcial devolve a diferença', async 
     assert.equal(ins.porPedido(77).get(passoDaOrdem(ordem).insumo_id), 1, `passo ${ordem} devolvido`);
   }
   assert.equal(saidas.consumidos.size, 0, 'e nada é consumido');
+});
+
+// ---------------------------------------------------------------------------
+// A ÚLTIMA UNIDADE DE UM GRUPO
+//
+// O caso que passou por todos os testes anteriores e quebrou no banco: a linha
+// de `pedido_itens_ext` tinha exatamente 1 unidade e a substituição levou essa
+// unidade. `quantidade = 0` é recusado pela constraint; o erro virava aviso, o
+// fluxo seguia, e a peça terminava LIBERADA ao lote e ainda contada dentro do
+// pedido — uma peça em dois lugares.
+// ---------------------------------------------------------------------------
+
+test('substituir a ÚLTIMA unidade de um grupo EXCLUI a linha, não zera', async () => {
+  const api = montarApi({
+    ext: [{ id: 1, id_pedido: 99, pedido_item_id: 1000, quantidade: 1, ultimo_insumo_id: passoDaOrdem(3).id, etapa_id: 503 }],
+    lotes: {
+      503: { id: 503, produto_id: 7, quantidade: 0, ultimo_insumo_id: passoDaOrdem(3).insumo_id },
+      510: { id: 510, produto_id: 7, quantidade: 0, ultimo_insumo_id: passoDaOrdem(10).insumo_id }
+    },
+    destino: {
+      qtdAProduzir: 0,
+      qtdUsarPronta: 0,
+      // O destino tem UMA unidade em 10/15 — e é ela que será substituída.
+      extInicial: [{
+        id: 58, id_pedido: 77, pedido_item_id: 2000, quantidade: 1,
+        ultimo_insumo_id: passoDaOrdem(10).id, etapa_id: 510
+      }]
+    }
+  });
+  const ins = coletorDeInsumos();
+  const saidas = coletorDeConsumo();
+
+  const { avisos } = await estornarCancelamento(api, {
+    pedidoId: 99,
+    acoes: [{
+      item: { id: 1000 }, action: 'reallocate', orderId: 77, quantity: 1,
+      grupo: { origem: 'estoque', ordem_origem: 3, lote_id: 503 },
+      pedidoItemDestino: 2000,
+      grupoDestino: { origem: 'estoque', ordem_origem: 10 }
+    }],
+    registrarEntradaInsumo: ins.fn,
+    registrarSaidaInsumo: saidas.fn
+  });
+
+  assert.deepEqual(avisos, [], 'sem falha nenhuma');
+
+  // 1. A linha do grupo substituído foi EXCLUÍDA.
+  assert.equal(api.gravacoes.extRemovidos.length, 1, 'a linha de saldo zero é removida');
+  assert.equal(Number(api.gravacoes.extRemovidos[0].id), 58);
+
+  // 2. A peça antiga voltou ao lote dela — uma vez só.
+  assert.equal(api.lotes[510].quantidade, 1, 'a peça substituída voltou ao lote de origem');
+  const liberacoes = api.gravacoes.movimentos.filter(m =>
+    m.tipo_movimento === 'retorno_cancelamento'
+    && m.tipo_item === 'peca'
+    && Number(m.pedido_id) === 77);
+  assert.equal(liberacoes.length, 1, 'e apenas um movimento de liberação');
+
+  // 3. O TOTAL DE PEÇAS DO DESTINO NÃO MUDA. Substituição troca uma peça por
+  //    outra; se o total sobe, sobrou uma peça fantasma.
+  const doDestino = await api.get('/api/pedido_itens_ext', { query: { id_pedido: 77 } });
+  const total = doDestino.reduce((soma, r) => soma + Number(r.quantidade), 0);
+  assert.equal(total, 1, 'uma peça entrou, uma saiu: o pedido continua com uma');
+
+  // E a que ficou é a nova, no ponto em que ela chegou.
+  assert.equal(Number(doDestino[0].ultimo_insumo_id), passoDaOrdem(3).id);
+});
+
+test('falha ao soltar a peça substituída ABORTA o cancelamento', async () => {
+  const api = montarApi({
+    ext: [{ id: 1, id_pedido: 99, pedido_item_id: 1000, quantidade: 1, ultimo_insumo_id: passoDaOrdem(3).id, etapa_id: 503 }],
+    lotes: {
+      503: { id: 503, produto_id: 7, quantidade: 0, ultimo_insumo_id: passoDaOrdem(3).insumo_id },
+      510: { id: 510, produto_id: 7, quantidade: 0, ultimo_insumo_id: passoDaOrdem(10).insumo_id }
+    },
+    destino: {
+      qtdAProduzir: 0,
+      qtdUsarPronta: 0,
+      extInicial: [{
+        id: 58, id_pedido: 77, pedido_item_id: 2000, quantidade: 1,
+        ultimo_insumo_id: passoDaOrdem(10).id, etapa_id: 510
+      }]
+    }
+  });
+  // O banco recusa a exclusão (permissão, FK, o que for).
+  api.delete = async () => { throw new Error('permission denied for table pedido_itens_ext'); };
+
+  const ins = coletorDeInsumos();
+
+  await assert.rejects(
+    () => estornarCancelamento(api, {
+      pedidoId: 99,
+      acoes: [{
+        item: { id: 1000 }, action: 'reallocate', orderId: 77, quantity: 1,
+        grupo: { origem: 'estoque', ordem_origem: 3, lote_id: 503 },
+        pedidoItemDestino: 2000,
+        grupoDestino: { origem: 'estoque', ordem_origem: 10 }
+      }],
+      registrarEntradaInsumo: ins.fn
+    }),
+    err => err.code === 'ESTORNO_INCONSISTENTE' && /NÃO foi cancelado/.test(err.message)
+  );
+
+  // A peça NÃO foi para o lote: abortar antes disso é o que impede a duplicata.
+  assert.equal(api.lotes[510].quantidade, 0, 'a peça substituída não foi liberada');
+  // E o destino não recebeu a nova peça.
+  assert.equal(api.gravacoes.extDestino.length, 0, 'nada foi acrescentado ao destino');
+  // A realocação não é registrada como se tivesse acontecido.
+  assert.equal(api.gravacoes.realocacoes.length, 0);
+  // Mas a FALHA fica registrada, que é como se sabe o que conferir.
+  const comFalha = api.gravacoes.destinacoes.find(d => d.falha);
+  assert.ok(comFalha, 'a destinação registra a falha');
+  assert.equal(comFalha.tipo_destino, 'realocacao');
+  assert.match(comFalha.falha, /permission denied/);
 });
