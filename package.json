@@ -1,6 +1,6 @@
 {
   "name": "santissimo-decor-dashboard",
-  "version": "1.0.471",
+  "version": "1.0.5",
   "description": "Dashboard admin for Santissimo Decor",
   "main": "main.js",
   "scripts": {
