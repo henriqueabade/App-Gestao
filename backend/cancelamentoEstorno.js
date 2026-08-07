@@ -297,7 +297,13 @@ async function carregarPedidoDestino(api, pedidoId, cache) {
  *     mostrar a nova realidade em vez da antiga.
  *  3. Fica um movimento de entrada, cujo id volta para `realocacoes`.
  *
- * @returns {{ pedidoItemId: number|null, movimentoId: number|null }}
+ * @returns {{
+ *   pedidoItemId: number|null, movimentoId: number|null,
+ *   tipoDestinoSubstituido: string|null, extIdSubstituido: number|null,
+ *   passoIdSubstituido: number|null, loteIdSubstituido: number|null,
+ *   movimentoPecaLiberada: number|null, reservaIdSubstituida: number|null
+ * }}  tudo o que a auditoria precisa para reconstruir a substituição sem
+ *   cruzar tabelas por data e texto.
  */
 async function entregarAoPedidoDestino(api, {
   pedidoDestino,
@@ -311,9 +317,20 @@ async function entregarAoPedidoDestino(api, {
   rotuloOrigem,
   pedidoItemDestino,
   grupoDestino,
+  movimentoOrigemId = null,
   cacheLotes,
   usuarioId
 }, avisos) {
+  const vazio = {
+    pedidoItemId: null,
+    movimentoId: null,
+    tipoDestinoSubstituido: null,
+    extIdSubstituido: null,
+    passoIdSubstituido: null,
+    loteIdSubstituido: null,
+    movimentoPecaLiberada: null,
+    reservaIdSubstituida: null
+  };
   const itensDestino = await api
     .get('/api/pedidos_itens', { query: { pedido_id: pedidoDestino } })
     .catch(() => []);
@@ -330,11 +347,27 @@ async function entregarAoPedidoDestino(api, {
       `O ${rotuloDestino} não tem a peça ${produtoId}: a realocação foi registrada, `
       + 'mas a composição dele não pôde ser atualizada.'
     );
-    return { pedidoItemId: null, movimentoId: null };
+    return vazio;
   }
 
   const passo = rota.find(p => p.ordem === ordemDestino) || null;
   const ordemFinal = rota.length ? rota[rota.length - 1].ordem : 0;
+
+  // O QUE foi substituído lá — a pergunta que os dois movimentos de recebimento
+  // não distinguem. Uma peça em 9/15 no lugar de uma PRONTA libera a pronta ao
+  // estoque; a mesma peça no lugar de uma PRODUÇÃO DO ZERO não libera nada e
+  // devolve a rota inteira daquela unidade à matéria-prima.
+  const tipoDestinoSubstituido = !grupoDestino
+    ? null
+    : (String(grupoDestino.origem) === 'producao'
+      ? 'producao_zero'
+      : (paraNumero(grupoDestino.ordem_origem) >= ordemFinal ? 'pronta' : 'parcial'));
+
+  const auditoria = {
+    ...vazio,
+    pedidoItemId: alvo.id,
+    tipoDestinoSubstituido
+  };
 
   // 1. A peça, no destino, veio do estoque.
   //
@@ -389,6 +422,11 @@ async function entregarAoPedidoDestino(api, {
       const liberadas = Math.min(unidades, paraNumero(linha.quantidade));
       const sobra = arredondar(Math.max(0, paraNumero(linha.quantidade) - unidades));
 
+      // O grupo substituído, para a auditoria: qual linha de `pedido_itens_ext`
+      // encolheu e em que ponto da rota ela estava.
+      auditoria.extIdSubstituido = linha.id ?? null;
+      auditoria.passoIdSubstituido = passoLiberado?.passo_id ?? null;
+
       await api.put(`/api/pedido_itens_ext/${linha.id}`, { quantidade: sobra })
         .catch(err => avisos.push(
           `Falha ao liberar a peça substituída no ${rotuloDestino}: ${err?.message || err}`
@@ -407,8 +445,12 @@ async function entregarAoPedidoDestino(api, {
           data_hora_completa: new Date().toISOString()
         }).catch(err => avisos.push(`Falha ao devolver ao lote ${lote.id}: ${err?.message || err}`));
         lote.quantidade = nova;
+        auditoria.loteIdSubstituido = lote.id ?? null;
 
-        await registrarMovimento(api, {
+        // O id volta para `realocacoes.movimento_id_peca_liberada`: sem ele, a
+        // ligação entre a substituição e a peça que voltou ao estoque só podia
+        // ser deduzida por data, pedido e texto.
+        auditoria.movimentoPecaLiberada = await registrarMovimento(api, {
           tipoMovimento: MOV.RETORNO,
           tipoItem: ITEM.PECA,
           itemId: produtoId,
@@ -464,6 +506,12 @@ async function entregarAoPedidoDestino(api, {
     .find(r => String(r.pedido_item_id) === String(alvo.id));
 
   if (reserva) {
+    // Substituir produção do zero REDUZ esta reserva: é ela que a auditoria
+    // aponta como "o que foi substituído" quando não há peça a liberar.
+    if (tipoDestinoSubstituido === 'producao_zero') {
+      auditoria.reservaIdSubstituida = reserva.id ?? null;
+    }
+
     let parciais = 0;
     for (const reg of (Array.isArray(extAtual) ? extAtual : [])) {
       const p = rota.find(x => Number(x.passo_id) === Number(reg.ultimo_insumo_id)) || null;
@@ -478,15 +526,23 @@ async function entregarAoPedidoDestino(api, {
     // Zero não é permitido pela constraint — e faz sentido: uma reserva que
     // não vale mais está ENCERRADA, não vazia. O status diz isso; apagar a
     // quantidade apagaria o que chegou a ser prometido.
+    //
+    // `quantidade_original` guarda o que foi PROMETIDO. Ela é gravada na
+    // criação da reserva; aqui só se preenche o que ficou para trás, porque
+    // reduzir sem ter o original transforma "cinco peças, restou uma" em
+    // "sempre foi uma".
     const payload = doZeroNovo > 0
       ? { quantidade: doZeroNovo }
       : { status: RESERVA.RETORNADA };
+    if (reserva.quantidade_original === null || reserva.quantidade_original === undefined) {
+      payload.quantidade_original = paraNumero(reserva.quantidade);
+    }
 
     await api.put(`/api/reservas_estoque/${reserva.id}`, payload)
       .catch(err => avisos.push(`Falha ao ajustar a reserva do ${rotuloDestino}: ${err?.message || err}`));
   }
 
-  const movimentoId = await registrarMovimento(api, {
+  auditoria.movimentoId = await registrarMovimento(api, {
     tipoMovimento: MOV.TRANSFERENCIA,
     tipoItem: ITEM.PECA,
     itemId: produtoId,
@@ -495,12 +551,221 @@ async function entregarAoPedidoDestino(api, {
     pedidoItemId: alvo.id,
     loteId: loteOrigem ?? null,
     ultimoInsumoId: passo?.insumo_id ?? null,
+    // O par saída/entrada deixa de depender de data e texto para ser
+    // reconhecido: a entrada aponta para a saída que a causou.
+    movimentoOrigemId: movimentoOrigemId ?? null,
     nota: `Recebida por realocação do ${rotuloOrigem} no ponto ${ordemDestino} da rota`,
     usuarioId
   }, avisos);
 
-  return { pedidoItemId: alvo.id, movimentoId };
+  return auditoria;
 }
+
+/**
+ * Uma linha em `cancelamento_destinacoes`.
+ *
+ * TODA decisão do cancelamento passa por aqui — inclusive as que falharam, com
+ * o motivo em `falha`. É a única fonte que responde "o que foi feito com cada
+ * peça deste pedido" sem cruzar movimento, lote e texto livre; e é ela que
+ * distingue um descarte de um retorno ao estoque, que no razão de estoque
+ * produzem movimentos parecidos.
+ *
+ * Como todo registro do razão, não derruba a operação: falhar em anotar não
+ * pode desfazer o que já foi feito.
+ */
+async function registrarDestinacao(api, dados, avisos) {
+  try {
+    const criado = await api.post('/api/cancelamento_destinacoes', {
+      pedido_id: dados.pedidoId,
+      pedido_item_id: dados.pedidoItemId ?? null,
+      produto_id: dados.produtoId ?? null,
+      tipo_destino: dados.tipoDestino,
+      quantidade: dados.quantidade,
+      ordem_origem: dados.ordemOrigem ?? null,
+      ultimo_insumo_id: dados.passoOrigemId ?? null,
+      lote_id_origem: dados.loteOrigem ?? null,
+      ordem_destino: dados.ordemDestino ?? null,
+      lote_id_destino: dados.loteDestino ?? null,
+      pedido_id_destino: dados.pedidoDestino ?? null,
+      realocacao_id: dados.realocacaoId ?? null,
+      movimento_id: dados.movimentoId ?? null,
+      falha: dados.falha ?? null,
+      created_at: new Date().toISOString(),
+      created_by: dados.usuarioId ?? null
+    });
+    return criado?.id ?? criado?.[0]?.id ?? null;
+  } catch (err) {
+    avisos.push(`Falha ao registrar a destinação do cancelamento: ${err?.message || err}`);
+    return null;
+  }
+}
+
+/**
+ * A substituição inteira em `realocacoes`, e o id dela de volta.
+ *
+ * O id importa: é ele que amarra o estorno de matéria-prima e o movimento da
+ * peça liberada a ESTA substituição. Com duas realocações para o mesmo pedido
+ * de destino, `pedido_id` sozinho não separa uma da outra.
+ */
+async function registrarRealocacao(api, dados, avisos) {
+  try {
+    const criado = await api.post('/api/realocacoes', {
+      movimento_id_origem: dados.movimentoOrigem ?? null,
+      pedido_id_destino: dados.pedidoDestino,
+      pedido_item_id_destino: dados.pedidoItemDestino ?? null,
+      movimento_id_destino: dados.movimentoDestino ?? null,
+      quantidade: dados.quantidade,
+      // De onde saiu.
+      pedido_id_origem: dados.pedidoOrigem,
+      pedido_item_id_origem: dados.pedidoItemOrigem ?? null,
+      // Estágio = a LINHA da rota (`produtos_insumos.id`), não o id do insumo:
+      // um insumo pode aparecer duas vezes na rota, o passo não.
+      ultimo_insumo_id_origem: dados.passoOrigemId ?? null,
+      lote_id_origem: dados.loteOrigem ?? null,
+      // O que foi substituído lá.
+      tipo_destino_substituido: dados.tipoDestinoSubstituido ?? null,
+      pedido_itens_ext_id_substituido: dados.extIdSubstituido ?? null,
+      ultimo_insumo_id_substituido: dados.passoIdSubstituido ?? null,
+      lote_id_substituido: dados.loteIdSubstituido ?? null,
+      movimento_id_peca_liberada: dados.movimentoPecaLiberada ?? null,
+      reserva_id_substituida: dados.reservaIdSubstituida ?? null,
+      created_at: new Date().toISOString(),
+      created_by: dados.usuarioId ?? null
+    });
+    return criado?.id ?? criado?.[0]?.id ?? null;
+  } catch (err) {
+    avisos.push(`Falha ao registrar a realocação para o ${dados.rotuloDestino}: ${err?.message || err}`);
+    return null;
+  }
+}
+
+/**
+ * O que DEIXOU de ser necessário entre duas fotos.
+ *
+ * Só diferença positiva: negativa significaria que o pedido passou a precisar
+ * de mais material, o que uma realocação nunca causa — e devolver um número
+ * negativo aumentaria o consumo em vez de estornar.
+ */
+function diferencaDeNecessidade(antes, depois) {
+  const porInsumo = new Map();
+  for (const [insumoId, quantidadeAntes] of antes.entries()) {
+    const diferenca = arredondar(quantidadeAntes - (depois.get(insumoId) || 0));
+    if (diferenca > 0) porInsumo.set(insumoId, diferenca);
+  }
+  return porInsumo;
+}
+
+/**
+ * Devolve insumos ao estoque de matéria-prima e deixa o rastro nos dois lugares.
+ *
+ * `realocacaoId` amarra a devolução à substituição que a causou: sem ele, duas
+ * realocações para o mesmo pedido de destino geram estornos que só podem ser
+ * separados por horário.
+ */
+async function devolverInsumos(api, {
+  porInsumo,
+  pedidoId,
+  realocacaoId = null,
+  nota,
+  usuarioId,
+  registrarEntradaInsumo,
+  resumo,
+  tiposQueVoltaram
+}, avisos) {
+  for (const [insumoId, quantidade] of porInsumo.entries()) {
+    if (!(quantidade > 0)) continue;
+    try {
+      if (typeof registrarEntradaInsumo === 'function') {
+        await registrarEntradaInsumo(insumoId, quantidade, usuarioId, {
+          origem: 'pedido',
+          pedidoId,
+          realocacaoId,
+          nota
+        });
+      }
+      await registrarMovimento(api, {
+        tipoMovimento: MOV.RETORNO_INSUMO,
+        tipoItem: ITEM.INSUMO,
+        itemId: insumoId,
+        quantidade,
+        pedidoId,
+        realocacaoId,
+        nota,
+        usuarioId
+      }, avisos);
+      resumo.insumosDevolvidos += 1;
+      tiposQueVoltaram.add(Number(insumoId));
+    } catch (err) {
+      avisos.push(`Falha ao devolver o insumo ${insumoId}: ${err?.message || err}`);
+    }
+  }
+}
+
+/**
+ * Confere as decisões contra o que o pedido REALMENTE tem, sem escrever nada.
+ *
+ * É a simulação exata do laço que executa: mesmos grupos, mesma ordem, mesmo
+ * consumo. Se sobrar decisão sem grupo, o cancelamento é recusado inteiro —
+ * antes, o excedente era ignorado com um aviso, e o pedido terminava cancelado
+ * com metade do estorno feito. Sem transação, recusar antes de escrever é a
+ * única forma de não deixar meio serviço gravado.
+ */
+function conferirDecisoes(preparados = []) {
+  const problemas = [];
+
+  for (const { item, decisoes, grupos } of preparados) {
+    const saldos = grupos.map(g => ({ ...g }));
+    const nome = item.nome || item.codigo || `peça ${item.id}`;
+
+    for (const decisao of decisoes) {
+      if (decisao.acao === 'reallocate'
+        && (decisao.pedidoDestino === null || decisao.pedidoDestino === undefined)) {
+        problemas.push(`A realocação de ${nome} não diz para qual pedido vai.`);
+        continue;
+      }
+
+      let aTratar = decisao.quantidade;
+      while (aTratar > 0) {
+        const grupo = decisao.grupo
+          ? saldos.find(g =>
+            g.restante > 0
+            && String(g.origem) === String(decisao.grupo.origem)
+            && Number(g.ordem_origem) === Number(decisao.grupo.ordem_origem)
+            && String(g.lote_id ?? '') === String(decisao.grupo.lote_id ?? ''))
+          : saldos.find(g => g.restante > 0);
+
+        if (!grupo) {
+          problemas.push(
+            `${nome}: foram destinadas ${arredondar(aTratar)} unidade(s) a mais do que o `
+            + 'pedido tem. Refaça a destinação desta peça.'
+          );
+          break;
+        }
+
+        const unidades = Math.min(grupo.restante, aTratar);
+        grupo.restante = arredondar(grupo.restante - unidades);
+        aTratar = arredondar(aTratar - unidades);
+      }
+    }
+  }
+
+  return problemas;
+}
+
+/** "9/15 — Tag de Papel" ou "produção do zero", para o histórico. */
+function rotuloDoEstagio(rota, ordem) {
+  const total = rota.length;
+  if (!(ordem > 0)) return 'produção do zero';
+  const passo = rota.find(p => p.ordem === ordem) || null;
+  return `${ordem}/${total} — ${passo?.insumo_nome || 'insumo'}`;
+}
+
+/** Como o grupo substituído no destino se chama por extenso. */
+const NOME_DO_TIPO_SUBSTITUIDO = {
+  pronta: 'uma peça pronta',
+  parcial: 'uma peça parcial',
+  producao_zero: 'uma produção do zero'
+};
 
 /** Decisões do modal, agrupadas por peça do pedido. */
 function agruparAcoes(acoes = []) {
@@ -615,20 +880,37 @@ async function estornarCancelamento(api, {
   /** insumo -> quantidade a devolver, somada e gravada uma vez só no fim. */
   const insumosAVoltar = new Map();
   /**
-   * pedido de destino -> necessidade de matéria-prima ANTES da realocação.
+   * pedido de destino -> necessidade de matéria-prima AGORA.
    *
-   * A devolução do destino é a DIFERENÇA entre esta foto e a necessidade
-   * depois — nunca "o material das peças recebidas". Ver `necessidadeDoPedido`.
-   * E é gravada no nome DELE, não deste pedido: quem deixou de produzir foi ele.
+   * A devolução do destino é a DIFERENÇA entre esta foto e a necessidade depois
+   * de cada substituição — nunca "o material das peças recebidas". Ver
+   * `necessidadeDoPedido`. E é gravada no nome DELE, não deste pedido: quem
+   * deixou de produzir foi ele.
+   *
+   * A foto é atualizada a cada substituição para que a devolução de cada uma
+   * possa ser gravada apontando para a realocação que a causou.
    */
-  const necessidadeAntes = new Map();
+  const necessidadeAtual = new Map();
   /** Tipos distintos de insumo que voltaram, para o histórico não dizer 30 onde há 15. */
   const tiposQueVoltaram = new Set();
+  /** Uma entrada por decisão executada, para o histórico do pedido cancelado. */
+  const destinacoesDoResumo = [];
+  /** pedido de destino -> o que ele recebeu, linha a linha, para o histórico dele. */
+  const linhasPorDestino = new Map();
 
   // Número do próprio pedido, para as mensagens não citarem o id cru.
   const cabecalho = await carregarPedidoDestino(api, pedidoId, cachePedidos);
   const rotuloDoPedido = cabecalho?.numero || `#${pedidoId}`;
 
+  // ------------------------------------------------------------------
+  // LEITURA E CONFERÊNCIA ANTES DE QUALQUER ESCRITA
+  //
+  // Não existe transação: cada linha é uma requisição HTTP própria, e falhar no
+  // meio deixa metade do estorno gravado sem ROLLBACK possível daqui. O que dá
+  // para fazer é conferir tudo antes — se a decisão não fecha com o que o
+  // pedido tem, nada é escrito e o pedido NÃO é cancelado.
+  // ------------------------------------------------------------------
+  const preparados = [];
   for (const item of listaItens) {
     const chave = String(item.id);
     const decisoes = porItem.get(chave);
@@ -636,17 +918,34 @@ async function estornarCancelamento(api, {
     // estoque "por padrão": é a escolha que o modal existe para capturar.
     if (!decisoes || !decisoes.length) continue;
 
-    const produtoId = Number(item.produto_id);
-    const rota = await carregarRota(api, produtoId, cacheRotas, insumos);
-    const ordemFinal = rota.length ? rota[rota.length - 1].ordem : 0;
-
-    const grupos = montarGrupos({
-      extDoItem: extPorItem.get(chave) || [],
-      reserva: reservaPorItem.get(chave),
+    const rota = await carregarRota(api, Number(item.produto_id), cacheRotas, insumos);
+    preparados.push({
+      item,
+      decisoes,
       rota,
-      item
+      produtoId: Number(item.produto_id),
+      ordemFinal: rota.length ? rota[rota.length - 1].ordem : 0,
+      grupos: montarGrupos({
+        extDoItem: extPorItem.get(chave) || [],
+        reserva: reservaPorItem.get(chave),
+        rota,
+        item
+      })
     });
+  }
 
+  const problemas = conferirDecisoes(preparados);
+  if (problemas.length) {
+    const erro = new Error(
+      'As decisões do cancelamento não fecham com o que o pedido tem: '
+      + problemas.join(' ')
+    );
+    erro.code = 'DECISOES_INVALIDAS';
+    erro.problemas = problemas;
+    throw erro;
+  }
+
+  for (const { item, decisoes, rota, produtoId, ordemFinal, grupos } of preparados) {
     for (const decisao of decisoes) {
       let aTratar = decisao.quantidade;
 
@@ -661,6 +960,8 @@ async function estornarCancelamento(api, {
             && String(g.lote_id ?? '') === String(decisao.grupo.lote_id ?? ''))
           : grupos.find(g => g.restante > 0);
 
+        // `conferirDecisoes` já rejeitou o excedente antes de qualquer escrita;
+        // se chegou aqui sem grupo, é defesa de última hora.
         if (!grupo) {
           avisos.push(
             `A peça ${item.id} recebeu decisão para ${arredondar(aTratar)} unidade(s) `
@@ -696,6 +997,19 @@ async function estornarCancelamento(api, {
         // colocaria a mesma unidade em dois lugares — foi o que inflou o
         // estoque em quatro peças no teste do PED22.
         // --------------------------------------------------------------
+        const passoDaOrigem = rota.find(p => p.ordem === grupo.ordem_origem) || null;
+        const nomeDaPeca = item.nome || item.codigo || `peça ${item.id}`;
+        const destinacaoBase = {
+          pedidoId,
+          pedidoItemId: item.id,
+          produtoId,
+          quantidade: unidades,
+          ordemOrigem: grupo.ordem_origem,
+          passoOrigemId: passoDaOrigem?.passo_id ?? null,
+          loteOrigem: grupo.lote_id ?? null,
+          usuarioId
+        };
+
         if (ordemDestino > 0 && decisao.acao !== 'reallocate') {
           const passoDestino = rota.find(p => p.ordem === ordemDestino)
             || rota[rota.length - 1]
@@ -714,8 +1028,16 @@ async function estornarCancelamento(api, {
             }).catch(err => avisos.push(`Falha ao devolver ao lote ${lote.id}: ${err?.message || err}`));
             lote.quantidade = nova;
 
-            await registrarMovimento(api, {
-              tipoMovimento: MOV.RETORNO,
+            // Descarte tem tipo PRÓPRIO. Retorno e descarte gravavam o mesmo
+            // `retorno_cancelamento` e viravam a mesma coisa no razão, mesmo
+            // sendo decisões diferentes. `tipoAlternativo` cobre quem ainda não
+            // rodou sql/novascolunas5.sql: o valor novo do enum ainda não
+            // existe lá, e perder o movimento seria pior que gravá-lo com o
+            // tipo antigo.
+            const ehDescarte = decisao.acao === 'discard';
+            const movimentoId = await registrarMovimento(api, {
+              tipoMovimento: ehDescarte ? MOV.DESCARTE : MOV.RETORNO,
+              tipoAlternativo: ehDescarte ? MOV.RETORNO : null,
               tipoItem: ITEM.PECA,
               itemId: produtoId,
               quantidade: unidades,
@@ -723,22 +1045,65 @@ async function estornarCancelamento(api, {
               pedidoItemId: item.id,
               loteId: lote.id,
               ultimoInsumoId: passoDestino?.insumo_id ?? null,
-              nota: decisao.acao === 'reallocate'
-                ? `Realocada para o pedido ${decisao.pedidoDestino}: voltou ao estoque no ponto ${ordemDestino} da rota`
+              nota: ehDescarte
+                ? `Cancelamento: descartada e restaurada no lote de origem (ponto ${ordemDestino} da rota)`
                 : `Cancelamento: devolvida ao estoque no ponto ${ordemDestino} da rota`,
               usuarioId
             }, avisos);
 
+            await registrarDestinacao(api, {
+              ...destinacaoBase,
+              tipoDestino: ehDescarte ? 'descarte_restaura_lote' : 'retorno_estoque',
+              ordemDestino,
+              loteDestino: lote.id ?? null,
+              movimentoId
+            }, avisos);
+
             // "Descartar" devolve ao lote de ORIGEM; "retornar ao estoque"
             // devolve no ponto escolhido. São coisas diferentes no histórico.
-            if (decisao.acao === 'discard') {
+            if (ehDescarte) {
               resumo.pecasRestauradasNoLote = arredondar(resumo.pecasRestauradasNoLote + unidades);
+              destinacoesDoResumo.push({
+                unidades,
+                texto: `${nomeDaPeca} descartada(s) e restaurada(s) no lote de origem `
+                  + `(${rotuloDoEstagio(rota, ordemDestino)})`
+              });
             } else {
               resumo.pecasAoEstoque = arredondar(resumo.pecasAoEstoque + unidades);
+              const veioDe = rotuloDoEstagio(rota, grupo.ordem_origem);
+              const foiPara = rotuloDoEstagio(rota, ordemDestino);
+              destinacoesDoResumo.push({
+                unidades,
+                texto: `${nomeDaPeca} devolvida(s) ao estoque em ${foiPara}`
+                  + (veioDe === foiPara ? '' : ` (estavam em ${veioDe})`)
+              });
             }
+          } else {
+            // Sem lote, a peça não entrou em lugar nenhum. Um estorno que não
+            // aconteceu tem de deixar rastro: sem transação, é esta linha que
+            // diz depois o que precisa ser conferido à mão.
+            const motivo = `Não foi possível achar ou criar o lote do produto ${produtoId} `
+              + `no ponto ${ordemDestino} da rota: a peça não voltou ao estoque.`;
+            avisos.push(motivo);
+            await registrarDestinacao(api, {
+              ...destinacaoBase,
+              tipoDestino: decisao.acao === 'discard' ? 'descarte_restaura_lote' : 'retorno_estoque',
+              ordemDestino,
+              falha: motivo
+            }, avisos);
           }
         } else if (decisao.acao !== 'reallocate') {
           resumo.pecasNaoDevolvidas = arredondar(resumo.pecasNaoDevolvidas + unidades);
+          await registrarDestinacao(api, {
+            ...destinacaoBase,
+            tipoDestino: 'nao_retorna_produto',
+            ordemDestino: 0
+          }, avisos);
+          destinacoesDoResumo.push({
+            unidades,
+            texto: `${nomeDaPeca} não retornaram como produto (seriam produzidas do zero); `
+              + 'todo o material voltou à matéria-prima'
+          });
         }
 
         // --------------------------------------------------------------
@@ -770,14 +1135,21 @@ async function estornarCancelamento(api, {
           const destino = await carregarPedidoDestino(api, decisao.pedidoDestino, cachePedidos);
           const rotuloDestino = destino?.numero || `#${decisao.pedidoDestino}`;
 
-          // Necessidade do destino ANTES de qualquer mudança. A devolução dele
-          // é a diferença entre esta foto e a de depois — ver `necessidadeDoPedido`.
-          if (!necessidadeAntes.has(decisao.pedidoDestino)) {
-            necessidadeAntes.set(
+          // Necessidade do destino ANTES desta substituição. A devolução dele é
+          // a diferença entre esta foto e a de depois — ver `necessidadeDoPedido`.
+          //
+          // A foto é tirada POR SUBSTITUIÇÃO, não uma vez por pedido: com duas
+          // realocações para o mesmo destino, uma única diferença no fim diria
+          // o total certo e não diria de qual das duas ele veio. As diferenças
+          // se encaixam (o "depois" de uma é o "antes" da seguinte), então o
+          // total continua exatamente o mesmo.
+          if (!necessidadeAtual.has(decisao.pedidoDestino)) {
+            necessidadeAtual.set(
               decisao.pedidoDestino,
               await necessidadeDoPedido(api, decisao.pedidoDestino, cacheRotas, insumos)
             );
           }
+          const antes = necessidadeAtual.get(decisao.pedidoDestino);
 
           const movimentoId = await registrarMovimento(api, {
             tipoMovimento: MOV.TRANSFERENCIA,
@@ -788,6 +1160,8 @@ async function estornarCancelamento(api, {
             pedidoItemId: item.id,
             loteId: grupo.lote_id ?? null,
             ultimoInsumoId: rota.find(p => p.ordem === ordemDestino)?.insumo_id ?? null,
+            // Para onde foi, na própria linha do movimento.
+            transferParaPedidoId: decisao.pedidoDestino,
             // O NÚMERO do pedido, não o id: "realocada para o pedido 63" não diz
             // nada a quem conhece o pedido como PED17.
             nota: `Realocada para o ${rotuloDestino} no ponto ${ordemDestino} da rota`,
@@ -806,24 +1180,85 @@ async function estornarCancelamento(api, {
             rotuloOrigem: rotuloDoPedido,
             pedidoItemDestino: decisao.pedidoItemDestino,
             grupoDestino: decisao.grupoDestino,
+            movimentoOrigemId: movimentoId,
             cacheLotes,
             usuarioId
           }, avisos);
 
-          await api.post('/api/realocacoes', {
-            movimento_id_origem: movimentoId,
-            pedido_id_destino: decisao.pedidoDestino,
+          const realocacaoId = await registrarRealocacao(api, {
+            movimentoOrigem: movimentoId,
+            pedidoDestino: decisao.pedidoDestino,
+            rotuloDestino,
             // Sem estes dois, o vínculo fica pela metade: dá para ver que saiu,
             // não para onde entrou nem em qual peça do outro pedido.
-            pedido_item_id_destino: recebido?.pedidoItemId ?? null,
-            movimento_id_destino: recebido?.movimentoId ?? null,
-            created_at: new Date().toISOString(),
-            created_by: usuarioId
-          }).catch(err => avisos.push(
-            `Falha ao registrar a realocação para o ${rotuloDestino}: ${err?.message || err}`
-          ));
+            pedidoItemDestino: recebido?.pedidoItemId ?? null,
+            movimentoDestino: recebido?.movimentoId ?? null,
+            quantidade: unidades,
+            pedidoOrigem: pedidoId,
+            pedidoItemOrigem: item.id,
+            passoOrigemId: passoDaOrigem?.passo_id ?? null,
+            loteOrigem: grupo.lote_id ?? null,
+            tipoDestinoSubstituido: recebido?.tipoDestinoSubstituido ?? null,
+            extIdSubstituido: recebido?.extIdSubstituido ?? null,
+            passoIdSubstituido: recebido?.passoIdSubstituido ?? null,
+            loteIdSubstituido: recebido?.loteIdSubstituido ?? null,
+            movimentoPecaLiberada: recebido?.movimentoPecaLiberada ?? null,
+            reservaIdSubstituida: recebido?.reservaIdSubstituida ?? null,
+            usuarioId
+          }, avisos);
+
+          await registrarDestinacao(api, {
+            ...destinacaoBase,
+            tipoDestino: 'realocacao',
+            ordemDestino,
+            pedidoDestino: decisao.pedidoDestino,
+            realocacaoId,
+            movimentoId,
+            // A peça saiu daqui de qualquer jeito; se o outro lado não pôde ser
+            // atualizado, é isto que aponta onde conferir.
+            falha: recebido?.pedidoItemId
+              ? null
+              : `O ${rotuloDestino} não recebeu a peça na composição dele.`
+          }, avisos);
+
+          // A matéria-prima que o destino deixou de precisar POR CAUSA DESTA
+          // substituição, gravada já ligada a ela.
+          const depois = await necessidadeDoPedido(api, decisao.pedidoDestino, cacheRotas, insumos);
+          await devolverInsumos(api, {
+            porInsumo: diferencaDeNecessidade(antes, depois),
+            pedidoId: decisao.pedidoDestino,
+            realocacaoId,
+            nota: `Devolvido: substituição de ${NOME_DO_TIPO_SUBSTITUIDO[recebido?.tipoDestinoSubstituido] || 'uma peça'} `
+              + `por peça recebida do ${rotuloDoPedido}`,
+            usuarioId,
+            registrarEntradaInsumo,
+            resumo,
+            tiposQueVoltaram
+          }, avisos);
+          necessidadeAtual.set(decisao.pedidoDestino, depois);
 
           resumo.pecasRealocadas = arredondar(resumo.pecasRealocadas + unidades);
+
+          const estagioEnviado = rotuloDoEstagio(rota, ordemDestino);
+          const substituiu = NOME_DO_TIPO_SUBSTITUIDO[recebido?.tipoDestinoSubstituido]
+            || 'uma peça do pedido de destino';
+
+          destinacoesDoResumo.push({
+            unidades,
+            texto: `${nomeDaPeca} em ${estagioEnviado} realocada(s) para o ${rotuloDestino}, `
+              + `substituindo ${substituiu}`
+          });
+
+          if (!linhasPorDestino.has(decisao.pedidoDestino)) {
+            linhasPorDestino.set(decisao.pedidoDestino, { rotulo: rotuloDestino, linhas: [] });
+          }
+          linhasPorDestino.get(decisao.pedidoDestino).linhas.push({
+            unidades,
+            pecaNome: nomeDaPeca,
+            estagioEnviado,
+            substituiu: recebido?.tipoDestinoSubstituido ?? null,
+            liberou: Boolean(recebido?.movimentoPecaLiberada)
+          });
         }
       }
     }
@@ -836,85 +1271,41 @@ async function estornarCancelamento(api, {
   // registra ALTERAÇÕES DE SALDO, e cinco linhas de "voltou 2" para o mesmo
   // insumo no mesmo instante contam a mesma história pior.
   // ------------------------------------------------------------------
-  for (const [insumoId, quantidade] of insumosAVoltar.entries()) {
-    if (!(quantidade > 0)) continue;
-    try {
-      if (typeof registrarEntradaInsumo === 'function') {
-        await registrarEntradaInsumo(insumoId, quantidade, usuarioId, {
-          origem: 'pedido',
-          pedidoId,
-          nota: 'Devolvido no cancelamento do pedido'
-        });
-      }
-      await registrarMovimento(api, {
-        tipoMovimento: MOV.RETORNO_INSUMO,
-        tipoItem: ITEM.INSUMO,
-        itemId: insumoId,
-        quantidade,
-        pedidoId,
-        nota: 'Devolvido no cancelamento do pedido',
-        usuarioId
-      }, avisos);
-      resumo.insumosDevolvidos += 1;
-      tiposQueVoltaram.add(Number(insumoId));
-    } catch (err) {
-      avisos.push(`Falha ao devolver o insumo ${insumoId}: ${err?.message || err}`);
-    }
-  }
+  await devolverInsumos(api, {
+    porInsumo: insumosAVoltar,
+    pedidoId,
+    nota: 'Devolvido no cancelamento do pedido',
+    usuarioId,
+    registrarEntradaInsumo,
+    resumo,
+    tiposQueVoltaram
+  }, avisos);
 
   // ------------------------------------------------------------------
-  // A matéria-prima que o PEDIDO DE DESTINO deixou de precisar
+  // O histórico de cada pedido de DESTINO
   //
-  // Vai no nome DELE, não no deste pedido: quem deixou de produzir aquele
-  // trecho foi ele. No histórico do insumo a devolução aparece ligada ao
-  // pedido que a causou, que é o que uma auditoria precisa responder.
+  // "Recebeu peça(s) por realocação do PEDxx" não permite auditar nada: não diz
+  // quantas, em que estágio chegaram, o que substituíram, nem se alguma peça de
+  // lá foi liberada. Cada substituição vira uma linha.
+  //
+  // A matéria-prima destes pedidos já foi devolvida acima, uma devolução por
+  // substituição, ligada à realocação que a causou.
   // ------------------------------------------------------------------
-  for (const [pedidoDestino, antes] of necessidadeAntes.entries()) {
-    const destino = await carregarPedidoDestino(api, pedidoDestino, cachePedidos);
-    const rotulo = destino?.numero || `#${pedidoDestino}`;
-
-    // A composição do destino já foi alterada acima; esta é a foto de depois.
-    const depois = await necessidadeDoPedido(api, pedidoDestino, cacheRotas, insumos);
-
-    const porInsumo = new Map();
-    for (const [insumoId, quantidadeAntes] of antes.entries()) {
-      const diferenca = arredondar(quantidadeAntes - (depois.get(insumoId) || 0));
-      // Só o que DEIXOU de ser necessário. Diferença negativa significaria que
-      // o pedido passou a precisar de mais — o que a realocação nunca causa.
-      if (diferenca > 0) porInsumo.set(insumoId, diferenca);
-    }
-
-    for (const [insumoId, quantidade] of porInsumo.entries()) {
-      if (!(quantidade > 0)) continue;
-      try {
-        if (typeof registrarEntradaInsumo === 'function') {
-          await registrarEntradaInsumo(insumoId, quantidade, usuarioId, {
-            origem: 'pedido',
-            pedidoId: pedidoDestino,
-            nota: `Devolvido: peça recebida por realocação do ${rotuloDoPedido}`
-          });
-        }
-        await registrarMovimento(api, {
-          tipoMovimento: MOV.RETORNO_INSUMO,
-          tipoItem: ITEM.INSUMO,
-          itemId: insumoId,
-          quantidade,
-          pedidoId: pedidoDestino,
-          nota: `Devolvido: peça recebida por realocação do ${rotuloDoPedido}`,
-          usuarioId
-        }, avisos);
-        resumo.insumosDevolvidos += 1;
-        tiposQueVoltaram.add(Number(insumoId));
-      } catch (err) {
-        avisos.push(`Falha ao devolver o insumo ${insumoId} do ${rotulo}: ${err?.message || err}`);
-      }
-    }
+  for (const [pedidoDestino, { rotulo, linhas }] of linhasPorDestino.entries()) {
+    const total = arredondar(linhas.reduce((soma, l) => soma + l.unidades, 0));
+    const detalhes = linhas.map(l => {
+      const substituiu = NOME_DO_TIPO_SUBSTITUIDO[l.substituiu] || 'uma peça do pedido';
+      const liberada = l.liberou ? ', liberada ao lote de origem' : '';
+      return `- ${arredondar(l.unidades)} × ${l.pecaNome} em ${l.estagioEnviado} `
+        + `substituindo ${substituiu}${liberada};`;
+    });
 
     await registrarEventoDoPedido(api, {
       pedidoId: pedidoDestino,
       tipoEvento: EVENTO.REALOCACAO,
-      descricao: `Recebeu peça(s) por realocação do ${rotuloDoPedido}. `
-        + 'Os insumos que deixaram de ser necessários voltaram à matéria-prima.',
+      descricao: `${rotulo} recebeu ${total} peça(s) do ${rotuloDoPedido}:\n`
+        + `${detalhes.join('\n')}\n`
+        + 'Os insumos que deixaram de ser necessários foram devolvidos à matéria-prima.',
       usuarioId
     }, avisos);
   }
@@ -926,6 +1317,18 @@ async function estornarCancelamento(api, {
   );
 
   resumo.tiposDeInsumo = tiposQueVoltaram.size;
+
+  // O que aconteceu com cada peça, em português, para o histórico do pedido
+  // cancelado. Decisões iguais são somadas numa linha só — quatro peças para o
+  // mesmo destino no mesmo estágio são "4 × ...", não quatro linhas iguais.
+  const porTexto = new Map();
+  for (const destinacao of destinacoesDoResumo) {
+    const atual = porTexto.get(destinacao.texto) || 0;
+    porTexto.set(destinacao.texto, arredondar(atual + destinacao.unidades));
+  }
+  resumo.detalhes = Array.from(porTexto.entries())
+    .map(([texto, unidades]) => `${unidades} × ${texto}`);
+
   return { resumo, avisos };
 }
 

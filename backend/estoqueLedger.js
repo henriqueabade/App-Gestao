@@ -46,6 +46,15 @@ const MOV = {
   /** Peça devolvida ao estoque por cancelamento. */
   RETORNO: 'retorno_cancelamento',
   RETORNO_INSUMO: 'retorno_cancelamento',
+  /**
+   * Peça DESCARTADA no cancelamento — volta ao lote de origem como estava.
+   *
+   * Retorno e descarte são decisões diferentes e produziam o mesmo tipo de
+   * movimento, o que tornava as duas indistinguíveis depois. O valor é novo no
+   * enum (sql/novascolunas5.sql); quem ainda não rodou o SQL cai de volta em
+   * `retorno_cancelamento` — ver `tipoAlternativo` em `registrarMovimento`.
+   */
+  DESCARTE: 'descarte_cancelamento',
   RESERVA: 'reserva',
   TRANSFERENCIA: 'transferencia',
   CANCELAMENTO: 'cancelamento',
@@ -100,17 +109,28 @@ async function registrarMovimento(api, {
   reservaId = null,
   movimentoOrigemId = null,
   estornoDeMovimentoId = null,
+  transferParaPedidoId = null,
+  realocacaoId = null,
   saldoNegativoAutorizado = null,
   nota = null,
-  usuarioId = null
+  usuarioId = null,
+  /**
+   * Tipo a usar se o banco recusar o primeiro.
+   *
+   * Existe por um motivo só: `descarte_cancelamento` é um valor NOVO do enum, e
+   * o SQL que o cria pode não ter rodado ainda. Sem a segunda tentativa, quem
+   * atualizasse o app antes do banco perderia o movimento inteiro — pior que
+   * gravá-lo com o tipo antigo.
+   */
+  tipoAlternativo = null
 } = {}, avisos = []) {
   if (!tipoMovimento || itemId === null || itemId === undefined) return null;
   const qtd = paraNumero(quantidade);
   if (!(qtd > 0)) return null;
 
-  try {
+  const gravar = async tipo => {
     const criado = await api.post('/api/estoque_movimentos', {
-      tipo_movimento: tipoMovimento,
+      tipo_movimento: tipo,
       tipo_item: tipoItem,
       item_id: itemId,
       quantidade: qtd,
@@ -121,13 +141,27 @@ async function registrarMovimento(api, {
       reserva_id: reservaId,
       source_movement_id: movimentoOrigemId,
       reversal_of_movement_id: estornoDeMovimentoId,
+      transfer_to_pedido_id: transferParaPedidoId,
+      realocacao_id: realocacaoId,
       saldo_negativo_autorizado: saldoNegativoAutorizado,
       decision_note: nota,
       created_at: new Date().toISOString(),
       created_by: usuarioId
     });
     return criado?.id ?? criado?.[0]?.id ?? null;
+  };
+
+  try {
+    return await gravar(tipoMovimento);
   } catch (err) {
+    if (tipoAlternativo && tipoAlternativo !== tipoMovimento) {
+      try {
+        return await gravar(tipoAlternativo);
+      } catch (err2) {
+        avisos.push(`Falha ao registrar movimento de estoque (${tipoAlternativo}): ${err2?.message || err2}`);
+        return null;
+      }
+    }
     avisos.push(`Falha ao registrar movimento de estoque (${tipoMovimento}): ${err?.message || err}`);
     return null;
   }
@@ -245,6 +279,10 @@ async function registrarReservaDeProducao(api, {
       item_id: produtoId,
       ultimo_insumo_id: ultimoInsumoId,
       quantidade: qtd,
+      // O que foi PROMETIDO, que não muda mais. `quantidade` é o saldo e
+      // diminui a cada substituição; sem guardar o original, uma reserva de
+      // cinco peças que sobrou com uma some com a história do plano.
+      quantidade_original: qtd,
       status: RESERVA.PRODUCAO,
       created_at: new Date().toISOString(),
       created_by: usuarioId

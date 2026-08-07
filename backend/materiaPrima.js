@@ -345,14 +345,16 @@ async function registrarMovimentacao({
   precoAtual = null,
   usuarioId = null,
   pedidoId = null,
+  realocacaoId = null,
   observacao = null
 }) {
   if (!insumoId || !tipo) return;
   try {
-    // `pedido_id` e `observacao` só existem depois de sql/novascolunas4.sql. A
-    // API monta o INSERT a partir das colunas que a tabela realmente tem e
-    // ignora o resto, então mandar antes da hora não quebra nada — passa a
-    // gravar sozinho quando as colunas existirem (e a API for reiniciada).
+    // `pedido_id` e `observacao` só existem depois de sql/novascolunas4.sql, e
+    // `realocacao_id` depois de sql/novascolunas5.sql. A API monta o INSERT a
+    // partir das colunas que a tabela realmente tem e ignora o resto, então
+    // mandar antes da hora não quebra nada — passa a gravar sozinho quando as
+    // colunas existirem (e a API for reiniciada).
     await pool.post('/materia_prima_movimentacoes', {
       insumo_id: insumoId,
       tipo,
@@ -363,6 +365,9 @@ async function registrarMovimentacao({
       preco_atual: precoAtual,
       usuario_id: usuarioId,
       pedido_id: pedidoId,
+      // Qual SUBSTITUIÇÃO devolveu este insumo. Com duas realocações para o
+      // mesmo pedido de destino, `pedido_id` sozinho não separa os estornos.
+      realocacao_id: realocacaoId,
       observacao,
       criado_em: new Date().toISOString()
     });
@@ -398,6 +403,7 @@ async function registrarEntrada(id, quantidadeBruta, usuarioId = null, contexto 
     quantidadeAtual,
     usuarioId,
     pedidoId: contexto?.pedidoId ?? null,
+    realocacaoId: contexto?.realocacaoId ?? null,
     observacao: contexto?.nota ?? null
   });
 

@@ -2262,7 +2262,15 @@
         body: JSON.stringify({ status: 'Cancelado', acoes: actions })
       });
       const corpo = await resp.json().catch(() => null);
-      if (!resp.ok) throw new Error(corpo?.detalhe || corpo?.error || 'Falha ao cancelar pedido');
+      if (!resp.ok) {
+        // Decisão que não fecha com o pedido: NADA foi gravado e o pedido
+        // continua ativo. A lista de problemas diz o que refazer — mais útil
+        // que "erro ao cancelar".
+        if (corpo?.code === 'DECISOES_INVALIDAS' && Array.isArray(corpo.problemas) && corpo.problemas.length) {
+          throw new Error(`${corpo.problemas.join(' ')} Nada foi alterado.`);
+        }
+        throw new Error(corpo?.detalhe || corpo?.error || 'Falha ao cancelar pedido');
+      }
 
       // A tabela é atualizada ANTES do aviso: ler "cancelado" com o pedido
       // ainda em Produção faz o usuário concluir que não funcionou.

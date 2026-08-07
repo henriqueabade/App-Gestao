@@ -153,17 +153,9 @@
   const btnPecas = document.getElementById('verPecasRelatorio');
   const btnPecasTexto = document.getElementById('verPecasRelatorioTexto');
 
-  function tabelaDePecas(dados) {
-    const linhas = Array.isArray(dados?.pecas) ? dados.pecas : [];
-    if (!linhas.length) {
-      return `
-        <div class="py-16 px-6 text-center max-w-2xl mx-auto">
-          <i class="fas fa-cubes text-4xl text-gray-500 mb-4"></i>
-          <p class="text-gray-300 font-medium">Este pedido não tem peças registradas na conversão.</p>
-        </div>`;
-    }
-
-    const corpoTabela = linhas.map(l => {
+  /** As seis colunas da tabela de peças, para as duas versões da composição. */
+  function linhasDeComposicao(linhas) {
+    return linhas.map(l => {
       // "Faltam 0" numa peça acabada se lê como erro; melhor dizer que está
       // pronta e reservar o número para quem ainda tem rota pela frente.
       const falta = l.itens_faltantes > 0
@@ -181,6 +173,97 @@
           <td>${escapar(falta)}</td>
         </tr>`;
     }).join('');
+  }
+
+  function tabelaDeComposicao(titulo, linhas) {
+    return `
+        <table class="rp-tabela rp-tabela-larga">
+          <thead>
+            <tr class="rp-faixa-processo"><th colspan="6">${escapar(titulo)}</th></tr>
+            <tr class="rp-faixa-peca">
+              <th>Peça</th><th>Origem</th><th>Qtd.</th>
+              <th>Etapa</th><th>Parou no item</th><th>Itens para finalizar</th>
+            </tr>
+          </thead>
+          <tbody>${linhasDeComposicao(linhas)}</tbody>
+        </table>`;
+  }
+
+  /**
+   * O que este pedido RECEBEU depois da conversão.
+   *
+   * Sem esta seção o relatório mostra a composição atual como se fosse a
+   * original: uma peça que chegou de um pedido cancelado aparece como escolha
+   * da conversão, e o que ela substituiu não aparece em lugar nenhum.
+   */
+  function tabelaDeAlteracoes(alteracoes) {
+    if (!alteracoes.length) return '';
+    const corpo = alteracoes.map(a => `
+        <tr>
+          <td>${escapar(a.peca)}</td>
+          <td>${escapar(a.recebida)}</td>
+          <td>${escapar(formatarQuantidade(a.quantidade))}</td>
+          <td>${escapar(a.substituiu)}${a.liberou_peca ? ' <em>(devolvida ao estoque)</em>' : ''}</td>
+          <td>${escapar(a.origem)}</td>
+        </tr>`).join('');
+
+    return `
+        <table class="rp-tabela rp-tabela-larga">
+          <thead>
+            <tr class="rp-faixa-processo"><th colspan="5">Alterações posteriores — peças recebidas por realocação</th></tr>
+            <tr class="rp-faixa-peca">
+              <th>Peça</th><th>Recebida em</th><th>Qtd.</th><th>Substituiu</th><th>Origem</th>
+            </tr>
+          </thead>
+          <tbody>${corpo}</tbody>
+        </table>`;
+  }
+
+  /** O que foi feito com cada peça quando ESTE pedido foi cancelado. */
+  function tabelaDeDestinacoes(destinacoes) {
+    if (!destinacoes.length) return '';
+    const corpo = destinacoes.map(d => `
+        <tr>
+          <td>${escapar(d.peca)}</td>
+          <td>${escapar(d.rotulo)}</td>
+          <td>${escapar(formatarQuantidade(d.quantidade))}</td>
+          <td>${escapar(d.estagio_origem)}</td>
+          <td>${escapar(d.pedido_destino || '—')}</td>
+          <td>${d.falha ? `<strong>${escapar(d.falha)}</strong>` : 'OK'}</td>
+        </tr>`).join('');
+
+    return `
+        <table class="rp-tabela rp-tabela-larga">
+          <thead>
+            <tr class="rp-faixa-processo"><th colspan="6">Destinação no cancelamento</th></tr>
+            <tr class="rp-faixa-peca">
+              <th>Peça</th><th>Destino</th><th>Qtd.</th>
+              <th>Estágio de origem</th><th>Pedido de destino</th><th>Resultado</th>
+            </tr>
+          </thead>
+          <tbody>${corpo}</tbody>
+        </table>`;
+  }
+
+  function tabelaDePecas(dados) {
+    const linhas = Array.isArray(dados?.pecas) ? dados.pecas : [];
+    const original = Array.isArray(dados?.selecaoOriginal) ? dados.selecaoOriginal : [];
+    const alteracoes = Array.isArray(dados?.alteracoes) ? dados.alteracoes : [];
+    const destinacoes = Array.isArray(dados?.destinacoes) ? dados.destinacoes : [];
+
+    if (!linhas.length && !destinacoes.length) {
+      return `
+        <div class="py-16 px-6 text-center max-w-2xl mx-auto">
+          <i class="fas fa-cubes text-4xl text-gray-500 mb-4"></i>
+          <p class="text-gray-300 font-medium">Este pedido não tem peças registradas na conversão.</p>
+        </div>`;
+    }
+
+    // Três recortes, na ordem em que a história aconteceu: o que foi escolhido,
+    // o que mudou depois, e como o pedido ficou. Sem alteração, a primeira e a
+    // terceira seriam a mesma tabela — então só a atual aparece, com o título
+    // de sempre.
+    const houveAlteracao = alteracoes.length > 0 && original.length > 0;
 
     return `
       <section class="rp-folha">
@@ -192,16 +275,13 @@
           <div class="rp-processo-nome">PEÇAS</div>
         </header>
 
-        <table class="rp-tabela rp-tabela-larga">
-          <thead>
-            <tr class="rp-faixa-processo"><th colspan="6">Peças selecionadas na conversão</th></tr>
-            <tr class="rp-faixa-peca">
-              <th>Peça</th><th>Origem</th><th>Qtd.</th>
-              <th>Etapa</th><th>Parou no item</th><th>Itens para finalizar</th>
-            </tr>
-          </thead>
-          <tbody>${corpoTabela}</tbody>
-        </table>
+        ${houveAlteracao ? tabelaDeComposicao('Seleção original da conversão', original) : ''}
+        ${tabelaDeAlteracoes(alteracoes)}
+        ${tabelaDeComposicao(
+    houveAlteracao ? 'Composição atual' : 'Peças selecionadas na conversão',
+    linhas
+  )}
+        ${tabelaDeDestinacoes(destinacoes)}
       </section>`;
   }
 

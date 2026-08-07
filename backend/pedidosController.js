@@ -5,6 +5,11 @@ const { excluirPedidoEmCascata } = require('./exclusaoEmCascata');
 const { estornarCancelamento, opcoesDeEstorno } = require('./cancelamentoEstorno');
 const { registrarEntrada } = require('./materiaPrima');
 const {
+  alteracoesRecebidas,
+  reconstruirSelecaoOriginal,
+  destinacoesDoCancelamento
+} = require('./relatorioPecas');
+const {
   RESERVA,
   EVENTO,
   registrarEventoDoPedido,
@@ -96,28 +101,26 @@ router.put('/:id/status', exigirPermissao(permissaoDeStatus), async (req, res) =
       }
     }
 
-    const payload = payloadDeStatus(status);
-    await api.put(`/api/pedidos/${id}`, payload);
-
-    // ------------------------------------------------------------------
-    // Razão: o status do pedido move as reservas de produção.
-    //
-    // Enviado/Entregue = as peças reservadas foram produzidas e saíram, então a
-    // reserva encerra como "finalizado". Cancelado NÃO é tratado aqui: devolver
-    // peça ao estoque é operação própria, com decisão do usuário, e fazê-la de
-    // carona numa troca de status esconderia o que aconteceu.
-    // ------------------------------------------------------------------
     const avisos = [];
     let estorno = null;
 
-    if (status === 'Enviado' || status === 'Entregue') {
-      await atualizarStatusDasReservas(api, id, RESERVA.FINALIZADO, avisos);
-    }
-
-    // O cancelamento DESFAZ o que a conversão fez, peça a peça, conforme o que
-    // o usuário escolheu no modal (devolver, descartar ou realocar). Essas
-    // escolhas chegavam aqui e eram descartadas: o pedido virava "Cancelado" e
-    // nada voltava ao estoque.
+    // ------------------------------------------------------------------
+    // O ESTORNO VEM ANTES DE MARCAR O PEDIDO COMO CANCELADO.
+    //
+    // Não existe transação: cada linha do estorno é uma requisição própria ao
+    // CRUD da API, e não há BEGIN/COMMIT cobrindo o conjunto. Marcar o pedido
+    // primeiro significava que uma recusa (decisão que não fecha com o que o
+    // pedido tem) deixava o pedido cancelado e o estoque intacto.
+    //
+    // Invertida a ordem, o caso previsível fica coberto: `estornarCancelamento`
+    // confere tudo ANTES de escrever e recusa sem gravar nada — e o pedido
+    // continua ativo, do jeito que estava.
+    //
+    // O que continua sem solução daqui é a falha NO MEIO da gravação: sem
+    // transação não há ROLLBACK. O que se faz nesse caso é registrar (as falhas
+    // ficam em `cancelamento_destinacoes.falha` e nos avisos) e nunca dizer que
+    // deu certo.
+    // ------------------------------------------------------------------
     if (status === 'Cancelado') {
       try {
         const resultado = await estornarCancelamento(api, {
@@ -129,11 +132,38 @@ router.put('/:id/status', exigirPermissao(permissaoDeStatus), async (req, res) =
         estorno = resultado.resumo;
         avisos.push(...resultado.avisos);
       } catch (err) {
-        // O pedido JÁ está cancelado neste ponto. Derrubar a resposta faria o
-        // usuário tentar de novo e cancelar duas vezes; o erro vira aviso.
         console.error('Falha ao estornar o cancelamento:', err);
+        // Decisão que não fecha com o pedido: nada foi gravado e o pedido NÃO é
+        // cancelado. É erro do usuário (ou de uma tela desatualizada), com
+        // conserto óbvio — refazer a destinação.
+        if (err?.code === 'DECISOES_INVALIDAS') {
+          return res.status(422).json({
+            error: 'As decisões do cancelamento não fecham com o que o pedido tem.',
+            code: err.code,
+            problemas: err.problemas || [],
+            detalhe: err.message
+          });
+        }
+        // Qualquer outra falha: o estorno pode ter gravado parte. Não cancelar
+        // seria pior — as peças já saíram dos lotes. Cancela, e o aviso diz o
+        // que conferir.
         avisos.push(`Falha ao estornar o estoque: ${err?.message || err}`);
       }
+    }
+
+    const payload = payloadDeStatus(status);
+    await api.put(`/api/pedidos/${id}`, payload);
+
+    // ------------------------------------------------------------------
+    // Razão: o status do pedido move as reservas de produção.
+    //
+    // Enviado/Entregue = as peças reservadas foram produzidas e saíram, então a
+    // reserva encerra como "finalizado". Cancelado NÃO é tratado aqui: devolver
+    // peça ao estoque é operação própria, com decisão do usuário, e fazê-la de
+    // carona numa troca de status esconderia o que aconteceu.
+    // ------------------------------------------------------------------
+    if (status === 'Enviado' || status === 'Entregue') {
+      await atualizarStatusDasReservas(api, id, RESERVA.FINALIZADO, avisos);
     }
     const eventoPorStatus = {
       Enviado: EVENTO.ABATIMENTO,
@@ -160,6 +190,12 @@ router.put('/:id/status', exigirPermissao(permissaoDeStatus), async (req, res) =
             // realocação), e chamar 30 movimentos de "30 tipos" era falso.
             + `${estorno.tiposDeInsumo ?? 0} tipo(s) de insumo devolvido(s) `
             + `em ${estorno.insumosDevolvidos ?? 0} movimento(s) de estoque.`
+            // E o que foi feito com CADA peça. O parágrafo acima diz os totais;
+            // sem o detalhe, o histórico não permite conferir de onde eles
+            // vieram — que é justamente o que uma auditoria precisa.
+            + ((estorno.detalhes || []).length
+              ? `\nDestinação de cada peça:\n- ${estorno.detalhes.join('\n- ')}`
+              : '')
           : `Pedido marcado como ${status}.`,
         usuarioId: idDoUsuarioDaRequisicao(req)
       }, avisos);
@@ -598,10 +634,33 @@ router.get('/:id/pecas-selecionadas', exigirPermissao('ped.report'), async (req,
       }
     }
 
+    // ------------------------------------------------------------------
+    // O que MUDOU depois da conversão
+    //
+    // As linhas acima são a composição ATUAL. Sozinha, ela não conta que o
+    // pedido recebeu peças de um pedido cancelado, nem o que elas substituíram
+    // — e é exatamente essa parte que alguém precisa conferir depois. As duas
+    // seções abaixo são independentes: um pedido pode ter recebido peças
+    // (`alteracoes`) e/ou ter sido cancelado (`destinacoes`).
+    // ------------------------------------------------------------------
+    const [recebidas, destinacoes] = await Promise.all([
+      api.get('/api/realocacoes', { query: { pedido_id_destino: id } }).catch(() => []),
+      destinacoesDoCancelamento(api, id, rotaDoProduto, listaItens)
+    ]);
+    const alteracoes = await alteracoesRecebidas(api, recebidas, rotaDoProduto, listaItens);
+    // A seleção ORIGINAL só faz sentido quando houve alteração — sem ela seria
+    // uma segunda tabela idêntica à composição atual.
+    const selecaoOriginal = alteracoes.length
+      ? await reconstruirSelecaoOriginal(linhas, recebidas, rotaDoProduto, listaItens)
+      : [];
+
     res.json({
       pedido: { id: pedido.id, numero: pedido.numero, data_emissao: pedido.data_emissao },
       temItens: listaItens.length > 0,
-      pecas: linhas
+      pecas: linhas,
+      selecaoOriginal,
+      alteracoes,
+      destinacoes
     });
   } catch (err) {
     console.error('Erro ao listar as peças selecionadas:', err);

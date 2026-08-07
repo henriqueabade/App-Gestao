@@ -40,9 +40,10 @@ function montarApi({ ext = [], reserva = 0, lotes = {}, qtdAProduzir = null, des
   const estado = { ...lotes };
   const gravacoes = {
     movimentos: [], realocacoes: [], lotesNovos: [], reservas: [],
-    extDestino: [], eventos: [], itensAtualizados: []
+    extDestino: [], eventos: [], itensAtualizados: [], destinacoes: []
   };
   let proximoLote = 900;
+  let proximaRealocacao = 8000;
 
   return {
     lotes: estado,
@@ -118,8 +119,15 @@ function montarApi({ ext = [], reserva = 0, lotes = {}, qtdAProduzir = null, des
         return { id: 7000 + gravacoes.movimentos.length };
       }
       if (rota === '/api/realocacoes') {
-        gravacoes.realocacoes.push(payload);
-        return { id: 8000 };
+        // Id próprio por realocação: é ele que amarra o estorno de insumo à
+        // substituição, e um id fixo esconderia a troca entre duas.
+        proximaRealocacao += 1;
+        gravacoes.realocacoes.push({ id: proximaRealocacao, ...payload });
+        return { id: proximaRealocacao };
+      }
+      if (rota === '/api/cancelamento_destinacoes') {
+        gravacoes.destinacoes.push(payload);
+        return { id: 8500 + gravacoes.destinacoes.length };
       }
       if (rota === '/api/pedido_itens_ext') {
         gravacoes.extDestino.push(payload);
@@ -147,22 +155,37 @@ function coletorDeInsumos() {
   // Por pedido: a devolução do DESTINO de uma realocação é dele, não do pedido
   // cancelado — e o histórico do insumo tem de atribuí-la a quem a causou.
   const porPedidoMap = new Map();
+  // Por realocação: com duas substituições no MESMO pedido de destino, só o id
+  // da realocação separa um estorno do outro.
+  const porRealocacaoMap = new Map();
+  const chamadas = [];
 
   const fn = async (insumoId, quantidade, _usuarioId, contexto = {}) => {
     const id = Number(insumoId);
     devolvidos.set(id, (devolvidos.get(id) || 0) + Number(quantidade));
+    chamadas.push({ insumoId: id, quantidade: Number(quantidade), ...contexto });
 
     const pedido = Number(contexto?.pedidoId);
     if (!porPedidoMap.has(pedido)) porPedidoMap.set(pedido, new Map());
     const doPedido = porPedidoMap.get(pedido);
     doPedido.set(id, (doPedido.get(id) || 0) + Number(quantidade));
+
+    const realocacao = contexto?.realocacaoId ?? null;
+    if (realocacao !== null && realocacao !== undefined) {
+      if (!porRealocacaoMap.has(realocacao)) porRealocacaoMap.set(realocacao, new Map());
+      const daRealocacao = porRealocacaoMap.get(realocacao);
+      daRealocacao.set(id, (daRealocacao.get(id) || 0) + Number(quantidade));
+    }
   };
 
   return {
     devolvidos,
+    chamadas,
     fn,
     de: ordem => devolvidos.get(passoDaOrdem(ordem).insumo_id) || 0,
-    porPedido: pedidoId => porPedidoMap.get(Number(pedidoId)) || new Map()
+    porPedido: pedidoId => porPedidoMap.get(Number(pedidoId)) || new Map(),
+    porRealocacao: realocacaoId => porRealocacaoMap.get(realocacaoId) || new Map(),
+    realocacoesUsadas: () => Array.from(porRealocacaoMap.keys())
   };
 }
 
@@ -570,19 +593,25 @@ test('o mesmo item pode ser devolvido em pontos diferentes, até cobrir tudo', a
   assert.equal(api.gravacoes.lotesNovos.length, 2, 'um lote no ponto 15 e outro no 10');
 });
 
-test('decisão além do que o pedido tinha é ignorada, com aviso', async () => {
+test('decisão além do que o pedido tinha é RECUSADA antes de gravar', async () => {
+  // A regra mudou de propósito: antes o excedente era ignorado com um aviso, e
+  // o pedido terminava cancelado com o estorno pela metade. Sem transação, meio
+  // serviço gravado é exatamente o que não pode acontecer — a conferência é
+  // feita antes da primeira escrita e o cancelamento inteiro é recusado.
   const api = montarApi({ reserva: 1 });
   const ins = coletorDeInsumos();
 
-  const { avisos, resumo } = await estornarCancelamento(api, {
-    pedidoId: 99,
-    acoes: [{ item: { id: 1000 }, action: 'discard', quantity: 5 }],
-    registrarEntradaInsumo: ins.fn
-  });
+  await assert.rejects(
+    () => estornarCancelamento(api, {
+      pedidoId: 99,
+      acoes: [{ item: { id: 1000 }, action: 'discard', quantity: 5 }],
+      registrarEntradaInsumo: ins.fn
+    }),
+    err => err.code === 'DECISOES_INVALIDAS' && /a mais do que o pedido tem/.test(err.message)
+  );
 
-  assert.equal(ins.de(1), 1, 'só 1 unidade existia: devolver 5 inventaria material');
-  assert.equal(resumo.pecasNaoDevolvidas, 1);
-  assert.ok(avisos.some(a => /além do que o pedido tinha/.test(a)));
+  assert.equal(ins.devolvidos.size, 0, 'nenhum insumo devolvido');
+  assert.equal(api.gravacoes.movimentos.length, 0, 'e nenhum movimento gravado');
 });
 
 test('sem decisão do usuário, nada é mexido', async () => {
@@ -731,21 +760,26 @@ test('destinos que somam mais que o grupo não inventam peças', async () => {
   });
   const ins = coletorDeInsumos();
 
-  const { resumo, avisos } = await estornarCancelamento(api, {
-    pedidoId: 99,
-    acoes: [
-      { item: { id: 1000 }, action: 'stock', quantity: 4, ordem: 15,
-        grupo: { origem: 'estoque', ordem_origem: 7, lote_id: 503 } },
-      // A tela impede, mas se passar (duas abas, payload adulterado) o backend
-      // não pode devolver 8 peças de um grupo que tinha 4.
-      { item: { id: 1000 }, action: 'stock', quantity: 4, ordem: 10,
-        grupo: { origem: 'estoque', ordem_origem: 7, lote_id: 503 } }
-    ],
-    registrarEntradaInsumo: ins.fn
-  });
+  await assert.rejects(
+    () => estornarCancelamento(api, {
+      pedidoId: 99,
+      acoes: [
+        { item: { id: 1000 }, action: 'stock', quantity: 4, ordem: 15,
+          grupo: { origem: 'estoque', ordem_origem: 7, lote_id: 503 } },
+        // A tela impede, mas se passar (duas abas, payload adulterado) o backend
+        // não pode devolver 8 peças de um grupo que tinha 4.
+        { item: { id: 1000 }, action: 'stock', quantity: 4, ordem: 10,
+          grupo: { origem: 'estoque', ordem_origem: 7, lote_id: 503 } }
+      ],
+      registrarEntradaInsumo: ins.fn
+    }),
+    err => err.code === 'DECISOES_INVALIDAS'
+  );
 
-  assert.equal(resumo.pecasDevolvidas, 4, 'o grupo tinha 4: o excedente é recusado');
-  assert.ok(avisos.some(a => /além do que o pedido tinha/.test(a)));
+  // E NADA foi gravado: nem as 4 primeiras, que sozinhas seriam válidas.
+  assert.equal(api.lotes[503].quantidade, 0, 'o lote não foi tocado');
+  assert.equal(api.gravacoes.movimentos.length, 0);
+  assert.equal(ins.devolvidos.size, 0);
 });
 
 test('SEM reserva gravada, as peças do zero continuam existindo para o estorno', async () => {
@@ -800,4 +834,333 @@ test('opcoesDeEstorno diz o piso e o teto de cada peça', async () => {
   assert.equal(doEstoque.quantidade, 2);
   assert.equal(daProducao.ordem_origem, 0, 'as 3 do zero podem voltar de qualquer ponto, ou nenhum');
   assert.equal(daProducao.quantidade, 3);
+});
+
+// ---------------------------------------------------------------------------
+// K — Auditoria
+//
+// O cálculo já fechava; o que faltava era PROVA. Cada teste abaixo defende uma
+// pergunta que a auditoria precisa responder sem cruzar tabelas por data e
+// texto livre.
+// ---------------------------------------------------------------------------
+
+/** Duas prontas em 15/15, três parciais em 9/15, e um destino que tem as duas coisas. */
+function cenarioComDoisGrupos() {
+  return montarApi({
+    qtdAProduzir: 2,
+    ext: [
+      { id: 1, id_pedido: 99, pedido_item_id: 1000, quantidade: 2, ultimo_insumo_id: passoDaOrdem(15).id, etapa_id: 502 },
+      { id: 2, id_pedido: 99, pedido_item_id: 1000, quantidade: 3, ultimo_insumo_id: passoDaOrdem(9).id, etapa_id: 509 }
+    ],
+    lotes: {
+      502: { id: 502, produto_id: 7, quantidade: 0, ultimo_insumo_id: passoDaOrdem(15).insumo_id },
+      509: { id: 509, produto_id: 7, quantidade: 0, ultimo_insumo_id: passoDaOrdem(9).insumo_id }
+    },
+    destino: {
+      qtdAProduzir: 6,
+      qtdUsarPronta: 1,
+      extInicial: [{
+        id: 5000, id_pedido: 77, pedido_item_id: 2000, quantidade: 1,
+        ultimo_insumo_id: passoDaOrdem(15).id, etapa_id: 502
+      }]
+    }
+  });
+}
+
+test('duas substituições no mesmo destino viram DUAS linhas em realocacoes', async () => {
+  const api = cenarioComDoisGrupos();
+  const ins = coletorDeInsumos();
+
+  await estornarCancelamento(api, {
+    pedidoId: 99,
+    acoes: [
+      // 2 prontas no lugar de 2 produções do zero.
+      { item: { id: 1000 }, action: 'reallocate', orderId: 77, quantity: 2,
+        grupo: { origem: 'estoque', ordem_origem: 15, lote_id: 502 },
+        pedidoItemDestino: 2000,
+        grupoDestino: { origem: 'producao', ordem_origem: 0 } },
+      // 1 parcial em 9/15 no lugar da peça PRONTA que o destino tinha.
+      { item: { id: 1000 }, action: 'reallocate', orderId: 77, quantity: 1,
+        grupo: { origem: 'estoque', ordem_origem: 9, lote_id: 509 },
+        pedidoItemDestino: 2000,
+        grupoDestino: { origem: 'estoque', ordem_origem: 15 } }
+    ],
+    registrarEntradaInsumo: ins.fn
+  });
+
+  const reas = api.gravacoes.realocacoes;
+  assert.equal(reas.length, 2, 'uma linha por atribuição — a segunda não sobrescreve a primeira');
+
+  const [primeira, segunda] = reas;
+  assert.equal(Number(primeira.quantidade), 2);
+  assert.equal(primeira.tipo_destino_substituido, 'producao_zero');
+  assert.ok(primeira.reserva_id_substituida, 'produção do zero aponta a reserva reduzida');
+  assert.equal(primeira.movimento_id_peca_liberada, null, 'e não libera peça nenhuma');
+
+  assert.equal(Number(segunda.quantidade), 1);
+  assert.equal(segunda.tipo_destino_substituido, 'pronta');
+  assert.ok(segunda.pedido_itens_ext_id_substituido, 'pronta aponta o grupo substituído');
+  assert.ok(segunda.movimento_id_peca_liberada, 'e o movimento que devolveu a peça antiga');
+
+  // De onde saiu, sem precisar abrir o movimento de origem.
+  for (const rea of reas) {
+    assert.equal(Number(rea.pedido_id_origem), 99);
+    assert.equal(Number(rea.pedido_item_id_origem), 1000);
+    assert.equal(Number(rea.pedido_id_destino), 77);
+    assert.ok(rea.ultimo_insumo_id_origem, 'com o estágio de onde a peça saiu');
+    assert.ok(rea.movimento_id_origem && rea.movimento_id_destino, 'e os dois movimentos');
+  }
+});
+
+test('os movimentos dos dois lados se apontam', async () => {
+  const api = cenarioComDoisGrupos();
+  const ins = coletorDeInsumos();
+
+  await estornarCancelamento(api, {
+    pedidoId: 99,
+    acoes: [{
+      item: { id: 1000 }, action: 'reallocate', orderId: 77, quantity: 2,
+      grupo: { origem: 'estoque', ordem_origem: 15, lote_id: 502 },
+      pedidoItemDestino: 2000,
+      grupoDestino: { origem: 'producao', ordem_origem: 0 }
+    }],
+    registrarEntradaInsumo: ins.fn
+  });
+
+  const saida = api.gravacoes.movimentos.find(m =>
+    m.tipo_movimento === 'transferencia' && Number(m.pedido_id) === 99);
+  const entrada = api.gravacoes.movimentos.find(m =>
+    m.tipo_movimento === 'transferencia' && Number(m.pedido_id) === 77);
+
+  assert.equal(Number(saida.transfer_to_pedido_id), 77, 'a saída diz para onde foi');
+  assert.ok(entrada.source_movement_id, 'e a entrada aponta a saída que a causou');
+});
+
+test('o estorno de insumo do destino aponta a substituição que o causou', async () => {
+  const api = cenarioComDoisGrupos();
+  const ins = coletorDeInsumos();
+
+  await estornarCancelamento(api, {
+    pedidoId: 99,
+    acoes: [
+      { item: { id: 1000 }, action: 'reallocate', orderId: 77, quantity: 2,
+        grupo: { origem: 'estoque', ordem_origem: 15, lote_id: 502 },
+        pedidoItemDestino: 2000,
+        grupoDestino: { origem: 'producao', ordem_origem: 0 } },
+      { item: { id: 1000 }, action: 'reallocate', orderId: 77, quantity: 1,
+        grupo: { origem: 'estoque', ordem_origem: 9, lote_id: 509 },
+        pedidoItemDestino: 2000,
+        grupoDestino: { origem: 'producao', ordem_origem: 0 } }
+    ],
+    registrarEntradaInsumo: ins.fn
+  });
+
+  const ids = api.gravacoes.realocacoes.map(r => r.id);
+  assert.equal(ids.length, 2);
+
+  // Cada devolução ficou amarrada a UMA substituição — com as duas para o mesmo
+  // pedido, `pedido_id` sozinho não separava uma da outra.
+  const daPrimeira = ins.porRealocacao(ids[0]);
+  const daSegunda = ins.porRealocacao(ids[1]);
+  assert.ok(daPrimeira.size > 0 && daSegunda.size > 0, 'as duas devolveram material');
+
+  // E o total continua o mesmo: 3 peças substituem 3 produções do zero, e o
+  // passo 1 da rota volta 1 unidade por peça.
+  assert.equal(
+    ins.porPedido(77).get(passoDaOrdem(1).insumo_id), 3,
+    'somadas, as devoluções dão o mesmo total de sempre'
+  );
+
+  const movimentosDoDestino = api.gravacoes.movimentos
+    .filter(m => m.tipo_item === 'insumo' && Number(m.pedido_id) === 77);
+  assert.ok(
+    movimentosDoDestino.length > 0
+    && movimentosDoDestino.every(m => ids.includes(m.realocacao_id)),
+    'e o movimento de estoque carrega a mesma referência'
+  );
+});
+
+test('toda destinação do cancelamento fica registrada, com o tipo certo', async () => {
+  const api = montarApi({
+    qtdAProduzir: 4,
+    ext: [
+      { id: 1, id_pedido: 99, pedido_item_id: 1000, quantidade: 1, ultimo_insumo_id: passoDaOrdem(15).id, etapa_id: 502 },
+      { id: 2, id_pedido: 99, pedido_item_id: 1000, quantidade: 1, ultimo_insumo_id: passoDaOrdem(9).id, etapa_id: 509 }
+    ],
+    lotes: {
+      502: { id: 502, produto_id: 7, quantidade: 0, ultimo_insumo_id: passoDaOrdem(15).insumo_id },
+      509: { id: 509, produto_id: 7, quantidade: 0, ultimo_insumo_id: passoDaOrdem(9).insumo_id }
+    }
+  });
+  const ins = coletorDeInsumos();
+
+  await estornarCancelamento(api, {
+    pedidoId: 99,
+    acoes: [
+      { item: { id: 1000 }, action: 'stock', quantity: 1, ordem: 15,
+        grupo: { origem: 'estoque', ordem_origem: 15, lote_id: 502 } },
+      { item: { id: 1000 }, action: 'discard', quantity: 1,
+        grupo: { origem: 'estoque', ordem_origem: 9, lote_id: 509 } },
+      { item: { id: 1000 }, action: 'stock', quantity: 2, ordem: 0,
+        grupo: { origem: 'producao', ordem_origem: 0, lote_id: null } }
+    ],
+    registrarEntradaInsumo: ins.fn
+  });
+
+  const tipos = api.gravacoes.destinacoes.map(d => d.tipo_destino).sort();
+  assert.deepEqual(
+    tipos,
+    ['descarte_restaura_lote', 'nao_retorna_produto', 'retorno_estoque'],
+    'as três decisões ficam distinguíveis — antes descarte e retorno eram iguais'
+  );
+
+  const descarte = api.gravacoes.destinacoes.find(d => d.tipo_destino === 'descarte_restaura_lote');
+  assert.equal(Number(descarte.quantidade), 1);
+  assert.equal(Number(descarte.ordem_origem), 9, 'com o estágio de onde a peça saiu');
+  assert.equal(Number(descarte.lote_id_origem), 509);
+  assert.ok(descarte.movimento_id, 'e o movimento que a executou');
+
+  // O descarte também ganhou tipo próprio no razão de estoque.
+  assert.ok(
+    api.gravacoes.movimentos.some(m => m.tipo_movimento === 'descarte_cancelamento'),
+    'descarte deixa de se disfarçar de retorno'
+  );
+});
+
+test('banco sem o tipo novo: o descarte é gravado como retorno, não perdido', async () => {
+  const api = montarApi({
+    ext: [{ id: 1, id_pedido: 99, pedido_item_id: 1000, quantidade: 1, ultimo_insumo_id: passoDaOrdem(9).id, etapa_id: 509 }],
+    lotes: { 509: { id: 509, produto_id: 7, quantidade: 0, ultimo_insumo_id: passoDaOrdem(9).insumo_id } }
+  });
+  const ins = coletorDeInsumos();
+
+  // Quem não rodou sql/novascolunas5.sql ainda não tem o valor no enum.
+  const postOriginal = api.post.bind(api);
+  api.post = async (rota, payload) => {
+    if (rota === '/api/estoque_movimentos' && payload.tipo_movimento === 'descarte_cancelamento') {
+      throw new Error('invalid input value for enum tipo_movimento_estoque');
+    }
+    return postOriginal(rota, payload);
+  };
+
+  const { avisos } = await estornarCancelamento(api, {
+    pedidoId: 99,
+    acoes: [{ item: { id: 1000 }, action: 'discard', quantity: 1,
+      grupo: { origem: 'estoque', ordem_origem: 9, lote_id: 509 } }],
+    registrarEntradaInsumo: ins.fn
+  });
+
+  assert.ok(
+    api.gravacoes.movimentos.some(m => m.tipo_movimento === 'retorno_cancelamento'),
+    'o movimento existe com o tipo antigo'
+  );
+  assert.equal(avisos.length, 0, 'e sem alarme falso: a operação não falhou');
+  assert.equal(api.lotes[509].quantidade, 1, 'a peça voltou ao lote de origem');
+});
+
+test('o histórico do destino diz o que cada peça substituiu', async () => {
+  const api = cenarioComDoisGrupos();
+  const ins = coletorDeInsumos();
+
+  await estornarCancelamento(api, {
+    pedidoId: 99,
+    acoes: [
+      { item: { id: 1000 }, action: 'reallocate', orderId: 77, quantity: 2,
+        grupo: { origem: 'estoque', ordem_origem: 15, lote_id: 502 },
+        pedidoItemDestino: 2000,
+        grupoDestino: { origem: 'producao', ordem_origem: 0 } },
+      { item: { id: 1000 }, action: 'reallocate', orderId: 77, quantity: 1,
+        grupo: { origem: 'estoque', ordem_origem: 9, lote_id: 509 },
+        pedidoItemDestino: 2000,
+        grupoDestino: { origem: 'estoque', ordem_origem: 15 } }
+    ],
+    registrarEntradaInsumo: ins.fn
+  });
+
+  const evento = api.gravacoes.eventos.find(e => Number(e.pedido_id) === 77);
+  assert.ok(evento, 'o destino recebe evento');
+  assert.match(evento.descricao, /recebeu 3 peça\(s\)/);
+  assert.match(evento.descricao, /15\/15/, 'com o estágio em que a peça chegou');
+  assert.match(evento.descricao, /substituindo uma produção do zero/);
+  assert.match(evento.descricao, /substituindo uma peça pronta, liberada ao lote de origem/);
+});
+
+test('o resumo lista a destinação de cada peça, somando as iguais', async () => {
+  const api = cenarioComDoisGrupos();
+  const ins = coletorDeInsumos();
+
+  const { resumo } = await estornarCancelamento(api, {
+    pedidoId: 99,
+    acoes: [
+      { item: { id: 1000 }, action: 'reallocate', orderId: 77, quantity: 2,
+        grupo: { origem: 'estoque', ordem_origem: 15, lote_id: 502 },
+        pedidoItemDestino: 2000,
+        grupoDestino: { origem: 'producao', ordem_origem: 0 } },
+      { item: { id: 1000 }, action: 'stock', quantity: 3, ordem: 12,
+        grupo: { origem: 'estoque', ordem_origem: 9, lote_id: 509 } }
+    ],
+    registrarEntradaInsumo: ins.fn
+  });
+
+  assert.equal(resumo.detalhes.length, 2, 'uma linha por decisão, não uma por unidade');
+  assert.ok(
+    resumo.detalhes.some(l => /^2 × .*realocada\(s\) para o PED77, substituindo uma produção do zero/.test(l)),
+    `esperava a linha da realocação em ${JSON.stringify(resumo.detalhes)}`
+  );
+  assert.ok(
+    resumo.detalhes.some(l => /^3 × .*devolvida\(s\) ao estoque em 12\/15/.test(l)),
+    `esperava a linha do retorno em ${JSON.stringify(resumo.detalhes)}`
+  );
+});
+
+test('a reserva reduzida guarda o que foi prometido', async () => {
+  const api = cenarioComDoisGrupos();
+  const ins = coletorDeInsumos();
+
+  await estornarCancelamento(api, {
+    pedidoId: 99,
+    acoes: [{
+      item: { id: 1000 }, action: 'reallocate', orderId: 77, quantity: 2,
+      grupo: { origem: 'estoque', ordem_origem: 15, lote_id: 502 },
+      pedidoItemDestino: 2000,
+      grupoDestino: { origem: 'producao', ordem_origem: 0 }
+    }],
+    registrarEntradaInsumo: ins.fn
+  });
+
+  const doDestino = api.gravacoes.reservas.find(r => String(r.id) === '950');
+  assert.ok(doDestino, 'a reserva do destino é ajustada');
+  assert.equal(
+    Number(doDestino.quantidade_original), 6,
+    'o que foi prometido continua registrado — sem isso, "seis viraram quatro" '
+    + 'se torna "sempre foram quatro"'
+  );
+});
+
+test('etapa que falhou fica registrada, não some no meio do estorno', async () => {
+  // Sem transação, o que resta é PROVAR o que não aconteceu: uma peça que não
+  // achou lote não voltou ao estoque, e quem for conferir precisa saber disso
+  // por um registro, não por uma diferença no inventário meses depois.
+  const api = montarApi({ reserva: 1 });
+  const original = api.post.bind(api);
+  api.post = async (rota, payload) => {
+    // O lote não existe e a criação falha.
+    if (rota === '/api/produtos_em_cada_ponto') throw new Error('sem permissão');
+    return original(rota, payload);
+  };
+  const ins = coletorDeInsumos();
+
+  const { avisos } = await estornarCancelamento(api, {
+    pedidoId: 99,
+    acoes: [{ item: { id: 1000 }, action: 'stock', quantity: 1, ordem: 12,
+      grupo: { origem: 'producao', ordem_origem: 0, lote_id: null } }],
+    registrarEntradaInsumo: ins.fn
+  });
+
+  const registro = api.gravacoes.destinacoes.find(d => d.falha);
+  assert.ok(registro, 'a etapa que falhou deixa linha própria');
+  assert.equal(registro.tipo_destino, 'retorno_estoque');
+  assert.equal(Number(registro.quantidade), 1);
+  assert.match(registro.falha, /não voltou ao estoque/);
+  assert.ok(avisos.length > 0, 'e o usuário é avisado — nada de toast verde');
 });
