@@ -78,7 +78,17 @@
         </div>`;
       document.body.appendChild(overlay);
 
+      // TRAVA NO PRIMEIRO CLIQUE.
+      //
+      // Entre responder e a gravação terminar existe uma ida à API que leva
+      // segundos: são vários insumos, cada um com saldo e duas auditorias. Sem
+      // travar aqui, um segundo clique dispararia a operação inteira de novo —
+      // peça duplicada no estoque e matéria-prima baixada em dobro.
+      let respondido = false;
       const encerrar = valor => {
+        if (respondido) return;
+        respondido = true;
+        overlay.querySelectorAll('button').forEach(b => { b.disabled = true; });
         document.removeEventListener('keydown', aoTeclar);
         overlay.remove();
         resolve(valor);
@@ -98,14 +108,45 @@
   /** Aviso curto do que aconteceu com a matéria-prima, para o toast. */
   function resumo(resultado, escolheuMexer) {
     if (!escolheuMexer) return '';
-    const falhas = Array.isArray(resultado?.falhasInsumos) ? resultado.falhasInsumos : [];
-    if (falhas.length) {
-      console.error('Falhas ao movimentar a matéria-prima da peça:', falhas);
-      return ` ATENÇÃO: ${falhas.length} insumo(s) não foram movimentados — confira o estoque.`;
-    }
     const total = Number(resultado?.insumosMovimentados) || 0;
     return total > 0 ? ` ${total} insumo(s) movimentado(s).` : '';
   }
 
-  window.InsumosDaPeca = { perguntar, resumo };
+  /**
+   * Roda a gravação sob o véu de carregamento e devolve o resultado.
+   *
+   * O véu fica de pé até TUDO terminar: a peça, cada insumo e as auditorias dos
+   * dois. Sem ele, a tela voltava a parecer disponível enquanto o backend ainda
+   * estava gravando — e quem clicasse de novo duplicava a operação.
+   *
+   * Falha parcial é FALHA: se algum insumo não se moveu, isto lança. Quem chamou
+   * não fecha o modal nem mostra sucesso, e o motivo fica no erro.
+   */
+  async function comCarregamento(fn, escolheuMexer) {
+    const executar = async () => {
+      const resultado = await fn();
+      const falhas = Array.isArray(resultado?.falhasInsumos) ? resultado.falhasInsumos : [];
+      if (escolheuMexer && falhas.length) {
+        console.error('Falhas ao movimentar a matéria-prima da peça:', falhas);
+        const erro = new Error(
+          `A peça foi gravada, mas ${falhas.length} insumo(s) não foram movimentados. `
+          + 'Confira o estoque de matéria-prima antes de seguir.'
+        );
+        erro.falhasInsumos = falhas;
+        erro.parcial = true;
+        throw erro;
+      }
+      return resultado;
+    };
+
+    if (window.BotaoAcao?.comCarregamento) {
+      return window.BotaoAcao.comCarregamento(
+        executar,
+        escolheuMexer ? 'Atualizando estoque e matéria-prima...' : 'Atualizando estoque...'
+      );
+    }
+    return executar();
+  }
+
+  window.InsumosDaPeca = { perguntar, resumo, comCarregamento };
 })();

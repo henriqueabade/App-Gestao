@@ -123,3 +123,15 @@
 }
 
 .rp-vazio { text-align: center; font-style: italic; color: #555; }
+
+/**
+ * Segunda linha dentro de uma célula: quantidade e estágio da peça que causou
+ * o consumo, abaixo do código dela. Menor e mais clara, para a coluna continuar
+ * legível de relance sem perder o detalhe que a auditoria precisa.
+ */
+.rp-detalhe {
+    display: block;
+    font-size: 0.85em;
+    color: #555;
+    line-height: 1.3;
+}

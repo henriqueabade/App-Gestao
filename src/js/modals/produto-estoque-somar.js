@@ -68,25 +68,28 @@
     }
 
     try {
-      const resultado = await window.electronAPI.atualizarLoteProduto({
-        id: info.existing.id,
-        quantidade: novaQtd,
-        ajustarInsumos,
-        __meta: {
-          produto: info.produto,
-          etapa: info.etapa || info.existing.etapa,
-          itemNome: info.itemNome || info.existing.ultimo_item,
-          quantidadeAnterior: Number.isNaN(quantidadeAtual) ? undefined : quantidadeAtual,
-          quantidadeNova: novaQtd,
-          alteracao: Number.isNaN(quantidadeAtual) ? undefined : novaQtd - quantidadeAtual,
-          modo,
-          ajustarInsumos
-        }
-      });
+      const resultado = await window.InsumosDaPeca.comCarregamento(
+        () => window.electronAPI.atualizarLoteProduto({
+          id: info.existing.id,
+          quantidade: novaQtd,
+          ajustarInsumos,
+          __meta: {
+            produto: info.produto,
+            etapa: info.etapa || info.existing.etapa,
+            itemNome: info.itemNome || info.existing.ultimo_item,
+            quantidadeAnterior: Number.isNaN(quantidadeAtual) ? undefined : quantidadeAtual,
+            quantidadeNova: novaQtd,
+            alteracao: Number.isNaN(quantidadeAtual) ? undefined : novaQtd - quantidadeAtual,
+            modo,
+            ajustarInsumos
+          }
+        }),
+        ajustarInsumos
+      );
       const extra = window.InsumosDaPeca?.resumo(resultado, ajustarInsumos) || '';
       showToast(
         `${modo === 'substituir' ? 'Quantidade substituída' : 'Quantidade somada'}.${extra}`,
-        extra.includes('ATENÇÃO') ? 'warning' : 'success'
+        'success'
       );
       close();
       // Recarrega os detalhes E a listagem de produtos: a coluna "Quantidade"
@@ -95,7 +98,10 @@
       window.somarEstoqueInfo = null;
     } catch (err) {
       console.error('Erro ao atualizar lote', err);
-      showToast('Erro ao atualizar lote', 'error');
+      // Falha parcial: o modal FICA ABERTO, com o contexto do que se tentou.
+      // Fechar aqui esconderia o que precisa ser conferido à mão.
+      if (err?.parcial) info.reload?.();
+      showToast(err?.parcial ? err.message : 'Erro ao atualizar lote', 'error');
       throw err;
     }
   }

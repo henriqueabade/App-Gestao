@@ -346,6 +346,7 @@ async function registrarMovimentacao({
   usuarioId = null,
   pedidoId = null,
   realocacaoId = null,
+  estoqueMovimentoId = null,
   observacao = null
 }) {
   if (!insumoId || !tipo) return;
@@ -368,6 +369,10 @@ async function registrarMovimentacao({
       // Qual SUBSTITUIÇÃO devolveu este insumo. Com duas realocações para o
       // mesmo pedido de destino, `pedido_id` sozinho não separa os estornos.
       realocacao_id: realocacaoId,
+      // Qual movimentação de PEÇA causou este consumo. É por ela que o extrato
+      // do insumo mostra o produto, a quantidade e o estágio da rota — sem o
+      // vínculo, só sobrava o horário para deduzir, e horário não é vínculo.
+      estoque_movimento_id: estoqueMovimentoId,
       observacao,
       criado_em: new Date().toISOString()
     });
@@ -409,6 +414,7 @@ async function registrarEntrada(id, quantidadeBruta, usuarioId = null, contexto 
     usuarioId,
     pedidoId: contexto?.pedidoId ?? null,
     realocacaoId: contexto?.realocacaoId ?? null,
+    estoqueMovimentoId: contexto?.estoqueMovimentoId ?? null,
     observacao: contexto?.nota ?? null
   });
 
@@ -438,6 +444,8 @@ async function registrarSaida(id, quantidadeBruta, usuarioId = null, contexto = 
     quantidadeAtual,
     usuarioId,
     pedidoId: contexto?.pedidoId ?? null,
+    realocacaoId: contexto?.realocacaoId ?? null,
+    estoqueMovimentoId: contexto?.estoqueMovimentoId ?? null,
     observacao: contexto?.nota ?? null
   });
 
@@ -677,6 +685,107 @@ async function listarMovimentosInsumo(insumoId) {
   const doRazao = (Array.isArray(razaoBruto) ? razaoBruto : [])
     .filter(m => String(m?.tipo_item) === 'insumo' && String(m?.item_id) === String(id));
 
+  // ---------------------------------------------------------------
+  // A PEÇA que causou o consumo
+  //
+  // Quando o insumo sai porque alguém lançou uma peça no estoque, o extrato
+  // precisa dizer QUAL peça, quantas unidades e em que ponto da rota. Isso vem
+  // do movimento de peça apontado por `estoque_movimento_id` — e a leitura é em
+  // bloco (uma requisição para os movimentos, uma para os produtos, uma rota
+  // por produto), porque linha a linha seriam dezenas de idas à API por
+  // extrato.
+  // ---------------------------------------------------------------
+  const idsDeMovimentoDePeca = Array.from(new Set(
+    doInsumo
+      .map(m => m.estoque_movimento_id)
+      .filter(v => v !== null && v !== undefined && v !== '')
+      .map(Number)
+      .filter(Number.isFinite)
+  ));
+
+  const movimentosDePeca = new Map();
+  const produtosPorId = new Map();
+  const rotaPorProduto = new Map();
+  const nomeDoInsumo = new Map();
+
+  if (idsDeMovimentoDePeca.length) {
+    const movimentos = await pool
+      .get('/estoque_movimentos', { query: { id: `in.(${idsDeMovimentoDePeca.join(',')})` } })
+      .catch(() => []);
+    for (const mov of (Array.isArray(movimentos) ? movimentos : [])) {
+      if (mov?.id !== undefined) movimentosDePeca.set(Number(mov.id), mov);
+    }
+
+    const produtoIds = Array.from(new Set(
+      Array.from(movimentosDePeca.values())
+        .filter(m => String(m.tipo_item) === 'peca')
+        .map(m => Number(m.item_id))
+        .filter(Number.isFinite)
+    ));
+
+    if (produtoIds.length) {
+      const [produtos, rotas] = await Promise.all([
+        pool.get('/produtos', { query: { id: `in.(${produtoIds.join(',')})` } }).catch(() => []),
+        pool.get('/produtos_insumos', { query: { produto_id: `in.(${produtoIds.join(',')})` } }).catch(() => [])
+      ]);
+      for (const produto of (Array.isArray(produtos) ? produtos : [])) {
+        if (produto?.id !== undefined) produtosPorId.set(Number(produto.id), produto);
+      }
+      for (const passo of (Array.isArray(rotas) ? rotas : [])) {
+        const chave = Number(passo?.produto_id);
+        if (!Number.isFinite(chave)) continue;
+        if (!rotaPorProduto.has(chave)) rotaPorProduto.set(chave, []);
+        rotaPorProduto.get(chave).push(passo);
+      }
+      for (const lista of rotaPorProduto.values()) {
+        lista.sort((a, b) => (Number(a.ordem_insumo) || 0) - (Number(b.ordem_insumo) || 0));
+      }
+
+      // O NOME do insumo onde a peça parou. Só os que aparecem nessas rotas —
+      // ler a matéria-prima inteira para achar um nome seria caro à toa.
+      const insumosDasRotas = Array.from(new Set(
+        Array.from(rotaPorProduto.values())
+          .flat()
+          .map(p => Number(p.insumo_id))
+          .filter(Number.isFinite)
+      ));
+      if (insumosDasRotas.length) {
+        const nomes = await pool
+          .get('/materia_prima', { query: { id: `in.(${insumosDasRotas.join(',')})` } })
+          .catch(() => []);
+        for (const materia of (Array.isArray(nomes) ? nomes : [])) {
+          if (materia?.id !== undefined) nomeDoInsumo.set(Number(materia.id), materia.nome || '');
+        }
+      }
+    }
+  }
+
+  /** "10/15 — Elástico Calombe Roliço" a partir do insumo em que a peça parou. */
+  const estagioDaPeca = (produtoId, ultimoInsumoId) => {
+    const rota = rotaPorProduto.get(Number(produtoId)) || [];
+    if (!rota.length) return null;
+    const passo = rota.find(p => Number(p.insumo_id) === Number(ultimoInsumoId));
+    if (!passo) return null;
+    const nome = nomeDoInsumo.get(Number(passo.insumo_id));
+    return `${Number(passo.ordem_insumo) || 0}/${rota.length}${nome ? ` — ${nome}` : ''}`;
+  };
+
+  /** O bloco "Peça / Quantidade / Estágio" de uma linha, quando houver. */
+  const contextoDaPeca = mp => {
+    const movimento = movimentosDePeca.get(Number(mp?.estoque_movimento_id));
+    if (!movimento || String(movimento.tipo_item) !== 'peca') return null;
+    const produto = produtosPorId.get(Number(movimento.item_id)) || null;
+    return {
+      produto_id: movimento.item_id ?? null,
+      codigo: produto?.codigo || null,
+      nome: produto?.nome || null,
+      unidades: Number(movimento.quantidade) || 0,
+      estagio: estagioDaPeca(movimento.item_id, movimento.ultimo_insumo_id),
+      lote_id: movimento.lote_id ?? null,
+      movimento_id: movimento.id ?? null
+    };
+  };
+
   const indexar = lista => {
     const mapa = new Map();
     for (const linha of (Array.isArray(lista) ? lista : [])) {
@@ -770,6 +879,7 @@ async function listarMovimentosInsumo(insumoId) {
     const pedido = contexto ? pedidos.get(Number(contexto.pedido_id)) : null;
     const quantidade = Number(mp.quantidade) || 0;
     const autor = mp.usuario_id ?? contexto?.created_by ?? null;
+    const daPeca = contextoDaPeca(mp);
 
     return {
       id: mp.id,
@@ -786,7 +896,14 @@ async function listarMovimentosInsumo(insumoId) {
       preco_atual: mp.preco_atual ?? null,
       origem: pedido
         ? `Pedido ${pedido.numero || pedido.id}`
-        : (mp.pedido_id ? `Pedido ${mp.pedido_id}` : 'Módulo de Matéria-Prima'),
+        : (mp.pedido_id
+          ? `Pedido ${mp.pedido_id}`
+          // Consumo causado por uma peça lançada à mão tem origem própria:
+          // "Módulo de Matéria-Prima" mandaria procurar no lugar errado.
+          : (daPeca ? 'Ajuste de estoque de produto' : 'Módulo de Matéria-Prima')),
+      // A peça que causou o consumo, quando houver: produto, quantas unidades
+      // e em que ponto da rota ela estava.
+      peca: daPeca,
       pedido_numero: pedido?.numero || null,
       pedido_item_id: contexto?.pedido_item_id || null,
       peca_codigo: codigoDaPeca(contexto?.pedido_item_id, contexto?.pedido_id),

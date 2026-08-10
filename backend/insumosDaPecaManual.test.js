@@ -282,3 +282,97 @@ test('o movimento do insumo entra no razão, com autor e lote', async () => {
     amb.restaurar();
   }
 });
+
+// ---------------------------------------------------------------------------
+// RASTREABILIDADE: qual peça causou o consumo
+//
+// Os abatimentos já saíam certos; o que faltava era o vínculo. Sem ele, o
+// extrato do insumo mostrava "-1,452 cm³" sem dizer produto, quantidade nem
+// estágio — e a única pista era o horário, que não é vínculo.
+// ---------------------------------------------------------------------------
+
+test('cada consumo aponta a movimentação de peça que o causou', async () => {
+  const amb = montarAmbiente();
+  try {
+    await amb.produtos.inserirLoteProduto({
+      produtoId: 7,
+      etapa: 'Montagem',
+      ultimoInsumoId: insumoDaOrdem(3),
+      quantidade: 3,
+      usuarioId: 13,
+      abaterInsumos: true
+    });
+
+    // O movimento da PEÇA é o primeiro gravado; os consumos vêm depois.
+    const daPeca = amb.registro.movimentos.find(m => m.tipo_item === 'peca');
+    assert.ok(daPeca, 'a peça tem movimento próprio');
+
+    // 1. No histórico da matéria-prima.
+    assert.equal(amb.registro.saidas.length, 3);
+    for (const saida of amb.registro.saidas) {
+      assert.equal(
+        saida.contexto?.estoqueMovimentoId, 1,
+        'o consumo guarda o id do movimento da peça — é por ele que o extrato '
+        + 'mostra produto, quantidade e estágio'
+      );
+    }
+
+    // 2. E no razão de estoque, nos dois sentidos.
+    const doInsumo = amb.registro.movimentos.filter(m => m.tipo_item === 'insumo');
+    assert.equal(doInsumo.length, 3);
+    assert.ok(
+      doInsumo.every(m => m.source_movement_id === 1),
+      'o movimento do insumo aponta para o movimento da peça'
+    );
+  } finally {
+    amb.restaurar();
+  }
+});
+
+test('a devolução da exclusão também fica ligada à peça', async () => {
+  const amb = montarAmbiente({
+    lote: { id: 42, produto_id: 7, quantidade: 2, ultimo_insumo_id: insumoDaOrdem(2) }
+  });
+  try {
+    await amb.produtos.excluirLoteProduto(42, 13, { devolverInsumos: true });
+
+    assert.equal(amb.registro.entradas.length, 2);
+    for (const entrada of amb.registro.entradas) {
+      assert.ok(
+        entrada.contexto?.estoqueMovimentoId,
+        'a devolução também aponta o movimento da peça que a causou'
+      );
+    }
+  } finally {
+    amb.restaurar();
+  }
+});
+
+test('insumo que falha não some: volta na lista de falhas', async () => {
+  // Falha parcial é FALHA. A tela não pode fechar nem dizer sucesso — e para
+  // isso ela precisa receber o que não foi movimentado.
+  const amb = montarAmbiente();
+  try {
+    const materia = require.cache[require.resolve('./materiaPrima')].exports;
+    const original = materia.registrarSaida;
+    materia.registrarSaida = async (id, quantidade, usuarioId, contexto) => {
+      if (Number(id) === insumoDaOrdem(2)) throw new Error('saldo insuficiente');
+      return original(id, quantidade, usuarioId, contexto);
+    };
+
+    const r = await amb.produtos.inserirLoteProduto({
+      produtoId: 7,
+      etapa: 'Montagem',
+      ultimoInsumoId: insumoDaOrdem(3),
+      quantidade: 1,
+      usuarioId: 13,
+      abaterInsumos: true
+    });
+
+    assert.equal(r.insumosMovimentados, 2, 'os outros dois passaram');
+    assert.equal(r.falhasInsumos.length, 1, 'e o que falhou é devolvido a quem chamou');
+    assert.match(r.falhasInsumos[0], /saldo insuficiente/);
+  } finally {
+    amb.restaurar();
+  }
+});

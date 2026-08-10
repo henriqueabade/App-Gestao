@@ -992,6 +992,10 @@ async function movimentarInsumosDaPeca({
   direcao,
   loteId = null,
   usuarioId = null,
+  // O movimento da PEÇA que causou esta baixa. É por ele que o extrato do
+  // insumo mostra o produto, quantas unidades e em que ponto da rota — sem o
+  // vínculo, o consumo aparece sozinho e sem explicação.
+  movimentoDaPecaId = null,
   nota
 }) {
   const quantidadePecas = Number(paraDecimal(unidades)) || 0;
@@ -1012,7 +1016,11 @@ async function movimentarInsumosDaPeca({
     const quantidade = Number(paraDecimal(passo.por_unidade * quantidadePecas)) || 0;
     if (!(quantidade > 0)) continue;
     try {
-      await aplicar(passo.insumo_id, quantidade, usuarioId, { origem: 'manual', nota });
+      await aplicar(passo.insumo_id, quantidade, usuarioId, {
+        origem: 'manual',
+        estoqueMovimentoId: movimentoDaPecaId,
+        nota
+      });
       await registrarMovimento(razaoPeloPool, {
         tipoMovimento: direcao === 'entrada' ? MOV.ENTRADA : MOV.CONSUMO_INSUMO,
         tipoItem: ITEM.INSUMO,
@@ -1020,6 +1028,8 @@ async function movimentarInsumosDaPeca({
         quantidade,
         loteId,
         ultimoInsumoId: passo.insumo_id,
+        // O mesmo vínculo no razão: a baixa aponta para o movimento da peça.
+        movimentoOrigemId: movimentoDaPecaId,
         nota,
         usuarioId
       });
@@ -1071,7 +1081,10 @@ async function inserirLoteProduto({
 
   // Peça entrando no estoque pela tela de Produtos. O razão registra POR PEÇA:
   // sem isso, o estoque muda e não sobra rastro de quem colocou nem quando.
-  await registrarMovimento(razaoPeloPool, {
+  //
+  // O id volta e é guardado: é ele que liga cada consumo de insumo a ESTA peça,
+  // com quantidade e ponto da rota.
+  const movimentoDaPecaId = await registrarMovimento(razaoPeloPool, {
     tipoMovimento: MOV.ENTRADA,
     tipoItem: ITEM.PECA,
     itemId: produtoId,
@@ -1091,6 +1104,7 @@ async function inserirLoteProduto({
       unidades: quantidade,
       direcao: 'saida',
       loteId: criado?.id ?? null,
+      movimentoDaPecaId,
       usuarioId,
       nota: 'Consumido para a peça lançada no estoque pelo módulo de Produtos'
     })
@@ -1119,7 +1133,7 @@ async function atualizarLoteProduto(id, quantidade, usuarioId = null, { ajustarI
 
   if (diferenca !== 0) {
     const abateu = ajustarInsumos ? ' · matéria-prima ajustada' : '';
-    await registrarMovimento(razaoPeloPool, {
+    const movimentoDaPecaId = await registrarMovimento(razaoPeloPool, {
       tipoMovimento: diferenca > 0 ? MOV.ENTRADA : MOV.SAIDA,
       tipoItem: ITEM.PECA,
       itemId: antes?.produto_id ?? null,
@@ -1140,6 +1154,7 @@ async function atualizarLoteProduto(id, quantidade, usuarioId = null, { ajustarI
         unidades: Math.abs(diferenca),
         direcao: diferenca > 0 ? 'saida' : 'entrada',
         loteId: id,
+        movimentoDaPecaId,
         usuarioId,
         nota: diferenca > 0
           ? 'Consumido no ajuste de estoque de peças pelo módulo de Produtos'
@@ -1158,7 +1173,7 @@ async function excluirLoteProduto(id, usuarioId = null, { devolverInsumos = fals
   await executarLotes('delete', `/${id}`);
   invalidarCacheLotes();
 
-  await registrarMovimento(razaoPeloPool, {
+  const movimentoDaPecaId = await registrarMovimento(razaoPeloPool, {
     tipoMovimento: MOV.SAIDA,
     tipoItem: ITEM.PECA,
     itemId: antes?.produto_id ?? null,
@@ -1180,6 +1195,7 @@ async function excluirLoteProduto(id, usuarioId = null, { devolverInsumos = fals
       unidades: quantidade,
       direcao: 'entrada',
       loteId: id,
+      movimentoDaPecaId,
       usuarioId,
       nota: 'Devolvido na exclusão do lote pelo módulo de Produtos'
     })

@@ -123,8 +123,19 @@
         <td>${escapar(efeitoFormatado(m))}</td>
         <td>${escapar(saldoOuPreco(m))}</td>
         <td>${escapar(m.origem || '—')}</td>
-        <!-- Só o código: o nome da peça é longo demais para caber na folha. -->
-        <td>${escapar(m.peca_codigo || '—')}</td>
+        <!--
+          A PEÇA que causou o consumo.
+
+          Só o código quando a baixa veio de um pedido: o nome é longo demais
+          para caber na folha. Já a baixa causada por um lançamento manual de
+          peça precisa de mais — sem a quantidade e o estágio, "saiu 1,452 cm³
+          de tarugo" fica sem explicação nenhuma.
+        -->
+        <td>${m.peca
+    ? `${escapar(m.peca.codigo || m.peca.nome || '—')}`
+      + `<span class="rp-detalhe">${escapar(formatarQuantidade(m.peca.unidades))} un.`
+      + `${m.peca.estagio ? ` · ${escapar(m.peca.estagio)}` : ''}</span>`
+    : escapar(m.peca_codigo || '—')}</td>
         <td>${escapar(m.usuario || '—')}</td>
         <td>${escapar(
           m.saldo_negativo_autorizado

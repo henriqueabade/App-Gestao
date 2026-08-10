@@ -229,31 +229,40 @@
       if (abaterInsumos === null || abaterInsumos === undefined) return;
 
       try{
-        const resultado = await window.electronAPI.inserirLoteProduto({
-          produtoId: produto.id,
-          etapa,
-          ultimoInsumoId: itemId,
-          quantidade,
-          abaterInsumos,
-          __meta: {
-            produto: {
-              id: produto.id,
-              nome: produto.nome,
-              codigo: produto.codigo
-            },
-            etapa: etapaNome,
-            etapaId: processoSelecionadoId || null,
-            itemNome,
+        // O véu fica de pé até a peça, os insumos e as duas auditorias
+        // terminarem. Só depois disso a tela volta a aceitar clique.
+        const resultado = await window.InsumosDaPeca.comCarregamento(
+          () => window.electronAPI.inserirLoteProduto({
+            produtoId: produto.id,
+            etapa,
+            ultimoInsumoId: itemId,
             quantidade,
-            abaterInsumos
-          }
-        });
+            abaterInsumos,
+            __meta: {
+              produto: {
+                id: produto.id,
+                nome: produto.nome,
+                codigo: produto.codigo
+              },
+              etapa: etapaNome,
+              etapaId: processoSelecionadoId || null,
+              itemNome,
+              quantidade,
+              abaterInsumos
+            }
+          }),
+          abaterInsumos
+        );
         const extra = window.InsumosDaPeca?.resumo(resultado, abaterInsumos) || '';
-        showToast(`Produto inserido.${extra}`, extra.includes('ATENÇÃO') ? 'warning' : 'success');
+        showToast(`Produto inserido.${extra}`, 'success');
         limparERecarregar();
       }catch(err){
         console.error(err);
-        showToast('Erro ao inserir produto', 'error');
+        // Falha parcial mantém o formulário como está: o usuário precisa do
+        // contexto para entender o que conferir. A grade é recarregada porque a
+        // peça pode ter entrado — mostrar o valor velho seria outra mentira.
+        if (err?.parcial) window.reloadDetalhesProduto?.();
+        showToast(err?.parcial ? err.message : 'Erro ao inserir produto', 'error');
       }
     };
 

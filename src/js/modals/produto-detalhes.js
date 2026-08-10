@@ -136,32 +136,45 @@
         ajustarInsumos = resposta;
       }
 
+      // A linha inteira sai do ar enquanto grava: sem isso, um segundo clique
+      // no visto dispararia a operação de novo, com peça e insumo em dobro.
+      confirmBtn.style.pointerEvents = 'none';
+      confirmBtn.style.opacity = '0.5';
+      cancelBtn.style.pointerEvents = 'none';
+      input.disabled = true;
+
       try {
-        const resultado = await window.electronAPI.atualizarLoteProduto({
-          id: dados.id,
-          quantidade: novaQtd,
-          ajustarInsumos,
-          __meta: {
-            produto: {
-              id: item.id,
-              nome: item.nome,
-              codigo: item.codigo
-            },
-            etapa: dados.etapa,
-            itemNome: dados.ultimo_item,
-            quantidadeAnterior: isNaN(quantidadeAtual) ? undefined : quantidadeAtual,
-            quantidadeNova: novaQtd,
-            alteracao: isNaN(quantidadeAtual) ? undefined : novaQtd - quantidadeAtual,
-            ajustarInsumos
-          }
-        });
+        const resultado = await window.InsumosDaPeca.comCarregamento(
+          () => window.electronAPI.atualizarLoteProduto({
+            id: dados.id,
+            quantidade: novaQtd,
+            ajustarInsumos,
+            __meta: {
+              produto: {
+                id: item.id,
+                nome: item.nome,
+                codigo: item.codigo
+              },
+              etapa: dados.etapa,
+              itemNome: dados.ultimo_item,
+              quantidadeAnterior: isNaN(quantidadeAtual) ? undefined : quantidadeAtual,
+              quantidadeNova: novaQtd,
+              alteracao: isNaN(quantidadeAtual) ? undefined : novaQtd - quantidadeAtual,
+              ajustarInsumos
+            }
+          }),
+          ajustarInsumos
+        );
         const extra = window.InsumosDaPeca?.resumo(resultado, ajustarInsumos) || '';
-        showToast(`Quantidade atualizada.${extra}`, extra.includes('ATENÇÃO') ? 'warning' : 'success');
+        showToast(`Quantidade atualizada.${extra}`, 'success');
         carregarDetalhes(item.id);
         if (typeof carregarProdutos === 'function') carregarProdutos();
       } catch (err) {
         console.error(err);
-        showToast('Erro ao atualizar quantidade', 'error');
+        showToast(err?.parcial ? err.message : 'Erro ao atualizar quantidade', 'error');
+        // A tabela volta a mostrar o que o banco tem — inclusive numa falha
+        // parcial, em que a peça mudou e o insumo não.
+        carregarDetalhes(item.id);
       }
     });
     cancelBtn.addEventListener('click', () => carregarDetalhes(item.id));

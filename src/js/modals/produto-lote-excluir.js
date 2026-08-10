@@ -46,17 +46,23 @@
           devolverInsumos
         }
       };
-      const resultado = await window.electronAPI.excluirLoteProduto(payload);
+      const resultado = await window.InsumosDaPeca.comCarregamento(
+        () => window.electronAPI.excluirLoteProduto(payload),
+        devolverInsumos
+      );
       // Tabela primeiro, aviso depois — ver a nota gêmea em
       // modals/cliente-excluir.js.
       await item.reload?.();
       const extra = window.InsumosDaPeca?.resumo(resultado, devolverInsumos) || '';
-      showToast(`Lote excluído.${extra}`, extra.includes('ATENÇÃO') ? 'warning' : 'success');
+      showToast(`Lote excluído.${extra}`, 'success');
       close();
       window.loteExcluir = null;
     } catch (err) {
       console.error(err);
-      showToast('Erro ao excluir lote', 'error');
+      // Numa falha parcial o lote já foi excluído: a tabela é recarregada para
+      // mostrar isso, mas o modal fica aberto com o aviso do que conferir.
+      if (err?.parcial) await item.reload?.();
+      showToast(err?.parcial ? err.message : 'Erro ao excluir lote', 'error');
     }
   });
 })();
