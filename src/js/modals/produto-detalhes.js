@@ -19,16 +19,46 @@
   window.EstadoTrabalho?.registrarContexto?.('detalhesProduto',
     () => ({ produtoDetalhes: item }));
 
+  /**
+   * O modal só aparece com os lotes JÁ na tela.
+   *
+   * Antes o aviso de "carregado" era disparado assim que o título ficava
+   * pronto, e a busca dos lotes seguia depois: o modal abria vazio e as linhas
+   * pipocavam alguns segundos mais tarde — o que se lê como tela quebrada, não
+   * como carregamento.
+   *
+   * Dispara uma vez só, e SEMPRE: se a consulta falhar ou demorar, é melhor
+   * abrir com a tabela vazia (e o erro no console) do que ficar girando para
+   * sempre.
+   */
+  let prontoAvisado = false;
+  let redeDeSeguranca = null;
+  const avisarPronto = () => {
+    if (prontoAvisado) return;
+    prontoAvisado = true;
+    if (redeDeSeguranca) clearTimeout(redeDeSeguranca);
+    window.dispatchEvent(new CustomEvent('modalSpinnerLoaded', { detail: 'detalhesProduto' }));
+  };
+
+  // Se a consulta travar, o modal abre assim mesmo. Trocar um modal vazio por
+  // um spinner eterno seria piorar: aqui o pior caso volta a ser o de antes —
+  // a tabela chega depois —, e só quando algo realmente deu errado.
+  const ESPERA_MAXIMA_MS = 15000;
+
   if(item){
     const titulo = document.getElementById('detalheTitulo');
     if(titulo) titulo.textContent = `DETALHE DE ESTOQUE – ${item.nome || ''}`;
     const codigoEl = document.getElementById('codigoPeca');
     if(codigoEl) codigoEl.textContent = `Código da Peça: ${item.codigo || ''}`; // subtítulo mostra código da peça
-    window.dispatchEvent(new CustomEvent('modalSpinnerLoaded', { detail: 'detalhesProduto' }));
     window.reloadDetalhesProduto = () => carregarDetalhes(item.id);
-    if (isProdutoIdValido(item.id)) carregarDetalhes(item.id);
+    if (isProdutoIdValido(item.id)) {
+      redeDeSeguranca = setTimeout(avisarPronto, ESPERA_MAXIMA_MS);
+      carregarDetalhes(item.id).finally(avisarPronto);
+    } else {
+      avisarPronto();
+    }
   } else {
-    window.dispatchEvent(new CustomEvent('modalSpinnerLoaded', { detail: 'detalhesProduto' }));
+    avisarPronto();
   }
 
   async function carregarDetalhes(id){

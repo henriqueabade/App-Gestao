@@ -660,6 +660,26 @@ function descobrirDeslocamento(movimentosDoRazao, movimentosDoInsumo) {
 /** Tolerância do pareamento depois de corrigido o fuso. */
 const JANELA_PAREAMENTO_MS = 10000;
 
+/**
+ * Quantas leituras por id podem estar no ar ao mesmo tempo.
+ *
+ * `Promise.all` sobre uma lista inteira dispara TUDO de uma vez. Num insumo com
+ * duzentas movimentações manuais, isso vira duzentas requisições simultâneas
+ * atravessando o servidor local até a API remota — e o que trava não é só este
+ * relatório: as outras telas ficam na fila atrás dele, e o app inteiro parece
+ * ter congelado.
+ */
+const LEITURAS_SIMULTANEAS = 6;
+
+/** `Promise.all` em blocos: rápido, sem inundar a API. */
+async function emBlocos(itens, tamanho, fn) {
+  const saida = [];
+  for (let i = 0; i < itens.length; i += tamanho) {
+    saida.push(...await Promise.all(itens.slice(i, i + tamanho).map(fn)));
+  }
+  return saida;
+}
+
 async function listarMovimentosInsumo(insumoId) {
   const id = Number(insumoId);
   if (!Number.isFinite(id)) return { insumo: null, movimentos: [], faltas: [] };
@@ -814,8 +834,10 @@ async function listarMovimentosInsumo(insumoId) {
   // memória. A consulta com `in.()` voltava sem as linhas, os mapas ficavam
   // vazios e a coluna "Peça" saía com traço mesmo com o vínculo gravado.
   if (idsDeMovimentoDePeca.length) {
-    const movimentos = await Promise.all(
-      idsDeMovimentoDePeca.map(idMov => pool.get(`/estoque_movimentos/${idMov}`).catch(() => null))
+    const movimentos = await emBlocos(
+      idsDeMovimentoDePeca,
+      LEITURAS_SIMULTANEAS,
+      idMov => pool.get(`/estoque_movimentos/${idMov}`).catch(() => null)
     );
     for (const mov of movimentos) {
       if (mov && !mov.error && mov.id !== undefined) movimentosDePeca.set(Number(mov.id), mov);
@@ -833,13 +855,14 @@ async function listarMovimentosInsumo(insumoId) {
       dePeca.map(m => Number(m.ultimo_insumo_id)).filter(Number.isFinite)
     ));
 
-    const [produtos, rotas, nomes] = await Promise.all([
-      Promise.all(produtoIds.map(pid => pool.get(`/produtos/${pid}`).catch(() => null))),
-      Promise.all(produtoIds.map(pid => pool
-        .get('/produtos_insumos', { query: { produto_id: pid } })
-        .catch(() => []))),
-      Promise.all(insumosDoPonto.map(iid => pool.get(`/materia_prima/${iid}`).catch(() => null)))
-    ]);
+    // Em blocos, e um grupo de cada vez: são poucos produtos, mas o relatório
+    // não pode ser o que derruba o resto do app.
+    const produtos = await emBlocos(produtoIds, LEITURAS_SIMULTANEAS,
+      pid => pool.get(`/produtos/${pid}`).catch(() => null));
+    const rotas = await emBlocos(produtoIds, LEITURAS_SIMULTANEAS,
+      pid => pool.get('/produtos_insumos', { query: { produto_id: pid } }).catch(() => []));
+    const nomes = await emBlocos(insumosDoPonto, LEITURAS_SIMULTANEAS,
+      iid => pool.get(`/materia_prima/${iid}`).catch(() => null));
 
     produtos.forEach(produto => {
       if (produto && !produto.error && produto.id !== undefined) {

@@ -237,9 +237,17 @@
     if (!mexer) return { mexer: false, justificativa: null };
 
     // Devolver nunca deixa saldo negativo: só a saída precisa da conferência.
-    const negativos = direcao === 'saida' && typeof previsao === 'function'
-      ? ((await previsao().catch(() => null))?.negativos || [])
-      : [];
+    //
+    // A consulta vai ao banco e leva um instante. SOB O VÉU: sem ele a tela
+    // ficava parada entre o "Sim" e o modal de aprovação, sem nada indicando
+    // que algo estava acontecendo — e é justamente aí que se clica de novo.
+    let negativos = [];
+    if (direcao === 'saida' && typeof previsao === 'function') {
+      const consulta = async () => (await previsao().catch(() => null))?.negativos || [];
+      negativos = window.BotaoAcao?.comCarregamento
+        ? await window.BotaoAcao.comCarregamento(consulta, 'Conferindo o estoque de matéria-prima...')
+        : await consulta();
+    }
     if (!negativos.length) return { mexer: true, justificativa: null };
 
     const justificativa = await aprovarNegativos({ negativos, peca, ponto });

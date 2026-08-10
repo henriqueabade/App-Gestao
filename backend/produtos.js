@@ -1055,26 +1055,31 @@ async function movimentarInsumosDaPeca({
   const quantidadePecas = Number(paraDecimal(unidades)) || 0;
   if (!(quantidadePecas > 0)) return { insumos: 0, falhas: [] };
 
-  const passos = await rotaConsumidaAte(produtoId, ultimoInsumoId);
-  if (!passos.length) return { insumos: 0, falhas: [] };
+  // UMA previsão serve para as duas coisas: dizer quais insumos fecham negativo
+  // e fornecer a lista de quanto tirar de cada um.
+  //
+  // Antes eram duas leituras da rota e duas da matéria-prima por operação —
+  // e, com quinze passos, cada requisição a mais atravessa o servidor local
+  // até a API remota. Além de mais rápido, isto garante que o que é GRAVADO é
+  // exatamente o que foi mostrado e aprovado na tela.
+  const previsao = await previsaoDeInsumosDaPeca({
+    produtoId, ultimoInsumoId, unidades, direcao
+  }).catch(() => ({ insumos: [], negativos: [] }));
+
+  if (!previsao.insumos.length) return { insumos: 0, falhas: [] };
 
   // Carregado aqui e não no topo: `materiaPrima` já requer este arquivo, e o
   // require no topo fecharia o ciclo.
   const { registrarEntrada, registrarSaida } = require('./materiaPrima');
   const aplicar = direcao === 'entrada' ? registrarEntrada : registrarSaida;
 
-  // QUAIS insumos fecham negativo — calculado antes de mexer em qualquer
-  // saldo, com os mesmos números que a tela mostrou ao pedir a aprovação.
-  const previsao = await previsaoDeInsumosDaPeca({
-    produtoId, ultimoInsumoId, unidades, direcao
-  }).catch(() => ({ negativos: [] }));
   const ficaNegativo = new Set(previsao.negativos.map(i => Number(i.insumo_id)));
 
   const falhas = [];
   let insumos = 0;
 
-  for (const passo of passos) {
-    const quantidade = Number(paraDecimal(passo.por_unidade * quantidadePecas)) || 0;
+  for (const passo of previsao.insumos) {
+    const quantidade = Number(passo.quantidade) || 0;
     if (!(quantidade > 0)) continue;
     const negativou = ficaNegativo.has(Number(passo.insumo_id));
     const notaDaLinha = negativou && justificativaNegativo
