@@ -2007,9 +2007,8 @@
         .filter(order => (order?.situacao || '') !== 'Cancelado')
         .filter(order => isOrderInProduction(order));
 
-      const prepared = [];
-
-      for (const raw of list) {
+      /** Um pedido candidato: busca os itens dele, se ainda não vieram. */
+      const prepararPedido = async raw => {
         const order = { ...raw };
         if (!Array.isArray(order.itens)) {
           try {
@@ -2037,9 +2036,22 @@
           order.__itemEntries = buildOrderItemEntries(order.itens);
         }
 
-        if (Array.isArray(order.__itemEntries) && order.__itemEntries.some(entry => Number(entry.quantity) > 0)) {
-          prepared.push(order);
-        }
+        // Sem peça nenhuma não há o que realocar: o pedido fica de fora.
+        const temPeca = Array.isArray(order.__itemEntries)
+          && order.__itemEntries.some(entry => Number(entry.quantity) > 0);
+        return temPeca ? order : null;
+      };
+
+      // EM BLOCOS, não um pedido de cada vez.
+      //
+      // Cada candidato custa uma ida à API. Em fila indiana, dez pedidos em
+      // produção eram dez esperas somadas antes de o modal aparecer — e o resto
+      // do app ficava atrás delas. Quatro por vez é rápido sem inundar a API.
+      const POR_VEZ = 4;
+      const prepared = [];
+      for (let i = 0; i < list.length; i += POR_VEZ) {
+        const bloco = await Promise.all(list.slice(i, i + POR_VEZ).map(prepararPedido));
+        prepared.push(...bloco.filter(Boolean));
       }
 
       await nomesCarregando;

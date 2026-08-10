@@ -67,13 +67,23 @@ function montarAmbiente() {
 
   const lotes = lotesIniciais();
   const gravacoes = { faltantes: [], ext: [], lotesAtualizados: [], movimentos: [], reservas: [], eventos: [] };
+  // Quantas idas à API cada forma de leitura provocou.
+  const contagem = { materiaPrima: 0, materiaPrimaPorId: 0 };
 
   const api = {
     async get(rota, opcoes = {}) {
       if (rota === '/api/produtos_insumos') {
         return ROTA.filter(r => String(r.produto_id) === String(opcoes?.query?.produto_id));
       }
+      // A tabela inteira, de uma vez: é assim que a conversão lê hoje. Ler
+      // insumo a insumo eram dezenas de idas à API antes de a conversão sequer
+      // começar, e o app inteiro ficava na fila atrás delas.
+      if (rota === '/api/materia_prima') {
+        contagem.materiaPrima += 1;
+        return Object.values(MATERIAS);
+      }
       if (rota.startsWith('/api/materia_prima/')) {
+        contagem.materiaPrimaPorId += 1;
         return MATERIAS[Number(rota.split('/').pop())] || null;
       }
       if (rota === '/api/produtos_em_cada_ponto') {
@@ -106,6 +116,7 @@ function montarAmbiente() {
     api,
     lotes,
     gravacoes,
+    contagem,
     saidasDeInsumo,
     // Tabelas do app sem auto-incremento usam estes ajudantes.
     getMaxId: async () => 0,
@@ -816,5 +827,46 @@ test('dois lotes no mesmo ponto da rota são baixados cada um na sua linha', asy
     assert.ok(baixados.includes(504), 'o lote 504, no mesmo ponto, também');
   } finally {
     amb.restaurar();
+  }
+});
+
+// ---------------------------------------------------------------------------
+// A conversão não lê insumo por insumo
+//
+// Eram duas passagens sobre o MESMO conjunto de insumos — uma para nome e
+// processo, outra para o saldo — e cada uma pedia `/materia_prima/{id}` em fila
+// indiana. Um pedido com quatro peças de quinze passos chega perto de quarenta
+// insumos distintos: oitenta idas à API antes de a conversão sequer começar,
+// com o app inteiro esperando atrás delas.
+// ---------------------------------------------------------------------------
+
+test('a matéria-prima é lida em bloco, não um insumo por vez', async () => {
+  const amb = montarAmbiente();
+  try {
+    await amb.aplicarConversaoNoEstoque(amb.api, {
+      pedidoId: 99,
+      itens: [{
+        pedido_item_id: 1000,
+        produto_id: 7,
+        quantidade: 4,
+        qtd_usar_pronta: 1,
+        qtd_a_produzir: 3,
+        parciais: [{ ultimo_insumo_id: 20, quantidade: 2, ordem: 2 }]
+      }],
+      getMaxId: amb.getMaxId,
+      inserirLinhaComId: amb.inserirLinhaComId,
+      registrarSaidaInsumo: amb.saidasDeInsumo.fn
+    });
+
+    assert.equal(
+      amb.contagem.materiaPrimaPorId, 0,
+      'nenhuma leitura insumo a insumo — era daí que vinha a fila'
+    );
+    assert.ok(
+      amb.contagem.materiaPrima <= 2,
+      `no máximo duas leituras da tabela (rota e saldo), houve ${amb.contagem.materiaPrima}`
+    );
+  } finally {
+    amb.restaurar?.();
   }
 });

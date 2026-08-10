@@ -39,6 +39,36 @@ function paraNumero(valor) {
   return Number.isFinite(n) ? n : 0;
 }
 
+/**
+ * A matéria-prima que a conversão vai tocar, indexada por id.
+ *
+ * UMA leitura da tabela, não uma por insumo. A conversão precisa dos mesmos
+ * insumos duas vezes — uma para nome/unidade/processo, outra para o saldo — e
+ * as duas liam `/materia_prima/{id}` em fila indiana. Um pedido com quatro
+ * peças de quinze passos chega perto de quarenta insumos distintos: eram
+ * oitenta idas à API antes de a conversão sequer começar, e o app inteiro
+ * ficava atrás delas.
+ *
+ * A tabela tem algumas centenas de linhas; uma leitura só custa muito menos que
+ * quarenta idas de rede — é a mesma decisão já tomada em
+ * `pedidosController.carregarMateriaPrima` e em `cancelamentoEstorno`.
+ */
+async function carregarMateriaPrima(api, insumosIds) {
+  const porId = new Map();
+  const querFiltro = insumosIds instanceof Set || Array.isArray(insumosIds);
+  const desejados = querFiltro ? new Set(Array.from(insumosIds).map(Number)) : null;
+  if (desejados && !desejados.size) return porId;
+
+  const lista = await api.get('/api/materia_prima').catch(() => []);
+  for (const materia of (Array.isArray(lista) ? lista : [])) {
+    const id = Number(materia?.id);
+    if (!Number.isFinite(id)) continue;
+    if (desejados && !desejados.has(id)) continue;
+    porId.set(id, materia);
+  }
+  return porId;
+}
+
 /** Rotas dos produtos envolvidos, indexadas por produto_id. */
 async function carregarRotas(api, produtoIds) {
   const rotaPorProduto = new Map();
@@ -62,11 +92,7 @@ async function carregarRotas(api, produtoIds) {
   }
 
   // Nome, unidade e processo vêm da matéria-prima — são o que o relatório mostra.
-  const materias = new Map();
-  for (const insumoId of insumosIds) {
-    const materia = await api.get(`/api/materia_prima/${insumoId}`).catch(() => null);
-    if (materia && !materia.error) materias.set(Number(insumoId), materia);
-  }
+  const materias = await carregarMateriaPrima(api, insumosIds);
 
   for (const [produtoId, lista] of rotasBrutas.entries()) {
     const rota = lista
@@ -132,9 +158,16 @@ async function carregarEstoqueInsumos(api, rotaPorProduto) {
     });
   }
 
+  // Uma leitura indexada, não uma por insumo — ver `carregarMateriaPrima`.
+  //
+  // O saldo é lido AGORA, no momento da conversão: `carregarRotas` também leu a
+  // tabela, mas para nome e processo, e reaproveitar aquele retorno correria o
+  // risco de abater em cima de um saldo velho.
+  const materias = await carregarMateriaPrima(api, ids);
+
   const estoquePorInsumo = new Map();
   for (const id of ids) {
-    const materia = await api.get(`/api/materia_prima/${id}`).catch(() => null);
+    const materia = materias.get(Number(id)) || null;
     estoquePorInsumo.set(id, {
       quantidade: paraNumero(materia?.quantidade),
       infinito: Boolean(materia?.infinito)
