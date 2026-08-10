@@ -1,5 +1,9 @@
 const pool = require('./db');
 const { normalizarCamposNumericos, paraDecimal } = require('./numeros');
+const {
+  lerProdutos: lerProdutosDoCatalogo,
+  lerProdutosInsumos: lerProdutosInsumosDoCatalogo
+} = require('./catalogoCache');
 
 /** Campos que chegam do front como texto e precisam virar número decimal. */
 const CAMPOS_NUMERICOS_MATERIA = ['quantidade', 'preco_unitario'];
@@ -1168,7 +1172,9 @@ async function listarProdutosPorInsumo(insumoId) {
   const lista = Array.isArray(vinculos) ? vinculos : [];
   if (!lista.length) return [];
 
-  const produtos = await getFiltrado('/produtos', { select: 'id,codigo,nome' });
+  // Do cache do catálogo: este popup abre a cada passada do mouse e lia a
+  // tabela inteira de produtos toda vez. Ver `catalogoCache`.
+  const produtos = await lerProdutosDoCatalogo(pool);
   const porId = new Map();
   const porCodigo = new Map();
   for (const produto of Array.isArray(produtos) ? produtos : []) {
@@ -1212,7 +1218,7 @@ async function listarInsumosPorProduto(termo) {
   const busca = String(termo || '').trim().toLowerCase();
   if (!busca) return [];
 
-  const produtos = await getFiltrado('/produtos', { select: 'id,codigo,nome' });
+  const produtos = await lerProdutosDoCatalogo(pool);
   const encontrados = (Array.isArray(produtos) ? produtos : []).filter(produto =>
     String(produto?.nome || '').toLowerCase().includes(busca) ||
     String(produto?.codigo || '').toLowerCase().includes(busca)
@@ -1225,9 +1231,9 @@ async function listarInsumosPorProduto(termo) {
       .map(produto => String(produto?.codigo || '').trim().toLowerCase())
       .filter(Boolean)
   );
-  const vinculos = await getFiltrado('/produtos_insumos', {
-    select: 'produto_id,produto_codigo,insumo_id'
-  });
+  // A tabela de rotas é a maior do sistema e era lida INTEIRA a cada busca —
+  // e a busca acontecia a cada tecla. Agora vem do cache do catálogo.
+  const vinculos = await lerProdutosInsumosDoCatalogo(pool);
 
   return Array.from(new Set(
     (Array.isArray(vinculos) ? vinculos : [])

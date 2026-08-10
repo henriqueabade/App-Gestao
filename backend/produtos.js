@@ -1,6 +1,8 @@
 const pool = require('./db');
 const { MOV, ITEM, registrarMovimento } = require('./estoqueLedger');
 const { normalizarCamposNumericos, paraDecimal } = require('./numeros');
+// Quem grava produto ou rota derruba o catálogo cacheado — ver catalogoCache.
+const catalogoCache = require('./catalogoCache');
 
 /** Campos que chegam do front como texto e precisam virar número decimal. */
 const CAMPOS_NUMERICOS_PRODUTO = [
@@ -815,6 +817,8 @@ async function adicionarProduto(dados) {
     err.code = 'NOME_EXISTE';
     throw err;
   }
+  // O catálogo mudou: o cache de produtos/rotas não vale mais.
+  catalogoCache.invalidar();
   return pool.post('/produtos', {
     codigo,
     nome,
@@ -862,6 +866,8 @@ async function atualizarProduto(id, dados) {
     ncm: ncmSanitizado
   });
   const atualizado = await pool.put(`/produtos/${id}`, payload);
+  // O catálogo mudou: o cache de produtos/rotas não vale mais.
+  catalogoCache.invalidar();
   return atualizado;
 }
 
@@ -904,6 +910,8 @@ async function excluirProduto(id) {
   console.info(`[excluirProduto] lotes em ${Date.now() - inicioEtapa}ms`);
 
   await pool.delete(`/produtos/${id}`);
+  // O catálogo mudou: o cache de produtos/rotas não vale mais.
+  catalogoCache.invalidar();
   console.info(`[excluirProduto] total em ${Date.now() - inicioTotal}ms`);
   return true;
 }
@@ -1479,6 +1487,10 @@ async function salvarProdutoDetalhado(codigoOriginal, produto, itens, produtoId)
     });
   }
 
+  // A ROTA mudou: é ela que responde "quais produtos usam este insumo" e
+  // "quais insumos este produto tem". Sem derrubar o cache, o popup e a busca
+  // continuariam mostrando a composição antiga.
+  catalogoCache.invalidar();
   return true;
 }
 

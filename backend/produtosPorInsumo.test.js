@@ -17,6 +17,10 @@ function carregarComTabelas(tabelas) {
     }
   };
   delete require.cache[require.resolve('./materiaPrima')];
+  // O catálogo é cacheado no processo (ver `catalogoCache`): sem descartá-lo, o
+  // segundo teste leria a tabela de produtos do primeiro. Em produção o cache é
+  // um só porque o banco é um só; aqui cada caso troca o banco inteiro.
+  delete require.cache[require.resolve('./catalogoCache')];
   return require('./materiaPrima');
 }
 
