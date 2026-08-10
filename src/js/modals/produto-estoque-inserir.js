@@ -220,13 +220,22 @@
       // agora. Sem essa resposta o estoque de peças subia e o de matéria-prima
       // ficava parado — o sistema passava a acreditar em material que já tinha
       // virado peça.
-      const abaterInsumos = await window.InsumosDaPeca?.perguntar({
+      const decisao = await window.InsumosDaPeca?.decidir({
         direcao: 'saida',
         unidades: quantidade,
         peca: produto.nome || produto.codigo || '',
-        ponto: `${etapaNome} · ${itemNome}`
+        ponto: `${etapaNome} · ${itemNome}`,
+        // Consultado só se a resposta for "sim": é o que diz quais insumos
+        // ficariam negativos, para pedir aprovação antes de gravar.
+        previsao: () => window.electronAPI.previsaoInsumosPeca({
+          produtoId: produto.id,
+          ultimoInsumoId: itemId,
+          unidades: quantidade,
+          direcao: 'saida'
+        })
       });
-      if (abaterInsumos === null || abaterInsumos === undefined) return;
+      if (!decisao) return;
+      const abaterInsumos = decisao.mexer;
 
       try{
         // O véu fica de pé até a peça, os insumos e as duas auditorias
@@ -238,6 +247,7 @@
             ultimoInsumoId: itemId,
             quantidade,
             abaterInsumos,
+            justificativaNegativo: decisao.justificativa,
             __meta: {
               produto: {
                 id: produto.id,

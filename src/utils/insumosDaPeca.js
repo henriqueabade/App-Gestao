@@ -72,7 +72,7 @@
               </button>
             </div>
             <div class="flex justify-end pt-1">
-              <button type="button" data-acao="cancelar" class="text-xs text-gray-400 hover:text-white transition">Cancelar</button>
+              <button type="button" data-acao="cancelar" class="btn-danger px-4 py-2 rounded-lg text-white font-medium">Cancelar</button>
             </div>
           </div>
         </div>`;
@@ -103,6 +103,148 @@
       overlay.addEventListener('click', e => { if (e.target === overlay) encerrar(null); });
       document.addEventListener('keydown', aoTeclar);
     });
+  }
+
+  const formatarNumero = valor => Number(valor || 0)
+    .toLocaleString('pt-BR', { maximumFractionDigits: 4 });
+
+  /**
+   * Aprovação do saldo negativo, com justificativa obrigatória.
+   *
+   * Abater às cegas e descobrir depois é o que transforma um erro de digitação
+   * em inventário furado. Negativo pode acontecer — material que chegou e não
+   * foi lançado, ficha técnica desatualizada —, mas é DECISÃO: quem aprova
+   * escreve o porquê, e isso fica no movimento daquele insumo.
+   *
+   * Mesmo padrão da conversão de orçamento: a linha negativa em vermelho, o
+   * campo de justificativa obrigatório e o botão travado enquanto ele estiver
+   * vazio.
+   *
+   * @returns {Promise<string|null>} a justificativa, ou `null` se desistiu.
+   */
+  function aprovarNegativos({ negativos = [], peca = '', ponto = '' } = {}) {
+    return new Promise(resolve => {
+      const overlay = document.createElement('div');
+      overlay.className = 'app-message-overlay fixed inset-0 bg-black/50 flex items-center justify-center p-4';
+      overlay.style.zIndex = 'var(--z-dialog)';
+      overlay.innerHTML = `
+        <div class="max-w-lg w-full glass-surface backdrop-blur-xl rounded-2xl border border-red-500/20 ring-1 ring-red-500/30 shadow-2xl/40 animate-modalFade">
+          <div class="p-6 space-y-4">
+            <div>
+              <h3 class="text-lg font-semibold text-red-400">Saldo negativo na matéria-prima</h3>
+              <p class="text-sm text-gray-300 mt-1">
+                ${negativos.length === 1 ? 'Um insumo ficará' : `${negativos.length} insumos ficarão`}
+                com saldo abaixo de zero se você continuar.
+              </p>
+            </div>
+
+            ${peca ? `
+            <div class="bg-white/5 border border-white/10 rounded-lg p-3 text-xs text-gray-200">
+              <p class="text-white font-medium">${peca}</p>
+              ${ponto ? `<p>${ponto}</p>` : ''}
+            </div>` : ''}
+
+            <div class="max-h-56 overflow-y-auto rounded-lg border border-white/10">
+              <table class="w-full text-xs">
+                <thead class="bg-white/5 text-gray-300">
+                  <tr>
+                    <th class="text-left px-3 py-2">Insumo</th>
+                    <th class="text-right px-3 py-2">Em estoque</th>
+                    <th class="text-right px-3 py-2">Consumo</th>
+                    <th class="text-right px-3 py-2">Fica com</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${negativos.map(i => `
+                    <tr class="border-t border-white/5">
+                      <td class="px-3 py-2 text-gray-200">${i.nome}</td>
+                      <td class="px-3 py-2 text-right text-gray-300">${formatarNumero(i.saldo_atual)} ${i.unidade || ''}</td>
+                      <td class="px-3 py-2 text-right text-gray-300">${formatarNumero(i.quantidade)}</td>
+                      <td class="px-3 py-2 text-right font-semibold status-alert">${formatarNumero(i.saldo_previsto)}</td>
+                    </tr>`).join('')}
+                </tbody>
+              </table>
+            </div>
+
+            <div class="space-y-1">
+              <label class="text-xs uppercase tracking-wide text-gray-400">
+                Justificativa <span class="text-red-400">*</span>
+              </label>
+              <textarea data-justificativa rows="2"
+                class="w-full bg-input border border-inputBorder rounded-lg px-3 py-2 text-white text-sm"
+                placeholder="Por que o saldo pode ficar negativo? (ex.: material recebido e ainda não lançado)"></textarea>
+              <p class="text-[11px] text-gray-400">
+                Fica gravada no movimento de cada insumo que ficou negativo, com o seu nome.
+              </p>
+            </div>
+
+            <div class="flex justify-end gap-3 pt-1">
+              <button type="button" data-acao="cancelar" class="btn-danger px-4 py-2 rounded-lg text-white font-medium">Cancelar</button>
+              <button type="button" data-acao="aprovar" class="btn-warning px-4 py-2 rounded-lg text-white font-medium opacity-50 cursor-not-allowed" disabled>
+                Aprovar e continuar
+              </button>
+            </div>
+          </div>
+        </div>`;
+      document.body.appendChild(overlay);
+
+      const campo = overlay.querySelector('[data-justificativa]');
+      const btnAprovar = overlay.querySelector('[data-acao="aprovar"]');
+
+      // Sem justificativa não há aprovação: o botão só destrava quando o campo
+      // tem conteúdo de verdade.
+      const revalidar = () => {
+        const preenchido = Boolean(campo.value.trim());
+        btnAprovar.disabled = !preenchido;
+        btnAprovar.classList.toggle('opacity-50', !preenchido);
+        btnAprovar.classList.toggle('cursor-not-allowed', !preenchido);
+      };
+      campo.addEventListener('input', revalidar);
+
+      let respondido = false;
+      const encerrar = valor => {
+        if (respondido) return;
+        respondido = true;
+        overlay.querySelectorAll('button').forEach(b => { b.disabled = true; });
+        document.removeEventListener('keydown', aoTeclar);
+        overlay.remove();
+        resolve(valor);
+      };
+      function aoTeclar(e) { if (e.key === 'Escape') encerrar(null); }
+
+      btnAprovar.addEventListener('click', () => {
+        const texto = campo.value.trim();
+        if (!texto) { campo.focus(); return; }
+        encerrar(texto);
+      });
+      overlay.querySelector('[data-acao="cancelar"]')?.addEventListener('click', () => encerrar(null));
+      overlay.addEventListener('click', e => { if (e.target === overlay) encerrar(null); });
+      document.addEventListener('keydown', aoTeclar);
+      campo.focus();
+    });
+  }
+
+  /**
+   * A pergunta completa: abater ou não e, se abater e algum insumo ficar
+   * negativo, a aprovação com justificativa.
+   *
+   * @returns {Promise<{mexer: boolean, justificativa: string|null}|null>}
+   *   `null` = desistiu, e nada deve ser gravado.
+   */
+  async function decidir({ direcao = 'saida', unidades = 0, peca = '', ponto = '', previsao = null } = {}) {
+    const mexer = await perguntar({ direcao, unidades, peca, ponto });
+    if (mexer === null || mexer === undefined) return null;
+    if (!mexer) return { mexer: false, justificativa: null };
+
+    // Devolver nunca deixa saldo negativo: só a saída precisa da conferência.
+    const negativos = direcao === 'saida' && typeof previsao === 'function'
+      ? ((await previsao().catch(() => null))?.negativos || [])
+      : [];
+    if (!negativos.length) return { mexer: true, justificativa: null };
+
+    const justificativa = await aprovarNegativos({ negativos, peca, ponto });
+    if (justificativa === null) return null;
+    return { mexer: true, justificativa };
   }
 
   /** Aviso curto do que aconteceu com a matéria-prima, para o toast. */
@@ -148,5 +290,5 @@
     return executar();
   }
 
-  window.InsumosDaPeca = { perguntar, resumo, comCarregamento };
+  window.InsumosDaPeca = { perguntar, aprovarNegativos, decidir, resumo, comCarregamento };
 })();

@@ -64,6 +64,7 @@ const {
   inserirLoteProduto,
   atualizarLoteProduto,
   excluirLoteProduto,
+  previsaoDeInsumosDaPeca,
   salvarProdutoDetalhado,
   listarColecoes,
   adicionarColecao,
@@ -4414,18 +4415,30 @@ ipcMain.handle('listar-detalhes-produto', async (_e, payload) => {
     throw err;
   }
 });
+/**
+ * O que aconteceria com a matéria-prima — sem gravar nada.
+ *
+ * A tela consulta antes de confirmar para mostrar quais insumos ficariam
+ * negativos e pedir aprovação. Só leitura, então basta a permissão de ver o
+ * ajuste de estoque.
+ */
+ipcMain.handle('previsao-insumos-peca', async (_e, dados) => {
+  if (!(await verificarPermissaoIpc('prod.stock.adjust'))) return negadoIpc('prod.stock.adjust');
+  return previsaoDeInsumosDaPeca(dados || {});
+});
 ipcMain.handle('inserir-lote-produto', async (_e, dados) => {
   if (!(await verificarPermissaoIpc('prod.stock.input'))) return negadoIpc('prod.stock.input');
   // Quem fez sai daqui: só o processo principal conhece a sessão. Sem passar
   // adiante, o movimento ia para o razão sem autor.
   return inserirLoteProduto({ ...dados, usuarioId: currentUserSession?.id ?? null });
 });
-ipcMain.handle('atualizar-lote-produto', async (_e, { id, quantidade, ajustarInsumos }) => {
+ipcMain.handle('atualizar-lote-produto', async (_e, { id, quantidade, ajustarInsumos, justificativaNegativo }) => {
   if (!(await verificarPermissaoIpc('prod.stock.adjust'))) return negadoIpc('prod.stock.adjust');
   // A escolha de mexer (ou não) na matéria-prima vem da tela e viaja junto: é
   // decisão de quem registra, não padrão do sistema.
   return atualizarLoteProduto(id, quantidade, currentUserSession?.id ?? null, {
-    ajustarInsumos: ajustarInsumos === true
+    ajustarInsumos: ajustarInsumos === true,
+    justificativaNegativo: justificativaNegativo || null
   });
 });
 ipcMain.handle('excluir-lote-produto', async (_e, info) => {
@@ -4439,7 +4452,8 @@ ipcMain.handle('excluir-lote-produto', async (_e, info) => {
     return { success: false, error: 'invalid-id' };
   }
   const resultado = await excluirLoteProduto(id, currentUserSession?.id ?? null, {
-    devolverInsumos: info?.devolverInsumos === true
+    devolverInsumos: info?.devolverInsumos === true,
+    justificativaNegativo: info?.justificativaNegativo || null
   });
   return { success: true, ...resultado };
 });

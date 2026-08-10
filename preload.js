@@ -230,6 +230,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   listarDetalhesProduto: (params) => ipcRenderer.invoke('listar-detalhes-produto', params),
   listarMovimentosProduto: (params) => ipcRenderer.invoke('listar-movimentos-produto', params),
   listarMovimentosInsumo: (params) => ipcRenderer.invoke('listar-movimentos-insumo', params),
+  // Só leitura: diz o que aconteceria com cada insumo, para a tela avisar
+  // ANTES de confirmar quais ficariam negativos.
+  previsaoInsumosPeca: (dados) => ipcRenderer.invoke('previsao-insumos-peca', dados),
   inserirLoteProduto: async (dados) => {
     const result = await ipcRenderer.invoke('inserir-lote-produto', dados);
     recordIpcAction('inserir-lote-produto', dados, result);
@@ -250,7 +253,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     // se perdia no caminho e nada era devolvido.
     const result = await ipcRenderer.invoke('excluir-lote-produto', {
       id: payload.id,
-      devolverInsumos: payload.devolverInsumos === true
+      devolverInsumos: payload.devolverInsumos === true,
+      justificativaNegativo: payload.justificativaNegativo || null
     });
     recordIpcAction('excluir-lote-produto', payload, result);
     return result;

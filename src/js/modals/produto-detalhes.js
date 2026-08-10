@@ -122,18 +122,27 @@
       // acompanhar — ou não, se for correção de inventário. Quem registra
       // decide, aqui, antes de gravar.
       let ajustarInsumos = false;
+      let justificativaNegativo = null;
       if (diferenca !== 0) {
-        const resposta = await window.InsumosDaPeca?.perguntar({
-          direcao: diferenca > 0 ? 'saida' : 'entrada',
+        const direcao = diferenca > 0 ? 'saida' : 'entrada';
+        const decisao = await window.InsumosDaPeca?.decidir({
+          direcao,
           unidades: Math.abs(diferenca),
           peca: item?.nome || item?.codigo || '',
-          ponto: `${dados.etapa || ''} · ${dados.ultimo_item || ''}`
+          ponto: `${dados.etapa || ''} · ${dados.ultimo_item || ''}`,
+          previsao: () => window.electronAPI.previsaoInsumosPeca({
+            produtoId: item?.id,
+            ultimoInsumoId: dados.ultimo_insumo_id,
+            unidades: Math.abs(diferenca),
+            direcao
+          })
         });
-        if (resposta === null || resposta === undefined) {
+        if (!decisao) {
           carregarDetalhes(item.id);
           return;
         }
-        ajustarInsumos = resposta;
+        ajustarInsumos = decisao.mexer;
+        justificativaNegativo = decisao.justificativa;
       }
 
       // A linha inteira sai do ar enquanto grava: sem isso, um segundo clique
@@ -149,6 +158,7 @@
             id: dados.id,
             quantidade: novaQtd,
             ajustarInsumos,
+            justificativaNegativo,
             __meta: {
               produto: {
                 id: item.id,

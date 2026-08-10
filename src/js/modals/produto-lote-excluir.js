@@ -26,13 +26,17 @@
     // Excluir o lote apaga peças do estoque. Elas chegaram a existir (e o
     // material foi junto) ou o lançamento estava errado (e o material volta)?
     // A mesma pergunta das outras telas, com as mesmas palavras.
-    const devolverInsumos = await window.InsumosDaPeca?.perguntar({
+    // Devolver nunca deixa saldo negativo, então aqui a decisão é só o sim/não
+    // — `decidir` cuida disso sozinho e o caminho fica igual ao das outras
+    // telas.
+    const decisao = await window.InsumosDaPeca?.decidir({
       direcao: 'entrada',
       unidades: item.quantidade,
       peca: item.produto?.nome || item.produto?.codigo || '',
       ponto: `${item.etapa || ''} · ${item.itemNome || ''}`
     });
-    if (devolverInsumos === null || devolverInsumos === undefined) return;
+    if (!decisao) return;
+    const devolverInsumos = decisao.mexer;
 
     try {
       const payload = {

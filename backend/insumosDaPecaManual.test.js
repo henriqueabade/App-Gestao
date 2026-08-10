@@ -376,3 +376,165 @@ test('insumo que falha não some: volta na lista de falhas', async () => {
     amb.restaurar();
   }
 });
+
+// ---------------------------------------------------------------------------
+// SALDO NEGATIVO: previsto antes, aprovado com justificativa, marcado depois
+//
+// Abater às cegas e descobrir no inventário é o que transforma um erro de
+// digitação em estoque furado. Negativo pode acontecer — material recebido e
+// não lançado, ficha técnica velha —, mas é DECISÃO: alguém aprova e escreve
+// o porquê, e isso fica no movimento do insumo que ficou negativo.
+// ---------------------------------------------------------------------------
+
+/** Ambiente com saldo controlado por insumo, para prever o que fica negativo. */
+function ambienteComSaldos(saldos, extras = {}) {
+  const amb = montarAmbiente(extras);
+  const dbFake = require.cache[require.resolve('./db')].exports;
+  const getOriginal = dbFake.get.bind(dbFake);
+  dbFake.get = async (rota, opcoes) => {
+    if (rota === '/materia_prima') {
+      return Object.entries(saldos).map(([id, valor]) => ({
+        id: Number(id),
+        nome: `Insumo ${id}`,
+        unidade: 'un',
+        quantidade: valor.quantidade ?? valor,
+        infinito: Boolean(valor.infinito)
+      }));
+    }
+    return getOriginal(rota, opcoes);
+  };
+  return amb;
+}
+
+test('a previsão diz qual insumo fica negativo, sem gravar nada', async () => {
+  // Passo 1 consome 1/peça, passo 2 consome 2/peça, passo 3 consome 3/peça.
+  // Com 4 peças: 4, 8 e 12.
+  const amb = ambienteComSaldos({
+    [insumoDaOrdem(1)]: 100,
+    [insumoDaOrdem(2)]: 5,
+    [insumoDaOrdem(3)]: 12
+  });
+  try {
+    const r = await amb.produtos.previsaoDeInsumosDaPeca({
+      produtoId: 7,
+      ultimoInsumoId: insumoDaOrdem(3),
+      unidades: 4,
+      direcao: 'saida'
+    });
+
+    assert.equal(r.insumos.length, 3, 'os três passos da rota até o ponto');
+    assert.equal(r.negativos.length, 1, 'só o que de fato fecha abaixo de zero');
+    assert.equal(r.negativos[0].insumo_id, insumoDaOrdem(2));
+    assert.equal(r.negativos[0].saldo_atual, 5);
+    assert.equal(r.negativos[0].quantidade, 8);
+    assert.equal(r.negativos[0].saldo_previsto, -3);
+
+    // Exatamente zero NÃO é negativo.
+    const noLimite = r.insumos.find(i => i.insumo_id === insumoDaOrdem(3));
+    assert.equal(noLimite.saldo_previsto, 0);
+    assert.equal(noLimite.negativo, false);
+
+    // E nada foi gravado: previsão é leitura.
+    assert.equal(amb.registro.saidas.length, 0);
+    assert.equal(amb.registro.movimentos.length, 0);
+  } finally {
+    amb.restaurar();
+  }
+});
+
+test('insumo infinito nunca conta como negativo', async () => {
+  const amb = ambienteComSaldos({
+    [insumoDaOrdem(1)]: { quantidade: 0, infinito: true },
+    [insumoDaOrdem(2)]: { quantidade: 0, infinito: false }
+  });
+  try {
+    const r = await amb.produtos.previsaoDeInsumosDaPeca({
+      produtoId: 7,
+      ultimoInsumoId: insumoDaOrdem(2),
+      unidades: 1,
+      direcao: 'saida'
+    });
+
+    assert.equal(r.negativos.length, 1);
+    assert.equal(r.negativos[0].insumo_id, insumoDaOrdem(2), 'o infinito fica de fora');
+  } finally {
+    amb.restaurar();
+  }
+});
+
+test('devolução não gera negativo: o saldo só sobe', async () => {
+  const amb = ambienteComSaldos({ [insumoDaOrdem(1)]: 0, [insumoDaOrdem(2)]: 0 });
+  try {
+    const r = await amb.produtos.previsaoDeInsumosDaPeca({
+      produtoId: 7,
+      ultimoInsumoId: insumoDaOrdem(2),
+      unidades: 3,
+      direcao: 'entrada'
+    });
+
+    assert.equal(r.negativos.length, 0);
+    assert.equal(r.insumos[0].saldo_previsto, 3, 'entrada soma');
+  } finally {
+    amb.restaurar();
+  }
+});
+
+test('a justificativa fica SÓ no insumo que ficou negativo', async () => {
+  const amb = ambienteComSaldos({
+    [insumoDaOrdem(1)]: 100,
+    [insumoDaOrdem(2)]: 1
+  });
+  try {
+    await amb.produtos.inserirLoteProduto({
+      produtoId: 7,
+      etapa: 'Montagem',
+      ultimoInsumoId: insumoDaOrdem(2),
+      quantidade: 1,
+      usuarioId: 13,
+      abaterInsumos: true,
+      justificativaNegativo: 'Material recebido e ainda não lançado'
+    });
+
+    const doInsumo = amb.registro.movimentos.filter(m => m.tipo_item === 'insumo');
+    const negativo = doInsumo.find(m => Number(m.item_id) === insumoDaOrdem(2));
+    const normal = doInsumo.find(m => Number(m.item_id) === insumoDaOrdem(1));
+
+    assert.equal(negativo.saldo_negativo_autorizado, true, 'o que fechou negativo é marcado');
+    assert.match(negativo.decision_note, /Material recebido e ainda não lançado/);
+
+    assert.equal(
+      normal.saldo_negativo_autorizado, null,
+      'marcar todos diria que houve decisão de negativar onde não houve'
+    );
+    assert.equal(
+      /Saldo negativo autorizado/.test(normal.decision_note || ''), false,
+      'e a nota do negativo não contamina os outros'
+    );
+
+    // A justificativa também vai para o histórico da matéria-prima.
+    const doHistorico = amb.registro.saidas.find(s => s.id === insumoDaOrdem(2));
+    assert.match(doHistorico.contexto.nota, /Saldo negativo autorizado/);
+  } finally {
+    amb.restaurar();
+  }
+});
+
+test('sem negativo, nada é marcado como autorizado', async () => {
+  const amb = ambienteComSaldos({ [insumoDaOrdem(1)]: 100, [insumoDaOrdem(2)]: 100 });
+  try {
+    await amb.produtos.inserirLoteProduto({
+      produtoId: 7,
+      etapa: 'Montagem',
+      ultimoInsumoId: insumoDaOrdem(2),
+      quantidade: 1,
+      usuarioId: 13,
+      abaterInsumos: true
+    });
+
+    const doInsumo = amb.registro.movimentos.filter(m => m.tipo_item === 'insumo');
+    assert.ok(doInsumo.length > 0);
+    assert.ok(doInsumo.every(m => m.saldo_negativo_autorizado === null));
+  } finally {
+    amb.restaurar();
+  }
+});

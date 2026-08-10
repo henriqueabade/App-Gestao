@@ -976,6 +976,56 @@ async function rotaConsumidaAte(produtoId, ultimoInsumoId) {
 }
 
 /**
+ * O que ACONTECERIA com o estoque de cada insumo, sem gravar nada.
+ *
+ * Serve para a tela mostrar antes de confirmar quais insumos ficariam
+ * negativos. Abater às cegas e descobrir depois é o que transforma um erro de
+ * digitação em inventário furado — e negativo consentido é decisão, não
+ * acidente: precisa de aprovação e justificativa de quem registra.
+ *
+ * @returns {Promise<{insumos: Array, negativos: Array}>}
+ */
+async function previsaoDeInsumosDaPeca({ produtoId, ultimoInsumoId, unidades, direcao = 'saida' }) {
+  const quantidadePecas = Number(paraDecimal(unidades)) || 0;
+  const passos = quantidadePecas > 0 ? await rotaConsumidaAte(produtoId, ultimoInsumoId) : [];
+  if (!passos.length) return { insumos: [], negativos: [] };
+
+  // Uma leitura da matéria-prima e um índice em memória: uma requisição por
+  // passo seriam quinze idas à API só para montar um aviso.
+  const materias = await pool.get('/materia_prima').catch(() => []);
+  const porId = new Map();
+  for (const materia of (Array.isArray(materias) ? materias : [])) {
+    if (materia?.id !== undefined) porId.set(Number(materia.id), materia);
+  }
+
+  const insumos = passos.map(passo => {
+    const materia = porId.get(Number(passo.insumo_id)) || null;
+    const quantidade = Number(paraDecimal(passo.por_unidade * quantidadePecas)) || 0;
+    const saldoAtual = Number(materia?.quantidade) || 0;
+    const infinito = Boolean(materia?.infinito);
+    const saldoPrevisto = direcao === 'entrada'
+      ? saldoAtual + quantidade
+      : saldoAtual - quantidade;
+
+    return {
+      insumo_id: passo.insumo_id,
+      nome: materia?.nome || `Insumo ${passo.insumo_id}`,
+      unidade: materia?.unidade || '',
+      ordem: passo.ordem,
+      por_unidade: passo.por_unidade,
+      quantidade,
+      saldo_atual: saldoAtual,
+      saldo_previsto: Number(paraDecimal(saldoPrevisto)) || 0,
+      infinito,
+      // Insumo infinito nunca fica negativo — é o que "infinito" quer dizer.
+      negativo: !infinito && direcao === 'saida' && saldoPrevisto < 0
+    };
+  });
+
+  return { insumos, negativos: insumos.filter(i => i.negativo) };
+}
+
+/**
  * Abate (ou devolve) a matéria-prima de `unidades` peças paradas num ponto.
  *
  * Grava nas DUAS auditorias, como todo o resto: `materia_prima_movimentacoes`
@@ -996,6 +1046,10 @@ async function movimentarInsumosDaPeca({
   // insumo mostra o produto, quantas unidades e em que ponto da rota — sem o
   // vínculo, o consumo aparece sozinho e sem explicação.
   movimentoDaPecaId = null,
+  // Saldo negativo consentido: o que o usuário escreveu ao aprovar. Fica no
+  // movimento do insumo que DE FATO fechou negativo — marcar todos diria que
+  // houve decisão onde não houve.
+  justificativaNegativo = null,
   nota
 }) {
   const quantidadePecas = Number(paraDecimal(unidades)) || 0;
@@ -1009,17 +1063,28 @@ async function movimentarInsumosDaPeca({
   const { registrarEntrada, registrarSaida } = require('./materiaPrima');
   const aplicar = direcao === 'entrada' ? registrarEntrada : registrarSaida;
 
+  // QUAIS insumos fecham negativo — calculado antes de mexer em qualquer
+  // saldo, com os mesmos números que a tela mostrou ao pedir a aprovação.
+  const previsao = await previsaoDeInsumosDaPeca({
+    produtoId, ultimoInsumoId, unidades, direcao
+  }).catch(() => ({ negativos: [] }));
+  const ficaNegativo = new Set(previsao.negativos.map(i => Number(i.insumo_id)));
+
   const falhas = [];
   let insumos = 0;
 
   for (const passo of passos) {
     const quantidade = Number(paraDecimal(passo.por_unidade * quantidadePecas)) || 0;
     if (!(quantidade > 0)) continue;
+    const negativou = ficaNegativo.has(Number(passo.insumo_id));
+    const notaDaLinha = negativou && justificativaNegativo
+      ? `${nota} · Saldo negativo autorizado: ${justificativaNegativo}`
+      : nota;
     try {
       await aplicar(passo.insumo_id, quantidade, usuarioId, {
         origem: 'manual',
         estoqueMovimentoId: movimentoDaPecaId,
-        nota
+        nota: notaDaLinha
       });
       await registrarMovimento(razaoPeloPool, {
         tipoMovimento: direcao === 'entrada' ? MOV.ENTRADA : MOV.CONSUMO_INSUMO,
@@ -1030,7 +1095,11 @@ async function movimentarInsumosDaPeca({
         ultimoInsumoId: passo.insumo_id,
         // O mesmo vínculo no razão: a baixa aponta para o movimento da peça.
         movimentoOrigemId: movimentoDaPecaId,
-        nota,
+        // Só onde o saldo REALMENTE fechou negativo. Marcar todos diria que
+        // houve decisão de negativar onde não houve — e a coluna existe
+        // justamente para separar uma coisa da outra.
+        saldoNegativoAutorizado: negativou ? Boolean(justificativaNegativo) : null,
+        nota: notaDaLinha,
         usuarioId
       });
       insumos += 1;
@@ -1068,7 +1137,9 @@ async function inserirLoteProduto({
   usuarioId = null,
   // Quem registra decide: a peça foi PRODUZIDA agora (e o insumo sai do
   // estoque) ou só está sendo lançada (correção, devolução, compra pronta)?
-  abaterInsumos = false
+  abaterInsumos = false,
+  // Escrita na tela quando algum insumo fecha negativo.
+  justificativaNegativo = null
 }) {
   const criado = await executarLotes('post', '', {
     produto_id: produtoId,
@@ -1105,6 +1176,7 @@ async function inserirLoteProduto({
       direcao: 'saida',
       loteId: criado?.id ?? null,
       movimentoDaPecaId,
+      justificativaNegativo,
       usuarioId,
       nota: 'Consumido para a peça lançada no estoque pelo módulo de Produtos'
     })
@@ -1116,7 +1188,12 @@ async function inserirLoteProduto({
 /**
  * Atualiza um lote (quantidade + data)
  */
-async function atualizarLoteProduto(id, quantidade, usuarioId = null, { ajustarInsumos = false } = {}) {
+async function atualizarLoteProduto(
+  id,
+  quantidade,
+  usuarioId = null,
+  { ajustarInsumos = false, justificativaNegativo = null } = {}
+) {
   // A diferença é o que interessa ao razão: subiu ou desceu, e quanto.
   const antes = await lerLote(id);
   const anterior = Number(antes?.quantidade) || 0;
@@ -1155,6 +1232,7 @@ async function atualizarLoteProduto(id, quantidade, usuarioId = null, { ajustarI
         direcao: diferenca > 0 ? 'saida' : 'entrada',
         loteId: id,
         movimentoDaPecaId,
+        justificativaNegativo,
         usuarioId,
         nota: diferenca > 0
           ? 'Consumido no ajuste de estoque de peças pelo módulo de Produtos'
@@ -1166,7 +1244,11 @@ async function atualizarLoteProduto(id, quantidade, usuarioId = null, { ajustarI
   return { ...atualizado, insumosMovimentados: insumos.insumos, falhasInsumos: insumos.falhas };
 }
 
-async function excluirLoteProduto(id, usuarioId = null, { devolverInsumos = false } = {}) {
+async function excluirLoteProduto(
+  id,
+  usuarioId = null,
+  { devolverInsumos = false, justificativaNegativo = null } = {}
+) {
   // Lido ANTES de excluir: depois não há mais de onde tirar a identidade.
   const antes = await lerLote(id);
   const quantidade = Number(antes?.quantidade) || 0;
@@ -1196,6 +1278,7 @@ async function excluirLoteProduto(id, usuarioId = null, { devolverInsumos = fals
       direcao: 'entrada',
       loteId: id,
       movimentoDaPecaId,
+      justificativaNegativo,
       usuarioId,
       nota: 'Devolvido na exclusão do lote pelo módulo de Produtos'
     })
@@ -1678,6 +1761,9 @@ module.exports = {
   inserirLoteProduto,
   atualizarLoteProduto,
   excluirLoteProduto,
+  // A tela consulta antes de confirmar: é assim que ela mostra quais insumos
+  // ficariam negativos e pede aprovação.
+  previsaoDeInsumosDaPeca,
   // Exportado para quem mexe em lotes por fora daqui (a conversão de orçamento
   // baixa lotes direto pela API da requisição) poder derrubar o cache também.
   invalidarCacheLotes,

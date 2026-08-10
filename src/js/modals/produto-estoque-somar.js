@@ -56,15 +56,24 @@
     // ou não? "Substituir" pode até DIMINUIR o lote — e aí a pergunta se
     // inverte, porque o material volta.
     let ajustarInsumos = false;
+    let justificativaNegativo = null;
     if (diferenca !== 0) {
-      const resposta = await window.InsumosDaPeca?.perguntar({
-        direcao: diferenca > 0 ? 'saida' : 'entrada',
+      const direcao = diferenca > 0 ? 'saida' : 'entrada';
+      const decisao = await window.InsumosDaPeca?.decidir({
+        direcao,
         unidades: Math.abs(diferenca),
         peca: info.produto?.nome || info.produto?.codigo || '',
-        ponto: `${info.etapa || info.existing.etapa || ''} · ${info.itemNome || info.existing.ultimo_item || ''}`
+        ponto: `${info.etapa || info.existing.etapa || ''} · ${info.itemNome || info.existing.ultimo_item || ''}`,
+        previsao: () => window.electronAPI.previsaoInsumosPeca({
+          produtoId: info.produto?.id,
+          ultimoInsumoId: info.existing.ultimo_insumo_id,
+          unidades: Math.abs(diferenca),
+          direcao
+        })
       });
-      if (resposta === null || resposta === undefined) return;
-      ajustarInsumos = resposta;
+      if (!decisao) return;
+      ajustarInsumos = decisao.mexer;
+      justificativaNegativo = decisao.justificativa;
     }
 
     try {
@@ -73,6 +82,7 @@
           id: info.existing.id,
           quantidade: novaQtd,
           ajustarInsumos,
+          justificativaNegativo,
           __meta: {
             produto: info.produto,
             etapa: info.etapa || info.existing.etapa,
