@@ -69,6 +69,27 @@ function montarAmbiente(sobrescrever = {}) {
         return razao.filter(m =>
           String(m.item_id) === String(q.item_id) && String(m.tipo_item) === String(q.tipo_item));
       }
+      // O movimento da PEÇA que causou uma devolução/consumo manual, e o que
+      // ele precisa para virar "AVSØ 0114 MUI · 6 un. · 11/15 — Etiqueta".
+      //
+      // Cada um por ID: a API não filtra por lista de forma confiável, e é
+      // assim que o código real lê — o mock tem de cobrar isso.
+      if (rota.startsWith('/estoque_movimentos/')) {
+        const idMov = Number(rota.split('/').pop());
+        return (sobrescrever.movimentosPorId || {})[idMov] || { error: 'Not found' };
+      }
+      if (rota.startsWith('/produtos/')) {
+        const idProduto = Number(rota.split('/').pop());
+        return (sobrescrever.produtos || {})[idProduto] || { error: 'Not found' };
+      }
+      if (rota === '/produtos_insumos') {
+        const produtoId = Number(q.produto_id);
+        return (sobrescrever.rotas || {})[produtoId] || [];
+      }
+      if (rota.startsWith('/materia_prima/')) {
+        const idInsumo = Number(rota.split('/').pop());
+        return (sobrescrever.insumos || {})[idInsumo] || { error: 'Not found' };
+      }
       if (rota === '/pedidos_itens_faltantes') return [];
       if (rota === '/usuarios') return [{ id: 13, nome: 'Henrique Viana Abade' }];
       if (rota === '/pedidos') {
@@ -273,6 +294,121 @@ test('devolução e consumo no mesmo instante não trocam de pedido', async () =
 
     assert.equal(entrada.pedido_numero, 'PED22', 'a devolução é do pedido cancelado');
     assert.equal(saida.pedido_numero, 'PED21', 'e o consumo é do pedido de destino');
+  } finally {
+    amb.restaurar();
+  }
+});
+
+// ---------------------------------------------------------------------------
+// A PEÇA na auditoria do insumo
+//
+// O caso real: a Caixa Nº 60 recebeu "+2" e "+6" por devolução de peças
+// ajustadas no módulo de Produtos, e o extrato mostrava "Entrada manual",
+// origem "Módulo de Matéria-Prima" e a coluna Peça com traço. A observação
+// dizia que veio de Produtos; nada mais. Texto não é vínculo.
+// ---------------------------------------------------------------------------
+
+/** Movimento de PEÇA que causou a devolução, como o razão o guarda. */
+const MOVIMENTO_DA_PECA = {
+  id: 777,
+  tipo_movimento: 'saida_estoque',
+  tipo_item: 'peca',
+  item_id: 55,
+  quantidade: 6,
+  lote_id: 900,
+  ultimo_insumo_id: 151,
+  created_at: comFuso(52),
+  created_by: 13
+};
+
+test('a devolução mostra peça, quantidade e ponto da rota', async () => {
+  const amb = montarAmbiente({
+    historico: [{
+      id: 1, insumo_id: 151, tipo: 'entrada_manual', quantidade: 6,
+      quantidade_anterior: 100, quantidade_atual: 106, criado_em: semFuso(52),
+      usuario_id: 13,
+      // O vínculo direto, gravado por sql/novascolunas7.sql.
+      estoque_movimento_id: 777,
+      observacao: 'Devolvido no ajuste de estoque de peças pelo módulo de Produtos'
+    }],
+    razao: [{
+      id: 900, tipo_movimento: 'entrada_estoque', tipo_item: 'insumo', item_id: 151,
+      quantidade: 6, created_at: comFuso(52), created_by: 13, source_movement_id: 777
+    }],
+    movimentosPorId: { 777: MOVIMENTO_DA_PECA },
+    produtos: { 55: { id: 55, codigo: 'AVSØ 0114 MUI', nome: 'Apaga Velas Silvia - 1' } },
+    rotas: {
+      55: Array.from({ length: 15 }, (_, i) => ({
+        id: 200 + i, produto_id: 55, insumo_id: 140 + i + 1, ordem_insumo: i + 1
+      }))
+    },
+    insumos: { 151: { id: 151, nome: 'Etiqueta do Produto' } }
+  });
+
+  try {
+    const r = await amb.listarMovimentosInsumo(151);
+    const [linha] = r.movimentos;
+
+    assert.equal(linha.efeito, 6, 'a devolução soma no saldo');
+    assert.ok(linha.peca, 'a linha tem de trazer a peça que causou a devolução');
+    assert.equal(linha.peca.codigo, 'AVSØ 0114 MUI');
+    assert.equal(linha.peca.unidades, 6, 'quantas PEÇAS, não quanto de insumo');
+    assert.equal(linha.peca.estagio, '11/15 — Etiqueta do Produto');
+    assert.equal(
+      linha.origem, 'Ajuste de estoque de produto',
+      'dizer "Módulo de Matéria-Prima" mandava procurar no lugar errado'
+    );
+  } finally {
+    amb.restaurar();
+  }
+});
+
+test('sem a coluna nova, o vínculo vem pelo razão', async () => {
+  // Quem ainda não rodou sql/novascolunas7.sql: `estoque_movimento_id` chega
+  // vazio, mas `source_movement_id` do razão já apontava a peça desde antes.
+  const amb = montarAmbiente({
+    historico: [{
+      id: 1, insumo_id: 151, tipo: 'entrada_manual', quantidade: 2,
+      quantidade_anterior: 100, quantidade_atual: 102, criado_em: semFuso(52),
+      usuario_id: 13
+    }],
+    razao: [{
+      id: 900, tipo_movimento: 'entrada_estoque', tipo_item: 'insumo', item_id: 151,
+      quantidade: 2, created_at: comFuso(52), created_by: 13, source_movement_id: 777
+    }],
+    movimentosPorId: { 777: { ...MOVIMENTO_DA_PECA, quantidade: 2 } },
+    produtos: { 55: { id: 55, codigo: 'AVSØ 0114 MUI', nome: 'Apaga Velas Silvia - 1' } },
+    rotas: {
+      55: Array.from({ length: 15 }, (_, i) => ({
+        id: 200 + i, produto_id: 55, insumo_id: 140 + i + 1, ordem_insumo: i + 1
+      }))
+    },
+    insumos: { 151: { id: 151, nome: 'Etiqueta do Produto' } }
+  });
+
+  try {
+    const [linha] = (await amb.listarMovimentosInsumo(151)).movimentos;
+    assert.ok(linha.peca, 'o extrato não pode ficar mudo enquanto o SQL não roda');
+    assert.equal(linha.peca.unidades, 2);
+    assert.equal(linha.origem, 'Ajuste de estoque de produto');
+  } finally {
+    amb.restaurar();
+  }
+});
+
+test('movimentação sem peça nenhuma continua como estava', async () => {
+  const amb = montarAmbiente();
+  try {
+    const r = await amb.listarMovimentosInsumo(151);
+    assert.ok(r.movimentos.length > 0);
+    assert.ok(
+      r.movimentos.every(m => !m.peca),
+      'baixa por pedido não ganha bloco de peça manual'
+    );
+    assert.ok(
+      r.movimentos.some(m => m.origem === 'Pedido PED22'),
+      'e a origem por pedido continua a mesma'
+    );
   } finally {
     amb.restaurar();
   }

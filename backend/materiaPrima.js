@@ -695,97 +695,6 @@ async function listarMovimentosInsumo(insumoId) {
   // por produto), porque linha a linha seriam dezenas de idas à API por
   // extrato.
   // ---------------------------------------------------------------
-  const idsDeMovimentoDePeca = Array.from(new Set(
-    doInsumo
-      .map(m => m.estoque_movimento_id)
-      .filter(v => v !== null && v !== undefined && v !== '')
-      .map(Number)
-      .filter(Number.isFinite)
-  ));
-
-  const movimentosDePeca = new Map();
-  const produtosPorId = new Map();
-  const rotaPorProduto = new Map();
-  const nomeDoInsumo = new Map();
-
-  if (idsDeMovimentoDePeca.length) {
-    const movimentos = await pool
-      .get('/estoque_movimentos', { query: { id: `in.(${idsDeMovimentoDePeca.join(',')})` } })
-      .catch(() => []);
-    for (const mov of (Array.isArray(movimentos) ? movimentos : [])) {
-      if (mov?.id !== undefined) movimentosDePeca.set(Number(mov.id), mov);
-    }
-
-    const produtoIds = Array.from(new Set(
-      Array.from(movimentosDePeca.values())
-        .filter(m => String(m.tipo_item) === 'peca')
-        .map(m => Number(m.item_id))
-        .filter(Number.isFinite)
-    ));
-
-    if (produtoIds.length) {
-      const [produtos, rotas] = await Promise.all([
-        pool.get('/produtos', { query: { id: `in.(${produtoIds.join(',')})` } }).catch(() => []),
-        pool.get('/produtos_insumos', { query: { produto_id: `in.(${produtoIds.join(',')})` } }).catch(() => [])
-      ]);
-      for (const produto of (Array.isArray(produtos) ? produtos : [])) {
-        if (produto?.id !== undefined) produtosPorId.set(Number(produto.id), produto);
-      }
-      for (const passo of (Array.isArray(rotas) ? rotas : [])) {
-        const chave = Number(passo?.produto_id);
-        if (!Number.isFinite(chave)) continue;
-        if (!rotaPorProduto.has(chave)) rotaPorProduto.set(chave, []);
-        rotaPorProduto.get(chave).push(passo);
-      }
-      for (const lista of rotaPorProduto.values()) {
-        lista.sort((a, b) => (Number(a.ordem_insumo) || 0) - (Number(b.ordem_insumo) || 0));
-      }
-
-      // O NOME do insumo onde a peça parou. Só os que aparecem nessas rotas —
-      // ler a matéria-prima inteira para achar um nome seria caro à toa.
-      const insumosDasRotas = Array.from(new Set(
-        Array.from(rotaPorProduto.values())
-          .flat()
-          .map(p => Number(p.insumo_id))
-          .filter(Number.isFinite)
-      ));
-      if (insumosDasRotas.length) {
-        const nomes = await pool
-          .get('/materia_prima', { query: { id: `in.(${insumosDasRotas.join(',')})` } })
-          .catch(() => []);
-        for (const materia of (Array.isArray(nomes) ? nomes : [])) {
-          if (materia?.id !== undefined) nomeDoInsumo.set(Number(materia.id), materia.nome || '');
-        }
-      }
-    }
-  }
-
-  /** "10/15 — Elástico Calombe Roliço" a partir do insumo em que a peça parou. */
-  const estagioDaPeca = (produtoId, ultimoInsumoId) => {
-    const rota = rotaPorProduto.get(Number(produtoId)) || [];
-    if (!rota.length) return null;
-    const passo = rota.find(p => Number(p.insumo_id) === Number(ultimoInsumoId));
-    if (!passo) return null;
-    const nome = nomeDoInsumo.get(Number(passo.insumo_id));
-    return `${Number(passo.ordem_insumo) || 0}/${rota.length}${nome ? ` — ${nome}` : ''}`;
-  };
-
-  /** O bloco "Peça / Quantidade / Estágio" de uma linha, quando houver. */
-  const contextoDaPeca = mp => {
-    const movimento = movimentosDePeca.get(Number(mp?.estoque_movimento_id));
-    if (!movimento || String(movimento.tipo_item) !== 'peca') return null;
-    const produto = produtosPorId.get(Number(movimento.item_id)) || null;
-    return {
-      produto_id: movimento.item_id ?? null,
-      codigo: produto?.codigo || null,
-      nome: produto?.nome || null,
-      unidades: Number(movimento.quantidade) || 0,
-      estagio: estagioDaPeca(movimento.item_id, movimento.ultimo_insumo_id),
-      lote_id: movimento.lote_id ?? null,
-      movimento_id: movimento.id ?? null
-    };
-  };
-
   const indexar = lista => {
     const mapa = new Map();
     for (const linha of (Array.isArray(lista) ? lista : [])) {
@@ -871,6 +780,115 @@ async function listarMovimentosInsumo(insumoId) {
     }
     return null;
   };
+
+  // O id do movimento de peça tem DUAS fontes, e basta uma:
+  //
+  //   1. `materia_prima_movimentacoes.estoque_movimento_id` — o vínculo direto.
+  //   2. `estoque_movimentos.source_movement_id` da linha pareada do razão.
+  //
+  // A segunda existe porque a primeira é uma coluna nova: enquanto o SQL não
+  // rodar (ou para o que foi gravado antes dele), a ligação continua chegando
+  // pelo razão, que já guardava a origem do movimento. Depender de uma fonte só
+  // deixava o extrato mudo justamente nas linhas mais recentes.
+  const idDoMovimentoDePeca = mp => {
+    const direto = mp?.estoque_movimento_id;
+    if (direto !== null && direto !== undefined && direto !== '') return Number(direto);
+    const pareado = contextoPorMovimento.get(mp?.id)?.source_movement_id;
+    if (pareado !== null && pareado !== undefined && pareado !== '') return Number(pareado);
+    return null;
+  };
+
+  const idsDeMovimentoDePeca = Array.from(new Set(
+    doInsumo.map(idDoMovimentoDePeca).filter(Number.isFinite)
+  ));
+
+  const movimentosDePeca = new Map();
+  const produtosPorId = new Map();
+  const rotaPorProduto = new Map();
+  const nomeDoInsumo = new Map();
+
+  // LEITURA POR ID, uma por linha distinta e todas em paralelo.
+  //
+  // Não use `in.(...)` aqui: a API não filtra por lista de forma confiável — é
+  // por isso que `produtos.js` tem `getFiltrado`, que refaz o filtro em
+  // memória. A consulta com `in.()` voltava sem as linhas, os mapas ficavam
+  // vazios e a coluna "Peça" saía com traço mesmo com o vínculo gravado.
+  if (idsDeMovimentoDePeca.length) {
+    const movimentos = await Promise.all(
+      idsDeMovimentoDePeca.map(idMov => pool.get(`/estoque_movimentos/${idMov}`).catch(() => null))
+    );
+    for (const mov of movimentos) {
+      if (mov && !mov.error && mov.id !== undefined) movimentosDePeca.set(Number(mov.id), mov);
+    }
+
+    const dePeca = Array.from(movimentosDePeca.values())
+      .filter(m => String(m.tipo_item) === 'peca');
+
+    const produtoIds = Array.from(new Set(
+      dePeca.map(m => Number(m.item_id)).filter(Number.isFinite)
+    ));
+    // Só o insumo em que cada peça PAROU: o nome dos outros passos da rota não
+    // aparece em lugar nenhum do extrato.
+    const insumosDoPonto = Array.from(new Set(
+      dePeca.map(m => Number(m.ultimo_insumo_id)).filter(Number.isFinite)
+    ));
+
+    const [produtos, rotas, nomes] = await Promise.all([
+      Promise.all(produtoIds.map(pid => pool.get(`/produtos/${pid}`).catch(() => null))),
+      Promise.all(produtoIds.map(pid => pool
+        .get('/produtos_insumos', { query: { produto_id: pid } })
+        .catch(() => []))),
+      Promise.all(insumosDoPonto.map(iid => pool.get(`/materia_prima/${iid}`).catch(() => null)))
+    ]);
+
+    produtos.forEach(produto => {
+      if (produto && !produto.error && produto.id !== undefined) {
+        produtosPorId.set(Number(produto.id), produto);
+      }
+    });
+
+    rotas.forEach((lista, indice) => {
+      const passos = (Array.isArray(lista) ? lista : [])
+        // A API pode devolver a tabela inteira quando não filtra: manter só o
+        // produto pedido é o que impede a rota de sair com 300 passos.
+        .filter(p => Number(p?.produto_id) === Number(produtoIds[indice]))
+        .sort((a, b) => (Number(a.ordem_insumo) || 0) - (Number(b.ordem_insumo) || 0));
+      if (passos.length) rotaPorProduto.set(Number(produtoIds[indice]), passos);
+    });
+
+    nomes.forEach(materia => {
+      if (materia && !materia.error && materia.id !== undefined) {
+        nomeDoInsumo.set(Number(materia.id), materia.nome || '');
+      }
+    });
+  }
+
+  /** "10/15 — Elástico Calombe Roliço" a partir do insumo em que a peça parou. */
+  const estagioDaPeca = (produtoId, ultimoInsumoId) => {
+    const rota = rotaPorProduto.get(Number(produtoId)) || [];
+    if (!rota.length) return null;
+    const passo = rota.find(p => Number(p.insumo_id) === Number(ultimoInsumoId));
+    if (!passo) return null;
+    const nome = nomeDoInsumo.get(Number(passo.insumo_id));
+    return `${Number(passo.ordem_insumo) || 0}/${rota.length}${nome ? ` — ${nome}` : ''}`;
+  };
+
+  /** O bloco "Peça / Quantidade / Estágio" de uma linha, quando houver. */
+  const contextoDaPeca = mp => {
+    const movimento = movimentosDePeca.get(Number(idDoMovimentoDePeca(mp)));
+    if (!movimento || String(movimento.tipo_item) !== 'peca') return null;
+    const produto = produtosPorId.get(Number(movimento.item_id)) || null;
+    return {
+      produto_id: movimento.item_id ?? null,
+      codigo: produto?.codigo || null,
+      nome: produto?.nome || null,
+      unidades: Number(movimento.quantidade) || 0,
+      estagio: estagioDaPeca(movimento.item_id, movimento.ultimo_insumo_id),
+      lote_id: movimento.lote_id ?? null,
+      movimento_id: movimento.id ?? null
+    };
+  };
+
 
   const linhas = doInsumo.map(mp => {
     const padrao = LEITURA_MP[mp.tipo] || { rotulo: mp.tipo || 'Movimento', sinal: 0 };
