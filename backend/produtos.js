@@ -1078,9 +1078,11 @@ async function movimentarInsumosDaPeca({
   const falhas = [];
   let insumos = 0;
 
-  for (const passo of previsao.insumos) {
+  const aTratar = previsao.insumos.filter(p => (Number(p.quantidade) || 0) > 0);
+
+  /** Um insumo: lê o saldo, grava o novo e deixa as duas auditorias. */
+  const tratar = async passo => {
     const quantidade = Number(passo.quantidade) || 0;
-    if (!(quantidade > 0)) continue;
     const negativou = ficaNegativo.has(Number(passo.insumo_id));
     const notaDaLinha = negativou && justificativaNegativo
       ? `${nota} · Saldo negativo autorizado: ${justificativaNegativo}`
@@ -1113,6 +1115,25 @@ async function movimentarInsumosDaPeca({
       // aparecer, senão o saldo de matéria-prima fica errado em silêncio.
       falhas.push(`Insumo ${passo.insumo_id}: ${err?.message || err}`);
     }
+  };
+
+  // ---------------------------------------------------------------------
+  // EM BLOCOS, não um a um.
+  //
+  // Cada insumo custa quatro idas à API (ler saldo, gravar saldo, histórico da
+  // matéria-prima, razão). Numa rota de quinze passos são sessenta requisições
+  // — e em fila indiana elas seguravam TODO o resto do app enquanto rodavam.
+  //
+  // Insumos diferentes são linhas diferentes, então tratá-los ao mesmo tempo é
+  // seguro. O MESMO insumo repetido na rota é que não pode: seriam duas
+  // leituras do mesmo saldo, e a segunda gravação apagaria a primeira. Nesse
+  // caso (raro) a fila indiana continua, que é o único jeito de a conta fechar.
+  const ids = aTratar.map(p => Number(p.insumo_id));
+  const insumoRepetido = new Set(ids).size !== ids.length;
+  const porVez = insumoRepetido ? 1 : 4;
+
+  for (let i = 0; i < aTratar.length; i += porVez) {
+    await Promise.all(aTratar.slice(i, i + porVez).map(tratar));
   }
 
   return { insumos, falhas };

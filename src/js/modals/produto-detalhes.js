@@ -125,8 +125,13 @@
       const valorEl = document.getElementById('valorEstimado');
       const preco = Number(item?.preco_venda || 0);
       if (valorEl) valorEl.textContent = (total * preco).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+      return true;
     } catch(err) {
       console.error('Erro ao carregar detalhes do produto', err);
+      // Devolve o resultado em vez de só engolir: quem editou uma linha precisa
+      // saber se a tabela foi redesenhada, senão fica achando que a linha some
+      // sozinha — e ela não some.
+      return false;
     }
   }
 
@@ -177,10 +182,19 @@
 
       // A linha inteira sai do ar enquanto grava: sem isso, um segundo clique
       // no visto dispararia a operação de novo, com peça e insumo em dobro.
-      confirmBtn.style.pointerEvents = 'none';
-      confirmBtn.style.opacity = '0.5';
-      cancelBtn.style.pointerEvents = 'none';
-      input.disabled = true;
+      //
+      // E VOLTA no fim, sempre. Antes eu contava com a recarga da tabela para
+      // trocar a linha por uma nova; quando a recarga falhava (rede ocupada,
+      // que é justamente quando a gravação demora), a linha ficava para trás
+      // em modo de edição, com tudo desligado — visível e intocável.
+      const travarLinha = travar => {
+        confirmBtn.style.pointerEvents = travar ? 'none' : '';
+        confirmBtn.style.opacity = travar ? '0.5' : '';
+        cancelBtn.style.pointerEvents = travar ? 'none' : '';
+        cancelBtn.style.opacity = travar ? '0.5' : '';
+        input.disabled = travar;
+      };
+      travarLinha(true);
 
       try {
         const resultado = await window.InsumosDaPeca.comCarregamento(
@@ -207,14 +221,21 @@
         );
         const extra = window.InsumosDaPeca?.resumo(resultado, ajustarInsumos) || '';
         showToast(`Quantidade atualizada.${extra}`, 'success');
-        carregarDetalhes(item.id);
         if (typeof carregarProdutos === 'function') carregarProdutos();
       } catch (err) {
         console.error(err);
         showToast(err?.parcial ? err.message : 'Erro ao atualizar quantidade', 'error');
+      } finally {
+        // Destrava ANTES de recarregar: se a recarga falhar, a linha continua
+        // usável em vez de virar um resto de tela congelado.
+        travarLinha(false);
         // A tabela volta a mostrar o que o banco tem — inclusive numa falha
         // parcial, em que a peça mudou e o insumo não.
-        carregarDetalhes(item.id);
+        const redesenhou = await carregarDetalhes(item.id);
+        // Não deu para reler (rede ocupada, que é justamente quando a gravação
+        // demora): a linha continua em edição, então pelo menos mostra o valor
+        // que foi gravado, e não o antigo.
+        if (!redesenhou) input.value = novaQtd;
       }
     });
     cancelBtn.addEventListener('click', () => carregarDetalhes(item.id));

@@ -538,3 +538,118 @@ test('sem negativo, nada é marcado como autorizado', async () => {
     amb.restaurar();
   }
 });
+
+// ---------------------------------------------------------------------------
+// EM BLOCOS, sem atropelar o saldo
+//
+// Cada insumo custa quatro idas à API. Em fila indiana, uma rota de quinze
+// passos segurava o app inteiro por dezenas de segundos. Tratá-los em blocos
+// resolve — MENOS quando o mesmo insumo aparece duas vezes na rota: aí duas
+// leituras pegariam o mesmo saldo e a segunda gravação apagaria a primeira.
+// ---------------------------------------------------------------------------
+
+/**
+ * Rota com o MESMO insumo em dois passos ANTES do ponto de parada.
+ *
+ * A repetição precisa estar abaixo do ponto onde a peça parou; se o insumo
+ * repetido FOSSE o ponto de parada, a rota seria cortada na primeira ocorrência
+ * e não haveria repetição nenhuma no trecho consumido.
+ */
+const ROTA_REPETIDA = [
+  { id: 301, produto_id: 7, insumo_id: insumoDaOrdem(1), quantidade: 1, ordem_insumo: 1 },
+  // O passo 2 usa de novo o insumo do passo 1.
+  { id: 302, produto_id: 7, insumo_id: insumoDaOrdem(1), quantidade: 5, ordem_insumo: 2 },
+  { id: 303, produto_id: 7, insumo_id: insumoDaOrdem(3), quantidade: 1, ordem_insumo: 3 }
+];
+
+/** Registra quantas chamadas estavam em voo ao mesmo tempo. */
+function ambienteQueMedeConcorrencia(rota) {
+  const amb = montarAmbiente(rota ? { rota } : {});
+  const materia = require.cache[require.resolve('./materiaPrima')].exports;
+  const medida = { emVoo: 0, pico: 0, ordem: [] };
+
+  materia.registrarSaida = async (id, quantidade, usuarioId, contexto) => {
+    medida.emVoo += 1;
+    medida.pico = Math.max(medida.pico, medida.emVoo);
+    medida.ordem.push(Number(id));
+    // Espera de verdade: sem ela, tudo termina antes de a próxima começar e a
+    // medição de concorrência não valeria nada.
+    await new Promise(r => setTimeout(r, 5));
+    amb.registro.saidas.push({ id: Number(id), quantidade: Number(quantidade), usuarioId, contexto });
+    medida.emVoo -= 1;
+  };
+
+  return { amb, medida };
+}
+
+test('insumos distintos são tratados em blocos, não um a um', async () => {
+  const { amb, medida } = ambienteQueMedeConcorrencia();
+  try {
+    await amb.produtos.inserirLoteProduto({
+      produtoId: 7,
+      etapa: 'Embalagem',
+      ultimoInsumoId: insumoDaOrdem(15),
+      quantidade: 1,
+      usuarioId: 13,
+      abaterInsumos: true
+    });
+
+    assert.equal(amb.registro.saidas.length, 15, 'os quinze passos são gravados');
+    assert.ok(
+      medida.pico > 1,
+      'em fila indiana o app inteiro ficava esperando; o pico tem de ser maior que 1'
+    );
+    assert.ok(medida.pico <= 4, `e limitado ao bloco, não tudo de uma vez (pico ${medida.pico})`);
+  } finally {
+    amb.restaurar();
+  }
+});
+
+test('insumo repetido na rota volta para a fila indiana', async () => {
+  // Duas leituras do mesmo saldo em paralelo perderiam uma das gravações — e o
+  // estoque fecharia errado sem ninguém notar.
+  const { amb, medida } = ambienteQueMedeConcorrencia(ROTA_REPETIDA);
+  try {
+    await amb.produtos.inserirLoteProduto({
+      produtoId: 7,
+      etapa: 'Montagem',
+      // Para no passo 3: o trecho consumido inclui as DUAS ocorrências do
+      // insumo do passo 1.
+      ultimoInsumoId: insumoDaOrdem(3),
+      quantidade: 1,
+      usuarioId: 13,
+      abaterInsumos: true
+    });
+
+    assert.equal(amb.registro.saidas.length, 3, 'os três passos são gravados');
+    assert.equal(
+      medida.pico, 1,
+      'com insumo repetido, uma gravação de cada vez é o único jeito de a conta fechar'
+    );
+  } finally {
+    amb.restaurar();
+  }
+});
+
+test('o bloco não perde nem troca nenhum insumo', async () => {
+  const { amb } = ambienteQueMedeConcorrencia();
+  try {
+    await amb.produtos.inserirLoteProduto({
+      produtoId: 7,
+      etapa: 'Montagem',
+      ultimoInsumoId: insumoDaOrdem(10),
+      quantidade: 2,
+      usuarioId: 13,
+      abaterInsumos: true
+    });
+
+    // Os mesmos dez passos, com as mesmas quantidades de antes da mudança.
+    assert.equal(amb.registro.saidas.length, 10);
+    for (const ordem of [1, 5, 10]) {
+      const linha = amb.registro.saidas.find(s => s.id === insumoDaOrdem(ordem));
+      assert.equal(linha.quantidade, ordem * 2, `passo ${ordem}: ${ordem} por peça × 2 peças`);
+    }
+  } finally {
+    amb.restaurar();
+  }
+});
