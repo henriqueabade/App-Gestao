@@ -51,12 +51,16 @@
         }
       };
       const resultado = await window.InsumosDaPeca.comCarregamento(
-        () => window.electronAPI.excluirLoteProduto(payload),
+        async () => {
+          const r = await window.electronAPI.excluirLoteProduto(payload);
+          // Tabela primeiro, aviso depois — ver a nota gêmea em
+          // modals/cliente-excluir.js. E ainda SOB O VÉU: quando ele cair, a
+          // linha excluída já não está mais lá.
+          await item.reload?.();
+          return r;
+        },
         devolverInsumos
       );
-      // Tabela primeiro, aviso depois — ver a nota gêmea em
-      // modals/cliente-excluir.js.
-      await item.reload?.();
       const extra = window.InsumosDaPeca?.resumo(resultado, devolverInsumos) || '';
       showToast(`Lote excluído.${extra}`, 'success');
       close();

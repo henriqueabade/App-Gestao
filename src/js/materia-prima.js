@@ -23,10 +23,20 @@ function initMateriaPrima() {
         }, index * 100);
     });
 
-    document.getElementById('materiaPrimaSearch')?.addEventListener('input', aplicarFiltros);
+    // Duas coisas a cada tecla: o filtro local, que é instantâneo, e o AGENDAMENTO
+    // da busca por produto, que só sai quando a digitação para.
+    document.getElementById('materiaPrimaSearch')?.addEventListener('input', () => {
+        aplicarFiltros();
+        agendarBuscaPorProduto();
+    });
     document.getElementById('filtroProcesso')?.addEventListener('change', aplicarFiltros);
     document.getElementById('filtroCategoria')?.addEventListener('change', aplicarFiltros);
-    document.getElementById('btnFiltrar')?.addEventListener('click', aplicarFiltros);
+    // Quem clica em "Filtrar" quer o resultado AGORA: a busca por produto não
+    // espera os 300 ms da digitação.
+    document.getElementById('btnFiltrar')?.addEventListener('click', () => {
+        aplicarFiltros();
+        agendarBuscaPorProduto(0);
+    });
     document.getElementById('btnLimpar')?.addEventListener('click', limparFiltros);
     document.getElementById('zeroStock')?.addEventListener('change', aplicarFiltros);
 
@@ -100,21 +110,75 @@ async function popularFiltros(lista) {
 }
 
 let sequenciaBuscaProduto = 0;
+let temporizadorBuscaProduto = null;
 
-async function aplicarFiltros() {
+/**
+ * Insumos usados por um PRODUTO cujo nome bate com a busca.
+ *
+ * Guardado com o termo que o gerou: uma lista de outra pesquisa mostraria
+ * insumos que não têm nada a ver com o que está escrito na caixa.
+ */
+let buscaPorProduto = { termo: '', ids: new Set() };
+
+/** Espera o usuário parar de digitar. Ver a nota em `agendarBuscaPorProduto`. */
+const ESPERA_DIGITACAO_MS = 300;
+
+/**
+ * A parte da busca que vai ao banco, DEPOIS que o usuário para de digitar.
+ *
+ * Filtrar por nome, categoria e processo é instantâneo — a lista já está aqui.
+ * O que custa é descobrir quais insumos são usados por um produto com aquele
+ * nome, e isso era feito A CADA TECLA: escrever "Apaga Velas Silvia" disparava
+ * dezoito consultas, uma atrás da outra, e a tabela só assentava quando a
+ * última voltava. Agora vai uma só, quando a digitação para.
+ */
+function agendarBuscaPorProduto(espera = ESPERA_DIGITACAO_MS) {
+    const termo = (document.getElementById('materiaPrimaSearch')?.value || '').trim();
+
+    if (temporizadorBuscaProduto) clearTimeout(temporizadorBuscaProduto);
+
+    if (!termo) {
+        // Caixa vazia: a lista de produtos não vale mais e some na hora.
+        sequenciaBuscaProduto += 1;
+        if (buscaPorProduto.ids.size) {
+            buscaPorProduto = { termo: '', ids: new Set() };
+            aplicarFiltros();
+        }
+        return;
+    }
+
+    temporizadorBuscaProduto = setTimeout(async () => {
+        const sequenciaAtual = ++sequenciaBuscaProduto;
+        try {
+            const ids = await (window.electronAPI?.listarInsumosPorProduto?.(termo) ?? []);
+            // Uma resposta antiga nunca deve substituir a pesquisa mais recente.
+            if (sequenciaAtual !== sequenciaBuscaProduto) return;
+            buscaPorProduto = {
+                termo: termo.toLowerCase(),
+                ids: new Set((Array.isArray(ids) ? ids : []).map(String))
+            };
+            aplicarFiltros();
+        } catch (err) {
+            console.error('Erro ao buscar insumos por produto', err);
+        }
+    }, espera);
+}
+
+/**
+ * Filtra e redesenha a tabela. SÍNCRONA de propósito: roda a cada tecla e não
+ * pode esperar rede — o que depende do banco entra por
+ * `agendarBuscaPorProduto` e redesenha de novo quando chega.
+ */
+function aplicarFiltros() {
     const termo = (document.getElementById('materiaPrimaSearch')?.value || '').toLowerCase();
     const processo = document.getElementById('filtroProcesso')?.value || '';
     const categoria = document.getElementById('filtroCategoria')?.value || '';
     const zeroEstoque = document.getElementById('zeroStock')?.checked;
 
-    const sequenciaAtual = ++sequenciaBuscaProduto;
-    let idsUsadosPeloProduto = new Set();
-    if (termo.trim()) {
-        const ids = await (window.electronAPI?.listarInsumosPorProduto?.(termo.trim()) ?? []);
-        // Uma resposta antiga nunca deve substituir a pesquisa mais recente.
-        if (sequenciaAtual !== sequenciaBuscaProduto) return;
-        idsUsadosPeloProduto = new Set((Array.isArray(ids) ? ids : []).map(String));
-    }
+    // Só vale a lista de produtos que corresponde ao que está escrito AGORA.
+    const idsUsadosPeloProduto = buscaPorProduto.termo === termo.trim()
+        ? buscaPorProduto.ids
+        : new Set();
 
     let filtrados = todosMateriais.filter(m => {
         const isCritical = !m.infinito && Number(m.quantidade) < 10;
@@ -148,6 +212,9 @@ function limparFiltros() {
     if (proc) proc.value = '';
     if (cat) cat.value = '';
     if (zero) zero.checked = false;
+    // Cancela a busca que estava agendada: sem isto ela chegaria depois e
+    // repintaria a tabela com o resultado de um filtro que já foi limpo.
+    agendarBuscaPorProduto();
     aplicarFiltros();
 }
 

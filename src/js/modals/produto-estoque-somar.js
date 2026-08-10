@@ -78,22 +78,29 @@
 
     try {
       const resultado = await window.InsumosDaPeca.comCarregamento(
-        () => window.electronAPI.atualizarLoteProduto({
-          id: info.existing.id,
-          quantidade: novaQtd,
-          ajustarInsumos,
-          justificativaNegativo,
-          __meta: {
-            produto: info.produto,
-            etapa: info.etapa || info.existing.etapa,
-            itemNome: info.itemNome || info.existing.ultimo_item,
-            quantidadeAnterior: Number.isNaN(quantidadeAtual) ? undefined : quantidadeAtual,
-            quantidadeNova: novaQtd,
-            alteracao: Number.isNaN(quantidadeAtual) ? undefined : novaQtd - quantidadeAtual,
-            modo,
-            ajustarInsumos
-          }
-        }),
+        async () => {
+          const r = await window.electronAPI.atualizarLoteProduto({
+            id: info.existing.id,
+            quantidade: novaQtd,
+            ajustarInsumos,
+            justificativaNegativo,
+            __meta: {
+              produto: info.produto,
+              etapa: info.etapa || info.existing.etapa,
+              itemNome: info.itemNome || info.existing.ultimo_item,
+              quantidadeAnterior: Number.isNaN(quantidadeAtual) ? undefined : quantidadeAtual,
+              quantidadeNova: novaQtd,
+              alteracao: Number.isNaN(quantidadeAtual) ? undefined : novaQtd - quantidadeAtual,
+              modo,
+              ajustarInsumos
+            }
+          });
+          // Ainda sob o véu: quando ele cair, a tela de trás já está atualizada.
+          // Recarrega os detalhes E a listagem de produtos — a coluna
+          // "Quantidade" da grade sai daqui e ficava com o valor velho.
+          await info.reload?.();
+          return r;
+        },
         ajustarInsumos
       );
       const extra = window.InsumosDaPeca?.resumo(resultado, ajustarInsumos) || '';
@@ -102,9 +109,6 @@
         'success'
       );
       close();
-      // Recarrega os detalhes E a listagem de produtos: a coluna "Quantidade"
-      // da grade sai daqui, e sem isso ela ficava mostrando o valor velho.
-      info.reload?.();
       window.somarEstoqueInfo = null;
     } catch (err) {
       console.error('Erro ao atualizar lote', err);

@@ -169,16 +169,23 @@
   const form = overlay.querySelector('form');
 
   /** Limpa o formulário e atualiza a grade de produtos e os detalhes. */
-  function limparERecarregar(){
+  /**
+   * Devolve uma promessa: quem chama espera as duas tabelas terminarem antes de
+   * tirar o carregamento da tela. Sem isso o véu caía com os dados antigos
+   * ainda no fundo, e a atualização acontecia à vista do usuário.
+   */
+  async function limparERecarregar(){
     processoSelect.value = '';
     itemInput.value = '';
     itemOptions.innerHTML = '';
     itemInput.disabled = true;
     if(quantidadeInput) quantidadeInput.value = '';
-    window.reloadDetalhesProduto?.();
-    // Pelo `window`, explicitamente: a coluna "Quantidade" da grade de Produtos
-    // sai daqui e ficava com o valor velho depois de registrar.
-    window.carregarProdutos?.();
+    await Promise.all([
+      window.reloadDetalhesProduto?.(),
+      // Pelo `window`, explicitamente: a coluna "Quantidade" da grade de
+      // Produtos sai daqui e ficava com o valor velho depois de registrar.
+      window.carregarProdutos?.()
+    ]);
   }
 
   if(form){
@@ -241,31 +248,36 @@
         // O véu fica de pé até a peça, os insumos e as duas auditorias
         // terminarem. Só depois disso a tela volta a aceitar clique.
         const resultado = await window.InsumosDaPeca.comCarregamento(
-          () => window.electronAPI.inserirLoteProduto({
-            produtoId: produto.id,
-            etapa,
-            ultimoInsumoId: itemId,
-            quantidade,
-            abaterInsumos,
-            justificativaNegativo: decisao.justificativa,
-            __meta: {
-              produto: {
-                id: produto.id,
-                nome: produto.nome,
-                codigo: produto.codigo
-              },
-              etapa: etapaNome,
-              etapaId: processoSelecionadoId || null,
-              itemNome,
+          async () => {
+            const r = await window.electronAPI.inserirLoteProduto({
+              produtoId: produto.id,
+              etapa,
+              ultimoInsumoId: itemId,
               quantidade,
-              abaterInsumos
-            }
-          }),
+              abaterInsumos,
+              justificativaNegativo: decisao.justificativa,
+              __meta: {
+                produto: {
+                  id: produto.id,
+                  nome: produto.nome,
+                  codigo: produto.codigo
+                },
+                etapa: etapaNome,
+                etapaId: processoSelecionadoId || null,
+                itemNome,
+                quantidade,
+                abaterInsumos
+              }
+            });
+            // Ainda sob o véu: quando ele cair, a tela de trás já mostra a peça
+            // nova. Recarregar depois deixa um instante com o dado velho.
+            await limparERecarregar();
+            return r;
+          },
           abaterInsumos
         );
         const extra = window.InsumosDaPeca?.resumo(resultado, abaterInsumos) || '';
         showToast(`Produto inserido.${extra}`, 'success');
-        limparERecarregar();
       }catch(err){
         console.error(err);
         // Falha parcial mantém o formulário como está: o usuário precisa do

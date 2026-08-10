@@ -196,27 +196,39 @@
       };
       travarLinha(true);
 
+      let redesenhou = false;
       try {
         const resultado = await window.InsumosDaPeca.comCarregamento(
-          () => window.electronAPI.atualizarLoteProduto({
-            id: dados.id,
-            quantidade: novaQtd,
-            ajustarInsumos,
-            justificativaNegativo,
-            __meta: {
-              produto: {
-                id: item.id,
-                nome: item.nome,
-                codigo: item.codigo
-              },
-              etapa: dados.etapa,
-              itemNome: dados.ultimo_item,
-              quantidadeAnterior: isNaN(quantidadeAtual) ? undefined : quantidadeAtual,
-              quantidadeNova: novaQtd,
-              alteracao: isNaN(quantidadeAtual) ? undefined : novaQtd - quantidadeAtual,
-              ajustarInsumos
-            }
-          }),
+          async () => {
+            const r = await window.electronAPI.atualizarLoteProduto({
+              id: dados.id,
+              quantidade: novaQtd,
+              ajustarInsumos,
+              justificativaNegativo,
+              __meta: {
+                produto: {
+                  id: item.id,
+                  nome: item.nome,
+                  codigo: item.codigo
+                },
+                etapa: dados.etapa,
+                itemNome: dados.ultimo_item,
+                quantidadeAnterior: isNaN(quantidadeAtual) ? undefined : quantidadeAtual,
+                quantidadeNova: novaQtd,
+                alteracao: isNaN(quantidadeAtual) ? undefined : novaQtd - quantidadeAtual,
+                ajustarInsumos
+              }
+            });
+
+            // A TABELA É REDESENHADA AINDA SOB O VÉU.
+            //
+            // Recarregar depois deixava um intervalo em que o carregamento já
+            // tinha sumido e a linha ainda estava em edição, com o ✓ e o ✗ na
+            // tela — que é exatamente o que se lê como travado. Quando o véu
+            // cai agora, a tabela já está no estado final.
+            redesenhou = await carregarDetalhes(item.id);
+            return r;
+          },
           ajustarInsumos
         );
         const extra = window.InsumosDaPeca?.resumo(resultado, ajustarInsumos) || '';
@@ -225,13 +237,13 @@
       } catch (err) {
         console.error(err);
         showToast(err?.parcial ? err.message : 'Erro ao atualizar quantidade', 'error');
+        // A gravação falhou antes de a tabela ser relida: relê agora, para a
+        // tela mostrar o que o banco tem de fato.
+        if (!redesenhou) redesenhou = await carregarDetalhes(item.id);
       } finally {
-        // Destrava ANTES de recarregar: se a recarga falhar, a linha continua
-        // usável em vez de virar um resto de tela congelado.
+        // Se a tabela foi redesenhada, esta linha já não existe — destravar é
+        // inofensivo. Se não foi, é o que impede que ela fique congelada.
         travarLinha(false);
-        // A tabela volta a mostrar o que o banco tem — inclusive numa falha
-        // parcial, em que a peça mudou e o insumo não.
-        const redesenhou = await carregarDetalhes(item.id);
         // Não deu para reler (rede ocupada, que é justamente quando a gravação
         // demora): a linha continua em edição, então pelo menos mostra o valor
         // que foi gravado, e não o antigo.
