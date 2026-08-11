@@ -447,28 +447,15 @@ function createMateriaPrimaRow(item) {
     const quantidadeValor = isInfinite ? '∞' : (item.quantidade ?? 0);
     const quantidadeNumero = Number(item.quantidade);
 
-    let baseColor = 'transparent';
-    if (isInfinite) {
-        baseColor = 'rgba(162, 255, 166, 0.1)';
-        tr.style.borderLeft = `4px solid var(--color-green)`;
-    } else if (!isNaN(quantidadeNumero) && quantidadeNumero < 10) {
-        baseColor = 'rgba(255, 88, 88, 0.1)';
-        tr.style.borderLeft = `4px solid var(--color-red)`;
-    }
-    tr.style.background = baseColor;
-
-    tr.addEventListener('mouseover', () => {
-        if (isInfinite) {
-            tr.style.background = 'rgba(162, 255, 166, 0.15)';
-        } else if (!isNaN(quantidadeNumero) && quantidadeNumero < 10) {
-            tr.style.background = 'rgba(255, 88, 88, 0.15)';
-        } else {
-            tr.style.background = 'rgba(163, 148, 167, 0.05)';
-        }
-    });
-    tr.addEventListener('mouseout', () => {
-        tr.style.background = baseColor;
-    });
+    // ESTADO DA LINHA POR CLASSE, cor e realce por CSS (materia-prima.css).
+    //
+    // Antes cada linha carregava cor inline e DOIS listeners próprios, criados
+    // de novo a cada render — e o render acontece ao abrir o módulo e a cada
+    // tecla do filtro. Numa tabela cheia são milhares de closures só para
+    // pintar fundo. A classe diz o estado; o resto o navegador resolve sozinho,
+    // sem tocar na thread principal.
+    if (isInfinite) tr.classList.add('linha-infinita');
+    else if (!isNaN(quantidadeNumero) && quantidadeNumero < 10) tr.classList.add('linha-critica');
 
     const preco = Number(item.preco_unitario || 0);
     tr.innerHTML = `

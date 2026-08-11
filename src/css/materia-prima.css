@@ -457,3 +457,32 @@ body {
         --materia-prima-table-height: clamp(200px, calc(var(--module-height) - 360px), 75vh);
     }
 }
+
+/**
+ * Realce da linha ao passar o mouse — em CSS, não em JavaScript.
+ *
+ * Antes cada render prendia DOIS listeners por linha (`mouseover` e
+ * `mouseout`). Numa tabela cheia isso é milhares de closures criadas a cada
+ * carga E a cada filtro, só para pintar um fundo. O navegador faz isso de
+ * graça, sem tocar na thread principal.
+ */
+#materiaPrimaTableBody tr:hover {
+    background: rgba(163, 148, 167, 0.05);
+}
+
+/* Estoque infinito e estoque acabando: a cor de fundo e a barra lateral saem
+   daqui, e não de estilo inline por linha. */
+#materiaPrimaTableBody tr.linha-infinita {
+    background: rgba(162, 255, 166, 0.1);
+    border-left: 4px solid var(--color-green);
+}
+#materiaPrimaTableBody tr.linha-infinita:hover {
+    background: rgba(162, 255, 166, 0.15);
+}
+#materiaPrimaTableBody tr.linha-critica {
+    background: rgba(255, 88, 88, 0.1);
+    border-left: 4px solid var(--color-red);
+}
+#materiaPrimaTableBody tr.linha-critica:hover {
+    background: rgba(255, 88, 88, 0.15);
+}

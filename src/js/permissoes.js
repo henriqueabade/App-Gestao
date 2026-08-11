@@ -262,18 +262,45 @@
 
   function tratarNovosNos(nos) {
     if (!ESTADO.carregado || liberaTudo()) return;
+    // UMA PASSADA POR CONJUNTO, não uma por nó.
+    //
+    // Uma tabela é montada de uma vez, e o observador recebe todas as linhas na
+    // MESMA mutação. Tratar nó a nó fazia, para cada linha, uma varredura e a
+    // conferência de cada ícone: numa tabela cheia são milhares de idas ao DOM
+    // toda vez que o módulo abre — e de novo a cada filtro.
+    //
+    // Aplicar no PAI comum cobre exatamente os mesmos elementos, de uma vez.
+    const alvos = new Set();
     nos.forEach(no => {
       if (!no || no.nodeType !== 1) return;
       // o próprio nó pode ser o alvo
       if (no.hasAttribute?.('data-perm') || no.hasAttribute?.('data-perm-col')
           || no.hasAttribute?.('data-perm-hide')) {
-        aplicarAcoesEColunas(no.parentElement || document);
+        alvos.add(no.parentElement || document);
         return;
       }
       if (no.querySelector?.('[data-perm], [data-perm-col], [data-perm-hide]')) {
-        aplicarAcoesEColunas(no);
+        alvos.add(no);
       }
     });
+
+    if (!alvos.size) return;
+
+    // Irmãos entram juntos: se dois ou mais alvos dividem o mesmo pai, o pai
+    // responde por todos.
+    const quantosPorPai = new Map();
+    alvos.forEach(alvo => {
+      const pai = alvo.parentElement;
+      if (pai) quantosPorPai.set(pai, (quantosPorPai.get(pai) || 0) + 1);
+    });
+
+    const finais = new Set();
+    alvos.forEach(alvo => {
+      const pai = alvo.parentElement;
+      finais.add(pai && quantosPorPai.get(pai) > 1 ? pai : alvo);
+    });
+
+    finais.forEach(alvo => aplicarAcoesEColunas(alvo));
   }
 
   function observarDom() {

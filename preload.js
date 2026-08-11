@@ -25,6 +25,9 @@ const ipcRenderer = new Proxy(electronIpcRenderer, {
   }
 });
 
+/** A partir de quanto tempo uma chamada merece aparecer no console. */
+const LIMITE_LENTIDAO_MS = 400;
+
 function beginModuleLoading() {
   return { sequence: ipcRequestSequence, startedAt: Date.now() };
 }
@@ -32,17 +35,43 @@ function beginModuleLoading() {
 function waitForModuleLoading(token = {}, options = {}) {
   const sequence = Number.isFinite(token.sequence) ? token.sequence : ipcRequestSequence;
   const startedAt = Number.isFinite(token.startedAt) ? token.startedAt : Date.now();
-  const quietMs = Math.max(100, Number(options.quietMs) || 220);
-  const minimumMs = Math.max(0, Number(options.minimumMs) || 280);
+  // ESPERAS CURTAS, porque elas são o grosso do tempo de abrir um módulo.
+  //
+  // A garantia de "não revelar tela pela metade" vem de `pendingIpcRequests`
+  // estar vazio — isso é fato, não estimativa. O silêncio serve só para pegar
+  // uma chamada ENCADEADA, que começa logo depois de a anterior responder: isso
+  // acontece em poucos milissegundos, não em 220.
+  //
+  // Com 220 ms de silêncio + 280 ms de piso, e mais 250 ms de silêncio de fetch
+  // no menu logo em seguida, todo módulo pagava mais de meio segundo de espera
+  // pura — inclusive os vazios, que carregam em 90 ms.
+  const quietMs = Math.max(60, Number(options.quietMs) || 90);
+  const minimumMs = Math.max(0, Number(options.minimumMs) || 120);
   const timeoutMs = Math.max(minimumMs, Number(options.timeoutMs) || 30000);
 
   return new Promise(resolve => {
     const inspect = () => {
       const now = Date.now();
-      const hasModuleRequests = [...pendingIpcRequests.keys()].some(id => id > sequence);
+      const pendentes = [...pendingIpcRequests.keys()].filter(id => id > sequence);
+      const hasModuleRequests = pendentes.length > 0;
       const minimumElapsed = now - startedAt >= minimumMs;
       const isQuiet = now - lastIpcActivityAt >= quietMs;
       if ((!hasModuleRequests && minimumElapsed && isQuiet) || now - startedAt >= timeoutMs) {
+        const total = now - startedAt;
+        // O NÚMERO QUE O USUÁRIO SENTE, e a razão dele.
+        //
+        // A espera termina quando o IPC fica quieto — não quando a última
+        // resposta chega. Se alguma chamada continuar pingando, a tela segura
+        // mesmo com tudo já respondido, e nenhum cronômetro de chamada
+        // individual mostra isso. Só este log mostra.
+        if (total >= LIMITE_LENTIDAO_MS) {
+          console.warn(
+            `[lento] abertura do módulo: ${total}ms `
+            + `(mínimo ${minimumMs}ms, silêncio exigido ${quietMs}ms, `
+            + `última atividade há ${now - lastIpcActivityAt}ms, `
+            + `chamadas ainda em voo: ${pendentes.length})`
+          );
+        }
         resolve({ timedOut: now - startedAt >= timeoutMs });
         return;
       }
@@ -125,9 +154,77 @@ function getRuntimeConfigCached() {
   return runtimeConfigPromise;
 }
 
-contextBridge.exposeInMainWorld('electronAPI', {
+/**
+ * Cronômetro das chamadas ao processo principal.
+ *
+ * O DevTools mostra a aba Network, e a aba Network mostra `fetch`. Quase todo
+ * dado de módulo NÃO passa por `fetch`: passa por IPC (`electronAPI.listarX`),
+ * que atravessa o processo principal até a API remota — e some do Network.
+ * Resultado: uma tela podia levar dez segundos com o Network dizendo que tudo
+ * estava rápido, porque o que demorava era invisível ali.
+ *
+ * Só reclama do que passa do limite, para o console não virar ruído. É pouco
+ * código e resolve a pergunta "o que está demorando?" sem chute.
+ */
+/**
+ * Quem quer saber de cada chamada em andamento.
+ *
+ * `botaoAcao` precisa das promessas do IPC para manter o botão carregando até a
+ * ação terminar. Ele tentava embrulhar `window.electronAPI` no renderer, e não
+ * dava: `contextBridge` publica a ponte como propriedade NÃO-CONFIGURÁVEL, então
+ * nem a atribuição nem `defineProperty` pegam — o console mostrava
+ * "Cannot redefine property: electronAPI" e nenhuma ação por IPC exibia
+ * carregamento. Aqui dentro do preload, onde as funções são criadas, o registro
+ * é trivial.
+ */
+let coletorDoRenderer = null;
+
+function cronometrar(nome, fn) {
+  if (typeof fn !== 'function') return fn;
+  return function (...args) {
+    const inicio = Date.now();
+    let resultado;
+    try {
+      resultado = fn.apply(this, args);
+    } catch (err) {
+      console.warn(`[lento] ${nome} falhou em ${Date.now() - inicio}ms`, err);
+      throw err;
+    }
+    if (resultado && typeof resultado.then === 'function') {
+      if (coletorDoRenderer) {
+        try { coletorDoRenderer(resultado); } catch (_) { /* nunca derruba a ação */ }
+      }
+      return resultado.finally(() => {
+        const levou = Date.now() - inicio;
+        if (levou >= LIMITE_LENTIDAO_MS) console.warn(`[lento] ${nome}: ${levou}ms`);
+      });
+    }
+    return resultado;
+  };
+}
+
+/** Envolve cada função da ponte, mantendo o resto do objeto intacto. */
+function comCronometro(api) {
+  const saida = {};
+  for (const [nome, valor] of Object.entries(api)) {
+    saida[nome] = typeof valor === 'function' ? cronometrar(nome, valor) : valor;
+  }
+  return saida;
+}
+
+contextBridge.exposeInMainWorld('electronAPI', comCronometro({
   beginModuleLoading,
   waitForModuleLoading,
+  /**
+   * O renderer registra quem acompanha as chamadas em andamento.
+   *
+   * É o que devolve o carregamento aos botões que agem por IPC — ver
+   * `coletorDoRenderer`. Uma função só: quem registra por último manda, e
+   * `null` desliga.
+   */
+  registrarColetorIpc: (fn) => {
+    coletorDoRenderer = typeof fn === 'function' ? fn : null;
+  },
   log: (msg) => {
     if (DEBUG) ipcRenderer.send('debug-log', msg);
   },
@@ -390,7 +487,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     };
   },
   onPublishError: (callback) => subscribeToChannel('publish-error', callback)
-  });
+  }));
 
 
 

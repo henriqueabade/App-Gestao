@@ -170,6 +170,17 @@
     const api = window.electronAPI;
     if (!api || api.__botaoAcaoInstrumentado) return;
 
+    // CAMINHO CERTO: o preload registra o coletor por dentro, onde as funções
+    // são criadas. A tentativa abaixo (copiar a ponte e sobrescrevê-la) NÃO
+    // funciona — `contextBridge` publica `electronAPI` como propriedade
+    // não-configurável, e o console enchia de "Cannot redefine property".
+    if (typeof api.registrarColetorIpc === 'function') {
+      api.registrarColetorIpc(promessa => {
+        if (coletor && promessa && typeof promessa.then === 'function') coletor(promessa);
+      });
+      return;
+    }
+
     const envolvido = { __botaoAcaoInstrumentado: true };
     Object.keys(api).forEach(chave => {
       const original = api[chave];
@@ -206,8 +217,11 @@
         writable: true,
         enumerable: true
       });
-    } catch (err) {
-      console.error('[botaoAcao] não foi possível instrumentar electronAPI', err);
+    } catch (_) {
+      // Sem `registrarColetorIpc` (preload antigo) não há como acompanhar as
+      // chamadas por IPC. Não é motivo para encher o console de erro: o
+      // carregamento por `fetch` continua funcionando, e o botão ainda tem a
+      // trava de duplo clique.
     }
   }
 

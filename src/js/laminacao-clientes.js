@@ -115,12 +115,6 @@ function renderClientes(clientes) {
         const tr = document.createElement('tr');
         tr.className = 'transition-colors duration-150';
         tr.style.cursor = 'pointer';
-        tr.addEventListener('mouseover', () => {
-            tr.style.background = 'rgba(163, 148, 167, 0.05)';
-        });
-        tr.addEventListener('mouseout', () => {
-            tr.style.background = 'transparent';
-        });
         tr.innerHTML = `
             <td class="px-6 py-4 whitespace-nowrap text-sm text-white">${c.nome_fantasia}</td>
             <td class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-violet)">${c.cnpj}</td>

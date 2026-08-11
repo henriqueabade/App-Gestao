@@ -149,18 +149,16 @@ function criarLinhaProduto(produto, index) {
     `;
 }
 
-function aplicarEfeitoHoverLinhas() {
-    const tbody = document.getElementById('produtosTableBody');
-    if (!tbody) return;
-    tbody.querySelectorAll('tr').forEach(tr => {
-        tr.addEventListener('mouseover', () => {
-            tr.style.background = 'rgba(163, 148, 167, 0.05)';
-        });
-        tr.addEventListener('mouseout', () => {
-            tr.style.background = 'transparent';
-        });
-    });
-}
+/**
+ * O realce da linha agora é CSS (`#produtosTableBody tr:hover`, em
+ * produtos.css).
+ *
+ * Esta função prendia DOIS listeners por linha a cada render — e o render
+ * acontece ao abrir o módulo e a cada filtro. Numa tabela cheia são milhares de
+ * closures criadas só para pintar um fundo, trabalho que o navegador faz de
+ * graça. Mantida vazia porque é chamada de mais de um ponto do arquivo.
+ */
+function aplicarEfeitoHoverLinhas() {}
 
 function garantirEventosAcoesProdutos() {
     if (produtoActionsBound) return;

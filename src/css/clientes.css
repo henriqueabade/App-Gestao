@@ -240,3 +240,15 @@ body {
     cursor: not-allowed;
 }
 
+
+/**
+ * Realce da linha ao passar o mouse — em CSS, não em JavaScript.
+ *
+ * Antes cada render prendia DOIS listeners por linha (`mouseover` e
+ * `mouseout`). Numa tabela cheia isso é milhares de closures criadas a cada
+ * carga E a cada filtro, só para pintar um fundo. O navegador faz isso de
+ * graça, sem tocar na thread principal.
+ */
+#clientesTableBody tr:hover {
+    background: rgba(163, 148, 167, 0.05);
+}

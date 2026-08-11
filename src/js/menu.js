@@ -3207,7 +3207,15 @@ let ultimaAtividadeFetch = Date.now();
     };
 })();
 
-function aguardarDadosDoModulo({ quietMs = 250, timeoutMs = 8000 } = {}) {
+/**
+ * @param {number} quietMs  silêncio de `fetch` exigido antes de revelar.
+ *
+ * Ver a nota gêmea em `preload.waitForModuleLoading`: o que garante a tela
+ * pronta é `fetchesEmVoo === 0`; o silêncio só cobre a requisição encadeada,
+ * que começa em milissegundos. Este passo roda DEPOIS da espera de IPC, então
+ * cada milissegundo aqui soma direto no tempo de abrir qualquer módulo.
+ */
+function aguardarDadosDoModulo({ quietMs = 90, timeoutMs = 8000 } = {}) {
     const inicio = Date.now();
     return new Promise(resolve => {
         const checar = () => {
