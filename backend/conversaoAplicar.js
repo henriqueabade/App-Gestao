@@ -59,7 +59,14 @@ async function carregarMateriaPrima(api, insumosIds) {
   const desejados = querFiltro ? new Set(Array.from(insumosIds).map(Number)) : null;
   if (desejados && !desejados.size) return porId;
 
-  const lista = await api.get('/api/materia_prima').catch(() => []);
+  // Só as colunas usadas aqui: nome/unidade/processo para o relatório e
+  // quantidade/infinito para o saldo. A tabela tem descrição, preço e datas que
+  // não entram em nada disto — trazer a linha inteira infla a resposta à toa.
+  const lista = await api
+    .get('/api/materia_prima', {
+      query: { select: 'id,nome,unidade,processo,quantidade,infinito' }
+    })
+    .catch(() => []);
   for (const materia of (Array.isArray(lista) ? lista : [])) {
     const id = Number(materia?.id);
     if (!Number.isFinite(id)) continue;

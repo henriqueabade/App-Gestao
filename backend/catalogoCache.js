@@ -31,13 +31,26 @@ const VALIDADE_MS = 60 * 1000;
 
 const cache = new Map();   // tabela -> { promessa, expiraEm }
 
-/** Lê a tabela inteira, reaproveitando o que ainda vale. */
+/**
+ * SÓ AS COLUNAS QUE ESTAS DUAS PERGUNTAS USAM.
+ *
+ * `produtos` tem descrição, preços e uma porção de campos que não entram nem no
+ * popup nem na busca; `produtos_insumos` tem quantidade e ordem. Trazer a linha
+ * inteira multiplica o tamanho da resposta à toa — e o cache existe justamente
+ * para o custo de rede parar de doer.
+ */
+const COLUNAS = {
+  produtos: 'id,codigo,nome',
+  produtos_insumos: 'produto_id,produto_codigo,insumo_id'
+};
+
+/** Lê a tabela, reaproveitando o que ainda vale. */
 function lerTabela(pool, tabela) {
   const agora = Date.now();
   const guardado = cache.get(tabela);
   if (guardado && guardado.expiraEm > agora) return guardado.promessa;
 
-  const promessa = pool.get(`/${tabela}`)
+  const promessa = pool.get(`/${tabela}`, { query: { select: COLUNAS[tabela] } })
     .then(dados => (Array.isArray(dados) ? dados : []))
     .catch(err => {
       // Falha não fica em cache: a próxima tentativa tem de ir ao banco.
