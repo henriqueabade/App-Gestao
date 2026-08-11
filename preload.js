@@ -25,8 +25,23 @@ const ipcRenderer = new Proxy(electronIpcRenderer, {
   }
 });
 
-/** A partir de quanto tempo uma chamada merece aparecer no console. */
-const LIMITE_LENTIDAO_MS = 400;
+/**
+ * A partir de quanto tempo uma chamada merece aparecer no console.
+ *
+ * Alto de propósito. Abrir um módulo custa uns 400 ms hoje — piso de espera
+ * mais montagem da tabela — e ninguém sente isso. Um alarme que dispara em toda
+ * abertura vira ruído, e ruído a gente aprende a ignorar; então o limite fica
+ * acima do normal, para o log só falar quando houver algo de fato errado.
+ */
+const LIMITE_LENTIDAO_MS = 800;
+
+/**
+ * Chamadas que já têm log próprio, mais detalhado.
+ *
+ * `waitForModuleLoading` é uma ESPERA, não trabalho: o cronômetro genérico
+ * repetiria o mesmo número sem o porquê, ao lado da linha que explica.
+ */
+const SEM_CRONOMETRO_GENERICO = new Set(['waitForModuleLoading', 'beginModuleLoading']);
 
 function beginModuleLoading() {
   return { sequence: ipcRequestSequence, startedAt: Date.now() };
@@ -65,11 +80,17 @@ function waitForModuleLoading(token = {}, options = {}) {
         // mesmo com tudo já respondido, e nenhum cronômetro de chamada
         // individual mostra isso. Só este log mostra.
         if (total >= LIMITE_LENTIDAO_MS) {
+          // A diferença entre "silêncio há X" e o silêncio exigido diz ONDE o
+          // tempo foi: sobra grande significa que a thread estava ocupada
+          // montando a tela e nem conseguiu rodar esta verificação; sobra
+          // pequena significa que o tempo foi esperando dado mesmo.
+          const atraso = Math.max(0, (now - lastIpcActivityAt) - quietMs);
           console.warn(
             `[lento] abertura do módulo: ${total}ms `
             + `(mínimo ${minimumMs}ms, silêncio exigido ${quietMs}ms, `
             + `última atividade há ${now - lastIpcActivityAt}ms, `
-            + `chamadas ainda em voo: ${pendentes.length})`
+            + `chamadas ainda em voo: ${pendentes.length}, `
+            + `thread ocupada por ~${atraso}ms)`
           );
         }
         resolve({ timedOut: now - startedAt >= timeoutMs });
@@ -207,7 +228,9 @@ function cronometrar(nome, fn) {
 function comCronometro(api) {
   const saida = {};
   for (const [nome, valor] of Object.entries(api)) {
-    saida[nome] = typeof valor === 'function' ? cronometrar(nome, valor) : valor;
+    saida[nome] = typeof valor === 'function' && !SEM_CRONOMETRO_GENERICO.has(nome)
+      ? cronometrar(nome, valor)
+      : valor;
   }
   return saida;
 }
