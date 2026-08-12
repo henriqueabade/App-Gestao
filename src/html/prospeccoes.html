@@ -1,4 +1,3 @@
-<!-- Interface principal do módulo de Prospecções (CRM) -->
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -19,28 +18,31 @@
         <div class="flex justify-between items-center mb-8 animate-fade-in-up">
             <div>
                 <h1 class="text-2xl font-semibold mb-2 module-header__title">Prospecções</h1>
-                <p class="module-header__description">Pipeline comercial: da primeira conversa ao cliente fechado</p>
+                <p class="module-header__description">Gerencie potenciais clientes e oportunidades</p>
             </div>
-            <button id="btnNovaProspeccao" data-perm="pros.create" class="btn-primary text-white rounded-md px-6 py-3 font-medium">
-                <i class="fas fa-plus mr-2"></i>Nova Prospecção
-            </button>
         </div>
 
         <!-- Action Bar -->
         <div class="flex flex-wrap items-center justify-between gap-4 mb-6 animate-fade-in-up">
             <div class="flex flex-wrap items-center gap-3">
-                <button id="btnOcultarGraficoFunil" class="btn-secondary text-white rounded-md px-4 py-2 font-medium">
-                    <i class="fas fa-chart-simple mr-2"></i>Ocultar Funil
+                <select class="input-glass text-white rounded-md px-4 py-2">
+                    <option>Meus Leads</option>
+                    <option>Todos os Leads</option>
+                    <option>Leads da Equipe</option>
+                </select>
+                <button id="btnNovaProspeccao" data-perm="pros.create" class="btn-primary text-white rounded-md px-4 py-2 font-medium">
+                    <i class="fas fa-plus mr-2"></i>Novo
                 </button>
-                <label class="flex items-center gap-3 cursor-pointer select-none">
-                    <input id="filtroIncluirArquivadas" type="checkbox" class="w-4 h-4" />
-                    <span class="text-sm text-white/80">Mostrar arquivadas (ganhas e perdidas)</span>
-                </label>
+                <button id="btnImportarLeads" data-perm="pros.create" class="btn-primary text-white rounded-md px-4 py-2 font-medium">
+                    <i class="fas fa-upload mr-2"></i>Importar Leads
+                </button>
+                <button id="btnOcultarGraficoFunil" class="btn-secondary text-white rounded-md px-4 py-2 font-medium">
+                    Ocultar Gráfico de Funil
+                </button>
             </div>
             <div class="flex items-center gap-3">
-                <button id="btnAtualizarProspeccoes" class="btn-neutral text-white rounded-md px-4 py-2 text-sm font-medium" title="Recarregar">
-                    <i class="fas fa-rotate-right mr-2"></i>Atualizar
-                </button>
+                <i class="fas fa-cog w-5 h-5 cursor-pointer" style="color: var(--color-violet)" title="Configurações"></i>
+                <div class="toggle-switch active" onclick="this.classList.toggle('active')"></div>
             </div>
         </div>
 
@@ -49,62 +51,51 @@
             <!-- Left Column - Filters -->
             <div class="w-full lg:w-72 animate-fade-in-up">
                 <div class="glass-surface shadow rounded-xl p-4">
-                    <h3 class="font-medium mb-4 text-white">Filtros &amp; Estatísticas</h3>
-
+                    <h3 class="font-medium mb-4 text-white">Filtros & Estatísticas</h3>
+                    
                     <div class="space-y-4">
-                        <!-- Busca -->
+                        <!-- Status Filter -->
                         <div>
-                            <label class="block text-sm font-medium mb-1 text-white">Buscar</label>
-                            <input id="filtroBusca" data-perm="pros.search" type="text"
-                                   placeholder="Empresa, CNPJ, contato ou e-mail"
-                                   class="input-glass text-white rounded-md px-3 py-2 w-full text-sm">
-                        </div>
-
-                        <!-- Etapa -->
-                        <div>
-                            <label class="block text-sm font-medium mb-1 text-white">Etapa</label>
-                            <select id="filtroEtapa" data-perm="pros.search" class="input-glass text-white rounded-md px-3 py-2 w-full text-sm">
-                                <option value="">Todas</option>
+                            <label class="block text-sm font-medium mb-1 text-white">Status</label>
+                            <select class="input-glass text-white rounded-md px-3 py-2 w-full text-sm">
+                                <option>Todos</option>
+                                <option>Novo</option>
+                                <option>Contactado</option>
+                                <option>Qualificado</option>
+                                <option>Desqualificado</option>
                             </select>
                         </div>
 
-                        <!-- Origem -->
+                        <!-- Lead Origin -->
                         <div>
-                            <label class="block text-sm font-medium mb-1 text-white">Origem</label>
-                            <select id="filtroOrigem" data-perm="pros.search" class="input-glass text-white rounded-md px-3 py-2 w-full text-sm">
-                                <option value="">Todas</option>
+                            <label class="block text-sm font-medium mb-1 text-white">Origem do Lead</label>
+                            <select class="input-glass text-white rounded-md px-3 py-2 w-full text-sm">
+                                <option>Todas</option>
+                                <option>Website</option>
+                                <option>Redes Sociais</option>
+                                <option>Indicação</option>
+                                <option>Evento</option>
                             </select>
                         </div>
 
-                        <!-- Responsável -->
+                        <!-- Responsible -->
                         <div>
                             <label class="block text-sm font-medium mb-1 text-white">Responsável</label>
-                            <select id="filtroResponsavel" data-perm="pros.search" class="input-glass text-white rounded-md px-3 py-2 w-full text-sm">
-                                <option value="">Todos</option>
+                            <select class="input-glass text-white rounded-md px-3 py-2 w-full text-sm">
+                                <option>Todos</option>
+                                <option>João Silva</option>
+                                <option>Maria Santos</option>
+                                <option>Pedro Costa</option>
                             </select>
                         </div>
 
-                        <!-- Valor estimado -->
+                        <!-- Date Range -->
                         <div>
-                            <label class="block text-sm font-medium mb-1 text-white">Valor estimado (R$)</label>
-                            <div class="flex gap-2">
-                                <input id="filtroValorMin" data-perm="pros.search" type="text" data-numeric="true" placeholder="mín."
-                                       class="input-glass text-white rounded-md px-3 py-2 w-full text-sm">
-                                <input id="filtroValorMax" data-perm="pros.search" type="text" data-numeric="true" placeholder="máx."
-                                       class="input-glass text-white rounded-md px-3 py-2 w-full text-sm">
+                            <label class="block text-sm font-medium mb-1 text-white">Data de Criação</label>
+                            <div class="space-y-2">
+                                <input type="date" class="input-glass text-white rounded-md px-3 py-2 w-full text-sm">
+                                <input type="date" class="input-glass text-white rounded-md px-3 py-2 w-full text-sm">
                             </div>
-                        </div>
-
-                        <!-- Próximo passo -->
-                        <div>
-                            <label class="block text-sm font-medium mb-1 text-white">Próximo passo</label>
-                            <select id="filtroProximoPasso" data-perm="pros.search" class="input-glass text-white rounded-md px-3 py-2 w-full text-sm">
-                                <option value="">Qualquer</option>
-                                <option value="atrasado">Atrasado</option>
-                                <option value="hoje">Para hoje</option>
-                                <option value="semana">Próximos 7 dias</option>
-                                <option value="sem">Sem próximo passo</option>
-                            </select>
                         </div>
 
                         <!-- Country -->
@@ -139,8 +130,13 @@
                             <input type="hidden" data-geo-input="prospeccoes-estados">
                         </div>
 
+                        <!-- Custom Filter Link -->
+                        <div>
+                            <a href="#" class="text-sm" style="color: var(--color-primary)">+ Adicionar Filtro Personalizado</a>
+                        </div>
+
                         <!-- Action Buttons -->
-                        <div class="flex gap-2 pt-2">
+                        <div class="flex gap-2 pt-4">
                             <button id="btnFiltrarProspeccoes" data-perm="pros.search" class="btn-secondary text-white rounded-md px-4 py-2 text-sm font-medium flex-1">
                                 Filtrar
                             </button>
@@ -148,92 +144,337 @@
                                 Limpar
                             </button>
                         </div>
-
-                        <!-- Totais -->
-                        <div class="pt-2 border-t border-white/10">
-                            <label class="block text-sm font-medium mb-2 text-white">Resumo</label>
-                            <div id="prospeccoesResumo" class="space-y-2 text-sm"></div>
-                        </div>
                     </div>
                 </div>
             </div>
 
             <!-- Right Column - Content -->
-            <div class="flex-1 animate-fade-in-up min-w-0">
-                <!-- Funil -->
-                <div id="prospeccoesFunilCard" class="glass-surface shadow rounded-xl p-4 mb-6">
+            <div class="flex-1 animate-fade-in-up">
+                <!-- Funnel Chart -->
+                <div class="glass-surface shadow rounded-xl p-4 mb-6">
                     <div class="flex justify-between items-center mb-4">
-                        <h3 class="font-medium text-white">Funil de Prospecção</h3>
-                        <span id="prospeccoesFunilTotal" class="text-sm" style="color: var(--color-violet)">—</span>
+                        <h3 class="font-medium text-white">Funnel de Leads</h3>
+                        <span class="text-sm" style="color: var(--color-violet)">Total: 156</span>
                     </div>
-                    <div id="prospeccoesFunil" class="space-y-4"></div>
+                    
+                    <div class="space-y-4">
+                        <!-- Novo -->
+                        <div>
+                            <div class="flex justify-between text-sm mb-1">
+                                <span class="text-white">Novo</span>
+                                <span style="color: var(--color-violet)">45</span>
+                            </div>
+                            <div class="bg-gray-200 rounded-full h-2">
+                                <div class="h-2 rounded-full w-3/4" style="background: var(--color-blue)"></div>
+                            </div>
+                        </div>
+
+                        <!-- Contactado -->
+                        <div>
+                            <div class="flex justify-between text-sm mb-1">
+                                <span class="text-white">Contactado</span>
+                                <span style="color: var(--color-violet)">38</span>
+                            </div>
+                            <div class="bg-gray-200 rounded-full h-2">
+                                <div class="h-2 rounded-full w-3/5" style="background: var(--color-primary)"></div>
+                            </div>
+                        </div>
+
+                        <!-- Qualificado -->
+                        <div>
+                            <div class="flex justify-between text-sm mb-1">
+                                <span class="text-white">Qualificado</span>
+                                <span style="color: var(--color-violet)">28</span>
+                            </div>
+                            <div class="bg-gray-200 rounded-full h-2">
+                                <div class="h-2 rounded-full w-2/5" style="background: var(--color-green)"></div>
+                            </div>
+                        </div>
+
+                        <!-- Desqualificado -->
+                        <div>
+                            <div class="flex justify-between text-sm mb-1">
+                                <span class="text-white">Desqualificado</span>
+                                <span style="color: var(--color-violet)">45</span>
+                            </div>
+                            <div class="bg-gray-200 rounded-full h-2">
+                                <div class="h-2 rounded-full w-1/4" style="background: var(--color-red)"></div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
-                <!-- Tabela -->
+                <!-- Leads Table -->
                 <div id="prospeccoesTableWrapper" class="glass-surface shadow rounded-xl table-scroll">
                     <table class="w-full">
                         <thead class="bg-gray-50 sticky top-0">
                             <tr>
-                                <th data-perm-col="col_pros_id" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
-                                <th data-perm-col="col_pros_entidade" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Empresa</th>
-                                <th data-perm-col="col_pros_origem" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Origem</th>
-                                <th data-perm-col="col_pros_etapa" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Etapa</th>
-                                <th data-perm-col="col_pros_valor" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Valor</th>
-                                <th data-perm-col="col_pros_prob" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Prob.</th>
-                                <th data-perm-col="col_pros_owner" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Responsável</th>
-                                <th data-perm-col="col_pros_proximo_passo" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Próx. passo</th>
-                                <th data-perm-col="col_pros_proximo_passo_data" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Para quando</th>
-                                <th data-perm-col="col_pros_atualizado_em" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Atualizado</th>
-                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ações</th>
-                            </tr>
+                                    <th data-perm-col="col_pros_entidade" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nome do Lead</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">E-mail</th>
+                                    <th data-perm-col="col_pros_etapa" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                                    <th data-perm-col="col_pros_owner" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Responsável</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ações</th>
+                                </tr>
                         </thead>
-                        <!-- Preenchido por src/js/prospeccoes.js a partir de GET /api/prospeccoes/lista -->
-                        <tbody id="prospeccoesTableBody" class="divide-y divide-white/10"></tbody>
+                        <tbody class="divide-y divide-white/10">
+                            <!-- Lead 1 -->
+                            <tr class="transition-colors duration-150" style="cursor: pointer;" onmouseover="this.style.background='rgba(163, 148, 167, 0.05)'" onmouseout="this.style.background='transparent'" data-company="Empresa Alpha" data-phone="(11) 3333-4444" data-cell="(11) 98888-7777">
+                                    <td data-perm-col="col_pros_entidade" class="px-6 py-4 whitespace-nowrap text-sm text-white">Ana Carolina Mendes</td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-violet)">ana.mendes@email.com</td>
+                                    <td data-perm-col="col_pros_etapa" class="px-6 py-4 whitespace-nowrap">
+                                        <span class="badge-info px-3 py-1 rounded-full text-xs font-medium">Novo</span>
+                                    </td>
+                                    <td data-perm-col="col_pros_owner" class="px-6 py-4 whitespace-nowrap text-sm text-white">João Silva</td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-left">
+                                        <div class="flex items-center justify-start space-x-2">
+                                            <i data-perm="pros.details.view" class="fas fa-eye w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Visualizar"></i>
+                                            <i data-perm="pros.edit" class="fas fa-edit w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Editar"></i>
+                                            <i data-perm="pros.delete" class="fas fa-trash w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-red)" title="Deletar"></i>
+                                        </div>
+                                    </td>
+                                </tr>
+
+                                <!-- Lead 2 -->
+                                <tr class="transition-colors duration-150" style="cursor: pointer;" onmouseover="this.style.background='rgba(163, 148, 167, 0.05)'" onmouseout="this.style.background='transparent'" data-company="Empresa Beta" data-phone="(21) 4444-5555" data-cell="(21) 97777-6666">
+                                    <td data-perm-col="col_pros_entidade" class="px-6 py-4 whitespace-nowrap text-sm text-white">Roberto Silva Santos</td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-violet)">roberto.santos@email.com</td>
+                                    <td data-perm-col="col_pros_etapa" class="px-6 py-4 whitespace-nowrap">
+                                        <span class="badge-warning px-3 py-1 rounded-full text-xs font-medium">Contactado</span>
+                                    </td>
+                                    <td data-perm-col="col_pros_owner" class="px-6 py-4 whitespace-nowrap text-sm text-white">Maria Santos</td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-left">
+                                        <div class="flex items-center justify-start space-x-2">
+                                            <i data-perm="pros.details.view" class="fas fa-eye w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Visualizar"></i>
+                                            <i data-perm="pros.edit" class="fas fa-edit w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Editar"></i>
+                                            <i data-perm="pros.delete" class="fas fa-trash w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-red)" title="Deletar"></i>
+                                        </div>
+                                    </td>
+                                </tr>
+
+                                <!-- Lead 3 -->
+                                <tr class="transition-colors duration-150" style="cursor: pointer;" onmouseover="this.style.background='rgba(163, 148, 167, 0.05)'" onmouseout="this.style.background='transparent'" data-company="Empresa Gamma" data-phone="(31) 5555-6666" data-cell="(31) 96666-5555">
+                                    <td data-perm-col="col_pros_entidade" class="px-6 py-4 whitespace-nowrap text-sm text-white">Mariana Costa Lima</td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-violet)">mariana.lima@email.com</td>
+                                    <td data-perm-col="col_pros_etapa" class="px-6 py-4 whitespace-nowrap">
+                                        <span class="badge-success px-3 py-1 rounded-full text-xs font-medium">Qualificado</span>
+                                    </td>
+                                    <td data-perm-col="col_pros_owner" class="px-6 py-4 whitespace-nowrap text-sm text-white">Pedro Costa</td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-left">
+                                        <div class="flex items-center justify-start space-x-2">
+                                            <i data-perm="pros.details.view" class="fas fa-eye w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Visualizar"></i>
+                                            <i data-perm="pros.edit" class="fas fa-edit w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Editar"></i>
+                                            <i data-perm="pros.delete" class="fas fa-trash w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-red)" title="Deletar"></i>
+                                        </div>
+                                    </td>
+                                </tr>
+
+                                <!-- Lead 4 -->
+                                <tr class="transition-colors duration-150" style="cursor: pointer;" onmouseover="this.style.background='rgba(163, 148, 167, 0.05)'" onmouseout="this.style.background='transparent'" data-company="Empresa Delta" data-phone="(41) 6666-7777" data-cell="(41) 95555-4444">
+                                    <td data-perm-col="col_pros_entidade" class="px-6 py-4 whitespace-nowrap text-sm text-white">Carlos Eduardo Rocha</td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-violet)">carlos.rocha@email.com</td>
+                                    <td data-perm-col="col_pros_etapa" class="px-6 py-4 whitespace-nowrap">
+                                        <span class="badge-danger px-3 py-1 rounded-full text-xs font-medium">Desqualificado</span>
+                                    </td>
+                                    <td data-perm-col="col_pros_owner" class="px-6 py-4 whitespace-nowrap text-sm text-white">Ana Oliveira</td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-left">
+                                        <div class="flex items-center justify-start space-x-2">
+                                            <i data-perm="pros.details.view" class="fas fa-eye w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Visualizar"></i>
+                                            <i data-perm="pros.edit" class="fas fa-edit w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Editar"></i>
+                                            <i data-perm="pros.delete" class="fas fa-trash w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-red)" title="Deletar"></i>
+                                        </div>
+                                    </td>
+                                </tr>
+
+                                <!-- Lead 5 -->
+                                <tr class="transition-colors duração-150" style="cursor: pointer;" onmouseover="this.style.background='rgba(163, 148, 167, 0.05)'" onmouseout="this.style.background='transparent'" data-company="Empresa Epsilon" data-phone="(51) 7777-8888" data-cell="(51) 94444-3333">
+                                    <td data-perm-col="col_pros_entidade" class="px-6 py-4 whitespace-nowrap text-sm text-white">Fernanda Alves Ribeiro</td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-violet)">fernanda.ribeiro@email.com</td>
+                                    <td data-perm-col="col_pros_etapa" class="px-6 py-4 whitespace-nowrap">
+                                        <span class="badge-info px-3 py-1 rounded-full text-xs font-medium">Novo</span>
+                                    </td>
+                                    <td data-perm-col="col_pros_owner" class="px-6 py-4 whitespace-nowrap text-sm text-white">João Silva</td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-left">
+                                        <div class="flex items-center justify-start space-x-2">
+                                            <i class="fas fa-eye w-5 h-5 cursor-pointer p-1 rounded transition-colors duração-150 hover:bg-white/10" style="color: var(--color-primary)" title="Visualizar"></i>
+                                            <i class="fas fa-edit w-5 h-5 cursor-pointer p-1 rounded transition-colors duração-150 hover:bg-white/10" style="color: var(--color-primary)" title="Editar"></i>
+                                            <i class="fas fa-trash w-5 h-5 cursor-pointer p-1 rounded transition-colors duração-150 hover:bg-white/10" style="color: var(--color-red)" title="Deletar"></i>
+                                        </div>
+                                    </td>
+                                </tr>
+
+                                <!-- Lead 6 -->
+                                <tr class="transition-colors duração-150" style="cursor: pointer;" onmouseover="this.style.background='rgba(163, 148, 167, 0.05)'" onmouseout="this.style.background='transparent'" data-company="Empresa Zeta" data-phone="(61) 8888-9999" data-cell="(61) 93333-2222">
+                                    <td data-perm-col="col_pros_entidade" class="px-6 py-4 whitespace-nowrap text-sm text-white">Gustavo Pereira Lima</td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-violet)">gustavo.lima@email.com</td>
+                                    <td data-perm-col="col_pros_etapa" class="px-6 py-4 whitespace-nowrap">
+                                        <span class="badge-warning px-3 py-1 rounded-full text-xs font-medium">Contactado</span>
+                                    </td>
+                                    <td data-perm-col="col_pros_owner" class="px-6 py-4 whitespace-nowrap text-sm text-white">Maria Santos</td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-left">
+                                        <div class="flex items-center justify-start space-x-2">
+                                            <i class="fas fa-eye w-5 h-5 cursor-pointer p-1 rounded transition-colors duração-150 hover:bg-white/10" style="color: var(--color-primary)" title="Visualizar"></i>
+                                            <i class="fas fa-edit w-5 h-5 cursor-pointer p-1 rounded transition-colors duração-150 hover:bg-white/10" style="color: var(--color-primary)" title="Editar"></i>
+                                            <i class="fas fa-trash w-5 h-5 cursor-pointer p-1 rounded transition-colors duração-150 hover:bg-white/10" style="color: var(--color-red)" title="Deletar"></i>
+                                        </div>
+                                    </td>
+                                </tr>
+
+                                <!-- Lead 7 -->
+                                <tr class="transition-colors duração-150" style="cursor: pointer;" onmouseover="this.style.background='rgba(163, 148, 167, 0.05)'" onmouseout="this.style.background='transparent'" data-company="Empresa Eta" data-phone="(71) 9999-0000" data-cell="(71) 92222-1111">
+                                    <td data-perm-col="col_pros_entidade" class="px-6 py-4 whitespace-nowrap text-sm text-white">Helena Martins Souza</td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-violet)">helena.souza@email.com</td>
+                                    <td data-perm-col="col_pros_etapa" class="px-6 py-4 whitespace-nowrap">
+                                        <span class="badge-success px-3 py-1 rounded-full text-xs font-medium">Qualificado</span>
+                                    </td>
+                                    <td data-perm-col="col_pros_owner" class="px-6 py-4 whitespace-nowrap text-sm text-white">Pedro Costa</td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-left">
+                                        <div class="flex items-center justify-start space-x-2">
+                                            <i class="fas fa-eye w-5 h-5 cursor-pointer p-1 rounded transition-colors duração-150 hover:bg-white/10" style="color: var(--color-primary)" title="Visualizar"></i>
+                                            <i class="fas fa-edit w-5 h-5 cursor-pointer p-1 rounded transition-colors duração-150 hover:bg-white/10" style="color: var(--color-primary)" title="Editar"></i>
+                                            <i class="fas fa-trash w-5 h-5 cursor-pointer p-1 rounded transition-colors duração-150 hover:bg-white/10" style="color: var(--color-red)" title="Deletar"></i>
+                                        </div>
+                                    </td>
+                                </tr>
+
+                                <!-- Lead 8 -->
+                                <tr class="transition-colors duração-150" style="cursor: pointer;" onmouseover="this.style.background='rgba(163, 148, 167, 0.05)'" onmouseout="this.style.background='transparent'" data-company="Empresa Theta" data-phone="(81) 1010-1111" data-cell="(81) 91111-0000">
+                                    <td data-perm-col="col_pros_entidade" class="px-6 py-4 whitespace-nowrap text-sm text-white">Igor Silva Nunes</td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-violet)">igor.nunes@email.com</td>
+                                    <td data-perm-col="col_pros_etapa" class="px-6 py-4 whitespace-nowrap">
+                                        <span class="badge-danger px-3 py-1 rounded-full text-xs font-medium">Desqualificado</span>
+                                    </td>
+                                    <td data-perm-col="col_pros_owner" class="px-6 py-4 whitespace-nowrap text-sm text-white">Ana Oliveira</td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-left">
+                                        <div class="flex items-center justify-start space-x-2">
+                                            <i class="fas fa-eye w-5 h-5 cursor-pointer p-1 rounded transition-colors duração-150 hover:bg-white/10" style="color: var(--color-primary)" title="Visualizar"></i>
+                                            <i class="fas fa-edit w-5 h-5 cursor-pointer p-1 rounded transition-colors duração-150 hover:bg-white/10" style="color: var(--color-primary)" title="Editar"></i>
+                                            <i class="fas fa-trash w-5 h-5 cursor-pointer p-1 rounded transition-colors duração-150 hover:bg-white/10" style="color: var(--color-red)" title="Deletar"></i>
+                                        </div>
+                                    </td>
+                                </tr>
+
+                                <!-- Lead 9 -->
+                                <tr class="transition-colors duração-150" style="cursor: pointer;" onmouseover="this.style.background='rgba(163, 148, 167, 0.05)'" onmouseout="this.style.background='transparent'" data-company="Empresa Iota" data-phone="(91) 2121-2222" data-cell="(91) 90000-8888">
+                                    <td data-perm-col="col_pros_entidade" class="px-6 py-4 whitespace-nowrap text-sm text-white">Julia Ferreira Gomes</td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-violet)">julia.gomes@email.com</td>
+                                    <td data-perm-col="col_pros_etapa" class="px-6 py-4 whitespace-nowrap">
+                                        <span class="badge-info px-3 py-1 rounded-full text-xs font-medium">Novo</span>
+                                    </td>
+                                    <td data-perm-col="col_pros_owner" class="px-6 py-4 whitespace-nowrap text-sm text-white">João Silva</td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-left">
+                                        <div class="flex items-center justify-start space-x-2">
+                                            <i class="fas fa-eye w-5 h-5 cursor-pointer p-1 rounded transition-colors duração-150 hover:bg-white/10" style="color: var(--color-primary)" title="Visualizar"></i>
+                                            <i class="fas fa-edit w-5 h-5 cursor-pointer p-1 rounded transition-colors duração-150 hover:bg-white/10" style="color: var(--color-primary)" title="Editar"></i>
+                                            <i class="fas fa-trash w-5 h-5 cursor-pointer p-1 rounded transition-colors duração-150 hover:bg-white/10" style="color: var(--color-red)" title="Deletar"></i>
+                                        </div>
+                                    </td>
+                                </tr>
+
+                                <!-- Lead 10 -->
+                                <tr class="transition-colors duração-150" style="cursor: pointer;" onmouseover="this.style.background='rgba(163, 148, 167, 0.05)'" onmouseout="this.style.background='transparent'" data-company="Empresa Kappa" data-phone="(31) 3232-3333" data-cell="(31) 94444-5555">
+                                    <td data-perm-col="col_pros_entidade" class="px-6 py-4 whitespace-nowrap text-sm text-white">Leonardo Batista Araujo</td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-violet)">leonardo.araujo@email.com</td>
+                                    <td data-perm-col="col_pros_etapa" class="px-6 py-4 whitespace-nowrap">
+                                        <span class="badge-warning px-3 py-1 rounded-full text-xs font-medium">Contactado</span>
+                                    </td>
+                                    <td data-perm-col="col_pros_owner" class="px-6 py-4 whitespace-nowrap text-sm text-white">Maria Santos</td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-left">
+                                        <div class="flex items-center justify-start space-x-2">
+                                            <i class="fas fa-eye w-5 h-5 cursor-pointer p-1 rounded transition-colors duração-150 hover:bg-white/10" style="color: var(--color-primary)" title="Visualizar"></i>
+                                            <i class="fas fa-edit w-5 h-5 cursor-pointer p-1 rounded transition-colors duração-150 hover:bg-white/10" style="color: var(--color-primary)" title="Editar"></i>
+                                            <i class="fas fa-trash w-5 h-5 cursor-pointer p-1 rounded transition-colors duração-150 hover:bg-white/10" style="color: var(--color-red)" title="Deletar"></i>
+                                        </div>
+                                    </td>
+                                </tr>
+
+                                <!-- Lead 11 -->
+                                <tr class="transition-colors duração-150" style="cursor: pointer;" onmouseover="this.style.background='rgba(163, 148, 167, 0.05)'" onmouseout="this.style.background='transparent'" data-company="Empresa Lambda" data-phone="(41) 4343-4444" data-cell="(41) 97777-6666">
+                                    <td data-perm-col="col_pros_entidade" class="px-6 py-4 whitespace-nowrap text-sm text-white">Marcela Dias Pinto</td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-violet)">marcela.pinto@email.com</td>
+                                    <td data-perm-col="col_pros_etapa" class="px-6 py-4 whitespace-nowrap">
+                                        <span class="badge-success px-3 py-1 rounded-full text-xs font-medium">Qualificado</span>
+                                    </td>
+                                    <td data-perm-col="col_pros_owner" class="px-6 py-4 whitespace-nowrap text-sm text-white">Pedro Costa</td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-left">
+                                        <div class="flex items-center justify-start space-x-2">
+                                            <i class="fas fa-eye w-5 h-5 cursor-pointer p-1 rounded transition-colors duração-150 hover:bg-white/10" style="color: var(--color-primary)" title="Visualizar"></i>
+                                            <i class="fas fa-edit w-5 h-5 cursor-pointer p-1 rounded transition-colors duração-150 hover:bg-white/10" style="color: var(--color-primary)" title="Editar"></i>
+                                            <i class="fas fa-trash w-5 h-5 cursor-pointer p-1 rounded transition-colors duração-150 hover:bg-white/10" style="color: var(--color-red)" title="Deletar"></i>
+                                        </div>
+                                    </td>
+                                </tr>
+
+                                <!-- Lead 12 -->
+                                <tr class="transition-colors duração-150" style="cursor: pointer;" onmouseover="this.style.background='rgba(163, 148, 167, 0.05)'" onmouseout="this.style.background='transparent'" data-company="Empresa Mu" data-phone="(51) 5454-5555" data-cell="(51) 98888-7777">
+                                    <td data-perm-col="col_pros_entidade" class="px-6 py-4 whitespace-nowrap text-sm text-white">Nathalia Costa Prado</td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-violet)">nathalia.prado@email.com</td>
+                                    <td data-perm-col="col_pros_etapa" class="px-6 py-4 whitespace-nowrap">
+                                        <span class="badge-danger px-3 py-1 rounded-full text-xs font-medium">Desqualificado</span>
+                                    </td>
+                                    <td data-perm-col="col_pros_owner" class="px-6 py-4 whitespace-nowrap text-sm text-white">Ana Oliveira</td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-left">
+                                        <div class="flex items-center justify-start space-x-2">
+                                            <i class="fas fa-eye w-5 h-5 cursor-pointer p-1 rounded transition-colors duração-150 hover:bg-white/10" style="color: var(--color-primary)" title="Visualizar"></i>
+                                            <i class="fas fa-edit w-5 h-5 cursor-pointer p-1 rounded transition-colors duração-150 hover:bg-white/10" style="color: var(--color-primary)" title="Editar"></i>
+                                            <i class="fas fa-trash w-5 h-5 cursor-pointer p-1 rounded transition-colors duração-150 hover:bg-white/10" style="color: var(--color-red)" title="Deletar"></i>
+                                        </div>
+                                    </td>
+                                </tr>
+
+                                <!-- Lead 13 -->
+                                <tr class="transition-colors duração-150" style="cursor: pointer;" onmouseover="this.style.background='rgba(163, 148, 167, 0.05)'" onmouseout="this.style.background='transparent'" data-company="Empresa Nu" data-phone="(61) 6565-6666" data-cell="(61) 97777-8888">
+                                    <td data-perm-col="col_pros_entidade" class="px-6 py-4 whitespace-nowrap text-sm text-white">Otávio Ramos Guedes</td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-violet)">otavio.guedes@email.com</td>
+                                    <td data-perm-col="col_pros_etapa" class="px-6 py-4 whitespace-nowrap">
+                                        <span class="badge-info px-3 py-1 rounded-full text-xs font-medium">Novo</span>
+                                    </td>
+                                    <td data-perm-col="col_pros_owner" class="px-6 py-4 whitespace-nowrap text-sm text-white">João Silva</td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-left">
+                                        <div class="flex items-center justify-start space-x-2">
+                                            <i class="fas fa-eye w-5 h-5 cursor-pointer p-1 rounded transition-colors duração-150 hover:bg-white/10" style="color: var(--color-primary)" title="Visualizar"></i>
+                                            <i class="fas fa-edit w-5 h-5 cursor-pointer p-1 rounded transition-colors duração-150 hover:bg-white/10" style="color: var(--color-primary)" title="Editar"></i>
+                                            <i class="fas fa-trash w-5 h-5 cursor-pointer p-1 rounded transition-colors duração-150 hover:bg-white/10" style="color: var(--color-red)" title="Deletar"></i>
+                                        </div>
+                                    </td>
+                                </tr>
+
+                                <!-- Lead 14 -->
+                                <tr class="transition-colors duração-150" style="cursor: pointer;" onmouseover="this.style.background='rgba(163, 148, 167, 0.05)'" onmouseout="this.style.background='transparent'" data-company="Empresa Xi" data-phone="(71) 7676-7777" data-cell="(71) 93333-9999">
+                                    <td data-perm-col="col_pros_entidade" class="px-6 py-4 whitespace-nowrap text-sm text-white">Patricia Moreira Lopes</td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-violet)">patricia.lopes@email.com</td>
+                                    <td data-perm-col="col_pros_etapa" class="px-6 py-4 whitespace-nowrap">
+                                        <span class="badge-warning px-3 py-1 rounded-full text-xs font-medium">Contactado</span>
+                                    </td>
+                                    <td data-perm-col="col_pros_owner" class="px-6 py-4 whitespace-nowrap text-sm text-white">Maria Santos</td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-left">
+                                        <div class="flex items-center justify-start space-x-2">
+                                            <i class="fas fa-eye w-5 h-5 cursor-pointer p-1 rounded transition-colors duração-150 hover:bg-white/10" style="color: var(--color-primary)" title="Visualizar"></i>
+                                            <i class="fas fa-edit w-5 h-5 cursor-pointer p-1 rounded transition-colors duração-150 hover:bg-white/10" style="color: var(--color-primary)" title="Editar"></i>
+                                            <i class="fas fa-trash w-5 h-5 cursor-pointer p-1 rounded transition-colors duração-150 hover:bg-white/10" style="color: var(--color-red)" title="Deletar"></i>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </tbody>
                     </table>
-                </div>
-
-                <!-- Carregando -->
-                <div id="prospeccoesLoading" class="hidden py-16 flex flex-col items-center justify-center text-center px-4">
-                    <div class="app-loading-indicator app-loading-indicator--compact" aria-hidden="true">
-                        <span class="module-loading-orbit"></span>
-                        <span class="module-loading-core"><img src="../assets/Logo.ico" alt=""></span>
-                    </div>
-                    <p class="mt-4 text-sm text-white/70">Carregando prospecções...</p>
-                </div>
-
-                <!-- Erro -->
-                <div id="prospeccoesErro" class="hidden py-12 flex flex-col items-center justify-center text-center px-4">
-                    <div class="rounded-full bg-[rgba(255,88,88,0.12)] p-8 mb-6">
-                        <i class="fas fa-triangle-exclamation text-8xl" style="color: var(--color-red)"></i>
-                    </div>
-                    <h3 class="text-lg font-medium text-white">Não foi possível carregar as prospecções</h3>
-                    <p id="prospeccoesErroDetalhe" class="mt-1 text-sm text-white/70"></p>
-                    <div class="mt-6">
-                        <button id="prospeccoesTentarNovamente" type="button"
-                                class="btn-secondary inline-flex items-center px-4 py-2 text-sm font-medium rounded-md text-white">
-                            <i class="fas fa-rotate-right w-4 h-4 mr-2"></i>Tentar novamente
-                        </button>
-                    </div>
                 </div>
 
                 <!-- Empty State -->
                 <div id="prospeccoesEmptyState" class="hidden py-12 flex flex-col items-center justify-center text-center px-4">
-                    <div class="rounded-full bg-[var(--color-primary-opacity)] p-8 mb-6">
-                        <i class="fas fa-bullseye text-8xl text-[var(--color-primary)]"></i>
-                    </div>
-                    <h3 id="prospeccoesEmptyTitulo" class="text-lg font-medium text-white">Nenhuma prospecção encontrada</h3>
-                    <p id="prospeccoesEmptyTexto" class="mt-1 text-sm text-white/70">Comece cadastrando a primeira empresa do seu pipeline.</p>
-                    <div class="mt-6">
-                        <button
-                            id="prospeccoesEmptyNew"
-                            type="button"
-                            data-perm="pros.create"
-                            class="btn-primary inline-flex items-center px-4 py-2 text-sm font-medium rounded-md text-white"
-                        >
-                            <i class="fas fa-plus w-4 h-4 mr-2"></i>
-                            Nova Prospecção
-                        </button>
-                    </div>
+                  <div class="rounded-full bg-[var(--color-primary-opacity)] p-8 mb-6">
+                    <i class="fas fa-box-open text-8xl text-[var(--color-primary)]"></i>
+                  </div>
+                  <h3 class="text-lg font-medium text-white">Nenhuma prospecção encontrada</h3>
+                  <p class="mt-1 text-sm text-white/70">Tente ajustar os filtros.</p>
+                  <div class="mt-6">
+                    <button
+                      id="prospeccoesEmptyNew"
+                      type="button"
+                      class="btn-primary inline-flex items-center px-4 py-2 text-sm font-medium rounded-md text-white"
+                    >
+                      <i class="fas fa-plus w-4 h-4 mr-2"></i>
+                      Nova Prospecção
+                    </button>
+                  </div>
                 </div>
             </div>
         </div>
