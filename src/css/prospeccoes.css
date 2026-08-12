@@ -142,6 +142,102 @@ body {
     border: 1px solid rgba(138, 167, 243, 0.3);
 }
 
+.badge-neutral {
+    background: rgba(255, 255, 255, 0.1);
+    color: rgba(255, 255, 255, 0.75);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+}
+
+/* ------------------------------------------------------------------
+   Etapas do funil
+   Uma classe por etapa, na ordem do funil: a cor esquenta conforme o
+   negócio avança. "Ganho" é a única sólida — é o desfecho que importa.
+   ------------------------------------------------------------------ */
+.badge-etapa {
+    display: inline-flex;
+    align-items: center;
+    white-space: nowrap;
+}
+
+.badge-etapa--novo {
+    background: rgba(138, 167, 243, 0.18);
+    color: var(--color-blue);
+    border: 1px solid rgba(138, 167, 243, 0.32);
+}
+
+.badge-etapa--contactado {
+    background: rgba(255, 163, 102, 0.18);
+    color: var(--color-orange);
+    border: 1px solid rgba(255, 163, 102, 0.32);
+}
+
+.badge-etapa--qualificado {
+    background: rgba(182, 160, 62, 0.2);
+    color: var(--color-primary-light);
+    border: 1px solid rgba(182, 160, 62, 0.38);
+}
+
+.badge-etapa--proposta {
+    background: rgba(163, 148, 167, 0.22);
+    color: var(--color-violet);
+    border: 1px solid rgba(163, 148, 167, 0.38);
+}
+
+.badge-etapa--negociacao {
+    background: rgba(162, 255, 166, 0.16);
+    color: var(--color-green);
+    border: 1px solid rgba(162, 255, 166, 0.3);
+}
+
+.badge-etapa--ganho {
+    background: var(--color-green);
+    color: #06300a;
+    border: 1px solid var(--color-green);
+    font-weight: 600;
+}
+
+.badge-etapa--perdido {
+    background: rgba(255, 88, 88, 0.18);
+    color: var(--color-red);
+    border: 1px solid rgba(255, 88, 88, 0.32);
+}
+
+/* Barras do funil, uma cor por etapa (mesma escala dos badges). */
+.funil-barra { transition: width 420ms cubic-bezier(0.22, 1, 0.36, 1); }
+.funil-barra--novo        { background: var(--color-blue); }
+.funil-barra--contactado  { background: var(--color-orange); }
+.funil-barra--qualificado { background: var(--color-primary); }
+.funil-barra--proposta    { background: var(--color-violet); }
+.funil-barra--negociacao  { background: rgba(162, 255, 166, 0.75); }
+.funil-barra--ganho       { background: var(--color-green); }
+.funil-barra--perdido     { background: var(--color-red); }
+
+.funil-trilho {
+    background: rgba(255, 255, 255, 0.08);
+}
+
+/* Linha da tabela: o hover inline do mockup foi trocado por CSS para não
+   repetir onmouseover em toda linha gerada pelo JS. */
+.prospeccao-linha {
+    cursor: pointer;
+    transition: background 150ms ease;
+}
+
+.prospeccao-linha:hover {
+    background: rgba(163, 148, 167, 0.07);
+}
+
+/* Próximo passo vencido: o atraso precisa saltar aos olhos na grade. */
+.prox-passo-atrasado {
+    color: var(--color-red);
+    font-weight: 600;
+}
+
+.prox-passo-hoje {
+    color: var(--color-orange);
+    font-weight: 600;
+}
+
 .timeline-item::before {
     content: '';
     position: absolute;
