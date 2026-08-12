@@ -45,14 +45,18 @@ leitor/interpretador de JSON
 ➡ Somente a API externa faz isso.
 
 🔥 3. REGRAS ABSOLUTAS (OBRIGATÓRIAS)
-✔ A API é REST simples
+✔ A API é REST simples — e mais simples do que parece
 
-Somente usa parâmetros simples:
+O filtro da listagem é montado em Santissimo-db-API/server.js (GET /api/:table).
+Ele percorre a query string e SÓ aproveita as chaves que são nome de coluna
+real da tabela, montando `WHERE coluna = $n`. Todo o resto é descartado sem
+aviso.
 
 Correto:
 
 GET /api/usuarios?id=1
-GET /api/usuarios?id=1&id=2&id=3
+GET /api/prospeccoes?etapa=Novo
+GET /api/prospeccoes?etapa=Novo&status=ativa      (vira AND)
 
 
 Errado (não funciona):
@@ -63,11 +67,37 @@ cs.{...}
 select=...
 materia_prima:insumo_id(...)
 
-✔ Arrays na URL são proibidos
+⚠️ IGNORADO EM SILÊNCIO (não são colunas — a API descarta e devolve tudo):
 
-O padrão correto para múltiplos ids:
+?order=nome        → NÃO ordena
+?limit=10          → NÃO limita
+?offset=20         → NÃO pagina
+?select=id,nome    → NÃO projeta; a resposta sempre traz TODAS as colunas
 
-?id=1&id=2&id=3
+Ordenação, paginação e recorte de colunas são responsabilidade do backend
+local (backend/*.js), depois de receber os dados. Nunca confie na query.
+
+❌ ?id=1&id=2&id=3 NÃO FUNCIONA — devolve HTTP 500
+
+Este era o padrão recomendado nas versões anteriores deste guia. Estava
+ERRADO. O Express transforma parâmetro repetido em array JavaScript, e a API
+monta `WHERE "id" = $1` passando esse array como valor único. O Postgres não
+compara inteiro com array:
+
+  cannot cast type array to integer
+
+Para vários ids, escolha um dos dois caminhos:
+
+  a) uma requisição por id, em paralelo
+     const registros = await Promise.all(
+       ids.map(id => api.get(`/api/perfis/${id}`).catch(() => null))
+     );
+
+  b) puxar a tabela e casar em memória (melhor quando são muitos ids)
+     const todos = await api.get('/api/perfis');
+     const porId = new Map(todos.map(p => [p.id, p]));
+
+O caminho (b) é o que backend/clientesController.js já usa.
 
 ✔ A API não faz JOIN
 
@@ -106,9 +136,12 @@ Esses pontos já causaram falhas graves. NUNCA USE:
 ❌ in.(...)
 ❌ select=id,nome,perfil:perfil_id(...)
 
-2. Arrays no URLSearchParams
-new URLSearchParams({ id: [1,2,3] })
-// ERRADO → vira id=1,2,3
+2. Vários ids na mesma query — de QUALQUER forma
+new URLSearchParams({ id: [1,2,3] })   // vira ?id=1,2,3     → filtro inútil
+params.append("id", 1); params.append("id", 2);  // ?id=1&id=2 → HTTP 500
+
+Não existe forma de filtrar por vários ids em uma requisição. Use requisições
+paralelas por id, ou traga a tabela e case em memória (ver seção 3).
 
 3. Tentar fazer JOIN com select expandido
 
@@ -135,9 +168,18 @@ fetch(`${API}/usuarios`, {
   headers: { Authorization: `Bearer ${token}` }
 })
 
-Parâmetros múltiplos
-const params = new URLSearchParams();
-ids.forEach(id => params.append("id", id));
+Vários registros por id
+// NÃO existe filtro por lista. Um dos dois caminhos:
+
+// a) uma requisição por id, em paralelo
+const registros = (await Promise.all(
+  ids.map(id => api.get(`/api/perfis/${id}`).catch(() => null))
+)).filter(Boolean);
+
+// b) tabela inteira + casamento em memória (muitos ids)
+const todos = await api.get('/api/perfis');
+const porId = new Map(todos.map(p => [p.id, p]));
+const registros2 = ids.map(id => porId.get(id)).filter(Boolean);
 
 📦 6. CRUD OFICIAL
 Listar
@@ -167,12 +209,16 @@ Passo 2 – Extrair perfil_id
 
 usuarios.map(u => u.perfil_id)
 
-Passo 3 – Repetir ids na query
+Passo 3 – Buscar os perfis
+(NÃO use ?id=1&id=2&id=3 — devolve 500; ver seção 3)
 
-GET /api/perfis?id=1&id=2&id=3
+GET /api/perfis                     ← tabela inteira, e casa em memória
+   ou
+GET /api/perfis/1, /api/perfis/2…   ← uma por id, em paralelo
 
 Passo 4 – Combinar manualmente
-usuario.perfil = perfis.find(p => p.id === usuario.perfil_id)
+const porId = new Map(perfis.map(p => [p.id, p]));
+usuario.perfil = porId.get(usuario.perfil_id);
 
 🧩 8. ESTRUTURA DO PROJETO
 /src
@@ -199,6 +245,20 @@ env               → API / SMTP
 ❌ Erro: arrays no SearchParams
 
 → ?id=1,2,3 → tratado como string → zero resultados
+
+❌ Erro: acreditar que ?id=1&id=2&id=3 funciona
+
+→ este guia recomendava esse padrão até 2026-08
+→ o Express vira array, a API monta "id" = $1 com o array
+→ HTTP 500: cannot cast type array to integer
+→ corrigido na seção 3
+
+❌ Erro: confiar em order / limit / select na query
+
+→ não são colunas, a API descarta sem avisar
+→ a lista volta inteira e fora de ordem, sem nenhum erro
+→ código em produção ainda depende disso em alguns pontos
+→ ordene, pagine e recorte no backend local
 
 ❌ Erro: JOIN via select expandido
 
@@ -254,7 +314,10 @@ Antes de fazer PR:
 
 ✔ API REST simples usada corretamente
 ✔ Zero operadores PostgREST
-✔ Parâmetros múltiplos → repetidos, não array
+✔ Filtros só por igualdade em coluna real
+✔ Nenhum order / limit / select / offset na query
+✔ Vários ids → requisições paralelas ou casamento em memória
+✔ Ordenação e paginação feitas no backend local
 ✔ Token JWT correto em todos os fetch
 ✔ Erros tratados e logados
 ✔ Nenhum SQL, JOIN, SELECT, FROM
@@ -272,15 +335,19 @@ Não farei SQL local.
 
 Não usarei operadores PostgREST.
 
-Nunca enviarei arrays na query.
+Nunca enviarei arrays na query, nem parâmetros repetidos.
 
-Sempre repetirei os parâmetros quando houver múltiplos IDs.
+Filtrarei apenas por igualdade, e só em coluna que existe.
+
+Ordenarei e paginarei no backend local, nunca na query.
 
 Jamais tentarei fazer JOIN no select.
 
 Toda requisição terá Authorization: Bearer TOKEN.
 
 Se a API devolver vazio, investigarei o filtro.
+
+Se a API devolver tudo, lembrarei que ela ignora o que não é coluna.
 
 A UI é burra; a API é inteligente.
 

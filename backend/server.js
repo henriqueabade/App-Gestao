@@ -10,6 +10,7 @@ const usuariosRouter = require('./usuariosController');
 const transportadorasRouter = require('./transportadorasController');
 const orcamentosRouter = require('./orcamentosController');
 const pedidosRouter = require('./pedidosController');
+const prospeccoesRouter = require('./prospeccoesController');
 const notificationsRouter = require('./notificationsController');
 const db = require('./db');
 const { normalizeToken } = require('./apiHttpClient');
@@ -49,6 +50,7 @@ app.use('/api/usuarios', usuariosRouter);
 app.use('/api/transportadoras', transportadorasRouter);
 app.use('/api/orcamentos', orcamentosRouter);
 app.use('/api/pedidos', pedidosRouter);
+app.use('/api/prospeccoes', prospeccoesRouter);
 
 const { createApiClient } = require('./apiHttpClient');
 const apiCache = new Map();
@@ -156,7 +158,12 @@ app.use('/js', express.static(path.join(__dirname, '../src/js')));
 // qualquer usuario lia as proprias tabelas de permissao (perm_*) e os modelos de
 // perfil — ou seja, dava para inspecionar e mapear todo o controle de acesso.
 // O backend le essas tabelas pelo cliente da API remota, nao por aqui.
-const TABELAS_BLOQUEADAS = /^(perm_|modelos_permissoes$|usuarios$)/i;
+//
+// As tabelas de prospeccao entram aqui porque o proxy generico NAO checa
+// permissao: sem o bloqueio, `GET /api/prospeccoes` entregaria todo o pipeline
+// comercial a qualquer usuario logado, ignorando `pros.view`. Tudo do modulo
+// passa por prospeccoesController, que aplica exigirPermissao() rota a rota.
+const TABELAS_BLOQUEADAS = /^(perm_|modelos_permissoes$|usuarios$|prospeccoes$|prospeccao_)/i;
 
 app.get('/api/:table', async (req, res) => {
   const { table } = req.params;
@@ -193,6 +200,13 @@ app.post('/api/:table', async (req, res) => {
   if (!table) {
     res.status(400).json({ error: 'Tabela inválida' });
     return;
+  }
+  // A mesma trava do GET. Faltava aqui: o GET protegia a LEITURA das tabelas de
+  // permissao, mas a ESCRITA seguia aberta — dava para inserir linha em perm_*,
+  // modelos_permissoes ou usuarios direto pelo proxy, sem passar por nenhuma
+  // checagem. Escrever nessas tabelas so pelos controllers dedicados.
+  if (TABELAS_BLOQUEADAS.test(table)) {
+    return res.status(403).json({ error: 'Acesso negado a esta tabela', code: 'FORBIDDEN' });
   }
 
   try {

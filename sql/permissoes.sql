@@ -35,7 +35,7 @@ CREATE INDEX IF NOT EXISTS idx_usuarios_modelo_permissoes
   ON usuarios(modelo_permissoes_id);
 
 -- ---------------------------------------------------------------------
--- 3) Matéria-prima  (perm_mp)  —  18 ações, 5 colunas
+-- 3) Matéria-prima  (perm_mp)  —  19 ações, 5 colunas
 -- ---------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS perm_mp (
   modelo_id    INTEGER PRIMARY KEY REFERENCES modelos_permissoes(id) ON DELETE CASCADE,
@@ -46,6 +46,7 @@ CREATE TABLE IF NOT EXISTS perm_mp (
   acao_search                        BOOLEAN NOT NULL DEFAULT FALSE,  -- mp.search · Buscar/filtrar
   acao_create                        BOOLEAN NOT NULL DEFAULT FALSE,  -- mp.create · Cadastrar insumo
   acao_totals_view                   BOOLEAN NOT NULL DEFAULT FALSE,  -- mp.totals.view · Ver totais por tipo
+  acao_movimentos_view               BOOLEAN NOT NULL DEFAULT FALSE,  -- mp.movimentos.view · Ver auditoria do insumo
   acao_edit                          BOOLEAN NOT NULL DEFAULT FALSE,  -- mp.edit · Editar insumo
   acao_delete                        BOOLEAN NOT NULL DEFAULT FALSE,  -- mp.delete · Excluir insumo
   acao_stock_edit                    BOOLEAN NOT NULL DEFAULT FALSE,  -- mp.stock.edit · Editar quantidade em estoque
@@ -70,7 +71,7 @@ CREATE TABLE IF NOT EXISTS perm_mp (
 );
 
 -- ---------------------------------------------------------------------
--- 4) Produtos  (perm_prod)  —  25 ações, 20 colunas
+-- 4) Produtos  (perm_prod)  —  26 ações, 20 colunas
 -- ---------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS perm_prod (
   modelo_id    INTEGER PRIMARY KEY REFERENCES modelos_permissoes(id) ON DELETE CASCADE,
@@ -80,6 +81,7 @@ CREATE TABLE IF NOT EXISTS perm_prod (
   acao_view                          BOOLEAN NOT NULL DEFAULT FALSE,  -- prod.view · Ver lista
   acao_search                        BOOLEAN NOT NULL DEFAULT FALSE,  -- prod.search · Buscar/filtrar
   acao_create                        BOOLEAN NOT NULL DEFAULT FALSE,  -- prod.create · Cadastrar produto
+  acao_movimentos_view               BOOLEAN NOT NULL DEFAULT FALSE,  -- prod.movimentos.view · Ver movimentações
   acao_stock_view                    BOOLEAN NOT NULL DEFAULT FALSE,  -- prod.stock.view · Ver estoque
   acao_details_view                  BOOLEAN NOT NULL DEFAULT FALSE,  -- prod.details.view · Visualizar produto
   acao_edit                          BOOLEAN NOT NULL DEFAULT FALSE,  -- prod.edit · Editar produto
@@ -288,7 +290,7 @@ CREATE TABLE IF NOT EXISTS perm_cli (
 );
 
 -- ---------------------------------------------------------------------
--- 8) Prospecções  (perm_pros)  —  8 ações, 14 colunas
+-- 8) Prospecções  (perm_pros)  —  16 ações, 14 colunas
 -- ---------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS perm_pros (
   modelo_id    INTEGER PRIMARY KEY REFERENCES modelos_permissoes(id) ON DELETE CASCADE,
@@ -303,6 +305,14 @@ CREATE TABLE IF NOT EXISTS perm_pros (
   acao_delete                        BOOLEAN NOT NULL DEFAULT FALSE,  -- pros.delete · Excluir prospecção
   acao_stage_update                  BOOLEAN NOT NULL DEFAULT FALSE,  -- pros.stage.update · Atualizar etapa
   acao_next_step                     BOOLEAN NOT NULL DEFAULT FALSE,  -- pros.next.step · Definir próximo passo
+  acao_contact_add                   BOOLEAN NOT NULL DEFAULT FALSE,  -- pros.contact.add · Adicionar contato
+  acao_contact_edit                  BOOLEAN NOT NULL DEFAULT FALSE,  -- pros.contact.edit · Editar contato
+  acao_contact_remove                BOOLEAN NOT NULL DEFAULT FALSE,  -- pros.contact.remove · Remover contato
+  acao_interaction_add               BOOLEAN NOT NULL DEFAULT FALSE,  -- pros.interaction.add · Registrar interação
+  acao_note_add                      BOOLEAN NOT NULL DEFAULT FALSE,  -- pros.note.add · Adicionar nota
+  acao_note_remove                   BOOLEAN NOT NULL DEFAULT FALSE,  -- pros.note.remove · Remover nota
+  acao_campaign_manage               BOOLEAN NOT NULL DEFAULT FALSE,  -- pros.campaign.manage · Gerenciar campanhas
+  acao_convert                       BOOLEAN NOT NULL DEFAULT FALSE,  -- pros.convert · Converter em cliente
 
   -- Colunas visíveis
   col_pros_id                        BOOLEAN NOT NULL DEFAULT FALSE,  -- ID
@@ -574,12 +584,12 @@ INSERT INTO modelos_permissoes (nome, descricao)
 VALUES ('Administrador', 'Acesso total a todos os módulos')
 ON CONFLICT (nome) DO NOTHING;
 
-INSERT INTO perm_mp (modelo_id, modulo_ativo, acao_view, acao_search, acao_create, acao_totals_view, acao_edit, acao_delete, acao_stock_edit, acao_stock_infinite_toggle, acao_category_view, acao_category_create, acao_category_delete, acao_unit_view, acao_unit_create, acao_unit_delete, acao_process_view, acao_process_create, acao_process_delete, acao_process_order, col_mp_nome, col_mp_estoque_atual, col_mp_unidade, col_mp_custo_medio, col_mp_campo_descricao)
-SELECT id, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE FROM modelos_permissoes WHERE nome = 'Administrador'
+INSERT INTO perm_mp (modelo_id, modulo_ativo, acao_view, acao_search, acao_create, acao_totals_view, acao_movimentos_view, acao_edit, acao_delete, acao_stock_edit, acao_stock_infinite_toggle, acao_category_view, acao_category_create, acao_category_delete, acao_unit_view, acao_unit_create, acao_unit_delete, acao_process_view, acao_process_create, acao_process_delete, acao_process_order, col_mp_nome, col_mp_estoque_atual, col_mp_unidade, col_mp_custo_medio, col_mp_campo_descricao)
+SELECT id, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE FROM modelos_permissoes WHERE nome = 'Administrador'
 ON CONFLICT (modelo_id) DO NOTHING;
 
-INSERT INTO perm_prod (modelo_id, modulo_ativo, acao_view, acao_search, acao_create, acao_stock_view, acao_details_view, acao_edit, acao_delete, acao_item_add, acao_item_edit, acao_item_remove, acao_clear, acao_percent_edit, acao_collection_create, acao_collection_delete, acao_clone, acao_registro_toggle, acao_pdf, acao_stage_insert, acao_stage_item_add, acao_stage_item_edit, acao_stage_item_remove, acao_stage_clear, acao_stock_input, acao_stock_adjust, acao_stock_lote_delete, col_prod_sku, col_prod_nome, col_prod_colecao, col_prod_preco_base, col_prod_margem, col_prod_estoque, col_ins_mp, col_ins_qtd, col_ins_unidade, col_ins_custo_un, col_ins_custo_total, col_etapa_item, col_etapa_qtd, col_etapa_unidade, col_etapa_valor_un, col_etapa_valor_total, col_est_processo, col_est_ultimo_item, col_est_quantidade, col_est_alterado_em)
-SELECT id, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE FROM modelos_permissoes WHERE nome = 'Administrador'
+INSERT INTO perm_prod (modelo_id, modulo_ativo, acao_view, acao_search, acao_create, acao_movimentos_view, acao_stock_view, acao_details_view, acao_edit, acao_delete, acao_item_add, acao_item_edit, acao_item_remove, acao_clear, acao_percent_edit, acao_collection_create, acao_collection_delete, acao_clone, acao_registro_toggle, acao_pdf, acao_stage_insert, acao_stage_item_add, acao_stage_item_edit, acao_stage_item_remove, acao_stage_clear, acao_stock_input, acao_stock_adjust, acao_stock_lote_delete, col_prod_sku, col_prod_nome, col_prod_colecao, col_prod_preco_base, col_prod_margem, col_prod_estoque, col_ins_mp, col_ins_qtd, col_ins_unidade, col_ins_custo_un, col_ins_custo_total, col_etapa_item, col_etapa_qtd, col_etapa_unidade, col_etapa_valor_un, col_etapa_valor_total, col_est_processo, col_est_ultimo_item, col_est_quantidade, col_est_alterado_em)
+SELECT id, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE FROM modelos_permissoes WHERE nome = 'Administrador'
 ON CONFLICT (modelo_id) DO NOTHING;
 
 INSERT INTO perm_orc (modelo_id, modulo_ativo, acao_view, acao_search, acao_create, acao_view_details, acao_edit, acao_convert, acao_delete, acao_export, acao_item_add, acao_item_edit, acao_item_remove, acao_clear, acao_send, acao_status_change, acao_clone, acao_convert_decide, acao_convert_justify, acao_item_replace, col_orc_num, col_orc_cliente, col_orc_data, col_orc_total, col_orc_cond_pagto, col_orc_status, col_orc_it_nome, col_orc_it_qtd, col_orc_it_preco, col_orc_it_preco_desc, col_orc_it_desc, col_orc_it_subtotal, col_conv_peca, col_conv_qtd_orcada, col_conv_em_estoque, col_conv_pronta, col_conv_produzir_total, col_conv_produzir_parcial, col_conv_status, col_conv_ins_nome, col_conv_ins_unidade, col_conv_ins_disponivel, col_conv_ins_necessario, col_conv_ins_saldo, col_conv_ins_etapa, col_conv_ins_flags, col_orc_campo_dono, col_orc_campo_transportadora, col_orc_campo_pagamento, col_orc_campo_observacoes)
@@ -594,8 +604,8 @@ INSERT INTO perm_cli (modelo_id, modulo_ativo, acao_view, acao_search, acao_crea
 SELECT id, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE FROM modelos_permissoes WHERE nome = 'Administrador'
 ON CONFLICT (modelo_id) DO NOTHING;
 
-INSERT INTO perm_pros (modelo_id, modulo_ativo, acao_view, acao_search, acao_details_view, acao_create, acao_edit, acao_delete, acao_stage_update, acao_next_step, col_pros_id, col_pros_entidade, col_pros_origem, col_pros_etapa, col_pros_valor, col_pros_prob, col_pros_owner, col_pros_proximo_passo, col_pros_proximo_passo_data, col_pros_atualizado_em, col_hist_data, col_hist_tipo, col_hist_resumo, col_hist_resp)
-SELECT id, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE FROM modelos_permissoes WHERE nome = 'Administrador'
+INSERT INTO perm_pros (modelo_id, modulo_ativo, acao_view, acao_search, acao_details_view, acao_create, acao_edit, acao_delete, acao_stage_update, acao_next_step, acao_contact_add, acao_contact_edit, acao_contact_remove, acao_interaction_add, acao_note_add, acao_note_remove, acao_campaign_manage, acao_convert, col_pros_id, col_pros_entidade, col_pros_origem, col_pros_etapa, col_pros_valor, col_pros_prob, col_pros_owner, col_pros_proximo_passo, col_pros_proximo_passo_data, col_pros_atualizado_em, col_hist_data, col_hist_tipo, col_hist_resumo, col_hist_resp)
+SELECT id, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE FROM modelos_permissoes WHERE nome = 'Administrador'
 ON CONFLICT (modelo_id) DO NOTHING;
 
 INSERT INTO perm_ctt (modelo_id, modulo_ativo, acao_view, acao_search, acao_create, acao_export_csv, acao_import_csv, acao_report, acao_email_bulk, acao_edit, col_ctt_nome, col_ctt_tipo, col_ctt_cliente, col_ctt_tel, col_ctt_fixo)

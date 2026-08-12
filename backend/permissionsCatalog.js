@@ -1176,6 +1176,54 @@ const PERMISSIONS_CATALOG = {
         "column": "acao_next_step",
         "label": "Definir próximo passo",
         "desc": "Agendar próxima ação"
+      },
+      {
+        "key": "pros.contact.add",
+        "column": "acao_contact_add",
+        "label": "Adicionar contato",
+        "desc": "Cadastrar pessoa da empresa prospectada"
+      },
+      {
+        "key": "pros.contact.edit",
+        "column": "acao_contact_edit",
+        "label": "Editar contato",
+        "desc": "Alterar cargo, decisor e dados de contato"
+      },
+      {
+        "key": "pros.contact.remove",
+        "column": "acao_contact_remove",
+        "label": "Remover contato",
+        "desc": "Excluir pessoa da empresa prospectada"
+      },
+      {
+        "key": "pros.interaction.add",
+        "column": "acao_interaction_add",
+        "label": "Registrar interação",
+        "desc": "Lançar ligação, e-mail, reunião ou visita"
+      },
+      {
+        "key": "pros.note.add",
+        "column": "acao_note_add",
+        "label": "Adicionar nota",
+        "desc": "Escrever anotação na prospecção"
+      },
+      {
+        "key": "pros.note.remove",
+        "column": "acao_note_remove",
+        "label": "Remover nota",
+        "desc": "Excluir anotação da prospecção"
+      },
+      {
+        "key": "pros.campaign.manage",
+        "column": "acao_campaign_manage",
+        "label": "Gerenciar campanhas",
+        "desc": "Registrar e acompanhar campanhas"
+      },
+      {
+        "key": "pros.convert",
+        "column": "acao_convert",
+        "label": "Converter em cliente",
+        "desc": "Fechar como Ganho e criar o cliente"
       }
     ],
     "columns": [
