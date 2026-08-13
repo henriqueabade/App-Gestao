@@ -62,6 +62,37 @@
   get('interacaoTipo').addEventListener('change', refletirTipo);
   refletirTipo();
 
+  // Consome o sinal na hora: pendurado, faria a PRÓXIMA "Registrar interação"
+  // abrir em modo edição e sobrescrever a atividade anterior.
+  const edicao = window.prospeccaoInteracaoEditar || null;
+  delete window.prospeccaoInteracaoEditar;
+
+  if (edicao) {
+    get('tituloModalInteracao').textContent = 'Editar Atividade';
+    get('salvarInteracaoProspeccao').textContent = 'Salvar';
+    if (edicao.tipo) get('interacaoTipo').value = edicao.tipo;
+    get('interacaoResumo').value = edicao.resumo || '';
+    get('interacaoDetalhe').value = edicao.detalhe || '';
+    get('interacaoDuracao').value = edicao.duracao_min ?? '';
+    if (edicao.contato_id) get('interacaoContato').value = String(edicao.contato_id);
+    if (edicao.data) {
+      // Mesmo caminho de volta da gravação: o instante em UTC vira hora LOCAL
+      // para o <input datetime-local>, que não aceita fuso.
+      const d = new Date(edicao.data);
+      if (!Number.isNaN(d.getTime())) {
+        d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+        get('interacaoData').value = d.toISOString().slice(0, 16);
+      }
+    }
+    // Próximo passo fica de fora na edição: ele pertence à prospecção, não a
+    // esta linha da timeline. Reaproveitar o campo aqui mudaria o combinado em
+    // aberto sem que ninguém tivesse pedido.
+    get('interacaoBlocoProximoPasso')?.classList.add('hidden');
+    refletirTipo();
+    window.EstadoTrabalho?.registrarContexto?.('interacaoProspeccao',
+      () => ({ prospeccaoInteracaoEditar: edicao }));
+  }
+
   get('interacaoProspeccaoForm')?.addEventListener('submit', e => e.preventDefault());
   setTimeout(() => get('interacaoResumo')?.focus(), 60);
 
@@ -104,17 +135,19 @@
     // Só manda o próximo passo se algo foi preenchido — o backend trata a
     // presença da chave como intenção de alterar, e enviar vazio à toa apagaria
     // o passo que já estava agendado.
-    if (proximoPasso || proximoPassoData) {
+    if (!edicao && (proximoPasso || proximoPassoData)) {
       corpo.proximo_passo = proximoPasso;
       corpo.proximo_passo_data = proximoPassoData;
     }
 
-    await A.enviar(`/api/prospeccoes/${prospeccao.id}/interacoes`, {
-      method: 'POST',
+    await A.enviar(edicao
+      ? `/api/prospeccoes/${prospeccao.id}/interacoes/${edicao.id}`
+      : `/api/prospeccoes/${prospeccao.id}/interacoes`, {
+      method: edicao ? 'PUT' : 'POST',
       body: JSON.stringify(corpo)
     }, {
       overlayId: 'interacaoProspeccao',
-      sucesso: 'Interação registrada'
+      sucesso: edicao ? 'Atividade atualizada' : 'Interação registrada'
     });
   });
 

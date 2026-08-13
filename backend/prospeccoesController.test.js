@@ -94,7 +94,24 @@ function criarUpstream(dados, opcoes = {}) {
         return responder(200, linhas);
       }
 
+      // Índice único PARCIAL do banco: no máximo um contato principal por
+      // prospecção (`pros_contatos_principal_unq ... WHERE principal`). Sem
+      // reproduzir isto aqui, o teste da troca de principal passaria por vazio.
+      const violaPrincipal = (linha, ignorarId) =>
+        tabela === 'prospeccao_contatos'
+        && linha?.principal
+        && tabelas.prospeccao_contatos.some(c =>
+             c.principal
+             && String(c.prospeccao_id) === String(linha.prospeccao_id)
+             && String(c.id) !== String(ignorarId));
+
       if (req.method === 'POST') {
+        if (violaPrincipal(body, null)) {
+          return responder(500, {
+            error: 'Erro no INSERT',
+            detalhe: 'duplicate key value violates unique constraint \"pros_contatos_principal_unq\"'
+          });
+        }
         const proximo = Math.max(0, ...tabelas[tabela].map(r => Number(r.id) || 0)) + 1;
         const linha = { id: proximo };
         for (const c of colunas) if (body?.[c] !== undefined) linha[c] = body[c];
@@ -108,6 +125,12 @@ function criarUpstream(dados, opcoes = {}) {
       if (req.method === 'PUT') {
         const alvo = tabelas[tabela].find(r => String(r.id) === String(id));
         if (!alvo) return responder(404, { error: 'Registro não encontrado' });
+        if (violaPrincipal({ ...alvo, ...body }, id)) {
+          return responder(500, {
+            error: 'Erro no UPDATE',
+            detalhe: 'duplicate key value violates unique constraint \"pros_contatos_principal_unq\"'
+          });
+        }
         for (const c of colunas) if (body?.[c] !== undefined) alvo[c] = body[c];
         // O trigger do banco carimba a data a cada UPDATE.
         if (colunas.includes('atualizado_em')) alvo.atualizado_em = new Date().toISOString();
@@ -247,7 +270,13 @@ function baseDados() {
       { id: 40, prospeccao_id: 1, titulo: 'Perfil', conteudo: 'Cliente exigente', usuario_id: 3, criado_em: ANTIGO },
       { id: 41, prospeccao_id: 2, titulo: 'Outra', conteudo: 'De outra prospeccao', usuario_id: 3, criado_em: ANTIGO }
     ],
-    prospeccao_campanhas: [],
+    prospeccao_campanhas: [
+      {
+        id: 60, prospeccao_id: 1, nome: 'Lancamento outono', canal: 'E-mail',
+        status: 'Em andamento', data_envio: '2026-08-01', resposta: null,
+        observacao: null, usuario_id: 3
+      }
+    ],
     prospeccao_anexos: []
   };
 }
@@ -1312,6 +1341,303 @@ test('trocar para o mesmo responsavel nao gera evento', async () => {
     assert.strictEqual(resp.status, 200);
     assert.strictEqual((await resp.json()).semMudanca, true);
     assert.strictEqual(ctx.tabelas.prospeccao_historico.some(h => h.tipo === 'responsavel'), false);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+
+// ---------------------------------------------------------------------------
+// Edição de notas, atividades e campanhas
+//
+// Editar é permitido; apagar o rastro não. Cada campo alterado vira uma linha
+// do histórico com o valor anterior ao lado do novo — um despejo do registro
+// inteiro obrigaria quem lê a caçar a diferença.
+// ---------------------------------------------------------------------------
+
+const eventosDe = (ctx, tipo) =>
+  ctx.tabelas.prospeccao_historico.filter(h => h.tipo === tipo && h.acao === 'alterou');
+
+test('editar uma nota grava um evento por campo, com o valor anterior', async () => {
+  const ctx = await montar(baseDados());
+  try {
+    const resp = await chamar(ctx.porta, '/api/prospeccoes/1/notas/40', {
+      method: 'PUT',
+      body: JSON.stringify({ titulo: 'Atenção ao decisor', conteudo: 'Quem assina é o Eduardo.' })
+    });
+    assert.strictEqual(resp.status, 200);
+
+    const nota = ctx.tabelas.prospeccao_notas.find(n => n.id === 40);
+    assert.strictEqual(nota.titulo, 'Atenção ao decisor');
+    assert.strictEqual(nota.conteudo, 'Quem assina é o Eduardo.');
+
+    const eventos = eventosDe(ctx, 'nota');
+    const campos = eventos.map(e => e.campo).sort();
+    assert.deepStrictEqual(campos, ['conteudo', 'titulo']);
+
+    const conteudo = eventos.find(e => e.campo === 'conteudo');
+    assert.ok(conteudo.valor_anterior, 'faltou o valor anterior do conteúdo');
+    assert.strictEqual(conteudo.valor_novo, 'Quem assina é o Eduardo.');
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('campo que não mudou não vira linha no histórico', async () => {
+  // Ruído de auditoria é tão ruim quanto ausência: se toda gravação registra
+  // tudo, ninguém mais lê o histórico.
+  const ctx = await montar(baseDados());
+  try {
+    const antes = ctx.tabelas.prospeccao_notas.find(n => n.id === 40);
+    await chamar(ctx.porta, '/api/prospeccoes/1/notas/40', {
+      method: 'PUT',
+      body: JSON.stringify({ titulo: antes.titulo, conteudo: 'Só o conteúdo mudou' })
+    });
+    const campos = eventosDe(ctx, 'nota').map(e => e.campo);
+    assert.deepStrictEqual(campos, ['conteudo']);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('nota vazia é recusada e nada é gravado', async () => {
+  const ctx = await montar(baseDados());
+  try {
+    const resp = await chamar(ctx.porta, '/api/prospeccoes/1/notas/40', {
+      method: 'PUT', body: JSON.stringify({ conteudo: '   ' })
+    });
+    assert.strictEqual(resp.status, 400);
+    assert.strictEqual(eventosDe(ctx, 'nota').length, 0);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('não dá para editar a nota de OUTRA prospecção pelo caminho', async () => {
+  // O id do caminho não é validado por ninguém: /prospeccoes/2/notas/40
+  // alteraria a nota da prospecção 1.
+  const ctx = await montar(baseDados());
+  try {
+    const resp = await chamar(ctx.porta, '/api/prospeccoes/2/notas/40', {
+      method: 'PUT', body: JSON.stringify({ conteudo: 'invasão' })
+    });
+    assert.strictEqual(resp.status, 404);
+    assert.notStrictEqual(ctx.tabelas.prospeccao_notas.find(n => n.id === 40).conteudo, 'invasão');
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('editar uma campanha registra status e resposta separadamente', async () => {
+  const ctx = await montar(baseDados());
+  try {
+    const resp = await chamar(ctx.porta, '/api/prospeccoes/1/campanhas/60', {
+      method: 'PUT',
+      body: JSON.stringify({
+        nome: 'Lançamento outono', canal: 'E-mail',
+        status: 'Concluída', resposta: 'Pediu proposta'
+      })
+    });
+    assert.strictEqual(resp.status, 200);
+    assert.strictEqual(ctx.tabelas.prospeccao_campanhas.find(c => c.id === 60).status, 'Concluída');
+
+    const status = eventosDe(ctx, 'campanha').find(e => e.campo === 'status');
+    assert.ok(status, 'faltou o evento de status');
+    assert.strictEqual(status.valor_novo, 'Concluída');
+    assert.ok(status.valor_anterior, 'faltou o status anterior');
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('status de campanha inválido é recusado', async () => {
+  const ctx = await montar(baseDados());
+  try {
+    const resp = await chamar(ctx.porta, '/api/prospeccoes/1/campanhas/60', {
+      method: 'PUT', body: JSON.stringify({ nome: 'X', status: 'Inventado' })
+    });
+    assert.strictEqual(resp.status, 400);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('editar uma interação guarda o contato pelo NOME, não pelo id', async () => {
+  const ctx = await montar(baseDados());
+  try {
+    const resp = await chamar(ctx.porta, '/api/prospeccoes/1/interacoes/20', {
+      method: 'PUT',
+      body: JSON.stringify({
+        tipo: 'Reunião', resumo: 'Primeiro contato', contato_id: 11
+      })
+    });
+    assert.strictEqual(resp.status, 200);
+
+    const evento = eventosDe(ctx, 'interacao').find(e => e.campo === 'contato_id');
+    assert.ok(evento, 'faltou o evento do contato');
+    // "10 → 11" não diz nada a quem for ler daqui a seis meses.
+    assert.strictEqual(evento.valor_novo, 'Alberto Decisor');
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('interação não aceita contato de outra prospecção', async () => {
+  const ctx = await montar(baseDados());
+  try {
+    const resp = await chamar(ctx.porta, '/api/prospeccoes/1/interacoes/20', {
+      method: 'PUT',
+      // O contato 12 é da prospecção 2.
+      body: JSON.stringify({ tipo: 'Ligação', resumo: 'x', contato_id: 12 })
+    });
+    assert.strictEqual(resp.status, 400);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('editar a interação NÃO reescreve o passo planejado', async () => {
+  // `passo_planejado` é o retrato do que havia sido combinado quando a
+  // atividade foi concluída. Corrigir um erro de digitação no resumo não pode
+  // reescrever a promessa original.
+  const dados = baseDados();
+  const alvo = dados.prospeccao_interacoes.find(i => i.id === 20);
+  alvo.tipo = 'Atividade realizada';
+  alvo.passo_planejado = 'Ligar para o Alberto';
+  const ctx = await montar(dados);
+  try {
+    await chamar(ctx.porta, '/api/prospeccoes/1/interacoes/20', {
+      method: 'PUT',
+      body: JSON.stringify({ tipo: 'Atividade realizada', resumo: 'Resumo corrigido' })
+    });
+    assert.strictEqual(
+      ctx.tabelas.prospeccao_interacoes.find(i => i.id === 20).passo_planejado,
+      'Ligar para o Alberto');
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('excluir uma interação guarda o registro inteiro no histórico', async () => {
+  const ctx = await montar(baseDados());
+  try {
+    const resp = await chamar(ctx.porta, '/api/prospeccoes/1/interacoes/20', { method: 'DELETE' });
+    assert.strictEqual(resp.status, 200);
+    assert.strictEqual(ctx.tabelas.prospeccao_interacoes.some(i => i.id === 20), false);
+
+    const evento = ctx.tabelas.prospeccao_historico.find(h => h.tipo === 'interacao' && h.acao === 'excluiu');
+    assert.ok(evento, 'faltou o evento de exclusão');
+    const detalhe = typeof evento.detalhe === 'string' ? JSON.parse(evento.detalhe) : evento.detalhe;
+    assert.strictEqual(detalhe.resumo, 'Primeiro contato');
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Troca do contato principal
+//
+// `principal` tem índice único PARCIAL (`WHERE principal`): dois marcados ao
+// mesmo tempo é erro, nem que seja por um instante. A faixa precisa ser
+// PASSADA — o antigo perde antes de o novo receber.
+// ---------------------------------------------------------------------------
+
+test('marcar outro contato como principal substitui o anterior', async () => {
+  const ctx = await montar(baseDados());
+  try {
+    // Na massa, o 11 (Alberto) é o principal da prospecção 1; o 10 não é.
+    const resp = await chamar(ctx.porta, '/api/prospeccoes/1', {
+      method: 'PUT',
+      body: JSON.stringify({
+        nome_fantasia: 'Antiga Ltda',
+        contatosAtualizados: [{ id: 10, nome: 'Zuleica Auxiliar', principal: true }]
+      })
+    });
+    assert.strictEqual(resp.status, 200);
+
+    const daProspeccao = ctx.tabelas.prospeccao_contatos.filter(c => c.prospeccao_id === 1);
+    const principais = daProspeccao.filter(c => c.principal);
+    assert.strictEqual(principais.length, 1, 'a prospecção precisa ter exatamente um principal');
+    assert.strictEqual(principais[0].id, 10);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('a troca do principal fica registrada nos dois lados', async () => {
+  const ctx = await montar(baseDados());
+  try {
+    await chamar(ctx.porta, '/api/prospeccoes/1', {
+      method: 'PUT',
+      body: JSON.stringify({
+        nome_fantasia: 'Antiga Ltda',
+        contatosAtualizados: [{ id: 10, nome: 'Zuleica Auxiliar', principal: true }]
+      })
+    });
+
+    const perdeu = ctx.tabelas.prospeccao_historico.find(
+      h => h.campo === 'principal' && h.valor_novo === 'Contato comum');
+    assert.ok(perdeu, 'quem perdeu a faixa precisa aparecer no histórico');
+    assert.match(perdeu.entidade, /Alberto/);
+    assert.match(perdeu.observacao, /Zuleica/);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('contato NOVO marcado como principal também substitui o atual', async () => {
+  const ctx = await montar(baseDados());
+  try {
+    const resp = await chamar(ctx.porta, '/api/prospeccoes/1', {
+      method: 'PUT',
+      body: JSON.stringify({
+        nome_fantasia: 'Antiga Ltda',
+        contatosNovos: [{ nome: 'Novo Decisor', principal: true }]
+      })
+    });
+    assert.strictEqual(resp.status, 200);
+
+    const principais = ctx.tabelas.prospeccao_contatos
+      .filter(c => c.prospeccao_id === 1 && c.principal);
+    assert.strictEqual(principais.length, 1);
+    assert.strictEqual(principais[0].nome, 'Novo Decisor');
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('reafirmar quem já é principal não gera troca', async () => {
+  const ctx = await montar(baseDados());
+  try {
+    await chamar(ctx.porta, '/api/prospeccoes/1', {
+      method: 'PUT',
+      body: JSON.stringify({
+        nome_fantasia: 'Antiga Ltda',
+        contatosAtualizados: [{ id: 11, nome: 'Alberto Decisor', principal: true }]
+      })
+    });
+    const trocas = ctx.tabelas.prospeccao_historico.filter(
+      h => h.campo === 'principal' && h.valor_novo === 'Contato comum');
+    assert.deepStrictEqual(trocas, []);
+    assert.strictEqual(
+      ctx.tabelas.prospeccao_contatos.filter(c => c.prospeccao_id === 1 && c.principal).length, 1);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('a troca do principal não mexe em outra prospecção', async () => {
+  const ctx = await montar(baseDados());
+  try {
+    await chamar(ctx.porta, '/api/prospeccoes/1', {
+      method: 'PUT',
+      body: JSON.stringify({
+        nome_fantasia: 'Antiga Ltda',
+        contatosAtualizados: [{ id: 10, nome: 'Zuleica Auxiliar', principal: true }]
+      })
+    });
+    // O contato 12 é o principal da prospecção 2 e não pode ter sido tocado.
+    assert.strictEqual(ctx.tabelas.prospeccao_contatos.find(c => c.id === 12).principal, true);
   } finally {
     await ctx.encerrar();
   }

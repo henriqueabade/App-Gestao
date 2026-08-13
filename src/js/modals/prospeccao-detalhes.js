@@ -33,6 +33,11 @@
   // trabalham por índice sobre ela.
   let contatosNaTela = [];
 
+  // Listas desenhadas nas abas. Os botões de editar recuperam o registro
+  // INTEIRO daqui pelo id — remontar a partir do texto da tela devolveria o
+  // valor já formatado, não o original.
+  const naTela = { interacoes: [], notas: [], campanhas: [] };
+
   document.getElementById('voltarDetalhesProspeccao')?.addEventListener('click', close);
   document.addEventListener('keydown', function esc(e) {
     if (e.key !== 'Escape') return;
@@ -345,6 +350,7 @@
       return;
     }
 
+    naTela.interacoes = interacoes;
     alvo.innerHTML = interacoes.map(i => {
       const duracao = i.duracao_min ? ` • ${esc(i.duracao_min)} min` : '';
       const autor = texto(i.responsavel) ? ` • ${esc(i.responsavel)}` : '';
@@ -354,7 +360,16 @@
             ${ICONE_INTERACAO[i.tipo] || '📌'}
           </div>
           <div>
-            <h4 class="font-semibold text-white">${esc(i.tipo)}${i.resumo ? ` — ${esc(i.resumo)}` : ''}</h4>
+            <div class="flex justify-between items-start gap-3">
+              <h4 class="font-semibold text-white">${esc(i.tipo)}${i.resumo ? ` — ${esc(i.resumo)}` : ''}</h4>
+              <div class="flex items-center gap-2 flex-shrink-0">
+                <i data-perm="pros.interaction.add" class="fas fa-edit acao-tabela acao-tabela--editar"
+                   data-editar="interacao" data-id="${esc(i.id)}" title="Editar atividade"></i>
+                <i data-perm="pros.interaction.add" class="fas fa-trash acao-tabela acao-tabela--excluir"
+                   data-remover="interacao" data-id="${esc(i.id)}"
+                   data-rotulo="${esc(i.resumo || i.tipo)}" title="Excluir atividade"></i>
+              </div>
+            </div>
             <p class="text-sm text-gray-400 mb-2">${esc(formatarDataHora(i.data))} <span class="text-white/40">(${esc(tempoRelativo(i.data))})</span>${duracao}${autor}</p>
             ${texto(i.detalhe) ? `<p class="text-gray-300 whitespace-pre-wrap">${esc(i.detalhe)}</p>` : ''}
           </div>
@@ -368,15 +383,20 @@
       alvo.innerHTML = estadoVazio('Nenhuma nota registrada');
       return;
     }
+    naTela.notas = notas;
     alvo.innerHTML = notas.map(n => `
       <div class="bg-surface/40 rounded-lg p-4 border border-white/5">
         <div class="flex justify-between items-start gap-3 mb-2">
           ${texto(n.titulo) ? `<h4 class="font-medium text-white">${esc(n.titulo)}</h4>` : '<span></span>'}
+          <div class="flex items-center gap-2 flex-shrink-0">
+          <i data-perm="pros.note.add" class="fas fa-edit acao-tabela acao-tabela--editar"
+             data-editar="nota" data-id="${esc(n.id)}" title="Editar nota"></i>
           <button type="button" data-remover="nota" data-id="${esc(n.id)}" data-perm="pros.note.remove"
                   data-rotulo="${esc(texto(n.titulo) ? n.titulo : 'sem título')}"
-                  class="acao-tabela acao-tabela--excluir flex-shrink-0" title="Remover nota">
+                  class="acao-tabela acao-tabela--excluir" title="Remover nota">
             <i class="fas fa-trash pointer-events-none"></i>
           </button>
+          </div>
         </div>
         <p class="text-gray-300 text-sm mb-2 whitespace-pre-wrap">${esc(n.conteudo)}</p>
         <p class="text-xs text-gray-500">${texto(n.autor) ? esc(n.autor) + ' • ' : ''}${esc(tempoRelativo(n.criado_em))}</p>
@@ -407,6 +427,7 @@
   }
 
   function renderCampanhas(campanhas) {
+    naTela.campanhas = campanhas;
     const alvo = get('detProspCampanhas');
     if (!campanhas.length) {
       alvo.innerHTML = estadoVazio('Nenhuma campanha registrada');
@@ -424,11 +445,15 @@
         <td class="px-4 py-3 text-sm text-white/80">${esc(formatarDia(c.data_envio)) || VAZIO}</td>
         <td class="px-4 py-3 text-sm text-white/80">${texto(c.resposta) || VAZIO}</td>
         <td class="px-4 py-3 text-sm">
-          <button type="button" data-remover="campanha" data-id="${esc(c.id)}" data-perm="pros.campaign.manage"
-                  data-rotulo="${esc(c.nome)}"
-                  class="acao-tabela acao-tabela--excluir" title="Remover campanha">
-            <i class="fas fa-trash pointer-events-none"></i>
-          </button>
+          <div class="flex items-center gap-2">
+            <i data-perm="pros.campaign.manage" class="fas fa-edit acao-tabela acao-tabela--editar"
+               data-editar="campanha" data-id="${esc(c.id)}" title="Editar campanha"></i>
+            <button type="button" data-remover="campanha" data-id="${esc(c.id)}" data-perm="pros.campaign.manage"
+                    data-rotulo="${esc(c.nome)}"
+                    class="acao-tabela acao-tabela--excluir" title="Remover campanha">
+              <i class="fas fa-trash pointer-events-none"></i>
+            </button>
+          </div>
         </td>
       </tr>`).join('');
 
@@ -1053,6 +1078,11 @@
       texto: rotulo => `A campanha "${rotulo}" sai da lista, mas continua detalhada no histórico.`,
       espera: 'Removendo a campanha...', sucesso: 'Campanha removida'
     },
+    interacao: {
+      rota: 'interacoes', titulo: 'Excluir esta atividade?',
+      texto: rotulo => `"${rotulo}" sai da timeline. O histórico guarda o registro inteiro.`,
+      espera: 'Removendo a atividade...', sucesso: 'Atividade removida'
+    },
     historico: {
       rota: 'historico', titulo: 'Apagar este evento do histórico?',
       // O histórico é o registro de tudo o mais; apagar aqui não deixa rastro
@@ -1062,6 +1092,34 @@
       espera: 'Apagando o evento...', sucesso: 'Evento removido do histórico'
     }
   };
+
+  /**
+   * Editar nota, atividade ou campanha.
+   *
+   * Reabre o MESMO modal do cadastro, em modo edição — o registro completo vem
+   * da lista carregada, não do texto da tela, que já está formatado.
+   */
+  const COMO_EDITAR = {
+    nota: { lista: 'notas', global: 'prospeccaoNotaEditar', html: 'nota.html', script: 'prospeccao-nota.js', overlay: 'notaProspeccao' },
+    interacao: { lista: 'interacoes', global: 'prospeccaoInteracaoEditar', html: 'interacao.html', script: 'prospeccao-interacao.js', overlay: 'interacaoProspeccao' },
+    campanha: { lista: 'campanhas', global: 'prospeccaoCampanhaEditar', html: 'campanha.html', script: 'prospeccao-campanha.js', overlay: 'campanhaProspeccao' }
+  };
+
+  overlay.addEventListener('click', e => {
+    const editar = e.target.closest?.('[data-editar]');
+    if (!editar) return;
+    e.preventDefault();
+    const como = COMO_EDITAR[editar.dataset.editar];
+    if (!como) return;
+
+    const registro = (naTela[como.lista] || []).find(x => String(x.id) === String(editar.dataset.id));
+    if (!registro) {
+      showToast('Registro não encontrado — reabra a ficha', 'error');
+      return;
+    }
+    window[como.global] = { ...registro };
+    return abrirAcao(como.html, como.script, como.overlay);
+  });
 
   overlay.addEventListener('click', e => {
     const remover = e.target.closest?.('[data-remover]');

@@ -1,4 +1,9 @@
-/** Registrar campanha — POST /api/prospeccoes/:id/campanhas. */
+/**
+ * Campanha da prospecção — registra (POST) ou edita (PUT).
+ *
+ * O MESMO modal para os dois: quem abre define `window.prospeccaoCampanhaEditar`
+ * quando é edição.
+ */
 (async function () {
   const overlay = document.getElementById('campanhaProspeccaoOverlay');
   if (!overlay) return;
@@ -27,6 +32,25 @@
   get('campanhaStatus').innerHTML = A.STATUS_CAMPANHA
     .map(s => `<option value="${A.esc(s)}">${A.esc(s)}</option>`).join('');
 
+  // Consome o sinal na hora: pendurado, faria a PRÓXIMA "Nova campanha" abrir
+  // em modo edição e sobrescrever a anterior.
+  const edicao = window.prospeccaoCampanhaEditar || null;
+  delete window.prospeccaoCampanhaEditar;
+
+  if (edicao) {
+    get('tituloModalCampanha').textContent = 'Editar Campanha';
+    get('campanhaNome').value = edicao.nome || '';
+    get('campanhaCanal').value = edicao.canal || '';
+    if (edicao.status) get('campanhaStatus').value = edicao.status;
+    // Coluna DATE: corta em 10 para o input date, sem passar por `new Date`,
+    // que deslocaria o dia pelo fuso.
+    get('campanhaDataEnvio').value = String(edicao.data_envio || '').slice(0, 10);
+    get('campanhaResposta').value = edicao.resposta || '';
+    get('campanhaObservacao').value = edicao.observacao || '';
+    window.EstadoTrabalho?.registrarContexto?.('campanhaProspeccao',
+      () => ({ prospeccaoCampanhaEditar: edicao }));
+  }
+
   get('campanhaProspeccaoForm')?.addEventListener('submit', e => e.preventDefault());
   setTimeout(() => get('campanhaNome')?.focus(), 60);
 
@@ -38,8 +62,10 @@
       return;
     }
 
-    await A.enviar(`/api/prospeccoes/${prospeccao.id}/campanhas`, {
-      method: 'POST',
+    await A.enviar(edicao
+      ? `/api/prospeccoes/${prospeccao.id}/campanhas/${edicao.id}`
+      : `/api/prospeccoes/${prospeccao.id}/campanhas`, {
+      method: edicao ? 'PUT' : 'POST',
       body: JSON.stringify({
         nome,
         canal: A.texto(get('campanhaCanal').value),
@@ -48,7 +74,10 @@
         resposta: A.texto(get('campanhaResposta').value),
         observacao: A.texto(get('campanhaObservacao').value)
       })
-    }, { overlayId: 'campanhaProspeccao', sucesso: 'Campanha registrada' });
+    }, {
+      overlayId: 'campanhaProspeccao',
+      sucesso: edicao ? 'Campanha atualizada' : 'Campanha registrada'
+    });
   });
 
   window.dispatchEvent(new CustomEvent('modalSpinnerLoaded', { detail: 'campanhaProspeccao' }));

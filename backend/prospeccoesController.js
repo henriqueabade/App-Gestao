@@ -421,6 +421,51 @@ function diferencasDaFicha(antes = {}, depois = {}, nomes = new Map()) {
   return eventos;
 }
 
+/**
+ * Compara um filho (nota, interação, campanha) antes e depois, devolvendo UM
+ * evento por campo alterado.
+ *
+ * Um evento por campo, e não um só com o registro inteiro: "Título: Perfil do
+ * cliente → Atenção ao decisor" responde o que mudou; um despejo do objeto
+ * antes e depois obriga quem lê a caçar a diferença.
+ */
+function diferencasDeFilho({ tipo, entidade, antes = {}, depois = {}, rotulos, formatar = {} }) {
+  const eventos = [];
+  for (const [campo, rotulo] of Object.entries(rotulos)) {
+    if (!(campo in depois)) continue;
+    const a = paraComparacao(campo, antes[campo]);
+    const d = paraComparacao(campo, depois[campo]);
+    if (a === d) continue;
+
+    const humano = formatar[campo] || (v => v);
+    eventos.push({
+      tipo,
+      acao: 'alterou',
+      entidade,
+      campo,
+      valor_anterior: a === null ? null : humano(a),
+      valor_novo: d === null ? null : humano(d),
+      detalhe: { rotulo, de: antes[campo] ?? null, para: depois[campo] ?? null }
+    });
+  }
+  return eventos;
+}
+
+/**
+ * Busca o filho e confirma que ele é DESTA prospecção.
+ *
+ * Sem esta conferência, `/prospeccoes/1/notas/999` alteraria a nota 999 de
+ * outra prospecção — o id do caminho não é validado por ninguém.
+ */
+async function filhoDaProspeccao(api, tabela, filhoId, prospeccaoId, nome) {
+  const registro = await api.get(`/api/${tabela}/${filhoId}`).catch(() => null);
+  if (!registro || registro.error === 'Not found') throw erro(404, `${nome} não encontrada`);
+  if (Number(registro.prospeccao_id) !== Number(prospeccaoId)) {
+    throw erro(404, `${nome} não pertence a esta prospecção`);
+  }
+  return registro;
+}
+
 /** Resumo curto de um contato, para rotular a linha do histórico. */
 const rotuloContato = c => `Contato ${c?.nome || ''}`.trim();
 
@@ -725,6 +770,44 @@ router.put('/:id', exigirPermissao(permissoesDeEdicao), async (req, res) => {
     const eventos = diferencasDaFicha(atual, payload, nomes);
 
     await api.put(`/api/prospeccoes/${id}`, payload);
+
+    // -----------------------------------------------------------------------
+    // Troca do contato principal
+    //
+    // `principal` tem índice único PARCIAL no banco (`WHERE principal`): dois
+    // contatos marcados ao mesmo tempo é erro, nem que seja por um instante.
+    // `normalizarPrincipais` só desempata dentro do lote que chega — não sabia
+    // de quem JÁ era principal no banco. Marcar um segundo contato batia na
+    // constraint e voltava 500.
+    //
+    // A faixa é passada, não duplicada: o antigo perde ANTES de o novo receber.
+    // -----------------------------------------------------------------------
+    const novoPrincipal = [
+      ...(Array.isArray(req.body.contatosNovos) ? req.body.contatosNovos : []),
+      ...(Array.isArray(req.body.contatosAtualizados) ? req.body.contatosAtualizados : [])
+    ].find(c => c?.principal && texto(c?.nome));
+
+    if (novoPrincipal) {
+      const existentes = await api
+        .get('/api/prospeccao_contatos', { query: { prospeccao_id: id } })
+        .catch(() => []);
+
+      for (const antigo of Array.isArray(existentes) ? existentes : []) {
+        if (!antigo.principal) continue;
+        // Já é ele: reafirmar não é troca.
+        if (String(antigo.id) === String(novoPrincipal.id ?? '')) continue;
+
+        await api.put(`/api/prospeccao_contatos/${antigo.id}`, { ...antigo, principal: false });
+        eventos.push({
+          tipo: 'contato', acao: 'alterou',
+          entidade: rotuloContato(antigo),
+          campo: 'principal',
+          valor_anterior: 'Contato principal',
+          valor_novo: 'Contato comum',
+          observacao: `Substituído por ${novoPrincipal.nome}`
+        });
+      }
+    }
 
     for (const c of Array.isArray(req.body.contatosNovos) ? req.body.contatosNovos : []) {
       if (!texto(c?.nome)) continue;
@@ -1084,6 +1167,103 @@ router.post('/:id/interacoes', exigirPermissao('pros.interaction.add'), async (r
   }
 });
 
+router.put('/:id/interacoes/:interacaoId', exigirPermissao('pros.interaction.add'), async (req, res) => {
+  const { id, interacaoId } = req.params;
+  try {
+    const tipo = texto(req.body?.tipo);
+    const resumo = texto(req.body?.resumo);
+    if (!TIPOS_INTERACAO.has(tipo)) throw erro(400, `Tipo de interação inválido: ${tipo}`);
+    if (!resumo) throw erro(400, 'Informe um resumo da interação');
+
+    const api = createApiClient(req);
+    const antes = await filhoDaProspeccao(api, 'prospeccao_interacoes', interacaoId, id, 'Interação');
+
+    // Mesma trava do POST: a FK aponta para prospeccao_contatos, mas nada
+    // garante que o contato seja DESTA prospecção.
+    const contatoId = req.body?.contato_id ?? null;
+    if (contatoId) {
+      const contato = await api.get(`/api/prospeccao_contatos/${contatoId}`).catch(() => null);
+      if (!contato || Number(contato.prospeccao_id) !== Number(id)) {
+        throw erro(400, 'Contato não pertence a esta prospecção');
+      }
+    }
+
+    // `passo_planejado` fica de fora: ele é o retrato do combinado no momento
+    // em que a atividade foi concluída. Reescrevê-lo numa correção de texto
+    // apagaria o que de fato havia sido prometido.
+    const depois = {
+      contato_id: contatoId,
+      tipo,
+      data: req.body?.data || antes.data,
+      resumo,
+      detalhe: texto(req.body?.detalhe),
+      duracao_min: req.body?.duracao_min ?? null
+    };
+    await api.put(`/api/prospeccao_interacoes/${interacaoId}`, depois);
+
+    const nomeContato = async valor => {
+      if (!valor) return null;
+      const c = await api.get(`/api/prospeccao_contatos/${valor}`).catch(() => null);
+      return c?.nome || `#${valor}`;
+    };
+    const [contatoAntes, contatoDepois] = await Promise.all([
+      nomeContato(antes.contato_id), nomeContato(contatoId)
+    ]);
+
+    const eventos = diferencasDeFilho({
+      tipo: 'interacao',
+      entidade: `${antes.tipo || 'Interação'} — ${antes.resumo || ''}`.trim(),
+      antes, depois,
+      rotulos: {
+        tipo: 'Tipo', resumo: 'Resumo', detalhe: 'Detalhe',
+        data: 'Data', duracao_min: 'Duração (min)'
+      }
+    });
+    // O contato entra à parte: no banco é um id, e "12 → 15" não diz nada a
+    // quem for ler daqui a seis meses.
+    if (Number(antes.contato_id ?? 0) !== Number(contatoId ?? 0)) {
+      eventos.push({
+        tipo: 'interacao', acao: 'alterou',
+        entidade: `${antes.tipo || 'Interação'} — ${antes.resumo || ''}`.trim(),
+        campo: 'contato_id',
+        valor_anterior: contatoAntes,
+        valor_novo: contatoDepois,
+        detalhe: { rotulo: 'Com quem' }
+      });
+    }
+
+    await registrarHistorico(api, id, eventos, usuarioDaRequisicao(req));
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Erro ao editar interação:', err);
+    res.status(err.status || 500).json({ error: err.message || 'Erro ao editar interação' });
+  }
+});
+
+router.delete('/:id/interacoes/:interacaoId', exigirPermissao('pros.interaction.add'), async (req, res) => {
+  const { id, interacaoId } = req.params;
+  try {
+    const api = createApiClient(req);
+    const antes = await filhoDaProspeccao(api, 'prospeccao_interacoes', interacaoId, id, 'Interação');
+
+    await api.delete(`/api/prospeccao_interacoes/${interacaoId}`);
+
+    // Fotografia ANTES de apagar: a timeline perde a linha, o histórico não.
+    await registrarHistorico(api, id, {
+      tipo: 'interacao', acao: 'excluiu',
+      entidade: `${antes.tipo || 'Interação'} — ${antes.resumo || ''}`.trim(),
+      valor_anterior: [antes.resumo, antes.detalhe].filter(Boolean).join(' · '),
+      detalhe: antes
+    }, usuarioDaRequisicao(req));
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Erro ao remover interação:', err);
+    res.status(err.status || 500).json({ error: err.message || 'Erro ao remover interação' });
+  }
+});
+
 // ---------------------------------------------------------------------------
 // NOTAS
 // ---------------------------------------------------------------------------
@@ -1115,6 +1295,35 @@ router.post('/:id/notas', exigirPermissao('pros.note.add'), async (req, res) => 
   } catch (err) {
     console.error('Erro ao adicionar nota:', err);
     res.status(err.status || 500).json({ error: err.message || 'Erro ao adicionar nota' });
+  }
+});
+
+router.put('/:id/notas/:notaId', exigirPermissao('pros.note.add'), async (req, res) => {
+  const { id, notaId } = req.params;
+  try {
+    const conteudo = texto(req.body?.conteudo);
+    if (!conteudo) throw erro(400, 'A nota não pode estar vazia');
+
+    const api = createApiClient(req);
+    const antes = await filhoDaProspeccao(api, 'prospeccao_notas', notaId, id, 'Nota');
+
+    const depois = { titulo: texto(req.body?.titulo), conteudo };
+    // `usuario_id` NÃO é reescrito: quem escreveu a nota escreveu, mesmo que
+    // outra pessoa corrija um erro de digitação depois. Quem editou fica no
+    // histórico.
+    await api.put(`/api/prospeccao_notas/${notaId}`, depois);
+
+    await registrarHistorico(api, id, diferencasDeFilho({
+      tipo: 'nota',
+      entidade: `Nota ${texto(antes.titulo) || '(sem título)'}`,
+      antes, depois,
+      rotulos: { titulo: 'Título', conteudo: 'Conteúdo' }
+    }), usuarioDaRequisicao(req));
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Erro ao editar nota:', err);
+    res.status(err.status || 500).json({ error: err.message || 'Erro ao editar nota' });
   }
 });
 
@@ -1186,6 +1395,44 @@ router.post('/:id/campanhas', exigirPermissao('pros.campaign.manage'), async (re
   } catch (err) {
     console.error('Erro ao registrar campanha:', err);
     res.status(err.status || 500).json({ error: err.message || 'Erro ao registrar campanha' });
+  }
+});
+
+router.put('/:id/campanhas/:campanhaId', exigirPermissao('pros.campaign.manage'), async (req, res) => {
+  const { id, campanhaId } = req.params;
+  try {
+    const nome = texto(req.body?.nome);
+    if (!nome) throw erro(400, 'Informe o nome da campanha');
+    const status = texto(req.body?.status) || 'Planejada';
+    if (!STATUS_CAMPANHA.has(status)) throw erro(400, `Status de campanha inválido: ${status}`);
+
+    const api = createApiClient(req);
+    const antes = await filhoDaProspeccao(api, 'prospeccao_campanhas', campanhaId, id, 'Campanha');
+
+    const depois = {
+      nome,
+      canal: texto(req.body?.canal),
+      status,
+      data_envio: req.body?.data_envio || null,
+      resposta: texto(req.body?.resposta),
+      observacao: texto(req.body?.observacao)
+    };
+    await api.put(`/api/prospeccao_campanhas/${campanhaId}`, depois);
+
+    await registrarHistorico(api, id, diferencasDeFilho({
+      tipo: 'campanha',
+      entidade: `Campanha ${antes.nome || ''}`.trim(),
+      antes, depois,
+      rotulos: {
+        nome: 'Nome', canal: 'Canal', status: 'Status',
+        data_envio: 'Data de envio', resposta: 'Resposta', observacao: 'Observação'
+      }
+    }), usuarioDaRequisicao(req));
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Erro ao editar campanha:', err);
+    res.status(err.status || 500).json({ error: err.message || 'Erro ao editar campanha' });
   }
 });
 
