@@ -1,7 +1,13 @@
 <div id="detalhesProspeccaoOverlay" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-  <div class="w-full max-w-6xl max-h-[90vh] glass-surface backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade slide-in overflow-hidden flex flex-col text-white" style="transform: translateY(3vh);">
+  <!--
+    Sem `transform` aqui. O `translateY(3vh)` que existia antes resolvia para
+    um valor fracionário (28,5px numa janela de 950) e criava uma camada de
+    composição desalinhada com a grade de pixels — era o que deixava o texto
+    do modal com aparência borrada, de baixa resolução.
+  -->
+  <div class="modal-prospeccao glass-surface backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade text-white">
 
-    <header class="px-8 py-6 border-b border-white/10 flex flex-col gap-4 flex-shrink-0">
+    <header class="modal-prospeccao__topo px-8 py-5 border-b border-white/10 flex flex-col gap-4">
       <div class="relative flex items-center justify-center">
         <button id="voltarDetalhesProspeccao" type="button" class="absolute left-0 top-1/2 -translate-y-1/2 btn-neutral px-4 py-2 rounded-lg text-white font-medium flex items-center gap-2">← Voltar</button>
         <h2 class="text-lg font-semibold text-center text-white">DETALHES DA PROSPECÇÃO</h2>
@@ -20,12 +26,38 @@
       </div>
     </header>
 
-    <div class="flex-1 overflow-y-auto modal-scroll">
-      <!-- Cartão-resumo -->
-      <div class="px-8 py-6">
-        <section class="w-full rounded-2xl bg-[--color-surface] backdrop-blur p-6 lg:p-8 shadow-lg">
-          <div class="grid grid-cols-12 gap-6 items-center">
-            <div class="col-span-12 lg:col-span-4 flex items-center gap-4">
+    <!-- Abas logo após o cabeçalho, no mesmo desenho do modal de edição. -->
+    <nav class="modal-prospeccao__topo px-8 border-b border-white/10" role="tablist">
+      <div class="modal-prospeccao__abas">
+        <button role="tab" data-tab="visao" aria-selected="true">Visão Geral</button>
+        <button role="tab" data-tab="contatos" aria-selected="false">
+          Contatos <span data-contador="contatos" class="aba-contador"></span>
+        </button>
+        <button role="tab" data-tab="atividades" aria-selected="false">
+          Atividades <span data-contador="interacoes" class="aba-contador"></span>
+        </button>
+        <button role="tab" data-tab="notas" aria-selected="false">
+          Notas <span data-contador="notas" class="aba-contador"></span>
+        </button>
+        <button role="tab" data-tab="campanhas" aria-selected="false">
+          Campanhas <span data-contador="campanhas" class="aba-contador"></span>
+        </button>
+        <button role="tab" data-tab="historico" aria-selected="false">
+          Histórico <span data-contador="historico" class="aba-contador"></span>
+        </button>
+      </div>
+    </nav>
+
+    <div class="modal-prospeccao__corpo modal-scroll px-8 py-6">
+      <section data-panel="visao" class="space-y-6">
+        <!--
+          O cartão-resumo passou a viver DENTRO da Visão Geral. Fixo no topo, ele
+          roubava altura permanente das outras abas, que ficavam espremidas
+          repetindo dados já visíveis acima.
+        -->
+        <section class="cartao-prospeccao cartao-prospeccao--resumo">
+          <div class="flex flex-col lg:flex-row lg:items-center gap-6">
+            <div class="flex items-center gap-4 lg:w-1/3 min-w-0">
               <div class="h-16 w-16 rounded-full ring-2 ring-[--color-primary] grid place-items-center text-[--color-primary] font-semibold shrink-0">
                 <span id="detProspIniciais"></span>
               </div>
@@ -34,122 +66,90 @@
                 <p id="detProspSegmento" class="text-sm text-white/70 truncate"></p>
               </div>
             </div>
-
-            <!-- Métricas: preenchidas por prospeccao-detalhes.js -->
-            <div id="detProspMetricas" class="col-span-12 lg:col-span-8 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3"></div>
+            <div id="detProspMetricas" class="flex-1 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3"></div>
           </div>
         </section>
-      </div>
 
-      <nav class="sticky top-0 z-20 bg-gray-50 backdrop-blur-xl border-b border-white/10" role="tablist">
-        <div class="px-8">
-          <div class="flex gap-8 overflow-x-auto">
-            <button role="tab" data-tab="visao" aria-selected="true"
-                    class="py-4 px-2 text-sm font-medium text-gray-400 border-b-2 border-transparent hover:text-black transition whitespace-nowrap">Visão Geral</button>
-            <button role="tab" data-tab="contatos" aria-selected="false"
-                    class="py-4 px-2 text-sm font-medium text-gray-400 border-b-2 border-transparent hover:text-black transition whitespace-nowrap">
-              Contatos <span data-contador="contatos" class="ml-1 text-xs opacity-70"></span>
-            </button>
-            <button role="tab" data-tab="atividades" aria-selected="false"
-                    class="py-4 px-2 text-sm font-medium text-gray-400 border-b-2 border-transparent hover:text-black transition whitespace-nowrap">
-              Atividades <span data-contador="interacoes" class="ml-1 text-xs opacity-70"></span>
-            </button>
-            <button role="tab" data-tab="notas" aria-selected="false"
-                    class="py-4 px-2 text-sm font-medium text-gray-400 border-b-2 border-transparent hover:text-black transition whitespace-nowrap">
-              Notas <span data-contador="notas" class="ml-1 text-xs opacity-70"></span>
-            </button>
-            <button role="tab" data-tab="campanhas" aria-selected="false"
-                    class="py-4 px-2 text-sm font-medium text-gray-400 border-b-2 border-transparent hover:text-black transition whitespace-nowrap">
-              Campanhas <span data-contador="campanhas" class="ml-1 text-xs opacity-70"></span>
-            </button>
-            <button role="tab" data-tab="historico" aria-selected="false"
-                    class="py-4 px-2 text-sm font-medium text-gray-400 border-b-2 border-transparent hover:text-black transition whitespace-nowrap">
-              Histórico <span data-contador="historico" class="ml-1 text-xs opacity-70"></span>
+        <div class="cartao-prospeccao">
+          <div class="flex justify-between items-center mb-4">
+            <h3 class="text-lg font-semibold text-white">Oportunidade</h3>
+            <button id="detProspProximoPasso" data-perm="pros.next.step" class="btn-secondary px-4 py-2 rounded-lg text-white text-sm font-medium">
+              <i class="fas fa-calendar-check mr-2"></i>Próximo passo
             </button>
           </div>
+          <div id="detProspOportunidade" class="grid grid-cols-1 md:grid-cols-2 gap-6"></div>
         </div>
-      </nav>
 
-      <div class="px-8 py-6">
-        <section data-panel="visao" class="space-y-6">
-          <div class="bg-surface/60 backdrop-blur-xl rounded-2xl border border-white/10 p-6">
-            <div class="flex justify-between items-center mb-4">
-              <h3 class="text-lg font-semibold text-white">Oportunidade</h3>
-              <button id="detProspProximoPasso" data-perm="pros.next.step" class="btn-secondary px-4 py-2 rounded-lg text-white text-sm font-medium">
-                <i class="fas fa-calendar-check mr-2"></i>Próximo passo
-              </button>
-            </div>
-            <div id="detProspOportunidade" class="grid grid-cols-1 md:grid-cols-2 gap-6"></div>
-          </div>
+        <div class="cartao-prospeccao">
+          <h3 class="text-lg font-semibold text-white mb-4">Empresa</h3>
+          <div id="detProspEmpresaDados" class="grid grid-cols-1 md:grid-cols-2 gap-6"></div>
+        </div>
 
-          <div class="bg-surface/60 backdrop-blur-xl rounded-2xl border border-white/10 p-6">
-            <h3 class="text-lg font-semibold text-white mb-4">Empresa</h3>
-            <div id="detProspEmpresaDados" class="grid grid-cols-1 md:grid-cols-2 gap-6"></div>
-          </div>
+        <div class="cartao-prospeccao">
+          <h3 class="text-lg font-semibold text-white mb-4">Endereço</h3>
+          <div id="detProspEndereco" class="text-white"></div>
+        </div>
 
-          <div class="bg-surface/60 backdrop-blur-xl rounded-2xl border border-white/10 p-6">
-            <h3 class="text-lg font-semibold text-white mb-4">Endereço</h3>
-            <div id="detProspEndereco" class="text-white"></div>
-          </div>
+        <div id="detProspAnotacoesCard" class="cartao-prospeccao hidden">
+          <h3 class="text-lg font-semibold text-white mb-4">Anotações</h3>
+          <p id="detProspAnotacoes" class="text-gray-300 whitespace-pre-wrap"></p>
+        </div>
+      </section>
 
-          <div id="detProspAnotacoesCard" class="bg-surface/60 backdrop-blur-xl rounded-2xl border border-white/10 p-6 hidden">
-            <h3 class="text-lg font-semibold text-white mb-4">Anotações</h3>
-            <p id="detProspAnotacoes" class="text-gray-300 whitespace-pre-wrap"></p>
+      <section data-panel="contatos" class="space-y-6 hidden">
+        <div class="cartao-prospeccao">
+          <div class="flex justify-between items-center mb-4">
+            <h3 class="text-lg font-semibold text-white">Contatos da empresa</h3>
+            <button id="detProspNovoContato" data-perm="pros.contact.add" class="btn-primary px-4 py-2 rounded-lg text-white text-sm font-medium">+ Novo contato</button>
           </div>
-        </section>
+          <div id="detProspContatos"></div>
+        </div>
+      </section>
 
-        <section data-panel="contatos" class="space-y-6 hidden">
-          <div class="bg-surface/60 backdrop-blur-xl rounded-2xl border border-white/10 p-6">
-            <h3 class="text-lg font-semibold text-white mb-4">Contatos da empresa</h3>
-            <div id="detProspContatos"></div>
+      <section data-panel="atividades" class="space-y-6 hidden">
+        <div class="cartao-prospeccao">
+          <div class="flex justify-between items-center mb-6">
+            <h3 class="text-lg font-semibold text-white">Timeline de atividades</h3>
+            <button id="detProspNovaInteracao" data-perm="pros.interaction.add" class="btn-primary px-4 py-2 rounded-lg text-white text-sm font-medium">+ Registrar interação</button>
           </div>
-        </section>
+          <div id="detProspInteracoes" class="space-y-6"></div>
+        </div>
+      </section>
 
-        <section data-panel="atividades" class="space-y-6 hidden">
-          <div class="bg-surface/60 backdrop-blur-xl rounded-2xl border border-white/10 p-6">
-            <div class="flex justify-between items-center mb-6">
-              <h3 class="text-lg font-semibold text-white">Timeline de atividades</h3>
-              <button id="detProspNovaInteracao" data-perm="pros.interaction.add" class="btn-primary px-4 py-2 rounded-lg text-white text-sm font-medium">+ Registrar interação</button>
-            </div>
-            <div id="detProspInteracoes" class="space-y-6"></div>
+      <section data-panel="notas" class="space-y-6 hidden">
+        <div class="cartao-prospeccao">
+          <div class="flex justify-between items-center mb-4">
+            <h3 class="text-lg font-semibold text-white">Notas</h3>
+            <button id="detProspNovaNota" data-perm="pros.note.add" class="btn-primary px-4 py-2 rounded-lg text-white text-sm font-medium">+ Nova nota</button>
           </div>
-        </section>
+          <div id="detProspNotas" class="space-y-4"></div>
+        </div>
+        <div class="cartao-prospeccao">
+          <h3 class="text-lg font-semibold text-white mb-4">Anexos</h3>
+          <div id="detProspAnexos"></div>
+        </div>
+      </section>
 
-        <section data-panel="notas" class="space-y-6 hidden">
-          <div class="bg-surface/60 backdrop-blur-xl rounded-2xl border border-white/10 p-6">
-            <div class="flex justify-between items-center mb-4">
-              <h3 class="text-lg font-semibold text-white">Notas</h3>
-              <button id="detProspNovaNota" data-perm="pros.note.add" class="btn-primary px-4 py-2 rounded-lg text-white text-sm font-medium">+ Nova nota</button>
-            </div>
-            <div id="detProspNotas" class="space-y-4"></div>
+      <section data-panel="campanhas" class="space-y-6 hidden">
+        <div class="cartao-prospeccao">
+          <div class="flex justify-between items-center mb-4">
+            <h3 class="text-lg font-semibold text-white">Campanhas</h3>
+            <button id="detProspNovaCampanha" data-perm="pros.campaign.manage" class="btn-primary px-4 py-2 rounded-lg text-white text-sm font-medium">+ Nova campanha</button>
           </div>
-          <div class="bg-surface/60 backdrop-blur-xl rounded-2xl border border-white/10 p-6">
-            <h3 class="text-lg font-semibold text-white mb-4">Anexos</h3>
-            <div id="detProspAnexos"></div>
-          </div>
-        </section>
+          <div id="detProspCampanhas"></div>
+        </div>
+        <div class="cartao-prospeccao">
+          <h3 class="text-lg font-semibold text-white mb-4">Orçamentos vinculados</h3>
+          <div id="detProspOrcamentos"></div>
+        </div>
+      </section>
 
-        <section data-panel="campanhas" class="space-y-6 hidden">
-          <div class="bg-surface/60 backdrop-blur-xl rounded-2xl border border-white/10 p-6">
-            <div class="flex justify-between items-center mb-4">
-              <h3 class="text-lg font-semibold text-white">Campanhas</h3>
-              <button id="detProspNovaCampanha" data-perm="pros.campaign.manage" class="btn-primary px-4 py-2 rounded-lg text-white text-sm font-medium">+ Nova campanha</button>
-            </div>
-            <div id="detProspCampanhas"></div>
-          </div>
-          <div class="bg-surface/60 backdrop-blur-xl rounded-2xl border border-white/10 p-6">
-            <h3 class="text-lg font-semibold text-white mb-4">Orçamentos vinculados</h3>
-            <div id="detProspOrcamentos"></div>
-          </div>
-        </section>
-
-        <section data-panel="historico" class="space-y-6 hidden">
-          <div class="bg-surface/60 backdrop-blur-xl rounded-2xl border border-white/10 p-6">
-            <h3 class="text-lg font-semibold text-white mb-4">Movimentação no funil</h3>
-            <div id="detProspHistorico"></div>
-          </div>
-        </section>
-      </div>
+      <section data-panel="historico" class="space-y-6 hidden">
+        <div class="cartao-prospeccao">
+          <h3 class="text-lg font-semibold text-white mb-4">Movimentação no funil</h3>
+          <div id="detProspHistorico"></div>
+        </div>
+      </section>
     </div>
   </div>
 </div>

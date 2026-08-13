@@ -118,15 +118,20 @@
   // -------------------------------------------------------------------------
   // Abas
   // -------------------------------------------------------------------------
+  /**
+   * A aba ativa é indicada só por `aria-selected`; o estilo vem do CSS
+   * (`.modal-prospeccao__abas [role="tab"][aria-selected="true"]`). Antes o
+   * visual dependia de alternar classes utilitárias na mão, e o estado
+   * acessível e o visual podiam divergir.
+   */
   function setTab(id) {
     overlay.querySelectorAll('[data-panel]').forEach(p => p.classList.toggle('hidden', p.dataset.panel !== id));
     overlay.querySelectorAll('[role="tab"]').forEach(t => {
-      const ativo = t.dataset.tab === id;
-      t.setAttribute('aria-selected', String(ativo));
-      t.classList.toggle('tab-active', ativo);
-      t.classList.toggle('text-gray-400', !ativo);
-      t.classList.toggle('border-transparent', !ativo);
+      t.setAttribute('aria-selected', String(t.dataset.tab === id));
     });
+    // O corpo rola por inteiro; ao trocar de aba, volta ao topo. Sem isso a
+    // aba nova abria no meio, na altura em que a anterior estava rolada.
+    overlay.querySelector('.modal-prospeccao__corpo')?.scrollTo({ top: 0 });
   }
 
   overlay.querySelectorAll('[role="tab"]').forEach(t => {
@@ -166,10 +171,13 @@
   }
 
   function renderMetricas(p) {
+    // Sem `backdrop-blur` e sem `h-[76px]`: o desfoque em cima de conteúdo já
+    // desfocado pelo diálogo era parte do aspecto "baixa resolução", e a altura
+    // arbitrária do Tailwind não existe no build offline do projeto.
     const bloco = (rotulo, conteudo) => `
-      <div class="rounded-lg border border-white/10 bg-white/5 backdrop-blur p-3 h-[76px] flex flex-col justify-center overflow-hidden">
-        <span class="text-[11px] uppercase tracking-wide text-white/60">${esc(rotulo)}</span>
-        <span class="block text-sm text-white truncate">${conteudo}</span>
+      <div class="metrica-prospeccao">
+        <span class="metrica-prospeccao__rotulo">${esc(rotulo)}</span>
+        <span class="metrica-prospeccao__valor">${conteudo}</span>
       </div>`;
 
     const etapaBadge = `<span class="badge-etapa badge-etapa--${slugEtapa(p.etapa)} px-2.5 py-1 rounded-full text-xs font-medium">${esc(p.etapa)}</span>`;
@@ -645,6 +653,56 @@
 
   get('detProspNovaCampanha')?.addEventListener('click', () => {
     abrirAcao('campanha.html', 'prospeccao-campanha.js', 'campanhaProspeccao');
+  });
+
+  // -------------------------------------------------------------------------
+  // Novo contato pela aba Contatos
+  //
+  // Reaproveita o sub-modal do cadastro/edição, que só devolve o contato por
+  // evento. Aqui ele precisa ser PERSISTIDO na hora — o backend recebe como
+  // delta `contatosNovos`, exatamente como o modal de edição faz.
+  // -------------------------------------------------------------------------
+  get('detProspNovoContato')?.addEventListener('click', () => {
+    delete window.prospeccaoContatoEditar;
+    Modal.open('modals/prospeccoes/contato.html', '../js/modals/prospeccao-contato.js', 'contatoProspeccao', true);
+  });
+
+  async function gravarNovoContato(evento) {
+    const contato = evento.detail;
+    // `indice` só vem quando o sub-modal está EDITANDO um item da lista em
+    // memória do cadastro — aqui nunca é o caso.
+    if (!contato?.nome || contato.indice !== undefined) return;
+
+    try {
+      const resp = await fetchApi(`/api/prospeccoes/${resumo.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...(window.prospeccaoDetalhesCarregada || {}),
+          contatosNovos: [contato]
+        })
+      });
+      const corpo = await resp.json().catch(() => ({}));
+      if (!resp.ok) {
+        showToast(corpo.error || 'Erro ao adicionar contato', 'error');
+        return;
+      }
+      await carregar();
+      window.ProspeccoesModulo?.carregar?.(true);
+      showToast('Contato adicionado', 'success');
+    } catch (err) {
+      console.error('Erro ao adicionar contato', err);
+      showToast('Falha de comunicação com o servidor', 'error');
+    }
+  }
+
+  window.addEventListener('prospeccaoContatoSalvo', gravarNovoContato);
+  // Sem remover, o ouvinte sobrevive ao modal e uma segunda ficha receberia o
+  // contato cadastrado na primeira.
+  window.addEventListener('modal-ready', function soltar(e) {
+    if (e.detail !== 'detalhesProspeccao') return;
+    window.removeEventListener('prospeccaoContatoSalvo', gravarNovoContato);
+    window.removeEventListener('modal-ready', soltar);
   });
 
   // `window.ProspeccoesModulo` é o contrato publicado por prospeccoes.js.

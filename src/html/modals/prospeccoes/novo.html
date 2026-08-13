@@ -1,12 +1,12 @@
-<div id="novaProspeccaoOverlay" class="hidden fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4 pt-[4vw]">
-  <div class="w-full max-w-6xl max-h-[90vh] glass-surface backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade slide-in overflow-hidden flex flex-col">
-    <header class="grid grid-cols-3 items-center px-8 py-5 border-b border-white/10 flex-shrink-0">
+<div id="novaProspeccaoOverlay" class="hidden fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4">
+  <div class="modal-prospeccao glass-surface backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade">
+    <header class="modal-prospeccao__topo grid grid-cols-3 items-center px-8 py-5 border-b border-white/10">
       <button id="voltarNovaProspeccao" class="btn-neutral px-4 py-2 rounded-lg text-white font-medium flex items-center gap-2 justify-self-start">← Voltar</button>
       <h2 id="prospeccaoTitulo" class="text-lg font-semibold text-white text-center">Nova Prospecção</h2>
       <span></span>
     </header>
 
-    <nav class="px-8 border-b border-white/10 flex-shrink-0" role="tablist">
+    <nav class="modal-prospeccao__topo px-8 border-b border-white/10" role="tablist">
       <div class="flex gap-8 overflow-x-auto scrollbar-hide">
         <button id="tab-pros-empresa" role="tab" aria-selected="true" aria-controls="panel-pros-empresa" tabindex="0" class="py-4 px-2 text-sm font-medium border-b-2 tab-active whitespace-nowrap transition">Empresa</button>
         <button id="tab-pros-contatos" role="tab" aria-selected="false" aria-controls="panel-pros-contatos" tabindex="-1" class="py-4 px-2 text-sm font-medium text-gray-400 border-b-2 border-transparent hover:text-white transition whitespace-nowrap">Contatos</button>
@@ -16,7 +16,7 @@
       </div>
     </nav>
 
-    <div class="flex-1 overflow-y-auto modal-scroll">
+    <div class="modal-prospeccao__corpo modal-scroll">
       <!-- ------------------------------------------------ EMPRESA -->
       <section id="panel-pros-empresa" role="tabpanel" aria-labelledby="tab-pros-empresa" class="px-8 py-6">
         <div class="grid grid-cols-1 md:grid-cols-12 gap-8">
@@ -188,7 +188,7 @@
       </section>
     </div>
 
-    <footer class="flex justify-end items-center gap-4 px-8 py-5 border-t border-white/10 flex-shrink-0">
+    <footer class="modal-prospeccao__rodape flex justify-end items-center gap-4 px-8 py-5 border-t border-white/10">
       <button id="cancelarNovaProspeccao" class="btn-danger px-6 py-2 rounded-lg text-white font-medium min-w-[120px]">Cancelar</button>
       <button id="registrarProspeccao" class="btn-success px-6 py-2 rounded-lg font-medium min-w-[120px]">Registrar</button>
     </footer>

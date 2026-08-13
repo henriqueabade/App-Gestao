@@ -357,6 +357,132 @@ body {
     border-color: var(--color-primary);
 }
 
+/* ==================================================================
+   Modais grandes do módulo (detalhes, editar, nova, interação, converter)
+   ================================================================== */
+
+/*
+   ALTURA FIXA, não máxima.
+
+   Com `max-height` o diálogo encolhia e crescia conforme a aba aberta:
+   "Visão Geral" ficava alta, "Notas" baixinha, e o modal pulava de tamanho a
+   cada clique. Altura fixa mantém o quadro parado e dá às abas curtas todo o
+   espaço disponível.
+*/
+.modal-prospeccao {
+    width: 100%;
+    max-width: 72rem;
+    height: 90vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+/* A área que rola. `min-height: 0` é obrigatório: sem ele um filho flex se
+   recusa a encolher abaixo do conteúdo e o scroll nunca aparece. */
+.modal-prospeccao__corpo {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+}
+
+.modal-prospeccao__topo,
+.modal-prospeccao__rodape {
+    flex-shrink: 0;
+}
+
+/*
+   Barra de abas dos modais grandes — mesmo desenho do modal de edição.
+   O detalhe usava `bg-gray-50`, um fundo CLARO no meio do tema escuro.
+*/
+.modal-prospeccao__abas {
+    display: flex;
+    gap: 2rem;
+    overflow-x: auto;
+    scrollbar-width: none;
+}
+
+.modal-prospeccao__abas::-webkit-scrollbar {
+    display: none;
+}
+
+.modal-prospeccao__abas [role="tab"] {
+    padding: 1rem 0.5rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.55);
+    border-bottom: 2px solid transparent;
+    white-space: nowrap;
+    background: transparent;
+    cursor: pointer;
+    transition: color 150ms ease, border-color 150ms ease;
+}
+
+.modal-prospeccao__abas [role="tab"]:hover {
+    color: #fff;
+}
+
+.modal-prospeccao__abas [role="tab"][aria-selected="true"] {
+    color: var(--color-primary);
+    border-bottom-color: var(--color-primary);
+}
+
+.modal-prospeccao__abas .aba-contador {
+    margin-left: 0.35rem;
+    font-size: 0.75rem;
+    opacity: 0.65;
+}
+
+/*
+   Cartões internos SEM backdrop-filter.
+
+   O diálogo já aplica `backdrop-blur-xl`; repetir o filtro em cada cartão
+   empilhava dez camadas de desfoque sobre conteúdo já desfocado — era o que
+   deixava o texto com cara de baixa resolução. Um fundo sólido translúcido
+   dá o mesmo efeito visual sem custo nem borrão.
+*/
+.cartao-prospeccao {
+    background: rgba(255, 255, 255, 0.045);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 1rem;
+    padding: 1.5rem;
+}
+
+.cartao-prospeccao--resumo {
+    background: rgba(255, 255, 255, 0.06);
+}
+
+/* Blocos de métrica do cartão-resumo. Altura fixa para os seis ficarem
+   alinhados, sem depender de `h-[76px]` (arbitrário do Tailwind, ausente do
+   build offline). */
+.metrica-prospeccao {
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 0.5rem;
+    padding: 0.75rem;
+    height: 76px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    overflow: hidden;
+}
+
+.metrica-prospeccao__rotulo {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: rgba(255, 255, 255, 0.6);
+}
+
+.metrica-prospeccao__valor {
+    display: block;
+    font-size: 0.875rem;
+    color: #fff;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
 /* ------------------------------------------------------------------
    Ícone (i) e popover — mesmo padrão de Matéria-prima e Produtos.
    ------------------------------------------------------------------ */
