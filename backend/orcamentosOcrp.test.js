@@ -26,14 +26,33 @@ const COLUNAS = {
   ],
   orcamentos_itens: ['id', 'orcamento_id', 'produto_id', 'nome', 'quantidade', 'valor_unitario', 'valor_total'],
   orcamento_parcelas: ['id', 'orcamento_id', 'numero_parcela', 'valor', 'data_vencimento'],
-  prospeccoes: ['id', 'nome_fantasia', 'etapa', 'status', 'responsavel_id', 'cliente_id'],
-  prospeccao_contatos: ['id', 'prospeccao_id', 'nome', 'principal'],
+  prospeccoes: [
+    'id', 'nome_fantasia', 'razao_social', 'cnpj', 'inscricao_estadual', 'site', 'origem',
+    'etapa', 'probabilidade', 'status', 'responsavel_id', 'cliente_id', 'convertida_em', 'anotacoes',
+    'end_logradouro', 'end_numero', 'end_complemento', 'end_bairro', 'end_cidade', 'end_uf', 'end_pais', 'end_cep'
+  ],
+  prospeccao_contatos: ['id', 'prospeccao_id', 'nome', 'cargo', 'email', 'telefone_fixo', 'telefone_celular', 'principal'],
   prospeccao_historico: [
     'id', 'prospeccao_id', 'tipo', 'acao', 'entidade', 'campo',
     'valor_anterior', 'valor_novo', 'detalhe', 'observacao', 'usuario_id', 'criado_em'
   ],
-  clientes: ['id', 'nome_fantasia'],
-  pedidos: ['id', 'numero', 'orcamento_id'],
+  clientes: [
+    'id', 'nome_fantasia', 'razao_social', 'cnpj', 'inscricao_estadual', 'site',
+    'status_cliente', 'dono_cliente', 'origem_captacao', 'anotacoes',
+    'reg_logradouro', 'reg_numero', 'reg_complemento', 'reg_bairro', 'reg_cidade', 'reg_uf', 'reg_pais', 'reg_cep',
+    'cob_logradouro', 'cob_numero', 'cob_complemento', 'cob_bairro', 'cob_cidade', 'cob_uf', 'cob_pais', 'cob_cep',
+    'ent_logradouro', 'ent_numero', 'ent_complemento', 'ent_bairro', 'ent_cidade', 'ent_uf', 'ent_pais', 'ent_cep'
+  ],
+  contatos_cliente: ['id', 'id_cliente', 'nome', 'cargo', 'email', 'telefone_fixo', 'telefone_celular'],
+  transportadoras: ['id', 'id_cliente', 'transportadora'],
+  pedidos_itens: ['id', 'pedido_id', 'produto_id', 'nome', 'quantidade', 'valor_total'],
+  pedido_parcelas: ['id', 'pedido_id', 'numero_parcela', 'valor', 'data_vencimento'],
+  pedidos: [
+    'id', 'numero', 'orcamento_id', 'cliente_id', 'contato_id', 'data_emissao', 'data_aprovacao',
+    'situacao', 'parcelas', 'tipo_parcela', 'forma_pagamento', 'transportadora',
+    'desconto_pagamento', 'desconto_especial', 'desconto_total', 'valor_final',
+    'observacoes', 'validade', 'prazo', 'dono', 'decisao_estoque_by', 'decisao_estoque_note'
+  ],
   usuarios: ['id', 'nome', 'perfil', 'modelo_permissoes_id'],
   modelos_permissoes: ['id', 'nome']
 };
@@ -179,15 +198,27 @@ function baseDados(orcamentos = []) {
     modelos_permissoes: [],
     clientes: [{ id: 50, nome_fantasia: 'Cliente Antigo' }],
     prospeccoes: [
-      { id: 1, nome_fantasia: 'Marmoraria Vitória', etapa: 'Proposta', status: 'ativa' },
+      {
+        id: 1, nome_fantasia: 'Marmoraria Vitória', razao_social: 'Marmoraria Vitória Ltda',
+        cnpj: '11.111.111/0001-11', etapa: 'Proposta', status: 'ativa',
+        end_cidade: 'Curitiba', end_uf: 'PR'
+      },
+      // Sem dados fiscais de propósito: é o caso que a conversão precisa recusar.
       { id: 2, nome_fantasia: 'Outra Empresa', etapa: 'Novo', status: 'ativa' }
     ],
-    prospeccao_contatos: [{ id: 10, prospeccao_id: 1, nome: 'Alberto', principal: true }],
+    prospeccao_contatos: [
+      { id: 10, prospeccao_id: 1, nome: 'Alberto Decisor', cargo: 'Diretor', email: 'alberto@mv.com', principal: true },
+      { id: 11, prospeccao_id: 1, nome: 'Zuleica Auxiliar', cargo: 'Assistente', principal: false }
+    ],
     prospeccao_historico: [],
     orcamentos,
     orcamentos_itens: [],
     orcamento_parcelas: [],
-    pedidos: []
+    contatos_cliente: [],
+    transportadoras: [],
+    pedidos: [],
+    pedidos_itens: [],
+    pedido_parcelas: []
   };
 }
 
@@ -561,9 +592,11 @@ test('falha ao gravar histórico não derruba a criação do orçamento', async 
 // precisa recusar em vez de gravar um pedido órfão.
 // ---------------------------------------------------------------------------
 
-test('aprovar um OCRP sem cliente não cria pedido órfão', async () => {
+test('aprovar um OCRP sem transportadora é recusado', async () => {
+  // No orçamento a transportadora é opcional — não existe cadastro dela para
+  // quem ainda não é cliente. No pedido ela diz como a peça sai da fábrica.
   const ctx = await montar(baseDados([
-    { id: 1, numero: 'OCRP1', prospeccao_id: 1, situacao: 'Enviado', valor_final: 500 }
+    { id: 1, numero: 'OCRP1', prospeccao_id: 1, situacao: 'Enviado', valor_final: 500, transportadora: '' }
   ]));
   try {
     const resp = await chamar(ctx.porta, '/api/orcamentos/1/status', {
@@ -571,10 +604,224 @@ test('aprovar um OCRP sem cliente não cria pedido órfão', async () => {
     });
     const corpo = await resp.json();
 
-    // A mudança de situação em si vale; o que não pode é o pedido sair.
     assert.strictEqual(corpo.convertido, false);
-    assert.match(corpo.convertErro, /prospecção em cliente/i);
+    assert.match(corpo.convertErro, /transportadora/i);
     assert.strictEqual(ctx.tabelas.pedidos.length, 0);
+    // E, sobretudo: nenhum cliente criado no meio do caminho.
+    assert.strictEqual(ctx.tabelas.clientes.length, 1);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('aprovar um OCRP cria o cliente e o pedido', async () => {
+  const ctx = await montar(baseDados([
+    {
+      id: 1, numero: 'OCRP1', prospeccao_id: 1, prospeccao_contato_id: 10,
+      situacao: 'Enviado', valor_final: 8500, dono: 'Henrique'
+    }
+  ]));
+  try {
+    const resp = await chamar(ctx.porta, '/api/orcamentos/1/status', {
+      method: 'PATCH',
+      body: JSON.stringify({ situacao: 'Aprovado', conversao: { transportadora: 'Braspress' } })
+    });
+    const corpo = await resp.json();
+    assert.strictEqual(corpo.convertido, true, corpo.convertErro || '');
+
+    // 1) Cliente criado a partir da prospecção, com os dados fiscais dela.
+    const cliente = ctx.tabelas.clientes.find(c => c.cnpj === '11.111.111/0001-11');
+    assert.ok(cliente, 'deveria ter criado o cliente');
+    assert.strictEqual(cliente.razao_social, 'Marmoraria Vitória Ltda');
+    assert.strictEqual(cliente.reg_cidade, 'Curitiba');
+    assert.strictEqual(cliente.ent_uf, 'PR');
+
+    // 2) Contatos copiados.
+    const copiados = ctx.tabelas.contatos_cliente.filter(c => c.id_cliente === cliente.id);
+    assert.strictEqual(copiados.length, 2);
+
+    // 3) A prospecção fechou como Ganho, sem ser apagada.
+    const prospeccao = ctx.tabelas.prospeccoes.find(p => p.id === 1);
+    assert.strictEqual(prospeccao.etapa, 'Ganho');
+    assert.strictEqual(prospeccao.status, 'arquivada');
+    assert.strictEqual(prospeccao.cliente_id, cliente.id);
+
+    // 4) O orçamento ganhou o cliente SEM perder a origem.
+    const orc = ctx.tabelas.orcamentos.find(o => o.id === 1);
+    assert.strictEqual(orc.cliente_id, cliente.id);
+    assert.strictEqual(orc.prospeccao_id, 1);
+    assert.strictEqual(orc.transportadora, 'Braspress');
+
+    // 5) O pedido nasceu com o cliente certo.
+    const pedido = ctx.tabelas.pedidos[0];
+    assert.strictEqual(pedido.cliente_id, cliente.id);
+    assert.strictEqual(pedido.transportadora, 'Braspress');
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('o contato do pedido é o contato COPIADO, não o da prospecção', async () => {
+  // O contato da prospecção vira uma linha nova em `contatos_cliente`, com id
+  // próprio. Repassar o id antigo apontaria para o contato de outro cliente que
+  // por acaso tivesse aquele número.
+  const ctx = await montar(baseDados([
+    { id: 1, numero: 'OCRP1', prospeccao_id: 1, prospeccao_contato_id: 10, situacao: 'Enviado' }
+  ]));
+  try {
+    await chamar(ctx.porta, '/api/orcamentos/1/status', {
+      method: 'PATCH',
+      body: JSON.stringify({ situacao: 'Aprovado', conversao: { transportadora: 'Jamef' } })
+    });
+
+    const novo = ctx.tabelas.contatos_cliente.find(c => c.nome === 'Alberto Decisor');
+    assert.ok(novo);
+    assert.notStrictEqual(novo.id, 10, 'o contato copiado deveria ter id próprio');
+    assert.strictEqual(ctx.tabelas.orcamentos[0].contato_id, novo.id);
+    assert.strictEqual(ctx.tabelas.pedidos[0].contato_id, novo.id);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('prospecção já convertida reaproveita o cliente existente', async () => {
+  // Dois OCRP da mesma prospecção podem ser aprovados. O segundo não pode
+  // falhar só porque o primeiro já criou o cliente.
+  const ctx = await montar(baseDados([
+    { id: 1, numero: 'OCRP1', prospeccao_id: 1, prospeccao_contato_id: 10, situacao: 'Enviado' },
+    { id: 2, numero: 'OCRP2', prospeccao_id: 1, prospeccao_contato_id: 10, situacao: 'Enviado' }
+  ]));
+  try {
+    const primeiro = await chamar(ctx.porta, '/api/orcamentos/1/status', {
+      method: 'PATCH', body: JSON.stringify({ situacao: 'Aprovado', conversao: { transportadora: 'Braspress' } })
+    });
+    assert.strictEqual((await primeiro.json()).convertido, true);
+    const clienteId = ctx.tabelas.prospeccoes.find(p => p.id === 1).cliente_id;
+
+    const segundo = await chamar(ctx.porta, '/api/orcamentos/2/status', {
+      method: 'PATCH', body: JSON.stringify({ situacao: 'Aprovado', conversao: { transportadora: 'Jamef' } })
+    });
+    const corpo = await segundo.json();
+    assert.strictEqual(corpo.convertido, true, corpo.convertErro || '');
+
+    // Um único cliente para as duas aprovações.
+    assert.strictEqual(ctx.tabelas.clientes.filter(c => c.cnpj === '11.111.111/0001-11').length, 1);
+    assert.strictEqual(ctx.tabelas.orcamentos.find(o => o.id === 2).cliente_id, clienteId);
+    assert.strictEqual(ctx.tabelas.pedidos.length, 2);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('no reaproveitamento, o contato é reencontrado pelo nome', async () => {
+  // Na segunda aprovação os contatos já foram copiados antes, então não há
+  // de-para novo: a busca é pelo nome, que é o que sobrevive à cópia.
+  const ctx = await montar(baseDados([
+    { id: 1, numero: 'OCRP1', prospeccao_id: 1, prospeccao_contato_id: 10, situacao: 'Enviado' },
+    { id: 2, numero: 'OCRP2', prospeccao_id: 1, prospeccao_contato_id: 11, situacao: 'Enviado' }
+  ]));
+  try {
+    await chamar(ctx.porta, '/api/orcamentos/1/status', {
+      method: 'PATCH', body: JSON.stringify({ situacao: 'Aprovado', conversao: { transportadora: 'X' } })
+    });
+    await chamar(ctx.porta, '/api/orcamentos/2/status', {
+      method: 'PATCH', body: JSON.stringify({ situacao: 'Aprovado', conversao: { transportadora: 'X' } })
+    });
+
+    const zuleica = ctx.tabelas.contatos_cliente.find(c => c.nome === 'Zuleica Auxiliar');
+    assert.ok(zuleica);
+    assert.strictEqual(ctx.tabelas.pedidos.find(p => p.orcamento_id === 2).contato_id, zuleica.id);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('prospecção sem dados fiscais bloqueia a conversão', async () => {
+  // A prospecção 2 não tem CNPJ nem razão social. Prospectar sem isso é
+  // legítimo; virar cliente, não.
+  const ctx = await montar(baseDados([
+    { id: 1, numero: 'OCRP1', prospeccao_id: 2, situacao: 'Enviado' }
+  ]));
+  try {
+    const resp = await chamar(ctx.porta, '/api/orcamentos/1/status', {
+      method: 'PATCH', body: JSON.stringify({ situacao: 'Aprovado', conversao: { transportadora: 'X' } })
+    });
+    const corpo = await resp.json();
+    assert.strictEqual(corpo.convertido, false);
+    assert.match(corpo.convertErro, /Razão Social|CNPJ/i);
+    assert.strictEqual(ctx.tabelas.pedidos.length, 0);
+    assert.strictEqual(ctx.tabelas.clientes.length, 1);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('a conversão inteira entra no histórico da prospecção', async () => {
+  const ctx = await montar(baseDados([
+    { id: 1, numero: 'OCRP1', prospeccao_id: 1, situacao: 'Enviado', valor_final: 8500 }
+  ]));
+  try {
+    await chamar(ctx.porta, '/api/orcamentos/1/status', {
+      method: 'PATCH', body: JSON.stringify({ situacao: 'Aprovado', conversao: { transportadora: 'Braspress' } })
+    });
+
+    const h = ctx.tabelas.prospeccao_historico.filter(x => String(x.prospeccao_id) === '1');
+    assert.ok(h.some(x => x.tipo === 'conversao' && /Cliente #/.test(x.valor_novo || '')));
+    assert.ok(h.some(x => x.tipo === 'etapa' && x.valor_novo === 'Ganho'));
+    assert.ok(h.some(x => x.tipo === 'arquivamento' && x.valor_novo === 'arquivada'));
+
+    const doOrcamento = h.find(x => x.entidade === 'Orçamento OCRP1' && x.tipo === 'conversao');
+    assert.ok(doOrcamento, 'faltou o evento da conversão do orçamento');
+    const detalhe = typeof doOrcamento.detalhe === 'string'
+      ? JSON.parse(doOrcamento.detalhe) : doOrcamento.detalhe;
+    assert.strictEqual(detalhe.transportadora, 'Braspress');
+    assert.strictEqual(detalhe.clienteJaExistia, false);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('CNPJ já cadastrado como cliente bloqueia em vez de duplicar', async () => {
+  const dados = baseDados([{ id: 1, numero: 'OCRP1', prospeccao_id: 1, situacao: 'Enviado' }]);
+  dados.clientes.push({ id: 51, nome_fantasia: 'Marmoraria Vitória', cnpj: '11.111.111/0001-11' });
+  const ctx = await montar(dados);
+  try {
+    const resp = await chamar(ctx.porta, '/api/orcamentos/1/status', {
+      method: 'PATCH', body: JSON.stringify({ situacao: 'Aprovado', conversao: { transportadora: 'X' } })
+    });
+    const corpo = await resp.json();
+    assert.strictEqual(corpo.convertido, false);
+    assert.match(corpo.convertErro, /CNPJ/i);
+    assert.strictEqual(ctx.tabelas.clientes.filter(c => c.cnpj === '11.111.111/0001-11').length, 1);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('a transportadora já gravada no orçamento serve para converter', async () => {
+  const ctx = await montar(baseDados([
+    { id: 1, numero: 'OCRP1', prospeccao_id: 1, situacao: 'Enviado', transportadora: 'Correios' }
+  ]));
+  try {
+    const resp = await chamar(ctx.porta, '/api/orcamentos/1/status', {
+      method: 'PATCH', body: JSON.stringify({ situacao: 'Aprovado' })
+    });
+    assert.strictEqual((await resp.json()).convertido, true);
+    assert.strictEqual(ctx.tabelas.pedidos[0].transportadora, 'Correios');
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('transportadora só com espaços não conta como preenchida', async () => {
+  const ctx = await montar(baseDados([
+    { id: 1, numero: 'OCRP1', prospeccao_id: 1, situacao: 'Enviado', transportadora: '   ' }
+  ]));
+  try {
+    const resp = await chamar(ctx.porta, '/api/orcamentos/1/status', {
+      method: 'PATCH', body: JSON.stringify({ situacao: 'Aprovado' })
+    });
+    assert.match((await resp.json()).convertErro, /transportadora/i);
   } finally {
     await ctx.encerrar();
   }
@@ -592,6 +839,42 @@ test('orçamento de cliente continua convertendo normalmente', async () => {
     assert.strictEqual(corpo.convertido, true, corpo.convertErro || '');
     assert.strictEqual(ctx.tabelas.pedidos.length, 1);
     assert.strictEqual(ctx.tabelas.pedidos[0].orcamento_id, 1);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('a transportadora vira cadastro do cliente recém-criado', async () => {
+  // Transportadora é cadastro por cliente. Sem isto, o cliente nasceria com a
+  // lista vazia e o próximo orçamento para ele — onde o campo é obrigatório —
+  // não teria o que escolher.
+  const ctx = await montar(baseDados([
+    { id: 1, numero: 'OCRP1', prospeccao_id: 1, situacao: 'Enviado' }
+  ]));
+  try {
+    await chamar(ctx.porta, '/api/orcamentos/1/status', {
+      method: 'PATCH', body: JSON.stringify({ situacao: 'Aprovado', conversao: { transportadora: 'Braspress' } })
+    });
+    const cliente = ctx.tabelas.clientes.find(c => c.cnpj === '11.111.111/0001-11');
+    const cadastradas = ctx.tabelas.transportadoras.filter(t => t.id_cliente === cliente.id);
+    assert.deepStrictEqual(cadastradas.map(t => t.transportadora), ['Braspress']);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('nao duplica a transportadora na segunda aprovacao', async () => {
+  const ctx = await montar(baseDados([
+    { id: 1, numero: 'OCRP1', prospeccao_id: 1, situacao: 'Enviado' },
+    { id: 2, numero: 'OCRP2', prospeccao_id: 1, situacao: 'Enviado' }
+  ]));
+  try {
+    for (const id of [1, 2]) {
+      await chamar(ctx.porta, '/api/orcamentos/' + id + '/status', {
+        method: 'PATCH', body: JSON.stringify({ situacao: 'Aprovado', conversao: { transportadora: 'braspress' } })
+      });
+    }
+    assert.strictEqual(ctx.tabelas.transportadoras.length, 1);
   } finally {
     await ctx.encerrar();
   }

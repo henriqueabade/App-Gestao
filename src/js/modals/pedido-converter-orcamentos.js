@@ -219,18 +219,46 @@
     return porId;
   }
 
+  /**
+   * Nome de cada prospecção, para rotular os orçamentos OCRP.
+   *
+   * Sem isto eles apareciam na lista com cliente "—": o vendedor via um
+   * orçamento para converter e não sabia de quem era.
+   */
+  async function carregarProspeccoes() {
+    const porId = new Map();
+    try {
+      const resp = await fetchApi('/api/prospeccoes/lista');
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+      const dados = await resp.json();
+      (Array.isArray(dados?.itens) ? dados.itens : []).forEach(p => {
+        porId.set(String(p.id), p.nome_fantasia || p.razao_social || 'Prospecção');
+      });
+    } catch (err) {
+      console.error('Erro ao carregar prospecções para conversão de orçamentos', err);
+    }
+    return porId;
+  }
+
   async function carregar() {
     try {
-      const [resp, clientes] = await Promise.all([
+      const [resp, clientes, prospeccoes] = await Promise.all([
         fetchApi('/api/orcamentos'),
-        carregarClientes()
+        carregarClientes(),
+        carregarProspeccoes()
       ]);
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
       const dados = await resp.json();
 
       disponiveis = (Array.isArray(dados) ? dados : [])
         .filter(podeConverter)
-        .map(o => ({ ...o, __cliente: clientes.get(String(o.cliente_id)) || '—' }))
+        .map(o => ({
+          ...o,
+          __cliente: clientes.get(String(o.cliente_id))
+            || (o.prospeccao_id
+                  ? (prospeccoes.get(String(o.prospeccao_id)) || 'Prospecção') + ' (prospecção)'
+                  : '—')
+        }))
         .sort((a, b) => String(a.numero || '').localeCompare(String(b.numero || ''), 'pt-BR', { numeric: true }));
     } catch (err) {
       console.error('Erro ao carregar orçamentos para conversão', err);

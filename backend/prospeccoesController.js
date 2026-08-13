@@ -1221,61 +1221,71 @@ router.delete('/:id/campanhas/:campanhaId', exigirPermissao('pros.campaign.manag
 // CONVERTER EM CLIENTE
 // ---------------------------------------------------------------------------
 
-router.post('/:id/converter', exigirPermissao(['pros.convert', 'cli.create']), async (req, res) => {
-  const { id } = req.params;
-  const api = createApiClient(req);
-  const usuarioId = usuarioDaRequisicao(req);
+/**
+ * Transforma a prospecção em cliente de verdade.
+ *
+ * Extraída da rota porque a conversão de um orçamento OCRP em pedido precisa
+ * exatamente disto — e uma segunda implementação divergiria da primeira na
+ * primeira regra que mudasse (dados fiscais obrigatórios, cópia de contatos,
+ * arquivamento como Ganho).
+ *
+ * Devolve também o DE-PARA dos contatos: quem era contato da prospecção passa a
+ * ter um id novo em `contatos_cliente`, e quem chamou precisa saber qual virou
+ * qual para não perder a referência.
+ *
+ * Idempotente por desenho: prospecção já convertida devolve o cliente que já
+ * existe, em vez de recusar. Quem precisa recusar é a rota.
+ */
+async function converterProspeccaoEmCliente(api, id, opcoes = {}, usuarioId = null) {
+  const p = await buscarProspeccao(api, id);
+
+  if (p.cliente_id) {
+    return { clienteId: p.cliente_id, jaExistia: true, contatos: [] };
+  }
+
+  // Aqui os dados fiscais deixam de ser opcionais: o cadastro de cliente
+  // exige. É de propósito que a cobrança só apareça neste ponto — prospectar
+  // um lead de feira sem CNPJ tem que continuar possível.
+  const faltando = [];
+  if (!texto(p.razao_social)) faltando.push('Razão Social');
+  if (!texto(p.nome_fantasia)) faltando.push('Nome Fantasia');
+  if (!texto(p.cnpj)) faltando.push('CNPJ');
+  if (faltando.length) {
+    const e = erro(422, `Complete os dados da empresa antes de converter: ${faltando.join(', ')}`);
+    e.camposFaltantes = faltando;
+    throw e;
+  }
+
+  const duplicados = await api.get('/api/clientes', { query: { cnpj: p.cnpj } }).catch(() => []);
+  if (Array.isArray(duplicados) && duplicados.length) {
+    const e = erro(409, 'Já existe um cliente com este CNPJ');
+    e.clienteExistenteId = duplicados[0]?.id ?? null;
+    throw e;
+  }
+
+  const contatos = await api
+    .get('/api/prospeccao_contatos', { query: { prospeccao_id: id } })
+    .catch(() => []);
+
+  // O endereço da prospecção é único; o cliente tem três. Replicamos nos três
+  // e a pessoa ajusta depois no módulo Clientes.
+  const endereco = {
+    logradouro: p.end_logradouro, numero: p.end_numero, complemento: p.end_complemento,
+    bairro: p.end_bairro, cidade: p.end_cidade, uf: p.end_uf, pais: p.end_pais, cep: p.end_cep
+  };
+  const espalhar = prefixo =>
+    Object.fromEntries(Object.entries(endereco).map(([k, v]) => [`${prefixo}_${k}`, v]));
+
   let clienteCriadoId = null;
-
   try {
-    const p = await buscarProspeccao(api, id);
-    if (p.cliente_id) {
-      return res.status(409).json({
-        error: 'Esta prospecção já foi convertida',
-        clienteId: p.cliente_id
-      });
-    }
-
-    // Aqui os dados fiscais deixam de ser opcionais: o cadastro de cliente
-    // exige. É de propósito que a cobrança só apareça neste ponto — prospectar
-    // um lead de feira sem CNPJ tem que continuar possível.
-    const faltando = [];
-    if (!texto(p.razao_social)) faltando.push('Razão Social');
-    if (!texto(p.nome_fantasia)) faltando.push('Nome Fantasia');
-    if (!texto(p.cnpj)) faltando.push('CNPJ');
-    if (faltando.length) {
-      return res.status(422).json({
-        error: `Complete os dados da empresa antes de converter: ${faltando.join(', ')}`,
-        camposFaltantes: faltando
-      });
-    }
-
-    const duplicados = await api.get('/api/clientes', { query: { cnpj: p.cnpj } }).catch(() => []);
-    if (Array.isArray(duplicados) && duplicados.length) {
-      return res.status(409).json({ error: 'Já existe um cliente com este CNPJ' });
-    }
-
-    const contatos = await api
-      .get('/api/prospeccao_contatos', { query: { prospeccao_id: id } })
-      .catch(() => []);
-
-    // O endereço da prospecção é único; o cliente tem três. Replicamos nos três
-    // e a pessoa ajusta depois no módulo Clientes.
-    const endereco = {
-      logradouro: p.end_logradouro, numero: p.end_numero, complemento: p.end_complemento,
-      bairro: p.end_bairro, cidade: p.end_cidade, uf: p.end_uf, pais: p.end_pais, cep: p.end_cep
-    };
-    const espalhar = prefixo =>
-      Object.fromEntries(Object.entries(endereco).map(([k, v]) => [`${prefixo}_${k}`, v]));
-
     const cliente = await api.post('/api/clientes', {
       razao_social: p.razao_social,
       nome_fantasia: p.nome_fantasia,
       cnpj: p.cnpj,
       inscricao_estadual: p.inscricao_estadual,
       site: p.site,
-      status_cliente: texto(req.body?.status_cliente) || 'Ativo',
-      dono_cliente: texto(req.body?.dono_cliente) || null,
+      status_cliente: texto(opcoes.status_cliente) || 'Ativo',
+      dono_cliente: texto(opcoes.dono_cliente) || null,
       origem_captacao: p.origem,
       anotacoes: p.anotacoes,
       ...espalhar('reg'),
@@ -1286,14 +1296,19 @@ router.post('/:id/converter', exigirPermissao(['pros.convert', 'cli.create']), a
     clienteCriadoId = cliente?.id ?? cliente?.[0]?.id;
     if (!clienteCriadoId) throw erro(500, 'A API não devolveu o id do cliente criado');
 
+    const deParaContatos = [];
     for (const c of Array.isArray(contatos) ? contatos : []) {
-      await api.post('/api/contatos_cliente', {
+      const criado = await api.post('/api/contatos_cliente', {
         id_cliente: clienteCriadoId,
         nome: c.nome,
         cargo: c.cargo,
         telefone_celular: c.telefone_celular,
         telefone_fixo: c.telefone_fixo,
         email: c.email
+      });
+      deParaContatos.push({
+        prospeccaoContatoId: c.id,
+        clienteContatoId: criado?.id ?? criado?.[0]?.id ?? null
       });
     }
 
@@ -1312,7 +1327,12 @@ router.post('/:id/converter', exigirPermissao(['pros.convert', 'cli.create']), a
         tipo: 'conversao', acao: 'converteu', entidade: 'Conversão em cliente',
         valor_anterior: 'Prospecção', valor_novo: `Cliente #${clienteCriadoId}`,
         observacao: `${(Array.isArray(contatos) ? contatos : []).length} contato(s) copiado(s)`,
-        detalhe: { clienteId: clienteCriadoId, status_cliente: texto(req.body?.status_cliente) || 'Ativo', dono_cliente: texto(req.body?.dono_cliente) }
+        detalhe: {
+          clienteId: clienteCriadoId,
+          status_cliente: texto(opcoes.status_cliente) || 'Ativo',
+          dono_cliente: texto(opcoes.dono_cliente),
+          origem: texto(opcoes.origem)
+        }
       },
       {
         tipo: 'etapa', acao: 'moveu', entidade: 'Etapa do funil', campo: 'etapa',
@@ -1324,7 +1344,7 @@ router.post('/:id/converter', exigirPermissao(['pros.convert', 'cli.create']), a
       }
     ], usuarioId);
 
-    res.status(201).json({ clienteId: clienteCriadoId });
+    return { clienteId: clienteCriadoId, jaExistia: false, contatos: deParaContatos, prospeccao: p };
   } catch (err) {
     // Sem transação: se o cliente entrou mas a prospecção não fechou, ficariam
     // os dois vivos e o próximo "Converter" esbarraria no CNPJ duplicado.
@@ -1338,8 +1358,35 @@ router.post('/:id/converter', exigirPermissao(['pros.convert', 'cli.create']), a
         );
       }
     }
+    throw err;
+  }
+}
+
+router.post('/:id/converter', exigirPermissao(['pros.convert', 'cli.create']), async (req, res) => {
+  const { id } = req.params;
+  const api = createApiClient(req);
+
+  try {
+    const resultado = await converterProspeccaoEmCliente(api, id, {
+      status_cliente: req.body?.status_cliente,
+      dono_cliente: req.body?.dono_cliente
+    }, usuarioDaRequisicao(req));
+
+    // Pela tela, reconverter é engano: o usuário precisa saber que aquele
+    // cliente já existe em vez de achar que acabou de criá-lo.
+    if (resultado.jaExistia) {
+      return res.status(409).json({
+        error: 'Esta prospecção já foi convertida',
+        clienteId: resultado.clienteId
+      });
+    }
+
+    res.status(201).json({ clienteId: resultado.clienteId });
+  } catch (err) {
     console.error('Erro ao converter prospecção:', err);
-    res.status(err.status || 500).json({ error: err.message || 'Erro ao converter prospecção' });
+    const corpo = { error: err.message || 'Erro ao converter prospecção' };
+    if (err.camposFaltantes) corpo.camposFaltantes = err.camposFaltantes;
+    res.status(err.status || 500).json(corpo);
   }
 });
 
@@ -1468,5 +1515,8 @@ module.exports = router;
 // histórico da prospecção, e duplicar a gravação seria arriscar dois formatos
 // de evento para o mesmo fato.
 module.exports.registrarHistorico = registrarHistorico;
+// Usado pela conversão de um orçamento OCRP em pedido, que precisa criar o
+// cliente antes de emitir o pedido.
+module.exports.converterProspeccaoEmCliente = converterProspeccaoEmCliente;
 module.exports.ETAPAS = ETAPAS;
 module.exports.PROBABILIDADE_PADRAO = PROBABILIDADE_PADRAO;

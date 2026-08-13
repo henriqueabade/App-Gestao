@@ -93,6 +93,35 @@ function obterNomeCliente(id) {
   return cacheClientes.get(id) || '—';
 }
 
+// Nome das prospecções, para os orçamentos OCRP. Eles não têm cliente até
+// serem aprovados; sem isto a coluna Cliente mostrava "—" e o orçamento
+// ficava anônimo na lista.
+const cacheProspeccoes = new Map();
+
+async function carregarProspeccoesParaOrcamentos() {
+  try {
+    const resp = await fetchApi('/api/prospeccoes/lista?incluirArquivadas=1');
+    if (!resp.ok) throw new Error('Erro HTTP ' + resp.status);
+    const dados = await resp.json();
+    (Array.isArray(dados?.itens) ? dados.itens : []).forEach(p => {
+      cacheProspeccoes.set(String(p.id), p.nome_fantasia || p.razao_social || 'Prospecção');
+    });
+  } catch (err) {
+    // Falha aqui não pode derrubar a lista de orçamentos: o pior caso é a
+    // coluna mostrar o rótulo genérico.
+    console.error('Erro ao carregar prospecções para a lista de orçamentos:', err);
+  }
+}
+
+/** Quem é o destinatário do orçamento: o cliente ou, ainda, a prospecção. */
+function obterDestinatario(orcamento) {
+  if (orcamento.cliente_id) return obterNomeCliente(orcamento.cliente_id);
+  if (orcamento.prospeccao_id) {
+    return (cacheProspeccoes.get(String(orcamento.prospeccao_id)) || 'Prospecção') + ' (prospecção)';
+  }
+  return '—';
+}
+
 function formatarDataLocal(isoDate) {
     if (!isoDate) return '';
     const data = new Date(isoDate);
@@ -251,7 +280,8 @@ async function carregarOrcamentos() {
         // primeira vez — o cache de nomes é aditivo e não expira.
         const [resp] = await Promise.all([
             fetchApi('/api/orcamentos'),
-            cacheClientes.size ? Promise.resolve() : carregarClientes()
+            cacheClientes.size ? Promise.resolve() : carregarClientes(),
+            cacheProspeccoes.size ? Promise.resolve() : carregarProspeccoesParaOrcamentos()
         ]);
         const data = await resp.json();
         const tbody = document.getElementById('orcamentosTabela');
@@ -293,7 +323,7 @@ async function carregarOrcamentos() {
             const convertClass = convertBlocked ? 'icon-disabled' : '';
             tr.innerHTML = `
                 <td data-perm-col="col_orc_num" class="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">${o.numero}</td>
-                <td data-perm-col="col_orc_cliente" class="px-6 py-4 whitespace-nowrap text-sm text-white">${obterNomeCliente(o.cliente_id)}</td>
+                <td data-perm-col="col_orc_cliente" class="px-6 py-4 whitespace-nowrap text-sm text-white">${obterDestinatario(o)}</td>
                 <td data-perm-col="col_orc_data" class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-violet)">${dataFormatada}</td>
                 <td data-perm-col="col_orc_total" class="px-6 py-4 whitespace-nowrap text-sm text-white">${valor}</td>
                 <td data-perm-col="col_orc_cond_pagto" class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-violet)">${condicao}</td>

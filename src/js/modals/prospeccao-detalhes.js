@@ -719,6 +719,10 @@
     if (p.cliente_id) {
       desligar('detProspConverter', `Já convertida no cliente #${p.cliente_id}`);
       desligar('detProspExcluir', 'Prospecção convertida não pode ser excluída');
+      // Quem já é cliente recebe orçamento ORC pelo módulo de Orçamentos. Abrir
+      // outro OCRP aqui criaria uma proposta para uma oportunidade que já fechou.
+      desligar('detProspNovoOrcamento',
+        `Já é o cliente #${p.cliente_id} — emita o orçamento pelo módulo Orçamentos`);
     }
     if (p.status === 'arquivada' && p.etapa === 'Ganho' && !p.cliente_id) {
       // Ganho mas ainda sem cliente: converter continua sendo o caminho.

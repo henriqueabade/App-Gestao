@@ -227,7 +227,65 @@
   });
 
   await carregarUsuarios();
-  await carregarClientes();
+
+  // -------------------------------------------------------------------------
+  // Orçamento de prospecção (OCRP)
+  //
+  // Enquanto não houver cliente, não há lista de clientes a escolher nem
+  // transportadoras cadastradas — elas são cadastro POR cliente. O destinatário
+  // vem da prospecção e a transportadora é digitada, virando cadastro do
+  // cliente no momento em que a aprovação o cria.
+  // -------------------------------------------------------------------------
+  const daProspeccao = Boolean(data.prospeccao_id) && !data.cliente_id;
+  let transportadoraTexto = null;
+
+  if (daProspeccao) {
+    const escapar = v => String(v ?? '')
+      .replace(/&/g, '&amp;').replace(/"/g, '&quot;')
+      .replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+    const ficha = await fetchApi(`/api/prospeccoes/${data.prospeccao_id}`)
+      .then(r => r.json()).catch(() => ({}));
+    const p = ficha.prospeccao || {};
+    const nome = p.nome_fantasia || p.razao_social || 'Prospecção';
+
+    editarCliente.innerHTML = `<option value="${escapar(data.prospeccao_id)}">${escapar(nome)}</option>`;
+    editarCliente.value = String(data.prospeccao_id);
+    editarCliente.setAttribute('data-filled', 'true');
+    editarCliente.disabled = true;
+    editarCliente.classList.add('opacity-70', 'cursor-not-allowed');
+    const rotuloCliente = document.querySelector('label[for="editarCliente"]');
+    if (rotuloCliente) rotuloCliente.textContent = 'Prospecção';
+
+    editarContato.innerHTML = '<option value="" disabled selected hidden></option>' +
+      (ficha.contatos || []).map(c => `<option value="${escapar(c.id)}">${escapar(c.nome)}</option>`).join('');
+    if (data.prospeccao_contato_id) {
+      editarContato.value = String(data.prospeccao_contato_id);
+      editarContato.setAttribute('data-filled', 'true');
+    }
+
+    // O <select> de transportadora não tem o que oferecer aqui. Trocamos por um
+    // campo de texto no mesmo lugar, mantendo o select no DOM (escondido) para
+    // não quebrar o que o lê — a leitura passa a ser do input.
+    transportadoraTexto = document.createElement('input');
+    transportadoraTexto.type = 'text';
+    transportadoraTexto.id = 'editarTransportadoraTexto';
+    transportadoraTexto.placeholder = 'Transportadora (obrigatória para aprovar)';
+    transportadoraTexto.value = data.transportadora || '';
+    transportadoraTexto.className = editarTransportadora.className
+      .replace('appearance-none', '').replace('pr-12', 'pr-4');
+    editarTransportadora.classList.add('hidden');
+    editarTransportadora.required = false;
+    editarTransportadora.after(transportadoraTexto);
+    // A seta do select ficaria pairando sobre o campo de texto.
+    editarTransportadora.parentElement?.querySelector('.fa-chevron-down')?.classList.add('hidden');
+    const rotuloTransp = document.querySelector('label[for="editarTransportadora"]');
+    if (rotuloTransp) rotuloTransp.classList.add('hidden');
+  }
+
+  // Em modo prospecção a lista de clientes não é carregada de propósito:
+  // sobrescreveria a opção única montada acima.
+  if (!daProspeccao) await carregarClientes();
   if (data.cliente_id) {
     editarCliente.value = data.cliente_id;
     editarCliente.setAttribute('data-filled', 'true');
@@ -734,8 +792,15 @@
     if(!contatoVal) missing.push('Contato');
     const condicaoVal = editarCondicao.value;
     if(!condicaoVal) missing.push('Condição de pagamento');
-    const transportadoraVal = editarTransportadora.value;
-    if(!transportadoraVal) missing.push('Transportadora');
+    // Em modo prospecção o <select> está escondido e vazio de propósito: a
+    // transportadora é digitada. Validar o select aqui tornava IMPOSSÍVEL
+    // salvar um OCRP — reclamava de um campo que o usuário nem vê.
+    const transportadoraVal = daProspeccao
+      ? (transportadoraTexto?.value || '').trim()
+      : editarTransportadora.value;
+    // Só é obrigatória para aprovar; num rascunho de prospecção ela ainda não
+    // existe (é cadastro por cliente).
+    if(!transportadoraVal && !(daProspeccao && currentStatus !== 'Aprovado')) missing.push('Transportadora');
     const formaPagamentoVal = editarFormaPagamento.value;
     if(!formaPagamentoVal) missing.push('Forma de Pagamento');
     const donoVal = donoSelect.value;
@@ -813,10 +878,23 @@
     const descontoTotal = descPagTot + descEspTot;
     const subtotal = parseCurrencyToCents(document.getElementById('subtotalOrcamento').textContent) / 100;
     const total = subtotal - descontoTotal;
-    const transportadoraText = editarTransportadora.options[editarTransportadora.selectedIndex]?.textContent || '';
+    // Em modo prospecção a transportadora é digitada, não escolhida — não há
+    // cadastro dela para quem ainda não é cliente.
+    const transportadoraText = daProspeccao
+      ? (transportadoraTexto?.value || '').trim()
+      : (editarTransportadora.options[editarTransportadora.selectedIndex]?.textContent || '');
+
+    // Segunda linha de defesa — a primeira é , antes de
+    // abrir a revisão de estoque.
+    if (exigeTransportadora()) return;
+
     const body = {
-      cliente_id: clienteVal,
-      contato_id: contatoVal,
+      // Num OCRP o select carrega o id da PROSPECÇÃO; mandá-lo como cliente_id
+      // apontaria para o cliente de mesmo número. O vínculo é preservado pelo
+      // backend, que reaproveita o que já está gravado.
+      cliente_id: daProspeccao ? null : clienteVal,
+      contato_id: daProspeccao ? null : contatoVal,
+      prospeccao_contato_id: daProspeccao ? (contatoVal || null) : undefined,
       situacao: currentStatus,
       parcelas,
       tipo_parcela: tipoParcela,
@@ -974,12 +1052,30 @@
     }
   }
 
+  /**
+   * Num OCRP a transportadora é obrigatória para aprovar — é ela que diz como a
+   * peça sai da fábrica, e o backend recusa a conversão sem ela.
+   *
+   * Cobrada AQUI, antes da revisão de estoque: aprovar abre um modal longo, de
+   * decisão peça a peça. Descobrir a falta só no fim jogaria fora todo esse
+   * trabalho. Devolve  quando barrou.
+   */
+  function exigeTransportadora() {
+    if (!daProspeccao || currentStatus !== 'Aprovado') return false;
+    if ((transportadoraTexto?.value || '').trim()) return false;
+    showToast('Informe a transportadora para aprovar este orçamento', 'error');
+    transportadoraTexto?.focus();
+    transportadoraTexto?.classList.add('border-red-500');
+    return true;
+  }
+
   // Captura o submit antes do handler padrão para abrir o modal de conversão quando necessário
   if (form) {
     form.addEventListener('submit', e => {
       if (currentStatus === 'Aprovado') {
         e.preventDefault();
         if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+        if (exigeTransportadora()) return;
         const closeAfter = e.submitter?.id === 'salvarFecharOrcamento' || currentStatus !== initialStatus;
         openConverterModal(() => saveChanges(closeAfter));
       }
@@ -995,6 +1091,7 @@
       currentStatus = 'Aprovado';
       updateStatusTag();
       updateConverterBtn();
+      if (exigeTransportadora()) return;
       openConverterModal(() => saveChanges(true));
     }, true);
   }

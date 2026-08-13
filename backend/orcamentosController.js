@@ -3,7 +3,7 @@ const { createApiClient } = require('./apiHttpClient');
 const { exigirPermissao, exigirSupAdmin } = require('./permissionsController');
 const { aplicarConversaoNoEstoque } = require('./conversaoAplicar');
 const { excluirOrcamentoEmCascata } = require('./exclusaoEmCascata');
-const { registrarHistorico } = require('./prospeccoesController');
+const { registrarHistorico, converterProspeccaoEmCliente } = require('./prospeccoesController');
 
 const router = express.Router();
 
@@ -166,6 +166,119 @@ async function anotarNaProspeccao(api, req, orcamento, evento) {
   } catch (err) {
     console.error('[orcamentos] falha ao anotar no histórico da prospecção:', err?.message || err);
   }
+}
+
+/**
+ * Fecha o negócio de um OCRP: a prospecção vira cliente e o orçamento passa a
+ * ter os DOIS vínculos — `cliente_id` novo e `prospeccao_id` preservado, para
+ * que a origem não se perca.
+ *
+ * Devolve os campos que o orçamento ganhou, para o chamador aplicar sobre a
+ * cópia em memória antes de montar o pedido.
+ */
+async function promoverProspeccao(api, orcamento, conversao = {}) {
+  // A transportadora é cadastro por cliente e não existe durante a prospecção.
+  // No orçamento ela é opcional; no pedido, não — é ela que diz como a peça
+  // sai da fábrica. Esta é a hora de cobrar.
+  const transportadora = String(
+    conversao?.transportadora ?? orcamento.transportadora ?? ''
+  ).trim();
+  if (!transportadora) {
+    const error = new Error('Informe a transportadora para converter este orçamento em pedido.');
+    error.status = 400;
+    error.code = 'TRANSPORTADORA_OBRIGATORIA';
+    throw error;
+  }
+
+  // `converterProspeccaoEmCliente` é idempotente: prospecção já convertida
+  // devolve o cliente existente em vez de recusar. Isso importa aqui — dois
+  // OCRP da mesma prospecção podem ser aprovados, e o segundo não pode falhar
+  // só porque o primeiro já criou o cliente.
+  const resultado = await converterProspeccaoEmCliente(api, orcamento.prospeccao_id, {
+    dono_cliente: orcamento.dono,
+    origem: `Orçamento ${orcamento.numero}`
+  }, conversao?.decisaoBy ?? null);
+
+  // O contato da prospecção foi copiado para `contatos_cliente` com id NOVO.
+  // Sem este de-para o pedido nasceria sem contato, ou pior, apontando para o
+  // contato de outro cliente que por acaso tivesse o mesmo id.
+  let contatoId = null;
+  if (orcamento.prospeccao_contato_id) {
+    const par = (resultado.contatos || [])
+      .find(c => String(c.prospeccaoContatoId) === String(orcamento.prospeccao_contato_id));
+    contatoId = par?.clienteContatoId ?? null;
+
+    // Prospecção já convertida antes: os contatos foram copiados naquela hora e
+    // não vêm neste resultado. Procura pelo nome, que é o que sobrevive à cópia.
+    if (!contatoId && resultado.jaExistia) {
+      const [origem, destinos] = await Promise.all([
+        api.get(`/api/prospeccao_contatos/${orcamento.prospeccao_contato_id}`).catch(() => null),
+        api.get('/api/contatos_cliente', { query: { id_cliente: resultado.clienteId } }).catch(() => [])
+      ]);
+      const nome = String(origem?.nome || '').trim().toLowerCase();
+      const achado = nome && (Array.isArray(destinos) ? destinos : [])
+        .find(c => String(c.nome || '').trim().toLowerCase() === nome);
+      contatoId = achado?.id ?? null;
+    }
+  }
+
+  // Transportadora é cadastro POR CLIENTE. Sem registrá-la para o cliente que
+  // acabou de nascer, ele começaria a vida com a lista vazia — e o próximo
+  // orçamento para ele, onde o campo é obrigatório, não teria o que escolher.
+  try {
+    const jaTem = await api.get('/api/transportadoras', {
+      query: { id_cliente: resultado.clienteId }
+    }).catch(() => []);
+    const existe = (Array.isArray(jaTem) ? jaTem : []).some(
+      t => String(t.transportadora || '').trim().toLowerCase() === transportadora.toLowerCase()
+    );
+    if (!existe) {
+      await api.post('/api/transportadoras', {
+        id_cliente: resultado.clienteId,
+        transportadora
+      });
+    }
+  } catch (err) {
+    // Não derruba a conversão: o pedido guarda o nome da transportadora de
+    // qualquer forma, e o cadastro pode ser refeito na tela de Clientes.
+    console.error('[orcamentos] não foi possível cadastrar a transportadora do novo cliente:',
+      err?.message || err);
+  }
+
+  const patch = {
+    cliente_id: resultado.clienteId,
+    contato_id: contatoId,
+    transportadora
+  };
+  await api.put(`/api/orcamentos/${orcamento.id}`, {
+    ...orcamento,
+    ...patch,
+    // Preservado explicitamente: a API grava o payload inteiro, e omitir o
+    // vínculo aqui apagaria a origem justamente no momento em que ela passa a
+    // ser a parte mais interessante da história.
+    prospeccao_id: orcamento.prospeccao_id,
+    prospeccao_contato_id: orcamento.prospeccao_contato_id ?? null
+  });
+
+  await registrarHistorico(api, orcamento.prospeccao_id, {
+    tipo: 'conversao',
+    acao: 'converteu',
+    entidade: `Orçamento ${orcamento.numero}`,
+    valor_anterior: 'Orçamento de prospecção',
+    valor_novo: `Cliente #${resultado.clienteId}`,
+    observacao: resultado.jaExistia
+      ? 'Cliente já existia — o orçamento foi vinculado a ele'
+      : 'Cliente criado a partir da prospecção na aprovação do orçamento',
+    detalhe: {
+      orcamento_id: orcamento.id,
+      numero: orcamento.numero,
+      clienteId: resultado.clienteId,
+      clienteJaExistia: resultado.jaExistia,
+      transportadora
+    }
+  }, conversao?.decisaoBy ?? null);
+
+  return patch;
 }
 
 // ---------------------------------------------------------------------------
@@ -342,16 +455,16 @@ async function converterOrcamentoEmPedido(api, id, conversao = null) {
     throw error;
   }
 
-  // Um OCRP ainda não tem cliente. Deixar passar criaria um pedido com
-  // `cliente_id` nulo — sem dono para faturar, entregar ou cobrar, e invisível
-  // na ficha de qualquer cliente. A criação automática do cliente a partir da
-  // prospecção é o passo seguinte; até lá, converte-se a prospecção primeiro.
+  // Um OCRP ainda não tem cliente. É AQUI que a prospecção vira cliente: o
+  // momento em que o negócio fecha de fato. Fazer isso antes obrigaria a
+  // cadastrar como cliente quem ainda era só uma oportunidade.
   if (!orcamento.cliente_id) {
-    const error = new Error(orcamento.prospeccao_id
-      ? 'Este orçamento é de uma prospecção. Converta a prospecção em cliente antes de gerar o pedido.'
-      : 'Orçamento sem cliente não pode virar pedido.');
-    error.status = 400;
-    throw error;
+    if (!orcamento.prospeccao_id) {
+      const error = new Error('Orçamento sem cliente não pode virar pedido.');
+      error.status = 400;
+      throw error;
+    }
+    Object.assign(orcamento, await promoverProspeccao(api, orcamento, conversao));
   }
 
   const [itens, parcelas] = await Promise.all([
