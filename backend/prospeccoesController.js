@@ -136,6 +136,10 @@ function mapProspeccaoLista(row = {}, { nomes, contatoPrincipal }) {
     cliente_id: row.cliente_id ?? null,
     atualizado_em: row.atualizado_em,
     criado_em: row.criado_em,
+    // A anotação do cadastro aparece no popover (i) da grade. É a "Anotação"
+    // da ficha — NÃO se confunde com as `prospeccao_notas`, que são o
+    // histórico de notas do acompanhamento e vivem só no detalhe.
+    anotacoes: row.anotacoes,
     // O contato principal alimenta a coluna de e-mail/telefone da grade sem
     // exigir que o front abra o detalhe de cada linha.
     contato_principal: contatoPrincipal

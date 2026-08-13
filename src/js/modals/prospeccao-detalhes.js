@@ -19,8 +19,19 @@
     return fetch(`${baseUrl}${path}`, options);
   }
 
+  // Popover (i) dos contatos — arquivo compartilhado com o formulário.
+  if (!window.ProspeccaoContatoPopup) {
+    const s = document.createElement('script');
+    s.src = '../js/modals/prospeccao-contato-popup.js';
+    document.head.appendChild(s);
+  }
+
   const close = () => Modal.close('detalhesProspeccao');
   const get = id => document.getElementById(id);
+
+  // Lista desenhada na aba Contatos; os handlers de editar/remover
+  // trabalham por índice sobre ela.
+  let contatosNaTela = [];
 
   document.getElementById('voltarDetalhesProspeccao')?.addEventListener('click', close);
   document.addEventListener('keydown', function esc(e) {
@@ -269,6 +280,10 @@
     get('detProspAnotacoes').textContent = p.anotacoes;
   }
 
+  /**
+   * Cargo e papel vivem no popover (i), não em colunas — assim os telefones
+   * cabem inteiros e a tabela não precisa rolar na horizontal.
+   */
   function renderContatos(contatos) {
     const alvo = get('detProspContatos');
     if (!contatos.length) {
@@ -276,22 +291,27 @@
       return;
     }
 
-    const linhas = contatos.map(c => {
-      const papeis = [];
-      if (c.principal) papeis.push('<span class="badge-info px-2 py-1 rounded text-xs">Principal</span>');
-      if (c.decisor) papeis.push('<span class="badge-success px-2 py-1 rounded text-xs">Decisor</span>');
+    const linhas = contatos.map((c, i) => {
       const email = texto(c.email)
         ? `<a href="mailto:${esc(c.email)}" class="text-primary hover:text-primary-light">${esc(c.email)}</a>`
         : VAZIO;
       return `
         <tr class="border-b border-white/5">
-          <td class="px-4 py-3 text-sm text-white">${esc(c.nome)}</td>
-          <td class="px-4 py-3 text-sm text-white/80">${texto(c.cargo) || VAZIO}</td>
+          <td class="px-4 py-3 text-sm text-white">
+            <div class="flex items-center gap-2">
+              <span>${esc(c.nome)}</span>
+              <i class="info-icon" data-info-contato="${i}"></i>
+            </div>
+          </td>
           <td class="px-4 py-3 text-sm">${email}</td>
-          <td class="px-4 py-3 text-sm text-white/80">${texto(c.telefone_celular) || VAZIO}</td>
-          <td class="px-4 py-3 text-sm text-white/80">${texto(c.telefone_fixo) || VAZIO}</td>
-          <td class="px-4 py-3 text-sm">${papeis.join(' ') || VAZIO}</td>
-        </tr>`;
+          <td class="px-4 py-3 text-sm text-white/80 celula-sem-quebra">${texto(c.telefone_celular) || VAZIO}</td>
+          <td class="px-4 py-3 text-sm text-white/80 celula-sem-quebra">${texto(c.telefone_fixo) || VAZIO}</td>
+          <td class="px-4 py-3 text-sm">
+            <div class="flex items-center gap-2">
+              <i data-perm="pros.contact.edit" class="fas fa-edit acao-tabela acao-tabela--editar" data-editar-contato="${i}" title="Editar contato"></i>
+              <i data-perm="pros.contact.remove" class="fas fa-trash acao-tabela acao-tabela--excluir" data-remover-contato="${i}" title="Remover contato"></i>
+            </div>
+          </td>`;
     }).join('');
 
     alvo.innerHTML = `
@@ -300,16 +320,21 @@
           <thead>
             <tr class="border-b border-white/10">
               <th class="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Nome</th>
-              <th class="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Cargo</th>
               <th class="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">E-mail</th>
               <th class="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Celular</th>
               <th class="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Tel. fixo</th>
-              <th class="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Papel</th>
+              <th class="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Ações</th>
             </tr>
           </thead>
           <tbody>${linhas}</tbody>
         </table>
       </div>`;
+
+    // Guarda a lista para os handlers, que trabalham por índice.
+    contatosNaTela = contatos;
+    alvo.querySelectorAll('[data-info-contato]').forEach(icone => {
+      window.ProspeccaoContatoPopup?.ligar(icone, contatos[Number(icone.dataset.infoContato)]);
+    });
   }
 
   function renderInteracoes(interacoes) {
@@ -347,7 +372,7 @@
         <div class="flex justify-between items-start gap-3 mb-2">
           ${texto(n.titulo) ? `<h4 class="font-medium text-white">${esc(n.titulo)}</h4>` : '<span></span>'}
           <button type="button" data-remover="nota" data-id="${esc(n.id)}" data-perm="pros.note.remove"
-                  class="text-gray-400 hover:text-white flex-shrink-0" title="Remover nota">
+                  class="acao-tabela acao-tabela--excluir flex-shrink-0" title="Remover nota">
             <i class="fas fa-trash pointer-events-none"></i>
           </button>
         </div>
@@ -398,7 +423,7 @@
         <td class="px-4 py-3 text-sm text-white/80">${texto(c.resposta) || VAZIO}</td>
         <td class="px-4 py-3 text-sm">
           <button type="button" data-remover="campanha" data-id="${esc(c.id)}" data-perm="pros.campaign.manage"
-                  class="text-gray-400 hover:text-white" title="Remover campanha">
+                  class="acao-tabela acao-tabela--excluir" title="Remover campanha">
             <i class="fas fa-trash pointer-events-none"></i>
           </button>
         </td>
@@ -667,41 +692,73 @@
     Modal.open('modals/prospeccoes/contato.html', '../js/modals/prospeccao-contato.js', 'contatoProspeccao', true);
   });
 
-  async function gravarNovoContato(evento) {
-    const contato = evento.detail;
-    // `indice` só vem quando o sub-modal está EDITANDO um item da lista em
-    // memória do cadastro — aqui nunca é o caso.
-    if (!contato?.nome || contato.indice !== undefined) return;
-
+  /**
+   * Grava o delta de contatos.
+   *
+   * O PUT precisa levar a ficha inteira: o backend regrava a prospecção com o
+   * que recebe, e mandar só o delta apagaria os demais campos.
+   */
+  async function salvarDeltaContatos(delta, mensagem) {
     try {
       const resp = await fetchApi(`/api/prospeccoes/${resumo.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...(window.prospeccaoDetalhesCarregada || {}),
-          contatosNovos: [contato]
-        })
+        body: JSON.stringify({ ...(window.prospeccaoDetalhesCarregada || {}), ...delta })
       });
       const corpo = await resp.json().catch(() => ({}));
       if (!resp.ok) {
-        showToast(corpo.error || 'Erro ao adicionar contato', 'error');
+        showToast(corpo.error || 'Erro ao salvar contato', 'error');
         return;
       }
       await carregar();
       window.ProspeccoesModulo?.carregar?.(true);
-      showToast('Contato adicionado', 'success');
+      showToast(mensagem, 'success');
     } catch (err) {
-      console.error('Erro ao adicionar contato', err);
+      console.error('Erro ao salvar contato', err);
       showToast('Falha de comunicação com o servidor', 'error');
     }
   }
 
-  window.addEventListener('prospeccaoContatoSalvo', gravarNovoContato);
+  /**
+   * O sub-modal serve inclusão E edição. Aqui a distinção é o `id`: quem já
+   * existe no banco vira `contatosAtualizados`, quem não existe vira
+   * `contatosNovos`. (`indice` só aparece quando quem abriu é a lista em
+   * memória do cadastro, nunca este modal.)
+   */
+  async function aoSalvarContato(evento) {
+    const contato = evento.detail;
+    if (!contato?.nome) return;
+    if (contato.id) {
+      await salvarDeltaContatos({ contatosAtualizados: [contato] }, 'Contato atualizado');
+    } else {
+      await salvarDeltaContatos({ contatosNovos: [contato] }, 'Contato adicionado');
+    }
+  }
+
+  // Editar e remover contato, por delegação na aba.
+  get('detProspContatos')?.addEventListener('click', async e => {
+    const editar = e.target.closest('[data-editar-contato]');
+    if (editar) {
+      const c = contatosNaTela[Number(editar.dataset.editarContato)];
+      if (!c) return;
+      window.prospeccaoContatoEditar = { ...c };
+      Modal.open('modals/prospeccoes/contato.html', '../js/modals/prospeccao-contato.js', 'contatoProspeccao', true);
+      return;
+    }
+    const remover = e.target.closest('[data-remover-contato]');
+    if (remover) {
+      const c = contatosNaTela[Number(remover.dataset.removerContato)];
+      if (!c?.id) return;
+      await salvarDeltaContatos({ contatosExcluidos: [c.id] }, 'Contato removido');
+    }
+  });
+
+  window.addEventListener('prospeccaoContatoSalvo', aoSalvarContato);
   // Sem remover, o ouvinte sobrevive ao modal e uma segunda ficha receberia o
   // contato cadastrado na primeira.
   window.addEventListener('modal-ready', function soltar(e) {
     if (e.detail !== 'detalhesProspeccao') return;
-    window.removeEventListener('prospeccaoContatoSalvo', gravarNovoContato);
+    window.removeEventListener('prospeccaoContatoSalvo', aoSalvarContato);
     window.removeEventListener('modal-ready', soltar);
   });
 

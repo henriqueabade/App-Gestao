@@ -456,6 +456,7 @@ function criarConteudoPopupLinha(p) {
     const contato = p.contato_principal;
     const ponderado = Number(p.valor_estimado ?? 0) * (Number(p.probabilidade ?? 0) / 100);
 
+    const texto = v => (v === null || v === undefined || String(v).trim() === '' ? null : v);
     const info = (rotulo, valor, permissao) =>
         `<div${permissao ? ` data-perm-col="${permissao}"` : ''}>
             <p class="popup-info-label">${rotulo}</p>
@@ -528,6 +529,11 @@ function criarConteudoPopupLinha(p) {
             <p class="popup-info-value popup-info-value--inteiro">${esc(p.cnpj || '') || '—'}</p>
           </div>
         </div>
+        ${texto(p.anotacoes) ? `
+        <div class="popup-secao">
+          <p class="popup-info-label">Anotação do cadastro</p>
+          <p class="popup-info-value popup-anotacao">${esc(p.anotacoes)}</p>
+        </div>` : ''}
       </div>
     </div>`;
 }
@@ -659,10 +665,10 @@ function renderTabela(lista) {
             <td data-perm-col="col_pros_owner" class="px-4 py-3 whitespace-nowrap text-sm text-white">${esc(p.responsavel || '—')}</td>
             <td class="px-4 py-3 whitespace-nowrap text-left">
                 <div class="flex items-center justify-start space-x-2">
-                    <i data-perm="pros.details.view" class="fas fa-eye acao-ver w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Ver detalhes"></i>
-                    <i data-perm="pros.stage.update" class="fas fa-arrow-right-arrow-left acao-mover w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-blue)" title="Mover no funil"></i>
-                    <i data-perm="pros.edit" class="fas fa-edit acao-editar w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Editar"></i>
-                    <i data-perm="pros.delete" class="fas fa-trash acao-excluir w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-red)" title="Excluir"></i>
+                    <i data-perm="pros.details.view" class="fas fa-eye acao-tabela acao-tabela--ver acao-ver" title="Ver detalhes"></i>
+                    <i data-perm="pros.stage.update" class="fas fa-arrow-right-arrow-left acao-tabela acao-tabela--mover acao-mover" title="Mover no funil"></i>
+                    <i data-perm="pros.edit" class="fas fa-edit acao-tabela acao-tabela--editar acao-editar" title="Editar"></i>
+                    <i data-perm="pros.delete" class="fas fa-trash acao-tabela acao-tabela--excluir acao-excluir" title="Excluir"></i>
                 </div>
             </td>`;
 

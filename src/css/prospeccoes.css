@@ -483,6 +483,39 @@ body {
     text-overflow: ellipsis;
 }
 
+/*
+   Ações de linha (editar / excluir) — as MESMAS cores da grade principal.
+
+   Cada tabela do módulo repetia o estilo inline, e as de dentro dos modais
+   tinham acabado com um cinza próprio: o mesmo "excluir" aparecia vermelho na
+   grade e cinza no detalhe. Aqui a regra fica num lugar só.
+*/
+.acao-tabela {
+    width: 20px;
+    height: 20px;
+    padding: 0.25rem;
+    border-radius: 0.25rem;
+    cursor: pointer;
+    background: transparent;
+    border: none;
+    line-height: 1;
+    transition: background 150ms ease, color 150ms ease;
+}
+
+.acao-tabela:hover {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.acao-tabela--editar { color: var(--color-primary); }
+.acao-tabela--excluir { color: var(--color-red); }
+.acao-tabela--mover { color: var(--color-blue); }
+.acao-tabela--ver { color: var(--color-primary); }
+
+/* Telefone e documento não podem quebrar no meio. */
+.celula-sem-quebra {
+    white-space: nowrap;
+}
+
 /* ------------------------------------------------------------------
    Ícone (i) e popover — mesmo padrão de Matéria-prima e Produtos.
    ------------------------------------------------------------------ */
@@ -973,4 +1006,14 @@ body {
 
 .geo-multiselect-hint.visible {
     opacity: 1;
+}
+
+/* Anotação do cadastro no popover da grade: texto livre, pode ser longo. */
+.popup-anotacao {
+    white-space: pre-wrap;
+    max-height: 7rem;
+    overflow-y: auto;
+    font-size: 0.8rem;
+    color: #e5e5e5;
+    font-weight: 400;
 }

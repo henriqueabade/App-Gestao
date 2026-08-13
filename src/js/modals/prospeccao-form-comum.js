@@ -50,6 +50,9 @@
   function criar(overlay, opcoes = {}) {
     const modo = opcoes.modo === 'editar' ? 'editar' : 'novo';
 
+    // Popover (i) dos contatos — arquivo compartilhado com o modal de detalhe.
+    if (!window.ProspeccaoContatoPopup) carregarScript('../js/modals/prospeccao-contato-popup.js');
+
     // -----------------------------------------------------------------
     // Abas
     // -----------------------------------------------------------------
@@ -118,31 +121,35 @@
       if (!tbody) return;
 
       if (!contatos.length) {
-        tbody.innerHTML = '<tr><td colspan="7" class="py-12 text-center text-gray-400">Nenhum contato cadastrado</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="5" class="py-12 text-center text-gray-400">Nenhum contato cadastrado</td></tr>';
         return;
       }
 
       tbody.innerHTML = '';
       contatos.forEach((c, indice) => {
-        const papeis = [];
-        if (c.principal) papeis.push('<span class="badge-info px-2 py-1 rounded text-xs">Principal</span>');
-        if (c.decisor) papeis.push('<span class="badge-success px-2 py-1 rounded text-xs">Decisor</span>');
-
         const tr = document.createElement('tr');
         tr.className = 'border-b border-white/5';
+        // Cargo e papel saíram das colunas e foram para o popover (i): sem
+        // eles sobra largura para os telefones caberem inteiros, sem quebrar
+        // "(61) 98211-" numa linha e "3344" na outra.
         tr.innerHTML = `
-          <td class="py-3 px-4 text-white">${esc(c.nome)}</td>
-          <td class="py-3 px-4 text-white/80">${esc(c.cargo || '—')}</td>
+          <td class="py-3 px-4 text-white">
+            <div class="flex items-center gap-2">
+              <span>${esc(c.nome)}</span>
+              <i class="info-icon" data-info-contato></i>
+            </div>
+          </td>
           <td class="py-3 px-4 text-white/80">${esc(c.email || '—')}</td>
-          <td class="py-3 px-4 text-white/80">${esc(c.telefone_celular || '—')}</td>
-          <td class="py-3 px-4 text-white/80">${esc(c.telefone_fixo || '—')}</td>
-          <td class="py-3 px-4">${papeis.join(' ') || '<span class="text-white/40">—</span>'}</td>
+          <td class="py-3 px-4 text-white/80 celula-sem-quebra">${esc(c.telefone_celular || '—')}</td>
+          <td class="py-3 px-4 text-white/80 celula-sem-quebra">${esc(c.telefone_fixo || '—')}</td>
           <td class="py-3 px-4">
             <div class="flex items-center gap-2">
-              <i data-perm="pros.contact.edit" class="fas fa-edit acao-editar-contato w-5 h-5 cursor-pointer p-1 rounded hover:bg-white/10" style="color: var(--color-primary)" title="Editar contato"></i>
-              <i data-perm="pros.contact.remove" class="fas fa-trash acao-remover-contato w-5 h-5 cursor-pointer p-1 rounded hover:bg-white/10" style="color: var(--color-red)" title="Remover contato"></i>
+              <i data-perm="pros.contact.edit" class="fas fa-edit acao-tabela acao-tabela--editar acao-editar-contato" title="Editar contato"></i>
+              <i data-perm="pros.contact.remove" class="fas fa-trash acao-tabela acao-tabela--excluir acao-remover-contato" title="Remover contato"></i>
             </div>
           </td>`;
+
+        window.ProspeccaoContatoPopup?.ligar(tr.querySelector('[data-info-contato]'), c);
 
         tr.querySelector('.acao-editar-contato')?.addEventListener('click', () => {
           window.prospeccaoContatoEditar = { ...c, indice };

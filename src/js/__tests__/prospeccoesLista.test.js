@@ -519,3 +519,31 @@ test('a classe do CNPJ existe na folha de estilo do módulo', () => {
   assert.match(css, /\.popup-info-value--inteiro\s*\{[^}]*white-space:\s*nowrap/);
   assert.match(css, /\.popup-copiar\s*\{/);
 });
+
+test('anotação do cadastro aparece no popover da grade', () => {
+  const s = criarSandbox();
+  const html = s.criarConteudoPopupLinha({
+    id: 1, nome_fantasia: 'X',
+    anotacoes: 'Indicada pelo cliente Alpha. Trabalham com bancadas sob medida.'
+  });
+  assert.match(html, /Anotação do cadastro/);
+  assert.match(html, /Indicada pelo cliente Alpha/);
+});
+
+test('sem anotação, a seção não aparece', () => {
+  const s = criarSandbox();
+  const html = s.criarConteudoPopupLinha({ id: 1, nome_fantasia: 'X' });
+  assert.equal(html.includes('Anotação do cadastro'), false);
+  // Espaço em branco também não conta como anotação.
+  const comEspaco = s.criarConteudoPopupLinha({ id: 1, nome_fantasia: 'X', anotacoes: '   ' });
+  assert.equal(comEspaco.includes('Anotação do cadastro'), false);
+});
+
+test('anotação do cadastro é escapada', () => {
+  const s = criarSandbox();
+  const html = s.criarConteudoPopupLinha({
+    id: 1, nome_fantasia: 'X', anotacoes: '<img src=x onerror=alert(1)>'
+  });
+  assert.equal(html.includes('<img src=x'), false);
+  assert.match(html, /&lt;img/);
+});
