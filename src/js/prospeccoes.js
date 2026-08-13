@@ -462,14 +462,30 @@ function criarConteudoPopupLinha(p) {
             <p class="popup-info-value">${valor || '—'}</p>
         </div>`;
 
+    /**
+     * Botão de copiar ao lado do valor.
+     *
+     * O dado vai no `data-copiar` já escapado; o handler lê o atributo em vez
+     * do texto renderizado, para não copiar junto o ícone ou espaço de layout.
+     */
+    const copiar = (valor, rotulo) =>
+        `<button type="button" class="popup-copiar" data-copiar="${esc(valor)}"
+                 data-rotulo="${esc(rotulo)}" title="Copiar ${esc(rotulo.toLowerCase())}"
+                 aria-label="Copiar ${esc(rotulo.toLowerCase())}">
+           <i class="fas fa-copy pointer-events-none"></i>
+         </button>`;
+
     // Contato primeiro: é o dado que a pessoa procura ao passar o mouse.
     const blocoContato = contato
         ? `<div class="popup-secao">
              <p class="popup-info-label">Contato principal</p>
-             <p class="popup-contato-nome">${esc(contato.nome)}</p>
-             ${contato.cargo ? `<p class="popup-contato-linha"><i class="fas fa-briefcase text-white/40"></i>${esc(contato.cargo)}</p>` : ''}
-             ${contato.email ? `<p class="popup-contato-linha"><i class="fas fa-envelope text-white/40"></i>${esc(contato.email)}</p>` : ''}
-             ${contato.telefone_celular ? `<p class="popup-contato-linha"><i class="fas fa-phone text-white/40"></i>${esc(contato.telefone_celular)}</p>` : ''}
+             <p class="popup-contato-nome popup-contato-linha">
+               <span class="popup-contato-texto">${esc(contato.nome)}</span>
+               ${copiar(contato.nome, 'Nome')}
+             </p>
+             ${contato.cargo ? `<p class="popup-contato-linha"><i class="fas fa-briefcase text-white/40"></i><span class="popup-contato-texto">${esc(contato.cargo)}</span></p>` : ''}
+             ${contato.email ? `<p class="popup-contato-linha"><i class="fas fa-envelope text-white/40"></i><span class="popup-contato-texto">${esc(contato.email)}</span>${copiar(contato.email, 'E-mail')}</p>` : ''}
+             ${contato.telefone_celular ? `<p class="popup-contato-linha"><i class="fas fa-phone text-white/40"></i><span class="popup-contato-texto">${esc(contato.telefone_celular)}</span>${copiar(contato.telefone_celular, 'Telefone')}</p>` : ''}
            </div>`
         : `<div class="popup-secao">
              <p class="popup-info-label">Contato principal</p>
@@ -506,7 +522,10 @@ function criarConteudoPopupLinha(p) {
         <div class="popup-secao">
           <div class="popup-info-grid" style="margin-bottom:0">
             ${info('Atualizada em', esc(formatarDataHora(p.atualizado_em)), 'col_pros_atualizado_em')}
-            ${info('CNPJ', esc(p.cnpj || ''))}
+          </div>
+          <div class="mt-3">
+            <p class="popup-info-label">CNPJ</p>
+            <p class="popup-info-value popup-info-value--inteiro">${esc(p.cnpj || '') || '—'}</p>
           </div>
         </div>
       </div>
@@ -522,10 +541,63 @@ function esconderPopupLinha() {
 // O Modal.closeAll() do projeto chama este nome ao trocar de módulo.
 window.hideRawMaterialInfoPopup = window.hideRawMaterialInfoPopup || esconderPopupLinha;
 
+/**
+ * Copia para a área de transferência.
+ *
+ * `navigator.clipboard` exige contexto seguro e falha em alguns cenários do
+ * Electron; o `execCommand` fica como rede de proteção para o botão nunca
+ * parecer quebrado.
+ */
+async function copiarTexto(texto) {
+    try {
+        await navigator.clipboard.writeText(texto);
+        return true;
+    } catch (_) {
+        try {
+            const campo = document.createElement('textarea');
+            campo.value = texto;
+            campo.style.position = 'fixed';
+            campo.style.opacity = '0';
+            document.body.appendChild(campo);
+            campo.select();
+            const ok = document.execCommand('copy');
+            campo.remove();
+            return ok;
+        } catch (err) {
+            console.error('Falha ao copiar', err);
+            return false;
+        }
+    }
+}
+
 function mostrarPopupLinha(icone, p) {
     esconderPopupLinha();
     const { popup } = window.createPopup(icone, criarConteudoPopupLinha(p), { onHide: esconderPopupLinha });
     popupLinhaAtual = popup;
+
+    // Delegação: os botões nascem junto com o HTML do popover.
+    popup.addEventListener('click', async e => {
+        const botao = e.target.closest('.popup-copiar');
+        if (!botao) return;
+        e.preventDefault();
+        e.stopPropagation();
+
+        const ok = await copiarTexto(botao.dataset.copiar || '');
+        if (!ok) {
+            showToast('Não foi possível copiar', 'error');
+            return;
+        }
+        // Confirmação no próprio botão: o popover some ao tirar o mouse, e um
+        // toast atrás dele passaria despercebido.
+        botao.classList.add('copiado');
+        botao.querySelector('i')?.classList.replace('fa-copy', 'fa-check');
+        showToast(`${botao.dataset.rotulo} copiado!`, 'success');
+        setTimeout(() => {
+            botao.classList.remove('copiado');
+            botao.querySelector('i')?.classList.replace('fa-check', 'fa-copy');
+        }, 1500);
+    });
+
     // O popover nasce em document.body, fora do alcance da varredura que roda
     // sobre a tabela — precisa da sua própria aplicação de permissões.
     window.Permissoes?.aplicarAcoesEColunas?.(popup);

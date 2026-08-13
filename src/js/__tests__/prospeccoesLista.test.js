@@ -444,3 +444,78 @@ test('popover escapa o nome do contato', () => {
   assert.equal(html.includes('<img src=x'), false);
   assert.match(html, /&lt;img/);
 });
+
+// ---------------------------------------------------------------------------
+// Popover: botões de copiar e CNPJ inteiro
+// ---------------------------------------------------------------------------
+
+test('nome, e-mail e telefone do contato ganham botão de copiar', () => {
+  const s = criarSandbox();
+  const html = s.criarConteudoPopupLinha({
+    id: 1,
+    nome_fantasia: 'Marmoraria Vitória',
+    contato_principal: {
+      nome: 'Rogério Tavares',
+      cargo: 'Sócio-proprietário',
+      email: 'rogerio@marmorariavitoria.com.br',
+      telefone_celular: '(11) 98812-4455'
+    }
+  });
+
+  const copiaveis = [...html.matchAll(/data-copiar="([^"]*)"/g)].map(m => m[1]);
+  assert.equal(copiaveis.length, 3, 'esperava três botões de copiar');
+  assert.ok(copiaveis.includes('Rogério Tavares'));
+  assert.ok(copiaveis.includes('rogerio@marmorariavitoria.com.br'));
+  assert.ok(copiaveis.includes('(11) 98812-4455'));
+
+  // O cargo NÃO recebe botão: ninguém copia "Sócio-proprietário".
+  assert.equal(copiaveis.includes('Sócio-proprietário'), false);
+});
+
+test('o valor copiado sai do atributo, não do texto com ícone junto', () => {
+  const s = criarSandbox();
+  const html = s.criarConteudoPopupLinha({
+    id: 1, nome_fantasia: 'X',
+    contato_principal: { nome: 'Ana', email: 'ana@x.com' }
+  });
+  // O texto fica num <span> próprio, separado do ícone e do botão — é o que
+  // permite quebrar a linha sem levar o botão junto.
+  assert.match(html, /popup-contato-texto/);
+  assert.match(html, /data-copiar="ana@x\.com"/);
+  assert.match(html, /data-rotulo="E-mail"/);
+});
+
+test('botão de copiar escapa aspas no valor', () => {
+  const s = criarSandbox();
+  const html = s.criarConteudoPopupLinha({
+    id: 1, nome_fantasia: 'X',
+    contato_principal: { nome: 'Ana "A" Silva' }
+  });
+  // Sem escape, a aspa fecharia o atributo e o resto viraria marcação.
+  assert.equal(html.includes('data-copiar="Ana "A" Silva"'), false);
+  assert.match(html, /data-copiar="Ana &quot;A&quot; Silva"/);
+});
+
+test('CNPJ é marcado para não quebrar no meio', () => {
+  const s = criarSandbox();
+  const html = s.criarConteudoPopupLinha({
+    id: 1, nome_fantasia: 'X', cnpj: '12.345.678/0001-90'
+  });
+  // A classe é o que impede o "12.345.678/0001-" numa linha e o "90" na outra.
+  assert.match(html, /popup-info-value--inteiro/);
+  const trecho = /<p class="popup-info-value popup-info-value--inteiro">([^<]*)<\/p>/.exec(html);
+  assert.ok(trecho, 'não achei o parágrafo do CNPJ');
+  assert.equal(trecho[1], '12.345.678/0001-90');
+});
+
+test('CNPJ ausente vira travessão em vez de campo vazio', () => {
+  const s = criarSandbox();
+  const html = s.criarConteudoPopupLinha({ id: 1, nome_fantasia: 'X' });
+  assert.match(html, /popup-info-value--inteiro">—</);
+});
+
+test('a classe do CNPJ existe na folha de estilo do módulo', () => {
+  const css = fs.readFileSync(path.join(__dirname, '..', '..', 'css', 'prospeccoes.css'), 'utf8');
+  assert.match(css, /\.popup-info-value--inteiro\s*\{[^}]*white-space:\s*nowrap/);
+  assert.match(css, /\.popup-copiar\s*\{/);
+});

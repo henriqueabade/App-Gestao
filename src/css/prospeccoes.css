@@ -486,7 +486,50 @@ body {
     align-items: center;
     gap: 0.4rem;
     margin-top: 0.15rem;
+}
+
+/* O texto quebra; o botão de copiar não encolhe nem sai da linha. */
+.popup-contato-linha .popup-contato-texto {
+    flex: 1;
+    min-width: 0;
     word-break: break-all;
+}
+
+/*
+   Campos que não podem quebrar no meio: um CNPJ partido em duas linhas é
+   ilegível e, pior, quem copia à mão copia errado.
+*/
+.popup-info-value--inteiro {
+    white-space: nowrap;
+    word-break: normal;
+}
+
+/* Ocupa a largura toda do card, para o valor caber sem quebra. */
+.popup-info-linha-cheia {
+    grid-column: 1 / -1;
+}
+
+/* Botão de copiar ao lado do valor */
+.popup-copiar {
+    background: transparent;
+    border: none;
+    color: rgba(255, 255, 255, 0.45);
+    cursor: pointer;
+    padding: 2px 5px;
+    font-size: 0.7rem;
+    line-height: 1;
+    border-radius: 4px;
+    flex-shrink: 0;
+    transition: color 120ms ease, background 120ms ease;
+}
+
+.popup-copiar:hover {
+    color: #fff;
+    background: rgba(255, 255, 255, 0.14);
+}
+
+.popup-copiar.copiado {
+    color: var(--color-green);
 }
 
 /* ------------------------------------------------------------------
