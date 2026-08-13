@@ -234,8 +234,26 @@ function exigirSupAdmin(req, res, next) {
     });
 }
 
+/**
+ * Versão consultável do `exigirSupAdmin`, para quando a restrição vale só para
+ * PARTE do que a rota faz.
+ *
+ * Exemplo: editar a prospecção é permitido a quem tem `pros.edit`, mas trocar
+ * o responsável dentro do mesmo PUT é privativo do Sup Admin. Como middleware
+ * isso barraria a edição inteira; aqui a rota decide o que fazer.
+ */
+async function ehSupAdmin(req) {
+  try {
+    return permissoesRepo.isSupAdmin(await carregarUsuarioAtual(req));
+  } catch (err) {
+    console.error('[permissoes] falha ao verificar Sup Admin:', err?.message || err);
+    return false;
+  }
+}
+
 module.exports = router;
 module.exports.exigirPermissao = exigirPermissao;
 module.exports.exigirSupAdmin = exigirSupAdmin;
+module.exports.ehSupAdmin = ehSupAdmin;
 module.exports.obterPermissoesEfetivas = obterPermissoesEfetivas;
 module.exports.limparCachePermissoes = limparCache;

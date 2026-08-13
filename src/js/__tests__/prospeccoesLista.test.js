@@ -547,3 +547,76 @@ test('anotação do cadastro é escapada', () => {
   assert.equal(html.includes('<img src=x'), false);
   assert.match(html, /&lt;img/);
 });
+
+// ---------------------------------------------------------------------------
+// Ícone de trocar responsável na grade
+//
+// Ele é privativo do Sup Admin. O backend recusa de qualquer jeito (403), mas
+// oferecer o botão a quem vai levar negativa é ruim — e o inverso, escondê-lo
+// de quem pode, esconde a única porta para a ação.
+// ---------------------------------------------------------------------------
+
+/** Renderiza uma linha e devolve o HTML gerado, com Permissoes.supAdmin dado. */
+function renderizarLinha(supAdmin) {
+  let html = '';
+  const linha = {
+    className: '', dataset: {},
+    set innerHTML(v) { html = v; },
+    get innerHTML() { return html; },
+    querySelector: () => null,
+    addEventListener() {}
+  };
+  const tbody = { innerHTML: '', appendChild() {}, classList: { add() {}, remove() {} } };
+
+  const s = criarSandbox({ prospeccoesTableBody: tbody });
+  s.document.createElement = () => linha;
+  s.Permissoes = { supAdmin };
+  definir(s, 'todasProspeccoes', []);
+
+  vm.runInContext('renderTabela(__lista);', Object.assign(s, {
+    __lista: [{ id: 1, nome_fantasia: 'Marmoraria', etapa: 'Contato', probabilidade: 10, responsavel: 'João' }]
+  }));
+  return html;
+}
+
+test('Sup Admin vê o ícone de trocar responsável', () => {
+  const html = renderizarLinha(true);
+  assert.match(html, /acao-responsavel/);
+  assert.match(html, /acao-tabela--responsavel/);
+});
+
+test('quem não é Sup Admin não vê o ícone', () => {
+  const html = renderizarLinha(false);
+  assert.equal(html.includes('acao-responsavel'), false);
+  // As demais ações continuam lá — a restrição é só desta.
+  assert.match(html, /acao-editar/);
+  assert.match(html, /acao-excluir/);
+});
+
+test('sem Permissoes carregado, o ícone não aparece', () => {
+  // Falha fechada: se as permissões não carregaram, não oferece a ação restrita.
+  let html = '';
+  const linha = {
+    className: '', dataset: {},
+    set innerHTML(v) { html = v; }, get innerHTML() { return html; },
+    querySelector: () => null, addEventListener() {}
+  };
+  const s = criarSandbox({ prospeccoesTableBody: { innerHTML: '', appendChild() {}, classList: { add() {}, remove() {} } } });
+  s.document.createElement = () => linha;
+  definir(s, 'todasProspeccoes', []);
+  s.__lista = [{ id: 1, nome_fantasia: 'X', etapa: 'Contato', probabilidade: 0 }];
+  vm.runInContext('renderTabela(__lista);', s);
+  assert.equal(html.includes('acao-responsavel'), false);
+});
+
+test('o módulo publica abrirTrocarResponsavel para o menu', () => {
+  // As funções vivem dentro do IIFE do menu.js; sem export explícito, o
+  // onclick da grade não alcançaria nada.
+  const s = criarSandbox();
+  assert.equal(typeof s.ProspeccoesModulo?.abrirTrocarResponsavel, 'function');
+});
+
+test('a cor da ação de responsável existe na folha de estilo', () => {
+  const css = fs.readFileSync(path.join(__dirname, '..', '..', 'css', 'prospeccoes.css'), 'utf8');
+  assert.match(css, /\.acao-tabela--responsavel\s*\{[^}]*color/);
+});

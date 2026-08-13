@@ -667,6 +667,7 @@ function renderTabela(lista) {
                 <div class="flex items-center justify-start space-x-2">
                     <i data-perm="pros.details.view" class="fas fa-eye acao-tabela acao-tabela--ver acao-ver" title="Ver detalhes"></i>
                     <i data-perm="pros.stage.update" class="fas fa-arrow-right-arrow-left acao-tabela acao-tabela--mover acao-mover" title="Mover no funil"></i>
+                    ${window.Permissoes?.supAdmin ? `<i data-perm="pros.edit" class="fas fa-user-pen acao-tabela acao-tabela--responsavel acao-responsavel" title="Alterar responsável (Sup Admin)"></i>` : ''}
                     <i data-perm="pros.edit" class="fas fa-edit acao-tabela acao-tabela--editar acao-editar" title="Editar"></i>
                     <i data-perm="pros.delete" class="fas fa-trash acao-tabela acao-tabela--excluir acao-excluir" title="Excluir"></i>
                 </div>
@@ -684,6 +685,10 @@ function renderTabela(lista) {
         tr.querySelector('.acao-mover')?.addEventListener('click', e => {
             e.stopPropagation();
             abrirMoverEtapa(p);
+        });
+        tr.querySelector('.acao-responsavel')?.addEventListener('click', e => {
+            e.stopPropagation();
+            abrirTrocarResponsavel(p);
         });
         tr.querySelector('.acao-editar')?.addEventListener('click', e => {
             e.stopPropagation();
@@ -747,6 +752,18 @@ function abrirExcluirProspeccao(prospeccao) {
  * frequente do dia a dia comercial — obrigar a abrir a ficha para cada
  * movimentação transformaria a rotina em quatro cliques.
  */
+/**
+ * Trocar o responsável, direto da grade.
+ *
+ * O ícone só é desenhado para Sup Admin, e o backend cobra de novo — esconder
+ * o botão é conveniência, não é a proteção.
+ */
+function abrirTrocarResponsavel(prospeccao) {
+    window.prospeccaoAcaoAlvo = prospeccao;
+    window.prospeccaoAcaoContatos = [];
+    Modal.open('modals/prospeccoes/responsavel.html', '../js/modals/prospeccao-responsavel.js', 'responsavelProspeccao');
+}
+
 function abrirMoverEtapa(prospeccao) {
     window.prospeccaoAcaoAlvo = prospeccao;
     // Sem contatos aqui: o modal de etapa não precisa deles.
@@ -800,7 +817,8 @@ window.ProspeccoesModulo = {
     abrirDetalhes: abrirDetalhesProspeccao,
     abrirEditar: abrirEditarProspeccao,
     abrirExcluir: abrirExcluirProspeccao,
-    abrirMoverEtapa
+    abrirMoverEtapa,
+    abrirTrocarResponsavel
 };
 
 // Recarrega preservando os filtros quando algo muda em outro lugar.

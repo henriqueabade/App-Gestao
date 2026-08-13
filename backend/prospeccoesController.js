@@ -33,7 +33,7 @@
 
 const express = require('express');
 const { createApiClient } = require('./apiHttpClient');
-const { exigirPermissao, exigirSupAdmin } = require('./permissionsController');
+const { exigirPermissao, exigirSupAdmin, ehSupAdmin } = require('./permissionsController');
 const { normalizarCamposNumericos } = require('./numeros');
 
 const router = express.Router();
@@ -710,6 +710,15 @@ router.put('/:id', exigirPermissao(permissoesDeEdicao), async (req, res) => {
       payload.probabilidade = Number(atual.probabilidade ?? 0);
     }
 
+    // Trocar o responsável é privativo do Sup Admin. Sem esta trava, o botão
+    // restrito na grade seria decorativo: bastaria abrir "Editar" e mudar o
+    // campo para contornar a regra.
+    if ('responsavel_id' in payload
+        && Number(payload.responsavel_id ?? 0) !== Number(atual.responsavel_id ?? 0)
+        && !(await ehSupAdmin(req))) {
+      throw erro(403, 'Somente o Sup Admin pode alterar o responsável pela prospecção');
+    }
+
     // Nomes resolvidos ANTES de gravar: o histórico mostra "Maria -> João",
     // não "3 -> 7".
     const nomes = await carregarNomesDeUsuario(api);
@@ -1333,6 +1342,58 @@ router.post('/:id/converter', exigirPermissao(['pros.convert', 'cli.create']), a
     res.status(err.status || 500).json({ error: err.message || 'Erro ao converter prospecção' });
   }
 });
+
+// ---------------------------------------------------------------------------
+// RESPONSÁVEL
+//
+// Trocar quem cuida da prospecção é decisão de gestão, não de operação: por
+// isso `exigirSupAdmin` ALÉM da permissão do módulo.
+//
+// `criado_por` NUNCA muda. São coisas diferentes: quem cadastrou é fato
+// histórico, quem responde hoje é atribuição. Sobrescrever o primeiro apagaria
+// a origem do registro.
+// ---------------------------------------------------------------------------
+
+router.put(
+  '/:id/responsavel',
+  exigirPermissao('pros.edit'),
+  exigirSupAdmin,
+  async (req, res) => {
+    const { id } = req.params;
+    try {
+      const api = createApiClient(req);
+      const alvo = await buscarProspeccao(api, id);
+
+      const bruto = req.body?.responsavel_id;
+      const novo = bruto === null || bruto === '' || bruto === undefined ? null : Number(bruto);
+      if (novo !== null && !Number.isFinite(novo)) throw erro(400, 'Responsável inválido');
+
+      if (Number(alvo.responsavel_id ?? 0) === Number(novo ?? 0)) {
+        return res.json({ success: true, semMudanca: true });
+      }
+
+      const nomes = await carregarNomesDeUsuario(api);
+      if (novo !== null && !nomes.has(novo)) throw erro(400, 'Usuário não encontrado');
+
+      // Só o responsável entra no corpo: `montarPayload` não é usado aqui de
+      // propósito, para não haver caminho que roce em `criado_por`.
+      await api.put(`/api/prospeccoes/${id}`, { responsavel_id: novo });
+
+      await registrarHistorico(api, id, {
+        tipo: 'responsavel', acao: 'alterou',
+        entidade: 'Responsável', campo: 'responsavel_id',
+        valor_anterior: alvo.responsavel_id ? (nomes.get(Number(alvo.responsavel_id)) || `#${alvo.responsavel_id}`) : null,
+        valor_novo: novo ? (nomes.get(novo) || `#${novo}`) : null,
+        observacao: texto(req.body?.observacao)
+      }, usuarioDaRequisicao(req));
+
+      res.json({ success: true });
+    } catch (err) {
+      console.error('Erro ao trocar responsável:', err);
+      res.status(err.status || 500).json({ error: err.message || 'Erro ao trocar responsável' });
+    }
+  }
+);
 
 // ---------------------------------------------------------------------------
 // HISTÓRICO

@@ -1217,3 +1217,102 @@ test('concluir sem permissao de mover no funil e barrado', async () => {
     await ctx.encerrar();
   }
 });
+
+// ---------------------------------------------------------------------------
+// Responsável
+//
+// Trocar quem cuida da prospecção é decisão de gestão: privativo do Sup Admin,
+// tanto pela rota dedicada quanto pelo PUT de edição — senão o botão restrito
+// na grade seria decorativo.
+// ---------------------------------------------------------------------------
+
+test('Sup Admin troca o responsavel e o historico guarda o anterior', async () => {
+  const ctx = await montar(baseDados());
+  try {
+    const resp = await chamar(ctx.porta, '/api/prospeccoes/1/responsavel', {
+      method: 'PUT',
+      body: JSON.stringify({ responsavel_id: 2, observacao: 'Redistribuicao de carteira' })
+    });
+    assert.strictEqual(resp.status, 200);
+
+    const p = ctx.tabelas.prospeccoes.find(x => x.id === 1);
+    assert.strictEqual(p.responsavel_id, 2);
+
+    const evento = ctx.tabelas.prospeccao_historico.find(h => h.tipo === 'responsavel');
+    assert.strictEqual(evento.valor_anterior, 'João Silva');
+    assert.strictEqual(evento.valor_novo, 'Vendedora Ana');
+    assert.strictEqual(evento.observacao, 'Redistribuicao de carteira');
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('trocar responsavel NAO mexe em quem cadastrou', async () => {
+  const dados = baseDados();
+  dados.prospeccoes.find(p => p.id === 1).criado_por = 3;
+  const ctx = await montar(dados);
+  try {
+    await chamar(ctx.porta, '/api/prospeccoes/1/responsavel', {
+      method: 'PUT', body: JSON.stringify({ responsavel_id: 2 })
+    });
+    // Quem cadastrou é fato histórico; quem responde hoje é atribuição.
+    assert.strictEqual(ctx.tabelas.prospeccoes.find(p => p.id === 1).criado_por, 3);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('nao Sup Admin nao troca responsavel pela rota dedicada', async () => {
+  const ctx = await montar(baseDados());
+  try {
+    const resp = await chamar(ctx.porta, '/api/prospeccoes/1/responsavel', {
+      usuario: 2, method: 'PUT', body: JSON.stringify({ responsavel_id: 2 })
+    });
+    assert.strictEqual(resp.status, 403);
+    assert.strictEqual(ctx.tabelas.prospeccoes.find(p => p.id === 1).responsavel_id, 3);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('o PUT de edicao tambem barra a troca de responsavel', async () => {
+  const ctx = await montar(baseDados());
+  try {
+    // Usuario 2 nao e Sup Admin — sem esta trava, bastaria abrir "Editar"
+    // para contornar a restricao do botao na grade.
+    const resp = await chamar(ctx.porta, '/api/prospeccoes/1', {
+      usuario: 2, method: 'PUT',
+      body: JSON.stringify({ nome_fantasia: 'Antiga Ltda', responsavel_id: 2 })
+    });
+    assert.strictEqual(resp.status, 403);
+    assert.strictEqual(ctx.tabelas.prospeccoes.find(p => p.id === 1).responsavel_id, 3);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('responsavel inexistente e recusado', async () => {
+  const ctx = await montar(baseDados());
+  try {
+    const resp = await chamar(ctx.porta, '/api/prospeccoes/1/responsavel', {
+      method: 'PUT', body: JSON.stringify({ responsavel_id: 999 })
+    });
+    assert.strictEqual(resp.status, 400);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('trocar para o mesmo responsavel nao gera evento', async () => {
+  const ctx = await montar(baseDados());
+  try {
+    const resp = await chamar(ctx.porta, '/api/prospeccoes/1/responsavel', {
+      method: 'PUT', body: JSON.stringify({ responsavel_id: 3 })
+    });
+    assert.strictEqual(resp.status, 200);
+    assert.strictEqual((await resp.json()).semMudanca, true);
+    assert.strictEqual(ctx.tabelas.prospeccao_historico.some(h => h.tipo === 'responsavel'), false);
+  } finally {
+    await ctx.encerrar();
+  }
+});

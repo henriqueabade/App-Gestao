@@ -1,0 +1,50 @@
+<div id="responsavelProspeccaoOverlay" class="fixed inset-0 z-[1300] bg-black/50 flex items-center justify-center p-4">
+  <div class="max-w-lg w-full glass-surface backdrop-blur-xl rounded-2xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade">
+    <header class="grid grid-cols-3 items-center px-6 py-4 border-b border-white/10">
+      <button id="voltarResponsavel" type="button" class="btn-neutral px-4 py-2 rounded-lg text-white font-medium justify-self-start">← Voltar</button>
+      <h2 class="text-lg font-semibold text-white text-center">Alterar Responsável</h2>
+      <span></span>
+    </header>
+
+    <form id="responsavelForm" class="p-6 space-y-4">
+      <div class="rounded-lg border border-white/10 bg-white/5 p-4">
+        <p class="text-xs uppercase tracking-wide text-white/50 mb-1">Prospecção</p>
+        <p id="responsavelEmpresa" class="text-white font-medium"></p>
+        <div class="grid grid-cols-2 gap-4 mt-3">
+          <div>
+            <p class="text-xs uppercase tracking-wide text-white/50">Responsável atual</p>
+            <p id="responsavelAtual" class="text-sm text-white mt-1"></p>
+          </div>
+          <div>
+            <p class="text-xs uppercase tracking-wide text-white/50">Cadastrada por</p>
+            <p id="responsavelCadastrou" class="text-sm text-white/60 mt-1"></p>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <label for="responsavelNovo" class="block text-sm font-medium text-gray-300 mb-2">Novo responsável</label>
+        <select id="responsavelNovo" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition select-arrow appearance-none">
+          <option value="">Sem responsável</option>
+        </select>
+      </div>
+
+      <div>
+        <label for="responsavelObservacao" class="block text-sm font-medium text-gray-300 mb-2">Motivo da troca</label>
+        <textarea id="responsavelObservacao" rows="2" placeholder="Redistribuição de carteira, férias, desligamento..."
+                  class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition resize-none"></textarea>
+      </div>
+
+      <p class="text-xs text-gray-400 rounded-lg border border-white/10 bg-white/5 p-3">
+        <i class="fas fa-circle-info mr-1"></i>
+        Quem <strong>cadastrou</strong> a prospecção não muda — é registro histórico.
+        A troca fica no histórico, com o responsável anterior.
+      </p>
+    </form>
+
+    <footer class="flex justify-end gap-4 px-6 py-4 border-t border-white/10">
+      <button id="cancelarResponsavel" type="button" class="btn-danger px-6 py-2 rounded-lg text-white font-medium">Cancelar</button>
+      <button type="button" id="salvarResponsavel" data-perm="pros.edit" class="btn-success px-6 py-2 rounded-lg font-medium">Alterar</button>
+    </footer>
+  </div>
+</div>

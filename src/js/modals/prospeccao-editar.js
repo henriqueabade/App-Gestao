@@ -95,6 +95,18 @@
       form.carregarResponsaveis(p.responsavel_id),
       form.configurarGeografia(p.endereco?.pais, p.endereco?.estado)
     ]);
+
+    // Trocar o responsável é privativo do Sup Admin. O backend recusa de
+    // qualquer forma; travar o campo evita que a pessoa preencha o formulário
+    // inteiro para só então levar um 403.
+    if (!window.Permissoes?.supAdmin) {
+      const campo = document.getElementById('prosResponsavel');
+      if (campo) {
+        campo.disabled = true;
+        campo.classList.add('opacity-60', 'cursor-not-allowed');
+        document.getElementById('prosResponsavelAviso')?.classList.remove('hidden');
+      }
+    }
   } catch (err) {
     console.error('Erro ao carregar prospecção', err);
     showToast(err.message || 'Erro ao carregar prospecção', 'error');
@@ -152,6 +164,11 @@
   const salvar = async () => {
     const dados = form.coletarDados();
     if (!dados) return;
+
+    // Sem permissão para trocar, o campo nem vai no corpo: mandá-lo faria o
+    // backend comparar e, na primeira divergência de tipo, recusar a edição
+    // inteira por causa de um campo que a pessoa nem podia mexer.
+    if (!window.Permissoes?.supAdmin) delete dados.responsavel_id;
 
     try {
       const resp = await fetchApi(`/api/prospeccoes/${prospeccao.id}`, {
