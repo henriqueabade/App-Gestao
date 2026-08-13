@@ -1,0 +1,72 @@
+<div id="interacaoProspeccaoOverlay" class="fixed inset-0 z-[1300] bg-black/50 flex items-center justify-center p-4">
+  <div class="max-w-xl w-full max-h-[90vh] glass-surface backdrop-blur-xl rounded-2xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade flex flex-col">
+    <header class="grid grid-cols-3 items-center px-6 py-4 border-b border-white/10 flex-shrink-0">
+      <button id="voltarInteracaoProspeccao" type="button" class="btn-neutral px-4 py-2 rounded-lg text-white font-medium justify-self-start">← Voltar</button>
+      <h2 class="text-lg font-semibold text-white text-center">Registrar Interação</h2>
+      <span></span>
+    </header>
+
+    <form id="interacaoProspeccaoForm" class="p-6 space-y-4 overflow-y-auto modal-scroll">
+      <div class="grid grid-cols-2 gap-4">
+        <div>
+          <label for="interacaoTipo" class="block text-sm font-medium text-gray-300 mb-2">Tipo <span class="text-[var(--color-red)]">*</span></label>
+          <select id="interacaoTipo" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition select-arrow appearance-none"></select>
+        </div>
+        <div>
+          <label for="interacaoData" class="block text-sm font-medium text-gray-300 mb-2">Quando</label>
+          <input id="interacaoData" type="datetime-local"
+                 class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+        </div>
+      </div>
+
+      <div class="grid grid-cols-2 gap-4">
+        <div>
+          <label for="interacaoContato" class="block text-sm font-medium text-gray-300 mb-2">Com quem</label>
+          <select id="interacaoContato" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition select-arrow appearance-none">
+            <option value="">Não especificado</option>
+          </select>
+        </div>
+        <div id="interacaoDuracaoBloco">
+          <label for="interacaoDuracao" class="block text-sm font-medium text-gray-300 mb-2">Duração (min)</label>
+          <input id="interacaoDuracao" type="text" data-numeric="true" data-numeric-decimals="0" placeholder="30"
+                 class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+        </div>
+      </div>
+
+      <div>
+        <label for="interacaoResumo" class="block text-sm font-medium text-gray-300 mb-2">Resumo <span class="text-[var(--color-red)]">*</span></label>
+        <input id="interacaoResumo" type="text" maxlength="255" placeholder="Cliente pediu proposta revisada"
+               class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+      </div>
+
+      <div>
+        <label for="interacaoDetalhe" class="block text-sm font-medium text-gray-300 mb-2">Detalhes</label>
+        <textarea id="interacaoDetalhe" rows="4" placeholder="O que foi conversado, objeções, combinados..."
+                  class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition resize-none"></textarea>
+      </div>
+
+      <div class="pt-4 border-t border-white/10 space-y-4">
+        <p class="text-sm text-gray-400">
+          Toda conversa termina com um combinado. Aproveite e já registre o próximo passo.
+        </p>
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label for="interacaoProximoPasso" class="block text-sm font-medium text-gray-300 mb-2">Próximo passo</label>
+            <input id="interacaoProximoPasso" data-perm="pros.next.step" type="text" placeholder="Enviar proposta revisada"
+                   class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+          </div>
+          <div>
+            <label for="interacaoProximoPassoData" class="block text-sm font-medium text-gray-300 mb-2">Para quando</label>
+            <input id="interacaoProximoPassoData" data-perm="pros.next.step" type="date"
+                   class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+          </div>
+        </div>
+      </div>
+    </form>
+
+    <footer class="flex justify-end gap-4 px-6 py-4 border-t border-white/10 flex-shrink-0">
+      <button id="cancelarInteracaoProspeccao" type="button" class="btn-danger px-6 py-2 rounded-lg text-white font-medium">Cancelar</button>
+      <button type="button" id="salvarInteracaoProspeccao" data-perm="pros.interaction.add" class="btn-success px-6 py-2 rounded-lg font-medium">Registrar</button>
+    </footer>
+  </div>
+</div>

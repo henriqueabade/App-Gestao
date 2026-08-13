@@ -46,10 +46,25 @@
   const moeda = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
   const formatarMoeda = v => moeda.format(Number.isFinite(Number(v)) ? Number(v) : 0);
 
+  /** Instante (TIMESTAMPTZ): `new Date` é o certo aqui. */
   function formatarData(iso) {
     if (!iso) return '';
     const d = new Date(iso);
     return Number.isNaN(d.getTime()) ? '' : d.toLocaleDateString('pt-BR');
+  }
+
+  /**
+   * Coluna DATE — dia sem hora, como `proximo_passo_data` e `data_envio`.
+   *
+   * `new Date('2026-09-20')` é meia-noite UTC por norma; a oeste de Greenwich
+   * isso vira o dia ANTERIOR na exibição. O passo marcado para 20/09 aparecia
+   * como 19/09. Montamos o dia campo a campo, no fuso local.
+   */
+  function formatarDia(valor) {
+    if (!valor) return '';
+    const [ano, mes, dia] = String(valor).slice(0, 10).split('-').map(Number);
+    if (!ano || !mes || !dia) return '';
+    return new Date(ano, mes - 1, dia).toLocaleDateString('pt-BR');
   }
 
   function formatarDataHora(iso) {
@@ -175,7 +190,7 @@
   function renderOportunidade(p) {
     let proximoPasso = VAZIO;
     if (p.proximo_passo || p.proximo_passo_data) {
-      const data = p.proximo_passo_data ? formatarData(p.proximo_passo_data) : '';
+      const data = p.proximo_passo_data ? formatarDia(p.proximo_passo_data) : '';
       // Atrasado precisa saltar aos olhos: é a informação acionável da tela.
       const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
       const bruto = String(p.proximo_passo_data || '').slice(0, 10);
@@ -321,7 +336,13 @@
     }
     alvo.innerHTML = notas.map(n => `
       <div class="bg-surface/40 rounded-lg p-4 border border-white/5">
-        ${texto(n.titulo) ? `<h4 class="font-medium text-white mb-2">${esc(n.titulo)}</h4>` : ''}
+        <div class="flex justify-between items-start gap-3 mb-2">
+          ${texto(n.titulo) ? `<h4 class="font-medium text-white">${esc(n.titulo)}</h4>` : '<span></span>'}
+          <button type="button" data-remover="nota" data-id="${esc(n.id)}" data-perm="pros.note.remove"
+                  class="text-gray-400 hover:text-white flex-shrink-0" title="Remover nota">
+            <i class="fas fa-trash pointer-events-none"></i>
+          </button>
+        </div>
         <p class="text-gray-300 text-sm mb-2 whitespace-pre-wrap">${esc(n.conteudo)}</p>
         <p class="text-xs text-gray-500">${texto(n.autor) ? esc(n.autor) + ' • ' : ''}${esc(tempoRelativo(n.criado_em))}</p>
       </div>`).join('');
@@ -365,8 +386,14 @@
         <td class="px-4 py-3 text-sm text-white">${esc(c.nome)}</td>
         <td class="px-4 py-3 text-sm text-white/80">${texto(c.canal) || VAZIO}</td>
         <td class="px-4 py-3 text-sm"><span class="${classeStatus[c.status] || 'badge-neutral'} px-2 py-1 rounded text-xs">${esc(c.status)}</span></td>
-        <td class="px-4 py-3 text-sm text-white/80">${esc(formatarData(c.data_envio)) || VAZIO}</td>
+        <td class="px-4 py-3 text-sm text-white/80">${esc(formatarDia(c.data_envio)) || VAZIO}</td>
         <td class="px-4 py-3 text-sm text-white/80">${texto(c.resposta) || VAZIO}</td>
+        <td class="px-4 py-3 text-sm">
+          <button type="button" data-remover="campanha" data-id="${esc(c.id)}" data-perm="pros.campaign.manage"
+                  class="text-gray-400 hover:text-white" title="Remover campanha">
+            <i class="fas fa-trash pointer-events-none"></i>
+          </button>
+        </td>
       </tr>`).join('');
 
     alvo.innerHTML = `
@@ -379,6 +406,7 @@
               <th class="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Status</th>
               <th class="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Envio</th>
               <th class="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Resposta</th>
+              <th class="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Ações</th>
             </tr>
           </thead>
           <tbody>${linhas}</tbody>
@@ -480,77 +508,181 @@
   // caso a requisição demore.
   renderCabecalho(resumo);
 
-  try {
-    const resp = await fetchApi(`/api/prospeccoes/${resumo.id}`);
-    if (resp.status === 403) throw new Error('Você não tem permissão para ver os detalhes desta prospecção.');
-    if (!resp.ok) {
-      const corpo = await resp.json().catch(() => ({}));
-      throw new Error(corpo.error || `Erro ${resp.status}`);
-    }
+  /**
+   * Busca e desenha a ficha inteira. Vive numa função porque as ações (mover no
+   * funil, registrar interação, adicionar nota…) precisam repintar o modal sem
+   * fechá-lo — ver `window.recarregarDetalhesProspeccao` abaixo.
+   */
+  async function carregar() {
+    try {
+      const resp = await fetchApi(`/api/prospeccoes/${resumo.id}`);
+      if (resp.status === 403) throw new Error('Você não tem permissão para ver os detalhes desta prospecção.');
+      if (!resp.ok) {
+        const corpo = await resp.json().catch(() => ({}));
+        throw new Error(corpo.error || `Erro ${resp.status}`);
+      }
 
-    const dados = await resp.json();
-    const p = dados.prospeccao || {};
-    const listas = {
-      contatos: dados.contatos || [],
-      interacoes: dados.interacoes || [],
-      notas: dados.notas || [],
-      campanhas: dados.campanhas || [],
-      historico: dados.historico || [],
-      anexos: dados.anexos || [],
-      orcamentos: dados.orcamentos || []
-    };
+      const dados = await resp.json();
+      const p = dados.prospeccao || {};
+      const listas = {
+        contatos: dados.contatos || [],
+        interacoes: dados.interacoes || [],
+        notas: dados.notas || [],
+        campanhas: dados.campanhas || [],
+        historico: dados.historico || [],
+        anexos: dados.anexos || [],
+        orcamentos: dados.orcamentos || []
+      };
 
-    renderCabecalho(p);
-    renderMetricas(p);
-    renderOportunidade(p);
-    renderEmpresa(p);
-    renderEndereco(p);
-    renderAnotacoes(p);
-    renderContatos(listas.contatos);
-    renderInteracoes(listas.interacoes);
-    renderNotas(listas.notas);
-    renderAnexos(listas.anexos);
-    renderCampanhas(listas.campanhas);
-    renderOrcamentos(listas.orcamentos);
-    renderHistorico(listas.historico);
-    atualizarContadores(listas);
+      renderCabecalho(p);
+      renderMetricas(p);
+      renderOportunidade(p);
+      renderEmpresa(p);
+      renderEndereco(p);
+      renderAnotacoes(p);
+      renderContatos(listas.contatos);
+      renderInteracoes(listas.interacoes);
+      renderNotas(listas.notas);
+      renderAnexos(listas.anexos);
+      renderCampanhas(listas.campanhas);
+      renderOrcamentos(listas.orcamentos);
+      renderHistorico(listas.historico);
+      atualizarContadores(listas);
+      refletirEstado(p);
 
-    // Guarda a ficha completa para os botões de ação — a grade só tem o resumo.
-    window.prospeccaoDetalhesCarregada = p;
+      // A ficha completa e os contatos alimentam os modais de ação: a grade só
+      // tem o resumo, e o de interação precisa da lista para oferecer "com quem"
+      // (o backend recusa contato de outra prospecção).
+      window.prospeccaoDetalhesCarregada = p;
+      window.prospeccaoAcaoContatos = listas.contatos;
 
-    // Links externos abrem no navegador do sistema, não dentro do Electron.
-    overlay.querySelectorAll('a[data-external]').forEach(a => {
-      a.addEventListener('click', e => {
-        e.preventDefault();
-        window.electronAPI?.openExternal?.(a.href);
+      // Links externos abrem no navegador do sistema, não dentro do Electron.
+      overlay.querySelectorAll('a[data-external]').forEach(a => {
+        a.addEventListener('click', e => {
+          e.preventDefault();
+          window.electronAPI?.openExternal?.(a.href);
+        });
       });
-    });
 
-    // As colunas do histórico respeitam col_hist_*; foram desenhadas agora.
-    window.Permissoes?.aplicarAcoesEColunas?.(overlay);
-  } catch (err) {
-    console.error('Erro ao carregar detalhes da prospecção', err);
-    showToast(err.message || 'Erro ao carregar detalhes', 'error');
-  } finally {
-    window.dispatchEvent(new CustomEvent('modalSpinnerLoaded', { detail: 'detalhesProspeccao' }));
+      // Colunas do histórico respeitam col_hist_*; foram desenhadas agora.
+      window.Permissoes?.aplicarAcoesEColunas?.(overlay);
+    } catch (err) {
+      console.error('Erro ao carregar detalhes da prospecção', err);
+      showToast(err.message || 'Erro ao carregar detalhes', 'error');
+    }
   }
+
+  /**
+   * Prospecção arquivada (ganha ou perdida) saiu do pipeline: mover no funil e
+   * converter deixam de fazer sentido. Desabilitar é mais honesto que deixar o
+   * botão clicável para o backend recusar depois.
+   */
+  function refletirEstado(p) {
+    const desligar = (id, motivo) => {
+      const b = get(id);
+      if (!b) return;
+      b.disabled = true;
+      b.title = motivo;
+      b.classList.add('opacity-40', 'cursor-not-allowed');
+    };
+    if (p.cliente_id) {
+      desligar('detProspConverter', `Já convertida no cliente #${p.cliente_id}`);
+      desligar('detProspExcluir', 'Prospecção convertida não pode ser excluída');
+    }
+    if (p.status === 'arquivada' && p.etapa === 'Ganho' && !p.cliente_id) {
+      // Ganho mas ainda sem cliente: converter continua sendo o caminho.
+      return;
+    }
+  }
+
+  await carregar();
+  window.dispatchEvent(new CustomEvent('modalSpinnerLoaded', { detail: 'detalhesProspeccao' }));
+
+  // Ponte usada pelos modais de ação, que abrem POR CIMA deste.
+  window.recarregarDetalhesProspeccao = carregar;
+  window.addEventListener('modal-ready', function limpar(e) {
+    if (e.detail !== 'detalhesProspeccao') return;
+    delete window.recarregarDetalhesProspeccao;
+    delete window.prospeccaoAcaoContatos;
+    delete window.prospeccaoAcaoAlvo;
+    window.removeEventListener('modal-ready', limpar);
+  });
 
   // -------------------------------------------------------------------------
   // Ações
   // -------------------------------------------------------------------------
-  document.getElementById('detProspEditar')?.addEventListener('click', () => {
-    close();
-    // Passa a ficha completa quando já carregou; o modal de edição recarrega
-    // de qualquer forma, mas assim o título aparece na hora.
-    if (typeof abrirEditarProspeccao === 'function') {
-      abrirEditarProspeccao(window.prospeccaoDetalhesCarregada || resumo);
-    }
+
+  /** A ficha carregada é o alvo; o resumo da grade é o plano B. */
+  const alvo = () => window.prospeccaoDetalhesCarregada || resumo;
+
+  /** Abre um modal de ação por cima deste, sem fechá-lo. */
+  function abrirAcao(html, script, overlayId) {
+    window.prospeccaoAcaoAlvo = alvo();
+    Modal.open(`modals/prospeccoes/${html}`, `../js/modals/${script}`, overlayId, true);
+  }
+
+  get('detProspMoverFunil')?.addEventListener('click', e => {
+    if (e.currentTarget.disabled) return;
+    abrirAcao('etapa.html', 'prospeccao-etapa.js', 'etapaProspeccao');
   });
 
-  document.getElementById('detProspExcluir')?.addEventListener('click', () => {
+  get('detProspConverter')?.addEventListener('click', e => {
+    if (e.currentTarget.disabled) return;
+    abrirAcao('converter.html', 'prospeccao-converter.js', 'converterProspeccao');
+  });
+
+  get('detProspProximoPasso')?.addEventListener('click', () => {
+    abrirAcao('proximo-passo.html', 'prospeccao-proximo-passo.js', 'proximoPassoProspeccao');
+  });
+
+  get('detProspNovaInteracao')?.addEventListener('click', () => {
+    abrirAcao('interacao.html', 'prospeccao-interacao.js', 'interacaoProspeccao');
+  });
+
+  get('detProspNovaNota')?.addEventListener('click', () => {
+    abrirAcao('nota.html', 'prospeccao-nota.js', 'notaProspeccao');
+  });
+
+  get('detProspNovaCampanha')?.addEventListener('click', () => {
+    abrirAcao('campanha.html', 'prospeccao-campanha.js', 'campanhaProspeccao');
+  });
+
+  get('detProspEditar')?.addEventListener('click', () => {
     close();
-    if (typeof abrirExcluirProspeccao === 'function') {
-      abrirExcluirProspeccao(window.prospeccaoDetalhesCarregada || resumo);
+    if (typeof abrirEditarProspeccao === 'function') abrirEditarProspeccao(alvo());
+  });
+
+  get('detProspExcluir')?.addEventListener('click', e => {
+    if (e.currentTarget.disabled) return;
+    close();
+    if (typeof abrirExcluirProspeccao === 'function') abrirExcluirProspeccao(alvo());
+  });
+
+  // -------------------------------------------------------------------------
+  // Exclusão de nota e campanha — direto na lista, sem modal intermediário.
+  // -------------------------------------------------------------------------
+  async function removerFilho(rota, id, mensagem) {
+    try {
+      const resp = await fetchApi(`/api/prospeccoes/${resumo.id}/${rota}/${id}`, { method: 'DELETE' });
+      const corpo = await resp.json().catch(() => ({}));
+      if (!resp.ok) {
+        showToast(corpo.error || `Erro ${resp.status}`, 'error');
+        return;
+      }
+      await carregar();
+      showToast(mensagem, 'success');
+    } catch (err) {
+      console.error('Erro ao remover', err);
+      showToast('Falha de comunicação com o servidor', 'error');
     }
+  }
+
+  overlay.addEventListener('click', e => {
+    const remover = e.target.closest?.('[data-remover]');
+    if (!remover) return;
+    e.preventDefault();
+    const { remover: tipo, id } = remover.dataset;
+    if (tipo === 'nota') removerFilho('notas', id, 'Nota removida');
+    else if (tipo === 'campanha') removerFilho('campanhas', id, 'Campanha removida');
   });
 })();

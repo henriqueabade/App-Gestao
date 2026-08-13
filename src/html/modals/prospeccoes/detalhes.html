@@ -11,7 +11,9 @@
           <h1 id="detProspNome" class="text-2xl font-bold text-white truncate"></h1>
           <p id="detProspSubtitulo" class="text-gray-300 truncate text-sm"></p>
         </div>
-        <div class="flex items-center gap-3 justify-end flex-shrink-0">
+        <div class="flex items-center gap-2 justify-end flex-shrink-0 flex-wrap">
+          <button id="detProspMoverFunil" data-perm="pros.stage.update" class="btn-dark-blue px-4 py-2 rounded-lg text-white font-medium">Mover no funil</button>
+          <button id="detProspConverter" data-perm="pros.convert" class="btn-success px-4 py-2 rounded-lg font-medium">Converter</button>
           <button id="detProspEditar" data-perm="pros.edit" class="btn-primary px-4 py-2 rounded-lg text-white font-medium">Editar</button>
           <button id="detProspExcluir" data-perm="pros.delete" class="btn-danger px-4 py-2 rounded-lg text-white font-medium">Excluir</button>
         </div>
@@ -71,7 +73,12 @@
       <div class="px-8 py-6">
         <section data-panel="visao" class="space-y-6">
           <div class="bg-surface/60 backdrop-blur-xl rounded-2xl border border-white/10 p-6">
-            <h3 class="text-lg font-semibold text-white mb-4">Oportunidade</h3>
+            <div class="flex justify-between items-center mb-4">
+              <h3 class="text-lg font-semibold text-white">Oportunidade</h3>
+              <button id="detProspProximoPasso" data-perm="pros.next.step" class="btn-secondary px-4 py-2 rounded-lg text-white text-sm font-medium">
+                <i class="fas fa-calendar-check mr-2"></i>Próximo passo
+              </button>
+            </div>
             <div id="detProspOportunidade" class="grid grid-cols-1 md:grid-cols-2 gap-6"></div>
           </div>
 
@@ -100,14 +107,20 @@
 
         <section data-panel="atividades" class="space-y-6 hidden">
           <div class="bg-surface/60 backdrop-blur-xl rounded-2xl border border-white/10 p-6">
-            <h3 class="text-lg font-semibold text-white mb-6">Timeline de atividades</h3>
+            <div class="flex justify-between items-center mb-6">
+              <h3 class="text-lg font-semibold text-white">Timeline de atividades</h3>
+              <button id="detProspNovaInteracao" data-perm="pros.interaction.add" class="btn-primary px-4 py-2 rounded-lg text-white text-sm font-medium">+ Registrar interação</button>
+            </div>
             <div id="detProspInteracoes" class="space-y-6"></div>
           </div>
         </section>
 
         <section data-panel="notas" class="space-y-6 hidden">
           <div class="bg-surface/60 backdrop-blur-xl rounded-2xl border border-white/10 p-6">
-            <h3 class="text-lg font-semibold text-white mb-4">Notas</h3>
+            <div class="flex justify-between items-center mb-4">
+              <h3 class="text-lg font-semibold text-white">Notas</h3>
+              <button id="detProspNovaNota" data-perm="pros.note.add" class="btn-primary px-4 py-2 rounded-lg text-white text-sm font-medium">+ Nova nota</button>
+            </div>
             <div id="detProspNotas" class="space-y-4"></div>
           </div>
           <div class="bg-surface/60 backdrop-blur-xl rounded-2xl border border-white/10 p-6">
@@ -118,7 +131,10 @@
 
         <section data-panel="campanhas" class="space-y-6 hidden">
           <div class="bg-surface/60 backdrop-blur-xl rounded-2xl border border-white/10 p-6">
-            <h3 class="text-lg font-semibold text-white mb-4">Campanhas</h3>
+            <div class="flex justify-between items-center mb-4">
+              <h3 class="text-lg font-semibold text-white">Campanhas</h3>
+              <button id="detProspNovaCampanha" data-perm="pros.campaign.manage" class="btn-primary px-4 py-2 rounded-lg text-white text-sm font-medium">+ Nova campanha</button>
+            </div>
             <div id="detProspCampanhas"></div>
           </div>
           <div class="bg-surface/60 backdrop-blur-xl rounded-2xl border border-white/10 p-6">

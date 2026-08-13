@@ -1,0 +1,51 @@
+<div id="etapaProspeccaoOverlay" class="fixed inset-0 z-[1300] bg-black/50 flex items-center justify-center p-4">
+  <div class="max-w-lg w-full glass-surface backdrop-blur-xl rounded-2xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade">
+    <header class="grid grid-cols-3 items-center px-6 py-4 border-b border-white/10">
+      <button id="voltarEtapaProspeccao" type="button" class="btn-neutral px-4 py-2 rounded-lg text-white font-medium justify-self-start">← Voltar</button>
+      <h2 class="text-lg font-semibold text-white text-center">Mover no Funil</h2>
+      <span></span>
+    </header>
+
+    <form id="etapaProspeccaoForm" class="p-6 space-y-4">
+      <div class="flex items-center gap-3 text-sm">
+        <span class="text-gray-400">Etapa atual:</span>
+        <span id="etapaAtualBadge"></span>
+      </div>
+
+      <div>
+        <label for="etapaNova" class="block text-sm font-medium text-gray-300 mb-2">Nova etapa <span class="text-[var(--color-red)]">*</span></label>
+        <select id="etapaNova" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition select-arrow appearance-none"></select>
+      </div>
+
+      <div>
+        <label for="etapaProbabilidade" class="block text-sm font-medium text-gray-300 mb-2">Probabilidade (%)</label>
+        <input id="etapaProbabilidade" type="text" data-numeric="true" data-numeric-decimals="0"
+               class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+        <p class="mt-2 text-xs text-gray-400">Sugerida pela etapa. Ajuste se a leitura do negócio for outra.</p>
+      </div>
+
+      <div id="etapaMotivoBloco" class="hidden">
+        <label for="etapaMotivo" class="block text-sm font-medium text-gray-300 mb-2">Motivo da perda <span class="text-[var(--color-red)]">*</span></label>
+        <textarea id="etapaMotivo" rows="3" placeholder="Preço acima do orçamento, fechou com concorrente..."
+                  class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition resize-none"></textarea>
+        <p class="mt-2 text-xs text-gray-400">Sem o motivo, daqui a três meses ninguém lembra por que este negócio caiu.</p>
+      </div>
+
+      <div>
+        <label for="etapaObservacao" class="block text-sm font-medium text-gray-300 mb-2">Observação</label>
+        <textarea id="etapaObservacao" rows="2" placeholder="O que motivou a mudança"
+                  class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition resize-none"></textarea>
+      </div>
+
+      <p id="etapaAvisoGanho" class="hidden text-xs text-[var(--color-primary-light)] bg-white/5 border border-white/10 rounded-lg p-3">
+        Marcar como <strong>Ganho</strong> não cria o cliente automaticamente. Use o botão
+        <strong>Converter em cliente</strong> quando quiser gerar o cadastro.
+      </p>
+    </form>
+
+    <footer class="flex justify-end gap-4 px-6 py-4 border-t border-white/10">
+      <button id="cancelarEtapaProspeccao" type="button" class="btn-danger px-6 py-2 rounded-lg text-white font-medium">Cancelar</button>
+      <button type="submit" form="etapaProspeccaoForm" id="confirmarEtapaProspeccao" data-perm="pros.stage.update" class="btn-success px-6 py-2 rounded-lg font-medium">Mover</button>
+    </footer>
+  </div>
+</div>

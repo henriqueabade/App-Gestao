@@ -1,0 +1,60 @@
+<div id="campanhaProspeccaoOverlay" class="fixed inset-0 z-[1300] bg-black/50 flex items-center justify-center p-4">
+  <div class="max-w-lg w-full glass-surface backdrop-blur-xl rounded-2xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade">
+    <header class="grid grid-cols-3 items-center px-6 py-4 border-b border-white/10">
+      <button id="voltarCampanhaProspeccao" type="button" class="btn-neutral px-4 py-2 rounded-lg text-white font-medium justify-self-start">← Voltar</button>
+      <h2 class="text-lg font-semibold text-white text-center">Nova Campanha</h2>
+      <span></span>
+    </header>
+
+    <form id="campanhaProspeccaoForm" class="p-6 space-y-4">
+      <div>
+        <label for="campanhaNome" class="block text-sm font-medium text-gray-300 mb-2">Nome <span class="text-[var(--color-red)]">*</span></label>
+        <input id="campanhaNome" type="text" maxlength="180" placeholder="Portfólio corporativo 2026"
+               class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+      </div>
+
+      <div class="grid grid-cols-2 gap-4">
+        <div>
+          <label for="campanhaCanal" class="block text-sm font-medium text-gray-300 mb-2">Canal</label>
+          <input id="campanhaCanal" type="text" list="campanhaCanalSugestoes" placeholder="E-mail, WhatsApp..."
+                 class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+          <datalist id="campanhaCanalSugestoes">
+            <option value="E-mail"></option>
+            <option value="WhatsApp"></option>
+            <option value="Redes Sociais"></option>
+            <option value="Telefone"></option>
+            <option value="Evento"></option>
+          </datalist>
+        </div>
+        <div>
+          <label for="campanhaStatus" class="block text-sm font-medium text-gray-300 mb-2">Status</label>
+          <select id="campanhaStatus" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition select-arrow appearance-none"></select>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-2 gap-4">
+        <div>
+          <label for="campanhaDataEnvio" class="block text-sm font-medium text-gray-300 mb-2">Data de envio</label>
+          <input id="campanhaDataEnvio" type="date"
+                 class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+        </div>
+        <div>
+          <label for="campanhaResposta" class="block text-sm font-medium text-gray-300 mb-2">Resposta</label>
+          <input id="campanhaResposta" type="text" maxlength="120" placeholder="Interessado, sem resposta..."
+                 class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+        </div>
+      </div>
+
+      <div>
+        <label for="campanhaObservacao" class="block text-sm font-medium text-gray-300 mb-2">Observação</label>
+        <textarea id="campanhaObservacao" rows="3"
+                  class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition resize-none"></textarea>
+      </div>
+    </form>
+
+    <footer class="flex justify-end gap-4 px-6 py-4 border-t border-white/10">
+      <button id="cancelarCampanhaProspeccao" type="button" class="btn-danger px-6 py-2 rounded-lg text-white font-medium">Cancelar</button>
+      <button type="button" id="salvarCampanhaProspeccao" data-perm="pros.campaign.manage" class="btn-success px-6 py-2 rounded-lg font-medium">Salvar</button>
+    </footer>
+  </div>
+</div>

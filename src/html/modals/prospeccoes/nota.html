@@ -1,0 +1,27 @@
+<div id="notaProspeccaoOverlay" class="fixed inset-0 z-[1300] bg-black/50 flex items-center justify-center p-4">
+  <div class="max-w-lg w-full glass-surface backdrop-blur-xl rounded-2xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade">
+    <header class="grid grid-cols-3 items-center px-6 py-4 border-b border-white/10">
+      <button id="voltarNotaProspeccao" type="button" class="btn-neutral px-4 py-2 rounded-lg text-white font-medium justify-self-start">← Voltar</button>
+      <h2 class="text-lg font-semibold text-white text-center">Nova Nota</h2>
+      <span></span>
+    </header>
+
+    <form id="notaProspeccaoForm" class="p-6 space-y-4">
+      <div>
+        <label for="notaTitulo" class="block text-sm font-medium text-gray-300 mb-2">Título</label>
+        <input id="notaTitulo" type="text" maxlength="180" placeholder="Perfil do cliente, concorrência, condição..."
+               class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+      </div>
+      <div>
+        <label for="notaConteudo" class="block text-sm font-medium text-gray-300 mb-2">Conteúdo <span class="text-[var(--color-red)]">*</span></label>
+        <textarea id="notaConteudo" rows="8" placeholder="O que vale registrar sobre esta oportunidade..."
+                  class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition resize-none"></textarea>
+      </div>
+    </form>
+
+    <footer class="flex justify-end gap-4 px-6 py-4 border-t border-white/10">
+      <button id="cancelarNotaProspeccao" type="button" class="btn-danger px-6 py-2 rounded-lg text-white font-medium">Cancelar</button>
+      <button type="button" id="salvarNotaProspeccao" data-perm="pros.note.add" class="btn-success px-6 py-2 rounded-lg font-medium">Salvar</button>
+    </footer>
+  </div>
+</div>

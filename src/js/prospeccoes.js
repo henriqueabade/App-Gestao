@@ -61,11 +61,17 @@ function formatarMoedaCompacta(valor) {
     return formatarMoeda(numero);
 }
 
-function formatarData(iso) {
-    if (!iso) return '';
-    const d = new Date(iso);
-    if (Number.isNaN(d.getTime())) return '';
-    return d.toLocaleDateString('pt-BR');
+/**
+ * Formata uma coluna DATE (dia sem hora), como `proximo_passo_data`.
+ *
+ * NÃO use `new Date('2026-09-20')`: a norma manda interpretar a forma só-data
+ * como meia-noite UTC, então a oeste de Greenwich o `toLocaleDateString`
+ * devolve o dia ANTERIOR — o passo agendado para 20/09 aparecia como 19/09.
+ * Aqui o dia é montado campo a campo, no fuso local.
+ */
+function formatarData(valor) {
+    const dia = diaDe(valor);
+    return dia ? dia.toLocaleDateString('pt-BR') : '';
 }
 
 function formatarDataHora(iso) {
@@ -476,6 +482,7 @@ function renderTabela(lista) {
             <td class="px-4 py-3 whitespace-nowrap text-left">
                 <div class="flex items-center justify-start space-x-2">
                     <i data-perm="pros.details.view" class="fas fa-eye acao-ver w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Ver detalhes"></i>
+                    <i data-perm="pros.stage.update" class="fas fa-arrow-right-arrow-left acao-mover w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-blue)" title="Mover no funil"></i>
                     <i data-perm="pros.edit" class="fas fa-edit acao-editar w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Editar"></i>
                     <i data-perm="pros.delete" class="fas fa-trash acao-excluir w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-red)" title="Excluir"></i>
                 </div>
@@ -486,6 +493,10 @@ function renderTabela(lista) {
         tr.querySelector('.acao-ver')?.addEventListener('click', e => {
             e.stopPropagation();
             abrirDetalhesProspeccao(p);
+        });
+        tr.querySelector('.acao-mover')?.addEventListener('click', e => {
+            e.stopPropagation();
+            abrirMoverEtapa(p);
         });
         tr.querySelector('.acao-editar')?.addEventListener('click', e => {
             e.stopPropagation();
@@ -542,6 +553,18 @@ function openModalWithSpinner(htmlPath, scriptPath, overlayId) {
 function abrirExcluirProspeccao(prospeccao) {
     window.prospeccaoExcluir = prospeccao;
     Modal.open('modals/prospeccoes/excluir.html', '../js/modals/prospeccao-excluir.js', 'excluirProspeccao');
+}
+
+/**
+ * Mover no funil direto da grade, sem passar pelo detalhe. É a ação mais
+ * frequente do dia a dia comercial — obrigar a abrir a ficha para cada
+ * movimentação transformaria a rotina em quatro cliques.
+ */
+function abrirMoverEtapa(prospeccao) {
+    window.prospeccaoAcaoAlvo = prospeccao;
+    // Sem contatos aqui: o modal de etapa não precisa deles.
+    window.prospeccaoAcaoContatos = [];
+    Modal.open('modals/prospeccoes/etapa.html', '../js/modals/prospeccao-etapa.js', 'etapaProspeccao');
 }
 
 function abrirDetalhesProspeccao(prospeccao) {

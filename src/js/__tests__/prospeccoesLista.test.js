@@ -351,3 +351,51 @@ test('formatarMoedaCompacta encurta milhares e milhões', () => {
 function formatarZero(s) {
   return s.formatarMoedaCompacta(0);
 }
+
+// ---------------------------------------------------------------------------
+// Exibição de data — a regressão que fazia o dia aparecer errado
+// ---------------------------------------------------------------------------
+
+test('formatarData exibe o MESMO dia que foi gravado, sem recuar por fuso', () => {
+  const s = criarSandbox();
+  // `new Date('2026-09-20')` é meia-noite UTC por norma; no Brasil (UTC-3) o
+  // toLocaleDateString devolvia 19/09. Um próximo passo agendado para o dia 20
+  // aparecia como 19 na grade e no detalhe.
+  assert.equal(s.formatarData('2026-09-20'), '20/09/2026');
+  assert.equal(s.formatarData('2026-01-01'), '01/01/2026');
+  assert.equal(s.formatarData('2026-12-31'), '31/12/2026');
+});
+
+test('formatarData aceita timestamp completo e mantém o dia', () => {
+  const s = criarSandbox();
+  assert.equal(s.formatarData('2026-09-20T00:00:00.000Z'), '20/09/2026');
+  assert.equal(s.formatarData('2026-09-20T23:59:00.000Z'), '20/09/2026');
+});
+
+test('formatarData devolve vazio para nulo e lixo', () => {
+  const s = criarSandbox();
+  assert.equal(s.formatarData(null), '');
+  assert.equal(s.formatarData(''), '');
+  assert.equal(s.formatarData('nao-e-data'), '');
+});
+
+test('celulaProximoPasso marca atraso sem errar o dia', () => {
+  const s = criarSandbox();
+  const emDias = n => {
+    const d = new Date(); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() + n);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  };
+
+  const ontem = emDias(-1);
+  const htmlOntem = s.celulaProximoPasso({ proximo_passo_data: ontem });
+  assert.match(htmlOntem, /prox-passo-atrasado/);
+  // A data mostrada tem que ser a de ontem, não a de anteontem.
+  const [a, m, d] = ontem.split('-');
+  assert.ok(htmlOntem.includes(`${d}/${m}/${a}`), `esperava ${d}/${m}/${a} em: ${htmlOntem}`);
+
+  const hoje = emDias(0);
+  assert.match(s.celulaProximoPasso({ proximo_passo_data: hoje }), /prox-passo-hoje/);
+
+  const semData = s.celulaProximoPasso({ proximo_passo_data: null });
+  assert.match(semData, /—/);
+});
