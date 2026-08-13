@@ -1,468 +1,137 @@
 <div id="detalhesProspeccaoOverlay" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-    <div class="w-full max-w-6xl max-h-[90vh] glass-surface backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade slide-in overflow-hidden flex flex-col text-white"  style="transform: translateY(3vh);">
-      <header class="px-8 py-6 border-b border-white/10 flex flex-col gap-4 flex-shrink-0">
-        <div class="relative flex items-center justify-center">
-          <button id="voltarDetalhesProspeccao" type="button" class="absolute left-0 top-1/2 -translate-y-1/2 btn-neutral px-4 py-2 rounded-lg text-white font-medium flex items-center gap-2">← Voltar</button>
-          <h2 class="text-lg font-semibold text-center text-white">DETALHES PROSPECÇÃO</h2>
+  <div class="w-full max-w-6xl max-h-[90vh] glass-surface backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade slide-in overflow-hidden flex flex-col text-white" style="transform: translateY(3vh);">
+
+    <header class="px-8 py-6 border-b border-white/10 flex flex-col gap-4 flex-shrink-0">
+      <div class="relative flex items-center justify-center">
+        <button id="voltarDetalhesProspeccao" type="button" class="absolute left-0 top-1/2 -translate-y-1/2 btn-neutral px-4 py-2 rounded-lg text-white font-medium flex items-center gap-2">← Voltar</button>
+        <h2 class="text-lg font-semibold text-center text-white">DETALHES DA PROSPECÇÃO</h2>
+      </div>
+      <div class="flex items-center gap-4">
+        <div class="flex-1 min-w-0">
+          <h1 id="detProspNome" class="text-2xl font-bold text-white truncate"></h1>
+          <p id="detProspSubtitulo" class="text-gray-300 truncate text-sm"></p>
         </div>
-        <div class="flex items-center">
-          <div class="flex-1 text-center min-w-0">
-            <h1 id="modalProspectNameHeader" class="text-2xl font-bold text-white truncate" title="Jennifer Wilson">Jennifer Wilson</h1>
-            <p id="modalProspectCompanyHeader" class="text-gray-300 truncate" title="Acme Corporation">Acme Corporation</p>
-          </div>
-          <div class="flex items-center gap-3 justify-end">
-            <button class="btn-primary px-4 py-2 rounded-lg text-white font-medium">
-              Editar
-            </button>
-            <button id="prospectDelete" class="btn-danger px-4 py-2 rounded-lg text-white font-medium">
-              Deletar
-            </button>
-            <button class="btn-dark-blue px-4 py-2 rounded-lg text-white font-medium">
-              Alterar Responsável
-            </button>
-            <button id="toggleNotify" aria-pressed="false" class="btn-ghost px-4 py-2 rounded-lg text-white font-medium">
-              Notificações
-            </button>
-            <button class="btn-success px-6 py-2 rounded-lg font-medium text-black">
-              Converter
-            </button>
-          </div>
+        <div class="flex items-center gap-3 justify-end flex-shrink-0">
+          <button id="detProspEditar" data-perm="pros.edit" class="btn-primary px-4 py-2 rounded-lg text-white font-medium">Editar</button>
+          <button id="detProspExcluir" data-perm="pros.delete" class="btn-danger px-4 py-2 rounded-lg text-white font-medium">Excluir</button>
         </div>
-      </header>
+      </div>
+    </header>
 
     <div class="flex-1 overflow-y-auto modal-scroll">
-      <!-- Summary Card -->
+      <!-- Cartão-resumo -->
       <div class="px-8 py-6">
         <section class="w-full rounded-2xl bg-[--color-surface] backdrop-blur p-6 lg:p-8 shadow-lg">
-            <div class="grid grid-cols-12 gap-6 items-center">
-                <!-- Identidade -->
-                <div class="col-span-12 lg:col-span-5 flex items-center gap-4">
-                    <div class="h-16 w-16 rounded-full ring-2 ring-[--color-primary] grid place-items-center text-[--color-primary] font-semibold shrink-0">
-                        <span id="modalProspectInitials">JW</span>
-                    </div>
-                    <div class="min-w-0">
-                        <h2 id="modalProspectName" class="text-xl lg:text-2xl font-semibold text-white truncate" title="Jennifer Wilson">Jennifer Wilson</h2>
-                        <p id="modalProspectCompany" class="text-sm text-white/70 truncate" title="Acme Corporation">Acme Corporation</p>
-                    </div>
-                </div>
-
-                <!-- Metadados 3×2 -->
-                <div class="col-span-12 lg:col-span-7 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-
-                    <div class="rounded-lg border border-white/10 bg-white/5 backdrop-blur p-3 h-[76px] flex flex-col justify-center overflow-hidden">
-                        <span class="text-[11px] uppercase tracking-wide text-white/60">Responsável</span>
-                        <span id="modalProspectOwner" class="block text-sm text-white truncate" title="João Silva">João Silva</span>
-                    </div>
-
-                    <button id="modalProspectEmailLink" type="button" class="rounded-lg border border-white/10 bg-white/5 backdrop-blur p-3 h-[76px] flex flex-col justify-center hover:bg-white/10 transition-colors overflow-hidden" aria-label="Copiar e-mail">
-                        <span class="text-[11px] uppercase tracking-wide text-white/60">E-mail</span>
-                        <span id="modalProspectEmail" class="block text-sm text-white truncate" title="jennifer@acme.com">jennifer@acme.com</span>
-                    </button>
-
-                    <button id="modalProspectPhoneLink" type="button" class="rounded-lg border border-white/10 bg-white/5 backdrop-blur p-3 h-[76px] flex flex-col justify-center hover:bg-white/10 transition-colors overflow-hidden" aria-label="Copiar telefone">
-                        <span class="text-[11px] uppercase tracking-wide text-white/60">Telefone</span>
-                        <span id="modalProspectPhone" class="block text-sm text-white truncate" title="(11) 3333-4444">(11) 3333-4444</span>
-                    </button>
-
-                    <button id="modalProspectCellLink" type="button" class="rounded-lg border border-white/10 bg-white/5 backdrop-blur p-3 h-[76px] flex flex-col justify-center hover:bg-white/10 transition-colors overflow-hidden" aria-label="Copiar celular">
-                        <span class="text-[11px] uppercase tracking-wide text-white/60">Celular</span>
-                        <span id="modalProspectCell" class="block text-sm text-white truncate" title="(11) 99999-9999">(11) 99999-9999</span>
-                    </button>
-
-                    <div class="rounded-lg border border-white/10 bg-white/5 backdrop-blur p-3 h-[76px] flex flex-col justify-center overflow-hidden">
-                        <span class="text-[11px] uppercase tracking-wide text-white/60">Empresa</span>
-                        <span id="modalProspectCompanyMeta" class="block text-sm text-white truncate" title="Acme Corporation">Acme Corporation</span>
-                    </div>
-
-                    <div class="rounded-lg border border-white/10 bg-white/5 backdrop-blur p-3 h-[76px] flex flex-col justify-center overflow-hidden">
-                        <span class="text-[11px] uppercase tracking-wide text-white/60">Status</span>
-                        <span id="modalProspectStatus" class="mt-1 inline-flex max-w-max px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-500/20 text-emerald-200 truncate" title="Novo">Novo</span>
-                    </div>
-
-                </div>
+          <div class="grid grid-cols-12 gap-6 items-center">
+            <div class="col-span-12 lg:col-span-4 flex items-center gap-4">
+              <div class="h-16 w-16 rounded-full ring-2 ring-[--color-primary] grid place-items-center text-[--color-primary] font-semibold shrink-0">
+                <span id="detProspIniciais"></span>
+              </div>
+              <div class="min-w-0">
+                <h2 id="detProspEmpresa" class="text-xl font-semibold text-white truncate"></h2>
+                <p id="detProspSegmento" class="text-sm text-white/70 truncate"></p>
+              </div>
             </div>
-            <div class="mt-6 lg:hidden h-px w-full bg-white/10"></div>
+
+            <!-- Métricas: preenchidas por prospeccao-detalhes.js -->
+            <div id="detProspMetricas" class="col-span-12 lg:col-span-8 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3"></div>
+          </div>
         </section>
       </div>
 
-        <nav class="sticky top-0 z-20 bg-gray-50 backdrop-blur-xl border-b border-white/10" role="tablist">
+      <nav class="sticky top-0 z-20 bg-gray-50 backdrop-blur-xl border-b border-white/10" role="tablist">
         <div class="px-8">
-            <div class="flex gap-8 overflow-x-auto">
-                <button role="tab" data-tab="overview" aria-selected="true"
-                        class="py-4 px-2 text-sm font-medium text-gray-400 border-b-2 border-transparent hover:text-black transition whitespace-nowrap">
-                    Visão Geral
-                </button>
-                <button role="tab" data-tab="activities" aria-selected="false"
-                        class="py-4 px-2 text-sm font-medium text-gray-400 border-b-2 border-transparent hover:text-black transition whitespace-nowrap">
-                    Atividades
-                </button>
-                <button role="tab" data-tab="notes" aria-selected="false"
-                        class="py-4 px-2 text-sm font-medium text-gray-400 border-b-2 border-transparent hover:text-black transition whitespace-nowrap">
-                    Notas
-                </button>
-                <button role="tab" data-tab="history" aria-selected="false"
-                        class="py-4 px-2 text-sm font-medium text-gray-400 border-b-2 border-transparent hover:text-black transition whitespace-nowrap">
-                    Histórico
-                </button>
-            </div>
+          <div class="flex gap-8 overflow-x-auto">
+            <button role="tab" data-tab="visao" aria-selected="true"
+                    class="py-4 px-2 text-sm font-medium text-gray-400 border-b-2 border-transparent hover:text-black transition whitespace-nowrap">Visão Geral</button>
+            <button role="tab" data-tab="contatos" aria-selected="false"
+                    class="py-4 px-2 text-sm font-medium text-gray-400 border-b-2 border-transparent hover:text-black transition whitespace-nowrap">
+              Contatos <span data-contador="contatos" class="ml-1 text-xs opacity-70"></span>
+            </button>
+            <button role="tab" data-tab="atividades" aria-selected="false"
+                    class="py-4 px-2 text-sm font-medium text-gray-400 border-b-2 border-transparent hover:text-black transition whitespace-nowrap">
+              Atividades <span data-contador="interacoes" class="ml-1 text-xs opacity-70"></span>
+            </button>
+            <button role="tab" data-tab="notas" aria-selected="false"
+                    class="py-4 px-2 text-sm font-medium text-gray-400 border-b-2 border-transparent hover:text-black transition whitespace-nowrap">
+              Notas <span data-contador="notas" class="ml-1 text-xs opacity-70"></span>
+            </button>
+            <button role="tab" data-tab="campanhas" aria-selected="false"
+                    class="py-4 px-2 text-sm font-medium text-gray-400 border-b-2 border-transparent hover:text-black transition whitespace-nowrap">
+              Campanhas <span data-contador="campanhas" class="ml-1 text-xs opacity-70"></span>
+            </button>
+            <button role="tab" data-tab="historico" aria-selected="false"
+                    class="py-4 px-2 text-sm font-medium text-gray-400 border-b-2 border-transparent hover:text-black transition whitespace-nowrap">
+              Histórico <span data-contador="historico" class="ml-1 text-xs opacity-70"></span>
+            </button>
+          </div>
         </div>
       </nav>
 
-      <!-- Tab Content -->
-      <div id="prospectTabContent" class="px-8 py-6">
-        <!-- Visão Geral -->
-        <section data-panel="overview" class="space-y-6">
-            <!-- Informações de Contato -->
-            <div class="bg-surface/60 backdrop-blur-xl rounded-2xl border border-white/10 p-6">
-                <h3 class="text-lg font-semibold text-white mb-4">Informações de Contato</h3>
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div>
-                        <label class="block text-sm text-gray-400 mb-1">Cargo</label>
-                        <p class="text-white">Diretora de Marketing</p>
-                    </div>
-                    <div>
-                        <label class="block text-sm text-gray-400 mb-1">Status</label>
-                        <span class="badge-success px-3 py-1 rounded-full text-sm font-medium">Qualificado</span>
-                    </div>
-                    <div>
-                        <label class="block text-sm text-gray-400 mb-1">Origem</label>
-                        <p class="text-white">LinkedIn</p>
-                    </div>
-                    <div>
-                        <label class="block text-sm text-gray-400 mb-1">Telefone</label>
-                        <p class="text-white">(11) 3333-4444</p>
-                    </div>
-                    <div>
-                        <label class="block text-sm text-gray-400 mb-1">Celular</label>
-                        <p class="text-white">(11) 99999-9999</p>
-                    </div>
-                    <div>
-                        <label class="block text-sm text-gray-400 mb-1">E-mail</label>
-                        <p class="text-white">jennifer@acme.com</p>
-                    </div>
-                </div>
-            </div>
+      <div class="px-8 py-6">
+        <section data-panel="visao" class="space-y-6">
+          <div class="bg-surface/60 backdrop-blur-xl rounded-2xl border border-white/10 p-6">
+            <h3 class="text-lg font-semibold text-white mb-4">Oportunidade</h3>
+            <div id="detProspOportunidade" class="grid grid-cols-1 md:grid-cols-2 gap-6"></div>
+          </div>
 
-            <!-- Informações da Empresa -->
-            <div class="bg-surface/60 backdrop-blur-xl rounded-2xl border border-white/10 p-6">
-                <h3 class="text-lg font-semibold text-white mb-4">Informações da Empresa</h3>
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div>
-                        <label class="block text-sm text-gray-400 mb-1">Razão Social</label>
-                        <p class="text-white">Acme Corporation</p>
-                    </div>
-                    <div>
-                        <label class="block text-sm text-gray-400 mb-1">Nome Fantasia</label>
-                        <p class="text-white">Acme</p>
-                    </div>
-                    <div>
-                        <label class="block text-sm text-gray-400 mb-1">CNPJ</label>
-                        <p class="text-white">00.000.000/0001-00</p>
-                    </div>
-                    <div>
-                        <label class="block text-sm text-gray-400 mb-1">Segmento</label>
-                        <p class="text-white">Tecnologia</p>
-                    </div>
-                    <div>
-                        <label class="block text-sm text-gray-400 mb-1">Inscrição Estadual</label>
-                        <p class="text-white">123.456.789.000</p>
-                    </div>
-                    <div>
-                        <label class="block text-sm text-gray-400 mb-1">Site</label>
-                        <a href="https://acme.com" data-external target="_blank" rel="noopener noreferrer" class="text-primary hover:text-primary-light">www.acme.com</a>
-                    </div>
-                    <div class="md:col-span-2">
-                        <label class="block text-sm text-gray-400 mb-1">Endereço</label>
-                        <p class="text-white">Av. Paulista, 1000 - Bela Vista, São Paulo - SP, 01310-100</p>
-                    </div>
-                </div>
-            </div>
+          <div class="bg-surface/60 backdrop-blur-xl rounded-2xl border border-white/10 p-6">
+            <h3 class="text-lg font-semibold text-white mb-4">Empresa</h3>
+            <div id="detProspEmpresaDados" class="grid grid-cols-1 md:grid-cols-2 gap-6"></div>
+          </div>
 
-            <!-- Campos Personalizados -->
-            <div class="bg-surface/60 backdrop-blur-xl rounded-2xl border border-white/10 p-6">
-                <h3 class="text-lg font-semibold text-white mb-4">Campos Personalizados</h3>
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div>
-                        <label class="block text-sm text-gray-400 mb-1">Receita Anual</label>
-                        <p class="text-white">R$ 50M - R$ 100M</p>
-                    </div>
-                    <div>
-                        <label class="block text-sm text-gray-400 mb-1">Interesse no Produto</label>
-                        <span class="badge-warning px-3 py-1 rounded-full text-sm font-medium">Alto</span>
-                    </div>
-                    <div>
-                        <label class="block text-sm text-gray-400 mb-1">Prazo de Decisão</label>
-                        <p class="text-white">3-6 meses</p>
-                    </div>
-                    <div>
-                        <label class="block text-sm text-gray-400 mb-1">Status do Orçamento</label>
-                        <span class="badge-info px-3 py-1 rounded-full text-sm font-medium">Aprovado</span>
-                    </div>
-                </div>
-            </div>
+          <div class="bg-surface/60 backdrop-blur-xl rounded-2xl border border-white/10 p-6">
+            <h3 class="text-lg font-semibold text-white mb-4">Endereço</h3>
+            <div id="detProspEndereco" class="text-white"></div>
+          </div>
+
+          <div id="detProspAnotacoesCard" class="bg-surface/60 backdrop-blur-xl rounded-2xl border border-white/10 p-6 hidden">
+            <h3 class="text-lg font-semibold text-white mb-4">Anotações</h3>
+            <p id="detProspAnotacoes" class="text-gray-300 whitespace-pre-wrap"></p>
+          </div>
         </section>
 
-        <!-- Atividades -->
-        <section data-panel="activities" class="space-y-6 hidden">
-            <!-- Ações -->
-            <div class="flex gap-3 mb-6">
-                <button id="btnNovaTarefa" class="btn-primary px-4 py-2 rounded-lg text-white font-medium">
-                    + Nova Tarefa
-                </button>
-                <button class="btn-blue px-4 py-2 rounded-lg text-white font-medium">
-                    Registrar Ligação
-                </button>
-                <button class="btn-blue px-4 py-2 rounded-lg text-white font-medium">
-                    Registrar E-mail
-                </button>
-            </div>
-
-            <!-- Timeline -->
-            <div class="bg-surface/60 backdrop-blur-xl rounded-2xl border border-white/10 p-6">
-                <h3 class="text-lg font-semibold text-white mb-6">Timeline de Atividades</h3>
-                <div class="space-y-6">
-                    <div class="timeline-item relative pl-12">
-                        <div class="timeline-marker absolute left-0 top-1 w-8 h-8 rounded-full flex items-center justify-center">
-                            📞
-                        </div>
-                        <div>
-                            <h4 class="font-semibold text-white">Ligação realizada</h4>
-                            <p class="text-sm text-gray-400 mb-2">Hoje, 14:30 • Duração: 25 min</p>
-                            <p class="text-gray-300">Discussão sobre necessidades de marketing digital. Cliente demonstrou interesse em nossa solução de automação.</p>
-                        </div>
-                    </div>
-
-                    <div class="timeline-item relative pl-12">
-                        <div class="timeline-marker absolute left-0 top-1 w-8 h-8 rounded-full flex items-center justify-center">
-                            📧
-                        </div>
-                        <div>
-                            <h4 class="font-semibold text-white">E-mail enviado</h4>
-                            <p class="text-sm text-gray-400 mb-2">Ontem, 16:45</p>
-                            <p class="text-gray-300">Proposta comercial enviada com detalhes do pacote Premium.</p>
-                        </div>
-                    </div>
-
-                    <div class="timeline-item relative pl-12">
-                        <div class="timeline-marker absolute left-0 top-1 w-8 h-8 rounded-full flex items-center justify-center">
-                            📅
-                        </div>
-                        <div>
-                            <h4 class="font-semibold text-white">Reunião agendada</h4>
-                            <p class="text-sm text-gray-400 mb-2">2 dias atrás, 10:00</p>
-                            <p class="text-gray-300">Primeira reunião de apresentação da empresa e produtos.</p>
-                        </div>
-                    </div>
-                </div>
-            </div>
+        <section data-panel="contatos" class="space-y-6 hidden">
+          <div class="bg-surface/60 backdrop-blur-xl rounded-2xl border border-white/10 p-6">
+            <h3 class="text-lg font-semibold text-white mb-4">Contatos da empresa</h3>
+            <div id="detProspContatos"></div>
+          </div>
         </section>
 
-        <!-- Notas -->
-        <section data-panel="notes" class="space-y-6 hidden">
-            <!-- Ordens -->
-            <div class="bg-surface/60 backdrop-blur-xl rounded-2xl border border-white/10 p-6">
-                <div class="flex justify-between items-center mb-4">
-                    <h3 class="text-lg font-semibold text-white">Ordens</h3>
-                    <button class="btn-primary px-4 py-2 rounded-lg text-white font-medium">
-                        + Novo
-                    </button>
-                </div>
-                <div class="glass-surface rounded-xl shadow-lg table-scroll">
-                    <table class="w-full">
-                        <thead class="bg-gray-50 sticky top-0">
-                            <tr>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Código</th>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cliente</th>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Data</th>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Valor Total</th>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Condição</th>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ações</th>
-                            </tr>
-                        </thead>
-                        <tbody class="divide-y divide-white/10">
-                            <tr>
-                                <td class="px-6 py-4 whitespace-nowrap text-sm text-white">#123</td>
-                                <td class="px-6 py-4 whitespace-nowrap text-sm text-white">Acme Corporation</td>
-                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">15/02/2024</td>
-                                <td class="px-6 py-4 whitespace-nowrap text-sm text-left text-white">R$ 45.000</td>
-                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">À vista</td>
-                                <td class="px-6 py-4 whitespace-nowrap text-sm"><span class="badge-warning px-2 py-1 rounded text-xs">Proposta</span></td>
-                                <td class="px-6 py-4 whitespace-nowrap text-sm text-left">
-                                    <div class="flex items-center justify-start space-x-2">
-                                        <i class="fas fa-edit w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Editar"></i>
-                                        <i class="fas fa-trash w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-red)" title="Excluir"></i>
-                                    </div>
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-
-            <!-- Mais Contatos da Empresa -->
-            <div class="bg-surface/60 backdrop-blur-xl rounded-2xl border border-white/10 p-6">
-                <div class="flex justify-between items-center mb-4">
-                    <h3 class="text-lg font-semibold text-white">Mais Contatos da Empresa</h3>
-                    <button class="btn-primary px-4 py-2 rounded-lg text-white font-medium">
-                        + Novo
-                    </button>
-                </div>
-                <div class="glass-surface rounded-xl shadow-lg table-scroll">
-                    <table class="w-full">
-                        <thead class="bg-gray-50 sticky top-0">
-                            <tr>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nome</th>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cargo</th>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">E-mail</th>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Celular</th>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tel. Fixo</th>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ações</th>
-                            </tr>
-                        </thead>
-                        <tbody class="divide-y divide-white/10">
-                            <tr>
-                                <td class="px-6 py-4 whitespace-nowrap text-sm text-white">Jennifer Wilson</td>
-                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">Diretora de Marketing</td>
-                                <td class="px-6 py-4 whitespace-nowrap text-sm text-white">jennifer@acme.com</td>
-                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">(11) 99999-9999</td>
-                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">(11) 3333-4444</td>
-                                <td class="px-6 py-4 whitespace-nowrap text-sm text-left">
-                                    <div class="flex items-center justify-start space-x-2">
-                                        <i class="fas fa-edit w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Editar"></i>
-                                        <i class="fas fa-trash w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-red)" title="Excluir"></i>
-                                    </div>
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-
-            <!-- Histórico de Campanhas -->
-            <div class="bg-surface/60 backdrop-blur-xl rounded-2xl border border-white/10 p-6">
-                <div class="flex justify-between items-center mb-4">
-                    <h3 class="text-lg font-semibold text-white">Histórico de Campanhas</h3>
-                    <button class="btn-primary px-4 py-2 rounded-lg text-white font-medium">
-                        + Add
-                    </button>
-                </div>
-                <div class="glass-surface rounded-xl shadow-lg table-scroll">
-                    <table class="w-full">
-                        <thead class="bg-gray-50 sticky top-0">
-                            <tr>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nome</th>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Data</th>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Resposta</th>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ações</th>
-                            </tr>
-                        </thead>
-                        <tbody class="divide-y divide-white/10">
-                            <tr>
-                                <td class="px-6 py-4 whitespace-nowrap text-sm text-white">LinkedIn Outreach Q1</td>
-                                <td class="px-6 py-4 whitespace-nowrap text-sm"><span class="badge-success px-2 py-1 rounded text-xs">Concluída</span></td>
-                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">10/01/2024</td>
-                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">Interessado</td>
-                                <td class="px-6 py-4 whitespace-nowrap text-sm text-left">
-                                    <div class="flex items-center justify-start space-x-2">
-                                        <i class="fas fa-edit w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Editar"></i>
-                                        <i class="fas fa-trash w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-red)" title="Excluir"></i>
-                                    </div>
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-
-            <!-- Notas e Anexos -->
-            <div class="bg-surface/60 backdrop-blur-xl rounded-2xl border border-white/10 p-6">
-                <div class="flex justify-between items-center mb-4">
-                    <h3 class="text-lg font-semibold text-white">Notas e Anexos</h3>
-                    <button class="btn-primary px-4 py-2 rounded-lg text-white font-medium">
-                        + Novo
-                    </button>
-                </div>
-                <div class="space-y-4">
-                    <div class="bg-surface/40 rounded-lg p-4 border border-white/5">
-                        <div class="flex justify-between items-start mb-2">
-                            <h4 class="font-medium text-white">Primeira impressão</h4>
-                            <div class="flex gap-2">
-                                <button class="text-gray-400 hover:text-white" title="Editar"><i class="fas fa-edit"></i></button>
-                                <button class="text-gray-400 hover:text-white" title="Excluir"><i class="fas fa-trash"></i></button>
-                            </div>
-                        </div>
-                        <p class="text-gray-300 text-sm mb-2">Cliente muito receptivo, empresa em crescimento acelerado. Demonstrou interesse real em automação de marketing.</p>
-                        <p class="text-xs text-gray-500">Carlos Silva • 3 dias atrás</p>
-                    </div>
-                </div>
-            </div>
+        <section data-panel="atividades" class="space-y-6 hidden">
+          <div class="bg-surface/60 backdrop-blur-xl rounded-2xl border border-white/10 p-6">
+            <h3 class="text-lg font-semibold text-white mb-6">Timeline de atividades</h3>
+            <div id="detProspInteracoes" class="space-y-6"></div>
+          </div>
         </section>
 
-        <!-- Histórico -->
-        <section data-panel="history" class="space-y-6 hidden">
-            <!-- Composer -->
-            <div class="bg-surface/60 backdrop-blur-xl rounded-2xl border border-white/10 p-6">
-                <div class="flex gap-4">
-                    <div class="w-10 h-10 bg-gradient-to-br from-primary/20 to-primary/5 rounded-full flex items-center justify-center text-sm font-bold text-primary border border-primary/20">
-                        CS
-                    </div>
-                    <div class="flex-1">
-                        <textarea placeholder="Compartilhe uma atualização..." 
-                                  class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 resize-none" 
-                                  rows="3"></textarea>
-                        <div class="flex justify-end mt-3">
-                            <button class="btn-primary px-6 py-2 rounded-lg text-white font-medium">
-                                Compartilhar
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            </div>
+        <section data-panel="notas" class="space-y-6 hidden">
+          <div class="bg-surface/60 backdrop-blur-xl rounded-2xl border border-white/10 p-6">
+            <h3 class="text-lg font-semibold text-white mb-4">Notas</h3>
+            <div id="detProspNotas" class="space-y-4"></div>
+          </div>
+          <div class="bg-surface/60 backdrop-blur-xl rounded-2xl border border-white/10 p-6">
+            <h3 class="text-lg font-semibold text-white mb-4">Anexos</h3>
+            <div id="detProspAnexos"></div>
+          </div>
+        </section>
 
-            <!-- Feed -->
-            <div class="space-y-4">
-                <div class="bg-surface/60 backdrop-blur-xl rounded-2xl border border-white/10 p-6">
-                    <div class="flex gap-4">
-                        <div class="w-10 h-10 bg-gradient-to-br from-primary/20 to-primary/5 rounded-full flex items-center justify-center text-sm font-bold text-primary border border-primary/20">
-                            CS
-                        </div>
-                        <div class="flex-1">
-                            <div class="flex items-center gap-2 mb-2">
-                                <span class="font-medium text-white">Carlos Silva</span>
-                                <span class="text-gray-400 text-sm">• 2 horas atrás</span>
-                            </div>
-                            <p class="text-gray-300 mb-4">Ligação muito produtiva com a Jennifer. Ela está animada com nossa proposta de automação e quer agendar uma demo para a equipe dela na próxima semana. 🚀</p>
-                            <div class="flex gap-4 text-sm text-gray-400">
-                                <button class="hover:text-white">👍 Curtir</button>
-                                <button class="hover:text-white">💬 Comentar</button>
-                                <button class="hover:text-white">🔄 Compartilhar</button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+        <section data-panel="campanhas" class="space-y-6 hidden">
+          <div class="bg-surface/60 backdrop-blur-xl rounded-2xl border border-white/10 p-6">
+            <h3 class="text-lg font-semibold text-white mb-4">Campanhas</h3>
+            <div id="detProspCampanhas"></div>
+          </div>
+          <div class="bg-surface/60 backdrop-blur-xl rounded-2xl border border-white/10 p-6">
+            <h3 class="text-lg font-semibold text-white mb-4">Orçamentos vinculados</h3>
+            <div id="detProspOrcamentos"></div>
+          </div>
+        </section>
 
-                <div class="bg-surface/60 backdrop-blur-xl rounded-2xl border border-white/10 p-6">
-                    <div class="flex gap-4">
-                        <div class="w-10 h-10 bg-gradient-to-br from-violet/20 to-violet/5 rounded-full flex items-center justify-center text-sm font-bold text-violet border border-violet/20">
-                            MR
-                        </div>
-                        <div class="flex-1">
-                            <div class="flex items-center gap-2 mb-2">
-                                <span class="font-medium text-white">Maria Rodrigues</span>
-                                <span class="text-gray-400 text-sm">• 1 dia atrás</span>
-                            </div>
-                            <p class="text-gray-300 mb-4">Proposta enviada para a Acme Corporation. Valor: R$ 45.000 para implementação completa da solução de marketing digital.</p>
-                            <div class="flex gap-4 text-sm text-gray-400">
-                                <button class="hover:text-white">👍 Curtir</button>
-                                <button class="hover:text-white">💬 Comentar</button>
-                                <button class="hover:text-white">🔄 Compartilhar</button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
+        <section data-panel="historico" class="space-y-6 hidden">
+          <div class="bg-surface/60 backdrop-blur-xl rounded-2xl border border-white/10 p-6">
+            <h3 class="text-lg font-semibold text-white mb-4">Movimentação no funil</h3>
+            <div id="detProspHistorico"></div>
+          </div>
         </section>
       </div>
     </div>

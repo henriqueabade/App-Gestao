@@ -545,26 +545,9 @@ function abrirExcluirProspeccao(prospeccao) {
 }
 
 function abrirDetalhesProspeccao(prospeccao) {
+    // O modal recarrega a ficha completa de GET /api/prospeccoes/:id; este
+    // resumo da grade serve para pintar o cabeçalho enquanto isso não chega.
     window.prospeccaoDetalhes = prospeccao;
-
-    // Ponte temporária para o modal de detalhes, que ainda é o mockup e lê
-    // `window.prospectDetails`. Sem ela o modal cairia no exemplo embutido
-    // ("Jennifer Wilson"/"Acme Corporation") e mostraria dados falsos por cima
-    // de um registro real. O modal é reconstruído na etapa 5; até lá, ao menos
-    // o cabeçalho mostra a empresa certa.
-    const contato = prospeccao.contato_principal || {};
-    const nomeExibido = contato.nome || prospeccao.nome_fantasia || '';
-    window.prospectDetails = {
-        initials: nomeExibido.split(' ').filter(Boolean).map(n => n[0]).join('').slice(0, 2).toUpperCase(),
-        name: nomeExibido,
-        company: prospeccao.nome_fantasia || prospeccao.razao_social || '',
-        ownerName: prospeccao.responsavel || '',
-        email: contato.email || '',
-        phone: '',
-        cell: contato.telefone_celular || '',
-        status: prospeccao.etapa || ''
-    };
-
     openModalWithSpinner(
         'modals/prospeccoes/detalhes.html',
         '../js/modals/prospeccao-detalhes.js',
