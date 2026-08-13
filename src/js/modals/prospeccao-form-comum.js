@@ -156,11 +156,21 @@
           Modal.open('modals/prospeccoes/contato.html', '../js/modals/prospeccao-contato.js', 'contatoProspeccao', true);
         });
 
-        tr.querySelector('.acao-remover-contato')?.addEventListener('click', () => {
+        tr.querySelector('.acao-remover-contato')?.addEventListener('click', async () => {
           const removido = contatos[indice];
-          // Só vai para a lista de exclusão quem já existe no banco; contato
-          // adicionado e removido na mesma sessão nunca chegou lá.
-          if (removido?.id && removido.status !== 'new') contatosExcluidos.push(removido.id);
+          // Contato que já existe no banco some de verdade ao salvar — pergunta
+          // antes. O que foi digitado agora e ainda não saiu daqui não precisa
+          // de cerimônia: nada foi gravado.
+          const jaGravado = Boolean(removido?.id) && removido.status !== 'new';
+          if (jaGravado) {
+            const ok = await window.DialogPadrao?.confirm({
+              title: 'Remover este contato?',
+              message: `${removido.nome || 'O contato'} será excluído da prospecção ao salvar. O histórico guarda os dados dele.`,
+              confirmText: 'Remover'
+            });
+            if (!ok) return;
+            contatosExcluidos.push(removido.id);
+          }
           contatos.splice(indice, 1);
           renderContatos();
         });

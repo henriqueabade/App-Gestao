@@ -373,6 +373,7 @@
         <div class="flex justify-between items-start gap-3 mb-2">
           ${texto(n.titulo) ? `<h4 class="font-medium text-white">${esc(n.titulo)}</h4>` : '<span></span>'}
           <button type="button" data-remover="nota" data-id="${esc(n.id)}" data-perm="pros.note.remove"
+                  data-rotulo="${esc(texto(n.titulo) ? n.titulo : 'sem título')}"
                   class="acao-tabela acao-tabela--excluir flex-shrink-0" title="Remover nota">
             <i class="fas fa-trash pointer-events-none"></i>
           </button>
@@ -424,6 +425,7 @@
         <td class="px-4 py-3 text-sm text-white/80">${texto(c.resposta) || VAZIO}</td>
         <td class="px-4 py-3 text-sm">
           <button type="button" data-remover="campanha" data-id="${esc(c.id)}" data-perm="pros.campaign.manage"
+                  data-rotulo="${esc(c.nome)}"
                   class="acao-tabela acao-tabela--excluir" title="Remover campanha">
             <i class="fas fa-trash pointer-events-none"></i>
           </button>
@@ -578,7 +580,8 @@
         ${podeExcluir ? `
         <td class="px-4 py-3 text-sm align-top">
           <i class="fas fa-trash acao-tabela acao-tabela--excluir" data-remover="historico"
-             data-id="${esc(h.id)}" title="Excluir evento (Sup Admin)"></i>
+             data-id="${esc(h.id)}" data-rotulo="${esc(h.entidade || meta.rotulo)}"
+             title="Excluir evento (Sup Admin)"></i>
         </td>` : ''}
       </tr>`;
     }).join('');
@@ -758,7 +761,27 @@
   /** Abre um modal de ação por cima deste, sem fechá-lo. */
   function abrirAcao(html, script, overlayId) {
     window.prospeccaoAcaoAlvo = alvo();
-    Modal.open(`modals/prospeccoes/${html}`, `../js/modals/${script}`, overlayId, true);
+    // Devolve a promessa: é ela que o BotaoAcao espera para liberar o botão.
+    return Modal.open(`modals/prospeccoes/${html}`, `../js/modals/${script}`, overlayId, true);
+  }
+
+  /**
+   * Liga um botão de ação com a proteção padrão do sistema: o segundo clique é
+   * engolido enquanto o primeiro não termina, e o botão mostra carregando.
+   *
+   * A rede automática do BotaoAcao libera o botão rastreando promessas de
+   * `window.electronAPI` — e este módulo fala por `fetch` com o backend local.
+   * Sem o `bind` explícito, o bloqueio durava só a janela mínima e dois cliques
+   * rápidos empilhavam dois modais.
+   */
+  function aoClicar(id, handler) {
+    const el = get(id);
+    if (!el) return;
+    // O elemento vai por parâmetro: `evento.currentTarget` só vale durante o
+    // despacho, e o BotaoAcao chama o handler de dentro da própria máquina.
+    const acao = evento => handler(el, evento);
+    if (window.BotaoAcao?.bind) window.BotaoAcao.bind(el, acao);
+    else el.addEventListener('click', acao);
   }
 
   /**
@@ -773,6 +796,10 @@
    * que fecharia esta ficha. Aqui a ficha continua atrás (`keepExisting`).
    */
   function abrirModalOrcamento(html, script, overlayId) {
+    // Devolve uma promessa que só resolve quando o modal aparece: é ela que
+    // mantém o botão em "carregando" durante os segundos de carga.
+    let concluir;
+    const pronto = new Promise(r => { concluir = r; });
     const espera = document.createElement('div');
     espera.className = 'fixed inset-0 bg-black/50 flex items-center justify-center';
     espera.style.zIndex = 'var(--z-dialog)';
@@ -787,6 +814,7 @@
       window.removeEventListener('orcamentoModalLoaded', aoCarregar);
       espera.remove();
       document.getElementById(`${overlayId}Overlay`)?.classList.remove('hidden');
+      concluir();
     };
 
     function aoCarregar(e) {
@@ -807,44 +835,45 @@
 
     window.addEventListener('orcamentoModalLoaded', aoCarregar);
     Modal.open(`modals/orcamentos/${html}`, `../js/modals/${script}`, overlayId, true);
+    return pronto;
   }
 
-  get('detProspMoverFunil')?.addEventListener('click', e => {
-    if (e.currentTarget.disabled) return;
-    abrirAcao('etapa.html', 'prospeccao-etapa.js', 'etapaProspeccao');
+  aoClicar('detProspMoverFunil', botao => {
+    if (botao.disabled) return;
+    return abrirAcao('etapa.html', 'prospeccao-etapa.js', 'etapaProspeccao');
   });
 
-  get('detProspConverter')?.addEventListener('click', e => {
-    if (e.currentTarget.disabled) return;
-    abrirAcao('converter.html', 'prospeccao-converter.js', 'converterProspeccao');
+  aoClicar('detProspConverter', botao => {
+    if (botao.disabled) return;
+    return abrirAcao('converter.html', 'prospeccao-converter.js', 'converterProspeccao');
   });
 
-  get('detProspProximoPasso')?.addEventListener('click', () => {
-    abrirAcao('proximo-passo.html', 'prospeccao-proximo-passo.js', 'proximoPassoProspeccao');
+  aoClicar('detProspProximoPasso', () => {
+    return abrirAcao('proximo-passo.html', 'prospeccao-proximo-passo.js', 'proximoPassoProspeccao');
   });
 
-  get('detProspConcluirPasso')?.addEventListener('click', () => {
-    abrirAcao('concluir-passo.html', 'prospeccao-concluir-passo.js', 'concluirPasso');
+  aoClicar('detProspConcluirPasso', () => {
+    return abrirAcao('concluir-passo.html', 'prospeccao-concluir-passo.js', 'concluirPasso');
   });
 
-  get('detProspNovaInteracao')?.addEventListener('click', () => {
-    abrirAcao('interacao.html', 'prospeccao-interacao.js', 'interacaoProspeccao');
+  aoClicar('detProspNovaInteracao', () => {
+    return abrirAcao('interacao.html', 'prospeccao-interacao.js', 'interacaoProspeccao');
   });
 
-  get('detProspNovaNota')?.addEventListener('click', () => {
-    abrirAcao('nota.html', 'prospeccao-nota.js', 'notaProspeccao');
+  aoClicar('detProspNovaNota', () => {
+    return abrirAcao('nota.html', 'prospeccao-nota.js', 'notaProspeccao');
   });
 
-  get('detProspNovaCampanha')?.addEventListener('click', () => {
-    abrirAcao('campanha.html', 'prospeccao-campanha.js', 'campanhaProspeccao');
+  aoClicar('detProspNovaCampanha', () => {
+    return abrirAcao('campanha.html', 'prospeccao-campanha.js', 'campanhaProspeccao');
   });
 
   // Abre a tela padrão de Novo Orçamento em "modo prospecção": mesmos itens,
   // descontos e parcelamento, só que a proposta é desta prospecção e ganha
   // numeração OCRP. Ver o bloco correspondente em orcamento-novo.js.
-  get('detProspNovoOrcamento')?.addEventListener('click', () => {
+  aoClicar('detProspNovoOrcamento', () => {
     window.orcamentoProspeccao = alvo();
-    abrirModalOrcamento('novo.html', 'orcamento-novo.js', 'novoOrcamento');
+    return abrirModalOrcamento('novo.html', 'orcamento-novo.js', 'novoOrcamento');
   });
 
   // -------------------------------------------------------------------------
@@ -854,7 +883,7 @@
   // evento. Aqui ele precisa ser PERSISTIDO na hora — o backend recebe como
   // delta `contatosNovos`, exatamente como o modal de edição faz.
   // -------------------------------------------------------------------------
-  get('detProspNovoContato')?.addEventListener('click', () => {
+  aoClicar('detProspNovoContato', () => {
     delete window.prospeccaoContatoEditar;
     Modal.open('modals/prospeccoes/contato.html', '../js/modals/prospeccao-contato.js', 'contatoProspeccao', true);
   });
@@ -895,10 +924,17 @@
   async function aoSalvarContato(evento) {
     const contato = evento.detail;
     if (!contato?.nome) return;
-    if (contato.id) {
-      await salvarDeltaContatos({ contatosAtualizados: [contato] }, 'Contato atualizado');
+    // Véu de espera: o salvamento faz o PUT, repinta a ficha inteira e ainda
+    // atualiza a grade atrás. Quem disparou foi o sub-modal do contato, que já
+    // se fechou — não há botão nenhum para segurar o carregando.
+    const gravar = contato.id
+      ? () => salvarDeltaContatos({ contatosAtualizados: [contato] }, 'Contato atualizado')
+      : () => salvarDeltaContatos({ contatosNovos: [contato] }, 'Contato adicionado');
+
+    if (window.BotaoAcao?.comCarregamento) {
+      await window.BotaoAcao.comCarregamento(gravar, 'Salvando o contato...');
     } else {
-      await salvarDeltaContatos({ contatosNovos: [contato] }, 'Contato adicionado');
+      await gravar();
     }
   }
 
@@ -916,7 +952,15 @@
     if (remover) {
       const c = contatosNaTela[Number(remover.dataset.removerContato)];
       if (!c?.id) return;
-      await salvarDeltaContatos({ contatosExcluidos: [c.id] }, 'Contato removido');
+      const aviso = c.principal
+        ? ' Ele é o contato principal — a prospecção ficará sem interlocutor padrão.'
+        : '';
+      await confirmarEExecutar({
+        titulo: 'Excluir este contato?',
+        mensagem: `${c.nome} será removido da prospecção.${aviso} O histórico guarda os dados dele.`,
+        espera: 'Removendo o contato...',
+        acao: () => salvarDeltaContatos({ contatosExcluidos: [c.id] }, 'Contato removido')
+      });
     }
   });
 
@@ -933,7 +977,7 @@
   // Chamar `abrirEditarProspeccao` pelo nome NÃO funciona: menu.js injeta o
   // script do módulo dentro de uma IIFE, e estes <script> de modal ficam fora
   // desse escopo.
-  get('detProspEditar')?.addEventListener('click', () => {
+  aoClicar('detProspEditar', () => {
     const abrir = window.ProspeccoesModulo?.abrirEditar;
     if (!abrir) {
       showToast('Não foi possível abrir a edição', 'error');
@@ -944,7 +988,7 @@
     abrir(registro);
   });
 
-  get('detProspExcluir')?.addEventListener('click', e => {
+  aoClicar('detProspExcluir', e => {
     if (e.currentTarget.disabled) return;
     const abrir = window.ProspeccoesModulo?.abrirExcluir;
     if (!abrir) {
@@ -957,7 +1001,15 @@
   });
 
   // -------------------------------------------------------------------------
-  // Exclusão de nota e campanha — direto na lista, sem modal intermediário.
+  // Exclusão de nota, campanha e evento do histórico
+  //
+  // Toda exclusão passa pela caixa de diálogo padrão do sistema. Antes a
+  // lixeira apagava no primeiro clique, sem pergunta — e nenhuma delas tem
+  // desfazer.
+  //
+  // O carregamento vem do `comCarregamento`, e não do botão: quando o usuário
+  // confirma, o diálogo já fechou e a lixeira original não existe mais na tela
+  // (a lista é repintada). Sem o véu, a espera ficaria muda.
   // -------------------------------------------------------------------------
   async function removerFilho(rota, id, mensagem) {
     try {
@@ -975,14 +1027,56 @@
     }
   }
 
+  /** Pergunta antes e, se confirmado, executa sob o véu de carregamento. */
+  async function confirmarEExecutar({ titulo, mensagem, confirmar = 'Excluir', espera, acao }) {
+    const ok = await window.DialogPadrao?.confirm({
+      title: titulo,
+      message: mensagem,
+      confirmText: confirmar
+    });
+    if (!ok) return;
+    if (window.BotaoAcao?.comCarregamento) {
+      await window.BotaoAcao.comCarregamento(acao, espera);
+    } else {
+      await acao();
+    }
+  }
+
+  const COMO_EXCLUIR = {
+    nota: {
+      rota: 'notas', titulo: 'Excluir esta nota?',
+      texto: rotulo => `A nota "${rotulo}" será removida da ficha. O histórico guarda o que ela dizia.`,
+      espera: 'Removendo a nota...', sucesso: 'Nota removida'
+    },
+    campanha: {
+      rota: 'campanhas', titulo: 'Excluir esta campanha?',
+      texto: rotulo => `A campanha "${rotulo}" sai da lista, mas continua detalhada no histórico.`,
+      espera: 'Removendo a campanha...', sucesso: 'Campanha removida'
+    },
+    historico: {
+      rota: 'historico', titulo: 'Apagar este evento do histórico?',
+      // O histórico é o registro de tudo o mais; apagar aqui não deixa rastro
+      // em lugar nenhum. Por isso o aviso é mais duro que o dos outros.
+      texto: rotulo => `"${rotulo}" será apagado definitivamente. O histórico é o único registro deste fato — não há como recuperá-lo.`,
+      confirmar: 'Apagar definitivamente',
+      espera: 'Apagando o evento...', sucesso: 'Evento removido do histórico'
+    }
+  };
+
   overlay.addEventListener('click', e => {
     const remover = e.target.closest?.('[data-remover]');
     if (!remover) return;
     e.preventDefault();
-    const { remover: tipo, id } = remover.dataset;
-    if (tipo === 'nota') removerFilho('notas', id, 'Nota removida');
-    else if (tipo === 'campanha') removerFilho('campanhas', id, 'Campanha removida');
-    // Exclusão de evento do histórico: o backend exige Sup Admin de novo.
-    else if (tipo === 'historico') removerFilho('historico', id, 'Evento removido do histórico');
+    const { remover: tipo, id, rotulo } = remover.dataset;
+    const como = COMO_EXCLUIR[tipo];
+    if (!como) return;
+
+    confirmarEExecutar({
+      titulo: como.titulo,
+      mensagem: como.texto(rotulo || 'sem título'),
+      confirmar: como.confirmar,
+      espera: como.espera,
+      acao: () => removerFilho(como.rota, id, como.sucesso)
+    });
   });
 })();

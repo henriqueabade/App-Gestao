@@ -620,6 +620,22 @@ function ligarIconeInfo(icone, p) {
     icone.addEventListener('click', e => e.stopPropagation());
 }
 
+/**
+ * Liga um ícone de ação da grade com a proteção padrão contra duplo clique.
+ *
+ * O `stopPropagation` continua sendo necessário: a linha inteira é clicável, e
+ * sem ele o clique no ícone também abriria a ficha.
+ */
+function ligarAcao(el, handler) {
+    if (!el) return;
+    const acao = e => {
+        e.stopPropagation();
+        return handler();
+    };
+    if (window.BotaoAcao?.bind) window.BotaoAcao.bind(el, acao);
+    else el.addEventListener('click', acao);
+}
+
 function renderTabela(lista) {
     const tbody = document.getElementById('prospeccoesTableBody');
     if (!tbody) return;
@@ -675,29 +691,19 @@ function renderTabela(lista) {
 
         // Cada ícone conhece a SUA prospecção pelo closure. O mockup anterior
         // lia o texto das células para remontar o registro e passava id fixo.
-        tr.querySelector('.acao-ver')?.addEventListener('click', e => {
-            e.stopPropagation();
-            abrirDetalhesProspeccao(p);
-        });
+        //
+        // Todos passam por `ligarAcao`: sem a trava, dois cliques rápidos na
+        // lixeira ou no olho empilhavam dois modais — a rede automática do
+        // BotaoAcao só segura ações que passam por `window.electronAPI`, e aqui
+        // tudo vai por `fetch` ao backend local.
+        ligarAcao(tr.querySelector('.acao-ver'), () => abrirDetalhesProspeccao(p));
         const icone = tr.querySelector('[data-info]');
         if (icone) ligarIconeInfo(icone, p);
 
-        tr.querySelector('.acao-mover')?.addEventListener('click', e => {
-            e.stopPropagation();
-            abrirMoverEtapa(p);
-        });
-        tr.querySelector('.acao-responsavel')?.addEventListener('click', e => {
-            e.stopPropagation();
-            abrirTrocarResponsavel(p);
-        });
-        tr.querySelector('.acao-editar')?.addEventListener('click', e => {
-            e.stopPropagation();
-            abrirEditarProspeccao(p);
-        });
-        tr.querySelector('.acao-excluir')?.addEventListener('click', e => {
-            e.stopPropagation();
-            abrirExcluirProspeccao(p);
-        });
+        ligarAcao(tr.querySelector('.acao-mover'), () => abrirMoverEtapa(p));
+        ligarAcao(tr.querySelector('.acao-responsavel'), () => abrirTrocarResponsavel(p));
+        ligarAcao(tr.querySelector('.acao-editar'), () => abrirEditarProspeccao(p));
+        ligarAcao(tr.querySelector('.acao-excluir'), () => abrirExcluirProspeccao(p));
         tr.addEventListener('click', () => abrirDetalhesProspeccao(p));
 
         tbody.appendChild(tr);
@@ -728,6 +734,10 @@ function openModalWithSpinner(htmlPath, scriptPath, overlayId) {
     // segura a revelação do modal caso ele fique pronto antes disso.
     const MIN_SPINNER_MS = 1000;
     const inicioSpinner = Date.now();
+    // Promessa concluída só quando o modal aparece: é ela que segura o ícone da
+    // grade em "carregando" e engole o segundo clique enquanto isso.
+    let concluir;
+    const pronto = new Promise(r => { concluir = r; });
     function handleLoaded(e) {
         if (e.detail !== overlayId) return;
         const restante = Math.max(0, MIN_SPINNER_MS - (Date.now() - inicioSpinner));
@@ -735,16 +745,18 @@ function openModalWithSpinner(htmlPath, scriptPath, overlayId) {
             const overlay = document.getElementById(`${overlayId}Overlay`);
             spinner.remove();
             overlay?.classList.remove('hidden');
+            concluir();
         }, restante);
         window.removeEventListener('modalSpinnerLoaded', handleLoaded);
     }
     window.addEventListener('modalSpinnerLoaded', handleLoaded);
     Modal.open(htmlPath, scriptPath, overlayId, true);
+    return pronto;
 }
 
 function abrirExcluirProspeccao(prospeccao) {
     window.prospeccaoExcluir = prospeccao;
-    Modal.open('modals/prospeccoes/excluir.html', '../js/modals/prospeccao-excluir.js', 'excluirProspeccao');
+    return Modal.open('modals/prospeccoes/excluir.html', '../js/modals/prospeccao-excluir.js', 'excluirProspeccao');
 }
 
 /**
@@ -761,21 +773,21 @@ function abrirExcluirProspeccao(prospeccao) {
 function abrirTrocarResponsavel(prospeccao) {
     window.prospeccaoAcaoAlvo = prospeccao;
     window.prospeccaoAcaoContatos = [];
-    Modal.open('modals/prospeccoes/responsavel.html', '../js/modals/prospeccao-responsavel.js', 'responsavelProspeccao');
+    return Modal.open('modals/prospeccoes/responsavel.html', '../js/modals/prospeccao-responsavel.js', 'responsavelProspeccao');
 }
 
 function abrirMoverEtapa(prospeccao) {
     window.prospeccaoAcaoAlvo = prospeccao;
     // Sem contatos aqui: o modal de etapa não precisa deles.
     window.prospeccaoAcaoContatos = [];
-    Modal.open('modals/prospeccoes/etapa.html', '../js/modals/prospeccao-etapa.js', 'etapaProspeccao');
+    return Modal.open('modals/prospeccoes/etapa.html', '../js/modals/prospeccao-etapa.js', 'etapaProspeccao');
 }
 
 function abrirDetalhesProspeccao(prospeccao) {
     // O modal recarrega a ficha completa de GET /api/prospeccoes/:id; este
     // resumo da grade serve para pintar o cabeçalho enquanto isso não chega.
     window.prospeccaoDetalhes = prospeccao;
-    openModalWithSpinner(
+    return openModalWithSpinner(
         'modals/prospeccoes/detalhes.html',
         '../js/modals/prospeccao-detalhes.js',
         'detalhesProspeccao'
@@ -784,7 +796,7 @@ function abrirDetalhesProspeccao(prospeccao) {
 
 function abrirEditarProspeccao(prospeccao) {
     window.prospeccaoEditar = prospeccao;
-    openModalWithSpinner(
+    return openModalWithSpinner(
         'modals/prospeccoes/editar.html',
         '../js/modals/prospeccao-editar.js',
         'editarProspeccao'
@@ -792,7 +804,7 @@ function abrirEditarProspeccao(prospeccao) {
 }
 
 function abrirNovaProspeccao() {
-    openModalWithSpinner(
+    return openModalWithSpinner(
         'modals/prospeccoes/novo.html',
         '../js/modals/prospeccao-novo.js',
         'novaProspeccao'

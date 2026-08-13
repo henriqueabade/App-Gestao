@@ -52,8 +52,16 @@
 
   setTimeout(() => get('contatoProsNome')?.focus(), 50);
 
-  form?.addEventListener('submit', e => {
-    e.preventDefault();
+  /**
+   * Salvar o contato.
+   *
+   * Vai por `bindSubmit` (com o `addEventListener` como plano B): o formulário
+   * também é enviado com Enter, sem clique nenhum, e dois envios seguidos
+   * despachariam `prospeccaoContatoSalvo` duas vezes — o que inclui o mesmo
+   * contato duas vezes na lista de quem abriu este modal.
+   */
+  function salvar(e) {
+    e?.preventDefault?.();
 
     const nome = get('contatoProsNome').value.trim();
     if (!nome) {
@@ -92,7 +100,12 @@
 
     window.dispatchEvent(new CustomEvent('prospeccaoContatoSalvo', { detail: detalhe }));
     close();
-  });
+  }
+
+  if (form) {
+    if (window.BotaoAcao?.bindSubmit) window.BotaoAcao.bindSubmit(form, salvar);
+    else form.addEventListener('submit', salvar);
+  }
 
   window.dispatchEvent(new CustomEvent('modalSpinnerLoaded', { detail: 'contatoProspeccao' }));
 })();

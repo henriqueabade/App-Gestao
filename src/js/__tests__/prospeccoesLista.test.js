@@ -712,3 +712,149 @@ test('as utilitárias de tamanho usadas nos modais existem no build offline', ()
   }
   assert.deepEqual(faltando, [], 'classes de tamanho inexistentes no build: ' + faltando.join(', '));
 });
+
+// ---------------------------------------------------------------------------
+// Proteção das ações: duplo clique, carregamento e confirmação de exclusão
+//
+// A rede automática do BotaoAcao libera o botão rastreando promessas de
+// `window.electronAPI`. Este módulo fala por `fetch` com o backend local, então
+// sem o registro EXPLÍCITO o bloqueio durava só a janela mínima — dois cliques
+// rápidos na lixeira ou no olho empilhavam duas ações.
+// ---------------------------------------------------------------------------
+
+/** Elemento mínimo que registra o que foi feito com ele. */
+function elementoFalso() {
+  return {
+    dataset: {},
+    classList: { add() {}, remove() {}, contains: () => false },
+    ouvintes: [],
+    addEventListener(tipo, fn) { this.ouvintes.push({ tipo, fn }); },
+    removeAttribute() {}, setAttribute() {}
+  };
+}
+
+function sandboxDaGrade({ comBotaoAcao = true } = {}) {
+  const s = criarSandbox();
+  s.registrados = [];
+  if (comBotaoAcao) {
+    s.BotaoAcao = {
+      bind(el, handler) {
+        el.dataset.acaoGerida = 'true';
+        s.registrados.push({ el, handler });
+      }
+    };
+  }
+  return s;
+}
+
+test('ícone da grade é registrado pelo BotaoAcao, não por addEventListener', () => {
+  const s = sandboxDaGrade();
+  const icone = elementoFalso();
+  s.__icone = icone;
+  s.__acao = () => {};
+  vm.runInContext('ligarAcao(__icone, __acao);', s);
+
+  assert.equal(s.registrados.length, 1, 'deveria ter ido para o BotaoAcao');
+  assert.equal(icone.dataset.acaoGerida, 'true');
+  assert.equal(icone.ouvintes.length, 0, 'não pode registrar o clique por fora da proteção');
+});
+
+test('sem BotaoAcao, o ícone ainda funciona', () => {
+  // O utilitário é global no menu.html, mas o módulo não pode quebrar se ele
+  // faltar — só perde a proteção.
+  const s = sandboxDaGrade({ comBotaoAcao: false });
+  const icone = elementoFalso();
+  s.__icone = icone;
+  s.__acao = () => {};
+  vm.runInContext('ligarAcao(__icone, __acao);', s);
+  assert.equal(icone.ouvintes.length, 1);
+});
+
+test('o clique no ícone não vaza para a linha', () => {
+  // A linha inteira é clicável e abre a ficha. Sem o stopPropagation, clicar na
+  // lixeira abriria a ficha ao mesmo tempo.
+  const s = sandboxDaGrade();
+  const icone = elementoFalso();
+  let chamou = 0;
+  s.__icone = icone;
+  s.__acao = () => { chamou += 1; return 'feito'; };
+  vm.runInContext('ligarAcao(__icone, __acao);', s);
+
+  let parou = 0;
+  const retorno = s.registrados[0].handler({ stopPropagation() { parou += 1; } });
+  assert.equal(parou, 1, 'stopPropagation não foi chamado');
+  assert.equal(chamou, 1);
+  // O retorno precisa subir: é a promessa que mantém o ícone carregando.
+  assert.equal(retorno, 'feito');
+});
+
+test('ligarAcao ignora ícone ausente sem quebrar', () => {
+  // `.acao-responsavel` só existe para Sup Admin; nas demais linhas é null.
+  const s = sandboxDaGrade();
+  s.__acao = () => {};
+  assert.doesNotThrow(() => vm.runInContext('ligarAcao(null, __acao);', s));
+  assert.equal(s.registrados.length, 0);
+});
+
+// ---------------------------------------------------------------------------
+// Confirmação de exclusão — checagem no código-fonte
+//
+// Nenhuma exclusão pode chamar a API direto: todas passam pela caixa de
+// diálogo padrão. Guarda contra alguém acrescentar uma lixeira nova e esquecer.
+// ---------------------------------------------------------------------------
+
+const FONTE_DETALHES = fs.readFileSync(
+  path.join(__dirname, '..', 'modals', 'prospeccao-detalhes.js'), 'utf8');
+
+test('todo tipo de exclusão da ficha tem texto de confirmação próprio', () => {
+  // Os `data-remover` desenhados na tela e as chaves de COMO_EXCLUIR precisam
+  // bater: um tipo sem entrada simplesmente não apagaria nada.
+  const desenhados = new Set(
+    [...FONTE_DETALHES.matchAll(/data-remover="([a-z]+)"/g)].map(m => m[1]));
+  assert.ok(desenhados.size >= 3, 'esperava nota, campanha e histórico');
+
+  const bloco = /const COMO_EXCLUIR = \{([\s\S]*?)\n  \};/.exec(FONTE_DETALHES);
+  assert.ok(bloco, 'não achei o mapa COMO_EXCLUIR');
+  const declarados = new Set(
+    [...bloco[1].matchAll(/^\s{4}([a-z]+):\s*\{/gm)].map(m => m[1]));
+
+  for (const tipo of desenhados) {
+    assert.ok(declarados.has(tipo), `"${tipo}" tem lixeira na tela e nenhuma confirmação`);
+  }
+});
+
+test('a exclusão de contato pergunta antes', () => {
+  const trecho = /data-remover-contato[\s\S]{0,900}?\}\);/.exec(FONTE_DETALHES);
+  assert.ok(trecho, 'não achei o handler de remover contato');
+  assert.match(trecho[0], /confirmarEExecutar/);
+});
+
+test('a confirmação usa o diálogo padrão do sistema e o véu de carregamento', () => {
+  const helper = /async function confirmarEExecutar\([\s\S]*?\n  \}/.exec(FONTE_DETALHES);
+  assert.ok(helper, 'não achei confirmarEExecutar');
+  assert.match(helper[0], /DialogPadrao\?\.confirm/);
+  assert.match(helper[0], /BotaoAcao\?\.comCarregamento/);
+  // Sem o `if (!ok) return`, cancelar apagaria assim mesmo.
+  assert.match(helper[0], /if \(!ok\) return;/);
+});
+
+test('remover contato no formulário de edição também pergunta', () => {
+  const fonte = fs.readFileSync(
+    path.join(__dirname, '..', 'modals', 'prospeccao-form-comum.js'), 'utf8');
+  // Ancora no handler, não na primeira aparição da classe (que está no
+  // template HTML da linha, algumas dezenas de linhas antes).
+  const trecho = /querySelector\('\.acao-remover-contato'\)[\s\S]{0,1400}?\n        \}\);/.exec(fonte);
+  assert.ok(trecho, 'não achei o handler do formulário');
+  assert.match(trecho[0], /DialogPadrao\?\.confirm/);
+  // Só o que já existe no banco merece cerimônia — o que foi digitado agora e
+  // nunca saiu da tela não precisa.
+  assert.match(trecho[0], /status !== 'new'/);
+});
+
+test('nenhum botão de ação da ficha ficou com addEventListener cru', () => {
+  const crus = [...FONTE_DETALHES.matchAll(/get\('(detProsp[A-Za-z]+)'\)\?\.addEventListener\('click'/g)]
+    .map(m => m[1])
+    // A aba de contatos usa delegação de propósito: as linhas são repintadas.
+    .filter(id => id !== 'detProspContatos');
+  assert.deepEqual(crus, [], 'botões sem proteção: ' + crus.join(', '));
+});
