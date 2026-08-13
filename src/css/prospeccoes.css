@@ -269,6 +269,274 @@ body {
     border-color: var(--color-primary);
 }
 
+/* ------------------------------------------------------------------
+   Barra de filtros horizontal — mesmo padrão de Matéria-prima,
+   Produtos, Clientes e Pedidos. Substituiu a coluna lateral fixa, que
+   comia largura da tabela o tempo todo mesmo sem ninguém filtrar.
+   ------------------------------------------------------------------ */
+.filter-bar {
+    gap: 24px;
+    flex-wrap: nowrap;
+}
+
+@media (max-width: 767px) {
+    .filter-bar {
+        flex-direction: column;
+        align-items: stretch;
+    }
+}
+
+.filter-bar input:not([type="checkbox"]),
+.filter-bar select,
+.filter-bar button {
+    height: 48px;
+}
+
+#bt-actions {
+    margin-top: 1vw;
+    width: 100%;
+    justify-content: flex-start;
+    flex-wrap: wrap;
+}
+
+@media (min-width: 768px) {
+    #bt-actions {
+        width: auto;
+        margin-top: 0;
+        justify-content: flex-end;
+    }
+}
+
+/* ------------------------------------------------------------------
+   Filtros avançados retráteis.
+
+   Anima por `max-height`, e não pelo truque de grid-template-rows
+   0fr -> 1fr: naquele caminho o `1fr` resolvia para 0px neste Chromium
+   e o painel simplesmente não abria.
+
+   O valor do max-height é calculado em JS a partir do scrollHeight —
+   um número fixo no CSS cortaria o painel quando os campos quebrassem
+   em mais linhas numa tela estreita.
+   ------------------------------------------------------------------ */
+.filtros-avancados {
+    overflow: hidden;
+    max-height: 0;
+    transition: max-height 260ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/*
+   Grades escritas à mão, sem depender de `md:grid-cols-*` do Tailwind.
+   O build offline (src/styles/tailwind-offline.css) é um subconjunto gerado
+   por varredura e NÃO contém essas variantes — usá-las daria uma coluna só,
+   em silêncio. `auto-fit` ainda dispensa breakpoints.
+*/
+.filtros-avancados-grade {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+    gap: 1rem;
+}
+
+.filtros-avancados-grade .linha-inteira {
+    grid-column: 1 / -1;
+}
+
+.funil-grade {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 0.75rem;
+}
+
+#btnFiltrosAvancados[aria-expanded="true"] #btnFiltrosAvancadosSeta {
+    transform: rotate(180deg);
+}
+
+/* Botão de funil e de avançados sinalizam quando estão ligados. */
+#btnFiltrosAvancados[aria-expanded="true"],
+#btnOcultarGraficoFunil[aria-expanded="true"] {
+    background: var(--color-primary);
+    border-color: var(--color-primary);
+}
+
+/* ------------------------------------------------------------------
+   Ícone (i) e popover — mesmo padrão de Matéria-prima e Produtos.
+   ------------------------------------------------------------------ */
+.info-icon {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    color: #fff;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: all 150ms ease;
+}
+
+.info-icon::after {
+    content: 'i';
+    font-style: italic;
+    font-weight: bold;
+}
+
+.info-icon:hover {
+    background: rgba(255, 255, 255, 0.445);
+    transform: scale(1.1);
+}
+
+.resumo-popover {
+    position: absolute;
+    z-index: 50;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.555);
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(-8px);
+    transition: opacity 200ms ease, transform 200ms ease;
+    pointer-events: none;
+    background: #310017c5;
+}
+
+.resumo-popover.show {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
+    pointer-events: auto;
+}
+
+/* Card do popup da linha */
+.popup-card {
+    background: #310017e6;
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.45);
+    color: white;
+    border-radius: 0.5rem;
+    overflow: hidden;
+    width: 20rem;
+}
+
+.popup-header {
+    padding: 0.75rem 1.25rem;
+    background-color: rgba(0, 0, 0, 0.15);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.popup-header-subtitle {
+    font-size: 0.75rem;
+    color: #c9c9c9;
+    margin-bottom: 0.25rem;
+}
+
+.popup-header-title {
+    font-size: 1rem;
+    font-weight: 500;
+    color: white;
+}
+
+.popup-body {
+    padding: 1rem 1.25rem;
+}
+
+.popup-info-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+.popup-info-label {
+    font-size: 0.75rem;
+    color: #c9c9c9;
+    margin-bottom: 0.25rem;
+}
+
+.popup-info-value {
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: white;
+    word-break: break-word;
+}
+
+.popup-secao {
+    padding-top: 0.75rem;
+    margin-top: 0.75rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.popup-secao:first-child {
+    padding-top: 0;
+    margin-top: 0;
+    border-top: none;
+}
+
+.popup-contato-nome {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: #fff;
+}
+
+.popup-contato-linha {
+    font-size: 0.8rem;
+    color: #e5e5e5;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    margin-top: 0.15rem;
+    word-break: break-all;
+}
+
+/* ------------------------------------------------------------------
+   Funil compacto: sete cartões lado a lado em vez de sete barras
+   empilhadas. Com a coluna lateral removida sobra largura, e o que
+   passou a ser escasso é a ALTURA.
+   ------------------------------------------------------------------ */
+.funil-etapa {
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(255, 255, 255, 0.04);
+    border-radius: 0.6rem;
+    padding: 0.6rem 0.75rem;
+}
+
+.funil-etapa__topo {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.5rem;
+    margin-bottom: 0.35rem;
+}
+
+.funil-etapa__nome {
+    font-size: 0.75rem;
+    color: rgba(255, 255, 255, 0.75);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.funil-etapa__qtd {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: #fff;
+    line-height: 1;
+}
+
+.funil-etapa__valor {
+    font-size: 0.7rem;
+    color: rgba(255, 255, 255, 0.55);
+    margin-top: 0.35rem;
+}
+
+/* A altura da barra fica aqui: `h-1.5` também não existe no build offline. */
+.funil-etapa .funil-trilho,
+.funil-etapa .funil-barra {
+    height: 6px;
+    border-radius: 999px;
+}
+
 .prospeccoes-multiselect-trigger {
     display: flex;
     align-items: center;

@@ -134,8 +134,10 @@ function mostrarEstado(estado, detalhe = '') {
     alternar(vazio, estado === 'vazio');
     alternar(carregando, estado === 'carregando');
     alternar(erro, estado === 'erro');
-    // O funil não faz sentido enquanto carrega ou quando a busca falhou.
-    if (funil && !funil.dataset.ocultoPeloUsuario) {
+
+    // O funil nasce oculto e só aparece quando o usuário pede — mas enquanto
+    // carrega ou depois de uma falha ele não faz sentido nem se estiver ligado.
+    if (funil?.dataset.ligado === '1') {
         alternar(funil, estado === 'lista' || estado === 'vazio');
     }
 
@@ -347,6 +349,13 @@ function limparFiltros() {
 // Desenho
 // ---------------------------------------------------------------------------
 
+/**
+ * Funil em cartões lado a lado, não em barras empilhadas.
+ *
+ * Com a coluna lateral de filtros removida sobrou largura, e o que passou a ser
+ * escasso é a ALTURA — sete barras empilhadas empurravam a tabela para fora da
+ * tela justamente quando o usuário pedia o gráfico.
+ */
 function renderFunil(funil) {
     const container = document.getElementById('prospeccoesFunil');
     const total = document.getElementById('prospeccoesFunilTotal');
@@ -359,24 +368,22 @@ function renderFunil(funil) {
     }
 
     // A barra é proporcional à MAIOR etapa, não ao total: com 7 etapas, usar o
-    // total deixaria todas as barras minúsculas e o gráfico ilegível.
+    // total deixaria todas minúsculas e o gráfico ilegível.
     const maior = Math.max(1, ...funil.etapas.map(e => e.quantidade));
 
     container.innerHTML = funil.etapas.map(e => {
         const largura = Math.round((e.quantidade / maior) * 100);
         const slug = slugEtapa(e.etapa);
         return `
-            <div>
-                <div class="flex justify-between text-sm mb-1">
-                    <span class="text-white">${esc(e.etapa)}</span>
-                    <span class="flex items-center gap-3">
-                        <span class="text-white/60">${formatarMoedaCompacta(e.valor)}</span>
-                        <span style="color: var(--color-violet)">${e.quantidade}</span>
-                    </span>
+            <div class="funil-etapa">
+                <div class="funil-etapa__topo">
+                    <span class="funil-etapa__nome" title="${esc(e.etapa)}">${esc(e.etapa)}</span>
+                    <span class="funil-etapa__qtd">${e.quantidade}</span>
                 </div>
-                <div class="funil-trilho rounded-full h-2">
-                    <div class="funil-barra funil-barra--${slug} h-2 rounded-full" style="width: ${largura}%"></div>
+                <div class="funil-trilho">
+                    <div class="funil-barra funil-barra--${slug}" style="width: ${largura}%"></div>
                 </div>
+                <div class="funil-etapa__valor">${formatarMoedaCompacta(e.valor)}</div>
             </div>`;
     }).join('');
 
@@ -385,9 +392,14 @@ function renderFunil(funil) {
     }
 }
 
+/**
+ * Resumo em etiquetas na barra de filtro, com o detalhe no popover (i) — mesmo
+ * padrão do "Totais por Tipo" de Matéria-prima. Na coluna lateral cabia uma
+ * lista; numa barra horizontal, não.
+ */
 function renderResumo(lista) {
-    const container = document.getElementById('prospeccoesResumo');
-    if (!container) return;
+    const tags = document.getElementById('prospeccoesResumoTags');
+    if (!tags) return;
 
     const valorTotal = lista.reduce((s, p) => s + Number(p.valor_estimado ?? 0), 0);
     const ponderado = lista.reduce(
@@ -399,40 +411,135 @@ function renderResumo(lista) {
         return d && d < hoje;
     }).length;
 
+    const etiqueta = (texto, classe) =>
+        `<span class="${classe} px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap">${texto}</span>`;
+
+    tags.innerHTML = [
+        etiqueta(`${lista.length} exibindo`, 'badge-neutral'),
+        etiqueta(formatarMoedaCompacta(valorTotal), 'badge-info'),
+        atrasadas ? etiqueta(`${atrasadas} atrasada${atrasadas > 1 ? 's' : ''}`, 'badge-danger') : ''
+    ].join('');
+
+    const popover = document.getElementById('resumoPopover');
+    if (!popover) return;
+
     const linha = (rotulo, valor, classe = 'text-white') =>
-        `<div class="flex justify-between gap-2">
-            <span class="text-white/60">${rotulo}</span>
-            <span class="${classe} font-medium">${valor}</span>
+        `<div class="flex justify-between gap-6 py-1">
+            <span class="text-white/60 text-sm">${rotulo}</span>
+            <span class="${classe} text-sm font-medium">${valor}</span>
         </div>`;
 
-    container.innerHTML = [
-        linha('Exibindo', String(lista.length)),
-        linha('Valor total', formatarMoeda(valorTotal)),
-        // Valor ponderado pela probabilidade: é a previsão realista, não o
-        // sonho da soma bruta.
-        linha('Previsão ponderada', formatarMoeda(ponderado)),
-        atrasadas
-            ? linha('Passos atrasados', String(atrasadas), 'prox-passo-atrasado')
-            : ''
-    ].join('');
+    popover.innerHTML = `
+        <p class="text-xs uppercase tracking-wide text-white/50 mb-2">Resumo do que está na tela</p>
+        ${linha('Prospecções', String(lista.length))}
+        ${linha('Valor total', formatarMoeda(valorTotal))}
+        ${linha('Previsão ponderada', formatarMoeda(ponderado))}
+        ${linha('Passos atrasados', String(atrasadas), atrasadas ? 'prox-passo-atrasado' : 'text-white')}
+        <p class="mt-2 pt-2 border-t border-white/10 text-xs text-white/50">
+            A previsão ponderada multiplica cada valor pela probabilidade da etapa.
+        </p>`;
 }
 
-function celulaProximoPasso(p) {
-    if (!p.proximo_passo_data) {
-        return `<span class="text-white/40">—</span>`;
+// ---------------------------------------------------------------------------
+// Popover (i) da linha
+// ---------------------------------------------------------------------------
+
+let popupLinhaAtual = null;
+
+/**
+ * O que saiu das colunas da tabela mora aqui.
+ *
+ * Os `data-perm-col` acompanham os campos: quem não pode ver o valor na grade
+ * também não pode vê-lo no popover, senão esconder a coluna seria teatro.
+ */
+function criarConteudoPopupLinha(p) {
+    const contato = p.contato_principal;
+    const ponderado = Number(p.valor_estimado ?? 0) * (Number(p.probabilidade ?? 0) / 100);
+
+    const info = (rotulo, valor, permissao) =>
+        `<div${permissao ? ` data-perm-col="${permissao}"` : ''}>
+            <p class="popup-info-label">${rotulo}</p>
+            <p class="popup-info-value">${valor || '—'}</p>
+        </div>`;
+
+    // Contato primeiro: é o dado que a pessoa procura ao passar o mouse.
+    const blocoContato = contato
+        ? `<div class="popup-secao">
+             <p class="popup-info-label">Contato principal</p>
+             <p class="popup-contato-nome">${esc(contato.nome)}</p>
+             ${contato.cargo ? `<p class="popup-contato-linha"><i class="fas fa-briefcase text-white/40"></i>${esc(contato.cargo)}</p>` : ''}
+             ${contato.email ? `<p class="popup-contato-linha"><i class="fas fa-envelope text-white/40"></i>${esc(contato.email)}</p>` : ''}
+             ${contato.telefone_celular ? `<p class="popup-contato-linha"><i class="fas fa-phone text-white/40"></i>${esc(contato.telefone_celular)}</p>` : ''}
+           </div>`
+        : `<div class="popup-secao">
+             <p class="popup-info-label">Contato principal</p>
+             <p class="popup-info-value text-white/50">Nenhum contato cadastrado</p>
+           </div>`;
+
+    const proximoPasso = p.proximo_passo ? esc(p.proximo_passo) : '—';
+    const dia = diaDe(p.proximo_passo_data);
+    const atrasado = dia && dia < hojeZerado();
+    const quando = p.proximo_passo_data
+        ? `<span class="${atrasado ? 'prox-passo-atrasado' : ''}">${formatarData(p.proximo_passo_data)}${atrasado ? ' · atrasado' : ''}</span>`
+        : '—';
+
+    return `
+    <div class="popup-card">
+      <div class="popup-header">
+        <p class="popup-header-subtitle" data-perm-col="col_pros_id">Prospecção #${esc(p.id)}</p>
+        <h3 class="popup-header-title">${esc(p.nome_fantasia || p.razao_social || '')}</h3>
+      </div>
+      <div class="popup-body">
+        ${blocoContato}
+        <div class="popup-secao">
+          <div class="popup-info-grid" style="margin-bottom:0">
+            ${info('Valor estimado', esc(formatarMoeda(p.valor_estimado)), 'col_pros_valor')}
+            ${info('Previsão ponderada', esc(formatarMoeda(ponderado)), 'col_pros_valor')}
+          </div>
+        </div>
+        <div class="popup-secao">
+          <div class="popup-info-grid" style="margin-bottom:0">
+            ${info('Próximo passo', proximoPasso, 'col_pros_proximo_passo')}
+            ${info('Para quando', quando, 'col_pros_proximo_passo_data')}
+          </div>
+        </div>
+        <div class="popup-secao">
+          <div class="popup-info-grid" style="margin-bottom:0">
+            ${info('Atualizada em', esc(formatarDataHora(p.atualizado_em)), 'col_pros_atualizado_em')}
+            ${info('CNPJ', esc(p.cnpj || ''))}
+          </div>
+        </div>
+      </div>
+    </div>`;
+}
+
+function esconderPopupLinha() {
+    if (popupLinhaAtual) {
+        popupLinhaAtual.remove();
+        popupLinhaAtual = null;
     }
-    const data = diaDe(p.proximo_passo_data);
-    const hoje = hojeZerado();
-    let classe = 'text-white/80';
-    let titulo = '';
-    if (data && data < hoje) {
-        classe = 'prox-passo-atrasado';
-        titulo = 'Próximo passo atrasado';
-    } else if (data && data.getTime() === hoje.getTime()) {
-        classe = 'prox-passo-hoje';
-        titulo = 'Próximo passo é hoje';
-    }
-    return `<span class="${classe}" title="${esc(titulo)}">${formatarData(p.proximo_passo_data)}</span>`;
+}
+// O Modal.closeAll() do projeto chama este nome ao trocar de módulo.
+window.hideRawMaterialInfoPopup = window.hideRawMaterialInfoPopup || esconderPopupLinha;
+
+function mostrarPopupLinha(icone, p) {
+    esconderPopupLinha();
+    const { popup } = window.createPopup(icone, criarConteudoPopupLinha(p), { onHide: esconderPopupLinha });
+    popupLinhaAtual = popup;
+    // O popover nasce em document.body, fora do alcance da varredura que roda
+    // sobre a tabela — precisa da sua própria aplicação de permissões.
+    window.Permissoes?.aplicarAcoesEColunas?.(popup);
+}
+
+function ligarIconeInfo(icone, p) {
+    icone.addEventListener('mouseenter', () => mostrarPopupLinha(icone, p));
+    icone.addEventListener('mouseleave', () => {
+        setTimeout(() => {
+            if (!popupLinhaAtual?.matches(':hover')) esconderPopupLinha();
+        }, 100);
+    });
+    // Clicar no ícone não deve abrir o detalhe da linha.
+    icone.addEventListener('click', e => e.stopPropagation());
 }
 
 function renderTabela(lista) {
@@ -455,30 +562,29 @@ function renderTabela(lista) {
         tr.dataset.id = p.id;
 
         const empresa = esc(p.nome_fantasia || p.razao_social || '(sem nome)');
-        const contato = p.contato_principal;
-        const subtitulo = contato?.nome
-            ? `${esc(contato.nome)}${contato.email ? ' · ' + esc(contato.email) : ''}`
-            : esc(p.cnpj || '');
         const arquivada = p.status === 'arquivada'
             ? '<i class="fas fa-box-archive text-xs text-white/40 ml-2" title="Arquivada"></i>'
             : '';
+        // Sinaliza atraso já na linha: o "para quando" foi para o popover, mas
+        // perder o prazo de vista seria perder a informação mais acionável.
+        const dia = diaDe(p.proximo_passo_data);
+        const alerta = dia && dia < hojeZerado()
+            ? '<i class="fas fa-clock text-xs prox-passo-atrasado ml-2" title="Próximo passo atrasado"></i>'
+            : '';
 
         tr.innerHTML = `
-            <td data-perm-col="col_pros_id" class="px-4 py-3 whitespace-nowrap text-sm text-white/60">#${esc(p.id)}</td>
             <td data-perm-col="col_pros_entidade" class="px-4 py-3 text-sm">
-                <div class="text-white font-medium">${empresa}${arquivada}</div>
-                ${subtitulo ? `<div class="text-xs text-white/50">${subtitulo}</div>` : ''}
+                <div class="flex items-center gap-2">
+                    <span class="text-white font-medium">${empresa}</span>
+                    <i class="info-icon" data-info></i>${arquivada}${alerta}
+                </div>
             </td>
             <td data-perm-col="col_pros_origem" class="px-4 py-3 whitespace-nowrap text-sm" style="color: var(--color-violet)">${esc(p.origem || '—')}</td>
             <td data-perm-col="col_pros_etapa" class="px-4 py-3 whitespace-nowrap">
                 <span class="badge-etapa badge-etapa--${slugEtapa(p.etapa)} px-3 py-1 rounded-full text-xs font-medium">${esc(p.etapa)}</span>
             </td>
-            <td data-perm-col="col_pros_valor" class="px-4 py-3 whitespace-nowrap text-sm text-white">${formatarMoeda(p.valor_estimado)}</td>
             <td data-perm-col="col_pros_prob" class="px-4 py-3 whitespace-nowrap text-sm text-white/80">${Number(p.probabilidade ?? 0)}%</td>
             <td data-perm-col="col_pros_owner" class="px-4 py-3 whitespace-nowrap text-sm text-white">${esc(p.responsavel || '—')}</td>
-            <td data-perm-col="col_pros_proximo_passo" class="px-4 py-3 text-sm text-white/80">${esc(p.proximo_passo || '—')}</td>
-            <td data-perm-col="col_pros_proximo_passo_data" class="px-4 py-3 whitespace-nowrap text-sm">${celulaProximoPasso(p)}</td>
-            <td data-perm-col="col_pros_atualizado_em" class="px-4 py-3 whitespace-nowrap text-sm text-white/60">${formatarDataHora(p.atualizado_em)}</td>
             <td class="px-4 py-3 whitespace-nowrap text-left">
                 <div class="flex items-center justify-start space-x-2">
                     <i data-perm="pros.details.view" class="fas fa-eye acao-ver w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Ver detalhes"></i>
@@ -494,6 +600,9 @@ function renderTabela(lista) {
             e.stopPropagation();
             abrirDetalhesProspeccao(p);
         });
+        const icone = tr.querySelector('[data-info]');
+        if (icone) ligarIconeInfo(icone, p);
+
         tr.querySelector('.acao-mover')?.addEventListener('click', e => {
             e.stopPropagation();
             abrirMoverEtapa(p);
@@ -643,19 +752,95 @@ function initProspeccoes() {
         carregarProspeccoes(true);
     });
 
+    // ---------------------------------------------------------------------
+    // Funil e filtros avançados: os dois nascem retraídos e crescem para baixo.
+    // Enquanto ambos estão fechados o módulo cabe na tela e só a tabela rola —
+    // é o comportamento dos outros módulos. Quando um deles abre, o conteúdo
+    // passa da altura útil e aí sim a página precisa rolar.
+    // ---------------------------------------------------------------------
     const btnFunil = document.getElementById('btnOcultarGraficoFunil');
+    const btnAvancados = document.getElementById('btnFiltrosAvancados');
+    const cardFunil = document.getElementById('prospeccoesFunilCard');
+    const painelAvancados = document.getElementById('prospeccoesFiltrosAvancados');
+
+    function ajustarRolagemDaPagina() {
+        const content = document.getElementById('content');
+        if (!content) return;
+        const expandido = cardFunil?.dataset.ligado === '1'
+            || painelAvancados?.classList.contains('aberto');
+        // `no-scroll` é posto por menu.js ao entrar no módulo; tiramos enquanto
+        // houver conteúdo expandido para a página poder rolar.
+        content.classList.toggle('no-scroll', !expandido);
+    }
+
     btnFunil?.addEventListener('click', () => {
-        const card = document.getElementById('prospeccoesFunilCard');
-        if (!card) return;
-        const vaiOcultar = !card.classList.contains('hidden');
-        card.classList.toggle('hidden', vaiOcultar);
-        // Marca a escolha para que mostrarEstado() não reexiba o funil sozinho.
-        if (vaiOcultar) card.dataset.ocultoPeloUsuario = '1';
-        else delete card.dataset.ocultoPeloUsuario;
-        btnFunil.innerHTML = vaiOcultar
-            ? '<i class="fas fa-chart-simple mr-2"></i>Mostrar Funil'
-            : '<i class="fas fa-chart-simple mr-2"></i>Ocultar Funil';
+        if (!cardFunil) return;
+        const vaiMostrar = cardFunil.dataset.ligado !== '1';
+        cardFunil.dataset.ligado = vaiMostrar ? '1' : '0';
+        cardFunil.classList.toggle('hidden', !vaiMostrar);
+        btnFunil.setAttribute('aria-expanded', String(vaiMostrar));
+        ajustarRolagemDaPagina();
     });
+
+    /**
+     * Abre/fecha medindo o conteúdo na hora.
+     *
+     * Depois de abrir, o max-height vira `none`: preso ao valor medido, o
+     * painel cortaria os campos se a janela encolhesse e eles quebrassem em
+     * mais linhas.
+     */
+    function alternarAvancados(vaiAbrir) {
+        if (!painelAvancados) return;
+        painelAvancados.classList.toggle('aberto', vaiAbrir);
+        painelAvancados.setAttribute('aria-hidden', String(!vaiAbrir));
+        btnAvancados?.setAttribute('aria-expanded', String(vaiAbrir));
+
+        if (vaiAbrir) {
+            painelAvancados.style.maxHeight = `${painelAvancados.scrollHeight}px`;
+            painelAvancados.addEventListener('transitionend', function solta(e) {
+                if (e.propertyName !== 'max-height') return;
+                painelAvancados.style.maxHeight = 'none';
+                painelAvancados.removeEventListener('transitionend', solta);
+            });
+        } else {
+            // De `none` direto para 0 não anima: é preciso partir de um valor
+            // concreto. Fixamos a altura atual e forçamos o layout na hora —
+            // com requestAnimationFrame o painel ficava ABERTO sempre que a
+            // janela não estivesse compondo quadros (minimizada, em segundo
+            // plano), porque o quadro seguinte nunca chegava.
+            painelAvancados.style.maxHeight = `${painelAvancados.scrollHeight}px`;
+            void painelAvancados.offsetHeight;
+            painelAvancados.style.maxHeight = '0px';
+        }
+        ajustarRolagemDaPagina();
+    }
+
+    btnAvancados?.addEventListener('click', () => {
+        alternarAvancados(!painelAvancados?.classList.contains('aberto'));
+    });
+
+    ajustarRolagemDaPagina();
+
+    // Popover do resumo, no padrão do "Totais por Tipo" de Matéria-prima.
+    const iconeResumo = document.getElementById('resumoInfoIcon');
+    const popoverResumo = document.getElementById('resumoPopover');
+    if (iconeResumo && popoverResumo) {
+        const posicionar = () => {
+            const r = iconeResumo.getBoundingClientRect();
+            popoverResumo.style.left = `${window.scrollX + r.left}px`;
+            popoverResumo.style.top = `${window.scrollY + r.bottom + 8}px`;
+        };
+        iconeResumo.addEventListener('mouseenter', () => {
+            posicionar();
+            popoverResumo.classList.add('show');
+        });
+        iconeResumo.addEventListener('mouseleave', () => {
+            setTimeout(() => {
+                if (!popoverResumo.matches(':hover')) popoverResumo.classList.remove('show');
+            }, 100);
+        });
+        popoverResumo.addEventListener('mouseleave', () => popoverResumo.classList.remove('show'));
+    }
 
     document.addEventListener('prospeccoes:geo-filter-change', evento => {
         const detalhe = evento.detail || {};

@@ -14,231 +14,217 @@
 </head>
 <body class="text-white">
   <div class="modulo-container">
-    <div>
-        <!-- Header -->
-        <div class="flex justify-between items-center mb-8 animate-fade-in-up">
-            <div>
-                <h1 class="text-2xl font-semibold mb-2 module-header__title">Prospecções</h1>
-                <p class="module-header__description">Pipeline comercial: da primeira conversa ao cliente fechado</p>
-            </div>
-            <button id="btnNovaProspeccao" data-perm="pros.create" class="btn-primary text-white rounded-md px-6 py-3 font-medium">
-                <i class="fas fa-plus mr-2"></i>Nova Prospecção
-            </button>
+    <!-- Header -->
+    <div class="flex justify-between items-center mb-6 animate-fade-in-up">
+        <div>
+            <h1 class="text-2xl font-semibold mb-1 module-header__title">Prospecções</h1>
+            <p class="module-header__description">Pipeline comercial: da primeira conversa ao cliente fechado</p>
         </div>
+        <button id="btnNovaProspeccao" data-perm="pros.create" class="btn-primary text-white rounded-md px-6 py-3 font-medium whitespace-nowrap">
+            <i class="fas fa-plus mr-2"></i>Nova Prospecção
+        </button>
+    </div>
 
-        <!-- Action Bar -->
-        <div class="flex flex-wrap items-center justify-between gap-4 mb-6 animate-fade-in-up">
-            <div class="flex flex-wrap items-center gap-3">
-                <button id="btnOcultarGraficoFunil" class="btn-secondary text-white rounded-md px-4 py-2 font-medium">
-                    <i class="fas fa-chart-simple mr-2"></i>Ocultar Funil
-                </button>
-                <label class="flex items-center gap-3 cursor-pointer select-none">
-                    <input id="filtroIncluirArquivadas" type="checkbox" class="w-4 h-4" />
-                    <span class="text-sm text-white/80">Mostrar arquivadas (ganhas e perdidas)</span>
+    <!-- Barra de filtros -->
+    <div class="glass-surface rounded-xl p-4 mb-4 animate-fade-in-up">
+        <div class="filter-bar flex items-end w-full">
+            <div class="flex-1 min-w-0">
+                <label class="block text-sm font-medium mb-2 text-white">Buscar</label>
+                <input id="filtroBusca" data-perm="pros.search" type="text"
+                       placeholder="Empresa, CNPJ, contato ou e-mail"
+                       class="input-glass text-white rounded-md px-4 py-3 w-full placeholder-white/50">
+            </div>
+
+            <div class="flex-1 min-w-0">
+                <label class="block text-sm font-medium mb-2 text-white">Etapa</label>
+                <select id="filtroEtapa" data-perm="pros.search" class="input-glass text-white rounded-md px-4 py-3 w-full">
+                    <option value="">Todas</option>
+                </select>
+            </div>
+
+            <div class="flex-1 min-w-0">
+                <label class="block text-sm font-medium mb-2 text-white">Responsável</label>
+                <select id="filtroResponsavel" data-perm="pros.search" class="input-glass text-white rounded-md px-4 py-3 w-full">
+                    <option value="">Todos</option>
+                </select>
+            </div>
+
+            <div class="flex flex-col flex-1 min-w-0">
+                <label class="block text-sm font-medium mb-1 text-white flex items-center gap-2">
+                    Resumo <i id="resumoInfoIcon" class="info-icon"></i>
                 </label>
+                <div id="prospeccoesResumoTags" class="flex flex-wrap gap-2"></div>
             </div>
-            <div class="flex items-center gap-3">
-                <button id="btnAtualizarProspeccoes" class="btn-neutral text-white rounded-md px-4 py-2 text-sm font-medium" title="Recarregar">
-                    <i class="fas fa-rotate-right mr-2"></i>Atualizar
+
+            <div id="bt-actions" class="flex items-center gap-2 w-full justify-center md:w-auto md:justify-end">
+                <button id="btnFiltrosAvancados" type="button" aria-expanded="false" aria-controls="prospeccoesFiltrosAvancados"
+                        class="btn-neutral text-white rounded-md px-4 h-12 text-sm font-medium whitespace-nowrap">
+                    <i class="fas fa-sliders mr-2"></i>Filtros avançados
+                    <i id="btnFiltrosAvancadosSeta" class="fas fa-chevron-down ml-2 text-xs transition-transform"></i>
                 </button>
+                <button id="btnOcultarGraficoFunil" type="button" aria-expanded="false" aria-controls="prospeccoesFunilCard"
+                        class="btn-secondary text-white rounded-md px-4 h-12 text-sm font-medium whitespace-nowrap">
+                    <i class="fas fa-chart-simple mr-2"></i>Funil
+                </button>
+                <button id="btnFiltrarProspeccoes" data-perm="pros.search" class="btn-secondary text-white rounded-md px-4 h-12 text-sm font-medium">Filtrar</button>
+                <button id="btnLimparProspeccoes" data-perm="pros.search" class="btn-warning text-white rounded-md px-4 h-12 text-sm font-medium">Limpar</button>
             </div>
         </div>
 
-        <!-- Two Column Layout -->
-        <div class="flex flex-col lg:flex-row gap-6">
-            <!-- Left Column - Filters -->
-            <div class="w-full lg:w-72 animate-fade-in-up">
-                <div class="glass-surface shadow rounded-xl p-4">
-                    <h3 class="font-medium mb-4 text-white">Filtros &amp; Estatísticas</h3>
+        <!--
+          Filtros avançados: nascem RETRAÍDOS. O painel cresce para baixo dentro
+          da própria barra, em vez de ocupar uma coluna lateral permanente — a
+          tabela ganha a largura inteira do módulo.
+        -->
+        <div id="prospeccoesFiltrosAvancados" class="filtros-avancados" aria-hidden="true">
+          <!--
+            Duas camadas de propósito: a de fora é o que o grid recorta, e a
+            margem/padding fica na de DENTRO. Com margem no filho direto, o
+            painel fechado ainda ocupava a altura da margem.
+          -->
+          <div>
+            <div class="pt-4 mt-4 border-t border-white/10 filtros-avancados-grade">
+                <div>
+                    <label class="block text-sm font-medium mb-2 text-white">Origem</label>
+                    <select id="filtroOrigem" data-perm="pros.search" class="input-glass text-white rounded-md px-4 py-3 w-full">
+                        <option value="">Todas</option>
+                    </select>
+                </div>
 
-                    <div class="space-y-4">
-                        <!-- Busca -->
-                        <div>
-                            <label class="block text-sm font-medium mb-1 text-white">Buscar</label>
-                            <input id="filtroBusca" data-perm="pros.search" type="text"
-                                   placeholder="Empresa, CNPJ, contato ou e-mail"
-                                   class="input-glass text-white rounded-md px-3 py-2 w-full text-sm">
-                        </div>
-
-                        <!-- Etapa -->
-                        <div>
-                            <label class="block text-sm font-medium mb-1 text-white">Etapa</label>
-                            <select id="filtroEtapa" data-perm="pros.search" class="input-glass text-white rounded-md px-3 py-2 w-full text-sm">
-                                <option value="">Todas</option>
-                            </select>
-                        </div>
-
-                        <!-- Origem -->
-                        <div>
-                            <label class="block text-sm font-medium mb-1 text-white">Origem</label>
-                            <select id="filtroOrigem" data-perm="pros.search" class="input-glass text-white rounded-md px-3 py-2 w-full text-sm">
-                                <option value="">Todas</option>
-                            </select>
-                        </div>
-
-                        <!-- Responsável -->
-                        <div>
-                            <label class="block text-sm font-medium mb-1 text-white">Responsável</label>
-                            <select id="filtroResponsavel" data-perm="pros.search" class="input-glass text-white rounded-md px-3 py-2 w-full text-sm">
-                                <option value="">Todos</option>
-                            </select>
-                        </div>
-
-                        <!-- Valor estimado -->
-                        <div>
-                            <label class="block text-sm font-medium mb-1 text-white">Valor estimado (R$)</label>
-                            <div class="flex gap-2">
-                                <input id="filtroValorMin" data-perm="pros.search" type="text" data-numeric="true" placeholder="mín."
-                                       class="input-glass text-white rounded-md px-3 py-2 w-full text-sm">
-                                <input id="filtroValorMax" data-perm="pros.search" type="text" data-numeric="true" placeholder="máx."
-                                       class="input-glass text-white rounded-md px-3 py-2 w-full text-sm">
-                            </div>
-                        </div>
-
-                        <!-- Próximo passo -->
-                        <div>
-                            <label class="block text-sm font-medium mb-1 text-white">Próximo passo</label>
-                            <select id="filtroProximoPasso" data-perm="pros.search" class="input-glass text-white rounded-md px-3 py-2 w-full text-sm">
-                                <option value="">Qualquer</option>
-                                <option value="atrasado">Atrasado</option>
-                                <option value="hoje">Para hoje</option>
-                                <option value="semana">Próximos 7 dias</option>
-                                <option value="sem">Sem próximo passo</option>
-                            </select>
-                        </div>
-
-                        <!-- Country -->
-                        <div data-geo-wrapper>
-                            <label class="block text-sm font-medium mb-1 text-white">País</label>
-                            <button type="button"
-                                class="input-glass prospeccoes-multiselect-trigger text-white rounded-md px-3 py-2 w-full text-sm flex items-center justify-between gap-3"
-                                data-geo-multiselect="prospeccoes-paises"
-                                data-geo-source="countries"
-                                data-geo-placeholder="Todos os países"
-                                data-geo-title="Selecionar países">
-                                <span class="prospeccoes-multiselect-value" data-geo-summary>Todos os países</span>
-                                <i class="fas fa-chevron-down text-xs text-white/70"></i>
-                            </button>
-                            <input type="hidden" data-geo-input="prospeccoes-paises">
-                        </div>
-
-                        <!-- State -->
-                        <div data-geo-wrapper>
-                            <label class="block text-sm font-medium mb-1 text-white">Estado</label>
-                            <button type="button"
-                                class="input-glass prospeccoes-multiselect-trigger text-white rounded-md px-3 py-2 w-full text-sm flex items-center justify-between gap-3"
-                                data-geo-multiselect="prospeccoes-estados"
-                                data-geo-source="states"
-                                data-geo-placeholder="Todos os estados"
-                                data-geo-title="Selecionar estados"
-                                data-geo-depends-on="prospeccoes-paises"
-                                data-geo-dependency-message="Escolha um país antes de selecionar estados">
-                                <span class="prospeccoes-multiselect-value" data-geo-summary>Todos os estados</span>
-                                <i class="fas fa-chevron-down text-xs text-white/70"></i>
-                            </button>
-                            <input type="hidden" data-geo-input="prospeccoes-estados">
-                        </div>
-
-                        <!-- Action Buttons -->
-                        <div class="flex gap-2 pt-2">
-                            <button id="btnFiltrarProspeccoes" data-perm="pros.search" class="btn-secondary text-white rounded-md px-4 py-2 text-sm font-medium flex-1">
-                                Filtrar
-                            </button>
-                            <button id="btnLimparProspeccoes" data-perm="pros.search" class="btn-danger text-white rounded-md px-4 py-2 text-sm font-medium flex-1">
-                                Limpar
-                            </button>
-                        </div>
-
-                        <!-- Totais -->
-                        <div class="pt-2 border-t border-white/10">
-                            <label class="block text-sm font-medium mb-2 text-white">Resumo</label>
-                            <div id="prospeccoesResumo" class="space-y-2 text-sm"></div>
-                        </div>
+                <div>
+                    <label class="block text-sm font-medium mb-2 text-white">Valor estimado (R$)</label>
+                    <div class="flex gap-2">
+                        <input id="filtroValorMin" data-perm="pros.search" type="text" data-numeric="true" placeholder="mín."
+                               class="input-glass text-white rounded-md px-3 py-3 w-full placeholder-white/50">
+                        <input id="filtroValorMax" data-perm="pros.search" type="text" data-numeric="true" placeholder="máx."
+                               class="input-glass text-white rounded-md px-3 py-3 w-full placeholder-white/50">
                     </div>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium mb-2 text-white">Próximo passo</label>
+                    <select id="filtroProximoPasso" data-perm="pros.search" class="input-glass text-white rounded-md px-4 py-3 w-full">
+                        <option value="">Qualquer</option>
+                        <option value="atrasado">Atrasado</option>
+                        <option value="hoje">Para hoje</option>
+                        <option value="semana">Próximos 7 dias</option>
+                        <option value="sem">Sem próximo passo</option>
+                    </select>
+                </div>
+
+                <div data-geo-wrapper>
+                    <label class="block text-sm font-medium mb-2 text-white">País</label>
+                    <button type="button"
+                        class="input-glass prospeccoes-multiselect-trigger text-white rounded-md px-4 py-3 w-full flex items-center justify-between gap-3"
+                        data-geo-multiselect="prospeccoes-paises"
+                        data-geo-source="countries"
+                        data-geo-placeholder="Todos os países"
+                        data-geo-title="Selecionar países">
+                        <span class="prospeccoes-multiselect-value" data-geo-summary>Todos os países</span>
+                        <i class="fas fa-chevron-down text-xs text-white/70"></i>
+                    </button>
+                    <input type="hidden" data-geo-input="prospeccoes-paises">
+                </div>
+
+                <div data-geo-wrapper>
+                    <label class="block text-sm font-medium mb-2 text-white">Estado</label>
+                    <button type="button"
+                        class="input-glass prospeccoes-multiselect-trigger text-white rounded-md px-4 py-3 w-full flex items-center justify-between gap-3"
+                        data-geo-multiselect="prospeccoes-estados"
+                        data-geo-source="states"
+                        data-geo-placeholder="Todos os estados"
+                        data-geo-title="Selecionar estados"
+                        data-geo-depends-on="prospeccoes-paises"
+                        data-geo-dependency-message="Escolha um país antes de selecionar estados">
+                        <span class="prospeccoes-multiselect-value" data-geo-summary>Todos os estados</span>
+                        <i class="fas fa-chevron-down text-xs text-white/70"></i>
+                    </button>
+                    <input type="hidden" data-geo-input="prospeccoes-estados">
+                </div>
+
+                <div class="linha-inteira flex items-center">
+                    <label class="flex items-center gap-3 cursor-pointer select-none">
+                        <input id="filtroIncluirArquivadas" type="checkbox" class="w-4 h-4" />
+                        <span class="text-sm text-white/80">Mostrar arquivadas (ganhas e perdidas)</span>
+                    </label>
                 </div>
             </div>
-
-            <!-- Right Column - Content -->
-            <div class="flex-1 animate-fade-in-up min-w-0">
-                <!-- Funil -->
-                <div id="prospeccoesFunilCard" class="glass-surface shadow rounded-xl p-4 mb-6">
-                    <div class="flex justify-between items-center mb-4">
-                        <h3 class="font-medium text-white">Funil de Prospecção</h3>
-                        <span id="prospeccoesFunilTotal" class="text-sm" style="color: var(--color-violet)">—</span>
-                    </div>
-                    <div id="prospeccoesFunil" class="space-y-4"></div>
-                </div>
-
-                <!-- Tabela -->
-                <div id="prospeccoesTableWrapper" class="glass-surface shadow rounded-xl table-scroll">
-                    <table class="w-full">
-                        <thead class="bg-gray-50 sticky top-0">
-                            <tr>
-                                <th data-perm-col="col_pros_id" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
-                                <th data-perm-col="col_pros_entidade" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Empresa</th>
-                                <th data-perm-col="col_pros_origem" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Origem</th>
-                                <th data-perm-col="col_pros_etapa" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Etapa</th>
-                                <th data-perm-col="col_pros_valor" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Valor</th>
-                                <th data-perm-col="col_pros_prob" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Prob.</th>
-                                <th data-perm-col="col_pros_owner" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Responsável</th>
-                                <th data-perm-col="col_pros_proximo_passo" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Próx. passo</th>
-                                <th data-perm-col="col_pros_proximo_passo_data" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Para quando</th>
-                                <th data-perm-col="col_pros_atualizado_em" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Atualizado</th>
-                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ações</th>
-                            </tr>
-                        </thead>
-                        <!-- Preenchido por src/js/prospeccoes.js a partir de GET /api/prospeccoes/lista -->
-                        <tbody id="prospeccoesTableBody" class="divide-y divide-white/10"></tbody>
-                    </table>
-                </div>
-
-                <!-- Carregando -->
-                <div id="prospeccoesLoading" class="hidden py-16 flex flex-col items-center justify-center text-center px-4">
-                    <div class="app-loading-indicator app-loading-indicator--compact" aria-hidden="true">
-                        <span class="module-loading-orbit"></span>
-                        <span class="module-loading-core"><img src="../assets/Logo.ico" alt=""></span>
-                    </div>
-                    <p class="mt-4 text-sm text-white/70">Carregando prospecções...</p>
-                </div>
-
-                <!-- Erro -->
-                <div id="prospeccoesErro" class="hidden py-12 flex flex-col items-center justify-center text-center px-4">
-                    <div class="rounded-full bg-[rgba(255,88,88,0.12)] p-8 mb-6">
-                        <i class="fas fa-triangle-exclamation text-8xl" style="color: var(--color-red)"></i>
-                    </div>
-                    <h3 class="text-lg font-medium text-white">Não foi possível carregar as prospecções</h3>
-                    <p id="prospeccoesErroDetalhe" class="mt-1 text-sm text-white/70"></p>
-                    <div class="mt-6">
-                        <button id="prospeccoesTentarNovamente" type="button"
-                                class="btn-secondary inline-flex items-center px-4 py-2 text-sm font-medium rounded-md text-white">
-                            <i class="fas fa-rotate-right w-4 h-4 mr-2"></i>Tentar novamente
-                        </button>
-                    </div>
-                </div>
-
-                <!-- Empty State -->
-                <div id="prospeccoesEmptyState" class="hidden py-12 flex flex-col items-center justify-center text-center px-4">
-                    <div class="rounded-full bg-[var(--color-primary-opacity)] p-8 mb-6">
-                        <i class="fas fa-bullseye text-8xl text-[var(--color-primary)]"></i>
-                    </div>
-                    <h3 id="prospeccoesEmptyTitulo" class="text-lg font-medium text-white">Nenhuma prospecção encontrada</h3>
-                    <p id="prospeccoesEmptyTexto" class="mt-1 text-sm text-white/70">Comece cadastrando a primeira empresa do seu pipeline.</p>
-                    <div class="mt-6">
-                        <button
-                            id="prospeccoesEmptyNew"
-                            type="button"
-                            data-perm="pros.create"
-                            class="btn-primary inline-flex items-center px-4 py-2 text-sm font-medium rounded-md text-white"
-                        >
-                            <i class="fas fa-plus w-4 h-4 mr-2"></i>
-                            Nova Prospecção
-                        </button>
-                    </div>
-                </div>
-            </div>
+          </div>
         </div>
     </div>
-</div>
+
+    <!-- Popover do resumo, no padrão dos outros módulos -->
+    <div id="resumoPopover" class="resumo-popover glass-surface rounded-xl p-4 text-white"></div>
+
+    <!--
+      Funil: nasce OCULTO. Só aparece quando o usuário pede, para que a tabela
+      comece ocupando a altura inteira do módulo.
+    -->
+    <div id="prospeccoesFunilCard" class="glass-surface shadow rounded-xl p-4 mb-4 hidden animate-fade-in-up">
+        <div class="flex justify-between items-center mb-4">
+            <h3 class="font-medium text-white">Funil de Prospecção</h3>
+            <span id="prospeccoesFunilTotal" class="text-sm" style="color: var(--color-violet)">—</span>
+        </div>
+        <div id="prospeccoesFunil" class="funil-grade"></div>
+    </div>
+
+    <!-- Tabela -->
+    <div id="prospeccoesTableWrapper" class="glass-surface shadow rounded-xl table-scroll animate-fade-in-up">
+        <table class="w-full">
+            <thead class="bg-gray-50 sticky top-0">
+                <tr>
+                    <th data-perm-col="col_pros_entidade" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Empresa</th>
+                    <th data-perm-col="col_pros_origem" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Origem</th>
+                    <th data-perm-col="col_pros_etapa" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Etapa</th>
+                    <th data-perm-col="col_pros_prob" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Prob.</th>
+                    <th data-perm-col="col_pros_owner" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Responsável</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ações</th>
+                </tr>
+            </thead>
+            <!-- Preenchido por src/js/prospeccoes.js a partir de GET /api/prospeccoes/lista -->
+            <tbody id="prospeccoesTableBody" class="divide-y divide-white/10"></tbody>
+        </table>
+    </div>
+
+    <!-- Carregando -->
+    <div id="prospeccoesLoading" class="hidden py-16 flex flex-col items-center justify-center text-center px-4">
+        <div class="app-loading-indicator app-loading-indicator--compact" aria-hidden="true">
+            <span class="module-loading-orbit"></span>
+            <span class="module-loading-core"><img src="../assets/Logo.ico" alt=""></span>
+        </div>
+        <p class="mt-4 text-sm text-white/70">Carregando prospecções...</p>
+    </div>
+
+    <!-- Erro -->
+    <div id="prospeccoesErro" class="hidden py-12 flex flex-col items-center justify-center text-center px-4">
+        <div class="rounded-full bg-[rgba(255,88,88,0.12)] p-8 mb-6">
+            <i class="fas fa-triangle-exclamation text-8xl" style="color: var(--color-red)"></i>
+        </div>
+        <h3 class="text-lg font-medium text-white">Não foi possível carregar as prospecções</h3>
+        <p id="prospeccoesErroDetalhe" class="mt-1 text-sm text-white/70"></p>
+        <div class="mt-6">
+            <button id="prospeccoesTentarNovamente" type="button"
+                    class="btn-secondary inline-flex items-center px-4 py-2 text-sm font-medium rounded-md text-white">
+                <i class="fas fa-rotate-right w-4 h-4 mr-2"></i>Tentar novamente
+            </button>
+        </div>
+    </div>
+
+    <!-- Empty State -->
+    <div id="prospeccoesEmptyState" class="hidden py-12 flex flex-col items-center justify-center text-center px-4">
+        <div class="rounded-full bg-[var(--color-primary-opacity)] p-8 mb-6">
+            <i class="fas fa-bullseye text-8xl text-[var(--color-primary)]"></i>
+        </div>
+        <h3 id="prospeccoesEmptyTitulo" class="text-lg font-medium text-white">Nenhuma prospecção encontrada</h3>
+        <p id="prospeccoesEmptyTexto" class="mt-1 text-sm text-white/70">Comece cadastrando a primeira empresa do seu pipeline.</p>
+        <div class="mt-6">
+            <button id="prospeccoesEmptyNew" type="button" data-perm="pros.create"
+                    class="btn-primary inline-flex items-center px-4 py-2 text-sm font-medium rounded-md text-white">
+                <i class="fas fa-plus w-4 h-4 mr-2"></i>Nova Prospecção
+            </button>
+        </div>
+    </div>
+  </div>
 
 <script src="../js/apiConfig.js"></script>
 <script src="../js/utils/notifications.js"></script>

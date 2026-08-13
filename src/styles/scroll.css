@@ -50,6 +50,7 @@ body[data-current-module="orcamentos"] #content.no-scroll .table-scroll,
 body[data-current-module="pedidos"] #content.no-scroll .table-scroll,
 body[data-current-module="calendario"] #content.no-scroll .table-scroll,
 body[data-current-module="tarefas"] #content.no-scroll .table-scroll,
+body[data-current-module="prospeccoes"] #content.no-scroll .table-scroll,
 body[data-current-module="usuarios"] #content.no-scroll .table-scroll {
   overflow-y: auto !important;
   max-height: calc(var(--module-height) - 200px);

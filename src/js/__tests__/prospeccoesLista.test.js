@@ -379,23 +379,68 @@ test('formatarData devolve vazio para nulo e lixo', () => {
   assert.equal(s.formatarData('nao-e-data'), '');
 });
 
-test('celulaProximoPasso marca atraso sem errar o dia', () => {
+test('o popover (i) traz o contato primeiro e a data sem recuar', () => {
   const s = criarSandbox();
   const emDias = n => {
     const d = new Date(); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() + n);
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   };
 
-  const ontem = emDias(-1);
-  const htmlOntem = s.celulaProximoPasso({ proximo_passo_data: ontem });
-  assert.match(htmlOntem, /prox-passo-atrasado/);
-  // A data mostrada tem que ser a de ontem, não a de anteontem.
-  const [a, m, d] = ontem.split('-');
-  assert.ok(htmlOntem.includes(`${d}/${m}/${a}`), `esperava ${d}/${m}/${a} em: ${htmlOntem}`);
+  const html = s.criarConteudoPopupLinha({
+    id: 7,
+    nome_fantasia: 'Incorporadora Terra Nova',
+    cnpj: '67.890.123/0001-45',
+    valor_estimado: 320000,
+    probabilidade: 65,
+    proximo_passo: 'Defender a proposta',
+    proximo_passo_data: '2026-09-20',
+    atualizado_em: '2026-08-11T13:56:00.000Z',
+    contato_principal: {
+      nome: 'Ricardo Mourão', cargo: 'Diretor',
+      email: 'ricardo@terranovainc.com.br', telefone_celular: '(61) 98211-3344'
+    }
+  });
 
-  const hoje = emDias(0);
-  assert.match(s.celulaProximoPasso({ proximo_passo_data: hoje }), /prox-passo-hoje/);
+  // O contato abre o corpo do popover — foi para isso que ele saiu da coluna.
+  const posContato = html.indexOf('Ricardo Mourão');
+  const posValor = html.indexOf('Valor estimado');
+  assert.ok(posContato > -1 && posValor > -1);
+  assert.ok(posContato < posValor, 'o contato deveria vir antes das métricas');
 
-  const semData = s.celulaProximoPasso({ proximo_passo_data: null });
-  assert.match(semData, /—/);
+  assert.match(html, /ricardo@terranovainc\.com\.br/);
+  assert.match(html, /Diretor/);
+  // Data pura não pode recuar um dia (ver formatarData).
+  assert.match(html, /20\/09\/2026/);
+  // Previsão ponderada: 320.000 x 65%
+  assert.match(html, /208\.000,00/);
+  // Cada campo movido carrega a sua permissão de coluna.
+  ['col_pros_id', 'col_pros_valor', 'col_pros_proximo_passo',
+   'col_pros_proximo_passo_data', 'col_pros_atualizado_em'].forEach(chave => {
+    assert.ok(html.includes(chave), `faltou data-perm-col ${chave} no popover`);
+  });
+});
+
+test('popover marca o próximo passo atrasado', () => {
+  const s = criarSandbox();
+  const ontem = new Date(); ontem.setDate(ontem.getDate() - 1);
+  const iso = `${ontem.getFullYear()}-${String(ontem.getMonth() + 1).padStart(2, '0')}-${String(ontem.getDate()).padStart(2, '0')}`;
+  const html = s.criarConteudoPopupLinha({ id: 1, nome_fantasia: 'X', proximo_passo_data: iso });
+  assert.match(html, /prox-passo-atrasado/);
+  assert.match(html, /atrasado/);
+});
+
+test('popover sem contato avisa em vez de quebrar', () => {
+  const s = criarSandbox();
+  const html = s.criarConteudoPopupLinha({ id: 2, nome_fantasia: 'Sem Contato' });
+  assert.match(html, /Nenhum contato cadastrado/);
+});
+
+test('popover escapa o nome do contato', () => {
+  const s = criarSandbox();
+  const html = s.criarConteudoPopupLinha({
+    id: 3, nome_fantasia: 'X',
+    contato_principal: { nome: '<img src=x onerror=alert(1)>' }
+  });
+  assert.equal(html.includes('<img src=x'), false);
+  assert.match(html, /&lt;img/);
 });
