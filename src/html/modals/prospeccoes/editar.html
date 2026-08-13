@@ -1,0 +1,198 @@
+<div id="editarProspeccaoOverlay" class="hidden fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4 pt-[4vw]">
+  <div class="w-full max-w-6xl max-h-[90vh] glass-surface backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade slide-in overflow-hidden flex flex-col">
+    <header class="grid grid-cols-3 items-center px-8 py-5 border-b border-white/10 flex-shrink-0">
+      <button id="voltarEditarProspeccao" class="btn-neutral px-4 py-2 rounded-lg text-white font-medium flex items-center gap-2 justify-self-start">← Voltar</button>
+      <h2 id="prospeccaoTitulo" class="text-lg font-semibold text-white text-center">Editar Prospecção</h2>
+      <span></span>
+    </header>
+
+    <nav class="px-8 border-b border-white/10 flex-shrink-0" role="tablist">
+      <div class="flex gap-8 overflow-x-auto scrollbar-hide">
+        <button id="tab-pros-empresa" role="tab" aria-selected="true" aria-controls="panel-pros-empresa" tabindex="0" class="py-4 px-2 text-sm font-medium border-b-2 tab-active whitespace-nowrap transition">Empresa</button>
+        <button id="tab-pros-contatos" role="tab" aria-selected="false" aria-controls="panel-pros-contatos" tabindex="-1" class="py-4 px-2 text-sm font-medium text-gray-400 border-b-2 border-transparent hover:text-white transition whitespace-nowrap">Contatos</button>
+        <button id="tab-pros-endereco" role="tab" aria-selected="false" aria-controls="panel-pros-endereco" tabindex="-1" class="py-4 px-2 text-sm font-medium text-gray-400 border-b-2 border-transparent hover:text-white transition whitespace-nowrap">Endereço</button>
+        <button id="tab-pros-oportunidade" role="tab" aria-selected="false" aria-controls="panel-pros-oportunidade" tabindex="-1" class="py-4 px-2 text-sm font-medium text-gray-400 border-b-2 border-transparent hover:text-white transition whitespace-nowrap">Oportunidade</button>
+        <button id="tab-pros-notas" role="tab" aria-selected="false" aria-controls="panel-pros-notas" tabindex="-1" class="py-4 px-2 text-sm font-medium text-gray-400 border-b-2 border-transparent hover:text-white transition whitespace-nowrap">Notas</button>
+      </div>
+    </nav>
+
+    <div class="flex-1 overflow-y-auto modal-scroll">
+      <!-- ------------------------------------------------ EMPRESA -->
+      <section id="panel-pros-empresa" role="tabpanel" aria-labelledby="tab-pros-empresa" class="px-8 py-6">
+        <div class="grid grid-cols-1 md:grid-cols-12 gap-8">
+          <div class="md:col-span-3 flex flex-col items-center">
+            <div id="prospeccaoAvatar" class="w-32 h-32 glass-surface rounded-full flex items-center justify-center text-4xl font-bold text-primary border-2 border-primary/20"></div>
+            <div id="prospeccaoResumoLateral" class="mt-4 w-full space-y-2 text-xs text-gray-400"></div>
+          </div>
+          <div class="md:col-span-9">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div class="md:col-span-2">
+                <label class="block text-sm font-medium text-gray-300 mb-2">Nome Fantasia <span class="text-[var(--color-red)]">*</span></label>
+                <input id="prosNomeFantasia" type="text" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-300 mb-2">Razão Social</label>
+                <input id="prosRazaoSocial" type="text" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-300 mb-2">Segmento</label>
+                <input id="prosSegmento" type="text" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-300 mb-2">CNPJ</label>
+                <input id="prosCnpj" type="text" maxlength="18" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-300 mb-2">Inscrição Estadual</label>
+                <input id="prosInscricaoEstadual" type="text" maxlength="20" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              </div>
+              <div class="md:col-span-2">
+                <label class="block text-sm font-medium text-gray-300 mb-2">Site</label>
+                <input id="prosSite" type="url" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ------------------------------------------------ CONTATOS -->
+      <section id="panel-pros-contatos" role="tabpanel" aria-labelledby="tab-pros-contatos" class="px-8 py-6 hidden">
+        <div class="flex justify-between items-center mb-6">
+          <div>
+            <h3 class="text-lg font-semibold text-white">Contatos da empresa</h3>
+            <p class="text-sm text-gray-400">Quem decide, quem compra e quem atende. Marque o contato principal.</p>
+          </div>
+          <button id="addContatoProspeccaoBtn" data-perm="pros.contact.add" class="btn-primary px-4 py-2 rounded-lg text-white font-medium">+ Novo Contato</button>
+        </div>
+        <div class="glass-surface rounded-xl border border-white/10 overflow-hidden">
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+              <thead class="glass-surface">
+                <tr class="border-b border-white/10">
+                  <th class="text-left py-4 px-4 text-gray-300 font-medium">NOME</th>
+                  <th class="text-left py-4 px-4 text-gray-300 font-medium">CARGO</th>
+                  <th class="text-left py-4 px-4 text-gray-300 font-medium">E-MAIL</th>
+                  <th class="text-left py-4 px-4 text-gray-300 font-medium">CELULAR</th>
+                  <th class="text-left py-4 px-4 text-gray-300 font-medium">TEL. FIXO</th>
+                  <th class="text-left py-4 px-4 text-gray-300 font-medium">PAPEL</th>
+                  <th class="text-left py-4 px-4 text-gray-300 font-medium">AÇÕES</th>
+                </tr>
+              </thead>
+              <tbody id="prospeccaoContatosTabela"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ------------------------------------------------ ENDEREÇO -->
+      <section id="panel-pros-endereco" role="tabpanel" aria-labelledby="tab-pros-endereco" class="px-8 py-6 hidden">
+        <h3 class="text-lg font-semibold text-white mb-4">Endereço da empresa</h3>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="md:col-span-2">
+            <label class="block text-sm font-medium text-gray-300 mb-2">Rua</label>
+            <input id="endRua" type="text" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-300 mb-2">Número</label>
+            <input id="endNumero" type="text" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-300 mb-2">Complemento</label>
+            <input id="endComplemento" type="text" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-300 mb-2">Bairro</label>
+            <input id="endBairro" type="text" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-300 mb-2">Cidade</label>
+            <input id="endCidade" type="text" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-300 mb-2">País</label>
+            <select id="endPais" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition select-arrow appearance-none">
+              <option value="">Selecione</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-300 mb-2">Estado</label>
+            <select id="endEstado" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition select-arrow appearance-none" disabled>
+              <option value="">Selecione o país</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-300 mb-2">CEP</label>
+            <input id="endCep" type="text" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+          </div>
+        </div>
+      </section>
+
+      <!-- ------------------------------------------------ OPORTUNIDADE -->
+      <section id="panel-pros-oportunidade" role="tabpanel" aria-labelledby="tab-pros-oportunidade" class="px-8 py-6 hidden">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div>
+            <label class="block text-sm font-medium text-gray-300 mb-2">Origem</label>
+            <input id="prosOrigem" type="text" list="prosOrigemSugestoes" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+            <datalist id="prosOrigemSugestoes">
+              <option value="Website"></option>
+              <option value="Redes Sociais"></option>
+              <option value="Indicação"></option>
+              <option value="Evento"></option>
+              <option value="Feira"></option>
+              <option value="Prospecção ativa"></option>
+            </datalist>
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium text-gray-300 mb-2">Etapa do funil</label>
+            <select id="prosEtapa" disabled class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white opacity-60 cursor-not-allowed select-arrow appearance-none"></select>
+            <p class="mt-2 text-xs text-gray-400">
+              A etapa não muda por aqui — mover no funil é uma ação própria, que exige
+              permissão separada e registra quem moveu, quando e por quê.
+            </p>
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium text-gray-300 mb-2">Valor estimado (R$)</label>
+            <input id="prosValorEstimado" type="text" data-numeric="true" data-numeric-decimals="2" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium text-gray-300 mb-2">Probabilidade (%)</label>
+            <input id="prosProbabilidade" type="text" data-numeric="true" data-numeric-decimals="0" data-numeric-min="0" data-numeric-max="100" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium text-gray-300 mb-2">Responsável</label>
+            <select id="prosResponsavel" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition select-arrow appearance-none">
+              <option value="">Selecione o responsável</option>
+            </select>
+          </div>
+
+          <div></div>
+
+          <div>
+            <label class="block text-sm font-medium text-gray-300 mb-2">Próximo passo</label>
+            <input id="prosProximoPasso" data-perm="pros.next.step" type="text" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium text-gray-300 mb-2">Para quando</label>
+            <input id="prosProximoPassoData" data-perm="pros.next.step" type="date" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+          </div>
+        </div>
+      </section>
+
+      <!-- ------------------------------------------------ NOTAS -->
+      <section id="panel-pros-notas" role="tabpanel" aria-labelledby="tab-pros-notas" class="px-8 py-6 hidden">
+        <label class="block text-sm font-medium text-gray-300 mb-2">Anotações</label>
+        <textarea id="prosAnotacoes" rows="12" class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition resize-none"></textarea>
+      </section>
+    </div>
+
+    <footer class="flex justify-end items-center gap-4 px-8 py-5 border-t border-white/10 flex-shrink-0">
+      <button id="cancelarEditarProspeccao" class="btn-danger px-6 py-2 rounded-lg text-white font-medium min-w-[120px]">Cancelar</button>
+      <button id="salvarProspeccao" class="btn-success px-6 py-2 rounded-lg font-medium min-w-[120px]">Salvar</button>
+    </footer>
+  </div>
+</div>

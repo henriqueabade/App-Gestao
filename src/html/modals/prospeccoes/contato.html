@@ -1,0 +1,79 @@
+<div id="contatoProspeccaoOverlay" class="fixed inset-0 z-[1300] bg-black/50 flex items-center justify-center p-4">
+  <div class="max-w-md w-full glass-surface backdrop-blur-xl rounded-2xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade">
+    <header class="grid grid-cols-3 items-center px-6 py-4 border-b border-white/10">
+      <button id="voltarContatoProspeccao" type="button" class="btn-neutral px-4 py-2 rounded-lg text-white font-medium flex items-center gap-2 justify-self-start">← Voltar</button>
+      <h2 id="contatoProspeccaoTitulo" class="text-lg font-semibold text-white text-center">Novo Contato</h2>
+      <span></span>
+    </header>
+
+    <form id="contatoProspeccaoForm" class="p-6 space-y-4">
+      <div>
+        <label for="contatoProsNome" class="block text-sm font-medium text-gray-300 mb-2">Nome <span class="text-[var(--color-red)]">*</span></label>
+        <input id="contatoProsNome" name="nome" type="text" required placeholder="Nome completo"
+               class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+      </div>
+
+      <div>
+        <label for="contatoProsCargo" class="block text-sm font-medium text-gray-300 mb-2">Cargo / função</label>
+        <input id="contatoProsCargo" name="cargo" type="text" list="contatoProsCargoSugestoes" placeholder="Diretor, Comprador, Arquiteto..."
+               class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+        <datalist id="contatoProsCargoSugestoes">
+          <option value="Sócio-proprietário"></option>
+          <option value="Diretor"></option>
+          <option value="Gerente"></option>
+          <option value="Comprador"></option>
+          <option value="Arquiteto"></option>
+          <option value="Financeiro"></option>
+          <option value="Assistente"></option>
+        </datalist>
+      </div>
+
+      <div>
+        <label for="contatoProsEmail" class="block text-sm font-medium text-gray-300 mb-2">E-mail</label>
+        <input id="contatoProsEmail" name="email" type="email" placeholder="nome@empresa.com.br"
+               class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+      </div>
+
+      <div class="grid grid-cols-2 gap-4">
+        <div>
+          <label for="contatoProsCelular" class="block text-sm font-medium text-gray-300 mb-2">Celular</label>
+          <input id="contatoProsCelular" name="telefone_celular" type="text" inputmode="tel" placeholder="(11) 90000-0000"
+                 class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+        </div>
+        <div>
+          <label for="contatoProsFixo" class="block text-sm font-medium text-gray-300 mb-2">Telefone fixo</label>
+          <input id="contatoProsFixo" name="telefone_fixo" type="text" inputmode="tel" placeholder="(11) 3000-0000"
+                 class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+        </div>
+      </div>
+
+      <div class="space-y-3 pt-2 border-t border-white/10">
+        <label class="flex items-start gap-3 cursor-pointer">
+          <input id="contatoProsDecisor" name="decisor" type="checkbox" class="w-4 h-4 mt-1" />
+          <span>
+            <span class="block text-sm font-medium text-white">É decisor</span>
+            <span class="block text-xs text-gray-400">Tem poder para aprovar a compra</span>
+          </span>
+        </label>
+        <label class="flex items-start gap-3 cursor-pointer">
+          <input id="contatoProsPrincipal" name="principal" type="checkbox" class="w-4 h-4 mt-1" />
+          <span>
+            <span class="block text-sm font-medium text-white">Contato principal</span>
+            <span class="block text-xs text-gray-400">Aparece na grade e é o interlocutor padrão. Só um por prospecção.</span>
+          </span>
+        </label>
+      </div>
+
+      <div>
+        <label for="contatoProsObservacao" class="block text-sm font-medium text-gray-300 mb-2">Observação</label>
+        <textarea id="contatoProsObservacao" name="observacao" rows="2" placeholder="Melhor horário para ligar, preferências..."
+                  class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition resize-none"></textarea>
+      </div>
+    </form>
+
+    <footer class="flex justify-end gap-4 px-6 py-4 border-t border-white/10">
+      <button id="cancelarContatoProspeccao" type="button" class="btn-danger px-6 py-2 rounded-lg text-white font-medium">Cancelar</button>
+      <button type="submit" form="contatoProspeccaoForm" id="salvarContatoProspeccao" class="btn-primary px-6 py-2 rounded-lg text-white font-medium">Registrar</button>
+    </footer>
+  </div>
+</div>

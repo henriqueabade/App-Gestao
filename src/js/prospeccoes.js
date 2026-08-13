@@ -188,6 +188,11 @@ async function carregarProspeccoes(preservarFiltros = false) {
         funilAtual = dados.funil || null;
         etapasDisponiveis = Array.isArray(dados.etapas) ? dados.etapas : [];
 
+        // Publica as etapas para os modais. A ordem do funil é regra de
+        // negócio que mora no backend (e no CHECK da tabela); os modais leem
+        // daqui em vez de manter uma segunda cópia que sairia do lugar.
+        window.PROSPECCOES_ETAPAS = etapasDisponiveis;
+
         popularFiltros(preservarFiltros);
         renderFunil(funilAtual);
         aplicarFiltros();
@@ -569,11 +574,19 @@ function abrirDetalhesProspeccao(prospeccao) {
 
 function abrirEditarProspeccao(prospeccao) {
     window.prospeccaoEditar = prospeccao;
-    showToast('Edição chega na próxima etapa do módulo', 'info');
+    openModalWithSpinner(
+        'modals/prospeccoes/editar.html',
+        '../js/modals/prospeccao-editar.js',
+        'editarProspeccao'
+    );
 }
 
 function abrirNovaProspeccao() {
-    showToast('Cadastro chega na próxima etapa do módulo', 'info');
+    openModalWithSpinner(
+        'modals/prospeccoes/novo.html',
+        '../js/modals/prospeccao-novo.js',
+        'novaProspeccao'
+    );
 }
 
 // Recarrega preservando os filtros quando algo muda em outro lugar.
