@@ -73,9 +73,20 @@
         <div class="cartao-prospeccao">
           <div class="flex justify-between items-center mb-4">
             <h3 class="text-lg font-semibold text-white">Oportunidade</h3>
-            <button id="detProspProximoPasso" data-perm="pros.next.step" class="btn-secondary px-4 py-2 rounded-lg text-white text-sm font-medium">
-              <i class="fas fa-calendar-check mr-2"></i>Próximo passo
-            </button>
+            <div class="flex flex-col items-end gap-2">
+              <button id="detProspProximoPasso" data-perm="pros.next.step" class="btn-secondary px-4 py-2 rounded-lg text-white text-sm font-medium whitespace-nowrap">
+                <i class="fas fa-calendar-check mr-2"></i>Próximo passo
+              </button>
+              <!--
+                Abaixo do de próximo passo, como pedido: a leitura natural é
+                "o que combinei" e, logo em seguida, "já fiz".
+                Só aparece quando existe passo em aberto — sem combinado, não
+                há o que concluir.
+              -->
+              <button id="detProspConcluirPasso" data-perm="pros.interaction.add" class="btn-primary px-4 py-2 rounded-lg text-white text-sm font-medium whitespace-nowrap hidden">
+                <i class="fas fa-circle-check mr-2"></i>Concluir passo planejado
+              </button>
+            </div>
           </div>
           <div id="detProspOportunidade" class="grid grid-cols-1 md:grid-cols-2 gap-6"></div>
         </div>

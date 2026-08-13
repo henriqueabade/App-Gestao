@@ -7,8 +7,28 @@
     </header>
 
     <form id="proximoPassoForm" class="p-6 space-y-4">
+      <!--
+        Só aparece quando já existe passo em aberto. Trocar o combinado sem
+        dizer o que houve com o anterior faz a timeline perder o rastro: o
+        passo some e ninguém sabe se foi feito, adiado ou abandonado.
+      -->
+      <div id="passoAnteriorBloco" class="hidden rounded-lg border border-white/10 bg-white/5 p-4">
+        <p class="text-xs uppercase tracking-wide text-white/50 mb-1">Passo em aberto</p>
+        <p id="passoAnteriorTexto" class="text-white font-medium"></p>
+        <p id="passoAnteriorData" class="text-xs text-white/50 mt-1"></p>
+
+        <label for="passoAnteriorNota" class="block text-sm font-medium text-gray-300 mt-4 mb-2">
+          O que aconteceu com ele? <span class="text-[var(--color-red)]">*</span>
+        </label>
+        <textarea id="passoAnteriorNota" rows="3" placeholder="Liguei e o Ricardo pediu para retomar depois do conselho"
+                  class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition resize-none"></textarea>
+        <p class="mt-2 text-xs text-gray-400">
+          Vira uma atividade na timeline, do tipo <strong>Atividade realizada</strong>.
+        </p>
+      </div>
+
       <div>
-        <label for="proximoPassoTexto" class="block text-sm font-medium text-gray-300 mb-2">O que fazer</label>
+        <label for="proximoPassoTexto" class="block text-sm font-medium text-gray-300 mb-2">O que fazer agora</label>
         <input id="proximoPassoTexto" type="text" maxlength="255" placeholder="Ligar para confirmar o recebimento da proposta"
                class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
       </div>
@@ -18,7 +38,7 @@
                class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
       </div>
       <p class="text-xs text-gray-400">
-        Deixe os dois campos em branco para limpar o próximo passo.
+        Deixe os dois campos em branco para encerrar sem agendar um novo passo.
       </p>
     </form>
 

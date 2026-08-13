@@ -29,7 +29,7 @@ const COLUNAS = {
     'anotacoes', 'criado_por', 'criado_em', 'atualizado_em'
   ],
   prospeccao_contatos: ['id', 'prospeccao_id', 'nome', 'cargo', 'email', 'telefone_fixo', 'telefone_celular', 'decisor', 'principal', 'observacao'],
-  prospeccao_interacoes: ['id', 'prospeccao_id', 'contato_id', 'tipo', 'data', 'resumo', 'detalhe', 'duracao_min', 'usuario_id'],
+  prospeccao_interacoes: ['id', 'prospeccao_id', 'contato_id', 'tipo', 'data', 'resumo', 'detalhe', 'duracao_min', 'usuario_id', 'passo_planejado', 'passo_planejado_data'],
   prospeccao_etapas_historico: ['id', 'prospeccao_id', 'etapa_anterior', 'etapa_nova', 'observacao', 'usuario_id', 'criado_em'],
   prospeccao_historico: ['id', 'prospeccao_id', 'tipo', 'acao', 'entidade', 'campo', 'valor_anterior', 'valor_novo', 'detalhe', 'observacao', 'usuario_id', 'criado_em'],
   prospeccao_notas: ['id', 'prospeccao_id', 'titulo', 'conteudo', 'usuario_id', 'criado_em'],
@@ -991,6 +991,228 @@ test('nao da para apagar evento de OUTRA prospeccao', async () => {
     const resp = await chamar(ctx.porta, `/api/prospeccoes/1/historico/${evento.id}`, { method: 'DELETE' });
     assert.strictEqual(resp.status, 404);
     assert.strictEqual(ctx.tabelas.prospeccao_historico.some(h => h.id === evento.id), true);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Fluxo do passo planejado
+//
+// A ideia central: o combinado em aberto nunca some sem deixar rastro. Trocar
+// ou concluir um passo produz uma "Atividade realizada" na timeline, com o
+// texto do passo guardado ao lado do que de fato aconteceu.
+// ---------------------------------------------------------------------------
+
+/** Prospecção 1 da massa base ganha um passo em aberto. */
+function comPassoAberto() {
+  const dados = baseDados();
+  const p = dados.prospeccoes.find(x => x.id === 1);
+  p.proximo_passo = 'Ligar para o Alberto';
+  p.proximo_passo_data = '2026-09-10';
+  return dados;
+}
+
+test('trocar o proximo passo exige dizer o que houve com o anterior', async () => {
+  const ctx = await montar(comPassoAberto());
+  try {
+    const semNota = await chamar(ctx.porta, '/api/prospeccoes/1/proximo-passo', {
+      method: 'PUT',
+      body: JSON.stringify({ proximo_passo: 'Enviar proposta', proximo_passo_data: '2026-09-20' })
+    });
+    assert.strictEqual(semNota.status, 400);
+    // Nada mudou: nem o passo, nem a timeline.
+    assert.strictEqual(ctx.tabelas.prospeccoes.find(p => p.id === 1).proximo_passo, 'Ligar para o Alberto');
+    assert.strictEqual(ctx.tabelas.prospeccao_interacoes.some(i => i.tipo === 'Atividade realizada'), false);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('com a nota, o passo anterior vira Atividade realizada', async () => {
+  const ctx = await montar(comPassoAberto());
+  try {
+    const resp = await chamar(ctx.porta, '/api/prospeccoes/1/proximo-passo', {
+      method: 'PUT',
+      body: JSON.stringify({
+        proximo_passo: 'Enviar proposta',
+        proximo_passo_data: '2026-09-20',
+        nota_passo_anterior: 'Alberto pediu para ligar depois do feriado'
+      })
+    });
+    assert.strictEqual(resp.status, 200);
+
+    const atividade = ctx.tabelas.prospeccao_interacoes.find(i => i.tipo === 'Atividade realizada');
+    assert.ok(atividade, 'deveria ter criado a atividade');
+    // O resumo é o passo COMBINADO; o detalhe é o que aconteceu.
+    assert.strictEqual(atividade.resumo, 'Ligar para o Alberto');
+    assert.strictEqual(atividade.detalhe, 'Alberto pediu para ligar depois do feriado');
+    assert.strictEqual(atividade.passo_planejado, 'Ligar para o Alberto');
+    assert.strictEqual(atividade.passo_planejado_data, '2026-09-10');
+
+    assert.strictEqual(ctx.tabelas.prospeccoes.find(p => p.id === 1).proximo_passo, 'Enviar proposta');
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('sem passo anterior, definir o primeiro nao exige nota', async () => {
+  const ctx = await montar(baseDados());
+  try {
+    const resp = await chamar(ctx.porta, '/api/prospeccoes/3/proximo-passo', {
+      method: 'PUT',
+      body: JSON.stringify({ proximo_passo: 'Primeiro contato', proximo_passo_data: '2026-09-01' })
+    });
+    assert.strictEqual(resp.status, 200);
+    assert.strictEqual(ctx.tabelas.prospeccao_interacoes.some(i => i.tipo === 'Atividade realizada'), false);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('concluir o passo registra atividade e encerra o combinado', async () => {
+  const ctx = await montar(comPassoAberto());
+  try {
+    const resp = await chamar(ctx.porta, '/api/prospeccoes/1/concluir-passo', {
+      method: 'POST',
+      body: JSON.stringify({ nota: 'Liguei, ele confirmou interesse.' })
+    });
+    assert.strictEqual(resp.status, 200);
+
+    const atividade = ctx.tabelas.prospeccao_interacoes.find(i => i.tipo === 'Atividade realizada');
+    assert.strictEqual(atividade.resumo, 'Ligar para o Alberto');
+
+    // Sem novo passo, o antigo não pode continuar em aberto: ele acabou de ser
+    // concluído e ficaria eternamente marcado como pendente.
+    const p = ctx.tabelas.prospeccoes.find(x => x.id === 1);
+    assert.strictEqual(p.proximo_passo, null);
+    assert.strictEqual(p.proximo_passo_data, null);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('concluir sem nota e recusado', async () => {
+  const ctx = await montar(comPassoAberto());
+  try {
+    const resp = await chamar(ctx.porta, '/api/prospeccoes/1/concluir-passo', {
+      method: 'POST', body: JSON.stringify({})
+    });
+    assert.strictEqual(resp.status, 400);
+    assert.strictEqual(ctx.tabelas.prospeccao_interacoes.some(i => i.tipo === 'Atividade realizada'), false);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('concluir sem passo planejado e recusado', async () => {
+  const ctx = await montar(baseDados());
+  try {
+    // A prospecção 3 não tem passo em aberto.
+    const resp = await chamar(ctx.porta, '/api/prospeccoes/3/concluir-passo', {
+      method: 'POST', body: JSON.stringify({ nota: 'qualquer coisa' })
+    });
+    assert.strictEqual(resp.status, 400);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('concluir movendo no funil e encadeando o proximo passo', async () => {
+  const ctx = await montar(comPassoAberto());
+  try {
+    const resp = await chamar(ctx.porta, '/api/prospeccoes/1/concluir-passo', {
+      method: 'POST',
+      body: JSON.stringify({
+        nota: 'Reunião feita, escopo aprovado.',
+        etapa: 'Proposta',
+        proximo_passo: 'Montar a proposta',
+        proximo_passo_data: '2026-09-30'
+      })
+    });
+    assert.strictEqual(resp.status, 200);
+
+    const p = ctx.tabelas.prospeccoes.find(x => x.id === 1);
+    assert.strictEqual(p.etapa, 'Proposta');
+    // A probabilidade acompanha a etapa.
+    assert.strictEqual(p.probabilidade, 65);
+    assert.strictEqual(p.proximo_passo, 'Montar a proposta');
+
+    const hist = ctx.tabelas.prospeccao_historico.filter(h => String(h.prospeccao_id) === '1');
+    assert.ok(hist.some(h => h.tipo === 'interacao' && /Atividade realizada/.test(h.entidade)));
+    assert.ok(hist.some(h => h.tipo === 'etapa' && h.valor_novo === 'Proposta'));
+    assert.ok(hist.some(h => h.campo === 'proximo_passo' && h.valor_novo === 'Montar a proposta'));
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('concluir marcando Perdido exige motivo e arquiva', async () => {
+  const ctx = await montar(comPassoAberto());
+  try {
+    const semMotivo = await chamar(ctx.porta, '/api/prospeccoes/1/concluir-passo', {
+      method: 'POST',
+      body: JSON.stringify({ nota: 'Cliente desistiu', etapa: 'Perdido' })
+    });
+    assert.strictEqual(semMotivo.status, 400);
+
+    const comMotivo = await chamar(ctx.porta, '/api/prospeccoes/1/concluir-passo', {
+      method: 'POST',
+      body: JSON.stringify({ nota: 'Cliente desistiu', etapa: 'Perdido', motivo_perda: 'Sem verba' })
+    });
+    assert.strictEqual(comMotivo.status, 200);
+
+    const p = ctx.tabelas.prospeccoes.find(x => x.id === 1);
+    assert.strictEqual(p.etapa, 'Perdido');
+    assert.strictEqual(p.status, 'arquivada');
+    assert.strictEqual(p.motivo_perda, 'Sem verba');
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('concluir com converter apenas SINALIZA, nao converte por baixo', async () => {
+  const ctx = await montar(comPassoAberto());
+  try {
+    const resp = await chamar(ctx.porta, '/api/prospeccoes/1/concluir-passo', {
+      method: 'POST',
+      body: JSON.stringify({ nota: 'Cliente fechou!', converter: true })
+    });
+    assert.strictEqual(resp.status, 200);
+    assert.strictEqual((await resp.json()).converter, true);
+
+    // Nenhum cliente criado aqui: a conversão passa pelo fluxo próprio, que
+    // confere os dados fiscais e pede status e dono.
+    assert.strictEqual(ctx.tabelas.clientes.length, 0);
+    assert.strictEqual(ctx.tabelas.prospeccoes.find(p => p.id === 1).cliente_id, undefined);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('concluir recusa etapa invalida', async () => {
+  const ctx = await montar(comPassoAberto());
+  try {
+    const resp = await chamar(ctx.porta, '/api/prospeccoes/1/concluir-passo', {
+      method: 'POST',
+      body: JSON.stringify({ nota: 'x', etapa: 'Inventada' })
+    });
+    assert.strictEqual(resp.status, 400);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('concluir sem permissao de mover no funil e barrado', async () => {
+  const ctx = await montar(comPassoAberto());
+  try {
+    // Usuário 2 não é Sup Admin e não tem modelo: tudo negado.
+    const resp = await chamar(ctx.porta, '/api/prospeccoes/1/concluir-passo', {
+      usuario: 2, method: 'POST',
+      body: JSON.stringify({ nota: 'x', etapa: 'Proposta' })
+    });
+    assert.strictEqual(resp.status, 403);
+    assert.strictEqual(ctx.tabelas.prospeccao_interacoes.some(i => i.tipo === 'Atividade realizada'), false);
   } finally {
     await ctx.encerrar();
   }

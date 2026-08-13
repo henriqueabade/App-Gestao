@@ -68,7 +68,10 @@ const PROBABILIDADE_PADRAO = {
 };
 
 const TIPOS_INTERACAO = new Set([
-  'Ligação', 'E-mail', 'Reunião', 'WhatsApp', 'Visita', 'Nota', 'Proposta'
+  'Ligação', 'E-mail', 'Reunião', 'WhatsApp', 'Visita', 'Nota', 'Proposta',
+  // Gerado ao concluir um passo planejado. Fica fora da lista oferecida no
+  // formulário de interação: quem cria este tipo é o fluxo de conclusão.
+  'Atividade realizada'
 ]);
 
 const STATUS_CAMPANHA = new Set(['Planejada', 'Em andamento', 'Concluída', 'Cancelada']);
@@ -826,28 +829,189 @@ router.patch('/:id/etapa', exigirPermissao('pros.stage.update'), async (req, res
 // PRÓXIMO PASSO
 // ---------------------------------------------------------------------------
 
+/**
+ * Fecha o passo planejado transformando-o numa atividade da timeline.
+ *
+ * "Ligar para o Ricardo" não é uma ligação, um e-mail nem uma reunião — é o
+ * CUMPRIMENTO de um combinado. Por isso o tipo próprio: encaixá-lo num dos
+ * outros falsearia o relatório de atividades. O texto do passo é guardado em
+ * `passo_planejado`, ao lado do que de fato aconteceu, para depois dar para
+ * comparar combinado x realizado.
+ *
+ * Devolve os eventos de histórico para quem chamou registrar em bloco.
+ */
+async function concluirPassoPlanejado(api, id, prospeccao, { nota, data, contatoId }, usuarioId) {
+  const passo = texto(prospeccao.proximo_passo);
+  if (!passo) return [];
+
+  const quando = data || new Date().toISOString();
+  await api.post('/api/prospeccao_interacoes', {
+    prospeccao_id: Number(id),
+    contato_id: contatoId ?? null,
+    tipo: 'Atividade realizada',
+    data: quando,
+    resumo: passo,
+    detalhe: texto(nota),
+    passo_planejado: passo,
+    passo_planejado_data: prospeccao.proximo_passo_data || null,
+    usuario_id: usuarioId ?? null
+  });
+
+  return [{
+    tipo: 'interacao', acao: 'criou',
+    entidade: `Atividade realizada — ${passo}`,
+    valor_anterior: passo,
+    valor_novo: texto(nota) || 'Concluído',
+    observacao: 'Passo planejado concluído',
+    detalhe: { passo_planejado: passo, passo_planejado_data: prospeccao.proximo_passo_data || null, nota: texto(nota) }
+  }];
+}
+
 router.put('/:id/proximo-passo', exigirPermissao('pros.next.step'), async (req, res) => {
   const { id } = req.params;
   try {
     const api = createApiClient(req);
     const alvo = await buscarProspeccao(api, id);
+    const usuarioId = usuarioDaRequisicao(req);
     const novoPasso = texto(req.body?.proximo_passo);
     const novaData = req.body?.proximo_passo_data || null;
+
+    // Trocar o passo sem dizer o que houve com o anterior faz a timeline
+    // perder o combinado. Quando existe passo em aberto, a nota é obrigatória.
+    const notaAnterior = texto(req.body?.nota_passo_anterior);
+    const tinhaPasso = Boolean(texto(alvo.proximo_passo));
+    if (tinhaPasso && novoPasso && !notaAnterior) {
+      throw erro(400, 'Descreva o que aconteceu com o passo anterior antes de definir o próximo');
+    }
+
+    const eventos = tinhaPasso && notaAnterior
+      ? await concluirPassoPlanejado(api, id, alvo, { nota: notaAnterior }, usuarioId)
+      : [];
 
     await api.put(`/api/prospeccoes/${id}`, {
       proximo_passo: novoPasso,
       proximo_passo_data: novaData
     });
 
-    await registrarHistorico(api, id, diferencasDaFicha(
-      alvo,
-      { proximo_passo: novoPasso, proximo_passo_data: novaData }
-    ), usuarioDaRequisicao(req));
+    eventos.push(...diferencasDaFicha(alvo, { proximo_passo: novoPasso, proximo_passo_data: novaData }));
+    await registrarHistorico(api, id, eventos, usuarioId);
 
     res.json({ success: true });
   } catch (err) {
     console.error('Erro ao definir próximo passo:', err);
     res.status(err.status || 500).json({ error: err.message || 'Erro ao definir próximo passo' });
+  }
+});
+
+/**
+ * Concluir o passo planejado e decidir o rumo da prospecção.
+ *
+ * Três desfechos possíveis, exclusivos entre si:
+ *   • mover para outra etapa do funil;
+ *   • marcar para conversão em cliente (a conversão em si segue pelo fluxo
+ *     próprio, que valida os dados fiscais);
+ *   • só concluir, sem mexer no funil.
+ *
+ * As permissões são cobradas conforme o que o corpo pede: mover exige
+ * `pros.stage.update`, e definir o próximo passo exige `pros.next.step`.
+ */
+function permissoesDeConclusao(req) {
+  const chaves = ['pros.interaction.add'];
+  if (texto(req.body?.etapa)) chaves.push('pros.stage.update');
+  if (req.body?.proximo_passo !== undefined) chaves.push('pros.next.step');
+  return chaves;
+}
+
+router.post('/:id/concluir-passo', exigirPermissao(permissoesDeConclusao), async (req, res) => {
+  const { id } = req.params;
+  try {
+    const nota = texto(req.body?.nota);
+    if (!nota) throw erro(400, 'Descreva o que aconteceu');
+
+    const api = createApiClient(req);
+    const usuarioId = usuarioDaRequisicao(req);
+    const alvo = await buscarProspeccao(api, id);
+
+    if (!texto(alvo.proximo_passo)) {
+      throw erro(400, 'Não há passo planejado para concluir');
+    }
+
+    const eventos = await concluirPassoPlanejado(api, id, alvo, {
+      nota,
+      data: req.body?.data,
+      contatoId: req.body?.contato_id ?? null
+    }, usuarioId);
+
+    // --- desfecho: nova etapa (opcional) ---
+    const novaEtapa = texto(req.body?.etapa);
+    if (novaEtapa) {
+      if (!ETAPAS.includes(novaEtapa)) throw erro(400, `Etapa inválida: ${novaEtapa}`);
+      const motivo = texto(req.body?.motivo_perda);
+      if (novaEtapa === 'Perdido' && !motivo) throw erro(400, 'Informe o motivo da perda');
+
+      if (novaEtapa !== alvo.etapa) {
+        const patch = {
+          etapa: novaEtapa,
+          probabilidade: PROBABILIDADE_PADRAO[novaEtapa] ?? alvo.probabilidade,
+          motivo_perda: novaEtapa === 'Perdido' ? motivo : null
+        };
+        if (novaEtapa === 'Perdido') patch.status = 'arquivada';
+        await api.put(`/api/prospeccoes/${id}`, patch);
+
+        eventos.push({
+          tipo: 'etapa', acao: 'moveu', entidade: 'Etapa do funil', campo: 'etapa',
+          valor_anterior: alvo.etapa, valor_novo: novaEtapa,
+          observacao: 'Definida ao concluir o passo planejado'
+        });
+        if (Number(alvo.probabilidade) !== Number(patch.probabilidade)) {
+          eventos.push({
+            tipo: 'campo', acao: 'alterou', entidade: 'Probabilidade', campo: 'probabilidade',
+            valor_anterior: String(alvo.probabilidade ?? ''), valor_novo: String(patch.probabilidade)
+          });
+        }
+        if (patch.status) {
+          eventos.push({
+            tipo: 'arquivamento', acao: 'alterou', entidade: 'Situação', campo: 'status',
+            valor_anterior: alvo.status, valor_novo: patch.status
+          });
+        }
+      }
+    }
+
+    // --- próximo passo (opcional) ---
+    // A chave presente é o que sinaliza intenção: enviar vazio à toa apagaria
+    // um passo que ninguém pediu para apagar.
+    let proximoPasso = null;
+    if (req.body?.proximo_passo !== undefined) {
+      proximoPasso = texto(req.body.proximo_passo);
+      const proximaData = req.body?.proximo_passo_data || null;
+      await api.put(`/api/prospeccoes/${id}`, {
+        proximo_passo: proximoPasso,
+        proximo_passo_data: proximaData
+      });
+      eventos.push(...diferencasDaFicha(alvo, {
+        proximo_passo: proximoPasso, proximo_passo_data: proximaData
+      }));
+    } else {
+      // Sem novo passo, o antigo não pode continuar em aberto: ele acabou de
+      // ser concluído e ficaria eternamente marcado como pendente.
+      await api.put(`/api/prospeccoes/${id}`, { proximo_passo: null, proximo_passo_data: null });
+      eventos.push(...diferencasDaFicha(alvo, { proximo_passo: null, proximo_passo_data: null }));
+    }
+
+    await registrarHistorico(api, id, eventos, usuarioId);
+
+    // `converter` é só um sinal para a interface abrir o fluxo de conversão,
+    // que valida os dados fiscais e pede status e dono do cliente. Converter
+    // aqui, por baixo, pularia essas checagens.
+    res.json({
+      success: true,
+      etapa: novaEtapa || alvo.etapa,
+      converter: Boolean(req.body?.converter)
+    });
+  } catch (err) {
+    console.error('Erro ao concluir passo planejado:', err);
+    res.status(err.status || 500).json({ error: err.message || 'Erro ao concluir passo' });
   }
 });
 

@@ -123,7 +123,8 @@
   /** Ícone por tipo de interação — a timeline fica legível de relance. */
   const ICONE_INTERACAO = {
     'Ligação': '📞', 'E-mail': '📧', 'Reunião': '🤝',
-    'WhatsApp': '💬', 'Visita': '🏢', 'Nota': '📝', 'Proposta': '📄'
+    'WhatsApp': '💬', 'Visita': '🏢', 'Nota': '📝', 'Proposta': '📄',
+    'Atividade realizada': '✅'
   };
 
   // -------------------------------------------------------------------------
@@ -643,6 +644,7 @@
       renderHistorico(listas.historico);
       atualizarContadores(listas);
       refletirEstado(p);
+      refletirPassoPlanejado(p);
 
       // A ficha completa e os contatos alimentam os modais de ação: a grade só
       // tem o resumo, e o de interação precisa da lista para oferecer "com quem"
@@ -689,6 +691,11 @@
     }
   }
 
+  /** Sem combinado em aberto não há o que concluir — o botão nem aparece. */
+  function refletirPassoPlanejado(p) {
+    get('detProspConcluirPasso')?.classList.toggle('hidden', !String(p.proximo_passo || '').trim());
+  }
+
   await carregar();
   window.dispatchEvent(new CustomEvent('modalSpinnerLoaded', { detail: 'detalhesProspeccao' }));
 
@@ -727,6 +734,10 @@
 
   get('detProspProximoPasso')?.addEventListener('click', () => {
     abrirAcao('proximo-passo.html', 'prospeccao-proximo-passo.js', 'proximoPassoProspeccao');
+  });
+
+  get('detProspConcluirPasso')?.addEventListener('click', () => {
+    abrirAcao('concluir-passo.html', 'prospeccao-concluir-passo.js', 'concluirPasso');
   });
 
   get('detProspNovaInteracao')?.addEventListener('click', () => {
