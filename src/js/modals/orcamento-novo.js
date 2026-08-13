@@ -215,7 +215,69 @@
     }
   });
 
-  carregarClientes();
+  // -------------------------------------------------------------------------
+  // Modo prospecção (OCRP)
+  //
+  // A tela é a MESMA — itens, descontos, parcelamento e totais valem igual.
+  // Muda só de quem é a proposta: em vez de escolher entre os clientes, o
+  // destinatário já vem definido pela prospecção que abriu o modal.
+  //
+  // Duplicar este arquivo para a variante seria condenar as duas cópias a
+  // divergirem na primeira mudança de regra de desconto.
+  // -------------------------------------------------------------------------
+  const prospeccao = window.orcamentoProspeccao || null;
+  // Consome o sinal na hora. Deixá-lo pendurado fazia o PRÓXIMO "Novo
+  // Orçamento" — o do módulo de Orçamentos, para um cliente — abrir preso à
+  // última prospecção visitada. A restauração de trabalho o repõe sozinha
+  // (`registrarContexto` logo abaixo), então apagar aqui não perde nada.
+  delete window.orcamentoProspeccao;
+
+  async function prepararProspeccao(){
+    const nome = prospeccao.nome_fantasia || prospeccao.razao_social || 'Prospecção';
+    clienteSelect.innerHTML = `<option value="${escapeAttr(prospeccao.id)}">${escapeAttr(nome)}</option>`;
+    clienteSelect.value = String(prospeccao.id);
+    clienteSelect.setAttribute('data-filled','true');
+    // Fica visível e legível, mas não escolhível: o orçamento pertence a esta
+    // prospecção e trocar o destinatário no meio seria outro documento.
+    clienteSelect.disabled = true;
+    clienteSelect.classList.add('opacity-70','cursor-not-allowed');
+    const rotulo = document.querySelector('label[for="novoCliente"]');
+    if (rotulo) rotulo.textContent = 'Prospecção';
+
+    try {
+      const resp = await fetchApi(`/api/prospeccoes/${prospeccao.id}`);
+      const ficha = await resp.json();
+      const contatos = ficha.contatos || [];
+      contatoSelect.innerHTML = '<option value="" disabled selected hidden></option>' +
+        contatos.map(ct => `<option value="${escapeAttr(ct.id)}">${escapeAttr(ct.nome)}</option>`).join('');
+      // Contato principal já vem escolhido: é para ele que a proposta vai na
+      // esmagadora maioria das vezes.
+      const principal = contatos.find(ct => ct.principal) || contatos[0];
+      if (principal) {
+        contatoSelect.value = String(principal.id);
+        contatoSelect.setAttribute('data-filled','true');
+      }
+    } catch(err){ console.error('Erro ao carregar contatos da prospecção', err); }
+
+    // Transportadora é cadastro POR CLIENTE — não existe para uma prospecção.
+    // Deixar o campo obrigatório aqui travaria o orçamento num dado que só
+    // pode existir depois da conversão.
+    transportadoraSelect.innerHTML = '<option value="">Definir na conversão em pedido</option>';
+    transportadoraSelect.required = false;
+    transportadoraSelect.disabled = true;
+    transportadoraSelect.classList.add('opacity-70','cursor-not-allowed');
+    transportadoraSelect.setAttribute('data-filled','false');
+  }
+
+  if (prospeccao?.id) {
+    // Sem devolver o contexto, uma queda reabriria o modal em modo cliente e o
+    // vínculo com a prospecção se perderia sem aviso.
+    window.EstadoTrabalho?.registrarContexto?.(overlayId,
+      () => ({ orcamentoProspeccao: prospeccao }));
+    prepararProspeccao();
+  } else {
+    carregarClientes();
+  }
   carregarUsuarios();
   carregarProdutos();
 
@@ -647,14 +709,21 @@
         });
         const descontoTotal = descPagTot + descEspTot;
         const total = subtotal - descontoTotal;
+        // Num OCRP o select de "cliente" carrega o id da PROSPECÇÃO. Mandá-lo
+        // como cliente_id apontaria para o cliente de mesmo número — outra
+        // empresa, escolhida por acidente.
         const body = {
-          cliente_id: clienteVal,
-          contato_id: contatoVal,
+          cliente_id: prospeccao?.id ? null : clienteVal,
+          contato_id: prospeccao?.id ? null : contatoVal,
+          prospeccao_id: prospeccao?.id || null,
+          prospeccao_contato_id: prospeccao?.id ? (contatoVal || null) : null,
           situacao: status,
           parcelas,
           tipo_parcela: tipoParcela,
           forma_pagamento: formaPagamentoVal,
-          transportadora: transportadoraSelect.options[transportadoraSelect.selectedIndex]?.textContent || '',
+          transportadora: prospeccao?.id
+            ? ''
+            : (transportadoraSelect.options[transportadoraSelect.selectedIndex]?.textContent || ''),
           desconto_pagamento: descPagTot,
           desconto_especial: descEspTot,
           desconto_total: descontoTotal,
@@ -675,6 +744,9 @@
         if (!resp.ok) throw new Error('Erro ao salvar');
         const result = await resp.json();
         if (window.reloadOrcamentos) await window.reloadOrcamentos();
+        // A ficha da prospecção fica ABERTA por baixo: sem repintar, o
+        // orçamento recém-criado só apareceria depois de fechar e reabrir.
+        if (prospeccao?.id) await window.recarregarDetalhesProspeccao?.();
         Modal.close(overlayId);
         const message =
           status === 'Rascunho'

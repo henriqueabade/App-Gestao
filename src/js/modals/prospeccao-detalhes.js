@@ -448,32 +448,66 @@
       </div>`;
   }
 
+  /** Mesmas cores de situação do módulo de Orçamentos — a leitura é a mesma. */
+  const SITUACAO_ORCAMENTO = {
+    'Rascunho': 'badge-info',
+    'Pendente': 'badge-warning',
+    'Enviado': 'badge-warning',
+    'Aprovado': 'badge-success',
+    'Rejeitado': 'badge-danger',
+    'Expirado': 'badge-neutral'
+  };
+
   function renderOrcamentos(orcamentos) {
     const alvo = get('detProspOrcamentos');
     if (!orcamentos.length) {
       alvo.innerHTML = estadoVazio('Nenhum orçamento emitido para esta prospecção');
       return;
     }
+
+    const total = orcamentos
+      .filter(o => o.situacao !== 'Rejeitado' && o.situacao !== 'Expirado')
+      .reduce((soma, o) => soma + (Number(o.valor_final) || 0), 0);
+
     alvo.innerHTML = `
       <div class="overflow-x-auto">
         <table class="w-full">
           <thead>
             <tr class="border-b border-white/10">
               <th class="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Número</th>
+              <th class="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Emissão</th>
               <th class="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Situação</th>
               <th class="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Valor</th>
+              <th class="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Ações</th>
             </tr>
           </thead>
           <tbody>
             ${orcamentos.map(o => `
               <tr class="border-b border-white/5">
-                <td class="px-4 py-3 text-sm text-white">${esc(o.numero)}</td>
-                <td class="px-4 py-3 text-sm text-white/80">${texto(o.situacao) || VAZIO}</td>
-                <td class="px-4 py-3 text-sm text-white">${esc(formatarMoeda(o.valor_final))}</td>
+                <td class="px-4 py-3 text-sm text-white font-medium popup-info-value--inteiro">${esc(o.numero)}</td>
+                <td class="px-4 py-3 text-sm text-white/80 popup-info-value--inteiro">${esc(formatarData(o.data_emissao))}</td>
+                <td class="px-4 py-3">
+                  <span class="${SITUACAO_ORCAMENTO[o.situacao] || 'badge-neutral'} px-3 py-1 rounded-full text-xs font-medium">${esc(texto(o.situacao) || '—')}</span>
+                </td>
+                <td class="px-4 py-3 text-sm text-white popup-info-value--inteiro">${esc(formatarMoeda(o.valor_final))}</td>
+                <td class="px-4 py-3">
+                  <i class="fas fa-eye acao-tabela acao-tabela--ver acao-ver-orcamento" data-orcamento="${esc(o.id)}" title="Ver orçamento"></i>
+                </td>
               </tr>`).join('')}
           </tbody>
         </table>
-      </div>`;
+      </div>
+      <p class="text-sm text-white/70 mt-4">
+        Em aberto: <strong class="text-white popup-info-value--inteiro">${esc(formatarMoeda(total))}</strong>
+        <span class="text-xs text-gray-400 ml-1">(exclui rejeitados e expirados)</span>
+      </p>`;
+
+    alvo.querySelectorAll('.acao-ver-orcamento').forEach(icone => {
+      icone.addEventListener('click', () => {
+        window.selectedQuoteId = Number(icone.dataset.orcamento);
+        Modal.open('modals/orcamentos/visualizar.html', '../js/modals/orcamento-visualizar.js', 'visualizarOrcamento', true);
+      });
+    });
   }
 
   /** Rótulo e cor por tipo de evento do histórico. */
@@ -576,6 +610,7 @@
       interacoes: dados.interacoes.length,
       notas: dados.notas.length,
       campanhas: dados.campanhas.length,
+      orcamentos: dados.orcamentos.length,
       historico: dados.historico.length
     };
     overlay.querySelectorAll('[data-contador]').forEach(el => {
@@ -750,6 +785,14 @@
 
   get('detProspNovaCampanha')?.addEventListener('click', () => {
     abrirAcao('campanha.html', 'prospeccao-campanha.js', 'campanhaProspeccao');
+  });
+
+  // Abre a tela padrão de Novo Orçamento em "modo prospecção": mesmos itens,
+  // descontos e parcelamento, só que a proposta é desta prospecção e ganha
+  // numeração OCRP. Ver o bloco correspondente em orcamento-novo.js.
+  get('detProspNovoOrcamento')?.addEventListener('click', () => {
+    window.orcamentoProspeccao = alvo();
+    Modal.open('modals/orcamentos/novo.html', '../js/modals/orcamento-novo.js', 'novoOrcamento', true);
   });
 
   // -------------------------------------------------------------------------

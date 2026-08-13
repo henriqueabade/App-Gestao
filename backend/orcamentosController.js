@@ -3,6 +3,7 @@ const { createApiClient } = require('./apiHttpClient');
 const { exigirPermissao, exigirSupAdmin } = require('./permissionsController');
 const { aplicarConversaoNoEstoque } = require('./conversaoAplicar');
 const { excluirOrcamentoEmCascata } = require('./exclusaoEmCascata');
+const { registrarHistorico } = require('./prospeccoesController');
 
 const router = express.Router();
 
@@ -28,18 +29,44 @@ function idDoUsuarioDaRequisicao(req) {
   }
 }
 
+// Orçamento nascido de uma prospecção usa prefixo próprio: quem olha a lista
+// precisa distinguir na hora a proposta feita a um cliente da feita a quem
+// ainda é só uma oportunidade.
+const PREFIXO_CLIENTE = 'ORC';
+const PREFIXO_PROSPECCAO = 'OCRP';
+
+function prefixoDe(body = {}) {
+  return body.prospeccao_id ? PREFIXO_PROSPECCAO : PREFIXO_CLIENTE;
+}
+
 // Descobre a maior sequência numérica já usada em "numero" (ORC1, ORC2, ...).
 // Precisa varrer TODOS os registros: usar apenas o último por id.desc gera
 // colisões quando os números não são monotônicos com o id (ex.: ORC2 criado
 // depois de ORC3), violando a constraint única "orcamentos_numero_key".
-async function getMaxSequencia(api) {
+//
+// O prefixo NÃO é decorativo aqui. Contar só os dígitos, como antes, misturava
+// as duas famílias: com OCRP80 no banco, o próximo orçamento de cliente viraria
+// ORC81 e a sequência de cliente daria um salto de setenta números — e o mesmo
+// no sentido inverso. Cada prefixo tem a sua própria contagem.
+//
+// A regra é assimétrica de propósito. OCRP é formato novo, então exige o
+// formato exato. ORC herda tudo o que já existe no banco, inclusive números
+// gravados fora do padrão ("ORC-12", "12") que a versão anterior contava —
+// deixar de contá-los faria a sequência voltar para trás e colidir com a
+// constraint única. Por isso o lado do cliente é "tudo que não for OCRP".
+const EH_PROSPECCAO = /^OCRP\d+$/i;
+
+async function getMaxSequencia(api, prefixo = PREFIXO_CLIENTE) {
   const lista = await api
     .get('/api/orcamentos', { query: { order: 'id.desc', limit: 5000 } })
     .catch(() => []);
   let maxSeq = 0;
   if (Array.isArray(lista)) {
     for (const orc of lista) {
-      const n = parseInt(String(orc?.numero ?? '').replace(/\D/g, ''), 10);
+      const numero = String(orc?.numero ?? '').trim();
+      const daProspeccao = EH_PROSPECCAO.test(numero);
+      if (daProspeccao !== (prefixo === PREFIXO_PROSPECCAO)) continue;
+      const n = parseInt(numero.replace(/\D/g, ''), 10);
       if (Number.isFinite(n) && n > maxSeq) maxSeq = n;
     }
   }
@@ -64,16 +91,24 @@ function isDuplicateNumeroError(err) {
 // Cria o orçamento gerando o próximo "numero" livre. Em caso de colisão
 // (concorrência ou lacunas na sequência), incrementa e tenta novamente.
 async function criarOrcamentoComNumero(api, body) {
-  let sequencia = (await getMaxSequencia(api)) + 1;
+  const prefixo = prefixoDe(body);
+  let sequencia = (await getMaxSequencia(api, prefixo)) + 1;
   const maxTentativas = 20;
 
   for (let tentativa = 0; tentativa < maxTentativas; tentativa++) {
-    const numero = `ORC${sequencia}`;
+    const numero = `${prefixo}${sequencia}`;
     try {
       const created = await api.post('/api/orcamentos', buildOrcamentoPayload(body, { numero }));
       return { created, numero };
     } catch (err) {
-      if (isDuplicateNumeroError(err) && tentativa < maxTentativas - 1) {
+      // Só a colisão de número justifica insistir; qualquer outra falha sobe
+      // na hora, com a mensagem original.
+      //
+      // O `tentativa < maxTentativas - 1` que existia aqui fazia a última
+      // tentativa relançar o erro cru do upstream (500, "duplicate key"), o que
+      // tornava o 409 abaixo inalcançável e devolvia ao usuário uma mensagem de
+      // erro interno no lugar da explicação.
+      if (isDuplicateNumeroError(err)) {
         sequencia += 1;
         continue;
       }
@@ -87,10 +122,17 @@ async function criarOrcamentoComNumero(api, body) {
 }
 
 function buildOrcamentoPayload(body = {}, { numero, situacao, dataAprovacao } = {}) {
+  // Vazio vindo de um <select> chega como "" — que o Postgres recusaria numa
+  // coluna integer. Como agora esses campos podem legitimamente não ter valor,
+  // "" precisa virar null em vez de ser repassado adiante.
+  const idOuNulo = v => (v === '' || v === undefined || v === null ? null : v);
+
   return {
     numero,
-    cliente_id: body.cliente_id,
-    contato_id: body.contato_id,
+    cliente_id: idOuNulo(body.cliente_id),
+    contato_id: idOuNulo(body.contato_id),
+    prospeccao_id: idOuNulo(body.prospeccao_id),
+    prospeccao_contato_id: idOuNulo(body.prospeccao_contato_id),
     data_emissao: body.data_emissao || new Date().toISOString(),
     situacao: situacao || body.situacao,
     parcelas: body.parcelas,
@@ -107,6 +149,23 @@ function buildOrcamentoPayload(body = {}, { numero, situacao, dataAprovacao } = 
     dono: body.dono,
     data_aprovacao: dataAprovacao
   };
+}
+
+/**
+ * Anota na ficha da prospecção algo que aconteceu com um orçamento dela.
+ *
+ * Silencioso quando o orçamento é de cliente: prospecção nenhuma tem o que
+ * registrar. Nunca derruba a operação principal — perder uma linha de histórico
+ * é ruim, desfazer um orçamento já gravado por causa disso é pior.
+ */
+async function anotarNaProspeccao(api, req, orcamento, evento) {
+  const prospeccaoId = orcamento?.prospeccao_id;
+  if (!prospeccaoId) return;
+  try {
+    await registrarHistorico(api, prospeccaoId, evento, idDoUsuarioDaRequisicao(req));
+  } catch (err) {
+    console.error('[orcamentos] falha ao anotar no histórico da prospecção:', err?.message || err);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -283,6 +342,18 @@ async function converterOrcamentoEmPedido(api, id, conversao = null) {
     throw error;
   }
 
+  // Um OCRP ainda não tem cliente. Deixar passar criaria um pedido com
+  // `cliente_id` nulo — sem dono para faturar, entregar ou cobrar, e invisível
+  // na ficha de qualquer cliente. A criação automática do cliente a partir da
+  // prospecção é o passo seguinte; até lá, converte-se a prospecção primeiro.
+  if (!orcamento.cliente_id) {
+    const error = new Error(orcamento.prospeccao_id
+      ? 'Este orçamento é de uma prospecção. Converta a prospecção em cliente antes de gerar o pedido.'
+      : 'Orçamento sem cliente não pode virar pedido.');
+    error.status = 400;
+    throw error;
+  }
+
   const [itens, parcelas] = await Promise.all([
     api.get('/api/orcamentos_itens', { query: { orcamento_id: id } }).catch(() => []),
     api.get('/api/orcamento_parcelas', { query: { orcamento_id: id, order: 'numero_parcela' } }).catch(() => [])
@@ -392,12 +463,16 @@ async function converterOrcamentoEmPedido(api, id, conversao = null) {
 }
 
 router.get('/', exigirPermissao('orc.view'), async (req, res) => {
-  const { clienteId } = req.query;
+  const { clienteId, prospeccaoId } = req.query;
   try {
     const api = createApiClient(req);
-    const orcamentos = await api.get('/api/orcamentos', {
-      query: clienteId ? { cliente_id: clienteId, order: 'id.desc' } : { order: 'id.desc' }
-    });
+    // Os filtros são exclusivos: um orçamento de prospecção ainda não tem
+    // cliente, então combinar os dois devolveria vazio sempre.
+    let query = { order: 'id.desc' };
+    if (prospeccaoId) query = { prospeccao_id: prospeccaoId, order: 'id.desc' };
+    else if (clienteId) query = { cliente_id: clienteId, order: 'id.desc' };
+
+    const orcamentos = await api.get('/api/orcamentos', { query });
     res.json(Array.isArray(orcamentos) ? orcamentos : []);
   } catch (err) {
     console.error('Erro ao listar orçamentos:', err);
@@ -435,8 +510,27 @@ router.post('/', exigirPermissao('orc.create'), async (req, res) => {
   const itens = Array.isArray(body.itens) ? body.itens : [];
   const parcelasDetalhes = Array.isArray(body.parcelas_detalhes) ? body.parcelas_detalhes : [];
 
+  // Sem dono, o orçamento não apareceria nem na ficha do cliente nem na da
+  // prospecção: existiria no banco e em lugar nenhum na tela.
+  const temCliente = body.cliente_id !== '' && body.cliente_id != null;
+  const temProspeccao = body.prospeccao_id !== '' && body.prospeccao_id != null;
+  if (!temCliente && !temProspeccao) {
+    return res.status(400).json({ error: 'Informe o cliente ou a prospecção do orçamento' });
+  }
+
   try {
     const api = createApiClient(req);
+
+    // Prospecção precisa existir: FK inválida só estouraria depois de já ter
+    // gravado itens e parcelas, deixando lixo pela metade.
+    let prospeccao = null;
+    if (temProspeccao) {
+      prospeccao = await api.get(`/api/prospeccoes/${body.prospeccao_id}`).catch(() => null);
+      if (!prospeccao?.id) {
+        return res.status(400).json({ error: 'Prospecção não encontrada' });
+      }
+    }
+
     const { created, numero } = await criarOrcamentoComNumero(api, body);
     const orcamentoId = created?.id || created?.data?.id || created?.[0]?.id;
 
@@ -451,6 +545,23 @@ router.post('/', exigirPermissao('orc.create'), async (req, res) => {
         orcamento_id: orcamentoId,
         numero_parcela: parcela.numero_parcela || i + 1
       });
+    }
+
+    if (temProspeccao) {
+      // Depois de itens e parcelas: o histórico anuncia um orçamento pronto,
+      // não um esqueleto que ainda pode falhar no meio.
+      await registrarHistorico(api, body.prospeccao_id, {
+        tipo: 'orcamento',
+        acao: 'criou',
+        entidade: `Orçamento ${numero}`,
+        valor_novo: numero,
+        detalhe: {
+          orcamento_id: orcamentoId,
+          situacao: body.situacao || null,
+          valor_final: body.valor_final ?? null,
+          itens: itens.length
+        }
+      }, idDoUsuarioDaRequisicao(req));
     }
 
     res.json({ success: true, id: orcamentoId, numero });
@@ -491,10 +602,22 @@ router.put('/:id', exigirPermissao(permissoesDeEdicao), async (req, res) => {
       ? new Date().toISOString()
       : null;
 
-    await api.put(`/api/orcamentos/${id}`, buildOrcamentoPayload(body, {
+    const atual = await api.get(`/api/orcamentos/${id}`).catch(() => null);
+
+    const payload = buildOrcamentoPayload(body, {
       situacao: body.situacao,
       dataAprovacao: dataAprovacaoValor
-    }));
+    });
+
+    // O modal de edição não conhece o vínculo com a prospecção e não o envia.
+    // Sem esta linha, toda edição de um OCRP gravaria prospeccao_id = null: o
+    // orçamento sumiria da ficha da prospecção e viraria órfão, sem cliente e
+    // sem origem. Só sobrescreve quando o vínculo vem explicitamente no corpo.
+    for (const campo of ['prospeccao_id', 'prospeccao_contato_id', 'cliente_id', 'contato_id']) {
+      if (!Object.prototype.hasOwnProperty.call(body, campo)) payload[campo] = atual?.[campo] ?? null;
+    }
+
+    await api.put(`/api/orcamentos/${id}`, payload);
 
     const itensExistentes = await api.get('/api/orcamentos_itens', { query: { orcamento_id: id } }).catch(() => []);
     if (Array.isArray(itensExistentes)) {
@@ -527,6 +650,21 @@ router.put('/:id', exigirPermissao(permissoesDeEdicao), async (req, res) => {
         numero_parcela: parcela.numero_parcela || i + 1
       });
     }
+
+    await anotarNaProspeccao(api, req, { prospeccao_id: payload.prospeccao_id }, {
+      tipo: 'orcamento',
+      acao: 'editou',
+      entidade: `Orçamento ${atual?.numero || id}`,
+      campo: 'situacao',
+      valor_anterior: atual?.situacao ?? null,
+      valor_novo: body.situacao ?? atual?.situacao ?? null,
+      detalhe: {
+        orcamento_id: Number(id),
+        valor_final_anterior: atual?.valor_final ?? null,
+        valor_final: body.valor_final ?? null,
+        itens: itens.length
+      }
+    });
 
     let convertido = false;
     let convertErro = null;
@@ -564,7 +702,19 @@ router.patch('/:id/status', exigirPermissao(permissoesDeStatus), async (req, res
       situacao,
       data_aprovacao: situacoesComData.includes(situacao) ? new Date().toISOString() : null
     };
+    const antes = await api.get(`/api/orcamentos/${id}`).catch(() => null);
     await api.put(`/api/orcamentos/${id}`, payload);
+
+    await anotarNaProspeccao(api, req, antes, {
+      tipo: 'orcamento',
+      acao: 'editou',
+      entidade: `Orçamento ${antes?.numero || id}`,
+      campo: 'situacao',
+      valor_anterior: antes?.situacao ?? null,
+      valor_novo: situacao ?? null,
+      detalhe: { orcamento_id: Number(id) }
+    });
+
     let convertido = false;
     let convertErro = null;
     let pedido = null;
@@ -627,6 +777,16 @@ router.post('/:id/clone', exigirPermissao(['orc.clone', 'orc.create']), async (r
       });
     }
 
+    await anotarNaProspeccao(api, req, orcamento, {
+      tipo: 'orcamento',
+      acao: 'criou',
+      entidade: `Orçamento ${numero}`,
+      valor_anterior: orcamento.numero || null,
+      valor_novo: numero,
+      observacao: `Cópia do orçamento ${orcamento.numero || id}`,
+      detalhe: { orcamento_id: novoId, copia_de: Number(id), situacao: 'Rascunho' }
+    });
+
     res.json({ success: true, id: novoId, numero });
   } catch (err) {
     console.error('Erro ao clonar orçamento:', err);
@@ -648,7 +808,27 @@ router.delete('/:id', exigirPermissao('orc.delete'), exigirSupAdmin, async (req,
   const { id } = req.params;
   try {
     const api = createApiClient(req);
+
+    // Lido ANTES da cascata: depois de excluído não há de onde tirar número,
+    // valor nem o vínculo com a prospecção. O orçamento some da lista, mas o
+    // histórico continua sabendo o que ele era.
+    const antes = await api.get(`/api/orcamentos/${id}`).catch(() => null);
+
     const { removidos, avisos } = await excluirOrcamentoEmCascata(api, id);
+
+    await anotarNaProspeccao(api, req, antes, {
+      tipo: 'orcamento',
+      acao: 'excluiu',
+      entidade: `Orçamento ${antes?.numero || id}`,
+      valor_anterior: antes?.numero || null,
+      detalhe: {
+        orcamento_id: Number(id),
+        situacao: antes?.situacao ?? null,
+        valor_final: antes?.valor_final ?? null,
+        data_emissao: antes?.data_emissao ?? null
+      }
+    });
+
     res.json({ success: true, removidos, avisos });
   } catch (err) {
     console.error('Erro ao excluir orçamento:', err);

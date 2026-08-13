@@ -43,27 +43,65 @@
     const obs = document.getElementById('visualizarObservacoes');
     const itensTbody = document.querySelector('#orcamentoItens tbody');
 
-    // carregar nomes de cliente e contatos
-    const clientesResp = await fetchApi('/api/clientes/lista');
-    const clientes = await clientesResp.json();
-    clienteSel.innerHTML = clientes.map(c => `<option value="${c.id}">${c.nome_fantasia}</option>`).join('');
-    clienteSel.value = data.cliente_id;
-    clienteSel.setAttribute('data-filled', 'true');
+    // Orçamento de prospecção (OCRP) ainda não tem cliente. Sem este desvio, a
+    // tela pedia /api/clientes/null e /api/transportadoras/null e caía no catch,
+    // deixando o usuário sem conseguir abrir a própria proposta que acabou de
+    // emitir.
+    const daProspeccao = Boolean(data.prospeccao_id);
 
-    const contatosResp = await fetchApi(`/api/clientes/${data.cliente_id}`);
-    const clienteData = await contatosResp.json();
-    const contatos = clienteData.contatos || [];
-    contatoSel.innerHTML = contatos.map(ct => `<option value="${ct.id}">${ct.nome}</option>`).join('');
-    contatoSel.value = data.contato_id;
-    contatoSel.setAttribute('data-filled', 'true');
+    if (daProspeccao) {
+      const prospResp = await fetchApi(`/api/prospeccoes/${data.prospeccao_id}`);
+      const ficha = await prospResp.json().catch(() => ({}));
+      const prospeccao = ficha.prospeccao || {};
+      const nome = prospeccao.nome_fantasia || prospeccao.razao_social || 'Prospecção';
 
-    const transpResp = await fetchApi(`/api/transportadoras/${data.cliente_id}`);
-    const transportadoras = await transpResp.json();
-    transportadoraSel.innerHTML = transportadoras.map(tp => `<option value="${tp.id}">${tp.nome}</option>`).join('');
-    const tpOpt = Array.from(transportadoraSel.options).find(o => o.textContent === data.transportadora);
-    if (tpOpt) {
-      transportadoraSel.value = tpOpt.value;
-      transportadoraSel.setAttribute('data-filled', 'true');
+      clienteSel.innerHTML = `<option value="${escapeAttr(data.prospeccao_id)}">${escapeAttr(nome)}</option>`;
+      clienteSel.value = String(data.prospeccao_id);
+      clienteSel.setAttribute('data-filled', 'true');
+      // O rótulo precisa acompanhar: dizer "Cliente" para quem ainda não é
+      // cliente é exatamente a confusão que a numeração OCRP evita.
+      const rotulo = document.querySelector('label[for="visualizarCliente"]');
+      if (rotulo) rotulo.textContent = 'Prospecção';
+
+      const contatos = ficha.contatos || [];
+      contatoSel.innerHTML = contatos
+        .map(ct => `<option value="${escapeAttr(ct.id)}">${escapeAttr(ct.nome)}</option>`).join('');
+      if (data.prospeccao_contato_id) contatoSel.value = String(data.prospeccao_contato_id);
+      contatoSel.setAttribute('data-filled', 'true');
+    } else {
+      // carregar nomes de cliente e contatos
+      const clientesResp = await fetchApi('/api/clientes/lista');
+      const clientes = await clientesResp.json();
+      clienteSel.innerHTML = clientes.map(c => `<option value="${c.id}">${c.nome_fantasia}</option>`).join('');
+      clienteSel.value = data.cliente_id;
+      clienteSel.setAttribute('data-filled', 'true');
+
+      const contatosResp = await fetchApi(`/api/clientes/${data.cliente_id}`);
+      const clienteData = await contatosResp.json();
+      const contatos = clienteData.contatos || [];
+      contatoSel.innerHTML = contatos.map(ct => `<option value="${ct.id}">${ct.nome}</option>`).join('');
+      contatoSel.value = data.contato_id;
+      contatoSel.setAttribute('data-filled', 'true');
+    }
+
+    // A transportadora é cadastrada por CLIENTE. Numa prospecção ela ainda não
+    // existe, então mostra-se o texto já gravado (se houver) em vez de buscar
+    // uma lista que não pode existir.
+    if (daProspeccao) {
+      transportadoraSel.innerHTML = data.transportadora
+        ? `<option value="1">${escapeAttr(data.transportadora)}</option>`
+        : '<option value="">Definir na conversão em pedido</option>';
+      transportadoraSel.setAttribute('data-filled', data.transportadora ? 'true' : 'false');
+    } else {
+      const transpResp = await fetchApi(`/api/transportadoras/${data.cliente_id}`);
+      const transportadoras = await transpResp.json();
+      transportadoraSel.innerHTML = (Array.isArray(transportadoras) ? transportadoras : [])
+        .map(tp => `<option value="${tp.id}">${tp.nome}</option>`).join('');
+      const tpOpt = Array.from(transportadoraSel.options).find(o => o.textContent === data.transportadora);
+      if (tpOpt) {
+        transportadoraSel.value = tpOpt.value;
+        transportadoraSel.setAttribute('data-filled', 'true');
+      }
     }
 
     formaSel.value = data.forma_pagamento || '';

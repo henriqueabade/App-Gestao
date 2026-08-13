@@ -1464,5 +1464,9 @@ router.delete('/:id', exigirPermissao('pros.delete'), async (req, res) => {
 });
 
 module.exports = router;
+// Exportado para o módulo de Orçamentos: um OCRP criado lá precisa aparecer no
+// histórico da prospecção, e duplicar a gravação seria arriscar dois formatos
+// de evento para o mesmo fato.
+module.exports.registrarHistorico = registrarHistorico;
 module.exports.ETAPAS = ETAPAS;
 module.exports.PROBABILIDADE_PADRAO = PROBABILIDADE_PADRAO;

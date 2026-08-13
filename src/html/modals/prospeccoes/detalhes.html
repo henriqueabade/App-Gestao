@@ -42,6 +42,9 @@
         <button role="tab" data-tab="campanhas" aria-selected="false">
           Campanhas <span data-contador="campanhas" class="aba-contador"></span>
         </button>
+        <button role="tab" data-tab="orcamentos" aria-selected="false">
+          Orçamentos <span data-contador="orcamentos" class="aba-contador"></span>
+        </button>
         <button role="tab" data-tab="historico" aria-selected="false">
           Histórico <span data-contador="historico" class="aba-contador"></span>
         </button>
@@ -149,8 +152,20 @@
           </div>
           <div id="detProspCampanhas"></div>
         </div>
+      </section>
+
+      <section data-panel="orcamentos" class="space-y-6 hidden">
         <div class="cartao-prospeccao">
-          <h3 class="text-lg font-semibold text-white mb-4">Orçamentos vinculados</h3>
+          <div class="flex justify-between items-center mb-4">
+            <div>
+              <h3 class="text-lg font-semibold text-white">Orçamentos vinculados</h3>
+              <p class="text-xs text-gray-400 mt-1">
+                Propostas emitidas para esta prospecção. Recebem numeração
+                <strong>OCRP</strong>, para não se misturarem com as de cliente.
+              </p>
+            </div>
+            <button id="detProspNovoOrcamento" data-perm="orc.create" class="btn-primary px-4 py-2 rounded-lg text-white text-sm font-medium whitespace-nowrap">+ Novo orçamento</button>
+          </div>
           <div id="detProspOrcamentos"></div>
         </div>
       </section>
