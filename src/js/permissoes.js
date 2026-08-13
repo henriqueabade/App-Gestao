@@ -335,7 +335,12 @@
       aplicar(raiz);
       return ESTADO.permissoes;
     },
-    get estado() { return ESTADO.permissoes; }
+    get estado() { return ESTADO.permissoes; },
+    // Alguns controles não são regidos por permissão de módulo e sim pelo
+    // PERFIL — excluir linha do histórico de prospecção, por exemplo. O
+    // backend é quem decide (exigirSupAdmin); isto existe só para a interface
+    // não oferecer um botão que vai voltar 403.
+    get supAdmin() { return Boolean(ESTADO.supAdmin); }
   };
 
   if (document.readyState === 'loading') {

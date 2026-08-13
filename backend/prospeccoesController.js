@@ -33,7 +33,7 @@
 
 const express = require('express');
 const { createApiClient } = require('./apiHttpClient');
-const { exigirPermissao } = require('./permissionsController');
+const { exigirPermissao, exigirSupAdmin } = require('./permissionsController');
 const { normalizarCamposNumericos } = require('./numeros');
 
 const router = express.Router();
@@ -195,32 +195,53 @@ function montarFunil(lista) {
   };
 }
 
-/** Monta o corpo que vai para a tabela `prospeccoes`. */
+/**
+ * Monta o corpo que vai para a tabela `prospeccoes`.
+ *
+ * Campo que o chamador NÃO enviou fica de fora do payload — não vai como
+ * `null`. A API remota grava toda coluna presente no corpo: com o
+ * comportamento anterior, um PUT que só quisesse renomear a empresa mandava
+ * `responsavel_id: null` junto e APAGAVA o responsável sem ninguém pedir.
+ *
+ * Para limpar um campo de propósito, mande-o explicitamente vazio: a chave
+ * está presente e vira `null`, como deve ser.
+ */
 function montarPayload(dados = {}) {
-  const payload = {
-    nome_fantasia: texto(dados.nome_fantasia),
-    razao_social: texto(dados.razao_social),
-    cnpj: texto(dados.cnpj),
-    inscricao_estadual: texto(dados.inscricao_estadual),
-    site: texto(dados.site),
-    segmento: texto(dados.segmento),
-    origem: texto(dados.origem),
-    etapa: texto(dados.etapa) || 'Novo',
-    valor_estimado: dados.valor_estimado ?? 0,
-    probabilidade: dados.probabilidade,
-    responsavel_id: dados.responsavel_id ?? null,
-    proximo_passo: texto(dados.proximo_passo),
-    proximo_passo_data: dados.proximo_passo_data || null,
-    end_logradouro: texto(dados.endereco?.rua ?? dados.end_logradouro),
-    end_numero: texto(dados.endereco?.numero ?? dados.end_numero),
-    end_complemento: texto(dados.endereco?.complemento ?? dados.end_complemento),
-    end_bairro: texto(dados.endereco?.bairro ?? dados.end_bairro),
-    end_cidade: texto(dados.endereco?.cidade ?? dados.end_cidade),
-    end_uf: texto(dados.endereco?.estado ?? dados.end_uf),
-    end_pais: texto(dados.endereco?.pais ?? dados.end_pais),
-    end_cep: texto(dados.endereco?.cep ?? dados.end_cep),
-    anotacoes: texto(dados.anotacoes)
+  const tem = chave => Object.prototype.hasOwnProperty.call(dados, chave);
+  const temEndereco = campo =>
+    (dados.endereco && Object.prototype.hasOwnProperty.call(dados.endereco, campo));
+
+  const payload = {};
+  const por = (coluna, valor, presente) => {
+    if (presente) payload[coluna] = valor;
   };
+
+  por('nome_fantasia', texto(dados.nome_fantasia), tem('nome_fantasia'));
+  por('razao_social', texto(dados.razao_social), tem('razao_social'));
+  por('cnpj', texto(dados.cnpj), tem('cnpj'));
+  por('inscricao_estadual', texto(dados.inscricao_estadual), tem('inscricao_estadual'));
+  por('site', texto(dados.site), tem('site'));
+  por('segmento', texto(dados.segmento), tem('segmento'));
+  por('origem', texto(dados.origem), tem('origem'));
+  por('valor_estimado', dados.valor_estimado ?? 0, tem('valor_estimado'));
+  por('probabilidade', dados.probabilidade, tem('probabilidade'));
+  por('responsavel_id', dados.responsavel_id ?? null, tem('responsavel_id'));
+  por('proximo_passo', texto(dados.proximo_passo), tem('proximo_passo'));
+  por('proximo_passo_data', dados.proximo_passo_data || null, tem('proximo_passo_data'));
+  por('anotacoes', texto(dados.anotacoes), tem('anotacoes'));
+
+  por('end_logradouro', texto(dados.endereco?.rua ?? dados.end_logradouro), temEndereco('rua') || tem('end_logradouro'));
+  por('end_numero', texto(dados.endereco?.numero ?? dados.end_numero), temEndereco('numero') || tem('end_numero'));
+  por('end_complemento', texto(dados.endereco?.complemento ?? dados.end_complemento), temEndereco('complemento') || tem('end_complemento'));
+  por('end_bairro', texto(dados.endereco?.bairro ?? dados.end_bairro), temEndereco('bairro') || tem('end_bairro'));
+  por('end_cidade', texto(dados.endereco?.cidade ?? dados.end_cidade), temEndereco('cidade') || tem('end_cidade'));
+  por('end_uf', texto(dados.endereco?.estado ?? dados.end_uf), temEndereco('estado') || tem('end_uf'));
+  por('end_pais', texto(dados.endereco?.pais ?? dados.end_pais), temEndereco('pais') || tem('end_pais'));
+  por('end_cep', texto(dados.endereco?.cep ?? dados.end_cep), temEndereco('cep') || tem('end_cep'));
+
+  // A etapa tem padrão porque toda prospecção nasce em alguma: no PUT ela é
+  // sobrescrita pela atual logo adiante, e no POST 'Novo' é o certo.
+  payload.etapa = texto(dados.etapa) || 'Novo';
 
   if (payload.probabilidade === undefined || payload.probabilidade === null) {
     payload.probabilidade = PROBABILIDADE_PADRAO[payload.etapa] ?? 0;
@@ -277,19 +298,150 @@ function normalizarPrincipais(contatos) {
   });
 }
 
-/** Registra a movimentação no funil. Nunca derruba a operação principal. */
-async function registrarEtapa(api, prospeccaoId, anterior, nova, observacao, usuarioId) {
-  try {
-    await api.post('/api/prospeccao_etapas_historico', {
-      prospeccao_id: prospeccaoId,
-      etapa_anterior: anterior || null,
-      etapa_nova: nova,
-      observacao: texto(observacao),
-      usuario_id: usuarioId ?? null
-    });
-  } catch (err) {
-    console.error('[prospeccoes] falha ao gravar histórico de etapa:', err?.message || err);
+// ---------------------------------------------------------------------------
+// Histórico
+//
+// TUDO que acontece com a prospecção vira uma linha em `prospeccao_historico`,
+// sempre com o valor anterior ao lado do novo. Em exclusão, o registro inteiro
+// é fotografado em `detalhe` — é o que responde "o que era antes?" depois de o
+// dado original deixar de existir.
+//
+// Registrar histórico NUNCA derruba a operação principal: um erro aqui é
+// registrado no log e a ação segue. O oposto — perder a alteração porque a
+// auditoria falhou — seria pior para quem está usando.
+// ---------------------------------------------------------------------------
+
+/** Campos da ficha que geram linha de histórico quando mudam. */
+const CAMPOS_AUDITADOS = {
+  nome_fantasia: 'Nome fantasia',
+  razao_social: 'Razão social',
+  cnpj: 'CNPJ',
+  inscricao_estadual: 'Inscrição estadual',
+  site: 'Site',
+  segmento: 'Segmento',
+  origem: 'Origem',
+  etapa: 'Etapa do funil',
+  valor_estimado: 'Valor estimado',
+  probabilidade: 'Probabilidade',
+  responsavel_id: 'Responsável',
+  proximo_passo: 'Próximo passo',
+  proximo_passo_data: 'Prazo do próximo passo',
+  status: 'Situação',
+  motivo_perda: 'Motivo da perda',
+  anotacoes: 'Anotação',
+  end_logradouro: 'Endereço · rua',
+  end_numero: 'Endereço · número',
+  end_complemento: 'Endereço · complemento',
+  end_bairro: 'Endereço · bairro',
+  end_cidade: 'Endereço · cidade',
+  end_uf: 'Endereço · estado',
+  end_pais: 'Endereço · país',
+  end_cep: 'Endereço · CEP'
+};
+
+/** Campos monetários/percentuais: comparar como número, não como texto. */
+const CAMPOS_NUMERICOS = new Set(['valor_estimado', 'probabilidade', 'responsavel_id']);
+/** Colunas DATE: comparar só o dia, senão "2026-09-20" e o ISO completo diferem. */
+const CAMPOS_DATA = new Set(['proximo_passo_data']);
+
+/**
+ * Deixa o valor comparável.
+ *
+ * Sem isto, `48000` (número, vindo do formulário) e `"48000.00"` (texto, vindo
+ * do Postgres) contariam como alteração a cada gravação, e o histórico
+ * encheria de mudanças que ninguém fez.
+ */
+function paraComparacao(campo, valor) {
+  if (valor === undefined || valor === null || valor === '') return null;
+  if (CAMPOS_NUMERICOS.has(campo)) {
+    const n = Number(valor);
+    return Number.isFinite(n) ? String(n) : String(valor);
   }
+  if (CAMPOS_DATA.has(campo)) return String(valor).slice(0, 10);
+  return String(valor).trim() || null;
+}
+
+/** Grava um ou vários eventos. Silencioso em caso de falha, por decisão. */
+async function registrarHistorico(api, prospeccaoId, eventos, usuarioId) {
+  const lista = (Array.isArray(eventos) ? eventos : [eventos]).filter(Boolean);
+  if (!lista.length) return;
+
+  await Promise.all(lista.map(async evento => {
+    try {
+      await api.post('/api/prospeccao_historico', {
+        prospeccao_id: Number(prospeccaoId),
+        tipo: evento.tipo,
+        acao: evento.acao,
+        entidade: texto(evento.entidade),
+        campo: texto(evento.campo),
+        valor_anterior: evento.valor_anterior ?? null,
+        valor_novo: evento.valor_novo ?? null,
+        detalhe: evento.detalhe ?? null,
+        observacao: texto(evento.observacao),
+        usuario_id: usuarioId ?? null
+      });
+    } catch (err) {
+      console.error('[prospeccoes] falha ao gravar histórico:', err?.message || err);
+    }
+  }));
+}
+
+/**
+ * Compara a ficha antes e depois, devolvendo um evento por campo alterado.
+ *
+ * `nomes` resolve `responsavel_id` para o nome da pessoa: guardar "3 → 7" no
+ * histórico não diria nada a quem for ler daqui a seis meses.
+ */
+function diferencasDaFicha(antes = {}, depois = {}, nomes = new Map()) {
+  const eventos = [];
+  for (const [campo, rotulo] of Object.entries(CAMPOS_AUDITADOS)) {
+    if (!(campo in depois)) continue;
+    const a = paraComparacao(campo, antes[campo]);
+    const d = paraComparacao(campo, depois[campo]);
+    if (a === d) continue;
+
+    const humano = valor => {
+      if (valor === null) return null;
+      if (campo === 'responsavel_id') return nomes.get(Number(valor)) || `#${valor}`;
+      return valor;
+    };
+
+    eventos.push({
+      tipo: campo === 'etapa' ? 'etapa' : 'campo',
+      acao: 'alterou',
+      entidade: rotulo,
+      campo,
+      valor_anterior: humano(a),
+      valor_novo: humano(d)
+    });
+  }
+  return eventos;
+}
+
+/** Resumo curto de um contato, para rotular a linha do histórico. */
+const rotuloContato = c => `Contato ${c?.nome || ''}`.trim();
+
+/** Uma linha legível do contato, para o par anterior/novo do histórico. */
+const resumoContato = c => [
+  c?.nome,
+  c?.cargo,
+  c?.email,
+  c?.telefone_celular,
+  c?.principal ? 'principal' : null,
+  c?.decisor ? 'decisor' : null
+].filter(Boolean).join(' · ');
+
+/** Registra a movimentação no funil. Mantido como atalho do caso mais comum. */
+async function registrarEtapa(api, prospeccaoId, anterior, nova, observacao, usuarioId) {
+  await registrarHistorico(api, prospeccaoId, {
+    tipo: 'etapa',
+    acao: anterior ? 'moveu' : 'criou',
+    entidade: 'Etapa do funil',
+    campo: 'etapa',
+    valor_anterior: anterior || null,
+    valor_novo: nova,
+    observacao
+  }, usuarioId);
 }
 
 /** Id do usuário autenticado, lido do JWT sem validar assinatura (só leitura). */
@@ -384,7 +536,7 @@ router.get('/:id', exigirPermissao('pros.details.view'), async (req, res) => {
       await Promise.all([
         api.get('/api/prospeccao_contatos', { query: { prospeccao_id: id } }).catch(() => []),
         api.get('/api/prospeccao_interacoes', { query: { prospeccao_id: id } }).catch(() => []),
-        api.get('/api/prospeccao_etapas_historico', { query: { prospeccao_id: id } }).catch(() => []),
+        api.get('/api/prospeccao_historico', { query: { prospeccao_id: id } }).catch(() => []),
         api.get('/api/prospeccao_notas', { query: { prospeccao_id: id } }).catch(() => []),
         api.get('/api/prospeccao_campanhas', { query: { prospeccao_id: id } }).catch(() => []),
         api.get('/api/prospeccao_anexos', { query: { prospeccao_id: id } }).catch(() => []),
@@ -482,7 +634,21 @@ router.post(
         await api.post('/api/prospeccao_contatos', montarPayloadContato(c, criadaId));
       }
 
-      await registrarEtapa(api, criadaId, null, payload.etapa, 'Cadastro inicial', usuarioId);
+      await registrarHistorico(api, criadaId, [
+        {
+          tipo: 'criacao', acao: 'criou', entidade: 'Prospecção',
+          valor_novo: payload.nome_fantasia,
+          observacao: 'Cadastro inicial',
+          detalhe: payload
+        },
+        {
+          tipo: 'etapa', acao: 'criou', entidade: 'Etapa do funil', campo: 'etapa',
+          valor_novo: payload.etapa
+        },
+        ...contatos.map(c => ({
+          tipo: 'contato', acao: 'criou', entidade: rotuloContato(c), detalhe: c
+        }))
+      ], usuarioId);
 
       res.status(201).json({ id: criadaId });
     } catch (err) {
@@ -541,22 +707,45 @@ router.put('/:id', exigirPermissao(permissoesDeEdicao), async (req, res) => {
       payload.probabilidade = Number(atual.probabilidade ?? 0);
     }
 
+    // Nomes resolvidos ANTES de gravar: o histórico mostra "Maria -> João",
+    // não "3 -> 7".
+    const nomes = await carregarNomesDeUsuario(api);
+    const eventos = diferencasDaFicha(atual, payload, nomes);
+
     await api.put(`/api/prospeccoes/${id}`, payload);
 
     for (const c of Array.isArray(req.body.contatosNovos) ? req.body.contatosNovos : []) {
       if (!texto(c?.nome)) continue;
       await api.post('/api/prospeccao_contatos', montarPayloadContato(c, id));
+      eventos.push({ tipo: 'contato', acao: 'criou', entidade: rotuloContato(c), detalhe: c });
     }
 
     for (const c of Array.isArray(req.body.contatosAtualizados) ? req.body.contatosAtualizados : []) {
       if (!c?.id) continue;
+      // Lê o estado anterior ANTES de sobrescrever — é a única chance.
+      const antes = await api.get(`/api/prospeccao_contatos/${c.id}`).catch(() => null);
       await api.put(`/api/prospeccao_contatos/${c.id}`, montarPayloadContato(c, id));
+      eventos.push({
+        tipo: 'contato', acao: 'alterou', entidade: rotuloContato(c),
+        valor_anterior: antes ? resumoContato(antes) : null,
+        valor_novo: resumoContato(c),
+        detalhe: { antes, depois: c }
+      });
     }
 
     for (const contatoId of Array.isArray(req.body.contatosExcluidos) ? req.body.contatosExcluidos : []) {
       if (!contatoId) continue;
+      const antes = await api.get(`/api/prospeccao_contatos/${contatoId}`).catch(() => null);
       await api.delete(`/api/prospeccao_contatos/${contatoId}`);
+      eventos.push({
+        tipo: 'contato', acao: 'excluiu',
+        entidade: rotuloContato(antes || {}),
+        valor_anterior: antes ? resumoContato(antes) : null,
+        detalhe: antes
+      });
     }
+
+    await registrarHistorico(api, id, eventos, usuarioDaRequisicao(req));
 
     res.json({ success: true });
   } catch (err) {
@@ -601,10 +790,30 @@ router.patch('/:id/etapa', exigirPermissao('pros.stage.update'), async (req, res
     normalizarCamposNumericos(patch, ['probabilidade']);
     await api.put(`/api/prospeccoes/${id}`, patch);
 
-    await registrarEtapa(
-      api, id, atual.etapa, novaEtapa,
-      req.body?.observacao || motivo, usuarioDaRequisicao(req)
-    );
+    const eventos = [{
+      tipo: 'etapa', acao: 'moveu', entidade: 'Etapa do funil', campo: 'etapa',
+      valor_anterior: atual.etapa, valor_novo: novaEtapa,
+      observacao: req.body?.observacao || motivo
+    }];
+    if (Number(atual.probabilidade) !== Number(patch.probabilidade)) {
+      eventos.push({
+        tipo: 'campo', acao: 'alterou', entidade: 'Probabilidade', campo: 'probabilidade',
+        valor_anterior: String(atual.probabilidade ?? ''), valor_novo: String(patch.probabilidade)
+      });
+    }
+    if (patch.status && patch.status !== atual.status) {
+      eventos.push({
+        tipo: 'arquivamento', acao: 'alterou', entidade: 'Situação', campo: 'status',
+        valor_anterior: atual.status, valor_novo: patch.status
+      });
+    }
+    if (novaEtapa === 'Perdido' && motivo) {
+      eventos.push({
+        tipo: 'campo', acao: 'alterou', entidade: 'Motivo da perda', campo: 'motivo_perda',
+        valor_anterior: atual.motivo_perda || null, valor_novo: motivo
+      });
+    }
+    await registrarHistorico(api, id, eventos, usuarioDaRequisicao(req));
 
     res.json({ success: true, etapa: novaEtapa });
   } catch (err) {
@@ -621,12 +830,19 @@ router.put('/:id/proximo-passo', exigirPermissao('pros.next.step'), async (req, 
   const { id } = req.params;
   try {
     const api = createApiClient(req);
-    await buscarProspeccao(api, id);
+    const alvo = await buscarProspeccao(api, id);
+    const novoPasso = texto(req.body?.proximo_passo);
+    const novaData = req.body?.proximo_passo_data || null;
 
     await api.put(`/api/prospeccoes/${id}`, {
-      proximo_passo: texto(req.body?.proximo_passo),
-      proximo_passo_data: req.body?.proximo_passo_data || null
+      proximo_passo: novoPasso,
+      proximo_passo_data: novaData
     });
+
+    await registrarHistorico(api, id, diferencasDaFicha(
+      alvo,
+      { proximo_passo: novoPasso, proximo_passo_data: novaData }
+    ), usuarioDaRequisicao(req));
 
     res.json({ success: true });
   } catch (err) {
@@ -681,6 +897,13 @@ router.post('/:id/interacoes', exigirPermissao('pros.interaction.add'), async (r
       });
     }
 
+    await registrarHistorico(api, id, {
+      tipo: 'interacao', acao: 'criou',
+      entidade: `${tipo} — ${resumo}`,
+      valor_novo: resumo,
+      detalhe: { tipo, resumo, detalhe: texto(req.body?.detalhe), duracao_min: req.body?.duracao_min ?? null }
+    }, usuarioDaRequisicao(req));
+
     res.status(201).json({ id: criada?.id ?? null });
   } catch (err) {
     console.error('Erro ao registrar interação:', err);
@@ -708,6 +931,13 @@ router.post('/:id/notas', exigirPermissao('pros.note.add'), async (req, res) => 
       usuario_id: usuarioDaRequisicao(req)
     });
 
+    await registrarHistorico(api, id, {
+      tipo: 'nota', acao: 'criou',
+      entidade: texto(req.body?.titulo) || 'Nota',
+      valor_novo: conteudo,
+      detalhe: { titulo: texto(req.body?.titulo), conteudo }
+    }, usuarioDaRequisicao(req));
+
     res.status(201).json({ id: criada?.id ?? null });
   } catch (err) {
     console.error('Erro ao adicionar nota:', err);
@@ -729,6 +959,16 @@ router.delete('/:id/notas/:notaId', exigirPermissao('pros.note.remove'), async (
     }
 
     await api.delete(`/api/prospeccao_notas/${notaId}`);
+
+    // Fotografia ANTES de apagar: sem isto ninguém mais consegue responder o
+    // que a nota dizia.
+    await registrarHistorico(api, id, {
+      tipo: 'nota', acao: 'excluiu',
+      entidade: texto(nota.titulo) || 'Nota',
+      valor_anterior: nota.conteudo,
+      detalhe: nota
+    }, usuarioDaRequisicao(req));
+
     res.json({ success: true });
   } catch (err) {
     console.error('Erro ao remover nota:', err);
@@ -762,6 +1002,13 @@ router.post('/:id/campanhas', exigirPermissao('pros.campaign.manage'), async (re
       usuario_id: usuarioDaRequisicao(req)
     });
 
+    await registrarHistorico(api, id, {
+      tipo: 'campanha', acao: 'criou',
+      entidade: `Campanha ${nome}`,
+      valor_novo: [nome, texto(req.body?.canal), status].filter(Boolean).join(' · '),
+      detalhe: criada || { nome, status }
+    }, usuarioDaRequisicao(req));
+
     res.status(201).json({ id: criada?.id ?? null });
   } catch (err) {
     console.error('Erro ao registrar campanha:', err);
@@ -780,6 +1027,16 @@ router.delete('/:id/campanhas/:campanhaId', exigirPermissao('pros.campaign.manag
     }
 
     await api.delete(`/api/prospeccao_campanhas/${campanhaId}`);
+
+    // A campanha some da lista, mas o histórico guarda o registro inteiro.
+    await registrarHistorico(api, id, {
+      tipo: 'campanha', acao: 'excluiu',
+      entidade: `Campanha ${campanha.nome || ''}`.trim(),
+      valor_anterior: [campanha.nome, campanha.canal, campanha.status, campanha.resposta]
+        .filter(Boolean).join(' · '),
+      detalhe: campanha
+    }, usuarioDaRequisicao(req));
+
     res.json({ success: true });
   } catch (err) {
     console.error('Erro ao remover campanha:', err);
@@ -877,10 +1134,22 @@ router.post('/:id/converter', exigirPermissao(['pros.convert', 'cli.create']), a
       convertida_em: new Date().toISOString()
     });
 
-    await registrarEtapa(
-      api, id, p.etapa, 'Ganho',
-      `Convertida no cliente #${clienteCriadoId}`, usuarioId
-    );
+    await registrarHistorico(api, id, [
+      {
+        tipo: 'conversao', acao: 'converteu', entidade: 'Conversão em cliente',
+        valor_anterior: 'Prospecção', valor_novo: `Cliente #${clienteCriadoId}`,
+        observacao: `${(Array.isArray(contatos) ? contatos : []).length} contato(s) copiado(s)`,
+        detalhe: { clienteId: clienteCriadoId, status_cliente: texto(req.body?.status_cliente) || 'Ativo', dono_cliente: texto(req.body?.dono_cliente) }
+      },
+      {
+        tipo: 'etapa', acao: 'moveu', entidade: 'Etapa do funil', campo: 'etapa',
+        valor_anterior: p.etapa, valor_novo: 'Ganho'
+      },
+      {
+        tipo: 'arquivamento', acao: 'alterou', entidade: 'Situação', campo: 'status',
+        valor_anterior: p.status, valor_novo: 'arquivada'
+      }
+    ], usuarioId);
 
     res.status(201).json({ clienteId: clienteCriadoId });
   } catch (err) {
@@ -900,6 +1169,38 @@ router.post('/:id/converter', exigirPermissao(['pros.convert', 'cli.create']), a
     res.status(err.status || 500).json({ error: err.message || 'Erro ao converter prospecção' });
   }
 });
+
+// ---------------------------------------------------------------------------
+// HISTÓRICO
+//
+// A exclusão é restrita ao Sup Admin, e por isso usa `exigirSupAdmin` ALÉM da
+// permissão do módulo: o histórico é a única defesa contra "não fui eu que
+// mudei". Uma configuração equivocada de modelo de permissão não pode ser a
+// única coisa entre o usuário e o apagamento da auditoria.
+// ---------------------------------------------------------------------------
+
+router.delete(
+  '/:id/historico/:eventoId',
+  exigirPermissao('pros.details.view'),
+  exigirSupAdmin,
+  async (req, res) => {
+    const { id, eventoId } = req.params;
+    try {
+      const api = createApiClient(req);
+      const evento = await api.get(`/api/prospeccao_historico/${eventoId}`).catch(() => null);
+      if (!evento || evento.error === 'Not found') throw erro(404, 'Evento não encontrado');
+      if (Number(evento.prospeccao_id) !== Number(id)) {
+        throw erro(404, 'Evento não pertence a esta prospecção');
+      }
+
+      await api.delete(`/api/prospeccao_historico/${eventoId}`);
+      res.json({ success: true });
+    } catch (err) {
+      console.error('Erro ao excluir evento do histórico:', err);
+      res.status(err.status || 500).json({ error: err.message || 'Erro ao excluir evento' });
+    }
+  }
+);
 
 // ---------------------------------------------------------------------------
 // EXCLUIR

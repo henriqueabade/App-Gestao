@@ -31,6 +31,7 @@ const COLUNAS = {
   prospeccao_contatos: ['id', 'prospeccao_id', 'nome', 'cargo', 'email', 'telefone_fixo', 'telefone_celular', 'decisor', 'principal', 'observacao'],
   prospeccao_interacoes: ['id', 'prospeccao_id', 'contato_id', 'tipo', 'data', 'resumo', 'detalhe', 'duracao_min', 'usuario_id'],
   prospeccao_etapas_historico: ['id', 'prospeccao_id', 'etapa_anterior', 'etapa_nova', 'observacao', 'usuario_id', 'criado_em'],
+  prospeccao_historico: ['id', 'prospeccao_id', 'tipo', 'acao', 'entidade', 'campo', 'valor_anterior', 'valor_novo', 'detalhe', 'observacao', 'usuario_id', 'criado_em'],
   prospeccao_notas: ['id', 'prospeccao_id', 'titulo', 'conteudo', 'usuario_id', 'criado_em'],
   prospeccao_campanhas: ['id', 'prospeccao_id', 'nome', 'canal', 'status', 'data_envio', 'resposta', 'observacao', 'usuario_id'],
   prospeccao_anexos: ['id', 'prospeccao_id', 'nota_id', 'nome_arquivo', 'tipo_mime', 'tamanho_bytes', 'usuario_id', 'criado_em'],
@@ -44,7 +45,7 @@ const COLUNAS = {
 /** Filhas que caem junto com a prospecção (ON DELETE CASCADE no DDL real). */
 const CASCATA = [
   'prospeccao_contatos', 'prospeccao_interacoes', 'prospeccao_etapas_historico',
-  'prospeccao_notas', 'prospeccao_campanhas', 'prospeccao_anexos'
+  'prospeccao_notas', 'prospeccao_campanhas', 'prospeccao_anexos', 'prospeccao_historico'
 ];
 
 function criarUpstream(dados, opcoes = {}) {
@@ -238,6 +239,7 @@ function baseDados() {
       { id: 20, prospeccao_id: 1, tipo: 'Ligação', data: ANTIGO, resumo: 'Primeiro contato', usuario_id: 3 },
       { id: 21, prospeccao_id: 1, tipo: 'Reunião', data: RECENTE, resumo: 'Apresentação', usuario_id: 3 }
     ],
+    prospeccao_historico: [],
     prospeccao_etapas_historico: [
       { id: 30, prospeccao_id: 1, etapa_anterior: null, etapa_nova: 'Novo', criado_em: ANTIGO, usuario_id: 3 }
     ],
@@ -381,9 +383,11 @@ test('POST cria empresa, contatos e registra a etapa inicial', async () => {
     const contatos = ctx.tabelas.prospeccao_contatos.filter(c => c.prospeccao_id === id);
     assert.strictEqual(contatos.length, 2);
 
-    const historico = ctx.tabelas.prospeccao_etapas_historico.filter(h => h.prospeccao_id === id);
-    assert.strictEqual(historico.length, 1);
-    assert.strictEqual(historico[0].etapa_nova, 'Novo');
+    // O histórico agora registra criação, etapa inicial e cada contato.
+    const historico = ctx.tabelas.prospeccao_historico.filter(h => h.prospeccao_id === id);
+    assert.strictEqual(historico.some(h => h.tipo === 'criacao' && h.acao === 'criou'), true);
+    assert.strictEqual(historico.some(h => h.tipo === 'etapa' && h.valor_novo === 'Novo'), true);
+    assert.strictEqual(historico.filter(h => h.tipo === 'contato').length, 2);
   } finally {
     await ctx.encerrar();
   }
@@ -516,11 +520,15 @@ test('PATCH /:id/etapa move, aplica probabilidade padrão e grava histórico', a
     assert.strictEqual(p.etapa, 'Negociação');
     assert.strictEqual(p.probabilidade, 80);
 
-    const hist = ctx.tabelas.prospeccao_etapas_historico.filter(h => String(h.prospeccao_id) === '1');
-    const ultimo = hist[hist.length - 1];
-    assert.strictEqual(ultimo.etapa_anterior, 'Qualificado');
-    assert.strictEqual(ultimo.etapa_nova, 'Negociação');
-    assert.strictEqual(ultimo.usuario_id, 1);
+    const hist = ctx.tabelas.prospeccao_historico.filter(h => String(h.prospeccao_id) === '1');
+    const etapa = hist.find(h => h.tipo === 'etapa');
+    assert.strictEqual(etapa.valor_anterior, 'Qualificado');
+    assert.strictEqual(etapa.valor_novo, 'Negociação');
+    assert.strictEqual(etapa.usuario_id, 1);
+    // A mudança de probabilidade que acompanha a etapa vira evento próprio.
+    const prob = hist.find(h => h.campo === 'probabilidade');
+    assert.strictEqual(prob.valor_anterior, '50');
+    assert.strictEqual(prob.valor_novo, '80');
   } finally {
     await ctx.encerrar();
   }
@@ -789,6 +797,200 @@ test('usuário sem permissão recebe 403 e não altera nada', async () => {
     const excluir = await chamar(ctx.porta, '/api/prospeccoes/1', { usuario: 2, method: 'DELETE' });
     assert.strictEqual(excluir.status, 403);
     assert.strictEqual(ctx.tabelas.prospeccoes.some(p => p.id === 1), true);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Histórico universal
+//
+// A regra é: TODA alteração vira evento, e o evento guarda o que era ANTES.
+// Em exclusão, o registro inteiro é fotografado — é a única coisa capaz de
+// responder "o que essa nota dizia?" depois que ela deixou de existir.
+// ---------------------------------------------------------------------------
+
+test('editar a ficha registra um evento por campo, com o valor anterior', async () => {
+  const ctx = await montar(baseDados());
+  try {
+    await chamar(ctx.porta, '/api/prospeccoes/1', {
+      method: 'PUT',
+      body: JSON.stringify({
+        nome_fantasia: 'Antiga Renomeada',
+        valor_estimado: 25000,
+        origem: 'Feira'
+      })
+    });
+
+    const hist = ctx.tabelas.prospeccao_historico.filter(h => String(h.prospeccao_id) === '1');
+    const porCampo = Object.fromEntries(hist.filter(h => h.campo).map(h => [h.campo, h]));
+
+    assert.strictEqual(porCampo.nome_fantasia.valor_anterior, 'Antiga Ltda');
+    assert.strictEqual(porCampo.nome_fantasia.valor_novo, 'Antiga Renomeada');
+    assert.strictEqual(porCampo.valor_estimado.valor_anterior, '10000');
+    assert.strictEqual(porCampo.valor_estimado.valor_novo, '25000');
+    assert.strictEqual(porCampo.origem.valor_novo, 'Feira');
+    assert.strictEqual(porCampo.nome_fantasia.acao, 'alterou');
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('campo que nao mudou NAO gera evento', async () => {
+  const ctx = await montar(baseDados());
+  try {
+    // Regrava exatamente o que ja estava la.
+    await chamar(ctx.porta, '/api/prospeccoes/1', {
+      method: 'PUT',
+      body: JSON.stringify({
+        nome_fantasia: 'Antiga Ltda',
+        razao_social: 'Antiga Comercio Ltda',
+        cnpj: '11.111.111/0001-11',
+        // Numero vindo como texto: o historico nao pode enxergar mudanca onde
+        // nao houve, senao enche de ruido a cada gravacao.
+        valor_estimado: '10000.00',
+        probabilidade: 50
+      })
+    });
+
+    const hist = ctx.tabelas.prospeccao_historico.filter(h => String(h.prospeccao_id) === '1');
+    assert.deepStrictEqual(hist.map(h => h.campo).filter(Boolean), []);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('excluir nota guarda o conteudo no historico', async () => {
+  const ctx = await montar(baseDados());
+  try {
+    await chamar(ctx.porta, '/api/prospeccoes/1/notas/40', { method: 'DELETE' });
+
+    const evento = ctx.tabelas.prospeccao_historico.find(h => h.tipo === 'nota' && h.acao === 'excluiu');
+    assert.ok(evento, 'a exclusao da nota deveria virar evento');
+    // O conteudo sobrevive a exclusao — e o ponto da auditoria.
+    assert.strictEqual(evento.valor_anterior, 'Cliente exigente');
+    assert.strictEqual(evento.detalhe.titulo, 'Perfil');
+    assert.strictEqual(ctx.tabelas.prospeccao_notas.some(n => n.id === 40), false);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('excluir campanha some da lista mas fica detalhada no historico', async () => {
+  const dados = baseDados();
+  dados.prospeccao_campanhas.push({
+    id: 70, prospeccao_id: 1, nome: 'Outbound Q3', canal: 'E-mail',
+    status: 'Concluída', resposta: 'Interessado'
+  });
+  const ctx = await montar(dados);
+  try {
+    await chamar(ctx.porta, '/api/prospeccoes/1/campanhas/70', { method: 'DELETE' });
+
+    assert.strictEqual(ctx.tabelas.prospeccao_campanhas.some(c => c.id === 70), false);
+    const evento = ctx.tabelas.prospeccao_historico.find(h => h.tipo === 'campanha' && h.acao === 'excluiu');
+    assert.match(evento.valor_anterior, /Outbound Q3/);
+    assert.match(evento.valor_anterior, /Interessado/);
+    assert.strictEqual(evento.detalhe.canal, 'E-mail');
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('excluir contato guarda como ele era', async () => {
+  const ctx = await montar(baseDados());
+  try {
+    await chamar(ctx.porta, '/api/prospeccoes/1', {
+      method: 'PUT',
+      body: JSON.stringify({ nome_fantasia: 'Antiga Ltda', contatosExcluidos: [11] })
+    });
+
+    const evento = ctx.tabelas.prospeccao_historico.find(h => h.tipo === 'contato' && h.acao === 'excluiu');
+    assert.match(evento.entidade, /Alberto Decisor/);
+    assert.match(evento.valor_anterior, /Diretor/);
+    assert.strictEqual(evento.detalhe.email, 'alberto@antiga.com');
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('conversao registra conversao, etapa e arquivamento', async () => {
+  const ctx = await montar(baseDados());
+  try {
+    await chamar(ctx.porta, '/api/prospeccoes/1/converter', { method: 'POST' });
+
+    const hist = ctx.tabelas.prospeccao_historico.filter(h => String(h.prospeccao_id) === '1');
+    const tipos = hist.map(h => h.tipo);
+    assert.ok(tipos.includes('conversao'));
+    assert.ok(tipos.includes('etapa'));
+    assert.ok(tipos.includes('arquivamento'));
+
+    const conv = hist.find(h => h.tipo === 'conversao');
+    assert.strictEqual(conv.acao, 'converteu');
+    assert.match(conv.valor_novo, /^Cliente #/);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('registrar interacao e proximo passo viram eventos', async () => {
+  const ctx = await montar(baseDados());
+  try {
+    await chamar(ctx.porta, '/api/prospeccoes/1/interacoes', {
+      method: 'POST',
+      body: JSON.stringify({ tipo: 'Ligação', resumo: 'Retorno do cliente' })
+    });
+    await chamar(ctx.porta, '/api/prospeccoes/1/proximo-passo', {
+      method: 'PUT',
+      body: JSON.stringify({ proximo_passo: 'Enviar contrato', proximo_passo_data: '2026-09-20' })
+    });
+
+    const hist = ctx.tabelas.prospeccao_historico.filter(h => String(h.prospeccao_id) === '1');
+    assert.ok(hist.some(h => h.tipo === 'interacao' && /Retorno do cliente/.test(h.entidade)));
+    assert.ok(hist.some(h => h.campo === 'proximo_passo' && h.valor_novo === 'Enviar contrato'));
+    assert.ok(hist.some(h => h.campo === 'proximo_passo_data' && h.valor_novo === '2026-09-20'));
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('so o Sup Admin apaga evento do historico', async () => {
+  const ctx = await montar(baseDados());
+  try {
+    await chamar(ctx.porta, '/api/prospeccoes/1/notas', {
+      method: 'POST', body: JSON.stringify({ conteudo: 'para gerar evento' })
+    });
+    const evento = ctx.tabelas.prospeccao_historico.find(h => h.tipo === 'nota');
+    assert.ok(evento);
+
+    // Usuario 2 e Vendedor: barrado mesmo que tivesse a permissao do modulo.
+    const negado = await chamar(ctx.porta, `/api/prospeccoes/1/historico/${evento.id}`, {
+      usuario: 2, method: 'DELETE'
+    });
+    assert.strictEqual(negado.status, 403);
+    assert.strictEqual(ctx.tabelas.prospeccao_historico.some(h => h.id === evento.id), true);
+
+    // Usuario 1 e Sup Admin.
+    const permitido = await chamar(ctx.porta, `/api/prospeccoes/1/historico/${evento.id}`, {
+      usuario: 1, method: 'DELETE'
+    });
+    assert.strictEqual(permitido.status, 200);
+    assert.strictEqual(ctx.tabelas.prospeccao_historico.some(h => h.id === evento.id), false);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('nao da para apagar evento de OUTRA prospeccao', async () => {
+  const ctx = await montar(baseDados());
+  try {
+    await chamar(ctx.porta, '/api/prospeccoes/2/notas', {
+      method: 'POST', body: JSON.stringify({ conteudo: 'da prospeccao 2' })
+    });
+    const evento = ctx.tabelas.prospeccao_historico.find(h => String(h.prospeccao_id) === '2');
+
+    const resp = await chamar(ctx.porta, `/api/prospeccoes/1/historico/${evento.id}`, { method: 'DELETE' });
+    assert.strictEqual(resp.status, 404);
+    assert.strictEqual(ctx.tabelas.prospeccao_historico.some(h => h.id === evento.id), true);
   } finally {
     await ctx.encerrar();
   }

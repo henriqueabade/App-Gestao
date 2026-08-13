@@ -475,32 +475,93 @@
       </div>`;
   }
 
+  /** Rótulo e cor por tipo de evento do histórico. */
+  const EVENTO = {
+    criacao: { rotulo: 'Cadastro', classe: 'badge-info' },
+    etapa: { rotulo: 'Funil', classe: 'badge-warning' },
+    campo: { rotulo: 'Edição', classe: 'badge-neutral' },
+    contato: { rotulo: 'Contato', classe: 'badge-info' },
+    nota: { rotulo: 'Nota', classe: 'badge-neutral' },
+    campanha: { rotulo: 'Campanha', classe: 'badge-neutral' },
+    interacao: { rotulo: 'Interação', classe: 'badge-info' },
+    anexo: { rotulo: 'Anexo', classe: 'badge-neutral' },
+    orcamento: { rotulo: 'Orçamento', classe: 'badge-warning' },
+    conversao: { rotulo: 'Conversão', classe: 'badge-success' },
+    arquivamento: { rotulo: 'Situação', classe: 'badge-warning' },
+    responsavel: { rotulo: 'Responsável', classe: 'badge-info' }
+  };
+
+  const ACAO = {
+    criou: 'Criou', alterou: 'Alterou', excluiu: 'Excluiu',
+    moveu: 'Moveu', converteu: 'Converteu'
+  };
+
+  /**
+   * Histórico completo, não só movimentação de funil.
+   *
+   * Cada linha mostra o par anterior → novo. Em exclusões só existe o anterior,
+   * e é justamente isso que responde "o que era antes de apagarem".
+   */
   function renderHistorico(historico) {
     const alvo = get('detProspHistorico');
     if (!historico.length) {
-      alvo.innerHTML = estadoVazio('Nenhuma movimentação registrada');
+      alvo.innerHTML = estadoVazio('Nenhum evento registrado');
       return;
     }
-    const linhas = historico.map(h => `
+
+    // Só o Sup Admin apaga histórico — e o backend confere de novo.
+    const podeExcluir = Boolean(window.Permissoes?.supAdmin);
+
+    const valor = (v, classe) => texto(v)
+      ? `<span class="${classe}">${esc(v)}</span>`
+      : '<span class="text-white/30">—</span>';
+
+    const linhas = historico.map(h => {
+      const meta = EVENTO[h.tipo] || { rotulo: h.tipo, classe: 'badge-neutral' };
+      const excluido = h.acao === 'excluiu';
+      return `
       <tr class="border-b border-white/5">
-        <td data-perm-col="col_hist_data" class="px-4 py-3 text-sm text-white/80 whitespace-nowrap">${esc(formatarDataHora(h.criado_em))}</td>
-        <td data-perm-col="col_hist_tipo" class="px-4 py-3 text-sm">
-          ${h.etapa_anterior ? `<span class="text-white/50">${esc(h.etapa_anterior)}</span> <span class="text-white/30">→</span> ` : ''}
-          <span class="badge-etapa badge-etapa--${slugEtapa(h.etapa_nova)} px-2 py-1 rounded text-xs">${esc(h.etapa_nova)}</span>
+        <td data-perm-col="col_hist_data" class="px-4 py-3 text-sm text-white/80 whitespace-nowrap align-top">
+          ${esc(formatarDataHora(h.criado_em))}
         </td>
-        <td data-perm-col="col_hist_resumo" class="px-4 py-3 text-sm text-white/80">${texto(h.observacao) || VAZIO}</td>
-        <td data-perm-col="col_hist_resp" class="px-4 py-3 text-sm text-white/80">${texto(h.responsavel) || VAZIO}</td>
-      </tr>`).join('');
+        <td data-perm-col="col_hist_tipo" class="px-4 py-3 text-sm align-top whitespace-nowrap">
+          <span class="${meta.classe} px-2 py-1 rounded text-xs">${esc(meta.rotulo)}</span>
+          <span class="block text-xs text-white/50 mt-1">${esc(ACAO[h.acao] || h.acao)}</span>
+        </td>
+        <td data-perm-col="col_hist_resumo" class="px-4 py-3 text-sm align-top">
+          <div class="text-white">${esc(h.entidade || '')}</div>
+          ${(h.valor_anterior || h.valor_novo) ? `
+            <div class="mt-1 text-xs flex flex-wrap items-center gap-2">
+              ${valor(h.valor_anterior, excluido ? 'prox-passo-atrasado line-through' : 'text-white/50 line-through')}
+              ${!excluido ? '<span class="text-white/30">→</span>' + valor(h.valor_novo, 'text-white') : ''}
+            </div>` : ''}
+          ${texto(h.observacao) ? `<div class="mt-1 text-xs text-white/50">${esc(h.observacao)}</div>` : ''}
+        </td>
+        <td data-perm-col="col_hist_resp" class="px-4 py-3 text-sm text-white/80 align-top whitespace-nowrap">
+          ${texto(h.responsavel) || VAZIO}
+        </td>
+        ${podeExcluir ? `
+        <td class="px-4 py-3 text-sm align-top">
+          <i class="fas fa-trash acao-tabela acao-tabela--excluir" data-remover="historico"
+             data-id="${esc(h.id)}" title="Excluir evento (Sup Admin)"></i>
+        </td>` : ''}
+      </tr>`;
+    }).join('');
 
     alvo.innerHTML = `
+      <p class="text-xs text-white/50 mb-3">
+        Todo evento da prospecção fica registrado aqui, com o valor anterior.
+        ${podeExcluir ? 'Como Sup Admin, você pode remover eventos.' : 'Os eventos não podem ser removidos.'}
+      </p>
       <div class="overflow-x-auto">
         <table class="w-full">
           <thead>
             <tr class="border-b border-white/10">
               <th data-perm-col="col_hist_data" class="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Data</th>
-              <th data-perm-col="col_hist_tipo" class="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Movimentação</th>
-              <th data-perm-col="col_hist_resumo" class="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Observação</th>
-              <th data-perm-col="col_hist_resp" class="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Responsável</th>
+              <th data-perm-col="col_hist_tipo" class="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Evento</th>
+              <th data-perm-col="col_hist_resumo" class="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">O que mudou</th>
+              <th data-perm-col="col_hist_resp" class="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Quem</th>
+              ${podeExcluir ? '<th class="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Ações</th>' : ''}
             </tr>
           </thead>
           <tbody>${linhas}</tbody>
@@ -815,5 +876,7 @@
     const { remover: tipo, id } = remover.dataset;
     if (tipo === 'nota') removerFilho('notas', id, 'Nota removida');
     else if (tipo === 'campanha') removerFilho('campanhas', id, 'Campanha removida');
+    // Exclusão de evento do histórico: o backend exige Sup Admin de novo.
+    else if (tipo === 'historico') removerFilho('historico', id, 'Evento removido do histórico');
   });
 })();
