@@ -898,7 +898,9 @@ test('excluir nota guarda o conteudo no historico', async () => {
     assert.ok(evento, 'a exclusao da nota deveria virar evento');
     // O conteudo sobrevive a exclusao — e o ponto da auditoria.
     assert.strictEqual(evento.valor_anterior, 'Cliente exigente');
-    assert.strictEqual(evento.detalhe.titulo, 'Perfil');
+    assert.strictEqual(evento.detalhe.registro.titulo, 'Perfil');
+    // Retrato rotulado, que é o que a tela mostra.
+    assert.ok(evento.detalhe.campos.some(c => c.rotulo === 'Conteúdo'));
     assert.strictEqual(ctx.tabelas.prospeccao_notas.some(n => n.id === 40), false);
   } finally {
     await ctx.encerrar();
@@ -919,7 +921,8 @@ test('excluir campanha some da lista mas fica detalhada no historico', async () 
     const evento = ctx.tabelas.prospeccao_historico.find(h => h.tipo === 'campanha' && h.acao === 'excluiu');
     assert.match(evento.valor_anterior, /Outbound Q3/);
     assert.match(evento.valor_anterior, /Interessado/);
-    assert.strictEqual(evento.detalhe.canal, 'E-mail');
+    assert.strictEqual(evento.detalhe.registro.canal, 'E-mail');
+    assert.ok(evento.detalhe.campos.some(c => c.rotulo === 'Canal' && c.valor === 'E-mail'));
   } finally {
     await ctx.encerrar();
   }
@@ -936,7 +939,18 @@ test('excluir contato guarda como ele era', async () => {
     const evento = ctx.tabelas.prospeccao_historico.find(h => h.tipo === 'contato' && h.acao === 'excluiu');
     assert.match(evento.entidade, /Alberto Decisor/);
     assert.match(evento.valor_anterior, /Diretor/);
-    assert.strictEqual(evento.detalhe.email, 'alberto@antiga.com');
+    // O registro cru continua guardado, agora ao lado do retrato rotulado.
+    assert.strictEqual(evento.detalhe.registro.email, 'alberto@antiga.com');
+
+    // O retrato é o que se lê na tela: ninguém decifra {"telefone_fixo": null}.
+    const campos = evento.detalhe.campos;
+    assert.ok(Array.isArray(campos) && campos.length, 'faltou o retrato legível');
+    assert.deepStrictEqual(
+      campos.find(c => c.rotulo === 'E-mail'),
+      { rotulo: 'E-mail', valor: 'alberto@antiga.com' }
+    );
+    // Campo vazio não entra: encheria a tela de "—".
+    assert.strictEqual(campos.some(c => c.valor === '' || c.valor === 'null'), false);
   } finally {
     await ctx.encerrar();
   }
@@ -1528,7 +1542,8 @@ test('excluir uma interação guarda o registro inteiro no histórico', async ()
     const evento = ctx.tabelas.prospeccao_historico.find(h => h.tipo === 'interacao' && h.acao === 'excluiu');
     assert.ok(evento, 'faltou o evento de exclusão');
     const detalhe = typeof evento.detalhe === 'string' ? JSON.parse(evento.detalhe) : evento.detalhe;
-    assert.strictEqual(detalhe.resumo, 'Primeiro contato');
+    assert.strictEqual(detalhe.registro.resumo, 'Primeiro contato');
+    assert.ok(detalhe.campos.some(c => c.rotulo === 'Resumo' && c.valor === 'Primeiro contato'));
   } finally {
     await ctx.encerrar();
   }
@@ -1638,6 +1653,151 @@ test('a troca do principal não mexe em outra prospecção', async () => {
     });
     // O contato 12 é o principal da prospecção 2 e não pode ter sido tocado.
     assert.strictEqual(ctx.tabelas.prospeccao_contatos.find(c => c.id === 12).principal, true);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+
+// ---------------------------------------------------------------------------
+// Histórico detalhado
+//
+// O problema era concreto: editar um contato gerava UMA linha com o registro
+// inteiro dos dois lados — duas frases quase idênticas, e quem lia tinha de
+// caçar a diferença caractere a caractere.
+// ---------------------------------------------------------------------------
+
+const eventosContato = ctx =>
+  ctx.tabelas.prospeccao_historico.filter(h => h.tipo === 'contato' && h.acao === 'alterou');
+
+test('editar um contato gera um evento POR CAMPO alterado', async () => {
+  const ctx = await montar(baseDados());
+  try {
+    // O contato 11 é "Alberto Decisor / Diretor / alberto@antiga.com".
+    await chamar(ctx.porta, '/api/prospeccoes/1', {
+      method: 'PUT',
+      body: JSON.stringify({
+        nome_fantasia: 'Antiga Ltda',
+        contatosAtualizados: [{
+          id: 11, nome: 'Alberto Decisor', cargo: 'Diretor de Compras',
+          email: 'alberto.novo@antiga.com', decisor: true, principal: true
+        }]
+      })
+    });
+
+    const eventos = eventosContato(ctx);
+    const campos = eventos.map(e => e.campo).sort();
+    assert.deepStrictEqual(campos, ['cargo', 'email']);
+
+    const cargo = eventos.find(e => e.campo === 'cargo');
+    assert.strictEqual(cargo.valor_anterior, 'Diretor');
+    assert.strictEqual(cargo.valor_novo, 'Diretor de Compras');
+    // O rótulo viaja junto: a tela não pode ter de adivinhar "cargo".
+    assert.strictEqual(cargo.detalhe.rotulo, 'Cargo');
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('campo do contato que não mudou não vira linha', async () => {
+  const ctx = await montar(baseDados());
+  try {
+    await chamar(ctx.porta, '/api/prospeccoes/1', {
+      method: 'PUT',
+      body: JSON.stringify({
+        nome_fantasia: 'Antiga Ltda',
+        contatosAtualizados: [{
+          id: 11, nome: 'Alberto Decisor', cargo: 'Diretor',
+          email: 'alberto@antiga.com', decisor: true, principal: true
+        }]
+      })
+    });
+    assert.deepStrictEqual(eventosContato(ctx), []);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('marcar decisor aparece como Sim/Não, não true/false', async () => {
+  const ctx = await montar(baseDados());
+  try {
+    await chamar(ctx.porta, '/api/prospeccoes/1', {
+      method: 'PUT',
+      body: JSON.stringify({
+        nome_fantasia: 'Antiga Ltda',
+        // O contato 10 (Zuleica) não é decisor na massa.
+        contatosAtualizados: [{ id: 10, nome: 'Zuleica Auxiliar', cargo: 'Assistente', decisor: true }]
+      })
+    });
+    const evento = eventosContato(ctx).find(e => e.campo === 'decisor');
+    assert.ok(evento, 'faltou o evento do decisor');
+    assert.strictEqual(evento.valor_anterior, 'Não');
+    assert.strictEqual(evento.valor_novo, 'Sim');
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('criar contato guarda o retrato rotulado do que foi cadastrado', async () => {
+  const ctx = await montar(baseDados());
+  try {
+    await chamar(ctx.porta, '/api/prospeccoes/1', {
+      method: 'PUT',
+      body: JSON.stringify({
+        nome_fantasia: 'Antiga Ltda',
+        contatosNovos: [{ nome: 'Novo Contato', cargo: 'Compras', email: 'novo@antiga.com' }]
+      })
+    });
+    const evento = ctx.tabelas.prospeccao_historico.find(h => h.tipo === 'contato' && h.acao === 'criou');
+    const campos = evento.detalhe.campos;
+    assert.deepStrictEqual(
+      campos.map(c => c.rotulo).sort(),
+      ['Cargo', 'E-mail', 'Nome']
+    );
+    // Campo vazio não entra: encheria a tela de linhas inúteis.
+    assert.strictEqual(campos.some(c => c.rotulo === 'Telefone fixo'), false);
+    // "Não" também fica de fora — só o que É verdade merece linha.
+    assert.strictEqual(campos.some(c => c.valor === 'Não'), false);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('sem conseguir ler o estado anterior, registra uma linha honesta', async () => {
+  // Se a leitura do contato falhar, um diff acusaria mudança em TODOS os
+  // campos — pior que não saber.
+  const dados = baseDados();
+  const ctx = await montar(dados, {
+    falharEm: ({ metodo, tabela }) => metodo === 'GET' && tabela === 'prospeccao_contatos'
+  });
+  try {
+    await chamar(ctx.porta, '/api/prospeccoes/1', {
+      method: 'PUT',
+      body: JSON.stringify({
+        nome_fantasia: 'Antiga Ltda',
+        contatosAtualizados: [{ id: 11, nome: 'Alberto Decisor', cargo: 'Outro' }]
+      })
+    });
+    const eventos = eventosContato(ctx);
+    assert.strictEqual(eventos.length, 1);
+    assert.match(eventos[0].observacao, /não pôde ser lido/i);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('mover no funil continua nomeando o campo', async () => {
+  // A tela usa `campo` para rotular a linha; sem ele o histórico volta a ser
+  // dois textos soltos.
+  const ctx = await montar(baseDados());
+  try {
+    await chamar(ctx.porta, '/api/prospeccoes/1/etapa', {
+      method: 'PATCH', body: JSON.stringify({ etapa: 'Proposta' })
+    });
+    const evento = ctx.tabelas.prospeccao_historico.find(h => h.tipo === 'etapa');
+    assert.strictEqual(evento.campo, 'etapa');
+    assert.strictEqual(evento.valor_anterior, 'Qualificado');
+    assert.strictEqual(evento.valor_novo, 'Proposta');
   } finally {
     await ctx.encerrar();
   }

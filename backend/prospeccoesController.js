@@ -469,6 +469,51 @@ async function filhoDaProspeccao(api, tabela, filhoId, prospeccaoId, nome) {
 /** Resumo curto de um contato, para rotular a linha do histórico. */
 const rotuloContato = c => `Contato ${c?.nome || ''}`.trim();
 
+/** Campos do contato que valem auditoria, com o rótulo que aparece na tela. */
+const CAMPOS_CONTATO = {
+  nome: 'Nome',
+  cargo: 'Cargo',
+  email: 'E-mail',
+  telefone_celular: 'Celular',
+  telefone_fixo: 'Telefone fixo',
+  decisor: 'É decisor',
+  principal: 'Contato principal',
+  observacao: 'Observação'
+};
+
+/** Rótulos dos demais filhos, usados tanto no diff quanto no retrato. */
+const CAMPOS_NOTA = { titulo: 'Título', conteudo: 'Conteúdo' };
+const CAMPOS_CAMPANHA = {
+  nome: 'Nome', canal: 'Canal', status: 'Status',
+  data_envio: 'Data de envio', resposta: 'Resposta', observacao: 'Observação'
+};
+const CAMPOS_INTERACAO = {
+  tipo: 'Tipo', resumo: 'Resumo', detalhe: 'Detalhe',
+  data: 'Data', duracao_min: 'Duração (min)'
+};
+
+/** "true"/"false" não se lê; no histórico vira Sim/Não. */
+const simNao = v => (v === true || v === 'true' ? 'Sim' : 'Não');
+const FORMATO_CONTATO = { decisor: simNao, principal: simNao };
+
+/**
+ * Retrato legível de um registro, para o `detalhe` de criação e exclusão.
+ *
+ * O JSONB cru já ia para o banco, mas ninguém lê `{"telefone_fixo": null}`.
+ * Aqui só entram os campos preenchidos, já rotulados.
+ */
+function retratoLegivel(registro = {}, rotulos, formato = {}) {
+  const linhas = [];
+  for (const [campo, rotulo] of Object.entries(rotulos)) {
+    const bruto = registro[campo];
+    if (bruto === undefined || bruto === null || bruto === '') continue;
+    const valor = formato[campo] ? formato[campo](bruto) : String(bruto);
+    if (!valor || valor === 'Não') continue;
+    linhas.push({ rotulo, valor });
+  }
+  return linhas;
+}
+
 /** Uma linha legível do contato, para o par anterior/novo do histórico. */
 const resumoContato = c => [
   c?.nome,
@@ -811,21 +856,45 @@ router.put('/:id', exigirPermissao(permissoesDeEdicao), async (req, res) => {
 
     for (const c of Array.isArray(req.body.contatosNovos) ? req.body.contatosNovos : []) {
       if (!texto(c?.nome)) continue;
-      await api.post('/api/prospeccao_contatos', montarPayloadContato(c, id));
-      eventos.push({ tipo: 'contato', acao: 'criou', entidade: rotuloContato(c), detalhe: c });
+      const criado = montarPayloadContato(c, id);
+      await api.post('/api/prospeccao_contatos', criado);
+      eventos.push({
+        tipo: 'contato', acao: 'criou', entidade: rotuloContato(c),
+        valor_novo: resumoContato(c),
+        detalhe: { campos: retratoLegivel(criado, CAMPOS_CONTATO, FORMATO_CONTATO), registro: criado }
+      });
     }
 
     for (const c of Array.isArray(req.body.contatosAtualizados) ? req.body.contatosAtualizados : []) {
       if (!c?.id) continue;
       // Lê o estado anterior ANTES de sobrescrever — é a única chance.
       const antes = await api.get(`/api/prospeccao_contatos/${c.id}`).catch(() => null);
-      await api.put(`/api/prospeccao_contatos/${c.id}`, montarPayloadContato(c, id));
-      eventos.push({
-        tipo: 'contato', acao: 'alterou', entidade: rotuloContato(c),
-        valor_anterior: antes ? resumoContato(antes) : null,
-        valor_novo: resumoContato(c),
-        detalhe: { antes, depois: c }
-      });
+      const depois = montarPayloadContato(c, id);
+      await api.put(`/api/prospeccao_contatos/${c.id}`, depois);
+
+      // Um evento POR CAMPO. Antes saía uma linha só com o contato inteiro dos
+      // dois lados — as duas idênticas a olho nu, e quem lia tinha de caçar a
+      // diferença caractere a caractere.
+      if (!antes) {
+        // Não deu para ler o estado anterior: sem base de comparação, um diff
+        // acusaria mudança em TODOS os campos. Melhor uma linha honesta.
+        eventos.push({
+          tipo: 'contato', acao: 'alterou', entidade: rotuloContato(c),
+          valor_novo: resumoContato(c),
+          observacao: 'Estado anterior não pôde ser lido'
+        });
+      } else {
+        // Um evento POR CAMPO. Antes saía uma linha só com o contato inteiro
+        // dos dois lados — idênticas a olho nu, e quem lia tinha de caçar a
+        // diferença caractere a caractere. Nenhum campo mudou, nenhum evento.
+        eventos.push(...diferencasDeFilho({
+          tipo: 'contato',
+          entidade: rotuloContato(c),
+          antes, depois,
+          rotulos: CAMPOS_CONTATO,
+          formatar: FORMATO_CONTATO
+        }));
+      }
     }
 
     for (const contatoId of Array.isArray(req.body.contatosExcluidos) ? req.body.contatosExcluidos : []) {
@@ -836,7 +905,11 @@ router.put('/:id', exigirPermissao(permissoesDeEdicao), async (req, res) => {
         tipo: 'contato', acao: 'excluiu',
         entidade: rotuloContato(antes || {}),
         valor_anterior: antes ? resumoContato(antes) : null,
+        // O retrato rotulado é o que responde "quem era essa pessoa?" depois
+        // de a linha já não existir.
         detalhe: antes
+          ? { campos: retratoLegivel(antes, CAMPOS_CONTATO, FORMATO_CONTATO), registro: antes }
+          : null
       });
     }
 
@@ -1157,7 +1230,13 @@ router.post('/:id/interacoes', exigirPermissao('pros.interaction.add'), async (r
       tipo: 'interacao', acao: 'criou',
       entidade: `${tipo} — ${resumo}`,
       valor_novo: resumo,
-      detalhe: { tipo, resumo, detalhe: texto(req.body?.detalhe), duracao_min: req.body?.duracao_min ?? null }
+      detalhe: {
+        campos: retratoLegivel({
+          tipo, resumo, detalhe: texto(req.body?.detalhe),
+          duracao_min: req.body?.duracao_min ?? null
+        }, CAMPOS_INTERACAO),
+        registro: { tipo, resumo, detalhe: texto(req.body?.detalhe), duracao_min: req.body?.duracao_min ?? null }
+      }
     }, usuarioDaRequisicao(req));
 
     res.status(201).json({ id: criada?.id ?? null });
@@ -1214,10 +1293,7 @@ router.put('/:id/interacoes/:interacaoId', exigirPermissao('pros.interaction.add
       tipo: 'interacao',
       entidade: `${antes.tipo || 'Interação'} — ${antes.resumo || ''}`.trim(),
       antes, depois,
-      rotulos: {
-        tipo: 'Tipo', resumo: 'Resumo', detalhe: 'Detalhe',
-        data: 'Data', duracao_min: 'Duração (min)'
-      }
+      rotulos: CAMPOS_INTERACAO
     });
     // O contato entra à parte: no banco é um id, e "12 → 15" não diz nada a
     // quem for ler daqui a seis meses.
@@ -1254,7 +1330,7 @@ router.delete('/:id/interacoes/:interacaoId', exigirPermissao('pros.interaction.
       tipo: 'interacao', acao: 'excluiu',
       entidade: `${antes.tipo || 'Interação'} — ${antes.resumo || ''}`.trim(),
       valor_anterior: [antes.resumo, antes.detalhe].filter(Boolean).join(' · '),
-      detalhe: antes
+      detalhe: { campos: retratoLegivel(antes, CAMPOS_INTERACAO), registro: antes }
     }, usuarioDaRequisicao(req));
 
     res.json({ success: true });
@@ -1288,7 +1364,10 @@ router.post('/:id/notas', exigirPermissao('pros.note.add'), async (req, res) => 
       tipo: 'nota', acao: 'criou',
       entidade: texto(req.body?.titulo) || 'Nota',
       valor_novo: conteudo,
-      detalhe: { titulo: texto(req.body?.titulo), conteudo }
+      detalhe: {
+        campos: retratoLegivel({ titulo: texto(req.body?.titulo), conteudo }, CAMPOS_NOTA),
+        registro: { titulo: texto(req.body?.titulo), conteudo }
+      }
     }, usuarioDaRequisicao(req));
 
     res.status(201).json({ id: criada?.id ?? null });
@@ -1317,7 +1396,7 @@ router.put('/:id/notas/:notaId', exigirPermissao('pros.note.add'), async (req, r
       tipo: 'nota',
       entidade: `Nota ${texto(antes.titulo) || '(sem título)'}`,
       antes, depois,
-      rotulos: { titulo: 'Título', conteudo: 'Conteúdo' }
+      rotulos: CAMPOS_NOTA
     }), usuarioDaRequisicao(req));
 
     res.json({ success: true });
@@ -1348,7 +1427,7 @@ router.delete('/:id/notas/:notaId', exigirPermissao('pros.note.remove'), async (
       tipo: 'nota', acao: 'excluiu',
       entidade: texto(nota.titulo) || 'Nota',
       valor_anterior: nota.conteudo,
-      detalhe: nota
+      detalhe: { campos: retratoLegivel(nota, CAMPOS_NOTA), registro: nota }
     }, usuarioDaRequisicao(req));
 
     res.json({ success: true });
@@ -1388,7 +1467,10 @@ router.post('/:id/campanhas', exigirPermissao('pros.campaign.manage'), async (re
       tipo: 'campanha', acao: 'criou',
       entidade: `Campanha ${nome}`,
       valor_novo: [nome, texto(req.body?.canal), status].filter(Boolean).join(' · '),
-      detalhe: criada || { nome, status }
+      detalhe: {
+        campos: retratoLegivel(criada || { nome, status }, CAMPOS_CAMPANHA),
+        registro: criada || { nome, status }
+      }
     }, usuarioDaRequisicao(req));
 
     res.status(201).json({ id: criada?.id ?? null });
@@ -1423,10 +1505,7 @@ router.put('/:id/campanhas/:campanhaId', exigirPermissao('pros.campaign.manage')
       tipo: 'campanha',
       entidade: `Campanha ${antes.nome || ''}`.trim(),
       antes, depois,
-      rotulos: {
-        nome: 'Nome', canal: 'Canal', status: 'Status',
-        data_envio: 'Data de envio', resposta: 'Resposta', observacao: 'Observação'
-      }
+      rotulos: CAMPOS_CAMPANHA
     }), usuarioDaRequisicao(req));
 
     res.json({ success: true });
@@ -1454,7 +1533,7 @@ router.delete('/:id/campanhas/:campanhaId', exigirPermissao('pros.campaign.manag
       entidade: `Campanha ${campanha.nome || ''}`.trim(),
       valor_anterior: [campanha.nome, campanha.canal, campanha.status, campanha.resposta]
         .filter(Boolean).join(' · '),
-      detalhe: campanha
+      detalhe: { campos: retratoLegivel(campanha, CAMPOS_CAMPANHA), registro: campanha }
     }, usuarioDaRequisicao(req));
 
     res.json({ success: true });

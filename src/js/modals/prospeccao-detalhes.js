@@ -559,6 +559,27 @@
   };
 
   /**
+   * Nome da coluna -> rótulo na tela.
+   *
+   * Só entra aqui o que o backend NÃO manda em `detalhe.rotulo` (os campos da
+   * própria ficha, gravados por `diferencasDaFicha`). Sem isto o histórico
+   * mostrava dois textos parecidos e nenhuma pista de qual campo mudou.
+   */
+  const ROTULO_CAMPO = {
+    nome_fantasia: 'Nome fantasia', razao_social: 'Razão social', cnpj: 'CNPJ',
+    inscricao_estadual: 'Inscrição estadual', site: 'Site', segmento: 'Segmento',
+    origem: 'Origem', etapa: 'Etapa do funil', valor_estimado: 'Valor estimado',
+    probabilidade: 'Probabilidade', responsavel_id: 'Responsável',
+    proximo_passo: 'Próximo passo', proximo_passo_data: 'Prazo do próximo passo',
+    status: 'Situação', motivo_perda: 'Motivo da perda', anotacoes: 'Anotação',
+    end_logradouro: 'Endereço · rua', end_numero: 'Endereço · número',
+    end_complemento: 'Endereço · complemento', end_bairro: 'Endereço · bairro',
+    end_cidade: 'Endereço · cidade', end_uf: 'Endereço · estado',
+    end_pais: 'Endereço · país', end_cep: 'Endereço · CEP',
+    situacao: 'Situação', principal: 'Contato principal', contato_id: 'Com quem'
+  };
+
+  /**
    * Histórico completo, não só movimentação de funil.
    *
    * Cada linha mostra o par anterior → novo. Em exclusões só existe o anterior,
@@ -578,9 +599,46 @@
       ? `<span class="${classe}">${esc(v)}</span>`
       : '<span class="text-white/30">—</span>';
 
+    /**
+     * O `detalhe` é JSONB: às vezes chega objeto, às vezes string.
+     * Quem grava é o backend; quem lê aqui não pode assumir a forma.
+     */
+    const lerDetalhe = bruto => {
+      if (!bruto) return null;
+      if (typeof bruto === 'object') return bruto;
+      try { return JSON.parse(bruto); } catch (_) { return null; }
+    };
+
+    /**
+     * Retrato do registro em criação e exclusão.
+     *
+     * O backend manda `campos` já rotulado. Sem isto o histórico só dizia
+     * "Criou Contato Fulano" — e nunca COM QUAIS DADOS.
+     */
+    const retrato = detalhe => {
+      const campos = Array.isArray(detalhe?.campos) ? detalhe.campos : [];
+      if (!campos.length) return '';
+      return `
+        <dl class="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1 text-xs">
+          ${campos.map(c => `
+            <div class="flex gap-1 min-w-0">
+              <dt class="text-white/40 whitespace-nowrap">${esc(c.rotulo)}:</dt>
+              <dd class="text-white/80 break-words min-w-0">${esc(c.valor)}</dd>
+            </div>`).join('')}
+        </dl>`;
+    };
+
     const linhas = historico.map(h => {
       const meta = EVENTO[h.tipo] || { rotulo: h.tipo, classe: 'badge-neutral' };
       const excluido = h.acao === 'excluiu';
+      const detalhe = lerDetalhe(h.detalhe);
+      // O rótulo do campo é o que faltava: sem ele, "Alterou Contato Tainá"
+      // seguido de dois textos parecidos não diz O QUE mudou.
+      //
+      // Suprimido quando repete a entidade: nos eventos da própria ficha os
+      // dois são a mesma coisa ("Etapa do funil" em cima de "Etapa do funil").
+      const rotuloBruto = detalhe?.rotulo || ROTULO_CAMPO[h.campo] || null;
+      const rotuloCampo = rotuloBruto === (h.entidade || '') ? null : rotuloBruto;
       return `
       <tr class="border-b border-white/5">
         <td data-perm-col="col_hist_data" class="px-4 py-3 text-sm text-white/80 whitespace-nowrap align-top">
@@ -592,11 +650,13 @@
         </td>
         <td data-perm-col="col_hist_resumo" class="px-4 py-3 text-sm align-top">
           <div class="text-white">${esc(h.entidade || '')}</div>
+          ${rotuloCampo ? `<div class="mt-1 text-xs font-medium" style="color: var(--color-violet)">${esc(rotuloCampo)}</div>` : ''}
           ${(h.valor_anterior || h.valor_novo) ? `
             <div class="mt-1 text-xs flex flex-wrap items-center gap-2">
               ${valor(h.valor_anterior, excluido ? 'prox-passo-atrasado line-through' : 'text-white/50 line-through')}
               ${!excluido ? '<span class="text-white/30">→</span>' + valor(h.valor_novo, 'text-white') : ''}
             </div>` : ''}
+          ${retrato(detalhe)}
           ${texto(h.observacao) ? `<div class="mt-1 text-xs text-white/50">${esc(h.observacao)}</div>` : ''}
         </td>
         <td data-perm-col="col_hist_resp" class="px-4 py-3 text-sm text-white/80 align-top whitespace-nowrap">
