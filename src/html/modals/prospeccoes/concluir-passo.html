@@ -1,12 +1,18 @@
 <div id="concluirPassoOverlay" class="fixed inset-0 z-[1300] bg-black/50 flex items-center justify-center p-4">
-  <div class="max-w-xl w-full max-h-[90vh] glass-surface backdrop-blur-xl rounded-2xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade flex flex-col">
-    <header class="grid grid-cols-3 items-center px-6 py-4 border-b border-white/10 flex-shrink-0">
+  <!--
+    Mesmo tamanho fixo do modal de Detalhes (72rem x 90vh), pela classe
+    .modal-prospeccao. As utilitarias que estavam aqui — max-w-xl, max-h-[90vh],
+    flex-shrink-0 — NAO existem no build offline do Tailwind: sem limite de
+    largura nem de altura, o modal ocupava a tela inteira.
+  -->
+  <div class="modal-prospeccao glass-surface backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade">
+    <header class="modal-prospeccao__topo grid grid-cols-3 items-center px-8 py-5 border-b border-white/10">
       <button id="voltarConcluirPasso" type="button" class="btn-neutral px-4 py-2 rounded-lg text-white font-medium justify-self-start">← Voltar</button>
       <h2 class="text-lg font-semibold text-white text-center">Concluir Passo Planejado</h2>
       <span></span>
     </header>
 
-    <form id="concluirPassoForm" class="p-6 space-y-5 overflow-y-auto modal-scroll">
+    <form id="concluirPassoForm" class="modal-prospeccao__corpo modal-scroll px-8 py-6 space-y-5">
       <div class="rounded-lg border border-white/10 bg-white/5 p-4">
         <p class="text-xs uppercase tracking-wide text-white/50 mb-1">Passo planejado</p>
         <p id="concluirPassoTexto" class="text-white font-medium"></p>
@@ -88,7 +94,7 @@
       </div>
     </form>
 
-    <footer class="flex justify-end gap-4 px-6 py-4 border-t border-white/10 flex-shrink-0">
+    <footer class="modal-prospeccao__rodape flex justify-end gap-4 px-8 py-4 border-t border-white/10">
       <button id="cancelarConcluirPasso" type="button" class="btn-danger px-6 py-2 rounded-lg text-white font-medium">Cancelar</button>
       <button type="button" id="confirmarConcluirPasso" data-perm="pros.interaction.add" class="btn-success px-6 py-2 rounded-lg font-medium">Concluir</button>
     </footer>

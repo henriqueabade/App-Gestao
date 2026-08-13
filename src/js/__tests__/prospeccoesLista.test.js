@@ -620,3 +620,95 @@ test('a cor da ação de responsável existe na folha de estilo', () => {
   const css = fs.readFileSync(path.join(__dirname, '..', '..', 'css', 'prospeccoes.css'), 'utf8');
   assert.match(css, /\.acao-tabela--responsavel\s*\{[^}]*color/);
 });
+
+// ---------------------------------------------------------------------------
+// Folha de estilo do módulo
+//
+// O menu carrega apenas `../css/{pagina}.css`. O que a tela de Prospecções usa
+// e essa folha não define simplesmente não existe — foi o que aconteceu com o
+// botão "Limpar", que ficou sem fundo nenhum.
+// ---------------------------------------------------------------------------
+
+const CSS_PROSPECCOES = fs.readFileSync(
+  path.join(__dirname, '..', '..', 'css', 'prospeccoes.css'), 'utf8');
+const HTML_PROSPECCOES = fs.readFileSync(
+  path.join(__dirname, '..', '..', 'html', 'prospeccoes.html'), 'utf8');
+
+test('toda classe btn-* usada na tela existe na folha do módulo', () => {
+  const usadas = new Set();
+  for (const m of HTML_PROSPECCOES.matchAll(/class="([^"]*)"/g)) {
+    for (const c of m[1].split(/\s+/)) if (/^btn-[a-z-]+$/.test(c)) usadas.add(c);
+  }
+  assert.ok(usadas.size > 0, 'não achei classes btn-* no HTML');
+
+  const semDefinicao = [...usadas].filter(c => !CSS_PROSPECCOES.includes('.' + c + ' {'));
+  assert.deepEqual(semDefinicao, [], 'classes sem definição em prospeccoes.css: ' + semDefinicao.join(', '));
+});
+
+test('o botão Funil é violeta', () => {
+  const botao = /id="btnOcultarGraficoFunil"[\s\S]*?class="([^"]*)"/.exec(HTML_PROSPECCOES);
+  assert.ok(botao, 'não achei o botão Funil');
+  assert.match(botao[1], /btn-violet/);
+  assert.match(CSS_PROSPECCOES, /\.btn-violet\s*\{[^}]*var\(--color-violet\)/);
+});
+
+test('os botões da barra de filtros são centrados nos dois eixos', () => {
+  // Com `h-12` e conteúdo inline, o ícone e o rótulo assentavam pela linha de
+  // base e o texto "Funil" saía do centro.
+  const regra = /#bt-actions\s*>\s*button\s*\{([^}]*)\}/.exec(CSS_PROSPECCOES);
+  assert.ok(regra, 'faltou a regra de centralização');
+  assert.match(regra[1], /align-items:\s*center/);
+  assert.match(regra[1], /justify-content:\s*center/);
+});
+
+test('esconder o calendário nativo NÃO vale para os modais de prospecção', () => {
+  // Os modais de próximo passo / concluir passo têm campo de data e nenhum
+  // ícone próprio: uma regra global apagaria a única pista de calendário deles.
+  // Um bloco por regra: o seletor é tudo que vem antes do `{`.
+  const blocos = CSS_PROSPECCOES.split('}')
+    .filter(b => b.includes('calendar-picker-indicator'));
+  assert.ok(blocos.length > 0, 'a regra do indicador nativo sumiu');
+  for (const bloco of blocos) {
+    const seletor = bloco.split('{')[0];
+    assert.match(seletor, /#(novo|editar|visualizar)OrcamentoOverlay/,
+      'seletor sem escopo de overlay: ' + seletor.trim());
+  }
+});
+
+test('o modal Concluir Passo usa o tamanho fixo do Detalhes', () => {
+  // `max-w-xl` e `max-h-[90vh]` NÃO existem no build offline do Tailwind — sem
+  // limite de largura nem de altura, o modal tomava a tela inteira.
+  const html = fs.readFileSync(
+    path.join(__dirname, '..', '..', 'html', 'modals', 'prospeccoes', 'concluir-passo.html'), 'utf8');
+  assert.match(html, /class="modal-prospeccao /);
+  assert.match(html, /modal-prospeccao__corpo/);
+
+  // Só o que está em `class="..."` conta — o comentário do arquivo cita as
+  // utilitárias justamente para explicar por que saíram.
+  const classes = [...html.matchAll(/class="([^"]*)"/g)]
+    .flatMap(m => m[1].split(/\s+/));
+  assert.equal(classes.includes('max-w-xl'), false);
+  assert.equal(classes.includes('max-h-[90vh]'), false);
+});
+
+test('as utilitárias de tamanho usadas nos modais existem no build offline', () => {
+  // Trava para a armadilha da folha gerada: uma classe ausente não avisa, só
+  // deixa o modal sem limite.
+  const tw = fs.readFileSync(
+    path.join(__dirname, '..', '..', 'styles', 'tailwind-offline.css'), 'utf8');
+  const modais = ['concluir-passo', 'detalhes', 'responsavel', 'etapa', 'nota', 'campanha'];
+  const faltando = [];
+  for (const nome of modais) {
+    const caminho = path.join(__dirname, '..', '..', 'html', 'modals', 'prospeccoes', nome + '.html');
+    if (!fs.existsSync(caminho)) continue;
+    const html = fs.readFileSync(caminho, 'utf8');
+    for (const m of html.matchAll(/class="([^"]*)"/g)) {
+      for (const c of m[1].split(/\s+/)) {
+        if (!/^max-w-|^max-h-|^h-\[/.test(c)) continue;
+        const escapada = c.replace(/([.[\]()])/g, '\$1');
+        if (!new RegExp('\.' + escapada + '[\s,{:]').test(tw)) faltando.push(nome + ': ' + c);
+      }
+    }
+  }
+  assert.deepEqual(faltando, [], 'classes de tamanho inexistentes no build: ' + faltando.join(', '));
+});

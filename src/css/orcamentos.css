@@ -451,3 +451,18 @@ input[type="date"]:valid::-webkit-datetime-edit {
 .component-toggle::after { content:''; position:absolute; top:2px; left:2px; width:20px; height:20px; background:white; border-radius:50%; transition: all 150ms ease; }
 .component-toggle:checked { background: var(--color-primary); }
 .component-toggle:checked::after { transform: translateX(24px); }
+
+/*
+   Campos de data — o indicador nativo do Chromium desenha o próprio ícone de
+   calendário no canto direito, exatamente onde o modal já posiciona um
+   `fa-calendar-alt`. Ficavam DOIS calendários sobrepostos.
+
+   O nativo continua ali, invisível e clicável: é ele que abre o seletor. O
+   ícone visível tem `pointer-events: none`, então o clique atravessa até ele.
+*/
+#novoOrcamentoOverlay input[type="date"]::-webkit-calendar-picker-indicator,
+#editarOrcamentoOverlay input[type="date"]::-webkit-calendar-picker-indicator,
+#visualizarOrcamentoOverlay input[type="date"]::-webkit-calendar-picker-indicator {
+    opacity: 0;
+    cursor: pointer;
+}

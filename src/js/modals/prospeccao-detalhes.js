@@ -505,7 +505,7 @@
     alvo.querySelectorAll('.acao-ver-orcamento').forEach(icone => {
       icone.addEventListener('click', () => {
         window.selectedQuoteId = Number(icone.dataset.orcamento);
-        Modal.open('modals/orcamentos/visualizar.html', '../js/modals/orcamento-visualizar.js', 'visualizarOrcamento', true);
+        abrirModalOrcamento('visualizar.html', 'orcamento-visualizar.js', 'visualizarOrcamento');
       });
     });
   }
@@ -761,6 +761,54 @@
     Modal.open(`modals/prospeccoes/${html}`, `../js/modals/${script}`, overlayId, true);
   }
 
+  /**
+   * Abre um modal do módulo de ORÇAMENTOS por cima desta ficha.
+   *
+   * Não basta chamar `Modal.open`: os overlays de orçamento nascem com a classe
+   * `hidden` e quem a remove é o `openQuoteModal` do próprio módulo, ao ouvir
+   * `orcamentoModalLoaded`. Chamado direto daqui, o modal carregava e ficava
+   * invisível — era o "botão de visualizar não faz nada".
+   *
+   * O `openQuoteModal` original não serve porque começa com `Modal.closeAll()`,
+   * que fecharia esta ficha. Aqui a ficha continua atrás (`keepExisting`).
+   */
+  function abrirModalOrcamento(html, script, overlayId) {
+    const espera = document.createElement('div');
+    espera.className = 'fixed inset-0 bg-black/50 flex items-center justify-center';
+    espera.style.zIndex = 'var(--z-dialog)';
+    espera.innerHTML = '<div class="app-loading-indicator app-loading-indicator--compact" aria-hidden="true"><span class="module-loading-orbit"></span><span class="module-loading-core"><img src="../assets/Logo.ico" alt=""></span></div>';
+    document.body.appendChild(espera);
+
+    let encerrado = false;
+    const revelar = () => {
+      if (encerrado) return;
+      encerrado = true;
+      clearTimeout(desistir);
+      window.removeEventListener('orcamentoModalLoaded', aoCarregar);
+      espera.remove();
+      document.getElementById(`${overlayId}Overlay`)?.classList.remove('hidden');
+    };
+
+    function aoCarregar(e) {
+      if (e.detail !== overlayId) return;
+      revelar();
+    }
+
+    // Rede de segurança: o script do orçamento só anuncia o carregamento na
+    // ÚLTIMA linha. Se ele quebrar antes, sem isto o usuário ficaria preso numa
+    // máscara de espera eterna, sem modal e sem erro.
+    const desistir = setTimeout(() => {
+      if (encerrado) return;
+      revelar();
+      if (!document.getElementById(`${overlayId}Overlay`)) {
+        showToast('Não foi possível abrir o orçamento', 'error');
+      }
+    }, 8000);
+
+    window.addEventListener('orcamentoModalLoaded', aoCarregar);
+    Modal.open(`modals/orcamentos/${html}`, `../js/modals/${script}`, overlayId, true);
+  }
+
   get('detProspMoverFunil')?.addEventListener('click', e => {
     if (e.currentTarget.disabled) return;
     abrirAcao('etapa.html', 'prospeccao-etapa.js', 'etapaProspeccao');
@@ -796,7 +844,7 @@
   // numeração OCRP. Ver o bloco correspondente em orcamento-novo.js.
   get('detProspNovoOrcamento')?.addEventListener('click', () => {
     window.orcamentoProspeccao = alvo();
-    Modal.open('modals/orcamentos/novo.html', '../js/modals/orcamento-novo.js', 'novoOrcamento', true);
+    abrirModalOrcamento('novo.html', 'orcamento-novo.js', 'novoOrcamento');
   });
 
   // -------------------------------------------------------------------------

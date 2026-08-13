@@ -91,7 +91,9 @@
       transportadoraSel.innerHTML = data.transportadora
         ? `<option value="1">${escapeAttr(data.transportadora)}</option>`
         : '<option value="">Definir na conversão em pedido</option>';
-      transportadoraSel.setAttribute('data-filled', data.transportadora ? 'true' : 'false');
+      // Sempre 'true': mesmo sem transportadora o campo mostra o texto de
+      // orientação, e o rótulo não pode cair por cima dele.
+      transportadoraSel.setAttribute('data-filled', 'true');
     } else {
       const transpResp = await fetchApi(`/api/transportadoras/${data.cliente_id}`);
       const transportadoras = await transpResp.json();

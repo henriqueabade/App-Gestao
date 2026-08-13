@@ -266,7 +266,9 @@
     transportadoraSelect.required = false;
     transportadoraSelect.disabled = true;
     transportadoraSelect.classList.add('opacity-70','cursor-not-allowed');
-    transportadoraSelect.setAttribute('data-filled','false');
+    // O campo EXIBE texto, então o rótulo tem de subir. Com data-filled=false
+    // ele ficava no meio do campo, por cima da própria opção.
+    transportadoraSelect.setAttribute('data-filled','true');
   }
 
   if (prospeccao?.id) {

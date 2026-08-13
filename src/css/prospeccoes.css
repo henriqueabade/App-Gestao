@@ -87,6 +87,44 @@ body {
     transform: scale(1.05);
 }
 
+/*
+   O botão "Limpar" da barra de filtros usa `btn-warning`, como em Orçamentos,
+   Pedidos e Clientes — mas esta folha nunca definiu a classe. O botão ficava
+   SEM fundo, destoando dos vizinhos. Mesma cor dos outros módulos.
+*/
+.btn-warning {
+    background: var(--color-bordeaux);
+    transition: all 150ms ease;
+}
+
+.btn-warning:hover {
+    background: rgba(106, 21, 44, 0.8);
+    transform: scale(1.05);
+}
+
+/* Violeta do módulo — o mesmo tom já usado nos números e na coluna Origem. */
+.btn-violet {
+    background: var(--color-violet);
+    transition: all 150ms ease;
+}
+
+.btn-violet:hover {
+    background: rgba(163, 148, 167, 0.8);
+    transform: scale(1.05);
+}
+
+/*
+   Botões da barra de filtros: altura fixa (`h-12`) alinha as caixas, mas o
+   conteúdo continuava no fluxo inline — o ícone e o rótulo assentavam pela
+   linha de base, deixando "Funil" fora do centro. O flex centra nos dois eixos.
+*/
+#bt-actions > button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+}
+
 .btn-neutral {
     background: rgba(255,255,255,0.1);
     border: 1px solid rgba(255,255,255,0.2);
@@ -1021,3 +1059,83 @@ body {
 /* Trocar responsável: ação de gestão, cor própria para não se confundir
    com editar (que é operação do dia a dia). */
 .acao-tabela--responsavel { color: var(--color-violet); }
+
+/* ==========================================================================
+   Modais de Orçamento abertos DE DENTRO de Prospecções
+   --------------------------------------------------------------------------
+   O menu carrega apenas `../css/{pagina}.css`. Com a página de Prospecções
+   ativa, `orcamentos.css` não está na página — e os modais de orçamento
+   abertos a partir daqui apareciam sem a grade de itens, sem a seta dos
+   selects e sem o traço dos ícones desabilitados.
+
+   Carregar `orcamentos.css` inteiro resolveria, mas ele redefine `.btn-danger`
+   com o vermelho vivo em vez do bordeaux daqui — todos os botões Excluir do
+   módulo mudariam de cor por trás do modal. Então copiamos só o que os modais
+   precisam, como cada folha de módulo já faz com as classes de base.
+   ========================================================================== */
+
+.select-arrow {
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='m6 8 4 4 4-4'/%3e%3c/svg%3e");
+    background-position: right 0.5rem center;
+    background-repeat: no-repeat;
+    background-size: 1.5em 1.5em;
+    padding-right: 2.5rem;
+}
+
+.icon-disabled {
+    position: relative;
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+
+.icon-disabled::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 0;
+    width: 100%;
+    height: 2px;
+    background: var(--color-red);
+    transform: translateY(-50%);
+}
+
+#orcamentoItens {
+    table-layout: fixed;
+    width: 100%;
+}
+
+#orcamentoItens th,
+#orcamentoItens td {
+    text-align: left;
+    white-space: normal;
+    min-width: 0;
+    word-break: break-word;
+}
+
+#orcamentoItens th:first-child,
+#orcamentoItens td:first-child {
+    width: 38%;
+}
+
+#orcamentoItens th:last-child,
+#orcamentoItens td:last-child {
+    text-align: center;
+}
+
+/*
+   Campos de data DOS MODAIS DE ORÇAMENTO: o indicador nativo do Chromium
+   desenha o próprio calendário exatamente onde esses modais já posicionam um
+   `fa-calendar-alt`. Ficavam dois ícones sobrepostos. O nativo segue ali,
+   invisível e clicável — é ele que abre o seletor, e o ícone visível tem
+   `pointer-events: none`.
+
+   O escopo por overlay NÃO é decorativo: os modais de prospecção (próximo
+   passo, concluir passo, campanha) têm campos de data e NENHUM ícone próprio.
+   Uma regra global apagaria a única pista de calendário que eles têm.
+*/
+#novoOrcamentoOverlay input[type="date"]::-webkit-calendar-picker-indicator,
+#editarOrcamentoOverlay input[type="date"]::-webkit-calendar-picker-indicator,
+#visualizarOrcamentoOverlay input[type="date"]::-webkit-calendar-picker-indicator {
+    opacity: 0;
+    cursor: pointer;
+}
