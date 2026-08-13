@@ -776,11 +776,34 @@ function abrirNovaProspeccao() {
     );
 }
 
+// ---------------------------------------------------------------------------
+// API pública do módulo
+//
+// menu.js injeta o script do módulo EMBRULHADO NUMA IIFE
+// (`script.textContent = '(function(){...})()'`), então nada declarado aqui é
+// global de verdade. Os modais rodam em <script> separados e não enxergam
+// estas funções pelo nome — era exatamente por isso que "Editar" e "Excluir"
+// no detalhe não faziam nada e a grade não recarregava depois de uma ação.
+//
+// `clientes.js` contorna o mesmo problema publicando `window.abrirEditarCliente`.
+// Aqui o contrato fica num objeto só, para não espalhar globais soltas.
+// ---------------------------------------------------------------------------
+window.ProspeccoesModulo = {
+    carregar: carregarProspeccoes,
+    abrirNova: abrirNovaProspeccao,
+    abrirDetalhes: abrirDetalhesProspeccao,
+    abrirEditar: abrirEditarProspeccao,
+    abrirExcluir: abrirExcluirProspeccao,
+    abrirMoverEtapa
+};
+
 // Recarrega preservando os filtros quando algo muda em outro lugar.
-window.addEventListener('prospeccaoAdicionada', () => carregarProspeccoes(true));
-window.addEventListener('prospeccaoEditada', () => carregarProspeccoes(true));
-window.addEventListener('prospeccaoExcluida', () => carregarProspeccoes(true));
-window.addEventListener('prospeccaoEtapaAlterada', () => carregarProspeccoes(true));
+// Os eventos continuam sendo a via de menor acoplamento e funcionam mesmo
+// dentro da IIFE, porque `window` é o mesmo objeto.
+['prospeccaoAdicionada', 'prospeccaoEditada', 'prospeccaoExcluida',
+ 'prospeccaoEtapaAlterada', 'prospeccaoAtualizada'].forEach(evento => {
+    window.addEventListener(evento, () => carregarProspeccoes(true));
+});
 
 // ---------------------------------------------------------------------------
 // Inicialização

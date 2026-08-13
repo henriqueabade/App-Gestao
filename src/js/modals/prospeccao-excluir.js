@@ -45,11 +45,11 @@
         // Tabela primeiro, aviso depois, e tudo sob o carregando do botão. Ao
         // contrário, o usuário lia "excluída com sucesso" com a linha ainda na
         // tela e concluía que não tinha funcionado.
-        if (typeof carregarProspeccoes === 'function') {
-          await carregarProspeccoes(true);
-        } else {
-          window.dispatchEvent(new Event('prospeccaoExcluida'));
-        }
+        // Pelo objeto publicado: menu.js embrulha o script do módulo numa
+        // IIFE e `carregarProspeccoes` não existe neste escopo.
+        const recarregar = window.ProspeccoesModulo?.carregar;
+        if (recarregar) await recarregar(true);
+        else window.dispatchEvent(new Event('prospeccaoExcluida'));
         showToast('Prospecção excluída com sucesso!', 'success');
       } else {
         // O backend recusa quando a prospecção já virou cliente ou tem

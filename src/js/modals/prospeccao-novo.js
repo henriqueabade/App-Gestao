@@ -128,11 +128,9 @@
 
       // Grade primeiro, aviso depois: ao contrário, o usuário lê "registrada"
       // com a lista ainda sem a linha e acha que não funcionou.
-      if (typeof carregarProspeccoes === 'function') {
-        await carregarProspeccoes(true);
-      } else {
-        window.dispatchEvent(new Event('prospeccaoAdicionada'));
-      }
+      const recarregar = window.ProspeccoesModulo?.carregar;
+      if (recarregar) await recarregar(true);
+      else window.dispatchEvent(new Event('prospeccaoAdicionada'));
       showToast('Prospecção registrada com sucesso!', 'success');
       close();
     } catch (err) {

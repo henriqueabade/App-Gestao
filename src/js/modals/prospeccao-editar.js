@@ -170,11 +170,9 @@
       }
       if (!resp.ok) throw new Error(corpo.error || 'Erro ao salvar prospecção');
 
-      if (typeof carregarProspeccoes === 'function') {
-        await carregarProspeccoes(true);
-      } else {
-        window.dispatchEvent(new Event('prospeccaoEditada'));
-      }
+      const recarregar = window.ProspeccoesModulo?.carregar;
+      if (recarregar) await recarregar(true);
+      else window.dispatchEvent(new Event('prospeccaoEditada'));
       showToast('Prospecção atualizada com sucesso!', 'success');
       close();
     } catch (err) {

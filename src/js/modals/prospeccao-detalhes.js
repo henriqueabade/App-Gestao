@@ -647,15 +647,31 @@
     abrirAcao('campanha.html', 'prospeccao-campanha.js', 'campanhaProspeccao');
   });
 
+  // `window.ProspeccoesModulo` é o contrato publicado por prospeccoes.js.
+  // Chamar `abrirEditarProspeccao` pelo nome NÃO funciona: menu.js injeta o
+  // script do módulo dentro de uma IIFE, e estes <script> de modal ficam fora
+  // desse escopo.
   get('detProspEditar')?.addEventListener('click', () => {
+    const abrir = window.ProspeccoesModulo?.abrirEditar;
+    if (!abrir) {
+      showToast('Não foi possível abrir a edição', 'error');
+      return;
+    }
+    const registro = alvo();
     close();
-    if (typeof abrirEditarProspeccao === 'function') abrirEditarProspeccao(alvo());
+    abrir(registro);
   });
 
   get('detProspExcluir')?.addEventListener('click', e => {
     if (e.currentTarget.disabled) return;
+    const abrir = window.ProspeccoesModulo?.abrirExcluir;
+    if (!abrir) {
+      showToast('Não foi possível abrir a exclusão', 'error');
+      return;
+    }
+    const registro = alvo();
     close();
-    if (typeof abrirExcluirProspeccao === 'function') abrirExcluirProspeccao(alvo());
+    abrir(registro);
   });
 
   // -------------------------------------------------------------------------

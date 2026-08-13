@@ -44,8 +44,15 @@
     if (typeof window.recarregarDetalhesProspeccao === 'function') {
       tarefas.push(window.recarregarDetalhesProspeccao());
     }
-    if (typeof carregarProspeccoes === 'function') {
-      tarefas.push(carregarProspeccoes(true));
+    // Pelo objeto publicado, nunca pelo nome: menu.js embrulha o script do
+    // módulo numa IIFE e `carregarProspeccoes` não existe neste escopo — a
+    // grade simplesmente não recarregava depois de uma ação.
+    const recarregarGrade = window.ProspeccoesModulo?.carregar;
+    if (recarregarGrade) {
+      tarefas.push(recarregarGrade(true));
+    } else {
+      // Rede de proteção: o módulo escuta este evento.
+      window.dispatchEvent(new Event('prospeccaoAtualizada'));
     }
     // Recarrega ANTES do aviso: ao contrário, o usuário lê "registrado" com a
     // tela ainda mostrando o estado antigo e conclui que não funcionou.
