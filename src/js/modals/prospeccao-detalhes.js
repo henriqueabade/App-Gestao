@@ -805,16 +805,32 @@
       b.classList.add('opacity-40', 'cursor-not-allowed');
     };
     if (p.cliente_id) {
-      desligar('detProspConverter', `Já convertida no cliente #${p.cliente_id}`);
-      desligar('detProspExcluir', 'Prospecção convertida não pode ser excluída');
+      const virou = `Já convertida no cliente #${p.cliente_id}`;
+      desligar('detProspConverter', virou);
+      // Convertida é registro histórico: os dados já foram copiados para o
+      // cadastro do cliente, e a versão do cliente é a que vale. O backend
+      // recusa as duas de qualquer forma (409).
+      desligar('detProspEditar', `${virou} — edite pelo módulo Clientes`);
+      desligar('detProspMoverFunil', `${virou} — saiu do funil`);
       // Quem já é cliente recebe orçamento ORC pelo módulo de Orçamentos. Abrir
       // outro OCRP aqui criaria uma proposta para uma oportunidade que já fechou.
       desligar('detProspNovoOrcamento',
         `Já é o cliente #${p.cliente_id} — emita o orçamento pelo módulo Orçamentos`);
-    }
-    if (p.status === 'arquivada' && p.etapa === 'Ganho' && !p.cliente_id) {
-      // Ganho mas ainda sem cliente: converter continua sendo o caminho.
+      // Exclusão de convertida é decisão de Sup Admin, como na grade.
+      if (!window.Permissoes?.supAdmin) {
+        desligar('detProspExcluir', 'Prospecção convertida — só o Sup Admin pode excluir');
+      }
       return;
+    }
+
+    // Perdida: a negociação acabou. Continua editável só o que é registro
+    // (notas, atividades), mas o funil e a ficha ficam como ficaram.
+    if (p.etapa === 'Perdido') {
+      desligar('detProspMoverFunil', 'Prospecção perdida — negociação encerrada');
+      desligar('detProspConverter', 'Prospecção perdida — não há o que converter');
+      if (!window.Permissoes?.supAdmin) {
+        desligar('detProspExcluir', 'Prospecção perdida — só o Sup Admin pode excluir');
+      }
     }
   }
 

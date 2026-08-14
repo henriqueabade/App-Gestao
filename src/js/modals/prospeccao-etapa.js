@@ -87,7 +87,7 @@
       probabilidade = Math.round(n);
     }
 
-    await A.enviar(`/api/prospeccoes/${prospeccao.id}/etapa`, {
+    const resultado = await A.enviar(`/api/prospeccoes/${prospeccao.id}/etapa`, {
       method: 'PATCH',
       body: JSON.stringify({
         etapa,
@@ -97,8 +97,37 @@
       })
     }, {
       overlayId: 'etapaProspeccao',
-      sucesso: `Prospecção movida para ${etapa}`
+      sucesso: `Prospecção movida para ${etapa}`,
+      aoFalhar: (status, corpo) => {
+        // Dados fiscais incompletos para Ganho, ou prospecção já convertida:
+        // a mensagem do backend já diz exatamente o que falta.
+        if (status === 422 || status === 409) {
+          showToast(corpo.error || `Erro ${status}`, 'error');
+          return true;
+        }
+        return false;
+      }
     });
+
+    if (!resultado) return;
+
+    // Perdido encerra as propostas em aberto — o usuário precisa saber que
+    // isso aconteceu, senão descobre depois pelo relatório.
+    if (resultado.orcamentosRejeitados > 0) {
+      const n = resultado.orcamentosRejeitados;
+      showToast(
+        n === 1 ? '1 orçamento em aberto foi rejeitado' : `${n} orçamentos em aberto foram rejeitados`,
+        'info');
+    }
+
+    // Ganho é "fechou": o passo seguinte é virar cliente. Deixar a prospecção
+    // parada em Ganho sem cliente é o que quebrava o fluxo — a conversão abre
+    // na sequência para conferir os dados fiscais e pedir status e dono.
+    if (resultado.converter) {
+      window.prospeccaoAcaoAlvo = { ...prospeccao, etapa: 'Ganho' };
+      Modal.open('modals/prospeccoes/converter.html',
+        '../js/modals/prospeccao-converter.js', 'converterProspeccao', true);
+    }
   });
 
   window.dispatchEvent(new CustomEvent('modalSpinnerLoaded', { detail: 'etapaProspeccao' }));

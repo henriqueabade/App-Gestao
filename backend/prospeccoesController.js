@@ -524,6 +524,57 @@ const resumoContato = c => [
   c?.decisor ? 'decisor' : null
 ].filter(Boolean).join(' · ');
 
+/**
+ * Marca como Rejeitado todo orçamento em aberto da prospecção.
+ *
+ * Chamado quando a prospecção é dada como Perdida. Proposta em aberto para
+ * quem não vai comprar suja o relatório e continua aparecendo na lista de
+ * orçamentos a converter em pedido.
+ *
+ * O que já está Aprovado NÃO é tocado: virou pedido, e mexer no orçamento
+ * desencontraria os dois. Rejeitado e Expirado também ficam como estão — já
+ * estão encerrados.
+ *
+ * Acrescenta um evento por orçamento em  e devolve quantos mudaram.
+ */
+async function rejeitarOrcamentosDaProspeccao(api, prospeccaoId, motivo, eventos) {
+  const ENCERRADOS = new Set(['Aprovado', 'Rejeitado', 'Expirado']);
+  let total = 0;
+
+  try {
+    const lista = await api
+      .get('/api/orcamentos', { query: { prospeccao_id: prospeccaoId } })
+      .catch(() => []);
+
+    for (const orc of Array.isArray(lista) ? lista : []) {
+      if (ENCERRADOS.has(String(orc.situacao || '').trim())) continue;
+
+      await api.put(`/api/orcamentos/${orc.id}`, {
+        ...orc,
+        situacao: 'Rejeitado',
+        data_aprovacao: new Date().toISOString()
+      });
+      total += 1;
+
+      eventos.push({
+        tipo: 'orcamento', acao: 'alterou',
+        entidade: `Orçamento ${orc.numero || orc.id}`,
+        campo: 'situacao',
+        valor_anterior: orc.situacao ?? null,
+        valor_novo: 'Rejeitado',
+        observacao: motivo ? `Prospecção perdida: ${motivo}` : 'Prospecção perdida',
+        detalhe: { rotulo: 'Situação', orcamento_id: orc.id }
+      });
+    }
+  } catch (err) {
+    // Não derruba o movimento no funil: a prospecção precisa ficar como
+    // Perdida de qualquer forma. O que falhou aparece no log.
+    console.error('[prospeccoes] falha ao rejeitar orçamentos da prospecção:', err?.message || err);
+  }
+
+  return total;
+}
+
 /** Registra a movimentação no funil. Mantido como atalho do caso mais comum. */
 async function registrarEtapa(api, prospeccaoId, anterior, nova, observacao, usuarioId) {
   await registrarHistorico(api, prospeccaoId, {
@@ -790,6 +841,14 @@ router.put('/:id', exigirPermissao(permissoesDeEdicao), async (req, res) => {
     const api = createApiClient(req);
     const atual = await buscarProspeccao(api, id);
 
+    // Prospecção convertida é registro histórico: os dados dela já foram
+    // copiados para o cadastro do cliente. Editar aqui criaria duas versões da
+    // mesma empresa, e a do cliente é a que vale.
+    if (atual.cliente_id) {
+      throw erro(409,
+        `Esta prospecção já foi convertida no cliente #${atual.cliente_id}. Edite os dados pelo módulo Clientes.`);
+    }
+
     const payload = montarPayload({ ...req.body, etapa: req.body.etapa || atual.etapa });
     validarProspeccao(payload);
 
@@ -936,11 +995,33 @@ router.patch('/:id/etapa', exigirPermissao('pros.stage.update'), async (req, res
     const atual = await buscarProspeccao(api, id);
     if (atual.etapa === novaEtapa) return res.json({ success: true, semMudanca: true });
 
+    // Prospecção que já virou cliente saiu do funil para sempre. Movê-la
+    // reabriria uma negociação encerrada e desencontraria a etapa do cliente
+    // que já existe.
+    if (atual.cliente_id) {
+      throw erro(409, `Esta prospecção já foi convertida no cliente #${atual.cliente_id} e não se move mais no funil`);
+    }
+
     // "Perdido" sem motivo vira um buraco no relatório: daqui a três meses
     // ninguém lembra por que caiu.
     const motivo = texto(req.body?.motivo_perda);
     if (novaEtapa === 'Perdido' && !motivo) {
       throw erro(400, 'Informe o motivo da perda');
+    }
+
+    // Ganho é "fechou" — o passo seguinte é virar cliente. Cobrar os dados
+    // fiscais AQUI evita o beco sem saída de marcar Ganho e só então descobrir,
+    // na conversão, que falta CNPJ.
+    if (novaEtapa === 'Ganho') {
+      const faltando = [];
+      if (!texto(atual.razao_social)) faltando.push('Razão Social');
+      if (!texto(atual.nome_fantasia)) faltando.push('Nome Fantasia');
+      if (!texto(atual.cnpj)) faltando.push('CNPJ');
+      if (faltando.length) {
+        const e = erro(422, `Complete os dados da empresa antes de marcar como Ganho: ${faltando.join(', ')}`);
+        e.camposFaltantes = faltando;
+        throw e;
+      }
     }
 
     const patch = {
@@ -981,12 +1062,28 @@ router.patch('/:id/etapa', exigirPermissao('pros.stage.update'), async (req, res
         valor_anterior: atual.motivo_perda || null, valor_novo: motivo
       });
     }
+    // Perdido encerra a negociação: proposta em aberto para quem não vai
+    // comprar polui o relatório e a lista de orçamentos para converter.
+    let orcamentosRejeitados = 0;
+    if (novaEtapa === 'Perdido') {
+      orcamentosRejeitados = await rejeitarOrcamentosDaProspeccao(api, id, motivo, eventos);
+    }
+
     await registrarHistorico(api, id, eventos, usuarioDaRequisicao(req));
 
-    res.json({ success: true, etapa: novaEtapa });
+    res.json({
+      success: true,
+      etapa: novaEtapa,
+      orcamentosRejeitados,
+      // Sinal para a interface abrir a conversão. NÃO convertemos aqui: a
+      // conversão pede status e dono do cliente, decisões de quem está na tela.
+      converter: novaEtapa === 'Ganho'
+    });
   } catch (err) {
     console.error('Erro ao mover prospecção no funil:', err);
-    res.status(err.status || 500).json({ error: err.message || 'Erro ao mover prospecção' });
+    const corpo = { error: err.message || 'Erro ao mover prospecção' };
+    if (err.camposFaltantes) corpo.camposFaltantes = err.camposFaltantes;
+    res.status(err.status || 500).json(corpo);
   }
 });
 

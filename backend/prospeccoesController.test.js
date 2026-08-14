@@ -1802,3 +1802,186 @@ test('mover no funil continua nomeando o campo', async () => {
     await ctx.encerrar();
   }
 });
+
+
+// ---------------------------------------------------------------------------
+// Regras do funil: Ganho e Perdido
+//
+// Mover para Ganho ou Perdido não é trocar de etiqueta — é encerrar a
+// negociação. Antes o backend só gravava a etapa nova, e o fluxo combinado
+// (converter / arquivar / rejeitar propostas) simplesmente não acontecia.
+// ---------------------------------------------------------------------------
+
+/** Prospecção 1 com os dados fiscais completos, apta a virar cliente. */
+function aptaParaGanho() {
+  const dados = baseDados();
+  const p = dados.prospeccoes.find(x => x.id === 1);
+  p.razao_social = 'Antiga Comercio Ltda';
+  p.nome_fantasia = 'Antiga Ltda';
+  p.cnpj = '11.111.111/0001-11';
+  return dados;
+}
+
+test('mover para Ganho sinaliza a conversão para a interface', async () => {
+  const ctx = await montar(aptaParaGanho());
+  try {
+    const resp = await chamar(ctx.porta, '/api/prospeccoes/1/etapa', {
+      method: 'PATCH', body: JSON.stringify({ etapa: 'Ganho' })
+    });
+    assert.strictEqual(resp.status, 200);
+    const corpo = await resp.json();
+    assert.strictEqual(corpo.converter, true);
+
+    // O backend NÃO converte sozinho: a conversão pede status e dono do
+    // cliente, que são decisões de quem está na tela.
+    assert.strictEqual(ctx.tabelas.clientes.length, 0);
+    assert.strictEqual(ctx.tabelas.prospeccoes.find(p => p.id === 1).cliente_id ?? null, null);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('Ganho sem CNPJ é recusado, com a lista do que falta', async () => {
+  // Prospectar um lead de feira sem CNPJ é legítimo; dar como fechado, não —
+  // e descobrir isso só na conversão seria um beco sem saída.
+  const dados = baseDados();
+  const p = dados.prospeccoes.find(x => x.id === 1);
+  p.cnpj = null;
+  const ctx = await montar(dados);
+  try {
+    const resp = await chamar(ctx.porta, '/api/prospeccoes/1/etapa', {
+      method: 'PATCH', body: JSON.stringify({ etapa: 'Ganho' })
+    });
+    assert.strictEqual(resp.status, 422);
+    const corpo = await resp.json();
+    assert.ok(corpo.camposFaltantes.includes('CNPJ'));
+
+    // Nada mudou: a etapa continua onde estava.
+    assert.strictEqual(ctx.tabelas.prospeccoes.find(x => x.id === 1).etapa, 'Qualificado');
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('Perdido rejeita os orçamentos em aberto da prospecção', async () => {
+  const dados = baseDados();
+  dados.orcamentos = [
+    { id: 1, numero: 'OCRP1', prospeccao_id: 1, situacao: 'Rascunho' },
+    { id: 2, numero: 'OCRP2', prospeccao_id: 1, situacao: 'Enviado' },
+    { id: 3, numero: 'OCRP3', prospeccao_id: 2, situacao: 'Rascunho' }
+  ];
+  const ctx = await montar(dados);
+  try {
+    const resp = await chamar(ctx.porta, '/api/prospeccoes/1/etapa', {
+      method: 'PATCH',
+      body: JSON.stringify({ etapa: 'Perdido', motivo_perda: 'Preço' })
+    });
+    assert.strictEqual(resp.status, 200);
+    assert.strictEqual((await resp.json()).orcamentosRejeitados, 2);
+
+    const situacao = n => ctx.tabelas.orcamentos.find(o => o.numero === n).situacao;
+    assert.strictEqual(situacao('OCRP1'), 'Rejeitado');
+    assert.strictEqual(situacao('OCRP2'), 'Rejeitado');
+    // Orçamento de OUTRA prospecção não é tocado.
+    assert.strictEqual(situacao('OCRP3'), 'Rascunho');
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('Perdido NÃO mexe em orçamento já aprovado', async () => {
+  // Aprovado virou pedido. Rejeitar aqui desencontraria os dois documentos.
+  const dados = baseDados();
+  dados.orcamentos = [
+    { id: 1, numero: 'OCRP1', prospeccao_id: 1, situacao: 'Aprovado' },
+    { id: 2, numero: 'OCRP2', prospeccao_id: 1, situacao: 'Expirado' }
+  ];
+  const ctx = await montar(dados);
+  try {
+    const resp = await chamar(ctx.porta, '/api/prospeccoes/1/etapa', {
+      method: 'PATCH',
+      body: JSON.stringify({ etapa: 'Perdido', motivo_perda: 'Desistiu' })
+    });
+    assert.strictEqual((await resp.json()).orcamentosRejeitados, 0);
+    assert.strictEqual(ctx.tabelas.orcamentos.find(o => o.id === 1).situacao, 'Aprovado');
+    assert.strictEqual(ctx.tabelas.orcamentos.find(o => o.id === 2).situacao, 'Expirado');
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('cada orçamento rejeitado vira uma linha do histórico', async () => {
+  const dados = baseDados();
+  dados.orcamentos = [{ id: 1, numero: 'OCRP1', prospeccao_id: 1, situacao: 'Enviado' }];
+  const ctx = await montar(dados);
+  try {
+    await chamar(ctx.porta, '/api/prospeccoes/1/etapa', {
+      method: 'PATCH',
+      body: JSON.stringify({ etapa: 'Perdido', motivo_perda: 'Sem verba' })
+    });
+    const evento = ctx.tabelas.prospeccao_historico
+      .find(h => h.tipo === 'orcamento' && h.campo === 'situacao');
+    assert.ok(evento, 'faltou o evento do orçamento rejeitado');
+    assert.strictEqual(evento.valor_anterior, 'Enviado');
+    assert.strictEqual(evento.valor_novo, 'Rejeitado');
+    assert.match(evento.observacao, /Sem verba/);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('Perdido continua arquivando mesmo se os orçamentos falharem', async () => {
+  // Um erro ao rejeitar proposta não pode impedir a prospecção de ser marcada
+  // como perdida — senão o funil trava por causa de um efeito colateral.
+  const dados = baseDados();
+  dados.orcamentos = [{ id: 1, numero: 'OCRP1', prospeccao_id: 1, situacao: 'Enviado' }];
+  const ctx = await montar(dados, {
+    falharEm: ({ metodo, tabela }) => metodo === 'PUT' && tabela === 'orcamentos'
+  });
+  try {
+    const resp = await chamar(ctx.porta, '/api/prospeccoes/1/etapa', {
+      method: 'PATCH',
+      body: JSON.stringify({ etapa: 'Perdido', motivo_perda: 'Preço' })
+    });
+    assert.strictEqual(resp.status, 200);
+    const p = ctx.tabelas.prospeccoes.find(x => x.id === 1);
+    assert.strictEqual(p.etapa, 'Perdido');
+    assert.strictEqual(p.status, 'arquivada');
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Prospecção convertida sai do funil
+// ---------------------------------------------------------------------------
+
+test('prospecção convertida não se move mais no funil', async () => {
+  const ctx = await montar(baseDados());
+  try {
+    // A prospecção 4 já tem cliente_id na massa.
+    const resp = await chamar(ctx.porta, '/api/prospeccoes/4/etapa', {
+      method: 'PATCH', body: JSON.stringify({ etapa: 'Negociação' })
+    });
+    assert.strictEqual(resp.status, 409);
+    assert.strictEqual(ctx.tabelas.prospeccoes.find(p => p.id === 4).etapa, 'Ganho');
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('prospecção convertida não é editada pela ficha', async () => {
+  // Os dados já foram copiados para o cadastro do cliente; a versão do cliente
+  // é a que vale. Editar aqui criaria duas versões da mesma empresa.
+  const ctx = await montar(baseDados());
+  try {
+    const resp = await chamar(ctx.porta, '/api/prospeccoes/4', {
+      method: 'PUT', body: JSON.stringify({ nome_fantasia: 'Outro Nome' })
+    });
+    assert.strictEqual(resp.status, 409);
+    assert.match((await resp.json()).error, /módulo Clientes/i);
+    assert.strictEqual(ctx.tabelas.prospeccoes.find(p => p.id === 4).nome_fantasia, 'Ganha Convertida');
+  } finally {
+    await ctx.encerrar();
+  }
+});

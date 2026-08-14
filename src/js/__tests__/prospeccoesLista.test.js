@@ -557,13 +557,15 @@ test('anotação do cadastro é escapada', () => {
 // ---------------------------------------------------------------------------
 
 /** Renderiza uma linha e devolve o HTML gerado, com Permissoes.supAdmin dado. */
-function renderizarLinha(supAdmin) {
+function renderizarLinha(supAdmin, prospeccao) {
   let html = '';
   const linha = {
     className: '', dataset: {},
     set innerHTML(v) { html = v; },
     get innerHTML() { return html; },
     querySelector: () => null,
+    // O módulo varre a linha atrás dos ícones travados (`[data-inerte]`).
+    querySelectorAll: () => [],
     addEventListener() {}
   };
   const tbody = { innerHTML: '', appendChild() {}, classList: { add() {}, remove() {} } };
@@ -574,7 +576,9 @@ function renderizarLinha(supAdmin) {
   definir(s, 'todasProspeccoes', []);
 
   vm.runInContext('renderTabela(__lista);', Object.assign(s, {
-    __lista: [{ id: 1, nome_fantasia: 'Marmoraria', etapa: 'Contato', probabilidade: 10, responsavel: 'João' }]
+    __lista: [prospeccao || {
+      id: 1, nome_fantasia: 'Marmoraria', etapa: 'Contato', probabilidade: 10, responsavel: 'João'
+    }]
   }));
   return html;
 }
@@ -599,7 +603,7 @@ test('sem Permissoes carregado, o ícone não aparece', () => {
   const linha = {
     className: '', dataset: {},
     set innerHTML(v) { html = v; }, get innerHTML() { return html; },
-    querySelector: () => null, addEventListener() {}
+    querySelector: () => null, querySelectorAll: () => [], addEventListener() {}
   };
   const s = criarSandbox({ prospeccoesTableBody: { innerHTML: '', appendChild() {}, classList: { add() {}, remove() {} } } });
   s.document.createElement = () => linha;
@@ -857,4 +861,78 @@ test('nenhum botão de ação da ficha ficou com addEventListener cru', () => {
     // A aba de contatos usa delegação de propósito: as linhas são repintadas.
     .filter(id => id !== 'detProspContatos');
   assert.deepEqual(crus, [], 'botões sem proteção: ' + crus.join(', '));
+});
+
+
+// ---------------------------------------------------------------------------
+// Ganho e Perdido travam as ações da grade
+//
+// Negócio encerrado não volta ao funil nem tem a ficha reescrita: isso
+// desencontraria o registro do que de fato aconteceu.
+// ---------------------------------------------------------------------------
+
+/** Quais ações vieram travadas, pela classe do ícone. */
+function acoesTravadas(html) {
+  const travadas = [];
+  for (const m of html.matchAll(/acao-tabela--([a-z]+) acao-tabela--inerte/g)) {
+    travadas.push(m[1]);
+  }
+  return travadas.sort();
+}
+
+const ENCERRADA = { id: 1, nome_fantasia: 'Fechada', etapa: 'Ganho', probabilidade: 100 };
+const PERDIDA = { id: 2, nome_fantasia: 'Caiu', etapa: 'Perdido', probabilidade: 0 };
+const ATIVA = { id: 3, nome_fantasia: 'Em jogo', etapa: 'Proposta', probabilidade: 65 };
+
+test('prospecção Ganha trava mover, editar e responsável', () => {
+  const html = renderizarLinha(true, ENCERRADA);
+  assert.deepEqual(acoesTravadas(html), ['editar', 'mover', 'responsavel']);
+});
+
+test('prospecção Perdida trava as mesmas ações', () => {
+  const html = renderizarLinha(true, PERDIDA);
+  assert.deepEqual(acoesTravadas(html), ['editar', 'mover', 'responsavel']);
+});
+
+test('prospecção em andamento não trava nada', () => {
+  assert.deepEqual(acoesTravadas(renderizarLinha(true, ATIVA)), []);
+});
+
+test('ver detalhes continua liberado numa prospecção encerrada', () => {
+  // Travar a leitura seria esconder o histórico de quem quer entender o que
+  // aconteceu — o oposto do que a regra pede.
+  const html = renderizarLinha(true, ENCERRADA);
+  assert.match(html, /acao-tabela--ver acao-ver/);
+});
+
+test('excluir encerrada é liberado só para o Sup Admin', () => {
+  const comSup = renderizarLinha(true, ENCERRADA);
+  assert.equal(acoesTravadas(comSup).includes('excluir'), false);
+  assert.match(comSup, /acao-tabela--excluir acao-excluir/);
+
+  const semSup = renderizarLinha(false, ENCERRADA);
+  assert.ok(acoesTravadas(semSup).includes('excluir'));
+});
+
+test('a ação travada perde o gancho do clique', () => {
+  // É assim que o handler não chega a ser registrado: a busca pela classe do
+  // gancho devolve null e o ligarAcao sai pela porta dos fundos.
+  const html = renderizarLinha(true, ENCERRADA);
+  assert.equal(html.includes('acao-mover'), false);
+  assert.equal(html.includes('acao-editar'), false);
+  assert.match(html, /data-inerte="true"/);
+});
+
+test('o motivo da trava vai no title', () => {
+  const html = renderizarLinha(true, PERDIDA);
+  assert.match(html, /title="Prospecção Perdido — negociação encerrada"/);
+});
+
+test('a classe da ação travada existe na folha de estilo', () => {
+  const css = fs.readFileSync(path.join(__dirname, '..', '..', 'css', 'prospeccoes.css'), 'utf8');
+  const regra = /\.acao-tabela--inerte\s*\{([^}]*)\}/.exec(css);
+  assert.ok(regra, 'faltou a classe .acao-tabela--inerte');
+  // Sem pointer-events: none — ele mataria o tooltip junto com o clique, e o
+  // title é onde está a explicação do bloqueio.
+  assert.equal(/pointer-events/.test(regra[1]), false);
 });

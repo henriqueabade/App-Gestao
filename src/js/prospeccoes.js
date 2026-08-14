@@ -661,6 +661,23 @@ function renderTabela(lista) {
             : '';
         // Sinaliza atraso já na linha: o "para quando" foi para o popover, mas
         // perder o prazo de vista seria perder a informação mais acionável.
+        // Ganho e Perdido encerram a negociação: mexer no funil, editar a ficha
+        // ou trocar o responsável de um negócio fechado desencontra o registro
+        // do que de fato aconteceu. Só o Sup Admin ainda pode excluir.
+        const encerrada = p.etapa === 'Ganho' || p.etapa === 'Perdido';
+        const supAdmin = Boolean(window.Permissoes?.supAdmin);
+
+        /**
+         * Monta um ícone de ação. Quando `travada`, ele continua VISÍVEL — some
+         * a ação, não a informação de que ela existe — mas ganha `data-inerte`,
+         * que impede o clique e explica o porquê no title.
+         */
+        const acao = ({ perm, icone, classe, gancho, titulo, travada }) => `
+                    <i data-perm="${perm}" class="fas ${icone} acao-tabela ${classe}${travada ? ' acao-tabela--inerte' : ` ${gancho}`}"
+                       ${travada ? 'data-inerte="true"' : ''} title="${esc(travada || titulo)}"></i>`;
+
+        const motivoEncerrada = `Prospecção ${p.etapa} — negociação encerrada`;
+
         const dia = diaDe(p.proximo_passo_data);
         const alerta = dia && dia < hojeZerado()
             ? '<i class="fas fa-clock text-xs prox-passo-atrasado ml-2" title="Próximo passo atrasado"></i>'
@@ -681,11 +698,11 @@ function renderTabela(lista) {
             <td data-perm-col="col_pros_owner" class="px-4 py-3 whitespace-nowrap text-sm text-white">${esc(p.responsavel || '—')}</td>
             <td class="px-4 py-3 whitespace-nowrap text-left">
                 <div class="flex items-center justify-start space-x-2">
-                    <i data-perm="pros.details.view" class="fas fa-eye acao-tabela acao-tabela--ver acao-ver" title="Ver detalhes"></i>
-                    <i data-perm="pros.stage.update" class="fas fa-arrow-right-arrow-left acao-tabela acao-tabela--mover acao-mover" title="Mover no funil"></i>
-                    ${window.Permissoes?.supAdmin ? `<i data-perm="pros.edit" class="fas fa-user-pen acao-tabela acao-tabela--responsavel acao-responsavel" title="Alterar responsável (Sup Admin)"></i>` : ''}
-                    <i data-perm="pros.edit" class="fas fa-edit acao-tabela acao-tabela--editar acao-editar" title="Editar"></i>
-                    <i data-perm="pros.delete" class="fas fa-trash acao-tabela acao-tabela--excluir acao-excluir" title="Excluir"></i>
+                    ${acao({ perm: 'pros.details.view', icone: 'fa-eye', classe: 'acao-tabela--ver', gancho: 'acao-ver', titulo: 'Ver detalhes' })}
+                    ${acao({ perm: 'pros.stage.update', icone: 'fa-arrow-right-arrow-left', classe: 'acao-tabela--mover', gancho: 'acao-mover', titulo: 'Mover no funil', travada: encerrada && motivoEncerrada })}
+                    ${supAdmin ? acao({ perm: 'pros.edit', icone: 'fa-user-pen', classe: 'acao-tabela--responsavel', gancho: 'acao-responsavel', titulo: 'Alterar responsável (Sup Admin)', travada: encerrada && motivoEncerrada }) : ''}
+                    ${acao({ perm: 'pros.edit', icone: 'fa-edit', classe: 'acao-tabela--editar', gancho: 'acao-editar', titulo: 'Editar', travada: encerrada && motivoEncerrada })}
+                    ${acao({ perm: 'pros.delete', icone: 'fa-trash', classe: 'acao-tabela--excluir', gancho: 'acao-excluir', titulo: 'Excluir', travada: encerrada && !supAdmin && 'Prospecção encerrada — só o Sup Admin pode excluir' })}
                 </div>
             </td>`;
 
@@ -696,6 +713,15 @@ function renderTabela(lista) {
         // lixeira ou no olho empilhavam dois modais — a rede automática do
         // BotaoAcao só segura ações que passam por `window.electronAPI`, e aqui
         // tudo vai por `fetch` ao backend local.
+        // Ação travada: o clique não pode vazar para a linha (que abriria a
+        // ficha) nem passar em branco — o usuário merece saber por quê.
+        tr.querySelectorAll('[data-inerte]').forEach(icone => {
+            icone.addEventListener('click', e => {
+                e.stopPropagation();
+                showToast(icone.getAttribute('title') || 'Ação indisponível', 'info');
+            });
+        });
+
         ligarAcao(tr.querySelector('.acao-ver'), () => abrirDetalhesProspeccao(p));
         const icone = tr.querySelector('[data-info]');
         if (icone) ligarIconeInfo(icone, p);

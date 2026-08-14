@@ -540,6 +540,26 @@ body {
     transition: background 150ms ease, color 150ms ease;
 }
 
+/*
+   Ação travada por regra de negócio (prospecção Ganha ou Perdida).
+
+   Continua VISÍVEL de propósito: sumir com o ícone esconderia que a ação
+   existe e faria a coluna "dançar" de linha para linha.
+
+   Sem `pointer-events: none`: ele mataria o tooltip junto com o clique, e o
+   title é justamente onde está a explicação. O bloqueio é no JS, que também
+   impede o clique de vazar para a linha.
+*/
+.acao-tabela--inerte {
+    opacity: 0.35;
+    cursor: not-allowed;
+    color: rgba(255, 255, 255, 0.5) !important;
+}
+
+.acao-tabela--inerte:hover {
+    background: transparent;
+}
+
 .acao-tabela:hover {
     background: rgba(255, 255, 255, 0.1);
 }
