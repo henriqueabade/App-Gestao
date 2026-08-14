@@ -575,6 +575,24 @@ async function rejeitarOrcamentosDaProspeccao(api, prospeccaoId, motivo, eventos
   return total;
 }
 
+/**
+ * A campanha não pode ter sido enviada antes de a prospecção existir.
+ *
+ * O campo é livre e aceitava qualquer data — dava para registrar um envio
+ * anterior ao próprio cadastro da oportunidade, o que não descreve fato nenhum
+ * e distorce qualquer relatório por período.
+ */
+function validarDataDeEnvio(dataEnvio, prospeccao) {
+  if (!dataEnvio) return;
+  const envio = String(dataEnvio).slice(0, 10);
+  const nascimento = String(prospeccao?.criado_em || '').slice(0, 10);
+  if (!nascimento || envio >= nascimento) return;
+
+  const [a, m, d] = nascimento.split('-');
+  throw erro(400,
+    `A campanha não pode ter data de envio anterior ao cadastro da prospecção (${d}/${m}/${a})`);
+}
+
 /** Registra a movimentação no funil. Mantido como atalho do caso mais comum. */
 async function registrarEtapa(api, prospeccaoId, anterior, nova, observacao, usuarioId) {
   await registrarHistorico(api, prospeccaoId, {
@@ -1547,7 +1565,8 @@ router.post('/:id/campanhas', exigirPermissao('pros.campaign.manage'), async (re
     if (!STATUS_CAMPANHA.has(status)) throw erro(400, `Status de campanha inválido: ${status}`);
 
     const api = createApiClient(req);
-    await buscarProspeccao(api, id);
+    const prospeccao = await buscarProspeccao(api, id);
+    validarDataDeEnvio(req.body?.data_envio, prospeccao);
 
     const criada = await api.post('/api/prospeccao_campanhas', {
       prospeccao_id: Number(id),
@@ -1587,6 +1606,7 @@ router.put('/:id/campanhas/:campanhaId', exigirPermissao('pros.campaign.manage')
 
     const api = createApiClient(req);
     const antes = await filhoDaProspeccao(api, 'prospeccao_campanhas', campanhaId, id, 'Campanha');
+    validarDataDeEnvio(req.body?.data_envio, await buscarProspeccao(api, id));
 
     const depois = {
       nome,
@@ -1902,33 +1922,14 @@ router.delete(
 // ---------------------------------------------------------------------------
 
 /**
- * Excluir a prospecção.
+ * Excluir a prospecção — privativo do Sup Admin, em qualquer etapa.
  *
- * Encerrada (Ganho, Perdido ou já convertida) só o Sup Admin apaga: é o
- * registro do que aconteceu com o negócio. A trava na grade escondia o botão,
- * mas o backend deixava passar — bastava a permissão `pros.delete` e uma
- * chamada direta.
+ * A prospecção é o registro de uma negociação inteira: contatos, timeline,
+ * histórico e orçamentos vinculados. Apagar não tem volta, e a permissão
+ * `pros.delete` sozinha deixava qualquer perfil com ela fazer isso por chamada
+ * direta — a grade só escondia o botão.
  */
-async function exigirSupAdminSeEncerrada(req, res, next) {
-  try {
-    const api = createApiClient(req);
-    const atual = await buscarProspeccao(api, req.params.id);
-    const encerrada = Boolean(atual.cliente_id)
-      || atual.etapa === 'Ganho' || atual.etapa === 'Perdido';
-    if (!encerrada) return next();
-
-    if (await ehSupAdmin(req)) return next();
-    return res.status(403).json({
-      error: 'Prospecção encerrada — somente o Sup Admin pode excluir',
-      code: 'FORBIDDEN_SUP_ADMIN'
-    });
-  } catch (err) {
-    // Não existe ou não deu para ler: deixa o handler responder o 404.
-    return next();
-  }
-}
-
-router.delete('/:id', exigirPermissao('pros.delete'), exigirSupAdminSeEncerrada, async (req, res) => {
+router.delete('/:id', exigirPermissao('pros.delete'), exigirSupAdmin, async (req, res) => {
   const { id } = req.params;
   try {
     const api = createApiClient(req);

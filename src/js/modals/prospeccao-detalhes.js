@@ -804,6 +804,12 @@
       b.title = motivo;
       b.classList.add('opacity-40', 'cursor-not-allowed');
     };
+    // Excluir é sempre do Sup Admin — a prospecção é o registro de uma
+    // negociação inteira, e apagar não tem volta. O backend cobra de novo.
+    if (!window.Permissoes?.supAdmin) {
+      desligar('detProspExcluir', 'Somente o Sup Admin pode excluir uma prospecção');
+    }
+
     if (p.cliente_id) {
       const virou = `Já convertida no cliente #${p.cliente_id}`;
       desligar('detProspConverter', virou);
@@ -816,11 +822,6 @@
       // outro OCRP aqui criaria uma proposta para uma oportunidade que já fechou.
       desligar('detProspNovoOrcamento',
         `Já é o cliente #${p.cliente_id} — emita o orçamento pelo módulo Orçamentos`);
-      // Exclusão de convertida é decisão de Sup Admin, como na grade.
-      if (!window.Permissoes?.supAdmin) {
-        desligar('detProspExcluir', 'Prospecção convertida — só o Sup Admin pode excluir');
-      }
-
       // Os botões do TOPO não eram tudo: as abas seguiam com "+ Novo contato",
       // "+ Nova nota", editar e excluir funcionando. A ficha continuava
       // editável por dentro, que foi o que você viu.
@@ -838,13 +839,6 @@
       return;
     }
 
-    // Perdida NÃO trava mais o funil nem a edição: negócio perdido volta a ser
-    // trabalhado. Só a exclusão continua restrita — é o registro do que houve.
-    if (p.etapa === 'Perdido' || p.etapa === 'Ganho') {
-      if (!window.Permissoes?.supAdmin) {
-        desligar('detProspExcluir', 'Prospecção encerrada — só o Sup Admin pode excluir');
-      }
-    }
   }
 
   /** Sem combinado em aberto não há o que concluir — o botão nem aparece. */

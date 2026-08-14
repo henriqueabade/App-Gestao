@@ -2113,16 +2113,102 @@ test('Sup Admin exclui a encerrada normalmente', async () => {
   }
 });
 
-test('prospecção em andamento não exige Sup Admin para excluir', async () => {
-  // A restrição é sobre o registro ENCERRADO. Negócio em curso segue a
-  // permissão normal do módulo.
+test('nem a prospecção em andamento pode ser excluída por usuário comum', async () => {
+  // A regra vale para QUALQUER etapa: a prospecção é o registro de uma
+  // negociação inteira — contatos, timeline, histórico e orçamentos ligados a
+  // ela. Ter `pros.delete` no perfil não basta.
   const dados = baseDados();
   darPermissaoDeExcluir(dados);
   const ctx = await montar(dados);
   try {
-    // A 1 está Qualificado.
+    // A 1 está Qualificado, em pleno andamento.
     const resp = await chamar(ctx.porta, '/api/prospeccoes/1', { usuario: 2, method: 'DELETE' });
+    assert.strictEqual(resp.status, 403);
+    assert.ok(ctx.tabelas.prospeccoes.some(p => p.id === 1));
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('Sup Admin exclui prospecção em qualquer etapa', async () => {
+  const ctx = await montar(baseDados());
+  try {
+    const resp = await chamar(ctx.porta, '/api/prospeccoes/1', { method: 'DELETE' });
     assert.strictEqual(resp.status, 200);
+    assert.strictEqual(ctx.tabelas.prospeccoes.some(p => p.id === 1), false);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Data de envio da campanha
+//
+// O campo aceitava qualquer data: dava para registrar um envio anterior ao
+// próprio cadastro da oportunidade — fato que não aconteceu, e que distorce
+// qualquer relatório por período.
+// ---------------------------------------------------------------------------
+
+test('campanha não aceita envio anterior ao cadastro da prospecção', async () => {
+  const dados = baseDados();
+  dados.prospeccoes.find(p => p.id === 1).criado_em = '2026-05-10T09:00:00.000Z';
+  const ctx = await montar(dados);
+  try {
+    const resp = await chamar(ctx.porta, '/api/prospeccoes/1/campanhas', {
+      method: 'POST',
+      body: JSON.stringify({ nome: 'Retroativa', data_envio: '2026-05-09' })
+    });
+    assert.strictEqual(resp.status, 400);
+    assert.match((await resp.json()).error, /10\/05\/2026/);
+    assert.strictEqual(ctx.tabelas.prospeccao_campanhas.some(c => c.nome === 'Retroativa'), false);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('campanha aceita envio no mesmo dia do cadastro', async () => {
+  // O piso é o DIA, não o instante: cadastrar de manhã e disparar à tarde é
+  // rotina.
+  const dados = baseDados();
+  dados.prospeccoes.find(p => p.id === 1).criado_em = '2026-05-10T18:00:00.000Z';
+  const ctx = await montar(dados);
+  try {
+    const resp = await chamar(ctx.porta, '/api/prospeccoes/1/campanhas', {
+      method: 'POST',
+      body: JSON.stringify({ nome: 'No mesmo dia', data_envio: '2026-05-10' })
+    });
+    assert.strictEqual(resp.status, 201);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('editar campanha também recusa data retroativa', async () => {
+  const dados = baseDados();
+  dados.prospeccoes.find(p => p.id === 1).criado_em = '2026-05-10T09:00:00.000Z';
+  const ctx = await montar(dados);
+  try {
+    const resp = await chamar(ctx.porta, '/api/prospeccoes/1/campanhas/60', {
+      method: 'PUT',
+      body: JSON.stringify({ nome: 'Lancamento outono', data_envio: '2026-01-01' })
+    });
+    assert.strictEqual(resp.status, 400);
+    assert.strictEqual(
+      ctx.tabelas.prospeccao_campanhas.find(c => c.id === 60).data_envio, '2026-08-01');
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('campanha sem data de envio continua permitida', async () => {
+  // Campanha planejada e ainda não disparada não tem data — o piso não pode
+  // virar obrigatoriedade.
+  const ctx = await montar(baseDados());
+  try {
+    const resp = await chamar(ctx.porta, '/api/prospeccoes/1/campanhas', {
+      method: 'POST', body: JSON.stringify({ nome: 'Planejada', status: 'Planejada' })
+    });
+    assert.strictEqual(resp.status, 201);
   } finally {
     await ctx.encerrar();
   }

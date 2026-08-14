@@ -592,9 +592,11 @@ test('Sup Admin vê o ícone de trocar responsável', () => {
 test('quem não é Sup Admin não vê o ícone', () => {
   const html = renderizarLinha(false);
   assert.equal(html.includes('acao-responsavel'), false);
-  // As demais ações continuam lá — a restrição é só desta.
+  // Ver e editar continuam disponíveis; excluir é outra restrição, testada à
+  // parte — trocar o responsável e apagar a prospecção são do Sup Admin, o
+  // resto não.
   assert.match(html, /acao-editar/);
-  assert.match(html, /acao-excluir/);
+  assert.match(html, /acao-tabela--ver acao-ver/);
 });
 
 test('sem Permissoes carregado, o ícone não aparece', () => {
@@ -1079,9 +1081,93 @@ test('a conversão automática (tabela e lote) também é barrada', () => {
     path.join(__dirname, '..', 'modals', 'orcamento-editar.js'), 'utf8');
   assert.match(fonte, /exigeTransportadora\(\{ ignorarStatus: true \}\)/);
 
-  const auto = /autoOpenQuoteConversion\?\.id === id[\s\S]{0,900}?openConverterModal/.exec(fonte);
+  const auto = /autoOpenQuoteConversion\?\.id === id[\s\S]{0,1400}?openConverterModal/.exec(fonte);
   assert.ok(auto, 'não achei o bloco de conversão automática');
   assert.ok(
     auto[0].indexOf('exigeTransportadora') < auto[0].lastIndexOf('openConverterModal'),
     'a trava precisa vir antes de abrir a revisão');
+});
+
+
+// ---------------------------------------------------------------------------
+// Converter bloqueado não pode deixar rastro
+//
+// Dois estragos que a trava da transportadora causava justamente por barrar
+// tarde demais: o orçamento ficava "Aprovado" sem pedido nenhum, e a conversão
+// em lote seguia esperando uma revisão que nunca ia abrir.
+// ---------------------------------------------------------------------------
+
+const JS_EDITAR = fs.readFileSync(
+  path.join(__dirname, '..', 'modals', 'orcamento-editar.js'), 'utf8');
+const JS_LOTE = fs.readFileSync(
+  path.join(__dirname, '..', 'modals', 'pedido-converter-orcamentos.js'), 'utf8');
+
+test('o botão Converter checa a transportadora ANTES de marcar Aprovado', () => {
+  const trecho = /converterBtn\.addEventListener\('click'[\s\S]*?\}, true\);/.exec(JS_EDITAR);
+  assert.ok(trecho, 'não achei o handler do botão Converter');
+
+  const posChecagem = trecho[0].indexOf('exigeTransportadora');
+  const posAprovado = trecho[0].indexOf("currentStatus = 'Aprovado'");
+  assert.ok(posChecagem !== -1, 'a checagem sumiu do botão Converter');
+  assert.ok(posAprovado !== -1, 'não achei onde o status vira Aprovado');
+  assert.ok(
+    posChecagem < posAprovado,
+    'o status vira Aprovado antes da checagem — o orçamento fica aprovado sem pedido');
+});
+
+test('a conversão automática avisa quando aborta', () => {
+  // Sem o aviso, quem disparou a conversão em lote fica esperando uma revisão
+  // que nunca vai abrir, e ainda mostra a máscara de "convertendo".
+  const trecho = /autoOpenQuoteConversion\?\.id === id[\s\S]{0,1200}?openConverterModal/.exec(JS_EDITAR);
+  assert.ok(trecho, 'não achei o bloco de conversão automática');
+  assert.match(trecho[0], /conversaoAutomaticaAbortada/);
+});
+
+test('a conversão em lote corta o processo ao receber o aviso', () => {
+  assert.match(JS_LOTE, /conversaoAutomaticaAbortada/);
+
+  const espera = /async function esperarFimDaRevisao[\s\S]*?\n  \}/.exec(JS_LOTE);
+  assert.ok(espera, 'não achei esperarFimDaRevisao');
+  // Sai antes de exigir que a revisão apareça — senão espera os 20s do limite
+  // e ainda termina em erro. Ancorar no `return` e não em `abortou()`: a
+  // condição também aparece na espera acima, e ali sozinha não corta nada.
+  const posSaida = espera[0].indexOf("return 'abortado'");
+  assert.ok(posSaida !== -1, 'não há saída por aborto em esperarFimDaRevisao');
+  assert.ok(
+    posSaida < espera[0].indexOf('A revisão de estoque não abriu'),
+    'a saída por aborto precisa vir antes da exigência de abertura');
+});
+
+test('abortado não passa pela máscara de "convertendo"', () => {
+  const trecho = /async function revisarEConverter[\s\S]*?\n  \}/.exec(JS_LOTE);
+  assert.ok(trecho, 'não achei revisarEConverter');
+  const posAborto = trecho[0].indexOf("=== 'abortado'");
+  const posEspera = trecho[0].indexOf('abrirEspera');
+  assert.ok(posAborto !== -1, 'não achei o desvio de aborto');
+  assert.ok(
+    posAborto < posEspera,
+    'encenar "convertendo..." antes de dizer que não converteu é pior que não avisar');
+});
+
+// ---------------------------------------------------------------------------
+// Excluir prospecção é sempre do Sup Admin
+// ---------------------------------------------------------------------------
+
+test('a lixeira da grade é travada para quem não é Sup Admin', () => {
+  const html = renderizarLinha(false, { id: 9, nome_fantasia: 'Em jogo', etapa: 'Proposta' });
+  assert.ok(acoesTravadas(html).includes('excluir'));
+  assert.match(html, /title="Somente o Sup Admin pode excluir uma prospecção"/);
+});
+
+test('para o Sup Admin a lixeira segue liberada', () => {
+  const html = renderizarLinha(true, { id: 9, nome_fantasia: 'Em jogo', etapa: 'Proposta' });
+  assert.equal(acoesTravadas(html).includes('excluir'), false);
+  assert.match(html, /acao-tabela--excluir acao-excluir/);
+});
+
+test('a regra vale em qualquer etapa, não só nas encerradas', () => {
+  for (const etapa of ['Novo', 'Proposta', 'Ganho', 'Perdido']) {
+    const html = renderizarLinha(false, { id: 1, nome_fantasia: 'X', etapa });
+    assert.ok(acoesTravadas(html).includes('excluir'), `etapa ${etapa} deixou passar`);
+  }
 });

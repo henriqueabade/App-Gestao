@@ -668,9 +668,6 @@ function renderTabela(lista) {
         // propósito: negócio perdido volta a ser trabalhado, e Ganho sem
         // conversão precisa de conserto (foi o que travava o seu fluxo).
         const convertida = Boolean(p.cliente_id);
-        // A EXCLUSÃO é outra conversa: uma vez encerrada, apagar o registro do
-        // que aconteceu é decisão de Sup Admin. O backend cobra de novo.
-        const encerrada = p.etapa === 'Ganho' || p.etapa === 'Perdido' || convertida;
         const supAdmin = Boolean(window.Permissoes?.supAdmin);
 
         /**
@@ -710,7 +707,7 @@ function renderTabela(lista) {
                     ${acao({ perm: 'pros.stage.update', icone: 'fa-arrow-right-arrow-left', classe: 'acao-tabela--mover', gancho: 'acao-mover', titulo: 'Mover no funil', travada: convertida && motivoConvertida })}
                     ${supAdmin ? acao({ perm: 'pros.edit', icone: 'fa-user-pen', classe: 'acao-tabela--responsavel', gancho: 'acao-responsavel', titulo: 'Alterar responsável (Sup Admin)', travada: convertida && motivoConvertida }) : ''}
                     ${acao({ perm: 'pros.edit', icone: 'fa-edit', classe: 'acao-tabela--editar', gancho: 'acao-editar', titulo: 'Editar', travada: convertida && motivoConvertida })}
-                    ${acao({ perm: 'pros.delete', icone: 'fa-trash', classe: 'acao-tabela--excluir', gancho: 'acao-excluir', titulo: 'Excluir', travada: encerrada && !supAdmin && 'Prospecção encerrada — só o Sup Admin pode excluir' })}
+                    ${acao({ perm: 'pros.delete', icone: 'fa-trash', classe: 'acao-tabela--excluir', gancho: 'acao-excluir', titulo: 'Excluir', travada: !supAdmin && 'Somente o Sup Admin pode excluir uma prospecção' })}
                 </div>
             </td>`;
 

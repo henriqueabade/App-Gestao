@@ -328,9 +328,15 @@
   }
 
   /** Espera a revisão aparecer e, depois, sumir — os dois desfechos fecham. */
-  async function esperarFimDaRevisao(limiteAberturaMs = 20000) {
+  async function esperarFimDaRevisao(orcamento, limiteAberturaMs = 20000) {
+    const abortou = () => window.conversaoAutomaticaAbortada?.id === orcamento.id;
+
     const ateAbrir = Date.now() + limiteAberturaMs;
-    while (!revisaoNaTela() && Date.now() < ateAbrir) await esperar(150);
+    while (!revisaoNaTela() && !abortou() && Date.now() < ateAbrir) await esperar(150);
+
+    // A revisão foi recusada antes de abrir — falta transportadora, por
+    // exemplo. Não é erro nem desistência silenciosa: o processo PARA aqui.
+    if (abortou()) return 'abortado';
     if (!revisaoNaTela()) throw new Error('A revisão de estoque não abriu.');
 
     // Sem limite aqui de propósito: quem decide o tempo é o usuário, olhando
@@ -338,6 +344,7 @@
     while (revisaoNaTela()) await esperar(250);
     // Deixa o fechamento assentar antes de abrir o próximo.
     await esperar(400);
+    return 'revisado';
   }
 
   /**
@@ -355,8 +362,18 @@
       true
     );
 
-    await esperarFimDaRevisao();
+    const desfecho = await esperarFimDaRevisao(orcamento);
     window.autoOpenQuoteConversion = null;
+
+    if (desfecho === 'abortado') {
+      // Nada foi disparado no servidor: mostrar "convertendo..." e só então
+      // dizer que não converteu seria encenar um trabalho que não houve.
+      delete window.conversaoAutomaticaAbortada;
+      // O modal de edição fica aberto para o usuário preencher o que falta.
+      Modal.close('editarOrcamento');
+      await esperar(300);
+      return 'ignorado';
+    }
 
     // A revisão fechou, mas a conversão pode ainda estar rodando no servidor
     // (criar pedido, gravar faltantes, abater estoque). Enquanto isso a tela

@@ -51,6 +51,12 @@
       () => ({ prospeccaoCampanhaEditar: edicao }));
   }
 
+  // Piso do seletor de data: a campanha não pode ter sido enviada antes de a
+  // prospecção existir. O backend recusa de qualquer forma — aqui o calendário
+  // já nem oferece os dias impossíveis.
+  const nascimento = String(prospeccao.criado_em || '').slice(0, 10);
+  if (nascimento) get('campanhaDataEnvio')?.setAttribute('min', nascimento);
+
   get('campanhaProspeccaoForm')?.addEventListener('submit', e => e.preventDefault());
   setTimeout(() => get('campanhaNome')?.focus(), 60);
 

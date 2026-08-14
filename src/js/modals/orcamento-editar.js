@@ -1105,10 +1105,13 @@
       if (currentStatus !== 'Pendente') return; // deixa o handler original avisar
       e.preventDefault();
       if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+      // A checagem vem ANTES de mexer no status. Marcar "Aprovado" e só então
+      // barrar deixava o orçamento aprovado na tela sem pedido nenhum — e um
+      // salvamento seguinte gravaria isso.
+      if (exigeTransportadora({ ignorarStatus: true })) return;
       currentStatus = 'Aprovado';
       updateStatusTag();
       updateConverterBtn();
-      if (exigeTransportadora()) return;
       openConverterModal(() => saveChanges(true));
     }, true);
   }
@@ -1185,6 +1188,10 @@
       // confirmação joga fora toda a seleção que o usuário acabou de fazer.
       if (exigeTransportadora({ ignorarStatus: true })) {
         window.autoOpenQuoteConversion = null;
+        // Avisa quem disparou a conversão. Sem isto, a conversão em lote ficava
+        // esperando uma revisão que nunca ia abrir — e ainda mostrava a máscara
+        // de "convertendo" antes de desistir.
+        window.conversaoAutomaticaAbortada = { id, motivo: 'transportadora' };
         const overlayEdicao = document.getElementById('editarOrcamentoOverlay');
         overlayEdicao?.classList.remove('hidden');
         overlayEdicao?.removeAttribute('aria-hidden');
