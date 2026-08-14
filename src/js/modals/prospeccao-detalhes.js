@@ -948,7 +948,17 @@
     }, 8000);
 
     window.addEventListener('orcamentoModalLoaded', aoCarregar);
-    Modal.open(`modals/orcamentos/${html}`, `../js/modals/${script}`, overlayId, true);
+
+    // Nem todo modal de orçamento nasce escondido. Quando o overlay já vem
+    // visível, esperar o evento só serve para deixar a máscara por cima de uma
+    // tela pronta — foi o que fez "Novo orçamento" parecer travado por 8s.
+    Modal.open(`modals/orcamentos/${html}`, `../js/modals/${script}`, overlayId, true)
+      .then(() => {
+        const ov = document.getElementById(`${overlayId}Overlay`);
+        if (ov && !ov.classList.contains('hidden')) revelar();
+      })
+      .catch(() => revelar());
+
     return pronto;
   }
 

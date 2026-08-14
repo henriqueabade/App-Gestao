@@ -1065,8 +1065,12 @@
    * decisão peça a peça. Descobrir a falta só no fim jogaria fora todo esse
    * trabalho. Devolve  quando barrou.
    */
-  function exigeTransportadora() {
-    if (currentStatus !== 'Aprovado') return false;
+  function exigeTransportadora({ ignorarStatus = false } = {}) {
+    // `ignorarStatus`: na conversão disparada de fora (tabela de Orçamentos ou
+    // conversão em lote de Pedidos) o status ainda é "Pendente" — ele só vira
+    // "Aprovado" DEPOIS da revisão. Sem esta saída, a trava não alcançava
+    // justamente o caminho em que o usuário mais perde trabalho.
+    if (!ignorarStatus && currentStatus !== 'Aprovado') return false;
 
     // Num OCRP a transportadora é digitada; num orçamento de cliente ela é
     // escolhida na lista do próprio cliente.
@@ -1177,6 +1181,15 @@
     // (aprovar o orçamento -> gerar o pedido) e fechar tudo, sem reexibir a
     // edição. Antes, o callback vazio fazia o modal apenas fechar sem converter.
     setTimeout(() => {
+      // Cobrada ANTES de abrir a revisão de peças: descobrir a falta só na
+      // confirmação joga fora toda a seleção que o usuário acabou de fazer.
+      if (exigeTransportadora({ ignorarStatus: true })) {
+        window.autoOpenQuoteConversion = null;
+        const overlayEdicao = document.getElementById('editarOrcamentoOverlay');
+        overlayEdicao?.classList.remove('hidden');
+        overlayEdicao?.removeAttribute('aria-hidden');
+        return;
+      }
       openConverterModal(() => {
         currentStatus = 'Aprovado';
         try { updateStatusTag?.(); updateConverterBtn?.(); } catch (_) {}

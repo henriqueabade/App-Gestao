@@ -1014,3 +1014,74 @@ test('a lista de orçamentos recarrega os nomes quando aparece um id novo', () =
   assert.match(JS_ORCAMENTOS, /faltaCliente/);
   assert.match(JS_ORCAMENTOS, /!cacheClientes\.has\(o\.cliente_id\)/);
 });
+
+
+// ---------------------------------------------------------------------------
+// Abertura dos modais de Orçamento a partir da prospecção
+//
+// Quem abre põe uma máscara de espera e só a tira quando o modal avisa que
+// carregou. `orcamento-novo.js` era o único dos três que NÃO avisava — a
+// máscara ficava 8 segundos por cima de uma tela que já estava pronta, e o
+// usuário lia isso como travamento.
+// ---------------------------------------------------------------------------
+
+const MODAIS_ORCAMENTO = ['orcamento-novo', 'orcamento-editar', 'orcamento-visualizar'];
+
+test('todo modal de orçamento anuncia que carregou', () => {
+  const mudos = MODAIS_ORCAMENTO.filter(nome => {
+    const fonte = fs.readFileSync(
+      path.join(__dirname, '..', 'modals', nome + '.js'), 'utf8');
+    return !/dispatchEvent\(\s*new CustomEvent\(\s*'orcamentoModalLoaded'/.test(fonte);
+  });
+  assert.deepEqual(mudos, [], 'modais que não avisam: ' + mudos.join(', '));
+});
+
+test('o abridor não fica refém do evento', () => {
+  // Rede de segurança dupla: se o overlay já vem visível, revela na hora, sem
+  // esperar aviso nenhum. Foi assim que a máscara de 8s virou 49ms.
+  const fonte = fs.readFileSync(
+    path.join(__dirname, '..', 'modals', 'prospeccao-detalhes.js'), 'utf8');
+  const trecho = /function abrirModalOrcamento[\s\S]*?\n  \}/.exec(fonte);
+  assert.ok(trecho, 'não achei abrirModalOrcamento');
+  assert.match(trecho[0], /classList\.contains\('hidden'\)/);
+  assert.match(trecho[0], /revelar\(\)/);
+});
+
+// ---------------------------------------------------------------------------
+// Transportadora cobrada ANTES da revisão de peças
+//
+// O erro aparecia só na confirmação, depois de o usuário revisar peça a peça.
+// Todo o trabalho de seleção era perdido por uma restrição do passo anterior.
+// ---------------------------------------------------------------------------
+
+test('a linha da tabela carrega a transportadora para a checagem', () => {
+  // O handler do botão Converter fica FORA do laço das linhas e não enxerga o
+  // orçamento — por isso o dado viaja no dataset.
+  assert.match(JS_ORCAMENTOS, /tr\.dataset\.transportadora\s*=/);
+});
+
+test('o botão Converter barra antes de abrir a revisão', () => {
+  const trecho = /fa-money-bill-wave[\s\S]{0,2200}?openConversionFlow\(id\)/.exec(JS_ORCAMENTOS);
+  assert.ok(trecho, 'não achei o handler do botão Converter');
+  assert.match(trecho[0], /dataset\.transportadora/);
+  assert.match(trecho[0], /DialogPadrao\?\.confirm/);
+  // A checagem tem de vir ANTES da abertura, não depois.
+  assert.ok(
+    trecho[0].indexOf('dataset.transportadora') < trecho[0].lastIndexOf('openConversionFlow'),
+    'a checagem ficou depois de abrir a revisão');
+});
+
+test('a conversão automática (tabela e lote) também é barrada', () => {
+  // Neste caminho o status ainda é "Pendente" — só vira "Aprovado" depois da
+  // revisão. Sem ignorar o status, a trava não alcançava justamente o caminho
+  // em que o usuário mais perde trabalho.
+  const fonte = fs.readFileSync(
+    path.join(__dirname, '..', 'modals', 'orcamento-editar.js'), 'utf8');
+  assert.match(fonte, /exigeTransportadora\(\{ ignorarStatus: true \}\)/);
+
+  const auto = /autoOpenQuoteConversion\?\.id === id[\s\S]{0,900}?openConverterModal/.exec(fonte);
+  assert.ok(auto, 'não achei o bloco de conversão automática');
+  assert.ok(
+    auto[0].indexOf('exigeTransportadora') < auto[0].lastIndexOf('openConverterModal'),
+    'a trava precisa vir antes de abrir a revisão');
+});

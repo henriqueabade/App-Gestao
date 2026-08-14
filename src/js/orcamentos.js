@@ -318,6 +318,9 @@ async function carregarOrcamentos() {
             tr.setAttribute('onmouseout', "this.style.background='transparent'");
             tr.dataset.id = o.id;
             tr.dataset.dono = o.dono || o.vendedor || '';
+            // Guardada na linha para o botão Converter checá-la ANTES de abrir a
+            // revisão de peças — o handler dele fica fora deste laço.
+            tr.dataset.transportadora = (o.transportadora || '').trim();
             if (o.dono) owners.add(o.dono);
             const condicao = o.parcelas > 1 ? `${o.parcelas}x` : 'À vista';
             const badgeClass = statusClasses[o.situacao] || 'badge-neutral';
@@ -451,7 +454,7 @@ async function carregarOrcamentos() {
             });
         });
         tbody.querySelectorAll('.fa-money-bill-wave').forEach(icon => {
-            icon.addEventListener('click', e => {
+            icon.addEventListener('click', async e => {
                 e.stopPropagation();
                 const tr = e.currentTarget.closest('tr');
                 const status = tr?.cells?.[5]?.innerText?.trim() || '';
@@ -465,6 +468,25 @@ async function carregarOrcamentos() {
                 }
                 const id = tr?.dataset.id;
                 if (!id) return;
+
+                // A transportadora é exigida para gerar o pedido. Descobrir isso
+                // só DEPOIS da revisão peça a peça joga fora todo o trabalho de
+                // seleção — o erro aparecia no fim, na confirmação.
+                if (!tr.dataset.transportadora) {
+                    const numero = tr.cells?.[0]?.innerText?.trim() || `#${id}`;
+                    const abrir = await window.DialogPadrao?.confirm({
+                        title: 'Falta a transportadora',
+                        message: `O orçamento ${numero} não tem transportadora definida, e ela é obrigatória para gerar o pedido.
+
+Abrir o orçamento para preencher agora?`,
+                        confirmText: 'Abrir orçamento'
+                    });
+                    if (!abrir) return;
+                    window.selectedQuoteId = id;
+                    openQuoteModal('modals/orcamentos/editar.html', '../js/modals/orcamento-editar.js', 'editarOrcamento');
+                    return;
+                }
+
                 openConversionFlow(id);
             });
         });

@@ -825,6 +825,11 @@
   document.getElementById('cancelarNovoOrcamento').addEventListener('click', fecharLimpando);
   document.getElementById('voltarNovoOrcamento').addEventListener('click', fecharLimpando);
 
+  // Anuncia o carregamento, como `orcamento-editar.js` e `orcamento-visualizar.js`
+  // já faziam. Este era o único dos três que não avisava — e quem abre o modal
+  // esperando o aviso ficava preso na máscara de espera até o tempo limite.
+  window.dispatchEvent(new CustomEvent('orcamentoModalLoaded', { detail: overlayId }));
+
   const limparBtn = document.getElementById('limparNovoOrcamento');
   if (limparBtn) {
     limparBtn.addEventListener('click', () => {
