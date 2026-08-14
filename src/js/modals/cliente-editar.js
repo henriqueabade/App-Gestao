@@ -27,6 +27,11 @@
   }
   let contatos = [];
   const contatosExcluidos = [];
+
+  // Transportadoras: mesma mecânica dos contatos — a tela acumula o que mudou e
+  // tudo vai junto no salvamento do cliente.
+  let transportadoras = [];
+  const transportadorasExcluidas = [];
   if(cliente){
     const titulo = document.getElementById('clienteEditarTitulo');
     if(titulo) titulo.textContent = `Editar – ${cliente.nome_fantasia || ''}`;
@@ -322,6 +327,117 @@
     Modal.open('modals/clientes/contato.html', '../js/modals/cliente-contato.js', 'novoContatoCliente', true);
   });
 
+  // ------------------------------------------------------------------------
+  // Transportadoras do cliente
+  //
+  // São as opções oferecidas no campo Transportadora ao emitir um orçamento
+  // para ele. Sem esta tela, a única forma de cadastrar uma era converter uma
+  // prospecção — que grava a primeira automaticamente.
+  // ------------------------------------------------------------------------
+  function escaparHtml(v){
+    return String(v ?? '')
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
+  function renderTransportadoras(){
+    const tbody = document.getElementById('transportadorasTabela');
+    if(!tbody) return;
+    if(!transportadoras.length){
+      tbody.innerHTML = '<tr><td colspan="2" class="py-12 text-left text-gray-400">Nenhuma transportadora cadastrada</td></tr>';
+      return;
+    }
+    tbody.innerHTML = transportadoras.map((t, i) => `
+      <tr class="border-b border-white/5">
+        <td class="py-4 px-4 text-white">${escaparHtml(t.transportadora)}</td>
+        <td class="py-4 px-4">
+          <div class="flex items-center gap-2">
+            <i class="fas fa-edit w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10"
+               style="color: var(--color-primary)" data-editar-transp="${i}" title="Editar"></i>
+            <i class="fas fa-trash w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10"
+               style="color: var(--color-red)" data-remover-transp="${i}" title="Excluir"></i>
+          </div>
+        </td>
+      </tr>`).join('');
+  }
+
+  async function carregarTransportadoras(){
+    if(!cliente?.id) { renderTransportadoras(); return; }
+    try{
+      const res = await fetchApi(`/api/transportadoras/${cliente.id}`);
+      if(!res.ok) throw new Error(`Erro HTTP ${res.status}`);
+      const dados = await res.json();
+      transportadoras = (Array.isArray(dados) ? dados : [])
+        .map(t => ({ id: t.id, transportadora: t.nome || t.transportadora }));
+    }catch(err){
+      console.error('Erro ao carregar transportadoras', err);
+      transportadoras = [];
+    }
+    renderTransportadoras();
+  }
+
+  document.getElementById('addTransportadoraBtn')?.addEventListener('click', () => {
+    delete window.clienteTransportadoraEditar;
+    Modal.open('modals/clientes/transportadora.html',
+      '../js/modals/cliente-transportadora.js', 'transportadoraCliente', true);
+  });
+
+  document.getElementById('transportadorasTabela')?.addEventListener('click', async e => {
+    const editar = e.target.closest('[data-editar-transp]');
+    if(editar){
+      const i = Number(editar.dataset.editarTransp);
+      const t = transportadoras[i];
+      if(!t) return;
+      window.clienteTransportadoraEditar = { ...t, indice: i };
+      Modal.open('modals/clientes/transportadora.html',
+        '../js/modals/cliente-transportadora.js', 'transportadoraCliente', true);
+      return;
+    }
+
+    const remover = e.target.closest('[data-remover-transp]');
+    if(remover){
+      const i = Number(remover.dataset.removerTransp);
+      const t = transportadoras[i];
+      if(!t) return;
+      const ok = await window.DialogPadrao?.confirm({
+        title: 'Excluir esta transportadora?',
+        message: `"${t.transportadora}" deixa de aparecer nos orçamentos deste cliente. Orçamentos já emitidos guardam o nome e não mudam.`,
+        confirmText: 'Excluir'
+      });
+      if(!ok) return;
+      // Só entra na lista de exclusão quem já existe no banco; a que foi
+      // digitada e removida na mesma sessão nunca chegou lá.
+      if(t.id && t.status !== 'new') transportadorasExcluidas.push(t.id);
+      transportadoras.splice(i, 1);
+      renderTransportadoras();
+    }
+  });
+
+  function aoSalvarTransportadora(e){
+    const dados = e.detail || {};
+    if(dados.indice !== undefined && transportadoras[dados.indice]){
+      const atual = transportadoras[dados.indice];
+      atual.transportadora = dados.transportadora;
+      // Já existia no banco: passa a contar como alteração.
+      if(atual.id && atual.status !== 'new') atual.status = 'updated';
+    }else{
+      transportadoras.push({ transportadora: dados.transportadora, status: 'new' });
+    }
+    renderTransportadoras();
+  }
+
+  window.addEventListener('clienteTransportadoraSalva', aoSalvarTransportadora);
+  // Sem soltar, o ouvinte sobrevive ao modal: abrir a ficha de OUTRO cliente
+  // deixaria dois escutando, e o antigo repintaria a tabela do novo com a
+  // lista do cliente anterior.
+  window.addEventListener('modal-ready', function soltar(e){
+    if(e.detail !== 'editarCliente') return;
+    window.removeEventListener('clienteTransportadoraSalva', aoSalvarTransportadora);
+    window.removeEventListener('modal-ready', soltar);
+  });
+
+  carregarTransportadoras();
+
   applyPreferencias();
 
   window.addEventListener('clienteContatoAdicionado', e => {
@@ -434,11 +550,24 @@
       anotacoes: document.getElementById('clienteNotas')?.value || '',
       contatosNovos,
       contatosAtualizados,
-      contatosExcluidos
+      contatosExcluidos,
+      transportadorasNovas: transportadoras
+        .filter(t => t.status === 'new')
+        .map(t => ({ transportadora: t.transportadora })),
+      transportadorasAtualizadas: transportadoras
+        .filter(t => t.status === 'updated')
+        .map(t => ({ id: t.id, transportadora: t.transportadora })),
+      transportadorasExcluidas
     };
   }
 
-  const salvarBtn = overlay.querySelector('footer .btn-primary');
+  // O botão de salvar é `btn-success` no rodapé — `footer .btn-primary` não
+  // casava com nada, `salvarBtn` ficava null e o handler NUNCA era registrado:
+  // salvar o cliente não fazia coisa alguma. Agora ele tem id próprio, e o
+  // seletor antigo fica como plano B para não depender só do HTML.
+  const salvarBtn = document.getElementById('salvarEditarCliente')
+    || overlay.querySelector('footer .btn-success')
+    || overlay.querySelector('footer .btn-primary');
   if(salvarBtn && cliente){
     salvarBtn.addEventListener('click', async () => {
       const dados = coletarDados();

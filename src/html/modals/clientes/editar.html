@@ -12,6 +12,7 @@
         <button id="tab-contatos" role="tab" aria-selected="false" aria-controls="panel-contatos" tabindex="-1" class="py-4 px-2 text-sm font-medium text-gray-400 border-b-2 border-transparent hover:text-white transition whitespace-nowrap">Contatos</button>
         <button id="tab-enderecos" role="tab" aria-selected="false" aria-controls="panel-enderecos" tabindex="-1" class="py-4 px-2 text-sm font-medium text-gray-400 border-b-2 border-transparent hover:text-white transition whitespace-nowrap">Endereços</button>
         <button id="tab-ordens" role="tab" aria-selected="false" aria-controls="panel-ordens" tabindex="-1" class="py-4 px-2 text-sm font-medium text-gray-400 border-b-2 border-transparent hover:text-white transition whitespace-nowrap">Ordens</button>
+        <button id="tab-transportadoras" role="tab" aria-selected="false" aria-controls="panel-transportadoras" tabindex="-1" class="py-4 px-2 text-sm font-medium text-gray-400 border-b-2 border-transparent hover:text-white transition whitespace-nowrap">Transportadoras</button>
         <button id="tab-notas" role="tab" aria-selected="false" aria-controls="panel-notas" tabindex="-1" class="py-4 px-2 text-sm font-medium text-gray-400 border-b-2 border-transparent hover:text-white transition whitespace-nowrap">Notas</button>
       </div>
     </nav>
@@ -263,6 +264,34 @@
         </div>
       </section>
 
+      <section id="panel-transportadoras" role="tabpanel" aria-labelledby="tab-transportadoras" class="px-8 py-6 hidden">
+        <div class="flex justify-between items-center mb-6">
+          <div>
+            <h3 class="text-lg font-semibold text-white">Transportadoras</h3>
+            <p class="text-xs text-gray-400 mt-1">
+              São as opções oferecidas ao emitir um orçamento para este cliente.
+            </p>
+          </div>
+          <button id="addTransportadoraBtn" type="button" data-perm="cli.edit"
+                  class="btn-primary px-4 py-2 rounded-lg text-white font-medium">+ Nova Transportadora</button>
+        </div>
+        <div class="glass-surface rounded-xl border border-white/10 overflow-hidden">
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+              <thead class="glass-surface">
+                <tr class="border-b border-white/10">
+                  <th class="text-left py-4 px-4 text-gray-300 font-medium">TRANSPORTADORA</th>
+                  <th class="text-left py-4 px-4 text-gray-300 font-medium w-32">AÇÕES</th>
+                </tr>
+              </thead>
+              <tbody id="transportadorasTabela">
+                <tr><td colspan="2" class="py-12 text-left text-gray-400">Nenhuma transportadora cadastrada</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
       <section id="panel-notas" role="tabpanel" aria-labelledby="tab-notas" class="px-8 py-6 hidden">
         <div>
           <label class="block text-sm font-medium text-gray-300 mb-2">Observações</label>
@@ -273,7 +302,7 @@
 
     <footer class="flex justify-end items-center gap-4 px-8 py-5 border-t border-white/10 flex-shrink-0">
       <button id="cancelarEditarCliente" class="btn-danger px-6 py-2 rounded-lg text-white font-medium min-w-[120px]">Cancelar</button>
-      <button class="btn-success px-6 py-2 rounded-lg text-white font-medium min-w-[120px]">Salvar</button>
+      <button id="salvarEditarCliente" data-perm="cli.edit" class="btn-success px-6 py-2 rounded-lg text-white font-medium min-w-[120px]">Salvar</button>
     </footer>
   </div>
 </div>

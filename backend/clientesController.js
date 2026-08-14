@@ -287,8 +287,13 @@ function permissoesDeEdicaoCliente(req) {
   if (temItens(corpo.contatosNovos)) chaves.push('cli.contact.add');
   if (temItens(corpo.contatosAtualizados)) chaves.push('cli.contact.edit');
   if (temItens(corpo.contatosExcluidos)) chaves.push('cli.contact.remove');
+  // Transportadora é dado do cliente, sem permissão própria no catálogo — quem
+  // pode editar o cliente pode mexer nas transportadoras dele.
   return chaves;
 }
+
+/** Nome da transportadora, limpo. Vazio não vira linha no banco. */
+const nomeTransportadora = t => String(t?.transportadora ?? t?.nome ?? '').trim();
 
 router.put('/:id', exigirPermissao(permissoesDeEdicaoCliente), async (req, res) => {
   const { id } = req.params;
@@ -311,7 +316,10 @@ router.put('/:id', exigirPermissao(permissoesDeEdicaoCliente), async (req, res) 
 
     const contatosAtualizados = Array.isArray(cli.contatosAtualizados) ? cli.contatosAtualizados : [];
     for(const ct of contatosAtualizados){
-      await api.put(`/contatos_cliente/${ct.id}`, {
+      // O `/api` faltava aqui e no DELETE abaixo: `api.put` concatena o caminho
+      // cru na base, então isso batia em https://.../contatos_cliente/N, que não
+      // é rota nenhuma. Editar e excluir contato de cliente não funcionava.
+      await api.put(`/api/contatos_cliente/${ct.id}`, {
         id_cliente: id,
         nome: ct.nome,
         cargo: ct.cargo,
@@ -323,7 +331,30 @@ router.put('/:id', exigirPermissao(permissoesDeEdicaoCliente), async (req, res) 
 
     const contatosExcluidos = Array.isArray(cli.contatosExcluidos) ? cli.contatosExcluidos : [];
     for(const cid of contatosExcluidos){
-      await api.delete(`/contatos_cliente/${cid}`);
+      await api.delete(`/api/contatos_cliente/${cid}`);
+    }
+
+    // ----------------------------------------------------------------------
+    // Transportadoras do cliente
+    //
+    // Mesmo desenho dos contatos: a tela acumula o que mudou e manda tudo no
+    // salvamento. A tabela tem uma coluna só de conteúdo (`transportadora`).
+    // ----------------------------------------------------------------------
+    for (const t of Array.isArray(cli.transportadorasNovas) ? cli.transportadorasNovas : []) {
+      const nome = nomeTransportadora(t);
+      if (!nome) continue;
+      await api.post('/api/transportadoras', { id_cliente: Number(id), transportadora: nome });
+    }
+
+    for (const t of Array.isArray(cli.transportadorasAtualizadas) ? cli.transportadorasAtualizadas : []) {
+      const nome = nomeTransportadora(t);
+      if (!t?.id || !nome) continue;
+      await api.put(`/api/transportadoras/${t.id}`, { id_cliente: Number(id), transportadora: nome });
+    }
+
+    for (const tid of Array.isArray(cli.transportadorasExcluidas) ? cli.transportadorasExcluidas : []) {
+      if (!tid) continue;
+      await api.delete(`/api/transportadoras/${tid}`);
     }
 
     res.json({ success: true });

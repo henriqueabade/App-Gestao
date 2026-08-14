@@ -58,6 +58,7 @@ async function carregarContatos(idCliente) {
         await preencherEnderecos(data.cliente);
         const contatos = await carregarContatos(cliente.id);
         renderContatos(contatos);
+        renderTransportadoras(await carregarTransportadoras(cliente.id));
         inicializarToggles(data.cliente);
         const notas = document.getElementById('clienteNotas');
         if(notas) notas.value = data.cliente.anotacoes || '';
@@ -216,6 +217,40 @@ async function carregarContatos(idCliente) {
     await fill('reg', cli.endereco_registro);
     await fill('cob', cli.endereco_cobranca);
     await fill('ent', cli.endereco_entrega);
+  }
+
+  /** Transportadoras do cliente. O backend já devolve {id, nome}. */
+  async function carregarTransportadoras(idCliente){
+    if(!idCliente) return [];
+    try {
+      const res = await fetchApi(`/api/transportadoras/${idCliente}`);
+      if(!res.ok) throw new Error(`Erro HTTP ${res.status}`);
+      const dados = await res.json();
+      return Array.isArray(dados) ? dados : [];
+    } catch(err){
+      console.error('Erro ao carregar transportadoras', err);
+      return [];
+    }
+  }
+
+  function renderTransportadoras(lista){
+    const tbody = document.getElementById('transportadorasTabela');
+    if(!tbody) return;
+    if(!lista.length){
+      tbody.innerHTML = '<tr><td class="py-12 text-left text-gray-400">Nenhuma transportadora cadastrada</td></tr>';
+      return;
+    }
+    tbody.innerHTML = lista.map(t => `
+      <tr class="border-b border-white/5">
+        <td class="py-4 px-4 text-white">${escaparHtml(t.nome || t.transportadora)}</td>
+      </tr>`).join('');
+  }
+
+  /** Escapa antes do innerHTML — o nome é texto digitado por gente. */
+  function escaparHtml(v){
+    return String(v ?? '')
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
   }
 
   function renderContatos(contatos){

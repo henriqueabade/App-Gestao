@@ -1,0 +1,31 @@
+<div id="transportadoraClienteOverlay" class="fixed inset-0 z-[1300] bg-black/50 flex items-center justify-center p-4">
+  <div class="max-w-md w-full glass-surface backdrop-blur-xl rounded-2xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade">
+    <header class="grid grid-cols-3 items-center px-6 py-4 border-b border-white/10">
+      <button id="voltarTransportadoraCliente" type="button" class="btn-neutral px-4 py-2 rounded-lg text-white font-medium justify-self-start">← Voltar</button>
+      <h2 id="tituloTransportadoraCliente" class="text-lg font-semibold text-white text-center whitespace-nowrap">Nova Transportadora</h2>
+      <span></span>
+    </header>
+
+    <form id="transportadoraClienteForm" class="p-6 space-y-4">
+      <div>
+        <label for="transportadoraNome" class="block text-sm font-medium text-gray-300 mb-2">
+          Nome da transportadora <span class="text-[var(--color-red)]">*</span>
+        </label>
+        <input id="transportadoraNome" type="text" maxlength="120" required
+               placeholder="Braspress, Jamef, Correios, retirada no local..."
+               class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/50 transition" />
+      </div>
+
+      <p class="text-xs text-gray-400 rounded-lg border border-white/10 bg-white/5 p-3">
+        <i class="fas fa-circle-info mr-1"></i>
+        Cada cliente tem a própria lista. Ela é o que aparece no campo
+        <strong>Transportadora</strong> ao emitir um orçamento para ele.
+      </p>
+    </form>
+
+    <footer class="flex justify-end gap-4 px-6 py-4 border-t border-white/10">
+      <button id="cancelarTransportadoraCliente" type="button" class="btn-danger px-6 py-2 rounded-lg text-white font-medium">Cancelar</button>
+      <button type="submit" form="transportadoraClienteForm" id="salvarTransportadoraCliente" class="btn-success px-6 py-2 rounded-lg font-medium">Salvar</button>
+    </footer>
+  </div>
+</div>
