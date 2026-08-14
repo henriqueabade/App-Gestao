@@ -820,16 +820,29 @@
       if (!window.Permissoes?.supAdmin) {
         desligar('detProspExcluir', 'Prospecção convertida — só o Sup Admin pode excluir');
       }
+
+      // Os botões do TOPO não eram tudo: as abas seguiam com "+ Novo contato",
+      // "+ Nova nota", editar e excluir funcionando. A ficha continuava
+      // editável por dentro, que foi o que você viu.
+      ['detProspNovoContato', 'detProspNovaInteracao', 'detProspNovaNota',
+       'detProspNovaCampanha', 'detProspProximoPasso', 'detProspConcluirPasso']
+        .forEach(id => desligar(id, virou));
+
+      // As lixeiras e lápis desenhados dentro das listas.
+      overlay.querySelectorAll('[data-editar], [data-remover], [data-remover-contato], [data-editar-contato]')
+        .forEach(el => {
+          el.classList.add('acao-tabela--inerte');
+          el.setAttribute('title', virou);
+          el.dataset.inerte = 'true';
+        });
       return;
     }
 
-    // Perdida: a negociação acabou. Continua editável só o que é registro
-    // (notas, atividades), mas o funil e a ficha ficam como ficaram.
-    if (p.etapa === 'Perdido') {
-      desligar('detProspMoverFunil', 'Prospecção perdida — negociação encerrada');
-      desligar('detProspConverter', 'Prospecção perdida — não há o que converter');
+    // Perdida NÃO trava mais o funil nem a edição: negócio perdido volta a ser
+    // trabalhado. Só a exclusão continua restrita — é o registro do que houve.
+    if (p.etapa === 'Perdido' || p.etapa === 'Ganho') {
       if (!window.Permissoes?.supAdmin) {
-        desligar('detProspExcluir', 'Prospecção perdida — só o Sup Admin pode excluir');
+        desligar('detProspExcluir', 'Prospecção encerrada — só o Sup Admin pode excluir');
       }
     }
   }

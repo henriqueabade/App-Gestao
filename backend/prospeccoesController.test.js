@@ -39,7 +39,15 @@ const COLUNAS = {
   clientes: ['id', 'nome_fantasia', 'razao_social', 'cnpj', 'status_cliente'],
   contatos_cliente: ['id', 'id_cliente', 'nome', 'cargo', 'email', 'telefone_fixo', 'telefone_celular'],
   usuarios: ['id', 'nome', 'perfil', 'modelo_permissoes_id'],
-  modelos_permissoes: ['id', 'nome']
+  modelos_permissoes: ['id', 'nome'],
+  // Tabela real de permissões do módulo (`perm_pros` no catálogo). Sem ela no
+  // duplo, todo usuário sem Sup Admin cai em "tudo negado" e um teste de
+  // permissão específica passaria por vazio.
+  perm_pros: [
+    'id', 'modelo_id', 'modulo_ativo',
+    'acao_view', 'acao_search', 'acao_details_view', 'acao_create',
+    'acao_edit', 'acao_delete', 'acao_stage_update'
+  ]
 };
 
 /** Filhas que caem junto com a prospecção (ON DELETE CASCADE no DDL real). */
@@ -217,6 +225,7 @@ function baseDados() {
       { id: 3, nome: 'João Silva', perfil: 'Vendedor', modelo_permissoes_id: null }
     ],
     modelos_permissoes: [],
+    perm_pros: [],
     clientes: [],
     contatos_cliente: [],
     orcamentos: [],
@@ -1981,6 +1990,139 @@ test('prospecção convertida não é editada pela ficha', async () => {
     assert.strictEqual(resp.status, 409);
     assert.match((await resp.json()).error, /módulo Clientes/i);
     assert.strictEqual(ctx.tabelas.prospeccoes.find(p => p.id === 4).nome_fantasia, 'Ganha Convertida');
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+
+
+/**
+ * Dá ao usuário 2 (Vendedor, não Sup Admin) a permissão `pros.delete`.
+ *
+ * Sem isto ele seria barrado pelo `exigirPermissao` e o teste passaria por
+ * vazio — não provaria nada sobre a trava de Sup Admin que veio depois.
+ */
+function darPermissaoDeExcluir(dados) {
+  dados.modelos_permissoes = [{ id: 9, nome: 'Vendedor' }];
+  dados.usuarios.find(u => u.id === 2).modelo_permissoes_id = 9;
+  dados.perm_pros = [{
+    id: 1, modelo_id: 9, modulo_ativo: true,
+    acao_view: true, acao_delete: true, acao_details_view: true
+  }];
+}
+
+// ---------------------------------------------------------------------------
+// Perdido volta a ser trabalhável
+//
+// A trava da Etapa 12 pegou pesado: negócio perdido volta à mesa, e Ganho sem
+// conversão precisa de conserto. Só a CONVERTIDA sai do jogo — os dados dela
+// já viraram cadastro de cliente, e a versão do cliente é a que vale.
+// ---------------------------------------------------------------------------
+
+test('prospecção Perdida pode ser movida de volta no funil', async () => {
+  const ctx = await montar(baseDados());
+  try {
+    // A 5 está Perdido/arquivada na massa.
+    const resp = await chamar(ctx.porta, '/api/prospeccoes/5/etapa', {
+      method: 'PATCH', body: JSON.stringify({ etapa: 'Negociação' })
+    });
+    assert.strictEqual(resp.status, 200);
+
+    const p = ctx.tabelas.prospeccoes.find(x => x.id === 5);
+    assert.strictEqual(p.etapa, 'Negociação');
+    // Sai do arquivo junto: voltou a ser oportunidade viva.
+    assert.strictEqual(p.status, 'ativa');
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('prospecção Perdida pode ser editada', async () => {
+  const ctx = await montar(baseDados());
+  try {
+    const resp = await chamar(ctx.porta, '/api/prospeccoes/5', {
+      method: 'PUT', body: JSON.stringify({ nome_fantasia: 'Perdida Ltda (retomada)' })
+    });
+    assert.strictEqual(resp.status, 200);
+    assert.strictEqual(
+      ctx.tabelas.prospeccoes.find(p => p.id === 5).nome_fantasia,
+      'Perdida Ltda (retomada)');
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('convertida continua fora do funil e da edição', async () => {
+  const ctx = await montar(baseDados());
+  try {
+    const mover = await chamar(ctx.porta, '/api/prospeccoes/4/etapa', {
+      method: 'PATCH', body: JSON.stringify({ etapa: 'Negociação' })
+    });
+    assert.strictEqual(mover.status, 409);
+
+    const editar = await chamar(ctx.porta, '/api/prospeccoes/4', {
+      method: 'PUT', body: JSON.stringify({ nome_fantasia: 'Outro' })
+    });
+    assert.strictEqual(editar.status, 409);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Excluir encerrada é do Sup Admin — cobrado no BACKEND
+//
+// A grade escondia o botão, mas o backend deixava passar: bastava a permissão
+// `pros.delete` e uma chamada direta.
+// ---------------------------------------------------------------------------
+
+test('usuário comum não exclui prospecção Ganha', async () => {
+  const dados = baseDados();
+  darPermissaoDeExcluir(dados);
+  const ctx = await montar(dados);
+  try {
+    const resp = await chamar(ctx.porta, '/api/prospeccoes/4', { usuario: 2, method: 'DELETE' });
+    assert.strictEqual(resp.status, 403);
+    assert.ok(ctx.tabelas.prospeccoes.some(p => p.id === 4), 'a prospecção não podia ter sumido');
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('usuário comum não exclui prospecção Perdida', async () => {
+  const dados = baseDados();
+  darPermissaoDeExcluir(dados);
+  const ctx = await montar(dados);
+  try {
+    const resp = await chamar(ctx.porta, '/api/prospeccoes/5', { usuario: 2, method: 'DELETE' });
+    assert.strictEqual(resp.status, 403);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('Sup Admin exclui a encerrada normalmente', async () => {
+  const ctx = await montar(baseDados());
+  try {
+    const resp = await chamar(ctx.porta, '/api/prospeccoes/5', { method: 'DELETE' });
+    assert.strictEqual(resp.status, 200);
+    assert.strictEqual(ctx.tabelas.prospeccoes.some(p => p.id === 5), false);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('prospecção em andamento não exige Sup Admin para excluir', async () => {
+  // A restrição é sobre o registro ENCERRADO. Negócio em curso segue a
+  // permissão normal do módulo.
+  const dados = baseDados();
+  darPermissaoDeExcluir(dados);
+  const ctx = await montar(dados);
+  try {
+    // A 1 está Qualificado.
+    const resp = await chamar(ctx.porta, '/api/prospeccoes/1', { usuario: 2, method: 'DELETE' });
+    assert.strictEqual(resp.status, 200);
   } finally {
     await ctx.encerrar();
   }

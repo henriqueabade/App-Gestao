@@ -466,3 +466,17 @@ input[type="date"]:valid::-webkit-datetime-edit {
     opacity: 0;
     cursor: pointer;
 }
+
+/* Mesmo bordô do "Modelos de Permissão" em Usuários: as duas são ações de
+   entrada para um fluxo à parte, e agora se leem como a mesma família. */
+.btn-bordo {
+    background: var(--color-bordeaux);
+    color: #fff;
+    transition: all 150ms ease;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.btn-bordo:hover {
+    background: rgba(106, 21, 44, 0.85);
+    transform: scale(1.03);
+}

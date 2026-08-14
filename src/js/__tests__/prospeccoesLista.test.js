@@ -828,7 +828,9 @@ test('todo tipo de exclusão da ficha tem texto de confirmação próprio', () =
 });
 
 test('a exclusão de contato pergunta antes', () => {
-  const trecho = /data-remover-contato[\s\S]{0,900}?\}\);/.exec(FONTE_DETALHES);
+  // Ancora no HANDLER, não na primeira aparição do atributo: ele também
+  // aparece na marcação da linha e no bloco que trava a ficha convertida.
+  const trecho = /closest\('\[data-remover-contato\]'\)[\s\S]{0,900}?\}\);/.exec(FONTE_DETALHES);
   assert.ok(trecho, 'não achei o handler de remover contato');
   assert.match(trecho[0], /confirmarEExecutar/);
 });
@@ -880,28 +882,38 @@ function acoesTravadas(html) {
   return travadas.sort();
 }
 
+// Convertida = os dados já viraram cadastro de cliente. Ganho-sem-cliente e
+// Perdido continuam trabalháveis: negócio perdido volta à mesa, e Ganho sem
+// conversão precisa de conserto.
+const CONVERTIDA = { id: 1, nome_fantasia: 'Virou cliente', etapa: 'Ganho', probabilidade: 100, cliente_id: 73 };
 const ENCERRADA = { id: 1, nome_fantasia: 'Fechada', etapa: 'Ganho', probabilidade: 100 };
 const PERDIDA = { id: 2, nome_fantasia: 'Caiu', etapa: 'Perdido', probabilidade: 0 };
 const ATIVA = { id: 3, nome_fantasia: 'Em jogo', etapa: 'Proposta', probabilidade: 65 };
 
-test('prospecção Ganha trava mover, editar e responsável', () => {
-  const html = renderizarLinha(true, ENCERRADA);
+test('prospecção CONVERTIDA trava mover, editar e responsável', () => {
+  const html = renderizarLinha(true, CONVERTIDA);
   assert.deepEqual(acoesTravadas(html), ['editar', 'mover', 'responsavel']);
 });
 
-test('prospecção Perdida trava as mesmas ações', () => {
+test('prospecção Perdida continua editável e movível', () => {
+  // Negócio perdido volta a ser trabalhado — travar aqui impedia retomar.
   const html = renderizarLinha(true, PERDIDA);
-  assert.deepEqual(acoesTravadas(html), ['editar', 'mover', 'responsavel']);
+  assert.deepEqual(acoesTravadas(html), []);
+});
+
+test('Ganho ainda SEM cliente continua editável', () => {
+  // Se a conversão foi cancelada no meio, a ficha precisa poder ser corrigida.
+  assert.deepEqual(acoesTravadas(renderizarLinha(true, ENCERRADA)), []);
 });
 
 test('prospecção em andamento não trava nada', () => {
   assert.deepEqual(acoesTravadas(renderizarLinha(true, ATIVA)), []);
 });
 
-test('ver detalhes continua liberado numa prospecção encerrada', () => {
+test('ver detalhes continua liberado numa prospecção convertida', () => {
   // Travar a leitura seria esconder o histórico de quem quer entender o que
   // aconteceu — o oposto do que a regra pede.
-  const html = renderizarLinha(true, ENCERRADA);
+  const html = renderizarLinha(true, CONVERTIDA);
   assert.match(html, /acao-tabela--ver acao-ver/);
 });
 
@@ -917,15 +929,15 @@ test('excluir encerrada é liberado só para o Sup Admin', () => {
 test('a ação travada perde o gancho do clique', () => {
   // É assim que o handler não chega a ser registrado: a busca pela classe do
   // gancho devolve null e o ligarAcao sai pela porta dos fundos.
-  const html = renderizarLinha(true, ENCERRADA);
+  const html = renderizarLinha(true, CONVERTIDA);
   assert.equal(html.includes('acao-mover'), false);
   assert.equal(html.includes('acao-editar'), false);
   assert.match(html, /data-inerte="true"/);
 });
 
-test('o motivo da trava vai no title', () => {
-  const html = renderizarLinha(true, PERDIDA);
-  assert.match(html, /title="Prospecção Perdido — negociação encerrada"/);
+test('o motivo da trava aponta o cliente e o caminho', () => {
+  const html = renderizarLinha(true, CONVERTIDA);
+  assert.match(html, /title="Já convertida no cliente #73 — edite pelo módulo Clientes"/);
 });
 
 test('a classe da ação travada existe na folha de estilo', () => {

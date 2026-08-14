@@ -995,9 +995,9 @@ router.patch('/:id/etapa', exigirPermissao('pros.stage.update'), async (req, res
     const atual = await buscarProspeccao(api, id);
     if (atual.etapa === novaEtapa) return res.json({ success: true, semMudanca: true });
 
-    // Prospecção que já virou cliente saiu do funil para sempre. Movê-la
-    // reabriria uma negociação encerrada e desencontraria a etapa do cliente
-    // que já existe.
+    // Só a CONVERTIDA sai do funil para sempre: a etapa dela já foi decidida e
+    // os dados viraram cadastro de cliente. Perdido continua movível de
+    // propósito — negócio perdido volta a ser trabalhado.
     if (atual.cliente_id) {
       throw erro(409, `Esta prospecção já foi convertida no cliente #${atual.cliente_id} e não se move mais no funil`);
     }
@@ -1901,7 +1901,34 @@ router.delete(
 // EXCLUIR
 // ---------------------------------------------------------------------------
 
-router.delete('/:id', exigirPermissao('pros.delete'), async (req, res) => {
+/**
+ * Excluir a prospecção.
+ *
+ * Encerrada (Ganho, Perdido ou já convertida) só o Sup Admin apaga: é o
+ * registro do que aconteceu com o negócio. A trava na grade escondia o botão,
+ * mas o backend deixava passar — bastava a permissão `pros.delete` e uma
+ * chamada direta.
+ */
+async function exigirSupAdminSeEncerrada(req, res, next) {
+  try {
+    const api = createApiClient(req);
+    const atual = await buscarProspeccao(api, req.params.id);
+    const encerrada = Boolean(atual.cliente_id)
+      || atual.etapa === 'Ganho' || atual.etapa === 'Perdido';
+    if (!encerrada) return next();
+
+    if (await ehSupAdmin(req)) return next();
+    return res.status(403).json({
+      error: 'Prospecção encerrada — somente o Sup Admin pode excluir',
+      code: 'FORBIDDEN_SUP_ADMIN'
+    });
+  } catch (err) {
+    // Não existe ou não deu para ler: deixa o handler responder o 404.
+    return next();
+  }
+}
+
+router.delete('/:id', exigirPermissao('pros.delete'), exigirSupAdminSeEncerrada, async (req, res) => {
   const { id } = req.params;
   try {
     const api = createApiClient(req);

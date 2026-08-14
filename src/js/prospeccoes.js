@@ -661,10 +661,16 @@ function renderTabela(lista) {
             : '';
         // Sinaliza atraso já na linha: o "para quando" foi para o popover, mas
         // perder o prazo de vista seria perder a informação mais acionável.
-        // Ganho e Perdido encerram a negociação: mexer no funil, editar a ficha
-        // ou trocar o responsável de um negócio fechado desencontra o registro
-        // do que de fato aconteceu. Só o Sup Admin ainda pode excluir.
-        const encerrada = p.etapa === 'Ganho' || p.etapa === 'Perdido';
+        // Só a prospecção CONVERTIDA sai do jogo: os dados dela já viraram
+        // cadastro de cliente, e a versão do cliente é a que vale.
+        //
+        // Perdido e Ganho-sem-cliente continuam editáveis e movíveis de
+        // propósito: negócio perdido volta a ser trabalhado, e Ganho sem
+        // conversão precisa de conserto (foi o que travava o seu fluxo).
+        const convertida = Boolean(p.cliente_id);
+        // A EXCLUSÃO é outra conversa: uma vez encerrada, apagar o registro do
+        // que aconteceu é decisão de Sup Admin. O backend cobra de novo.
+        const encerrada = p.etapa === 'Ganho' || p.etapa === 'Perdido' || convertida;
         const supAdmin = Boolean(window.Permissoes?.supAdmin);
 
         /**
@@ -676,7 +682,9 @@ function renderTabela(lista) {
                     <i data-perm="${perm}" class="fas ${icone} acao-tabela ${classe}${travada ? ' acao-tabela--inerte' : ` ${gancho}`}"
                        ${travada ? 'data-inerte="true"' : ''} title="${esc(travada || titulo)}"></i>`;
 
-        const motivoEncerrada = `Prospecção ${p.etapa} — negociação encerrada`;
+        const motivoConvertida = p.cliente_id
+            ? `Já convertida no cliente #${p.cliente_id} — edite pelo módulo Clientes`
+            : '';
 
         const dia = diaDe(p.proximo_passo_data);
         const alerta = dia && dia < hojeZerado()
@@ -699,9 +707,9 @@ function renderTabela(lista) {
             <td class="px-4 py-3 whitespace-nowrap text-left">
                 <div class="flex items-center justify-start space-x-2">
                     ${acao({ perm: 'pros.details.view', icone: 'fa-eye', classe: 'acao-tabela--ver', gancho: 'acao-ver', titulo: 'Ver detalhes' })}
-                    ${acao({ perm: 'pros.stage.update', icone: 'fa-arrow-right-arrow-left', classe: 'acao-tabela--mover', gancho: 'acao-mover', titulo: 'Mover no funil', travada: encerrada && motivoEncerrada })}
-                    ${supAdmin ? acao({ perm: 'pros.edit', icone: 'fa-user-pen', classe: 'acao-tabela--responsavel', gancho: 'acao-responsavel', titulo: 'Alterar responsável (Sup Admin)', travada: encerrada && motivoEncerrada }) : ''}
-                    ${acao({ perm: 'pros.edit', icone: 'fa-edit', classe: 'acao-tabela--editar', gancho: 'acao-editar', titulo: 'Editar', travada: encerrada && motivoEncerrada })}
+                    ${acao({ perm: 'pros.stage.update', icone: 'fa-arrow-right-arrow-left', classe: 'acao-tabela--mover', gancho: 'acao-mover', titulo: 'Mover no funil', travada: convertida && motivoConvertida })}
+                    ${supAdmin ? acao({ perm: 'pros.edit', icone: 'fa-user-pen', classe: 'acao-tabela--responsavel', gancho: 'acao-responsavel', titulo: 'Alterar responsável (Sup Admin)', travada: convertida && motivoConvertida }) : ''}
+                    ${acao({ perm: 'pros.edit', icone: 'fa-edit', classe: 'acao-tabela--editar', gancho: 'acao-editar', titulo: 'Editar', travada: convertida && motivoConvertida })}
                     ${acao({ perm: 'pros.delete', icone: 'fa-trash', classe: 'acao-tabela--excluir', gancho: 'acao-excluir', titulo: 'Excluir', travada: encerrada && !supAdmin && 'Prospecção encerrada — só o Sup Admin pode excluir' })}
                 </div>
             </td>`;
