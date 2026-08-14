@@ -3509,9 +3509,9 @@ ipcMain.handle('perfil:remover-imagem', () =>
 /**
  * Foto de OUTRO usuário (cadastro pelo Sup Admin no modal "Novo usuário").
  *
- * Mesmo caminho que funciona em Configurações: multipart para o servidor, que
- * é quem grava a imagem. Antes a dataURL era enviada no INSERT e ia parar na
- * coluna como texto — não é assim que a foto sobe.
+ * A imagem é enviada após o INSERT, diretamente à rota de avatar do id que o
+ * cadastro devolveu. Assim ela não passa pela rota do perfil autenticado nem
+ * pode alterar por engano a foto do Sup Admin que está operando o modal.
  *
  * Duas diferenças em relação a `perfil:enviar-imagem`:
  *   - o alvo é o id do usuário criado, não o dono do token;
@@ -3549,31 +3549,27 @@ ipcMain.handle('usuarios:enviar-imagem', async (_event, payload) => {
     throw error;
   }
 
-  const nomeArquivo = String(payload?.name || 'perfil');
-  const criarFormData = () => {
-    const formData = new FormData();
-    // Mesmo campo usado por `perfil:enviar-imagem`; alguns ambientes também
-    // leem o id no corpo, então mandamos ambos sem depender disso.
-    formData.append('imagem', new Blob([bytes], { type }), nomeArquivo);
-    formData.append('usuarioId', String(usuarioId));
-    formData.append('usuario_id', String(usuarioId));
-    return formData;
-  };
-
-  // A API expõe uma única rota de upload. O usuário alvo vai no multipart;
-  // acrescentar o id ao caminho (como a implementação anterior fazia) chama
-  // rotas inexistentes e sempre termina em 404. O id também segue na query e
-  // no cabeçalho para manter compatibilidade com versões do servidor que leem
-  // o alvo antes de o middleware multipart popular req.body.
+  // A rota `/api/perfil/imagem` sempre resolve o usuário pelo JWT. Portanto,
+  // mandar o id no multipart/query/header não muda o alvo: a foto acabava no
+  // Sup Admin que estava fazendo o cadastro. Para outro usuário usamos a rota
+  // nominal de avatar, a mesma consumida pelo usuariosController, com o id no
+  // próprio caminho e a imagem no formato JSON esperado por essa rota.
   const idSeguro = encodeURIComponent(String(usuarioId));
-  const path = `/api/perfil/imagem?usuarioId=${idSeguro}`;
+  const path = `/api/usuarios/${idSeguro}/avatar`;
+  const avatar = `data:${type};base64,${Buffer.from(bytes).toString('base64')}`;
+  const avatarVersion = Date.now();
   const response = await fetch(`https://api.santissimodecor.com.br${path}`, {
-    method: 'POST',
+    method: 'PUT',
     headers: {
       Authorization: `Bearer ${token}`,
-      'X-Usuario-Alvo-Id': String(usuarioId)
+      'Content-Type': 'application/json'
     },
-    body: criarFormData()
+    body: JSON.stringify({
+      avatar,
+      foto_usuario: avatar,
+      avatarVersion,
+      avatar_version: avatarVersion
+    })
   });
 
   const corpo = await response.json().catch(() => null);

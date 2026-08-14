@@ -49,6 +49,16 @@ body {
     transform: translateY(-1px);
 }
 
+.clientes-header {
+    /*
+     * The entrance animation creates a stacking context on each animated
+     * section. Keep the header above the filters so its open menu is never
+     * painted underneath the following panels.
+     */
+    position: relative;
+    z-index: 40;
+}
+
 .acoes-rapidas {
     position: relative;
 }
