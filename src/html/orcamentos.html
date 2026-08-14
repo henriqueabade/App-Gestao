@@ -6,9 +6,15 @@
             <h1 class="text-2xl font-semibold mb-2 module-header__title">Orçamentos</h1>
             <p class="module-header__description">Gerencie propostas comerciais e acompanhe negociações</p>
         </div>
-        <button id="novoOrcamentoBtn" data-perm="orc.create" class="btn-primary text-white rounded-md px-6 py-3 font-medium">
-            <i class="fas fa-plus mr-2"></i>Novo Orçamento
-        </button>
+        <div class="flex items-center gap-2">
+            <button id="novoOrcamentoProspeccaoBtn" data-perm="orc.create" class="btn-purple text-white rounded-md px-6 py-3 font-medium whitespace-nowrap"
+                    title="Proposta para quem ainda não é cliente — recebe numeração OCRP">
+                <i class="fas fa-user-plus mr-2"></i>Para Prospecção
+            </button>
+            <button id="novoOrcamentoBtn" data-perm="orc.create" class="btn-primary text-white rounded-md px-6 py-3 font-medium whitespace-nowrap">
+                <i class="fas fa-plus mr-2"></i>Novo Orçamento
+            </button>
+        </div>
     </div>
 
     <!-- Filters -->

@@ -284,6 +284,21 @@ async function carregarOrcamentos() {
             cacheProspeccoes.size ? Promise.resolve() : carregarProspeccoesParaOrcamentos()
         ]);
         const data = await resp.json();
+
+        // O cache de nomes é aditivo e não expira — o que é bom para não
+        // recarregar a lista inteira a cada abertura, e ruim logo depois de uma
+        // conversão: o cliente ACABOU de nascer e não está nele, então a coluna
+        // saía "—" até reiniciar o módulo. Se aparecer um id desconhecido,
+        // recarrega uma vez e segue.
+        const faltaCliente = data.some(o => o.cliente_id && !cacheClientes.has(o.cliente_id));
+        const faltaProspeccao = data.some(o =>
+            !o.cliente_id && o.prospeccao_id && !cacheProspeccoes.has(String(o.prospeccao_id)));
+        if (faltaCliente || faltaProspeccao) {
+            await Promise.all([
+                faltaCliente ? carregarClientes() : Promise.resolve(),
+                faltaProspeccao ? carregarProspeccoesParaOrcamentos() : Promise.resolve()
+            ]);
+        }
         const tbody = document.getElementById('orcamentosTabela');
         tbody.innerHTML = '';
         const statusClasses = {
@@ -531,6 +546,17 @@ function initOrcamentos() {
             Modal.open('modals/orcamentos/novo.html', '../js/modals/orcamento-novo.js', 'novoOrcamento');
         });
     }
+    // Proposta para quem ainda NÃO é cliente. Abre o mesmo modal: o que muda é
+    // o destinatário — o seletor passa a listar prospecções, e o orçamento
+    // nasce com numeração OCRP.
+    const novoProspeccaoBtn = document.getElementById('novoOrcamentoProspeccaoBtn');
+    if (novoProspeccaoBtn) {
+        novoProspeccaoBtn.addEventListener('click', () => {
+            window.orcamentoProspeccao = { escolher: true };
+            Modal.open('modals/orcamentos/novo.html', '../js/modals/orcamento-novo.js', 'novoOrcamento');
+        });
+    }
+
     document.getElementById('orcamentosEmptyNew')?.addEventListener('click', () => {
         document.getElementById('novoOrcamentoBtn')?.click();
     });

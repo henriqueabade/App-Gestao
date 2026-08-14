@@ -936,3 +936,69 @@ test('a classe da ação travada existe na folha de estilo', () => {
   // title é onde está a explicação do bloqueio.
   assert.equal(/pointer-events/.test(regra[1]), false);
 });
+
+
+// ---------------------------------------------------------------------------
+// Orçamento para prospecção pelo módulo de Orçamentos
+//
+// O botão abre o MESMO modal de sempre: o que muda é o destinatário. Duplicar
+// a tela condenaria as duas cópias a divergirem na primeira regra de desconto
+// que mudasse.
+// ---------------------------------------------------------------------------
+
+const HTML_ORCAMENTOS = fs.readFileSync(
+  path.join(__dirname, '..', '..', 'html', 'orcamentos.html'), 'utf8');
+const JS_ORCAMENTOS = fs.readFileSync(
+  path.join(__dirname, '..', 'orcamentos.js'), 'utf8');
+const JS_NOVO = fs.readFileSync(
+  path.join(__dirname, '..', 'modals', 'orcamento-novo.js'), 'utf8');
+
+test('o módulo de Orçamentos tem o botão para prospecção', () => {
+  assert.match(HTML_ORCAMENTOS, /id="novoOrcamentoProspeccaoBtn"/);
+  // Mesma permissão do outro: quem pode criar orçamento, pode criar este.
+  const botao = /id="novoOrcamentoProspeccaoBtn"[^>]*/.exec(HTML_ORCAMENTOS)[0];
+  assert.match(botao, /data-perm="orc\.create"/);
+});
+
+test('o botão abre o modal de sempre, em modo prospecção', () => {
+  const trecho = /novoOrcamentoProspeccaoBtn[\s\S]{0,600}?\}\);/.exec(JS_ORCAMENTOS);
+  assert.ok(trecho, 'não achei o handler do botão');
+  assert.match(trecho[0], /orcamentoProspeccao = \{ escolher: true \}/);
+  assert.match(trecho[0], /modals\/orcamentos\/novo\.html/);
+});
+
+test('em modo prospecção o cliente NUNCA vai no corpo', () => {
+  // O bug: no modo de escolha o select carrega o id da PROSPECÇÃO. Testar
+  // `prospeccao?.id` em vez de `prospeccao` mandaria esse id como cliente_id
+  // enquanto nada estivesse escolhido — apontando para outra empresa.
+  assert.match(JS_NOVO, /cliente_id: prospeccao \? null : clienteVal/);
+  assert.match(JS_NOVO, /contato_id: prospeccao \? null : contatoVal/);
+});
+
+test('o handler de cliente não roda em modo prospecção', () => {
+  // Sem esta guarda, escolher a prospecção disparava
+  // /api/clientes/{idDaProspeccao} e apagava o aviso da transportadora.
+  const trecho = /clienteSelect\.addEventListener\('change'[\s\S]{0,700}?\n  \}\);/.exec(JS_NOVO);
+  assert.ok(trecho, 'não achei o handler de mudança de cliente');
+  assert.match(trecho[0], /__orcamentoModoProspeccao/);
+});
+
+test('a marca de modo prospecção é solta ao fechar e ao salvar', () => {
+  // Pendurada, ela deixaria mudo o select do próximo "Novo Orçamento".
+  const ocorrencias = (JS_NOVO.match(/delete window\.__orcamentoModoProspeccao/g) || []).length;
+  assert.ok(ocorrencias >= 2, `esperava soltar ao fechar e ao salvar, achei ${ocorrencias}`);
+});
+
+test('a lista de escolha exclui prospecção arquivada', () => {
+  // Emitir proposta para negócio já ganho ou perdido não faz sentido.
+  const trecho = /prospeccao\.escolher[\s\S]{0,2000}?addEventListener/.exec(JS_NOVO);
+  assert.ok(trecho, 'não achei o modo de escolha');
+  assert.match(trecho[0], /status !== 'arquivada'/);
+});
+
+test('a lista de orçamentos recarrega os nomes quando aparece um id novo', () => {
+  // O cache é aditivo e não expira — logo depois de uma conversão o cliente
+  // ACABOU de nascer e a coluna saía "—" até reiniciar o módulo.
+  assert.match(JS_ORCAMENTOS, /faltaCliente/);
+  assert.match(JS_ORCAMENTOS, /!cacheClientes\.has\(o\.cliente_id\)/);
+});

@@ -152,6 +152,38 @@ function buildOrcamentoPayload(body = {}, { numero, situacao, dataAprovacao } = 
 }
 
 /**
+ * Próximo número livre da série de CLIENTE, para renumerar um OCRP na conversão.
+ *
+ * Devolve `null` quando não consegue: renumerar é acabamento, e falhar aqui não
+ * pode impedir a conversão. O orçamento fica com o número OCRP, o que é
+ * estranho mas não quebra nada — o vínculo com o cliente é o que importa.
+ */
+async function numeroDeClienteLivre(api) {
+  try {
+    const usados = new Set();
+    const lista = await api
+      .get('/api/orcamentos', { query: { order: 'id.desc', limit: 5000 } })
+      .catch(() => []);
+    for (const o of Array.isArray(lista) ? lista : []) {
+      usados.add(String(o?.numero ?? '').trim().toUpperCase());
+    }
+
+    let sequencia = (await getMaxSequencia(api, PREFIXO_CLIENTE)) + 1;
+    // Percorre até achar um livre: a sequência conta o MAIOR já usado, mas
+    // números fora do padrão ("ORC-12") entram na contagem sem ocupar o lugar
+    // de "ORC12", e aí o candidato poderia já existir.
+    for (let i = 0; i < 50; i++) {
+      const candidato = `${PREFIXO_CLIENTE}${sequencia + i}`;
+      if (!usados.has(candidato.toUpperCase())) return candidato;
+    }
+    return null;
+  } catch (err) {
+    console.error('[orcamentos] não foi possível gerar o número de cliente:', err?.message || err);
+    return null;
+  }
+}
+
+/**
  * Anota na ficha da prospecção algo que aconteceu com um orçamento dela.
  *
  * Silencioso quando o orçamento é de cliente: prospecção nenhuma tem o que
@@ -245,10 +277,18 @@ async function promoverProspeccao(api, orcamento, conversao = {}) {
       err?.message || err);
   }
 
+  // O OCRP deixa de ser proposta de prospecção e passa a ser orçamento de um
+  // cliente de verdade — então recebe a numeração de cliente. O número antigo
+  // fica no histórico, para quem receber a proposta com o código OCRP ainda
+  // conseguir rastrear.
+  const numeroAntigo = orcamento.numero;
+  const numeroNovo = await numeroDeClienteLivre(api);
+
   const patch = {
     cliente_id: resultado.clienteId,
     contato_id: contatoId,
-    transportadora
+    transportadora,
+    ...(numeroNovo ? { numero: numeroNovo } : {})
   };
   await api.put(`/api/orcamentos/${orcamento.id}`, {
     ...orcamento,
@@ -260,10 +300,22 @@ async function promoverProspeccao(api, orcamento, conversao = {}) {
     prospeccao_contato_id: orcamento.prospeccao_contato_id ?? null
   });
 
+  if (numeroNovo) {
+    await registrarHistorico(api, orcamento.prospeccao_id, {
+      tipo: 'orcamento', acao: 'alterou',
+      entidade: `Orçamento ${numeroAntigo}`,
+      campo: 'numero',
+      valor_anterior: numeroAntigo,
+      valor_novo: numeroNovo,
+      observacao: 'Renumerado ao virar orçamento de cliente',
+      detalhe: { rotulo: 'Número', orcamento_id: orcamento.id }
+    }, conversao?.decisaoBy ?? null);
+  }
+
   await registrarHistorico(api, orcamento.prospeccao_id, {
     tipo: 'conversao',
     acao: 'converteu',
-    entidade: `Orçamento ${orcamento.numero}`,
+    entidade: `Orçamento ${numeroNovo || numeroAntigo}`,
     valor_anterior: 'Orçamento de prospecção',
     valor_novo: `Cliente #${resultado.clienteId}`,
     observacao: resultado.jaExistia
@@ -271,7 +323,8 @@ async function promoverProspeccao(api, orcamento, conversao = {}) {
       : 'Cliente criado a partir da prospecção na aprovação do orçamento',
     detalhe: {
       orcamento_id: orcamento.id,
-      numero: orcamento.numero,
+      numero: numeroNovo || numeroAntigo,
+      numeroAnterior: numeroAntigo,
       clienteId: resultado.clienteId,
       clienteJaExistia: resultado.jaExistia,
       transportadora
@@ -798,7 +851,13 @@ router.put('/:id', exigirPermissao(permissoesDeEdicao), async (req, res) => {
       }
     }
 
-    res.json({ success: true, convertido, convertErro, pedido, estoque: estoqueResumo });
+    // `numero` volta porque a conversão de um OCRP RENUMERA o orçamento: sem
+    // isto o aviso de sucesso citaria o código antigo, que já não existe.
+    const depois = await api.get(`/api/orcamentos/${id}`).catch(() => null);
+    res.json({
+      success: true, convertido, convertErro, pedido, estoque: estoqueResumo,
+      numero: depois?.numero ?? null
+    });
   } catch (err) {
     console.error('Erro ao atualizar orçamento:', err);
     res.status(err.status || 500).json({ error: 'Erro ao atualizar orçamento' });
@@ -850,7 +909,13 @@ router.patch('/:id/status', exigirPermissao(permissoesDeStatus), async (req, res
         console.error('Erro ao converter orçamento em pedido:', convErr);
       }
     }
-    res.json({ success: true, convertido, convertErro, pedido, estoque: estoqueResumo });
+    // `numero` volta porque a conversão de um OCRP RENUMERA o orçamento: sem
+    // isto o aviso de sucesso citaria o código antigo, que já não existe.
+    const depois = await api.get(`/api/orcamentos/${id}`).catch(() => null);
+    res.json({
+      success: true, convertido, convertErro, pedido, estoque: estoqueResumo,
+      numero: depois?.numero ?? null
+    });
   } catch (err) {
     console.error('Erro ao atualizar status do orçamento:', err);
     res.status(err.status || 500).json({ error: 'Erro ao atualizar status do orçamento' });

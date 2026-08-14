@@ -940,11 +940,16 @@
       let result = {};
       try { result = await resp.json(); } catch (_) {}
       if (window.reloadOrcamentos) await window.reloadOrcamentos();
+      // Converter um OCRP RENUMERA o orçamento: citar `data.numero` mandaria o
+      // usuário procurar por um código que já não existe.
+      const numeroAtual = result.numero || data.numero;
       if (currentStatus === 'Aprovado') {
         if (result.convertErro) {
-          showToast(`Orçamento ${data.numero} aprovado, mas houve erro ao gerar o pedido: ${result.convertErro}`, 'error');
+          showToast(`Orçamento ${numeroAtual} aprovado, mas houve erro ao gerar o pedido: ${result.convertErro}`, 'error');
+        } else if (daProspeccao && result.numero && result.numero !== data.numero) {
+          showToast(`ORÇAMENTO ${data.numero} CONVERTIDO EM PEDIDO E RENUMERADO PARA ${result.numero}`, 'success');
         } else {
-          showToast(`ORÇAMENTO ${data.numero} CONVERTIDO EM PEDIDO COM SUCESSO!`, 'success');
+          showToast(`ORÇAMENTO ${numeroAtual} CONVERTIDO EM PEDIDO COM SUCESSO!`, 'success');
         }
       } else {
         showToast(`ORÇAMENTO ${data.numero} ATUALIZADO COM SUCESSO!`, 'success');
@@ -1061,11 +1066,19 @@
    * trabalho. Devolve  quando barrou.
    */
   function exigeTransportadora() {
-    if (!daProspeccao || currentStatus !== 'Aprovado') return false;
-    if ((transportadoraTexto?.value || '').trim()) return false;
+    if (currentStatus !== 'Aprovado') return false;
+
+    // Num OCRP a transportadora é digitada; num orçamento de cliente ela é
+    // escolhida na lista do próprio cliente.
+    const campo = daProspeccao ? transportadoraTexto : editarTransportadora;
+    const preenchida = daProspeccao
+      ? (transportadoraTexto?.value || '').trim()
+      : (editarTransportadora?.value || '').trim();
+    if (preenchida) return false;
+
     showToast('Informe a transportadora para aprovar este orçamento', 'error');
-    transportadoraTexto?.focus();
-    transportadoraTexto?.classList.add('border-red-500');
+    campo?.focus();
+    campo?.classList.add('border-red-500');
     return true;
   }
 

@@ -204,6 +204,11 @@
   });
 
   clienteSelect.addEventListener('change', () => {
+    // Em modo prospecção este select carrega o id de uma PROSPECÇÃO. Deixar o
+    // handler de cliente rodar aqui buscaria /api/clientes/{idDaProspeccao} e
+    // /api/transportadoras/{idDaProspeccao} — dados de outra empresa — e ainda
+    // apagava o aviso "Definir na conversão em pedido" da transportadora.
+    if (window.__orcamentoModoProspeccao) return;
     carregarContatos(clienteSelect.value);
     carregarTransportadoras(clienteSelect.value);
     if(!donoSelect.value){
@@ -226,26 +231,21 @@
   // divergirem na primeira mudança de regra de desconto.
   // -------------------------------------------------------------------------
   const prospeccao = window.orcamentoProspeccao || null;
+  // Lido pelo handler de `change` do select de cliente, registrado mais acima.
+  window.__orcamentoModoProspeccao = Boolean(prospeccao);
   // Consome o sinal na hora. Deixá-lo pendurado fazia o PRÓXIMO "Novo
   // Orçamento" — o do módulo de Orçamentos, para um cliente — abrir preso à
   // última prospecção visitada. A restauração de trabalho o repõe sozinha
   // (`registrarContexto` logo abaixo), então apagar aqui não perde nada.
   delete window.orcamentoProspeccao;
 
-  async function prepararProspeccao(){
-    const nome = prospeccao.nome_fantasia || prospeccao.razao_social || 'Prospecção';
-    clienteSelect.innerHTML = `<option value="${escapeAttr(prospeccao.id)}">${escapeAttr(nome)}</option>`;
-    clienteSelect.value = String(prospeccao.id);
-    clienteSelect.setAttribute('data-filled','true');
-    // Fica visível e legível, mas não escolhível: o orçamento pertence a esta
-    // prospecção e trocar o destinatário no meio seria outro documento.
-    clienteSelect.disabled = true;
-    clienteSelect.classList.add('opacity-70','cursor-not-allowed');
-    const rotulo = document.querySelector('label[for="novoCliente"]');
-    if (rotulo) rotulo.textContent = 'Prospecção';
-
+  /** Carrega os contatos da prospecção escolhida no seletor de contato. */
+  async function carregarContatosProspeccao(prospeccaoId){
+    contatoSelect.innerHTML = '<option value="" disabled selected hidden></option>';
+    contatoSelect.setAttribute('data-filled','false');
+    if (!prospeccaoId) return;
     try {
-      const resp = await fetchApi(`/api/prospeccoes/${prospeccao.id}`);
+      const resp = await fetchApi(`/api/prospeccoes/${prospeccaoId}`);
       const ficha = await resp.json();
       const contatos = ficha.contatos || [];
       contatoSelect.innerHTML = '<option value="" disabled selected hidden></option>' +
@@ -258,6 +258,45 @@
         contatoSelect.setAttribute('data-filled','true');
       }
     } catch(err){ console.error('Erro ao carregar contatos da prospecção', err); }
+  }
+
+  async function prepararProspeccao(){
+    const rotulo = document.querySelector('label[for="novoCliente"]');
+    if (rotulo) rotulo.textContent = 'Prospecção';
+
+    if (prospeccao.escolher) {
+      // Aberto pelo módulo de Orçamentos: o destinatário ainda será escolhido.
+      // Só prospecções ATIVAS entram — emitir proposta para negócio já ganho ou
+      // perdido não faz sentido.
+      try {
+        const resp = await fetchApi('/api/prospeccoes/lista');
+        const dados = await resp.json();
+        const itens = (Array.isArray(dados?.itens) ? dados.itens : [])
+          .filter(x => x.status !== 'arquivada');
+        clienteSelect.innerHTML = '<option value="" disabled selected hidden></option>' +
+          itens.map(x => `<option value="${escapeAttr(x.id)}">${escapeAttr(x.nome_fantasia || x.razao_social || 'Sem nome')}</option>`).join('');
+        clienteSelect.setAttribute('data-filled','false');
+        if (!itens.length) showToast('Nenhuma prospecção ativa para orçar', 'info');
+      } catch(err){
+        console.error('Erro ao carregar prospecções', err);
+        showToast('Não foi possível carregar as prospecções', 'error');
+      }
+
+      clienteSelect.addEventListener('change', () => {
+        prospeccao.id = clienteSelect.value ? Number(clienteSelect.value) : null;
+        carregarContatosProspeccao(prospeccao.id);
+      });
+    } else {
+      const nome = prospeccao.nome_fantasia || prospeccao.razao_social || 'Prospecção';
+      clienteSelect.innerHTML = `<option value="${escapeAttr(prospeccao.id)}">${escapeAttr(nome)}</option>`;
+      clienteSelect.value = String(prospeccao.id);
+      clienteSelect.setAttribute('data-filled','true');
+      // Fica visível e legível, mas não escolhível: o orçamento pertence a esta
+      // prospecção e trocar o destinatário no meio seria outro documento.
+      clienteSelect.disabled = true;
+      clienteSelect.classList.add('opacity-70','cursor-not-allowed');
+      await carregarContatosProspeccao(prospeccao.id);
+    }
 
     // Transportadora é cadastro POR CLIENTE — não existe para uma prospecção.
     // Deixar o campo obrigatório aqui travaria o orçamento num dado que só
@@ -271,7 +310,7 @@
     transportadoraSelect.setAttribute('data-filled','true');
   }
 
-  if (prospeccao?.id) {
+  if (prospeccao?.id || prospeccao?.escolher) {
     // Sem devolver o contexto, uma queda reabriria o modal em modo cliente e o
     // vínculo com a prospecção se perderia sem aviso.
     window.EstadoTrabalho?.registrarContexto?.(overlayId,
@@ -634,6 +673,12 @@
         showMissingDialog(['Itens']);
         return;
       }
+      // Modo prospecção aberto pelo módulo de Orçamentos: o destinatário é
+      // escolhido aqui dentro e pode não ter sido escolhido ainda.
+      if (prospeccao && !prospeccao.id) {
+        showMissingDialog(['Prospecção']);
+        return;
+      }
 
       const clienteVal = clienteSelect.value;
       const contatoVal = contatoSelect.value;
@@ -715,15 +760,18 @@
         // como cliente_id apontaria para o cliente de mesmo número — outra
         // empresa, escolhida por acidente.
         const body = {
-          cliente_id: prospeccao?.id ? null : clienteVal,
-          contato_id: prospeccao?.id ? null : contatoVal,
+          // O que decide é estar EM modo prospecção, não ter um id: no modo de
+          // escolha o select carrega o id da prospecção, e mandá-lo como
+          // cliente_id apontaria para o cliente de mesmo número.
+          cliente_id: prospeccao ? null : clienteVal,
+          contato_id: prospeccao ? null : contatoVal,
           prospeccao_id: prospeccao?.id || null,
-          prospeccao_contato_id: prospeccao?.id ? (contatoVal || null) : null,
+          prospeccao_contato_id: prospeccao ? (contatoVal || null) : null,
           situacao: status,
           parcelas,
           tipo_parcela: tipoParcela,
           forma_pagamento: formaPagamentoVal,
-          transportadora: prospeccao?.id
+          transportadora: prospeccao
             ? ''
             : (transportadoraSelect.options[transportadoraSelect.selectedIndex]?.textContent || ''),
           desconto_pagamento: descPagTot,
@@ -749,6 +797,7 @@
         // A ficha da prospecção fica ABERTA por baixo: sem repintar, o
         // orçamento recém-criado só apareceria depois de fechar e reabrir.
         if (prospeccao?.id) await window.recarregarDetalhesProspeccao?.();
+        delete window.__orcamentoModoProspeccao;
         Modal.close(overlayId);
         const message =
           status === 'Rascunho'
@@ -767,8 +816,14 @@
     const status = e.submitter?.dataset.status || 'Rascunho';
     saveQuote(status);
   });
-  document.getElementById('cancelarNovoOrcamento').addEventListener('click', close);
-  document.getElementById('voltarNovoOrcamento').addEventListener('click', close);
+  /** Solta a marca de modo prospecção: sem isto o próximo "Novo Orçamento"
+   *  de cliente abriria com o select de cliente mudo. */
+  const fecharLimpando = () => {
+    delete window.__orcamentoModoProspeccao;
+    close();
+  };
+  document.getElementById('cancelarNovoOrcamento').addEventListener('click', fecharLimpando);
+  document.getElementById('voltarNovoOrcamento').addEventListener('click', fecharLimpando);
 
   const limparBtn = document.getElementById('limparNovoOrcamento');
   if (limparBtn) {

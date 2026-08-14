@@ -770,12 +770,16 @@ test('a conversão inteira entra no histórico da prospecção', async () => {
     assert.ok(h.some(x => x.tipo === 'etapa' && x.valor_novo === 'Ganho'));
     assert.ok(h.some(x => x.tipo === 'arquivamento' && x.valor_novo === 'arquivada'));
 
-    const doOrcamento = h.find(x => x.entidade === 'Orçamento OCRP1' && x.tipo === 'conversao');
+    // O evento traz o número NOVO: depois da conversão é por ele que se procura.
+    const doOrcamento = h.find(x => x.tipo === 'conversao' && /^Orçamento ORC/.test(x.entidade || ''));
     assert.ok(doOrcamento, 'faltou o evento da conversão do orçamento');
     const detalhe = typeof doOrcamento.detalhe === 'string'
       ? JSON.parse(doOrcamento.detalhe) : doOrcamento.detalhe;
     assert.strictEqual(detalhe.transportadora, 'Braspress');
     assert.strictEqual(detalhe.clienteJaExistia, false);
+    // O número antigo fica guardado: quem recebeu a proposta com o código OCRP
+    // precisa conseguir rastreá-la.
+    assert.strictEqual(detalhe.numeroAnterior, 'OCRP1');
   } finally {
     await ctx.encerrar();
   }
@@ -875,6 +879,91 @@ test('nao duplica a transportadora na segunda aprovacao', async () => {
       });
     }
     assert.strictEqual(ctx.tabelas.transportadoras.length, 1);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Renumeração na conversão
+//
+// O OCRP deixa de ser proposta de prospecção e passa a ser orçamento de um
+// cliente de verdade — então recebe a numeração de cliente e passa a constar
+// na ficha dele.
+// ---------------------------------------------------------------------------
+
+test('ao converter, o OCRP recebe numeração de cliente', async () => {
+  const ctx = await montar(baseDados([
+    { id: 1, numero: 'ORC40', cliente_id: 50, situacao: 'Aprovado' },
+    { id: 2, numero: 'OCRP1', prospeccao_id: 1, situacao: 'Enviado', valor_final: 500 }
+  ]));
+  try {
+    const resp = await chamar(ctx.porta, '/api/orcamentos/2/status', {
+      method: 'PATCH',
+      body: JSON.stringify({ situacao: 'Aprovado', conversao: { transportadora: 'Braspress' } })
+    });
+    assert.strictEqual((await resp.json()).convertido, true);
+
+    const orc = ctx.tabelas.orcamentos.find(o => o.id === 2);
+    // Continua a sequência de cliente, sem esbarrar no ORC40 já existente.
+    assert.strictEqual(orc.numero, 'ORC41');
+    assert.ok(orc.cliente_id, 'precisa ter cliente para aparecer na ficha dele');
+    // A origem NÃO se perde: é a parte mais interessante da história.
+    assert.strictEqual(orc.prospeccao_id, 1);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('a renumeração fica registrada no histórico', async () => {
+  const ctx = await montar(baseDados([
+    { id: 1, numero: 'OCRP1', prospeccao_id: 1, situacao: 'Enviado' }
+  ]));
+  try {
+    await chamar(ctx.porta, '/api/orcamentos/1/status', {
+      method: 'PATCH',
+      body: JSON.stringify({ situacao: 'Aprovado', conversao: { transportadora: 'X' } })
+    });
+    const evento = ctx.tabelas.prospeccao_historico.find(h => h.campo === 'numero');
+    assert.ok(evento, 'faltou o evento da renumeração');
+    assert.strictEqual(evento.valor_anterior, 'OCRP1');
+    assert.match(evento.valor_novo, /^ORC\d+$/);
+    assert.match(evento.observacao, /Renumerado/);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('o número novo não colide com um ORC já existente', async () => {
+  // A contagem olha o MAIOR já usado, mas números fora do padrão entram na
+  // conta sem ocupar o lugar deles — o candidato poderia já existir.
+  const ctx = await montar(baseDados([
+    { id: 1, numero: 'ORC-7', cliente_id: 50, situacao: 'Aprovado' },
+    { id: 2, numero: 'ORC8', cliente_id: 50, situacao: 'Aprovado' },
+    { id: 3, numero: 'OCRP1', prospeccao_id: 1, situacao: 'Enviado' }
+  ]));
+  try {
+    await chamar(ctx.porta, '/api/orcamentos/3/status', {
+      method: 'PATCH',
+      body: JSON.stringify({ situacao: 'Aprovado', conversao: { transportadora: 'X' } })
+    });
+    const numeros = ctx.tabelas.orcamentos.map(o => o.numero);
+    assert.strictEqual(new Set(numeros).size, numeros.length, 'gerou número duplicado: ' + numeros.join(', '));
+    assert.strictEqual(ctx.tabelas.orcamentos.find(o => o.id === 3).numero, 'ORC9');
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('orçamento de cliente NÃO é renumerado ao ser aprovado', async () => {
+  const ctx = await montar(baseDados([
+    { id: 1, numero: 'ORC5', cliente_id: 50, situacao: 'Enviado' }
+  ]));
+  try {
+    await chamar(ctx.porta, '/api/orcamentos/1/status', {
+      method: 'PATCH', body: JSON.stringify({ situacao: 'Aprovado' })
+    });
+    assert.strictEqual(ctx.tabelas.orcamentos[0].numero, 'ORC5');
   } finally {
     await ctx.encerrar();
   }
