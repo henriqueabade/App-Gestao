@@ -262,6 +262,32 @@ function initClientes() {
         openModalWithSpinner('modals/clientes/novo.html', '../js/modals/cliente-novo.js', 'novoCliente');
     });
 
+    const acoesRapidasContainer = document.getElementById('acoesRapidasContainer');
+    const btnAcoesRapidas = document.getElementById('btnAcoesRapidas');
+    const menuAcoesRapidas = document.getElementById('menuAcoesRapidas');
+    const fecharAcoesRapidas = (devolverFoco = false) => {
+        if (!btnAcoesRapidas || !menuAcoesRapidas) return;
+        menuAcoesRapidas.hidden = true;
+        btnAcoesRapidas.setAttribute('aria-expanded', 'false');
+        if (devolverFoco) btnAcoesRapidas.focus();
+    };
+
+    btnAcoesRapidas?.addEventListener('click', () => {
+        const deveAbrir = menuAcoesRapidas.hidden;
+        menuAcoesRapidas.hidden = !deveAbrir;
+        btnAcoesRapidas.setAttribute('aria-expanded', String(deveAbrir));
+        if (deveAbrir) menuAcoesRapidas.querySelector('[role="menuitem"]:not([hidden])')?.focus();
+    });
+    menuAcoesRapidas?.addEventListener('click', event => {
+        if (event.target.closest('[role="menuitem"]')) fecharAcoesRapidas();
+    });
+    document.addEventListener('click', event => {
+        if (!acoesRapidasContainer?.contains(event.target)) fecharAcoesRapidas();
+    });
+    document.addEventListener('keydown', event => {
+        if (event.key === 'Escape' && !menuAcoesRapidas?.hidden) fecharAcoesRapidas(true);
+    });
+
     const emDesenvolvimento = () => alert('Função em desenvolvimento');
     document.getElementById('btnExportarCSV')?.addEventListener('click', emDesenvolvimento);
     document.getElementById('btnImportarCSV')?.addEventListener('click', emDesenvolvimento);

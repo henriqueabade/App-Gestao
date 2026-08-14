@@ -3560,44 +3560,33 @@ ipcMain.handle('usuarios:enviar-imagem', async (_event, payload) => {
     return formData;
   };
 
+  // A API expõe uma única rota de upload. O usuário alvo vai no multipart;
+  // acrescentar o id ao caminho (como a implementação anterior fazia) chama
+  // rotas inexistentes e sempre termina em 404. O id também segue na query e
+  // no cabeçalho para manter compatibilidade com versões do servidor que leem
+  // o alvo antes de o middleware multipart popular req.body.
   const idSeguro = encodeURIComponent(String(usuarioId));
-  const endpoints = [
-    // Endpoint novo/específico para trocar a imagem de outro usuário.
-    { method: 'POST', path: `/api/usuarios/${idSeguro}/imagem` },
-    { method: 'POST', path: `/api/usuarios/${idSeguro}/foto` },
-    { method: 'PUT', path: `/api/usuarios/${idSeguro}/avatar` },
-    // Compatibilidade com a tentativa anterior e variações comuns da API.
-    { method: 'POST', path: `/api/perfil/${idSeguro}/imagem` },
-    { method: 'POST', path: `/api/perfil/imagem/${idSeguro}` }
-  ];
+  const path = `/api/perfil/imagem?usuarioId=${idSeguro}`;
+  const response = await fetch(`https://api.santissimodecor.com.br${path}`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'X-Usuario-Alvo-Id': String(usuarioId)
+    },
+    body: criarFormData()
+  });
 
-  let ultimoErro = null;
-  for (const endpoint of endpoints) {
-    const response = await fetch(`https://api.santissimodecor.com.br${endpoint.path}`, {
-      method: endpoint.method,
-      headers: { Authorization: `Bearer ${token}` },
-      body: criarFormData()
-    });
-
-    const corpo = await response.json().catch(() => null);
-    if (response.ok) {
-      return unwrapProfileUser(corpo);
-    }
-
-    ultimoErro = { status: response.status, corpo, endpoint };
-    // 404 significa apenas que este ambiente não expõe aquela variação da rota;
-    // tente a próxima. Outros erros são reais (permissão, validação, etc.).
-    if (response.status !== 404) break;
-  }
+  const corpo = await response.json().catch(() => null);
+  if (response.ok) return unwrapProfileUser(corpo);
 
   const error = new Error(
-    ultimoErro?.corpo?.message ||
-    ultimoErro?.corpo?.erro ||
-    ultimoErro?.corpo?.error ||
-    'Não foi possível enviar a foto do usuário.'
+    corpo?.message ||
+    corpo?.erro ||
+    corpo?.error ||
+    `Não foi possível enviar a foto do usuário (HTTP ${response.status}).`
   );
-  error.status = ultimoErro?.status;
-  error.endpoint = ultimoErro?.endpoint?.path;
+  error.status = response.status;
+  error.endpoint = path;
   throw error;
 });
 

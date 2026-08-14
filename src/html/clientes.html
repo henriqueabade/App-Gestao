@@ -17,38 +17,36 @@
   <div class="modulo-container">
     <div>
         <!-- Header -->
-        <div class="flex justify-between items-center mb-8 animate-fade-in-up">
+        <div class="clientes-header flex justify-between items-center mb-8 animate-fade-in-up">
             <div>
                 <h1 class="text-2xl font-semibold mb-2 module-header__title">Clientes</h1>
                 <p class="module-header__description">Gerencie informações e relacionamento com clientes</p>
             </div>
-            <button id="btnNovoCliente" data-perm="cli.create" class="btn-primary text-white rounded-md px-6 py-3 font-medium">
-                <i class="fas fa-plus mr-2"></i>Novo Cliente
-            </button>
-        </div>
-
-        <!-- Quick Actions -->
-        <div class="glass-surface rounded-xl p-6 mb-6 animate-fade-in-up">
-            <h3 class="text-lg font-medium mb-4 text-white">Ações Rápidas</h3>
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <!-- Left Column -->
-                <div class="space-y-3">
-                    <button id="btnExportarCSV" data-perm="cli.export.csv" class="w-full btn-secondary text-white rounded-md px-4 py-3 font-medium flex items-center justify-center">
-                        <i class="fas fa-download mr-2"></i>Exportar CSV
+            <div class="clientes-header__actions flex items-center gap-3">
+                <div id="acoesRapidasContainer" class="acoes-rapidas">
+                    <button id="btnAcoesRapidas" type="button" class="btn-bordo text-white rounded-md px-4 py-3 font-medium flex items-center gap-2" aria-haspopup="menu" aria-expanded="false" aria-controls="menuAcoesRapidas">
+                        <i class="fas fa-bolt" aria-hidden="true"></i>
+                        Ações Rápidas
+                        <i class="fas fa-chevron-down acoes-rapidas__chevron" aria-hidden="true"></i>
                     </button>
-                    <button id="btnImportarCSV" data-perm="cli.import.csv" class="w-full btn-secondary text-white rounded-md px-4 py-3 font-medium flex items-center justify-center">
-                        <i class="fas fa-upload mr-2"></i>Importar CSV
-                    </button>
+                    <div id="menuAcoesRapidas" class="acoes-rapidas__menu" role="menu" aria-label="Ações rápidas de clientes" hidden>
+                        <button id="btnExportarCSV" data-perm="cli.export.csv" type="button" role="menuitem" class="acoes-rapidas__item">
+                            <i class="fas fa-download" aria-hidden="true"></i><span>Exportar CSV</span>
+                        </button>
+                        <button id="btnImportarCSV" data-perm="cli.import.csv" type="button" role="menuitem" class="acoes-rapidas__item">
+                            <i class="fas fa-upload" aria-hidden="true"></i><span>Importar CSV</span>
+                        </button>
+                        <button id="btnGerarRelatorio" data-perm="cli.report" type="button" role="menuitem" class="acoes-rapidas__item">
+                            <i class="fas fa-file-alt" aria-hidden="true"></i><span>Gerar Relatório</span>
+                        </button>
+                        <button id="btnEnviarEmailMassa" data-perm="cli.email.bulk" type="button" role="menuitem" class="acoes-rapidas__item">
+                            <i class="fas fa-envelope" aria-hidden="true"></i><span>Enviar E-mail em Massa</span>
+                        </button>
+                    </div>
                 </div>
-                <!-- Right Column -->
-                <div class="space-y-3">
-                    <button id="btnGerarRelatorio" data-perm="cli.report" class="w-full btn-secondary text-white rounded-md px-4 py-3 font-medium flex items-center justify-center">
-                        <i class="fas fa-file-alt mr-2"></i>Gerar Relatório
-                    </button>
-                    <button id="btnEnviarEmailMassa" data-perm="cli.email.bulk" class="w-full btn-secondary text-white rounded-md px-4 py-3 font-medium flex items-center justify-center">
-                        <i class="fas fa-envelope mr-2"></i>Enviar E-mail em Massa
-                    </button>
-                </div>
+                <button id="btnNovoCliente" data-perm="cli.create" class="btn-primary text-white rounded-md px-6 py-3 font-medium">
+                    <i class="fas fa-plus mr-2"></i>Novo Cliente
+                </button>
             </div>
         </div>
 
