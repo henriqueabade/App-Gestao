@@ -122,7 +122,10 @@ body {
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    gap: 8px;
     line-height: 1;
+    flex-shrink: 0;
+    white-space: nowrap;
 }
 
 .btn-neutral {
@@ -342,6 +345,7 @@ body {
         width: auto;
         margin-top: 0;
         justify-content: flex-end;
+        flex-shrink: 0;
     }
 }
 
