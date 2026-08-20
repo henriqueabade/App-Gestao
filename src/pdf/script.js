@@ -204,10 +204,10 @@ function formatParcelasValores(orc) {
 
   return [...parcelas]
     .sort((a, b) => (Number(a?.numero_parcela) || 0) - (Number(b?.numero_parcela) || 0))
-    .map(p => Number(p?.valor || 0).toLocaleString('pt-BR', {
+    .map(p => `R$${Number(p?.valor || 0).toLocaleString('pt-BR', {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2
-    }))
+    })}`)
     .join('/');
 }
 
