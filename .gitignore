@@ -142,7 +142,7 @@ alteracoes.patch
 data/authToken.json
 data/authToken.json
 tools/notes.txt
-sql/correcao-peca-fantasma.sql
+sql/
 sql/faltantes.sql
 sql/mudancausuario.sql
 sql/novascolunas.sql
