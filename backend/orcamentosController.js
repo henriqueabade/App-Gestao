@@ -1,5 +1,6 @@
 const express = require('express');
 const { createApiClient } = require('./apiHttpClient');
+const { getMaxId, inserirLinhaComId } = require('./idsSequenciais');
 const { exigirPermissao, exigirSupAdmin } = require('./permissionsController');
 const { aplicarConversaoNoEstoque } = require('./conversaoAplicar');
 const { excluirOrcamentoEmCascata } = require('./exclusaoEmCascata');
@@ -369,51 +370,6 @@ function isDuplicatePedidoNumeroError(err) {
     .join(' ')
     .toLowerCase();
   return partes.includes('pedidos_numero_key') || partes.includes('duplicate key');
-}
-
-// Colisão genérica de chave (pkey/unique) para retentar com outro id.
-function isDuplicateKeyError(err) {
-  const partes = [
-    err?.body?.detalhe,
-    err?.body?.detail,
-    err?.body?.message,
-    err?.body?.error,
-    err?.message
-  ]
-    .filter(Boolean)
-    .join(' ')
-    .toLowerCase();
-  return partes.includes('duplicate key') || partes.includes('_pkey') || partes.includes('unique constraint');
-}
-
-// Maior id atual de uma tabela (as tabelas de pedido NÃO auto-geram id).
-async function getMaxId(api, tabela) {
-  const lista = await api
-    .get(`/api/${tabela}`, { query: { order: 'id.desc', limit: 1 } })
-    .catch(() => []);
-  const primeiro = Array.isArray(lista) && lista.length ? lista[0] : null;
-  const maxId = Number(primeiro?.id);
-  return Number.isFinite(maxId) ? maxId : 0;
-}
-
-// Insere uma linha com id explícito, retentando com o próximo id em caso de
-// colisão de chave primária. Retorna o id efetivamente usado.
-async function inserirLinhaComId(api, tabela, payload, idInicial) {
-  let id = idInicial;
-  const maxTentativas = 50;
-  for (let tentativa = 0; tentativa < maxTentativas; tentativa++) {
-    try {
-      await api.post(`/api/${tabela}`, { ...payload, id });
-      return id;
-    } catch (err) {
-      if (isDuplicateKeyError(err) && tentativa < maxTentativas - 1) {
-        id += 1;
-        continue;
-      }
-      throw err;
-    }
-  }
-  return id;
 }
 
 // Monta o payload do pedido espelhando os campos do orçamento. Só são incluídos

@@ -1,0 +1,91 @@
+<div id="pagamentoPedidoOverlay" class="hidden fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4 pt-[4vw]">
+  <div role="dialog" aria-modal="true" class="w-full max-w-3xl max-h-[90vh] glass-surface backdrop-blur-xl rounded-3xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade slide-in overflow-hidden flex flex-col">
+
+    <header class="grid grid-cols-3 items-center px-8 py-5 border-b border-white/10 flex-shrink-0">
+      <button id="voltarPagamentoPedido" class="btn-neutral px-4 py-2 rounded-lg text-white font-medium justify-self-start">← Voltar</button>
+      <h2 class="text-lg font-semibold text-white text-center truncate">Pagamento do pedido</h2>
+      <span id="pagamentoPedidoNumero" class="text-sm text-gray-300 justify-self-end truncate"></span>
+    </header>
+
+    <div class="flex-1 overflow-y-auto modal-scroll">
+      <section class="px-8 py-6 space-y-6">
+
+        <!-- Contexto: o que NÃO se altera aqui. Deixar visível evita o usuário
+             procurar por peças e quantidades num modal que não as edita. -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div class="glass-surface rounded-xl px-4 py-3 border border-white/10">
+            <p class="text-xs text-gray-400 mb-1">Cliente</p>
+            <p id="pagamentoPedidoCliente" class="text-sm text-white truncate">—</p>
+          </div>
+          <div class="glass-surface rounded-xl px-4 py-3 border border-white/10">
+            <p class="text-xs text-gray-400 mb-1">Emissão</p>
+            <p id="pagamentoPedidoEmissao" class="text-sm text-white">—</p>
+          </div>
+          <div class="glass-surface rounded-xl px-4 py-3 border border-white/10">
+            <p class="text-xs text-gray-400 mb-1">Peças</p>
+            <p id="pagamentoPedidoItens" class="text-sm text-white">—</p>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div class="relative">
+            <select id="pagamentoPedidoCondicao" class="peer w-full appearance-none bg-input border border-inputBorder rounded-lg px-4 pr-12 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" data-filled="true">
+              <option value="vista">À vista</option>
+              <option value="prazo">À prazo</option>
+            </select>
+            <label for="pagamentoPedidoCondicao" class="absolute left-4 top-0 -translate-y-full text-xs text-gray-300 pointer-events-none">Condição de pagamento</label>
+            <i class="fas fa-chevron-down absolute right-4 top-1/2 -translate-y-1/2 text-gray-300 pointer-events-none"></i>
+          </div>
+
+          <div class="relative">
+            <select id="pagamentoPedidoForma" class="peer w-full appearance-none bg-input border border-inputBorder rounded-lg px-4 pr-12 py-3 text-white focus:border-primary focus:ring-2 focus:ring-primary/50 transition" data-filled="false">
+              <option value="" disabled selected hidden></option>
+              <option value="boleto">Boleto</option>
+              <option value="pix">Pix</option>
+              <option value="cartao">Cartão de Crédito</option>
+            </select>
+            <label for="pagamentoPedidoForma" class="absolute left-4 top-0 -translate-y-full text-xs text-gray-300 pointer-events-none">Forma de pagamento</label>
+            <i class="fas fa-chevron-down absolute right-4 top-1/2 -translate-y-1/2 text-gray-300 pointer-events-none"></i>
+          </div>
+        </div>
+
+        <!-- Prazo (à vista) ou parcelamento (a prazo) — trocado pelo script. -->
+        <div id="pagamentoPedidoBox"></div>
+
+        <!-- Vencimentos resultantes. São derivados dos dias sobre a data de
+             emissão; mostrá-los evita o usuário ter de fazer a conta de
+             cabeça para saber o que está combinando. -->
+        <div id="pagamentoPedidoVencimentos" class="hidden">
+          <p class="text-xs text-gray-400 mb-2">Vencimentos</p>
+          <div id="pagamentoPedidoVencimentosLista" class="flex flex-wrap gap-2"></div>
+        </div>
+
+        <div class="glass-surface rounded-xl border border-white/10 divide-y divide-white/10">
+          <div class="flex items-center justify-between px-4 py-3">
+            <span class="text-sm text-gray-400">Subtotal</span>
+            <span id="pagamentoPedidoSubtotal" class="text-sm text-white">—</span>
+          </div>
+          <div class="flex items-center justify-between px-4 py-3">
+            <span class="text-sm text-gray-400">Desconto de pagamento</span>
+            <span id="pagamentoPedidoDescPag" class="text-sm text-white">—</span>
+          </div>
+          <div class="flex items-center justify-between px-4 py-3">
+            <span class="text-sm text-gray-400">Desconto especial</span>
+            <span id="pagamentoPedidoDescEsp" class="text-sm text-white">—</span>
+          </div>
+          <div class="flex items-center justify-between px-4 py-4">
+            <span class="text-base font-medium text-white">Total do pedido</span>
+            <span id="pagamentoPedidoTotal" class="text-xl font-bold" style="color: var(--color-green)">—</span>
+          </div>
+        </div>
+
+        <div id="pagamentoPedidoMensagem" class="hidden text-sm"></div>
+      </section>
+    </div>
+
+    <footer class="px-8 py-5 border-t border-white/10 flex items-center justify-end gap-4 flex-shrink-0">
+      <button id="cancelarPagamentoPedido" class="btn-danger px-6 py-2 rounded-lg text-white font-medium min-w-[120px]">Cancelar</button>
+      <button id="salvarPagamentoPedido" data-perm="ped.payment.edit" class="btn-success px-6 py-2 rounded-lg text-white font-medium min-w-[120px]">Salvar</button>
+    </footer>
+  </div>
+</div>

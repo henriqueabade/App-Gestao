@@ -279,15 +279,16 @@ test('o repasse recalcula o total mantendo os descontos da linha', async () => {
   await gravarPrecoTabela({ produtoId: 9, codigo: 'PEC', valor: 200 });
 
   const item = pool.dados.orcamentos_itens[0];
-  // 2 × 200 = 400 bruto; 5% + 5% = 40 de desconto; 360 líquido.
-  assert.strictEqual(item.valor_total, 400);
-  assert.strictEqual(item.desconto_total, 40);
-  assert.strictEqual(item.valor_desc, 360);
+  // Unitário 200, 5% + 5%. Os campos em reais do ITEM são POR UNIDADE;
+  // `desconto_total` e `valor_total` é que são da linha — e `valor_total` é
+  // LÍQUIDO, porque é a soma dessa coluna que tem de bater com o total do
+  // orçamento. Ver backend/descontos.js.
+  assert.strictEqual(item.desconto_pagamento, 10, 'por unidade, não da linha');
+  assert.strictEqual(item.desconto_especial, 10, 'por unidade, não da linha');
+  assert.strictEqual(item.valor_desc, 20, 'desconto por unidade');
   assert.strictEqual(item.valor_unitario_desc, 180);
-  // Sem recalcular o valor EM REAIS, o percentual e o total ficariam
-  // divergentes e a soma das linhas não fecharia com o total do orçamento.
-  assert.strictEqual(item.desconto_pagamento, 20);
-  assert.strictEqual(item.desconto_especial, 20);
+  assert.strictEqual(item.desconto_total, 40, 'desconto da linha: 20 × 2');
+  assert.strictEqual(item.valor_total, 360, 'linha já com desconto: 180 × 2');
 });
 
 test('peça sem item em orçamento nenhum não gera escrita extra', async () => {

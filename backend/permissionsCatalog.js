@@ -774,6 +774,12 @@ const PERMISSIONS_CATALOG = {
         "desc": "Botão \"Cancelar\" no Visualizar e \"Confirmar Cancelamento\""
       },
       {
+        "key": "ped.payment.edit",
+        "column": "acao_payment_edit",
+        "label": "Alterar pagamento",
+        "desc": "Ícone de calendário — repactua condição, forma, prazos e recalcula o total (só em Produção)"
+      },
+      {
         "key": "ped.stock.restore_on_cancel",
         "column": "acao_stock_restore_on_cancel",
         "label": "Realocar estoque ao cancelar",

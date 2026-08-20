@@ -230,6 +230,11 @@ function openVisualizarPedidoModal(id) {
     openPedidoModal('modals/pedidos/visualizar.html', '../js/modals/pedido-visualizar.js', 'visualizarPedido');
 }
 
+function abrirPagamentoPedido(id) {
+    window.selectedOrderId = id;
+    openPedidoModal('modals/pedidos/pagamento.html', '../js/modals/pedido-pagamento.js', 'pagamentoPedido');
+}
+
 function abrirRelatorioProducao(pedidoId, cliente) {
     if (!pedidoId) return;
     window.relatorioProducaoContext = { pedidoId, cliente };
@@ -290,6 +295,14 @@ async function carregarPedidos() {
             const dataFormatada3 = formatarDataLocal(p.data_envio);
             const dataFormatada4 = formatarDataLocal(p.data_entrega);
             const dataFormatada5 = formatarDataLocal(p.data_cancelamento);
+            // Repactuar pagamento só cabe enquanto o pedido está em produção:
+            // depois de enviado o combinado com o cliente virou fato, e um
+            // cancelado teve o estoque estornado sobre os números que tinha.
+            const podeEditarPagamento = p.situacao === 'Produção';
+            const pagamentoClass = podeEditarPagamento ? '' : 'icon-disabled';
+            const pagamentoTitle = podeEditarPagamento
+                ? 'Alterar pagamento'
+                : 'Pagamento só pode ser alterado em produção';
             // permissão exigida para avançar o status deste pedido
             const statusPerm = p.situacao === 'Produção' ? 'ped.status.ship'
                 : p.situacao === 'Enviado' ? 'ped.status.deliver'
@@ -303,6 +316,7 @@ async function carregarPedidos() {
                 <td data-perm-col="col_ped_status" class="px-6 py-4 whitespace-nowrap"><span class="${badgeClass} px-3 py-1 rounded-full text-xs font-medium status-badge" data-aprovacao="${dataFormatada2}" data-envio="${dataFormatada3}" data-entrega="${dataFormatada4}" data-cancelamento="${dataFormatada5}">${p.situacao}</span></td>
                 <td class="px-6 py-4 whitespace-nowrap text-left">
                     <div class="flex items-center justify-start space-x-2">
+                        <i data-perm="ped.payment.edit" class="fas fa-calendar-alt w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10 acao-pagamento ${pagamentoClass}" style="color: var(--color-primary)" title="${pagamentoTitle}"></i>
                         <i data-perm="ped.view.details" class="fas fa-eye w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Visualizar"></i>
                         <i data-perm="${statusPerm}" class="fas fa-check w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Concluir"></i>
                         <i data-perm="ped.report" class="fas fa-clipboard w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" style="color: var(--color-primary)" title="Relatório"></i>
@@ -410,6 +424,15 @@ async function carregarPedidos() {
         });
 
 
+
+        tbody.querySelectorAll('.acao-pagamento').forEach(icon => {
+            icon.addEventListener('click', e => {
+                e.stopPropagation();
+                if (icon.classList.contains('icon-disabled')) return;
+                const id = e.currentTarget.closest('tr')?.dataset.id;
+                if (id) abrirPagamentoPedido(id);
+            });
+        });
 
         tbody.querySelectorAll('.fa-clipboard').forEach(icon => {
             icon.addEventListener('click', e => {

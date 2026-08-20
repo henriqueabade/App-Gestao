@@ -16,6 +16,7 @@
  */
 const pool = require('./db');
 const { paraDecimal } = require('./numeros');
+const descontos = require('./descontos');
 
 const ENDPOINT = '/tabela_fixa';
 const ORCAMENTOS_ITENS = '/orcamentos_itens';
@@ -179,35 +180,22 @@ async function removerPrecoTabela(produtoId) {
 // ------------------------------------------------------------ propagação
 
 /**
- * Recalcula o item mantendo os descontos que já estavam nele.
+ * Recalcula o item mantendo os PERCENTUAIS de desconto que já estavam nele.
  *
- * O desconto é guardado em percentual E em reais; se só o unitário mudasse, o
- * valor em reais ficaria descolado do percentual e o total do orçamento não
- * fecharia com a soma das linhas.
+ * O desconto é guardado em percentual E em reais. Se só o unitário mudasse,
+ * o valor em reais ficaria descolado do percentual e a soma das linhas não
+ * fecharia com o total do orçamento.
+ *
+ * A convenção das colunas (quais são por unidade e quais são da linha) mora
+ * em backend/descontos.js — errá-la produz números plausíveis e errados.
  */
 function recalcularItem(item, novoUnitario) {
-  const quantidade = Number(item?.quantidade) || 0;
-  const bruto = novoUnitario * quantidade;
-
-  const pctPagamento = Number(item?.desconto_pagamento_prc) || 0;
-  const pctEspecial = Number(item?.desconto_especial_prc) || 0;
-
-  const descontoPagamento = bruto * (pctPagamento / 100);
-  const descontoEspecial = bruto * (pctEspecial / 100);
-  const descontoTotal = descontoPagamento + descontoEspecial;
-
-  const liquido = bruto - descontoTotal;
-  const unitarioComDesconto = quantidade > 0 ? liquido / quantidade : novoUnitario;
-
-  return {
-    valor_unitario: novoUnitario,
-    valor_total: bruto,
-    desconto_pagamento: descontoPagamento,
-    desconto_especial: descontoEspecial,
-    desconto_total: descontoTotal,
-    valor_unitario_desc: unitarioComDesconto,
-    valor_desc: liquido
-  };
+  return descontos.calcularItem({
+    valorUnitario: novoUnitario,
+    quantidade: item?.quantidade,
+    pctPagamento: item?.desconto_pagamento_prc,
+    pctEspecial: item?.desconto_especial_prc
+  });
 }
 
 /**

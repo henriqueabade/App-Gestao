@@ -2,6 +2,8 @@ const express = require('express');
 const { createApiClient } = require('./apiHttpClient');
 const { exigirPermissao, exigirSupAdmin } = require('./permissionsController');
 const { excluirPedidoEmCascata } = require('./exclusaoEmCascata');
+const descontos = require('./descontos');
+const { getMaxId, inserirLinhaComId } = require('./idsSequenciais');
 const { estornarCancelamento, opcoesDeEstorno } = require('./cancelamentoEstorno');
 const { registrarEntrada, registrarSaida } = require('./materiaPrima');
 const {
@@ -234,6 +236,152 @@ router.put('/:id/status', exigirPermissao(permissaoDeStatus), async (req, res) =
 }); // <--- Faltava este '});' para fechar a rota e a função async
 
 // Obtém um pedido específico com itens e parcelas
+/**
+ * PUT /pedidos/:id/pagamento — repactua a condição de pagamento do pedido.
+ *
+ * Escopo estreito de propósito: mexe na CONDIÇÃO (à vista / a prazo), na forma
+ * de pagamento, nos prazos e no que decorre disso — os descontos e o total.
+ * Não toca em peças, quantidades nem preços unitários.
+ *
+ * Duas coisas que o código precisa preservar e que não são evidentes:
+ *
+ * 1. `pedidos_itens` é ATUALIZADO no lugar, nunca apagado e recriado. Os ids
+ *    dessas linhas são referenciados por movimentos de estoque, reservas e
+ *    lotes; recriá-las (como o PUT de orçamento faz, onde nada aponta para
+ *    elas) romperia a produção já em andamento.
+ *
+ * 2. Só pedidos em "Produção". Depois de enviado ou entregue o combinado com
+ *    o cliente virou fato; e um pedido cancelado teve o estoque estornado com
+ *    base nos números que ele tinha.
+ */
+router.put('/:id/pagamento', exigirPermissao('ped.payment.edit'), async (req, res) => {
+  const { id } = req.params;
+  const body = req.body || {};
+
+  const condicao = body.condicao === 'prazo' ? 'prazo' : 'vista';
+  const formaPagamento = String(body.forma_pagamento || '').trim();
+  const parcelasDetalhes = Array.isArray(body.parcelas_detalhes) ? body.parcelas_detalhes : [];
+  const prazo = String(body.prazo || '').trim();
+
+  if (!formaPagamento) {
+    return res.status(400).json({ error: 'Forma de pagamento é obrigatória.' });
+  }
+  if (!prazo) {
+    return res.status(400).json({ error: 'Informe o prazo de pagamento.' });
+  }
+  if (!parcelasDetalhes.length) {
+    return res.status(400).json({ error: 'Informe ao menos uma parcela.' });
+  }
+
+  try {
+    const api = createApiClient(req);
+
+    const pedido = await api.get(`/api/pedidos/${id}`).catch(() => null);
+    if (!pedido || pedido.error === 'Not found') {
+      return res.status(404).json({ error: 'Pedido não encontrado' });
+    }
+
+    // A trava real. Esconder o ícone na tabela é conveniência de interface;
+    // o que impede uma segunda aba ou um envio repetido é esta checagem.
+    if (String(pedido.situacao || '').trim() !== 'Produção') {
+      return res.status(409).json({
+        error: 'Só é possível alterar o pagamento de pedidos em produção.',
+        code: 'SITUACAO_NAO_PERMITE'
+      });
+    }
+
+    const itens = await api.get('/api/pedidos_itens', { query: { pedido_id: id } }).catch(() => []);
+    const listaItens = Array.isArray(itens) ? itens : [];
+    if (!listaItens.length) {
+      return res.status(409).json({ error: 'Pedido sem itens: nada a recalcular.' });
+    }
+
+    // A condição anterior é deduzida das parcelas gravadas — é o mesmo
+    // critério que a tabela usa para exibir "À vista" ou "3x".
+    const condicaoAnterior = Number(pedido.parcelas) > 1 ? 'prazo' : 'vista';
+
+    // O desconto ESPECIAL de cada linha sobrevive à troca; o de pagamento é
+    // recalculado pela nova condição. Ver backend/descontos.js.
+    const linhas = listaItens.map(item => {
+      const totalPrc = descontos.descontoAoTrocarCondicao(item, condicaoAnterior, condicao);
+      const { pagamento, especial } = descontos.repartirDesconto(totalPrc, item.quantidade, condicao);
+      return {
+        id: item.id,
+        quantidade: Number(item.quantidade) || 0,
+        ...descontos.calcularItem({
+          valorUnitario: item.valor_unitario,
+          quantidade: item.quantidade,
+          pctPagamento: pagamento,
+          pctEspecial: especial
+        })
+      };
+    });
+
+    const totais = descontos.totaisDoDocumento(linhas);
+
+    // As parcelas chegam da tela com o total antigo se o desconto mudou a
+    // conta. Recusar é melhor que gravar um parcelamento que não soma o
+    // pedido: o financeiro cobraria a diferença de ninguém.
+    const somaParcelas = parcelasDetalhes.reduce((s, p) => s + (Number(p?.valor) || 0), 0);
+    if (Math.abs(somaParcelas - totais.valor_final) > 0.02) {
+      return res.status(422).json({
+        error: 'A soma das parcelas não fecha com o total do pedido.',
+        code: 'PARCELAS_NAO_FECHAM',
+        detalhe: { soma_parcelas: somaParcelas, valor_final: totais.valor_final }
+      });
+    }
+
+    await api.put(`/api/pedidos/${id}`, {
+      parcelas: condicao === 'prazo' ? parcelasDetalhes.length : 1,
+      tipo_parcela: condicao === 'prazo' ? (body.tipo_parcela || 'igual') : 'a vista',
+      forma_pagamento: formaPagamento,
+      prazo,
+      desconto_pagamento: totais.desconto_pagamento,
+      desconto_especial: totais.desconto_especial,
+      desconto_total: totais.desconto_total,
+      valor_final: totais.valor_final
+    });
+
+    // Atualização no lugar — ver o comentário 1 no cabeçalho da rota.
+    for (const linha of linhas) {
+      const { id: itemId, quantidade: _q, ...valores } = linha;
+      await api.put(`/api/pedidos_itens/${itemId}`, valores);
+    }
+
+    // Parcelas, ao contrário dos itens, não são referenciadas por nada: podem
+    // ser trocadas em bloco, que é o único jeito de refletir "de 3x para à
+    // vista" sem sobrar linha antiga.
+    const parcelasExistentes = await api
+      .get('/api/pedido_parcelas', { query: { pedido_id: id } })
+      .catch(() => []);
+    for (const parcela of Array.isArray(parcelasExistentes) ? parcelasExistentes : []) {
+      if (parcela?.id) await api.delete(`/api/pedido_parcelas/${parcela.id}`);
+    }
+
+    let proximoId = (await getMaxId(api, 'pedido_parcelas')) + 1;
+    for (let i = 0; i < parcelasDetalhes.length; i++) {
+      const { id: _pid, pedido_id: _ppid, ...resto } = parcelasDetalhes[i] || {};
+      const usado = await inserirLinhaComId(
+        api,
+        'pedido_parcelas',
+        { ...resto, pedido_id: Number(id), numero_parcela: resto.numero_parcela || i + 1 },
+        proximoId
+      );
+      proximoId = usado + 1;
+    }
+
+    res.json({
+      ok: true,
+      valor_final: totais.valor_final,
+      desconto_total: totais.desconto_total,
+      parcelas: condicao === 'prazo' ? parcelasDetalhes.length : 1
+    });
+  } catch (err) {
+    console.error('Erro ao alterar pagamento do pedido:', err);
+    res.status(err.status || 500).json({ error: 'Erro ao alterar o pagamento do pedido' });
+  }
+});
+
 router.get('/:id', exigirPermissao('ped.view.details'), async (req, res) => {
   const { id } = req.params;
   try {
