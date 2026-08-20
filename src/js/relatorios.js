@@ -302,6 +302,19 @@ function safeNumber(value) {
     return Number.isFinite(number) ? number : 0;
 }
 
+/**
+ * Preço de venda da peça nos relatórios: o PRATICADO (tabela fixa), o mesmo
+ * que Orçamentos usa — ver src/utils/precoTabela.js.
+ *
+ * `preco_venda` continua no objeto, mas é o custo apurado: ele oscila a cada
+ * mudança de insumo, então um relatório baseado nele não bate com nenhuma
+ * proposta emitida. Peça fora da tabela fixa devolve null (célula vazia) e
+ * entra como zero nos totais — não temos preço aprovado para ela.
+ */
+function precoDeVendaProduto(produto) {
+    return window.PrecoTabela?.precoDeVenda(produto) ?? null;
+}
+
 function formatDate(value) {
     if (!value) return '—';
     if (typeof value === 'string') {
@@ -1809,7 +1822,7 @@ const REPORT_FILTERS = {
             if (produto?.destaque) {
                 searchValues.push('destaque');
             }
-            searchValues.push(produto?.quantidade_total, produto?.preco_venda);
+            searchValues.push(produto?.quantidade_total, precoDeVendaProduto(produto));
 
             if (!matchesSearchTerm(searchTerm, searchValues)) return false;
 
@@ -1825,7 +1838,7 @@ const REPORT_FILTERS = {
             if (Number.isFinite(quantidadeMin) && quantidade < quantidadeMin) return false;
             if (Number.isFinite(quantidadeMax) && quantidade > quantidadeMax) return false;
 
-            const preco = safeNumber(produto?.preco_venda);
+            const preco = safeNumber(precoDeVendaProduto(produto));
             if (Number.isFinite(precoMin) && preco < precoMin) return false;
             if (Number.isFinite(precoMax) && preco > precoMax) return false;
 
@@ -2912,7 +2925,7 @@ function buildProdutosCharts(data = []) {
 
     const collectionSeriesRaw = sumByLabel(list, produto => produto?.colecao ?? produto?.categoria ?? produto?.linha, produto => {
         const quantidade = safeNumber(produto?.quantidade_total);
-        const preco = safeNumber(produto?.preco_venda);
+        const preco = safeNumber(precoDeVendaProduto(produto));
         return quantidade * preco;
     }, {
         fallback: 'Sem coleção',
@@ -3683,7 +3696,7 @@ function computeProdutosKpis(items = []) {
     const activeStatuses = new Set(['em linha', 'ativo', 'disponivel', 'disponível']);
     const active = list.filter(produto => activeStatuses.has(normalizeText(produto?.status))).length;
     const totalStock = list.reduce((sum, produto) => sum + safeNumber(produto?.quantidade_total), 0);
-    const totalValue = list.reduce((sum, produto) => sum + safeNumber(produto?.quantidade_total) * safeNumber(produto?.preco_venda), 0);
+    const totalValue = list.reduce((sum, produto) => sum + safeNumber(produto?.quantidade_total) * safeNumber(precoDeVendaProduto(produto)), 0);
 
     return [
         createKpiItem({
@@ -4098,9 +4111,8 @@ MASTER_DETAIL_CONFIGS.produtos = {
     getCardSummary: item => {
         const nome = formatText(item?.nome, '—');
         const codigo = item?.codigo ? formatText(item.codigo, '—') : '';
-        const precoVenda = item?.preco_venda !== undefined && item?.preco_venda !== null
-            ? escapeHtml(formatCurrency(item.preco_venda))
-            : '';
+        const precoTabela = precoDeVendaProduto(item);
+        const precoVenda = precoTabela !== null ? escapeHtml(formatCurrency(precoTabela)) : '';
         const estoque = escapeHtml(formatNumber(item?.quantidade_total, { fallback: '0' }));
         const statusLabel = item?.status ? String(item.status) : '';
         const badges = [];
@@ -4115,9 +4127,8 @@ MASTER_DETAIL_CONFIGS.produtos = {
         };
     },
     getDetail: item => {
-        const precoVenda = item?.preco_venda !== undefined && item?.preco_venda !== null
-            ? escapeHtml(formatCurrency(item.preco_venda))
-            : '—';
+        const precoTabela = precoDeVendaProduto(item);
+        const precoVenda = precoTabela !== null ? escapeHtml(formatCurrency(precoTabela)) : '—';
         const margem = Number.isFinite(Number(item?.pct_markup))
             ? escapeHtml(formatPercent(Number(item.pct_markup)))
             : '—';
@@ -4184,7 +4195,7 @@ REPORT_CONFIGS.produtos = {
         const codigo = formatText(produto?.codigo, '—');
         const nome = formatText(produto?.nome, '—');
         const colecao = formatText(produto?.colecao ?? produto?.categoria ?? produto?.linha, '—');
-        const precoVenda = formatCurrency(produto?.preco_venda);
+        const precoVenda = formatCurrency(precoDeVendaProduto(produto));
         const margem = Number.isFinite(Number(produto?.pct_markup))
             ? formatPercent(Number(produto.pct_markup))
             : '—';

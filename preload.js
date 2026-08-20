@@ -327,6 +327,7 @@ contextBridge.exposeInMainWorld('electronAPI', comCronometro({
   verificarDependenciaColecao: (nome) => ipcRenderer.invoke('verificar-dependencia-colecao', nome),
   verificarDependenciaProcesso: (nome) => ipcRenderer.invoke('verificar-dependencia-processo', nome),
   listarProdutos: () => ipcRenderer.invoke('listar-produtos'),
+  listarTabelaFixa: () => ipcRenderer.invoke('listar-tabela-fixa'),
   obterProduto: (codigo) => ipcRenderer.invoke('obter-produto', codigo),
   adicionarProduto: async (dados) => {
     const result = await ipcRenderer.invoke('adicionar-produto', dados);

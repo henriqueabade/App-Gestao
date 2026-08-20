@@ -210,7 +210,17 @@
       const lista = await (window.electronAPI?.listarProdutos?.() ?? []);
       produtoSelect.innerHTML = '<option value="" disabled selected hidden></option>' +
         lista.map(p => `<option value="${p.id}">${p.nome}</option>`).join('');
-      lista.forEach(p => { products[p.id] = { nome: p.nome, valor: Number(p.preco_venda) || 0, codigo: p.codigo || '', ncm: p.ncm || '' }; });
+      // Preço PRATICADO (tabela fixa) — ver src/utils/precoTabela.js.
+      lista.forEach(p => {
+        const praticado = window.PrecoTabela?.precoDeVenda(p) ?? null;
+        products[p.id] = {
+          nome: p.nome,
+          valor: praticado ?? 0,
+          semPreco: praticado === null,
+          codigo: p.codigo || '',
+          ncm: p.ncm || ''
+        };
+      });
     } catch(err){ console.error('Erro ao carregar produtos', err); }
   }
 
@@ -623,6 +633,13 @@
       if (!prodId) return;
       confirmResetIfNeeded(() => {
         const prod = products[prodId];
+        // Peça sem preço na tabela fixa não tem valor de venda aprovado.
+        // (Só vale para inclusão: os itens já gravados são carregados acima
+        // com o valor que o orçamento tem hoje, sem passar por aqui.)
+        if (prod.semPreco) {
+          showToast(window.PrecoTabela.motivoSemPreco({ nome: prod.nome, codigo: prod.codigo }), 'error');
+          return;
+        }
         // Não force desconto zero; deixe aplicar desconto padrão automaticamente
         addItem({ id: prodId, nome: prod.nome, qtd, valor: prod.valor });
         produtoSelect.value = '';

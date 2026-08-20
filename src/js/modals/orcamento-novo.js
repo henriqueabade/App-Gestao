@@ -182,9 +182,13 @@
       produtoSelect.innerHTML = '<option value="" disabled selected hidden></option>' +
         lista.map(p => `<option value="${p.id}">${p.nome}</option>`).join('');
       lista.forEach(p => {
+        // Orçamento vende pelo preço PRATICADO (tabela fixa), não pelo custo
+        // apurado — ver src/utils/precoTabela.js.
+        const praticado = window.PrecoTabela?.precoDeVenda(p) ?? null;
         products[p.id] = {
           nome: p.nome,
-          valor: Number(p.preco_venda) || 0,
+          valor: praticado ?? 0,
+          semPreco: praticado === null,
           codigo: p.codigo,
           ncm: p.ncm
         };
@@ -495,6 +499,13 @@
   function addItem(prodId, qtd){
     const product = products[prodId];
     if (!product) return;
+    // Sem preço na tabela fixa a peça não tem valor de venda aprovado. Entrar
+    // com zero produziria uma proposta com item de graça — barramos e dizemos
+    // onde resolver.
+    if (product.semPreco) {
+      showToast(window.PrecoTabela.motivoSemPreco({ nome: product.nome, codigo: product.codigo }), 'error');
+      return;
+    }
     const existing = Array.from(itensTbody.children).find(tr => tr.dataset.id === prodId);
     if (existing) {
       showDuplicateDialog(choice => {

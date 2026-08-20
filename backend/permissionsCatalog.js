@@ -315,6 +315,18 @@ const PERMISSIONS_CATALOG = {
         "column": "acao_stock_lote_delete",
         "label": "Excluir lote de estoque",
         "desc": "Ícone de lixeira na coluna AÇÕES do \"Detalhe de Estoque\""
+      },
+      {
+        "key": "prod.tabela.view",
+        "column": "acao_tabela_view",
+        "label": "Ver preço de tabela",
+        "desc": "Ícone de moeda — alterna a coluna entre Preço Tabela e Preço de Custo"
+      },
+      {
+        "key": "prod.tabela.update",
+        "column": "acao_tabela_update",
+        "label": "Atualizar tabela fixa",
+        "desc": "Opção \"Atualizar Tabela Fixa\" ao salvar o produto — repassa o preço aos orçamentos em aberto"
       }
     ],
     "columns": [
@@ -337,6 +349,11 @@ const PERMISSIONS_CATALOG = {
         "key": "col_prod_preco_base",
         "column": "col_prod_preco_base",
         "label": "Preço de Venda"
+      },
+      {
+        "key": "col_prod_preco_tabela",
+        "column": "col_prod_preco_tabela",
+        "label": "Preço Tabela"
       },
       {
         "key": "col_prod_margem",

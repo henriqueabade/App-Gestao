@@ -22,6 +22,65 @@ let currentProductPopup = null;
 let productInfoEventsBound = false;
 let produtoActionsBound = false;
 
+// ---------------------------------------------------------------------------
+// COLUNA DE PREÇO: DOIS NÚMEROS QUE NÃO SÃO A MESMA COISA
+//
+// `preco_venda` é o preço CALCULADO — ele se move sozinho toda vez que um
+// insumo muda de custo. `preco_tabela` é o preço PRATICADO, que só muda
+// quando alguém marca "Atualizar Tabela Fixa" ao salvar a peça. Quem vende
+// precisa do segundo; quem apura custo, do primeiro.
+//
+// A coluna é uma só e alterna entre eles pelo ícone na linha. O estado vale
+// para a tabela inteira: alternar em qualquer linha vira a coluna toda, senão
+// a mesma coluna mostraria grandezas diferentes de linha para linha.
+//
+//   'venda'  → como o módulo sempre abriu: "Preço de Venda" (preco_venda)
+//   'tabela' → "Preço Tabela"    (preco_tabela; vazio quando não há registro)
+//   'custo'  → "Preço de Custo"  (preco_venda, agora nomeado pelo que é)
+// ---------------------------------------------------------------------------
+const MODOS_PRECO = {
+    venda:  { titulo: 'Preço de Venda',  permCol: 'col_prod_preco_base',   proximo: 'tabela' },
+    tabela: { titulo: 'Preço Tabela',    permCol: 'col_prod_preco_tabela', proximo: 'custo'  },
+    custo:  { titulo: 'Preço de Custo',  permCol: 'col_prod_preco_base',   proximo: 'tabela' }
+};
+let modoPreco = 'venda';
+
+/** Ícone que a linha mostra hoje — e para onde ele leva. */
+function iconePrecoAtual() {
+    // Em 'tabela' a coluna já mostra o preço praticado, então o convite é
+    // voltar para o custo: calculadora roxa. Nos demais estados, moeda verde.
+    return modoPreco === 'tabela'
+        ? { classe: 'fa-calculator', cor: 'var(--color-violet)', titulo: 'Mostrar preço de custo' }
+        : { classe: 'fa-coins',      cor: 'var(--color-green)',  titulo: 'Mostrar preço de tabela' };
+}
+
+/** Valor que a célula de preço mostra no modo corrente. */
+function valorPrecoDaLinha(produto) {
+    if (modoPreco !== 'tabela') return formatCurrency(produto?.preco_venda);
+    // Peça sem linha na tabela fixa fica com célula VAZIA, não com R$ 0,00:
+    // zero é um preço, ausência é um cadastro que falta fazer.
+    const valor = produto?.preco_tabela;
+    return valor == null ? '' : formatCurrency(valor);
+}
+
+/** Reescreve o cabeçalho da coluna de preço conforme o modo. */
+function sincronizarCabecalhoPreco() {
+    const th = document.querySelector('#produtosTableWrapper th[data-coluna-preco]');
+    if (!th) return;
+    const modo = MODOS_PRECO[modoPreco] || MODOS_PRECO.venda;
+    th.textContent = modo.titulo;
+    // A coluna troca de identidade junto com o conteúdo: esconder "Preço
+    // Tabela" de quem não pode vê-lo exige que a chave acompanhe o modo.
+    th.setAttribute('data-perm-col', modo.permCol);
+    window.Permissoes?.aplicarAcoesEColunas?.(th.parentElement || th);
+}
+
+function alternarModoPreco() {
+    const modo = MODOS_PRECO[modoPreco] || MODOS_PRECO.venda;
+    modoPreco = modo.proximo;
+    renderProdutos(produtosRenderizados);
+}
+
 async function carregarProdutos(options = {}) {
     if (refreshInProgress) {
         refreshQueued = true;
@@ -95,6 +154,7 @@ function renderProdutos(produtos) {
     produtosRenderizados = [...produtos];
     tbody.innerHTML = produtos.map((prod, index) => criarLinhaProduto(prod, index)).join('');
 
+    sincronizarCabecalhoPreco();
     aplicarEfeitoHoverLinhas();
     garantirEventosAcoesProdutos();
 
@@ -109,7 +169,9 @@ function criarLinhaProduto(produto, index) {
     const codigo = produto.codigo || '';
     const nome = reduzirNome(produto.nome) || '';
     const categoria = produto.categoria || '';
-    const precoVenda = formatCurrency(produto.preco_venda);
+    const precoColuna = valorPrecoDaLinha(produto);
+    const modoColuna = MODOS_PRECO[modoPreco] || MODOS_PRECO.venda;
+    const icone = iconePrecoAtual();
     const produtoId = produto?.id != null ? ` data-id="${produto.id}"` : '';
     const infoId = produto?.id ?? '';
 
@@ -127,8 +189,8 @@ function criarLinhaProduto(produto, index) {
             <td data-perm-col="col_prod_colecao" class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-violet)">
                 <span class="cell-text" title="${categoria}">${categoria}</span>
             </td>
-            <td data-perm-col="col_prod_preco_base" class="px-6 py-4 whitespace-nowrap text-sm text-white">
-                <span class="cell-text" title="${precoVenda}">${precoVenda}</span>
+            <td data-perm-col="${modoColuna.permCol}" class="px-6 py-4 whitespace-nowrap text-sm text-white">
+                <span class="cell-text" title="${precoColuna}">${precoColuna}</span>
             </td>
             <td data-perm-col="col_prod_margem" class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-green)">
                 <span class="cell-text" title="${markup}">${markup}</span>
@@ -138,6 +200,7 @@ function criarLinhaProduto(produto, index) {
             </td>
             <td class="px-6 py-4 whitespace-nowrap text-left action-cell">
                 <div class="flex items-center justify-start space-x-2">
+                    <i data-perm="prod.tabela.view" class="fas ${icone.classe} w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" data-action="preco-tabela" data-index="${index}" title="${icone.titulo}" style="color: ${icone.cor}"></i>
                     <i data-perm="prod.movimentos.view" class="fas fa-clipboard-list w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" data-action="movimentos" data-index="${index}" title="Relatório de movimentações" style="color: var(--color-blue)"></i>
                     <i data-perm="prod.stock.view" class="fas fa-box w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" data-action="stock" data-index="${index}" title="Estoque" style="color: var(--color-primary)"></i>
                     <i data-perm="prod.details.view" class="fas fa-eye w-5 h-5 cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-white/10" data-action="view" data-index="${index}" title="Visualizar produto" style="color: var(--color-primary)"></i>
@@ -195,6 +258,9 @@ function garantirEventosAcoesProdutos() {
         if (!produto) return;
 
         switch (action) {
+            case 'preco-tabela':
+                alternarModoPreco();
+                break;
             case 'view':
                 abrirVisualizarProduto(produto);
                 break;

@@ -946,7 +946,11 @@
           preco_venda:    totals.valorVenda   || 0,
           status: produtoSelecionado.status,
           data: new Date().toISOString(),
-          categoria: colecaoSelect.value.trim()
+          categoria: colecaoSelect.value.trim(),
+          // Decisão explícita do usuário. Sem ela marcada, mexer nos insumos
+          // muda o custo apurado da peça e mais nada — o preço que o cliente
+          // já viu nos orçamentos em aberto fica de pé.
+          atualizar_tabela_fixa: updateRadios.some(r => r.checked && r.value === 'update')
         };
         if(editarRegistroToggle && editarRegistroToggle.checked){
           if (nomeInput){
@@ -975,12 +979,21 @@
         try{
           isSubmitting = true;
           setModalLoadingState(true, { submitText: 'Salvando...', cloneText: 'Aguarde...' });
-          await window.electronAPI.salvarProdutoDetalhado(
+          const resultado = await window.electronAPI.salvarProdutoDetalhado(
             null,
             produto,
             itensPayload,
             produtoSelecionado.id
           );
+
+          // Permissão negada volta como objeto, não como exceção. Sem esta
+          // conferência a tela anunciava "alterada com sucesso" para um
+          // salvamento que o processo principal recusou inteiro — e o usuário
+          // só descobriria ao reabrir a peça.
+          if (resultado && resultado.success === false) {
+            throw new Error(resultado.message || 'Você não tem permissão para esta ação.');
+          }
+
           deletedItens = [];
           const now = new Date();
           if (ultimaDataEl) ultimaDataEl.textContent = now.toLocaleDateString('pt-BR');
@@ -1010,7 +1023,10 @@
           close();
         }catch(err){
           console.error('Erro ao salvar produto', err);
-          showToast('Erro ao salvar peça', 'error');
+          // A mensagem do erro é o que diz ao usuário o que fazer ("você não
+          // tem permissão", "código já existe"). Trocá-la por um texto
+          // genérico deixava o problema sem saída visível.
+          showToast(err?.message || 'Erro ao salvar peça', 'error');
         } finally {
           isSubmitting = false;
           setModalLoadingState(false);

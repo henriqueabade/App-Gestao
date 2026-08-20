@@ -71,6 +71,7 @@ const {
   removerColecao,
   colecaoTemDependencias
 } = require('./backend/produtos');
+const tabelaFixa = require('./backend/tabelaFixa');
 const apiServer = require('./backend/server');
 
 function showStartupBanner() {
@@ -4469,7 +4470,21 @@ ipcMain.handle('listar-itens-processo-produto', async (_e, { codigo, etapa, busc
 });
 ipcMain.handle('salvar-produto-detalhado', async (_e, { codigo, produto, itens, produtoId }) => {
   if (!(await verificarPermissaoIpc('prod.edit'))) return negadoIpc('prod.edit');
+
+  // Mexer na tabela fixa é uma segunda decisão, com sua própria permissão:
+  // ela reprecifica orçamentos em aberto. Quem pode editar a peça não pode,
+  // por isso, remarcar propostas já enviadas.
+  const querAtualizarTabela = produto?.atualizar_tabela_fixa === true;
+  if (querAtualizarTabela && !(await verificarPermissaoIpc('prod.tabela.update'))) {
+    return negadoIpc('prod.tabela.update');
+  }
+
   return salvarProdutoDetalhado(codigo, produto, itens, produtoId);
+});
+
+ipcMain.handle('listar-tabela-fixa', async () => {
+  if (!(await verificarPermissaoIpc('prod.tabela.view'))) return negadoIpc('prod.tabela.view');
+  return tabelaFixa.listarTabelaFixa();
 });
 
 async function waitForAutoLoginDatabaseReady(user) {

@@ -1043,11 +1043,15 @@
       const primary = plan.stock[0];
       const variant = getVariantByKey(primary.variantKey);
       if (variant?.product) {
+        // A substituta é uma peça NOVA na proposta, então entra pelo preço
+        // praticado (tabela fixa), igual a qualquer item que se inclui hoje.
+        const praticado = window.PrecoTabela?.precoDeVenda(variant.product) ?? null;
         selectedProduct = {
           id: Number(variant.product.id),
           nome: variant.product.nome,
           codigo: variant.product.codigo,
-          preco_venda: Number(variant.product.preco_venda || 0)
+          preco_venda: praticado ?? 0,
+          sem_preco_tabela: praticado === null
         };
       }
     }

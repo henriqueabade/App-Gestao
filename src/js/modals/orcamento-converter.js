@@ -412,11 +412,24 @@
     const row = rows[idx];
     if (!row || !detail.plan) return;
 
+    // Peça substituta sem preço na tabela fixa não tem valor de venda
+    // aprovado. A recusa vem antes de TODA mutação: aplicar o plano e desistir
+    // no meio deixaria a linha num estado que nenhuma das duas escolhas produz.
+    if (detail.selectedProduct?.sem_preco_tabela) {
+      if (typeof showToast === 'function') {
+        showToast(window.PrecoTabela.motivoSemPreco(detail.selectedProduct), 'error');
+      }
+      return;
+    }
+
     applyReplacementPlanToRow(row, detail.plan);
     row.approved = false;
     row.forceProduceAll = !!detail.forceProduceAll;
 
     if (Array.isArray(detail.plan?.stock) && detail.plan.stock.length && detail.selectedProduct) {
+      // `preco_venda` aqui já é o preço praticado resolvido em
+      // orcamento-substituir-peca.js (a peça sem tabela fixa foi recusada
+      // logo na entrada do handler).
       const produto = detail.selectedProduct;
       if (row._origId == null) row._origId = row.produto_id;
       row.produto_id = Number(produto.id);

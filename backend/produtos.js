@@ -3,6 +3,8 @@ const { MOV, ITEM, registrarMovimento } = require('./estoqueLedger');
 const { normalizarCamposNumericos, paraDecimal } = require('./numeros');
 // Quem grava produto ou rota derruba o catálogo cacheado — ver catalogoCache.
 const catalogoCache = require('./catalogoCache');
+// Preço praticado da peça — ver backend/tabelaFixa.js.
+const tabelaFixa = require('./tabelaFixa');
 
 /** Campos que chegam do front como texto e precisam virar número decimal. */
 const CAMPOS_NUMERICOS_PRODUTO = [
@@ -490,12 +492,16 @@ async function listarProdutos() {
       return acc;
     }, new Map());
 
-    return listaProdutos
+    const comQuantidade = listaProdutos
       .map(produto => ({
         ...produto,
         quantidade_total: quantidadesPorProduto.get(produto?.id) || 0
       }))
       .sort((a, b) => String(a?.nome || '').localeCompare(String(b?.nome || '')));
+
+    // `preco_tabela` viaja junto com o produto porque quem consome esta lista
+    // (Produtos, Orçamentos, Relatórios) precisa dos dois preços lado a lado.
+    return tabelaFixa.anexarPrecoTabela(comQuantidade);
   } catch (err) {
     console.error('Erro ao listar produtos:', err.message);
     throw err;
@@ -819,7 +825,7 @@ async function adicionarProduto(dados) {
   }
   // O catálogo mudou: o cache de produtos/rotas não vale mais.
   catalogoCache.invalidar();
-  return pool.post('/produtos', {
+  const criado = await pool.post('/produtos', {
     codigo,
     nome,
     ncm,
@@ -828,6 +834,20 @@ async function adicionarProduto(dados) {
     pct_markup,
     status
   });
+
+  // Peça nova nasce com preço praticado igual ao calculado. Sem esta linha o
+  // produto ficaria invisível para Orçamentos, que só vende o que tem preço
+  // de tabela.
+  const criadoId = Array.isArray(criado) ? criado[0]?.id : criado?.id;
+  if (criadoId != null) {
+    await tabelaFixa.registrarPrecoTabela({
+      produtoId: criadoId,
+      codigo,
+      valor: preco_venda
+    });
+  }
+
+  return criado;
 }
 
 async function atualizarProduto(id, dados) {
@@ -908,6 +928,11 @@ async function excluirProduto(id) {
     (Array.isArray(lotes) ? lotes : []).map(lote => executarLotes('delete', `/${lote.id}`))
   );
   console.info(`[excluirProduto] lotes em ${Date.now() - inicioEtapa}ms`);
+
+  // A linha da tabela fixa sai ANTES do produto: id_prod aponta para
+  // produtos.id, e deixá-la para trás criaria preço órfão que reapareceria
+  // colado no próximo produto a receber o mesmo id.
+  await tabelaFixa.removerPrecoTabela(id);
 
   await pool.delete(`/produtos/${id}`);
   // O catálogo mudou: o cache de produtos/rotas não vale mais.
@@ -1491,7 +1516,21 @@ async function salvarProdutoDetalhado(codigoOriginal, produto, itens, produtoId)
   // "quais insumos este produto tem". Sem derrubar o cache, o popup e a busca
   // continuariam mostrando a composição antiga.
   catalogoCache.invalidar();
-  return true;
+
+  // O preço praticado só se move por decisão explícita ("Atualizar Tabela
+  // Fixa"). Um insumo que encareceu muda `preco_venda` acima e para por aí:
+  // reprecificar sozinho o que já foi proposto ao cliente seria o pior dos
+  // efeitos colaterais.
+  let tabelaFixaResultado = null;
+  if (produto?.atualizar_tabela_fixa === true) {
+    tabelaFixaResultado = await tabelaFixa.gravarPrecoTabela({
+      produtoId: produtoIdNormalizado,
+      codigo: codigoDestino,
+      valor: preco_venda
+    });
+  }
+
+  return { ok: true, tabelaFixa: tabelaFixaResultado };
 }
 
 async function listarColecoes() {
@@ -1806,6 +1845,7 @@ module.exports = {
   // baixa lotes direto pela API da requisição) poder derrubar o cache também.
   invalidarCacheLotes,
   salvarProdutoDetalhado,
+  tabelaFixa,
   listarColecoes,
   adicionarColecao,
   removerColecao,
