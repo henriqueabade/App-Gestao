@@ -54,6 +54,21 @@
 
   const formatarMoeda = v => Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
+  /**
+   * Nome do cliente.
+   *
+   * `cliente_nome` vem no próprio detalhe do pedido, e é essa a fonte: o cache
+   * de `pedidos.js` nem sempre alcança o escopo do modal — era por isso que o
+   * campo saía como "—" com o cliente cadastrado — e buscar em
+   * `/api/clientes/:id` exigiria permissão no módulo de Clientes, que quem
+   * mexe em pedido não necessariamente tem.
+   */
+  function nomeDoCliente(dados) {
+    return dados?.cliente_nome
+        || window.obterNomeCliente?.(dados?.cliente_id)
+        || '—';
+  }
+
   function exibirMensagem(tipo, texto) {
     if (!mensagemEl) return;
     mensagemEl.textContent = texto;
@@ -216,12 +231,18 @@
     condicaoSel.value = condicaoOriginal;
 
     el('pagamentoPedidoNumero').textContent = pedido.numero ? `Pedido ${pedido.numero}` : '';
-    el('pagamentoPedidoCliente').textContent =
-      window.obterNomeCliente?.(pedido.cliente_id) || pedido.cliente_nome || '—';
     el('pagamentoPedidoEmissao').textContent = pedido.data_emissao
       ? new Date(pedido.data_emissao).toLocaleDateString('pt-BR')
       : '—';
-    el('pagamentoPedidoItens').textContent = `${itens.length} ${itens.length === 1 ? 'peça' : 'peças'}`;
+
+    // Quantidade de PEÇAS, não de linhas: um pedido de uma linha com 12
+    // unidades são 12 peças. Contar linhas dizia "1 peça" para um pedido de
+    // uma dúzia.
+    const totalPecas = itens.reduce((soma, it) => soma + (Number(it.quantidade) || 0), 0);
+    el('pagamentoPedidoItens').textContent =
+      `${totalPecas} ${totalPecas === 1 ? 'peça' : 'peças'}`;
+
+    el('pagamentoPedidoCliente').textContent = nomeDoCliente(pedido);
 
     if (pedido.forma_pagamento) {
       formaSel.value = pedido.forma_pagamento;

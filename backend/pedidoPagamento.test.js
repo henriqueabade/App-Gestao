@@ -31,7 +31,8 @@ const COLUNAS = {
     'desconto_especial', 'desconto_especial_prc', 'valor_desc', 'desconto_total',
     'valor_total', 'qtd_a_produzir', 'qtd_usar_pronta'
   ],
-  pedido_parcelas: ['id', 'pedido_id', 'numero_parcela', 'valor', 'data_vencimento']
+  pedido_parcelas: ['id', 'pedido_id', 'numero_parcela', 'valor', 'data_vencimento'],
+  clientes: ['id', 'nome_fantasia', 'razao_social', 'nome']
 };
 
 function criarUpstream(dados) {
@@ -188,9 +189,49 @@ function cenario({ situacao = 'Produção' } = {}) {
     pedido_parcelas: [
       { id: 5, pedido_id: 1, numero_parcela: 1, valor: 192, data_vencimento: '2026-02-09' },
       { id: 6, pedido_id: 1, numero_parcela: 2, valor: 192, data_vencimento: '2026-03-11' }
-    ]
+    ],
+    clientes: [{ id: 50, nome_fantasia: 'Decorações Silvia', razao_social: 'Silvia ME' }]
   };
 }
+
+// ------------------------------------------------------- detalhe do pedido
+
+test('o detalhe traz o nome do cliente e as parcelas para a tela', async () => {
+  const ctx = await montar(cenario());
+  try {
+    const resposta = await fetch(`http://127.0.0.1:${ctx.porta}/api/pedidos/1`, {
+      headers: { authorization: `Bearer ${tokenDe(1)}` }
+    });
+    assert.strictEqual(resposta.status, 200);
+    const pedido = await resposta.json();
+
+    // Sem isto o modal de pagamento mostrava "—" no lugar do cliente: o cache
+    // da página nem sempre alcança o escopo do modal, e buscar em
+    // /api/clientes exigiria permissão que quem mexe em pedido pode não ter.
+    assert.strictEqual(pedido.cliente_nome, 'Decorações Silvia');
+    assert.strictEqual(pedido.itens.length, 2);
+    assert.strictEqual(pedido.parcelas_detalhes.length, 2);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('cliente inacessível não derruba o detalhe do pedido', async () => {
+  const dados = cenario();
+  dados.clientes = [];
+  const ctx = await montar(dados);
+  try {
+    const resposta = await fetch(`http://127.0.0.1:${ctx.porta}/api/pedidos/1`, {
+      headers: { authorization: `Bearer ${tokenDe(1)}` }
+    });
+    assert.strictEqual(resposta.status, 200, 'o pedido tem de abrir mesmo assim');
+    const pedido = await resposta.json();
+    assert.strictEqual(pedido.cliente_nome, null);
+    assert.strictEqual(pedido.itens.length, 2);
+  } finally {
+    await ctx.encerrar();
+  }
+});
 
 // ------------------------------------------------------------------ regra
 

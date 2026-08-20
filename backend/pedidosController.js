@@ -390,12 +390,22 @@ router.get('/:id', exigirPermissao('ped.view.details'), async (req, res) => {
     if (!pedido || pedido.error === 'Not found') {
       return res.status(404).json({ error: 'Pedido não encontrado' });
     }
-    const [itens, parcelas] = await Promise.all([
+    const [itens, parcelas, cliente] = await Promise.all([
       api.get('/api/pedidos_itens', { query: { pedido_id: id } }),
-      api.get('/api/pedido_parcelas', { query: { pedido_id: id, order: 'numero_parcela' } })
+      api.get('/api/pedido_parcelas', { query: { pedido_id: id, order: 'numero_parcela' } }),
+      // O nome do cliente vem junto de propósito: quem abre um pedido nem
+      // sempre tem permissão no módulo de Clientes, e o detalhe do pedido não
+      // deveria depender disso para escrever de quem ele é. Falha aqui não
+      // derruba o pedido — o nome fica vazio, o resto continua.
+      pedido.cliente_id != null
+        ? api.get(`/api/clientes/${pedido.cliente_id}`).catch(() => null)
+        : Promise.resolve(null)
     ]);
     pedido.itens = itens || [];
     pedido.parcelas_detalhes = parcelas || [];
+    pedido.cliente_nome = cliente
+      ? (cliente.nome_fantasia || cliente.razao_social || cliente.nome || null)
+      : null;
     res.json(pedido);
   } catch (err) {
     console.error('Erro ao buscar pedido:', err);

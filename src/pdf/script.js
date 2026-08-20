@@ -188,6 +188,29 @@ function formatCurrency(v) {
   });
 }
 
+/**
+ * Valores das parcelas no MESMO formato do prazo: "61,62/1.661,62/861,62".
+ *
+ * Só faz sentido quando há mais de uma parcela — num pagamento à vista o
+ * único valor já é o "Valor a Pagar" no fim do documento, e repeti-lo aqui
+ * seria ruído. Devolve string vazia nesse caso, e a linha inteira é omitida.
+ *
+ * A ordem vem de `numero_parcela` quando ela existe: a API devolve as linhas
+ * na ordem de inserção, que não é garantidamente a ordem de vencimento.
+ */
+function formatParcelasValores(orc) {
+  const parcelas = Array.isArray(orc?.parcelas_detalhes) ? orc.parcelas_detalhes : [];
+  if (parcelas.length < 2) return '';
+
+  return [...parcelas]
+    .sort((a, b) => (Number(a?.numero_parcela) || 0) - (Number(b?.numero_parcela) || 0))
+    .map(p => Number(p?.valor || 0).toLocaleString('pt-BR', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    }))
+    .join('/');
+}
+
 function formatEndereco(end) {
   if (!end) return '';
   const { rua = '', numero = '', bairro = '', cidade = '', estado = '', cep = '' } = end;
@@ -296,6 +319,10 @@ function createHeaderSection(data) {
   const numLabel = tipo === 'pedido' ? 'Número do Pedido' : 'Número do Orçamento';
   const sitLabel = tipo === 'pedido' ? 'Situação do Pedido' : 'Situação do Orçamento';
 
+  // Mesma estrutura de parágrafo das demais linhas — o bloco não muda de
+  // forma, só ganha mais uma entrada quando o pagamento é parcelado.
+  const parcelasValores = formatParcelasValores(orc);
+
   const docInfo = [
     createInfoParagraph(numLabel, orc.numero),
     createInfoParagraph('Data de Emissão', formatDate(orc.data_emissao)),
@@ -303,6 +330,7 @@ function createHeaderSection(data) {
     createInfoParagraph('Quantidade de Parcelas', orc.parcelas),
     createInfoParagraph('Forma de Pagamento', orc.forma_pagamento || ''),
     createInfoParagraph('Prazo', orc.prazo || ''),
+    ...(parcelasValores ? [createInfoParagraph('Valor das Parcelas', parcelasValores)] : []),
     createInfoParagraph('Nome Fantasia', cliente.nome_fantasia || ''),
     createInfoParagraph('Razão Social', cliente.razao_social || ''),
     createInfoParagraph('CNPJ', cliente.cnpj || ''),
