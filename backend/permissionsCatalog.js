@@ -348,7 +348,7 @@ const PERMISSIONS_CATALOG = {
       {
         "key": "col_prod_preco_base",
         "column": "col_prod_preco_base",
-        "label": "Preço de Venda"
+        "label": "Preço de Custo"
       },
       {
         "key": "col_prod_preco_tabela",

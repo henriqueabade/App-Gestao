@@ -276,9 +276,19 @@ textarea:disabled::placeholder {
     text-overflow: ellipsis;
 }
 
+/**
+ * Coluna de AÇÕES.
+ *
+ * Os 120px originais cabiam cinco ícones. Com o da tabela fixa passaram a ser
+ * seis (6 × 28px + 5 × 8px de intervalo = 208px) e a tabela começou a rolar na
+ * horizontal. A largura agora acompanha o conteúdo real, e o padding lateral
+ * cede o resto — o espaço veio do cabeçalho, que virou "QNTD.".
+ */
 .produtos-table th:last-child,
 .produtos-table td:last-child {
-    width: 120px;
+    width: 240px;
+    padding-left: 0.75rem;
+    padding-right: 0.75rem;
 }
 
 .cell-text {
@@ -482,4 +492,33 @@ textarea:disabled::placeholder {
  */
 #produtosTableBody tr:hover {
     background: rgba(163, 148, 167, 0.05);
+}
+
+/**
+ * Spinner da célula de preço enquanto a coluna alterna entre "Preço de Custo"
+ * e "Preço Tabela".
+ *
+ * Mesma linguagem visual do indicador global do app (órbita girando nos tons
+ * primários), reduzida para caber na altura de uma linha da tabela sem
+ * empurrar as demais células. Fica no lugar do número, não ao lado dele: a
+ * ideia é que aquele valor específico está sendo buscado.
+ */
+.preco-carregando {
+    display: inline-block;
+    width: 1.05rem;
+    height: 1.05rem;
+    vertical-align: middle;
+    border: 2px solid rgba(182, 160, 62, 0.18);
+    border-top-color: var(--color-primary-light);
+    border-right-color: var(--color-primary);
+    border-radius: 50%;
+    animation: preco-carregando-giro 700ms linear infinite;
+}
+
+@keyframes preco-carregando-giro {
+    to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .preco-carregando { animation-duration: 1.8s; }
 }

@@ -34,24 +34,26 @@ let produtoActionsBound = false;
 // para a tabela inteira: alternar em qualquer linha vira a coluna toda, senão
 // a mesma coluna mostraria grandezas diferentes de linha para linha.
 //
-//   'venda'  → como o módulo sempre abriu: "Preço de Venda" (preco_venda)
+//   'custo'  → "Preço de Custo"  (preco_venda — o nome diz o que o número é)
 //   'tabela' → "Preço Tabela"    (preco_tabela; vazio quando não há registro)
-//   'custo'  → "Preço de Custo"  (preco_venda, agora nomeado pelo que é)
+//
+// "Preço de Venda" saiu do vocabulário do módulo de propósito: era o rótulo
+// de `preco_venda`, que não é preço de venda nenhum — é o custo apurado.
 // ---------------------------------------------------------------------------
 const MODOS_PRECO = {
-    venda:  { titulo: 'Preço de Venda',  permCol: 'col_prod_preco_base',   proximo: 'tabela' },
-    tabela: { titulo: 'Preço Tabela',    permCol: 'col_prod_preco_tabela', proximo: 'custo'  },
-    custo:  { titulo: 'Preço de Custo',  permCol: 'col_prod_preco_base',   proximo: 'tabela' }
+    custo:  { titulo: 'Preço de Custo', permCol: 'col_prod_preco_base',   proximo: 'tabela' },
+    tabela: { titulo: 'Preço Tabela',   permCol: 'col_prod_preco_tabela', proximo: 'custo'  }
 };
-let modoPreco = 'venda';
+let modoPreco = 'custo';
+let trocandoModoPreco = false;
 
 /** Ícone que a linha mostra hoje — e para onde ele leva. */
 function iconePrecoAtual() {
     // Em 'tabela' a coluna já mostra o preço praticado, então o convite é
-    // voltar para o custo: calculadora roxa. Nos demais estados, moeda verde.
+    // voltar para o custo: calculadora roxa. Caso contrário, moeda verde.
     return modoPreco === 'tabela'
-        ? { classe: 'fa-calculator', cor: 'var(--color-violet)', titulo: 'Mostrar preço de custo' }
-        : { classe: 'fa-coins',      cor: 'var(--color-green)',  titulo: 'Mostrar preço de tabela' };
+        ? { classe: 'fa-calculator', cor: '#7300ba', titulo: 'Mostrar preço de custo' }
+        : { classe: 'fa-coins',      cor: 'var(--color-green)', titulo: 'Mostrar preço de tabela' };
 }
 
 /** Valor que a célula de preço mostra no modo corrente. */
@@ -63,11 +65,27 @@ function valorPrecoDaLinha(produto) {
     return valor == null ? '' : formatCurrency(valor);
 }
 
+/**
+ * Conteúdo da célula de preço.
+ *
+ * Durante a troca de modo a célula mostra o spinner em vez do número. Isso
+ * vale para TODO render enquanto a troca está em curso — inclusive o que
+ * `carregarProdutos` dispara no meio do caminho —, senão o valor antigo
+ * reapareceria por um instante e a coluna piscaria o número errado.
+ */
+function celulaPrecoHtml(produto) {
+    if (trocandoModoPreco) {
+        return '<span class="preco-carregando" role="status" aria-label="Atualizando preço"></span>';
+    }
+    const valor = valorPrecoDaLinha(produto);
+    return `<span class="cell-text" title="${valor}">${valor}</span>`;
+}
+
 /** Reescreve o cabeçalho da coluna de preço conforme o modo. */
 function sincronizarCabecalhoPreco() {
     const th = document.querySelector('#produtosTableWrapper th[data-coluna-preco]');
     if (!th) return;
-    const modo = MODOS_PRECO[modoPreco] || MODOS_PRECO.venda;
+    const modo = MODOS_PRECO[modoPreco] || MODOS_PRECO.custo;
     th.textContent = modo.titulo;
     // A coluna troca de identidade junto com o conteúdo: esconder "Preço
     // Tabela" de quem não pode vê-lo exige que a chave acompanhe o modo.
@@ -75,10 +93,42 @@ function sincronizarCabecalhoPreco() {
     window.Permissoes?.aplicarAcoesEColunas?.(th.parentElement || th);
 }
 
-function alternarModoPreco() {
-    const modo = MODOS_PRECO[modoPreco] || MODOS_PRECO.venda;
+/**
+ * Troca a coluna entre "Preço de Custo" e "Preço Tabela".
+ *
+ * A troca REBUSCA os produtos em vez de apenas reetiquetar o que já está na
+ * tela: o preço de tabela pode ter sido alterado por outra pessoa desde que o
+ * módulo abriu, e exibir um número velho no lugar do preço praticado é
+ * exatamente o erro que a tabela fixa existe para evitar.
+ *
+ * O spinner por linha existe porque essa ida ao servidor tem custo — sem ele
+ * a coluna ficaria parada no valor anterior e o clique pareceria não ter
+ * surtido efeito.
+ */
+async function alternarModoPreco() {
+    // Segundo clique durante a troca dispararia uma busca concorrente e
+    // deixaria o modo fora de sincronia com o que a coluna mostra.
+    if (trocandoModoPreco) return;
+
+    const modo = MODOS_PRECO[modoPreco] || MODOS_PRECO.custo;
     modoPreco = modo.proximo;
+    trocandoModoPreco = true;
     renderProdutos(produtosRenderizados);
+
+    // Piso curto: o suficiente para o spinner ser percebido quando a resposta
+    // volta rápido, sem transformar a troca em espera.
+    const MIN_SPINNER_MS = 450;
+    const inicio = Date.now();
+    try {
+        await carregarProdutos();
+    } finally {
+        const restante = MIN_SPINNER_MS - (Date.now() - inicio);
+        if (restante > 0) {
+            await new Promise(resolve => setTimeout(resolve, restante));
+        }
+        trocandoModoPreco = false;
+        renderProdutos(produtosRenderizados);
+    }
 }
 
 async function carregarProdutos(options = {}) {
@@ -169,8 +219,8 @@ function criarLinhaProduto(produto, index) {
     const codigo = produto.codigo || '';
     const nome = reduzirNome(produto.nome) || '';
     const categoria = produto.categoria || '';
-    const precoColuna = valorPrecoDaLinha(produto);
-    const modoColuna = MODOS_PRECO[modoPreco] || MODOS_PRECO.venda;
+    const precoColuna = celulaPrecoHtml(produto);
+    const modoColuna = MODOS_PRECO[modoPreco] || MODOS_PRECO.custo;
     const icone = iconePrecoAtual();
     const produtoId = produto?.id != null ? ` data-id="${produto.id}"` : '';
     const infoId = produto?.id ?? '';
@@ -190,7 +240,7 @@ function criarLinhaProduto(produto, index) {
                 <span class="cell-text" title="${categoria}">${categoria}</span>
             </td>
             <td data-perm-col="${modoColuna.permCol}" class="px-6 py-4 whitespace-nowrap text-sm text-white">
-                <span class="cell-text" title="${precoColuna}">${precoColuna}</span>
+                ${precoColuna}
             </td>
             <td data-perm-col="col_prod_margem" class="px-6 py-4 whitespace-nowrap text-sm" style="color: var(--color-green)">
                 <span class="cell-text" title="${markup}">${markup}</span>
