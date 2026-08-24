@@ -25,11 +25,34 @@
 // visível na revisão, não uma exceção que derruba a lista inteira.
 
 const express = require('express');
+const multer = require('multer');
 const { createApiClient } = require('./apiHttpClient');
-const { exigirPermissao } = require('./permissionsController');
+const { exigirPermissao, obterPermissoesEfetivas } = require('./permissionsController');
+const permissoesRepo = require('./permissionsRepository');
 const provedores = require('./iaProvedores');
+const leitura = require('./iaLeitura');
 
 const router = express.Router();
+
+/**
+ * Os arquivos ficam SÓ na memória desta requisição.
+ *
+ * Nada de disco: gravar em disco criaria um segundo lugar onde o documento do
+ * cliente existe, com ciclo de vida próprio para alguém esquecer de limpar. O
+ * arquivo é lido, vira texto e some junto com a requisição.
+ *
+ * O limite do multer é a última barreira, não a primeira — o front também
+ * confere, para o usuário não esperar o upload de um arquivo que vai ser
+ * recusado no fim.
+ */
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: provedores.LIMITES.arquivoMb() * 1024 * 1024,
+    files: provedores.LIMITES.arquivos(),
+    fields: 20
+  }
+});
 
 // ---------------------------------------------------------------------------
 // Destinos
@@ -92,7 +115,7 @@ const DESTINO_POR_ID = new Map(DESTINOS.map(d => [d.id, d]));
 
 /** Situações de uma leitura, na ordem em que acontecem. */
 const SITUACOES = [
-  { id: 'rascunho', rotulo: 'Rascunho', descricao: 'Arquivos enviados, leitura ainda não executada' },
+  { id: 'rascunho', rotulo: 'Texto lido', descricao: 'Os arquivos foram lidos; os dados ainda não foram extraídos' },
   { id: 'lendo', rotulo: 'Lendo', descricao: 'A IA está processando os arquivos' },
   { id: 'revisao', rotulo: 'Em revisão', descricao: 'Leitura pronta, esperando conferência' },
   { id: 'aplicada', rotulo: 'Aplicada', descricao: 'Os itens já foram gravados no módulo de destino' },
@@ -215,6 +238,187 @@ router.post('/config/testar', exigirPermissao('ia.config'), async (req, res) => 
     responder(res, err, 'POST /api/ia/config/testar');
   }
 });
+
+// ---------------------------------------------------------------------------
+// NOVA LEITURA (envio + leitura, na MESMA requisição)
+//
+// Envio e leitura não podem ser dois passos separados: o arquivo não é gravado
+// em lugar nenhum, então numa segunda requisição os bytes já não existiriam.
+// Por isso o POST recebe os arquivos, lê tudo e devolve a leitura pronta.
+// ---------------------------------------------------------------------------
+
+/** Roda as tarefas com no máximo `limite` em voo. */
+async function emParalelo(itens, limite, tarefa) {
+  const resultados = new Array(itens.length);
+  let proximo = 0;
+  const trabalhador = async () => {
+    while (proximo < itens.length) {
+      const i = proximo++;
+      resultados[i] = await tarefa(itens[i], i);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limite, itens.length) }, trabalhador));
+  return resultados;
+}
+
+/**
+ * Opções da tela de nova leitura.
+ *
+ * `pode_aplicar` vem daqui e não de uma conta que o front faça sozinho: ler um
+ * documento para um destino em que o usuário não pode gravar é gastar crédito
+ * à toa. O destino aparece na tela mesmo assim, travado e com o motivo — some
+ * a ação, não a informação de que ela existe.
+ */
+router.get('/opcoes', exigirPermissao('ia.upload'), async (req, res) => {
+  try {
+    const permissoes = await obterPermissoesEfetivas(req);
+    const cfg = provedores.configuracao();
+
+    res.json({
+      destinos: DESTINOS.map(d => ({
+        id: d.id,
+        rotulo: d.rotulo,
+        descricao: d.descricao,
+        icone: d.icone,
+        pode_aplicar: permissoesRepo.can(permissoes, d.permissao)
+          && permissoesRepo.can(permissoes, d.moduloAlvo)
+      })),
+      extensoes: leitura.EXTENSOES_ACEITAS,
+      limites: cfg.limites,
+      // Sem chave não adianta deixar o usuário escolher arquivo: a leitura
+      // falharia no fim, depois de ele já ter montado o lote.
+      provedores: {
+        gemini: cfg.gemini.configurado,
+        groq: cfg.groq.configurado,
+        pronto: cfg.pronto
+      }
+    });
+  } catch (err) {
+    responder(res, err, 'GET /api/ia/opcoes');
+  }
+});
+
+/**
+ * Cria a leitura e lê os arquivos.
+ *
+ * Exige `ia.upload` e `ia.extract` separadamente: enviar um arquivo e disparar
+ * a IA (que consome crédito da conta) são decisões diferentes, e há perfil que
+ * deve poder fazer a primeira sem a segunda.
+ *
+ * Se der ruim no meio, a leitura NÃO fica pendurada em "lendo": o catch marca
+ * `erro` com a mensagem. Uma linha travada nesse estado ficaria para sempre com
+ * o ponto piscando na grade, sem ninguém saber que já acabou.
+ */
+router.post('/',
+  exigirPermissao(['ia.upload', 'ia.extract']),
+  upload.array('arquivos'),
+  async (req, res) => {
+    const api = createApiClient(req);
+    let extracaoId = null;
+
+    try {
+      const destino = texto(req.body?.destino);
+      if (!destino || !DESTINO_POR_ID.has(destino)) {
+        throw erro(400, 'Escolha para onde os dados lidos vão.');
+      }
+
+      const arquivos = Array.isArray(req.files) ? req.files : [];
+      if (!arquivos.length) throw erro(400, 'Envie pelo menos um arquivo.');
+
+      // Falha cedo, antes de criar a leitura e antes de gastar crédito: um
+      // tipo não aceito no meio do lote é problema de escolha, não de leitura.
+      for (const a of arquivos) leitura.classificarArquivo(a.originalname, a.mimetype);
+
+      const cfg = provedores.configuracao();
+      const precisaGemini = arquivos.some(a =>
+        leitura.classificarArquivo(a.originalname, a.mimetype).origem !== 'planilha');
+      if (precisaGemini && !cfg.gemini.configurado) {
+        throw erro(400,
+          'PDF e foto precisam da GEMINI_API_KEY no .env. Planilhas são lidas sem ela.');
+      }
+
+      const titulo = texto(req.body?.titulo)
+        || (arquivos.length === 1 ? arquivos[0].originalname : `${arquivos.length} arquivos`);
+
+      const criada = await api.post('/api/ia_extracoes', {
+        titulo: titulo.slice(0, 200),
+        destino,
+        status: 'lendo',
+        arquivos_qtd: arquivos.length,
+        itens_qtd: 0,
+        aplicados_qtd: 0,
+        usuario_id: usuarioDaRequisicao(req)
+      });
+      extracaoId = criada?.id;
+      if (!extracaoId) throw erro(502, 'Não foi possível registrar a leitura.');
+
+      // Três em voo: um lote de dez PDFs em série levaria minutos, e todos de
+      // uma vez bateria no limite de uso do provedor — que devolve 429 e
+      // derruba justamente os arquivos do fim da fila.
+      const lidos = await emParalelo(arquivos, 3, async arquivo => {
+        const r = await leitura.lerArquivo({
+          nome: arquivo.originalname,
+          mime: arquivo.mimetype,
+          buffer: arquivo.buffer
+        });
+        return { arquivo, ...r };
+      });
+
+      let usouGemini = false;
+      for (const item of lidos) {
+        if (item.origem && item.origem !== 'planilha' && !item.erro) usouGemini = true;
+        await api.post('/api/ia_extracao_arquivos', {
+          extracao_id: extracaoId,
+          nome_arquivo: String(item.arquivo.originalname).slice(0, 255),
+          tipo_mime: item.mime || null,
+          tamanho_bytes: item.arquivo.size ?? null,
+          origem: item.origem || null,
+          paginas: item.paginas ?? null,
+          texto: item.texto || null,
+          // O aviso de corte também vira "erro" da linha, para aparecer no
+          // detalhe: texto cortado pela metade é exatamente o tipo de coisa
+          // que faz um item sumir sem explicação.
+          erro: item.erro || item.aviso || null
+        });
+      }
+
+      const comTexto = lidos.filter(l => l.texto).length;
+      const falharam = lidos.filter(l => l.erro);
+
+      // Um arquivo ruim no meio de dez não é falha do lote: o que foi lido
+      // segue valendo. Só quando NADA foi lido a leitura vira erro.
+      const status = comTexto ? 'rascunho' : 'erro';
+      const resumoErro = falharam.length
+        ? falharam.map(l => `${l.arquivo.originalname}: ${l.erro}`).join(' | ').slice(0, 1000)
+        : null;
+
+      await api.put(`/api/ia_extracoes/${extracaoId}`, {
+        status,
+        modelo_ocr: usouGemini ? provedores.modeloGemini() : null,
+        erro: comTexto ? resumoErro : (resumoErro || 'Nenhum arquivo pôde ser lido.')
+      });
+
+      res.status(201).json({
+        id: extracaoId,
+        status,
+        destino,
+        titulo,
+        arquivos_lidos: comTexto,
+        arquivos_com_falha: falharam.length,
+        erro: comTexto ? resumoErro : (resumoErro || 'Nenhum arquivo pôde ser lido.')
+      });
+    } catch (err) {
+      // A leitura já existe e ficaria em "lendo" para sempre — o ponto ficaria
+      // piscando na grade sem nunca terminar.
+      if (extracaoId) {
+        await api.put(`/api/ia_extracoes/${extracaoId}`, {
+          status: 'erro',
+          erro: String(err?.message || 'Falha ao ler os arquivos').slice(0, 1000)
+        }).catch(() => {});
+      }
+      responder(res, err, 'POST /api/ia');
+    }
+  });
 
 // ---------------------------------------------------------------------------
 // LISTA
@@ -395,6 +599,26 @@ router.delete('/:id', exigirPermissao('ia.delete'), async (req, res) => {
   }
 });
 
+/**
+ * Erros do multer.
+ *
+ * Eles nascem no middleware, antes do handler — o try/catch da rota nunca os
+ * veria. Sem isto, quem enviasse um arquivo grande demais recebia
+ * "File too large" em inglês, ou um 500 mudo.
+ */
+router.use((err, req, res, next) => {
+  if (!err || err.name !== 'MulterError') return next(err);
+
+  const mb = provedores.LIMITES.arquivoMb();
+  const max = provedores.LIMITES.arquivos();
+  const mensagens = {
+    LIMIT_FILE_SIZE: `Arquivo grande demais. O limite é ${mb} MB por arquivo.`,
+    LIMIT_FILE_COUNT: `Arquivos demais. O limite é ${max} por leitura.`,
+    LIMIT_UNEXPECTED_FILE: 'Campo de arquivo inesperado no envio.'
+  };
+  res.status(400).json({ error: mensagens[err.code] || 'Falha ao receber os arquivos.' });
+});
+
 module.exports = router;
 module.exports.DESTINOS = DESTINOS;
 module.exports.DESTINO_POR_ID = DESTINO_POR_ID;
@@ -402,4 +626,5 @@ module.exports.SITUACOES = SITUACOES;
 module.exports.SITUACOES_VALIDAS = SITUACOES_VALIDAS;
 module.exports.usuarioDaRequisicao = usuarioDaRequisicao;
 module.exports.lerDados = lerDados;
+module.exports.emParalelo = emParalelo;
 module.exports.texto = texto;

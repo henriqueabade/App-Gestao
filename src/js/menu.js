@@ -92,7 +92,8 @@ const MODULES_WITHOUT_SCROLL = new Set([
     'usuarios',
     // Prospecções cabe na tela com o funil e os filtros avançados retraídos.
     // O próprio módulo tira o `no-scroll` quando um deles é aberto.
-    'prospeccoes'
+    'prospeccoes',
+    'ia'
 ]);
 
 const CRM_SUBMODULES = new Set([

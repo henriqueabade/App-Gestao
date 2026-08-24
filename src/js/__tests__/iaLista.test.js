@@ -328,7 +328,7 @@ test('os modais grandes revelam o overlay pelo evento do spinner', () => {
   assert.match(bloco[0], /modalSpinnerLoaded/);
   assert.match(bloco[0], /classList\.remove\('hidden'\)/);
 
-  for (const arquivo of ['configuracao.html', 'detalhes.html']) {
+  for (const arquivo of ['configuracao.html', 'detalhes.html', 'nova.html']) {
     const html = fs.readFileSync(
       path.join(__dirname, '..', '..', 'html', 'modals', 'ia', arquivo), 'utf8');
     assert.match(html, /Overlay" class="hidden /,

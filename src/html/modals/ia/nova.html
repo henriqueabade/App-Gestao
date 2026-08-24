@@ -1,0 +1,89 @@
+<!--
+  Nova leitura: escolher o destino, enviar os arquivos e deixar a IA ler.
+
+  Envio e leitura acontecem na MESMA requisição — o arquivo não fica guardado
+  em lugar nenhum, então não há como enviar agora e ler depois.
+
+  O overlay nasce `hidden`: quem revela é o `openModalWithSpinner`, ao receber
+  `modalSpinnerLoaded`.
+-->
+<div id="iaNovaOverlay" class="hidden fixed inset-0 z-[1200] bg-black/60 flex items-center justify-center p-4">
+  <div class="modal-ia glass-surface backdrop-blur-xl rounded-2xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade">
+
+    <!-- Topo -->
+    <div class="modal-ia__topo px-6 pt-6 pb-4 border-b border-white/10">
+      <h3 class="text-lg font-semibold text-white flex items-center gap-3">
+        <i class="fas fa-wand-magic-sparkles text-[var(--color-primary)]"></i>
+        Nova leitura
+      </h3>
+      <p class="text-sm text-white/60 mt-1">
+        Envie planilhas, PDFs ou fotos. A IA lê o conteúdo e você confere antes de gravar.
+      </p>
+      <p id="iaNovaAvisoProvedor" class="text-xs mt-3 hidden" style="color: var(--color-red)"></p>
+    </div>
+
+    <!-- Corpo -->
+    <div class="modal-ia__corpo px-6 py-5 space-y-6">
+
+      <!-- 1. Destino -->
+      <section>
+        <h4 class="text-sm font-semibold text-white mb-1">1. Para onde vão os dados?</h4>
+        <p class="text-xs text-white/45 mb-3">
+          A escolha muda o que a IA procura no documento.
+        </p>
+        <div id="iaNovaDestinos" class="grid grid-cols-1 gap-2"></div>
+      </section>
+
+      <!-- 2. Arquivos -->
+      <section>
+        <h4 class="text-sm font-semibold text-white mb-1">2. Quais arquivos?</h4>
+        <p id="iaNovaLimites" class="text-xs text-white/45 mb-3">&nbsp;</p>
+
+        <div id="iaNovaSolta" class="ia-solta" tabindex="0" role="button"
+             aria-label="Escolher arquivos para a leitura">
+          <i class="fas fa-cloud-arrow-up text-3xl text-[var(--color-primary)]"></i>
+          <p class="text-sm text-white mt-3">Arraste os arquivos aqui ou clique para escolher</p>
+          <p id="iaNovaExtensoes" class="text-xs text-white/45 mt-1">&nbsp;</p>
+        </div>
+        <input id="iaNovaInput" type="file" multiple class="hidden">
+
+        <div id="iaNovaLista" class="space-y-2 mt-3"></div>
+        <p id="iaNovaErroArquivos" class="text-xs mt-2 hidden" style="color: var(--color-red)"></p>
+      </section>
+
+      <!-- 3. Nome -->
+      <section>
+        <h4 class="text-sm font-semibold text-white mb-1">3. Como chamar esta leitura? <span class="text-white/40 font-normal">(opcional)</span></h4>
+        <input id="iaNovaTitulo" type="text" maxlength="200"
+               placeholder="Ex.: Lista de chapas do fornecedor Bralux"
+               class="input-glass text-white rounded-md px-4 py-3 w-full placeholder-white/50 mt-2">
+      </section>
+
+    </div>
+
+    <!-- Rodapé -->
+    <div class="modal-ia__rodape px-6 py-4 border-t border-white/10">
+      <!-- Progresso: substitui os botões enquanto a leitura acontece. -->
+      <div id="iaNovaProgresso" class="hidden">
+        <div class="flex items-center justify-between gap-4 mb-2">
+          <p id="iaNovaProgressoTexto" class="text-sm text-white/80">Enviando…</p>
+          <span id="iaNovaProgressoPct" class="text-sm text-white/50">0%</span>
+        </div>
+        <div class="ia-barra"><div id="iaNovaBarra" class="ia-barra__preenchida"></div></div>
+        <p class="text-xs text-white/40 mt-2">
+          PDF e foto passam pela IA e podem levar alguns instantes. Não feche a janela.
+        </p>
+      </div>
+
+      <div id="iaNovaAcoes" class="flex items-center justify-end gap-3">
+        <button id="iaNovaCancelar" type="button"
+                class="btn-neutral text-white rounded-lg px-5 py-2 text-sm font-medium">Cancelar</button>
+        <button id="iaNovaEnviar" type="button" data-perm="ia.extract"
+                class="btn-primary text-white rounded-lg px-5 py-2 text-sm font-medium">
+          <i class="fas fa-wand-magic-sparkles mr-2"></i>Ler arquivos
+        </button>
+      </div>
+    </div>
+
+  </div>
+</div>

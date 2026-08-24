@@ -165,7 +165,12 @@ app.use('/js', express.static(path.join(__dirname, '../src/js')));
 // permissao: sem o bloqueio, `GET /api/prospeccoes` entregaria todo o pipeline
 // comercial a qualquer usuario logado, ignorando `pros.view`. Tudo do modulo
 // passa por prospeccoesController, que aplica exigirPermissao() rota a rota.
-const TABELAS_BLOQUEADAS = /^(perm_|modelos_permissoes$|usuarios$|prospeccoes$|prospeccao_|ia_extraca)/i;
+//
+// O mesmo vale para as tabelas do modulo de IA. O prefixo e `ia_extra` e nao
+// `ia_extraca` de proposito: com o sufixo mais longo, `ia_extracao_arquivos` e
+// `ia_extracao_itens` ficavam bloqueadas mas `ia_extracoes` (com "o") passava
+// batido -- e ela e justamente a tabela que lista TODAS as leituras.
+const TABELAS_BLOQUEADAS = /^(perm_|modelos_permissoes$|usuarios$|prospeccoes$|prospeccao_|ia_extra)/i;
 
 app.get('/api/:table', async (req, res) => {
   const { table } = req.params;

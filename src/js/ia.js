@@ -427,15 +427,8 @@ function abrirExcluirLeitura(leitura) {
     return Modal.open('modals/ia/excluir.html', '../js/modals/ia-excluir.js', 'iaExcluir');
 }
 
-/**
- * O envio de arquivos chega na próxima etapa. Enquanto isso o botão diz o que
- * falta, em vez de não reagir ao clique — botão mudo parece defeito.
- */
 function abrirNovaLeitura() {
-    const aviso = 'O envio de arquivos entra na próxima etapa do módulo. '
-        + 'Por enquanto, use Configurar para conferir se as credenciais da IA estão válidas.';
-    if (window.DialogPadrao?.info) return window.DialogPadrao.info('Nova leitura', aviso);
-    showToast(aviso, 'info');
+    return openModalWithSpinner('modals/ia/nova.html', '../js/modals/ia-nova.js', 'iaNova');
 }
 
 // ---------------------------------------------------------------------------
