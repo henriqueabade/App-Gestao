@@ -16,6 +16,7 @@ const MODULE_LABELS = {
   ped: ['Pedidos', 'pedidos'],
   cli: ['Clientes', 'clientes'],
   pros: ['Prospecções', 'prospeccoes'],
+  ia: ['IA', 'ia'],
   ctt: ['Contatos', 'contatos'],
   rel: ['Relatórios', 'relatorios'],
   tarefas: ['Tarefas', 'tarefas'],
@@ -32,7 +33,6 @@ const PENDING_MODULES = [
   ['lam_servicos', 'Laminação · Serviços', 'laminacao-servicos'],
   ['lam_precificacao', 'Laminação · Precificação', 'laminacao-precificacao'],
   ['lam_relatorios', 'Laminação · Relatórios', 'laminacao-relatorios'],
-  ['ia', 'IA', 'ia'],
   ['financeiro', 'Financeiro', 'financeiro']
 ];
 

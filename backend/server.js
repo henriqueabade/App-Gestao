@@ -11,6 +11,7 @@ const transportadorasRouter = require('./transportadorasController');
 const orcamentosRouter = require('./orcamentosController');
 const pedidosRouter = require('./pedidosController');
 const prospeccoesRouter = require('./prospeccoesController');
+const iaRouter = require('./iaController');
 const notificationsRouter = require('./notificationsController');
 const db = require('./db');
 const { normalizeToken } = require('./apiHttpClient');
@@ -51,6 +52,7 @@ app.use('/api/transportadoras', transportadorasRouter);
 app.use('/api/orcamentos', orcamentosRouter);
 app.use('/api/pedidos', pedidosRouter);
 app.use('/api/prospeccoes', prospeccoesRouter);
+app.use('/api/ia', iaRouter);
 
 const { createApiClient } = require('./apiHttpClient');
 const apiCache = new Map();
@@ -163,7 +165,7 @@ app.use('/js', express.static(path.join(__dirname, '../src/js')));
 // permissao: sem o bloqueio, `GET /api/prospeccoes` entregaria todo o pipeline
 // comercial a qualquer usuario logado, ignorando `pros.view`. Tudo do modulo
 // passa por prospeccoesController, que aplica exigirPermissao() rota a rota.
-const TABELAS_BLOQUEADAS = /^(perm_|modelos_permissoes$|usuarios$|prospeccoes$|prospeccao_)/i;
+const TABELAS_BLOQUEADAS = /^(perm_|modelos_permissoes$|usuarios$|prospeccoes$|prospeccao_|ia_extraca)/i;
 
 app.get('/api/:table', async (req, res) => {
   const { table } = req.params;

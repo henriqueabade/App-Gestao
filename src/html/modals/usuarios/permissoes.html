@@ -3713,7 +3713,7 @@
                 <i class="fas fa-robot text-[var(--color-primary)]"></i>
                 IA
               </h3>
-              <p class="text-sm text-gray-400">Recursos de inteligência artificial.</p>
+              <p class="text-sm text-gray-400">Leitura de planilhas, PDFs e fotos para preencher os outros módulos.</p>
             </div>
             <label class="usuario-permissao-toggle" data-module-toggle="ia">
               <input type="checkbox" class="sr-only" />
@@ -3724,10 +3724,238 @@
             </label>
           </div>
           <div data-module-content="ia" class="space-y-6">
-            <p class="text-sm text-gray-400 italic">
-              Este módulo ainda não possui ações e colunas configuradas. Por enquanto,
-              apenas a visibilidade no menu (Módulo ativo) é controlada aqui.
-            </p>
+            <article class="usuarios-permissoes-accordion">
+              <button class="usuarios-permissoes-accordion__toggle" data-accordion-toggle="acoes-ia" aria-expanded="true">
+                <span class="flex items-center gap-3">
+                  <i class="fas fa-play text-[var(--color-primary)]"></i>
+                  <span class="font-semibold text-lg text-[var(--color-primary)]">Ações</span>
+                </span>
+                <i class="fas fa-chevron-down"></i>
+              </button>
+              <div
+                class="usuarios-permissoes-accordion__content glass-surface rounded-2xl border border-white/10 p-4 is-open"
+                data-accordion-content="acoes-ia"
+                data-group-container="acoes-ia"
+              >
+                <div class="flex items-center justify-between mb-4 pb-3 border-b border-white/10">
+                  <div class="flex items-center gap-3">
+                    <input type="checkbox" id="usuariosPermissoesMasterAcoesIa" data-role="master" data-group="acoes-ia" class="w-4 h-4" />
+                    <label for="usuariosPermissoesMasterAcoesIa" class="font-medium">Selecionar tudo</label>
+                    <span class="text-sm text-gray-400" data-group-count="acoes-ia">(0 selecionadas)</span>
+                  </div>
+                  <i class="fas fa-info-circle text-[var(--color-primary)]" title="Permissões do módulo"></i>
+                </div>
+                <div class="grid grid-cols-1 gap-6">
+
+                  <div>
+                    <h4 class="text-sm font-semibold text-gray-300 mb-3">Tela de IA (leituras)</h4>
+                    <div class="grid grid-cols-1 gap-4">
+
+                      <label class="usuarios-permissoes-item" data-search="ver lista leituras extracoes ia">
+                        <input type="checkbox" name="ia.view" data-role="item" data-group="acoes-ia" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Ver lista</span>
+                          <p class="text-sm text-gray-400">Exibir a grade de leituras</p>
+                        </div>
+                      </label>
+
+                      <label class="usuarios-permissoes-item" data-search="buscar filtrar limpar leituras">
+                        <input type="checkbox" name="ia.search" data-role="item" data-group="acoes-ia" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Buscar/filtrar</span>
+                          <p class="text-sm text-gray-400">Campo de busca e filtros de destino e situação</p>
+                        </div>
+                      </label>
+
+                      <label class="usuarios-permissoes-item" data-search="ver detalhes leitura extracao">
+                        <input type="checkbox" name="ia.details.view" data-role="item" data-group="acoes-ia" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Abrir uma leitura</span>
+                          <p class="text-sm text-gray-400">Ver os arquivos, o que foi lido e os itens extraídos</p>
+                        </div>
+                      </label>
+
+                      <label class="usuarios-permissoes-item" data-search="excluir apagar leitura extracao">
+                        <input type="checkbox" name="ia.delete" data-role="item" data-group="acoes-ia" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Excluir leitura</span>
+                          <p class="text-sm text-gray-400">Apagar uma leitura e o que foi extraído dela</p>
+                        </div>
+                      </label>
+
+                    </div>
+                  </div>
+
+                  <div>
+                    <h4 class="text-sm font-semibold text-gray-300 mb-3">Enviar e ler os arquivos</h4>
+                    <div class="grid grid-cols-1 gap-4">
+
+                      <label class="usuarios-permissoes-item" data-search="enviar upload arquivo planilha pdf foto">
+                        <input type="checkbox" name="ia.upload" data-role="item" data-group="acoes-ia" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Enviar arquivos</span>
+                          <p class="text-sm text-gray-400">Área de envio de planilha, PDF e foto</p>
+                        </div>
+                      </label>
+
+                      <label class="usuarios-permissoes-item" data-search="executar ler extrair ia custo credito">
+                        <input type="checkbox" name="ia.extract" data-role="item" data-group="acoes-ia" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Executar a leitura</span>
+                          <p class="text-sm text-gray-400">Dispara a IA de fato — cada execução consome créditos da conta</p>
+                        </div>
+                      </label>
+
+                      <label class="usuarios-permissoes-item" data-search="editar revisar corrigir itens extraidos">
+                        <input type="checkbox" name="ia.review.edit" data-role="item" data-group="acoes-ia" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Corrigir o que foi lido</span>
+                          <p class="text-sm text-gray-400">Editar, descartar e reclassificar os itens antes de aplicar</p>
+                        </div>
+                      </label>
+
+                    </div>
+                  </div>
+
+                  <div>
+                    <h4 class="text-sm font-semibold text-gray-300 mb-3">Aplicar nos módulos</h4>
+                    <div class="grid grid-cols-1 gap-4">
+
+                      <label class="usuarios-permissoes-item" data-search="aplicar materia prima insumo estoque entrada">
+                        <input type="checkbox" name="ia.apply.mp" data-role="item" data-group="acoes-ia" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Aplicar em Matéria-prima</span>
+                          <p class="text-sm text-gray-400">Cadastrar insumo novo e dar entrada em estoque a partir da leitura</p>
+                        </div>
+                      </label>
+
+                      <label class="usuarios-permissoes-item" data-search="aplicar produtos insumos ficha tecnica">
+                        <input type="checkbox" name="ia.apply.prod" data-role="item" data-group="acoes-ia" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Aplicar em Produtos</span>
+                          <p class="text-sm text-gray-400">Preencher os insumos de um produto a partir da leitura</p>
+                        </div>
+                      </label>
+
+                      <label class="usuarios-permissoes-item" data-search="aplicar clientes contatos">
+                        <input type="checkbox" name="ia.apply.cli" data-role="item" data-group="acoes-ia" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Aplicar em Clientes</span>
+                          <p class="text-sm text-gray-400">Cadastrar/atualizar cliente e seus contatos a partir da leitura</p>
+                        </div>
+                      </label>
+
+                      <label class="usuarios-permissoes-item" data-search="aplicar prospeccoes contatos funil">
+                        <input type="checkbox" name="ia.apply.pros" data-role="item" data-group="acoes-ia" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Aplicar em Prospecções</span>
+                          <p class="text-sm text-gray-400">Cadastrar/atualizar prospecção e seus contatos a partir da leitura</p>
+                        </div>
+                      </label>
+
+                      <label class="usuarios-permissoes-item" data-search="aplicar orcamentos itens">
+                        <input type="checkbox" name="ia.apply.orc" data-role="item" data-group="acoes-ia" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Aplicar em Orçamentos</span>
+                          <p class="text-sm text-gray-400">Montar um orçamento com os itens lidos</p>
+                        </div>
+                      </label>
+
+                    </div>
+                  </div>
+
+                  <div>
+                    <h4 class="text-sm font-semibold text-gray-300 mb-3">Configuração</h4>
+                    <div class="grid grid-cols-1 gap-4">
+
+                      <label class="usuarios-permissoes-item" data-search="configurar provedor modelo credencial chave testar conexao">
+                        <input type="checkbox" name="ia.config" data-role="item" data-group="acoes-ia" data-item-type="action" class="w-4 h-4 mt-1" />
+                        <div>
+                          <span class="font-medium">Configurar a IA</span>
+                          <p class="text-sm text-gray-400">Ver o estado das credenciais, escolher os modelos e testar a conexão</p>
+                        </div>
+                      </label>
+
+                    </div>
+                  </div>
+
+                </div>
+              </div>
+            </article>
+
+            <article class="usuarios-permissoes-accordion">
+              <button class="usuarios-permissoes-accordion__toggle" data-accordion-toggle="colunas-ia" aria-expanded="false">
+                <span class="flex items-center gap-3">
+                  <i class="fas fa-table-columns text-[var(--color-primary)]"></i>
+                  <span class="font-semibold text-lg text-[var(--color-primary)]">Colunas</span>
+                </span>
+                <i class="fas fa-chevron-down"></i>
+              </button>
+              <div
+                class="usuarios-permissoes-accordion__content glass-surface rounded-2xl border border-white/10 p-4"
+                data-accordion-content="colunas-ia"
+                data-group-container="colunas-ia"
+              >
+                <div class="flex items-center justify-between mb-4 pb-3 border-b border-white/10">
+                  <div class="flex items-center gap-3">
+                    <input type="checkbox" id="usuariosPermissoesMasterColunasIa" data-role="master" data-group="colunas-ia" class="w-4 h-4" />
+                    <label for="usuariosPermissoesMasterColunasIa" class="font-medium">Selecionar tudo</label>
+                    <span class="text-sm text-gray-400" data-group-count="colunas-ia">(0 selecionadas)</span>
+                  </div>
+                  <i class="fas fa-info-circle text-[var(--color-primary)]" title="Colunas do módulo"></i>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+                  <div>
+                    <h4 class="text-sm font-semibold text-gray-300 mb-3">Tabela de leituras</h4>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+
+                      <label class="usuarios-permissoes-checkbox">
+                        <input type="checkbox" name="col_ia_titulo" data-role="item" data-group="colunas-ia" data-item-type="column" class="w-4 h-4" />
+                        <span class="text-sm">Leitura</span>
+                      </label>
+
+                      <label class="usuarios-permissoes-checkbox">
+                        <input type="checkbox" name="col_ia_destino" data-role="item" data-group="colunas-ia" data-item-type="column" class="w-4 h-4" />
+                        <span class="text-sm">Destino</span>
+                      </label>
+
+                      <label class="usuarios-permissoes-checkbox">
+                        <input type="checkbox" name="col_ia_arquivos" data-role="item" data-group="colunas-ia" data-item-type="column" class="w-4 h-4" />
+                        <span class="text-sm">Arquivos</span>
+                      </label>
+
+                      <label class="usuarios-permissoes-checkbox">
+                        <input type="checkbox" name="col_ia_itens" data-role="item" data-group="colunas-ia" data-item-type="column" class="w-4 h-4" />
+                        <span class="text-sm">Itens</span>
+                      </label>
+
+                      <label class="usuarios-permissoes-checkbox">
+                        <input type="checkbox" name="col_ia_status" data-role="item" data-group="colunas-ia" data-item-type="column" class="w-4 h-4" />
+                        <span class="text-sm">Situação</span>
+                      </label>
+
+                      <label class="usuarios-permissoes-checkbox">
+                        <input type="checkbox" name="col_ia_modelo" data-role="item" data-group="colunas-ia" data-item-type="column" class="w-4 h-4" />
+                        <span class="text-sm">Modelos usados</span>
+                      </label>
+
+                      <label class="usuarios-permissoes-checkbox">
+                        <input type="checkbox" name="col_ia_usuario" data-role="item" data-group="colunas-ia" data-item-type="column" class="w-4 h-4" />
+                        <span class="text-sm">Responsável</span>
+                      </label>
+
+                      <label class="usuarios-permissoes-checkbox">
+                        <input type="checkbox" name="col_ia_data" data-role="item" data-group="colunas-ia" data-item-type="column" class="w-4 h-4" />
+                        <span class="text-sm">Data</span>
+                      </label>
+
+                    </div>
+                  </div>
+
+                </div>
+              </div>
+            </article>
           </div>
         </section>
 

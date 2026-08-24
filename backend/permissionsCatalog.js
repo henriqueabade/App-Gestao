@@ -1322,6 +1322,135 @@ const PERMISSIONS_CATALOG = {
       }
     ]
   },
+  "ia": {
+    "code": "ia",
+    "label": "IA",
+    "page": "ia",
+    "table": "perm_ia",
+    "configured": true,
+    "actions": [
+      {
+        "key": "ia.view",
+        "column": "acao_view",
+        "label": "Ver lista",
+        "desc": "Exibir a grade de leituras"
+      },
+      {
+        "key": "ia.search",
+        "column": "acao_search",
+        "label": "Buscar/filtrar",
+        "desc": "Campo de busca e filtros de destino e situação"
+      },
+      {
+        "key": "ia.details.view",
+        "column": "acao_details_view",
+        "label": "Abrir uma leitura",
+        "desc": "Ver os arquivos, o que foi lido e os itens extraídos"
+      },
+      {
+        "key": "ia.delete",
+        "column": "acao_delete",
+        "label": "Excluir leitura",
+        "desc": "Apagar uma leitura e o que foi extraído dela"
+      },
+      {
+        "key": "ia.upload",
+        "column": "acao_upload",
+        "label": "Enviar arquivos",
+        "desc": "Área de envio de planilha, PDF e foto"
+      },
+      {
+        "key": "ia.extract",
+        "column": "acao_extract",
+        "label": "Executar a leitura",
+        "desc": "Dispara a IA de fato — cada execução consome créditos da conta"
+      },
+      {
+        "key": "ia.review.edit",
+        "column": "acao_review_edit",
+        "label": "Corrigir o que foi lido",
+        "desc": "Editar, descartar e reclassificar os itens antes de aplicar"
+      },
+      {
+        "key": "ia.apply.mp",
+        "column": "acao_apply_mp",
+        "label": "Aplicar em Matéria-prima",
+        "desc": "Cadastrar insumo novo e dar entrada em estoque a partir da leitura"
+      },
+      {
+        "key": "ia.apply.prod",
+        "column": "acao_apply_prod",
+        "label": "Aplicar em Produtos",
+        "desc": "Preencher os insumos de um produto a partir da leitura"
+      },
+      {
+        "key": "ia.apply.cli",
+        "column": "acao_apply_cli",
+        "label": "Aplicar em Clientes",
+        "desc": "Cadastrar/atualizar cliente e seus contatos a partir da leitura"
+      },
+      {
+        "key": "ia.apply.pros",
+        "column": "acao_apply_pros",
+        "label": "Aplicar em Prospecções",
+        "desc": "Cadastrar/atualizar prospecção e seus contatos a partir da leitura"
+      },
+      {
+        "key": "ia.apply.orc",
+        "column": "acao_apply_orc",
+        "label": "Aplicar em Orçamentos",
+        "desc": "Montar um orçamento com os itens lidos"
+      },
+      {
+        "key": "ia.config",
+        "column": "acao_config",
+        "label": "Configurar a IA",
+        "desc": "Ver o estado das credenciais, escolher os modelos e testar a conexão"
+      }
+    ],
+    "columns": [
+      {
+        "key": "col_ia_titulo",
+        "column": "col_ia_titulo",
+        "label": "Leitura"
+      },
+      {
+        "key": "col_ia_destino",
+        "column": "col_ia_destino",
+        "label": "Destino"
+      },
+      {
+        "key": "col_ia_arquivos",
+        "column": "col_ia_arquivos",
+        "label": "Arquivos"
+      },
+      {
+        "key": "col_ia_itens",
+        "column": "col_ia_itens",
+        "label": "Itens"
+      },
+      {
+        "key": "col_ia_status",
+        "column": "col_ia_status",
+        "label": "Situação"
+      },
+      {
+        "key": "col_ia_modelo",
+        "column": "col_ia_modelo",
+        "label": "Modelos usados"
+      },
+      {
+        "key": "col_ia_usuario",
+        "column": "col_ia_usuario",
+        "label": "Responsável"
+      },
+      {
+        "key": "col_ia_data",
+        "column": "col_ia_data",
+        "label": "Data"
+      }
+    ]
+  },
   "ctt": {
     "code": "ctt",
     "label": "Contatos",
@@ -2097,15 +2226,6 @@ const PERMISSIONS_CATALOG = {
     "label": "Laminação · Relatórios",
     "page": "laminacao-relatorios",
     "table": "perm_lam_relatorios",
-    "configured": false,
-    "actions": [],
-    "columns": []
-  },
-  "ia": {
-    "code": "ia",
-    "label": "IA",
-    "page": "ia",
-    "table": "perm_ia",
     "configured": false,
     "actions": [],
     "columns": []

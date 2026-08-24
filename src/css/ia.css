@@ -1,0 +1,641 @@
+/*
+   Estilos exclusivos da tela de IA.
+
+   O CSS de módulo é carregado sozinho (menu.js troca a folha `../css/<page>.css`
+   a cada navegação), então tudo que a página usa precisa estar AQUI — inclusive
+   o que parece global. Copiar `.glass-surface` e os botões não é duplicação por
+   desleixo: sem eles a tela abre sem fundo e com botão transparente.
+*/
+:root {
+    --color-primary: #b6a03e;
+    --color-primary-light: #d4c169;
+    --color-primary-dark: #7f6a27;
+    --color-violet: #A394A7;
+    --color-bordeaux: #6a152c;
+    --color-bg-deep: #310017;
+    --color-surface: rgba(255,255,255,0.08);
+    --color-input: rgba(0,0,0,0.3);
+    --color-inputBorder: rgba(255,255,255,0.15);
+    --color-green: #a2ffa6;
+    --color-red: #ff5858;
+    --color-blue: #8aa7f3;
+    --color-orange: #ffa366;
+    --neutral-100: #f9fafb;
+    --neutral-500: #6b7280;
+}
+
+body {
+    background: linear-gradient(135deg, var(--color-bg-deep) 0%, #1a0009 100%);
+    min-height: 100vh;
+}
+
+.glass-surface {
+    background: var(--color-surface);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+}
+
+.bg-surface { background: var(--color-surface); }
+.bg-input { background: var(--color-input); }
+.border-inputBorder { border-color: var(--color-inputBorder); }
+
+.btn-ghost {
+    background: transparent;
+    border: 1px solid rgba(255,255,255,0.2);
+    transition: all 150ms ease;
+}
+
+.btn-ghost:hover {
+    background: rgba(255,255,255,0.1);
+    transform: scale(1.05);
+}
+
+.tab-active {
+    color: var(--color-primary) !important;
+    border-bottom-color: var(--color-primary) !important;
+}
+
+.btn-primary {
+    background: var(--color-primary);
+    transition: all 150ms ease;
+}
+
+.btn-primary:hover {
+    background: var(--color-primary-light);
+    transform: scale(1.05);
+}
+
+.btn-secondary {
+    background: var(--color-blue);
+    transition: all 150ms ease;
+}
+
+.btn-secondary:hover {
+    background: rgba(138, 167, 243, 0.9);
+}
+
+.btn-blue {
+    background: var(--color-blue);
+    transition: all 150ms ease;
+}
+
+.btn-blue:hover {
+    background: rgba(138, 167, 243, 0.9);
+    transform: scale(1.05);
+}
+
+.btn-danger {
+    background: var(--color-bordeaux);
+    transition: all 150ms ease;
+}
+
+.btn-danger:hover {
+    background: rgba(106, 21, 44, 0.8);
+    transform: scale(1.05);
+}
+
+/*
+   O botão "Limpar" da barra de filtros usa `btn-warning`, como em Orçamentos,
+   Pedidos e Clientes — mas esta folha nunca definiu a classe. O botão ficava
+   SEM fundo, destoando dos vizinhos. Mesma cor dos outros módulos.
+*/
+.btn-warning {
+    background: var(--color-bordeaux);
+    transition: all 150ms ease;
+}
+
+.btn-warning:hover {
+    background: rgba(106, 21, 44, 0.8);
+    transform: scale(1.05);
+}
+
+/* Violeta do módulo — o mesmo tom já usado nos números e na coluna Origem. */
+.btn-violet {
+    background: var(--color-violet);
+    transition: all 150ms ease;
+}
+
+.btn-violet:hover {
+    background: rgba(163, 148, 167, 0.8);
+    transform: scale(1.05);
+}
+
+/*
+   Botões da barra de filtros: altura fixa (`h-12`) alinha as caixas, mas o
+   conteúdo continuava no fluxo inline — o ícone e o rótulo assentavam pela
+   linha de base, deixando "Funil" fora do centro. O flex centra nos dois eixos.
+*/
+#bt-actions > button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    line-height: 1;
+    flex-shrink: 0;
+    white-space: nowrap;
+}
+
+.btn-neutral {
+    background: rgba(255,255,255,0.1);
+    border: 1px solid rgba(255,255,255,0.2);
+    cursor: pointer;
+    transition: all 150ms ease;
+}
+
+.btn-neutral:hover {
+    background: rgba(255,255,255,0.2);
+}
+
+.btn-success {
+    background: var(--color-green);
+    color: #000;
+    transition: all 150ms ease;
+}
+
+.btn-success:hover {
+    background: rgba(162, 255, 166, 0.8);
+    transform: scale(1.05);
+}
+
+.btn-dark-blue {
+    background: #1e3a8a;
+    transition: all 150ms ease;
+}
+
+.btn-dark-blue:hover {
+    background: #1e40af;
+    transform: scale(1.05);
+}
+
+.badge-success {
+    background: rgba(162, 255, 166, 0.2);
+    color: var(--color-green);
+    border: 1px solid rgba(162, 255, 166, 0.3);
+}
+
+.badge-warning {
+    background: rgba(255, 163, 102, 0.2);
+    color: var(--color-orange);
+    border: 1px solid rgba(255, 163, 102, 0.3);
+}
+
+.badge-danger {
+    background: rgba(255, 88, 88, 0.2);
+    color: var(--color-red);
+}
+
+.badge-info {
+    background: rgba(138, 167, 243, 0.2);
+    color: var(--color-blue);
+    border: 1px solid rgba(138, 167, 243, 0.3);
+}
+
+.badge-neutral {
+    background: rgba(255, 255, 255, 0.1);
+    color: rgba(255, 255, 255, 0.75);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+}
+
+
+/* Campos e barra de filtros --------------------------------------- */
+.input-glass {
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    transition: all 150ms ease;
+}
+
+.input-glass:focus {
+    background: rgba(255, 255, 255, 0.2);
+    outline: none;
+    border-color: var(--color-primary);
+}
+
+/* ------------------------------------------------------------------
+   Barra de filtros horizontal — mesmo padrão de Matéria-prima,
+   Produtos, Clientes e Pedidos. Substituiu a coluna lateral fixa, que
+   comia largura da tabela o tempo todo mesmo sem ninguém filtrar.
+   ------------------------------------------------------------------ */
+.filter-bar {
+    gap: 24px;
+    flex-wrap: nowrap;
+}
+
+@media (max-width: 767px) {
+    .filter-bar {
+        flex-direction: column;
+        align-items: stretch;
+    }
+}
+
+.filter-bar input:not([type="checkbox"]),
+.filter-bar select,
+.filter-bar button {
+    height: 48px;
+}
+
+#bt-actions {
+    margin-top: 1vw;
+    width: 100%;
+    justify-content: flex-start;
+    flex-wrap: wrap;
+}
+
+@media (min-width: 768px) {
+    #bt-actions {
+        width: auto;
+        margin-top: 0;
+        justify-content: flex-end;
+        flex-shrink: 0;
+    }
+}
+
+
+/* Ações de linha, ícone de info e popover do resumo ---------------- */
+/*
+   Ações de linha (editar / excluir) — as MESMAS cores da grade principal.
+
+   Cada tabela do módulo repetia o estilo inline, e as de dentro dos modais
+   tinham acabado com um cinza próprio: o mesmo "excluir" aparecia vermelho na
+   grade e cinza no detalhe. Aqui a regra fica num lugar só.
+*/
+.acao-tabela {
+    width: 20px;
+    height: 20px;
+    padding: 0.25rem;
+    border-radius: 0.25rem;
+    cursor: pointer;
+    background: transparent;
+    border: none;
+    line-height: 1;
+    transition: background 150ms ease, color 150ms ease;
+}
+
+/*
+   Ação travada por regra de negócio (prospecção Ganha ou Perdida).
+
+   Continua VISÍVEL de propósito: sumir com o ícone esconderia que a ação
+   existe e faria a coluna "dançar" de linha para linha.
+
+   Sem `pointer-events: none`: ele mataria o tooltip junto com o clique, e o
+   title é justamente onde está a explicação. O bloqueio é no JS, que também
+   impede o clique de vazar para a linha.
+*/
+.acao-tabela--inerte {
+    opacity: 0.35;
+    cursor: not-allowed;
+    color: rgba(255, 255, 255, 0.5) !important;
+}
+
+.acao-tabela--inerte:hover {
+    background: transparent;
+}
+
+.acao-tabela:hover {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.acao-tabela--editar { color: var(--color-primary); }
+.acao-tabela--excluir { color: var(--color-red); }
+.acao-tabela--mover { color: var(--color-blue); }
+.acao-tabela--ver { color: var(--color-primary); }
+
+/* Telefone e documento não podem quebrar no meio. */
+.celula-sem-quebra {
+    white-space: nowrap;
+}
+
+/* ------------------------------------------------------------------
+   Ícone (i) e popover — mesmo padrão de Matéria-prima e Produtos.
+   ------------------------------------------------------------------ */
+.info-icon {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    color: #fff;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: all 150ms ease;
+}
+
+.info-icon::after {
+    content: 'i';
+    font-style: italic;
+    font-weight: bold;
+}
+
+.info-icon:hover {
+    background: rgba(255, 255, 255, 0.445);
+    transform: scale(1.1);
+}
+
+.resumo-popover {
+    position: absolute;
+    z-index: 50;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.555);
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(-8px);
+    transition: opacity 200ms ease, transform 200ms ease;
+    pointer-events: none;
+    background: #310017c5;
+}
+
+.resumo-popover.show {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
+    pointer-events: auto;
+}
+
+
+/* Animação de entrada e toasts ------------------------------------ */
+
+.animate-fade-in-up {
+    animation: fadeInUp 0.6s ease-out forwards;
+    opacity: 0;
+    transform: translateY(20px);
+}
+
+.animate-fade-in-up:nth-child(1) { animation-delay: 0.1s; }
+.animate-fade-in-up:nth-child(2) { animation-delay: 0.2s; }
+.animate-fade-in-up:nth-child(3) { animation-delay: 0.3s; }
+.animate-fade-in-up:nth-child(4) { animation-delay: 0.4s; }
+
+@keyframes fadeInUp {
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Toast notifications */
+.toast {
+    color: white;
+    padding: 0.5rem 1rem;
+    border-radius: 0.25rem;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    transition: opacity 0.5s ease-in-out;
+    background-color: #374151;
+}
+
+.toast-success { background-color: #16a34a; }
+.toast-error { background-color: #dc2626; }
+.toast-info { background-color: #2563eb; }
+
+/* ------------------------------------------------------------------
+   Específico do módulo de IA
+   ------------------------------------------------------------------ */
+
+/*
+   Situação da leitura. Uma cor por etapa do caminho, na mesma escala dos
+   outros módulos: azul = ainda vai acontecer, amarelo = esperando você,
+   verde = terminou, vermelho = deu errado.
+*/
+.badge-ia {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 10px;
+    border-radius: 9999px;
+    font-size: 12px;
+    font-weight: 600;
+    white-space: nowrap;
+    border: 1px solid transparent;
+}
+
+.badge-ia--rascunho {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.2);
+    color: rgba(255, 255, 255, 0.85);
+}
+
+.badge-ia--lendo {
+    background: rgba(138, 167, 243, 0.16);
+    border-color: rgba(138, 167, 243, 0.4);
+    color: var(--color-blue);
+}
+
+.badge-ia--revisao {
+    background: rgba(182, 160, 62, 0.18);
+    border-color: rgba(182, 160, 62, 0.45);
+    color: var(--color-primary-light);
+}
+
+.badge-ia--aplicada {
+    background: rgba(162, 255, 166, 0.14);
+    border-color: rgba(162, 255, 166, 0.4);
+    color: var(--color-green);
+}
+
+.badge-ia--erro {
+    background: rgba(255, 88, 88, 0.14);
+    border-color: rgba(255, 88, 88, 0.45);
+    color: var(--color-red);
+}
+
+.badge-ia--cancelada {
+    background: rgba(163, 148, 167, 0.16);
+    border-color: rgba(163, 148, 167, 0.4);
+    color: var(--color-violet);
+}
+
+/* Ponto pulsante enquanto a IA está lendo — a única situação que muda sozinha. */
+.badge-ia--lendo::before {
+    content: '';
+    width: 6px;
+    height: 6px;
+    border-radius: 9999px;
+    background: currentColor;
+    animation: iaPulso 1.2s ease-in-out infinite;
+}
+
+@keyframes iaPulso {
+    0%, 100% { opacity: 0.35; }
+    50%      { opacity: 1; }
+}
+
+/* Destino: identifica para onde a leitura vai, com o ícone do módulo alvo. */
+.ia-destino {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    color: rgba(255, 255, 255, 0.9);
+    white-space: nowrap;
+}
+
+.ia-destino i {
+    color: var(--color-primary);
+    width: 14px;
+    text-align: center;
+}
+
+/*
+   Modelos usados. Fonte monoespaçada de propósito: são identificadores
+   (`gemini-2.5-flash`), e ler isso em fonte de texto convida a erro de leitura
+   quando alguém for comparar com o que está no .env.
+*/
+.ia-modelo {
+    display: inline-block;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 11px;
+    line-height: 1.5;
+    color: rgba(255, 255, 255, 0.65);
+    max-width: 180px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.ia-linha {
+    transition: background 150ms ease;
+    cursor: pointer;
+}
+
+.ia-linha:hover {
+    background: rgba(255, 255, 255, 0.05);
+}
+
+/* Contadores da coluna "Itens": aplicados / total. */
+.ia-contagem {
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.ia-contagem__aplicados { color: var(--color-green); }
+.ia-contagem__separador { color: rgba(255, 255, 255, 0.35); padding: 0 2px; }
+
+/*
+   Entrada dos modais. `animate-modalFade` não existe no build offline do
+   Tailwind nem em toda folha de módulo — sem esta regra o modal aparece seco.
+*/
+@keyframes modalFade {
+    from { opacity: 0; transform: translateY(-12px) scale(0.98); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.animate-modalFade { animation: modalFade 0.3s ease-out forwards; }
+
+/*
+   Caixa dos modais grandes do módulo.
+
+   `max-h-[90vh]` e `h-[90vh]` NÃO existem no build offline do Tailwind — o
+   modal ficava do tamanho do conteúdo e escapava da tela em documento longo.
+   A altura fica aqui, com o corpo rolando por dentro.
+*/
+.modal-ia {
+    width: 100%;
+    max-width: 760px;
+    max-height: 88vh;
+    display: flex;
+    flex-direction: column;
+}
+
+/* `min-height: 0` é obrigatório: sem ele um filho flex se recusa a encolher e
+   a rolagem nunca aparece — a caixa é que cresce. */
+.modal-ia__corpo {
+    overflow-y: auto;
+    min-height: 0;
+    flex: 1 1 auto;
+}
+
+.modal-ia__topo,
+.modal-ia__rodape {
+    flex: 0 0 auto;
+}
+
+/* Cartão de um provedor na tela de configuração. */
+.ia-provedor {
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 14px;
+    padding: 16px;
+    background: rgba(255, 255, 255, 0.04);
+}
+
+.ia-provedor__estado {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 3px 10px;
+    border-radius: 9999px;
+    white-space: nowrap;
+}
+
+.ia-provedor__estado--ok {
+    background: rgba(162, 255, 166, 0.14);
+    color: var(--color-green);
+}
+
+.ia-provedor__estado--falta {
+    background: rgba(255, 88, 88, 0.14);
+    color: var(--color-red);
+}
+
+.ia-provedor__estado--aviso {
+    background: rgba(182, 160, 62, 0.18);
+    color: var(--color-primary-light);
+}
+
+/*
+   Nome de variável de ambiente e id de modelo em monoespaçada: são valores
+   para COPIAR para o .env, e fonte de texto convida a erro de digitação.
+*/
+.ia-chave-env {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 12px;
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 6px;
+    padding: 2px 8px;
+    color: rgba(255, 255, 255, 0.85);
+}
+
+/* Lista de modelos devolvida pelo teste de conexão. */
+.ia-lista-modelos {
+    max-height: 190px;
+    overflow-y: auto;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
+    background: rgba(0, 0, 0, 0.22);
+}
+
+.ia-lista-modelos__item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 6px 10px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.8);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.ia-lista-modelos__item:last-child { border-bottom: none; }
+
+/* O modelo que está no .env fica marcado — é o que vai ser usado de fato. */
+.ia-lista-modelos__item--atual {
+    background: rgba(182, 160, 62, 0.14);
+    color: var(--color-primary-light);
+}
+
+.ia-lista-modelos__ctx {
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.45);
+    white-space: nowrap;
+}
+
+/*
+   `space-y-5` não saiu no build offline do Tailwind (só 2, 3, 4 e 6). O corpo
+   da configuração usa esse espaçamento entre os cartões de provedor.
+*/
+.space-y-5 > :not([hidden]) ~ :not([hidden]) {
+    margin-top: 1.25rem;
+}
