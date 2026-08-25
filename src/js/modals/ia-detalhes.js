@@ -117,16 +117,36 @@
   function pintarRodape() {
     const extrair = get('iaDetExtrair');
     const aplicar = get('iaDetAplicar');
+    const gravarTodos = get('iaDetGravarTodos');
     const aviso = get('iaDetRodapeAviso');
     if (!leitura) return;
 
     const temTexto = (leitura.arquivos || []).some(a => a.texto_tamanho > 0);
     const mostrarExtrair = leitura.pode_estruturar && temTexto
       && (leitura.status === 'rascunho' || leitura.status === 'revisao' || leitura.status === 'erro');
-    const mostrarAplicar = leitura.status === 'revisao' && leitura.pode_aplicar_destino;
+    const emRevisao = leitura.status === 'revisao' && leitura.pode_aplicar_destino;
+    const pendentes = itensPendentes().length;
+    const temFormulario = Boolean(MODULOS_DE_DESTINO[leitura.destino]);
 
     extrair?.classList.toggle('hidden', !mostrarExtrair);
-    aplicar?.classList.toggle('hidden', !mostrarAplicar);
+    aplicar?.classList.toggle('hidden', !(emRevisao && pendentes > 0 && temFormulario));
+
+    // Gravar tudo de uma vez só aparece quando abrir um formulário por linha
+    // seria inviável. Com uma linha só, o caminho normal já dá conta e um
+    // segundo botão ao lado dele seria só um jeito de errar.
+    gravarTodos?.classList.toggle('hidden', !(emRevisao && pendentes > 1));
+
+    if (aplicar && emRevisao && pendentes > 0 && temFormulario) {
+      const rotulo = MODULOS_DE_DESTINO[leitura.destino].rotulo;
+      aplicar.innerHTML = '<i class="fas fa-up-right-from-square mr-2"></i>'
+        + (pendentes > 1 ? `Abrir a 1ª de ${pendentes} em ${rotulo}` : `Abrir em ${rotulo}`);
+      aplicar.title = `Abre ${rotulo} com os dados preenchidos. Nada é gravado aqui: quem salva é você.`;
+    }
+
+    if (gravarTodos && emRevisao && pendentes > 1) {
+      gravarTodos.title = `Grava ${pendentes} linha(s) direto em ${leitura.destino_rotulo}, `
+        + 'sem passar pelo formulário. Use quando conferir uma a uma não for prático.';
+    }
 
     // Extrair de novo REFAZ a lista. Dizer isso antes do clique evita a
     // surpresa de perder correções já feitas à mão.
@@ -784,14 +804,17 @@
 
     // Item incompleto falha na hora de gravar. Avisar aqui é o que evita
     // aplicar, ver o erro e ter de voltar.
-    const aplicar = get('iaDetAplicar');
-    if (aplicar) {
-      aplicar.disabled = incompletos > 0 || (criar + atualizar) === 0;
-      aplicar.title = incompletos
-        ? 'Preencha os campos obrigatórios em vermelho antes de aplicar'
+    // A trava vale para quem GRAVA. Abrir o formulário com um obrigatório
+    // vazio não só é inofensivo como é o caminho certo: é lá que o campo vai
+    // ser preenchido, com a validação do próprio módulo cobrando.
+    const gravarTodos = get('iaDetGravarTodos');
+    if (gravarTodos) {
+      gravarTodos.disabled = incompletos > 0 || (criar + atualizar) === 0;
+      gravarTodos.title = incompletos
+        ? 'Preencha os campos obrigatórios em vermelho antes de gravar'
         : (criar + atualizar) === 0
           ? 'Não há item para gravar — todos estão descartados ou já aplicados'
-          : '';
+          : 'Grava todas as linhas direto, sem passar pelo formulário';
     }
   }
 
@@ -904,17 +927,35 @@
   }
 
   // ---------------------------------------------------------------------------
-  // Abrir no módulo de destino, já preenchido
+  // Abrir o módulo de destino, já preenchido
   //
-  // O caminho para quem quer conferir e salvar no formulário que já conhece —
-  // com a validação, os selects e as travas do próprio módulo. Nada é gravado
-  // pela IA aqui: o modal abre preenchido e quem salva é o usuário.
+  // É o que a leitura FAZ. Ela não grava: prepara o formulário que a pessoa já
+  // conhece — com a validação, os selects e as travas do próprio módulo — e
+  // devolve o controle. Quem confere e salva é o usuário.
   //
-  // O preenchimento acontece DE FORA, depois que o modal abre. A alternativa
-  // seria ensinar cada módulo a ler um objeto de pré-preenchimento — cinco
-  // arquivos em produção alterados para um recurso de um sexto módulo. Como o
-  // preço disso é depender dos ids dos campos, existe um teste que confere,
-  // contra o HTML de cada modal, que todo id deste mapa continua existindo.
+  // O preenchimento tem duas metades, e a divisão não é arbitrária:
+  //
+  //   CAMPOS SIMPLES   caixas de texto, por id. Este mapa é a única coisa aqui
+  //                    que depende do HTML dos outros módulos, e existe um
+  //                    teste que confere cada id contra o arquivo de cada modal.
+  //
+  //   CONTEÚDO         tudo o que NÃO é caixa de texto: a lista de contatos, a
+  //                    tabela de insumos por processo, os itens do orçamento, e
+  //                    os selects que só têm opções depois de um `fetch`.
+  //
+  // A segunda metade é a que estava faltando, e era ela que fazia o formulário
+  // abrir pela metade. Ela não é preenchida daqui: cada modal já declara, para
+  // a restauração de trabalho, COMO repor o próprio conteúdo — e declarou bem,
+  // porque teve de acertar as ordens difíceis (o cliente antes do contato, o
+  // país antes do estado, os itens antes do total). `EstadoTrabalho.preencher`
+  // reaproveita exatamente esse contrato. Escrever um segundo mecanismo aqui
+  // significaria redescobrir cada uma dessas ordens, e descobrir errado em
+  // silêncio.
+  //
+  // As IDENTIDADES (insumo_id, produto_id, o cliente) vêm resolvidas do
+  // backend, por `GET /api/ia/:id/itens/:itemId/preenchimento`. Resolver isso
+  // aqui exigiria baixar a matéria-prima e o catálogo inteiros e repetir, em
+  // JavaScript de tela, a normalização de nome que o backend já faz e testa.
   // ---------------------------------------------------------------------------
 
   const MODULOS_DE_DESTINO = {
@@ -925,9 +966,7 @@
       overlay: 'novoInsumo',
       campos: {
         nome: 'nome',
-        categoria: 'categoria',
         quantidade: 'quantidade',
-        unidade: 'unidade',
         preco_unitario: 'preco',
         descricao: 'descricao'
       }
@@ -948,13 +987,8 @@
         end_complemento: 'regComplemento',
         end_bairro: 'regBairro',
         end_cidade: 'regCidade',
-        end_uf: 'regEstado',
         end_cep: 'regCep'
-      },
-      // Contatos entram por um modal próprio, com botão de adicionar. Preencher
-      // isso de fora seria simular uma sequência de cliques — frágil e mudo
-      // quando quebrasse. Ficam para o usuário, com os dados à vista na grade.
-      manuais: ['contatos']
+      }
     },
     prospeccoes: {
       rotulo: 'Nova Prospecção',
@@ -973,10 +1007,18 @@
         end_complemento: 'endComplemento',
         end_bairro: 'endBairro',
         end_cidade: 'endCidade',
-        end_uf: 'endEstado',
         end_cep: 'endCep'
-      },
-      manuais: ['contatos']
+      }
+    },
+    produto_insumos: {
+      rotulo: 'Novo Produto',
+      html: 'modals/produtos/novo.html',
+      script: '../js/modals/produto-novo.js',
+      overlay: 'novoProduto',
+      campos: {
+        nome: 'nomeInput',
+        codigo: 'codigoInput'
+      }
     },
     orcamentos: {
       rotulo: 'Novo Orçamento',
@@ -985,86 +1027,85 @@
       overlay: 'novoOrcamento',
       campos: {
         validade: 'novoValidade',
-        forma_pagamento: 'novoFormaPagamento',
         observacoes: 'novoObservacoes'
-      },
-      // O cliente é um <select> montado por requisição: escolher pelo id só
-      // funciona depois que as opções chegam.
-      selects: { cliente: { id: 'novoCliente', porAlvo: true } },
-      manuais: ['itens']
+      }
     }
   };
 
-  /** Espera o <select> ganhar opções: ele é montado por requisição. */
-  async function esperarOpcoes(select, limiteMs = 6000) {
-    const ate = Date.now() + limiteMs;
-    while (Date.now() < ate) {
-      if (select.options && select.options.length > 1) return true;
-      await new Promise(r => setTimeout(r, 120));
-    }
-    return false;
+  /**
+   * O valor de "Brasil" no <select> de país, lido das opções que ele tem.
+   *
+   * A lista de países vem de um serviço de geografia internacional, e o rótulo
+   * pode ser "Brasil" ou "Brazil" conforme o idioma que ele devolver. Escrever
+   * um dos dois aqui funcionaria até o dia em que não funcionasse — calado,
+   * porque select que recebe valor inexistente não reclama, só fica vazio.
+   */
+  function valorDoBrasil(idSelect) {
+    const select = document.getElementById(idSelect);
+    const achado = Array.from(select?.options || [])
+      .find(o => /^bra[sz]il$/i.test(String(o.value).trim()));
+    return achado ? achado.value : '';
   }
 
   /**
-   * Escreve o valor no campo e avisa a tela.
+   * O conteúdo dinâmico, na forma que o `capturar` de cada modal produz.
    *
-   * Os dois eventos são necessários: `input` acorda as máscaras e os cálculos
-   * que rodam a cada tecla, e `change` acorda quem só escuta o campo perder o
-   * foco. Preencher `value` calado deixaria o formulário com o valor na tela e
-   * o estado interno vazio.
+   * É um acoplamento real com cada módulo, e é o mesmo que a restauração de
+   * trabalho já tem: são as duas pontas do contrato que aquele modal declarou.
    */
-  function escrever(campo, valor) {
-    if (!campo) return false;
-    const texto = valor === null || valor === undefined ? '' : String(valor);
-    if (!texto) return false;
-    campo.value = texto;
-    campo.dispatchEvent(new Event('input', { bubbles: true }));
-    campo.dispatchEvent(new Event('change', { bubbles: true }));
-    return true;
-  }
+  const CONTEUDO_DO_DESTINO = {
+    // Categoria, unidade e processo são selects montados por requisição — o
+    // `restaurar` do módulo sabe esperar as opções chegarem.
+    materia_prima: carga => ({
+      categoria: carga.campos.categoria || '',
+      unidade: carga.campos.unidade || '',
+      processo: ''
+    }),
 
-  async function preencherModulo(config, item) {
-    const dados = item.dados || {};
-    const preenchidos = [];
-    const faltaram = [];
+    clientes: carga => ({
+      contatos: carga.contatos || [],
+      // O estado só carrega depois do país, e as opções dele são nomes por
+      // extenso — "Rio Grande do Sul", não "RS". O backend manda os dois.
+      enderecos: {
+        reg: {
+          pais: carga.campos.end_estado_nome ? valorDoBrasil('regPais') : '',
+          estado: carga.campos.end_estado_nome || ''
+        },
+        cob: { pais: '', estado: '' },
+        ent: { pais: '', estado: '' }
+      }
+    }),
 
-    for (const [chave, id] of Object.entries(config.campos || {})) {
-      const campo = document.getElementById(id);
-      if (!campo) { faltaram.push(chave); continue; }
-      if (escrever(campo, dados[chave])) preenchidos.push(chave);
-    }
+    prospeccoes: carga => ({
+      contatos: carga.contatos || [],
+      pais: carga.campos.end_estado_nome ? valorDoBrasil('endPais') : '',
+      estado: carga.campos.end_estado_nome || ''
+    }),
 
-    for (const [chave, cfg] of Object.entries(config.selects || {})) {
-      const select = document.getElementById(cfg.id);
-      if (!select) { faltaram.push(chave); continue; }
-      await esperarOpcoes(select);
-      // Para o select, o que vale é o ALVO escolhido na revisão, não o texto
-      // lido: o id é o que o formulário grava, e o nome pode estar escrito de
-      // um jeito que não bate com nenhuma opção.
-      const valor = cfg.porAlvo ? item.alvo_id : dados[chave];
-      if (valor === null || valor === undefined) { faltaram.push(chave); continue; }
-      select.value = String(valor);
-      if (String(select.value) !== String(valor)) { faltaram.push(chave); continue; }
-      select.dispatchEvent(new Event('change', { bubbles: true }));
-      preenchidos.push(chave);
-    }
+    // A tabela de insumos do produto agrupa por processo e ordena pela posição.
+    // O backend já mandou os dois resolvidos, junto com o id e o preço.
+    produto_insumos: carga => ({ itens: (carga.insumos || []).map(i => ({ ...i })) }),
 
-    return { preenchidos, faltaram };
-  }
+    orcamentos: carga => ({
+      // A tabela do orçamento guarda os valores como texto simples, e é assim
+      // que ela é relida para recalcular o total: número com ponto decimal,
+      // sem símbolo de moeda.
+      itens: (carga.itens || []).map(i => ({
+        id: String(i.produto_id),
+        nome: i.nome,
+        qtd: String(i.quantidade),
+        valor: String(i.valor_unitario),
+        valorDesc: String(i.valor_unitario),
+        desc: '0'
+      })),
+      // O cliente é o primeiro select a ser reposto: é o `change` dele que
+      // carrega contato e transportadora.
+      selects: { novoCliente: carga.alvo ? String(carga.alvo.id) : '' }
+    })
+  };
 
-  /** Nome legível de um campo, para a mensagem. */
-  const rotuloDoCampo = chave =>
-    (leitura.campos || []).find(c => c.chave === chave)?.rotulo || chave;
-
-  async function abrirNoModulo(item) {
-    const config = MODULOS_DE_DESTINO[leitura?.destino];
-    if (!config) {
-      showToast('Este destino ainda não abre o módulo preenchido', 'info');
-      return;
-    }
-
-    // O modal de destino abre POR CIMA do de IA: fechar o de baixo perderia a
-    // revisão, e quem salva do outro lado quer voltar para ela.
+  /** Abre o modal por cima e espera ele terminar de montar. */
+  function abrirPorCima(config) {
     const pronto = new Promise(resolve => {
       function aoAbrir(e) {
         if (e.detail !== config.overlay) return;
@@ -1077,28 +1118,77 @@
       setTimeout(() => { window.removeEventListener('modalSpinnerLoaded', aoAbrir); resolve(); }, 2500);
     });
 
+    // O modal de destino abre POR CIMA do de IA: fechar o de baixo perderia a
+    // revisão, e quem salva do outro lado quer voltar para ela.
     Modal.open(config.html, config.script, config.overlay, true);
-    await pronto;
+    return pronto;
+  }
 
-    const { preenchidos, faltaram } = await preencherModulo(config, item);
-    const manuais = (config.manuais || []).filter(c => {
-      const v = item.dados?.[c];
-      return Array.isArray(v) ? v.length > 0 : Boolean(v);
-    });
+  /** Quantos itens o preenchimento levou para o formulário. */
+  function contarConteudo(destino, conteudo) {
+    if (destino === 'clientes' || destino === 'prospeccoes') {
+      return { quantos: (conteudo.contatos || []).length, oQue: 'contato(s)' };
+    }
+    if (destino === 'produto_insumos') {
+      return { quantos: (conteudo.itens || []).length, oQue: 'insumo(s)' };
+    }
+    if (destino === 'orcamentos') {
+      return { quantos: (conteudo.itens || []).length, oQue: 'item(ns)' };
+    }
+    return { quantos: 0, oQue: '' };
+  }
 
-    if (!preenchidos.length && !manuais.length) {
-      showToast('Nada do que foi lido coube nos campos deste formulário', 'info');
+  async function abrirNoModulo(item) {
+    const config = MODULOS_DE_DESTINO[leitura?.destino];
+    if (!config) {
+      showToast('Este destino ainda não abre o módulo preenchido', 'info');
       return;
     }
 
-    const partes = [`${preenchidos.length} campo(s) preenchido(s)`];
-    if (manuais.length) {
-      // Dizer o que NÃO foi preenchido é o que evita o usuário salvar achando
-      // que os contatos vieram junto.
-      partes.push(`${manuais.map(rotuloDoCampo).join(' e ')} precisam ser adicionados à mão`);
+    let carga;
+    try {
+      const resp = await fetchApi(`/api/ia/${leitura.id}/itens/${item.id}/preenchimento`);
+      carga = await resp.json().catch(() => ({}));
+      if (!resp.ok) throw new Error(carga.error || `Erro ${resp.status}`);
+    } catch (err) {
+      showToast(err?.message || 'Não foi possível preparar o formulário', 'error');
+      return;
     }
-    if (faltaram.length) partes.push(`${faltaram.length} campo(s) não couberam`);
-    showToast(partes.join(' · '), manuais.length || faltaram.length ? 'info' : 'success');
+
+    await abrirPorCima(config);
+
+    // Os campos simples, por id. `EstadoTrabalho` aplica o valor E avisa a tela
+    // pelos dois eventos — sem isso o formulário fica com o valor à mostra e o
+    // estado interno vazio.
+    const campos = [];
+    for (const [chave, id] of Object.entries(config.campos)) {
+      const valor = carga.campos[chave];
+      if (valor === null || valor === undefined || valor === '') continue;
+      campos.push({ chave: `#${id}`, valor: String(valor) });
+    }
+
+    const conteudo = (CONTEUDO_DO_DESTINO[leitura.destino] || (() => null))(carga);
+
+    let resultado = { campos: 0, conteudo: false };
+    try {
+      resultado = await window.EstadoTrabalho.preencher(config.overlay, { campos, conteudo });
+    } catch (err) {
+      console.error('Falha ao preencher o formulário', err);
+    }
+
+    const { quantos, oQue } = contarConteudo(leitura.destino, conteudo || {});
+    const partes = [`${resultado.campos} campo(s) preenchido(s)`];
+    if (quantos) partes.push(`${quantos} ${oQue}`);
+    if (!resultado.campos && !quantos) {
+      showToast('Nada do que foi lido coube neste formulário', 'info');
+      return;
+    }
+
+    // O que o backend não conseguiu casar aparece AGORA, antes de a pessoa
+    // salvar. Depois vira material errado numa receita, ou item faltando num
+    // preço que já foi para o cliente.
+    if (carga.avisos?.length) partes.push(carga.avisos.join(' · '));
+    showToast(`${partes.join(' · ')} — confira e salve`, carga.avisos?.length ? 'info' : 'success');
   }
 
   // ---------------------------------------------------------------------------
@@ -1149,9 +1239,29 @@
     }
   }
 
-  async function aplicar() {
-    const pendentes = (leitura.itens || [])
-      .filter(i => i.status !== 'aplicado' && i.acao !== 'ignorar').length;
+  /** Linhas que ainda não viraram cadastro e não foram descartadas. */
+  const itensPendentes = () => (leitura?.itens || [])
+    .filter(i => i.status !== 'aplicado' && i.acao !== 'ignorar');
+
+  /**
+   * O caminho normal: abre o formulário do módulo com a primeira linha
+   * pendente. Nada é gravado daqui.
+   *
+   * Com várias linhas, abre uma de cada vez. Abrir dez formulários de uma vez
+   * não é uma tela, é uma pilha — e o modal de IA continua embaixo, então
+   * voltar para a próxima é um clique.
+   */
+  async function abrirPrimeiroPendente() {
+    const pendentes = itensPendentes();
+    if (!pendentes.length) {
+      showToast('Nenhuma linha pendente nesta leitura', 'info');
+      return;
+    }
+    await abrirNoModulo(pendentes[0]);
+  }
+
+  async function gravarTodos() {
+    const pendentes = itensPendentes().length;
 
     // Sem o componente carregado, cai no confirm do navegador em vez de
     // seguir direto: gravar em estoque sem confirmação nenhuma é pior do que
@@ -1204,9 +1314,14 @@
     if (e.key === 'Escape') { close(); document.removeEventListener('keydown', esc); }
   });
 
-  // Extrair consome crédito e aplicar mexe em estoque: os dois passam pela
-  // trava de duplo clique, que segura o botão até a ação terminar.
-  for (const [id, acao] of [['iaDetExtrair', extrair], ['iaDetAplicar', aplicar]]) {
+  // Extrair consome crédito e gravar mexe em estoque: os dois passam pela
+  // trava de duplo clique, que segura o botão até a ação terminar. Abrir o
+  // formulário entra na mesma trava para não empilhar dois modais iguais.
+  for (const [id, acao] of [
+    ['iaDetExtrair', extrair],
+    ['iaDetAplicar', abrirPrimeiroPendente],
+    ['iaDetGravarTodos', gravarTodos]
+  ]) {
     const botao = get(id);
     if (!botao) continue;
     if (window.BotaoAcao?.bind) window.BotaoAcao.bind(botao, acao);

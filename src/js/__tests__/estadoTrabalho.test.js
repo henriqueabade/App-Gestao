@@ -261,3 +261,101 @@ test('motivo posterior não-restaurável não apaga o que a queda já guardou', 
   assert.ok(disco.arquivo, 'o segundo motivo não pode destruir o trabalho guardado');
   assert.strictEqual(disco.arquivo.state.motivo, 'offline');
 });
+
+
+// ---------------------------------------------------------------------------
+// Preencher de fora, pelo mesmo contrato da restauração
+//
+// A restauração de trabalho e o preenchimento por IA são o mesmo problema visto
+// de dois lados: pôr valores num formulário recém-aberto, incluindo o que NÃO é
+// caixa de texto. Reaproveitar o `restaurar` que cada modal já declara evita
+// redescobrir as ordens difíceis — país antes de estado, cliente antes de
+// contato, itens antes do total — e redescobrir errado em silêncio.
+// ---------------------------------------------------------------------------
+
+/** Ambiente com um overlay que tem campos de verdade dentro. */
+function ambienteComOverlay(overlayId, campos = []) {
+  const amb = montarAmbiente();
+  const elementos = new Map();
+
+  for (const id of campos) {
+    elementos.set(id, {
+      id, name: '', value: '', type: 'text', disabled: false, dataset: {},
+      eventos: [],
+      dispatchEvent(e) { this.eventos.push(e?.type || String(e)); }
+    });
+  }
+
+  const overlay = {
+    id: `${overlayId}Overlay`,
+    querySelector: sel => elementos.get(String(sel).replace(/^#/, '')) || null,
+    querySelectorAll: () => [...elementos.values()]
+  };
+
+  const original = amb.janela.document.getElementById;
+  amb.janela.document.getElementById = id =>
+    (id === overlay.id ? overlay : original(id));
+
+  return { ...amb, campo: id => elementos.get(id) };
+}
+
+test('preencher aplica os campos e chama o restaurar do modal', async () => {
+  const amb = ambienteComOverlay('novoTeste', ['nomeTeste']);
+
+  let recebido = null;
+  amb.janela.EstadoTrabalho.registrarConteudo('novoTeste', {
+    capturar: () => ({}),
+    restaurar: async dados => { recebido = dados; }
+  });
+
+  const r = await amb.janela.EstadoTrabalho.preencher('novoTeste', {
+    campos: [{ chave: '#nomeTeste', valor: 'MDF 15mm' }],
+    conteudo: { contatos: [{ nome: 'Lúcia' }] }
+  });
+
+  assert.strictEqual(amb.campo('nomeTeste').value, 'MDF 15mm');
+  // Os dois eventos: `input` acorda máscaras e cálculos, `change` acorda quem
+  // só escuta o campo perder o foco. Sem eles o formulário fica com o valor à
+  // mostra e o estado interno vazio.
+  assert.ok(amb.campo('nomeTeste').eventos.includes('input'));
+  assert.ok(amb.campo('nomeTeste').eventos.includes('change'));
+
+  // O conteúdo dinâmico — contatos, itens, insumos — chega pelo contrato que o
+  // próprio modal declarou. É a metade que o preenchimento por id não alcança.
+  assert.deepStrictEqual(recebido, { contatos: [{ nome: 'Lúcia' }] });
+  assert.strictEqual(r.campos, 1);
+  assert.strictEqual(r.conteudo, true);
+});
+
+test('preencher espera o modal declarar como repor o conteúdo', async () => {
+  const amb = ambienteComOverlay('novoTarde');
+
+  let recebido = null;
+  // O modal registra o `restaurar` no fim do IIFE dele, DEPOIS de anunciar que
+  // carregou. Sem esperar, o preenchimento chegaria antes de existir quem o
+  // recebesse — e falharia calado.
+  setTimeout(() => {
+    amb.janela.EstadoTrabalho.registrarConteudo('novoTarde', {
+      capturar: () => ({}),
+      restaurar: dados => { recebido = dados; }
+    });
+  }, 80);
+
+  const r = await amb.janela.EstadoTrabalho.preencher('novoTarde', { conteudo: { itens: [1, 2] } });
+  assert.deepStrictEqual(recebido, { itens: [1, 2] });
+  assert.strictEqual(r.conteudo, true);
+});
+
+test('modal sem conteúdo dinâmico ainda recebe os campos simples', async () => {
+  const amb = ambienteComOverlay('novoSimples', ['soTexto']);
+
+  // Nem todo modal tem sub-lista, e a espera pelo registro tem prazo. Desistir
+  // do preenchimento inteiro por causa disso perderia também o que dava para
+  // preencher.
+  const r = await amb.janela.EstadoTrabalho.preencher('novoSimples',
+    { campos: [{ chave: '#soTexto', valor: 'valor' }] });
+
+  assert.strictEqual(amb.campo('soTexto').value, 'valor');
+  assert.strictEqual(r.campos, 1);
+  assert.strictEqual(r.conteudo, false);
+});

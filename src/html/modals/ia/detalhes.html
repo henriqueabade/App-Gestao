@@ -92,10 +92,20 @@
                 class="btn-primary text-white rounded-lg px-5 py-2 text-sm font-medium hidden">
           <i class="fas fa-table-list mr-2"></i>Extrair os dados
         </button>
-        <!-- Aparece com a leitura em revisão. -->
+        <!-- Grava a lista inteira de uma vez, SEM abrir formulário.
+             Existe para o caso em que abrir um formulário por linha seria
+             inviável: uma planilha de fornecedor com 40 insumos. Fica ao lado
+             do caminho normal, e não no lugar dele, porque gravar direto pula
+             a conferência que o formulário do módulo faria. -->
+        <button id="iaDetGravarTodos" type="button"
+                class="btn-neutral text-white rounded-lg px-5 py-2 text-sm font-medium hidden">
+          <i class="fas fa-bolt mr-2"></i>Gravar todos direto
+        </button>
+        <!-- O caminho normal: abre o formulário do módulo já preenchido, e
+             quem salva é o usuário. Aparece com a leitura em revisão. -->
         <button id="iaDetAplicar" type="button"
                 class="btn-success rounded-lg px-5 py-2 text-sm font-medium hidden">
-          <i class="fas fa-check mr-2"></i>Aplicar
+          <i class="fas fa-up-right-from-square mr-2"></i>Abrir e preencher
         </button>
       </div>
     </div>

@@ -35,6 +35,7 @@ const esquemas = require('./iaEsquemas');
 const estruturacao = require('./iaEstruturacao');
 const reconciliacao = require('./iaReconciliacao');
 const aplicacao = require('./iaAplicacao');
+const preenchimento = require('./iaPreenchimento');
 
 const router = express.Router();
 
@@ -669,6 +670,42 @@ router.get('/:id/arquivos/:arquivoId/texto', exigirPermissao('ia.details.view'),
     });
   } catch (err) {
     responder(res, err, 'GET /api/ia/:id/arquivos/:arquivoId/texto');
+  }
+});
+
+/**
+ * A carga para ABRIR O MODAL DO DESTINO já preenchido com um item lido.
+ *
+ * Fica atrás de `ia.details.view` e não de `ia.apply.*` de propósito: esta
+ * rota não grava nada em lugar nenhum. Ela lê o item, resolve as identidades
+ * (o insumo, o produto, o cliente) e devolve o que o formulário precisa.
+ * Quem salva é o usuário, no modal do módulo, com a permissão daquele módulo
+ * sendo cobrada lá — que é onde ela sempre foi cobrada.
+ */
+router.get('/:id/itens/:itemId/preenchimento', exigirPermissao('ia.details.view'), async (req, res) => {
+  try {
+    const api = createApiClient(req);
+    const id = Number(req.params.id);
+    const itemId = Number(req.params.itemId);
+    if (!Number.isFinite(id) || !Number.isFinite(itemId)) throw erro(400, 'Item inválido');
+
+    const extracao = await buscarExtracao(api, id);
+
+    const item = await api.get(`/api/ia_extracao_itens/${itemId}`);
+    if (!item || item.error === 'Not found') throw erro(404, 'Item não encontrado');
+    // Mesmo cuidado da leitura de texto: sem conferir o vínculo, um id de item
+    // qualquer seria legível por quem só tem acesso a outra leitura.
+    if (Number(item.extracao_id) !== id) throw erro(404, 'Item não encontrado');
+
+    const carga = await preenchimento.montarPreenchimento({
+      api,
+      destino: extracao.destino,
+      item: { ...item, dados: lerDados(item.dados).valor }
+    });
+
+    res.json({ item_id: itemId, destino: extracao.destino, ...carga });
+  } catch (err) {
+    responder(res, err, 'GET /api/ia/:id/itens/:itemId/preenchimento');
   }
 });
 

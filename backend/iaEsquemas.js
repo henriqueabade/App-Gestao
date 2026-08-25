@@ -143,7 +143,18 @@ const INSTRUCOES_EMPRESA = [
   '- CNPJ só se estiver escrito. Nunca deduza nem complete.',
   '- UF é a sigla de duas letras ("RS", "SC"), não o nome do estado.',
   '- Separe celular de telefone fixo quando der para distinguir.',
-  '- Não invente e-mail a partir do site nem nome a partir do e-mail.'
+  '- Não invente e-mail a partir do site nem nome a partir do e-mail.',
+  '',
+  'O documento quase sempre JUNTA o que o cadastro separa. Desmembre:',
+  '- "R. João Cachoeira, 152" -> logradouro "R. João Cachoeira", número "152".',
+  '- "Q SHIS QI 9 CL Bloco B Loja 34" -> o que vier depois do número',
+  '  (bloco, loja, sala, andar, apto) é COMPLEMENTO.',
+  '- "SP/SP", "BRASILIA/DF", "São José do Rio Preto/SP" -> cidade e UF.',
+  '  Quando vier só a sigla repetida ("SP/SP"), a cidade é a capital do estado.',
+  '- Uma célula com dois nomes separados por barra ("LIA / SOFIA",',
+  '  "VITOR/PRISCILLA") são DUAS pessoas: uma entrada de contato para cada.',
+  '- Não jogue fora coluna que tem valor: se a planilha traz cidade, e-mail ou',
+  '  inscrição estadual, eles precisam sair preenchidos.'
 ];
 
 const ESQUEMAS = {
@@ -275,11 +286,21 @@ const ESQUEMAS = {
     tabelaAlvo: 'produtos',
     campoDeExibicao: 'nome',
 
-    // O produto tem de existir. Ver "DESTINO QUE SÓ ATUALIZA" no topo.
-    exigeAlvo: true,
+    // O produto NÃO precisa existir.
+    //
+    // Aqui estava um erro de projeto que só apareceu com uma ficha de verdade:
+    // a ficha técnica de uma peça NOVA é justamente o caso mais comum de se
+    // querer ler — a peça ainda não está no catálogo, e é para não digitar os
+    // 23 insumos à mão que o módulo existe. Exigir o produto cadastrado antes
+    // fechava a porta exatamente para quem mais precisava dela.
+    //
+    // O que tornava a exigência razoável (a ficha não tem preço, coleção nem
+    // markup) deixou de valer quando a leitura passou a ABRIR O MODAL em vez
+    // de gravar: no formulário de Novo Produto esses campos estão ali, à vista,
+    // para quem sabe respondê-los.
     rotuloAlvo: 'Produto',
-    acoes: ['atualizar', 'ignorar'],
-    motivoSemAlvo: 'Produto não encontrado no catálogo — escolha o produto na coluna "O que fazer"',
+    acoes: ['criar', 'atualizar', 'ignorar'],
+    avisoAoCriar: 'Produto NOVO: não está no catálogo, e o formulário de cadastro abre com os insumos preenchidos',
 
     // Código primeiro: é identificador do catálogo. Nome de produto se repete
     // com variação ("Painel Ripado 2,10" e "Painel Ripado 2,10m").
@@ -293,10 +314,24 @@ const ESQUEMAS = {
       '',
       'Extraia UMA entrada por PRODUTO. Os materiais dele vão na lista "insumos".',
       '',
+      'A ficha é organizada em ETAPAS DE PRODUÇÃO, e cada etapa vem como um',
+      'título acima da sua lista de itens — MARCENARIA, ACABAMENTO, MONTAGEM,',
+      'EMBALAGEM, PINTURA, e assim por diante.',
+      '',
       'Atenção:',
+      '- "processo" é o título da etapa sob a qual o insumo está escrito.',
+      '  Repita o mesmo título em TODOS os insumos daquele bloco.',
+      '- Se a mesma etapa aparecer mais de uma vez, mantenha o nome nas duas:',
+      '  são blocos diferentes da mesma etapa, e os insumos dos dois entram.',
+      '- MANTENHA A ORDEM em que os insumos aparecem, etapa por etapa, de cima',
+      '  para baixo. A ordem é a sequência de produção.',
+      '- "unidade" costuma vir entre parênteses depois do número:',
+      '  "0,07 (m2)" é quantidade 0,07 e unidade "m2".',
       '- "quantidade" é quanto do insumo entra em UMA unidade do produto.',
-      '- Mantenha o nome do insumo como está escrito; não troque por sinônimo.',
+      '- Mantenha o nome do insumo como está escrito; não troque por sinônimo',
+      '  nem corte o final ("Em Lamina De Madeira" faz parte do nome).',
       '- Ignore linhas de mão de obra, tempo de processo, custo e total.',
+      '- Ignore as linhas de cabeçalho da tabela ("ITEM | QUANTIDADE").',
       '- Se o documento tratar de um produto só, é uma entrada só.',
       '- Não invente quantidade: se o documento não disser, deixe null.'
     ].join('\n'),
@@ -315,14 +350,22 @@ const ESQUEMAS = {
         obrigatorio: true, max_itens: 60,
         descricao: 'Materiais que compõem o produto. Uma entrada por material.',
         subcampos: [
+          {
+            chave: 'processo', rotulo: 'Processo', tipo: 'texto', max: 60,
+            descricao: 'Etapa de produção sob a qual o insumo está listado: MARCENARIA, ACABAMENTO, MONTAGEM, EMBALAGEM…'
+          },
           { chave: 'nome', rotulo: 'Insumo', tipo: 'texto', obrigatorio: true, max: 200, descricao: 'Nome do material, como está escrito' },
-          { chave: 'quantidade', rotulo: 'Qtde', tipo: 'numero', obrigatorio: true, descricao: 'Quanto entra em uma unidade do produto' }
+          { chave: 'quantidade', rotulo: 'Qtde', tipo: 'numero', obrigatorio: true, descricao: 'Quanto entra em uma unidade do produto' },
+          {
+            chave: 'unidade', rotulo: 'Un.', tipo: 'texto', max: 20,
+            descricao: 'Unidade da quantidade, normalmente entre parênteses: m2, ml, m, cm2, UN'
+          }
         ]
       }
     ],
 
-    explicacaoCriar: 'Indisponível: a ficha técnica não tem preço, coleção nem markup para cadastrar um produto.',
-    explicacaoAtualizar: 'Acrescenta os insumos que faltam na ficha do produto e corrige a quantidade dos que já estão. NUNCA remove insumo que o documento não citou.'
+    explicacaoCriar: 'Abre o formulário de Novo Produto com o nome e os insumos preenchidos, na ordem e nos processos do documento. Preço, coleção e markup você completa lá.',
+    explicacaoAtualizar: 'Abre a ficha do produto que já existe com os insumos lidos acrescentados. NUNCA remove insumo que o documento não citou.'
   },
 
   orcamentos: {
@@ -344,9 +387,17 @@ const ESQUEMAS = {
     acaoAoCasar: 'criar',
     motivoSemAlvo: 'Empresa não encontrada em Clientes nem em Prospecções — escolha na coluna "O que fazer", ou cadastre-a antes pelo destino "Clientes e contatos"',
 
+    // Um pedido traz OS DOIS nomes da empresa — "Nome Fantasia: Casa Vicenzo"
+    // e "Razão Social: Lavoro e Decorazione Ltda" — e o cadastro pode ter sido
+    // feito por qualquer um deles. Procurar só por nome fantasia fazia o
+    // pedido da Casa Vicenzo cair como "empresa não encontrada" quando o
+    // modelo, lendo o documento de cima para baixo, escrevia a razão social.
     chavesDeCasamento: [
       { campo: 'cnpj', rotulo: 'CNPJ', forte: true, normalizar: soDigitos },
-      { campo: 'cliente', rotulo: 'Empresa', colunaAlvo: 'nome_fantasia' }
+      { campo: 'cliente', rotulo: 'Empresa', colunaAlvo: 'nome_fantasia' },
+      { campo: 'razao_social', rotulo: 'Razão social', colunaAlvo: 'razao_social' },
+      { campo: 'razao_social', rotulo: 'Razão social', colunaAlvo: 'nome_fantasia' },
+      { campo: 'cliente', rotulo: 'Empresa', colunaAlvo: 'razao_social' }
     ],
 
     instrucoes: [
@@ -355,7 +406,10 @@ const ESQUEMAS = {
       'Extraia UMA entrada por ORÇAMENTO. Os produtos pedidos vão na lista "itens".',
       '',
       'Atenção:',
-      '- "cliente" é o nome da empresa que está pedindo, não o do fornecedor.',
+      '- "cliente" é o NOME FANTASIA da empresa que está pedindo, não o do fornecedor.',
+      '- Se o documento trouxer Nome Fantasia E Razão Social, ponha o nome',
+      '  fantasia em "cliente" e a razão social em "razao_social".',
+      '- Se trouxer um só, ponha esse em "cliente" e deixe "razao_social" null.',
       '- "quantidade" é quantas unidades do produto o cliente quer.',
       '- "valor_unitario" é o preço de UMA unidade. Se só houver o total da linha, divida pela quantidade.',
       '- Se o documento não trouxer preço, deixe "valor_unitario" em null: o preço de tabela será usado.',
@@ -367,6 +421,10 @@ const ESQUEMAS = {
       {
         chave: 'cliente', rotulo: 'Cliente', tipo: 'texto', obrigatorio: true,
         max: 200, largura: 'grande', descricao: 'Empresa que está pedindo o orçamento'
+      },
+      {
+        chave: 'razao_social', rotulo: 'Razão social', tipo: 'texto', max: 200, largura: 'media',
+        descricao: 'Razão social da empresa, se o documento trouxer as duas formas'
       },
       { chave: 'cnpj', rotulo: 'CNPJ', tipo: 'texto', max: 20, largura: 'media' },
       {

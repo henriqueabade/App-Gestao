@@ -165,7 +165,8 @@ function leituraPadrao(extra = {}) {
   };
 }
 
-function criarBancada({ leitura, respostaPut, respostaAplicar, respostaExtrair, confirmar = true } = {}) {
+function criarBancada({ leitura, respostaPut, respostaAplicar, respostaExtrair,
+  respostaPreenchimento, confirmar = true } = {}) {
   const elementos = new Map();
   for (const id of idsDoModal()) elementos.set(id, criarElemento());
 
@@ -182,6 +183,9 @@ function criarBancada({ leitura, respostaPut, respostaAplicar, respostaExtrair, 
   const toasts = [];
   const confirmacoes = [];
   const gradesRecarregadas = [];
+  const modaisAbertos = [];
+  const preenchimentos = [];
+  const ouvintesDaJanela = {};
   let dadosLeitura = leitura || leituraPadrao();
 
   const document = {
@@ -217,10 +221,33 @@ function criarBancada({ leitura, respostaPut, respostaAplicar, respostaExtrair, 
     Date,
     CustomEvent: class { constructor(t, i) { this.type = t; this.detail = i?.detail; } },
     Event: class { constructor(t, i) { this.type = t; this.bubbles = Boolean(i?.bubbles); } },
-    dispatchEvent() {},
-    addEventListener() {},
+    dispatchEvent(evento) {
+      for (const fn of ouvintesDaJanela[evento?.type] || []) fn(evento);
+      return true;
+    },
+    addEventListener(tipo, fn) { (ouvintesDaJanela[tipo] ||= []).push(fn); },
+    removeEventListener(tipo, fn) {
+      ouvintesDaJanela[tipo] = (ouvintesDaJanela[tipo] || []).filter(f => f !== fn);
+    },
     showToast: (msg, tipo) => toasts.push({ msg, tipo }),
-    Modal: { close() {} },
+    Modal: {
+      close() {},
+      // O modal de destino anuncia que terminou de montar, como fazem os
+      // módulos de verdade. Sem isso o preenchimento só aconteceria no
+      // desencalhe por tempo, e o teste mediria a espera em vez do caminho.
+      open(html, script, overlay) {
+        modaisAbertos.push({ html, script, overlay });
+        setTimeout(() => sandbox.dispatchEvent({ type: 'modalSpinnerLoaded', detail: overlay }), 0);
+      }
+    },
+    EstadoTrabalho: {
+      registrarContexto() {},
+      registrarConteudo() {},
+      preencher: async (overlay, carga) => {
+        preenchimentos.push({ overlay, ...carga });
+        return { campos: (carga?.campos || []).length, conteudo: Boolean(carga?.conteudo) };
+      }
+    },
     apiConfig: { getApiBaseUrl: async () => 'http://local' },
     IaModulo: { carregar: async () => { gradesRecarregadas.push(true); } },
     DialogPadrao: {
@@ -256,6 +283,18 @@ function criarBancada({ leitura, respostaPut, respostaAplicar, respostaExtrair, 
         const r = respostaExtrair || { status: 200, corpo: { status: 'revisao', itens_qtd: 2, avisos: [] } };
         return { ok: r.status < 400, status: r.status, json: async () => r.corpo };
       }
+      if (metodo === 'GET' && /\/preenchimento$/.test(url)) {
+        const r = respostaPreenchimento || {
+          status: 200,
+          corpo: {
+            modal: { overlay: 'novoInsumo', html: 'modals/materia-prima/novo.html',
+              script: '../js/modals/materia-prima-novo.js', rotulo: 'Novo Insumo' },
+            campos: { nome: 'MDF 15mm Branco TX', quantidade: 40, preco_unitario: 189.9 },
+            alvo: null, avisos: []
+          }
+        };
+        return { ok: r.status < 400, status: r.status, json: async () => r.corpo };
+      }
       if (metodo === 'POST' && /\/aplicar$/.test(url)) {
         const r = respostaAplicar || { status: 200, corpo: { aplicados: 2, com_erro: 0, ignorados: 0, status: 'aplicada' } };
         return { ok: r.status < 400, status: r.status, json: async () => r.corpo };
@@ -275,6 +314,8 @@ function criarBancada({ leitura, respostaPut, respostaAplicar, respostaExtrair, 
     toasts,
     confirmacoes,
     gradesRecarregadas,
+    modaisAbertos,
+    preenchimentos,
     trocarLeitura: nova => { dadosLeitura = nova; },
     pronta: () => new Promise(r => setTimeout(r, 10))
   };
@@ -645,7 +686,7 @@ test('campo obrigatório vazio trava o botão de aplicar', async () => {
 
   // Item incompleto falha na hora de gravar. Travar aqui evita aplicar, ver o
   // erro e ter de voltar.
-  const botao = b.el('iaDetAplicar');
+  const botao = b.el('iaDetGravarTodos');
   assert.equal(botao.disabled, true);
   assert.match(botao.title, /obrigatório/i);
   assert.match(b.el('iaDetResumoRevisao').texto(), /1 sem campo obrigatório/);
@@ -657,8 +698,8 @@ test('sem nada a gravar o botão também trava', async () => {
   const b = criarBancada({ leitura });
   await b.pronta();
 
-  assert.equal(b.el('iaDetAplicar').disabled, true);
-  assert.match(b.el('iaDetAplicar').title, /descartados|já aplicados/i);
+  assert.equal(b.el('iaDetGravarTodos').disabled, true);
+  assert.match(b.el('iaDetGravarTodos').title, /descartados|já aplicados/i);
 });
 
 // ---------------------------------------------------------------------------
@@ -718,7 +759,7 @@ test('aplicar pergunta antes, dizendo quantos e para onde', async () => {
   const b = criarBancada();
   await b.pronta();
 
-  b.el('iaDetAplicar').disparar('click');
+  b.el('iaDetGravarTodos').disparar('click');
   await b.pronta();
 
   const pergunta = b.confirmacoes.at(-1);
@@ -733,7 +774,7 @@ test('aplicar manda o destino junto e atualiza a grade', async () => {
   const b = criarBancada();
   await b.pronta();
 
-  b.el('iaDetAplicar').disparar('click');
+  b.el('iaDetGravarTodos').disparar('click');
   await b.pronta();
 
   const post = b.chamadas.find(c => /aplicar$/.test(c.url));
@@ -748,7 +789,7 @@ test('aplicação parcial avisa quantos ficaram com erro', async () => {
   });
   await b.pronta();
 
-  b.el('iaDetAplicar').disparar('click');
+  b.el('iaDetGravarTodos').disparar('click');
   await b.pronta();
 
   assert.equal(b.toasts.at(-1).tipo, 'error');
@@ -893,7 +934,7 @@ test('empresa sem contato não é acusada de campo obrigatório em branco', asyn
   const b = criarBancada({ leitura: leituraEmpresa() });
   await b.pronta();
 
-  assert.equal(b.el('iaDetAplicar').disabled, false);
+  assert.equal(b.el('iaDetGravarTodos').disabled, false);
   assert.equal(/sem campo obrigatório/.test(b.el('iaDetResumoRevisao').texto()), false);
 });
 
@@ -908,7 +949,7 @@ test('lista OBRIGATÓRIA vazia trava o aplicar', async () => {
   await b.pronta();
 
   // A linha 2 tem `contatos: []`.
-  assert.equal(b.el('iaDetAplicar').disabled, true);
+  assert.equal(b.el('iaDetGravarTodos').disabled, true);
   assert.match(b.el('iaDetResumoRevisao').texto(), /1 sem campo obrigatório/);
 });
 
@@ -920,7 +961,7 @@ test('lista obrigatória COM entrada não trava o aplicar', async () => {
   const b = criarBancada({ leitura });
   await b.pronta();
 
-  assert.equal(b.el('iaDetAplicar').disabled, false);
+  assert.equal(b.el('iaDetGravarTodos').disabled, false);
 });
 
 test('leitura aplicada mostra os contatos, mas travados', async () => {
@@ -1132,7 +1173,7 @@ test('orçamento sem nenhum item trava o aplicar', async () => {
   const b = criarBancada({ leitura });
   await b.pronta();
 
-  assert.equal(b.el('iaDetAplicar').disabled, true);
+  assert.equal(b.el('iaDetGravarTodos').disabled, true);
   assert.match(b.el('iaDetResumoRevisao').texto(), /1 sem campo obrigatório/);
 });
 
@@ -1235,15 +1276,27 @@ test('a leitura aplicada não oferece abrir no módulo', async () => {
     false);
 });
 
-test('o destino sem modal mapeado não oferece o botão', async () => {
-  // Insumos de produto é a ficha de um produto que já existe: não há
-  // formulário "novo" para abrir.
+test('a ficha técnica também abre o formulário de produto', async () => {
+  // Antes este destino era o único sem caminho de volta: a ficha de uma peça
+  // nova não tinha onde ser aproveitada, que é justamente o caso mais comum de
+  // se querer ler uma ficha.
   const b = criarBancada({ leitura: leituraFicha() });
   await b.pronta();
 
-  assert.equal(
-    linhasDeItem(b)[0].todos().some(f => f.classList.contains('ia-abrir-modulo')),
-    false);
+  const botao = linhasDeItem(b)[0].todos().find(f => f.classList.contains('ia-abrir-modulo'));
+  assert.ok(botao, 'a ficha ficou sem caminho para o formulário de produto');
+  assert.match(botao.texto(), /Novo Produto/);
+});
+
+test('todo destino do esquema tem um formulário para abrir', () => {
+  // Um destino sem modal mapeado é uma leitura que não leva a lugar nenhum:
+  // a pessoa envia o arquivo, revisa a grade, e descobre no fim que não há
+  // como usar o resultado.
+  const fonte = fs.readFileSync(ARQUIVO, 'utf8');
+  const mapeados = [...fonte.matchAll(/^    (\w+): \{$/gm)].map(m => m[1]);
+  for (const destino of ['materia_prima', 'clientes', 'prospeccoes', 'produto_insumos', 'orcamentos']) {
+    assert.ok(mapeados.includes(destino), `${destino} não abre formulário nenhum`);
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -1259,12 +1312,133 @@ test('o modal continua nascendo hidden e se revelando pelo spinner', () => {
   assert.ok(bloco, 'a revelação precisa estar num finally');
 });
 
-test('extrair e aplicar passam pela trava de duplo clique', () => {
-  // Extrair consome crédito e aplicar mexe em estoque: dois cliques rápidos
-  // gastariam duas vezes ou somariam o saldo em dobro.
+test('os três botões de ação passam pela trava de duplo clique', () => {
+  // Extrair consome crédito, gravar mexe em estoque, e abrir o formulário duas
+  // vezes empilharia dois modais iguais. Um clique repetido custa caro em cada
+  // um deles, de um jeito diferente.
   const fonte = fs.readFileSync(ARQUIVO, 'utf8');
   assert.match(fonte, /BotaoAcao\?\.bind/);
-  const bloco = /for \(const \[id, acao\] of \[\['iaDetExtrair'[\s\S]*?\n  \}/.exec(fonte);
-  assert.ok(bloco, 'os dois botões precisam passar pelo mesmo laço de proteção');
-  assert.match(bloco[0], /iaDetAplicar/);
+  const bloco = /for \(const \[id, acao\] of \[[\s\S]*?\n  \}/.exec(fonte);
+  assert.ok(bloco, 'os botões precisam passar pelo mesmo laço de proteção');
+  for (const id of ['iaDetExtrair', 'iaDetAplicar', 'iaDetGravarTodos']) {
+    assert.match(bloco[0], new RegExp(id), `${id} ficou fora da trava`);
+  }
+});
+
+
+// ---------------------------------------------------------------------------
+// O botão principal ABRE O FORMULÁRIO — não grava
+//
+// Era o ponto central da queixa do usuário: "esse botão aplicar não deveria
+// aplicar no banco, mas sim levar para o modal referente à operação preenchendo
+// os dados". Um cadastro que entra sozinho é um cadastro que ninguém conferiu.
+// ---------------------------------------------------------------------------
+
+test('o botão principal abre o formulário e não grava nada', async () => {
+  const b = criarBancada();
+  await b.pronta();
+
+  b.el('iaDetAplicar').disparar('click');
+  await b.pronta();
+
+  // Abriu o modal do destino, por cima (o quarto argumento do Modal.open).
+  assert.equal(b.modaisAbertos.at(-1)?.overlay, 'novoInsumo');
+  // E não passou perto da rota que grava.
+  assert.equal(b.chamadas.some(c => /\/aplicar$/.test(c.url)), false,
+    'o botão principal gravou no banco');
+  // Nem perguntou se podia gravar: não há o que confirmar.
+  assert.equal(b.confirmacoes.length, 0);
+});
+
+test('o formulário recebe os campos e o conteúdo dinâmico', async () => {
+  const b = criarBancada();
+  await b.pronta();
+
+  b.el('iaDetAplicar').disparar('click');
+  await b.pronta();
+
+  const carga = b.preenchimentos.at(-1);
+  assert.ok(carga, 'o formulário abriu vazio');
+  assert.equal(carga.overlay, 'novoInsumo');
+
+  // Os campos vão por seletor de id, prontos para o EstadoTrabalho aplicar.
+  const nome = carga.campos.find(c => c.chave === '#nome');
+  assert.equal(nome?.valor, 'MDF 15mm Branco TX');
+
+  // E o conteúdo dinâmico — aqui os selects que só têm opções depois de um
+  // fetch — vai junto, na forma que o módulo de destino sabe repor.
+  assert.ok(carga.conteudo, 'o conteúdo dinâmico não foi montado');
+});
+
+test('a linha pendente é a que abre, não a primeira da lista', async () => {
+  const leitura = leituraPadrao();
+  leitura.itens[0].status = 'aplicado';
+  const b = criarBancada({ leitura });
+  await b.pronta();
+
+  b.el('iaDetAplicar').disparar('click');
+  await b.pronta();
+
+  // Reabrir uma linha já gravada convidaria a cadastrá-la duas vezes.
+  const pedido = b.chamadas.find(c => /\/preenchimento$/.test(c.url));
+  assert.match(pedido.url, /\/itens\/2\/preenchimento$/);
+});
+
+test('o rótulo do botão diz para onde vai e quantas faltam', async () => {
+  const b = criarBancada();
+  await b.pronta();
+
+  // Duas pendentes: o botão precisa deixar claro que abre UMA por vez, senão
+  // a pessoa clica, salva, e acha que resolveu a leitura inteira.
+  assert.match(b.el('iaDetAplicar').innerHTML, /1ª de 2/);
+  assert.match(b.el('iaDetAplicar').innerHTML, /Novo Insumo/);
+  assert.match(b.el('iaDetAplicar').title, /quem salva é você/i);
+});
+
+test('gravar todos só aparece quando conferir uma a uma seria impraticável', async () => {
+  const b = criarBancada();
+  await b.pronta();
+  assert.equal(b.el('iaDetGravarTodos').classList.contains('hidden'), false);
+
+  // Com uma linha só, o caminho normal já dá conta — e um segundo botão ao
+  // lado dele seria só um jeito de errar.
+  const leitura = leituraPadrao();
+  leitura.itens = [leitura.itens[0]];
+  const c = criarBancada({ leitura });
+  await c.pronta();
+  assert.equal(c.el('iaDetGravarTodos').classList.contains('hidden'), true);
+});
+
+test('leitura sem nada pendente não oferece abrir formulário', async () => {
+  const b = criarBancada({ leitura: leituraPadrao({ status: 'revisao' }) });
+  b.trocarLeitura(leituraPadrao({
+    status: 'revisao',
+    itens: leituraPadrao().itens.map(i => ({ ...i, acao: 'ignorar' }))
+  }));
+  await b.pronta();
+  b.el('iaDetExtrair');
+  await b.pronta();
+});
+
+test('o que o backend não casou aparece antes de a pessoa salvar', async () => {
+  const b = criarBancada({
+    respostaPreenchimento: {
+      status: 200,
+      corpo: {
+        modal: { overlay: 'novoInsumo', html: 'x', script: 'y', rotulo: 'Novo Insumo' },
+        campos: { nome: 'MDF 15mm Branco TX' },
+        alvo: null,
+        avisos: ['Fora da lista, por não estarem em Matéria-prima: Couro Serpente']
+      }
+    }
+  });
+  await b.pronta();
+
+  b.el('iaDetAplicar').disparar('click');
+  await b.pronta();
+
+  // Depois de salvo, o que faltou vira material errado numa receita. O aviso
+  // só serve se chegar ANTES.
+  const aviso = b.toasts.at(-1);
+  assert.match(aviso.msg, /Couro Serpente/);
 });

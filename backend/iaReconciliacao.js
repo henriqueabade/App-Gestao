@@ -228,14 +228,22 @@ function reconciliar({ destino, itens, existentes }) {
       });
     }
 
+    // O que "cadastrar" significa NESTE destino, quando o destino precisa
+    // dizer. Numa ficha técnica, "criar" quer dizer que a peça vai nascer no
+    // catálogo — e quem revisa tem de saber disso antes de aprovar, não
+    // depois. Onde cadastrar já é óbvio (uma lista de insumos novos), o
+    // esquema não declara nada e a linha continua sem ressalva.
+    const aviso = esquema.avisoAoCriar ? [esquema.avisoAoCriar] : [];
+
     if (melhor && melhorNota >= LIMIAR_PARECIDO) {
       return decidir({
         acao: 'criar', alvo_id: null, alvo_tabela: null, confianca: Number(melhorNota.toFixed(2)),
-        notas: [`Parecido com "${rotularAlvo(melhor)}" (#${melhor.id}) — confira se não é o mesmo antes de cadastrar`]
+        notas: [...aviso,
+          `Parecido com "${rotularAlvo(melhor)}" (#${melhor.id}) — confira se não é o mesmo antes de cadastrar`]
       });
     }
 
-    return decidir({ acao: 'criar', alvo_id: null, alvo_tabela: null, confianca: null });
+    return decidir({ acao: 'criar', alvo_id: null, alvo_tabela: null, confianca: null, notas: aviso });
   });
 }
 

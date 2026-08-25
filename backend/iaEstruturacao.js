@@ -38,6 +38,26 @@
 // última: a segunda não custa nada.
 //
 // ---------------------------------------------------------------------------
+// DOCUMENTO LONGO É FATIADO
+//
+// Nenhuma dessas três tentativas resolve o caso em que o documento simplesmente
+// não CABE numa resposta. Uma planilha de 18 clientes, com 13 campos e contatos
+// cada, passa de qualquer teto de saída razoável — e o que acontece então é o
+// modo de falha mais traiçoeiro deste módulo: a resposta é JSON válido, os
+// itens que vieram estão certos, e os que faltaram não deixam rastro nenhum. O
+// usuário recebe 3 dos 18 e não tem como saber que havia mais.
+//
+// Por isso, quando a resposta vem cortada, o texto é PARTIDO EM DOIS numa
+// quebra de linha e cada metade é extraída por conta própria — de novo, e de
+// novo, até caber. O resultado cortado é jogado fora: as metades cobrem o mesmo
+// texto inteiro, e aproveitar as duas coisas duplicaria tudo o que veio antes
+// do corte.
+//
+// Fatiar só DEPOIS do corte, e não preventivamente, é de propósito. O documento
+// que cabe numa resposta só é o caso comum, e ele continua custando uma chamada;
+// quem paga o fatiamento é o documento que precisa dele.
+//
+// ---------------------------------------------------------------------------
 // POR QUE `json_object` E NÃO `json_schema`
 //
 // A Groq hospeda vários modelos e o suporte a `json_schema` varia de um para
@@ -64,6 +84,30 @@ const MAX_ITENS = Number(process.env.IA_MAX_ITENS) || 300;
  * a extração inteira com "Failed to validate JSON".
  */
 const MAX_SAIDA = Number(process.env.IA_MAX_SAIDA_TOKENS) || 8000;
+
+/**
+ * Quantas chamadas de extração uma leitura pode gastar no total.
+ *
+ * O fatiamento é recursivo e cada nível dobra o número de chamadas. Sem teto,
+ * um documento que o modelo se recusa a extrair — por qualquer motivo — geraria
+ * dezenas de chamadas pagas sobre o mesmo arquivo antes de desistir.
+ */
+const MAX_CHAMADAS = Number(process.env.IA_MAX_CHAMADAS) || 16;
+
+/** Quebra de linha. Nomeada porque aparece no corte e na contagem. */
+const chr10 = String.fromCharCode(10);
+
+/**
+ * O piso do fatiamento é UMA LINHA, não um número de caracteres.
+ *
+ * Um piso em caracteres parece prudente e não é: ele para de partir enquanto o
+ * pedaço ainda tem vários registros dentro, e aí a perda volta a ser silenciosa
+ * bem na fronteira escolhida. O único piso que corresponde a algo real é o
+ * registro: não existe extrair metade de uma linha.
+ *
+ * Quem impede a recursão de fugir é MAX_CHAMADAS, que é o custo de verdade.
+ */
+const MIN_LINHAS = 2;
 
 // ---------------------------------------------------------------------------
 // Prompt
@@ -403,6 +447,82 @@ async function pedirExtracao({ chave, modelo, sistema, conteudo }) {
 }
 
 /**
+ * Parte o texto em dois, na quebra de linha mais próxima do meio.
+ *
+ * O corte TEM de cair entre linhas. Partir no meio de uma linha quebraria um
+ * registro em dois, e cada metade viraria um item pela metade — que é pior do
+ * que o corte que estamos tentando consertar, porque um item pela metade parece
+ * um item bom.
+ *
+ * Devolve `null` quando não há onde cortar: pedaço curto demais, ou uma linha
+ * só. Quem chama trata isso como "não dá para fatiar mais".
+ */
+function dividirEmDuas(texto) {
+  const cru = String(texto || '');
+  if (cru.split(chr10).filter(l => l.trim()).length < MIN_LINHAS) return null;
+
+  const meio = Math.floor(cru.length / 2);
+  const candidatos = [cru.lastIndexOf('\n', meio), cru.indexOf('\n', meio)]
+    .filter(p => p > 0 && p < cru.length - 1)
+    .sort((a, b) => Math.abs(a - meio) - Math.abs(b - meio));
+
+  if (!candidatos.length) return null;
+  const a = cru.slice(0, candidatos[0]).trim();
+  const b = cru.slice(candidatos[0] + 1).trim();
+  if (!a || !b) return null;
+  return [a, b];
+}
+
+/** A lista de itens pode vir como `{itens:[...]}` ou como array solto. */
+function listaCrua(dados) {
+  if (Array.isArray(dados?.itens)) return dados.itens;
+  if (Array.isArray(dados)) return dados;
+  return null;
+}
+
+/**
+ * Extrai o texto; se a resposta veio cortada, parte o texto e extrai as partes.
+ *
+ * `orcamento` é compartilhado por toda a recursão e conta as chamadas já
+ * gastas. Quando ele zera, o que já foi extraído continua valendo e `truncado`
+ * sobe verdadeiro — é a diferença entre entregar 30 dos 40 AVISANDO e entregar
+ * 30 dos 40 em silêncio.
+ */
+async function extrairFatiando({ chave, modelo, sistema, texto, orcamento }) {
+  if (orcamento.restantes <= 0) return { brutos: [], truncado: true };
+  orcamento.restantes -= 1;
+
+  const { dados, truncado } = await pedirExtracao({ chave, modelo, sistema, conteudo: texto });
+  const brutos = listaCrua(dados);
+  if (!brutos) throw erro(502, 'Groq devolveu JSON sem a lista de itens.');
+  if (!truncado) return { brutos, truncado: false };
+
+  const partes = dividirEmDuas(texto);
+  // Não dá para partir mais. O que veio antes do corte continua valendo, e o
+  // aviso sobe junto para a tela de revisão.
+  if (!partes) return { brutos, truncado: true };
+
+  const saida = [];
+  let faltou = false;
+  for (const parte of partes) {
+    const r = await extrairFatiando({ chave, modelo, sistema, texto: parte, orcamento });
+    saida.push(...r.brutos);
+    faltou = faltou || r.truncado;
+  }
+
+  // Fica UM dos dois conjuntos, nunca a soma: as metades cobrem o mesmo texto
+  // do pai, e somar duplicaria cada item que veio antes do corte.
+  //
+  // Fica o MAIOR. Quando o fatiamento funciona, ele é sempre o das metades. O
+  // caso em que não é: o orçamento de chamadas acabou no meio da recursão e as
+  // metades voltaram vazias — aí descartar o resultado do pai entregaria zero
+  // item de um documento que tinha dado alguns, que é pior do que não ter
+  // fatiado.
+  if (saida.length < brutos.length) return { brutos, truncado: true };
+  return { brutos: saida, truncado: faltou };
+}
+
+/**
  * Manda o texto para o Groq e devolve `{ itens, descartados, modelo }`.
  *
  * `descartados` não é detalhe: quando o documento tinha 40 linhas e saíram 37,
@@ -421,14 +541,10 @@ async function estruturar({ texto, destino, modelo }) {
 
   const alvo = modelo || modeloGroq();
 
-  const { dados, truncado } = await pedirExtracao({
-    chave, modelo: alvo, sistema: montarPrompt(esquema), conteudo
+  const orcamento = { restantes: MAX_CHAMADAS };
+  const { brutos, truncado } = await extrairFatiando({
+    chave, modelo: alvo, sistema: montarPrompt(esquema), texto: conteudo, orcamento
   });
-
-  const brutos = Array.isArray(dados.itens) ? dados.itens
-    : Array.isArray(dados) ? dados
-      : null;
-  if (!brutos) throw erro(502, 'Groq devolveu JSON sem a lista de itens.');
 
   const itens = [];
   const descartados = [];
@@ -458,12 +574,22 @@ async function estruturar({ texto, destino, modelo }) {
     });
   }
 
-  return { itens, descartados, modelo: alvo, truncado };
+  return {
+    itens,
+    descartados,
+    modelo: alvo,
+    truncado,
+    chamadas: MAX_CHAMADAS - orcamento.restantes
+  };
 }
 
 module.exports = {
   MAX_ITENS,
   MAX_SAIDA,
+  MAX_CHAMADAS,
+  MIN_LINHAS,
+  dividirEmDuas,
+  extrairFatiando,
   corpoDaChamada,
   pedirExtracao,
   fecharJsonCortado,

@@ -1670,6 +1670,115 @@ test('resposta cortada por tamanho é anunciada', async () => {
   }
 });
 
+// ---------------------------------------------------------------------------
+// Documento que não cabe numa resposta só
+//
+// Este é o modo de falha que mais dói no módulo, e o que o usuário encontrou
+// na primeira planilha de verdade: 18 clientes no arquivo, 3 na tela. A
+// resposta veio JSON válido e os 3 estavam certos — não havia nada para o
+// revisor estranhar. Os outros 15 sumiram em silêncio.
+// ---------------------------------------------------------------------------
+
+/** Texto com `n` linhas longas o bastante para o fatiamento ter onde cortar. */
+function documentoLongo(n) {
+  return Array.from({ length: n }, (_, i) =>
+    `Insumo ${String(i + 1).padStart(2, '0')} Chapa MDF Branco Texturizado 15mm | 5 | 10,00`).join('\n');
+}
+
+/**
+ * Groq que se comporta como um modelo com teto de saída: devolve no máximo
+ * `teto` itens e marca `length` quando o texto tinha mais linhas do que isso.
+ */
+function groqComTeto(teto) {
+  return ({ body }) => {
+    const linhas = String(body.messages[1].content).split('\n')
+      .filter(l => l.trim() && !l.startsWith('###'));
+    const cabe = linhas.slice(0, teto);
+    const itens = cabe.map(l => ({
+      nome: l.split('|')[0].trim(), quantidade: '5', unidade: 'CH',
+      preco_unitario: '10,00', categoria: 'Chapas', descricao: null
+    }));
+    return { payload: respostaGroq({ itens }, linhas.length > teto ? 'length' : 'stop') };
+  };
+}
+
+/** Base cuja leitura tem um texto longo em vez das duas linhas de sempre. */
+function baseComDocumentoLongo(linhas) {
+  const dados = baseParaEstruturar();
+  dados.ia_extracao_arquivos[dados.ia_extracao_arquivos.length - 1].texto = documentoLongo(linhas);
+  return dados;
+}
+
+test('documento cortado por tamanho é fatiado até caber, e nada se perde', async () => {
+  const ctx = await montarComIA(baseComDocumentoLongo(24), {}, { groq: groqComTeto(6) });
+  try {
+    const corpo = await (await chamar(ctx.porta, '/api/ia/4/estruturar', { method: 'POST' })).json();
+
+    // As 24 linhas do documento viram 24 itens. Antes do fatiamento vinham 6.
+    assert.strictEqual(corpo.itens_qtd, 24);
+    // E, como tudo coube, o revisor não recebe aviso de resposta cortada.
+    assert.strictEqual(corpo.truncado, false);
+
+    const nomes = itensDa(ctx, 4).map(i => JSON.parse(i.dados).nome);
+    assert.strictEqual(nomes.length, 24);
+    // Sem duplicata: o resultado cortado do pai é descartado, senão os itens
+    // que vieram antes do corte entrariam uma vez por nível de fatiamento.
+    assert.strictEqual(new Set(nomes).size, 24);
+    // E o último item do documento chegou — é ele que sumia.
+    assert.ok(nomes.some(n => n.startsWith('Insumo 24')), nomes.join(', '));
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('o documento que cabe de primeira continua custando uma chamada só', async () => {
+  const ctx = await montarComIA(baseComDocumentoLongo(4), {}, { groq: groqComTeto(6) });
+  try {
+    const corpo = await (await chamar(ctx.porta, '/api/ia/4/estruturar', { method: 'POST' })).json();
+    assert.strictEqual(corpo.itens_qtd, 4);
+    // Fatiar preventivamente faria todo documento pagar pelo caso raro.
+    assert.strictEqual(ctx.groq.chamadas.length, 1);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('o fatiamento tem teto de chamadas, e avisa quando esbarra nele', async () => {
+  const ctx = await montarComIA(baseComDocumentoLongo(40), { IA_MAX_CHAMADAS: '3' },
+    { groq: groqComTeto(2) });
+  try {
+    const corpo = await (await chamar(ctx.porta, '/api/ia/4/estruturar', { method: 'POST' })).json();
+
+    // Sem teto, um documento que o modelo se recusa a extrair geraria dezenas
+    // de chamadas pagas sobre o mesmo arquivo.
+    assert.ok(ctx.groq.chamadas.length <= 3, `gastou ${ctx.groq.chamadas.length}`);
+    // O que veio continua valendo...
+    assert.ok(corpo.itens_qtd > 0);
+    // ...mas entregar parte da lista em silêncio é o bug que estamos consertando.
+    assert.strictEqual(corpo.truncado, true);
+    assert.ok(corpo.avisos.some(a => /cortada/i.test(a)));
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('dividirEmDuas corta entre linhas, nunca no meio de uma', () => {
+  const { dividirEmDuas } = require('./iaEstruturacao');
+
+  const texto = documentoLongo(10);
+  const [a, b] = dividirEmDuas(texto);
+  // Um registro partido ao meio viraria dois itens pela metade — e um item
+  // pela metade parece um item bom, que é o que o torna pior que o corte.
+  for (const linha of [...a.split('\n'), ...b.split('\n')]) {
+    assert.match(linha, /^Insumo \d\d .* \| 5 \| 10,00$/, `linha partida: ${linha}`);
+  }
+  assert.strictEqual(a.split('\n').length + b.split('\n').length, 10);
+
+  // Pedaço curto, ou de uma linha só, não tem por onde ser partido.
+  assert.strictEqual(dividirEmDuas('linha curta'), null);
+  assert.strictEqual(dividirEmDuas('x'.repeat(900)), null);
+});
+
 test('JSON embrulhado em cerca de código ainda é aproveitado', async () => {
   const ctx = await montarComIA(baseParaEstruturar(), {}, {
     groq: () => ({ payload: respostaGroq('```json\n' + JSON.stringify(ITENS_LIDOS) + '\n```') })
@@ -2932,10 +3041,12 @@ test('todo destino aplicável tem esquema, e todo esquema tem aplicador', () => 
 
 function baseFicha() {
   const dados = baseDados();
+  // `unidade` e `processo` existem na matéria-prima de verdade, e são eles que
+  // o formulário de produto usa para calcular custo e agrupar a tabela.
   dados.materia_prima = [
-    { id: 70, nome: 'MDF 15mm Branco TX', quantidade: 100, preco_unitario: 180 },
-    { id: 71, nome: 'Cola PVA extra 1kg', quantidade: 50, preco_unitario: 20 },
-    { id: 72, nome: 'Fita de borda 22mm', quantidade: 900, preco_unitario: 1.3 }
+    { id: 70, nome: 'MDF 15mm Branco TX', quantidade: 100, preco_unitario: 180, unidade: 'CH', processo: 'MARCENARIA' },
+    { id: 71, nome: 'Cola PVA extra 1kg', quantidade: 50, preco_unitario: 20, unidade: 'UN', processo: 'MARCENARIA' },
+    { id: 72, nome: 'Fita de borda 22mm', quantidade: 900, preco_unitario: 1.3, unidade: 'M', processo: 'ACABAMENTO' }
   ];
   dados.materia_prima_movimentacoes = [];
   dados.categoria = [];
@@ -2997,20 +3108,23 @@ test('o produto casa pelo código, mesmo com o nome escrito diferente', async ()
   }
 });
 
-test('produto que não está no catálogo NÃO vira cadastro', async () => {
+test('ficha de peça NOVA vira cadastro, não descarte', async () => {
   const ctx = await prepararFicha({
     itens: [{ codigo: null, nome: 'Banqueta Alta', insumos: [{ nome: 'MDF 15mm Branco TX', quantidade: '1' }] }]
   });
   try {
     const item = itensDa(ctx, 5)[0];
 
-    // Cadastrar produto a partir de ficha técnica produziria uma ficha pela
-    // metade, com preço zero, no meio do catálogo.
-    assert.strictEqual(item.acao, 'ignorar');
+    // A ficha técnica de uma peça que ainda não existe é o caso mais comum de
+    // se querer ler: é para não digitar os 23 insumos à mão que o módulo
+    // existe. Descartá-la fechava a porta para quem mais precisava dela.
+    //
+    // O que antes justificava o descarte — a ficha não tem preço, coleção nem
+    // markup — deixou de valer quando a leitura passou a ABRIR O FORMULÁRIO em
+    // vez de gravar: lá esses campos estão à vista de quem sabe respondê-los.
+    assert.strictEqual(item.acao, 'criar');
     assert.strictEqual(item.alvo_id, null);
-    assert.match(item.mensagem, /Produto não encontrado no catálogo/);
-    // E a mensagem manda para a ação certa.
-    assert.match(item.mensagem, /escolha o produto/i);
+    assert.match(item.mensagem, /Produto NOVO/);
   } finally {
     await ctx.encerrar();
   }
@@ -3022,7 +3136,10 @@ test('o parecido entra como pista na mensagem, sem decidir', async () => {
   });
   try {
     const item = itensDa(ctx, 5)[0];
-    assert.strictEqual(item.acao, 'ignorar');
+    // A pista NÃO decide: "Mesa Lateral Carvalho Escuro" pode ser uma peça
+    // nova da mesma linha, e casar sozinho sobrescreveria a ficha da outra.
+    assert.strictEqual(item.acao, 'criar');
+    assert.strictEqual(item.alvo_id, null);
     assert.match(item.mensagem, /Parecido com "Mesa Lateral Carvalho" \(#10\)/);
   } finally {
     await ctx.encerrar();
@@ -3262,14 +3379,17 @@ test('aplicar em Produtos exige a permissão de editar produto', async () => {
 // Detalhe
 // ---------------------------------------------------------------------------
 
-test('o detalhe avisa que o destino só atualiza', async () => {
+test('o destino de ficha técnica oferece cadastrar E apontar produto', async () => {
   const ctx = await montarComIA(comLeitura(baseFicha(), 'produto_insumos'));
   try {
     const dados = await (await chamar(ctx.porta, '/api/ia/5')).json();
 
-    // É o que faz a grade esconder "Cadastrar" e mostrar o seletor de destino.
-    assert.strictEqual(dados.exige_alvo, true);
+    // Peça nova cadastra; peça que já existe recebe os insumos na ficha dela.
+    assert.deepStrictEqual(dados.acoes, ['criar', 'atualizar', 'ignorar']);
+    assert.strictEqual(dados.exige_alvo, false);
     assert.strictEqual(dados.pode_aplicar_destino, true);
+    // O seletor de produto continua existindo: é ele que aponta a ficha certa
+    // quando a peça JÁ está no catálogo.
     assert.deepStrictEqual(dados.alvos.map(a => a.nome).sort(),
       ['Mesa Lateral Carvalho', 'Painel Ripado 2,10']);
   } finally {
@@ -3292,8 +3412,50 @@ test('a sub-lista de insumos é obrigatória no esquema', () => {
   const campo = obterEsquema('produto_insumos').campos.find(c => c.chave === 'insumos');
   // Um produto sem nenhum insumo não é ficha técnica nenhuma.
   assert.strictEqual(campo.obrigatorio, true);
-  assert.deepStrictEqual(campo.subcampos.map(s => s.chave), ['nome', 'quantidade']);
-  assert.strictEqual(campo.subcampos.every(s => s.obrigatorio), true);
+
+  // `processo` e `unidade` não são enfeite: a ficha é escrita em blocos de
+  // etapa ("MARCENARIA", "ACABAMENTO") e a quantidade vem com a unidade entre
+  // parênteses — "0,07 (m2)". Sem esses dois campos a leitura devolvia uma
+  // lista achatada de 23 nomes e números soltos, que é justamente o que o
+  // usuário NÃO consegue conferir contra o papel que tem na mão.
+  assert.deepStrictEqual(campo.subcampos.map(s => s.chave),
+    ['processo', 'nome', 'quantidade', 'unidade']);
+
+  // Só nome e quantidade derrubam o insumo: uma ficha sem título de etapa
+  // continua sendo uma ficha.
+  assert.deepStrictEqual(campo.subcampos.filter(s => s.obrigatorio).map(s => s.chave),
+    ['nome', 'quantidade']);
+});
+
+test('a ordem dos insumos do documento é preservada', async () => {
+  // A ordem é a SEQUÊNCIA DE PRODUÇÃO. Reordenar (por nome, por processo, por
+  // qualquer coisa) descaracteriza a ficha: quem monta a peça lê de cima para
+  // baixo.
+  const ctx = await prepararFicha({
+    itens: [{
+      codigo: null, nome: 'Bandeja Vero PP',
+      insumos: [
+        { processo: 'MARCENARIA', nome: 'MDF 06', quantidade: '0,07', unidade: 'm2' },
+        { processo: 'MARCENARIA', nome: 'Cola Branca', quantidade: '33,5', unidade: 'ml' },
+        { processo: 'ACABAMENTO', nome: 'Wash Primer', quantidade: '1', unidade: 'ml' },
+        { processo: 'EMBALAGEM', nome: 'Caixa No6', quantidade: '1', unidade: null }
+      ]
+    }]
+  });
+  try {
+    const insumos = JSON.parse(itensDa(ctx, 5)[0].dados).insumos;
+    assert.deepStrictEqual(insumos.map(i => i.nome),
+      ['MDF 06', 'Cola Branca', 'Wash Primer', 'Caixa No6']);
+    assert.deepStrictEqual(insumos.map(i => i.processo),
+      ['MARCENARIA', 'MARCENARIA', 'ACABAMENTO', 'EMBALAGEM']);
+    // A unidade vem junto: "0,07" sem "m2" não diz nada a quem confere.
+    assert.strictEqual(insumos[0].unidade, 'm2');
+    assert.strictEqual(insumos[0].quantidade, 0.07);
+    // Insumo sem unidade no documento não é problema: fica vazio.
+    assert.strictEqual(insumos[3].unidade, null);
+  } finally {
+    await ctx.encerrar();
+  }
 });
 
 
@@ -3363,6 +3525,67 @@ const itensDoOrcamento = (ctx, orcamentoId) =>
 // ---------------------------------------------------------------------------
 // Reconciliação: o alvo é o CLIENTE
 // ---------------------------------------------------------------------------
+
+test('a empresa casa pela RAZÃO SOCIAL quando o pedido traz os dois nomes', async () => {
+  // Um pedido de verdade traz "Nome Fantasia: Casa Vicenzo" e "Razão Social:
+  // Lavoro e Decorazione Ltda", nessa ordem. Procurando só por nome fantasia,
+  // o pedido caía como "empresa não encontrada" sempre que o cadastro tinha
+  // sido feito pela razão social — e o usuário via "Descartar" numa linha cujo
+  // cliente estava, sim, no sistema.
+  const ctx = await prepararOrcamento({
+    itens: [{
+      cliente: 'Lavoro e Decorazione Comércio de Decoração Ltda',
+      razao_social: 'Vicenzo Ltda',
+      cnpj: null, validade: null, prazo: '30/60/90', forma_pagamento: 'pix', observacoes: null,
+      itens: [{ codigo: 'P-100', nome: 'Painel Ripado 2,10', quantidade: '3', valor_unitario: null }]
+    }]
+  });
+  try {
+    const item = itensDa(ctx, 5)[0];
+    assert.strictEqual(item.acao, 'criar');
+    assert.strictEqual(item.alvo_id, 50);
+    assert.strictEqual(item.alvo_tabela, 'clientes');
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('a empresa casa mesmo com a razão social escrita no campo do nome', async () => {
+  // O modelo lê de cima para baixo e nem sempre acerta qual nome é qual. Isso
+  // não pode custar o casamento: os dois nomes são procurados nas duas colunas.
+  const ctx = await prepararOrcamento({
+    itens: [{
+      cliente: 'Vicenzo Ltda', razao_social: null,
+      cnpj: null, validade: null, prazo: null, forma_pagamento: null, observacoes: null,
+      itens: [{ codigo: 'P-100', nome: 'Painel Ripado 2,10', quantidade: '1', valor_unitario: null }]
+    }]
+  });
+  try {
+    const item = itensDa(ctx, 5)[0];
+    assert.strictEqual(item.alvo_id, 50);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('o CNPJ continua mandando mais que qualquer nome', async () => {
+  // Nome é apelido; CNPJ é identidade. Se os dois apontarem para lados
+  // diferentes, quem decide é o CNPJ — e sem ressalva.
+  const ctx = await prepararOrcamento({
+    itens: [{
+      cliente: 'Decor Alpina', razao_social: 'Decor Alpina Ltda',
+      cnpj: '11.111.111/0001-11', validade: null, prazo: null, forma_pagamento: null, observacoes: null,
+      itens: [{ codigo: 'P-100', nome: 'Painel Ripado 2,10', quantidade: '1', valor_unitario: null }]
+    }]
+  });
+  try {
+    const item = itensDa(ctx, 5)[0];
+    assert.strictEqual(item.alvo_id, 50, 'o CNPJ perdeu para o nome');
+    assert.strictEqual(item.mensagem, null, 'casamento por CNPJ não precisa de ressalva');
+  } finally {
+    await ctx.encerrar();
+  }
+});
 
 test('o cliente casa pelo CNPJ e a ação proposta é CRIAR', async () => {
   const ctx = await prepararOrcamento();
@@ -3796,7 +4019,7 @@ test('a extração pede um teto de saída ao modelo', async () => {
   }
 });
 
-test('JSON cortado devolvido na recusa é aproveitado, sem nova chamada', async () => {
+test('JSON cortado devolvido na recusa é aproveitado, sem repetir o mesmo pedido', async () => {
   // A própria Groq devolve o que o modelo gerou. Fechá-lo sai de graça; pedir
   // tudo de novo custa outra chamada paga.
   const cortado = '{"itens": [{"nome": "MDF 15mm Branco TX", "quantidade": 40}, {"nome": "Fita';
@@ -3805,9 +4028,14 @@ test('JSON cortado devolvido na recusa é aproveitado, sem nova chamada', async 
     const corpo = await (await chamar(ctx.porta, '/api/ia/4/estruturar', { method: 'POST' })).json();
 
     assert.strictEqual(corpo.status, 'revisao');
-    assert.strictEqual(corpo.itens_qtd, 1, 'o item completo antes do corte foi perdido');
-    assert.strictEqual(corpo.truncado, true, 'o corte precisa ser anunciado');
-    assert.strictEqual(ctx.groq.chamadas.length, 1, 'gastou uma segunda chamada à toa');
+    assert.ok(corpo.itens_qtd >= 1, 'o item completo antes do corte foi perdido');
+
+    // Depois de aproveitar o pedaço, o texto é fatiado para buscar o resto —
+    // é esse o conserto. O que continua proibido é gastar uma chamada
+    // repetindo EXATAMENTE o mesmo pedido, que já se sabe que não cabe.
+    const pedidos = ctx.groq.chamadas.map(c => c.body.messages[1].content);
+    assert.strictEqual(new Set(pedidos).size, pedidos.length,
+      'repetiu um pedido idêntico, que já se sabia que não cabia');
   } finally {
     await ctx.encerrar();
   }
@@ -3895,4 +4123,319 @@ test('todos os cinco destinos estão prontos', () => {
   const doModulo = DESTINOS.map(d => d.id).sort();
   assert.deepStrictEqual(DESTINOS_PRONTOS.slice().sort(), doModulo);
   assert.deepStrictEqual(DESTINOS_APLICAVEIS.slice().sort(), doModulo);
+});
+
+
+// ===========================================================================
+// ETAPA 8 — ABRIR O MODAL PREENCHIDO
+//
+// A leitura deixou de gravar. Ela prepara o formulário que a pessoa já conhece
+// e devolve o controle: quem confere, corrige e salva é o usuário, no módulo de
+// destino, com a validação daquele módulo valendo.
+//
+// O que estes testes protegem é a FIDELIDADE do que chega ao formulário. Um
+// preenchimento incompleto é pior do que nenhum: o formulário abre parecendo
+// pronto, a pessoa confere por cima, salva — e o que faltou não deixa rastro.
+// ===========================================================================
+
+const carga = (ctx, extracaoId, itemId) =>
+  chamar(ctx.porta, `/api/ia/${extracaoId}/itens/${itemId}/preenchimento`).then(r => r.json());
+
+test('a ficha técnica chega ao formulário com processo, ordem e custo', async () => {
+  const ctx = await prepararFicha({
+    itens: [{
+      codigo: null, nome: 'Bandeja Vero PP',
+      insumos: [
+        { processo: 'MARCENARIA', nome: 'MDF 15mm Branco TX', quantidade: '0,07', unidade: 'm2' },
+        { processo: 'MARCENARIA', nome: 'Cola PVA extra 1kg', quantidade: '33,5', unidade: 'ml' },
+        { processo: 'EMBALAGEM', nome: 'MDF 15mm Branco TX', quantidade: '1', unidade: null }
+      ]
+    }]
+  });
+  try {
+    const item = itensDa(ctx, 5)[0];
+    const r = await carga(ctx, 5, item.id);
+
+    assert.strictEqual(r.modal.overlay, 'novoProduto');
+    assert.strictEqual(r.campos.nome, 'Bandeja Vero PP');
+    assert.strictEqual(r.insumos.length, 3);
+
+    // O `insumo_id` é a razão de esta rota existir: sem ele o formulário teria
+    // um nome escrito e nenhum vínculo com o cadastro.
+    assert.strictEqual(r.insumos[0].insumo_id, 70);
+    // Preço e unidade vêm do CADASTRO — são eles que fazem o custo bater.
+    assert.strictEqual(r.insumos[0].preco_unitario, 180);
+    assert.strictEqual(r.insumos[0].unidade, 'CH');
+
+    // O processo é o que agrupa a tabela do produto. Sem ele os 23 insumos
+    // caíam num monte só, que não se parece com o papel que a pessoa tem.
+    assert.deepStrictEqual(r.insumos.map(i => i.processo),
+      ['MARCENARIA', 'MARCENARIA', 'EMBALAGEM']);
+    // E a ordem é a sequência de produção, lida de cima para baixo.
+    assert.deepStrictEqual(r.insumos.map(i => i.ordem), [1, 2, 3]);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('insumo fora da matéria-prima não entra — e o nome dele é dito', async () => {
+  const ctx = await prepararFicha({
+    itens: [{
+      codigo: null, nome: 'Bandeja Vero PP',
+      insumos: [
+        { processo: 'MONTAGEM', nome: 'MDF 15mm Branco TX', quantidade: '1', unidade: 'CH' },
+        { processo: 'MONTAGEM', nome: 'Couro Serpente Amêndoa', quantidade: '0,04', unidade: 'm2' }
+      ]
+    }]
+  });
+  try {
+    const r = await carga(ctx, 5, itensDa(ctx, 5)[0].id);
+
+    // Preencher com um id chutado abriria o formulário completo, a pessoa
+    // salvaria confiando, e a peça ficaria com o material errado na receita.
+    assert.strictEqual(r.insumos.length, 1);
+    assert.strictEqual(r.insumos[0].nome, 'MDF 15mm Branco TX');
+    // A perda tem de doer na hora certa: antes de salvar, com o nome escrito.
+    assert.ok(r.avisos.some(a => /Couro Serpente/.test(a)), r.avisos.join(' | '));
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('unidade do documento diferente da cadastrada vira aviso, não silêncio', async () => {
+  const ctx = await prepararFicha({
+    itens: [{
+      codigo: null, nome: 'Bandeja Vero PP',
+      insumos: [{ processo: 'MARCENARIA', nome: 'MDF 15mm Branco TX', quantidade: '2', unidade: 'm2' }]
+    }]
+  });
+  try {
+    const r = await carga(ctx, 5, itensDa(ctx, 5)[0].id);
+    // Divergência de unidade aqui não é diferença de escrita: é erro de custo.
+    // 2 m2 e 2 CH de MDF são preços diferentes.
+    assert.ok(r.avisos.some(a => /Unidade diferente/.test(a)), r.avisos.join(' | '));
+    // Mesmo assim o insumo entra: quem decide é quem vai salvar.
+    assert.strictEqual(r.insumos.length, 1);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('o pedido chega com os produtos casados e o cliente apontado', async () => {
+  const ctx = await prepararOrcamento();
+  try {
+    const item = itensDa(ctx, 5)[0];
+    const r = await carga(ctx, 5, item.id);
+
+    assert.strictEqual(r.modal.overlay, 'novoOrcamento');
+    assert.ok(r.itens.length >= 1);
+    // `produto_id` é o que prende a linha ao catálogo; o nome sozinho não
+    // serve para calcular preço nem para virar pedido depois.
+    assert.ok(Number.isInteger(r.itens[0].produto_id));
+    assert.ok(r.itens[0].valor_unitario > 0, 'item entrou com preço zero');
+
+    // E o cliente reconhecido vai junto: é ele que o formulário precisa
+    // selecionar antes de qualquer outra coisa.
+    assert.strictEqual(r.alvo.tabela, 'clientes');
+    assert.strictEqual(r.alvo.id, 50);
+    assert.strictEqual(r.alvo.nome, 'Casa Vicenzo');
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('item de pedido sem preço no documento usa o preço de tabela, avisando', async () => {
+  const ctx = await prepararOrcamento({
+    itens: [{
+      cliente: 'Casa Vicenzo', razao_social: null, cnpj: null, validade: null,
+      prazo: null, forma_pagamento: null, observacoes: null,
+      itens: [{ codigo: 'P-100', nome: 'Painel Ripado 2,10', quantidade: '3', valor_unitario: null }]
+    }]
+  });
+  try {
+    const r = await carga(ctx, 5, itensDa(ctx, 5)[0].id);
+    assert.ok(r.itens[0].valor_unitario > 0);
+    assert.strictEqual(r.itens[0].preco_de_tabela, true);
+    // Preço que não veio do documento precisa ser conferido antes de ir ao
+    // cliente — é a diferença entre uma proposta e um chute.
+    assert.ok(r.avisos.some(a => /preço de tabela/i.test(a)), r.avisos.join(' | '));
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('a carga de preenchimento não grava nada', async () => {
+  const ctx = await prepararFicha();
+  try {
+    const antes = JSON.stringify(ctx.tabelas);
+    await carga(ctx, 5, itensDa(ctx, 5)[0].id);
+    // O ponto inteiro desta etapa: o usuário pediu que a leitura parasse de
+    // escrever no banco por conta própria.
+    assert.strictEqual(JSON.stringify(ctx.tabelas), antes, 'a leitura escreveu no banco');
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('item de outra leitura não é legível pelo id', async () => {
+  const ctx = await prepararFicha();
+  try {
+    const item = itensDa(ctx, 5)[0];
+    const resp = await chamar(ctx.porta, `/api/ia/999/itens/${item.id}/preenchimento`);
+    // Sem conferir o vínculo, um id de item qualquer seria legível por quem só
+    // tem acesso a outra leitura.
+    assert.strictEqual(resp.status, 404);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+
+test('os contatos da empresa chegam ao formulário, o primeiro como principal', async () => {
+  const ctx = await montarComIA(comLeitura(baseEmpresas(), 'clientes'), {}, {
+    groq: () => ({
+      payload: respostaGroq({
+        itens: [{
+          nome_fantasia: 'Decor Alpina', razao_social: null, cnpj: null,
+          inscricao_estadual: null, site: null,
+          end_logradouro: 'Rua das Videiras', end_numero: '480', end_complemento: null,
+          end_bairro: 'Centro', end_cidade: 'Bento Gonçalves', end_uf: 'RS', end_cep: '95700-000',
+          contatos: [
+            { nome: 'Juliana Prass', cargo: 'Compras', email: 'juliana@alpina.com.br', telefone_celular: '47 99160-3388', telefone_fixo: null },
+            { nome: 'Marco Rossi', cargo: 'Diretor', email: null, telefone_celular: null, telefone_fixo: '47 3333-0000' }
+          ]
+        }]
+      })
+    })
+  });
+  try {
+    await chamar(ctx.porta, '/api/ia/5/estruturar', { method: 'POST' });
+    const r = await carga(ctx, 5, itensDa(ctx, 5)[0].id);
+
+    assert.strictEqual(r.modal.overlay, 'novoCliente');
+    // O endereço é o que o usuário viu na planilha: perder cidade ou CEP aqui
+    // é a queixa "no momento de extrair não puxa os dados corretamente".
+    assert.strictEqual(r.campos.end_cidade, 'Bento Gonçalves');
+    assert.strictEqual(r.campos.end_cep, '95700-000');
+
+    // Contatos são a parte que o preenchimento por campo NÃO alcançava: a
+    // tabela de contatos é um array interno do modal, não caixas de texto.
+    assert.strictEqual(r.contatos.length, 2);
+    assert.strictEqual(r.contatos[0].nome, 'Juliana Prass');
+    assert.strictEqual(r.contatos[0].cargo, 'Compras');
+    assert.strictEqual(r.contatos[0].telefone_celular, '47 99160-3388');
+    // Um deles tem de ser o principal, como em toda criação de empresa.
+    assert.strictEqual(r.contatos[0].principal, true);
+    assert.strictEqual(r.contatos[1].principal, false);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('contato sem nome não vira linha em branco no cadastro', async () => {
+  const ctx = await montarComIA(comLeitura(baseEmpresas(), 'clientes'), {}, {
+    groq: () => ({
+      payload: respostaGroq({
+        itens: [{
+          nome_fantasia: 'Decor Alpina', razao_social: null, cnpj: null,
+          inscricao_estadual: null, site: null, end_logradouro: null, end_numero: null,
+          end_complemento: null, end_bairro: null, end_cidade: null, end_uf: null, end_cep: null,
+          contatos: [
+            { nome: 'Juliana Prass', cargo: 'Compras', email: null, telefone_celular: null, telefone_fixo: null },
+            // Cargo sem pessoa: o documento cita "Diretoria" e ninguém.
+            { nome: '   ', cargo: 'Diretoria', email: null, telefone_celular: null, telefone_fixo: null }
+          ]
+        }]
+      })
+    })
+  });
+  try {
+    await chamar(ctx.porta, '/api/ia/5/estruturar', { method: 'POST' });
+    const r = await carga(ctx, 5, itensDa(ctx, 5)[0].id);
+
+    // Um contato só de cargo não serve para nada e, pior, vira uma linha em
+    // branco no cadastro da empresa — que alguém vai ter de apagar depois.
+    assert.strictEqual(r.contatos.length, 1);
+    assert.strictEqual(r.contatos[0].nome, 'Juliana Prass');
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('a UF vira o nome do estado que o formulário conhece', async () => {
+  const ctx = await montarComIA(comLeitura(baseEmpresas(), 'clientes'), {}, {
+    groq: () => ({
+      payload: respostaGroq({
+        itens: [{
+          nome_fantasia: 'Decor Alpina', razao_social: null, cnpj: null,
+          inscricao_estadual: null, site: null, end_logradouro: null, end_numero: null,
+          end_complemento: null, end_bairro: null, end_cidade: 'Bento Gonçalves',
+          end_uf: 'RS', end_cep: null, contatos: []
+        }]
+      })
+    })
+  });
+  try {
+    await chamar(ctx.porta, '/api/ia/5/estruturar', { method: 'POST' });
+    const r = await carga(ctx, 5, itensDa(ctx, 5)[0].id);
+
+    // O documento escreve "RS". O <select> de estado tem nomes por extenso,
+    // porque vêm de um serviço de geografia internacional. Mandar a sigla para
+    // lá não seleciona nada e não dá erro: o campo fica vazio, e o endereço
+    // chega ao cadastro sem estado.
+    assert.strictEqual(r.campos.end_uf, 'RS');
+    assert.strictEqual(r.campos.end_estado_nome, 'Rio Grande do Sul');
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('item de OUTRA leitura que existe também não é legível', async () => {
+  // A leitura 4 e a 5 existem as duas. Sem conferir o vínculo, o id do item de
+  // uma seria legível pela rota da outra — e este é o caso que o teste com um
+  // id inexistente NÃO cobre, porque lá a leitura já barra antes.
+  const dados = comLeitura(baseFicha(), 'produto_insumos');
+  dados.ia_extracoes.push({
+    id: 6, titulo: 'Outra leitura', destino: 'produto_insumos', status: 'revisao',
+    arquivos_qtd: 0, itens_qtd: 0, aplicados_qtd: 0, usuario_id: 1, criado_em: RECENTE
+  });
+
+  const ctx = await montarComIA(dados, {}, {
+    groq: () => ({
+      payload: respostaGroq({
+        itens: [{ codigo: 'PR-210', nome: 'Painel Ripado 2,10', insumos: [{ nome: 'MDF 15mm Branco TX', quantidade: '1' }] }]
+      })
+    })
+  });
+  try {
+    await chamar(ctx.porta, '/api/ia/5/estruturar', { method: 'POST' });
+    const item = itensDa(ctx, 5)[0];
+
+    const resp = await chamar(ctx.porta, `/api/ia/6/itens/${item.id}/preenchimento`);
+    assert.strictEqual(resp.status, 404);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('montarContatos descarta o que não tem nome', () => {
+  // A extração já derruba contato sem nome, porque o nome é obrigatório no
+  // esquema. Este filtro é a segunda tranca: `montarContatos` é exportada e
+  // recebe dados de quem a chamar, e um contato sem nome vira uma linha em
+  // branco no cadastro da empresa — que alguém vai ter de apagar depois.
+  const { montarContatos } = require('./iaPreenchimento');
+
+  const r = montarContatos([
+    { nome: 'Juliana Prass', cargo: 'Compras' },
+    { nome: '   ', cargo: 'Diretoria' },
+    { nome: null, email: 'contato@empresa.com.br' },
+    { cargo: 'Sócio' },
+    { nome: 'Marco Rossi' }
+  ]);
+
+  assert.deepStrictEqual(r.map(c => c.nome), ['Juliana Prass', 'Marco Rossi']);
+  assert.strictEqual(r[0].principal, true);
+  assert.strictEqual(r[1].principal, false);
+  // Campo ausente vira string vazia, nunca "undefined" escrito na coluna.
+  assert.strictEqual(r[1].email, '');
 });

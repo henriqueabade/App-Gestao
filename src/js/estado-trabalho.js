@@ -133,6 +133,63 @@
         });
     }
 
+    /**
+     * Abre um modal JÁ PREENCHIDO, reaproveitando o `restaurar` que ele declara.
+     *
+     * A restauração de trabalho e o preenchimento por IA são o MESMO problema
+     * visto de dois lados: os dois precisam pôr valores num formulário recém
+     * aberto, e os dois esbarram nas mesmas três dificuldades — selects que só
+     * têm opções depois de um `fetch`, tabelas que são array em JavaScript e
+     * não caixas de texto, e abas cujo conteúdo ainda não existe.
+     *
+     * Cada modal já resolveu isso uma vez, no `restaurar` dele, e resolveu bem:
+     * `cliente-novo` sabe repor a lista de contatos, `produto-novo` sabe repor
+     * os insumos agrupados por processo, `orcamento-novo` sabe que o cliente
+     * tem de ser selecionado ANTES do contato porque é o `change` dele que
+     * carrega a lista. Escrever um segundo mecanismo para preencher de fora
+     * significaria redescobrir cada uma dessas ordens — e descobrir errado em
+     * silêncio, que é como o preenchimento por ids de campo estava falhando.
+     *
+     * `conteudo` tem de ter a forma que o `capturar` daquele modal produz. É um
+     * acoplamento real, e é o mesmo que a restauração já tem: são as duas
+     * pontas do contrato que o modal declarou.
+     */
+    async function preencher(overlayId, { campos, conteudo } = {}) {
+        const id = idDoOverlay({ overlayId });
+        if (!id) return { campos: 0, conteudo: false };
+
+        // O modal registra o `restaurar` no fim do IIFE dele, que roda DEPOIS
+        // do evento de "carregou". Sem esperar, o preenchimento chegaria antes
+        // de existir quem o recebesse — e falharia calado.
+        const manipuladores = await esperarConteudo(id);
+
+        const raiz = document.getElementById(id);
+        const aplicados = restaurarCampos(raiz, campos);
+
+        let reposto = false;
+        if (manipuladores && typeof manipuladores.restaurar === 'function' && conteudo) {
+            await manipuladores.restaurar(conteudo);
+            reposto = true;
+        }
+        return { campos: aplicados, conteudo: reposto };
+    }
+
+    /** Espera o modal declarar como repor o próprio conteúdo. */
+    function esperarConteudo(id, limiteMs = 4000) {
+        if (conteudos.has(id)) return Promise.resolve(conteudos.get(id));
+        return new Promise(resolve => {
+            const inicio = Date.now();
+            const tentar = () => {
+                if (conteudos.has(id)) return resolve(conteudos.get(id));
+                // Nem todo modal registra conteúdo dinâmico. Desistir devolve
+                // null e o preenchimento dos campos simples continua valendo.
+                if (Date.now() - inicio >= limiteMs) return resolve(null);
+                setTimeout(tentar, 40);
+            };
+            setTimeout(tentar, 40);
+        });
+    }
+
     function esquecerConteudo(overlayId) {
         const id = idDoOverlay({ overlayId });
         if (id) conteudos.delete(id);
@@ -684,6 +741,7 @@
     window.EstadoTrabalho = {
         registrarConteudo,
         registrarContexto,
+        preencher,
         esquecerConteudo,
         registrarModalAberto: window.__registrarModalAberto,
         salvarPorDesconexao,
