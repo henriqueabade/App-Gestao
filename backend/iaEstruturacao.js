@@ -40,12 +40,26 @@ const MAX_ITENS = Number(process.env.IA_MAX_ITENS) || 300;
 // Prompt
 // ---------------------------------------------------------------------------
 
-function descreverCampos(esquema) {
-  return esquema.campos.map(c => {
+function descreverCampos(campos, recuo = '') {
+  return campos.map(c => {
     const partes = [`"${c.chave}"`, `(${c.tipo}${c.obrigatorio ? ', obrigatório' : ''})`];
     if (c.descricao) partes.push(`— ${c.descricao}`);
-    return `- ${partes.join(' ')}`;
+    const linha = `${recuo}- ${partes.join(' ')}`;
+    // A sub-lista é descrita recuada, logo abaixo do campo que a contém: sem
+    // isso o modelo não sabe a forma dos objetos e devolve uma lista de
+    // strings ou um objeto solto.
+    if (c.tipo !== 'lista' || !c.subcampos?.length) return linha;
+    return [linha, `${recuo}  Cada entrada de "${c.chave}" tem:`,
+      descreverCampos(c.subcampos, `${recuo}  `)].join('\n');
   }).join('\n');
+}
+
+/** Exemplo da forma de um item, para o modelo copiar. */
+function moldeDoItem(campos) {
+  return '{' + campos.map(c => {
+    if (c.tipo !== 'lista') return `"${c.chave}": ...`;
+    return `"${c.chave}": [${moldeDoItem(c.subcampos || [])}]`;
+  }).join(', ') + '}';
 }
 
 function montarPrompt(esquema) {
@@ -55,14 +69,15 @@ function montarPrompt(esquema) {
     esquema.instrucoes,
     '',
     'Campos de cada item:',
-    descreverCampos(esquema),
+    descreverCampos(esquema.campos),
     '',
     'Responda SOMENTE com um objeto JSON nesta forma:',
-    '{"itens": [{' + esquema.campos.map(c => `"${c.chave}": ...`).join(', ') + '}]}',
+    `{"itens": [${moldeDoItem(esquema.campos)}]}`,
     '',
     'Regras da resposta:',
     '- Use exatamente esses nomes de campo, sem acrescentar outros.',
     '- Campo sem valor no documento: use null. Nunca invente.',
+    '- Lista sem nenhuma entrada: use [].',
     '- Números: devolva como estão no documento (pode manter a vírgula decimal).',
     '- Se não houver nenhum item, devolva {"itens": []}.'
   ].join('\n');
@@ -80,6 +95,11 @@ const vazio = v => v === null || v === undefined || (typeof v === 'string' && v.
  * isso derruba a linha (campo obrigatório) ou só deixa a célula vazia.
  */
 function coagir(campo, bruto) {
+  // Lista vazia é resposta legítima ("esta empresa não tem contato no
+  // documento") e precisa virar `[]`, não `null` — quem consome espera um
+  // array e um null aqui estouraria no `.map`.
+  if (campo.tipo === 'lista') return coagirLista(campo, bruto);
+
   if (vazio(bruto)) return null;
 
   if (campo.tipo === 'numero' || campo.tipo === 'dinheiro') {
@@ -114,6 +134,49 @@ function coagir(campo, bruto) {
 }
 
 /**
+ * Sub-registros de um campo `lista` (os contatos de uma empresa).
+ *
+ * Entrada torta é DESCARTADA, não corrigida: um contato sem nome não serve
+ * para nada e, pior, viraria uma linha em branco no cadastro da empresa. O que
+ * caiu é anunciado junto do item, para o revisor saber que o documento tinha
+ * mais gente do que a tela mostra.
+ */
+function coagirLista(campo, bruto) {
+  if (bruto === null || bruto === undefined || bruto === '') return [];
+  if (!Array.isArray(bruto)) return undefined;
+
+  const subcampos = campo.subcampos || [];
+  const obrigatorios = subcampos.filter(sc => sc.obrigatorio);
+  const teto = campo.max_itens || 50;
+  const saida = [];
+
+  for (const cru of bruto) {
+    if (saida.length >= teto) break;
+    if (!cru || typeof cru !== 'object' || Array.isArray(cru)) continue;
+
+    const entrada = {};
+    let aproveitavel = true;
+    for (const sc of subcampos) {
+      const valor = coagir(sc, cru[sc.chave]);
+      entrada[sc.chave] = valor === undefined ? null : valor;
+    }
+    for (const sc of obrigatorios) {
+      const v = entrada[sc.chave];
+      if (v === null || v === '') aproveitavel = false;
+    }
+    if (aproveitavel) saida.push(entrada);
+  }
+
+  return saida;
+}
+
+/** Quantas entradas de uma lista o modelo mandou e não sobreviveram. */
+function contarDescartes(campo, bruto, aceitos) {
+  if (!Array.isArray(bruto)) return 0;
+  return Math.max(0, bruto.length - (aceitos?.length || 0));
+}
+
+/**
  * Uma linha crua do modelo vira `{ dados, problemas }`.
  * `problemas` vazio significa item aproveitável.
  */
@@ -131,6 +194,17 @@ function validarItem(esquema, bruto) {
     if (valor === undefined) {
       problemas.push(`${campo.rotulo}: valor não reconhecido (${String(bruto[campo.chave]).slice(0, 40)})`);
       dados[campo.chave] = null;
+      continue;
+    }
+
+    if (campo.tipo === 'lista') {
+      const perdidos = contarDescartes(campo, bruto[campo.chave], valor);
+      if (perdidos) {
+        // Ressalva, não bloqueio: a empresa entra mesmo sem um dos contatos,
+        // e esconder a perda é que seria grave.
+        problemas.push(`${perdidos} ${campo.rotulo.toLowerCase()} sem os dados mínimos foram descartados`);
+      }
+      dados[campo.chave] = valor;
       continue;
     }
 
@@ -255,7 +329,9 @@ module.exports = {
   estruturar,
   montarPrompt,
   descreverCampos,
+  moldeDoItem,
   coagir,
+  coagirLista,
   validarItem,
   extrairJson
 };

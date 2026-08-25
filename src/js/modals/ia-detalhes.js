@@ -22,6 +22,15 @@
   /** Última leitura carregada. É a fonte para redesenhar sem ir ao servidor. */
   let leitura = null;
 
+  /**
+   * Quais sub-listas estão abertas, por `${itemId}:${chave}`.
+   *
+   * Fica FORA do desenho de propósito: a grade é redesenhada inteira a cada
+   * mudança de ação, e sem guardar isto a lista de contatos que o revisor
+   * acabou de abrir se fecharia sozinha no meio da conferência.
+   */
+  const listasAbertas = new Set();
+
   const ROTULO_STATUS = {
     pendente: 'Pendente', aplicado: 'Aplicado', erro: 'Erro', ignorado: 'Descartado'
   };
@@ -227,6 +236,160 @@
     return input;
   }
 
+  /** "Ana Paula · Compras", para caber numa célula. */
+  function resumirSubItem(sub, subcampos) {
+    const partes = subcampos
+      .map(sc => sub?.[sc.chave])
+      .filter(v => v !== null && v !== undefined && String(v).trim());
+    return partes.slice(0, 2).join(' · ') || '(em branco)';
+  }
+
+  /** Grava a lista inteira do campo: o backend valida entrada por entrada. */
+  async function salvarLista(item, campo, lista) {
+    const salvo = await salvarItem(item.id, { dados: { [campo.chave]: lista } });
+    atualizarEmMemoria(salvo);
+    desenharItens();
+  }
+
+  /**
+   * Célula de um campo `lista`: quantos são, e um botão que abre a sub-tabela.
+   *
+   * Mostrar os contatos abertos em todas as linhas encheria a tela — vinte
+   * empresas com três contatos cada viram oitenta linhas. Fechado por padrão,
+   * o revisor abre o que quer conferir.
+   */
+  function criarCelulaDeLista(item, campo, editavel) {
+    const caixa = document.createElement('div');
+    caixa.className = 'ia-lista-resumo';
+
+    const lista = Array.isArray(item.dados?.[campo.chave]) ? item.dados[campo.chave] : [];
+    const chaveAberta = `${item.id}:${campo.chave}`;
+
+    const botao = document.createElement('button');
+    botao.type = 'button';
+    botao.className = 'ia-lista-abrir';
+    const seta = listasAbertas.has(chaveAberta) ? 'fa-chevron-down' : 'fa-chevron-right';
+    botao.innerHTML = `<i class="fas ${seta}"></i>`;
+    const rotulo = document.createElement('span');
+    rotulo.textContent = lista.length
+      ? `${lista.length} ${campo.rotulo.toLowerCase()}`
+      : `sem ${campo.rotulo.toLowerCase()}`;
+    botao.appendChild(rotulo);
+    botao.title = lista.length
+      ? lista.map(sub => resumirSubItem(sub, campo.subcampos || [])).join(' | ')
+      : `Nenhum ${campo.rotulo.toLowerCase()} lido para esta linha`;
+
+    botao.addEventListener('click', () => {
+      if (listasAbertas.has(chaveAberta)) listasAbertas.delete(chaveAberta);
+      else listasAbertas.add(chaveAberta);
+      desenharItens();
+    });
+    caixa.appendChild(botao);
+
+    if (editavel) {
+      const adicionar = document.createElement('button');
+      adicionar.type = 'button';
+      adicionar.className = 'ia-lista-adicionar';
+      adicionar.title = `Acrescentar ${campo.rotulo.toLowerCase()}`;
+      adicionar.innerHTML = '<i class="fas fa-plus"></i>';
+      adicionar.addEventListener('click', async () => {
+        const vazio = {};
+        for (const sc of campo.subcampos || []) vazio[sc.chave] = null;
+        listasAbertas.add(chaveAberta);
+        try { await salvarLista(item, campo, [...lista, vazio]); }
+        catch (err) { showToast(err.message || 'Não foi possível acrescentar', 'error'); }
+      });
+      caixa.appendChild(adicionar);
+    }
+
+    return caixa;
+  }
+
+  /**
+   * Sub-tabela de um campo `lista`, na linha logo abaixo do item.
+   *
+   * As colunas saem de `subcampos`, pelo mesmo caminho que desenha as de cima:
+   * um destino novo com sub-lista funciona sem tocar aqui.
+   */
+  function criarSubTabela(item, campo, colunas, editavel) {
+    const lista = Array.isArray(item.dados?.[campo.chave]) ? item.dados[campo.chave] : [];
+    const subcampos = campo.subcampos || [];
+
+    const tr = document.createElement('tr');
+    tr.className = 'ia-sublinha';
+    const td = document.createElement('td');
+    td.colSpan = colunas;
+
+    if (!lista.length) {
+      td.className = 'ia-sublista-vazia';
+      td.textContent = `Nenhum ${campo.rotulo.toLowerCase()} nesta linha.`;
+      tr.appendChild(td);
+      return tr;
+    }
+
+    const tabela = document.createElement('table');
+    tabela.className = 'ia-sublista';
+
+    const cabecalho = document.createElement('tr');
+    for (const sc of subcampos) {
+      const th = document.createElement('th');
+      th.textContent = sc.rotulo;
+      cabecalho.appendChild(th);
+    }
+    if (editavel) cabecalho.appendChild(document.createElement('th'));
+    tabela.appendChild(cabecalho);
+
+    lista.forEach((sub, indice) => {
+      const linha = document.createElement('tr');
+
+      for (const sc of subcampos) {
+        const celula = document.createElement('td');
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.className = 'ia-campo';
+        const valor = sub?.[sc.chave];
+        input.value = valor === null || valor === undefined ? '' : String(valor);
+        input.title = sc.rotulo;
+
+        if (!editavel) input.readOnly = true;
+        else {
+          if (sc.obrigatorio && !String(input.value).trim()) input.classList.add('ia-campo--faltando');
+          input.addEventListener('change', async () => {
+            const copia = lista.map((x, i) => (i === indice ? { ...x, [sc.chave]: input.value } : x));
+            try { await salvarLista(item, campo, copia); }
+            catch (err) {
+              showToast(err.message || 'Não foi possível salvar', 'error');
+              input.value = valor === null || valor === undefined ? '' : String(valor);
+            }
+          });
+        }
+        celula.appendChild(input);
+        linha.appendChild(celula);
+      }
+
+      if (editavel) {
+        const celula = document.createElement('td');
+        const remover = document.createElement('button');
+        remover.type = 'button';
+        remover.className = 'ia-arquivo__remover';
+        remover.title = 'Remover';
+        remover.innerHTML = '<i class="fas fa-xmark"></i>';
+        remover.addEventListener('click', async () => {
+          try { await salvarLista(item, campo, lista.filter((_, i) => i !== indice)); }
+          catch (err) { showToast(err.message || 'Não foi possível remover', 'error'); }
+        });
+        celula.appendChild(remover);
+        linha.appendChild(celula);
+      }
+
+      tabela.appendChild(linha);
+    });
+
+    td.appendChild(tabela);
+    tr.appendChild(td);
+    return tr;
+  }
+
   function criarSeletorDeAcao(item, editavel) {
     const select = document.createElement('select');
     select.className = 'ia-acao-select';
@@ -374,6 +537,8 @@
           td.className = 'text-sm';
           td.style.color = 'var(--color-red)';
           td.textContent = campo === campos[0] ? 'Conteúdo ilegível' : '';
+        } else if (campo.tipo === 'lista') {
+          td.appendChild(criarCelulaDeLista(item, campo, editavelAqui));
         } else {
           td.appendChild(criarCampo(item, campo, editavelAqui));
         }
@@ -391,6 +556,13 @@
       tr.appendChild(tdStatus);
 
       linhas.push(tr);
+
+      for (const campo of campos) {
+        if (campo.tipo !== 'lista') continue;
+        if (!listasAbertas.has(`${item.id}:${campo.chave}`)) continue;
+        linhas.push(criarSubTabela(item, campo, colunas, editavelAqui));
+      }
+
       const nota = criarNota(item, colunas);
       if (nota) linhas.push(nota);
     }
@@ -446,12 +618,20 @@
 
     const campos = leitura.campos || [];
     const obrigatorios = campos.filter(c => c.obrigatorio);
+
+    /**
+     * Vazio depende do tipo. Para uma LISTA, vazio é não ter entrada nenhuma —
+     * e `String([])` sendo `''` só acerta isso por coincidência: `String([{}])`
+     * vira "[object Object]", que passa mesmo com a entrada em branco.
+     */
+    const emBranco = (campo, valor) => {
+      if (campo.tipo === 'lista') return !Array.isArray(valor) || valor.length === 0;
+      return valor === null || valor === undefined || String(valor).trim() === '';
+    };
+
     const incompletos = pendentes.filter(i =>
       i.acao !== 'ignorar'
-      && obrigatorios.some(c => {
-        const v = i.dados?.[c.chave];
-        return v === null || v === undefined || String(v).trim() === '';
-      })).length;
+      && obrigatorios.some(c => emBranco(c, i.dados?.[c.chave]))).length;
 
     caixa.classList.remove('hidden');
     caixa.replaceChildren();

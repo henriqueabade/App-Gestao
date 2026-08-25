@@ -979,3 +979,89 @@ body {
 .ia-resumo-revisao__separador {
     color: rgba(255, 255, 255, 0.25);
 }
+
+/* ------------------------------------------------------------------
+   Sub-listas da revisão (contatos de uma empresa, itens de um orçamento)
+   ------------------------------------------------------------------ */
+
+.ia-lista-resumo {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+/*
+   Abre e fecha a sub-tabela. Nasce FECHADA: vinte empresas com três contatos
+   cada dariam oitenta linhas na tela, e a grade deixaria de ser conferível.
+*/
+.ia-lista-abrir {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: none;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 6px;
+    padding: 3px 8px;
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.85);
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.ia-lista-abrir:hover {
+    border-color: var(--color-primary);
+    color: var(--color-primary-light);
+}
+
+.ia-lista-abrir i {
+    font-size: 9px;
+    opacity: 0.7;
+}
+
+.ia-lista-adicionar {
+    background: none;
+    border: none;
+    color: var(--color-primary);
+    cursor: pointer;
+    padding: 2px 4px;
+    font-size: 11px;
+    flex-shrink: 0;
+}
+
+.ia-lista-adicionar:hover { color: var(--color-primary-light); }
+
+/* A sub-linha ocupa a largura toda, recuada para não se confundir com um
+   item de primeiro nível. */
+.ia-sublinha > td {
+    padding: 0 10px 10px 34px;
+    background: rgba(0, 0, 0, 0.18);
+}
+
+.ia-sublista {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.ia-sublista th {
+    text-align: left;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: rgba(255, 255, 255, 0.4);
+    padding: 4px 6px;
+    white-space: nowrap;
+}
+
+.ia-sublista td {
+    padding: 2px 6px;
+    vertical-align: middle;
+}
+
+.ia-sublista .ia-campo { font-size: 12px; }
+
+.ia-sublista-vazia {
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.4);
+    font-style: italic;
+}

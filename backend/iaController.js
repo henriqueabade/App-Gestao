@@ -242,7 +242,7 @@ async function alvosDoDestino(api, destino) {
   try {
     const linhas = listaDe(await api.get(`/api/${esquema.tabelaAlvo}`));
     return linhas
-      .map(l => ({ id: l.id, nome: l[esquema.chaveDeCasamento] }))
+      .map(l => ({ id: l.id, nome: l[esquema.campoDeExibicao] }))
       .filter(l => l.id && l.nome)
       .sort((a, b) => String(a.nome).localeCompare(String(b.nome)));
   } catch (_) {
@@ -928,6 +928,10 @@ router.post('/:id/aplicar',
       const resultados = await aplicacao.aplicar({
         destino: extracao.destino,
         itens,
+        // Empresa e contato são CRUD puro na API: vão pelo cliente HTTP da
+        // requisição. Estoque é diferente — passa pelo materiaPrima.js, que usa
+        // o cliente `db`, e é por isso que o token também é repassado.
+        api,
         usuarioId: usuarioDaRequisicao(req),
         token: tokenDaRequisicao(req),
         extracaoId: id,

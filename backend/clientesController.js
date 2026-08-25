@@ -415,3 +415,6 @@ router.delete('/:id', exigirPermissao('cli.delete'), async (req, res) => {
 });
 
 module.exports = router;
+// Reaproveitado pelo módulo de IA: o mapeamento de endereço para as colunas
+// reg_*/cob_*/ent_* mora aqui e não pode existir em dois lugares.
+module.exports.buildPayload = buildPayload;

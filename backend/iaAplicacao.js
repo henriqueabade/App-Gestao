@@ -23,7 +23,9 @@
 
 const db = require('./db');
 const materiaPrima = require('./materiaPrima');
-const { obterEsquema } = require('./iaEsquemas');
+const prospeccoes = require('./prospeccoesController');
+const clientes = require('./clientesController');
+const { obterEsquema, soDigitos } = require('./iaEsquemas');
 const { normalizar } = require('./iaReconciliacao');
 
 function erro(status, mensagem) {
@@ -209,7 +211,260 @@ async function aplicarMateriaPrima(item, contexto) {
   throw erro(400, `Ação desconhecida: ${item.acao}`);
 }
 
-const APLICADORES = { materia_prima: aplicarMateriaPrima };
+// ---------------------------------------------------------------------------
+// Empresas (clientes e prospecções)
+// ---------------------------------------------------------------------------
+
+/**
+ * Só o que o documento realmente trouxe.
+ *
+ * É a regra que impede a leitura de EMPOBRECER um cadastro. Um cartão de visita
+ * tem nome e telefone; o cliente no sistema pode ter endereço completo, IE e
+ * site preenchidos há anos. Mandar o payload inteiro, com null onde o cartão
+ * não dizia nada, apagaria tudo isso — e ninguém perceberia até precisar do
+ * endereço de entrega.
+ */
+function somenteVindos(dados, chaves) {
+  const saida = {};
+  for (const chave of chaves) {
+    const valor = dados?.[chave];
+    if (valor === null || valor === undefined) continue;
+    if (typeof valor === 'string' && !valor.trim()) continue;
+    saida[chave] = valor;
+  }
+  return saida;
+}
+
+const COLUNAS_EMPRESA = [
+  'nome_fantasia', 'razao_social', 'cnpj', 'inscricao_estadual', 'site',
+  'end_logradouro', 'end_numero', 'end_complemento', 'end_bairro',
+  'end_cidade', 'end_uf', 'end_cep'
+];
+
+/** O endereço plano da leitura na forma que `clientesController` espera. */
+const enderecoDeCliente = d => ({
+  rua: d.end_logradouro, numero: d.end_numero, complemento: d.end_complemento,
+  bairro: d.end_bairro, cidade: d.end_cidade, estado: d.end_uf,
+  pais: d.end_pais, cep: d.end_cep
+});
+
+const contatosDe = item => (Array.isArray(item?.dados?.contatos) ? item.dados.contatos : [])
+  .filter(c => String(c?.nome || '').trim());
+
+/**
+ * Contatos que ainda NÃO estão no cadastro.
+ *
+ * Aplicar a mesma lista de cartões duas vezes, ou ler um documento que repete
+ * gente já cadastrada, encheria a ficha de linhas iguais. Compara por e-mail
+ * (identificador de fato) e, na falta dele, por nome.
+ */
+function contatosInexistentes(novos, atuais) {
+  const porEmail = new Set((atuais || []).map(c => normalizar(c.email)).filter(Boolean));
+  const porNome = new Set((atuais || []).map(c => normalizar(c.nome)).filter(Boolean));
+
+  const saida = [];
+  for (const c of novos) {
+    const email = normalizar(c.email);
+    const nome = normalizar(c.nome);
+    if (email && porEmail.has(email)) continue;
+    if (!email && nome && porNome.has(nome)) continue;
+    saida.push(c);
+    if (email) porEmail.add(email);
+    if (nome) porNome.add(nome);
+  }
+  return saida;
+}
+
+async function aplicarClientes(item, contexto) {
+  const { api } = contexto;
+  const dados = item.dados || {};
+  const nome = String(dados.nome_fantasia || '').trim();
+  if (!nome) throw erro(400, 'Sem nome de empresa');
+
+  const contatos = contatosDe(item);
+  const notas = [];
+
+  // ---- cadastrar -----------------------------------------------------------
+  if (item.acao === 'criar') {
+    // A trava de CNPJ repetido é do módulo de Clientes. Conferir antes devolve
+    // uma mensagem que diz o que fazer, em vez de um 500 vindo do banco.
+    if (dados.cnpj) {
+      const existentes = await api.get('/api/clientes', { query: { cnpj: dados.cnpj } }).catch(() => []);
+      if (Array.isArray(existentes) && existentes.length) {
+        throw erro(409, `Já existe um cliente com o CNPJ ${dados.cnpj}. Mude a ação para "Atualizar" e escolha o cliente existente.`);
+      }
+    }
+
+    const criado = await api.post('/api/clientes', clientes.buildPayload({
+      ...dados,
+      endereco_registro: enderecoDeCliente(dados)
+    }));
+    const clienteId = criado?.id ?? criado?.[0]?.id;
+    if (!clienteId) throw erro(502, 'A API não devolveu o id do cliente criado');
+
+    for (const c of contatos) {
+      await api.post('/api/contatos_cliente', {
+        id_cliente: clienteId,
+        nome: c.nome, cargo: c.cargo, email: c.email,
+        telefone_fixo: c.telefone_fixo, telefone_celular: c.telefone_celular
+      });
+    }
+
+    return {
+      alvo_id: clienteId,
+      mensagem: [`Cliente cadastrado`, contatos.length ? `${contatos.length} contato(s)` : null, ...notas]
+        .filter(Boolean).join(' · ')
+    };
+  }
+
+  // ---- atualizar o que já existe ------------------------------------------
+  if (item.acao === 'atualizar') {
+    const alvo = Number(item.alvo_id);
+    if (!Number.isFinite(alvo)) throw erro(400, 'Sem cliente de destino');
+
+    const vindos = somenteVindos(dados, COLUNAS_EMPRESA);
+    const feitos = [];
+
+    if (Object.keys(vindos).length) {
+      await api.put(`/api/clientes/${alvo}`, clientes.buildPayload({
+        ...vindos,
+        endereco_registro: enderecoDeCliente(vindos)
+      }));
+      feitos.push(`${Object.keys(vindos).length} campo(s) atualizado(s)`);
+    }
+
+    if (contatos.length) {
+      const atuais = await api.get('/api/contatos_cliente', { query: { id_cliente: alvo } })
+        .then(r => (Array.isArray(r) ? r : [])).catch(() => []);
+      const faltantes = contatosInexistentes(contatos, atuais);
+      for (const c of faltantes) {
+        await api.post('/api/contatos_cliente', {
+          id_cliente: alvo,
+          nome: c.nome, cargo: c.cargo, email: c.email,
+          telefone_fixo: c.telefone_fixo, telefone_celular: c.telefone_celular
+        });
+      }
+      feitos.push(faltantes.length
+        ? `${faltantes.length} contato(s) acrescentado(s)`
+        : 'nenhum contato novo');
+    }
+
+    return { alvo_id: alvo, mensagem: feitos.join(', ') || 'Nada a mudar' };
+  }
+
+  throw erro(400, `Ação desconhecida: ${item.acao}`);
+}
+
+async function aplicarProspeccoes(item, contexto) {
+  const { api, usuarioId } = contexto;
+  const dados = item.dados || {};
+  const nome = String(dados.nome_fantasia || '').trim();
+  if (!nome) throw erro(400, 'Sem nome de empresa');
+
+  const contatos = contatosDe(item);
+
+  // ---- cadastrar -----------------------------------------------------------
+  if (item.acao === 'criar') {
+    const payload = prospeccoes.montarPayload(dados);
+    prospeccoes.validarProspeccao(payload);
+    payload.criado_por = usuarioId ?? null;
+
+    // Índice único parcial no banco: uma empresa não pode estar em duas
+    // prospecções ATIVAS. Conferir aqui devolve instrução em vez de 500.
+    if (payload.cnpj) {
+      const existentes = await api.get('/api/prospeccoes', { query: { cnpj: payload.cnpj } }).catch(() => []);
+      if ((existentes || []).some(p => p.status === 'ativa')) {
+        throw erro(409, `Já existe prospecção ativa para o CNPJ ${payload.cnpj}. Mude a ação para "Atualizar" e escolha a prospecção existente.`);
+      }
+    }
+
+    const criada = await api.post('/api/prospeccoes', payload);
+    const prospeccaoId = criada?.id ?? criada?.[0]?.id;
+    if (!prospeccaoId) throw erro(502, 'A API não devolveu o id da prospecção criada');
+
+    // A primeira pessoa da lista vira o contato principal. Alguém precisa ser,
+    // e a ordem do documento é a única pista que existe — o revisor troca pela
+    // tela de Prospecções se não for.
+    const comPrincipal = prospeccoes.normalizarPrincipais(
+      contatos.map((c, i) => ({ ...c, principal: i === 0 }))
+    );
+    for (const c of comPrincipal) {
+      await api.post('/api/prospeccao_contatos', prospeccoes.montarPayloadContato(c, prospeccaoId));
+    }
+
+    // O histórico da prospecção é a resposta para "de onde veio isto?". Uma
+    // prospecção criada pela IA sem linha nenhuma no histórico apareceria no
+    // funil sem origem.
+    await prospeccoes.registrarHistorico(api, prospeccaoId, [
+      {
+        tipo: 'criacao', acao: 'criou', entidade: 'Prospecção',
+        valor_novo: payload.nome_fantasia,
+        observacao: contexto.nota,
+        detalhe: payload
+      },
+      { tipo: 'etapa', acao: 'criou', entidade: 'Etapa do funil', campo: 'etapa', valor_novo: payload.etapa },
+      ...comPrincipal.map(c => ({
+        tipo: 'contato', acao: 'criou', entidade: prospeccoes.rotuloContato(c), detalhe: c
+      }))
+    ], usuarioId);
+
+    return {
+      alvo_id: prospeccaoId,
+      mensagem: ['Prospecção cadastrada', contatos.length ? `${contatos.length} contato(s)` : null]
+        .filter(Boolean).join(' · ')
+    };
+  }
+
+  // ---- atualizar o que já existe ------------------------------------------
+  if (item.acao === 'atualizar') {
+    const alvo = Number(item.alvo_id);
+    if (!Number.isFinite(alvo)) throw erro(400, 'Sem prospecção de destino');
+
+    const vindos = somenteVindos(dados, [...COLUNAS_EMPRESA, 'segmento']);
+    const feitos = [];
+
+    if (Object.keys(vindos).length) {
+      // `montarPayload` só inclui o que foi passado, então a etapa da
+      // prospecção não é mexida — mover no funil é decisão de quem vende, não
+      // de quem leu o documento.
+      const payload = prospeccoes.montarPayload(vindos);
+      delete payload.etapa;
+      delete payload.probabilidade;
+      await api.put(`/api/prospeccoes/${alvo}`, payload);
+      feitos.push(`${Object.keys(vindos).length} campo(s) atualizado(s)`);
+    }
+
+    if (contatos.length) {
+      const atuais = await api.get('/api/prospeccao_contatos', { query: { prospeccao_id: alvo } })
+        .then(r => (Array.isArray(r) ? r : [])).catch(() => []);
+      const faltantes = contatosInexistentes(contatos, atuais);
+      // `principal` fica FALSE em todos: a prospecção já tem o dela, e o
+      // índice único parcial do banco recusaria um segundo.
+      for (const c of faltantes) {
+        await api.post('/api/prospeccao_contatos',
+          prospeccoes.montarPayloadContato({ ...c, principal: false }, alvo));
+      }
+      feitos.push(faltantes.length
+        ? `${faltantes.length} contato(s) acrescentado(s)`
+        : 'nenhum contato novo');
+    }
+
+    await prospeccoes.registrarHistorico(api, alvo, [{
+      tipo: 'edicao', acao: 'editou', entidade: 'Prospecção',
+      observacao: contexto.nota, detalhe: vindos
+    }], usuarioId);
+
+    return { alvo_id: alvo, mensagem: feitos.join(', ') || 'Nada a mudar' };
+  }
+
+  throw erro(400, `Ação desconhecida: ${item.acao}`);
+}
+
+const APLICADORES = {
+  materia_prima: aplicarMateriaPrima,
+  clientes: aplicarClientes,
+  prospeccoes: aplicarProspeccoes
+};
 
 /** Destinos que já sabem gravar. Os demais chegam nas próximas etapas. */
 const DESTINOS_APLICAVEIS = Object.keys(APLICADORES);
@@ -229,7 +484,7 @@ const DESTINOS_APLICAVEIS = Object.keys(APLICADORES);
  * apareceriam as corridas de saldo, e o ganho de tempo não vale o risco numa
  * operação que mexe em estoque.
  */
-async function aplicar({ destino, itens, usuarioId, token, extracaoId, titulo }) {
+async function aplicar({ destino, itens, usuarioId, token, extracaoId, titulo, api }) {
   const esquema = obterEsquema(destino);
   const aplicador = APLICADORES[destino];
   if (!esquema || !aplicador) {
@@ -266,7 +521,7 @@ async function aplicar({ destino, itens, usuarioId, token, extracaoId, titulo })
       }
 
       try {
-        const r = await aplicador(item, { cache, usuarioId, nota });
+        const r = await aplicador(item, { cache, usuarioId, nota, api });
         resultados.push({ id: item.id, status: 'aplicado', alvo_id: r.alvo_id, mensagem: r.mensagem });
       } catch (e) {
         resultados.push({
@@ -287,8 +542,13 @@ async function aplicar({ destino, itens, usuarioId, token, extracaoId, titulo })
 module.exports = {
   APLICADORES,
   DESTINOS_APLICAVEIS,
+  COLUNAS_EMPRESA,
   encaixar,
   garantirTaxonomia,
+  somenteVindos,
+  contatosInexistentes,
   aplicarMateriaPrima,
+  aplicarClientes,
+  aplicarProspeccoes,
   aplicar
 };

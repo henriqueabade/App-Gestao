@@ -19,9 +19,88 @@
 //   numero   aceita "1.234,56" e "1,234.56" (ver backend/numeros.js)
 //   dinheiro igual a numero; a grade formata com 2 casas
 //   data     ISO (aaaa-mm-dd)
+//   lista    sub-registros (os contatos de uma empresa, os itens de um
+//            orçamento). Traz `subcampos` com o mesmo formato dos campos, e a
+//            grade desenha uma sub-tabela sob a linha.
 //
 // Nenhum tipo é confiado ao modelo: tudo passa por coerção em
 // backend/iaEstruturacao.js antes de virar item.
+//
+// ---------------------------------------------------------------------------
+// CHAVES DE CASAMENTO
+//
+// `chavesDeCasamento` é uma LISTA, em ordem de força. A primeira que existir no
+// item decide. Para empresa isso importa: CNPJ é identificador de verdade e
+// casa sem dúvida; nome fantasia é apelido — "Marcenaria Serrana" e
+// "Marcenaria Serrana Ltda" podem ser a mesma empresa ou duas.
+//
+// `normalizar` limpa antes de comparar (CNPJ escrito com e sem pontuação é o
+// mesmo CNPJ). `forte: true` diz que um empate ali dispensa qualquer ressalva.
+
+/** Só os dígitos: CNPJ com e sem pontuação é o mesmo CNPJ. */
+const soDigitos = valor => String(valor ?? '').replace(/\D/g, '');
+
+/**
+ * Contatos da empresa. Mesma forma nos dois destinos de empresa, porque as
+ * tabelas `contatos_cliente` e `prospeccao_contatos` guardam as mesmas coisas
+ * — e um documento não sabe (nem precisa saber) para qual das duas vai.
+ */
+const CAMPO_CONTATOS = {
+  chave: 'contatos',
+  rotulo: 'Contatos',
+  tipo: 'lista',
+  largura: 'media',
+  max_itens: 20,
+  descricao: 'Pessoas da empresa citadas no documento. Uma entrada por pessoa.',
+  subcampos: [
+    { chave: 'nome', rotulo: 'Nome', tipo: 'texto', obrigatorio: true, max: 150, descricao: 'Nome da pessoa' },
+    { chave: 'cargo', rotulo: 'Cargo', tipo: 'texto', max: 100, descricao: 'Função: Compras, Diretor, Sócio…' },
+    { chave: 'email', rotulo: 'E-mail', tipo: 'texto', max: 150 },
+    { chave: 'telefone_celular', rotulo: 'Celular', tipo: 'texto', max: 40, descricao: 'Telefone móvel/WhatsApp' },
+    { chave: 'telefone_fixo', rotulo: 'Fixo', tipo: 'texto', max: 40, descricao: 'Telefone fixo' }
+  ]
+};
+
+/**
+ * Campos da EMPRESA, compartilhados por Clientes e Prospecções.
+ *
+ * As duas tabelas guardam as mesmas colunas de identificação e endereço. O que
+ * muda entre os destinos é o que vem DEPOIS da empresa (etapa e origem só
+ * existem em prospecção), então a parte comum fica aqui em vez de ser copiada.
+ */
+const CAMPOS_EMPRESA = [
+  {
+    chave: 'nome_fantasia', rotulo: 'Empresa', tipo: 'texto', obrigatorio: true,
+    max: 200, largura: 'grande', descricao: 'Nome pelo qual a empresa é conhecida'
+  },
+  { chave: 'razao_social', rotulo: 'Razão social', tipo: 'texto', max: 200, largura: 'media' },
+  {
+    chave: 'cnpj', rotulo: 'CNPJ', tipo: 'texto', max: 20, largura: 'media',
+    descricao: 'Só o número, com ou sem pontuação. Não invente se não estiver no documento.'
+  },
+  { chave: 'inscricao_estadual', rotulo: 'Insc. estadual', tipo: 'texto', max: 30, largura: 'media' },
+  { chave: 'site', rotulo: 'Site', tipo: 'texto', max: 150, largura: 'media' },
+  { chave: 'end_logradouro', rotulo: 'Rua', tipo: 'texto', max: 200, largura: 'media' },
+  { chave: 'end_numero', rotulo: 'Nº', tipo: 'texto', max: 20, largura: 'pequena' },
+  { chave: 'end_complemento', rotulo: 'Compl.', tipo: 'texto', max: 100, largura: 'pequena' },
+  { chave: 'end_bairro', rotulo: 'Bairro', tipo: 'texto', max: 100, largura: 'media' },
+  { chave: 'end_cidade', rotulo: 'Cidade', tipo: 'texto', max: 100, largura: 'media' },
+  { chave: 'end_uf', rotulo: 'UF', tipo: 'texto', max: 2, largura: 'pequena', descricao: 'Sigla de 2 letras' },
+  { chave: 'end_cep', rotulo: 'CEP', tipo: 'texto', max: 15, largura: 'pequena' }
+];
+
+/** Instruções comuns à leitura de qualquer documento de empresa. */
+const INSTRUCOES_EMPRESA = [
+  'Extraia UMA entrada por EMPRESA. As pessoas da empresa vão na lista "contatos" dela.',
+  '',
+  'Atenção:',
+  '- Se o documento citar várias pessoas da MESMA empresa, é uma entrada só, com vários contatos.',
+  '- Se citar empresas diferentes, é uma entrada por empresa.',
+  '- CNPJ só se estiver escrito. Nunca deduza nem complete.',
+  '- UF é a sigla de duas letras ("RS", "SC"), não o nome do estado.',
+  '- Separe celular de telefone fixo quando der para distinguir.',
+  '- Não invente e-mail a partir do site nem nome a partir do e-mail.'
+];
 
 const ESQUEMAS = {
   materia_prima: {
@@ -30,15 +109,18 @@ const ESQUEMAS = {
     tabelaAlvo: 'materia_prima',
 
     /**
-     * Campo usado para reconhecer que o item JÁ EXISTE no sistema.
+     * Como reconhecer que o item JÁ EXISTE no sistema.
      * Casar por nome é o que a tela de Matéria-prima também faz ao recusar
      * insumo duplicado — usar outro critério aqui criaria dois conceitos de
      * "mesmo insumo" no mesmo programa.
      */
-    chaveDeCasamento: 'nome',
+    // `forte` porque, aqui, o nome É a identidade: a própria tela de
+    // Matéria-prima recusa cadastrar insumo com nome repetido. Casar por ele
+    // não é indício, é certeza — e não merece ressalva na revisão.
+    chavesDeCasamento: [{ campo: 'nome', rotulo: 'Insumo', forte: true }],
 
-    /** Como o item aparece resumido quando não cabe a linha inteira. */
-    resumo: item => item.nome,
+    /** Coluna que dá nome ao registro nas listas de escolha. */
+    campoDeExibicao: 'nome',
 
     instrucoes: [
       'O documento é uma lista de insumos (matéria-prima): chapas, fitas, ferragens, colas, etc.',
@@ -114,6 +196,62 @@ const ESQUEMAS = {
      */
     explicacaoAtualizar: 'Dá entrada da quantidade no insumo que já existe (soma ao saldo) e atualiza preço, unidade e categoria.',
     explicacaoCriar: 'Cadastra o insumo e já lança a quantidade como saldo inicial.'
+  },
+
+  clientes: {
+    id: 'clientes',
+    rotulo: 'Clientes e contatos',
+    tabelaAlvo: 'clientes',
+    tabelaContatos: 'contatos_cliente',
+    campoDeExibicao: 'nome_fantasia',
+
+    // CNPJ primeiro: é identificador, não apelido. Casar por nome fantasia
+    // sozinho juntaria duas filiais escritas igual — ou deixaria a mesma
+    // empresa entrar duas vezes por causa de um "Ltda" a mais.
+    chavesDeCasamento: [
+      { campo: 'cnpj', rotulo: 'CNPJ', forte: true, normalizar: soDigitos },
+      { campo: 'nome_fantasia', rotulo: 'Empresa' }
+    ],
+
+    instrucoes: [
+      'O documento traz dados de CLIENTES: cartão de visita, cabeçalho de nota, lista de contatos, ficha cadastral.',
+      '',
+      ...INSTRUCOES_EMPRESA.slice(1)
+    ].join('\n'),
+
+    campos: [...CAMPOS_EMPRESA, CAMPO_CONTATOS],
+
+    explicacaoAtualizar: 'Atualiza o cadastro do cliente que já existe e acrescenta os contatos que ainda não estão lá.',
+    explicacaoCriar: 'Cadastra o cliente com os contatos lidos.'
+  },
+
+  prospeccoes: {
+    id: 'prospeccoes',
+    rotulo: 'Prospecções e contatos',
+    tabelaAlvo: 'prospeccoes',
+    tabelaContatos: 'prospeccao_contatos',
+    campoDeExibicao: 'nome_fantasia',
+
+    chavesDeCasamento: [
+      { campo: 'cnpj', rotulo: 'CNPJ', forte: true, normalizar: soDigitos },
+      { campo: 'nome_fantasia', rotulo: 'Empresa' }
+    ],
+
+    instrucoes: [
+      'O documento traz empresas a PROSPECTAR: cartões de feira, lista de expositores, indicações, catálogo de fornecedores.',
+      '',
+      ...INSTRUCOES_EMPRESA.slice(1),
+      '- "segmento" é o ramo da empresa (marcenaria, arquitetura, construtora…), se estiver escrito.'
+    ].join('\n'),
+
+    campos: [
+      ...CAMPOS_EMPRESA,
+      { chave: 'segmento', rotulo: 'Segmento', tipo: 'texto', max: 100, largura: 'media', descricao: 'Ramo de atuação' },
+      CAMPO_CONTATOS
+    ],
+
+    explicacaoAtualizar: 'Atualiza a prospecção que já existe e acrescenta os contatos que ainda não estão lá.',
+    explicacaoCriar: 'Cadastra a prospecção na etapa "Novo", com os contatos lidos.'
   }
 };
 
@@ -134,8 +272,26 @@ function camposParaTela(destino) {
     rotulo: c.rotulo,
     tipo: c.tipo,
     obrigatorio: Boolean(c.obrigatorio),
-    largura: c.largura || 'media'
+    largura: c.largura || 'media',
+    // A sub-tabela da grade é desenhada a partir daqui, pelo mesmo caminho
+    // que desenha as colunas de cima.
+    ...(c.tipo === 'lista' ? {
+      subcampos: (c.subcampos || []).map(sc => ({
+        chave: sc.chave,
+        rotulo: sc.rotulo,
+        tipo: sc.tipo,
+        obrigatorio: Boolean(sc.obrigatorio)
+      }))
+    } : {})
   }));
 }
 
-module.exports = { ESQUEMAS, DESTINOS_PRONTOS, obterEsquema, camposParaTela };
+module.exports = {
+  ESQUEMAS,
+  DESTINOS_PRONTOS,
+  obterEsquema,
+  camposParaTela,
+  soDigitos,
+  CAMPO_CONTATOS,
+  CAMPOS_EMPRESA
+};

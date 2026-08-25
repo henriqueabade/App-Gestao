@@ -74,33 +74,51 @@ const LIMIAR_PARECIDO = 0.6;
  * requisição por item seria uma tempestade de chamadas para uma lista de 200
  * linhas.
  *
+ * As chaves são tentadas EM ORDEM DE FORÇA. Para empresa isso é o que separa
+ * um casamento seguro de um palpite: CNPJ igual é a mesma empresa, ponto;
+ * nome fantasia igual é indício, porque "Marcenaria Serrana" e "Marcenaria
+ * Serrana Ltda" tanto podem ser a mesma quanto duas.
+ *
  * Devolve os itens com `acao`, `alvo_id`, `confianca` e `mensagem`.
  */
 function reconciliar({ destino, itens, existentes }) {
   const esquema = obterEsquema(destino);
   if (!esquema) return itens.map(i => ({ ...i, acao: 'criar', alvo_id: null, confianca: null }));
 
-  const chave = esquema.chaveDeCasamento;
+  const chaves = esquema.chavesDeCasamento || [];
   const linhas = Array.isArray(existentes) ? existentes : [];
+  const exibicao = esquema.campoDeExibicao || chaves[0]?.campo;
 
-  // Dois índices: um exato e um "sem pontuação". O segundo pega a mesma peça
-  // escrita de outro jeito sem abrir mão de ser um casamento determinístico.
-  const porNome = new Map();
-  const porCompacto = new Map();
-  for (const linha of linhas) {
-    const bruto = linha?.[chave];
-    if (!bruto) continue;
-    const n = normalizar(bruto);
-    const c = compactar(bruto);
-    if (n && !porNome.has(n)) porNome.set(n, linha);
-    if (c && !porCompacto.has(c)) porCompacto.set(c, linha);
-  }
+  /** Como o registro aparece nas mensagens. */
+  const rotularAlvo = linha => String(linha?.[exibicao] ?? `#${linha?.id}`);
 
-  /** Nomes já vistos NESTA leitura, para pegar repetição dentro do lote. */
+  /**
+   * Índices por chave. Dois por chave: um exato e um "sem pontuação" — o
+   * segundo reconhece a mesma coisa escrita de outro jeito ("MDF 15 mm" e
+   * "MDF-15mm") sem deixar de ser um casamento determinístico.
+   *
+   * Para chave com `normalizar` próprio (CNPJ, que vira só dígitos) os dois
+   * índices coincidem, e é isso que se quer: pontuação de CNPJ não distingue.
+   */
+  const indices = chaves.map(chave => {
+    const limpar = chave.normalizar || normalizar;
+    const exato = new Map();
+    const compacto = new Map();
+    for (const linha of linhas) {
+      const bruto = linha?.[chave.campo];
+      if (!bruto) continue;
+      const n = limpar(bruto);
+      const c = chave.normalizar ? n : compactar(bruto);
+      if (n && !exato.has(n)) exato.set(n, linha);
+      if (c && !compacto.has(c)) compacto.set(c, linha);
+    }
+    return { chave, limpar, exato, compacto };
+  });
+
+  /** Chaves já vistas NESTA leitura, para pegar repetição dentro do lote. */
   const vistosNoLote = new Map();
 
   return itens.map(item => {
-    const valor = item?.dados?.[chave];
     const ressalvas = item.mensagem ? [item.mensagem] : [];
 
     const decidir = extra => ({
@@ -110,57 +128,75 @@ function reconciliar({ destino, itens, existentes }) {
       notas: undefined
     });
 
-    if (!valor) {
+    // Nenhuma das chaves veio preenchida: não há como comparar com nada.
+    const preenchidas = indices.filter(i => item?.dados?.[i.chave.campo]);
+    if (!preenchidas.length) {
       return decidir({
         acao: 'ignorar', alvo_id: null, alvo_tabela: null, confianca: 0,
-        notas: [`Sem ${esquema.campos.find(c => c.chave === chave)?.rotulo || chave} para comparar`]
+        notas: [`Sem ${chaves.map(c => c.rotulo).join(' nem ')} para comparar`]
       });
     }
 
-    const n = normalizar(valor);
-    const c = compactar(valor);
-
-    // 1) Repetido dentro da própria leitura.
-    const jaVisto = vistosNoLote.get(c);
-    if (jaVisto) {
-      return decidir({
-        acao: 'ignorar', alvo_id: null, alvo_tabela: null, confianca: 0,
-        notas: [`Repetido da linha ${jaVisto} — some as quantidades à mão se forem duas entradas`]
-      });
+    // 1) Repetido dentro da própria leitura, por qualquer uma das chaves.
+    for (const { chave, limpar } of preenchidas) {
+      const marca = `${chave.campo}:${limpar(item.dados[chave.campo])}`;
+      const jaVisto = vistosNoLote.get(marca);
+      if (jaVisto !== undefined) {
+        return decidir({
+          acao: 'ignorar', alvo_id: null, alvo_tabela: null, confianca: 0,
+          notas: [`Repetido da linha ${jaVisto} (mesmo ${chave.rotulo}) — junte os dados à mão se forem registros diferentes`]
+        });
+      }
     }
-    vistosNoLote.set(c, item.linha);
-
-    // 2) Nome igual: é o mesmo insumo, sem dúvida a levantar.
-    const exato = porNome.get(n);
-    if (exato) {
-      return decidir({
-        acao: 'atualizar', alvo_id: exato.id ?? null, alvo_tabela: esquema.tabelaAlvo, confianca: 1
-      });
+    for (const { chave, limpar } of preenchidas) {
+      vistosNoLote.set(`${chave.campo}:${limpar(item.dados[chave.campo])}`, item.linha);
     }
 
-    // 3) Mesma coisa escrita de outro jeito ("MDF 15 mm" e "MDF-15mm").
-    const compacto = porCompacto.get(c);
-    if (compacto) {
-      return decidir({
-        acao: 'atualizar', alvo_id: compacto.id ?? null, alvo_tabela: esquema.tabelaAlvo, confianca: 0.9,
-        notas: [`Casou com "${compacto[chave]}" ignorando espaços e pontuação — confira`]
-      });
+    // 2) Casamento por chave, da mais forte para a mais fraca.
+    for (const { chave, limpar, exato, compacto } of preenchidas) {
+      const bruto = item.dados[chave.campo];
+      const achadoExato = exato.get(limpar(bruto));
+      if (achadoExato) {
+        return decidir({
+          acao: 'atualizar',
+          alvo_id: achadoExato.id ?? null,
+          alvo_tabela: esquema.tabelaAlvo,
+          confianca: 1,
+          // Casar por chave fraca não é erro, mas merece conferência: nome
+          // igual pode ser filial, homônima ou a mesma empresa.
+          notas: chave.forte ? [] : [`Casou por ${chave.rotulo} com "${rotularAlvo(achadoExato)}" — confira se é a mesma`]
+        });
+      }
+
+      const achadoCompacto = compacto.get(chave.normalizar ? limpar(bruto) : compactar(bruto));
+      if (achadoCompacto) {
+        return decidir({
+          acao: 'atualizar',
+          alvo_id: achadoCompacto.id ?? null,
+          alvo_tabela: esquema.tabelaAlvo,
+          confianca: 0.9,
+          notas: [`Casou com "${rotularAlvo(achadoCompacto)}" ignorando espaços e pontuação — confira`]
+        });
+      }
     }
 
-    // 4) Parecido, mas não igual. NÃO decide: cadastra como novo e avisa.
-    //    Juntar por semelhança misturaria insumos diferentes, e o erro só
-    //    apareceria no inventário.
+    // 3) Parecido, mas não igual. NÃO decide: cadastra como novo e avisa.
+    //    Juntar por semelhança misturaria registros diferentes, e o erro só
+    //    apareceria depois, no inventário ou na carteira de clientes.
+    const campoTexto = preenchidas.find(i => !i.chave.forte)?.chave.campo
+      || preenchidas[0].chave.campo;
+    const valorTexto = item.dados[campoTexto];
     let melhor = null;
     let melhorNota = 0;
     for (const linha of linhas) {
-      const nota = semelhanca(valor, linha?.[chave]);
+      const nota = semelhanca(valorTexto, linha?.[campoTexto]);
       if (nota > melhorNota) { melhorNota = nota; melhor = linha; }
     }
 
     if (melhor && melhorNota >= LIMIAR_PARECIDO) {
       return decidir({
         acao: 'criar', alvo_id: null, alvo_tabela: null, confianca: Number(melhorNota.toFixed(2)),
-        notas: [`Parecido com "${melhor[chave]}" (#${melhor.id}) — confira se não é o mesmo antes de cadastrar`]
+        notas: [`Parecido com "${rotularAlvo(melhor)}" (#${melhor.id}) — confira se não é o mesmo antes de cadastrar`]
       });
     }
 

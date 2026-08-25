@@ -47,6 +47,21 @@ const COLUNAS = {
   // produção — e o teste passaria a medir o buraco do harness.
   produtos_insumos: ['id', 'produto_id', 'insumo_id', 'quantidade'],
   produtos: ['id', 'nome', 'preco_custo', 'preco_venda', 'margem'],
+  clientes: ['id', 'nome_fantasia', 'razao_social', 'cnpj', 'inscricao_estadual', 'site',
+    'status_cliente', 'dono_cliente', 'origem_captacao', 'anotacoes',
+    'reg_logradouro', 'reg_numero', 'reg_complemento', 'reg_bairro', 'reg_cidade', 'reg_uf', 'reg_pais', 'reg_cep',
+    'cob_logradouro', 'cob_numero', 'cob_complemento', 'cob_bairro', 'cob_cidade', 'cob_uf', 'cob_pais', 'cob_cep',
+    'ent_logradouro', 'ent_numero', 'ent_complemento', 'ent_bairro', 'ent_cidade', 'ent_uf', 'ent_pais', 'ent_cep'],
+  contatos_cliente: ['id', 'id_cliente', 'nome', 'cargo', 'email', 'telefone_fixo', 'telefone_celular'],
+  prospeccoes: ['id', 'nome_fantasia', 'razao_social', 'cnpj', 'inscricao_estadual', 'site', 'segmento',
+    'origem', 'etapa', 'valor_estimado', 'probabilidade', 'responsavel_id',
+    'end_logradouro', 'end_numero', 'end_complemento', 'end_bairro', 'end_cidade', 'end_uf', 'end_pais', 'end_cep',
+    'status', 'cliente_id', 'anotacoes', 'criado_por', 'criado_em', 'atualizado_em'],
+  prospeccao_contatos: ['id', 'prospeccao_id', 'nome', 'cargo', 'email', 'telefone_fixo',
+    'telefone_celular', 'decisor', 'principal', 'observacao'],
+  prospeccao_historico: ['id', 'prospeccao_id', 'tipo', 'acao', 'entidade', 'campo',
+    'valor_anterior', 'valor_novo', 'detalhe', 'observacao', 'usuario_id', 'criado_em'],
+  prospeccao_etapas_historico: ['id', 'prospeccao_id', 'etapa_anterior', 'etapa_nova', 'observacao', 'usuario_id'],
   usuarios: ['id', 'nome', 'perfil', 'modelo_permissoes_id'],
   modelos_permissoes: ['id', 'nome'],
   // Tabela real de permissões do módulo. Sem ela no duplo, todo usuário sem
@@ -141,7 +156,7 @@ const MODULOS = [
   // `db` e `materiaPrima` leem API_BASE_URL no carregamento do módulo: sem
   // limpar o cache deles, a aplicação de um teste falaria com o servidor do
   // teste anterior, já fechado.
-  './db', './materiaPrima',
+  './db', './materiaPrima', './prospeccoesController', './clientesController',
   './iaProvedores', './iaLeitura', './iaEsquemas', './iaEstruturacao',
   './iaReconciliacao', './iaAplicacao', './iaController'
 ];
@@ -2256,4 +2271,633 @@ test('o encaixe de taxonomia respeita a grafia que já existe', () => {
   assert.strictEqual(encaixar('FERRAGENS', ['Chapas', 'Ferragens']), 'Ferragens');
   assert.strictEqual(encaixar('Adesivos', ['Chapas']), 'Adesivos');
   assert.strictEqual(encaixar('  ', ['Chapas']), null);
+});
+
+
+// ===========================================================================
+// ETAPA 4 — empresas (clientes e prospecções) com contatos aninhados
+//
+// A diferença que muda tudo em relação à matéria-prima: um item traz uma LISTA
+// dentro. E a atualização passa a ter um risco novo — o de EMPOBRECER um
+// cadastro que já estava completo, sobrescrevendo com o pouco que um cartão de
+// visita trazia.
+// ===========================================================================
+
+function baseEmpresas() {
+  const dados = baseDados();
+  dados.clientes = [
+    {
+      id: 50, nome_fantasia: 'Casa Vicenzo', razao_social: 'Vicenzo Ltda',
+      cnpj: '11.111.111/0001-11', site: 'vicenzo.com.br', inscricao_estadual: '123456',
+      reg_logradouro: 'Rua das Flores', reg_numero: '100', reg_cidade: 'Bento Gonçalves',
+      reg_uf: 'RS', reg_cep: '95700-000'
+    }
+  ];
+  dados.contatos_cliente = [
+    { id: 7, id_cliente: 50, nome: 'Ana Paula', cargo: 'Compras', email: 'ana@vicenzo.com.br' }
+  ];
+  dados.prospeccoes = [
+    { id: 30, nome_fantasia: 'Marcenaria Serrana', cnpj: '22.222.222/0001-22', etapa: 'Proposta', status: 'ativa', probabilidade: 65 }
+  ];
+  dados.prospeccao_contatos = [
+    { id: 40, prospeccao_id: 30, nome: 'Ricardo Menezes', email: 'ricardo@serrana.com.br', principal: true }
+  ];
+  dados.prospeccao_historico = [];
+  dados.prospeccao_etapas_historico = [];
+  return dados;
+}
+
+function comLeitura(dados, destino, texto = 'CONTEUDO DO DOCUMENTO') {
+  dados.ia_extracoes.push({
+    id: 5, titulo: 'Cartões da feira', destino, status: 'rascunho',
+    arquivos_qtd: 1, itens_qtd: 0, aplicados_qtd: 0, usuario_id: 1, criado_em: RECENTE
+  });
+  dados.ia_extracao_arquivos.push({
+    id: 51, extracao_id: 5, nome_arquivo: 'cartoes.pdf', origem: 'pdf', texto
+  });
+  return dados;
+}
+
+const EMPRESA_NOVA = {
+  itens: [{
+    nome_fantasia: 'Decor Alpina',
+    razao_social: 'Decor Alpina Comércio de Móveis',
+    cnpj: '33.333.333/0001-33',
+    site: 'decoralpina.com.br',
+    end_logradouro: 'Rua das Videiras',
+    end_numero: '480',
+    end_cidade: 'Bento Gonçalves',
+    end_uf: 'RS',
+    contatos: [
+      { nome: 'Juliana Prass', cargo: 'Compras', email: 'juliana@decoralpina.com.br', telefone_celular: '(47) 99160-3388' },
+      { nome: 'Marco Rossi', cargo: 'Diretor', email: 'marco@decoralpina.com.br' }
+    ]
+  }]
+};
+
+const aplicarEm = (ctx, destino, id = 5, opcoes = {}) =>
+  chamar(ctx.porta, `/api/ia/${id}/aplicar`, {
+    method: 'POST', body: JSON.stringify({ destino }), ...opcoes
+  });
+
+// ---------------------------------------------------------------------------
+// Extração com lista aninhada
+// ---------------------------------------------------------------------------
+
+test('a empresa vem com os contatos dentro, não como linhas separadas', async () => {
+  const ctx = await montarComIA(comLeitura(baseEmpresas(), 'clientes'), {}, {
+    groq: () => ({ payload: respostaGroq(EMPRESA_NOVA) })
+  });
+  try {
+    const corpo = await (await chamar(ctx.porta, '/api/ia/5/estruturar', { method: 'POST' })).json();
+    assert.strictEqual(corpo.itens_qtd, 1, 'duas pessoas da mesma empresa viraram duas empresas');
+
+    const item = JSON.parse(itensDa(ctx, 5)[0].dados);
+    assert.strictEqual(item.nome_fantasia, 'Decor Alpina');
+    assert.strictEqual(item.contatos.length, 2);
+    assert.strictEqual(item.contatos[0].nome, 'Juliana Prass');
+    assert.strictEqual(item.contatos[0].cargo, 'Compras');
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('o prompt descreve a forma da sub-lista', async () => {
+  const ctx = await montarComIA(comLeitura(baseEmpresas(), 'clientes'), {}, {
+    groq: () => ({ payload: respostaGroq({ itens: [] }) })
+  });
+  try {
+    await chamar(ctx.porta, '/api/ia/5/estruturar', { method: 'POST' });
+    const sistema = ctx.groq.chamadas[0].body.messages[0].content;
+
+    // Sem a descrição dos subcampos, o modelo devolve uma lista de strings ou
+    // um objeto solto — e a lista inteira é descartada na coerção.
+    assert.match(sistema, /Cada entrada de "contatos" tem:/);
+    assert.match(sistema, /"telefone_celular"/);
+    assert.match(sistema, /"contatos": \[\{"nome": \.\.\./);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('contato sem nome é descartado, e o descarte é anunciado', async () => {
+  const ctx = await montarComIA(comLeitura(baseEmpresas(), 'clientes'), {}, {
+    groq: () => ({
+      payload: respostaGroq({
+        itens: [{
+          nome_fantasia: 'Empresa X',
+          contatos: [{ nome: 'Ana' }, { cargo: 'Compras' }, 'texto solto', { nome: '  ' }]
+        }]
+      })
+    })
+  });
+  try {
+    await chamar(ctx.porta, '/api/ia/5/estruturar', { method: 'POST' });
+    const linha = itensDa(ctx, 5)[0];
+
+    // Contato sem nome viraria uma linha em branco no cadastro da empresa.
+    assert.strictEqual(JSON.parse(linha.dados).contatos.length, 1);
+    assert.match(linha.mensagem, /3 contatos sem os dados mínimos foram descartados/);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('lista que não veio como lista é recusada, não silenciada', async () => {
+  // O modelo às vezes devolve "Ana, João" numa string em vez do array. Virar
+  // lista vazia perderia os contatos sem dizer nada; recusar deixa o problema
+  // à vista de quem revisa.
+  const ctx = await montarComIA(comLeitura(baseEmpresas(), 'clientes'), {}, {
+    groq: () => ({ payload: respostaGroq({ itens: [{ nome_fantasia: 'Empresa Y', contatos: 'Ana, João' }] }) })
+  });
+  try {
+    await chamar(ctx.porta, '/api/ia/5/estruturar', { method: 'POST' });
+    const linha = itensDa(ctx, 5)[0];
+    assert.match(linha.mensagem, /Contatos: valor não reconhecido/);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('a chave forte decide quando as duas apontam para registros diferentes', async () => {
+  // CNPJ leva à empresa A, nome fantasia leva à empresa B. Se a ordem de força
+  // não for respeitada, o dado entra na empresa errada — e o erro só aparece
+  // quando alguém for procurar o contato onde ele não está.
+  const dados = baseEmpresas();
+  dados.clientes.push({ id: 60, nome_fantasia: 'Outra Casa', cnpj: '55.555.555/0001-55' });
+
+  const ctx = await montarComIA(comLeitura(dados, 'clientes'), {}, {
+    groq: () => ({ payload: respostaGroq({ itens: [{ nome_fantasia: 'Outra Casa', cnpj: '11.111.111/0001-11' }] }) })
+  });
+  try {
+    await chamar(ctx.porta, '/api/ia/5/estruturar', { method: 'POST' });
+    const item = itensDa(ctx, 5)[0];
+
+    assert.strictEqual(item.alvo_id, 50, 'casou pelo nome em vez do CNPJ');
+    assert.strictEqual(item.mensagem, null, 'casamento por CNPJ não devia levantar ressalva');
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('empresa sem contato no documento fica com lista vazia, não nula', async () => {
+  const ctx = await montarComIA(comLeitura(baseEmpresas(), 'clientes'), {}, {
+    groq: () => ({ payload: respostaGroq({ itens: [{ nome_fantasia: 'Sozinha', contatos: null }] }) })
+  });
+  try {
+    await chamar(ctx.porta, '/api/ia/5/estruturar', { method: 'POST' });
+    // Quem consome espera um array; um null aqui estouraria no `.map`.
+    assert.deepStrictEqual(JSON.parse(itensDa(ctx, 5)[0].dados).contatos, []);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Reconciliação de empresa
+// ---------------------------------------------------------------------------
+
+test('CNPJ igual casa sem levantar dúvida, mesmo com pontuação diferente', async () => {
+  const ctx = await montarComIA(comLeitura(baseEmpresas(), 'clientes'), {}, {
+    groq: () => ({ payload: respostaGroq({ itens: [{ nome_fantasia: 'Vicenzo Casa', cnpj: '11111111000111' }] }) })
+  });
+  try {
+    await chamar(ctx.porta, '/api/ia/5/estruturar', { method: 'POST' });
+    const item = itensDa(ctx, 5)[0];
+
+    // CNPJ é identificador, não apelido: o nome escrito de outro jeito não
+    // muda o fato de ser a mesma empresa.
+    assert.strictEqual(item.acao, 'atualizar');
+    assert.strictEqual(item.alvo_id, 50);
+    assert.strictEqual(Number(item.confianca), 1);
+    assert.strictEqual(item.mensagem, null);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('casar só por nome vem com ressalva', async () => {
+  const ctx = await montarComIA(comLeitura(baseEmpresas(), 'clientes'), {}, {
+    groq: () => ({ payload: respostaGroq({ itens: [{ nome_fantasia: 'Casa Vicenzo', cnpj: null }] }) })
+  });
+  try {
+    await chamar(ctx.porta, '/api/ia/5/estruturar', { method: 'POST' });
+    const item = itensDa(ctx, 5)[0];
+
+    // Nome fantasia é apelido: pode ser filial, homônima ou a mesma empresa.
+    assert.strictEqual(item.acao, 'atualizar');
+    assert.strictEqual(item.alvo_id, 50);
+    assert.match(item.mensagem, /Casou por Empresa/);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('CNPJ diferente manda cadastrar, mesmo com nome parecido', async () => {
+  const ctx = await montarComIA(comLeitura(baseEmpresas(), 'clientes'), {}, {
+    groq: () => ({ payload: respostaGroq({ itens: [{ nome_fantasia: 'Casa Vicenzo Filial', cnpj: '99.999.999/0001-99' }] }) })
+  });
+  try {
+    await chamar(ctx.porta, '/api/ia/5/estruturar', { method: 'POST' });
+    const item = itensDa(ctx, 5)[0];
+    assert.strictEqual(item.acao, 'criar');
+    assert.match(item.mensagem, /Parecido com "Casa Vicenzo"/);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('a mesma empresa duas vezes no documento entra uma vez só', async () => {
+  const ctx = await montarComIA(comLeitura(baseEmpresas(), 'clientes'), {}, {
+    groq: () => ({
+      payload: respostaGroq({
+        itens: [
+          { nome_fantasia: 'Nova A', cnpj: '44.444.444/0001-44' },
+          { nome_fantasia: 'Nova A (matriz)', cnpj: '44444444000144' }
+        ]
+      })
+    })
+  });
+  try {
+    await chamar(ctx.porta, '/api/ia/5/estruturar', { method: 'POST' });
+    const itens = itensDa(ctx, 5);
+    assert.strictEqual(itens[0].acao, 'criar');
+    assert.strictEqual(itens[1].acao, 'ignorar');
+    assert.match(itens[1].mensagem, /Repetido da linha 1 \(mesmo CNPJ\)/);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Aplicar em Clientes
+// ---------------------------------------------------------------------------
+
+async function prepararClientes(resposta = EMPRESA_NOVA, dados) {
+  const ctx = await montarComIA(comLeitura(dados || baseEmpresas(), 'clientes'), {}, {
+    groq: () => ({ payload: respostaGroq(resposta) })
+  });
+  await chamar(ctx.porta, '/api/ia/5/estruturar', { method: 'POST' });
+  return ctx;
+}
+
+test('aplicar cadastra o cliente com os contatos', async () => {
+  const ctx = await prepararClientes();
+  try {
+    const corpo = await (await aplicarEm(ctx, 'clientes')).json();
+    assert.strictEqual(corpo.aplicados, 1, JSON.stringify(corpo.itens));
+
+    const novo = ctx.tabelas.clientes.find(c => c.nome_fantasia === 'Decor Alpina');
+    assert.ok(novo, 'o cliente não foi cadastrado');
+    assert.strictEqual(novo.cnpj, '33.333.333/0001-33');
+    // O endereço plano da leitura tem de chegar às colunas reg_* do cliente.
+    assert.strictEqual(novo.reg_logradouro, 'Rua das Videiras');
+    assert.strictEqual(novo.reg_cidade, 'Bento Gonçalves');
+    assert.strictEqual(novo.reg_uf, 'RS');
+
+    const contatos = ctx.tabelas.contatos_cliente.filter(c => c.id_cliente === novo.id);
+    assert.strictEqual(contatos.length, 2);
+    assert.strictEqual(contatos[0].cargo, 'Compras');
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('atualizar NÃO apaga o que o cadastro já tinha', async () => {
+  // O caso que mais importa nesta etapa: um cartão de visita traz nome e
+  // telefone; o cliente tem endereço, IE e site preenchidos há anos. Mandar o
+  // payload inteiro com null apagaria tudo isso em silêncio.
+  const ctx = await prepararClientes({
+    itens: [{
+      nome_fantasia: 'Casa Vicenzo',
+      cnpj: '11.111.111/0001-11',
+      contatos: [{ nome: 'Bruno Reis', cargo: 'Financeiro', email: 'bruno@vicenzo.com.br' }]
+    }]
+  });
+  try {
+    const corpo = await (await aplicarEm(ctx, 'clientes')).json();
+    assert.strictEqual(corpo.aplicados, 1, JSON.stringify(corpo.itens));
+
+    const cliente = ctx.tabelas.clientes.find(c => c.id === 50);
+    assert.strictEqual(cliente.site, 'vicenzo.com.br');
+    assert.strictEqual(cliente.inscricao_estadual, '123456');
+    assert.strictEqual(cliente.reg_logradouro, 'Rua das Flores');
+    assert.strictEqual(cliente.reg_cep, '95700-000');
+    assert.strictEqual(cliente.razao_social, 'Vicenzo Ltda');
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('atualizar acrescenta o contato novo sem duplicar o que já existe', async () => {
+  const ctx = await prepararClientes({
+    itens: [{
+      nome_fantasia: 'Casa Vicenzo',
+      cnpj: '11.111.111/0001-11',
+      contatos: [
+        { nome: 'Ana Paula', cargo: 'Compras', email: 'ana@vicenzo.com.br' },
+        { nome: 'Bruno Reis', cargo: 'Financeiro', email: 'bruno@vicenzo.com.br' }
+      ]
+    }]
+  });
+  try {
+    await aplicarEm(ctx, 'clientes');
+
+    const contatos = ctx.tabelas.contatos_cliente.filter(c => c.id_cliente === 50);
+    // Ana já estava lá: aplicar a mesma lista duas vezes encheria a ficha de
+    // linhas iguais.
+    assert.strictEqual(contatos.length, 2, contatos.map(c => c.nome).join(', '));
+    assert.ok(contatos.some(c => c.nome === 'Bruno Reis'));
+    assert.strictEqual(contatos.filter(c => c.nome === 'Ana Paula').length, 1);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('CNPJ já cadastrado recusa o cadastro e diz o que fazer', async () => {
+  const ctx = await prepararClientes({
+    itens: [{ nome_fantasia: 'Outro Nome', cnpj: '11.111.111/0001-11' }]
+  });
+  try {
+    // A reconciliação teria casado; forçamos "criar" para exercitar a trava,
+    // que é a rede para quando o revisor muda a ação à mão.
+    const item = itensDa(ctx, 5)[0];
+    await chamar(ctx.porta, `/api/ia/5/itens/${item.id}`, {
+      method: 'PUT', body: JSON.stringify({ acao: 'criar' })
+    });
+
+    const corpo = await (await aplicarEm(ctx, 'clientes')).json();
+    assert.strictEqual(corpo.com_erro, 1);
+    assert.match(corpo.itens[0].mensagem, /Já existe um cliente com o CNPJ/);
+    assert.strictEqual(ctx.tabelas.clientes.length, 1);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('aplicar em Clientes exige a permissão de cadastrar cliente', async () => {
+  const dados = permitir(baseEmpresas(), [
+    'acao_view', 'acao_details_view', 'acao_extract', 'acao_apply_cli'
+  ]);
+  const ctx = await montarComIA(comLeitura(dados, 'clientes'), {}, {
+    groq: () => ({ payload: respostaGroq(EMPRESA_NOVA) })
+  });
+  try {
+    await chamar(ctx.porta, '/api/ia/5/estruturar', { method: 'POST' });
+    const resp = await aplicarEm(ctx, 'clientes', 5, { usuario: 2 });
+    assert.strictEqual(resp.status, 403);
+    assert.strictEqual(ctx.tabelas.clientes.length, 1);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Aplicar em Prospecções
+// ---------------------------------------------------------------------------
+
+async function prepararProspeccoes(resposta = EMPRESA_NOVA, dados) {
+  const ctx = await montarComIA(comLeitura(dados || baseEmpresas(), 'prospeccoes'), {}, {
+    groq: () => ({ payload: respostaGroq(resposta) })
+  });
+  await chamar(ctx.porta, '/api/ia/5/estruturar', { method: 'POST' });
+  return ctx;
+}
+
+test('aplicar cadastra a prospecção na etapa Novo, com os contatos', async () => {
+  const ctx = await prepararProspeccoes();
+  try {
+    const corpo = await (await aplicarEm(ctx, 'prospeccoes')).json();
+    assert.strictEqual(corpo.aplicados, 1, JSON.stringify(corpo.itens));
+
+    const nova = ctx.tabelas.prospeccoes.find(p => p.nome_fantasia === 'Decor Alpina');
+    assert.ok(nova, 'a prospecção não foi cadastrada');
+    assert.strictEqual(nova.etapa, 'Novo');
+    assert.strictEqual(nova.end_logradouro, 'Rua das Videiras');
+    assert.strictEqual(Number(nova.criado_por), 1);
+
+    const contatos = ctx.tabelas.prospeccao_contatos.filter(c => c.prospeccao_id === nova.id);
+    assert.strictEqual(contatos.length, 2);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('só o primeiro contato entra como principal', async () => {
+  // Índice único parcial no banco: dois principais na mesma prospecção fazem
+  // a gravação estourar.
+  const ctx = await prepararProspeccoes();
+  try {
+    await aplicarEm(ctx, 'prospeccoes');
+    const nova = ctx.tabelas.prospeccoes.find(p => p.nome_fantasia === 'Decor Alpina');
+    const principais = ctx.tabelas.prospeccao_contatos
+      .filter(c => c.prospeccao_id === nova.id && c.principal);
+    assert.strictEqual(principais.length, 1);
+    assert.strictEqual(principais[0].nome, 'Juliana Prass');
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('a prospecção criada pela IA deixa rastro no histórico', async () => {
+  const ctx = await prepararProspeccoes();
+  try {
+    await aplicarEm(ctx, 'prospeccoes');
+    const nova = ctx.tabelas.prospeccoes.find(p => p.nome_fantasia === 'Decor Alpina');
+    const historico = ctx.tabelas.prospeccao_historico.filter(h => h.prospeccao_id === nova.id);
+
+    // Sem isto, uma prospecção apareceria no funil sem ninguém saber de onde
+    // veio nem quando.
+    assert.ok(historico.length >= 2, `só ${historico.length} linhas de histórico`);
+    const criacao = historico.find(h => h.tipo === 'criacao');
+    assert.ok(criacao, 'a criação não foi registrada');
+    assert.match(String(criacao.observacao || ''), /Leitura de IA #5/);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('CNPJ com prospecção ATIVA recusa o cadastro e diz o que fazer', async () => {
+  const ctx = await prepararProspeccoes({
+    itens: [{ nome_fantasia: 'Serrana Outra Grafia', cnpj: '22.222.222/0001-22' }]
+  });
+  try {
+    const item = itensDa(ctx, 5)[0];
+    await chamar(ctx.porta, `/api/ia/5/itens/${item.id}`, {
+      method: 'PUT', body: JSON.stringify({ acao: 'criar' })
+    });
+
+    const corpo = await (await aplicarEm(ctx, 'prospeccoes')).json();
+    assert.strictEqual(corpo.com_erro, 1);
+    assert.match(corpo.itens[0].mensagem, /prospecção ativa/i);
+    assert.strictEqual(ctx.tabelas.prospeccoes.length, 1);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('atualizar prospecção não a move no funil', async () => {
+  // Mover no funil é decisão de quem vende, não de quem leu o documento.
+  const ctx = await prepararProspeccoes({
+    itens: [{
+      nome_fantasia: 'Marcenaria Serrana',
+      cnpj: '22.222.222/0001-22',
+      site: 'serrana.com.br',
+      contatos: [{ nome: 'Paula Nunes', cargo: 'Compras' }]
+    }]
+  });
+  try {
+    const corpo = await (await aplicarEm(ctx, 'prospeccoes')).json();
+    assert.strictEqual(corpo.aplicados, 1, JSON.stringify(corpo.itens));
+
+    const p = ctx.tabelas.prospeccoes.find(x => x.id === 30);
+    assert.strictEqual(p.etapa, 'Proposta', 'a leitura mexeu na etapa do funil');
+    assert.strictEqual(Number(p.probabilidade), 65);
+    assert.strictEqual(p.site, 'serrana.com.br');
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('contato acrescentado a prospecção existente nunca vira principal', async () => {
+  // A prospecção já tem o principal dela, e o índice único parcial do banco
+  // recusaria um segundo.
+  const ctx = await prepararProspeccoes({
+    itens: [{
+      nome_fantasia: 'Marcenaria Serrana',
+      cnpj: '22.222.222/0001-22',
+      contatos: [{ nome: 'Paula Nunes' }]
+    }]
+  });
+  try {
+    await aplicarEm(ctx, 'prospeccoes');
+    const contatos = ctx.tabelas.prospeccao_contatos.filter(c => c.prospeccao_id === 30);
+    assert.strictEqual(contatos.length, 2);
+    assert.strictEqual(contatos.filter(c => c.principal).length, 1);
+    assert.strictEqual(contatos.find(c => c.nome === 'Paula Nunes').principal, false);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('aplicar em Prospecções exige a permissão de cadastrar prospecção', async () => {
+  const dados = permitir(baseEmpresas(), [
+    'acao_view', 'acao_details_view', 'acao_extract', 'acao_apply_pros'
+  ]);
+  const ctx = await montarComIA(comLeitura(dados, 'prospeccoes'), {}, {
+    groq: () => ({ payload: respostaGroq(EMPRESA_NOVA) })
+  });
+  try {
+    await chamar(ctx.porta, '/api/ia/5/estruturar', { method: 'POST' });
+    const resp = await aplicarEm(ctx, 'prospeccoes', 5, { usuario: 2 });
+    assert.strictEqual(resp.status, 403);
+    assert.strictEqual(ctx.tabelas.prospeccoes.length, 1);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Revisão da sub-lista
+// ---------------------------------------------------------------------------
+
+test('o revisor pode reescrever a lista de contatos inteira', async () => {
+  const ctx = await prepararClientes();
+  try {
+    const item = itensDa(ctx, 5)[0];
+    const salvo = await (await chamar(ctx.porta, `/api/ia/5/itens/${item.id}`, {
+      method: 'PUT',
+      body: JSON.stringify({ dados: { contatos: [{ nome: 'Só Esta', cargo: 'Compras' }] } })
+    })).json();
+
+    assert.strictEqual(salvo.dados.contatos.length, 1);
+    assert.strictEqual(salvo.dados.contatos[0].nome, 'Só Esta');
+    // Os campos de fora da lista não podem ser afetados.
+    assert.strictEqual(salvo.dados.nome_fantasia, 'Decor Alpina');
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('contato sem nome também é recusado na correção do revisor', async () => {
+  const ctx = await prepararClientes();
+  try {
+    const item = itensDa(ctx, 5)[0];
+    const salvo = await (await chamar(ctx.porta, `/api/ia/5/itens/${item.id}`, {
+      method: 'PUT',
+      body: JSON.stringify({ dados: { contatos: [{ nome: 'Boa' }, { cargo: 'sem nome' }] } })
+    })).json();
+
+    // Mesma regra que vale para o modelo: linha sem os dados mínimos não vira
+    // contato. O revisor não é exceção.
+    assert.strictEqual(salvo.dados.contatos.length, 1);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('o detalhe descreve os subcampos para a grade desenhar a sub-tabela', async () => {
+  const ctx = await montarComIA(comLeitura(baseEmpresas(), 'clientes'));
+  try {
+    const dados = await (await chamar(ctx.porta, '/api/ia/5')).json();
+    const contatos = dados.campos.find(c => c.chave === 'contatos');
+
+    assert.strictEqual(contatos.tipo, 'lista');
+    assert.deepStrictEqual(
+      contatos.subcampos.map(s => s.chave),
+      ['nome', 'cargo', 'email', 'telefone_celular', 'telefone_fixo']
+    );
+    assert.strictEqual(contatos.subcampos[0].obrigatorio, true);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('os alvos de empresa vêm com o nome fantasia', async () => {
+  const ctx = await montarComIA(comLeitura(baseEmpresas(), 'clientes'));
+  try {
+    const dados = await (await chamar(ctx.porta, '/api/ia/5')).json();
+    assert.deepStrictEqual(dados.alvos, [{ id: 50, nome: 'Casa Vicenzo' }]);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Unidade
+// ---------------------------------------------------------------------------
+
+test('somenteVindos deixa de fora o que o documento não trouxe', () => {
+  const { somenteVindos } = require('./iaAplicacao');
+  const saida = somenteVindos(
+    { nome_fantasia: 'X', cnpj: null, site: '   ', end_cidade: 'Bento' },
+    ['nome_fantasia', 'cnpj', 'site', 'end_cidade', 'razao_social']
+  );
+  // O que não veio nem aparece no payload — é o que impede o PUT de apagar.
+  assert.deepStrictEqual(saida, { nome_fantasia: 'X', end_cidade: 'Bento' });
+});
+
+test('contatosInexistentes casa por e-mail e, na falta dele, por nome', () => {
+  const { contatosInexistentes } = require('./iaAplicacao');
+  const atuais = [
+    { nome: 'Ana Paula', email: 'ana@x.com' },
+    { nome: 'João Silva', email: null }
+  ];
+
+  const saida = contatosInexistentes([
+    { nome: 'Ana P.', email: 'ANA@X.COM' },   // mesmo e-mail, nome diferente
+    { nome: 'joão silva' },                   // sem e-mail, nome já existe
+    { nome: 'Bruno', email: 'bruno@x.com' },  // novo
+    { nome: 'Bruno Reis', email: 'bruno@x.com' } // repetido dentro do lote
+  ], atuais);
+
+  assert.deepStrictEqual(saida.map(c => c.nome), ['Bruno']);
+});
+
+test('todo destino aplicável tem esquema, e todo esquema tem aplicador', () => {
+  const { DESTINOS_PRONTOS } = require('./iaEsquemas');
+  const { DESTINOS_APLICAVEIS } = require('./iaAplicacao');
+  // Um esquema sem aplicador deixaria a tela oferecer "Aplicar" num destino
+  // que não sabe gravar; um aplicador sem esquema nunca receberia item.
+  assert.deepStrictEqual(DESTINOS_PRONTOS.slice().sort(), DESTINOS_APLICAVEIS.slice().sort());
 });

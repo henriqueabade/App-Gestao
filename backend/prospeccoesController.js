@@ -1966,6 +1966,15 @@ module.exports = router;
 // histórico da prospecção, e duplicar a gravação seria arriscar dois formatos
 // de evento para o mesmo fato.
 module.exports.registrarHistorico = registrarHistorico;
+// Reaproveitados pelo módulo de IA ao aplicar uma leitura. Exportar em vez de
+// reescrever mantém UM lugar decidindo o formato do payload, a validação e a
+// regra do contato principal — que tem índice único parcial no banco e já
+// derrubou gravação por ter sido reimplementada.
+module.exports.montarPayload = montarPayload;
+module.exports.montarPayloadContato = montarPayloadContato;
+module.exports.validarProspeccao = validarProspeccao;
+module.exports.normalizarPrincipais = normalizarPrincipais;
+module.exports.rotuloContato = rotuloContato;
 // Usado pela conversão de um orçamento OCRP em pedido, que precisa criar o
 // cliente antes de emitir o pedido.
 module.exports.converterProspeccaoEmCliente = converterProspeccaoEmCliente;

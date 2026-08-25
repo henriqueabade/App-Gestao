@@ -276,6 +276,54 @@ function criarBancada({ leitura, respostaPut, respostaAplicar, respostaExtrair, 
   };
 }
 
+/**
+ * Leitura de EMPRESA: um campo `lista` com os contatos dentro.
+ *
+ * É a forma que Clientes e Prospecções usam, e a mesma que os itens de
+ * orçamento vão usar. O que se testa aqui não é "contato": é sub-lista.
+ */
+const SUBCAMPOS_CONTATO = [
+  { chave: 'nome', rotulo: 'Nome', tipo: 'texto', obrigatorio: true },
+  { chave: 'cargo', rotulo: 'Cargo', tipo: 'texto', obrigatorio: false },
+  { chave: 'email', rotulo: 'E-mail', tipo: 'texto', obrigatorio: false }
+];
+
+function leituraEmpresa(extra = {}) {
+  return leituraPadrao({
+    destino: 'clientes',
+    destino_rotulo: 'Clientes e contatos',
+    campos: [
+      { chave: 'nome_fantasia', rotulo: 'Empresa', tipo: 'texto', obrigatorio: true, largura: 'grande' },
+      { chave: 'cnpj', rotulo: 'CNPJ', tipo: 'texto', obrigatorio: false, largura: 'media' },
+      { chave: 'contatos', rotulo: 'Contatos', tipo: 'lista', obrigatorio: false, largura: 'media', subcampos: SUBCAMPOS_CONTATO }
+    ],
+    alvos: [{ id: 50, nome: 'Casa Vicenzo' }],
+    sugestoes: {},
+    itens: [
+      {
+        id: 1, linha: 1, acao: 'criar', alvo_id: null, status: 'pendente', mensagem: null,
+        dados: {
+          nome_fantasia: 'Decor Alpina', cnpj: '33.333.333/0001-33',
+          contatos: [
+            { nome: 'Juliana Prass', cargo: 'Compras', email: 'juliana@x.com' },
+            { nome: 'Marco Rossi', cargo: 'Diretor', email: null }
+          ]
+        }
+      },
+      {
+        id: 2, linha: 2, acao: 'criar', alvo_id: null, status: 'pendente', mensagem: null,
+        dados: { nome_fantasia: 'Sozinha Ltda', cnpj: null, contatos: [] }
+      }
+    ],
+    ...extra
+  });
+}
+
+/** Botão que abre/fecha a sub-lista de uma linha. */
+const botaoDaLista = linha => linha.todos().find(f => f.classList.contains('ia-lista-abrir'));
+const botaoAdicionar = linha => linha.todos().find(f => f.classList.contains('ia-lista-adicionar'));
+const subLinhas = b => b.el('iaDetItensCorpo').filhos.filter(l => l.classList.contains('ia-sublinha'));
+
 /** Linhas de item (as de nota não têm campos). */
 const linhasDeItem = b => b.el('iaDetItensCorpo').filhos.filter(l => l.classList.contains('ia-linha-item'));
 const notas = b => b.el('iaDetItensCorpo').filhos.filter(l => !l.classList.contains('ia-linha-item'));
@@ -611,6 +659,182 @@ test('o destino que ainda não grava esconde o botão e explica', async () => {
 
   assert.equal(b.el('iaDetAplicar').classList.contains('hidden'), true);
   assert.match(b.el('iaDetRodapeAviso').textContent, /próxima etapa/i);
+});
+
+// ---------------------------------------------------------------------------
+// Sub-lista (contatos da empresa)
+// ---------------------------------------------------------------------------
+
+test('a célula da lista diz quantos são, sem abrir', async () => {
+  // Vinte empresas com três contatos cada dariam oitenta linhas na tela — a
+  // grade deixaria de ser conferível. Fechada por padrão.
+  const b = criarBancada({ leitura: leituraEmpresa() });
+  await b.pronta();
+
+  assert.equal(subLinhas(b).length, 0);
+  assert.match(botaoDaLista(linhasDeItem(b)[0]).texto(), /2 contatos/);
+  assert.match(botaoDaLista(linhasDeItem(b)[1]).texto(), /sem contatos/);
+});
+
+test('o resumo dos contatos aparece no title, para conferir sem abrir', async () => {
+  const b = criarBancada({ leitura: leituraEmpresa() });
+  await b.pronta();
+
+  const botao = botaoDaLista(linhasDeItem(b)[0]);
+  assert.match(botao.title, /Juliana Prass · Compras/);
+  assert.match(botao.title, /Marco Rossi/);
+});
+
+test('abrir a lista mostra a sub-tabela com as colunas dos subcampos', async () => {
+  const b = criarBancada({ leitura: leituraEmpresa() });
+  await b.pronta();
+
+  botaoDaLista(linhasDeItem(b)[0]).disparar('click');
+  await b.pronta();
+
+  const sub = subLinhas(b);
+  assert.equal(sub.length, 1);
+
+  // As colunas saem de `subcampos`, pelo mesmo caminho que desenha as de cima.
+  const cabecalhos = sub[0].todos().filter(f => f.tagName === 'TH').map(f => f.textContent);
+  assert.deepEqual(cabecalhos.slice(0, 3), ['Nome', 'Cargo', 'E-mail']);
+
+  const campos = sub[0].todos().filter(f => f.classList.contains('ia-campo'));
+  assert.equal(campos.length, 6 + 0, 'dois contatos × três campos');
+  assert.equal(campos[0].value, 'Juliana Prass');
+});
+
+test('a lista aberta continua aberta depois de redesenhar', async () => {
+  // A grade é redesenhada inteira a cada mudança de ação. Sem guardar o
+  // estado, a lista que o revisor acabou de abrir se fecharia sozinha.
+  const b = criarBancada({ leitura: leituraEmpresa() });
+  await b.pronta();
+
+  botaoDaLista(linhasDeItem(b)[0]).disparar('click');
+  await b.pronta();
+
+  const select = seletorDa(linhasDeItem(b)[1]);
+  select.value = 'ignorar';
+  select.disparar('change');
+  await b.pronta();
+
+  assert.equal(subLinhas(b).length, 1, 'a sub-lista fechou ao redesenhar');
+});
+
+test('editar um contato manda a lista INTEIRA, não só o campo', async () => {
+  // O backend valida a lista entrada por entrada; mandar um campo solto
+  // deixaria os outros contatos de fora do que foi gravado.
+  const b = criarBancada({ leitura: leituraEmpresa() });
+  await b.pronta();
+
+  botaoDaLista(linhasDeItem(b)[0]).disparar('click');
+  await b.pronta();
+
+  const cargo = subLinhas(b)[0].todos().filter(f => f.classList.contains('ia-campo'))[1];
+  cargo.value = 'Gerente de Compras';
+  cargo.disparar('change');
+  await b.pronta();
+
+  const put = b.chamadas.find(c => c.metodo === 'PUT');
+  assert.ok(put, 'a correção do contato não saiu do navegador');
+  assert.equal(put.corpo.dados.contatos.length, 2);
+  assert.equal(put.corpo.dados.contatos[0].cargo, 'Gerente de Compras');
+  assert.equal(put.corpo.dados.contatos[1].nome, 'Marco Rossi');
+});
+
+test('remover um contato manda a lista sem ele', async () => {
+  const b = criarBancada({ leitura: leituraEmpresa() });
+  await b.pronta();
+
+  botaoDaLista(linhasDeItem(b)[0]).disparar('click');
+  await b.pronta();
+
+  const remover = subLinhas(b)[0].todos().find(f => f.classList.contains('ia-arquivo__remover'));
+  remover.disparar('click');
+  await b.pronta();
+
+  const put = b.chamadas.find(c => c.metodo === 'PUT');
+  assert.equal(put.corpo.dados.contatos.length, 1);
+  assert.equal(put.corpo.dados.contatos[0].nome, 'Marco Rossi');
+});
+
+test('acrescentar contato abre a lista e manda uma entrada em branco', async () => {
+  const b = criarBancada({ leitura: leituraEmpresa() });
+  await b.pronta();
+
+  botaoAdicionar(linhasDeItem(b)[1]).disparar('click');
+  await b.pronta();
+
+  const put = b.chamadas.find(c => c.metodo === 'PUT');
+  assert.equal(put.corpo.dados.contatos.length, 1);
+  assert.deepEqual(Object.keys(put.corpo.dados.contatos[0]).sort(), ['cargo', 'email', 'nome']);
+  // Abre junto: acrescentar sem mostrar onde digitar seria um clique mudo.
+  assert.equal(subLinhas(b).length, 1);
+});
+
+test('subcampo obrigatório vazio fica marcado', async () => {
+  const leitura = leituraEmpresa();
+  leitura.itens[0].dados.contatos[1].nome = '';
+  const b = criarBancada({ leitura });
+  await b.pronta();
+
+  botaoDaLista(linhasDeItem(b)[0]).disparar('click');
+  await b.pronta();
+
+  const campos = subLinhas(b)[0].todos().filter(f => f.classList.contains('ia-campo'));
+  assert.ok(campos[3].classList.contains('ia-campo--faltando'));
+});
+
+test('empresa sem contato não é acusada de campo obrigatório em branco', async () => {
+  // `String([])` é vazio: sem tratar o tipo lista à parte, a linha 2 travaria
+  // o botão de aplicar por um campo que nem é obrigatório.
+  const b = criarBancada({ leitura: leituraEmpresa() });
+  await b.pronta();
+
+  assert.equal(b.el('iaDetAplicar').disabled, false);
+  assert.equal(/sem campo obrigatório/.test(b.el('iaDetResumoRevisao').texto()), false);
+});
+
+test('lista OBRIGATÓRIA vazia trava o aplicar', async () => {
+  // Nenhum destino de hoje tem sub-lista obrigatória, mas os itens de um
+  // orçamento serão. Um orçamento sem nenhum item não é gravável, e a checagem
+  // de vazio precisa entender que, para lista, vazio é não ter entrada.
+  const leitura = leituraEmpresa();
+  leitura.campos = leitura.campos.map(c =>
+    (c.chave === 'contatos' ? { ...c, obrigatorio: true } : c));
+  const b = criarBancada({ leitura });
+  await b.pronta();
+
+  // A linha 2 tem `contatos: []`.
+  assert.equal(b.el('iaDetAplicar').disabled, true);
+  assert.match(b.el('iaDetResumoRevisao').texto(), /1 sem campo obrigatório/);
+});
+
+test('lista obrigatória COM entrada não trava o aplicar', async () => {
+  const leitura = leituraEmpresa();
+  leitura.campos = leitura.campos.map(c =>
+    (c.chave === 'contatos' ? { ...c, obrigatorio: true } : c));
+  leitura.itens[1].dados.contatos = [{ nome: 'Alguém', cargo: null, email: null }];
+  const b = criarBancada({ leitura });
+  await b.pronta();
+
+  assert.equal(b.el('iaDetAplicar').disabled, false);
+});
+
+test('leitura aplicada mostra os contatos, mas travados', async () => {
+  const leitura = leituraEmpresa({ status: 'aplicada', status_rotulo: 'Aplicada' });
+  const b = criarBancada({ leitura });
+  await b.pronta();
+
+  botaoDaLista(linhasDeItem(b)[0]).disparar('click');
+  await b.pronta();
+
+  const campos = subLinhas(b)[0].todos().filter(f => f.classList.contains('ia-campo'));
+  assert.ok(campos.length > 0, 'os contatos sumiram da leitura aplicada');
+  assert.ok(campos.every(c => c.readOnly));
+  // E não há como remover nem acrescentar.
+  assert.equal(subLinhas(b)[0].todos().some(f => f.classList.contains('ia-arquivo__remover')), false);
+  assert.equal(botaoAdicionar(linhasDeItem(b)[0]), undefined);
 });
 
 // ---------------------------------------------------------------------------
