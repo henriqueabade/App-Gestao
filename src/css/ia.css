@@ -1079,3 +1079,33 @@ body {
     color: rgba(255, 255, 255, 0.35);
     font-style: italic;
 }
+
+/* Caminho alternativo ao "Aplicar": abre o formulário do módulo preenchido. */
+.ia-abrir-modulo {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    width: 100%;
+    margin-top: 4px;
+    background: none;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 6px;
+    padding: 4px 8px;
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.7);
+    cursor: pointer;
+    text-align: left;
+}
+
+.ia-abrir-modulo:hover {
+    border-color: var(--color-primary);
+    color: var(--color-primary-light);
+}
+
+.ia-abrir-modulo i { font-size: 10px; opacity: 0.8; flex-shrink: 0; }
+
+.ia-abrir-modulo span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}

@@ -59,6 +59,9 @@ function criarElemento(tag = 'div') {
       for (const fn of el.ouvintes[evento] || []) fn(e);
       return e;
     },
+    // O preenchimento avisa a tela por evento: sem isto, o formulário ficaria
+    // com o valor visível e o estado interno vazio.
+    dispatchEvent(e) { el.disparar(e?.type || 'evento', e); return true; },
     appendChild(f) { el.filhos.push(f); f.pai = el; return f; },
     append(...fs) { for (const f of fs) el.appendChild(f); },
     replaceChildren(...fs) { el.filhos = []; for (const f of fs) el.appendChild(f); },
@@ -213,6 +216,7 @@ function criarBancada({ leitura, respostaPut, respostaAplicar, respostaExtrair, 
     Error,
     Date,
     CustomEvent: class { constructor(t, i) { this.type = t; this.detail = i?.detail; } },
+    Event: class { constructor(t, i) { this.type = t; this.bubbles = Boolean(i?.bubbles); } },
     dispatchEvent() {},
     addEventListener() {},
     showToast: (msg, tipo) => toasts.push({ msg, tipo }),
@@ -393,7 +397,10 @@ function leituraOrcamento(extra = {}) {
         ]
       }
     ],
-    alvos: [{ id: 50, nome: 'Casa Vicenzo' }, { id: 51, nome: 'Decor Alpina' }],
+    alvos: [
+      { id: 50, nome: 'Casa Vicenzo (Cliente)', tabela: 'clientes' },
+      { id: 30, nome: 'Marcenaria Serrana (Prospecção)', tabela: 'prospeccoes' }
+    ],
     sugestoes: {},
     explicacoes: { criar: 'Cria um orçamento pendente', atualizar: 'Indisponível' },
     itens: [
@@ -1076,19 +1083,35 @@ test('o seletor de cliente aparece em toda linha editável', async () => {
   assert.match(seletorDeAlvo(linhasDeItem(b)[1]).placeholder, /escolher cliente/i);
 });
 
-test('escolher o cliente aponta o item e mantém a ação de criar', async () => {
+test('escolher o cliente aponta o item e diz de qual tabela ele é', async () => {
   const b = criarBancada({ leitura: leituraOrcamento() });
   await b.pronta();
 
   const seletor = seletorDeAlvo(linhasDeItem(b)[1]);
-  seletor.value = 'Decor Alpina';
+  seletor.value = 'Marcenaria Serrana (Prospecção)';
   seletor.disparar('change');
   await b.pronta();
 
   const put = b.chamadas.find(c => c.metodo === 'PUT');
-  // O front manda `acao: 'atualizar'` e o backend corrige pelo esquema; o que
-  // importa aqui é o cliente ter sido apontado.
-  assert.equal(put.corpo.alvo_id, 51);
+  // A tabela é obrigatória aqui: o id sozinho é ambíguo entre clientes e
+  // prospecções, e a errada criaria o orçamento na série errada, preso a
+  // outra empresa.
+  assert.equal(put.corpo.alvo_id, 30);
+  assert.equal(put.corpo.alvo_tabela, 'prospeccoes');
+});
+
+test('destino de tabela única não manda tabela à toa', async () => {
+  const b = criarBancada();
+  await b.pronta();
+
+  const seletor = seletorDeAlvo(linhasDeItem(b)[0]);
+  seletor.value = 'Cola PVA extra 1kg';
+  seletor.disparar('change');
+  await b.pronta();
+
+  const put = b.chamadas.find(c => c.metodo === 'PUT');
+  assert.equal(put.corpo.alvo_id, 71);
+  assert.equal(put.corpo.alvo_tabela, undefined);
 });
 
 test('a sub-lista de itens do orçamento abre com as colunas certas', async () => {
@@ -1111,6 +1134,116 @@ test('orçamento sem nenhum item trava o aplicar', async () => {
 
   assert.equal(b.el('iaDetAplicar').disabled, true);
   assert.match(b.el('iaDetResumoRevisao').texto(), /1 sem campo obrigatório/);
+});
+
+// ---------------------------------------------------------------------------
+// Abrir no módulo preenchido
+// ---------------------------------------------------------------------------
+
+/**
+ * Este é o teste que sustenta a abordagem inteira.
+ *
+ * O preenchimento acontece DE FORA do módulo de destino, por id de campo. É a
+ * escolha certa — a alternativa seria alterar cinco arquivos em produção para
+ * um recurso de um sexto módulo —, mas o preço é depender de ids que vivem em
+ * outro arquivo. Sem esta conferência, renomear um campo de formulário faria o
+ * preenchimento parar em silêncio, e ninguém notaria até alguém salvar um
+ * cadastro pela metade.
+ */
+test('todo id do mapa de preenchimento existe no HTML do modal', () => {
+  const fonte = fs.readFileSync(ARQUIVO, 'utf8');
+  const bloco = /const MODULOS_DE_DESTINO = \{[\s\S]*?\n  \};/.exec(fonte);
+  assert.ok(bloco, 'não achei o mapa de módulos de destino');
+
+  // Cada destino declara `html:` e, abaixo, os ids dos campos.
+  const destinos = [...bloco[0].matchAll(
+    /(\w+): \{\s*\n\s*rotulo: '[^']*',\s*\n\s*html: '([^']+)'[\s\S]*?(?=\n    \w+: \{\s*\n\s*rotulo:|\n  \};)/g)];
+  assert.ok(destinos.length >= 4, `só ${destinos.length} destinos no mapa`);
+
+  for (const [trecho, destino, caminhoHtml] of destinos) {
+    const html = fs.readFileSync(
+      path.join(__dirname, '..', '..', 'html', caminhoHtml), 'utf8');
+    const idsDoHtml = new Set(
+      [...html.matchAll(/id="([^"]+)"/g)].map(m => m[1]));
+
+    // Ids que o mapa aponta: os de `campos` e os dos `selects`.
+    const usados = [
+      ...[...trecho.matchAll(/^\s{8}\w+: '([^']+)',?$/gm)].map(m => m[1]),
+      ...[...trecho.matchAll(/id: '([^']+)'/g)].map(m => m[1])
+    ];
+    assert.ok(usados.length, `o destino ${destino} não mapeia campo nenhum`);
+
+    for (const id of usados) {
+      assert.ok(idsDoHtml.has(id),
+        `${destino}: o campo "${id}" não existe mais em ${caminhoHtml}`);
+    }
+  }
+});
+
+test('o overlay de cada módulo de destino existe com o id esperado', () => {
+  // `Modal.close` e a revelação usam `<overlay>Overlay`. Um nome errado aqui
+  // abriria o modal e o deixaria invisível.
+  const fonte = fs.readFileSync(ARQUIVO, 'utf8');
+  const bloco = /const MODULOS_DE_DESTINO = \{[\s\S]*?\n  \};/.exec(fonte)[0];
+  const pares = [...bloco.matchAll(/html: '([^']+)'[\s\S]*?overlay: '([^']+)'/g)];
+  assert.ok(pares.length >= 4);
+
+  for (const [, caminhoHtml, overlay] of pares) {
+    const html = fs.readFileSync(path.join(__dirname, '..', '..', 'html', caminhoHtml), 'utf8');
+    assert.ok(html.includes(`id="${overlay}Overlay"`),
+      `${caminhoHtml} não tem o overlay "${overlay}Overlay"`);
+  }
+});
+
+test('o script de cada módulo de destino existe', () => {
+  const fonte = fs.readFileSync(ARQUIVO, 'utf8');
+  const bloco = /const MODULOS_DE_DESTINO = \{[\s\S]*?\n  \};/.exec(fonte)[0];
+  for (const [, caminho] of bloco.matchAll(/script: '\.\.\/js\/([^']+)'/g)) {
+    assert.ok(fs.existsSync(path.join(__dirname, '..', caminho)),
+      `o script ${caminho} não existe`);
+  }
+});
+
+test('a linha ganha o botão de abrir no módulo', async () => {
+  const b = criarBancada();
+  await b.pronta();
+
+  const botao = linhasDeItem(b)[0].todos().find(f => f.classList.contains('ia-abrir-modulo'));
+  assert.ok(botao, 'a linha ficou sem o caminho de abrir o formulário do módulo');
+  assert.match(botao.texto(), /Novo Insumo/);
+  // O texto do title precisa deixar claro quem grava.
+  assert.match(botao.title, /Quem salva é você/i);
+});
+
+test('a linha descartada não oferece abrir no módulo', async () => {
+  const leitura = leituraPadrao();
+  leitura.itens[0].acao = 'ignorar';
+  const b = criarBancada({ leitura });
+  await b.pronta();
+
+  assert.equal(
+    linhasDeItem(b)[0].todos().some(f => f.classList.contains('ia-abrir-modulo')),
+    false);
+});
+
+test('a leitura aplicada não oferece abrir no módulo', async () => {
+  const b = criarBancada({ leitura: leituraPadrao({ status: 'aplicada', status_rotulo: 'Aplicada' }) });
+  await b.pronta();
+
+  assert.equal(
+    linhasDeItem(b)[0].todos().some(f => f.classList.contains('ia-abrir-modulo')),
+    false);
+});
+
+test('o destino sem modal mapeado não oferece o botão', async () => {
+  // Insumos de produto é a ficha de um produto que já existe: não há
+  // formulário "novo" para abrir.
+  const b = criarBancada({ leitura: leituraFicha() });
+  await b.pronta();
+
+  assert.equal(
+    linhasDeItem(b)[0].todos().some(f => f.classList.contains('ia-abrir-modulo')),
+    false);
 });
 
 // ---------------------------------------------------------------------------

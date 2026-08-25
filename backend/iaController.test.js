@@ -1786,9 +1786,10 @@ test('o detalhe traz os insumos existentes para o revisor apontar', async () => 
   try {
     const dados = await (await chamar(ctx.porta, '/api/ia/4')).json();
     assert.deepStrictEqual(dados.alvos.map(a => a.id).sort(), [70, 71]);
-    // Só id e nome: a tabela inteira do estoque seria dezenas de campos por
-    // linha que a tela não usa.
-    assert.deepStrictEqual(Object.keys(dados.alvos[0]).sort(), ['id', 'nome']);
+    // Id, nome e a tabela de onde veio. Nada além disso: a tabela inteira do
+    // estoque seria dezenas de campos por linha que a tela não usa.
+    assert.deepStrictEqual(Object.keys(dados.alvos[0]).sort(), ['id', 'nome', 'tabela']);
+    assert.strictEqual(dados.alvos[0].tabela, 'materia_prima');
   } finally {
     await ctx.encerrar();
   }
@@ -2870,7 +2871,7 @@ test('os alvos de empresa vêm com o nome fantasia', async () => {
   const ctx = await montarComIA(comLeitura(baseEmpresas(), 'clientes'));
   try {
     const dados = await (await chamar(ctx.porta, '/api/ia/5')).json();
-    assert.deepStrictEqual(dados.alvos, [{ id: 50, nome: 'Casa Vicenzo' }]);
+    assert.deepStrictEqual(dados.alvos, [{ id: 50, nome: 'Casa Vicenzo', tabela: 'clientes' }]);
   } finally {
     await ctx.encerrar();
   }
@@ -3315,6 +3316,13 @@ function baseOrcamento() {
     { id: 51, nome_fantasia: 'Decor Alpina', cnpj: null }
   ];
   dados.contatos_cliente = [];
+  // O orçamento procura nas DUAS tabelas: a empresa lida tanto pode ser um
+  // cliente quanto uma prospecção, e o documento não diz qual.
+  dados.prospeccoes = [
+    { id: 30, nome_fantasia: 'Marcenaria Serrana', cnpj: '22.222.222/0001-22', etapa: 'Proposta', status: 'ativa' }
+  ];
+  dados.prospeccao_contatos = [];
+  dados.prospeccao_historico = [];
   dados.produtos = [
     { id: 9, codigo: 'PR-210', nome: 'Painel Ripado 2,10', preco_venda: 900, ncm: '9403' },
     { id: 10, codigo: 'ML-01', nome: 'Mesa Lateral Carvalho', preco_venda: 450, ncm: '9403' }
@@ -3382,7 +3390,7 @@ test('o campo lido "cliente" casa com a coluna nome_fantasia', async () => {
   try {
     const item = itensDa(ctx, 5)[0];
     assert.strictEqual(item.alvo_id, 51);
-    assert.match(item.mensagem, /Casou por Cliente/);
+    assert.match(item.mensagem, /Casou por Empresa/);
   } finally {
     await ctx.encerrar();
   }
@@ -3395,8 +3403,8 @@ test('cliente que não existe não vira orçamento solto', async () => {
   try {
     const item = itensDa(ctx, 5)[0];
     assert.strictEqual(item.acao, 'ignorar');
-    assert.match(item.mensagem, /Cliente não encontrado/);
-    // E manda para o caminho certo de cadastrá-lo.
+    assert.match(item.mensagem, /Empresa não encontrada em Clientes nem em Prospecções/);
+    // E manda para o caminho certo de cadastrá-la.
     assert.match(item.mensagem, /Clientes e contatos/);
   } finally {
     await ctx.encerrar();
@@ -3556,7 +3564,7 @@ test('sem cliente escolhido, nada é gravado', async () => {
 
     const corpo = await (await aplicarEm(ctx, 'orcamentos')).json();
     assert.strictEqual(corpo.com_erro, 1);
-    assert.match(corpo.itens[0].mensagem, /Sem cliente de destino/);
+    assert.match(corpo.itens[0].mensagem, /Sem cliente ou prospecção de destino/);
     assert.strictEqual(ctx.tabelas.orcamentos.length, 0);
   } finally {
     await ctx.encerrar();
@@ -3640,10 +3648,15 @@ test('o detalhe conta que o alvo é vínculo e quais ações valem', async () =>
 
     assert.strictEqual(dados.alvo_eh_vinculo, true);
     assert.strictEqual(dados.exige_alvo, true);
-    assert.strictEqual(dados.rotulo_alvo, 'Cliente');
+    assert.strictEqual(dados.rotulo_alvo, 'Cliente ou prospecção');
     assert.deepStrictEqual(dados.acoes, ['criar', 'ignorar']);
-    // Os alvos são os CLIENTES, não orçamentos.
-    assert.deepStrictEqual(dados.alvos.map(a => a.nome).sort(), ['Casa Vicenzo', 'Decor Alpina']);
+
+    // Os alvos são CLIENTES e PROSPECÇÕES, não orçamentos. E vêm com o tipo no
+    // nome: a mesma empresa pode estar nas duas listas, e escolher a errada
+    // criaria o orçamento na série errada.
+    assert.deepStrictEqual(dados.alvos.map(a => a.nome).sort(),
+      ['Casa Vicenzo (Cliente)', 'Decor Alpina (Cliente)', 'Marcenaria Serrana (Prospecção)']);
+    assert.strictEqual(dados.alvos.find(a => /Serrana/.test(a.nome)).tabela, 'prospeccoes');
   } finally {
     await ctx.encerrar();
   }
@@ -3658,6 +3671,220 @@ test('os destinos comuns continuam oferecendo as três ações', async () => {
   } finally {
     await ctx.encerrar();
   }
+});
+
+test('a empresa que é PROSPECÇÃO casa e gera OCRP', async () => {
+  const ctx = await prepararOrcamento({
+    itens: [{
+      cliente: 'Marcenaria Serrana', cnpj: '22.222.222/0001-22',
+      itens: [{ nome: 'Painel Ripado 2,10', quantidade: '2' }]
+    }]
+  });
+  try {
+    const item = itensDa(ctx, 5)[0];
+    assert.strictEqual(item.alvo_id, 30);
+    assert.strictEqual(item.alvo_tabela, 'prospeccoes', 'casou na tabela errada');
+
+    const corpo = await (await aplicarEm(ctx, 'orcamentos')).json();
+    assert.strictEqual(corpo.aplicados, 1, JSON.stringify(corpo.itens));
+
+    const orc = ctx.tabelas.orcamentos[0];
+    // Série OCRP e vínculo pela prospecção: mandar o id no campo `cliente_id`
+    // prenderia o orçamento ao CLIENTE de mesmo número, outra empresa.
+    assert.match(String(orc.numero), /^OCRP\d+$/);
+    assert.strictEqual(Number(orc.prospeccao_id), 30);
+    assert.strictEqual(orc.cliente_id, null);
+    assert.match(corpo.itens[0].mensagem, /para a prospecção/);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('o cliente tem precedência sobre a prospecção de mesmo nome', async () => {
+  // A prospecção que virou cliente continua na tabela de prospecções. Sem uma
+  // ordem definida, o orçamento cairia ora num lado ora no outro.
+  const dados = baseOrcamento();
+  dados.prospeccoes.push({ id: 31, nome_fantasia: 'Casa Vicenzo', cnpj: null, status: 'ativa' });
+  const ctx = await prepararOrcamento({
+    itens: [{ cliente: 'Casa Vicenzo', cnpj: null, itens: [{ nome: 'Painel Ripado 2,10', quantidade: '1' }] }]
+  }, dados);
+  try {
+    const item = itensDa(ctx, 5)[0];
+    assert.strictEqual(item.alvo_tabela, 'clientes');
+    assert.strictEqual(item.alvo_id, 50);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('escolher a prospecção à mão exige dizer de qual tabela', async () => {
+  const ctx = await prepararOrcamento({
+    itens: [{ cliente: 'Empresa Desconhecida', cnpj: null, itens: [{ nome: 'Painel Ripado 2,10', quantidade: '1' }] }]
+  });
+  try {
+    const item = itensDa(ctx, 5)[0];
+    const salvo = await (await chamar(ctx.porta, `/api/ia/5/itens/${item.id}`, {
+      method: 'PUT', body: JSON.stringify({ alvo_id: 30, alvo_tabela: 'prospeccoes' })
+    })).json();
+
+    assert.strictEqual(salvo.alvo_id, 30);
+    assert.strictEqual(salvo.alvo_tabela, 'prospeccoes');
+    assert.strictEqual(salvo.acao, 'criar');
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('tabela de alvo que não é deste destino é recusada', async () => {
+  // Sem a checagem, apontar para uma tabela qualquer criaria o orçamento com
+  // um vínculo que não existe.
+  const ctx = await prepararOrcamento();
+  try {
+    const item = itensDa(ctx, 5)[0];
+    const resp = await chamar(ctx.porta, `/api/ia/5/itens/${item.id}`, {
+      method: 'PUT', body: JSON.stringify({ alvo_id: 9, alvo_tabela: 'produtos' })
+    });
+    assert.strictEqual(resp.status, 400);
+    assert.match((await resp.json()).error, /não é um alvo deste tipo/i);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('sem dizer a tabela, vale a primeira do destino', async () => {
+  const ctx = await prepararOrcamento({
+    itens: [{ cliente: 'Empresa Desconhecida', cnpj: null, itens: [{ nome: 'Painel Ripado 2,10', quantidade: '1' }] }]
+  });
+  try {
+    const item = itensDa(ctx, 5)[0];
+    const salvo = await (await chamar(ctx.porta, `/api/ia/5/itens/${item.id}`, {
+      method: 'PUT', body: JSON.stringify({ alvo_id: 51 })
+    })).json();
+    assert.strictEqual(salvo.alvo_tabela, 'clientes');
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+// ---------------------------------------------------------------------------
+// As três tentativas contra a recusa de JSON da Groq
+// ---------------------------------------------------------------------------
+
+/** Recusa da Groq com o texto que o modelo chegou a gerar. */
+const recusaDeJson = gerado => ({
+  status: 400,
+  payload: {
+    error: {
+      message: "Failed to validate JSON. Please adjust your prompt. See 'failed_generation' for more details.",
+      type: 'invalid_request_error',
+      code: 'json_validate_failed',
+      failed_generation: gerado
+    }
+  }
+});
+
+test('a extração pede um teto de saída ao modelo', async () => {
+  // Sem teto, a Groq corta a geração antes do fim de uma lista longa — e o
+  // JSON cortado é recusado pelo modo estrito, derrubando a extração inteira.
+  const ctx = await montarComIA(baseParaEstruturar(), {}, { groq: () => ({ payload: respostaGroq(ITENS_LIDOS) }) });
+  try {
+    await chamar(ctx.porta, '/api/ia/4/estruturar', { method: 'POST' });
+    assert.ok(ctx.groq.chamadas[0].body.max_tokens >= 4000,
+      `max_tokens veio ${ctx.groq.chamadas[0].body.max_tokens}`);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('JSON cortado devolvido na recusa é aproveitado, sem nova chamada', async () => {
+  // A própria Groq devolve o que o modelo gerou. Fechá-lo sai de graça; pedir
+  // tudo de novo custa outra chamada paga.
+  const cortado = '{"itens": [{"nome": "MDF 15mm Branco TX", "quantidade": 40}, {"nome": "Fita';
+  const ctx = await montarComIA(baseParaEstruturar(), {}, { groq: () => recusaDeJson(cortado) });
+  try {
+    const corpo = await (await chamar(ctx.porta, '/api/ia/4/estruturar', { method: 'POST' })).json();
+
+    assert.strictEqual(corpo.status, 'revisao');
+    assert.strictEqual(corpo.itens_qtd, 1, 'o item completo antes do corte foi perdido');
+    assert.strictEqual(corpo.truncado, true, 'o corte precisa ser anunciado');
+    assert.strictEqual(ctx.groq.chamadas.length, 1, 'gastou uma segunda chamada à toa');
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('recusa sem nada aproveitável cai para uma chamada sem modo estrito', async () => {
+  let chamada = 0;
+  const ctx = await montarComIA(baseParaEstruturar(), {}, {
+    groq: () => {
+      chamada += 1;
+      // A primeira recusa não traz geração aproveitável; a segunda, solta,
+      // devolve o JSON no corpo do texto.
+      return chamada === 1
+        ? recusaDeJson('desculpe, não consegui')
+        : { payload: respostaGroq('Segue o resultado:\n```json\n' + JSON.stringify(ITENS_LIDOS) + '\n```') };
+    }
+  });
+  try {
+    const corpo = await (await chamar(ctx.porta, '/api/ia/4/estruturar', { method: 'POST' })).json();
+    assert.strictEqual(corpo.itens_qtd, 2);
+    assert.strictEqual(ctx.groq.chamadas.length, 2);
+
+    // A segunda tentativa vai SEM o modo estrito: é justamente ele que estava
+    // recusando.
+    assert.ok(ctx.groq.chamadas[0].body.response_format, 'a primeira devia ser estrita');
+    assert.strictEqual(ctx.groq.chamadas[1].body.response_format, undefined);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('quando as duas tentativas falham, a mensagem diz o que fazer', async () => {
+  const ctx = await montarComIA(baseParaEstruturar(), {}, {
+    groq: () => recusaDeJson('nada de útil')
+  });
+  try {
+    const resp = await chamar(ctx.porta, '/api/ia/4/estruturar', { method: 'POST' });
+    assert.ok(resp.status >= 400);
+
+    const extracao = ctx.tabelas.ia_extracoes.find(e => e.id === 4);
+    assert.strictEqual(extracao.status, 'erro');
+    // A mensagem crua da Groq ("Failed to validate JSON. Please adjust your
+    // prompt") não diz nada a quem está usando o programa.
+    assert.strictEqual(/adjust your prompt/i.test(extracao.erro), false);
+    assert.match(extracao.erro, /troque o modelo em Configurar|não é JSON/i);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('erro que NÃO é de JSON não gera segunda chamada', async () => {
+  // Chave recusada não melhora tentando de outro jeito: insistir só gastaria
+  // outra requisição e atrasaria a mensagem certa.
+  const ctx = await montarComIA(baseParaEstruturar(), {}, {
+    groq: () => ({ status: 401, payload: { error: { message: 'Invalid API Key' } } })
+  });
+  try {
+    await chamar(ctx.porta, '/api/ia/4/estruturar', { method: 'POST' });
+    assert.strictEqual(ctx.groq.chamadas.length, 1);
+    assert.match(ctx.tabelas.ia_extracoes.find(e => e.id === 4).erro, /chave recusada/i);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('fecharJsonCortado aproveita o que veio inteiro e descarta o resto', () => {
+  const { fecharJsonCortado } = require('./iaEstruturacao');
+
+  assert.deepStrictEqual(
+    fecharJsonCortado('{"itens": [{"a": 1}, {"b": 2}, {"c": '),
+    { itens: [{ a: 1 }, { b: 2 }] }
+  );
+  assert.deepStrictEqual(fecharJsonCortado('{"itens": [{"a": 1}'), { itens: [{ a: 1 }] });
+  // JSON completo não é assunto desta função.
+  assert.strictEqual(fecharJsonCortado('{"itens": []}'), null);
+  // Sem nada aproveitável, melhor dizer que não deu.
+  assert.strictEqual(fecharJsonCortado('texto solto'), null);
 });
 
 test('todos os cinco destinos estão prontos', () => {

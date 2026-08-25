@@ -616,6 +616,15 @@ async function aplicarProdutoInsumos(item, contexto) {
  * corrigir é seguro.
  *
  * ---------------------------------------------------------------------------
+ * CLIENTE OU PROSPECÇÃO
+ *
+ * O alvo pode ser dos dois tipos, e `alvo_tabela` diz qual. Isso não é detalhe
+ * de gravação: um orçamento de prospecção sai na série OCRP e aparece na ficha
+ * da prospecção; um de cliente sai como ORC. Mandar um id de prospecção no
+ * campo `cliente_id` prenderia o orçamento ao CLIENTE de mesmo número — outra
+ * empresa, escolhida por acidente.
+ *
+ * ---------------------------------------------------------------------------
  * NASCE PENDENTE
  *
  * `situacao: 'Pendente'`, sempre. Aprovar um orçamento dispara a conversão em
@@ -629,7 +638,15 @@ async function aplicarOrcamentos(item, contexto) {
     throw erro(400, 'A leitura só cria orçamento novo; ela não mexe em orçamento que já existe.');
   }
 
-  const clienteId = idAlvo(item, 'cliente');
+  const alvoId = idAlvo(item, 'cliente ou prospecção');
+  const naProspeccao = item.alvo_tabela === 'prospeccoes';
+
+  // A prospecção precisa existir: FK inválida só estouraria depois de já ter
+  // gravado o orçamento, deixando itens pendurados em nada.
+  if (naProspeccao) {
+    const p = await api.get(`/api/prospeccoes/${alvoId}`).catch(() => null);
+    if (!p?.id) throw erro(400, 'A prospecção escolhida não existe mais.');
+  }
 
   const linhas = (Array.isArray(dados.itens) ? dados.itens : [])
     .filter(i => String(i?.nome || '').trim());
@@ -704,7 +721,10 @@ async function aplicarOrcamentos(item, contexto) {
   }
 
   const { created, numero } = await orcamentos.criarOrcamentoComNumero(api, {
-    cliente_id: clienteId,
+    // `prospeccao_id` também é o que faz `criarOrcamentoComNumero` escolher a
+    // série OCRP em vez de ORC.
+    cliente_id: naProspeccao ? null : alvoId,
+    prospeccao_id: naProspeccao ? alvoId : null,
     situacao: 'Pendente',
     data_emissao: new Date().toISOString(),
     validade: dados.validade || null,
@@ -725,7 +745,9 @@ async function aplicarOrcamentos(item, contexto) {
     await api.post('/api/orcamentos_itens', { ...linha, orcamento_id: orcamentoId });
   }
 
-  const feitos = [`Orçamento ${numero} criado (${itens.length} itens)`];
+  const feitos = [
+    `Orçamento ${numero} criado (${itens.length} itens) para ${naProspeccao ? 'a prospecção' : 'o cliente'}`
+  ];
   if (semPreco.length) {
     feitos.push(`${semPreco.length} item(ns) com preço de tabela: ${semPreco.slice(0, 3).join(', ')}`);
   }

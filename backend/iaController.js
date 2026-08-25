@@ -240,14 +240,39 @@ async function alvosDoDestino(api, destino) {
   const esquema = esquemas.obterEsquema(destino);
   if (!esquema) return [];
   try {
-    const linhas = listaDe(await api.get(`/api/${esquema.tabelaAlvo}`));
+    const linhas = await registrosAlvo(api, destino);
+    const varias = esquemas.tabelasAlvoDo(destino).length > 1;
     return linhas
-      .map(l => ({ id: l.id, nome: l[esquema.campoDeExibicao] }))
+      .map(l => ({
+        id: l.id,
+        // Com duas tabelas, o nome sozinho é ambíguo: a mesma empresa pode
+        // estar nas duas, e o revisor precisa ver qual ele está escolhendo.
+        nome: varias ? `${l[esquema.campoDeExibicao]} (${l._rotulo})` : l[esquema.campoDeExibicao],
+        tabela: l._tabela
+      }))
       .filter(l => l.id && l.nome)
       .sort((a, b) => String(a.nome).localeCompare(String(b.nome)));
   } catch (_) {
     return [];
   }
+}
+
+/**
+ * Registros em que o destino procura o alvo, de todas as tabelas dele.
+ *
+ * Cada linha sai carimbada com `_tabela` e `_rotulo`: é assim que a
+ * reconciliação sabe de onde veio o casamento — e, no orçamento, é isso que
+ * decide se o número sai como ORC (cliente) ou OCRP (prospecção).
+ */
+async function registrosAlvo(api, destino) {
+  const tabelas = esquemas.tabelasAlvoDo(destino).filter(t => t.tabela);
+  const listas = await Promise.all(tabelas.map(t =>
+    api.get(`/api/${t.tabela}`)
+      .then(listaDe)
+      .then(linhas => linhas.map(l => ({ ...l, _tabela: t.tabela, _rotulo: t.rotulo })))
+      .catch(() => [])
+  ));
+  return listas.flat();
 }
 
 async function sugestoesDoDestino(api, destino) {
@@ -728,9 +753,7 @@ router.post('/:id/estruturar', exigirPermissao('ia.extract'), async (req, res) =
 
     // A reconciliação precisa da tabela de destino INTEIRA: a API não filtra
     // por lista de valores, então casar em memória é o único caminho.
-    const existentes = listaDe(
-      await api.get(`/api/${esquemas.obterEsquema(extracao.destino).tabelaAlvo}`)
-    );
+    const existentes = await registrosAlvo(api, extracao.destino);
     const itens = reconciliacao.reconciliar({
       destino: extracao.destino,
       itens: extraidos.itens,
@@ -851,7 +874,21 @@ router.put('/:id/itens/:itemId', exigirPermissao('ia.review.edit'), async (req, 
       const alvo = req.body.alvo_id === null ? null : Number(req.body.alvo_id);
       if (alvo !== null && !Number.isFinite(alvo)) throw erro(400, 'Destino inválido');
       payload.alvo_id = alvo;
-      payload.alvo_tabela = alvo === null ? null : esquema.tabelaAlvo;
+      // Com mais de uma tabela possível (o orçamento), quem escolhe diz de
+      // qual delas é o registro — o id sozinho seria ambíguo, e apontar para a
+      // tabela errada criaria o orçamento na série errada.
+      const tabelasPossiveis = esquemas.tabelasAlvoDo(extracao.destino).map(t => t.tabela);
+      const informada = texto(req.body?.alvo_tabela);
+      if (alvo === null) {
+        payload.alvo_tabela = null;
+      } else if (informada) {
+        if (!tabelasPossiveis.includes(informada)) {
+          throw erro(400, `Destino inválido: "${informada}" não é um alvo deste tipo de leitura.`);
+        }
+        payload.alvo_tabela = informada;
+      } else {
+        payload.alvo_tabela = tabelasPossiveis[0] || esquema.tabelaAlvo;
+      }
       // Escolher o destino já define a ação: "atualizar" nos destinos comuns,
       // "criar" onde o alvo é vínculo (o orçamento nasce preso ao cliente).
       if (alvo !== null) payload.acao = payload.acao || esquema.acaoAoCasar || 'atualizar';
@@ -869,6 +906,7 @@ router.put('/:id/itens/:itemId', exigirPermissao('ia.review.edit'), async (req, 
       dados: lerDados(salvo.dados).valor,
       acao: salvo.acao,
       alvo_id: salvo.alvo_id ?? null,
+      alvo_tabela: salvo.alvo_tabela || null,
       status: salvo.status,
       mensagem: salvo.mensagem || null
     });
@@ -936,6 +974,10 @@ router.post('/:id/aplicar',
           dados: lerDados(i.dados).valor,
           acao: i.acao || 'criar',
           alvo_id: i.alvo_id ?? null,
+          // A TABELA do alvo vai junto: é ela que decide, no orçamento, se o
+          // vínculo é com cliente ou com prospecção — e, com isso, se o número
+          // sai como ORC ou OCRP.
+          alvo_tabela: i.alvo_tabela || null,
           status: i.status || 'pendente',
           mensagem: i.mensagem || null
         }));
@@ -1061,4 +1103,5 @@ module.exports.lerDados = lerDados;
 module.exports.emParalelo = emParalelo;
 module.exports.tokenDaRequisicao = tokenDaRequisicao;
 module.exports.juntarTextos = juntarTextos;
+module.exports.registrosAlvo = registrosAlvo;
 module.exports.texto = texto;

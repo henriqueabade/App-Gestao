@@ -87,6 +87,15 @@ function reconciliar({ destino, itens, existentes }) {
 
   const chaves = esquema.chavesDeCasamento || [];
   const linhas = Array.isArray(existentes) ? existentes : [];
+
+  /**
+   * De qual tabela veio o registro casado.
+   *
+   * O orçamento procura em duas (clientes e prospecções), e é isso que decide
+   * a série do número — ORC ou OCRP. Quem monta `existentes` carimba `_tabela`
+   * em cada linha; nos destinos de tabela única não há o que carimbar.
+   */
+  const tabelaDa = linha => linha?._tabela || esquema.tabelaAlvo;
   const exibicao = esquema.campoDeExibicao || chaves[0]?.campo;
 
   /**
@@ -172,7 +181,7 @@ function reconciliar({ destino, itens, existentes }) {
         return decidir({
           acao: acaoAoCasar,
           alvo_id: achadoExato.id ?? null,
-          alvo_tabela: esquema.tabelaAlvo,
+          alvo_tabela: tabelaDa(achadoExato),
           confianca: 1,
           // Casar por chave fraca não é erro, mas merece conferência: nome
           // igual pode ser filial, homônima ou a mesma empresa.
@@ -185,7 +194,7 @@ function reconciliar({ destino, itens, existentes }) {
         return decidir({
           acao: acaoAoCasar,
           alvo_id: achadoCompacto.id ?? null,
-          alvo_tabela: esquema.tabelaAlvo,
+          alvo_tabela: tabelaDa(achadoCompacto),
           confianca: 0.9,
           notas: [`Casou com "${rotularAlvo(achadoCompacto)}" ignorando espaços e pontuação — confira`]
         });

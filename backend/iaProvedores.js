@@ -66,6 +66,20 @@ function erro(status, mensagem, causa) {
 }
 
 /**
+ * Erro de provedor, com o CORPO da resposta pendurado.
+ *
+ * O corpo não é curiosidade: quando a Groq recusa um JSON malformado, ela
+ * devolve em `error.failed_generation` o texto que o modelo chegou a gerar. É
+ * quase sempre um JSON bom cortado no meio — e aproveitá-lo evita uma segunda
+ * chamada paga só para pedir a mesma coisa de novo.
+ */
+function erroDeProvedor(status, mensagem, corpo) {
+  const e = erro(status, mensagem, String(corpo?.error?.message || corpo?.message || '').slice(0, 300));
+  e.corpo = corpo;
+  return e;
+}
+
+/**
  * Traduz a falha do provedor para algo acionável.
  *
  * "Erro 401" não diz a ninguém o que fazer. Quem está configurando precisa
@@ -74,19 +88,31 @@ function erro(status, mensagem, causa) {
  */
 function traduzirFalha(provedor, status, corpo) {
   const detalhe = String(corpo?.error?.message || corpo?.message || '').slice(0, 300);
+  const montar = (st, msg) => erroDeProvedor(st, msg, corpo);
+
   if (status === 401 || status === 403) {
-    return erro(status, `${provedor}: chave recusada. Confira a credencial no .env.`, detalhe);
+    return montar(status, `${provedor}: chave recusada. Confira a credencial no .env.`);
   }
   if (status === 404) {
-    return erro(status, `${provedor}: modelo não encontrado. Veja em Configurar quais modelos a sua conta tem.`, detalhe);
+    return montar(status, `${provedor}: modelo não encontrado. Veja em Configurar quais modelos a sua conta tem.`);
   }
   if (status === 429) {
-    return erro(status, `${provedor}: limite de uso atingido. Tente de novo em alguns instantes.`, detalhe);
+    return montar(status, `${provedor}: limite de uso atingido. Tente de novo em alguns instantes.`);
+  }
+  // A Groq recusa quando o modelo devolve JSON malformado no modo estrito. A
+  // mensagem crua ("Failed to validate JSON. Please adjust your prompt") não
+  // diz nada a quem está usando: quem chama sabe se dá para tentar de outro
+  // jeito, e é por `jsonInvalido` que ele reconhece o caso.
+  if (/failed to validate json/i.test(detalhe)) {
+    const e = montar(status || 400,
+      `${provedor}: a resposta veio com JSON malformado.`);
+    e.jsonInvalido = true;
+    return e;
   }
   if (status >= 500) {
-    return erro(502, `${provedor}: o serviço respondeu com erro. Tente de novo.`, detalhe);
+    return montar(502, `${provedor}: o serviço respondeu com erro. Tente de novo.`);
   }
-  return erro(status || 502, `${provedor}: ${detalhe || 'falha na chamada'}`, detalhe);
+  return montar(status || 502, `${provedor}: ${detalhe || 'falha na chamada'}`);
 }
 
 /**
@@ -358,6 +384,7 @@ async function lerComGemini({ buffer, mime, modelo }) {
 module.exports = {
   PADROES,
   LIMITES,
+  erroDeProvedor,
   PROMPT_LEITURA,
   MIMES_GEMINI,
   lerComGemini,

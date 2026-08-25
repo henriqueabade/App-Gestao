@@ -515,7 +515,7 @@
         input.value = atual ? atual.nome : '';
         return;
       }
-      await apontarPara(item, achado.id);
+      await apontarPara(item, achado.id, achado.tabela);
     });
 
     return input;
@@ -533,9 +533,16 @@
    * decidiu sozinha: com um clique o revisor confirma que é o mesmo, e o item
    * deixa de cadastrar um quase-duplicado.
    */
-  async function apontarPara(item, alvoId) {
+  async function apontarPara(item, alvoId, tabela) {
     try {
-      const salvo = await salvarItem(item.id, { alvo_id: alvoId, acao: 'atualizar' });
+      // A tabela vai junto: no orçamento o alvo pode ser cliente OU
+      // prospecção, e o id sozinho é ambíguo — apontar para a errada criaria o
+      // orçamento na série errada, preso a outra empresa.
+      const salvo = await salvarItem(item.id, {
+        alvo_id: alvoId,
+        acao: 'atualizar',
+        ...(tabela ? { alvo_tabela: tabela } : {})
+      });
       atualizarEmMemoria(salvo);
       desenharItens();
       showToast('Item apontado para o registro existente', 'success');
@@ -640,6 +647,24 @@
       tdAcao.appendChild(criarSeletorDeAcao(item, editavelAqui));
       const seletorAlvo = criarSeletorDeAlvo(item, editavelAqui);
       if (seletorAlvo) tdAcao.appendChild(seletorAlvo);
+
+      // Caminho alternativo ao "Aplicar": abre o formulário do módulo já
+      // preenchido, para quem prefere conferir e salvar por lá.
+      if (editavelAqui && MODULOS_DE_DESTINO[leitura.destino] && item.acao !== 'ignorar') {
+        const abrir = document.createElement('button');
+        abrir.type = 'button';
+        abrir.className = 'ia-abrir-modulo';
+        abrir.dataset.abrirModulo = String(item.id);
+        const icone = document.createElement('i');
+        icone.className = 'fas fa-up-right-from-square';
+        const rotulo = document.createElement('span');
+        rotulo.textContent = `Abrir em ${MODULOS_DE_DESTINO[leitura.destino].rotulo}`;
+        abrir.append(icone, rotulo);
+        abrir.title = 'Abre o formulário do módulo com estes dados preenchidos. Quem salva é você.';
+        abrir.addEventListener('click', () => abrirNoModulo(item));
+        tdAcao.appendChild(abrir);
+      }
+
       tr.appendChild(tdAcao);
 
       const tdStatus = document.createElement('td');
@@ -876,6 +901,204 @@
 
       return card;
     }));
+  }
+
+  // ---------------------------------------------------------------------------
+  // Abrir no módulo de destino, já preenchido
+  //
+  // O caminho para quem quer conferir e salvar no formulário que já conhece —
+  // com a validação, os selects e as travas do próprio módulo. Nada é gravado
+  // pela IA aqui: o modal abre preenchido e quem salva é o usuário.
+  //
+  // O preenchimento acontece DE FORA, depois que o modal abre. A alternativa
+  // seria ensinar cada módulo a ler um objeto de pré-preenchimento — cinco
+  // arquivos em produção alterados para um recurso de um sexto módulo. Como o
+  // preço disso é depender dos ids dos campos, existe um teste que confere,
+  // contra o HTML de cada modal, que todo id deste mapa continua existindo.
+  // ---------------------------------------------------------------------------
+
+  const MODULOS_DE_DESTINO = {
+    materia_prima: {
+      rotulo: 'Novo Insumo',
+      html: 'modals/materia-prima/novo.html',
+      script: '../js/modals/materia-prima-novo.js',
+      overlay: 'novoInsumo',
+      campos: {
+        nome: 'nome',
+        categoria: 'categoria',
+        quantidade: 'quantidade',
+        unidade: 'unidade',
+        preco_unitario: 'preco',
+        descricao: 'descricao'
+      }
+    },
+    clientes: {
+      rotulo: 'Novo Cliente',
+      html: 'modals/clientes/novo.html',
+      script: '../js/modals/cliente-novo.js',
+      overlay: 'novoCliente',
+      campos: {
+        nome_fantasia: 'empresaNomeFantasia',
+        razao_social: 'empresaRazaoSocial',
+        cnpj: 'empresaCnpj',
+        inscricao_estadual: 'empresaInscricaoEstadual',
+        site: 'empresaSite',
+        end_logradouro: 'regRua',
+        end_numero: 'regNumero',
+        end_complemento: 'regComplemento',
+        end_bairro: 'regBairro',
+        end_cidade: 'regCidade',
+        end_uf: 'regEstado',
+        end_cep: 'regCep'
+      },
+      // Contatos entram por um modal próprio, com botão de adicionar. Preencher
+      // isso de fora seria simular uma sequência de cliques — frágil e mudo
+      // quando quebrasse. Ficam para o usuário, com os dados à vista na grade.
+      manuais: ['contatos']
+    },
+    prospeccoes: {
+      rotulo: 'Nova Prospecção',
+      html: 'modals/prospeccoes/novo.html',
+      script: '../js/modals/prospeccao-novo.js',
+      overlay: 'novaProspeccao',
+      campos: {
+        nome_fantasia: 'prosNomeFantasia',
+        razao_social: 'prosRazaoSocial',
+        segmento: 'prosSegmento',
+        cnpj: 'prosCnpj',
+        inscricao_estadual: 'prosInscricaoEstadual',
+        site: 'prosSite',
+        end_logradouro: 'endRua',
+        end_numero: 'endNumero',
+        end_complemento: 'endComplemento',
+        end_bairro: 'endBairro',
+        end_cidade: 'endCidade',
+        end_uf: 'endEstado',
+        end_cep: 'endCep'
+      },
+      manuais: ['contatos']
+    },
+    orcamentos: {
+      rotulo: 'Novo Orçamento',
+      html: 'modals/orcamentos/novo.html',
+      script: '../js/modals/orcamento-novo.js',
+      overlay: 'novoOrcamento',
+      campos: {
+        validade: 'novoValidade',
+        forma_pagamento: 'novoFormaPagamento',
+        observacoes: 'novoObservacoes'
+      },
+      // O cliente é um <select> montado por requisição: escolher pelo id só
+      // funciona depois que as opções chegam.
+      selects: { cliente: { id: 'novoCliente', porAlvo: true } },
+      manuais: ['itens']
+    }
+  };
+
+  /** Espera o <select> ganhar opções: ele é montado por requisição. */
+  async function esperarOpcoes(select, limiteMs = 6000) {
+    const ate = Date.now() + limiteMs;
+    while (Date.now() < ate) {
+      if (select.options && select.options.length > 1) return true;
+      await new Promise(r => setTimeout(r, 120));
+    }
+    return false;
+  }
+
+  /**
+   * Escreve o valor no campo e avisa a tela.
+   *
+   * Os dois eventos são necessários: `input` acorda as máscaras e os cálculos
+   * que rodam a cada tecla, e `change` acorda quem só escuta o campo perder o
+   * foco. Preencher `value` calado deixaria o formulário com o valor na tela e
+   * o estado interno vazio.
+   */
+  function escrever(campo, valor) {
+    if (!campo) return false;
+    const texto = valor === null || valor === undefined ? '' : String(valor);
+    if (!texto) return false;
+    campo.value = texto;
+    campo.dispatchEvent(new Event('input', { bubbles: true }));
+    campo.dispatchEvent(new Event('change', { bubbles: true }));
+    return true;
+  }
+
+  async function preencherModulo(config, item) {
+    const dados = item.dados || {};
+    const preenchidos = [];
+    const faltaram = [];
+
+    for (const [chave, id] of Object.entries(config.campos || {})) {
+      const campo = document.getElementById(id);
+      if (!campo) { faltaram.push(chave); continue; }
+      if (escrever(campo, dados[chave])) preenchidos.push(chave);
+    }
+
+    for (const [chave, cfg] of Object.entries(config.selects || {})) {
+      const select = document.getElementById(cfg.id);
+      if (!select) { faltaram.push(chave); continue; }
+      await esperarOpcoes(select);
+      // Para o select, o que vale é o ALVO escolhido na revisão, não o texto
+      // lido: o id é o que o formulário grava, e o nome pode estar escrito de
+      // um jeito que não bate com nenhuma opção.
+      const valor = cfg.porAlvo ? item.alvo_id : dados[chave];
+      if (valor === null || valor === undefined) { faltaram.push(chave); continue; }
+      select.value = String(valor);
+      if (String(select.value) !== String(valor)) { faltaram.push(chave); continue; }
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+      preenchidos.push(chave);
+    }
+
+    return { preenchidos, faltaram };
+  }
+
+  /** Nome legível de um campo, para a mensagem. */
+  const rotuloDoCampo = chave =>
+    (leitura.campos || []).find(c => c.chave === chave)?.rotulo || chave;
+
+  async function abrirNoModulo(item) {
+    const config = MODULOS_DE_DESTINO[leitura?.destino];
+    if (!config) {
+      showToast('Este destino ainda não abre o módulo preenchido', 'info');
+      return;
+    }
+
+    // O modal de destino abre POR CIMA do de IA: fechar o de baixo perderia a
+    // revisão, e quem salva do outro lado quer voltar para ela.
+    const pronto = new Promise(resolve => {
+      function aoAbrir(e) {
+        if (e.detail !== config.overlay) return;
+        window.removeEventListener('modalSpinnerLoaded', aoAbrir);
+        document.getElementById(`${config.overlay}Overlay`)?.classList.remove('hidden');
+        resolve();
+      }
+      window.addEventListener('modalSpinnerLoaded', aoAbrir);
+      // Nem todo modal anuncia; depois de um tempo, segue assim mesmo.
+      setTimeout(() => { window.removeEventListener('modalSpinnerLoaded', aoAbrir); resolve(); }, 2500);
+    });
+
+    Modal.open(config.html, config.script, config.overlay, true);
+    await pronto;
+
+    const { preenchidos, faltaram } = await preencherModulo(config, item);
+    const manuais = (config.manuais || []).filter(c => {
+      const v = item.dados?.[c];
+      return Array.isArray(v) ? v.length > 0 : Boolean(v);
+    });
+
+    if (!preenchidos.length && !manuais.length) {
+      showToast('Nada do que foi lido coube nos campos deste formulário', 'info');
+      return;
+    }
+
+    const partes = [`${preenchidos.length} campo(s) preenchido(s)`];
+    if (manuais.length) {
+      // Dizer o que NÃO foi preenchido é o que evita o usuário salvar achando
+      // que os contatos vieram junto.
+      partes.push(`${manuais.map(rotuloDoCampo).join(' e ')} precisam ser adicionados à mão`);
+    }
+    if (faltaram.length) partes.push(`${faltaram.length} campo(s) não couberam`);
+    showToast(partes.join(' · '), manuais.length || faltaram.length ? 'info' : 'success');
   }
 
   // ---------------------------------------------------------------------------

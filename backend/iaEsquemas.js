@@ -43,6 +43,20 @@
 // dois nomes coincidem, `colunaAlvo` é dispensável.
 //
 // ---------------------------------------------------------------------------
+// DESTINO QUE PROCURA EM MAIS DE UMA TABELA
+//
+// `tabelasAlvo` (lista) existe para o orçamento: a empresa lida tanto pode ser
+// um CLIENTE quanto uma PROSPECÇÃO, e o documento não diz qual. Obrigar o
+// usuário a escolher antes de enviar o arquivo seria pedir uma informação que
+// ele só descobre depois de ler.
+//
+// A busca vai na ordem da lista — cliente primeiro, porque um orçamento para
+// quem já compra é o caso comum, e porque a prospecção que virou cliente
+// continua na tabela de prospecções. Qual das duas casou fica gravado em
+// `ia_extracao_itens.alvo_tabela`, e é ele que decide a série do número:
+// ORC para cliente, OCRP para prospecção.
+//
+// ---------------------------------------------------------------------------
 // AÇÕES OFERECIDAS
 //
 // `acoes` diz quais das três (criar / atualizar / ignorar) fazem sentido no
@@ -315,19 +329,24 @@ const ESQUEMAS = {
     id: 'orcamentos',
     rotulo: 'Orçamentos',
 
-    // O alvo é o CLIENTE, não um orçamento. Ver "AÇÕES OFERECIDAS" no topo.
+    // O alvo é o CLIENTE ou a PROSPECÇÃO, não um orçamento.
+    // Ver "DESTINO QUE PROCURA EM MAIS DE UMA TABELA" no topo.
     tabelaAlvo: 'clientes',
+    tabelasAlvo: [
+      { tabela: 'clientes', rotulo: 'Cliente' },
+      { tabela: 'prospeccoes', rotulo: 'Prospecção' }
+    ],
     campoDeExibicao: 'nome_fantasia',
     alvoEhVinculo: true,
     exigeAlvo: true,
-    rotuloAlvo: 'Cliente',
+    rotuloAlvo: 'Cliente ou prospecção',
     acoes: ['criar', 'ignorar'],
     acaoAoCasar: 'criar',
-    motivoSemAlvo: 'Cliente não encontrado — escolha o cliente na coluna "O que fazer", ou cadastre-o antes pelo destino "Clientes e contatos"',
+    motivoSemAlvo: 'Empresa não encontrada em Clientes nem em Prospecções — escolha na coluna "O que fazer", ou cadastre-a antes pelo destino "Clientes e contatos"',
 
     chavesDeCasamento: [
       { campo: 'cnpj', rotulo: 'CNPJ', forte: true, normalizar: soDigitos },
-      { campo: 'cliente', rotulo: 'Cliente', colunaAlvo: 'nome_fantasia' }
+      { campo: 'cliente', rotulo: 'Empresa', colunaAlvo: 'nome_fantasia' }
     ],
 
     instrucoes: [
@@ -370,7 +389,7 @@ const ESQUEMAS = {
       }
     ],
 
-    explicacaoCriar: 'Cria um orçamento PENDENTE para o cliente escolhido, com os itens lidos. Nada é aprovado nem vira pedido.',
+    explicacaoCriar: 'Cria um orçamento PENDENTE para o cliente ou prospecção escolhido, com os itens lidos. Nada é aprovado nem vira pedido.',
     explicacaoAtualizar: 'Indisponível: a leitura cria orçamento novo, nunca mexe num que já existe.'
   },
 
@@ -413,6 +432,17 @@ const obterEsquema = destino => ESQUEMAS[destino] || null;
  * Descrição dos campos para o front desenhar a grade de revisão.
  * `descricao` fica de fora: ela é instrução para o modelo, não rótulo de tela.
  */
+/**
+ * Tabelas em que o destino procura o alvo, sempre como lista.
+ * Destino de tabela única continua declarando só `tabelaAlvo`.
+ */
+function tabelasAlvoDo(destino) {
+  const esquema = obterEsquema(destino);
+  if (!esquema) return [];
+  if (Array.isArray(esquema.tabelasAlvo) && esquema.tabelasAlvo.length) return esquema.tabelasAlvo;
+  return [{ tabela: esquema.tabelaAlvo, rotulo: esquema.rotuloAlvo || null }];
+}
+
 /** Ações que a grade deve oferecer neste destino. */
 function acoesDoDestino(destino) {
   const esquema = obterEsquema(destino);
@@ -447,6 +477,7 @@ module.exports = {
   obterEsquema,
   camposParaTela,
   acoesDoDestino,
+  tabelasAlvoDo,
   soDigitos,
   CAMPO_CONTATOS,
   CAMPOS_EMPRESA

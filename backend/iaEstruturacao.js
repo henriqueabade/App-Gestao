@@ -18,6 +18,26 @@
 // sem ninguém notar.
 //
 // ---------------------------------------------------------------------------
+// TRÊS TENTATIVAS ANTES DE DESISTIR
+//
+// O modo estrito da Groq recusa a resposta inteira quando o modelo devolve JSON
+// malformado — e a causa mais comum não é o modelo estar perdido, é a geração
+// ter sido CORTADA no meio por limite de saída. Devolver "Failed to validate
+// JSON" ao usuário nesse caso é jogar fora uma extração que estava quase boa.
+//
+// Então, em ordem:
+//
+//   1. modo estrito (`json_object`), com `max_tokens` folgado;
+//   2. se recusar, aproveitar o `failed_generation` que a própria Groq devolve
+//      — é o texto que o modelo gerou, e costuma ser JSON cortado que dá para
+//      fechar;
+//   3. só então, uma segunda chamada SEM o modo estrito, deixando o modelo
+//      escrever livre, e extraindo o JSON do texto.
+//
+// A terceira tentativa custa uma chamada a mais, e é por isso que ela é a
+// última: a segunda não custa nada.
+//
+// ---------------------------------------------------------------------------
 // POR QUE `json_object` E NÃO `json_schema`
 //
 // A Groq hospeda vários modelos e o suporte a `json_schema` varia de um para
@@ -35,6 +55,15 @@ const { erro, pedir, chaveGroq, modeloGroq, GROQ_BASE } = provedores;
 
 /** Teto de itens por leitura. Vale como rede contra alucinação em laço. */
 const MAX_ITENS = Number(process.env.IA_MAX_ITENS) || 300;
+
+/**
+ * Teto de saída do modelo.
+ *
+ * Sem isto a Groq usa o padrão dela, que corta a geração bem antes do fim de
+ * uma lista longa — e o JSON cortado é recusado pelo modo estrito, derrubando
+ * a extração inteira com "Failed to validate JSON".
+ */
+const MAX_SAIDA = Number(process.env.IA_MAX_SAIDA_TOKENS) || 8000;
 
 // ---------------------------------------------------------------------------
 // Prompt
@@ -227,19 +256,150 @@ function validarItem(esquema, bruto) {
 // Chamada ao modelo
 // ---------------------------------------------------------------------------
 
-/** O JSON pode vir embrulhado em cerca de código, apesar do formato pedido. */
+/**
+ * Fecha um JSON que foi cortado no meio.
+ *
+ * Uma geração interrompida deixa chaves e colchetes abertos, e às vezes um
+ * objeto pela metade (`{"nome": "Fita`). Descartar o texto inteiro por causa
+ * disso jogaria fora as dezenas de itens que vieram completos ANTES do corte —
+ * que é justamente o caso em que este socorro entra.
+ *
+ * O corte não pode cair em qualquer lugar: `{"a":1},{"c"` fechado à força vira
+ * `{"a":1},{"c"}`, que não é JSON. Por isso o algoritmo só considera os pontos
+ * em que um objeto ou uma lista TERMINOU, e tenta do mais recente para o mais
+ * antigo até um deles parsear.
+ */
+function fecharJsonCortado(texto) {
+  const cru = String(texto || '');
+  const pilha = [];
+  let dentroDeTexto = false;
+  let escapado = false;
+
+  /** Pontos onde um valor composto terminou, com o que ficava aberto ali. */
+  const fechamentos = [];
+
+  for (let i = 0; i < cru.length; i++) {
+    const c = cru[i];
+    if (escapado) { escapado = false; continue; }
+    if (c === '\\') { escapado = true; continue; }
+    if (c === '"') { dentroDeTexto = !dentroDeTexto; continue; }
+    if (dentroDeTexto) continue;
+    if (c === '{' || c === '[') { pilha.push(c === '{' ? '}' : ']'); continue; }
+    if (c === '}' || c === ']') {
+      pilha.pop();
+      fechamentos.push({ pos: i, aberto: pilha.slice() });
+    }
+  }
+
+  // Nada ficou aberto: ou é JSON completo (não é assunto desta função) ou é
+  // texto que não começa como JSON.
+  if (!pilha.length) return null;
+
+  for (let i = fechamentos.length - 1; i >= 0; i--) {
+    const { pos, aberto } = fechamentos[i];
+    // De dentro para fora, e sem a vírgula que ficaria pendurada.
+    const tentativa = cru.slice(0, pos + 1).replace(/,\s*$/, '')
+      + aberto.slice().reverse().join('');
+    try { return JSON.parse(tentativa); } catch (_) { /* tenta um ponto antes */ }
+  }
+
+  return null;
+}
+
+/** O JSON pode vir embrulhado em cerca de código, ou cortado no meio. */
 function extrairJson(texto) {
   const cru = String(texto || '').trim();
   const semCerca = cru.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim();
   try {
     return JSON.parse(semCerca);
-  } catch (_) {
-    // Última tentativa: o primeiro objeto completo do texto.
-    const inicio = semCerca.indexOf('{');
-    const fim = semCerca.lastIndexOf('}');
-    if (inicio === -1 || fim <= inicio) return null;
-    try { return JSON.parse(semCerca.slice(inicio, fim + 1)); } catch (_) { return null; }
+  } catch (_) { /* segue para as tentativas de recuperação */ }
+
+  // O primeiro objeto completo do texto.
+  const inicio = semCerca.indexOf('{');
+  const fim = semCerca.lastIndexOf('}');
+  if (inicio !== -1 && fim > inicio) {
+    try { return JSON.parse(semCerca.slice(inicio, fim + 1)); } catch (_) { /* segue */ }
   }
+
+  // Geração cortada: fecha o que ficou aberto e aproveita o que veio inteiro.
+  return fecharJsonCortado(inicio === -1 ? semCerca : semCerca.slice(inicio));
+}
+
+/** Corpo da chamada de extração. `estrito` liga o modo JSON da Groq. */
+function corpoDaChamada({ modelo, sistema, conteudo, estrito }) {
+  return JSON.stringify({
+    model: modelo,
+    // Extração é trabalho determinístico: variação aqui não é criatividade,
+    // é um preço diferente a cada execução sobre o mesmo documento.
+    temperature: 0,
+    // Sem teto explícito, a Groq corta a geração bem antes do fim de uma lista
+    // longa — e o JSON cortado é recusado pelo modo estrito, derrubando a
+    // extração inteira.
+    max_tokens: MAX_SAIDA,
+    ...(estrito ? { response_format: { type: 'json_object' } } : {}),
+    messages: [
+      { role: 'system', content: sistema },
+      { role: 'user', content: conteudo }
+    ]
+  });
+}
+
+/**
+ * Pede a extração ao modelo, com as três tentativas descritas no topo.
+ *
+ * Devolve `{ dados, truncado }`. `truncado` é verdadeiro quando a geração foi
+ * cortada por tamanho — o revisor precisa saber que pode faltar item do fim da
+ * lista, e o dado que veio antes do corte continua valendo.
+ */
+async function pedirExtracao({ chave, modelo, sistema, conteudo }) {
+  const chamar = estrito => pedir(`${GROQ_BASE}/chat/completions`, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${chave}`, 'content-type': 'application/json' },
+    body: corpoDaChamada({ modelo, sistema, conteudo, estrito })
+  }, 'Groq');
+
+  // 1) Modo estrito.
+  let resposta;
+  try {
+    resposta = await chamar(true);
+  } catch (e) {
+    if (!e?.jsonInvalido) throw e;
+
+    // 2) A recusa traz o que o modelo chegou a gerar. Quase sempre é um JSON
+    //    bom cortado no meio, e fechá-lo sai de graça.
+    const gerado = e.corpo?.error?.failed_generation;
+    const salvo = gerado ? extrairJson(gerado) : null;
+    if (salvo) return { dados: salvo, truncado: true };
+
+    // 3) Só agora uma segunda chamada, sem o modo estrito. Solto, o modelo
+    //    costuma acertar a forma; o que ele não faz é garantir — e por isso a
+    //    validação daqui continua valendo do mesmo jeito.
+    try {
+      resposta = await chamar(false);
+    } catch (e2) {
+      // As duas falharam. Repetir "JSON malformado" deixaria o usuário sem
+      // saída: o que resolve, aqui, é trocar o modelo.
+      if (e2?.jsonInvalido) {
+        throw erro(502,
+          'O modelo não conseguiu montar a resposta neste documento. '
+          + 'Troque o modelo em Configurar, ou tente com menos arquivos de uma vez.');
+      }
+      throw e2;
+    }
+  }
+
+  const escolha = resposta?.choices?.[0];
+  if (!escolha) throw erro(502, 'Groq não devolveu nenhuma extração.');
+
+  const dados = extrairJson(escolha.message?.content);
+  if (!dados) {
+    throw erro(502,
+      'Groq devolveu uma resposta que não é JSON. Tente de novo, ou troque o modelo em Configurar.');
+  }
+
+  // O corte por limite de saída é o caso mais traiçoeiro: a resposta é JSON
+  // válido, só que incompleta.
+  return { dados, truncado: escolha.finish_reason === 'length' };
 }
 
 /**
@@ -261,27 +421,9 @@ async function estruturar({ texto, destino, modelo }) {
 
   const alvo = modelo || modeloGroq();
 
-  const resposta = await pedir(`${GROQ_BASE}/chat/completions`, {
-    method: 'POST',
-    headers: { authorization: `Bearer ${chave}`, 'content-type': 'application/json' },
-    body: JSON.stringify({
-      model: alvo,
-      // Extração é trabalho determinístico: variação aqui não é criatividade,
-      // é um preço diferente a cada execução sobre o mesmo documento.
-      temperature: 0,
-      response_format: { type: 'json_object' },
-      messages: [
-        { role: 'system', content: montarPrompt(esquema) },
-        { role: 'user', content: conteudo }
-      ]
-    })
-  }, 'Groq');
-
-  const escolha = resposta?.choices?.[0];
-  if (!escolha) throw erro(502, 'Groq não devolveu nenhuma extração.');
-
-  const dados = extrairJson(escolha.message?.content);
-  if (!dados) throw erro(502, 'Groq devolveu uma resposta que não é JSON válido.');
+  const { dados, truncado } = await pedirExtracao({
+    chave, modelo: alvo, sistema: montarPrompt(esquema), conteudo
+  });
 
   const brutos = Array.isArray(dados.itens) ? dados.itens
     : Array.isArray(dados) ? dados
@@ -316,16 +458,15 @@ async function estruturar({ texto, destino, modelo }) {
     });
   }
 
-  // O corte por limite de saída é o caso mais traiçoeiro: a resposta é JSON
-  // válido, só que incompleta. Sem aviso, o revisor aprova metade da lista
-  // achando que é a lista inteira.
-  const truncado = escolha.finish_reason === 'length';
-
   return { itens, descartados, modelo: alvo, truncado };
 }
 
 module.exports = {
   MAX_ITENS,
+  MAX_SAIDA,
+  corpoDaChamada,
+  pedirExtracao,
+  fecharJsonCortado,
   estruturar,
   montarPrompt,
   descreverCampos,
