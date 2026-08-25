@@ -398,16 +398,22 @@
     const explicacoes = leitura.explicacoes || {};
     const alvo = (leitura.alvos || []).find(a => String(a.id) === String(item.alvo_id));
 
-    const opcoes = [
-      {
+    // O vínculo muda o sentido de "cadastrar": no orçamento, o alvo é o
+    // CLIENTE a quem o orçamento novo se prende, não um orçamento existente.
+    const vinculo = Boolean(leitura.alvo_eh_vinculo);
+    const rotuloAlvo = leitura.rotulo_alvo || 'registro';
+
+    const todas = {
+      criar: {
         valor: 'criar',
-        rotulo: 'Cadastrar',
+        rotulo: vinculo
+          ? (alvo ? `Criar para: ${alvo.nome}` : `Criar (escolha o ${rotuloAlvo.toLowerCase()})`)
+          : 'Cadastrar',
         titulo: explicacoes.criar,
-        // Destino que só atualiza (ficha técnica): oferecer "Cadastrar" só
-        // produziria erro na hora de aplicar. A explicação fica no title.
-        desabilitada: Boolean(leitura.exige_alvo)
+        // Onde o alvo é vínculo, "criar" sem alvo não tem a quem se prender.
+        desabilitada: vinculo && !item.alvo_id
       },
-      {
+      atualizar: {
         valor: 'atualizar',
         rotulo: alvo ? `Dar entrada em: ${alvo.nome}` : 'Dar entrada no existente',
         titulo: explicacoes.atualizar,
@@ -415,8 +421,16 @@
         // opção clicável só produziria erro na hora de aplicar.
         desabilitada: !item.alvo_id
       },
-      { valor: 'ignorar', rotulo: 'Descartar', titulo: 'O item não é gravado' }
-    ];
+      ignorar: { valor: 'ignorar', rotulo: 'Descartar', titulo: 'O item não é gravado' }
+    };
+
+    // Só as ações que fazem sentido no destino. Oferecer uma que ele não sabe
+    // executar só produziria erro na hora de aplicar — e o revisor descobriria
+    // depois de conferir a lista inteira.
+    const oferecidas = Array.isArray(leitura.acoes) && leitura.acoes.length
+      ? leitura.acoes
+      : ['criar', 'atualizar', 'ignorar'];
+    const opcoes = oferecidas.map(a => todas[a]).filter(Boolean);
 
     for (const o of opcoes) {
       const option = document.createElement('option');
@@ -459,9 +473,11 @@
     if (!alvos.length) return null;
 
     // Só aparece quando há o que resolver: o item já aponta para alguém (e o
-    // revisor pode querer corrigir), ou o destino exige alvo e ele não tem.
+    // revisor pode querer corrigir), o destino exige alvo, ou o alvo é o
+    // vínculo do registro novo — caso em que ele é obrigatório sempre.
     const precisa = item.acao === 'atualizar'
-      || (leitura.exige_alvo && item.acao !== 'atualizar');
+      || leitura.exige_alvo
+      || leitura.alvo_eh_vinculo;
     if (!precisa || !editavel) return null;
 
     const lista = get('iaDetAlvos');
@@ -478,7 +494,9 @@
     input.type = 'text';
     input.className = 'ia-campo ia-alvo';
     input.setAttribute('list', 'iaDetAlvos');
-    input.placeholder = 'escolher…';
+    input.placeholder = leitura.rotulo_alvo
+      ? `escolher ${String(leitura.rotulo_alvo).toLowerCase()}…`
+      : 'escolher…';
     const atual = alvos.find(a => String(a.id) === String(item.alvo_id));
     input.value = atual ? atual.nome : '';
     input.title = 'Para qual registro este item vai';

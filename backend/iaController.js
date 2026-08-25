@@ -574,6 +574,10 @@ router.get('/:id', exigirPermissao('ia.details.view'), async (req, res) => {
       // A grade precisa saber que este destino não cadastra: é o que decide
       // mostrar o seletor de destino e esconder a opção "Cadastrar".
       exige_alvo: Boolean(esquema?.exigeAlvo),
+      alvo_eh_vinculo: Boolean(esquema?.alvoEhVinculo),
+      rotulo_alvo: esquema?.rotuloAlvo || null,
+      // A grade oferece só as ações que fazem sentido no destino.
+      acoes: esquemas.acoesDoDestino(extracao.destino),
       pode_aplicar_destino: aplicacao.DESTINOS_APLICAVEIS.includes(extracao.destino),
       explicacoes: esquema
         ? { criar: esquema.explicacaoCriar || null, atualizar: esquema.explicacaoAtualizar || null }
@@ -831,10 +835,16 @@ router.put('/:id/itens/:itemId', exigirPermissao('ia.review.edit'), async (req, 
       const acao = texto(req.body.acao);
       if (!ACOES_VALIDAS.has(acao)) throw erro(400, `Ação inválida: ${acao}`);
       payload.acao = acao;
-      // Trocar para "cadastrar" tem de soltar o alvo: senão o item sairia
-      // como novo apontando para um insumo existente, e o próximo salvamento
-      // gravaria um em cima do outro.
-      if (acao !== 'atualizar') { payload.alvo_id = null; payload.alvo_tabela = null; }
+      // Trocar para "cadastrar" solta o alvo: senão o item sairia como novo
+      // apontando para um registro existente, e o próximo salvamento gravaria
+      // um em cima do outro.
+      //
+      // MENOS quando o alvo é um vínculo. No orçamento, o alvo é o cliente a
+      // quem o orçamento novo se prende — soltá-lo ao escolher "cadastrar"
+      // deixaria o item sem cliente justo na ação em que ele mais precisa.
+      const soltaAlvo = acao === 'ignorar'
+        || (acao !== 'atualizar' && !esquema.alvoEhVinculo);
+      if (soltaAlvo) { payload.alvo_id = null; payload.alvo_tabela = null; }
     }
 
     if (req.body?.alvo_id !== undefined) {
@@ -842,7 +852,9 @@ router.put('/:id/itens/:itemId', exigirPermissao('ia.review.edit'), async (req, 
       if (alvo !== null && !Number.isFinite(alvo)) throw erro(400, 'Destino inválido');
       payload.alvo_id = alvo;
       payload.alvo_tabela = alvo === null ? null : esquema.tabelaAlvo;
-      if (alvo !== null) payload.acao = payload.acao || 'atualizar';
+      // Escolher o destino já define a ação: "atualizar" nos destinos comuns,
+      // "criar" onde o alvo é vínculo (o orçamento nasce preso ao cliente).
+      if (alvo !== null) payload.acao = payload.acao || esquema.acaoAoCasar || 'atualizar';
     }
 
     if (!Object.keys(payload).length) throw erro(400, 'Nada para alterar');

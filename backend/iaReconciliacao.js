@@ -89,6 +89,15 @@ function reconciliar({ destino, itens, existentes }) {
   const linhas = Array.isArray(existentes) ? existentes : [];
   const exibicao = esquema.campoDeExibicao || chaves[0]?.campo;
 
+  /**
+   * O que propor quando o alvo é encontrado.
+   *
+   * Quase sempre é "atualizar" — casou com um registro, mexe nele. No orçamento
+   * é "criar": o alvo é o CLIENTE, e o que se cria é um orçamento novo pendurado
+   * nele. Ver "AÇÕES OFERECIDAS" em iaEsquemas.js.
+   */
+  const acaoAoCasar = esquema.acaoAoCasar || 'atualizar';
+
   /** Como o registro aparece nas mensagens. */
   const rotularAlvo = linha => String(linha?.[exibicao] ?? `#${linha?.id}`);
 
@@ -102,17 +111,20 @@ function reconciliar({ destino, itens, existentes }) {
    */
   const indices = chaves.map(chave => {
     const limpar = chave.normalizar || normalizar;
+    // O item e a tabela podem chamar a mesma coisa por nomes diferentes: no
+    // orçamento, o campo lido é "cliente" e a coluna é `nome_fantasia`.
+    const coluna = chave.colunaAlvo || chave.campo;
     const exato = new Map();
     const compacto = new Map();
     for (const linha of linhas) {
-      const bruto = linha?.[chave.campo];
+      const bruto = linha?.[coluna];
       if (!bruto) continue;
       const n = limpar(bruto);
       const c = chave.normalizar ? n : compactar(bruto);
       if (n && !exato.has(n)) exato.set(n, linha);
       if (c && !compacto.has(c)) compacto.set(c, linha);
     }
-    return { chave, limpar, exato, compacto };
+    return { chave, coluna, limpar, exato, compacto };
   });
 
   /** Chaves já vistas NESTA leitura, para pegar repetição dentro do lote. */
@@ -158,7 +170,7 @@ function reconciliar({ destino, itens, existentes }) {
       const achadoExato = exato.get(limpar(bruto));
       if (achadoExato) {
         return decidir({
-          acao: 'atualizar',
+          acao: acaoAoCasar,
           alvo_id: achadoExato.id ?? null,
           alvo_tabela: esquema.tabelaAlvo,
           confianca: 1,
@@ -171,7 +183,7 @@ function reconciliar({ destino, itens, existentes }) {
       const achadoCompacto = compacto.get(chave.normalizar ? limpar(bruto) : compactar(bruto));
       if (achadoCompacto) {
         return decidir({
-          acao: 'atualizar',
+          acao: acaoAoCasar,
           alvo_id: achadoCompacto.id ?? null,
           alvo_tabela: esquema.tabelaAlvo,
           confianca: 0.9,
@@ -183,13 +195,12 @@ function reconciliar({ destino, itens, existentes }) {
     // 3) Parecido, mas não igual. NÃO decide: cadastra como novo e avisa.
     //    Juntar por semelhança misturaria registros diferentes, e o erro só
     //    apareceria depois, no inventário ou na carteira de clientes.
-    const campoTexto = preenchidas.find(i => !i.chave.forte)?.chave.campo
-      || preenchidas[0].chave.campo;
-    const valorTexto = item.dados[campoTexto];
+    const fraca = preenchidas.find(i => !i.chave.forte) || preenchidas[0];
+    const valorTexto = item.dados[fraca.chave.campo];
     let melhor = null;
     let melhorNota = 0;
     for (const linha of linhas) {
-      const nota = semelhanca(valorTexto, linha?.[campoTexto]);
+      const nota = semelhanca(valorTexto, linha?.[fraca.coluna]);
       if (nota > melhorNota) { melhorNota = nota; melhor = linha; }
     }
 

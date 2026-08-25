@@ -58,6 +58,13 @@ const COLUNAS = {
     'cob_logradouro', 'cob_numero', 'cob_complemento', 'cob_bairro', 'cob_cidade', 'cob_uf', 'cob_pais', 'cob_cep',
     'ent_logradouro', 'ent_numero', 'ent_complemento', 'ent_bairro', 'ent_cidade', 'ent_uf', 'ent_pais', 'ent_cep'],
   contatos_cliente: ['id', 'id_cliente', 'nome', 'cargo', 'email', 'telefone_fixo', 'telefone_celular'],
+  orcamentos: ['id', 'numero', 'cliente_id', 'contato_id', 'prospeccao_id', 'prospeccao_contato_id',
+    'data_emissao', 'situacao', 'parcelas', 'tipo_parcela', 'forma_pagamento', 'transportadora',
+    'desconto_pagamento', 'desconto_especial', 'desconto_total', 'valor_final', 'observacoes',
+    'validade', 'prazo', 'dono', 'data_aprovacao'],
+  orcamentos_itens: ['id', 'orcamento_id', 'produto_id', 'codigo', 'nome', 'ncm', 'quantidade',
+    'valor_unitario', 'valor_unitario_desc', 'desconto_total', 'valor_desc', 'valor_total'],
+  orcamento_parcelas: ['id', 'orcamento_id', 'numero_parcela', 'valor', 'data_vencimento'],
   prospeccoes: ['id', 'nome_fantasia', 'razao_social', 'cnpj', 'inscricao_estadual', 'site', 'segmento',
     'origem', 'etapa', 'valor_estimado', 'probabilidade', 'responsavel_id',
     'end_logradouro', 'end_numero', 'end_complemento', 'end_bairro', 'end_cidade', 'end_uf', 'end_pais', 'end_cep',
@@ -162,6 +169,7 @@ const MODULOS = [
   // limpar o cache deles, a aplicação de um teste falaria com o servidor do
   // teste anterior, já fechado.
   './db', './materiaPrima', './prospeccoesController', './clientesController',
+  './orcamentosController',
   './iaProvedores', './iaLeitura', './iaEsquemas', './iaEstruturacao',
   './iaReconciliacao', './iaAplicacao', './iaController'
 ];
@@ -3285,4 +3293,379 @@ test('a sub-lista de insumos é obrigatória no esquema', () => {
   assert.strictEqual(campo.obrigatorio, true);
   assert.deepStrictEqual(campo.subcampos.map(s => s.chave), ['nome', 'quantidade']);
   assert.strictEqual(campo.subcampos.every(s => s.obrigatorio), true);
+});
+
+
+// ===========================================================================
+// ETAPA 6 — orçamentos
+//
+// O destino que obrigou a separar duas ideias que até aqui andavam juntas: o
+// ALVO e o registro que muda. Aqui o alvo é o CLIENTE, e o que se cria é um
+// orçamento novo pendurado nele.
+//
+// E a regra que o diferencia da ficha técnica: ou entra inteiro, ou não entra.
+// Uma receita incompleta continua utilizável; um orçamento incompleto é um
+// PREÇO ERRADO que parece completo e vai para o cliente.
+// ===========================================================================
+
+function baseOrcamento() {
+  const dados = baseDados();
+  dados.clientes = [
+    { id: 50, nome_fantasia: 'Casa Vicenzo', razao_social: 'Vicenzo Ltda', cnpj: '11.111.111/0001-11' },
+    { id: 51, nome_fantasia: 'Decor Alpina', cnpj: null }
+  ];
+  dados.contatos_cliente = [];
+  dados.produtos = [
+    { id: 9, codigo: 'PR-210', nome: 'Painel Ripado 2,10', preco_venda: 900, ncm: '9403' },
+    { id: 10, codigo: 'ML-01', nome: 'Mesa Lateral Carvalho', preco_venda: 450, ncm: '9403' }
+  ];
+  dados.produtos_insumos = [];
+  dados.orcamentos = [];
+  dados.orcamentos_itens = [];
+  dados.orcamento_parcelas = [];
+  return dados;
+}
+
+const PEDIDO_LIDO = {
+  itens: [{
+    cliente: 'Casa Vicenzo',
+    cnpj: '11.111.111/0001-11',
+    validade: '30/09/2026',
+    prazo: '30 dias',
+    forma_pagamento: 'Boleto 30/60',
+    observacoes: 'Entregar na obra',
+    itens: [
+      { codigo: 'PR-210', nome: 'Painel Ripado', quantidade: '3', valor_unitario: '850,00' },
+      { codigo: null, nome: 'Mesa Lateral Carvalho', quantidade: '2', valor_unitario: null }
+    ]
+  }]
+};
+
+async function prepararOrcamento(resposta = PEDIDO_LIDO, dados) {
+  const ctx = await montarComIA(comLeitura(dados || baseOrcamento(), 'orcamentos'), {}, {
+    groq: () => ({ payload: respostaGroq(resposta) })
+  });
+  await chamar(ctx.porta, '/api/ia/5/estruturar', { method: 'POST' });
+  return ctx;
+}
+
+const itensDoOrcamento = (ctx, orcamentoId) =>
+  ctx.tabelas.orcamentos_itens.filter(i => Number(i.orcamento_id) === orcamentoId);
+
+// ---------------------------------------------------------------------------
+// Reconciliação: o alvo é o CLIENTE
+// ---------------------------------------------------------------------------
+
+test('o cliente casa pelo CNPJ e a ação proposta é CRIAR', async () => {
+  const ctx = await prepararOrcamento();
+  try {
+    const item = itensDa(ctx, 5)[0];
+
+    // Diferente de todos os outros destinos: casar não quer dizer "atualizar".
+    // O alvo é o cliente; o que se cria é um orçamento novo preso a ele.
+    assert.strictEqual(item.acao, 'criar');
+    assert.strictEqual(item.alvo_id, 50);
+    assert.strictEqual(item.alvo_tabela, 'clientes');
+    assert.strictEqual(item.mensagem, null);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('o campo lido "cliente" casa com a coluna nome_fantasia', async () => {
+  // Primeira vez em que o item e a tabela chamam a mesma coisa por nomes
+  // diferentes: sem `colunaAlvo`, a comparação seria contra uma coluna que
+  // não existe e nada casaria.
+  const ctx = await prepararOrcamento({
+    itens: [{ cliente: 'Decor Alpina', cnpj: null, itens: [{ nome: 'Painel Ripado 2,10', quantidade: '1' }] }]
+  });
+  try {
+    const item = itensDa(ctx, 5)[0];
+    assert.strictEqual(item.alvo_id, 51);
+    assert.match(item.mensagem, /Casou por Cliente/);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('cliente que não existe não vira orçamento solto', async () => {
+  const ctx = await prepararOrcamento({
+    itens: [{ cliente: 'Empresa Desconhecida', cnpj: null, itens: [{ nome: 'Painel Ripado 2,10', quantidade: '1' }] }]
+  });
+  try {
+    const item = itensDa(ctx, 5)[0];
+    assert.strictEqual(item.acao, 'ignorar');
+    assert.match(item.mensagem, /Cliente não encontrado/);
+    // E manda para o caminho certo de cadastrá-lo.
+    assert.match(item.mensagem, /Clientes e contatos/);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Aplicação
+// ---------------------------------------------------------------------------
+
+test('aplicar cria o orçamento pendente com os itens', async () => {
+  const ctx = await prepararOrcamento();
+  try {
+    const corpo = await (await aplicarEm(ctx, 'orcamentos')).json();
+    assert.strictEqual(corpo.aplicados, 1, JSON.stringify(corpo.itens));
+
+    const orc = ctx.tabelas.orcamentos[0];
+    assert.ok(orc, 'o orçamento não foi criado');
+    assert.strictEqual(Number(orc.cliente_id), 50);
+    // Aprovar dispara conversão em pedido, que abate estoque: decisão de
+    // gente, não de leitura de documento.
+    assert.strictEqual(orc.situacao, 'Pendente');
+    assert.match(String(orc.numero), /^ORC\d+$/);
+
+    const itens = itensDoOrcamento(ctx, orc.id);
+    assert.strictEqual(itens.length, 2);
+    assert.strictEqual(Number(itens[0].produto_id), 9);
+    assert.strictEqual(Number(itens[0].quantidade), 3);
+    assert.strictEqual(Number(itens[0].valor_unitario), 850);
+    assert.strictEqual(Number(itens[0].valor_total), 2550);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('item sem preço no documento usa o preço de tabela, e avisa', async () => {
+  const ctx = await prepararOrcamento();
+  try {
+    const corpo = await (await aplicarEm(ctx, 'orcamentos')).json();
+
+    const orc = ctx.tabelas.orcamentos[0];
+    const mesa = itensDoOrcamento(ctx, orc.id).find(i => Number(i.produto_id) === 10);
+    // Um pedido de compra costuma listar o que se quer, não quanto custa.
+    assert.strictEqual(Number(mesa.valor_unitario), 450);
+    assert.strictEqual(Number(mesa.valor_total), 900);
+    assert.match(corpo.itens[0].mensagem, /preço de tabela/i);
+    assert.match(corpo.itens[0].mensagem, /Mesa Lateral Carvalho/);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('o total do orçamento é a soma dos itens', async () => {
+  const ctx = await prepararOrcamento();
+  try {
+    await aplicarEm(ctx, 'orcamentos');
+    // 3 × 850 + 2 × 450 = 3450
+    assert.strictEqual(Number(ctx.tabelas.orcamentos[0].valor_final), 3450);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('produto fora do catálogo NÃO gera orçamento pela metade', async () => {
+  // A diferença que separa este destino da ficha técnica: um orçamento
+  // incompleto é um PREÇO ERRADO, e ele parece completo.
+  const ctx = await prepararOrcamento({
+    itens: [{
+      cliente: 'Casa Vicenzo', cnpj: '11.111.111/0001-11',
+      itens: [
+        { nome: 'Painel Ripado 2,10', quantidade: '2' },
+        { nome: 'Banqueta Que Nao Existe', quantidade: '4' }
+      ]
+    }]
+  });
+  try {
+    const corpo = await (await aplicarEm(ctx, 'orcamentos')).json();
+    assert.strictEqual(corpo.com_erro, 1);
+    assert.match(corpo.itens[0].mensagem, /Banqueta Que Nao Existe/);
+    assert.match(corpo.itens[0].mensagem, /Nada foi gravado/i);
+
+    // Nada entrou: aplicar de novo depois de corrigir é seguro.
+    assert.strictEqual(ctx.tabelas.orcamentos.length, 0);
+    assert.strictEqual(ctx.tabelas.orcamentos_itens.length, 0);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('a numeração do orçamento continua de onde parou', async () => {
+  const dados = baseOrcamento();
+  dados.orcamentos.push({ id: 1, numero: 'ORC77', cliente_id: 50, situacao: 'Pendente' });
+  const ctx = await prepararOrcamento(PEDIDO_LIDO, dados);
+  try {
+    await aplicarEm(ctx, 'orcamentos');
+    const novo = ctx.tabelas.orcamentos.find(o => o.id !== 1);
+    // A geração de número é a do próprio módulo de Orçamentos, com a
+    // retentativa em cima da constraint única.
+    assert.strictEqual(novo.numero, 'ORC78');
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('o orçamento nasce com dono e com a procedência anotada', async () => {
+  const ctx = await prepararOrcamento();
+  try {
+    await aplicarEm(ctx, 'orcamentos');
+    const orc = ctx.tabelas.orcamentos[0];
+
+    // Sem dono, o orçamento aparece sem responsável na tela.
+    assert.strictEqual(orc.dono, 'Henrique');
+    // E a observação diz de onde ele veio.
+    assert.match(String(orc.observacoes), /Leitura de IA #5/);
+    assert.match(String(orc.observacoes), /Entregar na obra/);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('a data lida em dd/mm/aaaa vira ISO na validade', async () => {
+  const ctx = await prepararOrcamento();
+  try {
+    await aplicarEm(ctx, 'orcamentos');
+    assert.strictEqual(ctx.tabelas.orcamentos[0].validade, '2026-09-30');
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('atualizar não é oferecido: a leitura não mexe em orçamento existente', async () => {
+  const ctx = await prepararOrcamento();
+  try {
+    const item = itensDa(ctx, 5)[0];
+    await chamar(ctx.porta, `/api/ia/5/itens/${item.id}`, {
+      method: 'PUT', body: JSON.stringify({ acao: 'atualizar' })
+    });
+
+    const corpo = await (await aplicarEm(ctx, 'orcamentos')).json();
+    assert.strictEqual(corpo.com_erro, 1);
+    assert.match(corpo.itens[0].mensagem, /só cria orçamento novo/i);
+    assert.strictEqual(ctx.tabelas.orcamentos.length, 0);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('sem cliente escolhido, nada é gravado', async () => {
+  const ctx = await prepararOrcamento({
+    itens: [{ cliente: 'Empresa Desconhecida', cnpj: null, itens: [{ nome: 'Painel Ripado 2,10', quantidade: '1' }] }]
+  });
+  try {
+    const item = itensDa(ctx, 5)[0];
+    await chamar(ctx.porta, `/api/ia/5/itens/${item.id}`, {
+      method: 'PUT', body: JSON.stringify({ acao: 'criar' })
+    });
+
+    const corpo = await (await aplicarEm(ctx, 'orcamentos')).json();
+    assert.strictEqual(corpo.com_erro, 1);
+    assert.match(corpo.itens[0].mensagem, /Sem cliente de destino/);
+    assert.strictEqual(ctx.tabelas.orcamentos.length, 0);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('escolher "cadastrar" NÃO solta o cliente quando o alvo é vínculo', async () => {
+  // Nos outros destinos, trocar para "cadastrar" solta o alvo. Aqui isso
+  // deixaria o orçamento sem cliente justo na ação em que ele mais precisa.
+  const ctx = await prepararOrcamento();
+  try {
+    const item = itensDa(ctx, 5)[0];
+    const salvo = await (await chamar(ctx.porta, `/api/ia/5/itens/${item.id}`, {
+      method: 'PUT', body: JSON.stringify({ acao: 'criar' })
+    })).json();
+
+    assert.strictEqual(salvo.acao, 'criar');
+    assert.strictEqual(salvo.alvo_id, 50, 'o cliente foi solto ao escolher cadastrar');
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('escolher "descartar" solta o alvo mesmo sendo vínculo', async () => {
+  const ctx = await prepararOrcamento();
+  try {
+    const item = itensDa(ctx, 5)[0];
+    const salvo = await (await chamar(ctx.porta, `/api/ia/5/itens/${item.id}`, {
+      method: 'PUT', body: JSON.stringify({ acao: 'ignorar' })
+    })).json();
+
+    assert.strictEqual(salvo.alvo_id, null);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('apontar o cliente já define a ação como CRIAR', async () => {
+  const ctx = await prepararOrcamento({
+    itens: [{ cliente: 'Empresa Desconhecida', cnpj: null, itens: [{ nome: 'Painel Ripado 2,10', quantidade: '1' }] }]
+  });
+  try {
+    const item = itensDa(ctx, 5)[0];
+    const salvo = await (await chamar(ctx.porta, `/api/ia/5/itens/${item.id}`, {
+      method: 'PUT', body: JSON.stringify({ alvo_id: 51 })
+    })).json();
+
+    // Nos outros destinos, apontar significa "atualizar". Aqui, "criar".
+    assert.strictEqual(salvo.acao, 'criar');
+    assert.strictEqual(salvo.alvo_id, 51);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('aplicar em Orçamentos exige a permissão de criar orçamento', async () => {
+  const dados = permitir(baseOrcamento(), [
+    'acao_view', 'acao_details_view', 'acao_extract', 'acao_apply_orc'
+  ]);
+  const ctx = await montarComIA(comLeitura(dados, 'orcamentos'), {}, {
+    groq: () => ({ payload: respostaGroq(PEDIDO_LIDO) })
+  });
+  try {
+    await chamar(ctx.porta, '/api/ia/5/estruturar', { method: 'POST' });
+    const resp = await aplicarEm(ctx, 'orcamentos', 5, { usuario: 2 });
+    assert.strictEqual(resp.status, 403);
+    assert.strictEqual(ctx.tabelas.orcamentos.length, 0);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Detalhe
+// ---------------------------------------------------------------------------
+
+test('o detalhe conta que o alvo é vínculo e quais ações valem', async () => {
+  const ctx = await montarComIA(comLeitura(baseOrcamento(), 'orcamentos'));
+  try {
+    const dados = await (await chamar(ctx.porta, '/api/ia/5')).json();
+
+    assert.strictEqual(dados.alvo_eh_vinculo, true);
+    assert.strictEqual(dados.exige_alvo, true);
+    assert.strictEqual(dados.rotulo_alvo, 'Cliente');
+    assert.deepStrictEqual(dados.acoes, ['criar', 'ignorar']);
+    // Os alvos são os CLIENTES, não orçamentos.
+    assert.deepStrictEqual(dados.alvos.map(a => a.nome).sort(), ['Casa Vicenzo', 'Decor Alpina']);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('os destinos comuns continuam oferecendo as três ações', async () => {
+  const ctx = await montarComIA(comLeitura(baseEmpresas(), 'clientes'));
+  try {
+    const dados = await (await chamar(ctx.porta, '/api/ia/5')).json();
+    assert.deepStrictEqual(dados.acoes, ['criar', 'atualizar', 'ignorar']);
+    assert.strictEqual(dados.alvo_eh_vinculo, false);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('todos os cinco destinos estão prontos', () => {
+  const { DESTINOS_PRONTOS } = require('./iaEsquemas');
+  const { DESTINOS_APLICAVEIS } = require('./iaAplicacao');
+  const { DESTINOS } = require('./iaController');
+
+  const doModulo = DESTINOS.map(d => d.id).sort();
+  assert.deepStrictEqual(DESTINOS_PRONTOS.slice().sort(), doModulo);
+  assert.deepStrictEqual(DESTINOS_APLICAVEIS.slice().sort(), doModulo);
 });

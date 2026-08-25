@@ -974,3 +974,9 @@ router.delete('/:id', exigirPermissao('orc.delete'), exigirSupAdmin, async (req,
 });
 
 module.exports = router;
+// Reaproveitados pelo módulo de IA. `criarOrcamentoComNumero` carrega a
+// retentativa em cima da constraint única de `numero` — reimplementá-la lá
+// significaria descobrir a colisão em produção, no primeiro orçamento
+// concorrente.
+module.exports.criarOrcamentoComNumero = criarOrcamentoComNumero;
+module.exports.buildOrcamentoPayload = buildOrcamentoPayload;

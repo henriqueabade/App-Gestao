@@ -331,6 +331,8 @@ function leituraFicha(extra = {}) {
     destino: 'produto_insumos',
     destino_rotulo: 'Insumos de produtos',
     exige_alvo: true,
+    rotulo_alvo: 'Produto',
+    acoes: ['atualizar', 'ignorar'],
     campos: [
       { chave: 'codigo', rotulo: 'Código', tipo: 'texto', obrigatorio: false, largura: 'media' },
       { chave: 'nome', rotulo: 'Produto', tipo: 'texto', obrigatorio: true, largura: 'grande' },
@@ -357,6 +359,52 @@ function leituraFicha(extra = {}) {
         id: 2, linha: 2, acao: 'ignorar', alvo_id: null, status: 'pendente',
         mensagem: 'Produto não encontrado no catálogo — escolha o produto na coluna "O que fazer".',
         dados: { codigo: null, nome: 'Banqueta Alta', insumos: [{ nome: 'Tubo 1/2', quantidade: 4 }] }
+      }
+    ],
+    ...extra
+  });
+}
+
+/**
+ * Leitura de ORÇAMENTO: o alvo é VÍNCULO.
+ *
+ * O item não aponta para um orçamento que já existe — aponta para o CLIENTE a
+ * quem o orçamento novo vai se prender. É por isso que a ação proposta ao casar
+ * é "criar" e não "atualizar", e por isso que escolher "cadastrar" não pode
+ * soltar o alvo.
+ */
+function leituraOrcamento(extra = {}) {
+  return leituraPadrao({
+    destino: 'orcamentos',
+    destino_rotulo: 'Orçamentos',
+    exige_alvo: true,
+    alvo_eh_vinculo: true,
+    rotulo_alvo: 'Cliente',
+    acoes: ['criar', 'ignorar'],
+    campos: [
+      { chave: 'cliente', rotulo: 'Cliente', tipo: 'texto', obrigatorio: true, largura: 'grande' },
+      { chave: 'cnpj', rotulo: 'CNPJ', tipo: 'texto', obrigatorio: false, largura: 'media' },
+      {
+        chave: 'itens', rotulo: 'Itens', tipo: 'lista', obrigatorio: true, largura: 'media',
+        subcampos: [
+          { chave: 'nome', rotulo: 'Produto', tipo: 'texto', obrigatorio: true },
+          { chave: 'quantidade', rotulo: 'Qtde', tipo: 'numero', obrigatorio: true },
+          { chave: 'valor_unitario', rotulo: 'Valor un.', tipo: 'dinheiro', obrigatorio: false }
+        ]
+      }
+    ],
+    alvos: [{ id: 50, nome: 'Casa Vicenzo' }, { id: 51, nome: 'Decor Alpina' }],
+    sugestoes: {},
+    explicacoes: { criar: 'Cria um orçamento pendente', atualizar: 'Indisponível' },
+    itens: [
+      {
+        id: 1, linha: 1, acao: 'criar', alvo_id: 50, status: 'pendente', mensagem: null,
+        dados: { cliente: 'Casa Vicenzo', cnpj: '11.111.111/0001-11', itens: [{ nome: 'Painel', quantidade: 3, valor_unitario: 850 }] }
+      },
+      {
+        id: 2, linha: 2, acao: 'ignorar', alvo_id: null, status: 'pendente',
+        mensagem: 'Cliente não encontrado — escolha o cliente na coluna "O que fazer".',
+        dados: { cliente: 'Empresa Nova', cnpj: null, itens: [{ nome: 'Mesa', quantidade: 1, valor_unitario: null }] }
       }
     ],
     ...extra
@@ -888,15 +936,26 @@ test('leitura aplicada mostra os contatos, mas travados', async () => {
 // Destino que só atualiza (ficha técnica)
 // ---------------------------------------------------------------------------
 
-test('"Cadastrar" fica desabilitado quando o destino só atualiza', async () => {
+test('"Cadastrar" nem é oferecido quando o destino só atualiza', async () => {
   // A ficha técnica não tem preço, coleção nem markup: cadastrar produto a
-  // partir dela produziria uma ficha pela metade no meio do catálogo.
+  // partir dela produziria uma ficha pela metade no meio do catálogo. Oferecer
+  // a opção só para deixá-la cinza faria o revisor tentar antes de ler.
   const b = criarBancada({ leitura: leituraFicha() });
   await b.pronta();
 
-  const criar = seletorDa(linhasDeItem(b)[0]).filhos.find(o => o.value === 'criar');
-  assert.equal(criar.disabled, true);
-  assert.match(criar.title, /Indisponível/i);
+  const valores = seletorDa(linhasDeItem(b)[0]).filhos.map(o => o.value);
+  assert.deepEqual(valores, ['atualizar', 'ignorar']);
+});
+
+test('sem `acoes` no destino, as três continuam disponíveis', async () => {
+  // Resposta antiga em cache não pode deixar a grade sem nenhuma ação.
+  const leitura = leituraFicha();
+  delete leitura.acoes;
+  const b = criarBancada({ leitura });
+  await b.pronta();
+
+  const valores = seletorDa(linhasDeItem(b)[0]).filhos.map(o => o.value);
+  assert.deepEqual(valores, ['criar', 'atualizar', 'ignorar']);
 });
 
 test('o item sem produto ganha um seletor de destino', async () => {
@@ -973,6 +1032,85 @@ test('leitura aplicada não mostra seletor de destino', async () => {
   await b.pronta();
 
   assert.equal(seletorDeAlvo(linhasDeItem(b)[0]), undefined);
+});
+
+// ---------------------------------------------------------------------------
+// Alvo que é vínculo (orçamento)
+// ---------------------------------------------------------------------------
+
+test('o destino de vínculo oferece só criar e descartar', async () => {
+  const b = criarBancada({ leitura: leituraOrcamento() });
+  await b.pronta();
+
+  const valores = seletorDa(linhasDeItem(b)[0]).filhos.map(o => o.value);
+  assert.deepEqual(valores, ['criar', 'ignorar']);
+});
+
+test('"Criar" mostra a quem o orçamento vai se prender', async () => {
+  const b = criarBancada({ leitura: leituraOrcamento() });
+  await b.pronta();
+
+  const criar = seletorDa(linhasDeItem(b)[0]).filhos.find(o => o.value === 'criar');
+  assert.match(criar.textContent, /Criar para: Casa Vicenzo/);
+});
+
+test('sem cliente escolhido, "Criar" fica desabilitado', async () => {
+  // Um orçamento sem cliente não tem a quem se prender: existiria no banco e
+  // em lugar nenhum na tela.
+  const b = criarBancada({ leitura: leituraOrcamento() });
+  await b.pronta();
+
+  const criar = seletorDa(linhasDeItem(b)[1]).filhos.find(o => o.value === 'criar');
+  assert.equal(criar.disabled, true);
+  assert.match(criar.textContent, /escolha o cliente/i);
+});
+
+test('o seletor de cliente aparece em toda linha editável', async () => {
+  // Diferente dos outros destinos, aqui ele não é exceção — é o controle
+  // principal, porque o cliente é obrigatório em qualquer caso.
+  const b = criarBancada({ leitura: leituraOrcamento() });
+  await b.pronta();
+
+  assert.ok(seletorDeAlvo(linhasDeItem(b)[0]), 'a linha que já tem cliente ficou sem seletor');
+  assert.ok(seletorDeAlvo(linhasDeItem(b)[1]), 'a linha sem cliente ficou sem seletor');
+  assert.match(seletorDeAlvo(linhasDeItem(b)[1]).placeholder, /escolher cliente/i);
+});
+
+test('escolher o cliente aponta o item e mantém a ação de criar', async () => {
+  const b = criarBancada({ leitura: leituraOrcamento() });
+  await b.pronta();
+
+  const seletor = seletorDeAlvo(linhasDeItem(b)[1]);
+  seletor.value = 'Decor Alpina';
+  seletor.disparar('change');
+  await b.pronta();
+
+  const put = b.chamadas.find(c => c.metodo === 'PUT');
+  // O front manda `acao: 'atualizar'` e o backend corrige pelo esquema; o que
+  // importa aqui é o cliente ter sido apontado.
+  assert.equal(put.corpo.alvo_id, 51);
+});
+
+test('a sub-lista de itens do orçamento abre com as colunas certas', async () => {
+  const b = criarBancada({ leitura: leituraOrcamento() });
+  await b.pronta();
+
+  botaoDaLista(linhasDeItem(b)[0]).disparar('click');
+  await b.pronta();
+
+  const cabecalhos = subLinhas(b)[0].todos().filter(f => f.tagName === 'TH').map(f => f.textContent);
+  assert.deepEqual(cabecalhos.slice(0, 3), ['Produto', 'Qtde', 'Valor un.']);
+});
+
+test('orçamento sem nenhum item trava o aplicar', async () => {
+  // A lista de itens é obrigatória: um orçamento sem item não é orçamento.
+  const leitura = leituraOrcamento();
+  leitura.itens[0].dados.itens = [];
+  const b = criarBancada({ leitura });
+  await b.pronta();
+
+  assert.equal(b.el('iaDetAplicar').disabled, true);
+  assert.match(b.el('iaDetResumoRevisao').texto(), /1 sem campo obrigatório/);
 });
 
 // ---------------------------------------------------------------------------

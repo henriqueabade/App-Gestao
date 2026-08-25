@@ -24,6 +24,7 @@
 const db = require('./db');
 const materiaPrima = require('./materiaPrima');
 const prospeccoes = require('./prospeccoesController');
+const orcamentos = require('./orcamentosController');
 const clientes = require('./clientesController');
 const { obterEsquema, soDigitos } = require('./iaEsquemas');
 const { normalizar } = require('./iaReconciliacao');
@@ -597,10 +598,146 @@ async function aplicarProdutoInsumos(item, contexto) {
   return { alvo_id: produtoId, mensagem: [...feitos, ...avisos].join(' · ') };
 }
 
+// ---------------------------------------------------------------------------
+// Orçamentos
+// ---------------------------------------------------------------------------
+
+/**
+ * Cria um orçamento PENDENTE para o cliente escolhido.
+ *
+ * ---------------------------------------------------------------------------
+ * OU ENTRA INTEIRO, OU NÃO ENTRA
+ *
+ * Diferente da ficha técnica, aqui um item que não casou NÃO é pulado. Uma
+ * receita incompleta continua utilizável; um orçamento incompleto é um PREÇO
+ * ERRADO — e ele parece completo, sai da tela com um número e vai para o
+ * cliente. Se algum produto da lista não existe no catálogo, nada é gravado e a
+ * mensagem diz quais faltaram. Como nada entrou, aplicar de novo depois de
+ * corrigir é seguro.
+ *
+ * ---------------------------------------------------------------------------
+ * NASCE PENDENTE
+ *
+ * `situacao: 'Pendente'`, sempre. Aprovar um orçamento dispara a conversão em
+ * pedido, que abate estoque — decisão de gente, não de leitura de documento.
+ */
+async function aplicarOrcamentos(item, contexto) {
+  const { api, cache, usuarioId } = contexto;
+  const dados = item.dados || {};
+
+  if (item.acao !== 'criar') {
+    throw erro(400, 'A leitura só cria orçamento novo; ela não mexe em orçamento que já existe.');
+  }
+
+  const clienteId = idAlvo(item, 'cliente');
+
+  const linhas = (Array.isArray(dados.itens) ? dados.itens : [])
+    .filter(i => String(i?.nome || '').trim());
+  if (!linhas.length) throw erro(400, 'Nenhum item neste orçamento');
+
+  // Catálogo UMA vez por lote. Dois índices porque o documento tanto pode
+  // trazer o código quanto só o nome.
+  if (!cache.produtos) {
+    const lista = await api.get('/api/produtos')
+      .then(r => (Array.isArray(r) ? r : [])).catch(() => []);
+    cache.produtos = { porNome: new Map(), porCodigo: new Map() };
+    for (const p of lista) {
+      const n = normalizar(p?.nome);
+      const c = normalizar(p?.codigo);
+      if (n && !cache.produtos.porNome.has(n)) cache.produtos.porNome.set(n, p);
+      if (c && !cache.produtos.porCodigo.has(c)) cache.produtos.porCodigo.set(c, p);
+    }
+  }
+
+  const itens = [];
+  const semCadastro = [];
+  const semPreco = [];
+
+  for (const linha of linhas) {
+    const produto = cache.produtos.porCodigo.get(normalizar(linha.codigo))
+      || cache.produtos.porNome.get(normalizar(linha.nome));
+    if (!produto) { semCadastro.push(String(linha.nome).trim()); continue; }
+
+    const quantidade = Number(linha.quantidade);
+    if (!Number.isFinite(quantidade) || quantidade <= 0) {
+      semCadastro.push(`${linha.nome} (quantidade inválida)`);
+      continue;
+    }
+
+    // Sem preço no documento, vale o de tabela. É o comportamento útil: um
+    // pedido de compra costuma listar o que se quer, não quanto custa.
+    let valorUnitario = Number(linha.valor_unitario);
+    if (!Number.isFinite(valorUnitario) || valorUnitario <= 0) {
+      valorUnitario = Number(produto.preco_venda) || 0;
+      semPreco.push(produto.nome);
+    }
+
+    itens.push({
+      produto_id: produto.id,
+      codigo: produto.codigo || null,
+      nome: produto.nome,
+      ncm: produto.ncm || null,
+      quantidade,
+      valor_unitario: valorUnitario,
+      valor_unitario_desc: valorUnitario,
+      desconto_total: 0,
+      valor_desc: 0,
+      valor_total: valorUnitario * quantidade
+    });
+  }
+
+  // Ver "OU ENTRA INTEIRO, OU NÃO ENTRA" acima.
+  if (semCadastro.length) {
+    throw erro(400,
+      `${semCadastro.length} produto(s) não estão no catálogo: ${semCadastro.slice(0, 5).join(', ')}. `
+      + 'Nada foi gravado — cadastre-os e aplique de novo.');
+  }
+
+  const valorFinal = itens.reduce((soma, i) => soma + i.valor_total, 0);
+
+  // `dono` guarda o NOME do usuário (é o que o select do módulo grava). Sem
+  // ele o orçamento fica sem responsável na tela.
+  if (cache.nomeDoUsuario === undefined) {
+    cache.nomeDoUsuario = usuarioId
+      ? await api.get(`/api/usuarios/${usuarioId}`).then(u => u?.nome || null).catch(() => null)
+      : null;
+  }
+
+  const { created, numero } = await orcamentos.criarOrcamentoComNumero(api, {
+    cliente_id: clienteId,
+    situacao: 'Pendente',
+    data_emissao: new Date().toISOString(),
+    validade: dados.validade || null,
+    prazo: dados.prazo || null,
+    forma_pagamento: dados.forma_pagamento || null,
+    observacoes: [dados.observacoes, contexto.nota].filter(Boolean).join(' · ').slice(0, 500),
+    desconto_pagamento: 0,
+    desconto_especial: 0,
+    desconto_total: 0,
+    valor_final: valorFinal,
+    dono: cache.nomeDoUsuario
+  });
+
+  const orcamentoId = created?.id ?? created?.[0]?.id;
+  if (!orcamentoId) throw erro(502, 'A API não devolveu o id do orçamento criado');
+
+  for (const linha of itens) {
+    await api.post('/api/orcamentos_itens', { ...linha, orcamento_id: orcamentoId });
+  }
+
+  const feitos = [`Orçamento ${numero} criado (${itens.length} itens)`];
+  if (semPreco.length) {
+    feitos.push(`${semPreco.length} item(ns) com preço de tabela: ${semPreco.slice(0, 3).join(', ')}`);
+  }
+
+  return { alvo_id: orcamentoId, mensagem: feitos.join(' · ') };
+}
+
 const APLICADORES = {
   materia_prima: aplicarMateriaPrima,
   clientes: aplicarClientes,
   produto_insumos: aplicarProdutoInsumos,
+  orcamentos: aplicarOrcamentos,
   prospeccoes: aplicarProspeccoes
 };
 
@@ -690,5 +827,6 @@ module.exports = {
   aplicarClientes,
   aplicarProspeccoes,
   aplicarProdutoInsumos,
+  aplicarOrcamentos,
   aplicar
 };

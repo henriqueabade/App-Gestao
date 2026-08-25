@@ -37,6 +37,27 @@
 // `normalizar` limpa antes de comparar (CNPJ escrito com e sem pontuação é o
 // mesmo CNPJ). `forte: true` diz que um empate ali dispensa qualquer ressalva.
 //
+// `colunaAlvo` existe porque o item e a tabela nem sempre falam a mesma língua:
+// no orçamento o campo lido chama-se "cliente" (é assim que ele aparece na
+// grade) e a coluna correspondente em `clientes` é `nome_fantasia`. Quando os
+// dois nomes coincidem, `colunaAlvo` é dispensável.
+//
+// ---------------------------------------------------------------------------
+// AÇÕES OFERECIDAS
+//
+// `acoes` diz quais das três (criar / atualizar / ignorar) fazem sentido no
+// destino, e `acaoAoCasar` diz qual propor quando o alvo é encontrado. Nem todo
+// destino usa as três:
+//
+//   matéria-prima, clientes, prospecções .. cadastra OU atualiza
+//   insumos de produto ................... só atualiza (o produto tem de existir)
+//   orçamentos ........................... só cadastra, mas PRECISA de um alvo
+//
+// O orçamento é o caso que obriga a separar as duas ideias. O alvo dele não é
+// um orçamento que já existe — é o CLIENTE a quem o orçamento novo se prende.
+// É o que `alvoEhVinculo` marca: o alvo não é o registro que vai mudar, é o
+// registro em que o novo se pendura.
+//
 // ---------------------------------------------------------------------------
 // DESTINO QUE SÓ ATUALIZA
 //
@@ -242,6 +263,8 @@ const ESQUEMAS = {
 
     // O produto tem de existir. Ver "DESTINO QUE SÓ ATUALIZA" no topo.
     exigeAlvo: true,
+    rotuloAlvo: 'Produto',
+    acoes: ['atualizar', 'ignorar'],
     motivoSemAlvo: 'Produto não encontrado no catálogo — escolha o produto na coluna "O que fazer"',
 
     // Código primeiro: é identificador do catálogo. Nome de produto se repete
@@ -288,6 +311,69 @@ const ESQUEMAS = {
     explicacaoAtualizar: 'Acrescenta os insumos que faltam na ficha do produto e corrige a quantidade dos que já estão. NUNCA remove insumo que o documento não citou.'
   },
 
+  orcamentos: {
+    id: 'orcamentos',
+    rotulo: 'Orçamentos',
+
+    // O alvo é o CLIENTE, não um orçamento. Ver "AÇÕES OFERECIDAS" no topo.
+    tabelaAlvo: 'clientes',
+    campoDeExibicao: 'nome_fantasia',
+    alvoEhVinculo: true,
+    exigeAlvo: true,
+    rotuloAlvo: 'Cliente',
+    acoes: ['criar', 'ignorar'],
+    acaoAoCasar: 'criar',
+    motivoSemAlvo: 'Cliente não encontrado — escolha o cliente na coluna "O que fazer", ou cadastre-o antes pelo destino "Clientes e contatos"',
+
+    chavesDeCasamento: [
+      { campo: 'cnpj', rotulo: 'CNPJ', forte: true, normalizar: soDigitos },
+      { campo: 'cliente', rotulo: 'Cliente', colunaAlvo: 'nome_fantasia' }
+    ],
+
+    instrucoes: [
+      'O documento é um PEDIDO DE ORÇAMENTO ou uma lista de itens que um cliente quer comprar.',
+      '',
+      'Extraia UMA entrada por ORÇAMENTO. Os produtos pedidos vão na lista "itens".',
+      '',
+      'Atenção:',
+      '- "cliente" é o nome da empresa que está pedindo, não o do fornecedor.',
+      '- "quantidade" é quantas unidades do produto o cliente quer.',
+      '- "valor_unitario" é o preço de UMA unidade. Se só houver o total da linha, divida pela quantidade.',
+      '- Se o documento não trouxer preço, deixe "valor_unitario" em null: o preço de tabela será usado.',
+      '- Ignore linhas de subtotal, total geral, frete e imposto.',
+      '- "prazo" é o prazo de entrega, como está escrito ("30 dias", "à vista").'
+    ].join('\n'),
+
+    campos: [
+      {
+        chave: 'cliente', rotulo: 'Cliente', tipo: 'texto', obrigatorio: true,
+        max: 200, largura: 'grande', descricao: 'Empresa que está pedindo o orçamento'
+      },
+      { chave: 'cnpj', rotulo: 'CNPJ', tipo: 'texto', max: 20, largura: 'media' },
+      {
+        chave: 'validade', rotulo: 'Validade', tipo: 'data', largura: 'media',
+        descricao: 'Até quando a proposta vale, se o documento disser'
+      },
+      { chave: 'prazo', rotulo: 'Prazo', tipo: 'texto', max: 60, largura: 'media', descricao: 'Prazo de entrega' },
+      { chave: 'forma_pagamento', rotulo: 'Pagamento', tipo: 'texto', max: 80, largura: 'media' },
+      { chave: 'observacoes', rotulo: 'Observações', tipo: 'texto', max: 500, largura: 'media' },
+      {
+        chave: 'itens', rotulo: 'Itens', tipo: 'lista', largura: 'media',
+        obrigatorio: true, max_itens: 100,
+        descricao: 'Produtos pedidos. Uma entrada por produto.',
+        subcampos: [
+          { chave: 'codigo', rotulo: 'Código', tipo: 'texto', max: 60, descricao: 'Código do produto, se estiver no documento' },
+          { chave: 'nome', rotulo: 'Produto', tipo: 'texto', obrigatorio: true, max: 200, descricao: 'Nome do produto, como está escrito' },
+          { chave: 'quantidade', rotulo: 'Qtde', tipo: 'numero', obrigatorio: true },
+          { chave: 'valor_unitario', rotulo: 'Valor un.', tipo: 'dinheiro', descricao: 'Preço de uma unidade; null se o documento não disser' }
+        ]
+      }
+    ],
+
+    explicacaoCriar: 'Cria um orçamento PENDENTE para o cliente escolhido, com os itens lidos. Nada é aprovado nem vira pedido.',
+    explicacaoAtualizar: 'Indisponível: a leitura cria orçamento novo, nunca mexe num que já existe.'
+  },
+
   prospeccoes: {
     id: 'prospeccoes',
     rotulo: 'Prospecções e contatos',
@@ -327,6 +413,12 @@ const obterEsquema = destino => ESQUEMAS[destino] || null;
  * Descrição dos campos para o front desenhar a grade de revisão.
  * `descricao` fica de fora: ela é instrução para o modelo, não rótulo de tela.
  */
+/** Ações que a grade deve oferecer neste destino. */
+function acoesDoDestino(destino) {
+  const esquema = obterEsquema(destino);
+  return esquema?.acoes || ['criar', 'atualizar', 'ignorar'];
+}
+
 function camposParaTela(destino) {
   const esquema = obterEsquema(destino);
   if (!esquema) return [];
@@ -354,6 +446,7 @@ module.exports = {
   DESTINOS_PRONTOS,
   obterEsquema,
   camposParaTela,
+  acoesDoDestino,
   soDigitos,
   CAMPO_CONTATOS,
   CAMPOS_EMPRESA
