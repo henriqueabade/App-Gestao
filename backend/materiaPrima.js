@@ -1248,6 +1248,10 @@ async function listarInsumosPorProduto(termo) {
 
 module.exports = {
   listarMaterias,
+  // Exportado para o módulo de IA: mexer na receita de um produto muda o custo
+  // dele, e a fórmula de preço (mão de obra, markup, comissão, imposto) mora
+  // aqui. Reescrevê-la lá seria criar um segundo preço para o mesmo produto.
+  atualizarProdutosComInsumo,
   adicionarMateria,
   atualizarMateria,
   excluirMateria,

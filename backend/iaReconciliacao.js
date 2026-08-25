@@ -193,6 +193,21 @@ function reconciliar({ destino, itens, existentes }) {
       if (nota > melhorNota) { melhorNota = nota; melhor = linha; }
     }
 
+    // Destino que só atualiza: sem alvo, o item não tem para onde ir. Marcar
+    // "cadastrar" produziria um erro na hora de aplicar; marcar "descartar"
+    // com o motivo escrito manda o revisor para a ação certa — escolher o
+    // registro na coluna "O que fazer".
+    if (esquema.exigeAlvo) {
+      const pista = melhor && melhorNota >= LIMIAR_PARECIDO
+        ? ` Parecido com "${rotularAlvo(melhor)}" (#${melhor.id}).`
+        : '';
+      return decidir({
+        acao: 'ignorar', alvo_id: null, alvo_tabela: null,
+        confianca: melhor && melhorNota >= LIMIAR_PARECIDO ? Number(melhorNota.toFixed(2)) : 0,
+        notas: [`${esquema.motivoSemAlvo || 'Registro não encontrado'}.${pista}`]
+      });
+    }
+
     if (melhor && melhorNota >= LIMIAR_PARECIDO) {
       return decidir({
         acao: 'criar', alvo_id: null, alvo_tabela: null, confianca: Number(melhorNota.toFixed(2)),

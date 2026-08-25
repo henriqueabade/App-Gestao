@@ -1065,3 +1065,17 @@ body {
     color: rgba(255, 255, 255, 0.4);
     font-style: italic;
 }
+
+/* Seletor de destino, logo abaixo da ação. Aparece quando há o que resolver:
+   o item aponta para alguém e pode estar errado, ou o destino exige um alvo
+   que a reconciliação não achou. */
+.ia-alvo {
+    margin-top: 4px;
+    font-size: 12px;
+    border-color: rgba(255, 255, 255, 0.14);
+}
+
+.ia-alvo::placeholder {
+    color: rgba(255, 255, 255, 0.35);
+    font-style: italic;
+}

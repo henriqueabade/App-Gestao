@@ -399,7 +399,14 @@
     const alvo = (leitura.alvos || []).find(a => String(a.id) === String(item.alvo_id));
 
     const opcoes = [
-      { valor: 'criar', rotulo: 'Cadastrar', titulo: explicacoes.criar },
+      {
+        valor: 'criar',
+        rotulo: 'Cadastrar',
+        titulo: explicacoes.criar,
+        // Destino que só atualiza (ficha técnica): oferecer "Cadastrar" só
+        // produziria erro na hora de aplicar. A explicação fica no title.
+        desabilitada: Boolean(leitura.exige_alvo)
+      },
       {
         valor: 'atualizar',
         rotulo: alvo ? `Dar entrada em: ${alvo.nome}` : 'Dar entrada no existente',
@@ -434,6 +441,72 @@
 
     return select;
   }
+
+  /**
+   * Escolher para QUAL registro o item vai.
+   *
+   * Sem isto, o único jeito de apontar um item era o atalho "É o mesmo" — que
+   * só aparece quando a reconciliação achou um parecido. Num destino que só
+   * atualiza (a ficha técnica de um produto), um nome que não casou ficaria
+   * sem saída nenhuma.
+   *
+   * `datalist` e não `select`: o catálogo de produtos e o de insumos têm
+   * centenas de linhas, e uma caixa de seleção com centenas de opções é pior
+   * do que digitar as três primeiras letras.
+   */
+  function criarSeletorDeAlvo(item, editavel) {
+    const alvos = leitura.alvos || [];
+    if (!alvos.length) return null;
+
+    // Só aparece quando há o que resolver: o item já aponta para alguém (e o
+    // revisor pode querer corrigir), ou o destino exige alvo e ele não tem.
+    const precisa = item.acao === 'atualizar'
+      || (leitura.exige_alvo && item.acao !== 'atualizar');
+    if (!precisa || !editavel) return null;
+
+    const lista = get('iaDetAlvos');
+    if (lista && !lista.dataset.montada) {
+      lista.replaceChildren(...alvos.map(a => {
+        const o = document.createElement('option');
+        o.value = a.nome;
+        return o;
+      }));
+      lista.dataset.montada = '1';
+    }
+
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'ia-campo ia-alvo';
+    input.setAttribute('list', 'iaDetAlvos');
+    input.placeholder = 'escolher…';
+    const atual = alvos.find(a => String(a.id) === String(item.alvo_id));
+    input.value = atual ? atual.nome : '';
+    input.title = 'Para qual registro este item vai';
+
+    input.addEventListener('change', async () => {
+      const digitado = normalizarNome(input.value);
+      if (!digitado) {
+        input.value = atual ? atual.nome : '';
+        return;
+      }
+      const achado = alvos.find(a => normalizarNome(a.nome) === digitado);
+      if (!achado) {
+        // Nome que não está no catálogo não vira alvo: apontar para o que não
+        // existe daria erro só na hora de gravar.
+        showToast('Escolha um registro da lista', 'error');
+        input.value = atual ? atual.nome : '';
+        return;
+      }
+      await apontarPara(item, achado.id);
+    });
+
+    return input;
+  }
+
+  /** Caixa e acento não distinguem registro na hora de casar o que foi digitado. */
+  const normalizarNome = valor => String(valor ?? '')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase().replace(/\s+/g, ' ').trim();
 
   /**
    * Aponta o item para um registro que já existe.
@@ -547,6 +620,8 @@
 
       const tdAcao = document.createElement('td');
       tdAcao.appendChild(criarSeletorDeAcao(item, editavelAqui));
+      const seletorAlvo = criarSeletorDeAlvo(item, editavelAqui);
+      if (seletorAlvo) tdAcao.appendChild(seletorAlvo);
       tr.appendChild(tdAcao);
 
       const tdStatus = document.createElement('td');

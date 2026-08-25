@@ -571,6 +571,9 @@ router.get('/:id', exigirPermissao('ia.details.view'), async (req, res) => {
       sugestoes,
       alvos,
       pode_estruturar: Boolean(esquema),
+      // A grade precisa saber que este destino não cadastra: é o que decide
+      // mostrar o seletor de destino e esconder a opção "Cadastrar".
+      exige_alvo: Boolean(esquema?.exigeAlvo),
       pode_aplicar_destino: aplicacao.DESTINOS_APLICAVEIS.includes(extracao.destino),
       explicacoes: esquema
         ? { criar: esquema.explicacaoCriar || null, atualizar: esquema.explicacaoAtualizar || null }

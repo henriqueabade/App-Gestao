@@ -46,7 +46,12 @@ const COLUNAS = {
   // duas no duplo, a atualização de preço bate num 404 que não existe em
   // produção — e o teste passaria a medir o buraco do harness.
   produtos_insumos: ['id', 'produto_id', 'insumo_id', 'quantidade'],
-  produtos: ['id', 'nome', 'preco_custo', 'preco_venda', 'margem'],
+  // `atualizarProdutosComInsumo` grava `preco_base`/`preco_venda` e LÊ os
+  // percentuais. Sem essas colunas no duplo, o recálculo roda mas não deixa
+  // rastro — e o teste mediria o buraco do harness.
+  produtos: ['id', 'codigo', 'nome', 'preco_custo', 'preco_base', 'preco_venda', 'margem', 'data',
+    'pct_fabricacao', 'pct_acabamento', 'pct_montagem', 'pct_embalagem',
+    'pct_markup', 'pct_comissao', 'pct_imposto'],
   clientes: ['id', 'nome_fantasia', 'razao_social', 'cnpj', 'inscricao_estadual', 'site',
     'status_cliente', 'dono_cliente', 'origem_captacao', 'anotacoes',
     'reg_logradouro', 'reg_numero', 'reg_complemento', 'reg_bairro', 'reg_cidade', 'reg_uf', 'reg_pais', 'reg_cep',
@@ -2900,4 +2905,384 @@ test('todo destino aplicável tem esquema, e todo esquema tem aplicador', () => 
   // Um esquema sem aplicador deixaria a tela oferecer "Aplicar" num destino
   // que não sabe gravar; um aplicador sem esquema nunca receberia item.
   assert.deepStrictEqual(DESTINOS_PRONTOS.slice().sort(), DESTINOS_APLICAVEIS.slice().sort());
+});
+
+
+// ===========================================================================
+// ETAPA 5 — insumos de produto (a ficha técnica)
+//
+// Destino diferente dos outros em duas coisas, e as duas são a razão de ele
+// existir separado:
+//
+//   • NÃO CADASTRA. A ficha técnica diz de que o produto é feito, não quanto
+//     ele custa nem em que coleção está.
+//   • NÃO REMOVE. A ficha pode ser parcial; substituir a receita inteira por
+//     ela apagaria em silêncio os insumos que o documento não citou, e o
+//     produto passaria a custar menos do que custa.
+// ===========================================================================
+
+function baseFicha() {
+  const dados = baseDados();
+  dados.materia_prima = [
+    { id: 70, nome: 'MDF 15mm Branco TX', quantidade: 100, preco_unitario: 180 },
+    { id: 71, nome: 'Cola PVA extra 1kg', quantidade: 50, preco_unitario: 20 },
+    { id: 72, nome: 'Fita de borda 22mm', quantidade: 900, preco_unitario: 1.3 }
+  ];
+  dados.materia_prima_movimentacoes = [];
+  dados.categoria = [];
+  dados.unidades = [];
+  dados.produtos = [
+    {
+      id: 9, codigo: 'PR-210', nome: 'Painel Ripado 2,10', preco_base: 400, preco_venda: 900,
+      pct_fabricacao: 10, pct_acabamento: 5, pct_montagem: 5, pct_embalagem: 2,
+      pct_markup: 30, pct_comissao: 5, pct_imposto: 10
+    },
+    {
+      id: 10, codigo: 'ML-01', nome: 'Mesa Lateral Carvalho', preco_base: 0, preco_venda: 0,
+      pct_fabricacao: 0, pct_acabamento: 0, pct_montagem: 0, pct_embalagem: 0,
+      pct_markup: 0, pct_comissao: 0, pct_imposto: 0
+    }
+  ];
+  // O painel já tem UM insumo na ficha: é o que a leitura não pode apagar.
+  dados.produtos_insumos = [{ id: 300, produto_id: 9, insumo_id: 71, quantidade: 0.5 }];
+  return dados;
+}
+
+const FICHA_LIDA = {
+  itens: [{
+    codigo: 'PR-210',
+    nome: 'Painel Ripado',
+    insumos: [
+      { nome: 'MDF 15mm Branco TX', quantidade: '2,5' },
+      { nome: 'Fita de borda 22mm', quantidade: '6' }
+    ]
+  }]
+};
+
+async function prepararFicha(resposta = FICHA_LIDA, dados) {
+  const ctx = await montarComIA(comLeitura(dados || baseFicha(), 'produto_insumos'), {}, {
+    groq: () => ({ payload: respostaGroq(resposta) })
+  });
+  await chamar(ctx.porta, '/api/ia/5/estruturar', { method: 'POST' });
+  return ctx;
+}
+
+const insumosDoProduto = (ctx, produtoId) =>
+  ctx.tabelas.produtos_insumos.filter(l => Number(l.produto_id) === produtoId);
+
+// ---------------------------------------------------------------------------
+// Reconciliação
+// ---------------------------------------------------------------------------
+
+test('o produto casa pelo código, mesmo com o nome escrito diferente', async () => {
+  const ctx = await prepararFicha();
+  try {
+    const item = itensDa(ctx, 5)[0];
+    // Código é identificador do catálogo; nome de produto varia ("2,10" e
+    // "2,10m"). Casar pelo código não levanta dúvida.
+    assert.strictEqual(item.acao, 'atualizar');
+    assert.strictEqual(item.alvo_id, 9);
+    assert.strictEqual(item.mensagem, null);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('produto que não está no catálogo NÃO vira cadastro', async () => {
+  const ctx = await prepararFicha({
+    itens: [{ codigo: null, nome: 'Banqueta Alta', insumos: [{ nome: 'MDF 15mm Branco TX', quantidade: '1' }] }]
+  });
+  try {
+    const item = itensDa(ctx, 5)[0];
+
+    // Cadastrar produto a partir de ficha técnica produziria uma ficha pela
+    // metade, com preço zero, no meio do catálogo.
+    assert.strictEqual(item.acao, 'ignorar');
+    assert.strictEqual(item.alvo_id, null);
+    assert.match(item.mensagem, /Produto não encontrado no catálogo/);
+    // E a mensagem manda para a ação certa.
+    assert.match(item.mensagem, /escolha o produto/i);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('o parecido entra como pista na mensagem, sem decidir', async () => {
+  const ctx = await prepararFicha({
+    itens: [{ codigo: null, nome: 'Mesa Lateral Carvalho Escuro', insumos: [{ nome: 'MDF 15mm Branco TX', quantidade: '1' }] }]
+  });
+  try {
+    const item = itensDa(ctx, 5)[0];
+    assert.strictEqual(item.acao, 'ignorar');
+    assert.match(item.mensagem, /Parecido com "Mesa Lateral Carvalho" \(#10\)/);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Aplicação
+// ---------------------------------------------------------------------------
+
+test('aplicar acrescenta os insumos que faltam na ficha', async () => {
+  const ctx = await prepararFicha();
+  try {
+    const corpo = await (await aplicarEm(ctx, 'produto_insumos')).json();
+    assert.strictEqual(corpo.aplicados, 1, JSON.stringify(corpo.itens));
+
+    const ficha = insumosDoProduto(ctx, 9);
+    assert.strictEqual(ficha.length, 3, ficha.map(l => l.insumo_id).join(','));
+    assert.strictEqual(Number(ficha.find(l => l.insumo_id === 70).quantidade), 2.5);
+    assert.strictEqual(Number(ficha.find(l => l.insumo_id === 72).quantidade), 6);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('o insumo que a ficha NÃO citou continua lá', async () => {
+  // O caso que mais importa: uma ficha parcial não pode apagar a receita.
+  const ctx = await prepararFicha();
+  try {
+    await aplicarEm(ctx, 'produto_insumos');
+
+    const cola = insumosDoProduto(ctx, 9).find(l => Number(l.insumo_id) === 71);
+    assert.ok(cola, 'a leitura apagou um insumo que o documento não citou');
+    assert.strictEqual(Number(cola.quantidade), 0.5, 'a quantidade do insumo antigo mudou');
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('a quantidade de um insumo que já estava na ficha é corrigida', async () => {
+  const ctx = await prepararFicha({
+    itens: [{ codigo: 'PR-210', nome: 'Painel', insumos: [{ nome: 'Cola PVA extra 1kg', quantidade: '0,8' }] }]
+  });
+  try {
+    const corpo = await (await aplicarEm(ctx, 'produto_insumos')).json();
+    assert.strictEqual(corpo.aplicados, 1, JSON.stringify(corpo.itens));
+
+    const ficha = insumosDoProduto(ctx, 9);
+    assert.strictEqual(ficha.length, 1, 'criou uma linha em vez de corrigir a existente');
+    assert.strictEqual(Number(ficha[0].quantidade), 0.8);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('quantidade que não mudou não gera escrita', async () => {
+  // A cola já está na ficha com 0,5 e o documento repete 0,5. Um PUT que não
+  // muda nada só suja o log de alterações e gasta requisição.
+  const ctx = await prepararFicha({
+    itens: [{ codigo: 'PR-210', nome: 'Painel', insumos: [{ nome: 'Cola PVA extra 1kg', quantidade: '0,5' }] }]
+  });
+  try {
+    const antes = ctx.chamadas.filter(c => c.metodo === 'PUT' && c.tabela === 'produtos_insumos').length;
+    const corpo = await (await aplicarEm(ctx, 'produto_insumos')).json();
+    const depois = ctx.chamadas.filter(c => c.metodo === 'PUT' && c.tabela === 'produtos_insumos').length;
+
+    assert.strictEqual(corpo.aplicados, 1);
+    assert.strictEqual(depois, antes, 'gravou uma quantidade que já era a mesma');
+    assert.match(corpo.itens[0].mensagem, /já estava assim/i);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('insumo que não existe no estoque é pulado, com o nome no aviso', async () => {
+  // Inventar o insumo encheria o estoque de linhas com preço zero. A linha é
+  // pulada e o nome fica escrito, para cadastrar pelo caminho certo.
+  const ctx = await prepararFicha({
+    itens: [{
+      codigo: 'PR-210', nome: 'Painel',
+      insumos: [
+        { nome: 'MDF 15mm Branco TX', quantidade: '2' },
+        { nome: 'Verniz Fosco Premium', quantidade: '0,3' }
+      ]
+    }]
+  });
+  try {
+    const corpo = await (await aplicarEm(ctx, 'produto_insumos')).json();
+    assert.strictEqual(corpo.aplicados, 1);
+    assert.match(corpo.itens[0].mensagem, /Verniz Fosco Premium/);
+    assert.match(corpo.itens[0].mensagem, /não existe/i);
+
+    // O insumo inventado não virou matéria-prima.
+    assert.strictEqual(ctx.tabelas.materia_prima.length, 3);
+    assert.strictEqual(insumosDoProduto(ctx, 9).length, 2);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('quando NENHUM insumo existe, o item vira erro', async () => {
+  const ctx = await prepararFicha({
+    itens: [{ codigo: 'PR-210', nome: 'Painel', insumos: [{ nome: 'Coisa Inventada', quantidade: '1' }] }]
+  });
+  try {
+    const corpo = await (await aplicarEm(ctx, 'produto_insumos')).json();
+    assert.strictEqual(corpo.com_erro, 1);
+    assert.match(corpo.itens[0].mensagem, /Nenhum insumo desta linha existe no estoque/);
+    assert.strictEqual(insumosDoProduto(ctx, 9).length, 1, 'a ficha original foi mexida');
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('quantidade zero ou negativa não entra na ficha', async () => {
+  const ctx = await prepararFicha({
+    itens: [{
+      codigo: 'PR-210', nome: 'Painel',
+      insumos: [
+        { nome: 'MDF 15mm Branco TX', quantidade: '2' },
+        { nome: 'Fita de borda 22mm', quantidade: '0' }
+      ]
+    }]
+  });
+  try {
+    await aplicarEm(ctx, 'produto_insumos');
+    // Insumo com quantidade zero na receita é linha morta que ainda entra no
+    // cálculo de custo.
+    assert.strictEqual(insumosDoProduto(ctx, 9).some(l => Number(l.insumo_id) === 72), false);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('mudar a receita recalcula o preço do produto', async () => {
+  const ctx = await prepararFicha();
+  try {
+    const antes = Number(ctx.tabelas.produtos.find(p => p.id === 9).preco_base);
+    await aplicarEm(ctx, 'produto_insumos');
+    const depois = Number(ctx.tabelas.produtos.find(p => p.id === 9).preco_base);
+
+    // 2,5 × 180 + 6 × 1,30 + 0,5 × 20 = 467,80. Sem o recálculo, o produto
+    // continuaria com o custo da receita antiga.
+    assert.notStrictEqual(depois, antes);
+    assert.strictEqual(Math.round(depois * 100) / 100, 467.8);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('aplicar sem produto de destino não grava nada', async () => {
+  const ctx = await prepararFicha({
+    itens: [{ codigo: null, nome: 'Banqueta Alta', insumos: [{ nome: 'MDF 15mm Branco TX', quantidade: '1' }] }]
+  });
+  try {
+    // A reconciliação marcou "ignorar". Forçamos "atualizar" sem alvo, que é o
+    // que aconteceria se o revisor mexesse na ação sem escolher o produto.
+    const item = itensDa(ctx, 5)[0];
+    await chamar(ctx.porta, `/api/ia/5/itens/${item.id}`, {
+      method: 'PUT', body: JSON.stringify({ acao: 'atualizar' })
+    });
+
+    const corpo = await (await aplicarEm(ctx, 'produto_insumos')).json();
+    assert.strictEqual(corpo.com_erro, 1);
+    assert.match(corpo.itens[0].mensagem, /Sem produto de destino/);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('nenhum destino aceita id de alvo nulo como registro zero', async () => {
+  // `Number(null)` é ZERO, e zero passa por finito. Sem a checagem, um item
+  // sem destino escolhido gravaria apontando para o registro de id 0.
+  const { idAlvo } = require('./iaAplicacao');
+  for (const vazio of [null, undefined, '', 0, -1, 1.5, 'abc']) {
+    assert.throws(
+      () => idAlvo({ alvo_id: vazio }, 'produto'),
+      /Sem produto de destino|Destino inválido/,
+      `alvo_id ${JSON.stringify(vazio)} passou`
+    );
+  }
+  assert.strictEqual(idAlvo({ alvo_id: 9 }, 'produto'), 9);
+  assert.strictEqual(idAlvo({ alvo_id: '9' }, 'produto'), 9);
+});
+
+test('cadastrar produto pela ficha técnica é recusado com explicação', async () => {
+  const ctx = await prepararFicha();
+  try {
+    const item = itensDa(ctx, 5)[0];
+    await chamar(ctx.porta, `/api/ia/5/itens/${item.id}`, {
+      method: 'PUT', body: JSON.stringify({ acao: 'criar' })
+    });
+
+    const corpo = await (await aplicarEm(ctx, 'produto_insumos')).json();
+    assert.strictEqual(corpo.com_erro, 1);
+    assert.match(corpo.itens[0].mensagem, /não tem preço nem coleção/i);
+    assert.strictEqual(ctx.tabelas.produtos.length, 2);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('aplicar de novo não duplica linha na ficha', async () => {
+  const ctx = await prepararFicha();
+  try {
+    await aplicarEm(ctx, 'produto_insumos');
+    const depoisDaPrimeira = insumosDoProduto(ctx, 9).length;
+
+    // A leitura fica encerrada; repetir é recusado. E mesmo que não fosse, o
+    // item já aplicado não seria gravado de novo.
+    const segunda = await aplicarEm(ctx, 'produto_insumos');
+    assert.strictEqual(segunda.status, 409);
+    assert.strictEqual(insumosDoProduto(ctx, 9).length, depoisDaPrimeira);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('aplicar em Produtos exige a permissão de editar produto', async () => {
+  const dados = permitir(baseFicha(), [
+    'acao_view', 'acao_details_view', 'acao_extract', 'acao_apply_prod'
+  ]);
+  const ctx = await montarComIA(comLeitura(dados, 'produto_insumos'), {}, {
+    groq: () => ({ payload: respostaGroq(FICHA_LIDA) })
+  });
+  try {
+    await chamar(ctx.porta, '/api/ia/5/estruturar', { method: 'POST' });
+    const resp = await aplicarEm(ctx, 'produto_insumos', 5, { usuario: 2 });
+    assert.strictEqual(resp.status, 403);
+    assert.strictEqual(insumosDoProduto(ctx, 9).length, 1);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Detalhe
+// ---------------------------------------------------------------------------
+
+test('o detalhe avisa que o destino só atualiza', async () => {
+  const ctx = await montarComIA(comLeitura(baseFicha(), 'produto_insumos'));
+  try {
+    const dados = await (await chamar(ctx.porta, '/api/ia/5')).json();
+
+    // É o que faz a grade esconder "Cadastrar" e mostrar o seletor de destino.
+    assert.strictEqual(dados.exige_alvo, true);
+    assert.strictEqual(dados.pode_aplicar_destino, true);
+    assert.deepStrictEqual(dados.alvos.map(a => a.nome).sort(),
+      ['Mesa Lateral Carvalho', 'Painel Ripado 2,10']);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('os outros destinos NÃO exigem alvo', async () => {
+  const ctx = await montarComIA(comLeitura(baseEmpresas(), 'clientes'));
+  try {
+    const dados = await (await chamar(ctx.porta, '/api/ia/5')).json();
+    assert.strictEqual(dados.exige_alvo, false);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('a sub-lista de insumos é obrigatória no esquema', () => {
+  const { obterEsquema } = require('./iaEsquemas');
+  const campo = obterEsquema('produto_insumos').campos.find(c => c.chave === 'insumos');
+  // Um produto sem nenhum insumo não é ficha técnica nenhuma.
+  assert.strictEqual(campo.obrigatorio, true);
+  assert.deepStrictEqual(campo.subcampos.map(s => s.chave), ['nome', 'quantidade']);
+  assert.strictEqual(campo.subcampos.every(s => s.obrigatorio), true);
 });

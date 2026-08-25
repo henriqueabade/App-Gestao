@@ -319,6 +319,50 @@ function leituraEmpresa(extra = {}) {
   });
 }
 
+/**
+ * Leitura de FICHA TÉCNICA: destino que só atualiza.
+ *
+ * Não cadastra produto — a ficha não tem preço, coleção nem markup. O item
+ * precisa apontar para um produto que já existe, e é isso que o seletor de
+ * destino resolve.
+ */
+function leituraFicha(extra = {}) {
+  return leituraPadrao({
+    destino: 'produto_insumos',
+    destino_rotulo: 'Insumos de produtos',
+    exige_alvo: true,
+    campos: [
+      { chave: 'codigo', rotulo: 'Código', tipo: 'texto', obrigatorio: false, largura: 'media' },
+      { chave: 'nome', rotulo: 'Produto', tipo: 'texto', obrigatorio: true, largura: 'grande' },
+      {
+        chave: 'insumos', rotulo: 'Insumos', tipo: 'lista', obrigatorio: true, largura: 'media',
+        subcampos: [
+          { chave: 'nome', rotulo: 'Insumo', tipo: 'texto', obrigatorio: true },
+          { chave: 'quantidade', rotulo: 'Qtde', tipo: 'numero', obrigatorio: true }
+        ]
+      }
+    ],
+    alvos: [
+      { id: 9, nome: 'Painel Ripado 2,10' },
+      { id: 10, nome: 'Mesa Lateral Carvalho' }
+    ],
+    sugestoes: {},
+    explicacoes: { criar: 'Indisponível', atualizar: 'Acrescenta os insumos que faltam' },
+    itens: [
+      {
+        id: 1, linha: 1, acao: 'atualizar', alvo_id: 9, status: 'pendente', mensagem: null,
+        dados: { codigo: 'PR-210', nome: 'Painel Ripado', insumos: [{ nome: 'MDF 15mm', quantidade: 2 }] }
+      },
+      {
+        id: 2, linha: 2, acao: 'ignorar', alvo_id: null, status: 'pendente',
+        mensagem: 'Produto não encontrado no catálogo — escolha o produto na coluna "O que fazer".',
+        dados: { codigo: null, nome: 'Banqueta Alta', insumos: [{ nome: 'Tubo 1/2', quantidade: 4 }] }
+      }
+    ],
+    ...extra
+  });
+}
+
 /** Botão que abre/fecha a sub-lista de uma linha. */
 const botaoDaLista = linha => linha.todos().find(f => f.classList.contains('ia-lista-abrir'));
 const botaoAdicionar = linha => linha.todos().find(f => f.classList.contains('ia-lista-adicionar'));
@@ -327,7 +371,10 @@ const subLinhas = b => b.el('iaDetItensCorpo').filhos.filter(l => l.classList.co
 /** Linhas de item (as de nota não têm campos). */
 const linhasDeItem = b => b.el('iaDetItensCorpo').filhos.filter(l => l.classList.contains('ia-linha-item'));
 const notas = b => b.el('iaDetItensCorpo').filhos.filter(l => !l.classList.contains('ia-linha-item'));
-const camposDa = linha => linha.todos().filter(f => f.classList.contains('ia-campo'));
+/** Campos do item. O seletor de destino também é `.ia-campo`, mas não é coluna. */
+const camposDa = linha => linha.todos()
+  .filter(f => f.classList.contains('ia-campo') && !f.classList.contains('ia-alvo'));
+const seletorDeAlvo = linha => linha.todos().find(f => f.classList.contains('ia-alvo'));
 const seletorDa = linha => linha.todos().find(f => f.classList.contains('ia-acao-select'));
 
 // ---------------------------------------------------------------------------
@@ -835,6 +882,97 @@ test('leitura aplicada mostra os contatos, mas travados', async () => {
   // E não há como remover nem acrescentar.
   assert.equal(subLinhas(b)[0].todos().some(f => f.classList.contains('ia-arquivo__remover')), false);
   assert.equal(botaoAdicionar(linhasDeItem(b)[0]), undefined);
+});
+
+// ---------------------------------------------------------------------------
+// Destino que só atualiza (ficha técnica)
+// ---------------------------------------------------------------------------
+
+test('"Cadastrar" fica desabilitado quando o destino só atualiza', async () => {
+  // A ficha técnica não tem preço, coleção nem markup: cadastrar produto a
+  // partir dela produziria uma ficha pela metade no meio do catálogo.
+  const b = criarBancada({ leitura: leituraFicha() });
+  await b.pronta();
+
+  const criar = seletorDa(linhasDeItem(b)[0]).filhos.find(o => o.value === 'criar');
+  assert.equal(criar.disabled, true);
+  assert.match(criar.title, /Indisponível/i);
+});
+
+test('o item sem produto ganha um seletor de destino', async () => {
+  // Sem ele, um nome que não casou ficaria sem saída nenhuma — o atalho
+  // "É o mesmo" só aparece quando a reconciliação achou um parecido.
+  const b = criarBancada({ leitura: leituraFicha() });
+  await b.pronta();
+
+  const seletor = seletorDeAlvo(linhasDeItem(b)[1]);
+  assert.ok(seletor, 'o item sem produto ficou sem como apontar');
+  assert.equal(seletor.value, '');
+  assert.equal(seletor.getAttribute('list'), 'iaDetAlvos');
+});
+
+test('o item que já aponta mostra o destino atual, e permite trocar', async () => {
+  const b = criarBancada({ leitura: leituraFicha() });
+  await b.pronta();
+
+  const seletor = seletorDeAlvo(linhasDeItem(b)[0]);
+  assert.equal(seletor.value, 'Painel Ripado 2,10');
+});
+
+test('escolher um produto da lista aponta o item', async () => {
+  const b = criarBancada({ leitura: leituraFicha() });
+  await b.pronta();
+
+  const seletor = seletorDeAlvo(linhasDeItem(b)[1]);
+  seletor.value = 'Mesa Lateral Carvalho';
+  seletor.disparar('change');
+  await b.pronta();
+
+  const put = b.chamadas.find(c => c.metodo === 'PUT');
+  assert.deepEqual(put.corpo, { alvo_id: 10, acao: 'atualizar' });
+});
+
+test('nome fora do catálogo é recusado e o campo volta atrás', async () => {
+  // Apontar para o que não existe daria erro só na hora de gravar.
+  const b = criarBancada({ leitura: leituraFicha() });
+  await b.pronta();
+
+  const seletor = seletorDeAlvo(linhasDeItem(b)[0]);
+  seletor.value = 'Produto Inventado';
+  seletor.disparar('change');
+  await b.pronta();
+
+  assert.equal(b.chamadas.some(c => c.metodo === 'PUT'), false);
+  assert.equal(b.toasts.at(-1).tipo, 'error');
+  assert.equal(seletor.value, 'Painel Ripado 2,10');
+});
+
+test('o seletor casa ignorando caixa e acento', async () => {
+  const b = criarBancada({ leitura: leituraFicha() });
+  await b.pronta();
+
+  const seletor = seletorDeAlvo(linhasDeItem(b)[1]);
+  seletor.value = '  mesa lateral CARVALHO  ';
+  seletor.disparar('change');
+  await b.pronta();
+
+  const put = b.chamadas.find(c => c.metodo === 'PUT');
+  assert.deepEqual(put.corpo, { alvo_id: 10, acao: 'atualizar' });
+});
+
+test('a datalist de destinos é preenchida com o catálogo', async () => {
+  const b = criarBancada({ leitura: leituraFicha() });
+  await b.pronta();
+
+  const opcoes = b.el('iaDetAlvos').filhos.map(o => o.value);
+  assert.deepEqual(opcoes, ['Painel Ripado 2,10', 'Mesa Lateral Carvalho']);
+});
+
+test('leitura aplicada não mostra seletor de destino', async () => {
+  const b = criarBancada({ leitura: leituraFicha({ status: 'aplicada', status_rotulo: 'Aplicada' }) });
+  await b.pronta();
+
+  assert.equal(seletorDeAlvo(linhasDeItem(b)[0]), undefined);
 });
 
 // ---------------------------------------------------------------------------

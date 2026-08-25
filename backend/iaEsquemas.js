@@ -36,6 +36,15 @@
 //
 // `normalizar` limpa antes de comparar (CNPJ escrito com e sem pontuação é o
 // mesmo CNPJ). `forte: true` diz que um empate ali dispensa qualquer ressalva.
+//
+// ---------------------------------------------------------------------------
+// DESTINO QUE SÓ ATUALIZA
+//
+// `exigeAlvo: true` diz que o destino não cria registro novo — ele só preenche
+// algo que já existe. É o caso dos insumos de produto: uma ficha técnica diz de
+// que o produto é feito, não quanto ele custa, em que coleção está nem qual é o
+// markup. Cadastrar produto a partir dela produziria uma ficha pela metade, com
+// preço zero, no meio do catálogo.
 
 /** Só os dígitos: CNPJ com e sem pontuação é o mesmo CNPJ. */
 const soDigitos = valor => String(valor ?? '').replace(/\D/g, '');
@@ -223,6 +232,60 @@ const ESQUEMAS = {
 
     explicacaoAtualizar: 'Atualiza o cadastro do cliente que já existe e acrescenta os contatos que ainda não estão lá.',
     explicacaoCriar: 'Cadastra o cliente com os contatos lidos.'
+  },
+
+  produto_insumos: {
+    id: 'produto_insumos',
+    rotulo: 'Insumos de produtos',
+    tabelaAlvo: 'produtos',
+    campoDeExibicao: 'nome',
+
+    // O produto tem de existir. Ver "DESTINO QUE SÓ ATUALIZA" no topo.
+    exigeAlvo: true,
+    motivoSemAlvo: 'Produto não encontrado no catálogo — escolha o produto na coluna "O que fazer"',
+
+    // Código primeiro: é identificador do catálogo. Nome de produto se repete
+    // com variação ("Painel Ripado 2,10" e "Painel Ripado 2,10m").
+    chavesDeCasamento: [
+      { campo: 'codigo', rotulo: 'Código', forte: true },
+      { campo: 'nome', rotulo: 'Produto' }
+    ],
+
+    instrucoes: [
+      'O documento é uma FICHA TÉCNICA: diz de que material cada produto é feito.',
+      '',
+      'Extraia UMA entrada por PRODUTO. Os materiais dele vão na lista "insumos".',
+      '',
+      'Atenção:',
+      '- "quantidade" é quanto do insumo entra em UMA unidade do produto.',
+      '- Mantenha o nome do insumo como está escrito; não troque por sinônimo.',
+      '- Ignore linhas de mão de obra, tempo de processo, custo e total.',
+      '- Se o documento tratar de um produto só, é uma entrada só.',
+      '- Não invente quantidade: se o documento não disser, deixe null.'
+    ].join('\n'),
+
+    campos: [
+      {
+        chave: 'codigo', rotulo: 'Código', tipo: 'texto', max: 60, largura: 'media',
+        descricao: 'Código do produto no catálogo, se estiver no documento'
+      },
+      {
+        chave: 'nome', rotulo: 'Produto', tipo: 'texto', obrigatorio: true,
+        max: 200, largura: 'grande', descricao: 'Nome do produto'
+      },
+      {
+        chave: 'insumos', rotulo: 'Insumos', tipo: 'lista', largura: 'media',
+        obrigatorio: true, max_itens: 60,
+        descricao: 'Materiais que compõem o produto. Uma entrada por material.',
+        subcampos: [
+          { chave: 'nome', rotulo: 'Insumo', tipo: 'texto', obrigatorio: true, max: 200, descricao: 'Nome do material, como está escrito' },
+          { chave: 'quantidade', rotulo: 'Qtde', tipo: 'numero', obrigatorio: true, descricao: 'Quanto entra em uma unidade do produto' }
+        ]
+      }
+    ],
+
+    explicacaoCriar: 'Indisponível: a ficha técnica não tem preço, coleção nem markup para cadastrar um produto.',
+    explicacaoAtualizar: 'Acrescenta os insumos que faltam na ficha do produto e corrige a quantidade dos que já estão. NUNCA remove insumo que o documento não citou.'
   },
 
   prospeccoes: {

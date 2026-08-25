@@ -34,6 +34,24 @@ function erro(status, mensagem) {
   return e;
 }
 
+/**
+ * Id do registro para onde o item vai.
+ *
+ * `Number.isFinite(Number(item.alvo_id))` NÃO basta: `Number(null)` e
+ * `Number('')` são ZERO, e zero passa por finito. Um item sem destino escolhido
+ * gravava no registro de id 0 — que não existe, mas a linha ia para o banco
+ * apontando para lá. Id de verdade é inteiro POSITIVO.
+ */
+function idAlvo(item, oQue) {
+  const bruto = item?.alvo_id;
+  if (bruto === null || bruto === undefined || bruto === '') {
+    throw erro(400, `Sem ${oQue} de destino`);
+  }
+  const id = Number(bruto);
+  if (!Number.isInteger(id) || id <= 0) throw erro(400, `Destino inválido para ${oQue}`);
+  return id;
+}
+
 // ---------------------------------------------------------------------------
 // Taxonomia (categoria e unidade)
 // ---------------------------------------------------------------------------
@@ -150,8 +168,7 @@ async function aplicarMateriaPrima(item, contexto) {
 
   // ---- dar entrada no que já existe ---------------------------------------
   if (item.acao === 'atualizar') {
-    const alvo = Number(item.alvo_id);
-    if (!Number.isFinite(alvo)) throw erro(400, 'Sem insumo de destino para dar entrada');
+    const alvo = idAlvo(item, 'insumo');
 
     // A ENTRADA é o passo irreversível: depois dela o saldo já mudou e não há
     // como desfazer por aqui. Se ela falhar, nada entrou e o item é erro de
@@ -319,8 +336,7 @@ async function aplicarClientes(item, contexto) {
 
   // ---- atualizar o que já existe ------------------------------------------
   if (item.acao === 'atualizar') {
-    const alvo = Number(item.alvo_id);
-    if (!Number.isFinite(alvo)) throw erro(400, 'Sem cliente de destino');
+    const alvo = idAlvo(item, 'cliente');
 
     const vindos = somenteVindos(dados, COLUNAS_EMPRESA);
     const feitos = [];
@@ -417,8 +433,7 @@ async function aplicarProspeccoes(item, contexto) {
 
   // ---- atualizar o que já existe ------------------------------------------
   if (item.acao === 'atualizar') {
-    const alvo = Number(item.alvo_id);
-    if (!Number.isFinite(alvo)) throw erro(400, 'Sem prospecção de destino');
+    const alvo = idAlvo(item, 'prospecção');
 
     const vindos = somenteVindos(dados, [...COLUNAS_EMPRESA, 'segmento']);
     const feitos = [];
@@ -460,9 +475,132 @@ async function aplicarProspeccoes(item, contexto) {
   throw erro(400, `Ação desconhecida: ${item.acao}`);
 }
 
+// ---------------------------------------------------------------------------
+// Insumos de produto (a ficha técnica)
+// ---------------------------------------------------------------------------
+
+/**
+ * Preenche a ficha de insumos de um produto que JÁ EXISTE.
+ *
+ * ---------------------------------------------------------------------------
+ * NUNCA REMOVE INSUMO
+ *
+ * A ficha de um produto é a receita dele. Uma ficha técnica em PDF pode ser
+ * parcial — só a parte de marcenaria, só o que mudou — e substituir a receita
+ * inteira por ela apagaria em silêncio os insumos que o documento não citou. O
+ * produto passaria a custar menos do que custa, e o erro só apareceria no
+ * fechamento. Por isso: acrescenta o que falta, corrige a quantidade do que já
+ * está, e deixa o resto em paz.
+ *
+ * ---------------------------------------------------------------------------
+ * O INSUMO TAMBÉM PRECISA EXISTIR
+ *
+ * Um nome que não casa com nenhuma matéria-prima NÃO vira insumo novo: o
+ * cadastro de insumo tem preço, unidade e saldo, e inventar isso a partir de
+ * uma ficha técnica encheria o estoque de linhas com preço zero. A linha é
+ * pulada com o nome escrito no aviso, para o revisor cadastrar pelo caminho
+ * certo (o destino Matéria-prima) e aplicar de novo.
+ */
+async function aplicarProdutoInsumos(item, contexto) {
+  const { api, cache } = contexto;
+  const dados = item.dados || {};
+
+  if (item.acao === 'criar') {
+    throw erro(400,
+      'A ficha técnica não tem preço nem coleção para cadastrar um produto. '
+      + 'Escolha o produto existente na coluna "O que fazer".');
+  }
+  if (item.acao !== 'atualizar') throw erro(400, `Ação desconhecida: ${item.acao}`);
+
+  const produtoId = idAlvo(item, 'produto');
+
+  const linhas = (Array.isArray(dados.insumos) ? dados.insumos : [])
+    .filter(i => String(i?.nome || '').trim());
+  if (!linhas.length) throw erro(400, 'Nenhum insumo nesta linha');
+
+  // O catálogo de insumos vem UMA vez por lote: uma consulta por linha seriam
+  // dezenas de requisições para uma tabela que não muda no meio da aplicação.
+  if (!cache.insumosPorNome) {
+    const materias = await api.get('/api/materia_prima')
+      .then(r => (Array.isArray(r) ? r : [])).catch(() => []);
+    cache.insumosPorNome = new Map();
+    for (const m of materias) {
+      const n = normalizar(m?.nome);
+      if (n && !cache.insumosPorNome.has(n)) cache.insumosPorNome.set(n, m);
+    }
+  }
+
+  const atuais = await api.get('/api/produtos_insumos', { query: { produto_id: produtoId } })
+    .then(r => (Array.isArray(r) ? r : [])).catch(() => []);
+  const atuaisPorInsumo = new Map(atuais.map(l => [Number(l.insumo_id), l]));
+
+  const acrescentados = [];
+  const corrigidos = [];
+  const semCadastro = [];
+  const tocados = new Set();
+
+  for (const linha of linhas) {
+    const insumo = cache.insumosPorNome.get(normalizar(linha.nome));
+    if (!insumo) { semCadastro.push(String(linha.nome).trim()); continue; }
+
+    const quantidade = Number(linha.quantidade);
+    if (!Number.isFinite(quantidade) || quantidade <= 0) {
+      semCadastro.push(`${linha.nome} (quantidade inválida)`);
+      continue;
+    }
+
+    const existente = atuaisPorInsumo.get(Number(insumo.id));
+    if (existente) {
+      // Mesma quantidade não gera escrita: um PUT que não muda nada só suja o
+      // log e gasta requisição.
+      if (Number(existente.quantidade) !== quantidade) {
+        await api.put(`/api/produtos_insumos/${existente.id}`, { quantidade });
+        corrigidos.push(insumo.nome);
+        tocados.add(Number(insumo.id));
+      }
+      continue;
+    }
+
+    await api.post('/api/produtos_insumos', {
+      produto_id: produtoId,
+      insumo_id: insumo.id,
+      quantidade
+    });
+    acrescentados.push(insumo.nome);
+    tocados.add(Number(insumo.id));
+  }
+
+  if (!acrescentados.length && !corrigidos.length && semCadastro.length) {
+    throw erro(400, `Nenhum insumo desta linha existe no estoque: ${semCadastro.slice(0, 5).join(', ')}`);
+  }
+
+  // Mudar a receita muda o custo. O recálculo é o do próprio módulo de
+  // Matéria-prima — a fórmula tem mão de obra, markup, comissão e imposto, e
+  // reescrevê-la aqui criaria um segundo preço para o mesmo produto.
+  const avisos = [];
+  for (const insumoId of tocados) {
+    try { await materiaPrima.atualizarProdutosComInsumo(insumoId); }
+    catch (e) {
+      avisos.push('o preço do produto não foi recalculado');
+      break;
+    }
+  }
+
+  const feitos = [];
+  if (acrescentados.length) feitos.push(`${acrescentados.length} insumo(s) acrescentado(s)`);
+  if (corrigidos.length) feitos.push(`${corrigidos.length} quantidade(s) corrigida(s)`);
+  if (!feitos.length) feitos.push('a ficha já estava assim');
+  if (semCadastro.length) {
+    feitos.push(`${semCadastro.length} não existe(m) no estoque: ${semCadastro.slice(0, 3).join(', ')}`);
+  }
+
+  return { alvo_id: produtoId, mensagem: [...feitos, ...avisos].join(' · ') };
+}
+
 const APLICADORES = {
   materia_prima: aplicarMateriaPrima,
   clientes: aplicarClientes,
+  produto_insumos: aplicarProdutoInsumos,
   prospeccoes: aplicarProspeccoes
 };
 
@@ -543,6 +681,7 @@ module.exports = {
   APLICADORES,
   DESTINOS_APLICAVEIS,
   COLUNAS_EMPRESA,
+  idAlvo,
   encaixar,
   garantirTaxonomia,
   somenteVindos,
@@ -550,5 +689,6 @@ module.exports = {
   aplicarMateriaPrima,
   aplicarClientes,
   aplicarProspeccoes,
+  aplicarProdutoInsumos,
   aplicar
 };
