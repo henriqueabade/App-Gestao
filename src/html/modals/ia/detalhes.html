@@ -6,7 +6,7 @@
   `modalSpinnerLoaded`.
 -->
 <div id="iaDetalhesOverlay" class="hidden fixed inset-0 z-[1200] bg-black/60 flex items-center justify-center p-4">
-  <div class="modal-ia glass-surface backdrop-blur-xl rounded-2xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade">
+  <div class="modal-ia modal-ia--largo glass-surface backdrop-blur-xl rounded-2xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade">
 
     <!-- Topo -->
     <div class="modal-ia__topo px-6 pt-6 pb-4 border-b border-white/10">
@@ -48,19 +48,25 @@
           <i class="fas fa-list-check text-4xl text-white/20"></i>
           <p class="text-sm text-white/50 mt-3">Nenhum item foi extraído desta leitura.</p>
         </div>
-        <div id="iaDetItensTabela" class="rounded-xl border border-white/10 overflow-hidden">
+        <!--
+          Enquanto a leitura está em revisão, a barra diz o que vai acontecer
+          ao aplicar. Contar antes é o que evita a surpresa de descobrir, depois
+          de gravar, que 12 itens iam cadastrar em vez de dar entrada.
+        -->
+        <div id="iaDetResumoRevisao" class="hidden ia-resumo-revisao"></div>
+
+        <!--
+          Cabeçalho e colunas vêm de `campos`, que o backend monta a partir do
+          esquema do destino. Escrever as colunas aqui obrigaria a mexer neste
+          arquivo a cada destino novo — e deixaria as duas listas divergirem.
+        -->
+        <div id="iaDetItensTabela" class="rounded-xl border border-white/10 ia-grade-revisao">
           <table class="w-full">
-            <thead>
-              <tr class="bg-white/5">
-                <th class="px-3 py-2 text-left text-xs font-medium text-white/50 uppercase tracking-wider">#</th>
-                <th class="px-3 py-2 text-left text-xs font-medium text-white/50 uppercase tracking-wider">Conteúdo</th>
-                <th class="px-3 py-2 text-left text-xs font-medium text-white/50 uppercase tracking-wider">O que fazer</th>
-                <th class="px-3 py-2 text-left text-xs font-medium text-white/50 uppercase tracking-wider">Situação</th>
-              </tr>
-            </thead>
+            <thead><tr id="iaDetItensCabecalho" class="bg-white/5"></tr></thead>
             <tbody id="iaDetItensCorpo" class="divide-y divide-white/10"></tbody>
           </table>
         </div>
+        <datalist id="iaDetAlvos"></datalist>
       </section>
 
       <!-- Arquivos -->
@@ -75,9 +81,23 @@
     </div>
 
     <!-- Rodapé -->
-    <div class="modal-ia__rodape px-6 py-4 border-t border-white/10 flex items-center justify-end gap-3">
-      <button id="iaDetFechar" type="button"
-              class="btn-neutral text-white rounded-lg px-5 py-2 text-sm font-medium">Fechar</button>
+    <div class="modal-ia__rodape px-6 py-4 border-t border-white/10 flex items-center justify-between gap-4">
+      <p id="iaDetRodapeAviso" class="text-xs text-white/45"></p>
+      <div class="flex items-center gap-3 flex-shrink-0">
+        <button id="iaDetFechar" type="button"
+                class="btn-neutral text-white rounded-lg px-5 py-2 text-sm font-medium">Fechar</button>
+        <!-- Aparece com a leitura em "Texto lido": o texto está guardado, então
+             extrair pode ser repetido sem reenviar arquivo nenhum. -->
+        <button id="iaDetExtrair" type="button" data-perm="ia.extract"
+                class="btn-primary text-white rounded-lg px-5 py-2 text-sm font-medium hidden">
+          <i class="fas fa-table-list mr-2"></i>Extrair os dados
+        </button>
+        <!-- Aparece com a leitura em revisão. -->
+        <button id="iaDetAplicar" type="button"
+                class="btn-success rounded-lg px-5 py-2 text-sm font-medium hidden">
+          <i class="fas fa-check mr-2"></i>Aplicar
+        </button>
+      </div>
     </div>
 
   </div>

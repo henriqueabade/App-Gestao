@@ -31,6 +31,10 @@ const { exigirPermissao, obterPermissoesEfetivas } = require('./permissionsContr
 const permissoesRepo = require('./permissionsRepository');
 const provedores = require('./iaProvedores');
 const leitura = require('./iaLeitura');
+const esquemas = require('./iaEsquemas');
+const estruturacao = require('./iaEstruturacao');
+const reconciliacao = require('./iaReconciliacao');
+const aplicacao = require('./iaAplicacao');
 
 const router = express.Router();
 
@@ -137,6 +141,18 @@ function erro(status, mensagem) {
 
 const texto = v => (v === undefined || v === null ? null : String(v).trim() || null);
 
+/**
+ * Token cru da requisição.
+ *
+ * A aplicação grava pelo módulo de destino, que usa o cliente `db` — e ele
+ * resolve o token por AsyncLocalStorage. Sem repassar este valor, a entrada em
+ * estoque sairia com o token de serviço do aplicativo e o histórico registraria
+ * "o sistema" onde deveria registrar a pessoa.
+ */
+function tokenDaRequisicao(req) {
+  return String(req.headers?.authorization || '').replace(/^Bearer\s+/i, '').trim() || null;
+}
+
 /** Id do usuário autenticado, lido do JWT sem validar assinatura (só leitura). */
 function usuarioDaRequisicao(req) {
   try {
@@ -199,6 +215,54 @@ async function nomesDeUsuarios(api) {
   } catch (_) {
     // Sem os nomes a lista ainda serve; o responsável fica vazio.
     return new Map();
+  }
+}
+
+/**
+ * Valores que já existem para os campos de lista do destino.
+ *
+ * Falha em silêncio de propósito: sem as sugestões a revisão continua
+ * funcionando (o campo vira texto livre), e derrubar a abertura da leitura por
+ * causa de um datalist seria uma troca ruim.
+ */
+/**
+ * Registros do módulo de destino que um item pode apontar.
+ *
+ * É o que permite o revisor dizer "não é novo, é aquele ali" — o caso em que a
+ * reconciliação avisou "parecido com X" mas não decidiu sozinha. Sem esta
+ * lista, a única saída seria cadastrar um quase-duplicado e consertar depois no
+ * outro módulo.
+ *
+ * Só id e nome: a tabela inteira do estoque numa resposta de modal seria
+ * dezenas de campos por linha que a tela não usa.
+ */
+async function alvosDoDestino(api, destino) {
+  const esquema = esquemas.obterEsquema(destino);
+  if (!esquema) return [];
+  try {
+    const linhas = listaDe(await api.get(`/api/${esquema.tabelaAlvo}`));
+    return linhas
+      .map(l => ({ id: l.id, nome: l[esquema.chaveDeCasamento] }))
+      .filter(l => l.id && l.nome)
+      .sort((a, b) => String(a.nome).localeCompare(String(b.nome)));
+  } catch (_) {
+    return [];
+  }
+}
+
+async function sugestoesDoDestino(api, destino) {
+  if (destino !== 'materia_prima') return {};
+  try {
+    const [categorias, unidades] = await Promise.all([
+      api.get('/api/categoria').then(listaDe).catch(() => []),
+      api.get('/api/unidades').then(listaDe).catch(() => [])
+    ]);
+    return {
+      categoria: categorias.map(c => c.nome_categoria).filter(Boolean).sort(),
+      unidade: unidades.map(u => u.tipo).filter(Boolean).sort()
+    };
+  } catch (_) {
+    return {};
   }
 }
 
@@ -481,14 +545,36 @@ router.get('/:id', exigirPermissao('ia.details.view'), async (req, res) => {
     if (!Number.isFinite(id)) throw erro(400, 'Leitura inválida');
 
     const extracao = await buscarExtracao(api, id);
-    const [arquivos, itens, nomes] = await Promise.all([
+    const esquema = esquemas.obterEsquema(extracao.destino);
+
+    const [arquivos, itens, nomes, sugestoes] = await Promise.all([
       api.get('/api/ia_extracao_arquivos', { query: { extracao_id: id } }).then(listaDe),
       api.get('/api/ia_extracao_itens', { query: { extracao_id: id } }).then(listaDe),
-      nomesDeUsuarios(api)
+      nomesDeUsuarios(api),
+      // Categoria e unidade em texto livre é como a mesma coisa vira três
+      // grafias. A grade oferece o que já existe para o revisor encaixar.
+      sugestoesDoDestino(api, extracao.destino)
     ]);
+
+    // A lista de alvos só faz sentido enquanto há o que revisar, e é a maior
+    // parte da resposta. Depois de aplicada, a leitura não precisa dela.
+    const alvos = extracao.status === 'revisao' || extracao.status === 'rascunho'
+      ? await alvosDoDestino(api, extracao.destino)
+      : [];
 
     res.json({
       ...extracao,
+      // A grade de revisão é montada a partir DAQUI, não de colunas escritas
+      // no HTML: é o que faz um destino novo aparecer na tela sem tocar no
+      // front, e o que impede a tela de pedir campo que ninguém extraiu.
+      campos: esquemas.camposParaTela(extracao.destino),
+      sugestoes,
+      alvos,
+      pode_estruturar: Boolean(esquema),
+      pode_aplicar_destino: aplicacao.DESTINOS_APLICAVEIS.includes(extracao.destino),
+      explicacoes: esquema
+        ? { criar: esquema.explicacaoCriar || null, atualizar: esquema.explicacaoAtualizar || null }
+        : null,
       destino_rotulo: DESTINO_POR_ID.get(extracao.destino)?.rotulo || extracao.destino,
       status_rotulo: SITUACOES.find(s => s.id === extracao.status)?.rotulo || extracao.status,
       usuario_nome: nomes.get(Number(extracao.usuario_id)) || null,
@@ -553,6 +639,333 @@ router.get('/:id/arquivos/:arquivoId/texto', exigirPermissao('ia.details.view'),
     responder(res, err, 'GET /api/ia/:id/arquivos/:arquivoId/texto');
   }
 });
+
+// ---------------------------------------------------------------------------
+// EXTRAÇÃO DOS DADOS
+//
+// O texto lido já está gravado, então este passo pode ser repetido sem pedir
+// os arquivos de novo. É a razão de guardar o texto: um esquema melhorado ou
+// um modelo diferente reprocessam o mesmo documento sem novo upload.
+// ---------------------------------------------------------------------------
+
+/** Texto de todos os arquivos de uma leitura, na ordem em que entraram. */
+function juntarTextos(arquivos) {
+  return arquivos
+    .filter(a => a.texto)
+    .map(a => `### ${a.nome_arquivo}\n${a.texto}`)
+    .join('\n\n');
+}
+
+/**
+ * Troca os itens de uma leitura pelos que acabaram de ser extraídos.
+ *
+ * Apaga antes de inserir porque extrair de novo é REFAZER, não acrescentar —
+ * sem isso, reprocessar dobraria a lista e o revisor aprovaria tudo duas vezes.
+ * Itens já APLICADOS ficam: eles viraram estoque, e apagá-los apagaria a
+ * procedência de um saldo que existe.
+ */
+async function trocarItens(api, extracaoId, novos) {
+  const atuais = listaDe(
+    await api.get('/api/ia_extracao_itens', { query: { extracao_id: extracaoId } })
+  );
+  const preservados = atuais.filter(i => i.status === 'aplicado');
+  const descartaveis = atuais.filter(i => i.status !== 'aplicado');
+
+  await Promise.all(descartaveis.map(i => api.delete(`/api/ia_extracao_itens/${i.id}`)));
+
+  let linha = preservados.length;
+  for (const item of novos) {
+    linha += 1;
+    await api.post('/api/ia_extracao_itens', {
+      extracao_id: extracaoId,
+      linha,
+      dados: JSON.stringify(item.dados || {}),
+      acao: item.acao || 'criar',
+      alvo_tabela: item.alvo_tabela || null,
+      alvo_id: item.alvo_id ?? null,
+      confianca: item.confianca ?? null,
+      status: 'pendente',
+      mensagem: item.mensagem || null
+    });
+  }
+
+  return preservados.length + novos.length;
+}
+
+router.post('/:id/estruturar', exigirPermissao('ia.extract'), async (req, res) => {
+  const api = createApiClient(req);
+  const id = Number(req.params.id);
+
+  try {
+    if (!Number.isFinite(id)) throw erro(400, 'Leitura inválida');
+
+    const extracao = await buscarExtracao(api, id);
+    if (extracao.status === 'aplicada') {
+      throw erro(409, 'Esta leitura já foi aplicada. Extrair de novo não mudaria o que já entrou no sistema.');
+    }
+    if (!esquemas.obterEsquema(extracao.destino)) {
+      throw erro(400, `O destino "${extracao.destino}" ainda não sabe extrair dados.`);
+    }
+
+    const arquivos = listaDe(
+      await api.get('/api/ia_extracao_arquivos', { query: { extracao_id: id } })
+    );
+    const texto = juntarTextos(arquivos);
+    if (!texto.trim()) {
+      throw erro(400, 'Nenhum arquivo desta leitura tem texto para extrair.');
+    }
+
+    await api.put(`/api/ia_extracoes/${id}`, { status: 'lendo' });
+
+    const extraidos = await estruturacao.estruturar({ texto, destino: extracao.destino });
+
+    // A reconciliação precisa da tabela de destino INTEIRA: a API não filtra
+    // por lista de valores, então casar em memória é o único caminho.
+    const existentes = listaDe(
+      await api.get(`/api/${esquemas.obterEsquema(extracao.destino).tabelaAlvo}`)
+    );
+    const itens = reconciliacao.reconciliar({
+      destino: extracao.destino,
+      itens: extraidos.itens,
+      existentes
+    });
+
+    const total = await trocarItens(api, id, itens);
+
+    // Linha descartada e resposta cortada não são detalhe: quem revisa precisa
+    // saber que o documento tinha mais do que está na tela — senão confere o
+    // que veio, aprova, e o resto some sem ninguém notar.
+    const avisos = [];
+    if (extraidos.descartados.length) {
+      avisos.push(`${extraidos.descartados.length} linha(s) descartada(s): `
+        + extraidos.descartados.slice(0, 5).map(d => `linha ${d.linha} (${d.motivo})`).join('; '));
+    }
+    if (extraidos.truncado) {
+      avisos.push('A resposta do modelo foi cortada por tamanho — pode faltar item do fim da lista.');
+    }
+
+    await api.put(`/api/ia_extracoes/${id}`, {
+      status: total ? 'revisao' : 'erro',
+      itens_qtd: total,
+      modelo_llm: extraidos.modelo,
+      erro: total
+        ? (avisos.join(' | ').slice(0, 1000) || null)
+        : 'A IA não encontrou nenhum item neste documento.'
+    });
+
+    res.json({
+      id,
+      status: total ? 'revisao' : 'erro',
+      itens_qtd: total,
+      descartados: extraidos.descartados.length,
+      truncado: extraidos.truncado,
+      avisos
+    });
+  } catch (err) {
+    // Sem isto a leitura ficaria em "lendo" para sempre, com o ponto piscando
+    // na grade sem nunca terminar.
+    await api.put(`/api/ia_extracoes/${id}`, {
+      status: 'erro',
+      erro: String(err?.message || 'Falha ao extrair os dados').slice(0, 1000)
+    }).catch(() => {});
+    responder(res, err, 'POST /api/ia/:id/estruturar');
+  }
+});
+
+// ---------------------------------------------------------------------------
+// REVISÃO
+// ---------------------------------------------------------------------------
+
+const ACOES_VALIDAS = new Set(['criar', 'atualizar', 'ignorar']);
+
+/**
+ * Corrige um item antes de aplicar.
+ *
+ * Os valores passam pela MESMA coerção da extração. Sem isso, o revisor
+ * digitaria "189,90" no campo de preço e gravaria a string — o modelo teria
+ * seus números validados e a pessoa não.
+ */
+router.put('/:id/itens/:itemId', exigirPermissao('ia.review.edit'), async (req, res) => {
+  try {
+    const api = createApiClient(req);
+    const id = Number(req.params.id);
+    const itemId = Number(req.params.itemId);
+    if (!Number.isFinite(id) || !Number.isFinite(itemId)) throw erro(400, 'Item inválido');
+
+    const extracao = await buscarExtracao(api, id);
+    const esquema = esquemas.obterEsquema(extracao.destino);
+    if (!esquema) throw erro(400, 'Este destino ainda não tem revisão.');
+
+    const item = await api.get(`/api/ia_extracao_itens/${itemId}`);
+    if (!item || item.error === 'Not found') throw erro(404, 'Item não encontrado');
+    if (Number(item.extracao_id) !== id) throw erro(404, 'Item não encontrado');
+    if (item.status === 'aplicado') {
+      throw erro(409, 'Este item já foi gravado no sistema e não pode mais ser editado.');
+    }
+
+    const payload = {};
+    const problemas = [];
+
+    if (req.body?.dados !== undefined) {
+      const atual = lerDados(item.dados).valor;
+      const enviados = req.body.dados || {};
+      const novos = { ...atual };
+
+      for (const campo of esquema.campos) {
+        if (!Object.prototype.hasOwnProperty.call(enviados, campo.chave)) continue;
+        const valor = estruturacao.coagir(campo, enviados[campo.chave]);
+        if (valor === undefined) {
+          problemas.push(`${campo.rotulo}: valor não reconhecido`);
+          continue;
+        }
+        novos[campo.chave] = valor;
+      }
+      if (problemas.length) throw erro(400, problemas.join('; '));
+      payload.dados = JSON.stringify(novos);
+    }
+
+    if (req.body?.acao !== undefined) {
+      const acao = texto(req.body.acao);
+      if (!ACOES_VALIDAS.has(acao)) throw erro(400, `Ação inválida: ${acao}`);
+      payload.acao = acao;
+      // Trocar para "cadastrar" tem de soltar o alvo: senão o item sairia
+      // como novo apontando para um insumo existente, e o próximo salvamento
+      // gravaria um em cima do outro.
+      if (acao !== 'atualizar') { payload.alvo_id = null; payload.alvo_tabela = null; }
+    }
+
+    if (req.body?.alvo_id !== undefined) {
+      const alvo = req.body.alvo_id === null ? null : Number(req.body.alvo_id);
+      if (alvo !== null && !Number.isFinite(alvo)) throw erro(400, 'Destino inválido');
+      payload.alvo_id = alvo;
+      payload.alvo_tabela = alvo === null ? null : esquema.tabelaAlvo;
+      if (alvo !== null) payload.acao = payload.acao || 'atualizar';
+    }
+
+    if (!Object.keys(payload).length) throw erro(400, 'Nada para alterar');
+
+    // Correção do revisor apaga a ressalva da IA: ela falava do valor antigo.
+    payload.mensagem = null;
+    const salvo = await api.put(`/api/ia_extracao_itens/${itemId}`, payload);
+
+    res.json({
+      id: salvo.id,
+      linha: Number(salvo.linha) || 0,
+      dados: lerDados(salvo.dados).valor,
+      acao: salvo.acao,
+      alvo_id: salvo.alvo_id ?? null,
+      status: salvo.status,
+      mensagem: salvo.mensagem || null
+    });
+  } catch (err) {
+    responder(res, err, 'PUT /api/ia/:id/itens/:itemId');
+  }
+});
+
+// ---------------------------------------------------------------------------
+// APLICAÇÃO
+// ---------------------------------------------------------------------------
+
+/**
+ * Grava os itens revisados no módulo de destino.
+ *
+ * Exige DUAS permissões: a de aplicar pela IA (`ia.apply.*`) e a do módulo de
+ * destino. Sem a segunda, `ia.apply.mp` viraria um atalho para cadastrar
+ * insumo sem ter permissão de cadastrar insumo.
+ */
+router.post('/:id/aplicar',
+  exigirPermissao(req => {
+    // A permissão depende do destino, que só se conhece lendo a leitura. Como
+    // o guard roda antes, ele usa o destino informado no corpo — e a rota
+    // confere logo abaixo se bate com o que está gravado. Informar um destino
+    // mais frouxo no corpo não ajuda: a checagem de baixo recusa.
+    const destino = String(req.body?.destino || '');
+    const d = DESTINO_POR_ID.get(destino);
+    return d ? [d.permissao, d.moduloAlvo] : ['ia.apply.mp'];
+  }),
+  async (req, res) => {
+    const api = createApiClient(req);
+    const id = Number(req.params.id);
+
+    try {
+      if (!Number.isFinite(id)) throw erro(400, 'Leitura inválida');
+
+      const extracao = await buscarExtracao(api, id);
+      // O corpo precisa repetir o destino: é ele que o guard de permissão usa
+      // para saber QUAL `ia.apply.*` exigir, e esta conferência é o que impede
+      // alguém de informar um destino mais frouxo para escapar do guard.
+      const destinoInformado = String(req.body?.destino || '');
+      if (destinoInformado !== extracao.destino) {
+        throw erro(400, destinoInformado
+          ? `Esta leitura é para "${extracao.destino}", e veio "${destinoInformado}".`
+          : `Informe o destino "${extracao.destino}" no corpo do pedido.`);
+      }
+      if (extracao.status === 'aplicada') {
+        throw erro(409, 'Esta leitura já foi aplicada.');
+      }
+      if (!aplicacao.DESTINOS_APLICAVEIS.includes(extracao.destino)) {
+        throw erro(400, `Ainda não é possível aplicar em "${extracao.destino}".`);
+      }
+
+      const brutos = listaDe(
+        await api.get('/api/ia_extracao_itens', { query: { extracao_id: id } })
+      );
+      if (!brutos.length) throw erro(400, 'Esta leitura não tem itens para aplicar.');
+
+      const itens = brutos
+        .slice()
+        .sort((a, b) => (Number(a.linha) || 0) - (Number(b.linha) || 0))
+        .map(i => ({
+          id: i.id,
+          linha: Number(i.linha) || 0,
+          dados: lerDados(i.dados).valor,
+          acao: i.acao || 'criar',
+          alvo_id: i.alvo_id ?? null,
+          status: i.status || 'pendente',
+          mensagem: i.mensagem || null
+        }));
+
+      const resultados = await aplicacao.aplicar({
+        destino: extracao.destino,
+        itens,
+        usuarioId: usuarioDaRequisicao(req),
+        token: tokenDaRequisicao(req),
+        extracaoId: id,
+        titulo: extracao.titulo
+      });
+
+      // O resultado de cada item volta para a linha dele: é o que permite
+      // reaplicar só o que falhou, em vez de repetir o lote inteiro.
+      const agora = new Date().toISOString();
+      for (const r of resultados) {
+        await api.put(`/api/ia_extracao_itens/${r.id}`, {
+          status: r.status,
+          alvo_id: r.alvo_id,
+          mensagem: r.mensagem || null,
+          aplicado_em: r.status === 'aplicado' ? agora : null
+        }).catch(() => {});
+      }
+
+      const aplicados = resultados.filter(r => r.status === 'aplicado').length;
+      const comErro = resultados.filter(r => r.status === 'erro').length;
+      const ignorados = resultados.filter(r => r.status === 'ignorado').length;
+
+      // Só encerra a leitura quando NADA ficou pendente. Com item em erro ela
+      // continua em revisão — é o que deixa corrigir e aplicar de novo, sem
+      // reaplicar o que já entrou.
+      const concluida = comErro === 0;
+      await api.put(`/api/ia_extracoes/${id}`, {
+        status: concluida ? 'aplicada' : 'revisao',
+        aplicados_qtd: aplicados,
+        aplicado_em: concluida ? agora : null,
+        erro: comErro ? `${comErro} item(ns) não puderam ser gravados.` : null
+      });
+
+      res.json({ id, status: concluida ? 'aplicada' : 'revisao', aplicados, ignorados, com_erro: comErro, itens: resultados });
+    } catch (err) {
+      responder(res, err, 'POST /api/ia/:id/aplicar');
+    }
+  });
 
 // ---------------------------------------------------------------------------
 // EXCLUSÃO
@@ -627,4 +1040,6 @@ module.exports.SITUACOES_VALIDAS = SITUACOES_VALIDAS;
 module.exports.usuarioDaRequisicao = usuarioDaRequisicao;
 module.exports.lerDados = lerDados;
 module.exports.emParalelo = emParalelo;
+module.exports.tokenDaRequisicao = tokenDaRequisicao;
+module.exports.juntarTextos = juntarTextos;
 module.exports.texto = texto;

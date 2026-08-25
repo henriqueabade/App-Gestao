@@ -799,3 +799,183 @@ body {
     0%   { margin-left: -35%; }
     100% { margin-left: 100%; }
 }
+
+/* ------------------------------------------------------------------
+   Revisão do que a IA extraiu
+   ------------------------------------------------------------------ */
+
+/*
+   A grade de revisão tem uma coluna por campo do destino — seis só para
+   matéria-prima, mais ação e situação. Nos 760px do modal padrão as células
+   ficariam ilegíveis.
+*/
+.modal-ia--largo {
+    max-width: 1120px;
+}
+
+/* A grade rola por dentro, na horizontal, quando o destino tiver campos
+   demais para a largura da tela. */
+.ia-grade-revisao {
+    overflow-x: auto;
+    overflow-y: visible;
+}
+
+.ia-grade-revisao table {
+    min-width: 100%;
+}
+
+.ia-grade-revisao th {
+    padding: 8px 10px;
+    text-align: left;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: rgba(255, 255, 255, 0.5);
+    white-space: nowrap;
+}
+
+.ia-grade-revisao td {
+    padding: 6px 10px;
+    vertical-align: top;
+}
+
+/* Larguras vêm do esquema do destino, não de palpite no CSS de cada coluna. */
+.ia-col-pequena { width: 92px; }
+.ia-col-media   { width: 150px; }
+.ia-col-grande  { width: auto; min-width: 240px; }
+
+/*
+   Campo editável da grade. Some a moldura até o foco: com seis inputs por
+   linha e vinte linhas, a borda em todos transforma a tabela num tabuleiro e
+   esconde justamente o que importa — o valor.
+*/
+.ia-campo {
+    width: 100%;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    padding: 4px 6px;
+    color: rgba(255, 255, 255, 0.92);
+    font-size: 13px;
+}
+
+.ia-campo:hover {
+    border-color: rgba(255, 255, 255, 0.14);
+}
+
+.ia-campo:focus {
+    outline: none;
+    border-color: var(--color-primary);
+    background: rgba(0, 0, 0, 0.28);
+}
+
+.ia-campo[readonly],
+.ia-campo:disabled {
+    color: rgba(255, 255, 255, 0.55);
+    cursor: default;
+}
+
+.ia-campo[readonly]:hover,
+.ia-campo:disabled:hover {
+    border-color: transparent;
+}
+
+/* Campo obrigatório em branco: o item não vai entrar assim. */
+.ia-campo--faltando {
+    border-color: rgba(255, 88, 88, 0.55);
+    background: rgba(255, 88, 88, 0.08);
+}
+
+/* Piscada curta confirmando que a correção foi gravada. Sem retorno nenhum,
+   o revisor não sabe se digitou no vazio. */
+.ia-campo--salvo {
+    animation: iaSalvo 900ms ease-out;
+}
+
+@keyframes iaSalvo {
+    0%   { background: rgba(162, 255, 166, 0.28); }
+    100% { background: transparent; }
+}
+
+.ia-acao-select {
+    width: 100%;
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 6px;
+    padding: 4px 6px;
+    color: rgba(255, 255, 255, 0.92);
+    font-size: 12px;
+}
+
+.ia-acao-select:focus {
+    outline: none;
+    border-color: var(--color-primary);
+}
+
+/* Linha descartada continua visível, mas apagada: esconder faria o revisor
+   perder de vista o que a leitura tinha. */
+.ia-linha-item--ignorada {
+    opacity: 0.45;
+}
+
+.ia-linha-item--erro {
+    background: rgba(255, 88, 88, 0.07);
+}
+
+.ia-linha-item--aplicada {
+    background: rgba(162, 255, 166, 0.06);
+}
+
+/* Ressalva da IA ou resultado da gravação, abaixo da linha. */
+.ia-nota-item {
+    font-size: 11px;
+    line-height: 1.5;
+    padding: 0 10px 6px;
+    color: rgba(255, 255, 255, 0.55);
+}
+
+.ia-nota-item--alerta { color: var(--color-primary-light); }
+.ia-nota-item--erro   { color: var(--color-red); }
+.ia-nota-item--ok     { color: var(--color-green); }
+
+/* Botão "é o mesmo": aceita a sugestão de casamento com um clique. */
+.ia-nota-item button {
+    background: none;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 6px;
+    color: inherit;
+    font-size: 11px;
+    padding: 1px 8px;
+    margin-left: 6px;
+    cursor: pointer;
+}
+
+.ia-nota-item button:hover {
+    border-color: var(--color-primary);
+    color: var(--color-primary-light);
+}
+
+/* Barra que resume o que vai acontecer ao aplicar. */
+.ia-resumo-revisao {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    margin-bottom: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.04);
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.8);
+}
+
+.ia-resumo-revisao strong {
+    color: #fff;
+    font-variant-numeric: tabular-nums;
+}
+
+.ia-resumo-revisao__separador {
+    color: rgba(255, 255, 255, 0.25);
+}

@@ -35,6 +35,18 @@ const COLUNAS = {
     'id', 'extracao_id', 'linha', 'dados', 'acao', 'alvo_tabela', 'alvo_id',
     'confianca', 'status', 'mensagem', 'criado_em', 'aplicado_em'
   ],
+  materia_prima: ['id', 'nome', 'quantidade', 'preco_unitario', 'categoria', 'unidade',
+    'infinito', 'processo', 'descricao', 'data_estoque', 'data_preco'],
+  materia_prima_movimentacoes: ['id', 'insumo_id', 'tipo', 'quantidade_alterada',
+    'quantidade_anterior', 'quantidade_atual', 'preco_atual', 'usuario_id', 'pedido_id',
+    'realocacao_id', 'estoque_movimento_id', 'observacao', 'criado_em'],
+  categoria: ['id', 'nome_categoria'],
+  unidades: ['id', 'tipo'],
+  // `atualizarPreco` repassa o custo aos produtos que usam o insumo. Sem estas
+  // duas no duplo, a atualização de preço bate num 404 que não existe em
+  // produção — e o teste passaria a medir o buraco do harness.
+  produtos_insumos: ['id', 'produto_id', 'insumo_id', 'quantidade'],
+  produtos: ['id', 'nome', 'preco_custo', 'preco_venda', 'margem'],
   usuarios: ['id', 'nome', 'perfil', 'modelo_permissoes_id'],
   modelos_permissoes: ['id', 'nome'],
   // Tabela real de permissões do módulo. Sem ela no duplo, todo usuário sem
@@ -126,7 +138,12 @@ function criarUpstream(dados, opcoes = {}) {
 
 const MODULOS = [
   './apiHttpClient', './permissionsController', './permissionsRepository',
-  './iaProvedores', './iaLeitura', './iaController'
+  // `db` e `materiaPrima` leem API_BASE_URL no carregamento do módulo: sem
+  // limpar o cache deles, a aplicação de um teste falaria com o servidor do
+  // teste anterior, já fechado.
+  './db', './materiaPrima',
+  './iaProvedores', './iaLeitura', './iaEsquemas', './iaEstruturacao',
+  './iaReconciliacao', './iaAplicacao', './iaController'
 ];
 
 async function montar(dados, env = {}, opcoes = {}) {
@@ -137,8 +154,10 @@ async function montar(dados, env = {}, opcoes = {}) {
   const envAnterior = {};
   for (const [chave, valor] of Object.entries(env)) {
     envAnterior[chave] = process.env[chave];
-    if (valor === null) delete process.env[chave];
-    else process.env[chave] = valor;
+    // Vazio, não apagado: `backend/db.js` chama dotenv ao ser carregado, e
+    // dotenv REPÕE toda chave que não estiver em process.env — apagar a
+    // variável faria o .env real do desenvolvedor vazar para dentro do teste.
+    process.env[chave] = valor === null ? '' : valor;
   }
 
   // Limpa o cache: permissionsController guarda usuário e permissões em
@@ -1397,4 +1416,844 @@ test('emParalelo preserva a ordem e respeita o teto de tarefas em voo', async ()
   // Todos de uma vez bateria no limite de uso do provedor, que responde 429 e
   // derruba justamente os arquivos do fim da fila.
   assert.ok(pico <= 3, `chegou a ${pico} em voo`);
+});
+
+
+// ===========================================================================
+// ETAPA 3 — extração, revisão e aplicação
+//
+// O provedor de estruturação também é trocado por um servidor local (via
+// GROQ_API_BASE). A aplicação passa pelo backend/materiaPrima.js de verdade,
+// contra o mesmo duplo da API remota — é a única forma de provar que a entrada
+// em estoque grava a movimentação junto com o saldo.
+// ===========================================================================
+
+/** Servidor que responde como o /chat/completions da Groq. */
+function criarGroq(responder) {
+  const chamadas = [];
+  const servidor = http.createServer((req, res) => {
+    let corpo = '';
+    req.on('data', p => { corpo += p; });
+    req.on('end', () => {
+      const url = new URL(req.url, 'http://x');
+      const body = corpo ? JSON.parse(corpo) : null;
+      chamadas.push({ caminho: url.pathname, auth: req.headers.authorization, body });
+      const r = responder ? responder({ chamadas, body }) : null;
+      const { status = 200, payload = respostaGroq({ itens: [] }) } = r || {};
+      res.writeHead(status, { 'content-type': 'application/json' });
+      res.end(JSON.stringify(payload));
+    });
+  });
+  return { servidor, chamadas };
+}
+
+const respostaGroq = (objeto, finish = 'stop') => ({
+  choices: [{ message: { content: typeof objeto === 'string' ? objeto : JSON.stringify(objeto) }, finish_reason: finish }]
+});
+
+/** Sobe o app com duplos de Gemini E Groq. */
+async function montarComIA(dados, env = {}, { gemini: respGemini, groq: respGroq } = {}, opcoesUpstream = {}) {
+  const gemini = criarGemini(respGemini);
+  const groq = criarGroq(respGroq);
+  await new Promise(r => gemini.servidor.listen(0, '127.0.0.1', r));
+  await new Promise(r => groq.servidor.listen(0, '127.0.0.1', r));
+
+  const ctx = await montar(dados, {
+    GEMINI_API_BASE: `http://127.0.0.1:${gemini.servidor.address().port}/v1beta`,
+    GEMINI_API_KEY: 'chave-gemini',
+    GROQ_API_BASE: `http://127.0.0.1:${groq.servidor.address().port}`,
+    GROQ_API_KEY: 'chave-groq',
+    GROQ_MODEL: 'llama-de-teste',
+    ...env
+  }, opcoesUpstream);
+
+  const encerrarOriginal = ctx.encerrar;
+  ctx.gemini = gemini;
+  ctx.groq = groq;
+  ctx.encerrar = async () => {
+    await encerrarOriginal();
+    await new Promise(r => gemini.servidor.close(r));
+    await new Promise(r => groq.servidor.close(r));
+  };
+  return ctx;
+}
+
+/** Base com uma leitura de matéria-prima já lida, pronta para estruturar. */
+function baseParaEstruturar() {
+  const dados = baseDados();
+  dados.materia_prima = [
+    { id: 70, nome: 'MDF 15mm Branco TX', quantidade: 12, preco_unitario: 180, unidade: 'CH', categoria: 'Chapas' },
+    { id: 71, nome: 'Cola PVA extra 1kg', quantidade: 5, preco_unitario: 20, unidade: 'UN', categoria: 'Consumível' }
+  ];
+  dados.materia_prima_movimentacoes = [];
+  dados.categoria = [{ id: 1, nome_categoria: 'Chapas' }, { id: 2, nome_categoria: 'Consumível' }];
+  dados.unidades = [{ id: 1, tipo: 'CH' }, { id: 2, tipo: 'UN' }];
+  dados.produtos_insumos = [];
+  dados.produtos = [];
+  dados.ia_extracoes.push({
+    id: 4, titulo: 'Lista Bralux', destino: 'materia_prima', status: 'rascunho',
+    arquivos_qtd: 1, itens_qtd: 0, aplicados_qtd: 0, usuario_id: 1, criado_em: RECENTE
+  });
+  dados.ia_extracao_arquivos.push({
+    id: 41, extracao_id: 4, nome_arquivo: 'bralux.xlsx', origem: 'planilha',
+    texto: 'ITEM | QTD | PRECO\nMDF 15mm Branco TX | 40 | 189,90\nFita 22mm | 500 | 1,35'
+  });
+  return dados;
+}
+
+const ITENS_LIDOS = {
+  itens: [
+    { nome: 'MDF 15mm Branco TX', quantidade: '40', unidade: 'CH', preco_unitario: '189,90', categoria: 'Chapas', descricao: null },
+    { nome: 'Fita de borda 22mm', quantidade: '500', unidade: 'M', preco_unitario: '1,35', categoria: 'Acabamento', descricao: null }
+  ]
+};
+
+const itensDa = (ctx, extracaoId) =>
+  ctx.tabelas.ia_extracao_itens
+    .filter(i => i.extracao_id === extracaoId)
+    .sort((a, b) => a.linha - b.linha);
+
+// ---------------------------------------------------------------------------
+// Extração
+// ---------------------------------------------------------------------------
+
+test('a extração transforma o texto guardado em itens', async () => {
+  const ctx = await montarComIA(baseParaEstruturar(), {}, { groq: () => ({ payload: respostaGroq(ITENS_LIDOS) }) });
+  try {
+    const resp = await chamar(ctx.porta, '/api/ia/4/estruturar', { method: 'POST' });
+    assert.strictEqual(resp.status, 200);
+    const corpo = await resp.json();
+    assert.strictEqual(corpo.status, 'revisao');
+    assert.strictEqual(corpo.itens_qtd, 2);
+
+    const itens = itensDa(ctx, 4);
+    assert.strictEqual(itens.length, 2);
+    const primeiro = JSON.parse(itens[0].dados);
+    // "189,90" precisa virar número: gravar a string faria o preço chegar ao
+    // estoque como NaN.
+    assert.strictEqual(primeiro.preco_unitario, 189.9);
+    assert.strictEqual(primeiro.quantidade, 40);
+
+    // O modelo usado fica registrado, como o de leitura.
+    assert.strictEqual(ctx.tabelas.ia_extracoes.find(e => e.id === 4).modelo_llm, 'llama-de-teste');
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('a extração pede JSON e temperatura zero', async () => {
+  const ctx = await montarComIA(baseParaEstruturar(), {}, { groq: () => ({ payload: respostaGroq(ITENS_LIDOS) }) });
+  try {
+    await chamar(ctx.porta, '/api/ia/4/estruturar', { method: 'POST' });
+    const body = ctx.groq.chamadas[0].body;
+
+    assert.strictEqual(body.model, 'llama-de-teste');
+    // Extração é trabalho determinístico: variação aqui é um preço diferente
+    // a cada execução sobre o mesmo documento.
+    assert.strictEqual(body.temperature, 0);
+    assert.strictEqual(body.response_format.type, 'json_object');
+    // O texto lido tem de chegar ao modelo, com o nome do arquivo junto.
+    assert.match(body.messages[1].content, /MDF 15mm Branco TX \| 40 \| 189,90/);
+    assert.match(body.messages[1].content, /bralux\.xlsx/);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('o item que já existe no estoque sai marcado para dar entrada', async () => {
+  const ctx = await montarComIA(baseParaEstruturar(), {}, { groq: () => ({ payload: respostaGroq(ITENS_LIDOS) }) });
+  try {
+    await chamar(ctx.porta, '/api/ia/4/estruturar', { method: 'POST' });
+    const itens = itensDa(ctx, 4);
+
+    // Cadastrar de novo o que já existe reparte o saldo entre duas linhas do
+    // mesmo insumo, e o erro só aparece no inventário.
+    assert.strictEqual(itens[0].acao, 'atualizar');
+    assert.strictEqual(itens[0].alvo_id, 70);
+    assert.strictEqual(itens[0].alvo_tabela, 'materia_prima');
+    // Nome IGUAL não levanta dúvida: confiança cheia e nenhuma ressalva. O
+    // índice "sem pontuação" casaria o mesmo registro, mas com um aviso de
+    // "confira" que não faz sentido quando o nome bate letra por letra.
+    assert.strictEqual(Number(itens[0].confianca), 1);
+    assert.strictEqual(itens[0].mensagem, null);
+
+    assert.strictEqual(itens[1].acao, 'criar');
+    assert.strictEqual(itens[1].alvo_id, null);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('nome parecido NÃO é casado sozinho — vira cadastro com aviso', async () => {
+  // Juntar "MDF 15mm Branco TX" com "MDF 15mm Branco TX Guararapes" misturaria
+  // dois insumos diferentes, e o estrago só apareceria no inventário.
+  const ctx = await montarComIA(baseParaEstruturar(), {}, {
+    groq: () => ({ payload: respostaGroq({ itens: [{ nome: 'MDF 15mm Branco TX Guararapes', quantidade: '10' }] }) })
+  });
+  try {
+    await chamar(ctx.porta, '/api/ia/4/estruturar', { method: 'POST' });
+    const item = itensDa(ctx, 4)[0];
+    assert.strictEqual(item.acao, 'criar');
+    assert.strictEqual(item.alvo_id, null);
+    assert.match(item.mensagem, /Parecido com "MDF 15mm Branco TX" \(#70\)/);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('linha sem campo obrigatório é descartada, e o descarte é anunciado', async () => {
+  const ctx = await montarComIA(baseParaEstruturar(), {}, {
+    groq: () => ({
+      payload: respostaGroq({
+        itens: [
+          { nome: 'Item bom', quantidade: '5' },
+          { nome: null, quantidade: '9' },
+          { nome: 'Sem quantidade', quantidade: null }
+        ]
+      })
+    })
+  });
+  try {
+    const corpo = await (await chamar(ctx.porta, '/api/ia/4/estruturar', { method: 'POST' })).json();
+    assert.strictEqual(corpo.itens_qtd, 1);
+    assert.strictEqual(corpo.descartados, 2);
+
+    // Se o documento tinha 3 linhas e sobrou 1, quem revisa PRECISA saber —
+    // senão confere a que veio, aprova, e as outras somem sem ninguém notar.
+    const extracao = ctx.tabelas.ia_extracoes.find(e => e.id === 4);
+    assert.match(extracao.erro, /2 linha\(s\) descartada\(s\)/);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('resposta cortada por tamanho é anunciada', async () => {
+  const ctx = await montarComIA(baseParaEstruturar(), {}, {
+    groq: () => ({ payload: respostaGroq(ITENS_LIDOS, 'length') })
+  });
+  try {
+    const corpo = await (await chamar(ctx.porta, '/api/ia/4/estruturar', { method: 'POST' })).json();
+    assert.strictEqual(corpo.truncado, true);
+    // A resposta é JSON válido, só que incompleta: sem aviso o revisor aprova
+    // metade da lista achando que é a lista inteira.
+    assert.ok(corpo.avisos.some(a => /cortada/i.test(a)));
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('JSON embrulhado em cerca de código ainda é aproveitado', async () => {
+  const ctx = await montarComIA(baseParaEstruturar(), {}, {
+    groq: () => ({ payload: respostaGroq('```json\n' + JSON.stringify(ITENS_LIDOS) + '\n```') })
+  });
+  try {
+    const corpo = await (await chamar(ctx.porta, '/api/ia/4/estruturar', { method: 'POST' })).json();
+    assert.strictEqual(corpo.itens_qtd, 2);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('resposta que não é JSON vira erro explicado, não leitura vazia', async () => {
+  const ctx = await montarComIA(baseParaEstruturar(), {}, {
+    groq: () => ({ payload: respostaGroq('desculpe, não consegui') })
+  });
+  try {
+    const resp = await chamar(ctx.porta, '/api/ia/4/estruturar', { method: 'POST' });
+    assert.ok(resp.status >= 400);
+    const extracao = ctx.tabelas.ia_extracoes.find(e => e.id === 4);
+    assert.strictEqual(extracao.status, 'erro');
+    assert.ok(extracao.erro);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('a extração nunca deixa a leitura pendurada em "lendo"', async () => {
+  const ctx = await montarComIA(baseParaEstruturar(), {}, {
+    groq: () => ({ status: 500, payload: { error: { message: 'boom' } } })
+  });
+  try {
+    await chamar(ctx.porta, '/api/ia/4/estruturar', { method: 'POST' });
+    assert.strictEqual(ctx.tabelas.ia_extracoes.find(e => e.id === 4).status, 'erro');
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('extrair de novo REFAZ a lista em vez de acrescentar', async () => {
+  const ctx = await montarComIA(baseParaEstruturar(), {}, { groq: () => ({ payload: respostaGroq(ITENS_LIDOS) }) });
+  try {
+    await chamar(ctx.porta, '/api/ia/4/estruturar', { method: 'POST' });
+    await chamar(ctx.porta, '/api/ia/4/estruturar', { method: 'POST' });
+
+    // Sem a troca, reprocessar dobraria a lista e o revisor aprovaria tudo
+    // duas vezes — o estoque entraria em dobro.
+    assert.strictEqual(itensDa(ctx, 4).length, 2);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('leitura já aplicada não pode ser extraída de novo', async () => {
+  const dados = baseParaEstruturar();
+  dados.ia_extracoes.find(e => e.id === 4).status = 'aplicada';
+  const ctx = await montarComIA(dados);
+  try {
+    const resp = await chamar(ctx.porta, '/api/ia/4/estruturar', { method: 'POST' });
+    assert.strictEqual(resp.status, 409);
+    assert.strictEqual(ctx.groq.chamadas.length, 0, 'gastou crédito numa leitura encerrada');
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('leitura sem texto não chega a chamar o modelo', async () => {
+  const dados = baseParaEstruturar();
+  dados.ia_extracao_arquivos.find(a => a.id === 41).texto = null;
+  const ctx = await montarComIA(dados);
+  try {
+    const resp = await chamar(ctx.porta, '/api/ia/4/estruturar', { method: 'POST' });
+    assert.strictEqual(resp.status, 400);
+    assert.strictEqual(ctx.groq.chamadas.length, 0);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('sem ia.extract o usuário comum não extrai', async () => {
+  const ctx = await montarComIA(permitir(baseParaEstruturar(), ['acao_view', 'acao_details_view']));
+  try {
+    const resp = await chamar(ctx.porta, '/api/ia/4/estruturar', { method: 'POST', usuario: 2 });
+    assert.strictEqual(resp.status, 403);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Detalhe da revisão
+// ---------------------------------------------------------------------------
+
+test('o detalhe descreve os campos que a grade deve mostrar', async () => {
+  const ctx = await montarComIA(baseParaEstruturar());
+  try {
+    const dados = await (await chamar(ctx.porta, '/api/ia/4')).json();
+
+    // A grade é montada a partir daqui. Colunas escritas no HTML fariam a
+    // tela divergir do que a IA extrai.
+    const chaves = dados.campos.map(c => c.chave);
+    assert.deepStrictEqual(chaves, ['nome', 'quantidade', 'unidade', 'preco_unitario', 'categoria', 'descricao']);
+    assert.strictEqual(dados.campos.find(c => c.chave === 'nome').obrigatorio, true);
+    assert.strictEqual(dados.campos.find(c => c.chave === 'preco_unitario').tipo, 'dinheiro');
+    assert.strictEqual(dados.pode_aplicar_destino, true);
+    assert.ok(dados.explicacoes.atualizar);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('o detalhe traz os insumos existentes para o revisor apontar', async () => {
+  const ctx = await montarComIA(baseParaEstruturar());
+  try {
+    const dados = await (await chamar(ctx.porta, '/api/ia/4')).json();
+    assert.deepStrictEqual(dados.alvos.map(a => a.id).sort(), [70, 71]);
+    // Só id e nome: a tabela inteira do estoque seria dezenas de campos por
+    // linha que a tela não usa.
+    assert.deepStrictEqual(Object.keys(dados.alvos[0]).sort(), ['id', 'nome']);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('o detalhe sugere as categorias e unidades que já existem', async () => {
+  const ctx = await montarComIA(baseParaEstruturar());
+  try {
+    const dados = await (await chamar(ctx.porta, '/api/ia/4')).json();
+    assert.deepStrictEqual(dados.sugestoes.categoria, ['Chapas', 'Consumível']);
+    assert.deepStrictEqual(dados.sugestoes.unidade, ['CH', 'UN']);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Revisão
+// ---------------------------------------------------------------------------
+
+async function prepararRevisao(env = {}) {
+  const ctx = await montarComIA(baseParaEstruturar(), env, { groq: () => ({ payload: respostaGroq(ITENS_LIDOS) }) });
+  await chamar(ctx.porta, '/api/ia/4/estruturar', { method: 'POST' });
+  return ctx;
+}
+
+test('a correção do revisor passa pela mesma coerção da IA', async () => {
+  const ctx = await prepararRevisao();
+  try {
+    const item = itensDa(ctx, 4)[1];
+    const resp = await chamar(ctx.porta, `/api/ia/4/itens/${item.id}`, {
+      method: 'PUT',
+      body: JSON.stringify({ dados: { preco_unitario: '2,50', nome: '  Fita   corrigida  ' } })
+    });
+    assert.strictEqual(resp.status, 200);
+    const salvo = await resp.json();
+
+    // Sem a coerção, o revisor digitaria "2,50" e gravaria a string: o modelo
+    // teria seus números validados e a pessoa não.
+    assert.strictEqual(salvo.dados.preco_unitario, 2.5);
+    assert.strictEqual(salvo.dados.nome, 'Fita corrigida');
+    // Os campos não enviados continuam como estavam.
+    assert.strictEqual(salvo.dados.quantidade, 500);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('valor impossível na correção é recusado com o motivo', async () => {
+  const ctx = await prepararRevisao();
+  try {
+    const item = itensDa(ctx, 4)[1];
+    const resp = await chamar(ctx.porta, `/api/ia/4/itens/${item.id}`, {
+      method: 'PUT', body: JSON.stringify({ dados: { quantidade: 'umas cinquenta' } })
+    });
+    assert.strictEqual(resp.status, 400);
+    assert.match((await resp.json()).error, /Qtde/);
+
+    // E nada mudou no banco.
+    assert.strictEqual(JSON.parse(itensDa(ctx, 4)[1].dados).quantidade, 500);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('mudar a ação para cadastrar solta o insumo de destino', async () => {
+  const ctx = await prepararRevisao();
+  try {
+    const item = itensDa(ctx, 4)[0];
+    assert.strictEqual(item.alvo_id, 70);
+
+    const salvo = await (await chamar(ctx.porta, `/api/ia/4/itens/${item.id}`, {
+      method: 'PUT', body: JSON.stringify({ acao: 'criar' })
+    })).json();
+
+    // Sem soltar o alvo, o item sairia como novo apontando para um insumo
+    // existente — e a gravação seguinte escreveria um por cima do outro.
+    assert.strictEqual(salvo.acao, 'criar');
+    assert.strictEqual(salvo.alvo_id, null);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('apontar o item para um insumo existente já muda a ação', async () => {
+  const ctx = await prepararRevisao();
+  try {
+    const item = itensDa(ctx, 4)[1];
+    const salvo = await (await chamar(ctx.porta, `/api/ia/4/itens/${item.id}`, {
+      method: 'PUT', body: JSON.stringify({ alvo_id: 71 })
+    })).json();
+
+    assert.strictEqual(salvo.alvo_id, 71);
+    assert.strictEqual(salvo.acao, 'atualizar');
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('ação inventada é recusada', async () => {
+  const ctx = await prepararRevisao();
+  try {
+    const item = itensDa(ctx, 4)[0];
+    const resp = await chamar(ctx.porta, `/api/ia/4/itens/${item.id}`, {
+      method: 'PUT', body: JSON.stringify({ acao: 'apagar_tudo' })
+    });
+    assert.strictEqual(resp.status, 400);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('item de outra leitura não é editável trocando o id', async () => {
+  const ctx = await prepararRevisao();
+  try {
+    // O item 21 pertence à leitura 1.
+    const resp = await chamar(ctx.porta, '/api/ia/4/itens/21', {
+      method: 'PUT', body: JSON.stringify({ acao: 'ignorar' })
+    });
+    assert.strictEqual(resp.status, 404);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('sem ia.review.edit o usuário comum não corrige', async () => {
+  const ctx = await prepararRevisao();
+  try {
+    const item = itensDa(ctx, 4)[0];
+    // O perfil Vendedor não tem nenhuma permissão liberada nesta base.
+    const resp = await chamar(ctx.porta, `/api/ia/4/itens/${item.id}`, {
+      method: 'PUT', usuario: 2, body: JSON.stringify({ acao: 'ignorar' })
+    });
+    assert.strictEqual(resp.status, 403);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Aplicação
+// ---------------------------------------------------------------------------
+
+const aplicar = (ctx, id = 4, opcoes = {}) => chamar(ctx.porta, `/api/ia/${id}/aplicar`, {
+  method: 'POST',
+  body: JSON.stringify({ destino: 'materia_prima' }),
+  ...opcoes
+});
+
+test('aplicar cadastra o insumo novo e dá entrada no que já existe', async () => {
+  const ctx = await prepararRevisao();
+  try {
+    const resp = await aplicar(ctx);
+    assert.strictEqual(resp.status, 200);
+    const corpo = await resp.json();
+    assert.strictEqual(corpo.aplicados, 2);
+    assert.strictEqual(corpo.com_erro, 0);
+    assert.strictEqual(corpo.status, 'aplicada');
+
+    // O que já existia recebeu ENTRADA (12 + 40), não substituição.
+    const existente = ctx.tabelas.materia_prima.find(m => m.id === 70);
+    assert.strictEqual(Number(existente.quantidade), 52);
+    assert.strictEqual(Number(existente.preco_unitario), 189.9);
+
+    // O novo foi cadastrado com a quantidade como saldo inicial.
+    const novo = ctx.tabelas.materia_prima.find(m => m.nome === 'Fita de borda 22mm');
+    assert.ok(novo, 'o insumo novo não foi cadastrado');
+    assert.strictEqual(Number(novo.quantidade), 500);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('a entrada em estoque grava a movimentação junto com o saldo', async () => {
+  const ctx = await prepararRevisao();
+  try {
+    await aplicar(ctx);
+
+    // Mexer no saldo sem escrever no razão é o que faz o histórico parar de
+    // fechar com o estoque — e ninguém descobre até a conferência anual.
+    const movimentos = ctx.tabelas.materia_prima_movimentacoes;
+    assert.ok(movimentos.length >= 2, `só ${movimentos.length} movimentações`);
+
+    const entrada = movimentos.find(m => Number(m.insumo_id) === 70);
+    assert.ok(entrada, 'a entrada não deixou rastro');
+    assert.strictEqual(Number(entrada.quantidade_anterior), 12);
+    assert.strictEqual(Number(entrada.quantidade_atual), 52);
+    // A procedência fica escrita: é como se descobre depois de onde veio um
+    // saldo estranho.
+    assert.match(String(entrada.observacao || ''), /Leitura de IA #4/);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('falha DEPOIS da entrada vira aviso, não erro', async () => {
+  // O saldo já subiu quando o preço vai ser atualizado. Marcar o item como
+  // erro convidaria a corrigir e aplicar de novo — e a segunda aplicação
+  // somaria a quantidade outra vez.
+  const ctx = await montarComIA(baseParaEstruturar(), {}, { groq: () => ({ payload: respostaGroq(ITENS_LIDOS) }) },
+    { falharEm: ({ metodo, tabela }) => metodo === 'GET' && tabela === 'produtos_insumos' });
+  try {
+    await chamar(ctx.porta, '/api/ia/4/estruturar', { method: 'POST' });
+    const corpo = await (await aplicar(ctx)).json();
+
+    assert.strictEqual(corpo.com_erro, 0, 'a falha no preço marcou o item como erro');
+    assert.strictEqual(corpo.aplicados, 2);
+    assert.strictEqual(corpo.status, 'aplicada');
+
+    // O saldo entrou e o problema ficou escrito na linha.
+    assert.strictEqual(Number(ctx.tabelas.materia_prima.find(m => m.id === 70).quantidade), 52);
+    const item = itensDa(ctx, 4)[0];
+    assert.strictEqual(item.status, 'aplicado');
+    assert.match(item.mensagem, /preço não foi possível/i);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('o item descartado não vira estoque', async () => {
+  const ctx = await prepararRevisao();
+  try {
+    const item = itensDa(ctx, 4)[1];
+    await chamar(ctx.porta, `/api/ia/4/itens/${item.id}`, {
+      method: 'PUT', body: JSON.stringify({ acao: 'ignorar' })
+    });
+
+    const corpo = await (await aplicar(ctx)).json();
+    assert.strictEqual(corpo.aplicados, 1);
+    assert.strictEqual(corpo.ignorados, 1);
+    assert.strictEqual(ctx.tabelas.materia_prima.some(m => m.nome === 'Fita de borda 22mm'), false);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('aplicar duas vezes não duplica o estoque', async () => {
+  const ctx = await prepararRevisao();
+  try {
+    await aplicar(ctx);
+    const segunda = await aplicar(ctx);
+
+    // A leitura já está encerrada: repetir não pode somar de novo.
+    assert.strictEqual(segunda.status, 409);
+    assert.strictEqual(Number(ctx.tabelas.materia_prima.find(m => m.id === 70).quantidade), 52);
+    assert.strictEqual(ctx.tabelas.materia_prima.filter(m => m.nome === 'Fita de borda 22mm').length, 1);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('item que falha não derruba os que deram certo', async () => {
+  const ctx = await prepararRevisao();
+  try {
+    // Deixa o segundo item sem quantidade válida, direto no banco: é o caso
+    // de um dado que passou pela revisão sem ser olhado.
+    const item = itensDa(ctx, 4)[1];
+    item.dados = JSON.stringify({ ...JSON.parse(item.dados), quantidade: null });
+
+    const corpo = await (await aplicar(ctx)).json();
+    assert.strictEqual(corpo.aplicados, 1);
+    assert.strictEqual(corpo.com_erro, 1);
+
+    // Continua em revisão: é o que deixa corrigir e aplicar de novo sem
+    // reaplicar o que já entrou.
+    assert.strictEqual(corpo.status, 'revisao');
+    assert.strictEqual(Number(ctx.tabelas.materia_prima.find(m => m.id === 70).quantidade), 52);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('aplicar de novo depois de corrigir não repete o que já entrou', async () => {
+  const ctx = await prepararRevisao();
+  try {
+    const item = itensDa(ctx, 4)[1];
+    item.dados = JSON.stringify({ ...JSON.parse(item.dados), quantidade: null });
+    await aplicar(ctx);
+
+    // Conserta e aplica de novo.
+    const alvo = itensDa(ctx, 4)[1];
+    await chamar(ctx.porta, `/api/ia/4/itens/${alvo.id}`, {
+      method: 'PUT', body: JSON.stringify({ dados: { quantidade: '300' } })
+    });
+    const corpo = await (await aplicar(ctx)).json();
+
+    assert.strictEqual(corpo.status, 'aplicada');
+    // O primeiro item NÃO pode entrar de novo: 52, não 92.
+    assert.strictEqual(Number(ctx.tabelas.materia_prima.find(m => m.id === 70).quantidade), 52);
+    assert.strictEqual(Number(ctx.tabelas.materia_prima.find(m => m.nome === 'Fita de borda 22mm').quantidade), 300);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('categoria nova é cadastrada, e a que já existe é reaproveitada', async () => {
+  const ctx = await prepararRevisao();
+  try {
+    await aplicar(ctx);
+
+    const nomes = ctx.tabelas.categoria.map(c => c.nome_categoria);
+    // "Acabamento" veio do documento e não existia.
+    assert.ok(nomes.includes('Acabamento'), `categorias: ${nomes.join(', ')}`);
+    // "Chapas" já existia: não pode virar uma segunda entrada.
+    assert.strictEqual(nomes.filter(n => n === 'Chapas').length, 1);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('a grafia diferente encaixa na categoria que já existe', async () => {
+  const ctx = await montarComIA(baseParaEstruturar(), {}, {
+    groq: () => ({ payload: respostaGroq({ itens: [{ nome: 'Item novo', quantidade: '3', categoria: 'CHAPAS' }] }) })
+  });
+  try {
+    await chamar(ctx.porta, '/api/ia/4/estruturar', { method: 'POST' });
+    await aplicar(ctx);
+
+    // Sem o encaixe, cada fornecedor com uma grafia criaria uma entrada nova
+    // e o filtro por categoria viraria uma lista de variações da mesma palavra.
+    assert.strictEqual(ctx.tabelas.categoria.filter(c => /chapas/i.test(c.nome_categoria)).length, 1);
+    assert.strictEqual(ctx.tabelas.materia_prima.find(m => m.nome === 'Item novo').categoria, 'Chapas');
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('preço em branco não apaga o preço que o cadastro já tinha', async () => {
+  const ctx = await montarComIA(baseParaEstruturar(), {}, {
+    groq: () => ({ payload: respostaGroq({ itens: [{ nome: 'MDF 15mm Branco TX', quantidade: '10', preco_unitario: null }] }) })
+  });
+  try {
+    await chamar(ctx.porta, '/api/ia/4/estruturar', { method: 'POST' });
+    await aplicar(ctx);
+
+    // Campo vazio lido como zero sobrescreveria o preço bom do cadastro.
+    assert.strictEqual(Number(ctx.tabelas.materia_prima.find(m => m.id === 70).preco_unitario), 180);
+    assert.strictEqual(Number(ctx.tabelas.materia_prima.find(m => m.id === 70).quantidade), 22);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('preço ZERO não apaga o preço que o cadastro já tinha', async () => {
+  // Diferente de `null`: aqui o modelo devolveu um número. Numa lista de
+  // compra, zero é campo em branco lido como valor — e gravá-lo zeraria o
+  // preço bom do cadastro, derrubando junto o custo dos produtos que usam o
+  // insumo.
+  const ctx = await montarComIA(baseParaEstruturar(), {}, {
+    groq: () => ({ payload: respostaGroq({ itens: [{ nome: 'MDF 15mm Branco TX', quantidade: '10', preco_unitario: '0' }] }) })
+  });
+  try {
+    await chamar(ctx.porta, '/api/ia/4/estruturar', { method: 'POST' });
+    await aplicar(ctx);
+
+    assert.strictEqual(Number(ctx.tabelas.materia_prima.find(m => m.id === 70).preco_unitario), 180);
+    assert.strictEqual(Number(ctx.tabelas.materia_prima.find(m => m.id === 70).quantidade), 22);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('a entrada não sobrescreve a quantidade com o payload descritivo', async () => {
+  // Unidade e categoria vão num PUT separado. Mandar o payload inteiro
+  // desfaria a soma que a entrada acabou de fazer.
+  const ctx = await montarComIA(baseParaEstruturar(), {}, {
+    groq: () => ({ payload: respostaGroq({ itens: [{ nome: 'MDF 15mm Branco TX', quantidade: '8', unidade: 'PC', categoria: 'Outra' }] }) })
+  });
+  try {
+    await chamar(ctx.porta, '/api/ia/4/estruturar', { method: 'POST' });
+    await aplicar(ctx);
+
+    const insumo = ctx.tabelas.materia_prima.find(m => m.id === 70);
+    assert.strictEqual(Number(insumo.quantidade), 20, 'a quantidade foi sobrescrita pelo PUT descritivo');
+    assert.strictEqual(insumo.unidade, 'PC');
+    assert.strictEqual(insumo.categoria, 'Outra');
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('aplicar em destino diferente do da leitura é recusado', async () => {
+  const ctx = await prepararRevisao();
+  try {
+    const resp = await chamar(ctx.porta, '/api/ia/4/aplicar', {
+      method: 'POST', body: JSON.stringify({ destino: 'clientes' })
+    });
+    assert.ok(resp.status >= 400);
+    assert.strictEqual(ctx.tabelas.materia_prima.length, 2, 'gravou mesmo assim');
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('aplicar exige a permissão do módulo de destino, não só a da IA', async () => {
+  // `ia.apply.mp` sozinho seria um atalho para cadastrar insumo sem ter
+  // permissão de cadastrar insumo.
+  const dados = permitir(baseParaEstruturar(), [
+    'acao_view', 'acao_details_view', 'acao_extract', 'acao_review_edit', 'acao_apply_mp'
+  ]);
+  const ctx = await montarComIA(dados, {}, { groq: () => ({ payload: respostaGroq(ITENS_LIDOS) }) });
+  try {
+    await chamar(ctx.porta, '/api/ia/4/estruturar', { method: 'POST' });
+    const resp = await aplicar(ctx, 4, { usuario: 2 });
+    assert.strictEqual(resp.status, 403);
+    assert.strictEqual(ctx.tabelas.materia_prima.length, 2);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('leitura sem itens não pode ser aplicada', async () => {
+  const ctx = await montarComIA(baseParaEstruturar());
+  try {
+    const resp = await aplicar(ctx);
+    assert.strictEqual(resp.status, 400);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Estruturação e reconciliação (unidade)
+// ---------------------------------------------------------------------------
+
+test('a coerção aceita número em português e recusa lixo', () => {
+  const { coagir } = require('./iaEstruturacao');
+  const { obterEsquema } = require('./iaEsquemas');
+  const preco = obterEsquema('materia_prima').campos.find(c => c.chave === 'preco_unitario');
+
+  assert.strictEqual(coagir(preco, '189,90'), 189.9);
+  assert.strictEqual(coagir(preco, '1.234,56'), 1234.56);
+  assert.strictEqual(coagir(preco, 'R$ 24,80'), 24.8);
+  assert.strictEqual(coagir(preco, 'a combinar'), undefined);
+  // Quantidade e preço negativos não existem numa lista de compra; quase
+  // sempre é sinal trocado de um estorno lido fora de contexto.
+  assert.strictEqual(coagir(preco, '-5'), undefined);
+  assert.strictEqual(coagir(preco, null), null);
+});
+
+test('a coerção não deixa objeto virar "[object Object]" no texto', () => {
+  const { coagir } = require('./iaEstruturacao');
+  const { obterEsquema } = require('./iaEsquemas');
+  const nome = obterEsquema('materia_prima').campos.find(c => c.chave === 'nome');
+
+  assert.strictEqual(coagir(nome, { valor: 'x' }), undefined);
+  assert.strictEqual(coagir(nome, ['a', 'b']), undefined);
+  assert.strictEqual(coagir(nome, '  MDF   15mm '), 'MDF 15mm');
+});
+
+test('o texto é cortado no comprimento da coluna', () => {
+  const { coagir } = require('./iaEstruturacao');
+  const { obterEsquema } = require('./iaEsquemas');
+  const nome = obterEsquema('materia_prima').campos.find(c => c.chave === 'nome');
+  // Um nome de 4 mil caracteres estouraria a coluna do banco.
+  assert.strictEqual(coagir(nome, 'x'.repeat(500)).length, nome.max);
+});
+
+test('a repetição dentro da própria leitura é sinalizada', () => {
+  const { reconciliar } = require('./iaReconciliacao');
+  const saida = reconciliar({
+    destino: 'materia_prima',
+    itens: [
+      { linha: 1, dados: { nome: 'Cola PVA' } },
+      { linha: 2, dados: { nome: 'cola  pva' } }
+    ],
+    existentes: []
+  });
+
+  // Duas entradas do mesmo item numa lista costumam ser linha duplicada no
+  // documento; somar sozinho dobraria o estoque em silêncio.
+  assert.strictEqual(saida[0].acao, 'criar');
+  assert.strictEqual(saida[1].acao, 'ignorar');
+  assert.match(saida[1].mensagem, /Repetido da linha 1/);
+});
+
+test('a mesma peça escrita com outra pontuação casa, e avisa', () => {
+  const { reconciliar } = require('./iaReconciliacao');
+  const saida = reconciliar({
+    destino: 'materia_prima',
+    itens: [{ linha: 1, dados: { nome: 'MDF-15mm-Branco' } }],
+    existentes: [{ id: 5, nome: 'MDF 15 mm Branco' }]
+  });
+
+  assert.strictEqual(saida[0].acao, 'atualizar');
+  assert.strictEqual(saida[0].alvo_id, 5);
+  assert.match(saida[0].mensagem, /ignorando espaços e pontuação/);
+});
+
+test('o encaixe de taxonomia respeita a grafia que já existe', () => {
+  const { encaixar } = require('./iaAplicacao');
+  assert.strictEqual(encaixar('chapas', ['Chapas', 'Ferragens']), 'Chapas');
+  assert.strictEqual(encaixar('FERRAGENS', ['Chapas', 'Ferragens']), 'Ferragens');
+  assert.strictEqual(encaixar('Adesivos', ['Chapas']), 'Adesivos');
+  assert.strictEqual(encaixar('  ', ['Chapas']), null);
 });
