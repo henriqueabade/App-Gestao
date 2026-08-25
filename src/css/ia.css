@@ -1377,3 +1377,129 @@ body {
 .ia-lista-modelos__item--escolhivel:hover {
     background: rgba(255, 255, 255, 0.08);
 }
+
+/* A lista de modelos usa a barra padrão (`.modal-scroll`); aqui fica só o que
+   é dela: a altura e a moldura. */
+.ia-lista-modelos {
+    max-height: 190px;
+    overflow-y: auto;
+}
+
+/* ---------------------------------------------------------------------------
+   ETAPA 16 — os dois textos do arquivo
+   ---------------------------------------------------------------------------
+   À esquerda o que foi lido, à direita o recorte que vai para a IA.
+   
+   A altura vem do modal, não de um número fixo: com o modal ocupando 90% da
+   tela, os 220px de antes deixavam metade da caixa vazia e obrigavam a rolar
+   um texto que teria cabido inteiro. */
+
+.ia-arquivo-paineis {
+    display: block;
+}
+
+.ia-texto-grade {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+    align-items: stretch;
+}
+
+/* Numa tela estreita, um embaixo do outro: lado a lado eles ficariam com
+   trinta caracteres de largura cada. */
+@media (max-width: 1100px) {
+    .ia-texto-grade {
+        grid-template-columns: 1fr;
+    }
+}
+
+.ia-texto-lado {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    gap: 6px;
+}
+
+.ia-texto-titulo {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: rgba(255, 255, 255, 0.5);
+    margin: 0;
+}
+
+/* Recorte ativo é uma decisão que muda o que a IA recebe: ela precisa se
+   anunciar, senão alguém extrai de novo sem lembrar que só metade vai. */
+.ia-texto-titulo--ativo {
+    color: var(--color-primary);
+}
+
+.ia-texto-corpo {
+    /* 52vh: o painel ocupa o que sobra do modal sem empurrar o rodapé para
+       fora. Em altura fixa de pixel, telas diferentes davam resultados
+       diferentes — e este modal tem altura proporcional. */
+    height: 52vh;
+    min-height: 220px;
+    padding: 10px;
+    font-size: 12px;
+    line-height: 1.5;
+    color: rgba(255, 255, 255, 0.75);
+    background: rgba(0, 0, 0, 0.22);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
+    overflow: auto;
+    /* `whitespace-pre-wrap` não existe no build offline do Tailwind, e um
+       <pre> preserva o espaço mas NÃO quebra a linha: o texto de um PDF virava
+       uma linha só com rolagem horizontal. */
+    white-space: pre-wrap;
+    word-break: break-word;
+    margin: 0;
+}
+
+.ia-texto-recorte {
+    resize: none;
+    font-family: inherit;
+    color: #fff;
+}
+
+.ia-texto-recorte:focus {
+    outline: none;
+    border-color: var(--color-primary);
+}
+
+.ia-texto-acoes {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+}
+
+/* ---------------------------------------------------------------------------
+   ETAPA 19 — larguras em `ch`, que é a unidade do que se quer ler
+   ---------------------------------------------------------------------------
+   "40 caracteres" vira literalmente 40ch, e não um palpite em pixels que muda
+   com a fonte. Nome de empresa e razão social são o que se confere contra o
+   documento; o CNPJ tem tamanho conhecido. */
+
+.ia-col-enorme {
+    min-width: 40ch;
+    max-width: 40ch;
+}
+
+.ia-col-grande {
+    min-width: 20ch;
+}
+
+/* Linha descartada: nada nela pode ser clicado.
+   
+   Deixar a caixa de seleção viva convidava a marcar uma linha que já não vai a
+   lugar nenhum — e, marcada, ela contava no "Descartar N selecionadas" e no
+   "Abrir a 1ª de N", que passavam a mentir sobre quantas linhas há. */
+.ia-linha-item--ignorada,
+.ia-linha-item--ignorada > td {
+    pointer-events: none;
+}
+
+.ia-linha-item--ignorada .ia-selecao {
+    display: none;
+}

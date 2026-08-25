@@ -30,9 +30,12 @@ const COLUNAS = {
     'tokens_entrada', 'tokens_saida'
   ],
   ia_configuracao: ['id', 'chave', 'valor', 'atualizado_em', 'atualizado_por'],
+  etapas_producao: ['id', 'nome', 'ordem'],
   ia_extracao_arquivos: [
     'id', 'extracao_id', 'nome_arquivo', 'tipo_mime', 'tamanho_bytes',
-    'origem', 'paginas', 'texto', 'erro', 'criado_em'
+    'origem', 'paginas', 'texto', 'erro', 'criado_em',
+    // sql/ia_texto_ajustado.sql
+    'texto_ajustado'
   ],
   ia_extracao_itens: [
     'id', 'extracao_id', 'linha', 'dados', 'acao', 'alvo_tabela', 'alvo_id',
@@ -3056,7 +3059,15 @@ function baseFicha() {
   ];
   dados.materia_prima_movimentacoes = [];
   dados.categoria = [];
-  dados.unidades = [];
+  dados.unidades = [{ id: 1, tipo: 'CH' }, { id: 2, tipo: 'UN' }, { id: 3, tipo: 'M' }];
+  // Um insumo só casa dentro da etapa que a ficha declara — sem esta tabela a
+  // restrição não teria contra o que conferir.
+  dados.etapas_producao = [
+    { id: 1, nome: 'MARCENARIA', ordem: 1 },
+    { id: 2, nome: 'ACABAMENTO', ordem: 2 },
+    { id: 3, nome: 'MONTAGEM', ordem: 3 },
+    { id: 4, nome: 'EMBALAGEM', ordem: 4 }
+  ];
   dados.produtos = [
     {
       id: 9, codigo: 'PR-210', nome: 'Painel Ripado 2,10', preco_base: 400, preco_venda: 900,
@@ -4154,7 +4165,7 @@ test('a ficha técnica chega ao formulário com processo, ordem e custo', async 
       insumos: [
         { processo: 'MARCENARIA', nome: 'MDF 15mm Branco TX', quantidade: '0,07', unidade: 'm2' },
         { processo: 'MARCENARIA', nome: 'Cola PVA extra 1kg', quantidade: '33,5', unidade: 'ml' },
-        { processo: 'EMBALAGEM', nome: 'MDF 15mm Branco TX', quantidade: '1', unidade: null }
+        { processo: 'ACABAMENTO', nome: 'Fita de borda 22mm', quantidade: '1', unidade: null }
       ]
     }]
   });
@@ -4176,7 +4187,7 @@ test('a ficha técnica chega ao formulário com processo, ordem e custo', async 
     // O processo é o que agrupa a tabela do produto. Sem ele os 23 insumos
     // caíam num monte só, que não se parece com o papel que a pessoa tem.
     assert.deepStrictEqual(r.insumos.map(i => i.processo),
-      ['MARCENARIA', 'MARCENARIA', 'EMBALAGEM']);
+      ['MARCENARIA', 'MARCENARIA', 'ACABAMENTO']);
     // E a ordem é a sequência de produção, lida de cima para baixo.
     assert.deepStrictEqual(r.insumos.map(i => i.ordem), [1, 2, 3]);
   } finally {
@@ -4189,7 +4200,7 @@ test('insumo fora da matéria-prima não entra — e o nome dele é dito', async
     itens: [{
       codigo: null, nome: 'Bandeja Vero PP',
       insumos: [
-        { processo: 'MONTAGEM', nome: 'MDF 15mm Branco TX', quantidade: '1', unidade: 'CH' },
+        { processo: 'MARCENARIA', nome: 'MDF 15mm Branco TX', quantidade: '1', unidade: 'CH' },
         { processo: 'MONTAGEM', nome: 'Couro Serpente Amêndoa', quantidade: '0,04', unidade: 'm2' }
       ]
     }]
@@ -4898,6 +4909,209 @@ test('num documento fatiado, o consumo é a soma das fatias', async () => {
     assert.ok(chamadas > 1, 'o documento nem chegou a ser fatiado');
     assert.strictEqual(leitura.tokens_entrada, chamadas * 100);
     assert.strictEqual(leitura.tokens_saida, chamadas * 50);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+
+// ===========================================================================
+// ETAPA 14 — O CASAMENTO DE INSUMO, CONSERTADO
+//
+// Três defeitos no tokenizador, todos encontrados com o estoque de verdade:
+//
+//   "MDF 6 mm" virava {mdf, mm} .......... o `6` era descartado por ter um
+//                                          caractere só, e as sete espessuras
+//                                          de MDF viravam sete nomes iguais;
+//   "DF4068" != "DF 4068" ................ letra colada em dígito;
+//   "MDF 06" != "MDF 6 mm" ............... zero à esquerda.
+//
+// E uma regra que faltava: um insumo só casa DENTRO da etapa que a ficha diz.
+// ===========================================================================
+
+test('os termos de um insumo separam número, letra e ruído', () => {
+  const { termosDeInsumo } = require('./iaPreenchimento');
+  const t = v => [...termosDeInsumo(v)].join(',');
+
+  // O número de um caractere é justamente o que distingue um MDF do outro.
+  assert.strictEqual(t('MDF 6 mm'), 'mdf,6');
+  // Zero à esquerda é forma de escrever, não número diferente.
+  assert.strictEqual(t('MDF 06'), 'mdf,6');
+  // Letra colada em dígito são dois termos: a ficha escreve junto, o cadastro
+  // separado, e é o mesmo código.
+  assert.strictEqual(t('DF4068'), 'df,4068');
+  // Preposição e unidade não distinguem insumo nenhum.
+  assert.strictEqual(t('Diluente DF 4068 Em Lamina De Madeira'), 'diluente,df,4068,lamina,madeira');
+});
+
+test('os casos que estavam errados no estoque de verdade', () => {
+  const { proximidadeDeInsumo } = require('./iaPreenchimento');
+  const casa = (a, b) => proximidadeDeInsumo(a, b) >= 0.6;
+
+  // Estes dois vinham VERMELHOS na tela, e o material existia no estoque.
+  assert.strictEqual(casa('MDF 06', 'MDF 6 mm'), true);
+  assert.strictEqual(casa('MDF 09', 'MDF 9 mm'), true);
+  assert.strictEqual(casa('Diluente DF4068 Em Lamina De Madeira', 'Diluente DF 4068'), true);
+
+  // E estes NÃO podem casar: sete espessuras de MDF são sete materiais, com
+  // preços que vão de R$ 11 a R$ 56 o metro quadrado.
+  assert.strictEqual(casa('MDF 06', 'MDF 9 mm'), false);
+  assert.strictEqual(casa('MDF 06', 'MDF 12 mm'), false);
+  assert.strictEqual(casa('MDF 06', 'MDF 25 mm'), false);
+  assert.strictEqual(casa('Cola Branca', 'Cola Fórmica'), false);
+  assert.strictEqual(casa('Freijó', 'MDF 6 mm'), false);
+});
+
+test('o insumo só casa dentro da etapa que a ficha declara', () => {
+  const { mesmoProcesso } = require('./iaPreenchimento');
+  const etapas = new Map([['1', 'MARCENARIA'], ['3', 'MONTAGEM']]);
+
+  assert.strictEqual(mesmoProcesso('MARCENARIA', { processo: 'MARCENARIA' }, etapas), true);
+  // Caixa e acento não distinguem etapa.
+  assert.strictEqual(mesmoProcesso('marcenaria', { processo: 'MARCENARIA' }, etapas), true);
+  // O cadastro grava o nome, mas há código no programa que aceita o id.
+  assert.strictEqual(mesmoProcesso('MARCENARIA', { processo: '1' }, etapas), true);
+
+  // Montar a peça com o material de outra etapa é o erro que o nome batendo
+  // esconde: ninguém percebe, porque o nome está certo.
+  assert.strictEqual(mesmoProcesso('MARCENARIA', { processo: 'MONTAGEM' }, etapas), false);
+  assert.strictEqual(mesmoProcesso('MARCENARIA', { processo: null }, etapas), false);
+
+  // Ficha que não diz a etapa não tem o que restringir.
+  assert.strictEqual(mesmoProcesso('', { processo: 'MONTAGEM' }, etapas), true);
+});
+
+test('nome certo na etapa errada não entra, e o motivo é dito', async () => {
+  const ctx = await prepararFicha({
+    itens: [{
+      codigo: 'PR-210', nome: 'Painel Ripado 2,10',
+      insumos: [
+        // "MDF 15mm Branco TX" está cadastrado em MARCENARIA.
+        { processo: 'MONTAGEM', nome: 'MDF 15mm Branco TX', quantidade: '1', unidade: 'CH' }
+      ]
+    }]
+  });
+  try {
+    const r = await carga(ctx, 5, itensDa(ctx, 5)[0].id);
+
+    assert.strictEqual(r.insumos.length, 0, 'entrou material de outra etapa');
+    // "Não existe" e "existe em outra etapa" pedem coisas diferentes de quem
+    // revisa: um manda cadastrar, o outro manda conferir a etapa.
+    assert.ok(r.avisos.some(a => /outra etapa/.test(a)), r.avisos.join(' | '));
+    assert.ok(r.avisos.some(a => /MARCENARIA/.test(a)), r.avisos.join(' | '));
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('a grade distingue "não existe" de "está em outra etapa"', async () => {
+  const ctx = await prepararFicha({
+    itens: [{
+      codigo: 'PR-210', nome: 'Painel Ripado 2,10',
+      insumos: [
+        { processo: 'MONTAGEM', nome: 'MDF 15mm Branco TX', quantidade: '1', unidade: 'CH' },
+        { processo: 'MONTAGEM', nome: 'Couro Serpente Amêndoa', quantidade: '1', unidade: 'm2' }
+      ]
+    }]
+  });
+  try {
+    const detalhe = await (await chamar(ctx.porta, '/api/ia/5')).json();
+    const insumos = detalhe.itens[0].dados.insumos;
+
+    assert.strictEqual(insumos[0]._casamento, null);
+    assert.strictEqual(insumos[0]._fora_do_processo, 'MARCENARIA');
+
+    assert.strictEqual(insumos[1]._casamento, null);
+    assert.strictEqual(insumos[1]._fora_do_processo, null);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('a etapa entra ANTES do nome, não como desempate', async () => {
+  const dados = baseFicha();
+  // Dois insumos com nome parecido, em etapas diferentes. Sem a restrição, o
+  // de MONTAGEM ganharia por ser mais parecido — e a peça sairia com o
+  // material da etapa errada.
+  dados.materia_prima.push(
+    { id: 80, nome: 'Catalisador FC 6975', quantidade: 100, preco_unitario: 3, unidade: 'ML', processo: 'ACABAMENTO' },
+    { id: 81, nome: 'Catalisador FC 6975 Montagem', quantidade: 100, preco_unitario: 9, unidade: 'ML', processo: 'MONTAGEM' }
+  );
+
+  const ctx = await prepararFicha({
+    itens: [{
+      codigo: 'PR-210', nome: 'Painel Ripado 2,10',
+      insumos: [{ processo: 'ACABAMENTO', nome: 'Catalisador FC 6975 Em Lamina De Madeira', quantidade: '22', unidade: 'ml' }]
+    }]
+  }, dados);
+  try {
+    const r = await carga(ctx, 5, itensDa(ctx, 5)[0].id);
+    assert.strictEqual(r.insumos.length, 1);
+    assert.strictEqual(r.insumos[0].insumo_id, 80, 'pegou o da etapa errada');
+    assert.strictEqual(r.insumos[0].preco_unitario, 3);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('o recorte substitui o texto inteiro na extração', async () => {
+  const dados = baseParaEstruturar();
+  dados.ia_extracao_arquivos.find(a => a.id === 41).texto_ajustado = 'SO ESTA LINHA | 1 | 5,00';
+
+  const ctx = await montarComIA(dados, {}, { groq: () => ({ payload: respostaGroq(ITENS_LIDOS) }) });
+  try {
+    await chamar(ctx.porta, '/api/ia/4/estruturar', { method: 'POST' });
+    const enviado = ctx.groq.chamadas[0].body.messages[1].content;
+
+    // Quem está olhando o documento sabe o que interessa ao destino. O que não
+    // interessa custa contexto e — pior — dá ao modelo em que se distrair.
+    assert.match(enviado, /SO ESTA LINHA/);
+    assert.doesNotMatch(enviado, /Fita 22mm/, 'mandou o texto inteiro mesmo com recorte');
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('sem recorte, vai o texto inteiro — como sempre foi', async () => {
+  const ctx = await montarComIA(baseParaEstruturar(), {}, {
+    groq: () => ({ payload: respostaGroq(ITENS_LIDOS) })
+  });
+  try {
+    await chamar(ctx.porta, '/api/ia/4/estruturar', { method: 'POST' });
+    assert.match(ctx.groq.chamadas[0].body.messages[1].content, /Fita 22mm/);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('salvar o recorte guarda, e apagar volta ao texto inteiro', async () => {
+  const ctx = await montarComIA(baseParaEstruturar());
+  try {
+    const salvar = corpo => chamar(ctx.porta, '/api/ia/4/arquivos/41/texto', {
+      method: 'PUT', body: JSON.stringify(corpo)
+    });
+
+    const r = await (await salvar({ texto_ajustado: '  SO ISTO  ' })).json();
+    assert.strictEqual(r.texto_ajustado, 'SO ISTO');
+    const arquivo = () => ctx.tabelas.ia_extracao_arquivos.find(a => a.id === 41);
+    assert.strictEqual(arquivo().texto_ajustado, 'SO ISTO');
+
+    // Vazio é "volte a usar a transcrição inteira". Guardar string vazia
+    // continuaria vencendo o texto original.
+    await salvar({ texto_ajustado: '   ' });
+    assert.strictEqual(arquivo().texto_ajustado, null);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('recorte de arquivo de outra leitura é recusado', async () => {
+  const ctx = await montarComIA(baseParaEstruturar());
+  try {
+    const resp = await chamar(ctx.porta, '/api/ia/1/arquivos/41/texto', {
+      method: 'PUT', body: JSON.stringify({ texto_ajustado: 'x' })
+    });
+    assert.strictEqual(resp.status, 404);
   } finally {
     await ctx.encerrar();
   }

@@ -132,19 +132,112 @@ function indexarPor(registros, campo) {
  * nome LIDO com um (i) que revela para qual cadastro ele foi, e é isso que
  * permite a quem confere pegar o palpite errado antes de virar receita.
  */
-function casarInsumo(nome, porNome, registros) {
+/**
+ * O insumo do cadastro está na MESMA ETAPA que a ficha diz?
+ *
+ * Cada insumo nasce com um processo em Matéria-prima, e a ficha técnica também
+ * é escrita em blocos de etapa. Casar um "Catalisador" do bloco ACABAMENTO com
+ * um "Catalisador" cadastrado em MONTAGEM é montar a peça com o material de
+ * outra etapa — e o nome bate, então ninguém percebe.
+ *
+ * Quando a ficha NÃO diz a etapa, não há o que restringir e todos valem.
+ *
+ * O cadastro grava o processo pelo NOME, mas há código no programa que aceita
+ * o id: por isso os dois são aceitos aqui, com o id resolvido contra a lista de
+ * etapas antes de comparar.
+ */
+function mesmoProcesso(lido, insumo, etapasPorId) {
+  const daFicha = normalizar(lido);
+  if (!daFicha) return true;
+
+  const bruto = insumo && insumo.processo;
+  if (bruto === null || bruto === undefined || bruto === '') return false;
+
+  const porId = etapasPorId && etapasPorId.get(String(bruto).trim());
+  const doCadastro = normalizar(porId || bruto);
+  return Boolean(doCadastro) && doCadastro === daFicha;
+}
+
+/**
+ * Casa um insumo lido com o cadastro, dentro da etapa que a ficha declara.
+ *
+ * A etapa entra ANTES do nome, e não como desempate depois: um nome parecido
+ * na etapa errada não é um casamento pior, é um casamento inválido.
+ */
+function casarInsumo(nome, porNome, registros, processo, etapasPorId) {
+  const candidatos = processo
+    ? registros.filter(r => mesmoProcesso(processo, r, etapasPorId))
+    : registros;
+
   const exato = porNome.get(normalizar(nome));
-  if (exato) return { registro: exato, tipo: 'exato' };
+  if (exato && (!processo || mesmoProcesso(processo, exato, etapasPorId))) {
+    return { registro: exato, tipo: 'exato' };
+  }
 
   let melhor = null;
   let nota = 0;
-  for (const r of registros) {
+  for (const r of candidatos) {
     const n = proximidadeDeInsumo(nome, r && r.nome);
     if (n > nota) { nota = n; melhor = r; }
   }
 
   if (melhor && nota >= LIMIAR_PARECIDO) return { registro: melhor, tipo: 'semelhante', nota };
+
+  // Nome que existe no cadastro mas em OUTRA etapa: o motivo da recusa é
+  // diferente de "não existe", e quem revisa precisa saber qual dos dois é —
+  // um manda cadastrar, o outro manda conferir a etapa.
+  if (exato) return { registro: null, tipo: null, foraDoProcesso: exato };
   return { registro: null, tipo: null };
+}
+
+/**
+ * Palavras que não distinguem um insumo de outro.
+ *
+ * "mm" e "cm" aparecem no cadastro ("MDF 6 mm") e não na ficha ("MDF 06").
+ * Preposições aparecem na ficha ("Diluente DF4068 Em Lamina De Madeira") e não
+ * no cadastro. Nos dois casos elas só somam ruído à conta.
+ */
+const RUIDO = new Set([
+  'em', 'de', 'da', 'do', 'das', 'dos', 'com', 'para', 'e', 'a', 'o', 'no', 'na',
+  'mm', 'cm', 'ml', 'un', 'kg', 'tipo'
+]);
+
+/**
+ * Os termos que identificam um insumo.
+ *
+ * ---------------------------------------------------------------------------
+ * POR QUE NÃO SERVE O `palavras()` DA RECONCILIAÇÃO
+ *
+ * Ele foi feito para nome de empresa, e ali as três regras que ele aplica
+ * fazem sentido. Em nome de insumo, cada uma delas quebra um caso real do
+ * estoque desta casa:
+ *
+ *   1. DESCARTA TOKEN DE UM CARACTERE. "MDF 6 mm" virava {mdf, mm} — sem o 6,
+ *      que é EXATAMENTE o que distingue um MDF do outro. Sete espessuras de
+ *      MDF viravam sete nomes idênticos, e nenhuma casava com nada.
+ *
+ *   2. NÃO SEPARA LETRA DE DÍGITO. A ficha escreve "DF4068" e o cadastro
+ *      "DF 4068" — o mesmo código, dois tokens que não se parecem.
+ *
+ *   3. NÃO NORMALIZA ZERO À ESQUERDA. "MDF 06" e "MDF 6 mm" falavam do mesmo
+ *      material com números diferentes.
+ *
+ * Reaproveitar `palavras()` aqui seria escolher a coerência entre dois lugares
+ * do código em vez da coerência com o estoque — e o estoque é quem manda.
+ */
+function termosDeInsumo(valor) {
+  const texto_ = normalizar(valor)
+    // "DF4068" -> "df 4068"; "10R" -> "10 r"
+    .replace(/([a-z])(\d)/g, '$1 $2')
+    .replace(/(\d)([a-z])/g, '$1 $2');
+
+  return new Set(
+    texto_
+      .split(/[^a-z0-9]+/)
+      // "06" -> "6". Zero à esquerda é forma de escrever, não número diferente.
+      .map(p => (/^\d+$/.test(p) ? String(Number(p)) : p))
+      .filter(p => p && !RUIDO.has(p))
+  );
 }
 
 /**
@@ -167,8 +260,8 @@ function casarInsumo(nome, porNome, registros) {
  * diferentes, que é o que eles são.
  */
 function proximidadeDeInsumo(lido, cadastrado) {
-  const a = palavras(lido);
-  const b = palavras(cadastrado);
+  const a = termosDeInsumo(lido);
+  const b = termosDeInsumo(cadastrado);
   if (!a.size || !b.size) return 0;
 
   let comuns = 0;
@@ -201,9 +294,10 @@ function proximidadeDeInsumo(lido, cadastrado) {
  *               diverge da cadastrada: ali a divergência é erro de custo, não
  *               diferença de escrita.
  */
-function montarInsumos(linhas, porNome, registros = []) {
+function montarInsumos(linhas, porNome, registros = [], etapasPorId = new Map()) {
   const itens = [];
   const semCadastro = [];
+  const foraDoProcesso = [];
   const unidadeDiferente = [];
   const porSemelhanca = [];
   let ordem = 0;
@@ -212,9 +306,21 @@ function montarInsumos(linhas, porNome, registros = []) {
     const nome = texto(linha && linha.nome).trim();
     if (!nome) continue;
 
-    const { registro: insumo, tipo } = casarInsumo(nome, porNome, registros);
-    if (!insumo) { semCadastro.push(nome); continue; }
-    if (tipo === 'semelhante') porSemelhanca.push(`"${nome}" entrou como "${insumo.nome}"`);
+    const processo = texto(linha.processo).trim();
+    const achado = casarInsumo(nome, porNome, registros, processo, etapasPorId);
+    const insumo = achado.registro;
+
+    if (!insumo) {
+      // Existe no cadastro, mas em outra etapa. O motivo da recusa é diferente
+      // de "não existe", e quem revisa precisa saber qual dos dois é.
+      if (achado.foraDoProcesso) {
+        foraDoProcesso.push(`${nome} (cadastrado em "${achado.foraDoProcesso.processo}", não em "${processo}")`);
+      } else {
+        semCadastro.push(nome);
+      }
+      continue;
+    }
+    if (achado.tipo === 'semelhante') porSemelhanca.push(`"${nome}" entrou como "${insumo.nome}"`);
 
     const quantidade = Number(linha.quantidade);
     if (!Number.isFinite(quantidade) || quantidade <= 0) {
@@ -241,7 +347,7 @@ function montarInsumos(linhas, porNome, registros = []) {
     });
   }
 
-  return { itens, semCadastro, unidadeDiferente, porSemelhanca };
+  return { itens, semCadastro, foraDoProcesso, unidadeDiferente, porSemelhanca };
 }
 
 /** Itens de um pedido, casados com o catálogo de produtos. */
@@ -497,11 +603,19 @@ async function montarPreenchimento({ api, destino, item }) {
   }
 
   if (destino === 'produto_insumos') {
-    const materias = await api.get('/api/materia_prima').then(lista).catch(() => []);
-    const r = montarInsumos(lista(dados.insumos), indexarPor(materias, 'nome'), materias);
+    const [materias, etapas] = await Promise.all([
+      api.get('/api/materia_prima').then(lista).catch(() => []),
+      api.get('/api/etapas_producao').then(lista).catch(() => [])
+    ]);
+    const etapasPorId = new Map(etapas.map(e => [String(e.id), e.nome]));
+
+    const r = montarInsumos(lista(dados.insumos), indexarPor(materias, 'nome'), materias, etapasPorId);
     saida.insumos = r.itens;
     if (r.semCadastro.length) {
       avisos.push(`Fora da lista, por não estarem em Matéria-prima: ${r.semCadastro.join(', ')}`);
+    }
+    if (r.foraDoProcesso.length) {
+      avisos.push(`Fora da lista, por estarem em outra etapa: ${r.foraDoProcesso.join('; ')}`);
     }
     // Casamento por semelhança é palpite bom, não certeza. Dizer qual virou
     // qual é o que permite pegar o palpite errado antes de virar receita.
@@ -559,6 +673,8 @@ module.exports = {
   ESTADOS,
   casarInsumo,
   proximidadeDeInsumo,
+  termosDeInsumo,
+  mesmoProcesso,
   interpretarPagamento,
   formaDePagamento,
   vincularAoCliente,

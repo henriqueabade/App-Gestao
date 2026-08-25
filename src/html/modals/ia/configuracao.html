@@ -64,7 +64,7 @@
           <p class="text-xs uppercase tracking-wide text-white/45 mb-2">
             Modelos da sua conta <span class="text-white/30" data-campo="contagemModelos"></span>
           </p>
-          <div class="ia-lista-modelos" data-campo="modelos"></div>
+          <div class="ia-lista-modelos modal-scroll" data-campo="modelos"></div>
         </div>
       </section>
 
@@ -100,7 +100,7 @@
           <p class="text-xs uppercase tracking-wide text-white/45 mb-2">
             Modelos da sua conta <span class="text-white/30" data-campo="contagemModelos"></span>
           </p>
-          <div class="ia-lista-modelos" data-campo="modelos"></div>
+          <div class="ia-lista-modelos modal-scroll" data-campo="modelos"></div>
         </div>
       </section>
 
@@ -159,11 +159,15 @@
         A credencial fica no <span class="ia-chave-env">.env</span>; o resto se configura aqui.
       </p>
       <div class="flex items-center gap-3">
+        <!-- Fechar vermelho e Testar amarelo, como em todo o programa. -->
         <button id="iaConfigFechar" type="button"
-                class="btn-neutral text-white rounded-lg px-5 py-2 text-sm font-medium">Fechar</button>
+                class="btn-danger text-white rounded-lg px-5 py-2 text-sm font-medium">Fechar</button>
+        <!-- `fa-plug-circle-check` não existe no Font Awesome 6.0 free, que é
+             o que o programa carrega: o ícone saía como um quadrado vazio.
+             `fa-plug` existe desde a v5 e diz a mesma coisa. -->
         <button id="iaConfigTestar" type="button" data-perm="ia.config"
-                class="btn-neutral text-white rounded-lg px-5 py-2 text-sm font-medium">
-          <i class="fas fa-plug-circle-check mr-2"></i>Testar conexão
+                class="btn-primary text-white rounded-lg px-5 py-2 text-sm font-medium">
+          <i class="fas fa-plug mr-2"></i>Testar conexão
         </button>
         <!-- Só o Sup Admin vê este botão. Ver a configuração ajuda a entender
              por que uma leitura saiu como saiu; MUDAR o modelo altera o

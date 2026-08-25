@@ -50,6 +50,9 @@
   /** O modelo escolhido em cada provedor, antes de salvar. */
   const escolhido = {};
 
+  /** Quanto a última leitura gastou. Guardado para repintar com a lista. */
+  let ultimoUso = null;
+
   function pintarConfiguracao(cfg) {
     podeEditar = Boolean(cfg?.pode_editar);
 
@@ -153,23 +156,36 @@
     const caixa = document.getElementById('iaConfigConsumo');
     if (!caixa) return;
 
-    const uso = cfg?.ultimo_uso;
-    if (!uso) {
-      caixa.textContent = 'Nenhuma leitura registrou consumo ainda.';
+    ultimoUso = cfg?.ultimo_uso || null;
+    if (!ultimoUso) {
+      caixa.textContent = 'Nenhuma leitura registrou consumo ainda. '
+        + 'Depois da próxima, aparece aqui quanto ela gastou do contexto do modelo.';
       return;
     }
 
-    const teto = tetoDoModelo(uso.modelo);
-    const partes = [
-      `Última leitura ("${uso.titulo}"): ${uso.entrada.toLocaleString('pt-BR')} de entrada`,
-      `${uso.saida.toLocaleString('pt-BR')} de saída`
-    ];
-    if (teto) {
-      const pct = Math.round((uso.entrada / teto) * 100);
-      partes.push(`${pct}% do contexto de ${Math.round(teto / 1000)}k do modelo`);
+    const teto = tetoDoModelo(ultimoUso.modelo);
+    const partes = [`Última leitura ("${ultimoUso.titulo}")`];
+
+    // Usado E total, lado a lado. Só o total não responde nada: a pergunta é
+    // "cabe?", e para respondê-la é preciso ver os dois números juntos.
+    partes.push(teto
+      ? `${milhares(ultimoUso.entrada)} de ${milhares(teto)} tokens de contexto `
+        + `(${Math.round((ultimoUso.entrada / teto) * 100)}%)`
+      : `${ultimoUso.entrada.toLocaleString('pt-BR')} tokens de entrada`);
+
+    partes.push(`${ultimoUso.saida.toLocaleString('pt-BR')} de saída`);
+
+    if (!teto) {
+      // Sem a lista de modelos não há contra o que comparar, e dizer isso é
+      // melhor do que mostrar um número solto que parece completo.
+      partes.push('teste a conexão para ver quanto isso é do total do modelo');
     }
+
     caixa.textContent = partes.join('  ·  ');
   }
+
+  /** "40.120" vira "40k"; abaixo de mil, o número inteiro. */
+  const milhares = n => (n >= 1000 ? `${Math.round(n / 1000)}k` : String(n));
 
   /** Contexto do modelo, tirado da lista que o teste de conexão trouxe. */
   function tetoDoModelo(id) {
@@ -215,9 +231,19 @@
       // O contexto aparece SEMPRE, inclusive no que está em uso: é contra ele
       // que se compara o consumo da última leitura para decidir se o
       // documento cabe.
+      // No modelo EM USO, o contexto aparece como usado/total: é ali que a
+      // pergunta "cabe neste modelo?" se responde de relance. Nos outros, só o
+      // total, porque não houve leitura com eles para comparar.
+      const gastou = atual && ultimoUso && ultimoUso.modelo === m.id
+        ? ultimoUso.entrada : null;
+
       ctx.textContent = [
         atual ? 'em uso' : null,
-        m.entrada_max ? `${Math.round(m.entrada_max / 1000)}k de contexto` : null
+        m.entrada_max
+          ? (gastou
+            ? `${milhares(gastou)} / ${milhares(m.entrada_max)} de contexto`
+            : `${milhares(m.entrada_max)} de contexto`)
+          : null
       ].filter(Boolean).join('  ·  ');
       linha.appendChild(ctx);
 
@@ -272,13 +298,19 @@
       // verdade, depois de o usuário já ter enviado os arquivos.
       if (r.aviso) {
         marcarEstado(campo(nome, 'estado'), 'aviso', 'Modelo inválido');
-        mostrarMensagem(nome, 'aviso', r.aviso);
+        // Com a configuração no programa, o ajuste é aqui e não no .env.
+        mostrarMensagem(nome, 'aviso',
+          podeEditar ? `${r.aviso} Escolha um da lista abaixo e salve.` : r.aviso);
       } else {
         marcarEstado(campo(nome, 'estado'), 'ok', 'Conectado');
         mostrarMensagem(nome, 'info', null);
       }
       pintarModelos(nome, r.modelos, modeloAtual);
     }
+
+    // Só agora existe o tamanho de contexto de cada modelo: até o teste de
+    // conexão, o consumo da última leitura era um número sem denominador.
+    pintarConsumo({ ultimo_uso: ultimoUso });
 
     const semAviso = dados?.gemini?.ok && dados?.groq?.ok
       && !dados.gemini.aviso && !dados.groq.aviso;

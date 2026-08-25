@@ -235,14 +235,8 @@ function ligarResumoInfo() {
     const popover = document.getElementById('iaResumoPopover');
     if (!icone || !popover) return;
 
-    const posicionar = () => {
-        const r = icone.getBoundingClientRect();
-        popover.style.top = `${r.bottom + window.scrollY + 8}px`;
-        popover.style.left = `${r.left + window.scrollX}px`;
-    };
-
-    icone.addEventListener('mouseenter', () => { posicionar(); popover.classList.add('show'); });
-    icone.addEventListener('mouseleave', () => popover.classList.remove('show'));
+    icone.addEventListener('mouseenter', () => window.Popover?.abrir(popover, icone));
+    icone.addEventListener('mouseleave', () => window.Popover?.fechar(popover));
 }
 
 /**
@@ -286,14 +280,13 @@ function abrirPopoverDaLinha(icone, leitura, modelosHtml) {
     // Não é preciso reaplicar as permissões à mão: `permissoes.js` observa o
     // DOM e trata os nós novos assim que eles entram.
 
-    const r = icone.getBoundingClientRect();
-    popover.style.top = `${r.bottom + window.scrollY + 8}px`;
-    popover.style.left = `${r.left + window.scrollX}px`;
-    popover.classList.add('show');
+    // `Popover.abrir` move o elemento para fora do ancestral borrado e trata
+    // as bordas da tela. Ver src/js/utils/popover.js.
+    window.Popover?.abrir(popover, icone);
 }
 
 function fecharPopoverDaLinha() {
-    document.getElementById('iaLinhaPopover')?.classList.remove('show');
+    window.Popover?.fechar(document.getElementById('iaLinhaPopover'));
 }
 
 // ---------------------------------------------------------------------------

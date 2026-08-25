@@ -66,6 +66,11 @@ function criarElemento(tag = 'div') {
     // do harness em vez do comportamento.
     getBoundingClientRect: () => ({ top: 0, left: 0, right: 0, bottom: 0, width: 0, height: 0 }),
     appendChild(f) { el.filhos.push(f); f.pai = el; return f; },
+    // O véu se remove sozinho quando o preenchimento acaba.
+    remove() {
+      if (el.pai) el.pai.filhos = el.pai.filhos.filter(f => f !== el);
+      el.pai = null;
+    },
     append(...fs) { for (const f of fs) el.appendChild(f); },
     replaceChildren(...fs) { el.filhos = []; for (const f of fs) el.appendChild(f); },
     querySelector(sel) { return el.todos().find(f => casa(f, sel)) || null; },
@@ -171,7 +176,13 @@ function leituraPadrao(extra = {}) {
 function criarBancada({ leitura, respostaPut, respostaAplicar, respostaExtrair,
   respostaPreenchimento, confirmar = true } = {}) {
   const elementos = new Map();
-  for (const id of idsDoModal()) elementos.set(id, criarElemento());
+  for (const id of idsDoModal()) {
+    const el = criarElemento();
+    // O `id` importa: o posicionador de popover usa ele para limpar órfãos, e
+    // sem isso o teste mediria o buraco do harness.
+    el.id = id;
+    elementos.set(id, el);
+  }
 
   // O duplo cria um elemento por `id` do HTML. Os poucos filhos que o módulo
   // procura por tag precisam existir também, senão o teste mede o buraco do
@@ -189,10 +200,17 @@ function criarBancada({ leitura, respostaPut, respostaAplicar, respostaExtrair,
   const modaisAbertos = [];
   const preenchimentos = [];
   const ouvintesDaJanela = {};
+  const ancorados = [];
   const copiado = [];
   let dadosLeitura = leitura || leituraPadrao();
 
+  // O véu com a logo é anexado ao <body>: sem ele no duplo, o teste mediria o
+  // buraco do harness em vez do comportamento.
+  const corpoDaPagina = criarElemento('body');
+
   const document = {
+    body: corpoDaPagina,
+    head: criarElemento('head'),
     addEventListener() {},
     removeEventListener() {},
     getElementById: id => elementos.get(id) || null,
@@ -241,8 +259,25 @@ function criarBancada({ leitura, respostaPut, respostaAplicar, respostaExtrair,
       // desencalhe por tempo, e o teste mediria a espera em vez do caminho.
       open(html, script, overlay) {
         modaisAbertos.push({ html, script, overlay });
+        // O modal de destino cria o overlay dele, nascendo `hidden` — é assim
+        // que o `Modal.open` de verdade se comporta, e é o que permite testar
+        // QUANDO ele é revelado.
+        if (!elementos.has(`${overlay}Overlay`)) {
+          const el = criarElemento();
+          el.id = `${overlay}Overlay`;
+          el.className = 'hidden';
+          elementos.set(el.id, el);
+        }
         setTimeout(() => sandbox.dispatchEvent({ type: 'modalSpinnerLoaded', detail: overlay }), 0);
       }
+    },
+    // O utilitário de popover de verdade não roda aqui (ele mexe no <body>),
+    // mas o duplo precisa registrar as chamadas para os testes conferirem que
+    // o popover foi ancorado no (i) certo.
+    Popover: {
+      abrir(popover, ancora) { ancorados.push({ popover, ancora }); popover?.classList.add('show'); },
+      fechar(popover) { popover?.classList.remove('show'); },
+      descartar() {}
     },
     EstadoTrabalho: {
       registrarContexto() {},
@@ -328,6 +363,8 @@ function criarBancada({ leitura, respostaPut, respostaAplicar, respostaExtrair,
     modaisAbertos,
     preenchimentos,
     copiado,
+    ancorados,
+    corpoDaPagina,
     trocarLeitura: nova => { dadosLeitura = nova; },
     pronta: () => new Promise(r => setTimeout(r, 10))
   };
@@ -1695,9 +1732,15 @@ test('só o casamento por semelhança ganha (i), com o nome do cadastro', async 
   assert.equal(comInfo.length, 1);
 
   const info = comInfo[0].todos().find(f => f.classList.contains('ia-info-insumo'));
-  assert.match(info.title, /Verniz FO10 6717/);
-  // A tela mostra o nome LIDO — é ele que se confere contra o papel.
-  assert.ok(comInfo[0].todos().some(f => f.value === 'Verniz FO10 - 6717 Em Lamina De Madeira'));
+
+  // A TABELA mostra o nome do cadastro: é ele que vai para a receita, com o id
+  // e o preço dele, e é ele que precisa ser conferido.
+  assert.ok(comInfo[0].todos().some(f => f.value === 'Verniz FO10 6717'),
+    'a tabela não mostra o nome que vai para a ficha');
+
+  // O (i) diz de onde veio. Essa é a direção útil: a origem só interessa
+  // quando algo parece errado.
+  assert.match(info.title, /Verniz FO10 - 6717 Em Lamina De Madeira/);
 });
 
 test('as colunas curtas da sub-lista têm largura fixa', async () => {
@@ -1714,4 +1757,253 @@ test('as colunas curtas da sub-lista têm largura fixa', async () => {
   // O nome não: é ele que fica com o que sobra.
   const nome = celulas.find(c => c.todos().some(f => f.value === 'MDF 06'));
   assert.equal(nome.className.includes('ia-sub-'), false);
+});
+
+// ---------------------------------------------------------------------------
+// ETAPA 18 — o popover ancorado no (i) certo
+// ---------------------------------------------------------------------------
+
+test('o popover é ancorado no (i) que o abriu', async () => {
+  // Ele aparecia longe do ícone porque o `backdrop-filter` do modal cria um
+  // bloco de contenção: dentro dele `position: fixed` deixa de ser relativo à
+  // janela, e as coordenadas certas viram posição errada.
+  const b = criarBancada({ leitura: leituraComDetalhe() });
+  await b.pronta();
+
+  const info = infoDa(linhasDeItem(b)[0]);
+  info.disparar('click');
+  await b.pronta();
+
+  const ancorado = b.ancorados.at(-1);
+  assert.ok(ancorado, 'o popover não passou pelo posicionador');
+  assert.strictEqual(ancorado.ancora, info, 'ancorou no elemento errado');
+  assert.strictEqual(ancorado.popover.id, 'iaDetLinhaPopover');
+});
+
+test('fechar o modal leva o popover junto', async () => {
+  const b = criarBancada({ leitura: leituraComDetalhe() });
+  await b.pronta();
+
+  const fonte = fs.readFileSync(ARQUIVO, 'utf8');
+  // O popover é movido para o <body> e não sai com o modal. Órfão, ele duplica
+  // o id e faz `getElementById` devolver um elemento que não está ligado a
+  // nada — e o sintoma ("o popover parou de abrir") não aponta para a causa.
+  assert.match(fonte, /Popover\?\.descartar\(/);
+});
+
+// ---------------------------------------------------------------------------
+// ETAPA 19 — linha descartada sai de circulação
+// ---------------------------------------------------------------------------
+
+test('linha descartada não pode ser marcada', async () => {
+  const leitura = leituraPadrao();
+  leitura.itens[0].acao = 'ignorar';
+  const b = criarBancada({ leitura });
+  await b.pronta();
+
+  // Marcada, ela contaria no "Descartar N selecionadas" e no "Abrir a 1ª de N"
+  // — os dois passariam a mentir sobre quantas linhas ainda vão a algum lugar.
+  assert.equal(marcaDa(linhasDeItem(b)[0]), undefined);
+  assert.ok(marcaDa(linhasDeItem(b)[1]), 'a linha pendente perdeu a caixa junto');
+});
+
+test('marcar todas ignora as descartadas', async () => {
+  const leitura = leituraPadrao();
+  leitura.itens[0].acao = 'ignorar';
+  const b = criarBancada({ leitura });
+  await b.pronta();
+
+  const todos = b.el('iaDetItensCabecalho').filhos[0].todos()
+    .find(f => f.classList.contains('ia-selecao'));
+  todos.checked = true;
+  todos.disparar('change');
+  await b.pronta();
+
+  assert.match(b.el('iaDetDescartar').texto(), /Descartar 1 selecionada/);
+});
+
+test('descartar uma linha marcada a tira da seleção', async () => {
+  const b = criarBancada();
+  await b.pronta();
+
+  marcaDa(linhasDeItem(b)[0]).checked = true;
+  marcaDa(linhasDeItem(b)[0]).disparar('change');
+  await b.pronta();
+  b.el('iaDetDescartar').disparar('click');
+  await b.pronta();
+
+  // Descartar o que já está descartado não faz nada, e um botão que às vezes
+  // não funciona é pior do que um botão que some.
+  assert.equal(b.el('iaDetDescartar').classList.contains('hidden'), true);
+});
+
+test('a empresa deixa doze colunas e fica com quatro', () => {
+  const { camposParaTela } = require('../../../backend/iaEsquemas');
+  const naGrade = camposParaTela('clientes').filter(c => c.naGrade);
+
+  // Doze colunas espremidas davam a cada uma menos de dez caracteres:
+  // "PROVENCE CAS…", "39.778.846…", "Rua Modes…".
+  assert.deepEqual(naGrade.map(c => c.chave),
+    ['nome_fantasia', 'razao_social', 'cnpj', 'contatos']);
+
+  const largura = chave => camposParaTela('clientes').find(c => c.chave === chave).largura;
+  assert.equal(largura('nome_fantasia'), 'enorme');
+  assert.equal(largura('razao_social'), 'enorme');
+  assert.equal(largura('cnpj'), 'grande');
+});
+
+// ---------------------------------------------------------------------------
+// ETAPA 17 — unidade, processo e insumo são TABELA, não texto livre
+// ---------------------------------------------------------------------------
+
+/** Ficha com as listas restritas que o backend manda. */
+function leituraFichaRestrita() {
+  const leitura = leituraFichaCasada();
+  leitura.sugestoes = {
+    'insumos.nome': ['MDF 06', 'Verniz FO10 6717', 'Cola Branca'],
+    'insumos.unidade': ['CH', 'ML', 'M2'],
+    'insumos.processo': ['MARCENARIA', 'ACABAMENTO', 'MONTAGEM', 'EMBALAGEM'],
+    __restritos: ['insumos.nome', 'insumos.unidade', 'insumos.processo']
+  };
+  return leitura;
+}
+
+test('os campos de tabela ganham a lista de opções do banco', async () => {
+  const b = criarBancada({ leitura: leituraFichaRestrita() });
+  await b.pronta();
+  const linhas = await abrirInsumos(b);
+
+  // linhas[0] é o cabeçalho da sub-tabela; os itens começam em 1.
+  const campos = linhas[1].todos().filter(f => f.tagName === 'INPUT');
+  const chaves = campos.map(c => c.dataset.chave);
+  assert.ok(chaves.includes('insumos.unidade'));
+  assert.ok(chaves.includes('insumos.processo'));
+  assert.ok(chaves.includes('insumos.nome'));
+});
+
+test('valor que não está na tabela é recusado e o campo volta atrás', async () => {
+  const b = criarBancada({ leitura: leituraFichaRestrita() });
+  await b.pronta();
+  const linhas = await abrirInsumos(b);
+
+  const unidade = linhas[1].todos()
+    .find(f => f.tagName === 'INPUT' && f.dataset.chave === 'insumos.unidade');
+  const antes = unidade.value;
+
+  unidade.value = 'litros';
+  unidade.disparar('change');
+  await b.pronta();
+
+  // Digitar "litros" não cria a unidade: cria um texto que não corresponde a
+  // nada e que o formulário do outro lado ignora em silêncio.
+  assert.equal(unidade.value, antes, 'aceitou um valor que não existe na tabela');
+  assert.equal(b.chamadas.some(c => c.metodo === 'PUT'), false);
+  assert.match(b.toasts.at(-1).msg, /não está cadastrado/);
+});
+
+test('digitar serve para PROCURAR: caixa e acento não impedem', async () => {
+  const b = criarBancada({ leitura: leituraFichaRestrita() });
+  await b.pronta();
+  const linhas = await abrirInsumos(b);
+
+  const processo = linhas[1].todos()
+    .find(f => f.tagName === 'INPUT' && f.dataset.chave === 'insumos.processo');
+
+  processo.value = 'montagem';
+  processo.disparar('change');
+  await b.pronta();
+
+  // Grava a opção como ela é na tabela, não como foi digitada.
+  assert.equal(processo.value, 'MONTAGEM');
+  const put = b.chamadas.find(c => c.metodo === 'PUT');
+  assert.equal(put.corpo.dados.insumos[0].processo, 'MONTAGEM');
+});
+
+test('trocar o nome à mão descarta o casamento anterior', async () => {
+  const b = criarBancada({ leitura: leituraFichaRestrita() });
+  await b.pronta();
+  const linhas = await abrirInsumos(b);
+
+  // O segundo insumo é o que casou por semelhança e carrega `_cadastro`.
+  const nome = linhas[2].todos()
+    .find(f => f.tagName === 'INPUT' && f.dataset.chave === 'insumos.nome');
+  nome.value = 'Cola Branca';
+  nome.disparar('change');
+  await b.pronta();
+
+  const put = b.chamadas.find(c => c.metodo === 'PUT');
+  // O `_cadastro` guardado valia para o nome antigo. Mantê-lo faria o (i)
+  // apontar para um casamento que já não existe.
+  assert.equal(put.corpo.dados.insumos[1]._cadastro, null);
+  assert.equal(put.corpo.dados.insumos[1].nome, 'Cola Branca');
+});
+
+// ---------------------------------------------------------------------------
+// ETAPA 20 — a transição não parece defeito
+// ---------------------------------------------------------------------------
+
+test('o véu com a logo cobre a montagem do formulário', async () => {
+  const b = criarBancada();
+  await b.pronta();
+
+  b.el('iaDetAplicar').disparar('click');
+  // Sem esperar: o véu tem de estar lá ENQUANTO a carga é buscada.
+  const durante = b.corpoDaPagina.filhos.some(f => f.id === 'iaAbrindoModulo');
+  assert.equal(durante, true, 'a tela ficou sem aviso de carregando');
+
+  await b.pronta();
+  // E some quando acaba: um véu que fica é a tela travada.
+  assert.equal(b.corpoDaPagina.filhos.some(f => f.id === 'iaAbrindoModulo'), false);
+});
+
+test('o formulário só aparece depois de preenchido', async () => {
+  const b = criarBancada();
+  await b.pronta();
+
+  b.el('iaDetAplicar').disparar('click');
+  await b.pronta();
+
+  // Revelar antes mostraria o formulário em branco enchendo-se sozinho, campo
+  // a campo — que parece defeito, não carregamento. E não revelar nunca é o
+  // outro lado do mesmo erro: o formulário abriria invisível.
+  assert.equal(b.el('novoInsumoOverlay').classList.contains('hidden'), false,
+    'o formulário nunca apareceu');
+
+  const fonte = fs.readFileSync(ARQUIVO, 'utf8');
+  const abrir = /function abrirPorCima\(config\) \{[\s\S]*?\n  \}/.exec(fonte)[0];
+  assert.doesNotMatch(abrir, /classList\.remove\('hidden'\)/,
+    'o overlay é revelado antes do preenchimento');
+});
+
+test('a falha no preenchimento não deixa o véu preso', async () => {
+  const b = criarBancada({
+    respostaPreenchimento: { status: 500, corpo: { error: 'boom' } }
+  });
+  await b.pronta();
+
+  b.el('iaDetAplicar').disparar('click');
+  await b.pronta();
+
+  // Um véu que fica é a tela bloqueada por algo que ninguém consegue tirar.
+  assert.equal(b.corpoDaPagina.filhos.some(f => f.id === 'iaAbrindoModulo'), false);
+  assert.match(b.toasts.at(-1).msg, /boom|não foi possível/i);
+});
+
+test('o CSS do módulo de destino é carregado junto', async () => {
+  const b = criarBancada();
+  await b.pronta();
+
+  b.el('iaDetAplicar').disparar('click');
+  await b.pronta();
+
+  // O programa carrega uma folha de módulo por vez. Sem esta, o formulário de
+  // Produtos abre com metade do estilo: botões quadrados onde deviam ser
+  // redondos, espaçamentos de outro lugar.
+  const link = b.el('iaDetItensCorpo') && null;
+  const fonte = fs.readFileSync(ARQUIVO, 'utf8');
+  assert.match(fonte, /garantirEstiloDoModulo/);
+  for (const css of ['materia-prima', 'clientes', 'prospeccoes', 'produtos', 'orcamentos']) {
+    assert.match(fonte, new RegExp(`css: '${css}'`), `${css} ficou sem folha de estilo`);
+  }
+  assert.equal(link, null);
 });

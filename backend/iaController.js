@@ -277,17 +277,57 @@ async function registrosAlvo(api, destino) {
   return listas.flat();
 }
 
+/**
+ * As listas que a grade oferece para o revisor escolher.
+ *
+ * ---------------------------------------------------------------------------
+ * A DIFERENÇA ENTRE SUGERIR E RESTRINGIR
+ *
+ * Categoria de insumo é texto livre no cadastro: sugerir o que já existe evita
+ * que a mesma coisa vire três grafias, mas digitar uma nova é legítimo.
+ *
+ * Unidade, processo e nome de insumo NÃO são: os três são tabela, com cadastro
+ * e edição próprios. Digitar "ml" à mão num deles não cria a unidade — cria um
+ * texto que não corresponde a nada, e o formulário do outro lado o ignora em
+ * silêncio. Por isso vão marcados como `restrito`: a grade aceita digitar para
+ * procurar, mas só grava o que existe.
+ */
 async function sugestoesDoDestino(api, destino) {
-  if (destino !== 'materia_prima') return {};
   try {
-    const [categorias, unidades] = await Promise.all([
-      api.get('/api/categoria').then(listaDe).catch(() => []),
-      api.get('/api/unidades').then(listaDe).catch(() => [])
-    ]);
-    return {
-      categoria: categorias.map(c => c.nome_categoria).filter(Boolean).sort(),
-      unidade: unidades.map(u => u.tipo).filter(Boolean).sort()
-    };
+    if (destino === 'materia_prima') {
+      const [categorias, unidades] = await Promise.all([
+        api.get('/api/categoria').then(listaDe).catch(() => []),
+        api.get('/api/unidades').then(listaDe).catch(() => [])
+      ]);
+      return {
+        categoria: categorias.map(c => c.nome_categoria).filter(Boolean).sort(),
+        unidade: unidades.map(u => u.tipo).filter(Boolean).sort()
+      };
+    }
+
+    if (destino === 'produto_insumos') {
+      const [materias, unidades, etapas] = await Promise.all([
+        api.get('/api/materia_prima').then(listaDe).catch(() => []),
+        api.get('/api/unidades').then(listaDe).catch(() => []),
+        api.get('/api/etapas_producao').then(listaDe).catch(() => [])
+      ]);
+
+      return {
+        // Prefixadas com `insumos.` porque valem para os SUBCAMPOS da lista de
+        // insumos, não para as colunas de cima.
+        'insumos.nome': materias.map(m => m.nome).filter(Boolean).sort(),
+        'insumos.unidade': unidades.map(u => u.tipo).filter(Boolean).sort(),
+        'insumos.processo': etapas
+          .slice()
+          .sort((a, b) => (Number(a.ordem) || 0) - (Number(b.ordem) || 0))
+          .map(e => e.nome).filter(Boolean),
+        // Os três são tabela: aceitar texto livre criaria um valor que não
+        // corresponde a nada e que o formulário ignora sem avisar.
+        __restritos: ['insumos.nome', 'insumos.unidade', 'insumos.processo']
+      };
+    }
+
+    return {};
   } catch (_) {
     return {};
   }
@@ -654,9 +694,15 @@ router.get('/:id', exigirPermissao('ia.details.view'), async (req, res) => {
     // para a lista que a pessoa descobre que "Couro Serpente Amêndoa" não
     // existe no estoque, e não depois de abrir o formulário e ver que ele não
     // veio.
-    const materias = extracao.destino === 'produto_insumos'
-      ? await api.get('/api/materia_prima').then(listaDe).catch(() => [])
-      : [];
+    // O catálogo de matéria-prima E as etapas de produção: a anotação de
+    // casamento precisa das duas, porque um insumo só casa dentro da etapa que
+    // a ficha declara.
+    const [materias, etapas] = extracao.destino === 'produto_insumos'
+      ? await Promise.all([
+        api.get('/api/materia_prima').then(listaDe).catch(() => []),
+        api.get('/api/etapas_producao').then(listaDe).catch(() => [])
+      ])
+      : [[], []];
 
     res.json({
       ...extracao,
@@ -691,6 +737,9 @@ router.get('/:id', exigirPermissao('ia.details.view'), async (req, res) => {
         // O texto extraído pode ter dezenas de milhares de caracteres. A lista
         // devolve só o tamanho; quem quiser ler abre o arquivo pela rota dele.
         texto_tamanho: a.texto ? String(a.texto).length : 0,
+        // O recorte que vai para a IA, quando existe. A tela mostra os dois
+        // números para deixar claro que o que será processado é menor.
+        ajustado_tamanho: a.texto_ajustado ? String(a.texto_ajustado).length : 0,
         erro: a.erro || null
       })),
       itens: itens
@@ -701,7 +750,7 @@ router.get('/:id', exigirPermissao('ia.details.view'), async (req, res) => {
           return {
             id: i.id,
             linha: Number(i.linha) || 0,
-            dados: anotarCasamento(extracao.destino, valor, materias),
+            dados: anotarCasamento(extracao.destino, valor, materias, etapas),
             dados_corrompidos: !ok,
             acao: i.acao || 'criar',
             alvo_tabela: i.alvo_tabela || null,
@@ -736,20 +785,29 @@ router.get('/:id', exigirPermissao('ia.details.view'), async (req, res) => {
  * não são gravadas em lugar nenhum e se refazem a cada abertura — que é o que
  * mantém a tela certa depois de alguém cadastrar o insumo que faltava.
  */
-function anotarCasamento(destino, dados, materias) {
+function anotarCasamento(destino, dados, materias, etapas = []) {
   if (destino !== 'produto_insumos' || !Array.isArray(dados?.insumos)) return dados;
 
   const porNome = preenchimento.indexarPor(materias, 'nome');
+  const etapasPorId = new Map(etapas.map(e => [String(e.id), e.nome]));
+
   return {
     ...dados,
     insumos: dados.insumos.map(linha => {
       const nome = String(linha?.nome ?? '').trim();
       if (!nome) return linha;
-      const { registro, tipo } = preenchimento.casarInsumo(nome, porNome, materias);
+
+      const processo = String(linha?.processo ?? '').trim();
+      const { registro, tipo, foraDoProcesso } =
+        preenchimento.casarInsumo(nome, porNome, materias, processo, etapasPorId);
+
       return {
         ...linha,
         _casamento: tipo,
-        _cadastro: registro ? registro.nome : null
+        _cadastro: registro ? registro.nome : null,
+        // Distingue "não existe" de "existe em outra etapa": a tela mostra os
+        // dois em vermelho, mas o que fazer com cada um é diferente.
+        _fora_do_processo: foraDoProcesso ? foraDoProcesso.processo : null
       };
     })
   };
@@ -774,6 +832,7 @@ router.get('/:id/arquivos/:arquivoId/texto', exigirPermissao('ia.details.view'),
       nome_arquivo: arquivo.nome_arquivo,
       origem: arquivo.origem || null,
       texto: arquivo.texto || '',
+      texto_ajustado: arquivo.texto_ajustado || '',
       erro: arquivo.erro || null
     });
   } catch (err) {
@@ -817,6 +876,44 @@ router.get('/:id/itens/:itemId/preenchimento', exigirPermissao('ia.details.view'
   }
 });
 
+/**
+ * Guarda o recorte de um arquivo — o que a pessoa quer que vá para a extração.
+ *
+ * Fica atrás de `ia.extract` e não de `ia.details.view`: recortar não é ler, é
+ * decidir o que a próxima extração vai processar.
+ */
+router.put('/:id/arquivos/:arquivoId/texto', exigirPermissao('ia.extract'), async (req, res) => {
+  try {
+    const api = createApiClient(req);
+    const id = Number(req.params.id);
+    const arquivoId = Number(req.params.arquivoId);
+    if (!Number.isFinite(id) || !Number.isFinite(arquivoId)) throw erro(400, 'Arquivo inválido');
+
+    const arquivo = await api.get(`/api/ia_extracao_arquivos/${arquivoId}`);
+    if (!arquivo || arquivo.error === 'Not found') throw erro(404, 'Arquivo não encontrado');
+    if (Number(arquivo.extracao_id) !== id) throw erro(404, 'Arquivo não encontrado');
+
+    // Vazio quer dizer "volte a usar a transcrição inteira".
+    const recorte = String(req.body?.texto_ajustado ?? '').trim();
+
+    const limite = provedores.LIMITES.textoMaxChars();
+    if (recorte.length > limite) {
+      throw erro(400, `O recorte passa de ${limite.toLocaleString('pt-BR')} caracteres.`);
+    }
+
+    await api.put(`/api/ia_extracao_arquivos/${arquivoId}`, { texto_ajustado: recorte || null });
+
+    res.json({
+      id: arquivoId,
+      texto_ajustado: recorte,
+      ajustado_tamanho: recorte.length,
+      texto_tamanho: arquivo.texto ? String(arquivo.texto).length : 0
+    });
+  } catch (err) {
+    responder(res, err, 'PUT /api/ia/:id/arquivos/:arquivoId/texto');
+  }
+});
+
 // ---------------------------------------------------------------------------
 // EXTRAÇÃO DOS DADOS
 //
@@ -826,10 +923,26 @@ router.get('/:id/itens/:itemId/preenchimento', exigirPermissao('ia.details.view'
 // ---------------------------------------------------------------------------
 
 /** Texto de todos os arquivos de uma leitura, na ordem em que entraram. */
+/**
+ * O texto que vai para a extração.
+ *
+ * O recorte que a pessoa fez vence a transcrição inteira. Quem está olhando o
+ * documento sabe o que interessa ao destino escolhido, e o que não interessa
+ * custa contexto e — pior — dá ao modelo em que se distrair.
+ *
+ * A transcrição original continua guardada: ela é a resposta para "de onde
+ * veio este dado", que é metade do motivo de o módulo existir.
+ */
+function textoParaExtrair(arquivo) {
+  const recorte = String(arquivo?.texto_ajustado || '').trim();
+  return recorte || String(arquivo?.texto || '');
+}
+
 function juntarTextos(arquivos) {
   return arquivos
+    .map(a => ({ nome: a.nome_arquivo, texto: textoParaExtrair(a) }))
     .filter(a => a.texto)
-    .map(a => `### ${a.nome_arquivo}\n${a.texto}`)
+    .map(a => `### ${a.nome}\n${a.texto}`)
     .join('\n\n');
 }
 

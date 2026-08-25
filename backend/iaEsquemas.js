@@ -127,25 +127,32 @@ const CAMPO_CONTATOS = {
  * muda entre os destinos é o que vem DEPOIS da empresa (etapa e origem só
  * existem em prospecção), então a parte comum fica aqui em vez de ser copiada.
  */
+// Doze colunas de empresa espremidas numa tabela dentro de um modal davam a
+// cada uma menos de dez caracteres: "PROVENCE CAS…", "39.778.846…", "Rua
+// Modes…". A tabela mostrava tudo e não deixava ler nada.
+//
+// Na grade ficam as quatro que IDENTIFICAM a empresa e decidem se a linha está
+// certa. Endereço, site e inscrição estadual são conferidos uma vez, olhando
+// para aquela empresa — e para isso serve o (i).
 const CAMPOS_EMPRESA = [
   {
     chave: 'nome_fantasia', rotulo: 'Empresa', tipo: 'texto', obrigatorio: true,
-    max: 200, largura: 'grande', descricao: 'Nome pelo qual a empresa é conhecida'
+    max: 200, largura: 'enorme', descricao: 'Nome pelo qual a empresa é conhecida'
   },
-  { chave: 'razao_social', rotulo: 'Razão social', tipo: 'texto', max: 200, largura: 'media' },
+  { chave: 'razao_social', rotulo: 'Razão social', tipo: 'texto', max: 200, largura: 'enorme' },
   {
-    chave: 'cnpj', rotulo: 'CNPJ', tipo: 'texto', max: 20, largura: 'media',
+    chave: 'cnpj', rotulo: 'CNPJ', tipo: 'texto', max: 20, largura: 'grande',
     descricao: 'Só o número, com ou sem pontuação. Não invente se não estiver no documento.'
   },
-  { chave: 'inscricao_estadual', rotulo: 'Insc. estadual', tipo: 'texto', max: 30, largura: 'media' },
-  { chave: 'site', rotulo: 'Site', tipo: 'texto', max: 150, largura: 'media' },
-  { chave: 'end_logradouro', rotulo: 'Rua', tipo: 'texto', max: 200, largura: 'media' },
-  { chave: 'end_numero', rotulo: 'Nº', tipo: 'texto', max: 20, largura: 'pequena' },
-  { chave: 'end_complemento', rotulo: 'Compl.', tipo: 'texto', max: 100, largura: 'pequena' },
-  { chave: 'end_bairro', rotulo: 'Bairro', tipo: 'texto', max: 100, largura: 'media' },
-  { chave: 'end_cidade', rotulo: 'Cidade', tipo: 'texto', max: 100, largura: 'media' },
-  { chave: 'end_uf', rotulo: 'UF', tipo: 'texto', max: 2, largura: 'pequena', descricao: 'Sigla de 2 letras' },
-  { chave: 'end_cep', rotulo: 'CEP', tipo: 'texto', max: 15, largura: 'pequena' }
+  { chave: 'inscricao_estadual', rotulo: 'Insc. estadual', tipo: 'texto', max: 30, largura: 'media', naGrade: false },
+  { chave: 'site', rotulo: 'Site', tipo: 'texto', max: 150, largura: 'media', naGrade: false },
+  { chave: 'end_logradouro', rotulo: 'Rua', tipo: 'texto', max: 200, largura: 'media', naGrade: false },
+  { chave: 'end_numero', rotulo: 'Nº', tipo: 'texto', max: 20, largura: 'pequena', naGrade: false },
+  { chave: 'end_complemento', rotulo: 'Compl.', tipo: 'texto', max: 100, largura: 'pequena', naGrade: false },
+  { chave: 'end_bairro', rotulo: 'Bairro', tipo: 'texto', max: 100, largura: 'media', naGrade: false },
+  { chave: 'end_cidade', rotulo: 'Cidade', tipo: 'texto', max: 100, largura: 'media', naGrade: false },
+  { chave: 'end_uf', rotulo: 'UF', tipo: 'texto', max: 2, largura: 'pequena', naGrade: false, descricao: 'Sigla de 2 letras' },
+  { chave: 'end_cep', rotulo: 'CEP', tipo: 'texto', max: 15, largura: 'pequena', naGrade: false }
 ];
 
 /** Instruções comuns à leitura de qualquer documento de empresa. */

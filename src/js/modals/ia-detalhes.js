@@ -6,7 +6,17 @@
     return fetch(`${baseUrl}${path}`, options);
   }
 
-  const close = () => Modal.close(OVERLAY);
+  /**
+   * Fecha o modal, levando junto o popover.
+   *
+   * O popover foi movido para o `<body>` para escapar do `backdrop-filter`, e
+   * por isso não sai com o modal: sem esta limpeza ele fica órfão na página e
+   * o id duplicado quebra a próxima abertura.
+   */
+  const close = () => {
+    window.Popover?.descartar(document.getElementById('iaDetLinhaPopover'));
+    Modal.close(OVERLAY);
+  };
   const revelar = () =>
     window.dispatchEvent(new CustomEvent('modalSpinnerLoaded', { detail: OVERLAY }));
 
@@ -211,6 +221,11 @@
    * única coluna que precisa ser lida inteira para se conferir a ficha contra
    * o papel — e era justamente ela que aparecia cortada.
    */
+  /** Caixa e acento não distinguem opção na hora de casar o que foi digitado. */
+  const normalizarOpcao = v => String(v ?? '')
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .toLowerCase().replace(/\s+/g, ' ').trim();
+
   const LARGURA_SUBCAMPO = {
     quantidade: 'ia-sub-qtde',
     unidade: 'ia-sub-unidade',
@@ -282,8 +297,15 @@
     );
   }
 
-  /** Itens que ainda podem ser marcados — o que já foi gravado não volta. */
-  const selecionaveis = () => (leitura?.itens || []).filter(i => i.status !== 'aplicado');
+  /**
+   * Itens que ainda podem ser marcados.
+   *
+   * Fora o que já virou cadastro (não volta atrás) e o que foi descartado (já
+   * não vai a lugar nenhum). "Marcar todas" que pegasse os dois faria a
+   * contagem do rodapé mentir.
+   */
+  const selecionaveis = () => (leitura?.itens || [])
+    .filter(i => i.status !== 'aplicado' && i.acao !== 'ignorar' && i.status !== 'ignorado');
 
   /**
    * O (i) da linha: os campos que não viraram coluna, editáveis ali mesmo.
@@ -317,13 +339,13 @@
       popover.appendChild(linha);
     }
 
-    const r = icone.getBoundingClientRect();
-    popover.style.top = `${r.bottom + 8}px`;
-    popover.style.left = `${Math.max(8, r.left - 40)}px`;
-    popover.classList.add('show');
+    // O modal tem `backdrop-blur`, que cria um bloco de contenção e faz
+    // `position: fixed` deixar de ser relativo à janela. `Popover.abrir` tira
+    // o elemento de lá e trata as bordas da tela — ver src/js/utils/popover.js.
+    window.Popover?.abrir(popover, icone);
   }
 
-  const fecharDetalheDaLinha = () => get('iaDetLinhaPopover')?.classList.remove('show');
+  const fecharDetalheDaLinha = () => window.Popover?.fechar(get('iaDetLinhaPopover'));
 
   function desenharItens() {
     const corpo = get('iaDetItensCorpo');
@@ -376,9 +398,18 @@
       // Coluna de seleção, no lugar do antigo número da linha. O número não
       // dizia nada que a ordem da tabela já não dissesse, e ocupava a largura
       // de que a primeira coluna de verdade precisava.
+      // Linha descartada não pode ser marcada.
+      //
+      // Marcada, ela contaria no "Descartar N selecionadas" e no "Abrir a 1ª
+      // de N" — os dois passariam a mentir sobre quantas linhas ainda vão a
+      // algum lugar. E descartar o que já está descartado não faz nada, o que
+      // ensina que o botão às vezes não funciona.
+      const descartada = item.acao === 'ignorar' || item.status === 'ignorado';
+      if (descartada) selecionados.delete(item.id);
+
       const tdSelecao = document.createElement('td');
       tdSelecao.className = 'ia-col-selecao';
-      if (item.status !== 'aplicado') {
+      if (item.status !== 'aplicado' && !descartada) {
         const marca = document.createElement('input');
         marca.type = 'checkbox';
         marca.className = 'ia-selecao';
@@ -638,21 +669,53 @@
         linha.className = 'ia-sublinha-item--sem-cadastro';
       }
 
+      const travados = restritos();
+
       for (const sc of subcampos) {
         const celula = document.createElement('td');
         if (LARGURA_SUBCAMPO[sc.chave]) celula.className = LARGURA_SUBCAMPO[sc.chave];
         const input = document.createElement('input');
         input.type = 'text';
         input.className = 'ia-campo';
-        const valor = sub?.[sc.chave];
+
+        // A chave da sub-lista é prefixada pelo campo que a contém: as opções
+        // de "nome" dentro de `insumos` não são as mesmas de um "nome" de
+        // outro destino.
+        const chaveCompleta = `${campo.chave}.${sc.chave}`;
+        input.dataset.chave = chaveCompleta;
+
+        // O que a tabela MOSTRA é o nome do cadastro quando ele existe: é ele
+        // que vai para a receita, e é ele que precisa ser conferido. O nome
+        // que o documento escreveu fica no (i), que é onde se procura a
+        // origem de uma dúvida.
+        const doCadastro = sc.chave === 'nome' && sub?._cadastro ? sub._cadastro : null;
+        const valor = doCadastro ?? sub?.[sc.chave];
         input.value = valor === null || valor === undefined ? '' : String(valor);
         input.title = sc.rotulo;
+
+        const opcoes = leitura?.sugestoes?.[chaveCompleta];
+        const restrito = travados.has(chaveCompleta) && Array.isArray(opcoes) && opcoes.length;
 
         if (!editavel) input.readOnly = true;
         else {
           if (sc.obrigatorio && !String(input.value).trim()) input.classList.add('ia-campo--faltando');
           input.addEventListener('change', async () => {
-            const copia = lista.map((x, i) => (i === indice ? { ...x, [sc.chave]: input.value } : x));
+            // Campo restrito só grava o que existe na tabela. Digitar é para
+            // PROCURAR: um valor livre aqui não cria unidade nem etapa nenhuma
+            // — cria um texto que o formulário do outro lado ignora calado.
+            if (restrito && input.value.trim()) {
+              const achado = opcoes.find(o => normalizarOpcao(o) === normalizarOpcao(input.value));
+              if (!achado) {
+                showToast(`"${input.value}" não está cadastrado em ${sc.rotulo}`, 'error');
+                input.value = valor === null || valor === undefined ? '' : String(valor);
+                return;
+              }
+              input.value = achado;
+            }
+
+            const copia = lista.map((x, i) => (i === indice
+              ? { ...x, [sc.chave]: input.value, ...(sc.chave === 'nome' ? { _cadastro: null } : {}) }
+              : x));
             try { await salvarLista(item, campo, copia); }
             catch (err) {
               showToast(err.message || 'Não foi possível salvar', 'error');
@@ -672,7 +735,10 @@
           caixa.className = 'ia-celula-com-info';
           const info = document.createElement('i');
           info.className = 'info-icon ia-info-insumo';
-          info.title = `No estoque: "${sub._cadastro}" — é este que vai para a ficha`;
+          // A tabela mostra o do cadastro; o (i) diz de onde ele veio. É esta
+          // a direção útil: o que vai para a receita fica à vista, e a origem
+          // — que só interessa quando algo parece errado — fica a um gesto.
+          info.title = `O documento escreveu "${sub.nome}"`;
           caixa.append(info, input);
           celula.appendChild(caixa);
           linha.appendChild(celula);
@@ -779,9 +845,13 @@
   }
 
   /** Datalists de categoria/unidade, para o revisor encaixar no que já existe. */
+  /** Chaves cujas opções são TABELA: aceita digitar para procurar, não para criar. */
+  const restritos = () => new Set(leitura?.sugestoes?.__restritos || []);
+
   function pintarSugestoes() {
     const sugestoes = leitura?.sugestoes || {};
     for (const [chave, valores] of Object.entries(sugestoes)) {
+      if (chave === '__restritos') continue;
       if (!Array.isArray(valores) || !valores.length) continue;
       const id = `iaDetSugestao-${chave}`;
       let lista = document.getElementById(id);
@@ -899,6 +969,22 @@
     return dados;
   }
 
+  /**
+   * Abre (ou fecha) o painel de um arquivo.
+   *
+   * ---------------------------------------------------------------------------
+   * DOIS TEXTOS, LADO A LADO
+   *
+   * À esquerda, o que a leitura transcreveu — inteiro, só de leitura, porque é
+   * ele a resposta para "de onde veio este dado".
+   *
+   * À direita, o RECORTE: o que a pessoa quer que vá para a extração. Um
+   * documento traz cabeçalho, rodapé, termos de garantia e colunas que não
+   * interessam ao destino escolhido, e tudo isso custa contexto e dá ao modelo
+   * em que se distrair. Quem sabe o que interessa é quem está olhando.
+   *
+   * Vazio à direita quer dizer "use tudo" — que é o comportamento de sempre.
+   */
   async function alternarTexto(botao, extracaoId, arquivoId, alvo) {
     if (!alvo.classList.contains('hidden')) {
       alvo.classList.add('hidden');
@@ -911,7 +997,7 @@
       botao.textContent = 'Carregando…';
       try {
         const dados = await buscarTextoLido(extracaoId, arquivoId);
-        alvo.textContent = dados.texto || '(nada foi extraído deste arquivo)';
+        montarPaineisDeTexto(alvo, extracaoId, arquivoId, dados);
         alvo.dataset.carregado = '1';
       } catch (err) {
         console.error('Falha ao ler o texto extraído', err);
@@ -925,6 +1011,102 @@
 
     alvo.classList.remove('hidden');
     botao.textContent = 'Ocultar';
+  }
+
+  /** Os dois painéis: a transcrição e o recorte. */
+  function montarPaineisDeTexto(alvo, extracaoId, arquivoId, dados) {
+    alvo.replaceChildren();
+
+    const grade = document.createElement('div');
+    grade.className = 'ia-texto-grade';
+
+    // --- O que foi lido -----------------------------------------------------
+    const ladoLido = document.createElement('div');
+    ladoLido.className = 'ia-texto-lado';
+
+    const tituloLido = document.createElement('p');
+    tituloLido.className = 'ia-texto-titulo';
+    tituloLido.textContent = `O que foi lido  ·  ${(dados.texto || '').length.toLocaleString('pt-BR')} caracteres`;
+    ladoLido.appendChild(tituloLido);
+
+    const lido = document.createElement('pre');
+    lido.className = 'ia-texto-corpo modal-scroll';
+    lido.textContent = dados.texto || '(nada foi extraído deste arquivo)';
+    ladoLido.appendChild(lido);
+
+    // --- O que vai para a IA ------------------------------------------------
+    const ladoEnvio = document.createElement('div');
+    ladoEnvio.className = 'ia-texto-lado';
+
+    const tituloEnvio = document.createElement('p');
+    tituloEnvio.className = 'ia-texto-titulo';
+    ladoEnvio.appendChild(tituloEnvio);
+
+    const recorte = document.createElement('textarea');
+    recorte.className = 'ia-texto-corpo ia-texto-recorte modal-scroll';
+    recorte.value = dados.texto_ajustado || '';
+    recorte.placeholder = 'Cole aqui só o trecho que a IA deve processar.\n\n'
+      + 'Vazio = manda o texto inteiro, como sempre foi.';
+    ladoEnvio.appendChild(recorte);
+
+    const atualizarTitulo = () => {
+      const n = recorte.value.trim().length;
+      tituloEnvio.textContent = n
+        ? `O que vai para a IA  ·  ${n.toLocaleString('pt-BR')} caracteres`
+        : 'O que vai para a IA  ·  vazio: manda o texto inteiro';
+      tituloEnvio.classList.toggle('ia-texto-titulo--ativo', n > 0);
+    };
+    atualizarTitulo();
+    recorte.addEventListener('input', atualizarTitulo);
+
+    const acoes = document.createElement('div');
+    acoes.className = 'ia-texto-acoes';
+
+    const copiarTudo = document.createElement('button');
+    copiarTudo.type = 'button';
+    copiarTudo.className = 'ia-btn-transparente rounded-lg px-3 py-1.5 text-xs';
+    copiarTudo.textContent = 'Copiar tudo para cá';
+    copiarTudo.title = 'Traz o texto inteiro para recortar aqui';
+    copiarTudo.addEventListener('click', () => {
+      recorte.value = dados.texto || '';
+      atualizarTitulo();
+    });
+
+    const salvar = document.createElement('button');
+    salvar.type = 'button';
+    salvar.className = 'btn-primary text-white rounded-lg px-3 py-1.5 text-xs font-medium';
+    salvar.textContent = 'Salvar recorte';
+    const gravarRecorte = async () => {
+      try {
+        const resp = await fetchApi(`/api/ia/${extracaoId}/arquivos/${arquivoId}/texto`, {
+          method: 'PUT',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ texto_ajustado: recorte.value })
+        });
+        const salvo = await resp.json().catch(() => ({}));
+        if (!resp.ok) throw new Error(salvo.error || `Erro ${resp.status}`);
+
+        dados.texto_ajustado = salvo.texto_ajustado || '';
+        recorte.value = dados.texto_ajustado;
+        atualizarTitulo();
+        showToast(salvo.ajustado_tamanho
+          ? 'Recorte salvo — a próxima extração usa só ele'
+          : 'Recorte apagado — a próxima extração usa o texto inteiro', 'success');
+      } catch (err) {
+        console.error('Falha ao salvar o recorte', err);
+        showToast(err.message || 'Não foi possível salvar o recorte', 'error');
+      }
+    };
+
+    // Gravar sai para o servidor: dois cliques rápidos mandariam o mesmo
+    // recorte duas vezes e o segundo poderia chegar antes do primeiro.
+    if (window.BotaoAcao?.bind) window.BotaoAcao.bind(salvar, gravarRecorte);
+    else salvar.addEventListener('click', gravarRecorte);
+    acoes.append(copiarTudo, salvar);
+    ladoEnvio.appendChild(acoes);
+
+    grade.append(ladoLido, ladoEnvio);
+    alvo.appendChild(grade);
   }
 
   /**
@@ -1029,15 +1211,11 @@
         card.appendChild(erro);
       }
 
-      const texto = document.createElement('pre');
-      texto.className = 'hidden mt-3 text-xs text-white/70 ia-lista-modelos';
-      // `whitespace-pre-wrap` não existe no build offline do Tailwind, e um
-      // <pre> preserva o espaço mas NÃO quebra a linha: o texto de um PDF
-      // virava uma linha só com rolagem horizontal.
-      texto.style.whiteSpace = 'pre-wrap';
-      texto.style.wordBreak = 'break-word';
-      texto.style.padding = '10px';
-      texto.style.maxHeight = '220px';
+      // O painel dos dois textos. A altura sai do CSS e acompanha o modal:
+      // 220px fixos deixavam metade da caixa vazia num modal que agora ocupa
+      // 90% da tela, e obrigavam a rolar um texto que teria cabido inteiro.
+      const texto = document.createElement('div');
+      texto.className = 'hidden mt-3 ia-arquivo-paineis';
       card.appendChild(texto);
 
       botao.addEventListener('click', () => alternarTexto(botao, extracaoId, a.id, texto));
@@ -1085,6 +1263,7 @@
       html: 'modals/materia-prima/novo.html',
       script: '../js/modals/materia-prima-novo.js',
       overlay: 'novoInsumo',
+      css: 'materia-prima',
       campos: {
         nome: 'nome',
         quantidade: 'quantidade',
@@ -1097,6 +1276,7 @@
       html: 'modals/clientes/novo.html',
       script: '../js/modals/cliente-novo.js',
       overlay: 'novoCliente',
+      css: 'clientes',
       campos: {
         nome_fantasia: 'empresaNomeFantasia',
         razao_social: 'empresaRazaoSocial',
@@ -1116,6 +1296,7 @@
       html: 'modals/prospeccoes/novo.html',
       script: '../js/modals/prospeccao-novo.js',
       overlay: 'novaProspeccao',
+      css: 'prospeccoes',
       campos: {
         nome_fantasia: 'prosNomeFantasia',
         razao_social: 'prosRazaoSocial',
@@ -1136,6 +1317,7 @@
       html: 'modals/produtos/novo.html',
       script: '../js/modals/produto-novo.js',
       overlay: 'novoProduto',
+      css: 'produtos',
       campos: {
         nome: 'nomeInput',
         codigo: 'codigoInput'
@@ -1146,6 +1328,7 @@
       html: 'modals/orcamentos/novo.html',
       script: '../js/modals/orcamento-novo.js',
       overlay: 'novoOrcamento',
+      css: 'orcamentos',
       campos: {
         validade: 'novoValidade',
         observacoes: 'novoObservacoes'
@@ -1242,13 +1425,67 @@
     }
   };
 
-  /** Abre o modal por cima e espera ele terminar de montar. */
+  /**
+   * Garante que o CSS do módulo de destino esteja na página.
+   *
+   * O programa carrega UMA folha de módulo por vez (`#page-style`), trocada a
+   * cada navegação. Abrir o formulário de Produtos com o módulo de IA ativo
+   * traz o HTML e o JavaScript dele, mas não o `produtos.css` — e o que se vê
+   * é o formulário certo com metade do estilo: botões quadrados onde deviam
+   * ser redondos, espaçamentos de outro lugar.
+   *
+   * A folha entra com um id próprio e FICA: recarregá-la a cada abertura
+   * piscaria a tela, e ela não conflita com a do módulo ativo (cada módulo
+   * escopa o que é seu).
+   */
+  function garantirEstiloDoModulo(config) {
+    const pagina = config.css;
+    if (!pagina) return;
+
+    const id = `ia-estilo-${pagina}`;
+    if (document.getElementById(id)) return;
+
+    const link = document.createElement('link');
+    link.id = id;
+    link.rel = 'stylesheet';
+    link.href = `../css/${pagina}.css`;
+    document.head.appendChild(link);
+  }
+
+  /**
+   * O véu com a logo, enquanto o formulário é montado e preenchido.
+   *
+   * Abrir o formulário de destino não é instantâneo: busca a carga no
+   * servidor, carrega HTML e script do outro módulo, espera os selects
+   * assíncronos e só então preenche. Sem o véu, o que se vê nesse intervalo é
+   * um formulário vazio que vai ganhando valores sozinho, campo a campo — que
+   * parece defeito, não carregamento.
+   */
+  function abrirVeu() {
+    const veu = document.createElement('div');
+    veu.id = 'iaAbrindoModulo';
+    veu.className = 'fixed inset-0 bg-black/50 flex items-center justify-center';
+    veu.style.zIndex = 'var(--z-dialog)';
+    veu.innerHTML = '<div class="app-loading-indicator app-loading-indicator--compact" aria-hidden="true">'
+      + '<span class="module-loading-orbit"></span>'
+      + '<span class="module-loading-core"><img src="../assets/Logo.ico" alt=""></span></div>';
+    document.body.appendChild(veu);
+    return veu;
+  }
+
+  /**
+   * Abre o modal por cima e espera ele terminar de montar.
+   *
+   * O overlay NÃO é revelado aqui: quem revela é `abrirNoModulo`, depois de
+   * preencher. Revelar antes mostraria o formulário em branco enchendo-se
+   * sozinho.
+   */
   function abrirPorCima(config) {
+    garantirEstiloDoModulo(config);
     const pronto = new Promise(resolve => {
       function aoAbrir(e) {
         if (e.detail !== config.overlay) return;
         window.removeEventListener('modalSpinnerLoaded', aoAbrir);
-        document.getElementById(`${config.overlay}Overlay`)?.classList.remove('hidden');
         resolve();
       }
       window.addEventListener('modalSpinnerLoaded', aoAbrir);
@@ -1283,12 +1520,14 @@
       return;
     }
 
+    const veu = abrirVeu();
     let carga;
     try {
       const resp = await fetchApi(`/api/ia/${leitura.id}/itens/${item.id}/preenchimento`);
       carga = await resp.json().catch(() => ({}));
       if (!resp.ok) throw new Error(carga.error || `Erro ${resp.status}`);
     } catch (err) {
+      veu.remove();
       showToast(err?.message || 'Não foi possível preparar o formulário', 'error');
       return;
     }
@@ -1312,6 +1551,12 @@
       resultado = await window.EstadoTrabalho.preencher(config.overlay, { campos, conteudo });
     } catch (err) {
       console.error('Falha ao preencher o formulário', err);
+    } finally {
+      // Só agora o formulário aparece: cheio, de uma vez. E o véu sai no
+      // `finally` para que uma falha no preenchimento não deixe a tela
+      // bloqueada por um véu que ninguém consegue tirar.
+      document.getElementById(`${config.overlay}Overlay`)?.classList.remove('hidden');
+      veu.remove();
     }
 
     const { quantos, oQue } = contarConteudo(leitura.destino, conteudo || {});
