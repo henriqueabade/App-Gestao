@@ -166,11 +166,17 @@ app.use('/js', express.static(path.join(__dirname, '../src/js')));
 // comercial a qualquer usuario logado, ignorando `pros.view`. Tudo do modulo
 // passa por prospeccoesController, que aplica exigirPermissao() rota a rota.
 //
-// O mesmo vale para as tabelas do modulo de IA. O prefixo e `ia_extra` e nao
-// `ia_extraca` de proposito: com o sufixo mais longo, `ia_extracao_arquivos` e
-// `ia_extracao_itens` ficavam bloqueadas mas `ia_extracoes` (com "o") passava
-// batido -- e ela e justamente a tabela que lista TODAS as leituras.
-const TABELAS_BLOQUEADAS = /^(perm_|modelos_permissoes$|usuarios$|prospeccoes$|prospeccao_|ia_extra)/i;
+// O mesmo vale para as tabelas do modulo de IA, e ali o prefixo e `ia_`
+// inteiro. Ja foi `ia_extraca`, e com esse sufixo mais longo
+// `ia_extracao_arquivos` e `ia_extracao_itens` ficavam bloqueadas mas
+// `ia_extracoes` (com "o") passava batido -- e ela e justamente a tabela que
+// lista TODAS as leituras. Depois veio `ia_configuracao`, que nao casava com
+// `ia_extra` nenhum: sem ela na lista, a trava de Sup Admin do
+// PUT /api/ia/config nao valeria nada, porque qualquer usuario logado gravaria
+// a linha direto por aqui e trocaria o modelo de todo mundo.
+//
+// A licao das duas vezes e a mesma: prefixo do MODULO, nao da tabela.
+const TABELAS_BLOQUEADAS = /^(perm_|modelos_permissoes$|usuarios$|prospeccoes$|prospeccao_|ia_)/i;
 
 app.get('/api/:table', async (req, res) => {
   const { table } = req.params;

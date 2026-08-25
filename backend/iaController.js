@@ -27,7 +27,7 @@
 const express = require('express');
 const multer = require('multer');
 const { createApiClient } = require('./apiHttpClient');
-const { exigirPermissao, obterPermissoesEfetivas } = require('./permissionsController');
+const { exigirPermissao, exigirSupAdmin, ehSupAdmin, obterPermissoesEfetivas } = require('./permissionsController');
 const permissoesRepo = require('./permissionsRepository');
 const provedores = require('./iaProvedores');
 const leitura = require('./iaLeitura');
@@ -36,6 +36,7 @@ const estruturacao = require('./iaEstruturacao');
 const reconciliacao = require('./iaReconciliacao');
 const aplicacao = require('./iaAplicacao');
 const preenchimento = require('./iaPreenchimento');
+const configArmazenada = require('./iaConfiguracao');
 
 const router = express.Router();
 
@@ -306,11 +307,70 @@ function responder(res, err, contexto) {
 // caracteres, para o usuário conferir que colou a chave certa.
 // ---------------------------------------------------------------------------
 
-router.get('/config/estado', exigirPermissao('ia.config'), (req, res) => {
+router.get('/config/estado', exigirPermissao('ia.config'), async (req, res) => {
   try {
-    res.json(provedores.configuracao());
+    // A configuração vem do banco antes de responder: o cache pode estar
+    // vencido, e mostrar o valor de antes na tela de configuração é o pior
+    // lugar possível para mostrar um valor de antes.
+    const api = createApiClient(req);
+    await configArmazenada.carregar(api);
+    res.json({
+      ...provedores.configuracao(),
+      ultimo_uso: await ultimoConsumo(api),
+      // Quem NÃO é Sup Admin vê tudo e não muda nada. Ver ajuda a entender por
+      // que uma leitura saiu como saiu; mudar o modelo altera o resultado, o
+      // custo e o limite de todo mundo.
+      pode_editar: await ehSupAdmin(req)
+    });
   } catch (err) {
     responder(res, err, 'GET /api/ia/config/estado');
+  }
+});
+
+/**
+ * Quanto de contexto a leitura mais recente gastou.
+ *
+ * "Cabe neste modelo?" é a pergunta que decide trocar de modelo ou dividir o
+ * documento. Contra o tamanho de contexto que a tela já mostra ao lado de cada
+ * modelo, este número responde — e é a leitura mais recente porque é ela que a
+ * pessoa acabou de fazer e está tentando entender.
+ *
+ * Um total acumulado do mês não responderia nada: ele mistura documentos de
+ * tamanhos diferentes e não diz se ALGUM deles chegou perto do teto.
+ */
+async function ultimoConsumo(api) {
+  const leituras = await api.get('/api/ia_extracoes').then(listaDe).catch(() => []);
+  const comUso = leituras.filter(l => Number(l.tokens_entrada) > 0);
+  if (!comUso.length) return null;
+
+  const recente = ordenarPorRecente(comUso)[0];
+  return {
+    titulo: recente.titulo || `Leitura #${recente.id}`,
+    modelo: recente.modelo_llm || null,
+    entrada: Number(recente.tokens_entrada) || 0,
+    saida: Number(recente.tokens_saida) || 0
+  };
+}
+
+/**
+ * Grava a configuração. Restrito ao Sup Admin.
+ *
+ * Sem permissão própria de propósito: uma permissão que se pode conceder seria
+ * exatamente o que se quer evitar aqui.
+ */
+router.put('/config', exigirSupAdmin, async (req, res) => {
+  try {
+    const api = createApiClient(req);
+    const { valores, erros } = configArmazenada.validar(req.body || {});
+    if (erros.length) throw erro(400, erros.join(' | '));
+    if (!Object.keys(valores).length) throw erro(400, 'Nada para salvar.');
+
+    await configArmazenada.gravar(api, valores, usuarioDaRequisicao(req));
+    await configArmazenada.carregar(api);
+
+    res.json({ ...provedores.configuracao(), pode_editar: true });
+  } catch (err) {
+    responder(res, err, 'PUT /api/ia/config');
   }
 });
 
@@ -588,6 +648,16 @@ router.get('/:id', exigirPermissao('ia.details.view'), async (req, res) => {
       ? await alvosDoDestino(api, extracao.destino)
       : [];
 
+    // O catálogo de matéria-prima, para dizer na grade como cada insumo casou.
+    // Vem aqui e não na hora de abrir o formulário porque a tela precisa
+    // MOSTRAR o resultado do casamento antes de qualquer clique: é olhando
+    // para a lista que a pessoa descobre que "Couro Serpente Amêndoa" não
+    // existe no estoque, e não depois de abrir o formulário e ver que ele não
+    // veio.
+    const materias = extracao.destino === 'produto_insumos'
+      ? await api.get('/api/materia_prima').then(listaDe).catch(() => [])
+      : [];
+
     res.json({
       ...extracao,
       // A grade de revisão é montada a partir DAQUI, não de colunas escritas
@@ -631,7 +701,7 @@ router.get('/:id', exigirPermissao('ia.details.view'), async (req, res) => {
           return {
             id: i.id,
             linha: Number(i.linha) || 0,
-            dados: valor,
+            dados: anotarCasamento(extracao.destino, valor, materias),
             dados_corrompidos: !ok,
             acao: i.acao || 'criar',
             alvo_tabela: i.alvo_tabela || null,
@@ -646,6 +716,44 @@ router.get('/:id', exigirPermissao('ia.details.view'), async (req, res) => {
     responder(res, err, 'GET /api/ia/:id');
   }
 });
+
+/**
+ * Anota, em cada insumo da ficha, COMO ele casou com o cadastro.
+ *
+ * Três desfechos, e a tela desenha os três de forma diferente:
+ *
+ *   exato ......... o nome bate letra por letra. Nada a dizer.
+ *   semelhante .... casou com outro nome. A tela mostra o nome LIDO com um
+ *                   (i) que revela para qual cadastro ele foi — porque é um
+ *                   palpite bom, não uma certeza, e quem confere precisa poder
+ *                   pegar o palpite errado.
+ *   null .......... não existe no estoque. A linha inteira fica vermelha: ela
+ *                   NÃO vai para o formulário, e descobrir isso depois de
+ *                   salvar é descobrir tarde demais.
+ *
+ * As anotações vão com `_` na frente porque não são dados lidos do documento:
+ * são o resultado de uma conta feita agora, contra o estoque de agora. Elas
+ * não são gravadas em lugar nenhum e se refazem a cada abertura — que é o que
+ * mantém a tela certa depois de alguém cadastrar o insumo que faltava.
+ */
+function anotarCasamento(destino, dados, materias) {
+  if (destino !== 'produto_insumos' || !Array.isArray(dados?.insumos)) return dados;
+
+  const porNome = preenchimento.indexarPor(materias, 'nome');
+  return {
+    ...dados,
+    insumos: dados.insumos.map(linha => {
+      const nome = String(linha?.nome ?? '').trim();
+      if (!nome) return linha;
+      const { registro, tipo } = preenchimento.casarInsumo(nome, porNome, materias);
+      return {
+        ...linha,
+        _casamento: tipo,
+        _cadastro: registro ? registro.nome : null
+      };
+    })
+  };
+}
 
 /** Texto que a IA leu de um arquivo. Separado do detalhe por ser grande. */
 router.get('/:id/arquivos/:arquivoId/texto', exigirPermissao('ia.details.view'), async (req, res) => {
@@ -768,6 +876,9 @@ router.post('/:id/estruturar', exigirPermissao('ia.extract'), async (req, res) =
   try {
     if (!Number.isFinite(id)) throw erro(400, 'Leitura inválida');
 
+    // Modelo e limites podem ter mudado na tela desde a última leitura.
+    await configArmazenada.carregar(api);
+
     const extracao = await buscarExtracao(api, id);
     if (extracao.status === 'aplicada') {
       throw erro(409, 'Esta leitura já foi aplicada. Extrair de novo não mudaria o que já entrou no sistema.');
@@ -815,6 +926,11 @@ router.post('/:id/estruturar', exigirPermissao('ia.extract'), async (req, res) =
       status: total ? 'revisao' : 'erro',
       itens_qtd: total,
       modelo_llm: extraidos.modelo,
+      // Guardado por leitura, e não somado num contador global: "esta planilha
+      // gastou 40 mil dos 131 mil que o modelo aguenta" diz o que fazer; um
+      // total acumulado do mês não diz nada.
+      tokens_entrada: extraidos.tokens_entrada ?? null,
+      tokens_saida: extraidos.tokens_saida ?? null,
       erro: total
         ? (avisos.join(' | ').slice(0, 1000) || null)
         : 'A IA não encontrou nenhum item neste documento.'

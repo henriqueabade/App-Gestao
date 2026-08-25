@@ -38,20 +38,40 @@ const GROQ_BASE = (process.env.GROQ_API_BASE || 'https://api.groq.com/openai/v1'
  * chamada. Por isso a tela de configuração LISTA os modelos da conta — o
  * usuário confere e ajusta o .env com o que ele realmente tem.
  */
+const configArmazenada = require('./iaConfiguracao');
+
 const PADROES = {
   geminiModelo: 'gemini-2.5-flash',
   groqModelo: 'llama-3.3-70b-versatile'
 };
 
+/**
+ * Três camadas, nesta ordem: o que foi configurado na TELA, o que a instalação
+ * pôs no .env, e o padrão do programa.
+ *
+ * A ordem é o que permite a configuração no banco existir sem mudar nada em
+ * quem nunca a usou: sem linha gravada, tudo continua como estava.
+ */
+const escolher = (chave, variavel, padrao) => {
+  const daTela = configArmazenada.configurado(chave);
+  if (daTela !== null && daTela !== undefined && daTela !== '') return daTela;
+  const doEnv = process.env[variavel];
+  if (doEnv !== undefined && String(doEnv).trim() !== '') {
+    const n = Number(doEnv);
+    return typeof padrao === 'number' ? (Number.isFinite(n) && n > 0 ? n : padrao) : String(doEnv).trim();
+  }
+  return padrao;
+};
+
 const LIMITES = {
   // 10 MB e não 15: o arquivo viaja em base64 dentro do JSON, o que infla o
   // corpo em ~33%, e a requisição inline do Gemini é recusada perto de 20 MB.
-  arquivoMb: () => Number(process.env.IA_MAX_ARQUIVO_MB) || 10,
-  arquivos: () => Number(process.env.IA_MAX_ARQUIVOS) || 10,
-  timeoutMs: () => Number(process.env.IA_TIMEOUT_MS) || 120000,
+  arquivoMb: () => escolher('arquivo_mb', 'IA_MAX_ARQUIVO_MB', 10),
+  arquivos: () => escolher('arquivos', 'IA_MAX_ARQUIVOS', 10),
+  timeoutMs: () => escolher('timeout_ms', 'IA_TIMEOUT_MS', 120000),
   // O texto lido é gravado em ia_extracao_arquivos.texto e trafega pela API
   // externa, que recusa corpo grande. O corte acontece antes de gravar.
-  textoMaxChars: () => Number(process.env.IA_TEXTO_MAX_CHARS) || 120000
+  textoMaxChars: () => escolher('texto_max_chars', 'IA_TEXTO_MAX_CHARS', 120000)
 };
 
 // ---------------------------------------------------------------------------
@@ -149,8 +169,8 @@ async function pedir(url, opcoes = {}, provedor = 'IA') {
 const chaveGemini = () => String(process.env.GEMINI_API_KEY || '').trim();
 const chaveGroq = () => String(process.env.GROQ_API_KEY || '').trim();
 
-const modeloGemini = () => String(process.env.GEMINI_MODEL || '').trim() || PADROES.geminiModelo;
-const modeloGroq = () => String(process.env.GROQ_MODEL || '').trim() || PADROES.groqModelo;
+const modeloGemini = () => escolher('gemini_modelo', 'GEMINI_MODEL', PADROES.geminiModelo);
+const modeloGroq = () => escolher('groq_modelo', 'GROQ_MODEL', PADROES.groqModelo);
 
 /** Só o suficiente para conferir que é a chave certa. Nunca a chave. */
 function mascarar(chave) {
@@ -163,6 +183,25 @@ function mascarar(chave) {
  * Estado do que está no .env. Não chama provedor nenhum: é a resposta da
  * pergunta "eu preenchi tudo?", que precisa funcionar mesmo sem internet.
  */
+/** Nome da variável de ambiente equivalente a cada configuração. */
+const VARIAVEL = {
+  gemini_modelo: 'GEMINI_MODEL',
+  groq_modelo: 'GROQ_MODEL',
+  arquivo_mb: 'IA_MAX_ARQUIVO_MB',
+  arquivos: 'IA_MAX_ARQUIVOS',
+  timeout_ms: 'IA_TIMEOUT_MS',
+  texto_max_chars: 'IA_TEXTO_MAX_CHARS',
+  max_itens: 'IA_MAX_ITENS',
+  max_saida_tokens: 'IA_MAX_SAIDA_TOKENS'
+};
+
+/** `tela`, `env` ou `padrao` — de onde veio o valor que está valendo. */
+function origemDe(chave, variavel) {
+  if (configArmazenada.configurado(chave) !== null) return 'tela';
+  if (variavel && String(process.env[variavel] || '').trim()) return 'env';
+  return 'padrao';
+}
+
 function configuracao() {
   const gemini = chaveGemini();
   const groq = chaveGroq();
@@ -175,7 +214,11 @@ function configuracao() {
       chave_mascarada: mascarar(gemini),
       modelo: modeloGemini(),
       modelo_padrao: PADROES.geminiModelo,
-      modelo_do_env: Boolean(String(process.env.GEMINI_MODEL || '').trim())
+      modelo_do_env: Boolean(String(process.env.GEMINI_MODEL || '').trim()),
+      // De onde veio o valor que está valendo. A tela mostra isso porque
+      // "por que este modelo?" é a primeira pergunta de quem abre a
+      // configuração e vê algo diferente do que esperava.
+      modelo_origem: origemDe('gemini_modelo', 'GEMINI_MODEL')
     },
     groq: {
       papel: 'Transformar o texto lido em dados',
@@ -185,14 +228,22 @@ function configuracao() {
       chave_mascarada: mascarar(groq),
       modelo: modeloGroq(),
       modelo_padrao: PADROES.groqModelo,
-      modelo_do_env: Boolean(String(process.env.GROQ_MODEL || '').trim())
+      modelo_do_env: Boolean(String(process.env.GROQ_MODEL || '').trim()),
+      modelo_origem: origemDe('groq_modelo', 'GROQ_MODEL')
     },
     limites: {
       arquivo_mb: LIMITES.arquivoMb(),
       arquivos: LIMITES.arquivos(),
+      timeout_ms: LIMITES.timeoutMs(),
       timeout_s: Math.round(LIMITES.timeoutMs() / 1000),
-      texto_max_chars: LIMITES.textoMaxChars()
+      texto_max_chars: LIMITES.textoMaxChars(),
+      max_itens: escolher('max_itens', 'IA_MAX_ITENS', 300),
+      max_saida_tokens: escolher('max_saida_tokens', 'IA_MAX_SAIDA_TOKENS', 8000)
     },
+    // O que a tela precisa para desenhar os campos: faixa aceita e o motivo de
+    // cada teto, para o aviso sair explicado em vez de "valor inválido".
+    campos: configArmazenada.CAMPOS,
+    origens: Object.fromEntries(Object.keys(configArmazenada.CAMPOS).map(c => [c, origemDe(c, VARIAVEL[c])])),
     pronto: Boolean(gemini && groq)
   };
 }
@@ -399,6 +450,7 @@ module.exports = {
   mascarar,
   modeloGemini,
   modeloGroq,
+  origemDe,
   chaveGemini,
   chaveGroq,
   GEMINI_BASE,

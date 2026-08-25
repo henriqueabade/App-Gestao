@@ -35,7 +35,8 @@
 // A perda precisa doer na hora certa: antes de salvar, na tela, com o nome do
 // que faltou escrito.
 
-const { normalizar } = require('./iaReconciliacao');
+const { normalizar, palavras, LIMIAR_PARECIDO } = require('./iaReconciliacao');
+const { paraDecimal } = require('./numeros');
 const esquemas = require('./iaEsquemas');
 
 /** Modal de destino de cada leitura. */
@@ -109,6 +110,79 @@ function indexarPor(registros, campo) {
 }
 
 /**
+ * Casa um insumo lido com o cadastro de matéria-prima.
+ *
+ * ---------------------------------------------------------------------------
+ * POR QUE NÃO BASTA O NOME EXATO
+ *
+ * Uma ficha técnica é escrita por quem faz a peça, não por quem cadastrou o
+ * insumo. "Verniz FO10 - 6717 Em Lamina De Madeira" no papel é "Verniz FO10
+ * 6717" no estoque; "Caixa Nº6" é "Caixa N6". São o mesmo material, e exigir
+ * que as duas grafias batam letra por letra fazia metade da ficha ficar de
+ * fora — foi o que aconteceu com a Bandeja Vero PP: 23 insumos na lista, 6
+ * chegando ao formulário.
+ *
+ * Então: nome exato primeiro; se não houver, o mais parecido acima do limiar.
+ *
+ * ---------------------------------------------------------------------------
+ * O CASAMENTO POR SEMELHANÇA É ANUNCIADO
+ *
+ * `tipo` distingue os dois, e a distinção não é acadêmica: um casamento exato
+ * é certeza, um casamento por semelhança é um palpite bom. A tela mostra o
+ * nome LIDO com um (i) que revela para qual cadastro ele foi, e é isso que
+ * permite a quem confere pegar o palpite errado antes de virar receita.
+ */
+function casarInsumo(nome, porNome, registros) {
+  const exato = porNome.get(normalizar(nome));
+  if (exato) return { registro: exato, tipo: 'exato' };
+
+  let melhor = null;
+  let nota = 0;
+  for (const r of registros) {
+    const n = proximidadeDeInsumo(nome, r && r.nome);
+    if (n > nota) { nota = n; melhor = r; }
+  }
+
+  if (melhor && nota >= LIMIAR_PARECIDO) return { registro: melhor, tipo: 'semelhante', nota };
+  return { registro: null, tipo: null };
+}
+
+/**
+ * Proximidade entre um nome de ficha e um nome de cadastro.
+ *
+ * O Jaccard que a reconciliação usa não serve aqui, e o motivo é a forma como
+ * uma ficha técnica é escrita: ela QUALIFICA o material. O cadastro diz
+ * "Verniz FO10 6717" e a ficha diz "Verniz FO10 - 6717 Em Lamina De Madeira" —
+ * o nome do cadastro inteiro está lá dentro, mais quatro palavras de contexto.
+ * Jaccard conta essas quatro contra o casamento (3 de 7 palavras = 0,43) e
+ * conclui que são coisas diferentes.
+ *
+ * A medida certa para "um nome contém o outro" é a CONTENÇÃO: quanto do menor
+ * dos dois aparece no maior. Ali dá 3 de 3.
+ *
+ * A contenção sozinha, porém, casa demais: "Cola" está inteiramente dentro de
+ * "Cola PVA extra 1kg" e de "Cola Fórmica" ao mesmo tempo. Por isso ela só
+ * vale a partir de DUAS palavras em comum — abaixo disso, decide o Jaccard,
+ * que é conservador. É o que mantém "MDF 06" e "MDF 09" como materiais
+ * diferentes, que é o que eles são.
+ */
+function proximidadeDeInsumo(lido, cadastrado) {
+  const a = palavras(lido);
+  const b = palavras(cadastrado);
+  if (!a.size || !b.size) return 0;
+
+  let comuns = 0;
+  for (const p of a) if (b.has(p)) comuns += 1;
+  if (!comuns) return 0;
+
+  const jaccard = comuns / (a.size + b.size - comuns);
+  if (comuns < 2) return jaccard;
+
+  const contencao = comuns / Math.min(a.size, b.size);
+  return Math.max(jaccard, contencao);
+}
+
+/**
  * Insumos de uma ficha técnica, prontos para a tabela do formulário de produto.
  *
  * Três coisas que a ficha tem, o formulário precisa, e que se perdiam:
@@ -127,18 +201,20 @@ function indexarPor(registros, campo) {
  *               diverge da cadastrada: ali a divergência é erro de custo, não
  *               diferença de escrita.
  */
-function montarInsumos(linhas, porNome) {
+function montarInsumos(linhas, porNome, registros = []) {
   const itens = [];
   const semCadastro = [];
   const unidadeDiferente = [];
+  const porSemelhanca = [];
   let ordem = 0;
 
   for (const linha of linhas) {
     const nome = texto(linha && linha.nome).trim();
     if (!nome) continue;
 
-    const insumo = porNome.get(normalizar(nome));
+    const { registro: insumo, tipo } = casarInsumo(nome, porNome, registros);
     if (!insumo) { semCadastro.push(nome); continue; }
+    if (tipo === 'semelhante') porSemelhanca.push(`"${nome}" entrou como "${insumo.nome}"`);
 
     const quantidade = Number(linha.quantidade);
     if (!Number.isFinite(quantidade) || quantidade <= 0) {
@@ -165,7 +241,7 @@ function montarInsumos(linhas, porNome) {
     });
   }
 
-  return { itens, semCadastro, unidadeDiferente };
+  return { itens, semCadastro, unidadeDiferente, porSemelhanca };
 }
 
 /** Itens de um pedido, casados com o catálogo de produtos. */
@@ -219,6 +295,166 @@ function montarContatos(linhas) {
     }));
 }
 
+
+// ---------------------------------------------------------------------------
+// O BLOCO COMERCIAL DO PEDIDO
+//
+// Um pedido de verdade traz, no cabeçalho, tudo o que o formulário de orçamento
+// pergunta: quem é o contato, qual a transportadora, como se paga, em quantas
+// vezes e com que prazo. Estava tudo sendo lido e nada estava chegando ao
+// formulário — a pessoa relia o PDF e digitava de novo, que é exatamente o
+// trabalho que este módulo existe para tirar da frente.
+//
+// O que o documento diz e o que o formulário quer não têm a mesma forma:
+//
+//   "pix"                          -> a opção `pix` do <select>
+//   "Quantidade de Parcelas: 3"    -> `count: 3`
+//   "Prazo: 30/60/90"              -> vencimentos em 30, 60 e 90 dias
+//   "R$61,62/R$1.661,62/R$861,62"  -> três valores DIFERENTES, em centavos
+//
+// A conversão mora aqui, e não na tela, porque é regra de negócio com casos
+// tortos de verdade: uma parcela só, valores iguais, prazo escrito por extenso.
+// ---------------------------------------------------------------------------
+
+/** As opções que o <select> de forma de pagamento realmente tem. */
+const FORMAS_DE_PAGAMENTO = [
+  { valor: 'pix', termos: ['pix'] },
+  { valor: 'boleto', termos: ['boleto', 'bancario', 'duplicata'] },
+  { valor: 'cartao', termos: ['cartao', 'credito', 'card'] }
+];
+
+/**
+ * A forma de pagamento lida, traduzida para uma opção que existe no select.
+ *
+ * Devolver o texto cru não adiantaria: um `<select>` que recebe um valor
+ * inexistente não reclama, fica vazio — e o pedido sai sem forma de pagamento
+ * sem ninguém notar.
+ */
+function formaDePagamento(lido) {
+  const chave = normalizar(lido);
+  if (!chave) return null;
+  const achado = FORMAS_DE_PAGAMENTO.find(f => f.termos.some(t => chave.includes(t)));
+  return achado ? achado.valor : null;
+}
+
+/**
+ * Números de uma lista escrita com barra, ponto e vírgula ou "e".
+ *
+ * O "3x" que costuma abrir a frase é CONTAGEM, não valor. Sem tirá-lo antes de
+ * partir, ele gruda no primeiro número — "3x R$61,62" vira 361,62 — e a
+ * primeira parcela sai com um valor que parece plausível, que é a pior forma
+ * de errar.
+ */
+function numerosDe(texto_) {
+  return texto(texto_)
+    .replace(/^\s*\d+\s*x\s*/i, '')
+    .split(/[/;|]| e |,\s*(?=R?\$)/i)
+    .map(p => paraDecimal(p.replace(/[^\d.,-]/g, '')))
+    .filter(n => Number.isFinite(n) && n > 0);
+}
+
+/** Dias de vencimento de um prazo escrito como "30/60/90" ou "30 dias". */
+function diasDe(prazo) {
+  return texto(prazo)
+    .split(/[/;|]| e /i)
+    .map(p => {
+      const n = /(\d+)/.exec(p);
+      return n ? Number(n[1]) : null;
+    })
+    .filter(n => Number.isFinite(n) && n > 0);
+}
+
+/**
+ * O bloco de pagamento, na forma que o formulário de orçamento repõe.
+ *
+ * `condicao` é deduzida quando o documento não diz com todas as letras: mais de
+ * uma parcela é a prazo. Deduzir aqui é seguro porque a pessoa vê o resultado
+ * no formulário antes de salvar; deixar em branco obrigaria a preencher à mão
+ * justamente o campo que decide o resto do bloco.
+ */
+function interpretarPagamento(dados) {
+  const forma = formaDePagamento(dados.forma_pagamento);
+  const valores = numerosDe(dados.parcelas);
+  const dias = diasDe(dados.prazo);
+
+  const declarada = normalizar(dados.condicao_pagamento);
+  const aVista = declarada.includes('vista')
+    || (!declarada && valores.length <= 1 && dias.length <= 1);
+
+  if (aVista) {
+    return {
+      forma,
+      condicao: 'vista',
+      // O prazo de uma venda à vista é o prazo de ENTREGA, e é isso que o
+      // campo do formulário pede.
+      prazo_vista: texto(dados.prazo).trim() || null,
+      parcelas: null
+    };
+  }
+
+  const quantidade = Math.max(valores.length, dias.length);
+  if (!quantidade) return { forma, condicao: 'prazo', prazo_vista: null, parcelas: null };
+
+  const itens = [];
+  for (let i = 0; i < quantidade; i++) {
+    itens.push({
+      // Centavos, que é a unidade em que o parcelamento trabalha. Trabalhar em
+      // reais com casas decimais espalharia erro de arredondamento por cada
+      // parcela até a soma não fechar com o total.
+      amount: Number.isFinite(valores[i]) ? Math.round(valores[i] * 100) : 0,
+      dueInDays: Number.isFinite(dias[i]) ? dias[i] : (i + 1) * 30
+    });
+  }
+
+  // Valores diferentes entre si é o caso comum num pedido de verdade — e o
+  // formulário só respeita valor a valor no modo "diferentes".
+  const todosIguais = itens.every(i => i.amount === itens[0].amount);
+
+  return {
+    forma,
+    condicao: 'prazo',
+    prazo_vista: null,
+    parcelas: {
+      count: quantidade,
+      mode: todosIguais ? 'equal' : 'custom',
+      items: itens
+    }
+  };
+}
+
+/**
+ * O contato e a transportadora do pedido, casados com o cadastro do cliente.
+ *
+ * Os dois são <select> alimentados a partir do cliente escolhido: o formulário
+ * quer o id, e o documento traz o nome. Sem casar aqui, "Contato: Lílian" e
+ * "Transportadora: Rodonaves" chegariam como texto que o select ignora.
+ */
+async function vincularAoCliente(api, alvo, dados) {
+  const saida = { contato: null, transportadora: null, avisos: [] };
+  if (!alvo || alvo.tabela !== 'clientes') return saida;
+
+  const nomeContato = texto(dados.contato).trim();
+  if (nomeContato) {
+    const contatos = await api.get('/api/contatos_cliente', { query: { id_cliente: alvo.id } })
+      .then(lista).catch(() => []);
+    const achado = indexarPor(contatos, 'nome').get(normalizar(nomeContato));
+    if (achado) saida.contato = { id: Number(achado.id), nome: achado.nome };
+    else saida.avisos.push(`Contato "${nomeContato}" não está no cadastro deste cliente`);
+  }
+
+  const nomeTransp = texto(dados.transportadora).trim();
+  if (nomeTransp) {
+    const transportadoras = await api.get('/api/transportadoras', { query: { id_cliente: alvo.id } })
+      .then(lista).catch(() => []);
+    // A coluna chama `transportadora`, não `nome` — é o nome dela na tabela.
+    const achado = indexarPor(transportadoras, 'transportadora').get(normalizar(nomeTransp));
+    if (achado) saida.transportadora = { id: Number(achado.id), nome: achado.transportadora };
+    else saida.avisos.push(`Transportadora "${nomeTransp}" não está cadastrada para este cliente`);
+  }
+
+  return saida;
+}
+
 /**
  * Monta a carga de preenchimento de UM item.
  *
@@ -262,10 +498,15 @@ async function montarPreenchimento({ api, destino, item }) {
 
   if (destino === 'produto_insumos') {
     const materias = await api.get('/api/materia_prima').then(lista).catch(() => []);
-    const r = montarInsumos(lista(dados.insumos), indexarPor(materias, 'nome'));
+    const r = montarInsumos(lista(dados.insumos), indexarPor(materias, 'nome'), materias);
     saida.insumos = r.itens;
     if (r.semCadastro.length) {
       avisos.push(`Fora da lista, por não estarem em Matéria-prima: ${r.semCadastro.join(', ')}`);
+    }
+    // Casamento por semelhança é palpite bom, não certeza. Dizer qual virou
+    // qual é o que permite pegar o palpite errado antes de virar receita.
+    if (r.porSemelhanca.length) {
+      avisos.push(`Casados por semelhança: ${r.porSemelhanca.join('; ')}`);
     }
     for (const d of r.unidadeDiferente) avisos.push(`Unidade diferente — ${d}`);
     if (!r.itens.length) avisos.push('Nenhum insumo desta ficha está cadastrado em Matéria-prima.');
@@ -300,12 +541,27 @@ async function montarPreenchimento({ api, destino, item }) {
     }
   }
 
+  // O bloco comercial depende do cliente já resolvido: contato e
+  // transportadora são listas DAQUELE cliente.
+  if (destino === 'orcamentos') {
+    saida.pagamento = interpretarPagamento(dados);
+    const vinculos = await vincularAoCliente(api, saida.alvo, dados);
+    saida.contato = vinculos.contato;
+    saida.transportadora = vinculos.transportadora;
+    avisos.push(...vinculos.avisos);
+  }
+
   return saida;
 }
 
 module.exports = {
   MODAIS,
   ESTADOS,
+  casarInsumo,
+  proximidadeDeInsumo,
+  interpretarPagamento,
+  formaDePagamento,
+  vincularAoCliente,
   montarPreenchimento,
   montarInsumos,
   montarItensDeOrcamento,

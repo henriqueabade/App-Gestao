@@ -81,6 +81,21 @@
 // markup. Cadastrar produto a partir dela produziria uma ficha pela metade, com
 // preço zero, no meio do catálogo.
 
+// ---------------------------------------------------------------------------
+// O QUE É COLUNA E O QUE É DETALHE
+//
+// `naGrade: false` num campo diz que ele NÃO vira coluna da grade de revisão:
+// ele aparece no (i) da linha, onde continua editável.
+//
+// A distinção é de leitura, não de importância. A grade responde "esta linha
+// está certa?" de relance — e para isso serve o punhado de campos que
+// identificam a linha e mostram o que ela vale. O resto (forma de pagamento,
+// observações, transportadora, validade) é conferido uma vez, quando se olha
+// para aquela linha específica; ocupando coluna, ele espremia as outras a
+// ponto de nenhuma poder ser lida.
+//
+// ---------------------------------------------------------------------------
+
 /** Só os dígitos: CNPJ com e sem pontuação é o mesmo CNPJ. */
 const soDigitos = valor => String(valor ?? '').replace(/\D/g, '');
 
@@ -414,7 +429,18 @@ const ESQUEMAS = {
       '- "valor_unitario" é o preço de UMA unidade. Se só houver o total da linha, divida pela quantidade.',
       '- Se o documento não trouxer preço, deixe "valor_unitario" em null: o preço de tabela será usado.',
       '- Ignore linhas de subtotal, total geral, frete e imposto.',
-      '- "prazo" é o prazo de entrega, como está escrito ("30 dias", "à vista").'
+      '- "prazo" é o prazo de entrega, como está escrito ("30 dias", "30/60/90").',
+      '',
+      'O pedido traz, quase sempre, um bloco de dados comerciais no cabeçalho.',
+      'Nenhum deles é opcional quando está escrito:',
+      '- "contato" é a PESSOA do cliente citada no pedido ("Contato: Lílian").',
+      '  Não confunda com o nome da empresa nem com quem autorizou.',
+      '- "transportadora" é a empresa de frete ("Transportadora: Rodonaves").',
+      '- "forma_pagamento" é o meio ("pix", "boleto", "cartão").',
+      '- "condicao_pagamento" é "à vista" ou "a prazo". Quando o documento não',
+      '  disser com essas palavras, deduza: mais de uma parcela é a prazo.',
+      '- "parcelas" junta quantidade e valores como estão escritos —',
+      '  "3x R$61,62/R$1.661,62/R$861,62". Não some, não divida, não arredonde.'
     ].join('\n'),
 
     campos: [
@@ -424,16 +450,35 @@ const ESQUEMAS = {
       },
       {
         chave: 'razao_social', rotulo: 'Razão social', tipo: 'texto', max: 200, largura: 'media',
-        descricao: 'Razão social da empresa, se o documento trouxer as duas formas'
+        naGrade: false, descricao: 'Razão social da empresa, se o documento trouxer as duas formas'
       },
-      { chave: 'cnpj', rotulo: 'CNPJ', tipo: 'texto', max: 20, largura: 'media' },
+      { chave: 'cnpj', rotulo: 'CNPJ', tipo: 'texto', max: 20, largura: 'media', naGrade: false },
       {
-        chave: 'validade', rotulo: 'Validade', tipo: 'data', largura: 'media',
+        chave: 'validade', rotulo: 'Validade', tipo: 'data', largura: 'media', naGrade: false,
         descricao: 'Até quando a proposta vale, se o documento disser'
       },
-      { chave: 'prazo', rotulo: 'Prazo', tipo: 'texto', max: 60, largura: 'media', descricao: 'Prazo de entrega' },
-      { chave: 'forma_pagamento', rotulo: 'Pagamento', tipo: 'texto', max: 80, largura: 'media' },
-      { chave: 'observacoes', rotulo: 'Observações', tipo: 'texto', max: 500, largura: 'media' },
+      // Prazo fica na grade: é o que muda de pedido para pedido e o que se
+      // confere junto com o cliente. `largura: grande` para caber inteiro —
+      // "30/60/90" cortado em "30/6" não diz nada.
+      { chave: 'prazo', rotulo: 'Prazo', tipo: 'texto', max: 60, largura: 'grande', descricao: 'Prazo de entrega' },
+      { chave: 'forma_pagamento', rotulo: 'Pagamento', tipo: 'texto', max: 80, largura: 'media', naGrade: false },
+      {
+        chave: 'condicao_pagamento', rotulo: 'Condição', tipo: 'texto', max: 40, largura: 'media', naGrade: false,
+        descricao: 'À vista ou a prazo, como o documento disser'
+      },
+      {
+        chave: 'parcelas', rotulo: 'Parcelas', tipo: 'texto', max: 200, largura: 'media', naGrade: false,
+        descricao: 'Quantidade e valor de cada parcela, como está escrito'
+      },
+      {
+        chave: 'transportadora', rotulo: 'Transportadora', tipo: 'texto', max: 120, largura: 'media', naGrade: false,
+        descricao: 'Transportadora indicada no pedido'
+      },
+      {
+        chave: 'contato', rotulo: 'Contato', tipo: 'texto', max: 150, largura: 'media', naGrade: false,
+        descricao: 'Pessoa de contato do cliente citada no pedido'
+      },
+      { chave: 'observacoes', rotulo: 'Observações', tipo: 'texto', max: 500, largura: 'media', naGrade: false },
       {
         chave: 'itens', rotulo: 'Itens', tipo: 'lista', largura: 'media',
         obrigatorio: true, max_itens: 100,
@@ -516,6 +561,15 @@ function camposParaTela(destino) {
     tipo: c.tipo,
     obrigatorio: Boolean(c.obrigatorio),
     largura: c.largura || 'media',
+    // `naGrade: false` tira o campo das COLUNAS e o manda para o (i) da linha.
+    // Ele continua sendo extraído, continua editável e continua indo para o
+    // formulário — o que muda é só onde aparece.
+    //
+    // A grade é o que se lê de relance para decidir se a linha está certa.
+    // Um pedido tem quinze campos, e mostrar os quinze fazia cada coluna ficar
+    // com quatro caracteres de largura: a tabela mostrava tudo e não deixava
+    // ler nada.
+    naGrade: c.naGrade !== false,
     // A sub-tabela da grade é desenhada a partir daqui, pelo mesmo caminho
     // que desenha as colunas de cima.
     ...(c.tipo === 'lista' ? {

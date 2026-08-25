@@ -40,7 +40,7 @@
     </div>
 
     <!-- Corpo -->
-    <div class="modal-ia__corpo px-6 py-5">
+    <div class="modal-ia__corpo modal-scroll px-6 py-5">
 
       <!-- Itens -->
       <section data-painel-ia="itens">
@@ -80,12 +80,24 @@
 
     </div>
 
+    <!-- Os campos que não viraram coluna, editáveis no (i) de cada linha.
+         Um só elemento, reposicionado a cada abertura. -->
+    <div id="iaDetLinhaPopover" class="resumo-popover glass-surface rounded-xl p-4 text-white"></div>
+
     <!-- Rodapé -->
     <div class="modal-ia__rodape px-6 py-4 border-t border-white/10 flex items-center justify-between gap-4">
       <p id="iaDetRodapeAviso" class="text-xs text-white/45"></p>
       <div class="flex items-center gap-3 flex-shrink-0">
+        <!-- Vermelho como o "Cancelar" de todos os outros modais do programa. -->
         <button id="iaDetFechar" type="button"
-                class="btn-neutral text-white rounded-lg px-5 py-2 text-sm font-medium">Fechar</button>
+                class="btn-danger text-white rounded-lg px-5 py-2 text-sm font-medium">Fechar</button>
+        <!-- Descarta as linhas marcadas. Transparente porque é uma ação de
+             limpeza, não o caminho principal — e fica logo depois de Fechar,
+             onde a mão já está depois de percorrer a tabela marcando. -->
+        <button id="iaDetDescartar" type="button"
+                class="ia-btn-transparente rounded-lg px-5 py-2 text-sm font-medium hidden">
+          <i class="fas fa-ban mr-2"></i>Descartar selecionados
+        </button>
         <!-- Aparece com a leitura em "Texto lido": o texto está guardado, então
              extrair pode ser repetido sem reenviar arquivo nenhum. -->
         <button id="iaDetExtrair" type="button" data-perm="ia.extract"

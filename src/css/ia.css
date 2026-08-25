@@ -528,18 +528,36 @@ body {
    modal ficava do tamanho do conteúdo e escapava da tela em documento longo.
    A altura fica aqui, com o corpo rolando por dentro.
 */
+/* ---------------------------------------------------------------------------
+   TAMANHO FIXO, QUASE A TELA TODA
+   ---------------------------------------------------------------------------
+   Os modais deste módulo mostram TABELA: a grade de revisão tem uma coluna por
+   campo do destino, e a lista de insumos de uma ficha passa de vinte linhas.
+   Uma caixa que se ajusta ao conteúdo é o pior formato possível para isso —
+   ela muda de tamanho a cada leitura aberta, corta as colunas da direita, e
+   obriga a rolar na horizontal para ler uma linha inteira.
+   
+   Então o tamanho é FIXO e igual para todos: a caixa não depende do que tem
+   dentro, e abrir duas leituras seguidas não faz a tela pular. As margens são
+   proporcionais (vw/vh) para que a proporção se mantenha em qualquer monitor.
+   
+   O teto em pixels existe para telas muito largas, onde 92vw daria linhas de
+   texto longas demais para o olho acompanhar de uma ponta à outra.
+*/
 .modal-ia {
-    width: 100%;
-    max-width: 760px;
-    max-height: 88vh;
+    width: min(1600px, 92vw);
+    height: 90vh;
     display: flex;
     flex-direction: column;
 }
 
 /* `min-height: 0` é obrigatório: sem ele um filho flex se recusa a encolher e
-   a rolagem nunca aparece — a caixa é que cresce. */
+   a rolagem nunca aparece — a caixa é que cresce.
+   
+   A aparência da barra vem de `.modal-scroll` (src/styles/scroll.css), que é o
+   padrão do programa. Antes este módulo usava a barra crua do sistema, que
+   destoava de todos os outros modais. */
 .modal-ia__corpo {
-    overflow-y: auto;
     min-height: 0;
     flex: 1 1 auto;
 }
@@ -805,19 +823,38 @@ body {
    ------------------------------------------------------------------ */
 
 /*
-   A grade de revisão tem uma coluna por campo do destino — seis só para
-   matéria-prima, mais ação e situação. Nos 760px do modal padrão as células
-   ficariam ilegíveis.
+   Mantida como classe vazia: o tamanho agora é o mesmo para todos os modais
+   do módulo, e a distinção "largo" deixou de existir. O nome continua no HTML
+   sem efeito para não quebrar quem procure por ele.
 */
 .modal-ia--largo {
-    max-width: 1120px;
+    /* sem regra própria */
 }
 
 /* A grade rola por dentro, na horizontal, quando o destino tiver campos
-   demais para a largura da tela. */
+   demais para a largura da tela. A barra segue `.table-scroll`, como as
+   tabelas do resto do programa. */
 .ia-grade-revisao {
     overflow-x: auto;
     overflow-y: visible;
+}
+
+.ia-grade-revisao::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+
+.ia-grade-revisao::-webkit-scrollbar-track {
+    background: #1e1e1e00;
+}
+
+.ia-grade-revisao::-webkit-scrollbar-thumb {
+    background: #f0c94c;
+    border-radius: 4px;
+}
+
+.ia-grade-revisao::-webkit-scrollbar-thumb:hover {
+    background: #d0a42e;
 }
 
 .ia-grade-revisao table {
@@ -1108,4 +1145,235 @@ body {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+/* ---------------------------------------------------------------------------
+   Célula do título, com o (i) das colunas que saíram da tabela.
+   --------------------------------------------------------------------------- */
+.ia-titulo-celula {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* O (i) de linha é menor que o do resumo: ele se repete uma vez por leitura, e
+   no tamanho cheio competia com o próprio título pela atenção. */
+.ia-titulo-celula .info-icon {
+    width: 16px;
+    height: 16px;
+    font-size: 10px;
+}
+
+/* ---------------------------------------------------------------------------
+   ETAPA 10 — seleção de linha, detalhe no (i), copiar texto
+   --------------------------------------------------------------------------- */
+
+/* A coluna de seleção ocupa o mínimo: ela existe para ser clicada, não lida. */
+.ia-col-selecao {
+    width: 36px;
+    text-align: center;
+    padding-left: 8px !important;
+    padding-right: 4px !important;
+}
+
+.ia-selecao {
+    width: 15px;
+    height: 15px;
+    accent-color: var(--color-primary);
+    cursor: pointer;
+    vertical-align: middle;
+}
+
+/* Linha marcada precisa se distinguir sem competir com os estados que já
+   existem (descartada, com erro, aplicada) — daí o realce ser na borda
+   esquerda, que nenhum outro estado usa. */
+.ia-linha-item--marcada > td {
+    background: rgba(240, 201, 76, 0.07);
+}
+
+.ia-linha-item--marcada > td:first-child {
+    box-shadow: inset 3px 0 0 var(--color-primary);
+}
+
+/* O (i) e o primeiro campo dividem a mesma célula. */
+.ia-celula-com-info {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+}
+
+.ia-celula-com-info > .info-icon {
+    width: 16px;
+    height: 16px;
+    font-size: 10px;
+}
+
+.ia-celula-com-info > *:not(.info-icon) {
+    min-width: 0;
+    flex: 1 1 auto;
+}
+
+/* Uma linha do popover de detalhe: rótulo em cima, campo embaixo. Lado a lado
+   o campo ficaria estreito demais para textos como uma observação inteira. */
+.ia-detalhe-linha {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-bottom: 10px;
+    min-width: 260px;
+}
+
+.ia-detalhe-rotulo {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: rgba(255, 255, 255, 0.5);
+}
+
+/* O popover de detalhe é o único que aceita clique: os campos dentro dele são
+   editáveis, então ele não pode sumir quando o mouse sai do (i). */
+#iaDetLinhaPopover {
+    position: fixed;
+    max-width: 340px;
+    max-height: 60vh;
+    overflow-y: auto;
+}
+
+/* Botão de ação secundária: existe, mas não disputa com o caminho principal. */
+.ia-btn-transparente {
+    background: transparent;
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    color: rgba(255, 255, 255, 0.85);
+    transition: background 150ms ease, border-color 150ms ease;
+}
+
+.ia-btn-transparente:hover {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.45);
+}
+
+.ia-btn-copiar {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    background: rgba(255, 255, 255, 0.05);
+    color: rgba(255, 255, 255, 0.75);
+    font-size: 12px;
+    transition: all 150ms ease;
+}
+
+.ia-btn-copiar:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.12);
+    color: #fff;
+}
+
+.ia-btn-copiar:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+}
+
+/* Confirmação no próprio botão: é ali que o olho está no momento do clique. */
+.ia-btn-copiar--feito {
+    background: rgba(74, 222, 128, 0.2);
+    border-color: rgba(74, 222, 128, 0.5);
+    color: #4ade80;
+}
+
+/* Coluna calculada: alinhada à direita, como todo dinheiro na tabela. */
+.ia-valor-total {
+    text-align: right;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+}
+
+/* ---------------------------------------------------------------------------
+   ETAPA 12 — a sub-lista de insumos
+   ---------------------------------------------------------------------------
+   As três colunas curtas ganham largura fixa, em `ch`, que é a unidade da
+   largura de um caractere: "6 dígitos" vira literalmente 6ch e não um palpite
+   em pixels que muda com a fonte.
+   
+   O que sobra vai para o nome do insumo, que é a única coluna que precisa ser
+   lida inteira — "Diluente DF4068 Em Lamina De Madeira" cortado em "Diluente
+   DF4068 Em Lamina De Mad" não dá para conferir contra o papel. */
+
+.ia-sub-qtde {
+    width: 8ch;
+    max-width: 8ch;
+}
+
+.ia-sub-unidade {
+    width: 6ch;
+    max-width: 6ch;
+}
+
+.ia-sub-processo {
+    width: 14ch;
+    max-width: 14ch;
+}
+
+.ia-sub-qtde .ia-campo,
+.ia-sub-unidade .ia-campo,
+.ia-sub-processo .ia-campo {
+    width: 100%;
+    min-width: 0;
+}
+
+/* Insumo que não existe no estoque NÃO vai para o formulário. A linha inteira
+   em vermelho é o que faz isso ser notado aqui, onde ainda dá para cadastrar o
+   que falta — e não depois de salvar. */
+.ia-sublinha-item--sem-cadastro .ia-campo {
+    color: var(--color-red);
+    border-color: rgba(248, 113, 113, 0.35);
+}
+
+.ia-sublinha-item--sem-cadastro > td {
+    background: rgba(248, 113, 113, 0.06);
+}
+
+.ia-info-insumo {
+    width: 14px;
+    height: 14px;
+    font-size: 9px;
+}
+
+/* ---------------------------------------------------------------------------
+   ETAPA 13 — a configuração deixou de ser só leitura
+   --------------------------------------------------------------------------- */
+
+.ia-config-campo {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.ia-config-campo > span {
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.6);
+}
+
+/* Valor que vem do .env é marcado: quem edita precisa saber que está
+   sobrescrevendo uma escolha da instalação, não um padrão qualquer. */
+.ia-config-campo > span[data-origem="env"]::after {
+    content: ' · do .env';
+    color: rgba(240, 201, 76, 0.75);
+}
+
+.ia-config-campo .ia-campo:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+/* Modelo escolhível: o item da lista vira botão. */
+.ia-lista-modelos__item--escolhivel {
+    width: 100%;
+    text-align: left;
+    cursor: pointer;
+    transition: background 150ms ease;
+}
+
+.ia-lista-modelos__item--escolhivel:hover {
+    background: rgba(255, 255, 255, 0.08);
 }

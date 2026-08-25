@@ -30,7 +30,7 @@
     </div>
 
     <!-- Corpo -->
-    <div class="modal-ia__corpo px-6 py-5 space-y-5">
+    <div class="modal-ia__corpo modal-scroll px-6 py-5 space-y-5">
 
       <!-- Gemini: leitura -->
       <section class="ia-provedor" data-provedor="gemini">
@@ -110,43 +110,67 @@
           <i class="fas fa-gauge-high text-[var(--color-primary)]"></i>
           Limites de envio
         </h4>
-        <div class="grid grid-cols-2 gap-3 text-sm">
-          <div class="flex items-center justify-between gap-3">
-            <span class="text-white/60">Tamanho por arquivo</span>
-            <span class="text-white/85" id="iaLimiteArquivoMb">—</span>
-          </div>
-          <div class="flex items-center justify-between gap-3">
-            <span class="text-white/60">Arquivos por leitura</span>
-            <span class="text-white/85" id="iaLimiteArquivos">—</span>
-          </div>
-          <div class="flex items-center justify-between gap-3">
-            <span class="text-white/60">Tempo máximo</span>
-            <span class="text-white/85" id="iaLimiteTimeout">—</span>
-          </div>
-          <div class="flex items-center justify-between gap-3">
-            <span class="text-white/60">Texto guardado</span>
-            <span class="text-white/85" id="iaLimiteTexto">—</span>
-          </div>
+        <!-- Editáveis por quem pode. Cada campo carrega a faixa aceita e o
+             motivo do teto no `title`, para o aviso sair explicado em vez de
+             "valor inválido". -->
+        <div class="grid grid-cols-2 gap-4 text-sm">
+          <label class="ia-config-campo">
+            <span>Tamanho por arquivo (MB)</span>
+            <input type="number" id="iaLimiteArquivoMb" data-config="arquivo_mb" class="ia-campo">
+          </label>
+          <label class="ia-config-campo">
+            <span>Arquivos por leitura</span>
+            <input type="number" id="iaLimiteArquivos" data-config="arquivos" class="ia-campo">
+          </label>
+          <label class="ia-config-campo">
+            <span>Tempo máximo (ms)</span>
+            <input type="number" id="iaLimiteTimeout" data-config="timeout_ms" class="ia-campo">
+          </label>
+          <label class="ia-config-campo">
+            <span>Texto guardado (caracteres)</span>
+            <input type="number" id="iaLimiteTexto" data-config="texto_max_chars" class="ia-campo">
+          </label>
+          <label class="ia-config-campo">
+            <span>Itens por leitura</span>
+            <input type="number" id="iaLimiteItens" data-config="max_itens" class="ia-campo">
+          </label>
+          <label class="ia-config-campo">
+            <span>Teto da resposta (tokens)</span>
+            <input type="number" id="iaLimiteSaida" data-config="max_saida_tokens" class="ia-campo">
+          </label>
         </div>
         <p class="text-xs text-white/45 mt-3">
           Os arquivos são lidos na sua máquina, enviados ao provedor e descartados.
           Só o texto extraído fica guardado, para você poder conferir de onde cada dado veio.
         </p>
+        <p class="text-xs text-white/45 mt-1">
+          Deixe um campo em branco para voltar ao padrão do aplicativo.
+        </p>
+        <!-- Quanto a última leitura gastou, contra o contexto do modelo. É o
+             que responde "cabe neste modelo?" sem ter de tentar. -->
+        <p id="iaConfigConsumo" class="text-xs text-white/60 mt-3 pt-3 border-t border-white/10"></p>
       </section>
 
     </div>
 
     <!-- Rodapé -->
     <div class="modal-ia__rodape px-6 py-4 border-t border-white/10 flex items-center justify-between gap-4">
-      <p class="text-xs text-white/45">
-        Mudou o <span class="ia-chave-env">.env</span>? Feche e reabra o aplicativo para valer.
+      <p id="iaConfigRodapeAviso" class="text-xs text-white/45">
+        A credencial fica no <span class="ia-chave-env">.env</span>; o resto se configura aqui.
       </p>
       <div class="flex items-center gap-3">
         <button id="iaConfigFechar" type="button"
                 class="btn-neutral text-white rounded-lg px-5 py-2 text-sm font-medium">Fechar</button>
         <button id="iaConfigTestar" type="button" data-perm="ia.config"
-                class="btn-primary text-white rounded-lg px-5 py-2 text-sm font-medium">
+                class="btn-neutral text-white rounded-lg px-5 py-2 text-sm font-medium">
           <i class="fas fa-plug-circle-check mr-2"></i>Testar conexão
+        </button>
+        <!-- Só o Sup Admin vê este botão. Ver a configuração ajuda a entender
+             por que uma leitura saiu como saiu; MUDAR o modelo altera o
+             resultado, o custo e o limite de todo mundo. -->
+        <button id="iaConfigSalvar" type="button"
+                class="btn-success rounded-lg px-5 py-2 text-sm font-medium hidden">
+          <i class="fas fa-check mr-2"></i>Salvar
         </button>
       </div>
     </div>

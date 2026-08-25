@@ -25,8 +25,11 @@ const COLUNAS = {
   ia_extracoes: [
     'id', 'titulo', 'destino', 'status', 'modelo_ocr', 'modelo_llm',
     'arquivos_qtd', 'itens_qtd', 'aplicados_qtd', 'erro', 'usuario_id',
-    'criado_em', 'atualizado_em', 'aplicado_em'
+    'criado_em', 'atualizado_em', 'aplicado_em',
+    // sql/ia_configuracao.sql
+    'tokens_entrada', 'tokens_saida'
   ],
+  ia_configuracao: ['id', 'chave', 'valor', 'atualizado_em', 'atualizado_por'],
   ia_extracao_arquivos: [
     'id', 'extracao_id', 'nome_arquivo', 'tipo_mime', 'tamanho_bytes',
     'origem', 'paginas', 'texto', 'erro', 'criado_em'
@@ -244,6 +247,9 @@ function baseDados() {
     ],
     modelos_permissoes: [{ id: 10, nome: 'Vendedor' }],
     perm_ia: [],
+    // Vazia: sem linha gravada, tudo continua valendo pelo .env — que é
+    // exatamente o comportamento de uma instalação que acabou de rodar o SQL.
+    ia_configuracao: [],
     // Inseridas FORA de ordem cronológica de propósito.
     ia_extracoes: [
       {
@@ -4438,4 +4444,461 @@ test('montarContatos descarta o que não tem nome', () => {
   assert.strictEqual(r[1].principal, false);
   // Campo ausente vira string vazia, nunca "undefined" escrito na coluna.
   assert.strictEqual(r[1].email, '');
+});
+
+
+// ===========================================================================
+// ETAPA 11 — O BLOCO COMERCIAL DO PEDIDO
+//
+// Contato, transportadora, forma de pagamento, condição, prazo e parcelas.
+// Tudo isso estava escrito no PDF, tudo isso era lido, e nada disso chegava ao
+// formulário — a pessoa relia o documento e digitava de novo.
+// ===========================================================================
+
+test('o pedido a prazo vira parcelas com valor e vencimento', () => {
+  const { interpretarPagamento } = require('./iaPreenchimento');
+
+  // Exatamente como o pedido de verdade escreve.
+  const r = interpretarPagamento({
+    forma_pagamento: 'pix',
+    condicao_pagamento: null,
+    prazo: '30/60/90',
+    parcelas: '3x R$61,62/R$1.661,62/R$861,62'
+  });
+
+  assert.strictEqual(r.forma, 'pix');
+  assert.strictEqual(r.condicao, 'prazo');
+  assert.strictEqual(r.parcelas.count, 3);
+
+  // Valores DIFERENTES entre si: o formulário só respeita valor a valor no
+  // modo "diferentes". No modo "iguais" ele redistribuiria o total.
+  assert.strictEqual(r.parcelas.mode, 'custom');
+
+  // Centavos, que é a unidade do parcelamento. Em reais com casas decimais o
+  // arredondamento se espalha por cada parcela até a soma não fechar.
+  assert.deepStrictEqual(r.parcelas.items.map(i => i.amount), [6162, 166162, 86162]);
+  assert.deepStrictEqual(r.parcelas.items.map(i => i.dueInDays), [30, 60, 90]);
+});
+
+test('parcelas iguais entram no modo "iguais"', () => {
+  const { interpretarPagamento } = require('./iaPreenchimento');
+  const r = interpretarPagamento({
+    forma_pagamento: 'boleto', condicao_pagamento: 'a prazo',
+    prazo: '30/60', parcelas: 'R$500,00/R$500,00'
+  });
+  assert.strictEqual(r.parcelas.mode, 'equal');
+  assert.strictEqual(r.parcelas.count, 2);
+});
+
+test('sem prazo escrito, os vencimentos caem de 30 em 30 dias', () => {
+  const { interpretarPagamento } = require('./iaPreenchimento');
+  const r = interpretarPagamento({
+    forma_pagamento: null, condicao_pagamento: 'a prazo',
+    prazo: null, parcelas: 'R$100,00/R$200,00/R$300,00'
+  });
+  // Chutar 30/60/90 é o costume do mercado, e o usuário vê e corrige no
+  // formulário. Deixar em branco travaria o bloco de parcelamento inteiro.
+  assert.deepStrictEqual(r.parcelas.items.map(i => i.dueInDays), [30, 60, 90]);
+});
+
+test('venda à vista leva o prazo de ENTREGA, sem parcelas', () => {
+  const { interpretarPagamento } = require('./iaPreenchimento');
+  const r = interpretarPagamento({
+    forma_pagamento: 'pix', condicao_pagamento: 'à vista',
+    prazo: '15 dias', parcelas: null
+  });
+  assert.strictEqual(r.condicao, 'vista');
+  assert.strictEqual(r.prazo_vista, '15 dias');
+  assert.strictEqual(r.parcelas, null);
+});
+
+test('uma parcela só é à vista, mesmo sem o documento dizer', () => {
+  const { interpretarPagamento } = require('./iaPreenchimento');
+  const r = interpretarPagamento({
+    forma_pagamento: 'pix', condicao_pagamento: null, prazo: '30 dias', parcelas: 'R$500,00'
+  });
+  // Deduzir é seguro: a pessoa vê o resultado no formulário antes de salvar.
+  // Deixar em branco obrigaria a preencher à mão o campo que decide o resto.
+  assert.strictEqual(r.condicao, 'vista');
+});
+
+test('a forma de pagamento vira uma opção que o select tem', () => {
+  const { formaDePagamento } = require('./iaPreenchimento');
+
+  assert.strictEqual(formaDePagamento('pix'), 'pix');
+  assert.strictEqual(formaDePagamento('PIX'), 'pix');
+  assert.strictEqual(formaDePagamento('Boleto bancário'), 'boleto');
+  assert.strictEqual(formaDePagamento('Cartão de Crédito'), 'cartao');
+
+  // Um <select> que recebe valor inexistente não reclama: fica vazio, e o
+  // pedido sai sem forma de pagamento sem ninguém notar.
+  assert.strictEqual(formaDePagamento('permuta'), null);
+  assert.strictEqual(formaDePagamento(null), null);
+});
+
+test('contato e transportadora são casados com o cadastro do cliente', async () => {
+  const dados = baseOrcamento();
+  dados.contatos_cliente = [
+    { id: 7, id_cliente: 50, nome: 'Lílian' },
+    { id: 8, id_cliente: 50, nome: 'Marcos' }
+  ];
+  dados.transportadoras = [{ id: 3, id_cliente: 50, transportadora: 'Rodonaves' }];
+
+  const ctx = await prepararOrcamento({
+    itens: [{
+      cliente: 'Casa Vicenzo', razao_social: null, cnpj: null, validade: null,
+      prazo: '30/60/90', forma_pagamento: 'pix', condicao_pagamento: null,
+      parcelas: 'R$61,62/R$1.661,62/R$861,62', transportadora: 'Rodonaves',
+      contato: 'Lílian', observacoes: null,
+      itens: [{ codigo: 'P-100', nome: 'Painel Ripado 2,10', quantidade: '3', valor_unitario: null }]
+    }]
+  }, dados);
+  try {
+    const r = await carga(ctx, 5, itensDa(ctx, 5)[0].id);
+
+    // O formulário quer o ID; o documento traz o NOME. Sem casar aqui,
+    // "Contato: Lílian" chega como texto que o <select> ignora.
+    assert.strictEqual(r.contato.id, 7);
+    assert.strictEqual(r.transportadora.id, 3);
+    assert.strictEqual(r.pagamento.forma, 'pix');
+    assert.strictEqual(r.pagamento.condicao, 'prazo');
+    assert.strictEqual(r.pagamento.parcelas.count, 3);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('contato que não está no cadastro é dito, não inventado', async () => {
+  const dados = baseOrcamento();
+  dados.contatos_cliente = [{ id: 7, id_cliente: 50, nome: 'Lílian' }];
+  dados.transportadoras = [];
+
+  const ctx = await prepararOrcamento({
+    itens: [{
+      cliente: 'Casa Vicenzo', razao_social: null, cnpj: null, validade: null,
+      prazo: null, forma_pagamento: null, condicao_pagamento: null, parcelas: null,
+      transportadora: 'Braspress', contato: 'Roberta', observacoes: null,
+      itens: [{ codigo: 'P-100', nome: 'Painel Ripado 2,10', quantidade: '1', valor_unitario: null }]
+    }]
+  }, dados);
+  try {
+    const r = await carga(ctx, 5, itensDa(ctx, 5)[0].id);
+
+    assert.strictEqual(r.contato, null);
+    assert.strictEqual(r.transportadora, null);
+    // Escolher outro contato porque o nome é parecido colocaria o orçamento no
+    // nome da pessoa errada — o aviso manda cadastrar, que é o certo.
+    assert.ok(r.avisos.some(a => /Roberta/.test(a)), r.avisos.join(' | '));
+    assert.ok(r.avisos.some(a => /Braspress/.test(a)), r.avisos.join(' | '));
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+
+// ===========================================================================
+// ETAPA 12 — INSUMO CASADO POR SEMELHANÇA
+//
+// Uma ficha técnica é escrita por quem faz a peça, não por quem cadastrou o
+// insumo. "Verniz FO10 - 6717 Em Lamina De Madeira" no papel é "Verniz FO10
+// 6717" no estoque. Exigir que as duas grafias batam letra por letra fazia
+// metade da ficha ficar de fora — 23 insumos na lista, 6 no formulário.
+// ===========================================================================
+
+test('insumo com grafia diferente casa por semelhança', () => {
+  const { casarInsumo, indexarPor } = require('./iaPreenchimento');
+  const materias = [
+    { id: 70, nome: 'Verniz FO10 6717' },
+    { id: 71, nome: 'Cola PVA extra 1kg' }
+  ];
+  const porNome = indexarPor(materias, 'nome');
+
+  const igual = casarInsumo('Cola PVA extra 1kg', porNome, materias);
+  assert.strictEqual(igual.tipo, 'exato');
+  assert.strictEqual(igual.registro.id, 71);
+
+  const parecido = casarInsumo('Verniz FO10 - 6717 Em Lamina De Madeira', porNome, materias);
+  assert.strictEqual(parecido.tipo, 'semelhante');
+  assert.strictEqual(parecido.registro.id, 70);
+
+  // Longe demais continua sendo "não existe": casar qualquer coisa poria o
+  // material errado na receita, que é pior do que deixar de fora.
+  assert.strictEqual(casarInsumo('Bolinha de Silicone 08 mm', porNome, materias).tipo, null);
+});
+
+test('a ficha diz, por insumo, como cada um casou', async () => {
+  const ctx = await prepararFicha({
+    itens: [{
+      codigo: 'PR-210', nome: 'Painel Ripado 2,10',
+      insumos: [
+        { processo: 'MARCENARIA', nome: 'MDF 15mm Branco TX', quantidade: '1', unidade: 'CH' },
+        { processo: 'MARCENARIA', nome: 'Cola PVA extra', quantidade: '2', unidade: 'UN' },
+        { processo: 'MONTAGEM', nome: 'Couro Serpente Amêndoa', quantidade: '1', unidade: 'm2' }
+      ]
+    }]
+  });
+  try {
+    const detalhe = await (await chamar(ctx.porta, '/api/ia/5')).json();
+    const insumos = detalhe.itens[0].dados.insumos;
+
+    // Exato: nada a dizer.
+    assert.strictEqual(insumos[0]._casamento, 'exato');
+    // Semelhante: a tela mostra o nome LIDO e revela o do cadastro no (i).
+    assert.strictEqual(insumos[1]._casamento, 'semelhante');
+    assert.strictEqual(insumos[1]._cadastro, 'Cola PVA extra 1kg');
+    // Fora do estoque: a linha inteira fica vermelha na grade.
+    assert.strictEqual(insumos[2]._casamento, null);
+    assert.strictEqual(insumos[2]._cadastro, null);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('o insumo casado por semelhança entra na ficha com o nome do cadastro', async () => {
+  const ctx = await prepararFicha({
+    itens: [{
+      codigo: 'PR-210', nome: 'Painel Ripado 2,10',
+      insumos: [{ processo: 'MARCENARIA', nome: 'Cola PVA extra', quantidade: '2', unidade: 'UN' }]
+    }]
+  });
+  try {
+    const r = await carga(ctx, 5, itensDa(ctx, 5)[0].id);
+
+    // O que vai para a receita é o registro, com o id e o preço dele.
+    assert.strictEqual(r.insumos.length, 1);
+    assert.strictEqual(r.insumos[0].insumo_id, 71);
+    assert.strictEqual(r.insumos[0].nome, 'Cola PVA extra 1kg');
+
+    // E o palpite é anunciado: casamento por semelhança é palpite bom, não
+    // certeza, e quem confere precisa poder pegar o palpite errado.
+    assert.ok(r.avisos.some(a => /semelhança/i.test(a)), r.avisos.join(' | '));
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('a anotação de casamento se refaz a cada abertura', async () => {
+  const ctx = await prepararFicha({
+    itens: [{
+      codigo: 'PR-210', nome: 'Painel Ripado 2,10',
+      insumos: [{ processo: 'MONTAGEM', nome: 'Perfil U 3/8', quantidade: '1', unidade: 'm2' }]
+    }]
+  });
+  try {
+    const antes = await (await chamar(ctx.porta, '/api/ia/5')).json();
+    assert.strictEqual(antes.itens[0].dados.insumos[0]._casamento, null);
+
+    // Alguém cadastra o insumo que faltava.
+    ctx.tabelas.materia_prima.push({
+      id: 99, nome: 'Perfil U 3/8', quantidade: 10, preco_unitario: 5, unidade: 'm2', processo: 'MONTAGEM'
+    });
+
+    // A anotação não é gravada em lugar nenhum: ela é o resultado de uma conta
+    // feita agora, contra o estoque de agora. Se fosse gravada na extração, a
+    // tela continuaria vermelha depois do cadastro.
+    const depois = await (await chamar(ctx.porta, '/api/ia/5')).json();
+    assert.strictEqual(depois.itens[0].dados.insumos[0]._casamento, 'exato');
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('a proximidade de insumo entende o nome qualificado', () => {
+  const { proximidadeDeInsumo } = require('./iaPreenchimento');
+  const perto = (a, b) => proximidadeDeInsumo(a, b) >= 0.6;
+
+  // A ficha QUALIFICA o material: o nome do cadastro inteiro está lá dentro,
+  // mais palavras de contexto. Jaccard conta o contexto contra o casamento.
+  assert.strictEqual(perto('Verniz FO10 - 6717 Em Lamina De Madeira', 'Verniz FO10 6717'), true);
+  assert.strictEqual(perto('Tinta Golf M115 (Bronze) Em Pintura/WFCT', 'Tinta Golf M115'), true);
+  assert.strictEqual(perto('Diluente DF4068 Em Lamina De Madeira', 'Diluente DF4068'), true);
+
+  // Mas contenção sozinha casa demais: com UMA palavra em comum decide o
+  // Jaccard, que é conservador. É o que mantém materiais diferentes separados.
+  assert.strictEqual(perto('MDF 06', 'MDF 09'), false);
+  assert.strictEqual(perto('Cola Branca', 'Cola Fórmica'), false);
+  assert.strictEqual(perto('Cola', 'Cola PVA extra 1kg'), false);
+
+  // E nada em comum é nada.
+  assert.strictEqual(proximidadeDeInsumo('Bolinha de Silicone', 'Verniz FO10 6717'), 0);
+  assert.strictEqual(proximidadeDeInsumo('', 'Verniz'), 0);
+});
+
+
+// ===========================================================================
+// ETAPA 13 — CONFIGURAÇÃO NO PROGRAMA
+//
+// Trocar o modelo ou um limite exigia editar o .env e reiniciar o aplicativo
+// em cada máquina. Quem opera não tem acesso ao arquivo, e cada instalação
+// acabava com uma configuração diferente sem ninguém perceber.
+//
+// A CREDENCIAL continua no .env, e continua sendo a única coisa lá.
+// ===========================================================================
+
+test('a validação recusa fora da faixa, dizendo por quê', () => {
+  const { validar } = require('./iaConfiguracao');
+
+  const bom = validar({ arquivo_mb: '15', groq_modelo: ' llama-3.3-70b ' });
+  assert.deepStrictEqual(bom.erros, []);
+  assert.strictEqual(bom.valores.arquivo_mb, '15');
+  assert.strictEqual(bom.valores.groq_modelo, 'llama-3.3-70b');
+
+  // O motivo do teto vai junto: "valor inválido" manda a pessoa adivinhar.
+  const alto = validar({ arquivo_mb: '500' });
+  assert.strictEqual(alto.erros.length, 1);
+  assert.match(alto.erros[0], /entre 1 e 50/);
+  assert.match(alto.erros[0], /recusa o envio/);
+
+  assert.match(validar({ arquivo_mb: 'grande' }).erros[0], /não é um número/);
+  assert.match(validar({ chave_secreta: 'x' }).erros[0], /não é uma configuração/);
+});
+
+test('vazio quer dizer "volte ao padrão"', () => {
+  const { validar } = require('./iaConfiguracao');
+  const r = validar({ groq_modelo: '', arquivo_mb: '   ' });
+  assert.deepStrictEqual(r.erros, []);
+  // `null` é o sinal de apagar a linha. É a única forma de desfazer uma
+  // escolha sem ter de adivinhar qual era o valor de antes.
+  assert.strictEqual(r.valores.groq_modelo, null);
+  assert.strictEqual(r.valores.arquivo_mb, null);
+});
+
+test('o que está na tela vence o .env, e o .env vence o padrão', async () => {
+  const configuracao = require('./iaConfiguracao');
+  const provedores = require('./iaProvedores');
+  const anterior = process.env.GROQ_MODEL;
+
+  try {
+    configuracao.limparCache();
+    process.env.GROQ_MODEL = 'do-env';
+    assert.strictEqual(provedores.modeloGroq(), 'do-env');
+
+    await configuracao.carregar({
+      get: async () => [{ id: 1, chave: 'groq_modelo', valor: 'da-tela' }]
+    });
+    assert.strictEqual(provedores.modeloGroq(), 'da-tela');
+    assert.strictEqual(provedores.origemDe('groq_modelo', 'GROQ_MODEL'), 'tela');
+
+    // Sem linha no banco, tudo volta a ser exatamente como era antes desta
+    // tabela existir — que é o que permite subi-la sem mudar comportamento.
+    configuracao.limparCache();
+    await configuracao.carregar({ get: async () => [] });
+    assert.strictEqual(provedores.modeloGroq(), 'do-env');
+    assert.strictEqual(provedores.origemDe('groq_modelo', 'GROQ_MODEL'), 'env');
+
+    delete process.env.GROQ_MODEL;
+    assert.strictEqual(provedores.origemDe('groq_modelo', 'GROQ_MODEL'), 'padrao');
+  } finally {
+    if (anterior === undefined) delete process.env.GROQ_MODEL;
+    else process.env.GROQ_MODEL = anterior;
+    configuracao.limparCache();
+  }
+});
+
+test('tabela ausente não derruba o módulo', async () => {
+  // Numa instalação que ainda não rodou o SQL, a leitura falha — e o módulo
+  // tem de continuar funcionando pelo .env, como funcionava antes.
+  const configuracao = require('./iaConfiguracao');
+  configuracao.limparCache();
+  const valores = await configuracao.carregar({
+    get: async () => { throw new Error('relation nao existe'); }
+  });
+  assert.deepStrictEqual(valores, {});
+  configuracao.limparCache();
+});
+
+test('gravar apaga a linha quando o valor volta ao padrão', async () => {
+  const configuracao = require('./iaConfiguracao');
+  const feitos = [];
+  const api = {
+    get: async () => [{ id: 7, chave: 'groq_modelo', valor: 'antigo' }],
+    put: async (caminho, corpo) => feitos.push(['PUT', caminho, corpo]),
+    post: async (caminho, corpo) => feitos.push(['POST', caminho, corpo]),
+    delete: async caminho => feitos.push(['DELETE', caminho])
+  };
+
+  await configuracao.gravar(api, { groq_modelo: null, arquivo_mb: '20' }, 3);
+
+  // Uma linha com valor em branco continuaria vencendo o .env, e o "volte ao
+  // padrão" não voltaria a padrão nenhum.
+  assert.deepStrictEqual(feitos[0], ['DELETE', '/api/ia_configuracao/7']);
+  assert.strictEqual(feitos[1][0], 'POST');
+  assert.strictEqual(feitos[1][2].valor, '20');
+  assert.strictEqual(feitos[1][2].atualizado_por, 3);
+  configuracao.limparCache();
+});
+
+test('o estado da configuração diz de onde veio cada valor', async () => {
+  const ctx = await montarComIA(baseDados(), { GROQ_MODEL: 'llama-de-teste' });
+  try {
+    const cfg = await (await chamar(ctx.porta, '/api/ia/config/estado')).json();
+
+    // "Por que este modelo?" é a primeira pergunta de quem abre a tela e vê
+    // algo diferente do que esperava.
+    assert.strictEqual(cfg.groq.modelo_origem, 'env');
+    assert.ok(cfg.campos.arquivo_mb, 'a tela não recebe a faixa aceita de cada campo');
+    assert.ok(cfg.campos.arquivo_mb.porque, 'a tela não recebe o motivo do teto');
+
+    // A chave continua mascarada: o que muda de lugar é a configuração, não a
+    // credencial.
+    assert.doesNotMatch(JSON.stringify(cfg), /chave-groq/);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('a extração guarda quanto de contexto gastou', async () => {
+  const ctx = await montarComIA(baseParaEstruturar(), {}, {
+    groq: () => ({
+      payload: {
+        ...respostaGroq(ITENS_LIDOS),
+        usage: { prompt_tokens: 1200, completion_tokens: 340 }
+      }
+    })
+  });
+  try {
+    await chamar(ctx.porta, '/api/ia/4/estruturar', { method: 'POST' });
+    const leitura = ctx.tabelas.ia_extracoes.find(e => e.id === 4);
+
+    // "Cabe neste modelo?" é a pergunta que decide trocar de modelo ou dividir
+    // o documento, e até aqui só dava para responder tentando.
+    assert.strictEqual(leitura.tokens_entrada, 1200);
+    assert.strictEqual(leitura.tokens_saida, 340);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('num documento fatiado, o consumo é a soma das fatias', async () => {
+  let chamadas = 0;
+  const ctx = await montarComIA(baseComDocumentoLongo(24), {}, {
+    groq: ({ body }) => {
+      chamadas += 1;
+      const cru = String(body.messages[1].content);
+      const linhas = cru.split(String.fromCharCode(10))
+        .filter(l => l.trim() && !l.startsWith('###'));
+      const itens = linhas.slice(0, 6).map(l => ({
+        nome: l.split('|')[0].trim(), quantidade: '5', unidade: 'CH',
+        preco_unitario: '10,00', categoria: 'Chapas', descricao: null
+      }));
+      return {
+        payload: {
+          ...respostaGroq({ itens }, linhas.length > 6 ? 'length' : 'stop'),
+          usage: { prompt_tokens: 100, completion_tokens: 50 }
+        }
+      };
+    }
+  });
+  try {
+    await chamar(ctx.porta, '/api/ia/4/estruturar', { method: 'POST' });
+    const leitura = ctx.tabelas.ia_extracoes.find(e => e.id === 4);
+
+    // O que interessa é quanto o DOCUMENTO gastou, não quanto gastou o último
+    // pedaço dele.
+    assert.ok(chamadas > 1, 'o documento nem chegou a ser fatiado');
+    assert.strictEqual(leitura.tokens_entrada, chamadas * 100);
+    assert.strictEqual(leitura.tokens_saida, chamadas * 50);
+  } finally {
+    await ctx.encerrar();
+  }
 });

@@ -41,7 +41,26 @@
   // Estado do .env (não sai para a internet)
   // -------------------------------------------------------------------------
 
+  /** Só o Sup Admin muda; todo mundo com `ia.config` vê. */
+  let podeEditar = false;
+
+  /** Modelos que o teste de conexão trouxe, por provedor. */
+  const modelosPorProvedor = {};
+
+  /** O modelo escolhido em cada provedor, antes de salvar. */
+  const escolhido = {};
+
   function pintarConfiguracao(cfg) {
+    podeEditar = Boolean(cfg?.pode_editar);
+
+    // O botão de salvar não é escondido por `data-perm` porque a restrição não
+    // é uma permissão que se possa conceder: é Sup Admin ou não é.
+    document.getElementById('iaConfigSalvar')?.classList.toggle('hidden', !podeEditar);
+    const aviso = document.getElementById('iaConfigRodapeAviso');
+    if (aviso && !podeEditar) {
+      aviso.textContent = 'Só o Sup Admin altera a configuração. Você vê o que está valendo.';
+    }
+
     for (const nome of ['gemini', 'groq']) {
       const p = cfg?.[nome];
       if (!p) continue;
@@ -59,9 +78,14 @@
       // Diz de onde veio o modelo. Sem isso o usuário não distingue "eu
       // escolhi este" de "é o padrão porque não pus nada no .env" — e é
       // justamente o padrão que pode estar desatualizado.
-      set('origemModelo', p.modelo_do_env
-        ? `Definido por ${p.variavelModelo} no .env`
-        : `Padrão do aplicativo — defina ${p.variavelModelo} no .env para escolher outro`);
+      // De onde veio o valor que está valendo. É a primeira pergunta de quem
+      // abre a tela e vê um modelo diferente do que esperava.
+      const ORIGEM = {
+        tela: 'Escolhido aqui na configuração',
+        env: `Definido por ${p.variavelModelo} no .env`,
+        padrao: 'Padrão do aplicativo — teste a conexão e escolha um da lista'
+      };
+      set('origemModelo', ORIGEM[p.modelo_origem] || ORIGEM.padrao);
 
       marcarEstado(
         campo(nome, 'estado'),
@@ -75,20 +99,85 @@
       }
     }
 
-    const lim = cfg?.limites || {};
-    const set = (id, valor) => {
-      const el = document.getElementById(id);
-      if (el) el.textContent = valor;
-    };
-    set('iaLimiteArquivoMb', lim.arquivo_mb ? `${lim.arquivo_mb} MB` : '—');
-    set('iaLimiteArquivos', lim.arquivos ? `${lim.arquivos} por vez` : '—');
-    set('iaLimiteTimeout', lim.timeout_s ? `${lim.timeout_s}s por chamada` : '—');
-    set('iaLimiteTexto', lim.texto_max_chars
-      ? `${Math.round(lim.texto_max_chars / 1000)} mil caracteres` : '—');
+    pintarLimites(cfg);
+    pintarConsumo(cfg);
 
     const tag = document.getElementById('iaConfigProntoTag');
     if (cfg?.pronto) marcarEstado(tag, 'aviso', 'Chaves preenchidas — teste a conexão');
     else marcarEstado(tag, 'falta', 'Faltam credenciais no .env');
+  }
+
+  /**
+   * Os limites, como campos.
+   *
+   * Quem não pode editar vê os mesmos valores, em campos travados: esconder a
+   * configuração de quem opera transforma "por que só entraram 10 arquivos?"
+   * numa pergunta que só o administrador consegue responder.
+   */
+  function pintarLimites(cfg) {
+    const lim = cfg?.limites || {};
+    const regras = cfg?.campos || {};
+
+    for (const campoEl of document.querySelectorAll('[data-config]')) {
+      const chave = campoEl.getAttribute('data-config');
+      const valor = lim[chave];
+      campoEl.value = valor === null || valor === undefined ? '' : String(valor);
+      campoEl.readOnly = !podeEditar;
+      campoEl.disabled = !podeEditar;
+
+      const regra = regras[chave];
+      if (regra && regra.tipo === 'inteiro') {
+        campoEl.min = regra.min;
+        campoEl.max = regra.max;
+        // O motivo do teto no `title`: um número sem explicação vira um número
+        // que alguém muda sem saber o que está arriscando.
+        campoEl.title = `Entre ${regra.min} e ${regra.max}. ${regra.porque || ''}`.trim();
+      }
+
+      // De onde vem o valor que está na caixa.
+      const origem = (cfg?.origens || {})[chave];
+      const rotulo = campoEl.parentElement?.querySelector('span');
+      if (rotulo && origem === 'env') rotulo.dataset.origem = 'env';
+      else if (rotulo) delete rotulo.dataset.origem;
+    }
+  }
+
+  /**
+   * Quanto de contexto a última leitura gastou.
+   *
+   * Contra o tamanho de contexto que a tela mostra ao lado de cada modelo,
+   * este número responde "cabe neste modelo?" — que é a pergunta que decide
+   * trocar de modelo ou dividir o documento.
+   */
+  function pintarConsumo(cfg) {
+    const caixa = document.getElementById('iaConfigConsumo');
+    if (!caixa) return;
+
+    const uso = cfg?.ultimo_uso;
+    if (!uso) {
+      caixa.textContent = 'Nenhuma leitura registrou consumo ainda.';
+      return;
+    }
+
+    const teto = tetoDoModelo(uso.modelo);
+    const partes = [
+      `Última leitura ("${uso.titulo}"): ${uso.entrada.toLocaleString('pt-BR')} de entrada`,
+      `${uso.saida.toLocaleString('pt-BR')} de saída`
+    ];
+    if (teto) {
+      const pct = Math.round((uso.entrada / teto) * 100);
+      partes.push(`${pct}% do contexto de ${Math.round(teto / 1000)}k do modelo`);
+    }
+    caixa.textContent = partes.join('  ·  ');
+  }
+
+  /** Contexto do modelo, tirado da lista que o teste de conexão trouxe. */
+  function tetoDoModelo(id) {
+    for (const lista of Object.values(modelosPorProvedor)) {
+      const achado = (lista || []).find(m => m.id === id);
+      if (achado?.entrada_max) return Number(achado.entrada_max);
+    }
+    return 0;
   }
 
   // -------------------------------------------------------------------------
@@ -106,11 +195,16 @@
     bloco.classList.remove('hidden');
     if (contagem) contagem.textContent = `(${modelos.length})`;
 
+    modelosPorProvedor[nome] = modelos;
+
     // Sem innerHTML com dado do provedor: id de modelo é texto de fora.
     lista.replaceChildren(...modelos.map(m => {
-      const linha = document.createElement('div');
+      const atual = m.id === (escolhido[nome] || modeloAtual);
+      const linha = document.createElement(podeEditar ? 'button' : 'div');
+      if (podeEditar) linha.type = 'button';
       linha.className = 'ia-lista-modelos__item'
-        + (m.id === modeloAtual ? ' ia-lista-modelos__item--atual' : '');
+        + (atual ? ' ia-lista-modelos__item--atual' : '')
+        + (podeEditar ? ' ia-lista-modelos__item--escolhivel' : '');
 
       const id = document.createElement('span');
       id.textContent = m.id;
@@ -118,10 +212,28 @@
 
       const ctx = document.createElement('span');
       ctx.className = 'ia-lista-modelos__ctx';
-      ctx.textContent = m.id === modeloAtual
-        ? 'em uso'
-        : (m.entrada_max ? `${Math.round(m.entrada_max / 1000)}k de contexto` : '');
+      // O contexto aparece SEMPRE, inclusive no que está em uso: é contra ele
+      // que se compara o consumo da última leitura para decidir se o
+      // documento cabe.
+      ctx.textContent = [
+        atual ? 'em uso' : null,
+        m.entrada_max ? `${Math.round(m.entrada_max / 1000)}k de contexto` : null
+      ].filter(Boolean).join('  ·  ');
       linha.appendChild(ctx);
+
+      // Escolher pela lista, e não digitando: o nome de um modelo é uma
+      // sequência que ninguém decora, e errar uma letra dá um 404 do provedor
+      // na próxima leitura, não aqui.
+      if (podeEditar) {
+        linha.addEventListener('click', () => {
+          escolhido[nome] = m.id;
+          const campoModelo = campo(nome, 'modelo');
+          if (campoModelo) campoModelo.textContent = m.id;
+          const origem = campo(nome, 'origemModelo');
+          if (origem) origem.textContent = 'Escolhido agora — clique em Salvar para valer';
+          pintarModelos(nome, modelos, m.id);
+        });
+      }
 
       return linha;
     }));
@@ -190,6 +302,53 @@
   document.addEventListener('keydown', function esc(e) {
     if (e.key === 'Escape') { close(); document.removeEventListener('keydown', esc); }
   });
+
+  /**
+   * Grava o que foi mudado na tela.
+   *
+   * Manda TUDO, inclusive o que não mudou: o backend compara com o que está no
+   * banco e só escreve o que for diferente, e mandar só o alterado exigiria a
+   * tela guardar um "antes" que sairia de sincronia na primeira recarga.
+   *
+   * Campo em branco vira `null`, que é o sinal de apagar a linha e voltar ao
+   * padrão — é a única forma de desfazer uma escolha sem adivinhar qual era o
+   * valor anterior.
+   */
+  async function salvar() {
+    const corpo = {};
+    for (const campoEl of document.querySelectorAll('[data-config]')) {
+      corpo[campoEl.getAttribute('data-config')] = campoEl.value.trim();
+    }
+    if (escolhido.gemini) corpo.gemini_modelo = escolhido.gemini;
+    if (escolhido.groq) corpo.groq_modelo = escolhido.groq;
+
+    try {
+      const resp = await fetchApi('/api/ia/config', {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(corpo)
+      });
+      const dados = await resp.json().catch(() => ({}));
+      if (!resp.ok) throw new Error(dados.error || `Erro ${resp.status}`);
+
+      // Repinta com o que o servidor confirmou, e não com o que a tela mandou:
+      // um valor recusado ou ajustado tem de aparecer como ficou.
+      pintarConfiguracao(dados);
+      for (const nome of ['gemini', 'groq']) {
+        if (modelosPorProvedor[nome]) pintarModelos(nome, modelosPorProvedor[nome], dados[nome]?.modelo);
+      }
+      showToast('Configuração salva — vale a partir da próxima leitura', 'success');
+    } catch (err) {
+      console.error('Falha ao salvar a configuração da IA', err);
+      showToast(err.message || 'Não foi possível salvar', 'error');
+    }
+  }
+
+  const botaoSalvar = document.getElementById('iaConfigSalvar');
+  if (botaoSalvar) {
+    if (window.BotaoAcao?.bind) window.BotaoAcao.bind(botaoSalvar, salvar);
+    else botaoSalvar.addEventListener('click', salvar);
+  }
 
   // O teste sai para a internet e consome cota: trava o segundo clique e mostra
   // o carregando até terminar.

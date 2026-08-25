@@ -62,6 +62,9 @@ function criarElemento(tag = 'div') {
     // O preenchimento avisa a tela por evento: sem isto, o formulário ficaria
     // com o valor visível e o estado interno vazio.
     dispatchEvent(e) { el.disparar(e?.type || 'evento', e); return true; },
+    // O popover se posiciona pela caixa do (i). Sem isto o teste mede o buraco
+    // do harness em vez do comportamento.
+    getBoundingClientRect: () => ({ top: 0, left: 0, right: 0, bottom: 0, width: 0, height: 0 }),
     appendChild(f) { el.filhos.push(f); f.pai = el; return f; },
     append(...fs) { for (const f of fs) el.appendChild(f); },
     replaceChildren(...fs) { el.filhos = []; for (const f of fs) el.appendChild(f); },
@@ -186,6 +189,7 @@ function criarBancada({ leitura, respostaPut, respostaAplicar, respostaExtrair,
   const modaisAbertos = [];
   const preenchimentos = [];
   const ouvintesDaJanela = {};
+  const copiado = [];
   let dadosLeitura = leitura || leituraPadrao();
 
   const document = {
@@ -249,6 +253,7 @@ function criarBancada({ leitura, respostaPut, respostaAplicar, respostaExtrair,
       }
     },
     apiConfig: { getApiBaseUrl: async () => 'http://local' },
+    navigator: { clipboard: { writeText: async texto => { copiado.push(texto); } } },
     IaModulo: { carregar: async () => { gradesRecarregadas.push(true); } },
     DialogPadrao: {
       confirm: async opcoes => { confirmacoes.push(opcoes); return confirmar; }
@@ -283,6 +288,12 @@ function criarBancada({ leitura, respostaPut, respostaAplicar, respostaExtrair,
         const r = respostaExtrair || { status: 200, corpo: { status: 'revisao', itens_qtd: 2, avisos: [] } };
         return { ok: r.status < 400, status: r.status, json: async () => r.corpo };
       }
+      if (metodo === 'GET' && /\/texto$/.test(url)) {
+        return {
+          ok: true, status: 200,
+          json: async () => ({ id: 41, nome_arquivo: 'bralux.xlsx', texto: 'ITEM | QTD | PRECO\nMDF | 40 | 189,90' })
+        };
+      }
       if (metodo === 'GET' && /\/preenchimento$/.test(url)) {
         const r = respostaPreenchimento || {
           status: 200,
@@ -316,6 +327,7 @@ function criarBancada({ leitura, respostaPut, respostaAplicar, respostaExtrair,
     gradesRecarregadas,
     modaisAbertos,
     preenchimentos,
+    copiado,
     trocarLeitura: nova => { dadosLeitura = nova; },
     pronta: () => new Promise(r => setTimeout(r, 10))
   };
@@ -471,7 +483,11 @@ const notas = b => b.el('iaDetItensCorpo').filhos.filter(l => !l.classList.conta
 const camposDa = linha => linha.todos()
   .filter(f => f.classList.contains('ia-campo') && !f.classList.contains('ia-alvo'));
 const seletorDeAlvo = linha => linha.todos().find(f => f.classList.contains('ia-alvo'));
-const seletorDa = linha => linha.todos().find(f => f.classList.contains('ia-acao-select'));
+/** A caixa de seleção da linha, que substituiu o antigo seletor de ação. */
+const marcaDa = linha => linha.todos().find(f => f.classList.contains('ia-selecao'));
+
+/** O (i) que abre os campos que não viraram coluna. */
+const infoDa = linha => linha.todos().find(f => f.classList.contains('ia-info-item'));
 
 // ---------------------------------------------------------------------------
 // Estrutura da grade
@@ -481,9 +497,12 @@ test('as colunas vêm do esquema do destino, não do HTML', async () => {
   const b = criarBancada();
   await b.pronta();
 
+  // A primeira coluna é a caixa de seleção, que não tem título: marcar linhas
+  // é gesto, não informação. E "O que fazer" saiu — descartar virou o botão do
+  // rodapé, apontar virou o "É o mesmo" da ressalva.
   const cabecalho = b.el('iaDetItensCabecalho').filhos.map(th => th.textContent);
   assert.deepEqual(cabecalho,
-    ['#', 'Insumo', 'Qtde', 'Un.', 'Preço un.', 'Categoria', 'Observação', 'O que fazer', 'Situação']);
+    ['', 'Insumo', 'Qtde', 'Un.', 'Preço un.', 'Categoria', 'Observação', 'Situação']);
 
   // Colunas escritas no HTML obrigariam a mexer no arquivo a cada destino
   // novo — e deixariam as duas listas divergirem.
@@ -577,35 +596,7 @@ test('o campo pisca ao gravar, para a correção não parecer perdida', async ()
 // Ação
 // ---------------------------------------------------------------------------
 
-test('"dar entrada" fica desabilitado sem insumo de destino', async () => {
-  const b = criarBancada();
-  await b.pronta();
 
-  // O item 2 é novo: sem alvo, "dar entrada" não tem onde entrar, e deixar a
-  // opção clicável só produziria erro na hora de aplicar.
-  const opcoes = seletorDa(linhasDeItem(b)[1]).filhos;
-  const atualizar = opcoes.find(o => o.value === 'atualizar');
-  assert.equal(atualizar.disabled, true);
-
-  const doPrimeiro = seletorDa(linhasDeItem(b)[0]).filhos.find(o => o.value === 'atualizar');
-  assert.equal(doPrimeiro.disabled, false);
-  // E diz em qual insumo vai entrar, não só "no existente".
-  assert.match(doPrimeiro.textContent, /MDF 15mm Branco TX/);
-});
-
-test('trocar a ação manda a mudança e redesenha', async () => {
-  const b = criarBancada();
-  await b.pronta();
-
-  const select = seletorDa(linhasDeItem(b)[0]);
-  select.value = 'ignorar';
-  select.disparar('change');
-  await b.pronta();
-
-  const put = b.chamadas.find(c => c.metodo === 'PUT');
-  assert.deepEqual(put.corpo, { acao: 'ignorar' });
-  assert.ok(linhasDeItem(b)[0].classList.contains('ia-linha-item--ignorada'));
-});
 
 test('a ressalva "parecido com" vira um botão de aceitar', async () => {
   const leitura = leituraPadrao();
@@ -639,8 +630,11 @@ test('item já gravado não volta a ser editável', async () => {
   const linha = linhasDeItem(b)[0];
   // Mexer nele daria a impressão de corrigir um estoque que já entrou.
   assert.ok(camposDa(linha).every(c => c.readOnly));
-  assert.equal(seletorDa(linha).disabled, true);
   assert.ok(linha.classList.contains('ia-linha-item--aplicada'));
+
+  // E nem pode ser marcado: descartar algo que já virou cadastro não desfaz
+  // nada, só dá a impressão de ter desfeito.
+  assert.equal(linha.todos().some(f => f.classList.contains('ia-selecao')), false);
 });
 
 test('leitura aplicada abre inteira em leitura apenas', async () => {
@@ -666,17 +660,6 @@ test('o resumo conta o que vai acontecer antes do clique', async () => {
   assert.match(texto, /1 a dar entrada/);
 });
 
-test('o resumo acompanha a mudança de ação', async () => {
-  const b = criarBancada();
-  await b.pronta();
-
-  const select = seletorDa(linhasDeItem(b)[1]);
-  select.value = 'ignorar';
-  select.disparar('change');
-  await b.pronta();
-
-  assert.match(b.el('iaDetResumoRevisao').texto(), /1 descartados/);
-});
 
 test('campo obrigatório vazio trava o botão de aplicar', async () => {
   const leitura = leituraPadrao();
@@ -848,17 +831,17 @@ test('abrir a lista mostra a sub-tabela com as colunas dos subcampos', async () 
 });
 
 test('a lista aberta continua aberta depois de redesenhar', async () => {
-  // A grade é redesenhada inteira a cada mudança de ação. Sem guardar o
-  // estado, a lista que o revisor acabou de abrir se fecharia sozinha.
+  // A grade é redesenhada inteira a cada marcação. Sem guardar o estado, a
+  // lista que o revisor acabou de abrir se fecharia sozinha.
   const b = criarBancada({ leitura: leituraEmpresa() });
   await b.pronta();
 
   botaoDaLista(linhasDeItem(b)[0]).disparar('click');
   await b.pronta();
 
-  const select = seletorDa(linhasDeItem(b)[1]);
-  select.value = 'ignorar';
-  select.disparar('change');
+  // Marcar outra linha redesenha a grade inteira.
+  marcaDa(linhasDeItem(b)[1]).checked = true;
+  marcaDa(linhasDeItem(b)[1]).disparar('change');
   await b.pronta();
 
   assert.equal(subLinhas(b).length, 1, 'a sub-lista fechou ao redesenhar');
@@ -901,19 +884,6 @@ test('remover um contato manda a lista sem ele', async () => {
   assert.equal(put.corpo.dados.contatos[0].nome, 'Marco Rossi');
 });
 
-test('acrescentar contato abre a lista e manda uma entrada em branco', async () => {
-  const b = criarBancada({ leitura: leituraEmpresa() });
-  await b.pronta();
-
-  botaoAdicionar(linhasDeItem(b)[1]).disparar('click');
-  await b.pronta();
-
-  const put = b.chamadas.find(c => c.metodo === 'PUT');
-  assert.equal(put.corpo.dados.contatos.length, 1);
-  assert.deepEqual(Object.keys(put.corpo.dados.contatos[0]).sort(), ['cargo', 'email', 'nome']);
-  // Abre junto: acrescentar sem mostrar onde digitar seria um clique mudo.
-  assert.equal(subLinhas(b).length, 1);
-});
 
 test('subcampo obrigatório vazio fica marcado', async () => {
   const leitura = leituraEmpresa();
@@ -984,96 +954,13 @@ test('leitura aplicada mostra os contatos, mas travados', async () => {
 // Destino que só atualiza (ficha técnica)
 // ---------------------------------------------------------------------------
 
-test('"Cadastrar" nem é oferecido quando o destino só atualiza', async () => {
-  // A ficha técnica não tem preço, coleção nem markup: cadastrar produto a
-  // partir dela produziria uma ficha pela metade no meio do catálogo. Oferecer
-  // a opção só para deixá-la cinza faria o revisor tentar antes de ler.
-  const b = criarBancada({ leitura: leituraFicha() });
-  await b.pronta();
 
-  const valores = seletorDa(linhasDeItem(b)[0]).filhos.map(o => o.value);
-  assert.deepEqual(valores, ['atualizar', 'ignorar']);
-});
 
-test('sem `acoes` no destino, as três continuam disponíveis', async () => {
-  // Resposta antiga em cache não pode deixar a grade sem nenhuma ação.
-  const leitura = leituraFicha();
-  delete leitura.acoes;
-  const b = criarBancada({ leitura });
-  await b.pronta();
 
-  const valores = seletorDa(linhasDeItem(b)[0]).filhos.map(o => o.value);
-  assert.deepEqual(valores, ['criar', 'atualizar', 'ignorar']);
-});
 
-test('o item sem produto ganha um seletor de destino', async () => {
-  // Sem ele, um nome que não casou ficaria sem saída nenhuma — o atalho
-  // "É o mesmo" só aparece quando a reconciliação achou um parecido.
-  const b = criarBancada({ leitura: leituraFicha() });
-  await b.pronta();
 
-  const seletor = seletorDeAlvo(linhasDeItem(b)[1]);
-  assert.ok(seletor, 'o item sem produto ficou sem como apontar');
-  assert.equal(seletor.value, '');
-  assert.equal(seletor.getAttribute('list'), 'iaDetAlvos');
-});
 
-test('o item que já aponta mostra o destino atual, e permite trocar', async () => {
-  const b = criarBancada({ leitura: leituraFicha() });
-  await b.pronta();
 
-  const seletor = seletorDeAlvo(linhasDeItem(b)[0]);
-  assert.equal(seletor.value, 'Painel Ripado 2,10');
-});
-
-test('escolher um produto da lista aponta o item', async () => {
-  const b = criarBancada({ leitura: leituraFicha() });
-  await b.pronta();
-
-  const seletor = seletorDeAlvo(linhasDeItem(b)[1]);
-  seletor.value = 'Mesa Lateral Carvalho';
-  seletor.disparar('change');
-  await b.pronta();
-
-  const put = b.chamadas.find(c => c.metodo === 'PUT');
-  assert.deepEqual(put.corpo, { alvo_id: 10, acao: 'atualizar' });
-});
-
-test('nome fora do catálogo é recusado e o campo volta atrás', async () => {
-  // Apontar para o que não existe daria erro só na hora de gravar.
-  const b = criarBancada({ leitura: leituraFicha() });
-  await b.pronta();
-
-  const seletor = seletorDeAlvo(linhasDeItem(b)[0]);
-  seletor.value = 'Produto Inventado';
-  seletor.disparar('change');
-  await b.pronta();
-
-  assert.equal(b.chamadas.some(c => c.metodo === 'PUT'), false);
-  assert.equal(b.toasts.at(-1).tipo, 'error');
-  assert.equal(seletor.value, 'Painel Ripado 2,10');
-});
-
-test('o seletor casa ignorando caixa e acento', async () => {
-  const b = criarBancada({ leitura: leituraFicha() });
-  await b.pronta();
-
-  const seletor = seletorDeAlvo(linhasDeItem(b)[1]);
-  seletor.value = '  mesa lateral CARVALHO  ';
-  seletor.disparar('change');
-  await b.pronta();
-
-  const put = b.chamadas.find(c => c.metodo === 'PUT');
-  assert.deepEqual(put.corpo, { alvo_id: 10, acao: 'atualizar' });
-});
-
-test('a datalist de destinos é preenchida com o catálogo', async () => {
-  const b = criarBancada({ leitura: leituraFicha() });
-  await b.pronta();
-
-  const opcoes = b.el('iaDetAlvos').filhos.map(o => o.value);
-  assert.deepEqual(opcoes, ['Painel Ripado 2,10', 'Mesa Lateral Carvalho']);
-});
 
 test('leitura aplicada não mostra seletor de destino', async () => {
   const b = criarBancada({ leitura: leituraFicha({ status: 'aplicada', status_rotulo: 'Aplicada' }) });
@@ -1086,74 +973,11 @@ test('leitura aplicada não mostra seletor de destino', async () => {
 // Alvo que é vínculo (orçamento)
 // ---------------------------------------------------------------------------
 
-test('o destino de vínculo oferece só criar e descartar', async () => {
-  const b = criarBancada({ leitura: leituraOrcamento() });
-  await b.pronta();
 
-  const valores = seletorDa(linhasDeItem(b)[0]).filhos.map(o => o.value);
-  assert.deepEqual(valores, ['criar', 'ignorar']);
-});
 
-test('"Criar" mostra a quem o orçamento vai se prender', async () => {
-  const b = criarBancada({ leitura: leituraOrcamento() });
-  await b.pronta();
 
-  const criar = seletorDa(linhasDeItem(b)[0]).filhos.find(o => o.value === 'criar');
-  assert.match(criar.textContent, /Criar para: Casa Vicenzo/);
-});
 
-test('sem cliente escolhido, "Criar" fica desabilitado', async () => {
-  // Um orçamento sem cliente não tem a quem se prender: existiria no banco e
-  // em lugar nenhum na tela.
-  const b = criarBancada({ leitura: leituraOrcamento() });
-  await b.pronta();
 
-  const criar = seletorDa(linhasDeItem(b)[1]).filhos.find(o => o.value === 'criar');
-  assert.equal(criar.disabled, true);
-  assert.match(criar.textContent, /escolha o cliente/i);
-});
-
-test('o seletor de cliente aparece em toda linha editável', async () => {
-  // Diferente dos outros destinos, aqui ele não é exceção — é o controle
-  // principal, porque o cliente é obrigatório em qualquer caso.
-  const b = criarBancada({ leitura: leituraOrcamento() });
-  await b.pronta();
-
-  assert.ok(seletorDeAlvo(linhasDeItem(b)[0]), 'a linha que já tem cliente ficou sem seletor');
-  assert.ok(seletorDeAlvo(linhasDeItem(b)[1]), 'a linha sem cliente ficou sem seletor');
-  assert.match(seletorDeAlvo(linhasDeItem(b)[1]).placeholder, /escolher cliente/i);
-});
-
-test('escolher o cliente aponta o item e diz de qual tabela ele é', async () => {
-  const b = criarBancada({ leitura: leituraOrcamento() });
-  await b.pronta();
-
-  const seletor = seletorDeAlvo(linhasDeItem(b)[1]);
-  seletor.value = 'Marcenaria Serrana (Prospecção)';
-  seletor.disparar('change');
-  await b.pronta();
-
-  const put = b.chamadas.find(c => c.metodo === 'PUT');
-  // A tabela é obrigatória aqui: o id sozinho é ambíguo entre clientes e
-  // prospecções, e a errada criaria o orçamento na série errada, preso a
-  // outra empresa.
-  assert.equal(put.corpo.alvo_id, 30);
-  assert.equal(put.corpo.alvo_tabela, 'prospeccoes');
-});
-
-test('destino de tabela única não manda tabela à toa', async () => {
-  const b = criarBancada();
-  await b.pronta();
-
-  const seletor = seletorDeAlvo(linhasDeItem(b)[0]);
-  seletor.value = 'Cola PVA extra 1kg';
-  seletor.disparar('change');
-  await b.pronta();
-
-  const put = b.chamadas.find(c => c.metodo === 'PUT');
-  assert.equal(put.corpo.alvo_id, 71);
-  assert.equal(put.corpo.alvo_tabela, undefined);
-});
 
 test('a sub-lista de itens do orçamento abre com as colunas certas', async () => {
   const b = criarBancada({ leitura: leituraOrcamento() });
@@ -1245,15 +1069,34 @@ test('o script de cada módulo de destino existe', () => {
   }
 });
 
-test('a linha ganha o botão de abrir no módulo', async () => {
+test('a linha marcada é a que abre no formulário', async () => {
+  // Antes, cada linha tinha o seu próprio botão de abrir, dentro da coluna
+  // "O que fazer". Com a coluna fora, quem escolhe é a marcação — e o mesmo
+  // gesto que serve para descartar serve para abrir.
   const b = criarBancada();
   await b.pronta();
 
-  const botao = linhasDeItem(b)[0].todos().find(f => f.classList.contains('ia-abrir-modulo'));
-  assert.ok(botao, 'a linha ficou sem o caminho de abrir o formulário do módulo');
-  assert.match(botao.texto(), /Novo Insumo/);
-  // O texto do title precisa deixar claro quem grava.
-  assert.match(botao.title, /Quem salva é você/i);
+  marcaDa(linhasDeItem(b)[1]).checked = true;
+  marcaDa(linhasDeItem(b)[1]).disparar('change');
+  await b.pronta();
+
+  b.el('iaDetAplicar').disparar('click');
+  await b.pronta();
+
+  const pedido = b.chamadas.find(c => /\/preenchimento$/.test(c.url));
+  assert.match(pedido.url, /\/itens\/2\/preenchimento$/,
+    'abriu a primeira linha em vez da que estava marcada');
+});
+
+test('sem marcação, abre a primeira pendente', async () => {
+  const b = criarBancada();
+  await b.pronta();
+
+  b.el('iaDetAplicar').disparar('click');
+  await b.pronta();
+
+  const pedido = b.chamadas.find(c => /\/preenchimento$/.test(c.url));
+  assert.match(pedido.url, /\/itens\/1\/preenchimento$/);
 });
 
 test('a linha descartada não oferece abrir no módulo', async () => {
@@ -1283,9 +1126,8 @@ test('a ficha técnica também abre o formulário de produto', async () => {
   const b = criarBancada({ leitura: leituraFicha() });
   await b.pronta();
 
-  const botao = linhasDeItem(b)[0].todos().find(f => f.classList.contains('ia-abrir-modulo'));
-  assert.ok(botao, 'a ficha ficou sem caminho para o formulário de produto');
-  assert.match(botao.texto(), /Novo Produto/);
+  assert.equal(b.el('iaDetAplicar').classList.contains('hidden'), false);
+  assert.match(b.el('iaDetAplicar').innerHTML, /Novo Produto/);
 });
 
 test('todo destino do esquema tem um formulário para abrir', () => {
@@ -1441,4 +1283,435 @@ test('o que o backend não casou aparece antes de a pessoa salvar', async () => 
   // só serve se chegar ANTES.
   const aviso = b.toasts.at(-1);
   assert.match(aviso.msg, /Couro Serpente/);
+});
+
+
+// ===========================================================================
+// ETAPA 10 — SELEÇÃO, DETALHE E LIMPEZA DA GRADE
+//
+// A grade responde uma pergunta: "esta linha está certa?". Tudo o que não
+// ajuda a respondê-la estava atrapalhando — o número da linha, o seletor de
+// ação, o botão de acrescentar sub-item, e sete colunas de pedido espremidas
+// a quatro caracteres cada.
+// ===========================================================================
+
+/** Leitura de orçamento com campos que ficam fora da grade. */
+function leituraComDetalhe(extra = {}) {
+  return leituraPadrao({
+    destino: 'orcamentos',
+    destino_rotulo: 'Orçamentos',
+    campos: [
+      { chave: 'cliente', rotulo: 'Cliente', tipo: 'texto', obrigatorio: true, largura: 'grande', naGrade: true },
+      { chave: 'prazo', rotulo: 'Prazo', tipo: 'texto', obrigatorio: false, largura: 'grande', naGrade: true },
+      { chave: 'forma_pagamento', rotulo: 'Pagamento', tipo: 'texto', obrigatorio: false, largura: 'media', naGrade: false },
+      { chave: 'transportadora', rotulo: 'Transportadora', tipo: 'texto', obrigatorio: false, largura: 'media', naGrade: false },
+      { chave: 'observacoes', rotulo: 'Observações', tipo: 'texto', obrigatorio: false, largura: 'media', naGrade: false }
+    ],
+    itens: [
+      {
+        id: 1, linha: 1, acao: 'criar', alvo_id: 50, status: 'pendente', mensagem: null,
+        dados: { cliente: 'Casa Vicenzo', prazo: '30/60/90', forma_pagamento: 'pix', transportadora: 'Rodonaves', observacoes: null }
+      }
+    ],
+    ...extra
+  });
+}
+
+test('a coluna do número da linha deu lugar à caixa de seleção', async () => {
+  const b = criarBancada();
+  await b.pronta();
+
+  // O número não dizia nada que a ordem da tabela já não dissesse, e ocupava
+  // a largura de que a primeira coluna de verdade precisava.
+  const linha = linhasDeItem(b)[0];
+  assert.ok(marcaDa(linha), 'a linha ficou sem caixa de seleção');
+  assert.equal(marcaDa(linha).type, 'checkbox');
+});
+
+test('marcar linhas revela o botão de descartar, com a contagem', async () => {
+  const b = criarBancada();
+  await b.pronta();
+
+  // Um botão permanentemente sem efeito ensina o usuário a ignorar aquele
+  // canto da tela.
+  assert.equal(b.el('iaDetDescartar').classList.contains('hidden'), true);
+
+  marcaDa(linhasDeItem(b)[0]).checked = true;
+  marcaDa(linhasDeItem(b)[0]).disparar('change');
+  await b.pronta();
+
+  assert.equal(b.el('iaDetDescartar').classList.contains('hidden'), false);
+  assert.match(b.el('iaDetDescartar').texto(), /Descartar 1 selecionada/);
+});
+
+test('descartar manda ignorar e não apaga a linha', async () => {
+  const b = criarBancada();
+  await b.pronta();
+
+  marcaDa(linhasDeItem(b)[0]).checked = true;
+  marcaDa(linhasDeItem(b)[0]).disparar('change');
+  await b.pronta();
+
+  b.el('iaDetDescartar').disparar('click');
+  await b.pronta();
+
+  const put = b.chamadas.find(c => c.metodo === 'PUT');
+  assert.deepEqual(put.corpo, { acao: 'ignorar' });
+
+  // Descartar não apaga: a linha continua na leitura com a procedência
+  // intacta. Apagar de verdade jogaria fora a resposta para "de onde veio
+  // este dado", que é metade do motivo de a leitura existir.
+  assert.equal(b.chamadas.some(c => c.metodo === 'DELETE'), false);
+  assert.equal(linhasDeItem(b).length, 2);
+});
+
+test('descartar pergunta antes', async () => {
+  const b = criarBancada();
+  await b.pronta();
+
+  marcaDa(linhasDeItem(b)[0]).checked = true;
+  marcaDa(linhasDeItem(b)[0]).disparar('change');
+  await b.pronta();
+  b.el('iaDetDescartar').disparar('click');
+  await b.pronta();
+
+  assert.ok(b.confirmacoes.at(-1), 'descartou sem perguntar');
+});
+
+test('marcar tudo de uma vez marca só o que ainda pode ser marcado', async () => {
+  const leitura = leituraPadrao();
+  leitura.itens[0].status = 'aplicado';
+  const b = criarBancada({ leitura });
+  await b.pronta();
+
+  const todos = b.el('iaDetItensCabecalho').filhos[0].todos()
+    .find(f => f.classList.contains('ia-selecao'));
+  assert.ok(todos, 'o cabeçalho ficou sem o "marcar todas"');
+
+  todos.checked = true;
+  todos.disparar('change');
+  await b.pronta();
+
+  // A linha já gravada não entra: descartá-la não desfaz o que virou cadastro.
+  assert.equal(b.el('iaDetDescartar').texto().includes('1 selecionada'), true);
+});
+
+test('a sub-lista perdeu o botão de acrescentar', async () => {
+  const b = criarBancada({ leitura: leituraEmpresa() });
+  await b.pronta();
+
+  // Uma linha em branco na sub-lista não tem o que a torna útil: busca contra
+  // o catálogo, validação, preço do cadastro. Isso existe no formulário do
+  // módulo, e é lá que acrescentar faz sentido.
+  assert.equal(
+    linhasDeItem(b)[0].todos().some(f => f.classList.contains('ia-lista-adicionar')),
+    false);
+});
+
+test('campo fora da grade não vira coluna, e vai para o (i)', async () => {
+  const b = criarBancada({ leitura: leituraComDetalhe() });
+  await b.pronta();
+
+  const cabecalho = b.el('iaDetItensCabecalho').filhos.map(th => th.textContent);
+  // Sete colunas de pedido espremidas deixavam cada uma com quatro caracteres.
+  // "Valor total" não vem do esquema: é calculada a partir dos itens.
+  assert.deepEqual(cabecalho, ['', 'Cliente', 'Prazo', 'Valor total', 'Situação']);
+
+  const info = infoDa(linhasDeItem(b)[0]);
+  assert.ok(info, 'a linha ficou sem o caminho para os campos escondidos');
+  assert.match(info.title, /3 campo/);
+});
+
+test('os campos do (i) continuam editáveis', async () => {
+  const b = criarBancada({ leitura: leituraComDetalhe() });
+  await b.pronta();
+
+  infoDa(linhasDeItem(b)[0]).disparar('click');
+  await b.pronta();
+
+  const popover = b.el('iaDetLinhaPopover');
+  const campos = popover.todos().filter(f => f.tagName === 'INPUT');
+  assert.equal(campos.length, 3, 'o popover não montou os campos escondidos');
+
+  // Só de leitura, o revisor que visse a forma de pagamento errada teria de
+  // corrigir no formulário, linha por linha — e a correção não voltaria para a
+  // leitura, então extrair de novo a perderia.
+  assert.equal(campos.every(c => c.readOnly), false);
+
+  campos[0].value = 'boleto';
+  campos[0].disparar('change');
+  await b.pronta();
+
+  const put = b.chamadas.find(c => c.metodo === 'PUT');
+  assert.deepEqual(put.corpo.dados, { forma_pagamento: 'boleto' });
+});
+
+test('leitura aplicada abre o (i) apenas para leitura', async () => {
+  const b = criarBancada({
+    leitura: leituraComDetalhe({ status: 'aplicada', status_rotulo: 'Aplicada' })
+  });
+  await b.pronta();
+
+  infoDa(linhasDeItem(b)[0]).disparar('click');
+  await b.pronta();
+
+  const campos = b.el('iaDetLinhaPopover').todos().filter(f => f.tagName === 'INPUT');
+  assert.ok(campos.length);
+  assert.ok(campos.every(c => c.readOnly), 'dá para editar o que já foi gravado');
+});
+
+test('o botão Fechar é vermelho, como nos outros modais', () => {
+  const html = fs.readFileSync(HTML_MODAL, 'utf8');
+  const fechar = /<button id="iaDetFechar"[\s\S]*?class="([^"]+)"/.exec(html);
+  assert.ok(fechar);
+  assert.match(fechar[1], /btn-danger/);
+});
+
+test('descartar fica entre Fechar e Extrair, e é transparente', () => {
+  const html = fs.readFileSync(HTML_MODAL, 'utf8');
+  const ordem = ['iaDetFechar', 'iaDetDescartar', 'iaDetExtrair']
+    .map(id => html.indexOf(`id="${id}"`));
+  assert.ok(ordem.every(i => i > 0), 'faltou algum botão no rodapé');
+  assert.ok(ordem[0] < ordem[1] && ordem[1] < ordem[2], 'a ordem do rodapé mudou');
+
+  const descartar = /<button id="iaDetDescartar"[\s\S]*?class="([^"]+)"/.exec(html);
+  assert.match(descartar[1], /ia-btn-transparente/);
+});
+
+test('cada arquivo tem um botão de copiar o texto lido', async () => {
+  const b = criarBancada();
+  await b.pronta();
+
+  const copiar = b.el('iaDetArquivosLista').todos()
+    .find(f => f.classList.contains('ia-btn-copiar'));
+  assert.ok(copiar, 'não dá para tirar o texto lido da tela');
+  assert.match(copiar.title, /copiar/i);
+});
+
+test('copiar busca o texto no servidor e usa a área de transferência', async () => {
+  const b = criarBancada();
+  await b.pronta();
+
+  const copiar = b.el('iaDetArquivosLista').todos()
+    .find(f => f.classList.contains('ia-btn-copiar'));
+  copiar.disparar('click');
+  await b.pronta();
+
+  // Busca no servidor, e não na tela: o painel do texto só existe depois de
+  // "Ver o que foi lido", e copiar não deveria exigir abrir antes.
+  assert.ok(b.chamadas.some(c => /\/texto$/.test(c.url)));
+  assert.match(b.copiado.at(-1) || '', /ITEM \| QTD/);
+});
+
+test('arquivo sem texto não oferece copiar', async () => {
+  const leitura = leituraPadrao();
+  leitura.arquivos[0].texto_tamanho = 0;
+  const b = criarBancada({ leitura });
+  await b.pronta();
+
+  const copiar = b.el('iaDetArquivosLista').todos()
+    .find(f => f.classList.contains('ia-btn-copiar'));
+  assert.equal(copiar.disabled, true);
+});
+
+test('"Ver o que foi lido" busca o texto e mostra na tela', async () => {
+  // Esta era a única forma de conferir a transcrição, e não tinha teste
+  // nenhum: trocar a busca por qualquer coisa passava despercebido.
+  const b = criarBancada();
+  await b.pronta();
+
+  // Pelo tagName, não só pelo texto: a <div> que envolve os dois botões tem
+  // exatamente o mesmo textContent, e vem antes na varredura.
+  const ver = b.el('iaDetArquivosLista').todos()
+    .find(f => f.tagName === 'BUTTON' && f.texto() === 'Ver o que foi lido');
+  assert.ok(ver, 'não há como conferir a transcrição');
+
+  ver.disparar('click');
+  await b.pronta();
+
+  assert.ok(b.chamadas.some(c => /\/arquivos\/41\/texto$/.test(c.url)));
+  const painel = b.el('iaDetArquivosLista').todos().find(f => /ITEM \| QTD/.test(f.textContent || ''));
+  assert.ok(painel, 'o texto lido não apareceu na tela');
+});
+
+// ---------------------------------------------------------------------------
+// ETAPA 11 — o pedido chega inteiro
+// ---------------------------------------------------------------------------
+
+test('o valor total é a soma dos itens, não o total escrito no papel', async () => {
+  const leitura = leituraComDetalhe();
+  leitura.itens[0].dados.itens = [
+    { nome: 'Apaga Velas Silvia', quantidade: 7, valor_unitario: 388.7 },
+    { nome: 'Bandeja Vero PP', quantidade: 2, valor_unitario: 100 }
+  ];
+  const b = criarBancada({ leitura });
+  await b.pronta();
+
+  const celula = linhasDeItem(b)[0].todos().find(f => f.classList.contains('ia-valor-total'));
+  assert.ok(celula, 'a coluna de valor total sumiu');
+  // 7 × 388,70 + 2 × 100 = 2.920,90. É quanto o orçamento vai valer quando for
+  // criado — e a diferença contra o total do PDF é o que revela um item que
+  // ficou de fora.
+  assert.match(celula.textContent, /2\.920,90/);
+});
+
+test('linha sem item mostra zero, não vazio', async () => {
+  const leitura = leituraComDetalhe();
+  leitura.itens[0].dados.itens = [];
+  const b = criarBancada({ leitura });
+  await b.pronta();
+
+  const celula = linhasDeItem(b)[0].todos().find(f => f.classList.contains('ia-valor-total'));
+  // Célula vazia se confunde com "ainda não calculei"; zero diz o que é.
+  assert.match(celula.textContent, /0,00/);
+});
+
+test('o bloco comercial do pedido chega ao formulário', async () => {
+  const b = criarBancada({
+    leitura: leituraComDetalhe(),
+    respostaPreenchimento: {
+      status: 200,
+      corpo: {
+        modal: { overlay: 'novoOrcamento', html: 'x', script: 'y', rotulo: 'Novo Orçamento' },
+        campos: { cliente: 'Casa Vicenzo', prazo: '30/60/90' },
+        alvo: { tabela: 'clientes', id: 50, nome: 'Casa Vicenzo' },
+        contato: { id: 7, nome: 'Lílian' },
+        transportadora: { id: 3, nome: 'Rodonaves' },
+        pagamento: {
+          forma: 'pix',
+          condicao: 'prazo',
+          prazo_vista: null,
+          parcelas: { count: 3, mode: 'custom', items: [
+            { amount: 6162, dueInDays: 30 },
+            { amount: 166162, dueInDays: 60 },
+            { amount: 86162, dueInDays: 90 }
+          ] }
+        },
+        itens: [{ produto_id: 9, nome: 'Apaga Velas Silvia', quantidade: 7, valor_unitario: 388.7 }],
+        avisos: []
+      }
+    }
+  });
+  await b.pronta();
+
+  b.el('iaDetAplicar').disparar('click');
+  await b.pronta();
+
+  const { conteudo } = b.preenchimentos.at(-1);
+
+  // Tudo isto estava no PDF e nada disso chegava: a pessoa relia o documento e
+  // digitava de novo, que é o trabalho que este módulo existe para tirar.
+  assert.equal(conteudo.selects.novoCliente, '50');
+  assert.equal(conteudo.selects.novoContato, '7');
+  assert.equal(conteudo.selects.novoTransportadora, '3');
+  assert.equal(conteudo.selects.novoFormaPagamento, 'pix');
+  assert.equal(conteudo.condicao, 'prazo');
+  assert.equal(conteudo.condicaoDefinida, true);
+
+  // As parcelas vêm com valor E vencimento, do jeito que o documento escreveu.
+  assert.equal(conteudo.parcelamento.count, 3);
+  assert.equal(conteudo.parcelamento.mode, 'custom');
+  assert.deepEqual(conteudo.parcelamento.items.map(i => i.dueInDays), [30, 60, 90]);
+  assert.equal(conteudo.parcelamento.items[1].amount, 166162);
+});
+
+test('venda à vista leva o prazo de entrega, não parcelas', async () => {
+  const b = criarBancada({
+    leitura: leituraComDetalhe(),
+    respostaPreenchimento: {
+      status: 200,
+      corpo: {
+        modal: { overlay: 'novoOrcamento', html: 'x', script: 'y', rotulo: 'Novo Orçamento' },
+        campos: {}, alvo: null, itens: [], avisos: [],
+        pagamento: { forma: 'pix', condicao: 'vista', prazo_vista: '15 dias', parcelas: null }
+      }
+    }
+  });
+  await b.pronta();
+
+  b.el('iaDetAplicar').disparar('click');
+  await b.pronta();
+
+  const { conteudo } = b.preenchimentos.at(-1);
+  assert.equal(conteudo.condicao, 'vista');
+  assert.equal(conteudo.prazoVista, '15 dias');
+  assert.equal(conteudo.parcelamento, null);
+});
+
+// ---------------------------------------------------------------------------
+// ETAPA 12 — a sub-lista de insumos diz o que casou e o que não casou
+// ---------------------------------------------------------------------------
+
+/** Ficha com um insumo de cada desfecho de casamento. */
+function leituraFichaCasada() {
+  const leitura = leituraFicha();
+  leitura.campos[2].subcampos = [
+    { chave: 'processo', rotulo: 'Processo', tipo: 'texto', obrigatorio: false },
+    { chave: 'nome', rotulo: 'Insumo', tipo: 'texto', obrigatorio: true },
+    { chave: 'quantidade', rotulo: 'Qtde', tipo: 'numero', obrigatorio: true },
+    { chave: 'unidade', rotulo: 'Un.', tipo: 'texto', obrigatorio: false }
+  ];
+  leitura.itens = [{
+    id: 1, linha: 1, acao: 'criar', alvo_id: null, status: 'pendente', mensagem: null,
+    dados: {
+      codigo: null, nome: 'Bandeja Vero PP',
+      insumos: [
+        { processo: 'MARCENARIA', nome: 'MDF 06', quantidade: 0.07, unidade: 'm2', _casamento: 'exato', _cadastro: 'MDF 06' },
+        { processo: 'ACABAMENTO', nome: 'Verniz FO10 - 6717 Em Lamina De Madeira', quantidade: 16, unidade: 'ml', _casamento: 'semelhante', _cadastro: 'Verniz FO10 6717' },
+        { processo: 'MONTAGEM', nome: 'Couro Serpente Amêndoa', quantidade: 0.04, unidade: 'm2', _casamento: null, _cadastro: null }
+      ]
+    }
+  }];
+  return leitura;
+}
+
+/** Abre a sub-lista de insumos e devolve as linhas dela. */
+async function abrirInsumos(b) {
+  botaoDaLista(linhasDeItem(b)[0]).disparar('click');
+  await b.pronta();
+  return subLinhas(b)[0].todos().filter(f => f.tagName === 'TR');
+}
+
+test('o insumo que não existe no estoque fica com a linha vermelha', async () => {
+  const b = criarBancada({ leitura: leituraFichaCasada() });
+  await b.pronta();
+  const linhas = await abrirInsumos(b);
+
+  const marcadas = linhas.filter(l => l.classList.contains('ia-sublinha-item--sem-cadastro'));
+  // Ele NÃO vai para o formulário. Descobrir isso depois de salvar é
+  // descobrir tarde demais — aqui ainda dá para cadastrar o que falta.
+  assert.equal(marcadas.length, 1, 'a linha sem cadastro não se distingue das outras');
+  assert.ok(marcadas[0].todos().some(f => f.value === 'Couro Serpente Amêndoa'));
+});
+
+test('só o casamento por semelhança ganha (i), com o nome do cadastro', async () => {
+  const b = criarBancada({ leitura: leituraFichaCasada() });
+  await b.pronta();
+  const linhas = await abrirInsumos(b);
+
+  const comInfo = linhas.filter(l => l.todos().some(f => f.classList.contains('ia-info-insumo')));
+  // Casamento exato não tem nada a revelar, e um ícone em toda linha viraria
+  // ruído que ninguém mais olha.
+  assert.equal(comInfo.length, 1);
+
+  const info = comInfo[0].todos().find(f => f.classList.contains('ia-info-insumo'));
+  assert.match(info.title, /Verniz FO10 6717/);
+  // A tela mostra o nome LIDO — é ele que se confere contra o papel.
+  assert.ok(comInfo[0].todos().some(f => f.value === 'Verniz FO10 - 6717 Em Lamina De Madeira'));
+});
+
+test('as colunas curtas da sub-lista têm largura fixa', async () => {
+  const b = criarBancada({ leitura: leituraFichaCasada() });
+  await b.pronta();
+  const linhas = await abrirInsumos(b);
+
+  // Deixá-las crescerem à vontade espremia o NOME DO INSUMO, que é a única
+  // coluna que precisa ser lida inteira para se conferir a ficha.
+  const celulas = linhas[1].todos().filter(f => f.tagName === 'TD');
+  assert.ok(celulas.some(c => c.classList.contains('ia-sub-processo')));
+  assert.ok(celulas.some(c => c.classList.contains('ia-sub-qtde')));
+  assert.ok(celulas.some(c => c.classList.contains('ia-sub-unidade')));
+  // O nome não: é ele que fica com o que sobra.
+  const nome = celulas.find(c => c.todos().some(f => f.value === 'MDF 06'));
+  assert.equal(nome.className.includes('ia-sub-'), false);
 });

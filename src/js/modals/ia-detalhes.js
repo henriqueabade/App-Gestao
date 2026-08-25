@@ -118,6 +118,7 @@
     const extrair = get('iaDetExtrair');
     const aplicar = get('iaDetAplicar');
     const gravarTodos = get('iaDetGravarTodos');
+    const descartar = get('iaDetDescartar');
     const aviso = get('iaDetRodapeAviso');
     if (!leitura) return;
 
@@ -136,6 +137,18 @@
     // segundo botão ao lado dele seria só um jeito de errar.
     gravarTodos?.classList.toggle('hidden', !(emRevisao && pendentes > 1));
 
+    // Descartar só existe quando há o que descartar: um botão permanentemente
+    // sem efeito ensina o usuário a ignorar aquele canto da tela.
+    const marcados = selecionados.size;
+    descartar?.classList.toggle('hidden', !(emRevisao && marcados > 0));
+    if (descartar && marcados > 0) {
+      descartar.textContent = '';
+      const icone = document.createElement('i');
+      icone.className = 'fas fa-ban mr-2';
+      descartar.append(icone,
+        document.createTextNode(`Descartar ${marcados} selecionada${marcados > 1 ? 's' : ''}`));
+    }
+
     if (aplicar && emRevisao && pendentes > 0 && temFormulario) {
       const rotulo = MODULOS_DE_DESTINO[leitura.destino].rotulo;
       aplicar.innerHTML = '<i class="fas fa-up-right-from-square mr-2"></i>'
@@ -143,10 +156,11 @@
       aplicar.title = `Abre ${rotulo} com os dados preenchidos. Nada é gravado aqui: quem salva é você.`;
     }
 
-    if (gravarTodos && emRevisao && pendentes > 1) {
-      gravarTodos.title = `Grava ${pendentes} linha(s) direto em ${leitura.destino_rotulo}, `
-        + 'sem passar pelo formulário. Use quando conferir uma a uma não for prático.';
-    }
+    // O `title` e o `disabled` de "Gravar todos" pertencem a
+    // `pintarResumoRevisao`, que é quem sabe se há campo obrigatório vazio.
+    // Escrever aqui também apagaria aquele aviso, que é o mais importante dos
+    // dois — e apagaria de forma intermitente, conforme a ordem em que as duas
+    // funções acabassem de rodar.
 
     // Extrair de novo REFAZ a lista. Dizer isso antes do clique evita a
     // surpresa de perder correções já feitas à mão.
@@ -176,23 +190,282 @@
   // Grade de revisão
   // ---------------------------------------------------------------------------
 
+  // ---------------------------------------------------------------------------
+  // O que é COLUNA e o que é DETALHE
+  //
+  // A grade responde "esta linha está certa?" de relance. Para isso serve o
+  // punhado de campos que identificam a linha e mostram o que ela vale. Os
+  // outros — forma de pagamento, observações, transportadora, validade — são
+  // conferidos uma vez, olhando para aquela linha; ocupando coluna, espremiam
+  // todas as outras a ponto de nenhuma poder ser lida.
+  //
+  // Quem decide é o esquema, com `naGrade: false`. O campo continua extraído,
+  // continua editável e continua indo para o formulário: muda só onde aparece.
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Largura das colunas da sub-lista, por chave.
+   *
+   * Quantidade e unidade são curtas por natureza; o processo tem nome de
+   * etapa. Deixá-las crescerem à vontade espremia o NOME DO INSUMO, que é a
+   * única coluna que precisa ser lida inteira para se conferir a ficha contra
+   * o papel — e era justamente ela que aparecia cortada.
+   */
+  const LARGURA_SUBCAMPO = {
+    quantidade: 'ia-sub-qtde',
+    unidade: 'ia-sub-unidade',
+    processo: 'ia-sub-processo'
+  };
+
+  const camposDaGrade = campos => campos.filter(c => c.naGrade !== false);
+
+  /**
+   * Colunas CALCULADAS, que não vêm do esquema porque não vêm do documento.
+   *
+   * O valor total do pedido é a soma dos itens que a leitura montou — não o
+   * total escrito no PDF. São coisas diferentes de propósito: o que interessa
+   * é quanto o orçamento vai valer quando for criado, e é justamente a
+   * diferença entre os dois números que revela um item que ficou de fora.
+   *
+   * Não é editável porque não é um dado, é uma conta: quem muda o total é
+   * quem muda os itens, na sub-lista logo abaixo.
+   */
+  const CALCULADAS = {
+    orcamentos: {
+      rotulo: 'Valor total',
+      largura: 'media',
+      calcular: item => (Array.isArray(item.dados?.itens) ? item.dados.itens : [])
+        .reduce((soma, i) => soma + (Number(i?.quantidade) || 0) * (Number(i?.valor_unitario) || 0), 0)
+    }
+  };
+
+  const formatarDinheiro = valor =>
+    (Number(valor) || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+  const camposDoDetalhe = campos => campos.filter(c => c.naGrade === false);
+
+  /** Linhas marcadas na grade, por id de item. */
+  const selecionados = new Set();
+
   function pintarCabecalhoDaGrade(campos) {
     const linha = get('iaDetItensCabecalho');
     if (!linha) return;
 
-    const th = (texto, classe) => {
+    const th = (conteudo, classe) => {
       const el = document.createElement('th');
       if (classe) el.className = classe;
-      el.textContent = texto;
+      if (typeof conteudo === 'string') el.textContent = conteudo;
+      else el.appendChild(conteudo);
       return el;
     };
 
+    // Marcar todos de uma vez: numa leitura de 18 clientes, descartar os que
+    // não servem um a um é o tipo de trabalho que a leitura existe para evitar.
+    const todos = document.createElement('input');
+    todos.type = 'checkbox';
+    todos.className = 'ia-selecao';
+    todos.title = 'Marcar todas as linhas';
+    todos.checked = selecionaveis().length > 0
+      && selecionaveis().every(i => selecionados.has(i.id));
+    todos.addEventListener('change', () => {
+      selecionados.clear();
+      if (todos.checked) for (const i of selecionaveis()) selecionados.add(i.id);
+      desenharItens();
+    });
+
+    const calculada = CALCULADAS[leitura?.destino];
+
     linha.replaceChildren(
-      th('#', 'ia-col-pequena'),
-      ...campos.map(c => th(c.rotulo, `ia-col-${c.largura || 'media'}`)),
-      th('O que fazer', 'ia-col-media'),
+      th(todos, 'ia-col-selecao'),
+      ...camposDaGrade(campos).map(c => th(c.rotulo, `ia-col-${c.largura || 'media'}`)),
+      ...(calculada ? [th(calculada.rotulo, `ia-col-${calculada.largura}`)] : []),
       th('Situação', 'ia-col-pequena')
     );
+  }
+
+  /** Itens que ainda podem ser marcados — o que já foi gravado não volta. */
+  const selecionaveis = () => (leitura?.itens || []).filter(i => i.status !== 'aplicado');
+
+  /**
+   * O (i) da linha: os campos que não viraram coluna, editáveis ali mesmo.
+   *
+   * Editáveis é o ponto. Se fosse só leitura, o revisor que visse a forma de
+   * pagamento errada teria de abrir o formulário, corrigir lá, e repetir isso
+   * para cada linha — e a correção não voltaria para a leitura, então extrair
+   * de novo a perderia.
+   */
+  function abrirDetalheDaLinha(icone, item, campos, editavel) {
+    const popover = get('iaDetLinhaPopover');
+    if (!popover) return;
+
+    popover.replaceChildren();
+
+    const titulo = document.createElement('p');
+    titulo.className = 'text-xs uppercase tracking-wide text-white/50 mb-3';
+    titulo.textContent = 'Dados que não cabem na tabela';
+    popover.appendChild(titulo);
+
+    for (const campo of campos) {
+      const linha = document.createElement('div');
+      linha.className = 'ia-detalhe-linha';
+
+      const rotulo = document.createElement('span');
+      rotulo.className = 'ia-detalhe-rotulo';
+      rotulo.textContent = campo.rotulo;
+      linha.appendChild(rotulo);
+      linha.appendChild(criarCampo(item, campo, editavel));
+
+      popover.appendChild(linha);
+    }
+
+    const r = icone.getBoundingClientRect();
+    popover.style.top = `${r.bottom + 8}px`;
+    popover.style.left = `${Math.max(8, r.left - 40)}px`;
+    popover.classList.add('show');
+  }
+
+  const fecharDetalheDaLinha = () => get('iaDetLinhaPopover')?.classList.remove('show');
+
+  function desenharItens() {
+    const corpo = get('iaDetItensCorpo');
+    const vazio = get('iaDetItensVazio');
+    const tabela = get('iaDetItensTabela');
+    const itens = leitura?.itens || [];
+    const campos = leitura?.campos || [];
+
+    const contador = document.querySelector('[data-contador-ia="itens"]');
+    if (contador) contador.textContent = itens.length ? `(${itens.length})` : '';
+
+    if (!corpo) return;
+    vazio?.classList.toggle('hidden', itens.length > 0);
+    tabela?.classList.toggle('hidden', itens.length === 0);
+
+    // Mensagem do estado vazio muda com a situação: "nada foi extraído" e
+    // "ainda não extraí" mandam o usuário para lugares diferentes.
+    if (vazio) {
+      const texto = vazio.querySelector('p');
+      if (texto) {
+        texto.textContent = leitura?.status === 'rascunho'
+          ? 'O texto já foi lido. Clique em "Extrair os dados" para montar a lista.'
+          : 'Nenhum item foi extraído desta leitura.';
+      }
+    }
+
+    pintarResumoRevisao();
+    if (!itens.length) { corpo.replaceChildren(); return; }
+
+    pintarCabecalhoDaGrade(campos);
+
+    const naGrade = camposDaGrade(campos);
+    const noDetalhe = camposDoDetalhe(campos);
+    const colunas = naGrade.length + 2 + (CALCULADAS[leitura.destino] ? 1 : 0);
+    const editavel = podeEditar();
+    const linhas = [];
+
+    for (const item of itens) {
+      const tr = document.createElement('tr');
+      tr.className = 'ia-linha-item'
+        + (item.acao === 'ignorar' || item.status === 'ignorado' ? ' ia-linha-item--ignorada' : '')
+        + (item.status === 'erro' ? ' ia-linha-item--erro' : '')
+        + (item.status === 'aplicado' ? ' ia-linha-item--aplicada' : '')
+        + (selecionados.has(item.id) ? ' ia-linha-item--marcada' : '');
+
+      // Item já gravado não volta a ser editável: mexer nele daria a impressão
+      // de corrigir um estoque que já entrou.
+      const editavelAqui = editavel && item.status !== 'aplicado';
+
+      // Coluna de seleção, no lugar do antigo número da linha. O número não
+      // dizia nada que a ordem da tabela já não dissesse, e ocupava a largura
+      // de que a primeira coluna de verdade precisava.
+      const tdSelecao = document.createElement('td');
+      tdSelecao.className = 'ia-col-selecao';
+      if (item.status !== 'aplicado') {
+        const marca = document.createElement('input');
+        marca.type = 'checkbox';
+        marca.className = 'ia-selecao';
+        marca.checked = selecionados.has(item.id);
+        marca.dataset.selecionar = String(item.id);
+        marca.addEventListener('change', () => {
+          if (marca.checked) selecionados.add(item.id);
+          else selecionados.delete(item.id);
+          tr.classList.toggle('ia-linha-item--marcada', marca.checked);
+          pintarRodape();
+        });
+        tdSelecao.appendChild(marca);
+      }
+      tr.appendChild(tdSelecao);
+
+      naGrade.forEach((campo, indice) => {
+        const td = document.createElement('td');
+        if (item.dados_corrompidos) {
+          td.className = 'text-sm';
+          td.style.color = 'var(--color-red)';
+          td.textContent = indice === 0 ? 'Conteúdo ilegível' : '';
+          tr.appendChild(td);
+          return;
+        }
+
+        // O (i) mora na primeira coluna, junto do que identifica a linha —
+        // é onde o olho já está quando decide olhar os detalhes.
+        if (indice === 0 && noDetalhe.length) {
+          const caixa = document.createElement('div');
+          caixa.className = 'ia-celula-com-info';
+
+          const info = document.createElement('i');
+          info.className = 'info-icon ia-info-item';
+          info.dataset.detalhe = String(item.id);
+          info.title = `${noDetalhe.length} campo(s) que não cabem na tabela`;
+          // Um caminho só para os dois gestos: passar o mouse e clicar abrem
+          // o mesmo popover, com as mesmas permissões. Dois handlers com a
+          // mesma chamada escrita duas vezes é como um deles fica para trás
+          // numa mudança futura.
+          const abrir = () => abrirDetalheDaLinha(info, item, noDetalhe, editavelAqui);
+          info.addEventListener('mouseenter', abrir);
+          info.addEventListener('click', e => { e.stopPropagation(); abrir(); });
+
+          caixa.append(info, campo.tipo === 'lista'
+            ? criarCelulaDeLista(item, campo, editavelAqui)
+            : criarCampo(item, campo, editavelAqui));
+          td.appendChild(caixa);
+          tr.appendChild(td);
+          return;
+        }
+
+        td.appendChild(campo.tipo === 'lista'
+          ? criarCelulaDeLista(item, campo, editavelAqui)
+          : criarCampo(item, campo, editavelAqui));
+        tr.appendChild(td);
+      });
+
+      const calculada = CALCULADAS[leitura.destino];
+      if (calculada) {
+        const td = document.createElement('td');
+        td.className = 'text-sm text-white ia-valor-total';
+        td.textContent = formatarDinheiro(calculada.calcular(item));
+        td.title = 'Soma dos itens desta linha. Muda quando você corrige um item.';
+        tr.appendChild(td);
+      }
+
+      const tdStatus = document.createElement('td');
+      tdStatus.className = 'text-sm';
+      tdStatus.style.color = COR_STATUS[item.status] || 'rgba(255,255,255,0.7)';
+      tdStatus.textContent = ROTULO_STATUS[item.status] || item.status || '—';
+      tr.appendChild(tdStatus);
+
+      linhas.push(tr);
+
+      for (const campo of naGrade) {
+        if (campo.tipo !== 'lista') continue;
+        if (!listasAbertas.has(`${item.id}:${campo.chave}`)) continue;
+        linhas.push(criarSubTabela(item, campo, colunas, editavelAqui));
+      }
+
+      const nota = criarNota(item, colunas);
+      if (nota) linhas.push(nota);
+    }
+
+    corpo.replaceChildren(...linhas);
+    pintarSugestoes();
+    pintarRodape();
   }
 
   /** Grava uma correção do revisor e devolve o item como ficou. */
@@ -306,22 +579,13 @@
     });
     caixa.appendChild(botao);
 
-    if (editavel) {
-      const adicionar = document.createElement('button');
-      adicionar.type = 'button';
-      adicionar.className = 'ia-lista-adicionar';
-      adicionar.title = `Acrescentar ${campo.rotulo.toLowerCase()}`;
-      adicionar.innerHTML = '<i class="fas fa-plus"></i>';
-      adicionar.addEventListener('click', async () => {
-        const vazio = {};
-        for (const sc of campo.subcampos || []) vazio[sc.chave] = null;
-        listasAbertas.add(chaveAberta);
-        try { await salvarLista(item, campo, [...lista, vazio]); }
-        catch (err) { showToast(err.message || 'Não foi possível acrescentar', 'error'); }
-      });
-      caixa.appendChild(adicionar);
-    }
-
+    // Sem botão de acrescentar aqui, de propósito.
+    //
+    // Uma linha em branco na sub-lista não tem o que a torna útil: o campo de
+    // busca contra o catálogo, a validação, o preço que vem do cadastro. Tudo
+    // isso existe do outro lado, no formulário do módulo, e é lá que
+    // acrescentar um item faz sentido. Aqui só se confere e se corrige o que a
+    // leitura trouxe.
     return caixa;
   }
 
@@ -354,6 +618,11 @@
     for (const sc of subcampos) {
       const th = document.createElement('th');
       th.textContent = sc.rotulo;
+      // Largura por chave: quantidade e unidade são curtas por natureza, e o
+      // processo tem nome de etapa. Deixá-las crescerem à vontade espremia o
+      // NOME DO INSUMO, que é a única coluna que precisa ser lida inteira para
+      // se conferir a ficha contra o papel.
+      if (LARGURA_SUBCAMPO[sc.chave]) th.className = LARGURA_SUBCAMPO[sc.chave];
       cabecalho.appendChild(th);
     }
     if (editavel) cabecalho.appendChild(document.createElement('th'));
@@ -362,8 +631,16 @@
     lista.forEach((sub, indice) => {
       const linha = document.createElement('tr');
 
+      // Insumo que não existe no estoque NÃO vai para o formulário. Descobrir
+      // isso depois de salvar é descobrir tarde demais, então a linha inteira
+      // fica vermelha aqui, onde ainda dá para cadastrar o que falta.
+      if (sub && sub._casamento === null && String(sub.nome || '').trim()) {
+        linha.className = 'ia-sublinha-item--sem-cadastro';
+      }
+
       for (const sc of subcampos) {
         const celula = document.createElement('td');
+        if (LARGURA_SUBCAMPO[sc.chave]) celula.className = LARGURA_SUBCAMPO[sc.chave];
         const input = document.createElement('input');
         input.type = 'text';
         input.className = 'ia-campo';
@@ -383,6 +660,25 @@
             }
           });
         }
+        // O (i) do nome, só quando o casamento foi por SEMELHANÇA.
+        //
+        // A tela mostra o nome LIDO, porque é ele que se confere contra o
+        // papel. Mas o que vai para a receita é o nome do CADASTRO, e quando
+        // os dois diferem quem revisa precisa poder ver para onde o insumo
+        // foi. Casamento exato não ganha (i): não há nada a revelar, e um
+        // ícone em toda linha viraria ruído que ninguém mais olha.
+        if (sc.chave === 'nome' && sub && sub._casamento === 'semelhante' && sub._cadastro) {
+          const caixa = document.createElement('div');
+          caixa.className = 'ia-celula-com-info';
+          const info = document.createElement('i');
+          info.className = 'info-icon ia-info-insumo';
+          info.title = `No estoque: "${sub._cadastro}" — é este que vai para a ficha`;
+          caixa.append(info, input);
+          celula.appendChild(caixa);
+          linha.appendChild(celula);
+          continue;
+        }
+
         celula.appendChild(input);
         linha.appendChild(celula);
       }
@@ -410,141 +706,23 @@
     return tr;
   }
 
-  function criarSeletorDeAcao(item, editavel) {
-    const select = document.createElement('select');
-    select.className = 'ia-acao-select';
-    select.disabled = !editavel;
-
-    const explicacoes = leitura.explicacoes || {};
-    const alvo = (leitura.alvos || []).find(a => String(a.id) === String(item.alvo_id));
-
-    // O vínculo muda o sentido de "cadastrar": no orçamento, o alvo é o
-    // CLIENTE a quem o orçamento novo se prende, não um orçamento existente.
-    const vinculo = Boolean(leitura.alvo_eh_vinculo);
-    const rotuloAlvo = leitura.rotulo_alvo || 'registro';
-
-    const todas = {
-      criar: {
-        valor: 'criar',
-        rotulo: vinculo
-          ? (alvo ? `Criar para: ${alvo.nome}` : `Criar (escolha o ${rotuloAlvo.toLowerCase()})`)
-          : 'Cadastrar',
-        titulo: explicacoes.criar,
-        // Onde o alvo é vínculo, "criar" sem alvo não tem a quem se prender.
-        desabilitada: vinculo && !item.alvo_id
-      },
-      atualizar: {
-        valor: 'atualizar',
-        rotulo: alvo ? `Dar entrada em: ${alvo.nome}` : 'Dar entrada no existente',
-        titulo: explicacoes.atualizar,
-        // Sem alvo escolhido, "dar entrada" não tem onde entrar. Deixar a
-        // opção clicável só produziria erro na hora de aplicar.
-        desabilitada: !item.alvo_id
-      },
-      ignorar: { valor: 'ignorar', rotulo: 'Descartar', titulo: 'O item não é gravado' }
-    };
-
-    // Só as ações que fazem sentido no destino. Oferecer uma que ele não sabe
-    // executar só produziria erro na hora de aplicar — e o revisor descobriria
-    // depois de conferir a lista inteira.
-    const oferecidas = Array.isArray(leitura.acoes) && leitura.acoes.length
-      ? leitura.acoes
-      : ['criar', 'atualizar', 'ignorar'];
-    const opcoes = oferecidas.map(a => todas[a]).filter(Boolean);
-
-    for (const o of opcoes) {
-      const option = document.createElement('option');
-      option.value = o.valor;
-      option.textContent = o.rotulo;
-      if (o.titulo) option.title = o.titulo;
-      if (o.desabilitada) option.disabled = true;
-      if (item.acao === o.valor) option.selected = true;
-      select.appendChild(option);
-    }
-
-    select.addEventListener('change', async () => {
-      try {
-        const salvo = await salvarItem(item.id, { acao: select.value });
-        atualizarEmMemoria(salvo);
-        desenharItens();
-      } catch (err) {
-        showToast(err.message || 'Não foi possível mudar a ação', 'error');
-        select.value = item.acao;
-      }
-    });
-
-    return select;
-  }
-
-  /**
-   * Escolher para QUAL registro o item vai.
-   *
-   * Sem isto, o único jeito de apontar um item era o atalho "É o mesmo" — que
-   * só aparece quando a reconciliação achou um parecido. Num destino que só
-   * atualiza (a ficha técnica de um produto), um nome que não casou ficaria
-   * sem saída nenhuma.
-   *
-   * `datalist` e não `select`: o catálogo de produtos e o de insumos têm
-   * centenas de linhas, e uma caixa de seleção com centenas de opções é pior
-   * do que digitar as três primeiras letras.
-   */
-  function criarSeletorDeAlvo(item, editavel) {
-    const alvos = leitura.alvos || [];
-    if (!alvos.length) return null;
-
-    // Só aparece quando há o que resolver: o item já aponta para alguém (e o
-    // revisor pode querer corrigir), o destino exige alvo, ou o alvo é o
-    // vínculo do registro novo — caso em que ele é obrigatório sempre.
-    const precisa = item.acao === 'atualizar'
-      || leitura.exige_alvo
-      || leitura.alvo_eh_vinculo;
-    if (!precisa || !editavel) return null;
-
-    const lista = get('iaDetAlvos');
-    if (lista && !lista.dataset.montada) {
-      lista.replaceChildren(...alvos.map(a => {
-        const o = document.createElement('option');
-        o.value = a.nome;
-        return o;
-      }));
-      lista.dataset.montada = '1';
-    }
-
-    const input = document.createElement('input');
-    input.type = 'text';
-    input.className = 'ia-campo ia-alvo';
-    input.setAttribute('list', 'iaDetAlvos');
-    input.placeholder = leitura.rotulo_alvo
-      ? `escolher ${String(leitura.rotulo_alvo).toLowerCase()}…`
-      : 'escolher…';
-    const atual = alvos.find(a => String(a.id) === String(item.alvo_id));
-    input.value = atual ? atual.nome : '';
-    input.title = 'Para qual registro este item vai';
-
-    input.addEventListener('change', async () => {
-      const digitado = normalizarNome(input.value);
-      if (!digitado) {
-        input.value = atual ? atual.nome : '';
-        return;
-      }
-      const achado = alvos.find(a => normalizarNome(a.nome) === digitado);
-      if (!achado) {
-        // Nome que não está no catálogo não vira alvo: apontar para o que não
-        // existe daria erro só na hora de gravar.
-        showToast('Escolha um registro da lista', 'error');
-        input.value = atual ? atual.nome : '';
-        return;
-      }
-      await apontarPara(item, achado.id, achado.tabela);
-    });
-
-    return input;
-  }
-
-  /** Caixa e acento não distinguem registro na hora de casar o que foi digitado. */
-  const normalizarNome = valor => String(valor ?? '')
-    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase().replace(/\s+/g, ' ').trim();
+  // ---------------------------------------------------------------------------
+  // A coluna "O que fazer" foi embora
+  //
+  // Ela tinha um seletor de ação (cadastrar / atualizar / descartar) e, abaixo,
+  // um campo para apontar o registro existente. Duas decisões por linha, numa
+  // coluna que competia por largura com os dados que se estava conferindo.
+  //
+  // Nada disso se perdeu, mudou de lugar para onde já era mais natural:
+  //
+  //   descartar ..... marcar as linhas e usar "Descartar selecionados" no
+  //                   rodapé — o mesmo gesto serve para uma linha ou dezoito;
+  //   apontar ....... o botão "É o mesmo" na ressalva, que já existia e é onde
+  //                   a dúvida aparece;
+  //   cadastrar ..... virou o padrão, porque abrir o formulário do módulo com
+  //                   os dados preenchidos É cadastrar, e quem confirma é quem
+  //                   salva do outro lado.
+  // ---------------------------------------------------------------------------
 
   /**
    * Aponta o item para um registro que já existe.
@@ -598,115 +776,6 @@
 
     tr.appendChild(td);
     return tr;
-  }
-
-  function desenharItens() {
-    const corpo = get('iaDetItensCorpo');
-    const vazio = get('iaDetItensVazio');
-    const tabela = get('iaDetItensTabela');
-    const itens = leitura?.itens || [];
-    const campos = leitura?.campos || [];
-
-    const contador = document.querySelector('[data-contador-ia="itens"]');
-    if (contador) contador.textContent = itens.length ? `(${itens.length})` : '';
-
-    if (!corpo) return;
-    vazio?.classList.toggle('hidden', itens.length > 0);
-    tabela?.classList.toggle('hidden', itens.length === 0);
-
-    // Mensagem do estado vazio muda com a situação: "nada foi extraído" e
-    // "ainda não extraí" mandam o usuário para lugares diferentes.
-    if (vazio) {
-      const texto = vazio.querySelector('p');
-      if (texto) {
-        texto.textContent = leitura?.status === 'rascunho'
-          ? 'O texto já foi lido. Clique em "Extrair os dados" para montar a lista.'
-          : 'Nenhum item foi extraído desta leitura.';
-      }
-    }
-
-    pintarResumoRevisao();
-    if (!itens.length) { corpo.replaceChildren(); return; }
-
-    pintarCabecalhoDaGrade(campos);
-    const colunas = campos.length + 3;
-    const editavel = podeEditar();
-    const linhas = [];
-
-    for (const item of itens) {
-      const tr = document.createElement('tr');
-      tr.className = 'ia-linha-item'
-        + (item.acao === 'ignorar' || item.status === 'ignorado' ? ' ia-linha-item--ignorada' : '')
-        + (item.status === 'erro' ? ' ia-linha-item--erro' : '')
-        + (item.status === 'aplicado' ? ' ia-linha-item--aplicada' : '');
-
-      const numero = document.createElement('td');
-      numero.className = 'text-sm text-white/40';
-      numero.textContent = String(item.linha ?? '—');
-      tr.appendChild(numero);
-
-      // Item já gravado não volta a ser editável: mexer nele daria a impressão
-      // de corrigir um estoque que já entrou.
-      const editavelAqui = editavel && item.status !== 'aplicado';
-
-      for (const campo of campos) {
-        const td = document.createElement('td');
-        if (item.dados_corrompidos) {
-          td.className = 'text-sm';
-          td.style.color = 'var(--color-red)';
-          td.textContent = campo === campos[0] ? 'Conteúdo ilegível' : '';
-        } else if (campo.tipo === 'lista') {
-          td.appendChild(criarCelulaDeLista(item, campo, editavelAqui));
-        } else {
-          td.appendChild(criarCampo(item, campo, editavelAqui));
-        }
-        tr.appendChild(td);
-      }
-
-      const tdAcao = document.createElement('td');
-      tdAcao.appendChild(criarSeletorDeAcao(item, editavelAqui));
-      const seletorAlvo = criarSeletorDeAlvo(item, editavelAqui);
-      if (seletorAlvo) tdAcao.appendChild(seletorAlvo);
-
-      // Caminho alternativo ao "Aplicar": abre o formulário do módulo já
-      // preenchido, para quem prefere conferir e salvar por lá.
-      if (editavelAqui && MODULOS_DE_DESTINO[leitura.destino] && item.acao !== 'ignorar') {
-        const abrir = document.createElement('button');
-        abrir.type = 'button';
-        abrir.className = 'ia-abrir-modulo';
-        abrir.dataset.abrirModulo = String(item.id);
-        const icone = document.createElement('i');
-        icone.className = 'fas fa-up-right-from-square';
-        const rotulo = document.createElement('span');
-        rotulo.textContent = `Abrir em ${MODULOS_DE_DESTINO[leitura.destino].rotulo}`;
-        abrir.append(icone, rotulo);
-        abrir.title = 'Abre o formulário do módulo com estes dados preenchidos. Quem salva é você.';
-        abrir.addEventListener('click', () => abrirNoModulo(item));
-        tdAcao.appendChild(abrir);
-      }
-
-      tr.appendChild(tdAcao);
-
-      const tdStatus = document.createElement('td');
-      tdStatus.className = 'text-sm';
-      tdStatus.style.color = COR_STATUS[item.status] || 'rgba(255,255,255,0.7)';
-      tdStatus.textContent = ROTULO_STATUS[item.status] || item.status || '—';
-      tr.appendChild(tdStatus);
-
-      linhas.push(tr);
-
-      for (const campo of campos) {
-        if (campo.tipo !== 'lista') continue;
-        if (!listasAbertas.has(`${item.id}:${campo.chave}`)) continue;
-        linhas.push(criarSubTabela(item, campo, colunas, editavelAqui));
-      }
-
-      const nota = criarNota(item, colunas);
-      if (nota) linhas.push(nota);
-    }
-
-    corpo.replaceChildren(...linhas);
-    pintarSugestoes();
   }
 
   /** Datalists de categoria/unidade, para o revisor encaixar no que já existe. */
@@ -822,6 +891,14 @@
   // Arquivos
   // ---------------------------------------------------------------------------
 
+  /** O texto que a IA leu de um arquivo. Um caminho só para os dois usos. */
+  async function buscarTextoLido(extracaoId, arquivoId) {
+    const resp = await fetchApi(`/api/ia/${extracaoId}/arquivos/${arquivoId}/texto`);
+    const dados = await resp.json().catch(() => ({}));
+    if (!resp.ok) throw new Error(dados.error || `Erro ${resp.status}`);
+    return dados;
+  }
+
   async function alternarTexto(botao, extracaoId, arquivoId, alvo) {
     if (!alvo.classList.contains('hidden')) {
       alvo.classList.add('hidden');
@@ -833,9 +910,7 @@
       botao.disabled = true;
       botao.textContent = 'Carregando…';
       try {
-        const resp = await fetchApi(`/api/ia/${extracaoId}/arquivos/${arquivoId}/texto`);
-        const dados = await resp.json().catch(() => ({}));
-        if (!resp.ok) throw new Error(dados.error || `Erro ${resp.status}`);
+        const dados = await buscarTextoLido(extracaoId, arquivoId);
         alvo.textContent = dados.texto || '(nada foi extraído deste arquivo)';
         alvo.dataset.carregado = '1';
       } catch (err) {
@@ -850,6 +925,31 @@
 
     alvo.classList.remove('hidden');
     botao.textContent = 'Ocultar';
+  }
+
+  /**
+   * Copia para a área de transferência o texto lido de um arquivo.
+   *
+   * Busca no servidor em vez de ler o que está na tela: o painel só existe
+   * depois de "Ver o que foi lido", e copiar não deveria exigir abrir antes.
+   */
+  async function copiarTextoDoArquivo(botao, extracaoId, arquivoId) {
+    try {
+      const dados = await buscarTextoLido(extracaoId, arquivoId);
+
+      const texto = dados.texto || '';
+      if (!texto) { showToast('Este arquivo não tem texto lido', 'info'); return; }
+
+      await navigator.clipboard.writeText(texto);
+      // A confirmação vai no próprio botão, e não só num toast: é ali que o
+      // olho está no momento do clique.
+      botao.classList.add('ia-btn-copiar--feito');
+      setTimeout(() => botao.classList.remove('ia-btn-copiar--feito'), 1200);
+      showToast(`${texto.length.toLocaleString('pt-BR')} caracteres copiados`, 'success');
+    } catch (err) {
+      console.error('Falha ao copiar o texto lido', err);
+      showToast(err?.message || 'Não foi possível copiar', 'error');
+    }
   }
 
   function pintarArquivos(extracaoId, arquivos) {
@@ -893,11 +993,32 @@
       esquerda.appendChild(nome);
       topo.appendChild(esquerda);
 
+      const acoes = document.createElement('div');
+      acoes.className = 'flex items-center gap-2 flex-shrink-0';
+
+      // Copiar o texto lido.
+      //
+      // É o que permite conferir a transcrição contra o documento fora daqui —
+      // colar num editor, procurar um número, comparar lado a lado. Sem isto,
+      // a única forma de tirar o texto da tela é selecionar com o mouse dentro
+      // de uma caixa que rola, o que na prática ninguém consegue fazer inteiro.
+      const copiar = document.createElement('button');
+      copiar.type = 'button';
+      copiar.className = 'ia-btn-copiar';
+      copiar.dataset.copiar = String(a.id);
+      copiar.title = 'Copiar o texto lido deste arquivo';
+      copiar.innerHTML = '<i class="fas fa-copy"></i>';
+      copiar.disabled = !a.texto_tamanho;
+      copiar.addEventListener('click', () => copiarTextoDoArquivo(copiar, extracaoId, a.id));
+      acoes.appendChild(copiar);
+
       const botao = document.createElement('button');
       botao.type = 'button';
       botao.className = 'btn-neutral text-white rounded-lg px-3 py-1.5 text-xs font-medium flex-shrink-0';
       botao.textContent = 'Ver o que foi lido';
-      topo.appendChild(botao);
+      acoes.appendChild(botao);
+
+      topo.appendChild(acoes);
       card.appendChild(topo);
 
       if (a.erro) {
@@ -1086,22 +1207,39 @@
     // O backend já mandou os dois resolvidos, junto com o id e o preço.
     produto_insumos: carga => ({ itens: (carga.insumos || []).map(i => ({ ...i })) }),
 
-    orcamentos: carga => ({
-      // A tabela do orçamento guarda os valores como texto simples, e é assim
-      // que ela é relida para recalcular o total: número com ponto decimal,
-      // sem símbolo de moeda.
-      itens: (carga.itens || []).map(i => ({
-        id: String(i.produto_id),
-        nome: i.nome,
-        qtd: String(i.quantidade),
-        valor: String(i.valor_unitario),
-        valorDesc: String(i.valor_unitario),
-        desc: '0'
-      })),
-      // O cliente é o primeiro select a ser reposto: é o `change` dele que
-      // carrega contato e transportadora.
-      selects: { novoCliente: carga.alvo ? String(carga.alvo.id) : '' }
-    })
+    orcamentos: carga => {
+      const pagamento = carga.pagamento || {};
+      return {
+        // A tabela do orçamento guarda os valores como texto simples, e é
+        // assim que ela é relida para recalcular o total: número com ponto
+        // decimal, sem símbolo de moeda.
+        itens: (carga.itens || []).map(i => ({
+          id: String(i.produto_id),
+          nome: i.nome,
+          qtd: String(i.quantidade),
+          valor: String(i.valor_unitario),
+          valorDesc: String(i.valor_unitario),
+          desc: '0'
+        })),
+
+        // O cliente é o PRIMEIRO select a ser reposto: é o `change` dele que
+        // carrega as listas de contato e de transportadora. Os outros dois só
+        // existem depois disso, e o `restaurar` do módulo já sabe dessa ordem.
+        selects: {
+          novoCliente: carga.alvo ? String(carga.alvo.id) : '',
+          novoContato: carga.contato ? String(carga.contato.id) : '',
+          novoTransportadora: carga.transportadora ? String(carga.transportadora.id) : '',
+          novoFormaPagamento: pagamento.forma || ''
+        },
+
+        // Condição de pagamento: é ela que decide se o formulário mostra o
+        // campo de prazo ou o bloco de parcelamento.
+        condicao: pagamento.condicao || '',
+        condicaoDefinida: Boolean(pagamento.condicao),
+        prazoVista: pagamento.prazo_vista || '',
+        parcelamento: pagamento.parcelas || null
+      };
+    }
   };
 
   /** Abre o modal por cima e espera ele terminar de montar. */
@@ -1257,7 +1395,49 @@
       showToast('Nenhuma linha pendente nesta leitura', 'info');
       return;
     }
-    await abrirNoModulo(pendentes[0]);
+    // A seleção manda quando existe: numa leitura de dezoito linhas, "a
+    // primeira pendente" quase nunca é a que se quer abrir agora. Sem seleção,
+    // segue a ordem da tabela.
+    const escolhida = pendentes.find(i => selecionados.has(i.id)) || pendentes[0];
+    await abrirNoModulo(escolhida);
+  }
+
+  /**
+   * Descarta as linhas marcadas.
+   *
+   * Descartar não apaga: o item continua na leitura, com a procedência
+   * intacta, e some do que vai virar cadastro. Apagar de verdade jogaria fora
+   * a resposta para "de onde veio este dado" — que é metade do motivo de a
+   * leitura existir.
+   */
+  async function descartarSelecionados() {
+    const alvos = itensPendentes().filter(i => selecionados.has(i.id));
+    if (!alvos.length) { showToast('Nenhuma linha marcada', 'info'); return; }
+
+    if (window.DialogPadrao?.confirm) {
+      const seguir = await window.DialogPadrao.confirm({
+        title: 'Descartar linhas',
+        message: `${alvos.length} linha(s) deixam de ser cadastradas. `
+          + 'Elas continuam na leitura, para você poder conferir de onde vieram.',
+        confirmText: 'Descartar',
+        cancelText: 'Voltar'
+      });
+      if (!seguir) return;
+    }
+
+    const falhas = [];
+    for (const item of alvos) {
+      try {
+        atualizarEmMemoria(await salvarItem(item.id, { acao: 'ignorar' }));
+        selecionados.delete(item.id);
+      } catch (err) {
+        falhas.push(err?.message || `linha ${item.linha}`);
+      }
+    }
+
+    desenharItens();
+    if (falhas.length) showToast(`${falhas.length} linha(s) não puderam ser descartadas`, 'error');
+    else showToast(`${alvos.length} linha(s) descartada(s)`, 'success');
   }
 
   async function gravarTodos() {
@@ -1320,7 +1500,8 @@
   for (const [id, acao] of [
     ['iaDetExtrair', extrair],
     ['iaDetAplicar', abrirPrimeiroPendente],
-    ['iaDetGravarTodos', gravarTodos]
+    ['iaDetGravarTodos', gravarTodos],
+    ['iaDetDescartar', descartarSelecionados]
   ]) {
     const botao = get(id);
     if (!botao) continue;

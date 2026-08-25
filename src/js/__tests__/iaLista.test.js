@@ -335,3 +335,143 @@ test('os modais grandes revelam o overlay pelo evento do spinner', () => {
       `${arquivo}: o overlay precisa nascer hidden para o spinner revelá-lo`);
   }
 });
+
+
+// ===========================================================================
+// ETAPA 9 — A CASCA
+//
+// Nada aqui muda o que o módulo faz. O que se prova é que ele PARECE com o
+// resto do programa: a mesma distância até a barra de cima, a mesma barra de
+// rolagem, e uma tabela cujos títulos não quebram em duas linhas.
+//
+// São conferências contra os arquivos, não contra comportamento — porque é
+// disso que se trata: um valor de CSS que ninguém repara ter mudado até a tela
+// ficar torta de novo.
+// ===========================================================================
+
+const HTML_MODULO = path.join(__dirname, '..', '..', 'html', 'ia.html');
+const CSS_MODULO = path.join(__dirname, '..', '..', 'css', 'ia.css');
+const HTML_PRODUTOS = path.join(__dirname, '..', '..', 'html', 'produtos.html');
+
+test('o cabeçalho segue o mesmo espaçamento do módulo de Produtos', () => {
+  const ia = fs.readFileSync(HTML_MODULO, 'utf8');
+  const produtos = fs.readFileSync(HTML_PRODUTOS, 'utf8');
+
+  // `module-header` é a classe que fixa `margin-top: 0` e CANCELA a animação
+  // de entrada. Sem ela o cabeçalho nasce 20px abaixo do lugar e desce até a
+  // posição final — que era exatamente a diferença que se via contra Produtos.
+  const cabecalhoIa = /<div class="([^"]*)"[^>]*>\s*<div>\s*<h1[^>]*module-header__title/.exec(ia)
+    || /<div class="(module-header[^"]*)"/.exec(ia);
+  assert.ok(cabecalhoIa, 'não achei o cabeçalho do módulo de IA');
+  assert.match(cabecalhoIa[1], /\bmodule-header\b/);
+
+  // E a mesma margem inferior do padrão.
+  const margemProdutos = /class="module-header[^"]*\bmb-(\d+)\b/.exec(produtos);
+  const margemIa = /class="module-header[^"]*\bmb-(\d+)\b/.exec(ia);
+  assert.ok(margemProdutos && margemIa);
+  assert.strictEqual(margemIa[1], margemProdutos[1],
+    'a margem do cabeçalho não bate com a de Produtos');
+});
+
+test('a barra de filtros tem o mesmo respiro de Produtos', () => {
+  const ia = fs.readFileSync(HTML_MODULO, 'utf8');
+  const produtos = fs.readFileSync(HTML_PRODUTOS, 'utf8');
+
+  const respiro = fonte => {
+    const m = /glass-surface rounded-xl (p-\d+ mb-\d+)/.exec(fonte);
+    return m && m[1];
+  };
+  assert.strictEqual(respiro(ia), respiro(produtos),
+    'o padding/margem da barra de filtros destoa de Produtos');
+});
+
+test('o módulo não recarrega Tailwind nem os ícones', () => {
+  // Os dois já vêm do documento principal. Carregar de novo baixa a folha
+  // inteira a cada troca de módulo — e o link de ícones aponta para a
+  // internet, que num aplicativo de mesa pode simplesmente não existir.
+  const ia = fs.readFileSync(HTML_MODULO, 'utf8');
+  assert.doesNotMatch(ia, /tailwind-offline\.css/);
+  assert.doesNotMatch(ia, /cdnjs\.cloudflare\.com/);
+});
+
+test('os modais têm tamanho fixo e quase cheio, com margens proporcionais', () => {
+  const css = fs.readFileSync(CSS_MODULO, 'utf8');
+  const regra = /\.modal-ia \{([\s\S]*?)\}/.exec(css);
+  assert.ok(regra, 'não achei a regra do modal');
+
+  // ALTURA, não max-height: uma caixa que se ajusta ao conteúdo muda de
+  // tamanho a cada leitura aberta, e a tela pula entre uma e outra.
+  assert.match(regra[1], /\n\s*height:\s*90vh;/);
+  assert.doesNotMatch(regra[1], /max-height/);
+
+  // Largura proporcional, com teto para telas muito largas.
+  assert.match(regra[1], /width:\s*min\(\d+px,\s*\d+vw\)/);
+
+  // A distinção "largo" deixou de existir: todos têm o mesmo tamanho.
+  const largo = /\.modal-ia--largo \{([\s\S]*?)\}/.exec(css);
+  assert.ok(largo);
+  assert.doesNotMatch(largo[1], /max-width|width/);
+});
+
+test('os modais usam a barra de rolagem padrão do programa', () => {
+  // `.modal-scroll` mora em src/styles/scroll.css e é o que todos os outros
+  // modais usam. Sem ela este módulo mostrava a barra crua do sistema.
+  for (const arquivo of ['detalhes', 'nova', 'configuracao']) {
+    const html = fs.readFileSync(
+      path.join(__dirname, '..', '..', 'html', 'modals', 'ia', `${arquivo}.html`), 'utf8');
+    assert.match(html, /class="modal-ia__corpo modal-scroll/,
+      `${arquivo}.html não usa a barra de rolagem padrão`);
+  }
+
+  // E a grade de revisão segue a barra das tabelas.
+  const css = fs.readFileSync(CSS_MODULO, 'utf8');
+  assert.match(css, /\.ia-grade-revisao::-webkit-scrollbar-thumb \{/);
+});
+
+test('a tabela tem cinco colunas, e nenhum título quebra em duas linhas', () => {
+  const ia = fs.readFileSync(HTML_MODULO, 'utf8');
+  const cabecalhos = [...ia.matchAll(/<th([^>]*)>([^<]+)<\/th>/g)];
+
+  assert.strictEqual(cabecalhos.length, 5,
+    `a tabela voltou a ter ${cabecalhos.length} colunas: ` + cabecalhos.map(c => c[2]).join(', '));
+  assert.deepStrictEqual(cabecalhos.map(c => c[2]),
+    ['Leitura', 'Destino', 'Situação', 'Responsável', 'Ações']);
+
+  // Título que quebra em duas linhas empurra a altura do cabeçalho e desalinha
+  // a tabela inteira.
+  for (const [, atributos, texto] of cabecalhos) {
+    assert.match(atributos, /whitespace-nowrap/, `o título "${texto}" pode quebrar`);
+  }
+});
+
+test('as colunas que saíram da tabela continuam sob a mesma permissão', () => {
+  // Arquivos, itens, modelos e data foram para o popover. O que mudou foi ONDE
+  // aparecem, não quem pode vê-los — uma permissão que deixa de proteger algo
+  // é pior do que uma que nunca existiu, porque continua marcada na tela de
+  // perfis dando a impressão de que faz alguma coisa.
+  const fonte = fs.readFileSync(ARQUIVO, 'utf8');
+  for (const perm of ['col_ia_arquivos', 'col_ia_itens', 'col_ia_modelo', 'col_ia_data']) {
+    assert.match(fonte, new RegExp(`data-perm-col="\\$\\{perm\\}"|'${perm}'`),
+      `${perm} deixou de proteger alguma coisa`);
+  }
+});
+
+test('a linha da tabela ganha o (i) e perde as quatro colunas', () => {
+  const html = renderizarLinha({ ...LEITURAS[0] });
+
+  // O caminho para o que saiu da tabela precisa existir na linha.
+  assert.match(html, /class="info-icon ia-info-linha"/);
+
+  // E as células que viraram popover não podem ter ficado para trás: duas
+  // fontes para o mesmo dado saem de sincronia na primeira mudança.
+  for (const perm of ['col_ia_arquivos', 'col_ia_itens', 'col_ia_modelo', 'col_ia_data']) {
+    assert.doesNotMatch(html, new RegExp(`<td[^>]*data-perm-col="${perm}"`),
+      `a coluna ${perm} continua na linha`);
+  }
+
+  // As cinco que ficaram continuam lá.
+  assert.match(html, /data-perm-col="col_ia_titulo"/);
+  assert.match(html, /data-perm-col="col_ia_destino"/);
+  assert.match(html, /data-perm-col="col_ia_status"/);
+  assert.match(html, /data-perm-col="col_ia_usuario"/);
+});

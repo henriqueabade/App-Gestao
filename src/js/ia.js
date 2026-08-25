@@ -245,6 +245,57 @@ function ligarResumoInfo() {
     icone.addEventListener('mouseleave', () => popover.classList.remove('show'));
 }
 
+/**
+ * Popover do (i) de UMA linha: o que saiu da tabela.
+ *
+ * Arquivos, itens, modelos e data deixaram de ser coluna. Com oito colunas
+ * numa tabela que mora dentro do módulo, os títulos quebravam em duas linhas e
+ * o conteúdo de cada célula não cabia — a tabela mostrava tudo e não deixava
+ * ler nada. Aqui a informação continua a um gesto de distância, e a tabela
+ * volta a responder de relance às perguntas que se faz olhando para ela.
+ *
+ * Um único elemento é reposicionado a cada (i). Um popover por linha seria um
+ * nó a mais por leitura, para algo que só uma de cada vez fica visível.
+ */
+function abrirPopoverDaLinha(icone, leitura, modelosHtml) {
+    const popover = document.getElementById('iaLinhaPopover');
+    if (!popover) return;
+
+    // `data-perm-col` continua em cada linha: as permissões de coluna
+    // (col_ia_arquivos, col_ia_itens, col_ia_modelo, col_ia_data) foram
+    // cadastradas para estes quatro dados, e o que mudou foi ONDE eles
+    // aparecem, não quem pode vê-los. Sem isto, desmarcar "Data" no perfil
+    // deixaria de ter efeito — uma permissão que não protege nada é pior do
+    // que uma permissão que não existe.
+    const linha = (perm, rotulo, valorHtml) =>
+        `<div data-perm-col="${perm}" class="flex justify-between gap-6 py-1">
+            <span class="text-white/60 text-sm">${esc(rotulo)}</span>
+            <span class="text-white text-sm font-medium text-right">${valorHtml}</span>
+        </div>`;
+
+    const aplicados = Number(leitura.aplicados_qtd) || 0;
+    const itens = Number(leitura.itens_qtd) || 0;
+
+    popover.innerHTML = `
+        <p class="text-xs uppercase tracking-wide text-white/50 mb-2">${esc(leitura.titulo || `Leitura #${leitura.id}`)}</p>
+        ${linha('col_ia_arquivos', 'Arquivos', String(Number(leitura.arquivos_qtd) || 0))}
+        ${linha('col_ia_itens', 'Itens', `<span class="ia-contagem"><span class="ia-contagem__aplicados">${aplicados}</span><span class="ia-contagem__separador">/</span>${itens}</span>`)}
+        ${linha('col_ia_modelo', 'Modelos', modelosHtml)}
+        ${linha('col_ia_data', 'Data', esc(formatarDataHora(leitura.criado_em)))}`;
+
+    // Não é preciso reaplicar as permissões à mão: `permissoes.js` observa o
+    // DOM e trata os nós novos assim que eles entram.
+
+    const r = icone.getBoundingClientRect();
+    popover.style.top = `${r.bottom + window.scrollY + 8}px`;
+    popover.style.left = `${r.left + window.scrollX}px`;
+    popover.classList.add('show');
+}
+
+function fecharPopoverDaLinha() {
+    document.getElementById('iaLinhaPopover')?.classList.remove('show');
+}
+
 // ---------------------------------------------------------------------------
 // Tabela
 // ---------------------------------------------------------------------------
@@ -310,30 +361,34 @@ function renderTabela(lista) {
 
         tr.innerHTML = `
             <td data-perm-col="col_ia_titulo" class="px-4 py-3 text-sm">
-                <span class="text-white font-medium">${esc(titulo)}</span>${alertaErro}
+                <span class="ia-titulo-celula">
+                    <i class="info-icon ia-info-linha" data-id="${l.id}"></i>
+                    <span class="text-white font-medium">${esc(titulo)}</span>${alertaErro}
+                </span>
             </td>
             <td data-perm-col="col_ia_destino" class="px-4 py-3 text-sm">
                 <span class="ia-destino"><i class="fas ${esc(iconeDestino(l.destino))}"></i>${esc(l.destino_rotulo)}</span>
             </td>
-            <td data-perm-col="col_ia_arquivos" class="px-4 py-3 whitespace-nowrap text-sm text-white/80">${Number(l.arquivos_qtd) || 0}</td>
-            <td data-perm-col="col_ia_itens" class="px-4 py-3 whitespace-nowrap text-sm text-white/80">
-                <span class="ia-contagem">
-                    <span class="ia-contagem__aplicados">${Number(l.aplicados_qtd) || 0}</span><span
-                        class="ia-contagem__separador">/</span>${Number(l.itens_qtd) || 0}
-                </span>
-            </td>
             <td data-perm-col="col_ia_status" class="px-4 py-3 whitespace-nowrap">
                 <span class="badge-ia badge-ia--${esc(l.status)}">${esc(rotuloSituacao(l.status))}</span>
             </td>
-            <td data-perm-col="col_ia_modelo" class="px-4 py-3 text-sm">${modelosHtml}</td>
             <td data-perm-col="col_ia_usuario" class="px-4 py-3 whitespace-nowrap text-sm text-white">${esc(l.usuario_nome || '—')}</td>
-            <td data-perm-col="col_ia_data" class="px-4 py-3 whitespace-nowrap text-sm text-white/80 celula-sem-quebra">${esc(formatarDataHora(l.criado_em))}</td>
             <td class="px-4 py-3 whitespace-nowrap text-left">
                 <div class="flex items-center justify-start space-x-2">
                     ${acao({ perm: 'ia.details.view', icone: 'fa-eye', classe: 'acao-tabela--ver', gancho: 'acao-ver', titulo: 'Abrir a leitura' })}
                     ${acao({ perm: 'ia.delete', icone: 'fa-trash', classe: 'acao-tabela--excluir', gancho: 'acao-excluir', titulo: 'Excluir', travada: aplicada && 'Leitura já aplicada — os registros criados por ela permanecem nos módulos' })}
                 </div>
             </td>`;
+
+        // O (i) carrega o que saiu da tabela. `stopPropagation` porque a linha
+        // inteira abre a leitura, e quem clica no (i) quer só espiar.
+        const info = tr.querySelector('.ia-info-linha');
+        if (info) {
+            const mostrar = () => abrirPopoverDaLinha(info, l, modelosHtml);
+            info.addEventListener('mouseenter', mostrar);
+            info.addEventListener('click', e => { e.stopPropagation(); mostrar(); });
+            info.addEventListener('mouseleave', fecharPopoverDaLinha);
+        }
 
         // Ação travada: o clique não pode vazar para a linha nem passar em
         // branco — o usuário merece saber por quê.

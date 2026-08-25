@@ -435,6 +435,11 @@ async function pedirExtracao({ chave, modelo, sistema, conteudo }) {
   const escolha = resposta?.choices?.[0];
   if (!escolha) throw erro(502, 'Groq não devolveu nenhuma extração.');
 
+  // Quanto de contexto esta chamada gastou. É o que permite responder "cabe
+  // neste modelo?" sem ter de tentar — e, num documento fatiado, o que importa
+  // é a SOMA das fatias, então quem chama acumula.
+  const uso = resposta?.usage || {};
+
   const dados = extrairJson(escolha.message?.content);
   if (!dados) {
     throw erro(502,
@@ -443,7 +448,12 @@ async function pedirExtracao({ chave, modelo, sistema, conteudo }) {
 
   // O corte por limite de saída é o caso mais traiçoeiro: a resposta é JSON
   // válido, só que incompleta.
-  return { dados, truncado: escolha.finish_reason === 'length' };
+  return {
+    dados,
+    truncado: escolha.finish_reason === 'length',
+    entrada: Number(uso.prompt_tokens) || 0,
+    saida: Number(uso.completion_tokens) || 0
+  };
 }
 
 /**
@@ -492,7 +502,12 @@ async function extrairFatiando({ chave, modelo, sistema, texto, orcamento }) {
   if (orcamento.restantes <= 0) return { brutos: [], truncado: true };
   orcamento.restantes -= 1;
 
-  const { dados, truncado } = await pedirExtracao({ chave, modelo, sistema, conteudo: texto });
+  // Renomeados na desestruturação: `saida` já é o nome do acumulador de itens
+  // logo abaixo, e reaproveitá-lo aqui esconderia um dos dois.
+  const { dados, truncado, entrada: gastoEntrada, saida: gastoSaida } =
+    await pedirExtracao({ chave, modelo, sistema, conteudo: texto });
+  orcamento.entrada += gastoEntrada || 0;
+  orcamento.saida += gastoSaida || 0;
   const brutos = listaCrua(dados);
   if (!brutos) throw erro(502, 'Groq devolveu JSON sem a lista de itens.');
   if (!truncado) return { brutos, truncado: false };
@@ -541,7 +556,7 @@ async function estruturar({ texto, destino, modelo }) {
 
   const alvo = modelo || modeloGroq();
 
-  const orcamento = { restantes: MAX_CHAMADAS };
+  const orcamento = { restantes: MAX_CHAMADAS, entrada: 0, saida: 0 };
   const { brutos, truncado } = await extrairFatiando({
     chave, modelo: alvo, sistema: montarPrompt(esquema), texto: conteudo, orcamento
   });
@@ -579,7 +594,11 @@ async function estruturar({ texto, destino, modelo }) {
     descartados,
     modelo: alvo,
     truncado,
-    chamadas: MAX_CHAMADAS - orcamento.restantes
+    chamadas: MAX_CHAMADAS - orcamento.restantes,
+    // Somado sobre todas as fatias: o que interessa é quanto o DOCUMENTO
+    // gastou, não quanto gastou cada pedaço dele.
+    tokens_entrada: orcamento.entrada,
+    tokens_saida: orcamento.saida
   };
 }
 

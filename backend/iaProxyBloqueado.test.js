@@ -148,3 +148,32 @@ test('as rotas do módulo continuam atendendo por /api/ia', async () => {
     await ctx.encerrar();
   }
 });
+
+test('ia_configuracao não é alcançável pelo proxy genérico', async () => {
+  // Sem isto, a trava de Sup Admin do PUT /api/ia/config não valeria nada:
+  // qualquer usuário logado gravaria a linha direto pela rota genérica e
+  // trocaria o modelo de todo mundo.
+  const ctx = await montar();
+  try {
+    // O proxy genérico só expõe GET e POST. PUT e DELETE não existem nele —
+    // e por isso a conferência aqui é sobre os dois que existem.
+    for (const metodo of ['GET', 'POST']) {
+      const resp = await pedir(ctx.porta, '/api/ia_configuracao', {
+        method: metodo,
+        headers: { 'content-type': 'application/json' },
+        ...(metodo === 'GET' ? {} : { body: JSON.stringify({ chave: 'groq_modelo', valor: 'x' }) })
+      });
+      assert.strictEqual(resp.status, 403, `${metodo} passou`);
+    }
+
+    // E as que não existem continuam não existindo: um PUT genérico que
+    // aparecesse depois entraria sem passar por bloqueio nenhum.
+    for (const metodo of ['PUT', 'DELETE']) {
+      const resp = await pedir(ctx.porta, '/api/ia_configuracao/1', { method: metodo });
+      assert.strictEqual(resp.status, 404, `${metodo} genérico passou a existir sem bloqueio`);
+    }
+    assert.strictEqual(ctx.servidas.some(c => c.includes('ia_configuracao')), false);
+  } finally {
+    await ctx.encerrar();
+  }
+});
