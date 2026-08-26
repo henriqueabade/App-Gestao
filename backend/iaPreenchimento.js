@@ -385,8 +385,48 @@ function montarInsumos(linhas, porNome, registros = [], etapasPorId = new Map())
   return { itens, semCadastro, foraDoProcesso, unidadeDiferente, porSemelhanca };
 }
 
+/**
+ * Casa um produto lido com o catálogo.
+ *
+ * Mesma ideia do insumo, com uma diferença: aqui existe CÓDIGO, e código é
+ * identidade. Um pedido que traz "AVSØ 0114 MUI" não precisa que o nome bata —
+ * e não deve deixar o nome desempatar, porque o nome do pedido costuma ser o
+ * que o cliente chama a peça, não o que o catálogo chama.
+ *
+ * Sem código, cai no nome, com a mesma regra dos insumos: exato, depois
+ * semelhante, e nunca por sorteio.
+ */
+function casarProduto(codigo, nome, porCodigo, porNome, registros) {
+  const porCod = porCodigo.get(normalizar(codigo));
+  if (porCod) return { registro: porCod, tipo: 'exato', por: 'codigo' };
+
+  const exato = porNome.get(normalizar(nome));
+  if (exato) return { registro: exato, tipo: 'exato', por: 'nome' };
+
+  if (!String(nome || '').trim()) return { registro: null, tipo: null };
+
+  const frequencia = frequenciaDeTermos(registros);
+  let melhor = null;
+  let nota = 0;
+  let empatados = 0;
+  for (const r of registros) {
+    const n = proximidadeDeInsumo(nome, r && r.nome, frequencia);
+    if (n > nota) { nota = n; melhor = r; empatados = 1; }
+    else if (n === nota && n > 0) empatados += 1;
+  }
+
+  // Empate é sorteio: duas peças igualmente parecidas com o que o pedido diz
+  // querem dizer que o pedido não foi específico, e escolher uma põe metade da
+  // chance de vender a peça errada — pelo preço da outra.
+  if (melhor && nota >= LIMIAR_PARECIDO && empatados > 1) {
+    return { registro: null, tipo: null, ambiguo: melhor.nome };
+  }
+  if (melhor && nota >= LIMIAR_PARECIDO) return { registro: melhor, tipo: 'semelhante', por: 'nome' };
+  return { registro: null, tipo: null };
+}
+
 /** Itens de um pedido, casados com o catálogo de produtos. */
-function montarItensDeOrcamento(linhas, porCodigo, porNome) {
+function montarItensDeOrcamento(linhas, porCodigo, porNome, registros = []) {
   const itens = [];
   const semCadastro = [];
 
@@ -394,7 +434,8 @@ function montarItensDeOrcamento(linhas, porCodigo, porNome) {
     const nome = texto(linha && linha.nome).trim();
     if (!nome) continue;
 
-    const produto = porCodigo.get(normalizar(linha.codigo)) || porNome.get(normalizar(nome));
+    const { registro: produto } = casarProduto(
+      linha.codigo, nome, porCodigo, porNome, registros);
     if (!produto) { semCadastro.push(nome); continue; }
 
     const quantidade = Number(linha.quantidade);
@@ -664,7 +705,7 @@ async function montarPreenchimento({ api, destino, item }) {
   if (destino === 'orcamentos') {
     const produtos = await api.get('/api/produtos').then(lista).catch(() => []);
     const r = montarItensDeOrcamento(
-      lista(dados.itens), indexarPor(produtos, 'codigo'), indexarPor(produtos, 'nome'));
+      lista(dados.itens), indexarPor(produtos, 'codigo'), indexarPor(produtos, 'nome'), produtos);
     saida.itens = r.itens;
     if (r.semCadastro.length) {
       avisos.push(`Fora do orçamento, por não estarem no catálogo: ${r.semCadastro.join(', ')}`);
@@ -707,6 +748,7 @@ module.exports = {
   MODAIS,
   ESTADOS,
   casarInsumo,
+  casarProduto,
   proximidadeDeInsumo,
   termosDeInsumo,
   frequenciaDeTermos,

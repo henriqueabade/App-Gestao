@@ -54,6 +54,9 @@ const COLUNAS = {
   // duas no duplo, a atualização de preço bate num 404 que não existe em
   // produção — e o teste passaria a medir o buraco do harness.
   produtos_insumos: ['id', 'produto_id', 'insumo_id', 'quantidade'],
+  // O preço PRATICADO mora aqui, não em `produtos`. Sem esta tabela no duplo,
+  // o item do orçamento chegaria sempre sem valor e o teste não veria.
+  tabela_fixa: ['id', 'id_prod', 'cod_prod', 'vlr_prod'],
   // `atualizarProdutosComInsumo` grava `preco_base`/`preco_venda` e LÊ os
   // percentuais. Sem essas colunas no duplo, o recálculo roda mas não deixa
   // rastro — e o teste mediria o buraco do harness.
@@ -3506,7 +3509,17 @@ function baseOrcamento() {
   dados.prospeccao_historico = [];
   dados.produtos = [
     { id: 9, codigo: 'PR-210', nome: 'Painel Ripado 2,10', preco_venda: 900, ncm: '9403' },
-    { id: 10, codigo: 'ML-01', nome: 'Mesa Lateral Carvalho', preco_venda: 450, ncm: '9403' }
+    { id: 10, codigo: 'ML-01', nome: 'Mesa Lateral Carvalho', preco_venda: 450, ncm: '9403' },
+    // Peça sem linha na tabela fixa: existe no catálogo, mas não tem preço
+    // praticado — e por isso não se vende.
+    { id: 11, codigo: 'BV-01', nome: 'Bandeja Vero PP', preco_venda: 300, ncm: '9403' }
+  ];
+  // O praticado difere do calculado de propósito: um teste em que os dois
+  // valem o mesmo passa mesmo lendo o campo errado. E o separador de milhar
+  // está aí porque é assim que o valor volta do banco.
+  dados.tabela_fixa = [
+    { id: 1, id_prod: 9, cod_prod: 'PR-210', vlr_prod: '1.250,00' },
+    { id: 2, id_prod: 10, cod_prod: 'ML-01', vlr_prod: '450' }
   ];
   dados.produtos_insumos = [];
   dados.orcamentos = [];
@@ -5420,6 +5433,192 @@ test('insumo sem cadastro não tem o que divergir', async () => {
     assert.strictEqual(insumo._unidade_ok, null);
     assert.strictEqual(insumo._processo_ok, null);
     assert.strictEqual(insumo._casamento, null);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+
+// ===========================================================================
+// ETAPAS 28 A 31 — A LEITURA SE FECHA, E O PEDIDO CASA COM O CATÁLOGO
+// ===========================================================================
+
+test('a leitura vira "Concluída" quando não sobra linha pendente', async () => {
+  const ctx = await prepararFicha({
+    itens: [{
+      codigo: 'PR-210', nome: 'Painel Ripado 2,10',
+      insumos: [{ processo: 'MARCENARIA', nome: 'MDF 15mm Branco TX', quantidade: '1', unidade: 'CH' }]
+    }]
+  });
+  try {
+    const item = itensDa(ctx, 5)[0];
+    assert.strictEqual(ctx.tabelas.ia_extracoes.find(e => e.id === 5).status, 'revisao');
+
+    const salvo = await (await chamar(ctx.porta, `/api/ia/5/itens/${item.id}`, {
+      method: 'PUT', body: JSON.stringify({ acao: 'ignorar' })
+    })).json();
+
+    // Com um item só, resolvido pelo formulário do módulo, a leitura ficava
+    // dizendo "Em revisão" para sempre — e a lista, que é onde se procura o
+    // que ainda falta fazer, mostrava trabalho já feito.
+    assert.strictEqual(salvo.leitura_status, 'aplicada');
+    assert.strictEqual(salvo.leitura_status_rotulo, 'Concluída');
+    assert.strictEqual(ctx.tabelas.ia_extracoes.find(e => e.id === 5).status, 'aplicada');
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('com linha ainda pendente, a leitura continua em revisão', async () => {
+  const ctx = await prepararFicha({
+    itens: [
+      { codigo: 'PR-210', nome: 'Painel Ripado 2,10', insumos: [{ processo: 'MARCENARIA', nome: 'MDF 15mm Branco TX', quantidade: '1', unidade: 'CH' }] },
+      { codigo: 'ML-01', nome: 'Mesa Lateral Carvalho', insumos: [{ processo: 'MARCENARIA', nome: 'Cola PVA extra 1kg', quantidade: '1', unidade: 'UN' }] }
+    ]
+  });
+  try {
+    const item = itensDa(ctx, 5)[0];
+    const salvo = await (await chamar(ctx.porta, `/api/ia/5/itens/${item.id}`, {
+      method: 'PUT', body: JSON.stringify({ acao: 'ignorar' })
+    })).json();
+
+    assert.strictEqual(salvo.leitura_status, 'revisao');
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('o produto do pedido casa por código, e o código manda', () => {
+  const { casarProduto, indexarPor } = require('./iaPreenchimento');
+  const catalogo = [
+    { id: 9, codigo: 'PR-210', nome: 'Painel Ripado 2,10', preco_tabela: 900 },
+    { id: 10, codigo: 'ML-01', nome: 'Mesa Lateral Carvalho', preco_tabela: 400 }
+  ];
+  const porCodigo = indexarPor(catalogo, 'codigo');
+  const porNome = indexarPor(catalogo, 'nome');
+
+  // Código é identidade. O nome do pedido costuma ser como o CLIENTE chama a
+  // peça, não como o catálogo a chama — deixá-lo desempatar seria trocar uma
+  // certeza por um palpite.
+  const r = casarProduto('PR-210', 'Painel de Ripas Grande', porCodigo, porNome, catalogo);
+  assert.strictEqual(r.registro.id, 9);
+  assert.strictEqual(r.por, 'codigo');
+  assert.strictEqual(r.tipo, 'exato');
+});
+
+test('sem código, o produto casa pelo nome — exato ou parecido', () => {
+  const { casarProduto, indexarPor } = require('./iaPreenchimento');
+  const catalogo = [
+    { id: 9, codigo: 'PR-210', nome: 'Painel Ripado 2,10', preco_tabela: 900 },
+    { id: 11, codigo: 'BV-01', nome: 'Bandeja Vero PP', preco_tabela: 300 }
+  ];
+  const porCodigo = indexarPor(catalogo, 'codigo');
+  const porNome = indexarPor(catalogo, 'nome');
+  const casar = (cod, nome) => casarProduto(cod, nome, porCodigo, porNome, catalogo);
+
+  assert.strictEqual(casar(null, 'Bandeja Vero PP').tipo, 'exato');
+  assert.strictEqual(casar(null, 'Bandeja Vero PP - Muiracatiara').tipo, 'semelhante');
+  assert.strictEqual(casar(null, 'Cadeira Dobrável').registro, null);
+});
+
+test('o item do pedido chega anotado, com o preço do catálogo', async () => {
+  const ctx = await prepararOrcamento({
+    itens: [{
+      cliente: 'Casa Vicenzo', razao_social: null, cnpj: null, validade: null,
+      prazo: null, forma_pagamento: null, condicao_pagamento: null, parcelas: null,
+      transportadora: null, contato: null, observacoes: null,
+      itens: [
+        { codigo: 'PR-210', nome: 'Painel de Ripas', quantidade: '2', valor_unitario: '1' },
+        { codigo: null, nome: 'Cadeira Dobrável', quantidade: '1', valor_unitario: '50' }
+      ]
+    }]
+  });
+  try {
+    const detalhe = await (await chamar(ctx.porta, '/api/ia/5')).json();
+    const itens = detalhe.itens[0].dados.itens;
+
+    // Casou pelo código: o nome mostrado passa a ser o do catálogo, e o que o
+    // pedido escreveu fica no (i).
+    assert.strictEqual(itens[0]._casamento, 'exato');
+    assert.strictEqual(itens[0]._cadastro, 'Painel Ripado 2,10');
+    assert.strictEqual(itens[0]._lido, 'Painel de Ripas');
+    assert.strictEqual(itens[0].codigo, 'PR-210');
+
+    // O preço é o PRATICADO do cadastro, não o do documento. Vender pelo que
+    // o pedido escreveu seria vender por um número que ninguém aprovou.
+    assert.strictEqual(itens[0]._preco, 1250);
+
+    // O que não existe no catálogo fica sem casamento — e vermelho na tela.
+    assert.strictEqual(itens[1]._casamento, null);
+    assert.strictEqual(itens[1]._preco, null);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('o código vem do catálogo, mesmo quando o pedido traz outro', async () => {
+  const ctx = await prepararOrcamento({
+    itens: [{
+      cliente: 'Casa Vicenzo', razao_social: null, cnpj: null, validade: null,
+      prazo: null, forma_pagamento: null, condicao_pagamento: null, parcelas: null,
+      transportadora: null, contato: null, observacoes: null,
+      // Sem código e com o nome do jeito que o cliente escreve.
+      itens: [{ codigo: null, nome: 'Mesa Lateral de Carvalho', quantidade: '1', valor_unitario: '10' }]
+    }]
+  });
+  try {
+    const [item] = (await (await chamar(ctx.porta, '/api/ia/5')).json()).itens[0].dados.itens;
+
+    // Um código digitado à mão não existe no sistema, e o orçamento o recusa
+    // do outro lado — quando já não há o que corrigir aqui. Escolhida a peça,
+    // o código é consequência dela.
+    assert.strictEqual(item._casamento, 'semelhante');
+    assert.strictEqual(item.codigo, 'ML-01');
+    assert.strictEqual(item._cadastro, 'Mesa Lateral Carvalho');
+    assert.strictEqual(item._lido, 'Mesa Lateral de Carvalho');
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('o preço é o PRATICADO da tabela fixa, não o do documento', async () => {
+  const ctx = await prepararOrcamento({
+    itens: [{
+      cliente: 'Casa Vicenzo', razao_social: null, cnpj: null, validade: null,
+      prazo: null, forma_pagamento: null, condicao_pagamento: null, parcelas: null,
+      transportadora: null, contato: null, observacoes: null,
+      itens: [
+        { codigo: 'PR-210', nome: 'Painel Ripado', quantidade: '3', valor_unitario: '850,00' },
+        { codigo: 'BV-01', nome: 'Bandeja Vero PP', quantidade: '1', valor_unitario: '99' }
+      ]
+    }]
+  });
+  try {
+    const itens = (await (await chamar(ctx.porta, '/api/ia/5')).json()).itens[0].dados.itens;
+
+    // 1.250 é o praticado; 900 é o custo apurado e 850 é o que o pedido pediu.
+    // Vender pelo do pedido é aceitar o preço que o CLIENTE escreveu; vender
+    // pelo apurado é vender pelo custo. Nenhum dos dois foi aprovado.
+    assert.strictEqual(itens[0]._preco, 1250);
+
+    // Peça sem linha na tabela fixa não tem preço praticado — e null não é
+    // zero: zero seria uma venda de graça, aprovada por ninguém.
+    assert.strictEqual(itens[1]._casamento, 'exato');
+    assert.strictEqual(itens[1]._preco, null);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('a peça do pedido se escolhe da lista, não se digita', async () => {
+  const ctx = await prepararOrcamento();
+  try {
+    const detalhe = await (await chamar(ctx.porta, '/api/ia/5')).json();
+
+    // Digitar um nome livre num pedido cria um item que o orçamento recusa —
+    // e o erro só aparece do outro lado, com o formulário já aberto.
+    assert.ok(Array.isArray(detalhe.sugestoes['itens.nome']));
+    assert.ok(detalhe.sugestoes.__restritos.includes('itens.nome'));
   } finally {
     await ctx.encerrar();
   }

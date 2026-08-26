@@ -416,16 +416,76 @@ test('os modais têm tamanho fixo e quase cheio, com margens proporcionais', () 
 test('os modais usam a barra de rolagem padrão do programa', () => {
   // `.modal-scroll` mora em src/styles/scroll.css e é o que todos os outros
   // modais usam. Sem ela este módulo mostrava a barra crua do sistema.
-  for (const arquivo of ['detalhes', 'nova', 'configuracao']) {
-    const html = fs.readFileSync(
-      path.join(__dirname, '..', '..', 'html', 'modals', 'ia', `${arquivo}.html`), 'utf8');
-    assert.match(html, /class="modal-ia__corpo modal-scroll/,
+  const ler = a => fs.readFileSync(
+    path.join(__dirname, '..', '..', 'html', 'modals', 'ia', `${a}.html`), 'utf8');
+
+  for (const arquivo of ['nova', 'configuracao']) {
+    assert.match(ler(arquivo), /class="modal-ia__corpo modal-scroll/,
       `${arquivo}.html não usa a barra de rolagem padrão`);
+  }
+
+  // No detalhe quem rola é a GRADE, não o corpo — e por isso o corpo é fixo.
+  // Com o corpo rolando, a página inteira crescia junto com a tabela e o rodapé
+  // descia com ela: a última linha ficava embaixo da borda da tela, fora de
+  // alcance, com o cabeçalho da tabela já perdido lá em cima.
+  const detalhes = ler('detalhes');
+  assert.match(detalhes, /class="modal-ia__corpo modal-ia__corpo--fixo/);
+  for (const seletor of ['ia-grade-revisao modal-scroll', 'modal-scroll ia-painel-rolante']) {
+    assert.ok(detalhes.includes(seletor), `o detalhe perdeu o rolante "${seletor}"`);
   }
 
   // E a grade de revisão segue a barra das tabelas.
   const css = fs.readFileSync(CSS_MODULO, 'utf8');
   assert.match(css, /\.ia-grade-revisao::-webkit-scrollbar-thumb \{/);
+});
+
+test('a grade cresce até a borda da tela e para', () => {
+  const css = fs.readFileSync(CSS_MODULO, 'utf8');
+
+  // Três peças, e todas necessárias. O modal tem altura fixa (90vh); o corpo
+  // esconde o que passa disso e reparte a sobra em coluna; a grade fica com a
+  // sobra inteira. Falta `min-height: 0` e o flex se recusa a encolher o filho
+  // abaixo do conteúdo dele — a grade estoura o corpo e a rolagem some.
+  const modal = /\.modal-ia \{([\s\S]*?)\}/.exec(css);
+  assert.match(modal[1], /height:\s*\d+vh/);
+
+  const corpo = /\.modal-ia__corpo--fixo \{([\s\S]*?)\}/.exec(css);
+  assert.ok(corpo, 'o corpo fixo saiu do CSS');
+  assert.match(corpo[1], /overflow:\s*hidden/);
+  assert.match(corpo[1], /flex-direction:\s*column/);
+
+  const grade = /\.ia-grade-revisao \{([\s\S]*?)\}/.exec(css);
+  assert.ok(grade, 'a grade saiu do CSS');
+  assert.match(grade[1], /overflow:\s*auto/);
+  assert.match(grade[1], /min-height:\s*0/);
+});
+
+test('o cabeçalho da tabela não some ao rolar', () => {
+  const css = fs.readFileSync(CSS_MODULO, 'utf8');
+
+  // Sem isto, rolar uma leitura de trinta linhas deixa o usuário olhando para
+  // colunas sem nome.
+  const th = /\.ia-grade-revisao thead th \{([\s\S]*?)\}/.exec(css);
+  assert.ok(th, 'o cabeçalho fixo saiu do CSS');
+  assert.match(th[1], /position:\s*sticky/);
+  assert.match(th[1], /top:\s*0/);
+
+  // Fundo opaco: `sticky` sem fundo deixa as linhas passarem POR BAIXO do
+  // texto do cabeçalho, e os dois se misturam.
+  assert.match(th[1], /background:\s*#[0-9a-f]{3,8}/i);
+});
+
+test('a coluna de unidade abre espaço quando há aviso', () => {
+  const css = fs.readFileSync(CSS_MODULO, 'utf8');
+
+  // "CH ⚠" não cabe em 7ch: ou o aviso sai da célula, ou empurra a coluna e
+  // desalinha a tabela toda. O seletor só alarga a que TEM aviso.
+  const larga = /\.ia-sub-unidade:has\(\.ia-alerta-campo\) \{([\s\S]*?)\}/.exec(css);
+  assert.ok(larga, 'a unidade não alarga com o aviso');
+  const normal = /\.ia-sub-unidade \{([\s\S]*?)\}/.exec(css);
+  const ch = t => Number(/width:\s*(\d+)ch/.exec(t)[1]);
+  assert.ok(ch(larga[1]) > ch(normal[1]),
+    'a coluna com aviso não é mais larga que a sem');
 });
 
 test('a tabela tem cinco colunas, e nenhum título quebra em duas linhas', () => {
@@ -512,17 +572,84 @@ test('o posicionador de popover não é chamado com `?.` sozinho', () => {
 });
 
 test('o popover fica acima de qualquer modal', () => {
-  // Movido para o <body>, ele deixa de herdar a pilha do modal e passa a
-  // competir com ele. O overlay dos modais é `z-[1200]`; um popover com o
-  // `z-index: 50` do CSS some ATRÁS dele — e o sintoma engana, porque o
-  // elemento está lá, do tamanho certo e na posição certa.
-  const util = fs.readFileSync(
-    path.join(__dirname, '..', 'utils', 'popover.js'), 'utf8');
-  const camada = /const CAMADA = (\d+);/.exec(util);
-  assert.ok(camada, 'o popover não fixa camada nenhuma');
-  assert.ok(Number(camada[1]) > 1200, 'o popover volta a ficar atrás do modal');
+  // `Modal.open` eleva TODO overlay a `z-[2000]` (ensureHighZIndex, em
+  // src/utils/modal.js), trocando o `z-[1200]` escrito no HTML. Movido para o
+  // <body>, o popover passa a competir com ele — e com z-index menor some
+  // ATRÁS, com o sintoma enganando: está lá, do tamanho certo, e o que se vê
+  // é a área borrada do modal por cima.
+  const util = fs.readFileSync(path.join(__dirname, '..', 'utils', 'popover.js'), 'utf8');
 
-  // E abaixo do aviso de desconexão, que tem de cobrir tudo.
-  assert.ok(Number(camada[1]) < 2147483000);
-  assert.match(util, /style\.zIndex/);
+  const piso = /const PISO = (\d+);/.exec(util);
+  assert.ok(piso, 'o popover não fixa piso nenhum');
+  assert.ok(Number(piso[1]) > 2000, 'o piso ficou abaixo do que Modal.open aplica');
+
+  // E a camada é CALCULADA a partir do que está na tela: um número cravado
+  // envelheceria em silêncio na primeira mudança daquele 2000.
+  assert.match(util, /function camadaAcimaDeTudo/);
+  assert.match(util, /getComputedStyle\(overlay\)\.zIndex/);
+
+  // Abaixo do aviso de desconexão, que precisa cobrir tudo.
+  const teto = /const TETO = (\d+);/.exec(util);
+  assert.ok(Number(teto[1]) < 2147483000);
+});
+
+test('o piso do popover acompanha o que Modal.open aplica', () => {
+  // Se `minZIndex` subir no utilitário de modal e o piso daqui não, o popover
+  // volta a sumir atrás — e o sintoma não aponta para este arquivo.
+  const modal = fs.readFileSync(path.join(__dirname, '..', '..', 'utils', 'modal.js'), 'utf8');
+  const minimo = /minZIndex = (\d+)/.exec(modal);
+  assert.ok(minimo, 'não achei o z-index mínimo dos modais');
+
+  const util = fs.readFileSync(path.join(__dirname, '..', 'utils', 'popover.js'), 'utf8');
+  const piso = Number(/const PISO = (\d+);/.exec(util)[1]);
+  assert.ok(piso > Number(minimo[1]),
+    `o piso do popover (${piso}) ficou abaixo do z-index dos modais (${minimo[1]})`);
+});
+
+test('o popover é devolvido ao trocar de módulo', () => {
+  // Trocar de módulo substitui o conteúdo da página. O popover foi movido para
+  // o <body> e não sai junto: sem esta limpeza ele fica flutuando por cima do
+  // módulo seguinte, congelado, sem nada que o faça sumir.
+  const util = fs.readFileSync(path.join(__dirname, '..', 'utils', 'popover.js'), 'utf8');
+  assert.match(util, /function limparTudo/);
+  assert.match(util, /MutationObserver/);
+  assert.match(util, /getElementById\('content'\)/);
+  assert.match(util, /addEventListener\('resize', limparTudo\)/);
+});
+
+test('todo popover do detalhe é devolvido ao fechar', () => {
+  // Os popovers são movidos para o `<body>` para escapar do `backdrop-filter`
+  // e não saem com o modal. Cada um esquecido na lista de limpeza vira um
+  // elemento órfão flutuando sobre o módulo seguinte — e, na abertura
+  // seguinte, um id duplicado que faz `getElementById` devolver o VELHO, solto
+  // e sem escuta nenhuma.
+  //
+  // Este teste é estrutural de propósito: um popover novo que não entre na
+  // lista sai calado, e o defeito só aparece na SEGUNDA vez que se abre.
+  const html = fs.readFileSync(
+    path.join(__dirname, '..', '..', 'html', 'modals', 'ia', 'detalhes.html'), 'utf8');
+  const js = fs.readFileSync(
+    path.join(__dirname, '..', 'modals', 'ia-detalhes.js'), 'utf8');
+
+  const noHtml = [...html.matchAll(/id="([^"]+)"[^>]*class="[^"]*resumo-popover/g)].map(m => m[1]);
+  assert.ok(noHtml.length >= 2, `só ${noHtml.length} popover(s) no HTML — o seletor deixou de casar`);
+
+  const lista = /const POPOVERS = \[([^\]]*)\]/.exec(js);
+  assert.ok(lista, 'a lista de limpeza saiu de ia-detalhes.js');
+
+  for (const id of noHtml) {
+    assert.ok(lista[1].includes(`'${id}'`), `${id} não é devolvido ao fechar o modal`);
+  }
+});
+
+test('rolar fecha os popovers abertos', () => {
+  // A grade rola por DENTRO agora. Um popover ancorado numa linha fica parado
+  // no ar quando a linha sai de vista, apontando para lugar nenhum.
+  const js = fs.readFileSync(path.join(__dirname, '..', 'utils', 'popover.js'), 'utf8');
+  const escuta = /addEventListener\('scroll'[^)]*\)/.exec(js);
+  assert.ok(escuta, 'ninguém escuta a rolagem');
+
+  // `capture: true` porque o evento de um contêiner que rola não sobe até
+  // `window` na fase de bolha — sem isso a escuta existe e não serve.
+  assert.match(escuta[0], /capture:\s*true/);
 });

@@ -831,14 +831,10 @@ body {
     /* sem regra própria */
 }
 
-/* A grade rola por dentro, na horizontal, quando o destino tiver campos
-   demais para a largura da tela. A barra segue `.table-scroll`, como as
-   tabelas do resto do programa. */
-.ia-grade-revisao {
-    overflow-x: auto;
-    overflow-y: visible;
-}
-
+/* A grade rola por dentro. A barra segue `.table-scroll`, como as tabelas do
+   resto do programa. As medidas da rolagem estão junto do corpo fixo, mais
+   abaixo — duas regras disputando o mesmo `overflow` só esperam alguém
+   reordenar o arquivo para quebrar. */
 .ia-grade-revisao::-webkit-scrollbar {
     width: 6px;
     height: 6px;
@@ -1524,4 +1520,81 @@ body {
 .ia-campo--divergente {
     color: var(--color-primary);
     border-color: rgba(240, 201, 76, 0.45);
+}
+
+/* ---------------------------------------------------------------------------
+   A TABELA ROLA POR DENTRO, E USA TODA A ALTURA DISPONÍVEL
+   ---------------------------------------------------------------------------
+   Antes o corpo do modal rolava e a tabela crescia à vontade. Numa ficha de
+   trinta insumos isso levava o cabeçalho da tabela e a barra de resumo para
+   fora da vista junto com as linhas — e sem os títulos das colunas não há como
+   saber que campo é qual.
+   
+   Agora o corpo é fixo e quem rola é a tabela. A altura vem do FLEX, não de um
+   número: o painel ocupa o que sobra entre o cabeçalho do modal e o rodapé, em
+   qualquer resolução, e a tabela ocupa o que sobra dentro do painel. */
+
+.modal-ia__corpo--fixo {
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+
+.modal-ia__corpo--fixo > section {
+    min-height: 0;
+}
+
+.ia-painel-itens {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    flex: 1 1 auto;
+}
+
+/* O painel de arquivos não tem tabela: rola inteiro. */
+.ia-painel-rolante {
+    overflow-y: auto;
+    min-height: 0;
+    flex: 1 1 auto;
+}
+
+.ia-grade-revisao {
+    /* `auto` nos dois eixos: a rolagem vertical é a que faltava, e a
+       horizontal continua servindo aos destinos com muitas colunas. */
+    overflow: auto;
+    flex: 1 1 auto;
+    min-height: 0;
+}
+
+/* O cabeçalho acompanha a rolagem. É ele que responde "que coluna é esta?", e
+   é a primeira coisa que se perde numa tabela longa. */
+.ia-grade-revisao thead th {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    /* Opaco: translúcido deixaria as linhas passarem por baixo do título. */
+    background: #2a0f1c;
+}
+
+/* A coluna de unidade cresce quando há o sinal de atenção ao lado: sem isso o
+   ⚠ come o espaço do valor e "cm²" aparece cortado. */
+.ia-sub-unidade {
+    width: 7ch;
+    max-width: 7ch;
+}
+
+.ia-sub-unidade:has(.ia-alerta-campo) {
+    width: 10ch;
+    max-width: 10ch;
+}
+
+/* Campo que vem do catálogo: mostrado, nunca digitado. Distingue-se de um
+   campo apenas desabilitado — este tem um valor certo e vivo, que muda quando
+   a peça muda. */
+.ia-campo--fixo {
+    background: transparent;
+    border-color: transparent;
+    color: rgba(255, 255, 255, 0.6);
+    cursor: default;
 }

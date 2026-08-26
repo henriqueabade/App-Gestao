@@ -37,6 +37,7 @@ const reconciliacao = require('./iaReconciliacao');
 const aplicacao = require('./iaAplicacao');
 const preenchimento = require('./iaPreenchimento');
 const configArmazenada = require('./iaConfiguracao');
+const { paraDecimal } = require('./numeros');
 
 const router = express.Router();
 
@@ -124,7 +125,7 @@ const SITUACOES = [
   { id: 'rascunho', rotulo: 'Texto lido', descricao: 'Os arquivos foram lidos; os dados ainda não foram extraídos' },
   { id: 'lendo', rotulo: 'Lendo', descricao: 'A IA está processando os arquivos' },
   { id: 'revisao', rotulo: 'Em revisão', descricao: 'Leitura pronta, esperando conferência' },
-  { id: 'aplicada', rotulo: 'Aplicada', descricao: 'Os itens já foram gravados no módulo de destino' },
+  { id: 'aplicada', rotulo: 'Concluída', descricao: 'Não há mais linha pendente nesta leitura' },
   { id: 'erro', rotulo: 'Erro', descricao: 'A leitura falhou' },
   { id: 'cancelada', rotulo: 'Cancelada', descricao: 'Descartada sem aplicar' }
 ];
@@ -302,6 +303,16 @@ async function sugestoesDoDestino(api, destino) {
       return {
         categoria: categorias.map(c => c.nome_categoria).filter(Boolean).sort(),
         unidade: unidades.map(u => u.tipo).filter(Boolean).sort()
+      };
+    }
+
+    if (destino === 'orcamentos') {
+      const produtos = await catalogoDeProdutos(api);
+      return {
+        // A peça se ESCOLHE. Digitar um nome livre num pedido cria um item que
+        // o orçamento recusa — e o erro só aparece do outro lado.
+        'itens.nome': produtos.map(p => p.nome).filter(Boolean).sort(),
+        __restritos: ['itens.nome']
       };
     }
 
@@ -723,12 +734,19 @@ router.get('/:id', exigirPermissao('ia.details.view'), async (req, res) => {
     // O catálogo de matéria-prima E as etapas de produção: a anotação de
     // casamento precisa das duas, porque um insumo só casa dentro da etapa que
     // a ficha declara.
-    const [materias, etapas] = extracao.destino === 'produto_insumos'
-      ? await Promise.all([
+    // Para a ficha técnica, o catálogo é a matéria-prima; para o pedido, são os
+    // produtos. Nos dois casos é a MESMA pergunta — "isto existe no sistema?" —
+    // e a mesma anotação responde.
+    let materias = [];
+    let etapas = [];
+    if (extracao.destino === 'produto_insumos') {
+      [materias, etapas] = await Promise.all([
         api.get('/api/materia_prima').then(listaDe).catch(() => []),
         api.get('/api/etapas_producao').then(listaDe).catch(() => [])
-      ])
-      : [[], []];
+      ]);
+    } else if (extracao.destino === 'orcamentos') {
+      materias = await catalogoDeProdutos(api);
+    }
 
     res.json({
       ...extracao,
@@ -833,12 +851,100 @@ function carregarLido(coagida, anterior, enviada) {
  * não são gravadas em lugar nenhum e se refazem a cada abertura — que é o que
  * mantém a tela certa depois de alguém cadastrar o insumo que faltava.
  */
+/**
+ * Anota, em cada item do pedido, COMO ele casou com o catálogo.
+ *
+ * As mesmas três respostas dos insumos, e pelo mesmo motivo: o que vai para o
+ * orçamento é a peça do CATÁLOGO, com o código e o preço dela. Um item que não
+ * casou não pode ir, e um que casou por semelhança é um palpite que alguém
+ * precisa conferir antes de o preço sair para o cliente.
+ *
+ * `_preco` vem junto, e é por isso que a coluna de valor na grade é só de
+ * leitura: o preço de venda é do cadastro, não do documento. O que o pedido
+ * escreveu fica no (i), para conferência — não para uso.
+ */
+function anotarProdutos(dados, produtos) {
+  if (!Array.isArray(dados?.itens)) return dados;
+
+  const porCodigo = preenchimento.indexarPor(produtos, 'codigo');
+  const porNome = preenchimento.indexarPor(produtos, 'nome');
+
+  return {
+    ...dados,
+    itens: dados.itens.map(linha => {
+      const nome = String(linha?.nome ?? '').trim();
+      if (!nome && !String(linha?.codigo ?? '').trim()) return linha;
+
+      const { registro, tipo, ambiguo } =
+        preenchimento.casarProduto(linha.codigo, nome, porCodigo, porNome, produtos);
+
+      return {
+        ...linha,
+        _lido: linha._lido || nome,
+        _casamento: tipo,
+        _cadastro: registro ? registro.nome : null,
+        // O código e o preço são do CATÁLOGO e não se digitam: trocar a peça
+        // troca os dois de uma vez, e é a peça que se escolhe.
+        codigo: registro ? (registro.codigo || null) : linha.codigo,
+        _preco: registro ? precoDeVenda(registro) : null,
+        _ambiguo: ambiguo || null
+      };
+    })
+  };
+}
+
+/**
+ * Catálogo de peças COM o preço praticado.
+ *
+ * `preco_tabela` não é coluna de `produtos`: mora em `tabela_fixa` e é acoplada
+ * por quem lista os produtos pelo BFF (ver backend/tabelaFixa.js). Aqui a
+ * conversa é com a API remota, que devolve a tabela crua — pedir só
+ * `/api/produtos` traria peças sem preço nenhum, e o valor do item chegaria
+ * vazio em todo orçamento lido.
+ *
+ * Preço ausente vira `null`, e null não é zero: quer dizer "esta peça não tem
+ * preço praticado" — o orçamento recusa o item, como já recusa em qualquer
+ * outro caminho.
+ */
+async function catalogoDeProdutos(api) {
+  const [produtos, tabela] = await Promise.all([
+    api.get('/api/produtos').then(listaDe).catch(() => []),
+    api.get('/api/tabela_fixa').then(listaDe).catch(() => [])
+  ]);
+
+  const precos = new Map();
+  for (const linha of tabela) {
+    const id = Number(linha?.id_prod);
+    if (Number.isFinite(id)) precos.set(id, linha?.vlr_prod);
+  }
+
+  return produtos.map(p => ({
+    ...p,
+    preco_tabela: precos.has(Number(p?.id)) ? precos.get(Number(p?.id)) : null
+  }));
+}
+
+/**
+ * Preço PRATICADO da peça — o que vai para o cliente.
+ *
+ * `preco_tabela` e não `preco_venda`: o segundo é custo apurado e se move
+ * sozinho quando um insumo encarece. Ver src/utils/precoTabela.js.
+ */
+function precoDeVenda(produto) {
+  // `paraDecimal` e não `Number`: a API devolve o valor como veio do banco, e
+  // "1.234,56" vira NaN no `Number` — a peça mais cara do catálogo é
+  // justamente a que tem separador de milhar.
+  const n = paraDecimal(produto?.preco_tabela);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
 /** Caixa e acento não distinguem unidade nem etapa. */
 const normalizarTexto = v => String(v ?? '')
   .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
   .toLowerCase().replace(/\s+/g, ' ').trim();
 
 function anotarCasamento(destino, dados, materias, etapas = []) {
+  if (destino === 'orcamentos') return anotarProdutos(dados, materias);
   if (destino !== 'produto_insumos' || !Array.isArray(dados?.insumos)) return dados;
 
   const porNome = preenchimento.indexarPor(materias, 'nome');
@@ -958,6 +1064,38 @@ router.get('/:id/itens/:itemId/preenchimento', exigirPermissao('ia.details.view'
     responder(res, err, 'GET /api/ia/:id/itens/:itemId/preenchimento');
   }
 });
+
+/**
+ * Fecha a leitura quando não sobra linha pendente.
+ *
+ * A situação da leitura é um RESUMO das linhas, e enquanto ela era escrita só
+ * na aplicação em lote ficava mentindo: com um item só, resolvido pelo
+ * formulário do módulo, a leitura continuava dizendo "Em revisão" para sempre
+ * — e a lista, que é onde se procura o que ainda falta fazer, mostrava
+ * trabalho que já tinha sido feito.
+ *
+ * "Não sobra pendente" inclui o descartado: descartar é uma decisão tomada,
+ * não uma pendência.
+ */
+async function fecharSeNadaPendente(api, extracaoId, statusAtual) {
+  if (statusAtual !== 'revisao') return statusAtual;
+
+  const itens = listaDe(
+    await api.get('/api/ia_extracao_itens', { query: { extracao_id: extracaoId } })
+  );
+  if (!itens.length) return statusAtual;
+
+  const pendente = itens.some(i => i.status !== 'aplicado' && i.status !== 'ignorado' && i.acao !== 'ignorar');
+  if (pendente) return statusAtual;
+
+  const aplicados = itens.filter(i => i.status === 'aplicado').length;
+  await api.put(`/api/ia_extracoes/${extracaoId}`, {
+    status: 'aplicada',
+    aplicados_qtd: aplicados,
+    aplicado_em: new Date().toISOString()
+  });
+  return 'aplicada';
+}
 
 /**
  * Guarda o recorte de um arquivo — o que a pessoa quer que vá para a extração.
@@ -1264,16 +1402,29 @@ router.put('/:id/itens/:itemId', exigirPermissao('ia.review.edit'), async (req, 
     // são gravadas e se refazem a cada leitura do detalhe. Devolver o item sem
     // elas fazia toda a linha perder os marcadores assim que UM campo era
     // corrigido — e só voltavam fechando e reabrindo o modal.
-    const [materias, etapas] = extracao.destino === 'produto_insumos'
-      ? await Promise.all([
+    // O mesmo catálogo do detalhe: a anotação é refeita aqui para a linha não
+    // perder os marcadores ao ser corrigida.
+    let materias = [];
+    let etapas = [];
+    if (extracao.destino === 'produto_insumos') {
+      [materias, etapas] = await Promise.all([
         api.get('/api/materia_prima').then(listaDe).catch(() => []),
         api.get('/api/etapas_producao').then(listaDe).catch(() => [])
-      ])
-      : [[], []];
+      ]);
+    } else if (extracao.destino === 'orcamentos') {
+      materias = await catalogoDeProdutos(api);
+    }
+
+    // Marcar a última linha como resolvida fecha a leitura.
+    const situacao = await fecharSeNadaPendente(api, id, extracao.status);
 
     res.json({
       id: salvo.id,
       linha: Number(salvo.linha) || 0,
+      // A tela precisa saber que a leitura mudou de situação: sem isto, o
+      // cabeçalho continuaria dizendo "Em revisão" até alguém reabrir.
+      leitura_status: situacao,
+      leitura_status_rotulo: SITUACOES.find(s => s.id === situacao)?.rotulo || situacao,
       dados: anotarCasamento(extracao.destino, lerDados(salvo.dados).valor, materias, etapas),
       acao: salvo.acao,
       alvo_id: salvo.alvo_id ?? null,

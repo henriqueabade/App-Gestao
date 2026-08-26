@@ -7,14 +7,20 @@
   }
 
   /**
-   * Fecha o modal, levando junto o popover.
+   * Fecha o modal, levando junto os popovers.
    *
-   * O popover foi movido para o `<body>` para escapar do `backdrop-filter`, e
-   * por isso não sai com o modal: sem esta limpeza ele fica órfão na página e
-   * o id duplicado quebra a próxima abertura.
+   * Eles foram movidos para o `<body>` para escapar do `backdrop-filter`, e por
+   * isso não saem com o modal. Cada um esquecido aqui fica órfão na página — e
+   * o id duplicado quebra a abertura seguinte, porque `getElementById` devolve
+   * o VELHO, que está solto e não escuta mais ninguém.
+   *
+   * A lista é explícita de propósito: um popover novo que não entre nela sai
+   * calado, e o defeito só aparece na segunda vez que alguém abre o modal.
    */
+  const POPOVERS = ['iaDetLinhaPopover', 'iaDetEscolhaAlvo'];
+
   const close = () => {
-    window.Popover?.descartar(document.getElementById('iaDetLinhaPopover'));
+    for (const id of POPOVERS) window.Popover?.descartar(document.getElementById(id));
     Modal.close(OVERLAY);
   };
   const revelar = () =>
@@ -146,6 +152,16 @@
     // seria inviável. Com uma linha só, o caminho normal já dá conta e um
     // segundo botão ao lado dele seria só um jeito de errar.
     gravarTodos?.classList.toggle('hidden', !(emRevisao && pendentes > 1));
+
+    // "Escolher empresa" só existe quando alguma linha precisa de destino.
+    const escolher = get('iaDetEscolherAlvo');
+    const semAlvo = (leitura.itens || []).filter(precisaDeAlvo);
+    escolher?.classList.toggle('hidden', !(emRevisao && semAlvo.length > 0));
+    if (escolher && semAlvo.length) {
+      const rotulo = leitura.rotulo_alvo || 'destino';
+      escolher.title = `${semAlvo.length} linha(s) sem ${rotulo.toLowerCase()}. `
+        + 'Aponte para um registro que já existe, ou cadastre-o antes.';
+    }
 
     // Descartar só existe quando há o que descartar: um botão permanentemente
     // sem efeito ensina o usuário a ignorar aquele canto da tela.
@@ -520,6 +536,21 @@
   }
 
   /** Sincroniza o item na lista em memória, para redesenhar sem ir ao servidor. */
+  /**
+   * A situação da leitura pode ter mudado com o salvamento do item.
+   *
+   * O backend fecha a leitura quando não sobra linha pendente. Sem trazer isso
+   * para cá, o cabeçalho continuaria dizendo "Em revisão" até alguém fechar e
+   * reabrir o modal — e o rodapé continuaria oferecendo botões para uma
+   * leitura que já acabou.
+   */
+  function absorverSituacao(salvo) {
+    if (!salvo?.leitura_status || salvo.leitura_status === leitura.status) return;
+    leitura.status = salvo.leitura_status;
+    leitura.status_rotulo = salvo.leitura_status_rotulo || salvo.leitura_status;
+    pintarCabecalho({ ...leitura });
+  }
+
   function atualizarEmMemoria(salvo) {
     const alvo = (leitura.itens || []).find(i => i.id === salvo.id);
     if (!alvo) return;
@@ -704,7 +735,27 @@
         const opcoes = leitura?.sugestoes?.[chaveCompleta];
         const restrito = travados.has(chaveCompleta) && Array.isArray(opcoes) && opcoes.length;
 
-        if (!editavel) input.readOnly = true;
+        // Código e preço são do CATÁLOGO, e mudam junto com a peça escolhida.
+        //
+        // Deixá-los digitáveis criava a pior combinação possível: um código que
+        // não existe, um preço que ninguém aprovou, e um orçamento que só
+        // recusa o item do outro lado — quando já não há o que corrigir aqui.
+        const doCatalogo = campo.chave === 'itens'
+          && (sc.chave === 'codigo' || sc.chave === 'valor_unitario');
+
+        if (doCatalogo) {
+          // Quem trava o campo é a linha abaixo, e só ela: duas atribuições em
+          // sequência escondem qual das duas está valendo.
+          input.classList.add('ia-campo--fixo');
+          input.title = sc.chave === 'codigo'
+            ? 'Vem da peça escolhida — troque a peça para mudar'
+            : 'Preço de tabela da peça — não se digita aqui';
+          if (sc.chave === 'valor_unitario' && sub?._preco != null) {
+            input.value = String(sub._preco);
+          }
+        }
+
+        if (!editavel || doCatalogo) input.readOnly = true;
         else {
           if (sc.obrigatorio && !String(input.value).trim()) input.classList.add('ia-campo--faltando');
           input.addEventListener('change', async () => {
@@ -1575,9 +1626,14 @@
     esperandoSalvar = null;
 
     try {
-      atualizarEmMemoria(await salvarItem(item.id, { acao: 'ignorar' }));
+      const salvo = await salvarItem(item.id, { acao: 'ignorar' });
+      atualizarEmMemoria(salvo);
+      absorverSituacao(salvo);
       desenharItens();
-      showToast('Linha marcada como resolvida', 'success');
+      pintarRodape();
+      showToast(leitura.status === 'aplicada'
+        ? 'Leitura concluída — não sobrou linha pendente'
+        : 'Linha marcada como resolvida', 'success');
     } catch (err) {
       // Falhar aqui não é grave: o cadastro do outro lado entrou. O que se
       // perde é a marca, e dizer isso é melhor do que fingir que marcou.
@@ -1745,6 +1801,77 @@
     return faltas;
   }
 
+  /**
+   * A linha precisa de um destino e ainda não tem?
+   *
+   * Vale só nos destinos que EXIGEM alvo — o orçamento, que nasce preso a um
+   * cliente ou a uma prospecção. Nos outros, não ter alvo é o caso normal:
+   * quer dizer "cadastrar novo".
+   */
+  const precisaDeAlvo = item =>
+    Boolean(leitura?.exige_alvo) && !item.alvo_id
+    && item.status !== 'aplicado' && item.acao !== 'ignorar';
+
+  /**
+   * Abre a escolha do destino de uma linha.
+   *
+   * Um `<select>` com o que existe no sistema, e não um campo livre: o que o
+   * formulário do outro lado precisa é o ID. Um nome digitado não aponta para
+   * nada — e o erro só apareceria depois de abrir o orçamento.
+   */
+  /** O que o botão "Apontar" faz agora. Trocado a cada abertura da escolha. */
+  let confirmarEscolha = null;
+
+  function abrirEscolhaDeAlvo(item, ancora) {
+    const caixa = get('iaDetEscolhaAlvo');
+    const campo = get('iaDetEscolhaCampo');
+    const lista = get('iaDetEscolhaLista');
+    const titulo = get('iaDetEscolhaTitulo');
+    if (!caixa || !campo || !lista) return;
+
+    const alvos = leitura?.alvos || [];
+    if (!alvos.length) {
+      showToast(`Nenhum ${leitura?.rotulo_alvo || 'destino'} cadastrado para escolher`, 'info');
+      return;
+    }
+
+    if (titulo) titulo.textContent = leitura?.rotulo_alvo || 'Escolher destino';
+    campo.value = '';
+    lista.replaceChildren(...alvos.map(a => {
+      const o = document.createElement('option');
+      o.value = a.nome;
+      return o;
+    }));
+
+    // O handler é GUARDADO, e o botão é ligado uma vez só no fim do arquivo.
+    // Trocar o nó a cada abertura (com `replaceWith`) deixava para trás
+    // qualquer referência que alguém tivesse ao botão — inclusive a do próprio
+    // modal — e o clique parava de fazer efeito na segunda vez.
+    confirmarEscolha = async () => {
+      const escolhido = alvos.find(a => normalizarOpcao(a.nome) === normalizarOpcao(campo.value));
+      if (!escolhido) {
+        showToast('Escolha um da lista — o sistema precisa do registro, não do nome', 'error');
+        return;
+      }
+      try {
+        const salvo = await salvarItem(item.id, {
+          alvo_id: escolhido.id,
+          ...(escolhido.tabela ? { alvo_tabela: escolhido.tabela } : {})
+        });
+        atualizarEmMemoria(salvo);
+        absorverSituacao(salvo);
+        window.Popover?.fechar(caixa);
+        desenharItens();
+        showToast(`Apontado para ${escolhido.nome}`, 'success');
+      } catch (err) {
+        showToast(err?.message || 'Não foi possível apontar', 'error');
+      }
+    };
+
+    window.Popover?.abrir(caixa, ancora);
+    campo.focus?.();
+  }
+
   /** Linhas que ainda não viraram cadastro e não foram descartadas. */
   const itensPendentes = () => (leitura?.itens || [])
     .filter(i => i.status !== 'aplicado' && i.acao !== 'ignorar');
@@ -1788,6 +1915,15 @@
    * a resposta para "de onde veio este dado" — que é metade do motivo de a
    * leitura existir.
    */
+  /** Abre a escolha para a linha marcada, ou para a primeira sem destino. */
+  async function escolherAlvoDaPrimeira() {
+    const semAlvo = (leitura.itens || []).filter(precisaDeAlvo);
+    if (!semAlvo.length) { showToast('Nenhuma linha esperando destino', 'info'); return; }
+
+    const alvo = semAlvo.find(i => selecionados.has(i.id)) || semAlvo[0];
+    abrirEscolhaDeAlvo(alvo, get('iaDetEscolherAlvo'));
+  }
+
   async function descartarSelecionados() {
     const alvos = itensPendentes().filter(i => selecionados.has(i.id));
     if (!alvos.length) { showToast('Nenhuma linha marcada', 'info'); return; }
@@ -1806,7 +1942,9 @@
     const falhas = [];
     for (const item of alvos) {
       try {
-        atualizarEmMemoria(await salvarItem(item.id, { acao: 'ignorar' }));
+        const salvo = await salvarItem(item.id, { acao: 'ignorar' });
+        atualizarEmMemoria(salvo);
+        absorverSituacao(salvo);
         selecionados.delete(item.id);
       } catch (err) {
         falhas.push(err?.message || `linha ${item.linha}`);
@@ -1872,6 +2010,10 @@
     if (e.key === 'Escape') { close(); document.removeEventListener('keydown', esc); }
   });
 
+  get('iaDetEscolhaConfirmar')?.addEventListener('click', () => confirmarEscolha?.());
+  get('iaDetEscolhaCancelar')?.addEventListener('click',
+    () => window.Popover?.fechar(get('iaDetEscolhaAlvo')));
+
   // Extrair consome crédito e gravar mexe em estoque: os dois passam pela
   // trava de duplo clique, que segura o botão até a ação terminar. Abrir o
   // formulário entra na mesma trava para não empilhar dois modais iguais.
@@ -1879,7 +2021,8 @@
     ['iaDetExtrair', extrair],
     ['iaDetAplicar', abrirPrimeiroPendente],
     ['iaDetGravarTodos', gravarTodos],
-    ['iaDetDescartar', descartarSelecionados]
+    ['iaDetDescartar', descartarSelecionados],
+    ['iaDetEscolherAlvo', escolherAlvoDaPrimeira]
   ]) {
     const botao = get(id);
     if (!botao) continue;

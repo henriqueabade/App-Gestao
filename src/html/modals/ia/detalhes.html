@@ -40,10 +40,14 @@
     </div>
 
     <!-- Corpo -->
-    <div class="modal-ia__corpo modal-scroll px-6 py-5">
+    <!-- `overflow: hidden` no corpo, e a rolagem DENTRO da tabela.
+         Com o corpo rolando, o cabeçalho da tabela e a barra de resumo saíam
+         de vista junto com as linhas, e numa ficha de trinta insumos não havia
+         mais como saber que coluna era qual. -->
+    <div class="modal-ia__corpo modal-ia__corpo--fixo px-6 py-5">
 
       <!-- Itens -->
-      <section data-painel-ia="itens">
+      <section data-painel-ia="itens" class="ia-painel-itens">
         <div id="iaDetItensVazio" class="hidden py-10 text-center">
           <i class="fas fa-list-check text-4xl text-white/20"></i>
           <p class="text-sm text-white/50 mt-3">Nenhum item foi extraído desta leitura.</p>
@@ -60,7 +64,7 @@
           esquema do destino. Escrever as colunas aqui obrigaria a mexer neste
           arquivo a cada destino novo — e deixaria as duas listas divergirem.
         -->
-        <div id="iaDetItensTabela" class="rounded-xl border border-white/10 ia-grade-revisao">
+        <div id="iaDetItensTabela" class="rounded-xl border border-white/10 ia-grade-revisao modal-scroll">
           <table class="w-full">
             <thead><tr id="iaDetItensCabecalho" class="bg-white/5"></tr></thead>
             <tbody id="iaDetItensCorpo" class="divide-y divide-white/10"></tbody>
@@ -70,7 +74,7 @@
       </section>
 
       <!-- Arquivos -->
-      <section data-painel-ia="arquivos" class="hidden space-y-3">
+      <section data-painel-ia="arquivos" class="hidden space-y-3 modal-scroll ia-painel-rolante">
         <div id="iaDetArquivosVazio" class="hidden py-10 text-center">
           <i class="fas fa-file-circle-question text-4xl text-white/20"></i>
           <p class="text-sm text-white/50 mt-3">Nenhum arquivo registrado nesta leitura.</p>
@@ -84,6 +88,22 @@
          Um só elemento, reposicionado a cada abertura. -->
     <div id="iaDetLinhaPopover" class="resumo-popover glass-surface rounded-xl p-4 text-white"></div>
 
+    <!-- Escolha do destino de uma linha. Um <select> com o que existe no
+         sistema: digitar o nome não resolveria, porque o que o formulário
+         precisa é o id. -->
+    <div id="iaDetEscolhaAlvo" class="resumo-popover glass-surface rounded-xl p-4 text-white">
+      <p class="text-xs uppercase tracking-wide text-white/50 mb-3" id="iaDetEscolhaTitulo">Escolher</p>
+      <input id="iaDetEscolhaCampo" type="text" class="ia-campo w-full" list="iaDetEscolhaLista"
+             placeholder="Digite para procurar">
+      <datalist id="iaDetEscolhaLista"></datalist>
+      <div class="flex items-center justify-end gap-2 mt-3">
+        <button id="iaDetEscolhaCancelar" type="button"
+                class="ia-btn-transparente rounded-lg px-3 py-1.5 text-xs">Cancelar</button>
+        <button id="iaDetEscolhaConfirmar" type="button"
+                class="btn-primary text-white rounded-lg px-3 py-1.5 text-xs font-medium">Apontar</button>
+      </div>
+    </div>
+
     <!-- Rodapé -->
     <div class="modal-ia__rodape px-6 py-4 border-t border-white/10 flex items-center justify-between gap-4">
       <p id="iaDetRodapeAviso" class="text-xs text-white/45"></p>
@@ -91,6 +111,15 @@
         <!-- Vermelho como o "Cancelar" de todos os outros modais do programa. -->
         <button id="iaDetFechar" type="button"
                 class="btn-danger text-white rounded-lg px-5 py-2 text-sm font-medium">Fechar</button>
+        <!-- Aparece quando a linha precisa de um destino e não tem.
+             A coluna "O que fazer" saiu, e com ela o único lugar em que se
+             podia apontar o cliente de um pedido cuja empresa não foi
+             reconhecida. Sem isto a linha ficava num beco: vermelha, sem
+             caminho, e o botão de abrir recusando sem oferecer saída. -->
+        <button id="iaDetEscolherAlvo" type="button"
+                class="ia-btn-transparente rounded-lg px-5 py-2 text-sm font-medium hidden">
+          <i class="fas fa-link mr-2"></i>Escolher empresa
+        </button>
         <!-- Descarta as linhas marcadas. Transparente porque é uma ação de
              limpeza, não o caminho principal — e fica logo depois de Fechar,
              onde a mão já está depois de percorrer a tabela marcando. -->

@@ -310,6 +310,7 @@ function criarBancada({ leitura, respostaPut, respostaAplicar, respostaExtrair,
         const id = Number(/\/itens\/(\d+)$/.exec(url)[1]);
         const item = dadosLeitura.itens.find(i => i.id === id);
         const salvo = {
+          ...(respostaPut?.corpoExtra || {}),
           ...item,
           ...(corpo.acao ? { acao: corpo.acao, alvo_id: corpo.acao === 'atualizar' ? item.alvo_id : null } : {}),
           ...(corpo.alvo_id !== undefined ? { alvo_id: corpo.alvo_id, acao: 'atualizar' } : {}),
@@ -2221,4 +2222,186 @@ test('a coluna de unidade cabe cinco caracteres', () => {
   assert.ok(regra);
   // 7ch: cinco caracteres mais o respiro da caixa de texto.
   assert.match(regra[1], /width:\s*7ch/);
+});
+
+// ---------------------------------------------------------------------------
+// ETAPAS 28 A 31 — situação, catálogo e escolha do destino
+// ---------------------------------------------------------------------------
+
+test('o cabeçalho acompanha a leitura que se fechou', async () => {
+  const b = criarBancada({
+    respostaPut: { corpoExtra: { leitura_status: 'aplicada', leitura_status_rotulo: 'Concluída' } }
+  });
+  await b.pronta();
+
+  marcaDa(linhasDeItem(b)[0]).checked = true;
+  marcaDa(linhasDeItem(b)[0]).disparar('change');
+  await b.pronta();
+  b.el('iaDetDescartar').disparar('click');
+  await b.pronta();
+
+  // Sem trazer a situação para cá, o cabeçalho continuaria dizendo "Em
+  // revisão" até alguém fechar e reabrir — e o rodapé continuaria oferecendo
+  // botões para uma leitura que já acabou.
+  assert.equal(b.el('iaDetStatus').texto(), 'Concluída');
+});
+
+test('a peça e o preço do pedido não se digitam', async () => {
+  const leitura = leituraPadrao({
+    destino: 'orcamentos',
+    destino_rotulo: 'Orçamentos',
+    campos: [
+      { chave: 'cliente', rotulo: 'Cliente', tipo: 'texto', obrigatorio: true, largura: 'grande', naGrade: true },
+      {
+        chave: 'itens', rotulo: 'Itens', tipo: 'lista', largura: 'media', naGrade: true,
+        subcampos: [
+          { chave: 'codigo', rotulo: 'Código', tipo: 'texto' },
+          { chave: 'nome', rotulo: 'Produto', tipo: 'texto', obrigatorio: true },
+          { chave: 'quantidade', rotulo: 'Qtde', tipo: 'numero', obrigatorio: true },
+          { chave: 'valor_unitario', rotulo: 'Valor un.', tipo: 'dinheiro' }
+        ]
+      }
+    ],
+    itens: [{
+      id: 1, linha: 1, acao: 'criar', alvo_id: 50, status: 'pendente', mensagem: null,
+      dados: {
+        cliente: 'Casa Vicenzo',
+        itens: [{
+          codigo: 'PR-210', nome: 'Painel de Ripas', quantidade: 2, valor_unitario: 1,
+          _casamento: 'exato', _cadastro: 'Painel Ripado 2,10', _lido: 'Painel de Ripas', _preco: 900
+        }]
+      }
+    }]
+  });
+
+  const b = criarBancada({ leitura });
+  await b.pronta();
+  botaoDaLista(linhasDeItem(b)[0]).disparar('click');
+  await b.pronta();
+  const linhas = subLinhas(b)[0].todos().filter(f => f.tagName === 'TR');
+
+  const campos = linhas[1].todos().filter(f => f.tagName === 'INPUT');
+  const porChave = c => campos.find(f => f.dataset.chave === `itens.${c}`);
+
+  // Um código digitado à mão não existe; um preço digitado à mão ninguém
+  // aprovou. Os dois vêm da peça, e é a peça que se escolhe.
+  assert.equal(porChave('codigo').readOnly, true);
+  assert.equal(porChave('valor_unitario').readOnly, true);
+  assert.equal(porChave('quantidade').readOnly, false);
+
+  // E o campo AVISA que é fixo. Um input travado sem marca nenhuma parece um
+  // input quebrado: o usuário clica, digita, nada acontece, e não há nada na
+  // tela dizendo por quê.
+  assert.ok(porChave('codigo').classList.contains('ia-campo--fixo'));
+  assert.ok(porChave('valor_unitario').classList.contains('ia-campo--fixo'));
+  assert.equal(porChave('quantidade').classList.contains('ia-campo--fixo'), false);
+
+  // O preço mostrado é o do catálogo, não o do documento.
+  assert.equal(porChave('valor_unitario').value, '900');
+});
+
+test('a peça do pedido só aceita nome que existe no catálogo', async () => {
+  const leitura = leituraPadrao({
+    destino: 'orcamentos', destino_rotulo: 'Orçamentos',
+    campos: [{
+      chave: 'itens', rotulo: 'Itens', tipo: 'lista', largura: 'media', naGrade: true,
+      subcampos: [
+        { chave: 'codigo', rotulo: 'Código', tipo: 'texto' },
+        { chave: 'nome', rotulo: 'Produto', tipo: 'texto', obrigatorio: true }
+      ]
+    }],
+    sugestoes: { 'itens.nome': ['Painel Ripado 2,10', 'Mesa Lateral Carvalho'], __restritos: ['itens.nome'] },
+    itens: [{
+      id: 1, linha: 1, acao: 'criar', alvo_id: 50, status: 'pendente', mensagem: null,
+      dados: { itens: [{ codigo: 'PR-210', nome: 'Painel Ripado 2,10', _casamento: 'exato' }] }
+    }]
+  });
+
+  const b = criarBancada({ leitura });
+  await b.pronta();
+  botaoDaLista(linhasDeItem(b)[0]).disparar('click');
+  await b.pronta();
+
+  const nome = subLinhas(b)[0].todos()
+    .find(f => f.tagName === 'INPUT' && f.dataset.chave === 'itens.nome');
+
+  nome.value = 'Cadeira Que Não Existe';
+  nome.disparar('change');
+  await b.pronta();
+
+  // Um nome livre cria um item que o orçamento recusa do outro lado — e o
+  // erro só apareceria com o formulário já aberto. O campo volta ao que era.
+  assert.equal(b.chamadas.some(c => c.metodo === 'PUT'), false);
+  assert.equal(nome.value, 'Painel Ripado 2,10');
+  assert.match(b.toasts.at(-1).msg, /não está cadastrado/);
+});
+
+test('linha sem destino revela o botão de escolher', async () => {
+  const leitura = leituraPadrao({
+    destino: 'orcamentos', destino_rotulo: 'Orçamentos',
+    exige_alvo: true, rotulo_alvo: 'Cliente ou prospecção',
+    alvos: [{ id: 50, nome: 'Casa Vicenzo (Cliente)', tabela: 'clientes' }]
+  });
+  leitura.itens = leitura.itens.map(i => ({ ...i, alvo_id: null, acao: 'criar' }));
+
+  const b = criarBancada({ leitura });
+  await b.pronta();
+
+  // A coluna "O que fazer" saiu, e com ela o único lugar em que se podia
+  // apontar o cliente. Sem este botão a linha ficava num beco: vermelha, sem
+  // caminho, e o botão de abrir recusando sem oferecer saída.
+  assert.equal(b.el('iaDetEscolherAlvo').classList.contains('hidden'), false);
+  assert.match(b.el('iaDetEscolherAlvo').title, /sem cliente ou prospecção/i);
+});
+
+test('escolher um da lista aponta a linha', async () => {
+  const leitura = leituraPadrao({
+    destino: 'orcamentos', destino_rotulo: 'Orçamentos',
+    exige_alvo: true, rotulo_alvo: 'Cliente ou prospecção',
+    alvos: [{ id: 50, nome: 'Casa Vicenzo (Cliente)', tabela: 'clientes' }]
+  });
+  leitura.itens = leitura.itens.map(i => ({ ...i, alvo_id: null, acao: 'criar' }));
+
+  const b = criarBancada({ leitura });
+  await b.pronta();
+
+  b.el('iaDetEscolherAlvo').disparar('click');
+  await b.pronta();
+
+  b.el('iaDetEscolhaCampo').value = 'casa vicenzo (cliente)';
+  b.el('iaDetEscolhaConfirmar').disparar('click');
+  await b.pronta();
+
+  const put = b.chamadas.find(c => c.metodo === 'PUT');
+  assert.equal(put.corpo.alvo_id, 50);
+  assert.equal(put.corpo.alvo_tabela, 'clientes');
+});
+
+test('nome fora da lista é recusado — o sistema precisa do registro', async () => {
+  const leitura = leituraPadrao({
+    destino: 'orcamentos', destino_rotulo: 'Orçamentos',
+    exige_alvo: true, rotulo_alvo: 'Cliente',
+    alvos: [{ id: 50, nome: 'Casa Vicenzo', tabela: 'clientes' }]
+  });
+  leitura.itens = leitura.itens.map(i => ({ ...i, alvo_id: null, acao: 'criar' }));
+
+  const b = criarBancada({ leitura });
+  await b.pronta();
+  b.el('iaDetEscolherAlvo').disparar('click');
+  await b.pronta();
+
+  b.el('iaDetEscolhaCampo').value = 'Empresa Que Não Existe';
+  b.el('iaDetEscolhaConfirmar').disparar('click');
+  await b.pronta();
+
+  // Um nome digitado não aponta para nada, e o erro só apareceria depois de
+  // abrir o orçamento.
+  assert.equal(b.chamadas.some(c => c.metodo === 'PUT'), false);
+  assert.match(b.toasts.at(-1).msg, /Escolha um da lista/);
+});
+
+test('destino que não exige alvo não mostra o botão', async () => {
+  const b = criarBancada();
+  await b.pronta();
+  assert.equal(b.el('iaDetEscolherAlvo').classList.contains('hidden'), true);
 });
