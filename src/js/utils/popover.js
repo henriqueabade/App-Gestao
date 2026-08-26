@@ -32,6 +32,20 @@
   const MARGEM = 8;
 
   /**
+   * Acima de qualquer modal, abaixo do aviso de desconexão.
+   *
+   * Este número é a outra metade do problema de mover o popover para o
+   * `<body>`. Dentro do modal ele herdava a pilha do modal e o `z-index: 50`
+   * bastava; no `<body>` ele passa a competir com o próprio modal, que é
+   * `z-[1200]` — e some ATRÁS dele.
+   *
+   * O sintoma engana: o popover está lá, do tamanho certo, na posição certa,
+   * e o que se vê é a área borrada do modal por cima. Parece que ele "não
+   * abriu" ou "abriu fora da tela".
+   */
+  const CAMADA = 1400;
+
+  /**
    * Mostra `popover` ancorado em `ancora`.
    *
    * O popover é movido para o `<body>` na primeira abertura e fica lá: mover a
@@ -56,6 +70,7 @@
     }
 
     popover.style.position = 'fixed';
+    popover.style.zIndex = String(CAMADA);
     // Precisa estar visível para ser medido: com `visibility: hidden` a caixa
     // tem tamanho, mas o `.show` também muda o `transform`, e medir antes dele
     // daria uma altura que não é a final.

@@ -220,10 +220,23 @@
     if (pct === null) {
       // Fase de leitura: a IA responde de uma vez, não há progresso real.
       // Fingir uma porcentagem que anda sozinha seria mentir para o usuário.
+      //
+      // A largura INLINE precisa sair, e é aqui que estava o defeito: estilo
+      // inline vence classe, então o `width` deixado pela fase de envio
+      // continuava valendo. Com um arquivo pequeno o envio termina antes do
+      // primeiro evento de progresso, o inline fica em `0%`, e a barra da
+      // fase de leitura nascia com largura zero — invisível e parada, que é
+      // exatamente a tela travada que se via.
+      if (barra) barra.style.width = '';
       caixa?.classList.add('ia-barra--indefinida');
       if (numero) numero.textContent = '';
+      // O ponto que gira ao lado do texto não depende de animação de CSS de
+      // largura nenhuma: é a garantia de que SEMPRE há algo se mexendo
+      // enquanto a IA não responde.
+      get('iaNovaGirando')?.classList.remove('hidden');
       return;
     }
+    get('iaNovaGirando')?.classList.add('hidden');
     caixa?.classList.remove('ia-barra--indefinida');
     if (barra) barra.style.width = `${pct}%`;
     if (numero) numero.textContent = `${pct}%`;

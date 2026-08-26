@@ -5330,3 +5330,97 @@ test('a raridade decide sozinha, sem depender da guarda de empate', () => {
   // não basta. É o que protege quem chamar a função sem o catálogo em mãos.
   assert.ok(proximidadeDeInsumo('Freijó', 'Lâmina de Freijó') < 0.6);
 });
+
+
+// ===========================================================================
+// ETAPA 27 — UNIDADE E ETAPA TÊM DE BATER COM O CADASTRO
+//
+// Não basta o insumo existir: ele existe COM uma unidade e NUMA etapa, e é com
+// essas que a ficha do produto é montada. Uma linha que diz "m²" para um
+// insumo cadastrado em "ML" produz uma receita com o custo errado por três
+// ordens de grandeza — e o nome bate, então nada parece fora do lugar.
+// ===========================================================================
+
+test('a grade diz, por insumo, se unidade e etapa batem', async () => {
+  const ctx = await prepararFicha({
+    itens: [{
+      codigo: 'PR-210', nome: 'Painel Ripado 2,10',
+      insumos: [
+        // MDF 15mm está cadastrado em MARCENARIA, unidade CH.
+        { processo: 'MARCENARIA', nome: 'MDF 15mm Branco TX', quantidade: '1', unidade: 'CH' },
+        { processo: 'MARCENARIA', nome: 'Cola PVA extra 1kg', quantidade: '2', unidade: 'm2' }
+      ]
+    }]
+  });
+  try {
+    const detalhe = await (await chamar(ctx.porta, '/api/ia/5')).json();
+    const insumos = detalhe.itens[0].dados.insumos;
+
+    assert.strictEqual(insumos[0]._unidade_ok, true);
+    assert.strictEqual(insumos[0]._processo_ok, true);
+
+    // "m2" contra "UN" do cadastro.
+    assert.strictEqual(insumos[1]._unidade_ok, false);
+    assert.strictEqual(insumos[1]._unidade_cadastro, 'UN');
+    assert.strictEqual(insumos[1]._processo_ok, true);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('caixa e acento não contam como divergência', async () => {
+  const ctx = await prepararFicha({
+    itens: [{
+      codigo: 'PR-210', nome: 'Painel Ripado 2,10',
+      insumos: [{ processo: 'marcenaria', nome: 'MDF 15mm Branco TX', quantidade: '1', unidade: 'ch' }]
+    }]
+  });
+  try {
+    const detalhe = await (await chamar(ctx.porta, '/api/ia/5')).json();
+    const insumo = detalhe.itens[0].dados.insumos[0];
+
+    // Exigir a mesma grafia transformaria uma questão de escrita num bloqueio.
+    assert.strictEqual(insumo._unidade_ok, true);
+    assert.strictEqual(insumo._processo_ok, true);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('unidade em branco é divergência, não indiferença', async () => {
+  const ctx = await prepararFicha({
+    itens: [{
+      codigo: 'PR-210', nome: 'Painel Ripado 2,10',
+      insumos: [{ processo: 'MARCENARIA', nome: 'MDF 15mm Branco TX', quantidade: '1', unidade: null }]
+    }]
+  });
+  try {
+    const detalhe = await (await chamar(ctx.porta, '/api/ia/5')).json();
+    // O insumo TEM unidade no cadastro; a linha não diz qual. Deixar passar
+    // mandaria para a ficha uma quantidade sem unidade nenhuma.
+    assert.strictEqual(detalhe.itens[0].dados.insumos[0]._unidade_ok, false);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('insumo sem cadastro não tem o que divergir', async () => {
+  const ctx = await prepararFicha({
+    itens: [{
+      codigo: 'PR-210', nome: 'Painel Ripado 2,10',
+      insumos: [{ processo: 'MONTAGEM', nome: 'Couro Serpente', quantidade: '1', unidade: 'm2' }]
+    }]
+  });
+  try {
+    const detalhe = await (await chamar(ctx.porta, '/api/ia/5')).json();
+    const insumo = detalhe.itens[0].dados.insumos[0];
+
+    // `null` e `false` dizem coisas diferentes: "não há com o que comparar" e
+    // "comparei e não bate". A tela desenha os dois de forma diferente.
+    assert.strictEqual(insumo._unidade_ok, null);
+    assert.strictEqual(insumo._processo_ok, null);
+    assert.strictEqual(insumo._casamento, null);
+  } finally {
+    await ctx.encerrar();
+  }
+});

@@ -1305,8 +1305,8 @@ body {
 }
 
 .ia-sub-unidade {
-    width: 6ch;
-    max-width: 6ch;
+    width: 7ch;
+    max-width: 7ch;
 }
 
 .ia-sub-processo {
@@ -1509,4 +1509,19 @@ body {
 .ia-btn-pendente {
     opacity: 0.65;
     box-shadow: inset 0 0 0 1px var(--color-red);
+}
+
+/* Valor que não bate com o cadastro. O insumo entra na ficha com a unidade e a
+   etapa do CADASTRO — enviar divergente faria a linha virar outra coisa do
+   outro lado, sem nada na tela parecer errado, porque o nome bate. */
+.ia-alerta-campo {
+    color: var(--color-primary);
+    font-size: 11px;
+    flex-shrink: 0;
+    cursor: help;
+}
+
+.ia-campo--divergente {
+    color: var(--color-primary);
+    border-color: rgba(240, 201, 76, 0.45);
 }

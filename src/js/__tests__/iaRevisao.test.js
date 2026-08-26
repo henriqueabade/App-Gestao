@@ -2135,3 +2135,90 @@ test('todos os formulários de destino avisam quando salvam', () => {
     assert.ok(fonte.includes(overlay), `${arquivo} avisa sem dizer de qual formulário`);
   }
 });
+
+// ---------------------------------------------------------------------------
+// ETAPA 27 — divergência de unidade e etapa
+// ---------------------------------------------------------------------------
+
+/** Ficha com um insumo cuja unidade não bate com o cadastro. */
+function leituraFichaDivergente() {
+  const leitura = leituraFichaRestrita();
+  leitura.itens[0].dados.insumos = [
+    {
+      processo: 'MARCENARIA', nome: 'MDF 06', quantidade: 0.07, unidade: 'm2',
+      _casamento: 'exato', _cadastro: 'MDF 06',
+      _unidade_cadastro: 'M2', _processo_cadastro: 'MARCENARIA',
+      _unidade_ok: true, _processo_ok: true
+    },
+    {
+      processo: 'ACABAMENTO', nome: 'Wash Primer', quantidade: 1, unidade: 'm2',
+      _casamento: 'exato', _cadastro: 'Wash Primer',
+      _unidade_cadastro: 'ML', _processo_cadastro: 'ACABAMENTO',
+      _unidade_ok: false, _processo_ok: true
+    }
+  ];
+  return leitura;
+}
+
+test('a célula divergente ganha sinal de atenção com o valor do cadastro', async () => {
+  const b = criarBancada({ leitura: leituraFichaDivergente() });
+  await b.pronta();
+  const linhas = await abrirInsumos(b);
+
+  // O aviso tem de estar na CÉLULA que diverge: a linha inteira em vermelho
+  // não diria qual dos campos está errado.
+  const alertas = linhas.flatMap(l => l.todos().filter(f => f.classList.contains('ia-alerta-campo')));
+  assert.equal(alertas.length, 1, 'a divergência não se anuncia');
+  assert.match(alertas[0].title, /ML/);
+
+  // E o campo se distingue dos outros.
+  const divergentes = linhas.flatMap(l => l.todos().filter(f => f.classList.contains('ia-campo--divergente')));
+  assert.equal(divergentes.length, 1);
+  assert.equal(divergentes[0].value, 'm2');
+});
+
+test('divergência impede enviar ao formulário, dizendo qual', async () => {
+  const b = criarBancada({ leitura: leituraFichaDivergente() });
+  await b.pronta();
+
+  b.el('iaDetAplicar').disparar('click');
+  await b.pronta();
+
+  // O insumo entra na ficha com a unidade do CADASTRO. Enviar divergente faria
+  // a linha virar outra coisa do outro lado, sem nada parecer errado.
+  assert.equal(b.chamadas.some(c => /\/preenchimento$/.test(c.url)), false);
+  assert.match(b.toasts.at(-1).msg, /unidade não é "ML"/);
+});
+
+test('etapa divergente também bloqueia', async () => {
+  const leitura = leituraFichaDivergente();
+  leitura.itens[0].dados.insumos[1]._unidade_ok = true;
+  leitura.itens[0].dados.insumos[1]._processo_ok = false;
+  leitura.itens[0].dados.insumos[1]._processo_cadastro = 'MONTAGEM';
+
+  const b = criarBancada({ leitura });
+  await b.pronta();
+
+  b.el('iaDetAplicar').disparar('click');
+  await b.pronta();
+  assert.match(b.toasts.at(-1).msg, /etapa não é "MONTAGEM"/);
+});
+
+test('tudo congruente abre normalmente', async () => {
+  const leitura = leituraFichaDivergente();
+  leitura.itens[0].dados.insumos[1]._unidade_ok = true;
+  const b = criarBancada({ leitura });
+  await b.pronta();
+
+  b.el('iaDetAplicar').disparar('click');
+  await b.pronta();
+  assert.equal(b.chamadas.some(c => /\/preenchimento$/.test(c.url)), true);
+});
+
+test('a coluna de unidade cabe cinco caracteres', () => {
+  const css = fs.readFileSync(path.join(__dirname, '..', '..', 'css', 'ia.css'), 'utf8');
+  const regra = /\.ia-sub-unidade \{([\s\S]*?)\}/.exec(css);
+  assert.ok(regra);
+  // 7ch: cinco caracteres mais o respiro da caixa de texto.
+  assert.match(regra[1], /width:\s*7ch/);
+});

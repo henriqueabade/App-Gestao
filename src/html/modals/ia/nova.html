@@ -66,7 +66,13 @@
       <!-- Progresso: substitui os botões enquanto a leitura acontece. -->
       <div id="iaNovaProgresso" class="hidden">
         <div class="flex items-center justify-between gap-4 mb-2">
-          <p id="iaNovaProgressoTexto" class="text-sm text-white/80">Enviando…</p>
+          <p class="flex items-center gap-2 text-sm text-white/80">
+            <!-- Gira enquanto a IA não responde. A barra indefinida sozinha
+                 não bastava: com arquivo pequeno ela nascia com largura zero
+                 e a tela parecia travada. -->
+            <i id="iaNovaGirando" class="fas fa-circle-notch fa-spin hidden text-[var(--color-primary)]"></i>
+            <span id="iaNovaProgressoTexto">Enviando…</span>
+          </p>
           <span id="iaNovaProgressoPct" class="text-sm text-white/50">0%</span>
         </div>
         <div class="ia-barra"><div id="iaNovaBarra" class="ia-barra__preenchida"></div></div>

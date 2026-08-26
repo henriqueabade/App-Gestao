@@ -738,6 +738,29 @@
         // os dois diferem quem revisa precisa poder ver para onde o insumo
         // foi. Casamento exato não ganha (i): não há nada a revelar, e um
         // ícone em toda linha viraria ruído que ninguém mais olha.
+        // Sinal de atenção quando o valor não bate com o cadastro.
+        //
+        // O insumo existe, o nome está certo, e a linha diz "m²" onde o
+        // cadastro diz "ML". A ficha sai com um custo errado por três ordens
+        // de grandeza — e nada na tela parece fora do lugar, porque o nome
+        // bate. O aviso tem de estar na CÉLULA que diverge.
+        const divergente = (sc.chave === 'unidade' && sub?._unidade_ok === false)
+          || (sc.chave === 'processo' && sub?._processo_ok === false);
+
+        if (divergente) {
+          const doCadastroAqui = sc.chave === 'unidade' ? sub._unidade_cadastro : sub._processo_cadastro;
+          const caixa = document.createElement('div');
+          caixa.className = 'ia-celula-com-info';
+          const alerta = document.createElement('i');
+          alerta.className = 'fas fa-triangle-exclamation ia-alerta-campo';
+          alerta.title = `No cadastro é "${doCadastroAqui}" — corrija antes de enviar`;
+          input.classList.add('ia-campo--divergente');
+          caixa.append(alerta, input);
+          celula.appendChild(caixa);
+          linha.appendChild(celula);
+          continue;
+        }
+
         // O (i) aparece sempre que o nome mostrado DIFERE do que o documento
         // trouxe — tenha isso vindo do casamento por semelhança ou de uma
         // troca à mão. Nos dois casos a pergunta é a mesma: "o que a ficha
@@ -1688,8 +1711,10 @@
     for (const campo of (leitura?.campos || [])) {
       if (campo.tipo !== 'lista') continue;
       const exigidos = (campo.subcampos || []).filter(sc => sc.exigido);
-      if (!exigidos.length) continue;
-
+      // Sem `continue` aqui: campo exigido em branco é UMA das pendências, e a
+      // divergência contra o cadastro é outra. Amarrar a segunda à primeira
+      // fazia a divergência passar batido em qualquer destino que não
+      // declarasse campos exigidos.
       const lista = Array.isArray(item.dados?.[campo.chave]) ? item.dados[campo.chave] : [];
       lista.forEach((sub, i) => {
         const nome = sub?.nome || `linha ${i + 1}`;
@@ -1704,6 +1729,16 @@
         // dizer agora.
         if (sub?._casamento === null && String(sub?.nome || '').trim()) {
           faltas.push(`${nome}: não está no cadastro`);
+        }
+
+        // Divergência de unidade ou de etapa também bloqueia: o insumo entra
+        // na ficha com a unidade e a etapa do CADASTRO, e enviar assim faria a
+        // linha silenciosamente virar outra coisa do outro lado.
+        if (sub?._unidade_ok === false) {
+          faltas.push(`${nome}: unidade não é "${sub._unidade_cadastro}"`);
+        }
+        if (sub?._processo_ok === false) {
+          faltas.push(`${nome}: etapa não é "${sub._processo_cadastro}"`);
         }
       });
     }

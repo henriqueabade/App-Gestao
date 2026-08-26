@@ -87,6 +87,8 @@ function criarBancada({ opcoes, respostaEnvio } = {}) {
   for (const id of idsDoModal()) elementos.set(id, criarElemento());
 
   const enviosXhr = [];
+  /** Cada largura que a barra recebeu, na ordem. */
+  const largurasDaBarra = [];
   const toasts = [];
   const modaisFechados = [];
   const gradesRecarregadas = [];
@@ -120,7 +122,9 @@ function criarBancada({ opcoes, respostaEnvio } = {}) {
       // Progresso de upload primeiro, como o navegador faz.
       for (const fn of this.upload.ouvintes.progress || []) {
         fn({ lengthComputable: true, loaded: 50, total: 100 });
+        largurasDaBarra.push(elementos.get('iaNovaBarra')?.style.width);
         fn({ lengthComputable: true, loaded: 100, total: 100 });
+        largurasDaBarra.push(elementos.get('iaNovaBarra')?.style.width);
       }
       this.status = r.status;
       this.responseText = JSON.stringify(r.corpo);
@@ -190,6 +194,7 @@ function criarBancada({ opcoes, respostaEnvio } = {}) {
     sandbox,
     el: id => elementos.get(id),
     enviosXhr,
+    largurasDaBarra,
     toasts,
     modaisFechados,
     gradesRecarregadas,
@@ -417,8 +422,16 @@ test('o envio vai por XHR, para haver progresso de upload', async () => {
 
   assert.equal(b.enviosXhr[0].metodo, 'POST');
   assert.match(b.enviosXhr[0].url, /\/api\/ia$/);
-  // A barra saiu do zero durante o upload.
-  assert.notEqual(b.el('iaNovaBarra').style.width, '');
+
+  // A barra andou DURANTE o upload — é isso que o XHR compra. E ao chegar aos
+  // 100% ela passa direto para a fase de leitura, sem parar cheia.
+  assert.deepEqual(b.largurasDaBarra, ['50%', '']);
+
+  // E, terminado o envio, a largura inline SAI. Estilo inline vence classe:
+  // deixá-la ali fazia a barra da fase de leitura nascer com a largura do
+  // envio — e com arquivo pequeno, que termina antes do primeiro evento de
+  // progresso, nascer com largura ZERO. Invisível e parada.
+  assert.equal(b.el('iaNovaBarra').style.width, '');
 });
 
 test('quando o upload chega a 100%, o texto muda para "lendo"', async () => {
@@ -534,4 +547,17 @@ test('o modal revela a si mesmo mesmo quando as opções falham', async () => {
   const fonte = fs.readFileSync(ARQUIVO, 'utf8');
   const bloco = /\} finally \{[\s\S]*?revelar\(\);[\s\S]*?\}/.exec(fonte);
   assert.ok(bloco, 'a revelação precisa estar num finally');
+});
+
+test('a fase de leitura tem sempre algo se mexendo', async () => {
+  const b = criarBancada();
+  await b.pronta();
+  await enviarCom(b);
+
+  // A barra indefinida sozinha não bastava: com arquivo pequeno o envio
+  // termina antes do primeiro evento de progresso, o `width` inline fica em
+  // "0%", e a barra nasce com largura zero — invisível e parada. O ponto que
+  // gira não depende de largura nenhuma.
+  assert.equal(b.el('iaNovaGirando').classList.contains('hidden'), false,
+    'a tela fica sem sinal de vida durante a leitura');
 });

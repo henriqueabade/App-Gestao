@@ -833,6 +833,11 @@ function carregarLido(coagida, anterior, enviada) {
  * não são gravadas em lugar nenhum e se refazem a cada abertura — que é o que
  * mantém a tela certa depois de alguém cadastrar o insumo que faltava.
  */
+/** Caixa e acento não distinguem unidade nem etapa. */
+const normalizarTexto = v => String(v ?? '')
+  .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+  .toLowerCase().replace(/\s+/g, ' ').trim();
+
 function anotarCasamento(destino, dados, materias, etapas = []) {
   if (destino !== 'produto_insumos' || !Array.isArray(dados?.insumos)) return dados;
 
@@ -849,6 +854,25 @@ function anotarCasamento(destino, dados, materias, etapas = []) {
       const { registro, tipo, foraDoProcesso, ambiguo } =
         preenchimento.casarInsumo(nome, porNome, materias, processo, etapasPorId);
 
+      // Unidade e processo do CADASTRO, e se o que está na linha bate com
+      // eles.
+      //
+      // Não basta o insumo existir: ele existe com uma unidade e numa etapa, e
+      // é com essas que a ficha do produto vai ser montada. Uma linha que diz
+      // "m²" para um insumo cadastrado em "ML" produz uma receita cujo custo
+      // está errado por três ordens de grandeza — e o nome bate, então nada
+      // parece fora do lugar.
+      const unidadeCadastro = registro ? String(registro.unidade || '').trim() : null;
+      const processoCadastro = registro
+        ? String(etapasPorId.get(String(registro.processo).trim()) || registro.processo || '').trim()
+        : null;
+
+      const combina = (naLinha, noCadastro) => {
+        if (!noCadastro) return null;
+        if (!String(naLinha || '').trim()) return false;
+        return normalizarTexto(naLinha) === normalizarTexto(noCadastro);
+      };
+
       return {
         ...linha,
         // O que o DOCUMENTO escreveu, guardado na primeira anotação e nunca
@@ -858,6 +882,10 @@ function anotarCasamento(destino, dados, materias, etapas = []) {
         _lido: linha._lido || nome,
         _casamento: tipo,
         _cadastro: registro ? registro.nome : null,
+        _unidade_cadastro: unidadeCadastro,
+        _processo_cadastro: processoCadastro,
+        _unidade_ok: combina(linha.unidade, unidadeCadastro),
+        _processo_ok: combina(linha.processo, processoCadastro),
         // Distingue "não existe" de "existe em outra etapa": a tela mostra os
         // dois em vermelho, mas o que fazer com cada um é diferente.
         _fora_do_processo: foraDoProcesso ? foraDoProcesso.processo : null,

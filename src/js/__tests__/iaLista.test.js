@@ -510,3 +510,19 @@ test('o posicionador de popover não é chamado com `?.` sozinho', () => {
   const fonte = fs.readFileSync(ARQUIVO, 'utf8');
   assert.match(fonte, /Popover\?\.abrir\(/);
 });
+
+test('o popover fica acima de qualquer modal', () => {
+  // Movido para o <body>, ele deixa de herdar a pilha do modal e passa a
+  // competir com ele. O overlay dos modais é `z-[1200]`; um popover com o
+  // `z-index: 50` do CSS some ATRÁS dele — e o sintoma engana, porque o
+  // elemento está lá, do tamanho certo e na posição certa.
+  const util = fs.readFileSync(
+    path.join(__dirname, '..', 'utils', 'popover.js'), 'utf8');
+  const camada = /const CAMADA = (\d+);/.exec(util);
+  assert.ok(camada, 'o popover não fixa camada nenhuma');
+  assert.ok(Number(camada[1]) > 1200, 'o popover volta a ficar atrás do modal');
+
+  // E abaixo do aviso de desconexão, que tem de cobrir tudo.
+  assert.ok(Number(camada[1]) < 2147483000);
+  assert.match(util, /style\.zIndex/);
+});
