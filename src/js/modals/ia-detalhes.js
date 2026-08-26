@@ -159,11 +159,19 @@
         document.createTextNode(`Descartar ${marcados} selecionada${marcados > 1 ? 's' : ''}`));
     }
 
+    // O botão avisa que há pendência antes do clique: descobrir depois é
+    // descobrir com o formulário já na frente.
+    const proxima = itensPendentes()[0];
+    const faltas = proxima ? pendenciasDoItem(proxima) : [];
+
     if (aplicar && emRevisao && pendentes > 0 && temFormulario) {
       const rotulo = MODULOS_DE_DESTINO[leitura.destino].rotulo;
+      aplicar.classList.toggle('ia-btn-pendente', faltas.length > 0);
       aplicar.innerHTML = '<i class="fas fa-up-right-from-square mr-2"></i>'
         + (pendentes > 1 ? `Abrir a 1ª de ${pendentes} em ${rotulo}` : `Abrir em ${rotulo}`);
-      aplicar.title = `Abre ${rotulo} com os dados preenchidos. Nada é gravado aqui: quem salva é você.`;
+      aplicar.title = faltas.length
+        ? `Falta preencher: ${faltas.slice(0, 4).join('; ')}`
+        : `Abre ${rotulo} com os dados preenchidos. Nada é gravado aqui: quem salva é você.`;
     }
 
     // O `title` e o `disabled` de "Gravar todos" pertencem a
@@ -730,15 +738,20 @@
         // os dois diferem quem revisa precisa poder ver para onde o insumo
         // foi. Casamento exato não ganha (i): não há nada a revelar, e um
         // ícone em toda linha viraria ruído que ninguém mais olha.
-        if (sc.chave === 'nome' && sub && sub._casamento === 'semelhante' && sub._cadastro) {
+        // O (i) aparece sempre que o nome mostrado DIFERE do que o documento
+        // trouxe — tenha isso vindo do casamento por semelhança ou de uma
+        // troca à mão. Nos dois casos a pergunta é a mesma: "o que a ficha
+        // dizia aqui?".
+        const nomeLido = sub?._lido || sub?.nome;
+        const mostrado = doCadastro ?? sub?.nome;
+        if (sc.chave === 'nome' && nomeLido && mostrado
+            && normalizarOpcao(nomeLido) !== normalizarOpcao(mostrado)) {
           const caixa = document.createElement('div');
           caixa.className = 'ia-celula-com-info';
           const info = document.createElement('i');
           info.className = 'info-icon ia-info-insumo';
-          // A tabela mostra o do cadastro; o (i) diz de onde ele veio. É esta
-          // a direção útil: o que vai para a receita fica à vista, e a origem
-          // — que só interessa quando algo parece errado — fica a um gesto.
-          info.title = `O documento escreveu "${sub.nome}"`;
+          // A tabela mostra o que vai para a receita; o (i) diz de onde veio.
+          info.title = `O documento escreveu "${nomeLido}"`;
           caixa.append(info, input);
           celula.appendChild(caixa);
           linha.appendChild(celula);
@@ -1513,12 +1526,52 @@
     return { quantos: 0, oQue: '' };
   }
 
+  /**
+   * A linha que está esperando o formulário de destino salvar.
+   *
+   * Guardada aqui, e não no item, porque é estado de UMA ida ao formulário:
+   * abrir outra linha antes de salvar a primeira substitui a espera, que é o
+   * comportamento certo — a pessoa mudou de ideia.
+   */
+  let esperandoSalvar = null;
+
+  /**
+   * O módulo de destino avisou que salvou.
+   *
+   * É o contrato mais simples que fecha o ciclo: a leitura não tem como saber
+   * sozinha que o cadastro entrou — ela não gravou nada e não fica olhando o
+   * banco. Quem sabe é quem salvou.
+   *
+   * `ia.review.edit` já cobre marcar a linha: é a mesma permissão de corrigir
+   * um item, e marcar "resolvido" é uma correção como outra qualquer.
+   */
+  window.addEventListener('moduloSalvou', async e => {
+    const item = esperandoSalvar;
+    if (!item) return;
+    if (e?.detail?.overlay && e.detail.overlay !== item.overlay) return;
+    esperandoSalvar = null;
+
+    try {
+      atualizarEmMemoria(await salvarItem(item.id, { acao: 'ignorar' }));
+      desenharItens();
+      showToast('Linha marcada como resolvida', 'success');
+    } catch (err) {
+      // Falhar aqui não é grave: o cadastro do outro lado entrou. O que se
+      // perde é a marca, e dizer isso é melhor do que fingir que marcou.
+      console.error('Falha ao marcar a linha como resolvida', err);
+      showToast('Salvo no módulo, mas a linha continua pendente aqui', 'info');
+    }
+  });
+
   async function abrirNoModulo(item) {
     const config = MODULOS_DE_DESTINO[leitura?.destino];
     if (!config) {
       showToast('Este destino ainda não abre o módulo preenchido', 'info');
       return;
     }
+
+    // A partir daqui, um "salvou" que chegar é desta linha.
+    esperandoSalvar = { id: item.id, overlay: config.overlay };
 
     const veu = abrirVeu();
     let carga;
@@ -1622,6 +1675,41 @@
     }
   }
 
+  /**
+   * O que falta numa linha para ela poder ir ao formulário.
+   *
+   * A verificação é da SUB-LISTA, não do cabeçalho. Um cliente sem site abre o
+   * formulário e a pessoa completa lá; um insumo sem unidade, não — ele entra
+   * direto na tabela do produto, já montado, e do outro lado não há onde
+   * corrigir. O que não pode ser completado depois tem de ser completado aqui.
+   */
+  function pendenciasDoItem(item) {
+    const faltas = [];
+    for (const campo of (leitura?.campos || [])) {
+      if (campo.tipo !== 'lista') continue;
+      const exigidos = (campo.subcampos || []).filter(sc => sc.exigido);
+      if (!exigidos.length) continue;
+
+      const lista = Array.isArray(item.dados?.[campo.chave]) ? item.dados[campo.chave] : [];
+      lista.forEach((sub, i) => {
+        const nome = sub?.nome || `linha ${i + 1}`;
+        for (const sc of exigidos) {
+          const v = sub?.[sc.chave];
+          if (v === null || v === undefined || String(v).trim() === '') {
+            faltas.push(`${nome}: sem ${sc.rotulo.toLowerCase()}`);
+          }
+        }
+        // Sem casamento, o insumo não vai para o formulário de jeito nenhum —
+        // e deixar a pessoa clicar para descobrir isso depois é pior do que
+        // dizer agora.
+        if (sub?._casamento === null && String(sub?.nome || '').trim()) {
+          faltas.push(`${nome}: não está no cadastro`);
+        }
+      });
+    }
+    return faltas;
+  }
+
   /** Linhas que ainda não viraram cadastro e não foram descartadas. */
   const itensPendentes = () => (leitura?.itens || [])
     .filter(i => i.status !== 'aplicado' && i.acao !== 'ignorar');
@@ -1644,6 +1732,16 @@
     // primeira pendente" quase nunca é a que se quer abrir agora. Sem seleção,
     // segue a ordem da tabela.
     const escolhida = pendentes.find(i => selecionados.has(i.id)) || pendentes[0];
+
+    const faltas = pendenciasDoItem(escolhida);
+    if (faltas.length) {
+      // Dizer O QUE falta, e não só que falta: "complete os campos" manda a
+      // pessoa procurar numa lista de vinte e três insumos.
+      showToast(`Complete antes de abrir — ${faltas.slice(0, 3).join('; ')}`
+        + (faltas.length > 3 ? ` e mais ${faltas.length - 3}` : ''), 'error');
+      return;
+    }
+
     await abrirNoModulo(escolhida);
   }
 

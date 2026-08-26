@@ -815,6 +815,10 @@
             ? `ORÇAMENTO ${result.numero} SALVO COM SUCESSO!`
             : `ORÇAMENTO ${result.numero} SALVO E ENVIADO COM SUCESSO!`;
         showToast(message, 'success');
+        // Avisa quem abriu este formulário que o orçamento entrou. Quem abre
+        // daqui (a leitura de IA) não tem como saber sozinho: ela não gravou
+        // nada e não fica olhando o banco. Quem não escuta, ignora.
+        window.dispatchEvent(new CustomEvent('moduloSalvou', { detail: { overlay: overlayId } }));
       } catch (err) {
         console.error(err);
         showToast('Erro ao salvar orçamento', 'error');

@@ -125,6 +125,12 @@
       // foi gravado, e cair no catch de baixo faria o usuário ler "não foi
       // possível registrar" depois de o insumo ter entrado.
       await recarregarGrade();
+      // Avisa quem abriu este formulário que o cadastro entrou.
+      //
+      // Quem abre daqui (a leitura de IA) não tem como saber sozinho: ela não
+      // gravou nada e não fica olhando o banco. Um evento na janela é o
+      // contrato mais barato possível — quem não escuta, ignora.
+      window.dispatchEvent(new CustomEvent('moduloSalvou', { detail: { overlay: 'novoInsumo' } }));
       showToast('Insumo registrado com sucesso!', 'success');
       close();
     }catch(err){

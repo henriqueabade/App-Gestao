@@ -380,15 +380,27 @@ router.get('/config/estado', exigirPermissao('ia.config'), async (req, res) => {
  */
 async function ultimoConsumo(api) {
   const leituras = await api.get('/api/ia_extracoes').then(listaDe).catch(() => []);
-  const comUso = leituras.filter(l => Number(l.tokens_entrada) > 0);
+  const comUso = leituras.filter(l =>
+    Number(l.tokens_entrada) > 0 || Number(l.tokens_ocr_entrada) > 0);
   if (!comUso.length) return null;
 
   const recente = ordenarPorRecente(comUso)[0];
   return {
     titulo: recente.titulo || `Leitura #${recente.id}`,
-    modelo: recente.modelo_llm || null,
     entrada: Number(recente.tokens_entrada) || 0,
-    saida: Number(recente.tokens_saida) || 0
+    saida: Number(recente.tokens_saida) || 0,
+    // Um bloco por provedor: são modelos diferentes, com contextos diferentes,
+    // e a tela compara cada consumo com o contexto do SEU modelo.
+    gemini: {
+      modelo: recente.modelo_ocr || null,
+      entrada: Number(recente.tokens_ocr_entrada) || 0,
+      saida: Number(recente.tokens_ocr_saida) || 0
+    },
+    groq: {
+      modelo: recente.modelo_llm || null,
+      entrada: Number(recente.tokens_llm_entrada) || 0,
+      saida: Number(recente.tokens_llm_saida) || 0
+    }
   };
 }
 
@@ -582,9 +594,23 @@ router.post('/',
         ? falharam.map(l => `${l.arquivo.originalname}: ${l.erro}`).join(' | ').slice(0, 1000)
         : null;
 
+      // Consumo da LEITURA, somado sobre os arquivos. Guardado desde já, e não
+      // só na extração: uma leitura que nunca foi extraída também gastou
+      // contexto, e é o Gemini quem gasta mais dele.
+      const gasto = lidos.reduce((soma, l) => ({
+        entrada: soma.entrada + (Number(l?.consumo?.entrada) || 0),
+        saida: soma.saida + (Number(l?.consumo?.saida) || 0)
+      }), { entrada: 0, saida: 0 });
+
       await api.put(`/api/ia_extracoes/${extracaoId}`, {
         status,
         modelo_ocr: usouGemini ? provedores.modeloGemini() : null,
+        ...(gasto.entrada ? {
+          tokens_ocr_entrada: gasto.entrada,
+          tokens_ocr_saida: gasto.saida,
+          tokens_entrada: gasto.entrada,
+          tokens_saida: gasto.saida
+        } : {}),
         erro: comTexto ? resumoErro : (resumoErro || 'Nenhum arquivo pôde ser lido.')
       });
 
@@ -767,6 +793,28 @@ router.get('/:id', exigirPermissao('ia.details.view'), async (req, res) => {
 });
 
 /**
+ * Carrega adiante o nome que o DOCUMENTO trouxe.
+ *
+ * A coerção do esquema derruba tudo o que não é subcampo declarado — e `_lido`
+ * não é: ele é anotação, não dado do documento. Só que, sem carregá-lo, trocar
+ * o nome à mão apagava a única prova de que a ficha dizia outra coisa, e o (i)
+ * ficava vazio justo nas linhas em que a pessoa mexeu.
+ *
+ * A correspondência é por POSIÇÃO. Por nome seria circular: é justamente o
+ * nome que acabou de mudar.
+ */
+function carregarLido(coagida, anterior, enviada) {
+  if (!Array.isArray(coagida)) return coagida;
+  const antes = Array.isArray(anterior) ? anterior : [];
+  const veio = Array.isArray(enviada) ? enviada : [];
+
+  return coagida.map((sub, i) => {
+    const lido = veio[i]?._lido || antes[i]?._lido || antes[i]?.nome;
+    return lido ? { ...sub, _lido: lido } : sub;
+  });
+}
+
+/**
  * Anota, em cada insumo da ficha, COMO ele casou com o cadastro.
  *
  * Três desfechos, e a tela desenha os três de forma diferente:
@@ -798,16 +846,23 @@ function anotarCasamento(destino, dados, materias, etapas = []) {
       if (!nome) return linha;
 
       const processo = String(linha?.processo ?? '').trim();
-      const { registro, tipo, foraDoProcesso } =
+      const { registro, tipo, foraDoProcesso, ambiguo } =
         preenchimento.casarInsumo(nome, porNome, materias, processo, etapasPorId);
 
       return {
         ...linha,
+        // O que o DOCUMENTO escreveu, guardado na primeira anotação e nunca
+        // mais tocado. Sem ele, trocar o nome à mão apagava a única prova de
+        // que a ficha dizia outra coisa — e o (i) da linha ficava sem conteúdo
+        // justo nas linhas que a pessoa mexeu.
+        _lido: linha._lido || nome,
         _casamento: tipo,
         _cadastro: registro ? registro.nome : null,
         // Distingue "não existe" de "existe em outra etapa": a tela mostra os
         // dois em vermelho, mas o que fazer com cada um é diferente.
-        _fora_do_processo: foraDoProcesso ? foraDoProcesso.processo : null
+        _fora_do_processo: foraDoProcesso ? foraDoProcesso.processo : null,
+        // E de "existe mais de um igualmente parecido", que pede escolher.
+        _ambiguo: ambiguo || null
       };
     })
   };
@@ -1042,8 +1097,15 @@ router.post('/:id/estruturar', exigirPermissao('ia.extract'), async (req, res) =
       // Guardado por leitura, e não somado num contador global: "esta planilha
       // gastou 40 mil dos 131 mil que o modelo aguenta" diz o que fazer; um
       // total acumulado do mês não diz nada.
-      tokens_entrada: extraidos.tokens_entrada ?? null,
-      tokens_saida: extraidos.tokens_saida ?? null,
+      // Cada passo guarda o SEU consumo, porque cada um usa um modelo com um
+      // contexto diferente — somar os dois e comparar contra um deles daria
+      // uma porcentagem que não significa nada.
+      tokens_llm_entrada: extraidos.tokens_entrada || 0,
+      tokens_llm_saida: extraidos.tokens_saida || 0,
+      // E as colunas antigas passam a valer como o TOTAL da leitura, que é o
+      // número útil para saber quanto o documento custou por inteiro.
+      tokens_entrada: (Number(extracao.tokens_ocr_entrada) || 0) + (extraidos.tokens_entrada || 0),
+      tokens_saida: (Number(extracao.tokens_ocr_saida) || 0) + (extraidos.tokens_saida || 0),
       erro: total
         ? (avisos.join(' | ').slice(0, 1000) || null)
         : 'A IA não encontrou nenhum item neste documento.'
@@ -1114,7 +1176,9 @@ router.put('/:id/itens/:itemId', exigirPermissao('ia.review.edit'), async (req, 
           problemas.push(`${campo.rotulo}: valor não reconhecido`);
           continue;
         }
-        novos[campo.chave] = valor;
+        novos[campo.chave] = campo.tipo === 'lista'
+          ? carregarLido(valor, atual[campo.chave], enviados[campo.chave])
+          : valor;
       }
       if (problemas.length) throw erro(400, problemas.join('; '));
       payload.dados = JSON.stringify(novos);
@@ -1166,10 +1230,23 @@ router.put('/:id/itens/:itemId', exigirPermissao('ia.review.edit'), async (req, 
     payload.mensagem = null;
     const salvo = await api.put(`/api/ia_extracao_itens/${itemId}`, payload);
 
+    // O casamento é REFEITO e devolvido junto.
+    //
+    // As anotações (`_casamento`, `_cadastro`) são conta, não dado: elas não
+    // são gravadas e se refazem a cada leitura do detalhe. Devolver o item sem
+    // elas fazia toda a linha perder os marcadores assim que UM campo era
+    // corrigido — e só voltavam fechando e reabrindo o modal.
+    const [materias, etapas] = extracao.destino === 'produto_insumos'
+      ? await Promise.all([
+        api.get('/api/materia_prima').then(listaDe).catch(() => []),
+        api.get('/api/etapas_producao').then(listaDe).catch(() => [])
+      ])
+      : [[], []];
+
     res.json({
       id: salvo.id,
       linha: Number(salvo.linha) || 0,
-      dados: lerDados(salvo.dados).valor,
+      dados: anotarCasamento(extracao.destino, lerDados(salvo.dados).valor, materias, etapas),
       acao: salvo.acao,
       alvo_id: salvo.alvo_id ?? null,
       alvo_tabela: salvo.alvo_tabela || null,

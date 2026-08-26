@@ -131,6 +131,10 @@
       const recarregar = window.ProspeccoesModulo?.carregar;
       if (recarregar) await recarregar(true);
       else window.dispatchEvent(new Event('prospeccaoAdicionada'));
+      // Avisa quem abriu este formulário que o cadastro entrou. Quem abre
+      // daqui (a leitura de IA) não tem como saber sozinho: ela não gravou
+      // nada e não fica olhando o banco. Quem não escuta, ignora.
+      window.dispatchEvent(new CustomEvent('moduloSalvou', { detail: { overlay: 'novaProspeccao' } }));
       showToast('Prospecção registrada com sucesso!', 'success');
       close();
     } catch (err) {

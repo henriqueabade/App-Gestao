@@ -475,3 +475,38 @@ test('a linha da tabela ganha o (i) e perde as quatro colunas', () => {
   assert.match(html, /data-perm-col="col_ia_status"/);
   assert.match(html, /data-perm-col="col_ia_usuario"/);
 });
+
+// ---------------------------------------------------------------------------
+// O carregador de módulo executa UM script só
+// ---------------------------------------------------------------------------
+
+test('o módulo não depende de <script> que nunca roda', () => {
+  // `menu.js` busca `../js/<pagina>.js` e injeta SÓ ele. Todo outro <script>
+  // escrito no HTML do módulo é ignorado quando o módulo abre pelo menu — e
+  // some sem erro nenhum: o que se vê é uma função global indefinida e um
+  // `?.` engolindo a chamada.
+  //
+  // Foi assim que o posicionador de popover ficou uma etapa inteira sem rodar:
+  // o arquivo existia, o <script> estava no HTML, e nada acontecia.
+  const html = fs.readFileSync(path.join(__dirname, '..', '..', 'html', 'ia.html'), 'utf8');
+  const scripts = [...html.matchAll(/<script src="([^"]+)"/g)].map(m => m[1]);
+
+  assert.deepEqual(scripts, ['../js/ia.js'],
+    'o HTML do módulo tem <script> que o carregador não executa');
+});
+
+test('os utilitários globais são carregados pelo menu', () => {
+  const menu = fs.readFileSync(path.join(__dirname, '..', '..', 'html', 'menu.html'), 'utf8');
+  for (const util of ['apiConfig.js', 'utils/notifications.js', 'utils/popover.js']) {
+    assert.ok(menu.includes(util), `${util} não é carregado por ninguém`);
+  }
+});
+
+test('o posicionador de popover não é chamado com `?.` sozinho', () => {
+  // `window.Popover?.abrir(...)` engole a falha: se o utilitário não estiver
+  // carregado, o popover simplesmente não abre e ninguém fica sabendo. O `?.`
+  // continua ali (é defensivo e correto), mas o teste acima garante que o
+  // utilitário CHEGA — que é a metade que faltava.
+  const fonte = fs.readFileSync(ARQUIVO, 'utf8');
+  assert.match(fonte, /Popover\?\.abrir\(/);
+});

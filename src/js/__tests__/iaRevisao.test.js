@@ -365,6 +365,8 @@ function criarBancada({ leitura, respostaPut, respostaAplicar, respostaExtrair,
     copiado,
     ancorados,
     corpoDaPagina,
+    // O aviso do módulo de destino chega pela janela.
+    dispararNaJanela: (tipo, detalhe) => sandbox.dispatchEvent({ type: tipo, ...detalhe }),
     trocarLeitura: nova => { dadosLeitura = nova; },
     pronta: () => new Promise(r => setTimeout(r, 10))
   };
@@ -2006,4 +2008,130 @@ test('o CSS do módulo de destino é carregado junto', async () => {
     assert.match(fonte, new RegExp(`css: '${css}'`), `${css} ficou sem folha de estilo`);
   }
   assert.equal(link, null);
+});
+
+
+// ---------------------------------------------------------------------------
+// ETAPA 23 e 26 — pendências bloqueiam, e o módulo avisa quando salva
+// ---------------------------------------------------------------------------
+
+/** Ficha com um insumo incompleto e outro sem cadastro. */
+function leituraFichaIncompleta() {
+  const leitura = leituraFichaRestrita();
+  leitura.campos[2].subcampos = leitura.campos[2].subcampos.map(sc => ({ ...sc, exigido: true }));
+  leitura.itens[0].dados.insumos = [
+    { processo: 'MARCENARIA', nome: 'MDF 06', quantidade: 0.07, unidade: 'm2', _casamento: 'exato', _cadastro: 'MDF 06' },
+    { processo: 'ACABAMENTO', nome: 'Wash Primer', quantidade: 1, unidade: '', _casamento: 'exato', _cadastro: 'Wash Primer' }
+  ];
+  return leitura;
+}
+
+test('insumo sem unidade impede abrir o formulário, dizendo qual', async () => {
+  const b = criarBancada({ leitura: leituraFichaIncompleta() });
+  await b.pronta();
+
+  b.el('iaDetAplicar').disparar('click');
+  await b.pronta();
+
+  // Um insumo sem unidade entra direto na tabela do produto, já montado — e do
+  // outro lado não há onde corrigir. O que não pode ser completado depois tem
+  // de ser completado aqui.
+  assert.equal(b.chamadas.some(c => /\/preenchimento$/.test(c.url)), false,
+    'abriu o formulário com insumo incompleto');
+  assert.match(b.toasts.at(-1).msg, /Wash Primer: sem un/i);
+});
+
+test('o botão avisa da pendência antes do clique', async () => {
+  const b = criarBancada({ leitura: leituraFichaIncompleta() });
+  await b.pronta();
+
+  // Descobrir depois é descobrir com o formulário já na frente.
+  assert.equal(b.el('iaDetAplicar').classList.contains('ia-btn-pendente'), true);
+  assert.match(b.el('iaDetAplicar').title, /Falta preencher/);
+});
+
+test('insumo fora do cadastro também impede', async () => {
+  const leitura = leituraFichaIncompleta();
+  leitura.itens[0].dados.insumos[1] = {
+    processo: 'MONTAGEM', nome: 'Couro Serpente', quantidade: 1, unidade: 'm2',
+    _casamento: null, _cadastro: null
+  };
+  const b = criarBancada({ leitura });
+  await b.pronta();
+
+  b.el('iaDetAplicar').disparar('click');
+  await b.pronta();
+
+  assert.match(b.toasts.at(-1).msg, /não está no cadastro/);
+});
+
+test('linha completa abre normalmente', async () => {
+  const leitura = leituraFichaIncompleta();
+  leitura.itens[0].dados.insumos[1].unidade = 'ML';
+  const b = criarBancada({ leitura });
+  await b.pronta();
+
+  assert.equal(b.el('iaDetAplicar').classList.contains('ia-btn-pendente'), false);
+  b.el('iaDetAplicar').disparar('click');
+  await b.pronta();
+  assert.equal(b.chamadas.some(c => /\/preenchimento$/.test(c.url)), true);
+});
+
+test('o aviso do módulo marca a linha como resolvida', async () => {
+  const b = criarBancada();
+  await b.pronta();
+
+  b.el('iaDetAplicar').disparar('click');
+  await b.pronta();
+
+  // A leitura não tem como saber sozinha que o cadastro entrou: ela não gravou
+  // nada e não fica olhando o banco. Quem sabe é quem salvou.
+  b.dispararNaJanela('moduloSalvou', { detail: { overlay: 'novoInsumo' } });
+  await b.pronta();
+
+  const put = b.chamadas.filter(c => c.metodo === 'PUT').at(-1);
+  assert.deepEqual(put.corpo, { acao: 'ignorar' });
+  assert.match(b.toasts.at(-1).msg, /resolvida/i);
+});
+
+test('aviso de outro modal não marca nada', async () => {
+  const b = criarBancada();
+  await b.pronta();
+
+  b.el('iaDetAplicar').disparar('click');
+  await b.pronta();
+  const antes = b.chamadas.filter(c => c.metodo === 'PUT').length;
+
+  // Salvar um cliente noutra aba não pode marcar a linha de um insumo.
+  b.dispararNaJanela('moduloSalvou', { detail: { overlay: 'novoCliente' } });
+  await b.pronta();
+
+  assert.equal(b.chamadas.filter(c => c.metodo === 'PUT').length, antes);
+});
+
+test('aviso sem ninguém esperando é ignorado', async () => {
+  const b = criarBancada();
+  await b.pronta();
+
+  b.dispararNaJanela('moduloSalvou', { detail: { overlay: 'novoInsumo' } });
+  await b.pronta();
+
+  assert.equal(b.chamadas.some(c => c.metodo === 'PUT'), false);
+});
+
+test('todos os formulários de destino avisam quando salvam', () => {
+  // O contrato só fecha se as duas pontas existirem. Um módulo que não avisa
+  // deixa a linha pendente para sempre, sem erro nenhum.
+  const modais = {
+    'materia-prima-novo': 'novoInsumo',
+    'cliente-novo': 'novoCliente',
+    'prospeccao-novo': 'novaProspeccao',
+    'produto-novo': 'novoProduto',
+    'orcamento-novo': 'overlayId'
+  };
+  for (const [arquivo, overlay] of Object.entries(modais)) {
+    const fonte = fs.readFileSync(path.join(__dirname, '..', 'modals', `${arquivo}.js`), 'utf8');
+    assert.match(fonte, /moduloSalvou/, `${arquivo} não avisa que salvou`);
+    assert.ok(fonte.includes(overlay), `${arquivo} avisa sem dizer de qual formulário`);
+  }
 });

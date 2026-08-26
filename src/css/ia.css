@@ -1503,3 +1503,10 @@ body {
 .ia-linha-item--ignorada .ia-selecao {
     display: none;
 }
+
+/* Botão que vai recusar: mostra isso ANTES do clique, sem sumir — sumir
+   deixaria a pessoa procurando o que fazer. */
+.ia-btn-pendente {
+    opacity: 0.65;
+    box-shadow: inset 0 0 0 1px var(--color-red);
+}

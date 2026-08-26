@@ -27,7 +27,9 @@ const COLUNAS = {
     'arquivos_qtd', 'itens_qtd', 'aplicados_qtd', 'erro', 'usuario_id',
     'criado_em', 'atualizado_em', 'aplicado_em',
     // sql/ia_configuracao.sql
-    'tokens_entrada', 'tokens_saida'
+    'tokens_entrada', 'tokens_saida',
+    // sql/ia_consumo_por_provedor.sql
+    'tokens_ocr_entrada', 'tokens_ocr_saida', 'tokens_llm_entrada', 'tokens_llm_saida'
   ],
   ia_configuracao: ['id', 'chave', 'valor', 'atualizado_em', 'atualizado_por'],
   etapas_producao: ['id', 'nome', 'ordem'],
@@ -5115,4 +5117,216 @@ test('recorte de arquivo de outra leitura é recusado', async () => {
   } finally {
     await ctx.encerrar();
   }
+});
+
+
+// ===========================================================================
+// ETAPA 21 — O TERMO RARO IDENTIFICA; O COMUM, NÃO
+//
+// "Freijó" está inteiro dentro de "Lâmina de Freijó" e é a mesma madeira.
+// "Cola" está inteiro dentro de "Cola PVA", de "Cola Branca" e de "Cola
+// Fórmica", e não é nenhuma das três.
+//
+// A diferença não é o tamanho do nome — é quantos insumos do catálogo usam
+// aquela palavra.
+// ===========================================================================
+
+/** Catálogo pequeno com os dois casos lado a lado. */
+const CATALOGO_MARCENARIA = [
+  { id: 1, nome: 'Lâmina de Freijó', processo: 'MARCENARIA' },
+  { id: 2, nome: 'Cola PVA extra 1kg', processo: 'MARCENARIA' },
+  { id: 3, nome: 'Cola Branca', processo: 'MARCENARIA' },
+  { id: 4, nome: 'Cola Fórmica', processo: 'MARCENARIA' },
+  { id: 5, nome: 'MDF 6 mm', processo: 'MARCENARIA' },
+  { id: 6, nome: 'MDF 9 mm', processo: 'MARCENARIA' }
+];
+
+const casar = lido => {
+  const { casarInsumo, indexarPor } = require('./iaPreenchimento');
+  return casarInsumo(lido, indexarPor(CATALOGO_MARCENARIA, 'nome'),
+    CATALOGO_MARCENARIA, 'MARCENARIA', new Map());
+};
+
+test('uma palavra RARA basta para identificar o insumo', () => {
+  // "freijo" aparece uma vez no catálogo: é o nome daquela madeira.
+  const r = casar('Freijó');
+  assert.strictEqual(r.tipo, 'semelhante');
+  assert.strictEqual(r.registro.nome, 'Lâmina de Freijó');
+});
+
+test('uma palavra COMUM não identifica nada', () => {
+  // "cola" aparece em três: é família, e escolher uma das três seria sorteio.
+  const r = casar('Cola');
+  assert.strictEqual(r.registro, null);
+});
+
+test('empate no topo é recusado, não sorteado', () => {
+  const { casarInsumo, indexarPor } = require('./iaPreenchimento');
+  const catalogo = [
+    { id: 1, nome: 'Verniz Fosco 900', processo: 'ACABAMENTO' },
+    { id: 2, nome: 'Verniz Fosco 901', processo: 'ACABAMENTO' }
+  ];
+  const r = casarInsumo('Verniz Fosco', indexarPor(catalogo, 'nome'),
+    catalogo, 'ACABAMENTO', new Map());
+
+  // Dois igualmente parecidos querem dizer que a ficha não foi específica. Um
+  // sorteio aqui põe metade da chance de material errado na receita — em
+  // silêncio, porque o nome escolhido parece plausível.
+  assert.strictEqual(r.registro, null);
+  assert.ok(r.ambiguo, 'não avisou que era ambíguo');
+});
+
+test('os casos do estoque de verdade continuam certos', () => {
+  assert.strictEqual(casar('MDF 06').registro.nome, 'MDF 6 mm');
+  assert.strictEqual(casar('MDF 09').registro.nome, 'MDF 9 mm');
+  assert.strictEqual(casar('Cola Branca').tipo, 'exato');
+  // E o que não existe continua não existindo.
+  assert.strictEqual(casar('Perfil U 3/8').registro, null);
+});
+
+test('a frequência sai dos CANDIDATOS da etapa, não do catálogo inteiro', () => {
+  const { frequenciaDeTermos } = require('./iaPreenchimento');
+  const freq = frequenciaDeTermos(CATALOGO_MARCENARIA);
+
+  // Dentro de MARCENARIA, "cola" é comum e "freijo" é único — e é essa
+  // comparação que decide entre eles.
+  assert.strictEqual(freq.get('cola'), 3);
+  assert.strictEqual(freq.get('freijo'), 1);
+  assert.strictEqual(freq.get('mdf'), 2);
+});
+
+
+// ===========================================================================
+// ETAPA 22 — O QUE FOI LIDO NÃO SE PERDE AO CORRIGIR
+// ===========================================================================
+
+test('corrigir um campo não apaga os marcadores da linha', async () => {
+  const ctx = await prepararFicha({
+    itens: [{
+      codigo: 'PR-210', nome: 'Painel Ripado 2,10',
+      insumos: [
+        { processo: 'MARCENARIA', nome: 'Cola PVA extra', quantidade: '2', unidade: 'UN' },
+        { processo: 'MARCENARIA', nome: 'MDF 15mm Branco TX', quantidade: '1', unidade: 'CH' }
+      ]
+    }]
+  });
+  try {
+    const item = itensDa(ctx, 5)[0];
+    const dados = JSON.parse(item.dados);
+    dados.insumos[0].quantidade = 5;
+
+    const salvo = await (await chamar(ctx.porta, `/api/ia/5/itens/${item.id}`, {
+      method: 'PUT', body: JSON.stringify({ dados })
+    })).json();
+
+    // As anotações são conta, não dado: não são gravadas e se refazem a cada
+    // leitura. Devolver o item sem elas fazia a linha inteira perder os
+    // marcadores assim que UM campo era corrigido — e só voltavam fechando e
+    // reabrindo o modal.
+    assert.strictEqual(salvo.dados.insumos[0]._casamento, 'semelhante');
+    assert.strictEqual(salvo.dados.insumos[0]._cadastro, 'Cola PVA extra 1kg');
+    assert.strictEqual(salvo.dados.insumos[1]._casamento, 'exato');
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('o nome que o documento escreveu sobrevive à troca', async () => {
+  const ctx = await prepararFicha({
+    itens: [{
+      codigo: 'PR-210', nome: 'Painel Ripado 2,10',
+      insumos: [{ processo: 'MARCENARIA', nome: 'Cola PVA extra', quantidade: '2', unidade: 'UN' }]
+    }]
+  });
+  try {
+    const item = itensDa(ctx, 5)[0];
+    const primeiro = await (await chamar(ctx.porta, `/api/ia/5/itens/${item.id}`, {
+      method: 'PUT', body: JSON.stringify({ dados: JSON.parse(item.dados) })
+    })).json();
+    assert.strictEqual(primeiro.dados.insumos[0]._lido, 'Cola PVA extra');
+
+    // Agora a pessoa troca o nome à mão.
+    const trocado = { ...primeiro.dados };
+    trocado.insumos = [{ ...primeiro.dados.insumos[0], nome: 'MDF 15mm Branco TX' }];
+
+    const depois = await (await chamar(ctx.porta, `/api/ia/5/itens/${item.id}`, {
+      method: 'PUT', body: JSON.stringify({ dados: trocado })
+    })).json();
+
+    // Sem isto, trocar o nome apagava a única prova de que a ficha dizia outra
+    // coisa — e o (i) da linha ficava vazio justo nas linhas que a pessoa mexeu.
+    assert.strictEqual(depois.dados.insumos[0]._lido, 'Cola PVA extra');
+    assert.strictEqual(depois.dados.insumos[0]._casamento, 'exato');
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+
+// ===========================================================================
+// ETAPA 25 — CONSUMO SEPARADO POR PROVEDOR
+// ===========================================================================
+
+test('leitura e extração guardam o consumo de cada uma', async () => {
+  const ctx = await montarComIA(baseParaEstruturar(), {}, {
+    groq: () => ({
+      payload: { ...respostaGroq(ITENS_LIDOS), usage: { prompt_tokens: 900, completion_tokens: 120 } }
+    })
+  });
+  try {
+    // A leitura já tinha registrado o gasto do Gemini.
+    const leitura = ctx.tabelas.ia_extracoes.find(e => e.id === 4);
+    leitura.tokens_ocr_entrada = 40000;
+    leitura.tokens_ocr_saida = 3000;
+
+    await chamar(ctx.porta, '/api/ia/4/estruturar', { method: 'POST' });
+    const depois = ctx.tabelas.ia_extracoes.find(e => e.id === 4);
+
+    // Cada passo usa um modelo com contexto diferente. Somar os dois e
+    // comparar contra um deles daria uma porcentagem que não significa nada.
+    assert.strictEqual(depois.tokens_ocr_entrada, 40000);
+    assert.strictEqual(depois.tokens_llm_entrada, 900);
+    // E o total continua sendo o número útil para "quanto custou o documento".
+    assert.strictEqual(depois.tokens_entrada, 40900);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('a configuração devolve o consumo de cada provedor', async () => {
+  const dados = baseDados();
+  dados.ia_extracoes[0].tokens_ocr_entrada = 40000;
+  dados.ia_extracoes[0].tokens_llm_entrada = 900;
+  dados.ia_extracoes[0].tokens_entrada = 40900;
+  dados.ia_extracoes[0].modelo_ocr = 'gemini-de-teste';
+  dados.ia_extracoes[0].modelo_llm = 'llama-de-teste';
+
+  const ctx = await montarComIA(dados);
+  try {
+    const cfg = await (await chamar(ctx.porta, '/api/ia/config/estado')).json();
+
+    assert.strictEqual(cfg.ultimo_uso.gemini.entrada, 40000);
+    assert.strictEqual(cfg.ultimo_uso.gemini.modelo, 'gemini-de-teste');
+    assert.strictEqual(cfg.ultimo_uso.groq.entrada, 900);
+    assert.strictEqual(cfg.ultimo_uso.groq.modelo, 'llama-de-teste');
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('a raridade decide sozinha, sem depender da guarda de empate', () => {
+  // Isolado da recusa por ambiguidade: aqui o que se mede é a REGRA, não o
+  // desfecho. Com um catálogo em que "cola" é comum e "freijo" é único, a
+  // mesma conta tem de dar respostas diferentes para os dois.
+  const { proximidadeDeInsumo, frequenciaDeTermos } = require('./iaPreenchimento');
+  const freq = frequenciaDeTermos(CATALOGO_MARCENARIA);
+
+  assert.ok(proximidadeDeInsumo('Freijó', 'Lâmina de Freijó', freq) >= 0.6,
+    'palavra única deixou de identificar');
+  assert.ok(proximidadeDeInsumo('Cola', 'Cola Branca', freq) < 0.6,
+    'palavra comum passou a identificar');
+
+  // E sem a tabela de frequência, o conservador vale: uma palavra em comum
+  // não basta. É o que protege quem chamar a função sem o catálogo em mãos.
+  assert.ok(proximidadeDeInsumo('Freijó', 'Lâmina de Freijó') < 0.6);
 });

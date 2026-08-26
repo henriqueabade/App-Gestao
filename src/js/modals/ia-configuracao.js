@@ -163,22 +163,30 @@
       return;
     }
 
-    const teto = tetoDoModelo(ultimoUso.modelo);
+    // Cada passo contra o contexto do SEU modelo. O Gemini processa o
+    // documento inteiro e gasta muito mais que o Groq — mostrar o total nos
+    // dois faria o número do Groq parecer catorze vezes maior do que é.
     const partes = [`Última leitura ("${ultimoUso.titulo}")`];
 
-    // Usado E total, lado a lado. Só o total não responde nada: a pergunta é
-    // "cabe?", e para respondê-la é preciso ver os dois números juntos.
-    partes.push(teto
-      ? `${milhares(ultimoUso.entrada)} de ${milhares(teto)} tokens de contexto `
-        + `(${Math.round((ultimoUso.entrada / teto) * 100)}%)`
-      : `${ultimoUso.entrada.toLocaleString('pt-BR')} tokens de entrada`);
+    for (const [nome, rotulo] of [['gemini', 'leitura'], ['groq', 'extração']]) {
+      const uso = ultimoUso[nome];
+      if (!uso || !uso.entrada) continue;
 
-    partes.push(`${ultimoUso.saida.toLocaleString('pt-BR')} de saída`);
+      const teto = tetoDoModelo(uso.modelo);
+      partes.push(teto
+        ? `${rotulo}: ${milhares(uso.entrada)} de ${milhares(teto)} `
+          + `(${Math.round((uso.entrada / teto) * 100)}% do contexto)`
+        : `${rotulo}: ${uso.entrada.toLocaleString('pt-BR')} tokens`);
+    }
 
-    if (!teto) {
-      // Sem a lista de modelos não há contra o que comparar, e dizer isso é
-      // melhor do que mostrar um número solto que parece completo.
-      partes.push('teste a conexão para ver quanto isso é do total do modelo');
+    if (partes.length === 1) {
+      partes.push(`${ultimoUso.entrada.toLocaleString('pt-BR')} tokens de entrada`);
+    }
+
+    // Sem a lista de modelos não há contra o que comparar, e dizer isso é
+    // melhor do que mostrar um número solto que parece completo.
+    if (!Object.keys(modelosPorProvedor).length) {
+      partes.push('teste a conexão para ver quanto isso é do total de cada modelo');
     }
 
     caixa.textContent = partes.join('  ·  ');
@@ -234,8 +242,13 @@
       // No modelo EM USO, o contexto aparece como usado/total: é ali que a
       // pergunta "cabe neste modelo?" se responde de relance. Nos outros, só o
       // total, porque não houve leitura com eles para comparar.
-      const gastou = atual && ultimoUso && ultimoUso.modelo === m.id
-        ? ultimoUso.entrada : null;
+      //
+      // O consumo é o DAQUELE provedor: o Gemini processa o documento e gasta
+      // muito mais que o Groq, e mostrar o total nos dois faria o número do
+      // Groq parecer catorze vezes maior do que é.
+      const doProvedor = ultimoUso && ultimoUso[nome];
+      const gastou = atual && doProvedor && doProvedor.modelo === m.id && doProvedor.entrada
+        ? doProvedor.entrada : null;
 
       ctx.textContent = [
         atual ? 'em uso' : null,

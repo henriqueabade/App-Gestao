@@ -580,6 +580,18 @@
         pct_imposto:    parseFloat(taxInput?.value) || 0,
         preco_base:     totals.totalInsumos || 0,
         preco_venda:    totals.valorVenda || 0,
+        // A peça NASCE na tabela fixa.
+        //
+        // O preço praticado só se move por decisão explícita, e a regra existe
+        // para não reprecificar sozinho o que já foi proposto ao cliente. Numa
+        // peça que acaba de ser criada não há proposta nenhuma a proteger — e
+        // sem linha na tabela fixa ela fica sem preço praticado, o que a torna
+        // IMPOSSÍVEL DE VENDER: o orçamento recusa item sem preço.
+        //
+        // Era um beco sem saída silencioso: cadastrava-se o produto, ele
+        // aparecia no catálogo, e só na hora de montar o orçamento se
+        // descobria que ele não podia entrar.
+        atualizar_tabela_fixa: true,
         nome,
         codigo,
         ncm,
@@ -601,6 +613,10 @@
         }, { mode: 'add' });
       }
 
+      // Avisa quem abriu este formulário que o cadastro entrou. Quem abre
+      // daqui (a leitura de IA) não tem como saber sozinho: ela não gravou
+      // nada e não fica olhando o banco. Quem não escuta, ignora.
+      window.dispatchEvent(new CustomEvent('moduloSalvou', { detail: { overlay: 'novoProduto' } }));
       showToast('Peça criada com sucesso!', 'success');
       close();
       const novoProduto = {

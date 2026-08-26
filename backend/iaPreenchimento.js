@@ -174,11 +174,26 @@ function casarInsumo(nome, porNome, registros, processo, etapasPorId) {
     return { registro: exato, tipo: 'exato' };
   }
 
+  // A frequência sai dos CANDIDATOS, não do catálogo inteiro: dentro de
+  // MARCENARIA, "cola" pode ser comum e "freijo" único, e é essa comparação
+  // que importa para escolher entre eles.
+  const frequencia = frequenciaDeTermos(candidatos);
+
   let melhor = null;
   let nota = 0;
+  let empatados = 0;
   for (const r of candidatos) {
-    const n = proximidadeDeInsumo(nome, r && r.nome);
-    if (n > nota) { nota = n; melhor = r; }
+    const n = proximidadeDeInsumo(nome, r && r.nome, frequencia);
+    if (n > nota) { nota = n; melhor = r; empatados = 1; }
+    else if (n === nota && n > 0) empatados += 1;
+  }
+
+  // Empate no topo é sorteio, não casamento. Dois insumos igualmente parecidos
+  // com o que a ficha diz querem dizer que a ficha não foi específica o
+  // bastante — e escolher um deles põe metade da chance de material errado na
+  // receita, em silêncio.
+  if (melhor && nota >= LIMIAR_PARECIDO && empatados > 1) {
+    return { registro: null, tipo: null, ambiguo: melhor.nome };
   }
 
   if (melhor && nota >= LIMIAR_PARECIDO) return { registro: melhor, tipo: 'semelhante', nota };
@@ -259,20 +274,40 @@ function termosDeInsumo(valor) {
  * que é conservador. É o que mantém "MDF 06" e "MDF 09" como materiais
  * diferentes, que é o que eles são.
  */
-function proximidadeDeInsumo(lido, cadastrado) {
+function proximidadeDeInsumo(lido, cadastrado, frequencia) {
   const a = termosDeInsumo(lido);
   const b = termosDeInsumo(cadastrado);
   if (!a.size || !b.size) return 0;
 
-  let comuns = 0;
-  for (const p of a) if (b.has(p)) comuns += 1;
-  if (!comuns) return 0;
+  const comuns = [...a].filter(t => b.has(t));
+  if (!comuns.length) return 0;
 
-  const jaccard = comuns / (a.size + b.size - comuns);
-  if (comuns < 2) return jaccard;
+  const jaccard = comuns.length / (a.size + b.size - comuns.length);
+  const contencao = comuns.length / Math.min(a.size, b.size);
 
-  const contencao = comuns / Math.min(a.size, b.size);
-  return Math.max(jaccard, contencao);
+  // Duas palavras em comum já bastam para a contenção valer.
+  if (comuns.length >= 2) return Math.max(jaccard, contencao);
+
+  // Com UMA palavra, o que decide é se ela IDENTIFICA.
+  //
+  // "Freijó" está inteiro dentro de "Lâmina de Freijó" e é a mesma madeira;
+  // "Cola" está inteiro dentro de "Cola PVA", de "Cola Branca" e de "Cola
+  // Fórmica", e não é nenhuma das três. A diferença entre os dois casos não é
+  // o tamanho do nome — é quantos insumos do catálogo usam aquela palavra.
+  //
+  // Uma palavra que aparece uma vez só é o nome daquele material. Uma que
+  // aparece em cinco é família, e escolher um dos cinco seria sorteio.
+  const identifica = frequencia && comuns.every(t => (frequencia.get(t) || 0) <= 1);
+  return identifica ? Math.max(jaccard, contencao) : jaccard;
+}
+
+/** Em quantos insumos do catálogo cada termo aparece. */
+function frequenciaDeTermos(registros) {
+  const freq = new Map();
+  for (const r of registros) {
+    for (const t of termosDeInsumo(r && r.nome)) freq.set(t, (freq.get(t) || 0) + 1);
+  }
+  return freq;
 }
 
 /**
@@ -674,6 +709,7 @@ module.exports = {
   casarInsumo,
   proximidadeDeInsumo,
   termosDeInsumo,
+  frequenciaDeTermos,
   mesmoProcesso,
   interpretarPagamento,
   formaDePagamento,

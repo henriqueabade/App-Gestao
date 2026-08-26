@@ -333,6 +333,10 @@ async function lerArquivo({ nome, mime, buffer }, opcoes = {}) {
       origem,
       mime: classificacao.mime,
       texto,
+      // O consumo da LEITURA. É o Gemini quem processa o PDF e a foto, então
+      // é ele quem gasta mais contexto — e era justamente ele que aparecia
+      // zerado na tela de configuração.
+      consumo: r.consumo || null,
       aviso: (r.truncado || cortado) ? 'A leitura foi cortada por tamanho — o final do documento pode não ter entrado.' : null
     };
   } catch (e) {

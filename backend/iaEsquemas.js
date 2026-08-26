@@ -371,15 +371,30 @@ const ESQUEMAS = {
         chave: 'insumos', rotulo: 'Insumos', tipo: 'lista', largura: 'media',
         obrigatorio: true, max_itens: 60,
         descricao: 'Materiais que compõem o produto. Uma entrada por material.',
+        // `obrigatorio` e `exigido` são coisas diferentes, e confundi-las
+        // custa caro nos dois sentidos.
+        //
+        //   `obrigatorio` .. sem isto a linha NÃO SOBREVIVE À EXTRAÇÃO. Vale
+        //                    para o que, faltando, torna a linha um lixo:
+        //                    insumo sem nome, insumo sem quantidade.
+        //
+        //   `exigido` ...... sem isto a linha não pode ir para o FORMULÁRIO,
+        //                    mas continua na grade para ser completada. É o
+        //                    caso da unidade e do processo: a ficha às vezes
+        //                    não os escreve, e descartar o insumo por causa
+        //                    disso perderia um material que existe — mas
+        //                    mandá-lo assim para a tabela do produto criaria
+        //                    uma linha sem etapa e sem unidade, que ninguém
+        //                    consegue corrigir do outro lado.
         subcampos: [
           {
-            chave: 'processo', rotulo: 'Processo', tipo: 'texto', max: 60,
+            chave: 'processo', rotulo: 'Processo', tipo: 'texto', max: 60, exigido: true,
             descricao: 'Etapa de produção sob a qual o insumo está listado: MARCENARIA, ACABAMENTO, MONTAGEM, EMBALAGEM…'
           },
-          { chave: 'nome', rotulo: 'Insumo', tipo: 'texto', obrigatorio: true, max: 200, descricao: 'Nome do material, como está escrito' },
-          { chave: 'quantidade', rotulo: 'Qtde', tipo: 'numero', obrigatorio: true, descricao: 'Quanto entra em uma unidade do produto' },
+          { chave: 'nome', rotulo: 'Insumo', tipo: 'texto', obrigatorio: true, exigido: true, max: 200, descricao: 'Nome do material, como está escrito' },
+          { chave: 'quantidade', rotulo: 'Qtde', tipo: 'numero', obrigatorio: true, exigido: true, descricao: 'Quanto entra em uma unidade do produto' },
           {
-            chave: 'unidade', rotulo: 'Un.', tipo: 'texto', max: 20,
+            chave: 'unidade', rotulo: 'Un.', tipo: 'texto', max: 20, exigido: true,
             descricao: 'Unidade da quantidade, normalmente entre parênteses: m2, ml, m, cm2, UN'
           }
         ]
@@ -584,7 +599,10 @@ function camposParaTela(destino) {
         chave: sc.chave,
         rotulo: sc.rotulo,
         tipo: sc.tipo,
-        obrigatorio: Boolean(sc.obrigatorio)
+        obrigatorio: Boolean(sc.obrigatorio),
+        // `exigido` bloqueia a ida ao formulário sem derrubar a linha na
+        // extração — ver o comentário no esquema de produto_insumos.
+        exigido: Boolean(sc.exigido)
       }))
     } : {})
   }));

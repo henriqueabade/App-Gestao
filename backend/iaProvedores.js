@@ -428,8 +428,17 @@ async function lerComGemini({ buffer, mime, modelo }) {
   // O corte por limite de saída não é erro, mas o usuário PRECISA saber: o
   // final do documento não entrou, e um item pode ter ficado de fora.
   const truncado = candidato.finishReason === 'MAX_TOKENS';
-  if (texto === 'SEM TEXTO') return { texto: '', truncado, vazio: true };
-  return { texto, truncado, vazio: !texto };
+  // Quanto a LEITURA gastou. Sem isto, a tela de configuração mostrava consumo
+  // só do provedor de extração — e o Gemini, que é quem lê os PDFs e as fotos
+  // e portanto quem consome mais contexto, aparecia sempre zerado.
+  const uso = resposta?.usageMetadata || {};
+  const consumo = {
+    entrada: Number(uso.promptTokenCount) || 0,
+    saida: Number(uso.candidatesTokenCount) || 0
+  };
+
+  if (texto === 'SEM TEXTO') return { texto: '', truncado, vazio: true, consumo };
+  return { texto, truncado, vazio: !texto, consumo };
 }
 
 module.exports = {
