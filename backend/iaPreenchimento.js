@@ -396,7 +396,7 @@ function montarInsumos(linhas, porNome, registros = [], etapasPorId = new Map())
  * Sem código, cai no nome, com a mesma regra dos insumos: exato, depois
  * semelhante, e nunca por sorteio.
  */
-function casarProduto(codigo, nome, porCodigo, porNome, registros) {
+function casarProduto(codigo, nome, porCodigo, porNome, registros, valor) {
   const porCod = porCodigo.get(normalizar(codigo));
   if (porCod) return { registro: porCod, tipo: 'exato', por: 'codigo' };
 
@@ -422,7 +422,37 @@ function casarProduto(codigo, nome, porCodigo, porNome, registros) {
     return { registro: null, tipo: null, ambiguo: melhor.nome };
   }
   if (melhor && nota >= LIMIAR_PARECIDO) return { registro: melhor, tipo: 'semelhante', por: 'nome' };
-  return { registro: null, tipo: null };
+
+  return porValor(valor, registros);
+}
+
+/**
+ * Último recurso: o PREÇO.
+ *
+ * Um pedido escrito à mão às vezes traz o nome que o cliente inventou e nenhum
+ * código — e aí o único dado que ainda aponta para o catálogo é quanto a peça
+ * custa. É uma pista fraca, e por isso é a última: só vale se bater EXATO e se
+ * uma única peça tiver aquele preço.
+ *
+ * "Aproximado" não existe aqui. Dois centavos de diferença podem ser outra peça
+ * inteira, e casar por perto significaria vender a errada pelo preço da certa —
+ * exatamente o erro que ninguém percebe até o pedido chegar ao cliente.
+ */
+function porValor(valor, registros) {
+  const alvo = paraDecimal(valor);
+  if (!Number.isFinite(alvo) || alvo <= 0) return { registro: null, tipo: null };
+
+  const iguais = registros.filter(r => {
+    const p = paraDecimal(r && r.preco_tabela);
+    return Number.isFinite(p) && p === alvo;
+  });
+
+  // Duas peças pelo mesmo preço é o caso comum num catálogo — tamanhos de uma
+  // mesma linha custam igual. Escolher uma seria sorteio.
+  if (iguais.length !== 1) {
+    return { registro: null, tipo: null, ambiguo: iguais.length > 1 ? iguais[0].nome : null };
+  }
+  return { registro: iguais[0], tipo: 'valor', por: 'valor' };
 }
 
 /** Itens de um pedido, casados com o catálogo de produtos. */
@@ -435,7 +465,7 @@ function montarItensDeOrcamento(linhas, porCodigo, porNome, registros = []) {
     if (!nome) continue;
 
     const { registro: produto } = casarProduto(
-      linha.codigo, nome, porCodigo, porNome, registros);
+      linha.codigo, nome, porCodigo, porNome, registros, linha.valor_unitario);
     if (!produto) { semCadastro.push(nome); continue; }
 
     const quantidade = Number(linha.quantidade);

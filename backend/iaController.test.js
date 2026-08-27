@@ -5610,6 +5610,118 @@ test('o preço é o PRATICADO da tabela fixa, não o do documento', async () => 
   }
 });
 
+test('sem código e sem nome que bata, o PREÇO ainda aponta a peça', () => {
+  const { casarProduto, indexarPor } = require('./iaPreenchimento');
+  const catalogo = [
+    { id: 9, codigo: 'PR-210', nome: 'Painel Ripado 2,10', preco_tabela: '1.250,00' },
+    { id: 10, codigo: 'ML-01', nome: 'Mesa Lateral Carvalho', preco_tabela: 450 }
+  ];
+  const casar = (nome, valor) =>
+    casarProduto(null, nome, indexarPor(catalogo, 'codigo'), indexarPor(catalogo, 'nome'),
+      catalogo, valor);
+
+  // Um pedido escrito à mão traz o nome que o cliente inventou e nenhum código.
+  // O preço é a última pista que ainda aponta para o catálogo.
+  const r = casar('AQUELA MESINHA', 450);
+  assert.strictEqual(r.registro.id, 10);
+  assert.strictEqual(r.tipo, 'valor');
+
+  // "1.250,00" é como o valor volta do banco: `Number` faria NaN disso, e a
+  // peça mais cara do catálogo é justamente a que tem separador de milhar.
+  assert.strictEqual(casar('SEI LÁ O QUE', '1.250,00').registro.id, 9);
+});
+
+test('preço parecido não é preço igual', () => {
+  const { casarProduto, indexarPor } = require('./iaPreenchimento');
+  const catalogo = [{ id: 10, codigo: 'ML-01', nome: 'Mesa Lateral Carvalho', preco_tabela: 450 }];
+  const casar = valor =>
+    casarProduto(null, 'NOME QUE NÃO EXISTE', indexarPor(catalogo, 'codigo'),
+      indexarPor(catalogo, 'nome'), catalogo, valor);
+
+  // Dois centavos de diferença podem ser outra peça inteira. Casar por perto
+  // significaria vender a errada pelo preço da certa — o erro que ninguém
+  // percebe até o pedido chegar ao cliente.
+  assert.strictEqual(casar(450).registro.id, 10);
+  assert.strictEqual(casar(449.98).registro, null);
+  assert.strictEqual(casar(460).registro, null);
+});
+
+test('duas peças pelo mesmo preço não escolhem nenhuma', () => {
+  const { casarProduto, indexarPor } = require('./iaPreenchimento');
+  // Tamanhos de uma mesma linha custando igual é o caso comum num catálogo.
+  const catalogo = [
+    { id: 11, codigo: 'BV-P', nome: 'Bandeja Vero P', preco_tabela: 300 },
+    { id: 12, codigo: 'BV-G', nome: 'Bandeja Vero G', preco_tabela: 300 }
+  ];
+  const r = casarProduto(null, 'ALGO', indexarPor(catalogo, 'codigo'),
+    indexarPor(catalogo, 'nome'), catalogo, 300);
+
+  assert.strictEqual(r.registro, null);
+});
+
+test('o preço só entra depois que nome e código falharam', () => {
+  const { casarProduto, indexarPor } = require('./iaPreenchimento');
+  const catalogo = [
+    { id: 9, codigo: 'PR-210', nome: 'Painel Ripado 2,10', preco_tabela: 900 },
+    { id: 10, codigo: 'ML-01', nome: 'Mesa Lateral Carvalho', preco_tabela: 450 }
+  ];
+  // O pedido traz o nome certo da peça 9 e, por engano, o preço da peça 10.
+  const r = casarProduto(null, 'Painel Ripado 2,10', indexarPor(catalogo, 'codigo'),
+    indexarPor(catalogo, 'nome'), catalogo, 450);
+
+  // O nome é uma pista muito mais forte que o preço: um número digitado errado
+  // não pode desfazer um nome que bate exato.
+  assert.strictEqual(r.registro.id, 9);
+  assert.strictEqual(r.tipo, 'exato');
+});
+
+test('sem valor nenhum, não inventa casamento', () => {
+  const { casarProduto, indexarPor } = require('./iaPreenchimento');
+  const catalogo = [{ id: 10, codigo: 'ML-01', nome: 'Mesa', preco_tabela: 450 }];
+  const casar = valor =>
+    casarProduto(null, 'INEXISTENTE', indexarPor(catalogo, 'codigo'),
+      indexarPor(catalogo, 'nome'), catalogo, valor);
+
+  for (const vazio of [null, undefined, '', 0, 'grátis']) {
+    assert.strictEqual(casar(vazio).registro, null, `casou com valor ${JSON.stringify(vazio)}`);
+  }
+});
+
+test('preço zero não casa com peça de preço zero', () => {
+  const { casarProduto, indexarPor } = require('./iaPreenchimento');
+  // Peça sem preço praticado no cadastro, e um item cujo valor o documento não
+  // trouxe. Sem a guarda, os dois "batem" em zero — e o pedido sai com uma
+  // peça que ninguém escolheu, de graça.
+  const catalogo = [{ id: 13, codigo: 'XX-01', nome: 'Peça sem preço', preco_tabela: 0 }];
+  const r = casarProduto(null, 'QUALQUER COISA', indexarPor(catalogo, 'codigo'),
+    indexarPor(catalogo, 'nome'), catalogo, 0);
+
+  assert.strictEqual(r.registro, null);
+});
+
+test('o item casado pelo preço chega marcado como tal', async () => {
+  const ctx = await prepararOrcamento({
+    itens: [{
+      cliente: 'Casa Vicenzo', razao_social: null, cnpj: null, validade: null,
+      prazo: null, forma_pagamento: null, condicao_pagamento: null, parcelas: null,
+      transportadora: null, contato: null, observacoes: null,
+      itens: [{ codigo: null, nome: 'AQUELA MESINHA DE CANTO', quantidade: '1', valor_unitario: '450' }]
+    }]
+  });
+  try {
+    const [item] = (await (await chamar(ctx.porta, '/api/ia/5')).json()).itens[0].dados.itens;
+
+    // É o casamento mais fraco que o programa aceita. A tela precisa saber
+    // disso para avisar quem revisa antes de o preço sair para o cliente.
+    assert.strictEqual(item._casamento, 'valor');
+    assert.strictEqual(item._cadastro, 'Mesa Lateral Carvalho');
+    assert.strictEqual(item._lido, 'AQUELA MESINHA DE CANTO');
+    assert.strictEqual(item.codigo, 'ML-01');
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
 test('a peça do pedido se escolhe da lista, não se digita', async () => {
   const ctx = await prepararOrcamento();
   try {

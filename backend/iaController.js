@@ -876,7 +876,8 @@ function anotarProdutos(dados, produtos) {
       if (!nome && !String(linha?.codigo ?? '').trim()) return linha;
 
       const { registro, tipo, ambiguo } =
-        preenchimento.casarProduto(linha.codigo, nome, porCodigo, porNome, produtos);
+        preenchimento.casarProduto(
+          linha.codigo, nome, porCodigo, porNome, produtos, linha.valor_unitario);
 
       return {
         ...linha,

@@ -632,7 +632,10 @@ test('todo popover do detalhe é devolvido ao fechar', () => {
     path.join(__dirname, '..', 'modals', 'ia-detalhes.js'), 'utf8');
 
   const noHtml = [...html.matchAll(/id="([^"]+)"[^>]*class="[^"]*resumo-popover/g)].map(m => m[1]);
-  assert.ok(noHtml.length >= 2, `só ${noHtml.length} popover(s) no HTML — o seletor deixou de casar`);
+  // O seletor tem de continuar casando: sem esta âncora o teste passaria a
+  // conferir uma lista vazia contra outra e ninguém notaria.
+  assert.ok(noHtml.includes('iaDetLinhaPopover'),
+    `o seletor não achou o popover da linha — achou ${JSON.stringify(noHtml)}`);
 
   const lista = /const POPOVERS = \[([^\]]*)\]/.exec(js);
   assert.ok(lista, 'a lista de limpeza saiu de ia-detalhes.js');
@@ -652,4 +655,72 @@ test('rolar fecha os popovers abertos', () => {
   // `capture: true` porque o evento de um contêiner que rola não sobe até
   // `window` na fase de bolha — sem isso a escuta existe e não serve.
   assert.match(escuta[0], /capture:\s*true/);
+});
+
+test('painel escondido fica escondido de verdade', () => {
+  // `.hidden` do Tailwind é UMA classe, e `ia.css` é carregado DEPOIS dele: um
+  // `display: flex` de uma classe própria ganha só por ordem de arquivo. Foi
+  // assim que o painel de itens continuou na tela com a aba "Arquivos" aberta,
+  // os dois empilhados dividindo a altura.
+  const css = fs.readFileSync(CSS_MODULO, 'utf8');
+
+  // Toda classe deste módulo que declare `display` e possa receber `.hidden`
+  // precisa de um par mais específico que a apague.
+  const comDisplay = [...css.matchAll(/^\.(ia-[a-z-]+)\s*\{([^}]*)\}/gm)]
+    .filter(m => /display:\s*(flex|grid|block|inline)/.test(m[2]))
+    .map(m => m[1]);
+
+  const html = [
+    fs.readFileSync(path.join(__dirname, '..', '..', 'html', 'modals', 'ia', 'detalhes.html'), 'utf8'),
+    fs.readFileSync(HTML_MODULO, 'utf8')
+  ].join('\n');
+
+  for (const classe of comDisplay) {
+    // Só as que o HTML de fato esconde: uma classe que nunca recebe `.hidden`
+    // não tem o problema, e exigir a regra dela seria ruído.
+    const recebeHidden = new RegExp(`class="[^"]*\b(?:hidden\b[^"]*\b${classe}|${classe}\b[^"]*\bhidden)\b`);
+    if (!recebeHidden.test(html)) continue;
+    assert.match(css, new RegExp(`\.${classe}\.hidden`),
+      `${classe} declara display e recebe .hidden, mas nada a apaga`);
+  }
+
+  // E a que já mordeu continua coberta, mesmo que o HTML mude de forma.
+  assert.match(css, /\.ia-painel-itens\.hidden/);
+});
+
+test('a tabela do módulo para na borda da tela', () => {
+  // `scroll.css` dá a todo módulo `max-height: calc(var(--module-height) - 200px)`,
+  // e os 200px são um palpite sobre a altura do que vem antes da tabela. No
+  // módulo de IA vem bem mais: título, explicação e um cartão de filtros com
+  // quatro campos. O resto passava da borda, e `#content.no-scroll` corta o
+  // que passa — a última leitura ficava inalcançável.
+  const css = fs.readFileSync(CSS_MODULO, 'utf8');
+  const html = fs.readFileSync(HTML_MODULO, 'utf8');
+
+  // A altura sai do FLEX, não de um número: muda o cartão de filtros e a conta
+  // se refaz sozinha.
+  assert.match(html, /class="ia-modulo-coluna"/,
+    'o módulo não tem coluna — a tabela não tem de quem herdar a sobra');
+
+  const coluna = /ia-modulo-coluna\s*\{([\s\S]*?)\}/.exec(css);
+  assert.ok(coluna, 'a coluna do módulo saiu do CSS');
+  assert.match(coluna[1], /flex-direction:\s*column/);
+
+  const tabela = /#iaTableWrapper \{([\s\S]*?)\}/.exec(css);
+  assert.ok(tabela, 'a tabela do módulo não tem regra própria');
+  assert.match(tabela[1], /flex:\s*1 1 auto/);
+  assert.match(tabela[1], /min-height:\s*0/);
+  // Sem isto o palpite de `scroll.css` continua valendo e volta a cortar.
+  assert.match(tabela[1], /max-height:\s*none/);
+});
+
+test('o popover usa a barra do programa', () => {
+  // Com a barra crua do sistema ele destoava de todos os outros modais — e sem
+  // teto de altura, um popover de pedido com doze campos passava da borda.
+  const css = fs.readFileSync(CSS_MODULO, 'utf8');
+  const regra = /^\.resumo-popover \{([\s\S]*?)\}/m.exec(css);
+  assert.ok(regra, 'o popover não tem regra própria neste módulo');
+  assert.match(regra[1], /max-height:/);
+  assert.match(regra[1], /overflow-y:\s*auto/);
+  assert.match(css, /\.resumo-popover::-webkit-scrollbar-thumb \{/);
 });

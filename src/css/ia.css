@@ -334,9 +334,20 @@ body {
     transform: scale(1.1);
 }
 
+/* `position` e `z-index` são reescritos por `Popover.abrir`, que move a caixa
+   para o `<body>` e calcula a camada a partir do que estiver aberto. O que
+   vale aqui é a aparência.
+
+   Teto de altura e barra própria: sem o teto, um popover de pedido com doze
+   campos passava da borda de baixo; com a barra crua do sistema, ele destoava
+   de todos os outros modais. */
 .resumo-popover {
     position: absolute;
     z-index: 50;
+    max-height: min(60vh, 460px);
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--thumb-color) transparent;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.555);
     opacity: 0;
     visibility: hidden;
@@ -897,6 +908,28 @@ body {
     border-color: rgba(255, 255, 255, 0.14);
 }
 
+/* Campo cujo valor vem de uma LISTA fechada — a peça do pedido, a unidade, a
+   etapa. Ele precisa dizer isso o tempo todo.
+
+   A moldura do `.ia-campo` só aparece no foco, de propósito: uma borda em
+   todos os campos transforma a tabela num tabuleiro. Só que, quando o item
+   casava e a linha deixava de ser vermelha, o campo virava texto comum e nada
+   mais na tela dizia que aquele nome se TROCA — trocá-lo passou a parecer
+   impossível. A seta resolve sem trazer a moldura de volta. */
+.ia-campo--lista {
+    background-image: linear-gradient(45deg, transparent 50%, rgba(255, 255, 255, 0.45) 50%),
+                      linear-gradient(135deg, rgba(255, 255, 255, 0.45) 50%, transparent 50%);
+    background-position: right 8px center, right 4px center;
+    background-size: 4px 4px, 4px 4px;
+    background-repeat: no-repeat;
+    padding-right: 18px;
+    border-bottom-color: rgba(255, 255, 255, 0.18);
+}
+
+.ia-campo--lista:focus {
+    border-color: var(--color-primary);
+}
+
 .ia-campo:focus {
     outline: none;
     border-color: var(--color-primary);
@@ -1335,6 +1368,15 @@ body {
     font-size: 9px;
 }
 
+/* Casou só pelo preço. É o casamento mais fraco que o programa aceita — nome e
+   código não bateram, e o único dado que apontou para a peça foi quanto ela
+   custa. Merece uma cor diferente de um (i) comum: quem revisa precisa saber
+   qual das duas coisas está olhando antes de deixar passar. */
+.ia-info-insumo--fraco {
+    color: #f0c94c;
+    border-color: rgba(240, 201, 76, 0.5);
+}
+
 /* ---------------------------------------------------------------------------
    ETAPA 13 — a configuração deixou de ser só leitura
    --------------------------------------------------------------------------- */
@@ -1552,6 +1594,20 @@ body {
     flex: 1 1 auto;
 }
 
+/* `.hidden` do Tailwind é UMA classe, e esta folha é carregada DEPOIS dele:
+   `display: flex` acima ganhava do `display: none` só por ordem de arquivo, e
+   o painel de itens continuava na tela com a aba "Arquivos" aberta — os dois
+   empilhados, dividindo a altura entre si.
+
+   Duas classes vencem uma. Vale para todo painel deste módulo que declare
+   `display`, e é por isso que o seletor cobre a lista inteira: um painel novo
+   com `display` próprio repete o defeito calado. */
+.ia-painel-itens.hidden,
+.ia-painel-rolante.hidden,
+.ia-modulo-coluna.hidden {
+    display: none;
+}
+
 /* O painel de arquivos não tem tabela: rola inteiro. */
 .ia-painel-rolante {
     overflow-y: auto;
@@ -1597,4 +1653,189 @@ body {
     border-color: transparent;
     color: rgba(255, 255, 255, 0.6);
     cursor: default;
+}
+
+
+/* ---------------------------------------------------------------------------
+   ETAPA 32 — A TABELA DO MÓDULO PARA NA BORDA DA TELA
+
+   `scroll.css` dá a todo módulo `max-height: calc(var(--module-height) - 200px)`,
+   e os 200px são um palpite sobre a altura do que vem antes da tabela. No módulo
+   de IA vem bem mais que isso: o título, a linha de explicação e um cartão de
+   filtros com quatro campos e o resumo. A tabela começava por volta dos 340px e
+   ainda pedia 200px a menos que a altura toda — o resto passava da borda, e
+   `#content.no-scroll` corta o que passa. A última leitura ficava inalcançável.
+
+   Aqui a altura não é palpitada: o módulo vira uma coluna e a tabela fica com o
+   que sobrar. Muda o cartão de filtros, a conta se refaz sozinha.
+   --------------------------------------------------------------------------- */
+
+body[data-current-module="ia"] #content.no-scroll {
+    height: var(--module-height);
+}
+
+body[data-current-module="ia"] #content.no-scroll .modulo-container,
+body[data-current-module="ia"] #content.no-scroll .ia-modulo-coluna {
+    height: 100%;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+body[data-current-module="ia"] #content.no-scroll #iaTableWrapper {
+    flex: 1 1 auto;
+    min-height: 0;
+    /* Sem isto o palpite de `scroll.css` continua valendo e volta a cortar. */
+    max-height: none;
+}
+
+/* ---------------------------------------------------------------------------
+   O POPOVER USA A BARRA DO PROGRAMA
+   --------------------------------------------------------------------------- */
+
+.resumo-popover::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+
+.resumo-popover::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.resumo-popover::-webkit-scrollbar-thumb {
+    background: var(--thumb-color);
+    border-radius: 4px;
+}
+
+.resumo-popover::-webkit-scrollbar-thumb:hover {
+    background: #d0a42e;
+}
+
+
+/* ---------------------------------------------------------------------------
+   ETAPA 35 — O QUE FAZER COM UMA LINHA QUE NÃO PODE SEGUIR
+
+   Um pedido nasce preso a uma empresa. Quando o nome do documento não bate com
+   nenhum cliente nem prospecção, a linha não tem para onde ir — e ficava num
+   beco: vermelha, sem caixa de seleção, com o botão de abrir recusando sem
+   oferecer saída. Duas decisões resolvem, e esta tela existe para pedir uma
+   das duas.
+   --------------------------------------------------------------------------- */
+
+.ia-acao__motivo {
+    font-size: 13px;
+    line-height: 1.5;
+    color: rgba(255, 255, 255, 0.75);
+    background: rgba(248, 113, 113, 0.09);
+    border: 1px solid rgba(248, 113, 113, 0.28);
+    border-radius: 8px;
+    padding: 10px 12px;
+}
+
+.ia-acao__opcoes {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+/* O cartão inteiro é o alvo do clique: 12px de radio é pouco para a única
+   decisão que esta tela pede. */
+.ia-acao__opcao {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 12px 14px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.03);
+    cursor: pointer;
+    transition: border-color 150ms ease, background 150ms ease;
+}
+
+.ia-acao__opcao:hover {
+    border-color: rgba(255, 255, 255, 0.26);
+    background: rgba(255, 255, 255, 0.06);
+}
+
+.ia-acao__opcao:has(.ia-acao__radio:checked) {
+    border-color: var(--color-primary);
+    background: var(--color-primary-opacity);
+}
+
+.ia-acao__radio {
+    margin-top: 3px;
+    accent-color: var(--color-primary);
+    flex: 0 0 auto;
+}
+
+.ia-acao__texto {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.ia-acao__titulo {
+    font-size: 14px;
+    font-weight: 600;
+    color: #fff;
+}
+
+.ia-acao__ajuda {
+    font-size: 12px;
+    line-height: 1.45;
+    color: rgba(255, 255, 255, 0.55);
+}
+
+/* A busca mora DENTRO da lista de opções, logo abaixo da que a revela: com ela
+   em outro canto da tela, a ligação entre marcar e preencher virava
+   adivinhação. */
+.ia-acao__busca {
+    padding: 12px 14px;
+    margin-top: -4px;
+    border: 1px solid var(--color-primary);
+    border-top: 0;
+    border-radius: 0 0 10px 10px;
+    background: rgba(0, 0, 0, 0.22);
+}
+
+.ia-acao__busca.hidden {
+    display: none;
+}
+
+.ia-acao__rotulo {
+    display: block;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: rgba(255, 255, 255, 0.5);
+    margin-bottom: 6px;
+}
+
+/* O campo desta tela mostra a moldura sempre: aqui ele é o assunto, não uma
+   célula entre vinte. */
+.ia-acao__busca .ia-campo {
+    border-color: rgba(255, 255, 255, 0.22);
+    background: rgba(0, 0, 0, 0.3);
+}
+
+/* Botão da linha travada, na grade. */
+.ia-btn-decidir {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 10px;
+    border-radius: 999px;
+    border: 1px solid rgba(248, 113, 113, 0.5);
+    background: rgba(248, 113, 113, 0.12);
+    color: #fca5a5;
+    font-size: 11px;
+    font-weight: 600;
+    white-space: nowrap;
+    cursor: pointer;
+}
+
+.ia-btn-decidir:hover {
+    background: rgba(248, 113, 113, 0.22);
+    color: #fff;
 }

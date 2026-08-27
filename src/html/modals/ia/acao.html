@@ -1,0 +1,87 @@
+<!--
+  O que fazer com uma linha que não pode seguir.
+
+  Um pedido nasce preso a uma empresa. Quando o nome do documento não bate com
+  nenhum cliente nem prospecção, a linha não tem para onde ir — e, sem esta
+  tela, ela ficava num beco: vermelha, sem caminho, com o botão de abrir
+  recusando sem oferecer saída.
+
+  São duas decisões, e só duas: a linha não vai a lugar nenhum, ou vai para uma
+  empresa que JÁ existe no sistema. Cadastrar uma empresa nova é trabalho do
+  módulo de Clientes, e mandar para lá é o terceiro caminho — o rodapé diz como.
+-->
+<div id="iaAcaoOverlay" class="fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4">
+  <div class="max-w-lg w-full glass-surface backdrop-blur-xl rounded-2xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade">
+    <div class="p-6">
+
+      <h3 class="text-lg font-semibold text-white">O que fazer com esta linha</h3>
+
+      <!-- O que o documento escreveu. É por ele que se reconhece a linha. -->
+      <p class="text-sm text-white/60 mt-1">
+        O documento diz <span id="iaAcaoLido" class="text-white font-medium"></span>
+      </p>
+
+      <!-- Por que ela parou. Vem do backend, e é o mesmo texto da grade. -->
+      <p id="iaAcaoMotivo" class="ia-acao__motivo mt-4"></p>
+
+      <div class="ia-acao__opcoes mt-5">
+
+        <!-- Escolher vem primeiro: é o desfecho que aproveita a leitura. -->
+        <label class="ia-acao__opcao" data-opcao="apontar">
+          <input type="radio" name="iaAcaoEscolha" value="apontar" class="ia-acao__radio">
+          <span class="ia-acao__texto">
+            <span class="ia-acao__titulo">Escolher uma empresa cadastrada</span>
+            <span class="ia-acao__ajuda">
+              A linha passa a ser desta empresa, e o orçamento abre no nome dela.
+            </span>
+          </span>
+        </label>
+
+        <!--
+          O campo mora DENTRO da opção para que escolher e preencher sejam um
+          gesto só: com ele fora, a pessoa marcava a opção, o campo aparecia em
+          outro canto da tela, e a ligação entre os dois virava adivinhação.
+        -->
+        <div id="iaAcaoBuscaEmpresa" class="ia-acao__busca hidden">
+          <label for="iaAcaoEmpresa" class="ia-acao__rotulo" id="iaAcaoRotuloAlvo">Empresa</label>
+          <input id="iaAcaoEmpresa" type="text" class="ia-campo ia-campo--lista w-full"
+                 list="iaAcaoEmpresas" autocomplete="off"
+                 placeholder="Digite para procurar e escolha da lista">
+          <datalist id="iaAcaoEmpresas"></datalist>
+          <p class="ia-acao__ajuda mt-2">
+            Só nomes que já existem no sistema. Um nome digitado não aponta para
+            registro nenhum — e o erro só apareceria com o orçamento já aberto.
+          </p>
+        </div>
+
+        <label class="ia-acao__opcao" data-opcao="descartar">
+          <input type="radio" name="iaAcaoEscolha" value="descartar" class="ia-acao__radio">
+          <span class="ia-acao__texto">
+            <span class="ia-acao__titulo">Descartar esta linha</span>
+            <span class="ia-acao__ajuda">
+              Ela não vira orçamento nenhum. Dá para trazer de volta depois.
+            </span>
+          </span>
+        </label>
+
+      </div>
+
+      <p class="ia-acao__ajuda mt-5">
+        A empresa não existe mesmo? Cadastre-a em <strong>Clientes e contatos</strong>
+        e depois volte aqui — a leitura continua esperando.
+      </p>
+
+      <div class="flex justify-end gap-3 mt-6">
+        <button id="iaAcaoCancelar" type="button"
+                class="btn-danger px-5 py-2 rounded-lg text-white font-medium active:scale-95">
+          Cancelar
+        </button>
+        <button id="iaAcaoConfirmar" type="button" disabled
+                class="btn-success px-5 py-2 rounded-lg font-medium active:scale-95">
+          Confirmar
+        </button>
+      </div>
+
+    </div>
+  </div>
+</div>

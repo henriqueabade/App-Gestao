@@ -17,10 +17,13 @@
    * A lista é explícita de propósito: um popover novo que não entre nela sai
    * calado, e o defeito só aparece na segunda vez que alguém abre o modal.
    */
-  const POPOVERS = ['iaDetLinhaPopover', 'iaDetEscolhaAlvo'];
+  const POPOVERS = ['iaDetLinhaPopover'];
 
   const close = () => {
     for (const id of POPOVERS) window.Popover?.descartar(document.getElementById(id));
+    // Fechar é o último momento em que dá para avisar. Correções que não mudam
+    // a situação da leitura mudam a CONTAGEM de itens, e a lista mostra isso.
+    if (mudouAlgumaCoisa) avisarQueMudou();
     Modal.close(OVERLAY);
   };
   const revelar = () =>
@@ -502,8 +505,37 @@
 
       const tdStatus = document.createElement('td');
       tdStatus.className = 'text-sm';
-      tdStatus.style.color = COR_STATUS[item.status] || 'rgba(255,255,255,0.7)';
-      tdStatus.textContent = ROTULO_STATUS[item.status] || item.status || '—';
+
+      // A situação da linha e a saída dela moram na mesma célula: é onde o olho
+      // já está quando pergunta "e agora?".
+      //
+      // Sem isto, uma linha cuja empresa não foi reconhecida ficava num beco —
+      // sem caixa de seleção, sem coluna "O que fazer" (ela saiu), e com o
+      // botão de abrir recusando sem oferecer caminho nenhum.
+      if (editavelAqui && precisaDeAlvo(item)) {
+        const decidir = document.createElement('button');
+        decidir.type = 'button';
+        decidir.className = 'ia-btn-decidir';
+        decidir.innerHTML = '<i class="fas fa-circle-question"></i>O que fazer';
+        decidir.title = item.mensagem || `Esta linha ainda não tem ${(leitura?.rotulo_alvo || 'destino').toLowerCase()}`;
+        decidir.addEventListener('click', () => abrirAcaoDaLinha(item));
+        tdStatus.appendChild(decidir);
+      } else if (descartada && editavel) {
+        // Descartar é uma decisão, não uma sentença. Sem volta, um clique
+        // errado obrigava a extrair a leitura inteira de novo — e isso custa
+        // crédito de API.
+        const voltar = document.createElement('button');
+        voltar.type = 'button';
+        voltar.className = 'ia-btn-decidir';
+        voltar.innerHTML = '<i class="fas fa-rotate-left"></i>Trazer de volta';
+        voltar.title = 'A linha volta a valer e pode ser revisada';
+        voltar.addEventListener('click',
+          () => aplicarNaLinha(item, { acao: 'criar' }, 'Linha de volta'));
+        tdStatus.appendChild(voltar);
+      } else {
+        tdStatus.style.color = COR_STATUS[item.status] || 'rgba(255,255,255,0.7)';
+        tdStatus.textContent = ROTULO_STATUS[item.status] || item.status || '—';
+      }
       tr.appendChild(tdStatus);
 
       linhas.push(tr);
@@ -518,9 +550,27 @@
       if (nota) linhas.push(nota);
     }
 
+    // Onde estava o cursor. `replaceChildren` destrói o campo em que a pessoa
+    // está digitando, e sem devolver o foco cada correção joga o cursor para
+    // fora da tabela — numa linha com seis campos, é uma viagem de mouse por
+    // campo corrigido.
+    const focado = document.activeElement;
+    const campoFocado = focado?.dataset?.campoId || null;
+    const selecao = campoFocado ? [focado.selectionStart, focado.selectionEnd] : null;
+
     corpo.replaceChildren(...linhas);
     pintarSugestoes();
     pintarRodape();
+
+    if (campoFocado) {
+      const volta = corpo.querySelector(`[data-campo-id="${campoFocado}"]`);
+      if (volta) {
+        volta.focus?.();
+        // `setSelectionRange` explode em `type="number"`; o campo do catálogo é
+        // texto, mas a grade tem outros.
+        try { if (selecao?.[0] != null) volta.setSelectionRange(...selecao); } catch { /* campo sem seleção */ }
+      }
+    }
   }
 
   /** Grava uma correção do revisor e devolve o item como ficou. */
@@ -549,13 +599,36 @@
     leitura.status = salvo.leitura_status;
     leitura.status_rotulo = salvo.leitura_status_rotulo || salvo.leitura_status;
     pintarCabecalho({ ...leitura });
+
+    // A tabela do módulo mostra a situação de cada leitura, e ela mudou agora.
+    // Sem este aviso, quem fechava o modal via "Em revisão" numa leitura que
+    // acabou de virar "Concluída" — e só recarregando o módulo inteiro a lista
+    // contava a verdade.
+    avisarQueMudou();
+  }
+
+  /**
+   * Diz à tabela do módulo que esta leitura não está mais como ela mostra.
+   *
+   * `ia.js` escuta o evento e recarrega preservando os filtros. É o mesmo
+   * contrato que "Nova leitura" e "Excluir" já usavam — o detalhe era o único
+   * que mexia numa leitura sem contar a ninguém.
+   */
+  function avisarQueMudou() {
+    window.dispatchEvent(new Event('iaLeituraAlterada'));
   }
 
   function atualizarEmMemoria(salvo) {
     const alvo = (leitura.itens || []).find(i => i.id === salvo.id);
     if (!alvo) return;
     Object.assign(alvo, salvo);
+    // Contagem de itens, situação e responsável saem daqui: a lista precisa
+    // saber de qualquer correção, não só das que fecham a leitura.
+    mudouAlgumaCoisa = true;
   }
+
+  /** Alguma coisa foi gravada nesta sessão do modal? */
+  let mudouAlgumaCoisa = false;
 
   function criarCampo(item, campo, editavel) {
     const valor = item.dados?.[campo.chave];
@@ -567,6 +640,15 @@
     input.value = valor === null || valor === undefined ? '' : String(valor);
     input.dataset.chave = campo.chave;
     input.title = campo.rotulo;
+    // Identidade estável, para reencontrar o campo depois do redesenho.
+    input.dataset.campoId = `${item.id}:${campo.chave}`;
+
+    // Campo de lista fechada ANUNCIA que é uma lista, sempre. A moldura do
+    // `.ia-campo` só aparece no foco — uma borda em todos vira tabuleiro —, e
+    // sem a seta nada na tela diz que aquele valor se troca escolhendo.
+    if (restritos().has(campo.chave) && Array.isArray(leitura?.sugestoes?.[campo.chave])) {
+      input.classList.add('ia-campo--lista');
+    }
 
     if (!editavel) {
       input.readOnly = true;
@@ -735,6 +817,17 @@
         const opcoes = leitura?.sugestoes?.[chaveCompleta];
         const restrito = travados.has(chaveCompleta) && Array.isArray(opcoes) && opcoes.length;
 
+        // Identidade estável do campo, para reencontrá-lo depois do redesenho.
+        input.dataset.campoId = `${item.id}:${campo.chave}:${indice}:${sc.chave}`;
+
+        // Campo de catálogo ANUNCIA que é uma lista — sempre, não só ao passar
+        // o mouse. A moldura do `.ia-campo` só aparece no foco (uma borda em
+        // todos os campos vira tabuleiro), e o efeito colateral era que, assim
+        // que o item casava e a linha deixava de ser vermelha, o campo virava
+        // texto comum: nada mais na tela dizia que aquele nome se troca, e
+        // trocá-lo passou a parecer impossível.
+        if (restrito) input.classList.add('ia-campo--lista');
+
         // Código e preço são do CATÁLOGO, e mudam junto com a peça escolhida.
         //
         // Deixá-los digitáveis criava a pior combinação possível: um código que
@@ -824,8 +917,14 @@
           caixa.className = 'ia-celula-com-info';
           const info = document.createElement('i');
           info.className = 'info-icon ia-info-insumo';
-          // A tabela mostra o que vai para a receita; o (i) diz de onde veio.
-          info.title = `O documento escreveu "${nomeLido}"`;
+          // A tabela mostra o que vai para a receita; o (i) diz de onde veio —
+          // e COMO. "Casou pelo preço" é uma pista bem mais fraca que "casou
+          // pelo nome parecido", e quem revisa precisa saber com qual das duas
+          // está lidando antes de deixar passar.
+          info.title = sub?._casamento === 'valor'
+            ? `O documento escreveu "${nomeLido}". Casou só pelo PREÇO — confira a peça.`
+            : `O documento escreveu "${nomeLido}"`;
+          if (sub?._casamento === 'valor') info.classList.add('ia-info-insumo--fraco');
           caixa.append(info, input);
           celula.appendChild(caixa);
           linha.appendChild(celula);
@@ -1813,63 +1912,77 @@
     && item.status !== 'aplicado' && item.acao !== 'ignorar';
 
   /**
-   * Abre a escolha do destino de uma linha.
+   * Abre "O que fazer com esta linha".
    *
-   * Um `<select>` com o que existe no sistema, e não um campo livre: o que o
-   * formulário do outro lado precisa é o ID. Um nome digitado não aponta para
-   * nada — e o erro só apareceria depois de abrir o orçamento.
+   * Era um popover com um `<datalist>` dentro, e pedia demais de um espaço
+   * pequeno: o motivo de a linha ter parado, a escolha entre dois desfechos e
+   * um campo de busca não cabem numa caixa flutuante ancorada num botão. Virou
+   * modal, no padrão do resto do programa.
+   *
+   * Este arquivo não decide nada: monta o pedido, e a decisão volta pelo
+   * `aoDecidir`. Gravar continua sendo daqui, porque é aqui que a grade mora —
+   * um modal que gravasse por conta própria poderia deixar a tela de trás
+   * dizendo outra coisa.
    */
-  /** O que o botão "Apontar" faz agora. Trocado a cada abertura da escolha. */
-  let confirmarEscolha = null;
-
-  function abrirEscolhaDeAlvo(item, ancora) {
-    const caixa = get('iaDetEscolhaAlvo');
-    const campo = get('iaDetEscolhaCampo');
-    const lista = get('iaDetEscolhaLista');
-    const titulo = get('iaDetEscolhaTitulo');
-    if (!caixa || !campo || !lista) return;
-
+  function abrirAcaoDaLinha(item) {
     const alvos = leitura?.alvos || [];
+    const rotuloAlvo = leitura?.rotulo_alvo || 'Empresa';
+
     if (!alvos.length) {
-      showToast(`Nenhum ${leitura?.rotulo_alvo || 'destino'} cadastrado para escolher`, 'info');
+      showToast(
+        `Nenhum ${rotuloAlvo.toLowerCase()} cadastrado ainda — cadastre um antes de apontar`,
+        'info');
       return;
     }
 
-    if (titulo) titulo.textContent = leitura?.rotulo_alvo || 'Escolher destino';
-    campo.value = '';
-    lista.replaceChildren(...alvos.map(a => {
-      const o = document.createElement('option');
-      o.value = a.nome;
-      return o;
-    }));
-
-    // O handler é GUARDADO, e o botão é ligado uma vez só no fim do arquivo.
-    // Trocar o nó a cada abertura (com `replaceWith`) deixava para trás
-    // qualquer referência que alguém tivesse ao botão — inclusive a do próprio
-    // modal — e o clique parava de fazer efeito na segunda vez.
-    confirmarEscolha = async () => {
-      const escolhido = alvos.find(a => normalizarOpcao(a.nome) === normalizarOpcao(campo.value));
-      if (!escolhido) {
-        showToast('Escolha um da lista — o sistema precisa do registro, não do nome', 'error');
-        return;
-      }
-      try {
-        const salvo = await salvarItem(item.id, {
-          alvo_id: escolhido.id,
-          ...(escolhido.tabela ? { alvo_tabela: escolhido.tabela } : {})
-        });
-        atualizarEmMemoria(salvo);
-        absorverSituacao(salvo);
-        window.Popover?.fechar(caixa);
-        desenharItens();
-        showToast(`Apontado para ${escolhido.nome}`, 'success');
-      } catch (err) {
-        showToast(err?.message || 'Não foi possível apontar', 'error');
+    window.iaAcaoPedido = {
+      itemId: item.id,
+      lido: primeiroTextoDoItem(item),
+      motivo: item.mensagem || null,
+      rotuloAlvo,
+      alvos,
+      aoDecidir: async decisao => {
+        if (decisao?.tipo === 'descartar') {
+          await aplicarNaLinha(item, { acao: 'ignorar' }, 'Linha descartada');
+          return;
+        }
+        const alvo = decisao?.alvo;
+        if (!alvo) return;
+        await aplicarNaLinha(item, {
+          alvo_id: alvo.id,
+          ...(alvo.tabela ? { alvo_tabela: alvo.tabela } : {})
+        }, `Apontado para ${alvo.nome}`);
       }
     };
 
-    window.Popover?.abrir(caixa, ancora);
-    campo.focus?.();
+    Modal.open('modals/ia/acao.html', '../js/modals/ia-acao.js', 'iaAcao', true);
+  }
+
+  /** Grava uma decisão na linha e repinta o que ela mudou. */
+  async function aplicarNaLinha(item, payload, aviso) {
+    try {
+      const salvo = await salvarItem(item.id, payload);
+      atualizarEmMemoria(salvo);
+      absorverSituacao(salvo);
+      desenharItens();
+      showToast(aviso, 'success');
+    } catch (err) {
+      showToast(err?.message || 'Não foi possível gravar a decisão', 'error');
+    }
+  }
+
+  /**
+   * O primeiro texto da linha — é por ele que a pessoa reconhece de qual linha
+   * a tela está falando. Costuma ser o nome da empresa; num destino sem nome de
+   * empresa, é o que estiver na primeira coluna preenchida.
+   */
+  function primeiroTextoDoItem(item) {
+    for (const campo of (leitura?.campos || [])) {
+      if (campo.tipo === 'lista') continue;
+      const v = item.dados?.[campo.chave];
+      if (v !== null && v !== undefined && String(v).trim()) return String(v).trim();
+    }
+    return `Linha ${item.linha || item.id}`;
   }
 
   /** Linhas que ainda não viraram cadastro e não foram descartadas. */
@@ -1920,8 +2033,9 @@
     const semAlvo = (leitura.itens || []).filter(precisaDeAlvo);
     if (!semAlvo.length) { showToast('Nenhuma linha esperando destino', 'info'); return; }
 
-    const alvo = semAlvo.find(i => selecionados.has(i.id)) || semAlvo[0];
-    abrirEscolhaDeAlvo(alvo, get('iaDetEscolherAlvo'));
+    // A marcada tem preferência: com várias travadas, o rodapé não teria como
+    // adivinhar qual a pessoa quis, e resolver a errada é pior que perguntar.
+    abrirAcaoDaLinha(semAlvo.find(i => selecionados.has(i.id)) || semAlvo[0]);
   }
 
   async function descartarSelecionados() {
@@ -2009,10 +2123,6 @@
   document.addEventListener('keydown', function esc(e) {
     if (e.key === 'Escape') { close(); document.removeEventListener('keydown', esc); }
   });
-
-  get('iaDetEscolhaConfirmar')?.addEventListener('click', () => confirmarEscolha?.());
-  get('iaDetEscolhaCancelar')?.addEventListener('click',
-    () => window.Popover?.fechar(get('iaDetEscolhaAlvo')));
 
   // Extrair consome crédito e gravar mexe em estoque: os dois passam pela
   // trava de duplo clique, que segura o botão até a ação terminar. Abrir o

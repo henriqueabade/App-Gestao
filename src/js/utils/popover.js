@@ -54,6 +54,9 @@
   /** Popovers que foram movidos para o `<body>`, para poder devolvê-los. */
   const movidos = new Set();
 
+  /** Quem está aberto agora, e em que âncora — para saber o que é "fora". */
+  const abertos = new Map();
+
   /**
    * Uma camada acima de tudo o que está aberto agora.
    *
@@ -122,10 +125,39 @@
 
     popover.style.top = `${Math.round(topo)}px`;
     popover.style.left = `${Math.round(esquerda)}px`;
+    abertos.set(popover, ancora);
   }
 
   function fechar(popover) {
     popover?.classList.remove('show');
+    if (popover) abertos.delete(popover);
+  }
+
+  /**
+   * Clique fora fecha; clique dentro, não.
+   *
+   * Sem isto o popover só sumia se alguém clicasse no mesmo (i) de novo — e
+   * como ele passou a morar no `<body>`, por cima de tudo, ficava plantado na
+   * frente da tabela cobrindo justamente as linhas que a pessoa queria ler.
+   *
+   * O teste é por CONTINÊNCIA e não por alvo: a caixa de escolha tem campo e
+   * botões dentro, e fechar ao clicar neles a tornaria inútil. A âncora também
+   * fica de fora, senão o clique que abre fecharia no mesmo gesto.
+   */
+  function fecharPorCliqueFora(evento) {
+    for (const [popover, ancora] of [...abertos]) {
+      if (popover.contains(evento.target)) continue;
+      if (ancora && ancora.contains && ancora.contains(evento.target)) continue;
+      fechar(popover);
+    }
+  }
+
+  document.addEventListener('click', fecharPorCliqueFora, true);
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') fecharTodos(); });
+
+  /** Fecha os abertos sem devolvê-los ao dono — quem devolve é `descartar`. */
+  function fecharTodos() {
+    for (const popover of [...abertos.keys()]) fechar(popover);
   }
 
   /**
@@ -181,5 +213,5 @@
   window.addEventListener('resize', limparTudo);
   window.addEventListener('scroll', limparTudo, { capture: true, passive: true });
 
-  window.Popover = { abrir, fechar, descartar, limparTudo, PISO };
+  window.Popover = { abrir, fechar, fecharTodos, descartar, limparTudo, PISO };
 })();

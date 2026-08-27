@@ -62,6 +62,14 @@ function criarElemento(tag = 'div') {
     // O preenchimento avisa a tela por evento: sem isto, o formulário ficaria
     // com o valor visível e o estado interno vazio.
     dispatchEvent(e) { el.disparar(e?.type || 'evento', e); return true; },
+    // O foco vive no DOCUMENTO, e é de lá que o módulo o lê para devolvê-lo
+    // depois de redesenhar a grade.
+    focus() { foco.atual = el; },
+    // Guardar o cursor dentro do campo: o módulo tenta restaurá-lo, e um
+    // método ausente aqui viraria "o teste mede o buraco do harness".
+    selectionStart: 0,
+    selectionEnd: 0,
+    setSelectionRange(inicio, fim) { el.selectionStart = inicio; el.selectionEnd = fim; },
     // O popover se posiciona pela caixa do (i). Sem isto o teste mede o buraco
     // do harness em vez do comportamento.
     getBoundingClientRect: () => ({ top: 0, left: 0, right: 0, bottom: 0, width: 0, height: 0 }),
@@ -123,6 +131,15 @@ function casa(el, seletor) {
 
   return false;
 }
+
+/**
+ * Quem tem o foco agora.
+ *
+ * No navegador o foco é do DOCUMENTO, não do elemento — e é de lá que o módulo
+ * o lê para devolvê-lo depois de redesenhar a grade. Mora no arquivo porque
+ * `criarElemento` não conhece bancada nenhuma; cada montagem o zera.
+ */
+const foco = { atual: null };
 
 function idsDoModal() {
   const html = fs.readFileSync(HTML_MODAL, 'utf8');
@@ -194,6 +211,8 @@ function criarBancada({ leitura, respostaPut, respostaAplicar, respostaExtrair,
   for (const [, el] of elementos) raiz.appendChild(el);
 
   const chamadas = [];
+  // Tudo que o modal anuncia para a janela. A tabela do módulo escuta daqui.
+  const avisos = [];
   const toasts = [];
   const confirmacoes = [];
   const gradesRecarregadas = [];
@@ -208,9 +227,12 @@ function criarBancada({ leitura, respostaPut, respostaAplicar, respostaExtrair,
   // buraco do harness em vez do comportamento.
   const corpoDaPagina = criarElemento('body');
 
+  foco.atual = null;
+
   const document = {
     body: corpoDaPagina,
     head: criarElemento('head'),
+    get activeElement() { return foco.atual; },
     addEventListener() {},
     removeEventListener() {},
     getElementById: id => elementos.get(id) || null,
@@ -244,6 +266,7 @@ function criarBancada({ leitura, respostaPut, respostaAplicar, respostaExtrair,
     CustomEvent: class { constructor(t, i) { this.type = t; this.detail = i?.detail; } },
     Event: class { constructor(t, i) { this.type = t; this.bubbles = Boolean(i?.bubbles); } },
     dispatchEvent(evento) {
+      avisos.push(evento?.type);
       for (const fn of ouvintesDaJanela[evento?.type] || []) fn(evento);
       return true;
     },
@@ -362,12 +385,18 @@ function criarBancada({ leitura, respostaPut, respostaAplicar, respostaExtrair,
     confirmacoes,
     gradesRecarregadas,
     modaisAbertos,
+    avisos,
     preenchimentos,
     copiado,
     ancorados,
     corpoDaPagina,
     // O aviso do módulo de destino chega pela janela.
     dispararNaJanela: (tipo, detalhe) => sandbox.dispatchEvent({ type: tipo, ...detalhe }),
+    focar: el => { foco.atual = el; },
+    focado: () => foco.atual,
+    // Um modal fala com o outro por `window.<algo>`: `menu.js` embrulha cada
+    // script numa IIFE, então não há chamada direta entre eles.
+    janela: sandbox,
     trocarLeitura: nova => { dadosLeitura = nova; },
     pronta: () => new Promise(r => setTimeout(r, 10))
   };
@@ -2296,6 +2325,7 @@ test('a peça e o preço do pedido não se digitam', async () => {
   assert.ok(porChave('valor_unitario').classList.contains('ia-campo--fixo'));
   assert.equal(porChave('quantidade').classList.contains('ia-campo--fixo'), false);
 
+
   // O preço mostrado é o do catálogo, não o do documento.
   assert.equal(porChave('valor_unitario').value, '900');
 });
@@ -2322,8 +2352,15 @@ test('a peça do pedido só aceita nome que existe no catálogo', async () => {
   botaoDaLista(linhasDeItem(b)[0]).disparar('click');
   await b.pronta();
 
-  const nome = subLinhas(b)[0].todos()
-    .find(f => f.tagName === 'INPUT' && f.dataset.chave === 'itens.nome');
+  const daSubLinha = chave => subLinhas(b)[0].todos()
+    .find(f => f.tagName === 'INPUT' && f.dataset.chave === `itens.${chave}`);
+  const nome = daSubLinha('nome');
+
+  // O campo anuncia que é uma lista. Sem isso, casado o item e desfeita a linha
+  // vermelha, ele vira texto comum — e nada mais na tela diz que aquela peça se
+  // troca escolhendo outra.
+  assert.ok(nome.classList.contains('ia-campo--lista'));
+  assert.equal(daSubLinha('codigo').classList.contains('ia-campo--lista'), false);
 
   nome.value = 'Cadeira Que Não Existe';
   nome.disparar('change');
@@ -2354,30 +2391,42 @@ test('linha sem destino revela o botão de escolher', async () => {
   assert.match(b.el('iaDetEscolherAlvo').title, /sem cliente ou prospecção/i);
 });
 
-test('escolher um da lista aponta a linha', async () => {
+test('a linha travada abre "O que fazer", com o motivo e a lista', async () => {
   const leitura = leituraPadrao({
     destino: 'orcamentos', destino_rotulo: 'Orçamentos',
     exige_alvo: true, rotulo_alvo: 'Cliente ou prospecção',
     alvos: [{ id: 50, nome: 'Casa Vicenzo (Cliente)', tabela: 'clientes' }]
   });
-  leitura.itens = leitura.itens.map(i => ({ ...i, alvo_id: null, acao: 'criar' }));
+  leitura.itens = leitura.itens.map(i => ({
+    ...i, alvo_id: null, acao: 'criar',
+    mensagem: 'Empresa não encontrada em Clientes nem em Prospecções'
+  }));
 
   const b = criarBancada({ leitura });
   await b.pronta();
 
-  b.el('iaDetEscolherAlvo').disparar('click');
+  const decidir = linhasDeItem(b)[0].todos()
+    .find(f => f.classList?.contains('ia-btn-decidir'));
+  assert.ok(decidir, 'a linha travada não oferece saída nenhuma');
+
+  decidir.disparar('click');
   await b.pronta();
 
-  b.el('iaDetEscolhaCampo').value = 'casa vicenzo (cliente)';
-  b.el('iaDetEscolhaConfirmar').disparar('click');
-  await b.pronta();
+  // A tela precisa dos três: de qual linha se trata, por que ela parou, e o
+  // que existe no sistema para apontar. Sem o motivo, a pessoa decide no
+  // escuro; sem a lista, não decide nada.
+  const pedido = b.janela.iaAcaoPedido;
+  assert.ok(pedido, 'o modal abriu sem pedido nenhum');
+  assert.match(pedido.motivo, /não encontrada/);
+  assert.equal(pedido.rotuloAlvo, 'Cliente ou prospecção');
+  assert.deepEqual(pedido.alvos.map(a => a.id), [50]);
 
-  const put = b.chamadas.find(c => c.metodo === 'PUT');
-  assert.equal(put.corpo.alvo_id, 50);
-  assert.equal(put.corpo.alvo_tabela, 'clientes');
+  const aberto = b.modaisAbertos.at(-1);
+  assert.equal(aberto.overlay, 'iaAcao');
+  assert.match(aberto.html, /ia\/acao\.html$/);
 });
 
-test('nome fora da lista é recusado — o sistema precisa do registro', async () => {
+test('apontar a empresa grava o id, não o nome', async () => {
   const leitura = leituraPadrao({
     destino: 'orcamentos', destino_rotulo: 'Orçamentos',
     exige_alvo: true, rotulo_alvo: 'Cliente',
@@ -2387,21 +2436,196 @@ test('nome fora da lista é recusado — o sistema precisa do registro', async (
 
   const b = criarBancada({ leitura });
   await b.pronta();
-  b.el('iaDetEscolherAlvo').disparar('click');
+  linhasDeItem(b)[0].todos()
+    .find(f => f.classList?.contains('ia-btn-decidir')).disparar('click');
   await b.pronta();
 
-  b.el('iaDetEscolhaCampo').value = 'Empresa Que Não Existe';
-  b.el('iaDetEscolhaConfirmar').disparar('click');
+  // O que o formulário do outro lado precisa é o ID. Um nome não aponta para
+  // registro nenhum — e o erro só apareceria com o orçamento já aberto.
+  await b.janela.iaAcaoPedido.aoDecidir({
+    tipo: 'apontar', alvo: { id: 50, nome: 'Casa Vicenzo', tabela: 'clientes' }
+  });
   await b.pronta();
 
-  // Um nome digitado não aponta para nada, e o erro só apareceria depois de
-  // abrir o orçamento.
-  assert.equal(b.chamadas.some(c => c.metodo === 'PUT'), false);
-  assert.match(b.toasts.at(-1).msg, /Escolha um da lista/);
+  const put = b.chamadas.find(c => c.metodo === 'PUT');
+  assert.equal(put.corpo.alvo_id, 50);
+  assert.equal(put.corpo.alvo_tabela, 'clientes');
+});
+
+test('descartar pela mesma tela marca a linha', async () => {
+  const leitura = leituraPadrao({
+    destino: 'orcamentos', destino_rotulo: 'Orçamentos',
+    exige_alvo: true, rotulo_alvo: 'Cliente',
+    alvos: [{ id: 50, nome: 'Casa Vicenzo', tabela: 'clientes' }]
+  });
+  leitura.itens = leitura.itens.map(i => ({ ...i, alvo_id: null, acao: 'criar' }));
+
+  const b = criarBancada({ leitura });
+  await b.pronta();
+  linhasDeItem(b)[0].todos()
+    .find(f => f.classList?.contains('ia-btn-decidir')).disparar('click');
+  await b.pronta();
+
+  await b.janela.iaAcaoPedido.aoDecidir({ tipo: 'descartar' });
+  await b.pronta();
+
+  assert.equal(b.chamadas.find(c => c.metodo === 'PUT').corpo.acao, 'ignorar');
+});
+
+test('linha descartada pode voltar', async () => {
+  const leitura = leituraPadrao();
+  leitura.itens = leitura.itens.map(i => ({ ...i, acao: 'ignorar' }));
+
+  const b = criarBancada({ leitura });
+  await b.pronta();
+
+  const voltar = linhasDeItem(b)[0].todos()
+    .find(f => f.classList?.contains('ia-btn-decidir'));
+  assert.ok(voltar, 'linha descartada não tem volta');
+
+  voltar.disparar('click');
+  await b.pronta();
+
+  // Sem volta, um clique errado obrigava a extrair a leitura inteira de novo —
+  // e extrair custa crédito de API.
+  assert.equal(b.chamadas.find(c => c.metodo === 'PUT').corpo.acao, 'criar');
 });
 
 test('destino que não exige alvo não mostra o botão', async () => {
   const b = criarBancada();
   await b.pronta();
   assert.equal(b.el('iaDetEscolherAlvo').classList.contains('hidden'), true);
+});
+
+// ---------------------------------------------------------------------------
+// ETAPAS 32 A 35 — a linha travada tem saída, e a lista fica sabendo
+// ---------------------------------------------------------------------------
+
+test('o campo do catálogo anuncia que é uma lista', async () => {
+  const leitura = leituraPadrao({
+    sugestoes: { unidade: ['CH', 'UN'], __restritos: ['unidade'] }
+  });
+
+  const b = criarBancada({ leitura });
+  await b.pronta();
+  const campos = camposDa(linhasDeItem(b)[0]);
+  const porChave = c => campos.find(f => f.dataset.chave === c);
+
+  // A moldura do `.ia-campo` só aparece no foco, de propósito — uma borda em
+  // todos vira tabuleiro. O efeito colateral era que, assim que o item casava,
+  // o campo virava texto comum: nada mais dizia que aquele valor se TROCA, e
+  // trocá-lo passou a parecer impossível.
+  assert.ok(porChave('unidade').classList.contains('ia-campo--lista'));
+  assert.equal(porChave('nome').classList.contains('ia-campo--lista'), false);
+});
+
+test('o cursor não sai da tabela a cada correção', async () => {
+  const leitura = leituraPadrao({
+    destino: 'orcamentos', destino_rotulo: 'Orçamentos',
+    campos: [{
+      chave: 'itens', rotulo: 'Itens', tipo: 'lista', largura: 'media', naGrade: true,
+      subcampos: [
+        { chave: 'nome', rotulo: 'Produto', tipo: 'texto', obrigatorio: true },
+        { chave: 'quantidade', rotulo: 'Qtde', tipo: 'numero' }
+      ]
+    }],
+    itens: [{
+      id: 1, linha: 1, acao: 'criar', alvo_id: 50, status: 'pendente', mensagem: null,
+      dados: { itens: [{ nome: 'Painel Ripado', quantidade: 3 }] }
+    }]
+  });
+
+  const b = criarBancada({ leitura });
+  await b.pronta();
+  botaoDaLista(linhasDeItem(b)[0]).disparar('click');
+  await b.pronta();
+
+  const campoNome = () => subLinhas(b)[0].todos()
+    .find(f => f.tagName === 'INPUT' && f.dataset.chave === 'itens.nome');
+
+  const antes = campoNome();
+  assert.ok(antes.dataset.campoId, 'o campo não tem identidade para ser reencontrado');
+  b.focar(antes);
+
+  antes.value = 'Painel Ripado 2,10';
+  antes.disparar('change');
+  await b.pronta();
+
+  // Gravar um item da sub-lista refaz a grade inteira, e `replaceChildren`
+  // destrói o campo em que a pessoa está digitando. Sem devolver o foco, cada
+  // correção joga o cursor para fora da tabela — e o campo que ela acabou de
+  // trocar deixa de parecer um campo, o que fez a troca seguinte parecer
+  // impossível.
+  const depois = campoNome();
+  assert.notStrictEqual(depois, antes, 'a grade nem foi redesenhada');
+  assert.strictEqual(b.focado(), depois);
+});
+
+test('a tabela do módulo fica sabendo quando a leitura se fecha', async () => {
+  const b = criarBancada({
+    respostaPut: { corpoExtra: { leitura_status: 'aplicada', leitura_status_rotulo: 'Concluída' } }
+  });
+  await b.pronta();
+
+  marcaDa(linhasDeItem(b)[0]).checked = true;
+  marcaDa(linhasDeItem(b)[0]).disparar('change');
+  await b.pronta();
+  b.el('iaDetDescartar').disparar('click');
+  await b.pronta();
+
+  // Sem este aviso, quem fechava o modal via "Em revisão" numa leitura que
+  // acabara de virar "Concluída" — e só recarregando o módulo inteiro a lista
+  // contava a verdade.
+  assert.ok(b.avisos.includes('iaLeituraAlterada'),
+    `a lista não foi avisada; avisos: ${JSON.stringify(b.avisos)}`);
+});
+
+test('correção que não fecha a leitura avisa ao fechar o modal', async () => {
+  const b = criarBancada();
+  await b.pronta();
+
+  const preco = camposDa(linhasDeItem(b)[0])[3];
+  preco.value = '199,90';
+  preco.disparar('change');
+  await b.pronta();
+  assert.equal(b.avisos.includes('iaLeituraAlterada'), false, 'avisou cedo demais');
+
+  b.el('iaDetFechar').disparar('click');
+  await b.pronta();
+
+  // A contagem de itens da lista sai daqui: ela precisa saber de qualquer
+  // correção, não só das que fecham a leitura.
+  assert.ok(b.avisos.includes('iaLeituraAlterada'));
+});
+
+test('modal sem nada gravado não incomoda a lista', async () => {
+  const b = criarBancada();
+  await b.pronta();
+  b.el('iaDetFechar').disparar('click');
+  await b.pronta();
+
+  // Recarregar a grade do módulo por um modal que só foi aberto e fechado
+  // gasta uma ida ao backend e pisca a tela sem motivo.
+  assert.equal(b.avisos.includes('iaLeituraAlterada'), false);
+});
+
+test('a decisão leva o motivo que travou a linha', async () => {
+  const leitura = leituraPadrao({
+    destino: 'orcamentos', destino_rotulo: 'Orçamentos',
+    exige_alvo: true, rotulo_alvo: 'Cliente',
+    alvos: [{ id: 50, nome: 'Casa Vicenzo', tabela: 'clientes' }]
+  });
+  leitura.itens = leitura.itens.map(i => ({
+    ...i, alvo_id: null, acao: 'criar', mensagem: 'Empresa não encontrada'
+  }));
+
+  const b = criarBancada({ leitura });
+  await b.pronta();
+  linhasDeItem(b)[0].todos()
+    .find(f => f.classList?.contains('ia-btn-decidir')).disparar('click');
+  await b.pronta();
+
+  // Sem o motivo, a caixa vermelha da tela fica vazia e a pessoa decide no
+  // escuro — ou fica procurando o texto que não veio.
+  assert.equal(b.janela.iaAcaoPedido.motivo, 'Empresa não encontrada');
 });
