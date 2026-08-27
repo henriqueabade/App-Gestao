@@ -403,26 +403,37 @@ function casarProduto(codigo, nome, porCodigo, porNome, registros, valor) {
   const exato = porNome.get(normalizar(nome));
   if (exato) return { registro: exato, tipo: 'exato', por: 'nome' };
 
-  if (!String(nome || '').trim()) return { registro: null, tipo: null };
+  if (!String(nome || '').trim()) return porValor(valor, registros);
 
   const frequencia = frequenciaDeTermos(registros);
-  let melhor = null;
   let nota = 0;
-  let empatados = 0;
+  let empatados = [];
   for (const r of registros) {
     const n = proximidadeDeInsumo(nome, r && r.nome, frequencia);
-    if (n > nota) { nota = n; melhor = r; empatados = 1; }
-    else if (n === nota && n > 0) empatados += 1;
+    if (n > nota) { nota = n; empatados = [r]; }
+    else if (n === nota && n > 0) empatados.push(r);
   }
 
-  // Empate é sorteio: duas peças igualmente parecidas com o que o pedido diz
-  // querem dizer que o pedido não foi específico, e escolher uma põe metade da
-  // chance de vender a peça errada — pelo preço da outra.
-  if (melhor && nota >= LIMIAR_PARECIDO && empatados > 1) {
-    return { registro: null, tipo: null, ambiguo: melhor.nome };
-  }
-  if (melhor && nota >= LIMIAR_PARECIDO) return { registro: melhor, tipo: 'semelhante', por: 'nome' };
+  const parecidos = nota >= LIMIAR_PARECIDO ? empatados : [];
+  if (parecidos.length === 1) return { registro: parecidos[0], tipo: 'semelhante', por: 'nome' };
 
+  // EMPATE — e é aqui que o preço vale mais.
+  //
+  // "BASE AO CUBO 3060" fica igualmente parecido com as seis variantes de
+  // "Base Ao Cubo Retangular" (P/M/G × dois materiais): o nome acertou a
+  // família e não diz qual das seis. Escolher no par ou ímpar poria cinco
+  // sextos de chance de vender a peça errada pelo preço da outra.
+  //
+  // O preço praticado é exatamente o que separa as seis. Procurar entre as
+  // EMPATADAS, e não no catálogo inteiro, é o que impede um "Vaso Silvia" que
+  // por acaso custe o mesmo de ganhar de um nome que já apontou a família.
+  if (parecidos.length > 1) {
+    const desempatada = porValor(valor, parecidos);
+    if (desempatada.registro) return desempatada;
+    return { registro: null, tipo: null, ambiguo: parecidos[0].nome };
+  }
+
+  // Nome não serviu para nada: o preço é a última pista.
   return porValor(valor, registros);
 }
 

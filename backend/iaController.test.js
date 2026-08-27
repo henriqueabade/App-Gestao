@@ -5646,6 +5646,94 @@ test('preço parecido não é preço igual', () => {
   assert.strictEqual(casar(460).registro, null);
 });
 
+test('nome que acerta a família e o preço que escolhe a variante', () => {
+  const { casarProduto, indexarPor } = require('./iaPreenchimento');
+  // O catálogo de verdade: uma linha de peças com o mesmo nome-base e seis
+  // variantes de tamanho e material.
+  const catalogo = [
+    { id: 1, codigo: 'BACR 3060 MNM', nome: 'Base Ao Cubo Retangular - G', preco_tabela: '2.064,29' },
+    { id: 2, codigo: 'BACR 3060 NOG', nome: 'Base Ao Cubo Retangular - G', preco_tabela: '1.331,04' },
+    { id: 3, codigo: 'BACR 2550 MNM', nome: 'Base Ao Cubo Retangular - M', preco_tabela: '1.687,37' },
+    { id: 4, codigo: 'BACR 2550 NOG', nome: 'Base Ao Cubo Retangular - M', preco_tabela: '1.138,54' },
+    { id: 5, codigo: 'BACR 1530 MNM', nome: 'Base Ao Cubo Retangular - P', preco_tabela: '1.022,89' },
+    { id: 6, codigo: 'BACR 1530 NOG', nome: 'Base Ao Cubo Retangular - P', preco_tabela: '728,25' }
+  ];
+  const casar = (nome, valor) =>
+    casarProduto(null, nome, indexarPor(catalogo, 'codigo'), indexarPor(catalogo, 'nome'),
+      catalogo, valor);
+
+  // O nome acerta a família e não diz qual das seis. Escolher no par ou ímpar
+  // poria cinco sextos de chance de vender a peça errada. O preço praticado é
+  // exatamente o que separa as seis.
+  const r = casar('BASE AO CUBO 3060', '2064,29');
+  assert.strictEqual(r.registro.codigo, 'BACR 3060 MNM');
+  assert.strictEqual(r.tipo, 'valor');
+
+  // Sem preço que sirva, o empate continua sendo empate.
+  assert.strictEqual(casar('BASE AO CUBO 3060', '999,00').registro, null);
+  assert.strictEqual(casar('BASE AO CUBO 3060', null).registro, null);
+});
+
+test('o preço do empate não sai da família que o nome apontou', () => {
+  const { casarProduto, indexarPor } = require('./iaPreenchimento');
+  const catalogo = [
+    { id: 1, codigo: 'BACR-G', nome: 'Base Ao Cubo Retangular - G', preco_tabela: 900 },
+    { id: 2, codigo: 'BACR-P', nome: 'Base Ao Cubo Retangular - P', preco_tabela: 700 },
+    // Nada a ver com a família, e custa o que o pedido escreveu.
+    { id: 9, codigo: 'VS-01', nome: 'Vaso Silvia M', preco_tabela: 450 }
+  ];
+  const r = casarProduto(null, 'BASE AO CUBO', indexarPor(catalogo, 'codigo'),
+    indexarPor(catalogo, 'nome'), catalogo, 450);
+
+  // O nome já apontou a família. Deixar um preço coincidente arrastar o item
+  // para fora dela seria trocar uma informação boa por uma coincidência.
+  assert.strictEqual(r.registro, null);
+});
+
+test('nome que aponta uma só peça ganha do preço de outra', () => {
+  const { casarProduto, indexarPor } = require('./iaPreenchimento');
+  const catalogo = [
+    { id: 1, codigo: 'A', nome: 'Bandeja Vero PP', preco_tabela: 300 },
+    { id: 2, codigo: 'B', nome: 'Castiçal Eixo G', preco_tabela: 999 }
+  ];
+  const r = casarProduto(null, 'Bandeja Vero PP Muiracatiara', indexarPor(catalogo, 'codigo'),
+    indexarPor(catalogo, 'nome'), catalogo, 999);
+
+  // Sem empate não há o que desempatar: o nome decidiu sozinho, e um valor
+  // digitado errado não pode desfazer isso.
+  assert.strictEqual(r.registro.codigo, 'A');
+  assert.strictEqual(r.tipo, 'semelhante');
+});
+
+test('nome fraco não estreita a busca por preço', () => {
+  const { casarProduto, indexarPor } = require('./iaPreenchimento');
+  const catalogo = [
+    { id: 1, codigo: 'A', nome: 'Bandeja Vero PP', preco_tabela: 300 },
+    { id: 2, codigo: 'B', nome: 'Castiçal Eixo G', preco_tabela: 999 }
+  ];
+  // "bandeja" em comum e mais nada: 0,33 de proximidade, longe do limiar de
+  // 0,6. Isso não é um palpite — é uma palavra que por acaso se repete.
+  const r = casarProduto(null, 'Bandeja Que Nao Existe De Jeito Nenhum',
+    indexarPor(catalogo, 'codigo'), indexarPor(catalogo, 'nome'), catalogo, 999);
+
+  // O preço tem de procurar no catálogo INTEIRO. Deixar uma semelhança fraca
+  // estreitar a busca faria a peça certa ficar de fora por causa de uma
+  // palavra solta.
+  assert.strictEqual(r.registro.codigo, 'B');
+  assert.strictEqual(r.tipo, 'valor');
+});
+
+test('item sem nome nenhum ainda pode casar pelo preço', () => {
+  const { casarProduto, indexarPor } = require('./iaPreenchimento');
+  const catalogo = [{ id: 1, codigo: 'A', nome: 'Bandeja Vero PP', preco_tabela: 300 }];
+  const r = casarProduto(null, '', indexarPor(catalogo, 'codigo'),
+    indexarPor(catalogo, 'nome'), catalogo, 300);
+
+  // Uma célula de nome que veio vazia da planilha não é motivo para desistir
+  // enquanto o valor ainda aponta para uma peça só.
+  assert.strictEqual(r.registro.codigo, 'A');
+});
+
 test('duas peças pelo mesmo preço não escolhem nenhuma', () => {
   const { casarProduto, indexarPor } = require('./iaPreenchimento');
   // Tamanhos de uma mesma linha custando igual é o caso comum num catálogo.
