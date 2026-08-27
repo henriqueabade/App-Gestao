@@ -5534,7 +5534,7 @@ test('insumo sem cadastro não tem o que divergir', async () => {
 // ETAPAS 28 A 31 — A LEITURA SE FECHA, E O PEDIDO CASA COM O CATÁLOGO
 // ===========================================================================
 
-test('a leitura vira "Concluída" quando não sobra linha pendente', async () => {
+test('a leitura vira "Concluída" quando alguma linha virou cadastro', async () => {
   const ctx = await prepararFicha({
     itens: [{
       codigo: 'PR-210', nome: 'Painel Ripado 2,10',
@@ -5545,9 +5545,16 @@ test('a leitura vira "Concluída" quando não sobra linha pendente', async () =>
     const item = itensDa(ctx, 5)[0];
     assert.strictEqual(ctx.tabelas.ia_extracoes.find(e => e.id === 5).status, 'revisao');
 
+    // É o que a grade manda quando o formulário do módulo salva.
     const salvo = await (await chamar(ctx.porta, `/api/ia/5/itens/${item.id}`, {
-      method: 'PUT', body: JSON.stringify({ acao: 'ignorar' })
+      method: 'PUT', body: JSON.stringify({ resolvido: true })
     })).json();
+    assert.strictEqual(salvo.status, 'aplicado');
+
+    // E fica registrado QUANDO. A lista ordena por isso, e uma linha aplicada
+    // sem data some do lugar onde quem procura o trabalho recente vai olhar.
+    const gravado = ctx.tabelas.ia_extracao_itens.find(i => i.id === item.id);
+    assert.ok(gravado.aplicado_em, 'a linha aplicada ficou sem data');
 
     // Com um item só, resolvido pelo formulário do módulo, a leitura ficava
     // dizendo "Em revisão" para sempre — e a lista, que é onde se procura o
@@ -5555,6 +5562,60 @@ test('a leitura vira "Concluída" quando não sobra linha pendente', async () =>
     assert.strictEqual(salvo.leitura_status, 'aplicada');
     assert.strictEqual(salvo.leitura_status_rotulo, 'Concluída');
     assert.strictEqual(ctx.tabelas.ia_extracoes.find(e => e.id === 5).status, 'aplicada');
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('descartar tudo NÃO é concluir: a leitura fica "Descartada"', async () => {
+  const ctx = await prepararFicha({
+    itens: [{
+      codigo: 'PR-210', nome: 'Painel Ripado 2,10',
+      insumos: [{ processo: 'MARCENARIA', nome: 'MDF 15mm Branco TX', quantidade: '1', unidade: 'CH' }]
+    }]
+  });
+  try {
+    const item = itensDa(ctx, 5)[0];
+    const salvo = await (await chamar(ctx.porta, `/api/ia/5/itens/${item.id}`, {
+      method: 'PUT', body: JSON.stringify({ acao: 'ignorar' })
+    })).json();
+
+    // "Concluída" quer dizer que a leitura VIROU alguma coisa. Uma em que tudo
+    // foi descartado também não tem pendência — e chamá-la de concluída é
+    // dizer que um cadastro aconteceu quando nada aconteceu.
+    //
+    // Quem descarta sabe que descartou; quem lê a lista depois, não. E é essa
+    // pessoa que precisa distinguir a leitura que rendeu da que foi jogada
+    // fora, sem abrir as duas para descobrir.
+    assert.strictEqual(salvo.leitura_status, 'cancelada');
+    assert.strictEqual(salvo.leitura_status_rotulo, 'Descartada');
+    assert.strictEqual(ctx.tabelas.ia_extracoes.find(e => e.id === 5).status, 'cancelada');
+    assert.strictEqual(Number(ctx.tabelas.ia_extracoes.find(e => e.id === 5).aplicados_qtd), 0);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('uma aplicada entre descartadas ainda é "Concluída"', async () => {
+  const ctx = await prepararFicha({
+    itens: [
+      { codigo: 'PR-210', nome: 'Painel Ripado 2,10', insumos: [{ processo: 'MARCENARIA', nome: 'MDF 15mm Branco TX', quantidade: '1', unidade: 'CH' }] },
+      { codigo: 'ML-01', nome: 'Mesa Lateral Carvalho', insumos: [{ processo: 'MARCENARIA', nome: 'Cola PVA extra 1kg', quantidade: '1', unidade: 'UN' }] }
+    ]
+  });
+  try {
+    const [primeiro, segundo] = itensDa(ctx, 5);
+    await chamar(ctx.porta, `/api/ia/5/itens/${primeiro.id}`, {
+      method: 'PUT', body: JSON.stringify({ resolvido: true })
+    });
+
+    const salvo = await (await chamar(ctx.porta, `/api/ia/5/itens/${segundo.id}`, {
+      method: 'PUT', body: JSON.stringify({ acao: 'ignorar' })
+    })).json();
+
+    // Uma linha que virou cadastro basta: a leitura rendeu.
+    assert.strictEqual(salvo.leitura_status, 'aplicada');
+    assert.strictEqual(Number(ctx.tabelas.ia_extracoes.find(e => e.id === 5).aplicados_qtd), 1);
   } finally {
     await ctx.encerrar();
   }

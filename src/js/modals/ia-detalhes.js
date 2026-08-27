@@ -787,14 +787,16 @@
     }
 
     try {
-      const salvo = await salvarItem(item.id, {
-        alvo_id: escolhida.id,
-        ...(escolhida.tabela ? { alvo_tabela: escolhida.tabela } : {})
+      await comVeu(async () => {
+        const salvo = await salvarItem(item.id, {
+          alvo_id: escolhida.id,
+          ...(escolhida.tabela ? { alvo_tabela: escolhida.tabela } : {})
+        });
+        atualizarEmMemoria(salvo);
+        absorverSituacao(salvo);
+        // A grade inteira: o bloco comercial da linha acabou de mudar de dono.
+        desenharItens();
       });
-      atualizarEmMemoria(salvo);
-      absorverSituacao(salvo);
-      // A grade inteira: o bloco comercial da linha acabou de mudar de dono.
-      desenharItens();
       showToast(`Linha apontada para ${escolhida.nome}`, 'success');
     } catch (err) {
       showToast(err?.message || 'Não foi possível apontar a empresa', 'error');
@@ -1840,6 +1842,23 @@
   }
 
   /**
+   * Roda `trabalho` com o véu na frente, e tira o véu quando ele acabar.
+   *
+   * Vale para tudo que muda vários campos de uma vez. Trocar o cliente de uma
+   * linha refaz razão social, CNPJ, contato e transportadora — e sem o véu o
+   * que se vê é a grade piscando e campos mudando sozinhos, um a um, que
+   * parece defeito e não carregamento.
+   *
+   * `finally` porque o véu cobre a tela inteira: esquecê-lo aberto depois de um
+   * erro deixaria o modal inutilizável, e o remédio seria pior que a doença.
+   */
+  async function comVeu(trabalho) {
+    const veu = abrirVeu();
+    try { return await trabalho(); }
+    finally { veu.remove(); }
+  }
+
+  /**
    * Abre o modal por cima e espera ele terminar de montar.
    *
    * O overlay NÃO é revelado aqui: quem revela é `abrirNoModulo`, depois de
@@ -1905,7 +1924,11 @@
     esperandoSalvar = null;
 
     try {
-      const salvo = await salvarItem(item.id, { acao: 'ignorar' });
+      // `resolvido` e não `acao: 'ignorar'`: a linha virou cadastro do outro
+      // lado, e "ignorar" é a marca de quem JOGA FORA uma linha. Com as duas
+      // usando a mesma marca, nada distinguia uma leitura que rendeu de uma
+      // inteiramente descartada.
+      const salvo = await salvarItem(item.id, { resolvido: true });
       atualizarEmMemoria(salvo);
       absorverSituacao(salvo);
       desenharItens();
@@ -2136,20 +2159,31 @@
         await aplicarNaLinha(item, {
           alvo_id: alvo.id,
           ...(alvo.tabela ? { alvo_tabela: alvo.tabela } : {})
-        }, `Apontado para ${alvo.nome}`);
+        }, `Apontado para ${alvo.nome}`, true);
       }
     };
 
     Modal.open('modals/ia/acao.html', '../js/modals/ia-acao.js', 'iaAcao', true);
   }
 
-  /** Grava uma decisão na linha e repinta o que ela mudou. */
-  async function aplicarNaLinha(item, payload, aviso) {
-    try {
+  /**
+   * Grava uma decisão na linha e repinta o que ela mudou.
+   *
+   * Apontar uma empresa traz o cadastro dela junto — razão social, CNPJ,
+   * contato, transportadora. O véu cobre esse intervalo pelo mesmo motivo de
+   * sempre: campos enchendo-se sozinhos parecem defeito. Descartar e restaurar
+   * mexem numa coluna só e não precisam.
+   */
+  async function aplicarNaLinha(item, payload, aviso, comCarga = false) {
+    const gravar = async () => {
       const salvo = await salvarItem(item.id, payload);
       atualizarEmMemoria(salvo);
       absorverSituacao(salvo);
       desenharItens();
+    };
+
+    try {
+      await (comCarga ? comVeu(gravar) : gravar());
       showToast(aviso, 'success');
     } catch (err) {
       showToast(err?.message || 'Não foi possível gravar a decisão', 'error');

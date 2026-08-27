@@ -331,6 +331,9 @@ function criarBancada({ leitura, respostaPut, respostaAplicar, respostaExtrair,
       }
       if (metodo === 'PUT' && /\/itens\/(\d+)$/.test(url)) {
         const r = respostaPut || {};
+        // Um gancho para olhar a TELA no meio da requisição: é o único momento
+        // em que dá para conferir que o véu de carregamento está de pé.
+        r.aoGravar?.(bancada);
         if (r.status && r.status >= 400) {
           return { ok: false, status: r.status, json: async () => r.corpo };
         }
@@ -382,7 +385,7 @@ function criarBancada({ leitura, respostaPut, respostaAplicar, respostaExtrair,
   vm.createContext(sandbox);
   vm.runInContext(fs.readFileSync(ARQUIVO, 'utf8'), sandbox, { filename: 'ia-detalhes.js' });
 
-  return {
+  const bancada = {
     el: id => elementos.get(id),
     chamadas,
     toasts,
@@ -404,6 +407,7 @@ function criarBancada({ leitura, respostaPut, respostaAplicar, respostaExtrair,
     trocarLeitura: nova => { dadosLeitura = nova; },
     pronta: () => new Promise(r => setTimeout(r, 10))
   };
+  return bancada;
 }
 
 /**
@@ -2188,7 +2192,12 @@ test('o aviso do módulo marca a linha como resolvida', async () => {
   await b.pronta();
 
   const put = b.chamadas.filter(c => c.metodo === 'PUT').at(-1);
-  assert.deepEqual(put.corpo, { acao: 'ignorar' });
+
+  // `resolvido` e não `acao: 'ignorar'`: a linha VIROU cadastro do outro lado,
+  // e "ignorar" é a marca de quem JOGA FORA uma linha. Com as duas usando a
+  // mesma marca, nada distinguia uma leitura que rendeu de uma inteiramente
+  // descartada — nem na lista, nem na contagem de aplicados.
+  assert.deepEqual(put.corpo, { resolvido: true });
   assert.match(b.toasts.at(-1).msg, /resolvida/i);
 });
 
@@ -3142,4 +3151,96 @@ test('sem cliente apontado, os campos voltam a ser texto livre', async () => {
 
   // O cliente segue restrito: é ele que amarra a linha a um registro.
   assert.ok(campoDe(b, 'cliente').classList.contains('ia-campo--lista'));
+});
+
+// ---------------------------------------------------------------------------
+// O véu enquanto o cadastro do cliente chega
+// ---------------------------------------------------------------------------
+
+/** O véu com a logo está na tela agora? */
+const veuAberto = b => b.corpoDaPagina.filhos.some(f => f.id === 'iaAbrindoModulo');
+
+test('trocar o cliente pela tabela mostra o carregamento', async () => {
+  let durante = null;
+  const b = criarBancada({
+    leitura: pedidoComEmpresa(),
+    // O véu tem de estar de pé ENQUANTO o servidor responde, não depois.
+    respostaPut: { aoGravar: bancada => { durante = veuAberto(bancada); } }
+  });
+  await b.pronta();
+
+  const cliente = campoDe(b, 'cliente');
+  cliente.value = 'Marcenaria Serrana (Prospecção)';
+  cliente.disparar('change');
+  await b.pronta();
+
+  // Trocar o cliente refaz razão social, CNPJ, contato e transportadora. Sem o
+  // véu, o que se vê é a grade piscando e campos mudando sozinhos, um a um —
+  // que parece defeito, não carregamento.
+  assert.strictEqual(durante, true, 'o véu não apareceu durante a gravação');
+  assert.strictEqual(veuAberto(b), false, 'o véu ficou na tela depois de carregar');
+});
+
+test('apontar pela tela "O que fazer" também mostra', async () => {
+  const leitura = pedidoComEmpresa();
+  leitura.itens[0] = { ...leitura.itens[0], alvo_id: null, alvo_tabela: null };
+
+  let durante = null;
+  const b = criarBancada({
+    leitura,
+    respostaPut: { aoGravar: bancada => { durante = veuAberto(bancada); } }
+  });
+  await b.pronta();
+
+  linhasDeItem(b)[0].todos()
+    .find(f => f.classList?.contains('ia-btn-decidir'))?.disparar('click');
+  await b.pronta();
+
+  await b.janela.iaAcaoPedido.aoDecidir({
+    tipo: 'apontar', alvo: { id: 50, nome: 'Casa Vicenzo', tabela: 'clientes' }
+  });
+  await b.pronta();
+
+  assert.strictEqual(durante, true, 'o véu não apareceu durante a gravação');
+  assert.strictEqual(veuAberto(b), false);
+});
+
+test('descartar não põe véu: mexe numa coluna só', async () => {
+  const leitura = pedidoComEmpresa();
+  leitura.itens[0] = { ...leitura.itens[0], alvo_id: null, alvo_tabela: null };
+
+  let durante = null;
+  const b = criarBancada({
+    leitura,
+    respostaPut: { aoGravar: bancada => { durante = veuAberto(bancada); } }
+  });
+  await b.pronta();
+
+  linhasDeItem(b)[0].todos()
+    .find(f => f.classList?.contains('ia-btn-decidir'))?.disparar('click');
+  await b.pronta();
+  await b.janela.iaAcaoPedido.aoDecidir({ tipo: 'descartar' });
+  await b.pronta();
+
+  // Um véu de tela cheia para trocar uma coluna é mais interrupção do que
+  // informação.
+  assert.strictEqual(durante, false);
+});
+
+test('o véu sai mesmo quando a gravação falha', async () => {
+  const b = criarBancada({
+    leitura: pedidoComEmpresa(),
+    respostaPut: { status: 500, corpo: { error: 'servidor fora do ar' } }
+  });
+  await b.pronta();
+
+  const cliente = campoDe(b, 'cliente');
+  cliente.value = 'Marcenaria Serrana (Prospecção)';
+  cliente.disparar('change');
+  await b.pronta();
+
+  // O véu cobre a tela inteira: esquecê-lo aberto depois de um erro deixaria o
+  // modal inutilizável, e o remédio seria pior que a doença.
+  assert.strictEqual(veuAberto(b), false, 'o véu ficou preso na tela após o erro');
+  assert.match(b.toasts.at(-1).msg, /servidor fora do ar/);
 });

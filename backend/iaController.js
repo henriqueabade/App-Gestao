@@ -127,7 +127,7 @@ const SITUACOES = [
   { id: 'revisao', rotulo: 'Em revisão', descricao: 'Leitura pronta, esperando conferência' },
   { id: 'aplicada', rotulo: 'Concluída', descricao: 'Não há mais linha pendente nesta leitura' },
   { id: 'erro', rotulo: 'Erro', descricao: 'A leitura falhou' },
-  { id: 'cancelada', rotulo: 'Cancelada', descricao: 'Descartada sem aplicar' }
+  { id: 'cancelada', rotulo: 'Descartada', descricao: 'Todas as linhas foram descartadas; nada foi cadastrado' }
 ];
 
 const SITUACOES_VALIDAS = new Set(SITUACOES.map(s => s.id));
@@ -1277,13 +1277,22 @@ async function fecharSeNadaPendente(api, extracaoId, statusAtual) {
   const pendente = itens.some(i => i.status !== 'aplicado' && i.status !== 'ignorado' && i.acao !== 'ignorar');
   if (pendente) return statusAtual;
 
+  // "Concluída" quer dizer que a leitura VIROU alguma coisa. Uma em que todas
+  // as linhas foram descartadas também não tem pendência — e dizer que ela
+  // concluiu é dizer que um cadastro aconteceu quando nada aconteceu.
+  //
+  // Quem descarta tudo sabe que descartou; quem lê a lista depois, não. E é
+  // essa pessoa que precisa distinguir uma leitura que rendeu de uma que foi
+  // jogada fora, sem ter de abrir as duas para descobrir.
   const aplicados = itens.filter(i => i.status === 'aplicado').length;
+  const situacao = aplicados > 0 ? 'aplicada' : 'cancelada';
+
   await api.put(`/api/ia_extracoes/${extracaoId}`, {
-    status: 'aplicada',
+    status: situacao,
     aplicados_qtd: aplicados,
     aplicado_em: new Date().toISOString()
   });
-  return 'aplicada';
+  return situacao;
 }
 
 /**
@@ -1518,6 +1527,18 @@ router.put('/:id/itens/:itemId', exigirPermissao('ia.review.edit'), async (req, 
 
     const payload = {};
     const problemas = [];
+
+    // O formulário do módulo salvou: a linha VIROU cadastro.
+    //
+    // Antes ela era marcada com `acao: 'ignorar'`, que é o mesmo que a pessoa
+    // usa para JOGAR FORA uma linha. Os dois desfechos ficavam com a mesma
+    // marca, e nada distinguia uma leitura que rendeu de uma inteiramente
+    // descartada — nem na lista, nem na contagem de aplicados.
+    if (req.body?.resolvido === true) {
+      payload.status = 'aplicado';
+      payload.aplicado_em = new Date().toISOString();
+      payload.mensagem = null;
+    }
 
     if (req.body?.dados !== undefined) {
       const atual = lerDados(item.dados).valor;
