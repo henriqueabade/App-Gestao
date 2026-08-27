@@ -724,3 +724,20 @@ test('o popover usa a barra do programa', () => {
   assert.match(regra[1], /overflow-y:\s*auto/);
   assert.match(css, /\.resumo-popover::-webkit-scrollbar-thumb \{/);
 });
+
+test('o (i) do casamento por preço se distingue de longe', () => {
+  const css = fs.readFileSync(CSS_MODULO, 'utf8');
+  const regra = /\.ia-info-insumo--fraco \{([\s\S]*?)\}/.exec(css);
+  assert.ok(regra, 'o (i) do casamento por preço não tem cor própria');
+
+  // Só a letra colorida some no meio das outras numa grade de vinte linhas. O
+  // fundo e a borda é que fazem a linha saltar.
+  assert.match(regra[1], /background:/);
+  assert.match(regra[1], /border-color:/);
+
+  // Amarelo, e não vermelho: vermelho quer dizer "não pode seguir", e este
+  // item pode. É um aviso, não um impedimento.
+  const vermelho = /\.ia-sublinha-item--sem-cadastro \.ia-campo \{([\s\S]*?)\}/.exec(css);
+  assert.ok(vermelho, 'a linha sem cadastro perdeu a cor');
+  assert.doesNotMatch(regra[1], /var\(--color-red\)|#f87171|248, 113, 113/);
+});

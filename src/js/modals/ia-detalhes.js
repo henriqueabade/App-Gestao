@@ -852,6 +852,27 @@
         else {
           if (sc.obrigatorio && !String(input.value).trim()) input.classList.add('ia-campo--faltando');
           input.addEventListener('change', async () => {
+            const anterior = valor === null || valor === undefined ? '' : String(valor);
+            const voltarAtras = () => { input.value = anterior; };
+
+            // Campo obrigatório vazio APAGA a linha inteira.
+            //
+            // A coerção do backend descarta sub-item sem campo obrigatório, e
+            // isso está certo para o que a IA extraiu: linha em branco é lixo.
+            // Só que numa edição a mão é outra coisa — quem apagou o nome para
+            // digitar outro perdia junto a quantidade, o preço e o registro do
+            // que o documento dizia, sem nada na tela avisando.
+            //
+            // Quem quer remover a linha tem o × da direita, que remove e diz
+            // que removeu.
+            if (sc.obrigatorio && !input.value.trim()) {
+              showToast(
+                `${sc.rotulo} não pode ficar em branco — use o × para remover a linha`,
+                'error');
+              voltarAtras();
+              return;
+            }
+
             // Campo restrito só grava o que existe na tabela. Digitar é para
             // PROCURAR: um valor livre aqui não cria unidade nem etapa nenhuma
             // — cria um texto que o formulário do outro lado ignora calado.
@@ -859,7 +880,7 @@
               const achado = opcoes.find(o => normalizarOpcao(o) === normalizarOpcao(input.value));
               if (!achado) {
                 showToast(`"${input.value}" não está cadastrado em ${sc.rotulo}`, 'error');
-                input.value = valor === null || valor === undefined ? '' : String(valor);
+                voltarAtras();
                 return;
               }
               input.value = achado;
@@ -871,7 +892,7 @@
             try { await salvarLista(item, campo, copia); }
             catch (err) {
               showToast(err.message || 'Não foi possível salvar', 'error');
-              input.value = valor === null || valor === undefined ? '' : String(valor);
+              voltarAtras();
             }
           });
         }

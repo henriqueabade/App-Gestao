@@ -1368,13 +1368,26 @@ body {
     font-size: 9px;
 }
 
-/* Casou só pelo preço. É o casamento mais fraco que o programa aceita — nome e
-   código não bateram, e o único dado que apontou para a peça foi quanto ela
-   custa. Merece uma cor diferente de um (i) comum: quem revisa precisa saber
-   qual das duas coisas está olhando antes de deixar passar. */
+/* Casou pelo PREÇO. É o casamento mais fraco que o programa aceita — o nome
+   não bastou, e o que apontou a peça foi quanto ela custa.
+
+   Amarelo, e não a cor de um (i) comum: numa grade de vinte linhas, quem
+   revisa precisa achar de relance as que merecem uma segunda olhada antes de o
+   preço sair para o cliente. Só a letra colorida não achava — some no meio das
+   outras. O fundo e a borda é que fazem a linha saltar.
+
+   Não é vermelho: vermelho quer dizer "não pode seguir", e este item pode. É
+   um aviso, não um impedimento. */
 .ia-info-insumo--fraco {
     color: #f0c94c;
-    border-color: rgba(240, 201, 76, 0.5);
+    background: rgba(240, 201, 76, 0.22);
+    border-color: rgba(240, 201, 76, 0.75);
+    box-shadow: 0 0 0 2px rgba(240, 201, 76, 0.12);
+}
+
+.ia-info-insumo--fraco:hover {
+    background: rgba(240, 201, 76, 0.38);
+    border-color: #f0c94c;
 }
 
 /* ---------------------------------------------------------------------------

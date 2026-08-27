@@ -2629,3 +2629,138 @@ test('a decisão leva o motivo que travou a linha', async () => {
   // escuro — ou fica procurando o texto que não veio.
   assert.equal(b.janela.iaAcaoPedido.motivo, 'Empresa não encontrada');
 });
+
+// ---------------------------------------------------------------------------
+// ETAPA 37 — apagar um campo não apaga a linha
+// ---------------------------------------------------------------------------
+
+test('esvaziar um campo obrigatório volta atrás em vez de apagar a linha', async () => {
+  const leitura = leituraPadrao({
+    destino: 'orcamentos', destino_rotulo: 'Orçamentos',
+    campos: [{
+      chave: 'itens', rotulo: 'Itens', tipo: 'lista', largura: 'media', naGrade: true,
+      subcampos: [
+        { chave: 'nome', rotulo: 'Produto', tipo: 'texto', obrigatorio: true },
+        { chave: 'quantidade', rotulo: 'Qtde', tipo: 'numero', obrigatorio: true }
+      ]
+    }],
+    itens: [{
+      id: 1, linha: 1, acao: 'criar', alvo_id: 50, status: 'pendente', mensagem: null,
+      dados: { itens: [{ nome: 'Painel Ripado 2,10', quantidade: 3, _lido: 'PAINEL' }] }
+    }]
+  });
+
+  const b = criarBancada({ leitura });
+  await b.pronta();
+  botaoDaLista(linhasDeItem(b)[0]).disparar('click');
+  await b.pronta();
+
+  const nome = () => subLinhas(b)[0].todos()
+    .find(f => f.tagName === 'INPUT' && f.dataset.chave === 'itens.nome');
+
+  nome().value = '';
+  nome().disparar('change');
+  await b.pronta();
+
+  // A coerção do backend descarta sub-item sem campo obrigatório — certo para
+  // o que a IA extraiu, mas numa edição a mão quem apagou o nome para digitar
+  // outro perdia junto a quantidade e o registro do que o documento dizia.
+  assert.equal(b.chamadas.some(c => c.metodo === 'PUT'), false, 'gravou o campo vazio');
+  assert.equal(nome().value, 'Painel Ripado 2,10');
+  assert.match(b.toasts.at(-1).msg, /não pode ficar em branco/);
+});
+
+test('só espaço em branco também não passa', async () => {
+  const leitura = leituraPadrao({
+    destino: 'orcamentos', destino_rotulo: 'Orçamentos',
+    campos: [{
+      chave: 'itens', rotulo: 'Itens', tipo: 'lista', largura: 'media', naGrade: true,
+      subcampos: [{ chave: 'nome', rotulo: 'Produto', tipo: 'texto', obrigatorio: true }]
+    }],
+    itens: [{
+      id: 1, linha: 1, acao: 'criar', alvo_id: 50, status: 'pendente', mensagem: null,
+      dados: { itens: [{ nome: 'Painel Ripado 2,10' }] }
+    }]
+  });
+
+  const b = criarBancada({ leitura });
+  await b.pronta();
+  botaoDaLista(linhasDeItem(b)[0]).disparar('click');
+  await b.pronta();
+
+  const nome = () => subLinhas(b)[0].todos()
+    .find(f => f.tagName === 'INPUT' && f.dataset.chave === 'itens.nome');
+  nome().value = '   ';
+  nome().disparar('change');
+  await b.pronta();
+
+  assert.equal(b.chamadas.some(c => c.metodo === 'PUT'), false);
+  assert.equal(nome().value, 'Painel Ripado 2,10');
+});
+
+test('campo que NÃO é obrigatório pode ficar vazio', async () => {
+  const leitura = leituraPadrao({
+    destino: 'orcamentos', destino_rotulo: 'Orçamentos',
+    campos: [{
+      chave: 'itens', rotulo: 'Itens', tipo: 'lista', largura: 'media', naGrade: true,
+      subcampos: [
+        { chave: 'nome', rotulo: 'Produto', tipo: 'texto', obrigatorio: true },
+        { chave: 'observacao', rotulo: 'Obs.', tipo: 'texto' }
+      ]
+    }],
+    itens: [{
+      id: 1, linha: 1, acao: 'criar', alvo_id: 50, status: 'pendente', mensagem: null,
+      dados: { itens: [{ nome: 'Painel Ripado 2,10', observacao: 'entregar na obra' }] }
+    }]
+  });
+
+  const b = criarBancada({ leitura });
+  await b.pronta();
+  botaoDaLista(linhasDeItem(b)[0]).disparar('click');
+  await b.pronta();
+
+  const obs = subLinhas(b)[0].todos()
+    .find(f => f.tagName === 'INPUT' && f.dataset.chave === 'itens.observacao');
+  obs.value = '';
+  obs.disparar('change');
+  await b.pronta();
+
+  // Apagar uma observação é uma edição legítima, e a linha sobrevive a ela.
+  const put = b.chamadas.find(c => c.metodo === 'PUT');
+  assert.ok(put, 'a correção não saiu do navegador');
+  assert.equal(put.corpo.dados.itens[0].observacao, '');
+});
+
+test('o (i) de quem casou pelo preço é amarelo', async () => {
+  const leitura = leituraPadrao({
+    destino: 'orcamentos', destino_rotulo: 'Orçamentos',
+    campos: [{
+      chave: 'itens', rotulo: 'Itens', tipo: 'lista', largura: 'media', naGrade: true,
+      subcampos: [{ chave: 'nome', rotulo: 'Produto', tipo: 'texto', obrigatorio: true }]
+    }],
+    itens: [{
+      id: 1, linha: 1, acao: 'criar', alvo_id: 50, status: 'pendente', mensagem: null,
+      dados: {
+        itens: [
+          { nome: 'BASE AO CUBO 3060', _casamento: 'valor', _cadastro: 'Base Ao Cubo Retangular - G', _lido: 'BASE AO CUBO 3060' },
+          { nome: 'Painel de Ripas', _casamento: 'semelhante', _cadastro: 'Painel Ripado 2,10', _lido: 'Painel de Ripas' }
+        ]
+      }
+    }]
+  });
+
+  const b = criarBancada({ leitura });
+  await b.pronta();
+  botaoDaLista(linhasDeItem(b)[0]).disparar('click');
+  await b.pronta();
+
+  const icones = subLinhas(b)[0].todos().filter(f => f.classList?.contains('ia-info-insumo'));
+  assert.equal(icones.length, 2, 'os dois itens deviam ter (i)');
+
+  // Casar só pelo preço é o desfecho mais fraco que o programa aceita. Numa
+  // grade de vinte linhas, quem revisa precisa achar de relance as que merecem
+  // uma segunda olhada antes de o preço sair para o cliente.
+  assert.ok(icones[0].classList.contains('ia-info-insumo--fraco'));
+  assert.equal(icones[1].classList.contains('ia-info-insumo--fraco'), false);
+  assert.match(icones[0].title, /PREÇO/);
+});
