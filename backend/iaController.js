@@ -821,13 +821,21 @@ router.get('/:id', exigirPermissao('ia.details.view'), async (req, res) => {
  * A correspondência é por POSIÇÃO. Por nome seria circular: é justamente o
  * nome que acabou de mudar.
  */
-function carregarLido(coagida, anterior, enviada) {
+function carregarLido(coagida, anterior) {
   if (!Array.isArray(coagida)) return coagida;
   const antes = Array.isArray(anterior) ? anterior : [];
-  const veio = Array.isArray(enviada) ? enviada : [];
+
+  // A coerção já traz o `_lido` de cada linha junto com ela (ver
+  // `coagirLista`). O que sobra para aqui é a leitura ANTIGA, gravada antes de
+  // o `_lido` existir: nessas, o nome que está no banco é o que o documento
+  // escreveu, porque ninguém tinha corrigido nada ainda.
+  //
+  // Só essa herança é por posição, e ela é segura: não houve edição, então
+  // nenhuma linha foi descartada entre uma lista e a outra.
+  if (coagida.some(sub => sub && sub._lido)) return coagida;
 
   return coagida.map((sub, i) => {
-    const lido = veio[i]?._lido || antes[i]?._lido || antes[i]?.nome;
+    const lido = antes[i]?._lido || antes[i]?.nome;
     return lido ? { ...sub, _lido: lido } : sub;
   });
 }
@@ -1344,7 +1352,7 @@ router.put('/:id/itens/:itemId', exigirPermissao('ia.review.edit'), async (req, 
           continue;
         }
         novos[campo.chave] = campo.tipo === 'lista'
-          ? carregarLido(valor, atual[campo.chave], enviados[campo.chave])
+          ? carregarLido(valor, atual[campo.chave])
           : valor;
       }
       if (problemas.length) throw erro(400, problemas.join('; '));

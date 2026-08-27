@@ -403,7 +403,7 @@ function casarProduto(codigo, nome, porCodigo, porNome, registros, valor) {
   const exato = porNome.get(normalizar(nome));
   if (exato) return { registro: exato, tipo: 'exato', por: 'nome' };
 
-  if (!String(nome || '').trim()) return porValor(valor, registros);
+  if (!String(nome || '').trim()) return porValor(valor, registros, nome);
 
   const frequencia = frequenciaDeTermos(registros);
   let nota = 0;
@@ -428,13 +428,13 @@ function casarProduto(codigo, nome, porCodigo, porNome, registros, valor) {
   // EMPATADAS, e não no catálogo inteiro, é o que impede um "Vaso Silvia" que
   // por acaso custe o mesmo de ganhar de um nome que já apontou a família.
   if (parecidos.length > 1) {
-    const desempatada = porValor(valor, parecidos);
+    const desempatada = porValor(valor, parecidos, nome);
     if (desempatada.registro) return desempatada;
     return { registro: null, tipo: null, ambiguo: parecidos[0].nome };
   }
 
   // Nome não serviu para nada: o preço é a última pista.
-  return porValor(valor, registros);
+  return porValor(valor, registros, nome);
 }
 
 /**
@@ -449,7 +449,7 @@ function casarProduto(codigo, nome, porCodigo, porNome, registros, valor) {
  * inteira, e casar por perto significaria vender a errada pelo preço da certa —
  * exatamente o erro que ninguém percebe até o pedido chegar ao cliente.
  */
-function porValor(valor, registros) {
+function porValor(valor, registros, lido) {
   const alvo = paraDecimal(valor);
   if (!Number.isFinite(alvo) || alvo <= 0) return { registro: null, tipo: null };
 
@@ -458,12 +458,88 @@ function porValor(valor, registros) {
     return Number.isFinite(p) && p === alvo;
   });
 
-  // Duas peças pelo mesmo preço é o caso comum num catálogo — tamanhos de uma
-  // mesma linha custam igual. Escolher uma seria sorteio.
-  if (iguais.length !== 1) {
-    return { registro: null, tipo: null, ambiguo: iguais.length > 1 ? iguais[0].nome : null };
+  if (iguais.length === 1) return { registro: iguais[0], tipo: 'valor', por: 'valor' };
+  if (!iguais.length) return { registro: null, tipo: null };
+
+  // Duas peças pelo mesmo preço é comum num catálogo — tamanhos de uma mesma
+  // linha custam igual, e materiais diferentes às vezes também. Escolher no par
+  // ou ímpar seria sorteio, mas desistir joga fora o que o texto ainda diz:
+  // resta olhar QUAIS palavras do pedido cada uma das candidatas contém.
+  const escolhida = desempatarPorConteudo(lido, iguais);
+  if (escolhida) return { registro: escolhida, tipo: 'valor', por: 'valor' };
+  return { registro: null, tipo: null, ambiguo: iguais[0].nome };
+}
+
+/**
+ * Desempata candidatas comparando o que o texto lido diz com o nome delas.
+ *
+ * Quatro medidas, em ordem, e nunca somadas — misturá-las num número só
+ * exigiria inventar um peso, e o peso inventado é que decidiria a venda:
+ *
+ *   1. QUANTAS palavras do pedido a candidata tem no NOME. É a medida grossa e
+ *      vem primeiro: quem cobre mais do que foi escrito é a aposta melhor.
+ *   2. Empatado o número, QUAIS palavras. "Retangular" está em todas as seis e
+ *      não separa nada; "Marron" está numa e resolve sozinha. Entre duas que
+ *      acertaram duas palavras cada, ganha a que acertou a que distingue.
+ *   3 e 4. Empatado o nome, as mesmas duas contas sobre o CÓDIGO. É lá que mora
+ *      o tamanho — "BASE AO CUBO 3060" contra "BACR 3060 MNM" —, e é a última
+ *      coisa que ainda distingue duas peças de mesmo nome e mesmo preço. O
+ *      código vem depois porque é sigla: uma coincidência de três letras não
+ *      pode ganhar de uma palavra escrita por extenso.
+ *
+ * Empate nas quatro devolve null: sem nada que separe, escolher é sortear.
+ */
+function desempatarPorConteudo(lido, candidatas) {
+  const termos = termosDeInsumo(lido);
+
+  // Tokeniza uma vez por candidata: as contas abaixo consultam os mesmos
+  // termos várias vezes, e refazer a quebra ali dentro seria trabalho repetido
+  // a cada item de cada pedido.
+  const porNome = candidatas.map(c => termosDeInsumo(c && c.nome));
+  const porCodigo = candidatas.map(c => termosDeInsumo(c && c.codigo));
+
+  const notas = candidatas.map((c, i) => ({
+    candidata: c,
+    quantosNome: quantos(termos, porNome[i]),
+    raroNome: raridade(termos, porNome[i], porNome),
+    quantosCodigo: quantos(termos, porCodigo[i]),
+    raroCodigo: raridade(termos, porCodigo[i], porCodigo)
+  }));
+
+  const melhor = (a, b) => (b.quantosNome - a.quantosNome)
+    || (b.raroNome - a.raroNome)
+    || (b.quantosCodigo - a.quantosCodigo)
+    || (b.raroCodigo - a.raroCodigo);
+
+  notas.sort(melhor);
+  if (notas.length > 1 && melhor(notas[0], notas[1]) === 0) return null;
+  return notas[0].quantosNome > 0 || notas[0].quantosCodigo > 0
+    ? notas[0].candidata
+    : null;
+}
+
+/** Quantas das palavras lidas a candidata contém. A medida grossa. */
+function quantos(termosLidos, termosDaCandidata) {
+  let total = 0;
+  for (const t of termosLidos) if (termosDaCandidata.has(t)) total += 1;
+  return total;
+}
+
+/**
+ * O mesmo, pesando cada acerto pela raridade do termo ENTRE AS CANDIDATAS —
+ * não no catálogo inteiro.
+ *
+ * A raridade que importa aqui é a que separa ESTAS peças umas das outras: num
+ * empate entre seis "Base Ao Cubo Retangular", "cubo" é comum entre elas e não
+ * decide nada, ainda que seja raro no catálogo todo.
+ */
+function raridade(termosLidos, termosDaCandidata, termosDeTodas) {
+  let total = 0;
+  for (const t of termosLidos) {
+    if (!termosDaCandidata.has(t)) continue;
+    total += 1 / termosDeTodas.filter(set => set.has(t)).length;
   }
-  return { registro: iguais[0], tipo: 'valor', por: 'valor' };
+  return total;
 }
 
 /** Itens de um pedido, casados com o catálogo de produtos. */
@@ -792,6 +868,7 @@ module.exports = {
   casarProduto,
   proximidadeDeInsumo,
   termosDeInsumo,
+  desempatarPorConteudo,
   frequenciaDeTermos,
   mesmoProcesso,
   interpretarPagamento,

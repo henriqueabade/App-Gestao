@@ -44,7 +44,11 @@ const MODOS_PRECO = {
     custo:  { titulo: 'Preço de Custo', permCol: 'col_prod_preco_base',   proximo: 'tabela' },
     tabela: { titulo: 'Preço Tabela',   permCol: 'col_prod_preco_tabela', proximo: 'custo'  }
 };
-let modoPreco = 'custo';
+// A coluna NASCE no preço praticado. É esse o número que a peça "vale" para
+// quem olha o catálogo: é o que vai no orçamento, é o que o cliente paga. O
+// calculado é ferramenta de quem apura custo, e abrir a tela mostrando ele
+// fazia todo mundo ler um número de custo achando que era o preço de venda.
+let modoPreco = 'tabela';
 let trocandoModoPreco = false;
 
 /** Ícone que a linha mostra hoje — e para onde ele leva. */
@@ -54,6 +58,37 @@ function iconePrecoAtual() {
     return modoPreco === 'tabela'
         ? { classe: 'fa-calculator', cor: '#7300ba', titulo: 'Mostrar preço de custo' }
         : { classe: 'fa-coins',      cor: 'var(--color-green)', titulo: 'Mostrar preço de tabela' };
+}
+
+/**
+ * A peça cabe na faixa de preço pedida?
+ *
+ * A faixa é sobre o preço PRATICADO, não sobre o calculado. Quem digita "entre
+ * 2.000 e 2.100" está procurando a peça que custa isso para o cliente —
+ * filtrar pelo calculado devolvia outra lista, e pior: uma lista plausível.
+ * Os dois números vivem na mesma ordem de grandeza, então o resultado errado
+ * não parecia errado.
+ *
+ * Peça sem linha na tabela fixa não tem preço praticado e fica DE FORA de
+ * qualquer faixa — coerente com o resto do programa, onde ela também não pode
+ * ser vendida. Sem faixa nenhuma pedida, porém, ela aparece: o catálogo mostra
+ * tudo, e é do catálogo que se descobre o que ainda falta cadastrar.
+ *
+ * `PrecoTabela` (src/utils/precoTabela.js) é a MESMA função que o orçamento usa
+ * para decidir se a peça pode ser vendida. Uma segunda leitura de
+ * `preco_tabela` aqui viraria uma segunda regra sobre o mesmo campo, e as duas
+ * divergiriam na primeira mudança.
+ */
+function naFaixaDePreco(produto, min, max) {
+    const temMin = Number.isFinite(min);
+    const temMax = Number.isFinite(max);
+    if (!temMin && !temMax) return true;
+
+    const valor = window.PrecoTabela.precoDeVenda(produto);
+    if (valor === null) return false;
+    if (temMin && valor < min) return false;
+    if (temMax && valor > max) return false;
+    return true;
 }
 
 /** Valor que a célula de preço mostra no modo corrente. */
@@ -371,14 +406,8 @@ function aplicarFiltro(aplicarNovos = false) {
     if (status) {
         filtrados = filtrados.filter(p => p.status === status);
     }
-    const precoMin = parseFloat(precoMinStr);
-    if (!isNaN(precoMin)) {
-        filtrados = filtrados.filter(p => Number(p.preco_venda) >= precoMin);
-    }
-    const precoMax = parseFloat(precoMaxStr);
-    if (!isNaN(precoMax)) {
-        filtrados = filtrados.filter(p => Number(p.preco_venda) <= precoMax);
-    }
+    filtrados = filtrados.filter(
+        p => naFaixaDePreco(p, parseFloat(precoMinStr), parseFloat(precoMaxStr)));
     if (zeroEstoque) {
         filtrados = filtrados.filter(p => Number(p.quantidade_total) === 0);
     }

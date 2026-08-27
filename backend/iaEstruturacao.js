@@ -233,6 +233,19 @@ function coagirLista(campo, bruto) {
       const valor = coagir(sc, cru[sc.chave]);
       entrada[sc.chave] = valor === undefined ? null : valor;
     }
+
+    // `_lido` é o que o DOCUMENTO escreveu, e viaja COM a linha.
+    //
+    // Antes ele era reencaixado por posição depois desta função, e este laço
+    // DESCARTA linhas — a que ficou sem campo obrigatório some. Toda linha
+    // depois do buraco herdava então a leitura da anterior: o (i) do item
+    // mostrava o nome do item de cima, e quem revisava conferia contra o papel
+    // errado. Nenhuma outra anotação vem junto: as demais (`_casamento`,
+    // `_cadastro`, `_preco`) são recalculadas a cada leitura e, guardadas,
+    // ficariam velhas.
+    if (cru._lido !== undefined && cru._lido !== null && String(cru._lido).trim()) {
+      entrada._lido = String(cru._lido);
+    }
     for (const sc of obrigatorios) {
       const v = entrada[sc.chave];
       if (v === null || v === '') aproveitavel = false;

@@ -5275,6 +5275,81 @@ test('o nome que o documento escreveu sobrevive à troca', async () => {
   }
 });
 
+test('linha apagada no meio não desalinha o que foi lido', async () => {
+  const ctx = await prepararFicha({
+    itens: [{
+      codigo: 'PR-210', nome: 'Painel Ripado 2,10',
+      insumos: [
+        { processo: 'MARCENARIA', nome: 'Cola PVA extra', quantidade: '2', unidade: 'UN' },
+        { processo: 'MARCENARIA', nome: 'MDF 15 Branco', quantidade: '1', unidade: 'CH' },
+        { processo: 'MARCENARIA', nome: 'Fita de borda 22', quantidade: '5', unidade: 'M' }
+      ]
+    }]
+  });
+  try {
+    const item = itensDa(ctx, 5)[0];
+    const primeiro = await (await chamar(ctx.porta, `/api/ia/5/itens/${item.id}`, {
+      method: 'PUT', body: JSON.stringify({ dados: JSON.parse(item.dados) })
+    })).json();
+    assert.deepStrictEqual(primeiro.dados.insumos.map(i => i._lido),
+      ['Cola PVA extra', 'MDF 15 Branco', 'Fita de borda 22']);
+
+    // A pessoa apaga o NOME da primeira linha — mid-edição, ou por engano. A
+    // coerção descarta a linha sem campo obrigatório, e a lista encurta.
+    const editado = { ...primeiro.dados };
+    editado.insumos = primeiro.dados.insumos.map(
+      (sub, i) => (i === 0 ? { ...sub, nome: '' } : sub));
+
+    const depois = await (await chamar(ctx.porta, `/api/ia/5/itens/${item.id}`, {
+      method: 'PUT', body: JSON.stringify({ dados: editado })
+    })).json();
+
+    // Enquanto o que foi lido era reencaixado por POSIÇÃO, toda linha depois
+    // do buraco herdava a leitura da anterior: o (i) do MDF passava a mostrar
+    // "Cola PVA extra", e quem revisava conferia contra o papel errado.
+    assert.deepStrictEqual(depois.dados.insumos.map(i => i.nome),
+      ['MDF 15 Branco', 'Fita de borda 22']);
+    assert.deepStrictEqual(depois.dados.insumos.map(i => i._lido),
+      ['MDF 15 Branco', 'Fita de borda 22']);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('leitura antiga, gravada antes do _lido, ainda mostra a origem', async () => {
+  const ctx = await prepararFicha({
+    itens: [{
+      codigo: 'PR-210', nome: 'Painel Ripado 2,10',
+      insumos: [{ processo: 'MARCENARIA', nome: 'Cola PVA extra', quantidade: '2', unidade: 'UN' }]
+    }]
+  });
+  try {
+    const item = itensDa(ctx, 5)[0];
+    // Como o banco guardava antes de o `_lido` existir: só os campos do
+    // esquema, sem anotação nenhuma.
+    const cru = JSON.parse(item.dados);
+    assert.strictEqual(cru.insumos[0]._lido, undefined);
+
+    const salvo = await (await chamar(ctx.porta, `/api/ia/5/itens/${item.id}`, {
+      method: 'PUT', body: JSON.stringify({ dados: cru })
+    })).json();
+
+    // Nessas linhas o nome no banco É o que o documento escreveu — ninguém
+    // tinha corrigido nada ainda. Sem essa herança, uma leitura velha reaberta
+    // perderia o (i) de todas as linhas de uma vez.
+    assert.strictEqual(salvo.dados.insumos[0]._lido, 'Cola PVA extra');
+
+    // E a herança tem de chegar ao BANCO, não só à resposta: a anotação
+    // preenche `_lido` de novo a cada leitura, então a resposta pareceria certa
+    // mesmo com nada gravado — e a origem só se fixaria no salvamento seguinte.
+    const guardado = JSON.parse(
+      ctx.tabelas.ia_extracao_itens.find(i => i.id === item.id).dados);
+    assert.strictEqual(guardado.insumos[0]._lido, 'Cola PVA extra');
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
 
 // ===========================================================================
 // ETAPA 25 — CONSUMO SEPARADO POR PROVEDOR
@@ -5703,6 +5778,137 @@ test('nome que aponta uma só peça ganha do preço de outra', () => {
   // digitado errado não pode desfazer isso.
   assert.strictEqual(r.registro.codigo, 'A');
   assert.strictEqual(r.tipo, 'semelhante');
+});
+
+test('preços iguais: o nome desempata pelo que o texto contém', () => {
+  const { casarProduto, indexarPor } = require('./iaPreenchimento');
+  // O caso real: uma linha de peças em que TAMANHO e MATERIAL custam o mesmo.
+  // O preço não separa nada aqui — o que separa é qual palavra do pedido cada
+  // candidata carrega.
+  const catalogo = [
+    { id: 1, codigo: 'BACR 3060 MNM', nome: 'Base Ao Cubo Retangular - G', preco_tabela: '1.500,00' },
+    { id: 2, codigo: 'BACR 3060 NOG', nome: 'Base Ao Cubo Retangular - G', preco_tabela: '1.500,00' },
+    { id: 3, codigo: 'BACR 1530 MNM', nome: 'Base Ao Cubo Retangular - P', preco_tabela: '1.500,00' }
+  ];
+  const casar = nome =>
+    casarProduto(null, nome, indexarPor(catalogo, 'codigo'), indexarPor(catalogo, 'nome'),
+      catalogo, '1500');
+
+  // "P" está no nome de uma só.
+  assert.strictEqual(casar('BASE AO CUBO RETANGULAR P').registro.codigo, 'BACR 1530 MNM');
+  // "1530" está no código de uma só.
+  assert.strictEqual(casar('BASE AO CUBO 1530').registro.codigo, 'BACR 1530 MNM');
+  // "3060" está em duas, e "MNM" resolve entre elas.
+  assert.strictEqual(casar('BASE AO CUBO 3060 MNM').registro.codigo, 'BACR 3060 MNM');
+
+  // "3060" sozinho está em DUAS: continua sem resposta, e sortear seria pôr
+  // metade da chance de vender o material errado.
+  assert.strictEqual(casar('BASE AO CUBO 3060').registro, null);
+  // E o que não distingue nada também não decide.
+  assert.strictEqual(casar('BASE AO CUBO').registro, null);
+});
+
+test('a palavra rara pesa mais que a comum no desempate', () => {
+  const { desempatarPorConteudo } = require('./iaPreenchimento');
+  const candidatas = [
+    { codigo: 'A1', nome: 'Bandeja Bath Marron Importada' },
+    { codigo: 'A2', nome: 'Bandeja Bath Bege Importada' },
+    { codigo: 'A3', nome: 'Bandeja Bath Preta Importada' }
+  ];
+
+  // "bandeja", "bath" e "importada" aparecem nas três e não separam nada;
+  // "marron" aparece numa e resolve sozinha. Contar as quatro igual faria as
+  // comuns abafarem a única que decide.
+  const r = desempatarPorConteudo('BANDEJA BATH/MARRON IMPORTADA', candidatas);
+  assert.strictEqual(r.codigo, 'A1');
+
+  // Sem nenhuma palavra que separe, não há desempate.
+  assert.strictEqual(desempatarPorConteudo('BANDEJA BATH IMPORTADA', candidatas), null);
+});
+
+test('cobrir mais do que foi escrito vem primeiro', () => {
+  const { desempatarPorConteudo } = require('./iaPreenchimento');
+  const candidatas = [
+    { codigo: 'A1', nome: 'Base Ao Cubo Retangular Grande Nogueira' },
+    { codigo: 'A2', nome: 'Base Ao Cubo Retangular G' }
+  ];
+
+  // As duas contêm "base", "cubo" e "retangular". Só a segunda contém o "G", e
+  // por isso cobre quatro das palavras escritas contra três.
+  assert.strictEqual(
+    desempatarPorConteudo('BASE AO CUBO RETANGULAR G', candidatas).codigo, 'A2');
+});
+
+test('cobrindo o mesmo tanto, ganha quem acertou a palavra que distingue', () => {
+  const { desempatarPorConteudo } = require('./iaPreenchimento');
+  const candidatas = [
+    { codigo: 'A1', nome: 'Caixa Peroba' },
+    { codigo: 'A2', nome: 'Caixa Marron' },
+    { codigo: 'A3', nome: 'Caixa Peroba Bege' }
+  ];
+
+  // As três cobrem duas palavras de "CAIXA PEROBA MARRON" e empatam na conta
+  // grossa. "Caixa" está nas três e não separa nada; "peroba" está em duas;
+  // "marron" está numa só — e é ela que diz de qual peça o pedido fala.
+  assert.strictEqual(
+    desempatarPorConteudo('CAIXA PEROBA MARRON', candidatas).codigo, 'A2');
+});
+
+test('uma palavra rara não vale mais que a família inteira', () => {
+  const { desempatarPorConteudo } = require('./iaPreenchimento');
+  const candidatas = [
+    { codigo: 'A1', nome: 'Caixa Acervo Peroba' },
+    { codigo: 'A2', nome: 'Caixa Acervo Cedro' },
+    { codigo: 'A3', nome: 'Caixa Acervo Marfim' },
+    { codigo: 'A4', nome: 'Laca' }
+  ];
+
+  // "CAIXA ACERVO LACA": três candidatas cobrem duas palavras e empatam; a
+  // quarta cobre uma só, mas é a única com "laca" — a palavra mais rara do
+  // lote. Deixar a raridade decidir ANTES da cobertura escolheria "Laca" e
+  // jogaria fora o que o pedido diz mais alto: a família é Caixa Acervo.
+  //
+  // A resposta certa é não ter resposta: as três da família são
+  // indistinguíveis com o que está escrito.
+  assert.strictEqual(desempatarPorConteudo('CAIXA ACERVO LACA', candidatas), null);
+});
+
+test('o desempate não inventa vencedor sem nada em comum', () => {
+  const { desempatarPorConteudo } = require('./iaPreenchimento');
+  const candidatas = [
+    { codigo: 'A1', nome: 'Bandeja Bath Marron' },
+    { codigo: 'A2', nome: 'Bandeja Bath Bege' }
+  ];
+
+  assert.strictEqual(desempatarPorConteudo('CADEIRA DOBRAVEL', candidatas), null);
+  assert.strictEqual(desempatarPorConteudo('', candidatas), null);
+
+  // Uma candidata só é o caso perigoso: não há com quem empatar, então nada
+  // impede de devolvê-la por não ter concorrente. Só que "sem concorrente" não
+  // é o mesmo que "é esta" — o texto continua não dizendo nada sobre ela.
+  const unica = [{ codigo: 'Z9', nome: 'Bandeja Bath Marron' }];
+  assert.strictEqual(desempatarPorConteudo('CADEIRA DOBRAVEL', unica), null);
+  assert.strictEqual(desempatarPorConteudo('', unica), null);
+  assert.strictEqual(desempatarPorConteudo(null, unica), null);
+
+  // E com o que bate, ela vale.
+  assert.strictEqual(desempatarPorConteudo('BANDEJA MARRON', unica).codigo, 'Z9');
+});
+
+test('o nome decide antes do código', () => {
+  const { desempatarPorConteudo } = require('./iaPreenchimento');
+  const candidatas = [
+    // O código desta contém "grande", mas o nome não.
+    { codigo: 'XX-GRANDE', nome: 'Mesa Lateral Carvalho' },
+    // O nome desta contém "grande".
+    { codigo: 'YY-01', nome: 'Mesa Lateral Grande' }
+  ];
+
+  // O nome é o que a pessoa lê e o que o documento costuma copiar; o código é
+  // a última pista, para quando o nome empatou. Deixar o código passar à frente
+  // faria uma coincidência de sigla ganhar de uma palavra escrita por extenso.
+  const r = desempatarPorConteudo('MESA LATERAL GRANDE', candidatas);
+  assert.strictEqual(r.codigo, 'YY-01');
 });
 
 test('nome fraco não estreita a busca por preço', () => {
