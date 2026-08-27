@@ -1379,15 +1379,20 @@ body {
    Não é vermelho: vermelho quer dizer "não pode seguir", e este item pode. É
    um aviso, não um impedimento. */
 .ia-info-insumo--fraco {
-    color: #f0c94c;
-    background: rgba(240, 201, 76, 0.22);
-    border-color: rgba(240, 201, 76, 0.75);
-    box-shadow: 0 0 0 2px rgba(240, 201, 76, 0.12);
+    /* SÓLIDO, com a letra escura. Amarelo transparente sobre o vinho do modal
+       vira um tom de marrom que não se distingue de um (i) comum a meio metro
+       da tela — e a meio metro da tela é onde a pessoa está. O contraste
+       invertido é o que faz o selo saltar numa grade de vinte linhas. */
+    background: #f0c94c;
+    border-color: #f0c94c;
+    color: #2a0f1c;
+    box-shadow: 0 0 0 3px rgba(240, 201, 76, 0.22);
 }
 
 .ia-info-insumo--fraco:hover {
-    background: rgba(240, 201, 76, 0.38);
-    border-color: #f0c94c;
+    background: #ffdc6b;
+    border-color: #ffdc6b;
+    box-shadow: 0 0 0 4px rgba(240, 201, 76, 0.32);
 }
 
 /* ---------------------------------------------------------------------------

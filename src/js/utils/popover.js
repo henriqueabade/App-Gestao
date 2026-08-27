@@ -203,15 +203,33 @@
     observarTrocaDeModulo();
   }
 
-  // Rolar ou redimensionar move a âncora e deixa o popover para trás, apontando
-  // para lugar nenhum.
-  //
-  // `capture: true` porque a rolagem que importa não é a da janela: a grade de
-  // revisão rola por DENTRO, e o evento de um contêiner não sobe até `window`
-  // na fase de bolha. Sem isto, rolar a tabela com um (i) aberto deixaria a
-  // caixa parada no ar, apontando para uma linha que já saiu de vista.
-  window.addEventListener('resize', limparTudo);
-  window.addEventListener('scroll', limparTudo, { capture: true, passive: true });
+  /**
+   * Rolar ou redimensionar move a âncora e deixa o popover para trás,
+   * apontando para lugar nenhum. Os dois FECHAM — nunca descartam.
+   *
+   * `descartar` tira o elemento do documento, e quem o abre o procura por id:
+   * uma vez descartado, `getElementById` devolve null e o popover não reabre
+   * mais enquanto o modal não for fechado e aberto de novo. Foi exatamente
+   * isso que aconteceu com quem tentou arrastar a barra de rolagem de dentro
+   * do popover. Descartar é para a troca de módulo, onde o elemento não tem
+   * mesmo para onde voltar.
+   *
+   * `capture: true` porque a rolagem que importa não é a da janela: a grade de
+   * revisão rola por DENTRO, e o evento de um contêiner não sobe até `window`
+   * na fase de bolha.
+   */
+  function fecharPorRolagem(evento) {
+    for (const popover of [...abertos.keys()]) {
+      // Rolar DENTRO do popover é USÁ-LO, não sair dele. O popover tem teto de
+      // altura e rola sozinho quando a linha tem campos demais — fechar aqui
+      // tornaria os campos de baixo inalcançáveis.
+      if (evento.target === popover || popover.contains(evento.target)) continue;
+      fechar(popover);
+    }
+  }
+
+  window.addEventListener('resize', fecharTodos);
+  window.addEventListener('scroll', fecharPorRolagem, { capture: true, passive: true });
 
   window.Popover = { abrir, fechar, fecharTodos, descartar, limparTudo, PISO };
 })();

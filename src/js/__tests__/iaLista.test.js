@@ -606,15 +606,26 @@ test('o piso do popover acompanha o que Modal.open aplica', () => {
     `o piso do popover (${piso}) ficou abaixo do z-index dos modais (${minimo[1]})`);
 });
 
-test('o popover é devolvido ao trocar de módulo', () => {
-  // Trocar de módulo substitui o conteúdo da página. O popover foi movido para
-  // o <body> e não sai junto: sem esta limpeza ele fica flutuando por cima do
-  // módulo seguinte, congelado, sem nada que o faça sumir.
+test('descartar é só para a troca de módulo', () => {
+  // `descartar` tira o elemento do documento, e quem abre o popover o procura
+  // por id: descartado, `getElementById` devolve null e ele não reabre mais
+  // enquanto o modal não for fechado e aberto de novo. Foi assim que arrastar a
+  // barra de rolagem de dentro do popover o matava de vez.
+  //
+  // Trocar de módulo é o único caso em que descartar é certo: ali o elemento
+  // não tem mesmo para onde voltar. O comportamento está medido em
+  // popoverUtil.test.js; o que este teste guarda é que rolagem e
+  // redimensionamento não usem a saída errada.
   const util = fs.readFileSync(path.join(__dirname, '..', 'utils', 'popover.js'), 'utf8');
-  assert.match(util, /function limparTudo/);
   assert.match(util, /MutationObserver/);
   assert.match(util, /getElementById\('content'\)/);
-  assert.match(util, /addEventListener\('resize', limparTudo\)/);
+
+  const escutas = [...util.matchAll(/addEventListener\('(resize|scroll)',\s*(\w+)/g)];
+  assert.strictEqual(escutas.length, 2, 'rolagem e redimensionamento mudaram de forma');
+  for (const [, evento, fn] of escutas) {
+    assert.notStrictEqual(fn, 'limparTudo',
+      `${evento} descarta o popover em vez de só fechá-lo`);
+  }
 });
 
 test('todo popover do detalhe é devolvido ao fechar', () => {
@@ -732,8 +743,30 @@ test('o (i) do casamento por preço se distingue de longe', () => {
 
   // Só a letra colorida some no meio das outras numa grade de vinte linhas. O
   // fundo e a borda é que fazem a linha saltar.
-  assert.match(regra[1], /background:/);
+  const fundo = /background:\s*([^;]+);/.exec(regra[1]);
+  assert.ok(fundo, 'o selo não tem fundo próprio');
   assert.match(regra[1], /border-color:/);
+
+  // SÓLIDO, e não translúcido: amarelo com alfa sobre o vinho do modal vira um
+  // tom de marrom que não se distingue de um (i) comum a meio metro da tela —
+  // e a meio metro da tela é onde a pessoa está.
+  assert.doesNotMatch(fundo[1], /rgba|transparent/,
+    `o fundo do selo é translúcido: ${fundo[1]}`);
+
+  // E a letra tem de contrastar com esse fundo. Herdar o branco do `.info-icon`
+  // deixaria branco sobre amarelo, que é onde a legibilidade some.
+  //
+  // O `(?<![-\w])` é o que separa `color` de `border-color`: sem ele o teste
+  // aceitava a borda no lugar da letra e passava com o selo ilegível.
+  const letra = /(?<![-\w])color:\s*(#[0-9a-f]{3,8})/i.exec(regra[1]);
+  assert.ok(letra, 'o selo não define a cor da própria letra');
+
+  // Escura sobre amarelo. Duas cores claras não são contraste.
+  const canais = letra[1].length <= 4
+    ? [...letra[1].slice(1)].map(c => parseInt(c + c, 16))
+    : [1, 3, 5].map(i => parseInt(letra[1].slice(i, i + 2), 16));
+  const luz = (canais[0] * 299 + canais[1] * 587 + canais[2] * 114) / 1000;
+  assert.ok(luz < 128, `a letra do selo é clara demais (${letra[1]}) para um fundo amarelo`);
 
   // Amarelo, e não vermelho: vermelho quer dizer "não pode seguir", e este
   // item pode. É um aviso, não um impedimento.

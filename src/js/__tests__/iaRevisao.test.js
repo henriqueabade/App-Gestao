@@ -2762,5 +2762,146 @@ test('o (i) de quem casou pelo preço é amarelo', async () => {
   // uma segunda olhada antes de o preço sair para o cliente.
   assert.ok(icones[0].classList.contains('ia-info-insumo--fraco'));
   assert.equal(icones[1].classList.contains('ia-info-insumo--fraco'), false);
-  assert.match(icones[0].title, /PREÇO/);
+
+  // O aviso diz as DUAS coisas: o que o documento escreveu, e que quem
+  // encontrou a peça foi a checagem de preço. Só a cor não explica nada a
+  // quem chegou agora na tela.
+  assert.match(icones[0].title, /BASE AO CUBO 3060/);
+  assert.match(icones[0].title, /CHECAGEM DE PREÇO/);
+  assert.match(icones[1].title, /Painel de Ripas/);
+  assert.doesNotMatch(icones[1].title, /PREÇO/);
+});
+
+// ---------------------------------------------------------------------------
+// ETAPA 38 — trocar uma peça que já casou
+// ---------------------------------------------------------------------------
+
+test('trocar o nome da peça solta o código da peça antiga', async () => {
+  const leitura = leituraPadrao({
+    destino: 'orcamentos', destino_rotulo: 'Orçamentos',
+    campos: [{
+      chave: 'itens', rotulo: 'Itens', tipo: 'lista', largura: 'media', naGrade: true,
+      subcampos: [
+        { chave: 'codigo', rotulo: 'Código', tipo: 'texto' },
+        { chave: 'nome', rotulo: 'Produto', tipo: 'texto', obrigatorio: true },
+        { chave: 'quantidade', rotulo: 'Qtde', tipo: 'numero' }
+      ]
+    }],
+    sugestoes: {
+      'itens.nome': ['Painel Ripado 2,10', 'Mesa Lateral Carvalho'],
+      __restritos: ['itens.nome']
+    },
+    itens: [{
+      id: 1, linha: 1, acao: 'criar', alvo_id: 50, status: 'pendente', mensagem: null,
+      dados: {
+        itens: [{
+          codigo: 'PR-210', nome: 'Painel de Ripas', quantidade: 3,
+          _casamento: 'exato', _cadastro: 'Painel Ripado 2,10', _lido: 'Painel de Ripas', _preco: 900
+        }]
+      }
+    }]
+  });
+
+  const b = criarBancada({ leitura });
+  await b.pronta();
+  botaoDaLista(linhasDeItem(b)[0]).disparar('click');
+  await b.pronta();
+
+  const nome = subLinhas(b)[0].todos()
+    .find(f => f.tagName === 'INPUT' && f.dataset.chave === 'itens.nome');
+  assert.strictEqual(nome.value, 'Painel Ripado 2,10', 'a grade mostra a peça casada');
+
+  nome.value = 'Mesa Lateral Carvalho';
+  nome.disparar('change');
+  await b.pronta();
+
+  const enviado = b.chamadas.find(c => c.metodo === 'PUT').corpo.dados.itens[0];
+
+  // O backend casa por CÓDIGO antes de olhar o nome — é identidade, e com
+  // razão. Com o código velho viajando junto, a peça antiga vencia a escolha
+  // que a pessoa acabara de fazer: o nome voltava ao anterior e nada na tela
+  // dizia por quê.
+  assert.strictEqual(enviado.codigo, null, 'o código da peça antiga foi junto');
+  assert.strictEqual(enviado.nome, 'Mesa Lateral Carvalho');
+  assert.strictEqual(enviado._cadastro, null);
+  assert.strictEqual(enviado._preco, null);
+
+  // A quantidade é da PESSOA, não do catálogo. Zerá-la faria trocar de peça
+  // custar uma digitação a mais.
+  assert.strictEqual(enviado.quantidade, 3);
+
+  // E o que o documento escreveu continua sendo o que o documento escreveu.
+  assert.strictEqual(enviado._lido, 'Painel de Ripas');
+});
+
+test('trocar outro campo não mexe no código', async () => {
+  const leitura = leituraPadrao({
+    destino: 'orcamentos', destino_rotulo: 'Orçamentos',
+    campos: [{
+      chave: 'itens', rotulo: 'Itens', tipo: 'lista', largura: 'media', naGrade: true,
+      subcampos: [
+        { chave: 'codigo', rotulo: 'Código', tipo: 'texto' },
+        { chave: 'nome', rotulo: 'Produto', tipo: 'texto', obrigatorio: true },
+        { chave: 'quantidade', rotulo: 'Qtde', tipo: 'numero' }
+      ]
+    }],
+    itens: [{
+      id: 1, linha: 1, acao: 'criar', alvo_id: 50, status: 'pendente', mensagem: null,
+      dados: {
+        itens: [{ codigo: 'PR-210', nome: 'Painel Ripado 2,10', quantidade: 3, _cadastro: 'Painel Ripado 2,10' }]
+      }
+    }]
+  });
+
+  const b = criarBancada({ leitura });
+  await b.pronta();
+  botaoDaLista(linhasDeItem(b)[0]).disparar('click');
+  await b.pronta();
+
+  const qtde = subLinhas(b)[0].todos()
+    .find(f => f.tagName === 'INPUT' && f.dataset.chave === 'itens.quantidade');
+  qtde.value = '7';
+  qtde.disparar('change');
+  await b.pronta();
+
+  // Corrigir a quantidade não é trocar de peça. Soltar o código aqui obrigaria
+  // o backend a redescobrir por nome uma peça que já estava identificada.
+  const enviado = b.chamadas.find(c => c.metodo === 'PUT').corpo.dados.itens[0];
+  assert.strictEqual(enviado.codigo, 'PR-210');
+  assert.strictEqual(enviado._cadastro, 'Painel Ripado 2,10');
+});
+
+test('numa ficha de insumos, trocar o nome não inventa um campo código', async () => {
+  const leitura = leituraPadrao({
+    destino: 'produto_insumos', destino_rotulo: 'Insumos de produtos',
+    campos: [{
+      chave: 'insumos', rotulo: 'Insumos', tipo: 'lista', largura: 'media', naGrade: true,
+      subcampos: [
+        { chave: 'nome', rotulo: 'Insumo', tipo: 'texto', obrigatorio: true },
+        { chave: 'quantidade', rotulo: 'Qtde', tipo: 'numero' }
+      ]
+    }],
+    sugestoes: { 'insumos.nome': ['MDF 15mm Branco TX', 'Cola PVA extra 1kg'], __restritos: ['insumos.nome'] },
+    itens: [{
+      id: 1, linha: 1, acao: 'criar', alvo_id: null, status: 'pendente', mensagem: null,
+      dados: { insumos: [{ nome: 'Cola PVA extra 1kg', quantidade: 2, _cadastro: 'Cola PVA extra 1kg' }] }
+    }]
+  });
+
+  const b = criarBancada({ leitura });
+  await b.pronta();
+  botaoDaLista(linhasDeItem(b)[0]).disparar('click');
+  await b.pronta();
+
+  const nome = subLinhas(b)[0].todos()
+    .find(f => f.tagName === 'INPUT' && f.dataset.chave === 'insumos.nome');
+  nome.value = 'MDF 15mm Branco TX';
+  nome.disparar('change');
+  await b.pronta();
+
+  // Insumo não tem código. Escrever a chave assim mesmo criaria um campo do
+  // nada, que a coerção do backend descartaria calada — ou pior, gravaria.
+  const enviado = b.chamadas.find(c => c.metodo === 'PUT').corpo.dados.insumos[0];
+  assert.strictEqual('codigo' in enviado, false);
+  assert.strictEqual(enviado.nome, 'MDF 15mm Branco TX');
 });

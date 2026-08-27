@@ -6016,6 +6016,105 @@ test('o item casado pelo preço chega marcado como tal', async () => {
   }
 });
 
+test('o item resolvido pelo preço chega à tela marcado como tal', async () => {
+  const ctx = await prepararOrcamento({
+    itens: [{
+      cliente: 'Casa Vicenzo', razao_social: null, cnpj: null, validade: null,
+      prazo: null, forma_pagamento: null, condicao_pagamento: null, parcelas: null,
+      transportadora: null, contato: null, observacoes: null,
+      // Nome que não bate com nada e o preço exato da Mesa Lateral.
+      itens: [{ codigo: null, nome: 'AQUELA MESINHA', quantidade: '1', valor_unitario: '450' }]
+    }]
+  });
+  try {
+    const [item] = (await (await chamar(ctx.porta, '/api/ia/5')).json()).itens[0].dados.itens;
+
+    // É deste campo que a tela tira a cor do (i). Sem ele chegando como
+    // 'valor', o aviso não tem como aparecer — e quem revisa não fica sabendo
+    // que a peça foi escolhida pelo dado mais fraco que o programa aceita.
+    assert.strictEqual(item._casamento, 'valor');
+    assert.strictEqual(item._cadastro, 'Mesa Lateral Carvalho');
+    assert.strictEqual(item._lido, 'AQUELA MESINHA');
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('o item resolvido pelo DESEMPATE de preço também chega marcado', async () => {
+  const ctx = await prepararOrcamento({
+    itens: [{
+      cliente: 'Casa Vicenzo', razao_social: null, cnpj: null, validade: null,
+      prazo: null, forma_pagamento: null, condicao_pagamento: null, parcelas: null,
+      transportadora: null, contato: null, observacoes: null,
+      // "Painel Ripado" fica parecido com "Painel Ripado 2,10" e o preço da
+      // tabela fixa confirma qual é.
+      itens: [{ codigo: null, nome: 'PAINEL RIPADO GRANDE', quantidade: '1', valor_unitario: '1250' }]
+    }]
+  });
+  try {
+    const [item] = (await (await chamar(ctx.porta, '/api/ia/5')).json()).itens[0].dados.itens;
+
+    // Casou ou por semelhança de nome ou pelo preço — as duas são desfechos
+    // legítimos. O que não pode é chegar sem casamento nenhum.
+    assert.ok(['valor', 'semelhante'].includes(item._casamento),
+      `casamento inesperado: ${item._casamento}`);
+    assert.strictEqual(item._cadastro, 'Painel Ripado 2,10');
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('trocar a peça pelo nome, com o código solto, casa com a nova', async () => {
+  const ctx = await prepararOrcamento();
+  try {
+    const item = itensDa(ctx, 5)[0];
+    const dados = JSON.parse(item.dados);
+
+    // É o que a grade manda ao trocar o nome de uma peça já casada: nome novo,
+    // código solto. Com o código velho junto, o casamento por CÓDIGO — que vem
+    // primeiro porque é identidade — devolvia a peça ANTIGA, e a escolha da
+    // pessoa era desfeita sem aviso.
+    dados.itens[0] = {
+      ...dados.itens[0], codigo: null, nome: 'Mesa Lateral Carvalho',
+      _cadastro: null, _preco: null
+    };
+
+    const salvo = await (await chamar(ctx.porta, `/api/ia/5/itens/${item.id}`, {
+      method: 'PUT', body: JSON.stringify({ dados })
+    })).json();
+
+    assert.strictEqual(salvo.dados.itens[0]._cadastro, 'Mesa Lateral Carvalho');
+    assert.strictEqual(salvo.dados.itens[0]._casamento, 'exato');
+    // E o código volta preenchido — da peça NOVA.
+    assert.strictEqual(salvo.dados.itens[0].codigo, 'ML-01');
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('com o código junto, ele manda — e é isso que se quer quando não mudou', async () => {
+  const ctx = await prepararOrcamento();
+  try {
+    const item = itensDa(ctx, 5)[0];
+    const dados = JSON.parse(item.dados);
+
+    // Corrigir a quantidade não é trocar de peça: o código continua junto, e é
+    // ele que identifica. Redescobrir por nome uma peça já identificada seria
+    // trocar uma certeza por um palpite.
+    dados.itens[0] = { ...dados.itens[0], quantidade: 7 };
+
+    const salvo = await (await chamar(ctx.porta, `/api/ia/5/itens/${item.id}`, {
+      method: 'PUT', body: JSON.stringify({ dados })
+    })).json();
+
+    assert.strictEqual(salvo.dados.itens[0].codigo, 'PR-210');
+    assert.strictEqual(salvo.dados.itens[0]._cadastro, 'Painel Ripado 2,10');
+    assert.strictEqual(salvo.dados.itens[0].quantidade, 7);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
 test('a peça do pedido se escolhe da lista, não se digita', async () => {
   const ctx = await prepararOrcamento();
   try {

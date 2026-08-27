@@ -681,6 +681,26 @@
     return input;
   }
 
+  /**
+   * O que mais muda quando a pessoa troca o NOME de um sub-item.
+   *
+   * Trocar o nome é escolher outra peça, e o resto da linha ainda descreve a
+   * anterior. O código é o caso grave: o backend casa por CÓDIGO antes de
+   * olhar o nome — é identidade, e com razão —, então um código velho viajando
+   * junto fazia a peça antiga vencer a escolha que a pessoa acabara de fazer.
+   * O nome voltava ao anterior e nada na tela dizia por quê.
+   *
+   * Só os campos que vêm da PEÇA são zerados. A quantidade é da pessoa, não do
+   * catálogo, e apagá-la faria trocar de peça custar uma digitação a mais.
+   */
+  function aoTrocarONome(sub) {
+    const limpo = { _cadastro: null, _preco: null };
+    // `codigo` só existe onde o destino declara: numa ficha técnica de insumos
+    // não há código nenhum, e escrever a chave criaria um campo do nada.
+    if (Object.prototype.hasOwnProperty.call(sub, 'codigo')) limpo.codigo = null;
+    return limpo;
+  }
+
   /** "Ana Paula · Compras", para caber numa célula. */
   function resumirSubItem(sub, subcampos) {
     const partes = subcampos
@@ -887,7 +907,7 @@
             }
 
             const copia = lista.map((x, i) => (i === indice
-              ? { ...x, [sc.chave]: input.value, ...(sc.chave === 'nome' ? { _cadastro: null } : {}) }
+              ? { ...x, [sc.chave]: input.value, ...(sc.chave === 'nome' ? aoTrocarONome(x) : {}) }
               : x));
             try { await salvarLista(item, campo, copia); }
             catch (err) {
@@ -943,7 +963,10 @@
           // pelo nome parecido", e quem revisa precisa saber com qual das duas
           // está lidando antes de deixar passar.
           info.title = sub?._casamento === 'valor'
-            ? `O documento escreveu "${nomeLido}". Casou só pelo PREÇO — confira a peça.`
+            ? `O documento escreveu "${nomeLido}".
+`
+              + 'Nome e código não bateram: esta peça foi encontrada pela CHECAGEM DE PREÇO. '
+              + 'Confira antes de enviar.'
             : `O documento escreveu "${nomeLido}"`;
           if (sub?._casamento === 'valor') info.classList.add('ia-info-insumo--fraco');
           caixa.append(info, input);

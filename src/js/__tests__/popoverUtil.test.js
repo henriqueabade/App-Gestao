@@ -146,8 +146,9 @@ function montar() {
 
   const dispararDoc = (tipo, evento) =>
     escutasDoc.filter(e => e.tipo === tipo).forEach(e => e.fn(evento));
-  const dispararWin = tipo =>
-    escutasWin.filter(e => e.tipo === tipo).forEach(e => e.fn({}));
+  // O alvo importa: rolar DENTRO do popover é diferente de rolar a página.
+  const dispararWin = (tipo, evento = {}) =>
+    escutasWin.filter(e => e.tipo === tipo).forEach(e => e.fn(evento));
 
   return {
     Popover: win.Popover,
@@ -340,8 +341,58 @@ test('rolar fecha — a âncora saiu de vista', () => {
   const { popover, ancora } = b.montarPar();
   b.Popover.abrir(popover, ancora);
 
-  b.dispararWin('scroll');
+  const tabela = criarElemento('div');
+  b.conteudo.appendChild(tabela);
+  b.dispararWin('scroll', { target: tabela });
   assert.strictEqual(aberto(popover), false);
+});
+
+test('rolar DENTRO do popover não o fecha', () => {
+  const b = montar();
+  const { popover, ancora } = b.montarPar();
+  b.Popover.abrir(popover, ancora);
+
+  // O popover tem teto de altura e rola sozinho quando a linha tem campos
+  // demais. Fechar ao rolar tornaria os campos de baixo inalcançáveis — e foi
+  // exatamente o que aconteceu com quem tentou arrastar a barra de dentro.
+  b.dispararWin('scroll', { target: popover });
+  assert.ok(aberto(popover));
+
+  const campo = criarElemento('input');
+  popover.appendChild(campo);
+  b.dispararWin('scroll', { target: campo });
+  assert.ok(aberto(popover));
+});
+
+test('fechado por rolagem, o popover ainda REABRE', () => {
+  const b = montar();
+  const { popover, ancora } = b.montarPar();
+  b.Popover.abrir(popover, ancora);
+
+  b.dispararWin('scroll', { target: b.conteudo });
+  assert.strictEqual(aberto(popover), false);
+
+  // `descartar` tira o elemento do documento, e quem abre o procura por id.
+  // Descartado, `getElementById` devolve null e o popover não reabre mais
+  // enquanto o modal não for fechado e aberto de novo.
+  assert.strictEqual(b.doc.getElementById(popover.id), popover,
+    'o popover sumiu do documento e não pode mais ser reaberto');
+
+  b.Popover.abrir(popover, ancora);
+  assert.ok(aberto(popover));
+});
+
+test('redimensionar fecha, mas também não descarta', () => {
+  const b = montar();
+  const { popover, ancora } = b.montarPar();
+  b.Popover.abrir(popover, ancora);
+
+  b.dispararWin('resize');
+  assert.strictEqual(aberto(popover), false);
+  assert.strictEqual(b.doc.getElementById(popover.id), popover);
+
+  b.Popover.abrir(popover, ancora);
+  assert.ok(aberto(popover));
 });
 
 test('a escuta de rolagem é de captura', () => {
