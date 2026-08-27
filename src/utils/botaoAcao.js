@@ -545,6 +545,11 @@
     run,
     bind,
     bindSubmit,
+    // Exportado porque o botão fora do `<form>` (ligado por `form="..."`) é
+    // comum no app, e quem trata o próprio envio precisa achá-lo do mesmo
+    // jeito. Duas buscas diferentes pelo mesmo botão divergem na primeira
+    // mudança — foi assim que Produtos ficou sem travar o segundo clique.
+    localizarBotaoEnvio,
     comCarregamento,
     liberar,
     marcarOcupado,

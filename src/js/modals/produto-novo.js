@@ -12,7 +12,11 @@
   document.addEventListener('keydown', function esc(e){ if(e.key==='Escape'){ close(); document.removeEventListener('keydown', esc); } });
 
   const form = document.getElementById('novoProdutoForm');
-  const submitBtn = form?.querySelector('button[type="submit"]') || null;
+  // O botão de Registrar/Salvar mora no RODAPÉ do modal, fora do `<form>`,
+  // ligado por `form="..."` — o HTML permite. `querySelector` dos
+  // descendentes devolvia null: sem botão, não havia o que desabilitar nem
+  // onde mostrar "Salvando...", e o segundo clique parecia legítimo.
+  const submitBtn = window.BotaoAcao?.localizarBotaoEnvio?.(form) || null;
   const submitBtnText = submitBtn?.textContent || '';
   let isSubmitting = false;
 

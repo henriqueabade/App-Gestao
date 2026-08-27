@@ -57,7 +57,11 @@
     const voltarBtn = document.getElementById('voltarEditarProduto');
     if (voltarBtn) voltarBtn.addEventListener('click', close);
     const form = document.getElementById('editarProdutoForm');
-    const submitBtn = form?.querySelector('button[type="submit"]') || null;
+    // O botão de Registrar/Salvar mora no RODAPÉ do modal, fora do `<form>`,
+    // ligado por `form="..."` — o HTML permite. `querySelector` dos
+    // descendentes devolvia null: sem botão, não havia o que desabilitar nem
+    // onde mostrar "Salvando...", e o segundo clique parecia legítimo.
+    const submitBtn = window.BotaoAcao?.localizarBotaoEnvio?.(form) || null;
     const submitBtnText = submitBtn?.textContent || '';
     const clonarBtn = document.getElementById('clonarProduto');
     const clonarBtnText = clonarBtn?.textContent || '';

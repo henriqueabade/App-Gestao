@@ -3340,3 +3340,183 @@ test('a lista do módulo fica sabendo da exclusão', async () => {
   // A contagem de itens da lista sai daqui.
   assert.ok(b.avisos.includes('iaLeituraAlterada'));
 });
+
+// ---------------------------------------------------------------------------
+// Duas correções ao mesmo tempo na mesma linha
+// ---------------------------------------------------------------------------
+
+/** Uma ficha com dois insumos, cada um com unidade em branco. */
+function fichaComDoisInsumos() {
+  return leituraPadrao({
+    destino: 'produto_insumos', destino_rotulo: 'Insumos',
+    campos: [{
+      chave: 'insumos', rotulo: 'Insumos', tipo: 'lista', largura: 'media', naGrade: true,
+      subcampos: [
+        { chave: 'nome', rotulo: 'Insumo', tipo: 'texto', obrigatorio: true },
+        { chave: 'unidade', rotulo: 'Un.', tipo: 'texto' }
+      ]
+    }],
+    sugestoes: {},
+    itens: [{
+      id: 1, linha: 1, acao: 'criar', alvo_id: null, status: 'pendente', mensagem: null,
+      dados: { insumos: [{ nome: 'MDF', unidade: null }, { nome: 'Cola', unidade: null }] }
+    }]
+  });
+}
+
+const unidadesDaSub = b => subLinhas(b)[0].todos()
+  .filter(f => f.tagName === 'INPUT' && f.dataset.chave === 'insumos.unidade');
+
+test('duas unidades digitadas em sequência ficam as duas', async () => {
+  const b = criarBancada({ leitura: fichaComDoisInsumos() });
+  await b.pronta();
+  botaoDaLista(linhasDeItem(b)[0]).disparar('click');
+  await b.pronta();
+
+  // Como quem digita e dá Tab: a segunda sai antes de a primeira voltar.
+  const primeira = unidadesDaSub(b)[0];
+  primeira.value = 'CH';
+  primeira.disparar('change');
+
+  const segunda = unidadesDaSub(b)[1];
+  segunda.value = 'UN';
+  segunda.disparar('change');
+  await b.pronta();
+
+  // O PUT do backend reescreve o `dados` INTEIRO da linha. Montando as duas
+  // correções a partir do mesmo ponto de partida, a segunda gravava por cima
+  // da primeira — e só a última pegava.
+  const ultimo = b.chamadas.filter(c => c.metodo === 'PUT').at(-1);
+  assert.deepEqual(ultimo.corpo.dados.insumos.map(i => i.unidade), ['CH', 'UN']);
+});
+
+test('a segunda correção parte do que a primeira gravou', async () => {
+  const vistos = [];
+  const b = criarBancada({
+    leitura: fichaComDoisInsumos(),
+    // O que cada PUT viu na linha no momento em que saiu.
+    respostaPut: { aoGravar: bancada => { vistos.push(bancada.chamadas.at(-1).corpo); } }
+  });
+  await b.pronta();
+  botaoDaLista(linhasDeItem(b)[0]).disparar('click');
+  await b.pronta();
+
+  unidadesDaSub(b)[0].value = 'CH';
+  unidadesDaSub(b)[0].disparar('change');
+  unidadesDaSub(b)[1].value = 'UN';
+  unidadesDaSub(b)[1].disparar('change');
+  await b.pronta();
+
+  // Ler o estado ao vivo só resolve se a segunda ESPERAR a primeira: sem a
+  // fila, as duas leem `item.dados` antes de qualquer resposta voltar, e
+  // partem do mesmo ponto.
+  assert.strictEqual(vistos.length, 2);
+  assert.deepEqual(vistos[0].dados.insumos.map(i => i.unidade), ['CH', null]);
+  assert.deepEqual(vistos[1].dados.insumos.map(i => i.unidade), ['CH', 'UN']);
+});
+
+test('linhas diferentes continuam indo em paralelo', async () => {
+  const leitura = fichaComDoisInsumos();
+  leitura.itens.push({
+    id: 2, linha: 2, acao: 'criar', alvo_id: null, status: 'pendente', mensagem: null,
+    dados: { insumos: [{ nome: 'Fita', unidade: null }] }
+  });
+
+  const b = criarBancada({ leitura });
+  await b.pronta();
+
+  // Duas linhas da leitura não disputam nada: serializá-las também seria
+  // trocar um defeito por lentidão.
+  const marcar = i => {
+    marcaDa(linhasDeItem(b)[i]).checked = true;
+    marcaDa(linhasDeItem(b)[i]).disparar('change');
+  };
+  marcar(0);
+  marcar(1);
+  await b.pronta();
+
+  b.el('iaDetDescartar').disparar('click');
+  await b.pronta();
+
+  assert.strictEqual(b.chamadas.filter(c => c.metodo === 'PUT').length, 2);
+  assert.ok(leitura.itens.every(i => i.acao === 'ignorar'),
+    'alguma linha ficou sem ser descartada');
+});
+
+test('a linha mostra que está gravando', async () => {
+  let durante = null;
+  const b = criarBancada({
+    leitura: fichaComDoisInsumos(),
+    respostaPut: {
+      aoGravar: bancada => {
+        durante = bancada.el('iaDetItensCorpo').filhos
+          .some(l => l.classList.contains('ia-linha--carregando'));
+      }
+    }
+  });
+  await b.pronta();
+  botaoDaLista(linhasDeItem(b)[0]).disparar('click');
+  await b.pronta();
+
+  unidadesDaSub(b)[0].value = 'CH';
+  unidadesDaSub(b)[0].disparar('change');
+  await b.pronta();
+
+  // Trocar a peça vai ao servidor e volta com o casamento refeito. Sem sinal
+  // nenhum a tela parece ter ignorado o clique — e a pessoa clica de novo.
+  assert.strictEqual(durante, true, 'a linha não avisou que estava gravando');
+
+  // E a marca sai com o redesenho que vem junto da resposta.
+  assert.strictEqual(
+    b.el('iaDetItensCorpo').filhos.some(l => l.classList.contains('ia-linha--carregando')),
+    false, 'a linha ficou marcada como carregando depois de gravar');
+});
+
+test('a marca de carregando sai mesmo quando a gravação falha', async () => {
+  const b = criarBancada({
+    leitura: fichaComDoisInsumos(),
+    respostaPut: { status: 500, corpo: { error: 'servidor fora do ar' } }
+  });
+  await b.pronta();
+  botaoDaLista(linhasDeItem(b)[0]).disparar('click');
+  await b.pronta();
+
+  unidadesDaSub(b)[0].value = 'CH';
+  unidadesDaSub(b)[0].disparar('change');
+  await b.pronta();
+
+  // Falhando, não há redesenho para limpar a marca. Sem o `finally`, a linha
+  // ficava esmaecida e SEM ACEITAR CLIQUE — a correção que falhou levava junto
+  // a chance de tentar de novo.
+  assert.strictEqual(
+    b.el('iaDetItensCorpo').filhos.some(l => l.classList.contains('ia-linha--carregando')),
+    false, 'a linha ficou travada depois do erro');
+  assert.match(b.toasts.at(-1).msg, /servidor fora do ar/);
+});
+
+test('uma gravação que falha não tranca a fila da linha', async () => {
+  const respostaPut = { status: 500, corpo: { error: 'servidor fora do ar' } };
+  const b = criarBancada({ leitura: fichaComDoisInsumos(), respostaPut });
+  await b.pronta();
+  botaoDaLista(linhasDeItem(b)[0]).disparar('click');
+  await b.pronta();
+
+  unidadesDaSub(b)[0].value = 'CH';
+  unidadesDaSub(b)[0].disparar('change');
+  await b.pronta();
+
+  // O servidor volta. A correção seguinte tem de sair.
+  delete respostaPut.status;
+  delete respostaPut.corpo;
+
+  unidadesDaSub(b)[1].value = 'UN';
+  unidadesDaSub(b)[1].disparar('change');
+  await b.pronta();
+
+  // A fila é uma promessa encadeada: sem absorver a rejeição, a primeira falha
+  // deixaria toda correção seguinte daquela linha pendurada para sempre — e a
+  // pessoa digitaria numa linha que parou de gravar, sem nada dizendo isso.
+  const puts = b.chamadas.filter(c => c.metodo === 'PUT');
+  assert.strictEqual(puts.length, 2, 'a segunda correção não saiu');
+  assert.deepEqual(puts.at(-1).corpo.dados.insumos.map(i => i.unidade), [null, 'UN']);
+});

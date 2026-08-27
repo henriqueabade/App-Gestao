@@ -460,6 +460,7 @@
       // `pintarRodape`). Marcar é dizer "é desta que eu falo", e isso vale
       // para qualquer linha que ainda possa mudar.
       const descartada = item.acao === 'ignorar' || item.status === 'ignorado';
+      const antesDaLinha = linhas.length;
 
       const tdSelecao = document.createElement('td');
       tdSelecao.className = 'ia-col-selecao';
@@ -589,6 +590,11 @@
 
       const nota = criarNota(item, colunas);
       if (nota) linhas.push(nota);
+
+      // Todas as `<tr>` desta linha da leitura — a principal, a sub-tabela e a
+      // nota — respondem pelo mesmo id: é por ele que o spinner as encontra
+      // enquanto a gravação está em voo.
+      for (const l of linhas.slice(antesDaLinha)) l.dataset.itemIa = String(item.id);
     }
 
     // Onde estava o cursor. `replaceChildren` destrói o campo em que a pessoa
@@ -611,6 +617,44 @@
         // texto, mas a grade tem outros.
         try { if (selecao?.[0] != null) volta.setSelectionRange(...selecao); } catch { /* campo sem seleção */ }
       }
+    }
+  }
+
+  /**
+   * Uma fila por LINHA, e a marca de que ela está ocupada.
+   *
+   * O PUT do backend é leitura-modificação-escrita sobre o `dados` inteiro da
+   * linha. Duas correções em voo ao mesmo tempo faziam a segunda gravar por
+   * cima da primeira — quem digitava a unidade de um insumo, dava Tab e
+   * digitava a do seguinte via só a última pegar.
+   *
+   * Serializar é o suficiente e é o mínimo: linhas diferentes continuam indo
+   * em paralelo, porque não disputam nada.
+   */
+  const filas = new Map();
+
+  function enfileirar(itemId, trabalho) {
+    const anterior = filas.get(itemId) || Promise.resolve();
+    // `catch` para que uma falha não trave a fila da linha para sempre.
+    const proxima = anterior.catch(() => {}).then(async () => {
+      marcarOcupada(itemId, true);
+      try { return await trabalho(); }
+      finally { marcarOcupada(itemId, false); }
+    });
+    filas.set(itemId, proxima);
+    return proxima;
+  }
+
+  /**
+   * Pinta a linha como "carregando".
+   *
+   * Trocar a peça de um item vai ao servidor e volta com o casamento refeito —
+   * não é instantâneo, e sem sinal nenhum a tela parece ter ignorado o clique.
+   * Marca as linhas na tela AGORA; o redesenho seguinte já vem sem a marca.
+   */
+  function marcarOcupada(itemId, ocupada) {
+    for (const tr of document.querySelectorAll(`[data-item-ia="${itemId}"]`)) {
+      tr.classList.toggle('ia-linha--carregando', ocupada);
     }
   }
 
@@ -848,10 +892,20 @@
   }
 
   /** Grava a lista inteira do campo: o backend valida entrada por entrada. */
-  async function salvarLista(item, campo, lista) {
-    const salvo = await salvarItem(item.id, { dados: { [campo.chave]: lista } });
-    atualizarEmMemoria(salvo);
-    desenharItens();
+  /**
+   * Grava uma sub-lista corrigida.
+   *
+   * `montar` recebe a lista COMO ELA ESTÁ na hora de gravar, e não a que o
+   * render capturou. Sem isso, duas correções seguidas na mesma linha montavam
+   * as duas a partir do mesmo ponto de partida e a segunda desfazia a primeira.
+   */
+  async function salvarLista(item, campo, montar) {
+    return enfileirar(item.id, async () => {
+      const atual = Array.isArray(item.dados?.[campo.chave]) ? item.dados[campo.chave] : [];
+      const salvo = await salvarItem(item.id, { dados: { [campo.chave]: montar(atual) } });
+      atualizarEmMemoria(salvo);
+      desenharItens();
+    });
   }
 
   /**
@@ -1044,10 +1098,13 @@
               input.value = achado;
             }
 
-            const copia = lista.map((x, i) => (i === indice
+            // A lista chega na hora de gravar, não a que o render capturou:
+            // duas correções seguidas montariam as duas do mesmo ponto de
+            // partida, e a segunda desfaria a primeira.
+            const montar = atual => atual.map((x, i) => (i === indice
               ? { ...x, [sc.chave]: input.value, ...(sc.chave === 'nome' ? aoTrocarONome(x) : {}) }
               : x));
-            try { await salvarLista(item, campo, copia); }
+            try { await salvarLista(item, campo, montar); }
             catch (err) {
               showToast(err.message || 'Não foi possível salvar', 'error');
               voltarAtras();
@@ -1125,7 +1182,7 @@
         remover.title = 'Remover';
         remover.innerHTML = '<i class="fas fa-xmark"></i>';
         remover.addEventListener('click', async () => {
-          try { await salvarLista(item, campo, lista.filter((_, i) => i !== indice)); }
+          try { await salvarLista(item, campo, atual => atual.filter((_, i) => i !== indice)); }
           catch (err) { showToast(err.message || 'Não foi possível remover', 'error'); }
         });
         celula.appendChild(remover);

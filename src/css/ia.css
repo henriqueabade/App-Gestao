@@ -1837,6 +1837,43 @@ body[data-current-module="ia"] #content.no-scroll #iaTableWrapper {
     background: rgba(0, 0, 0, 0.3);
 }
 
+/* Linha esperando o servidor.
+   
+   Trocar a peça de um item vai ao servidor e volta com o casamento refeito —
+   com a peça, o código e o preço. Não é instantâneo, e sem sinal nenhum a tela
+   parece ter ignorado o clique: a pessoa clica de novo, e a segunda gravação
+   entra em cima da primeira.
+   
+   A linha inteira esmaece e para de aceitar clique; a barra em cima diz que
+   algo está acontecendo. Some sozinha no redesenho que vem com a resposta. */
+.ia-linha--carregando {
+    opacity: 0.45;
+    pointer-events: none;
+    position: relative;
+}
+
+.ia-linha--carregando > td:first-child::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, var(--color-primary), transparent);
+    background-size: 40% 100%;
+    background-repeat: no-repeat;
+    animation: iaLinhaCarregando 900ms linear infinite;
+}
+
+@keyframes iaLinhaCarregando {
+    from { background-position: -40% 0; }
+    to   { background-position: 140% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .ia-linha--carregando > td:first-child::after { animation: none; }
+}
+
 /* Excluir a linha, na grade. Só o Sup Admin vê.
    
    Discreto até o mouse chegar: é a única ação da grade que não tem volta, e um
