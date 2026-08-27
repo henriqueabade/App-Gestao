@@ -670,17 +670,33 @@
     // Identidade estável, para reencontrar o campo depois do redesenho.
     input.dataset.campoId = `${item.id}:${campo.chave}`;
 
+    // As opções podem ser da LINHA — os contatos são os do cliente que ela
+    // aponta, e duas linhas do mesmo pedido podem apontar clientes diferentes.
+    // As da leitura valem para o que é igual em todas.
+    const opcoes = item.opcoes?.[campo.chave] ?? leitura?.sugestoes?.[campo.chave];
+    const restrito = ehRestrito(campo.chave, opcoes);
+
     // Campo de lista fechada ANUNCIA que é uma lista, sempre. A moldura do
     // `.ia-campo` só aparece no foco — uma borda em todos vira tabuleiro —, e
     // sem a seta nada na tela diz que aquele valor se troca escolhendo.
-    if (restritos().has(campo.chave) && Array.isArray(leitura?.sugestoes?.[campo.chave])) {
-      input.classList.add('ia-campo--lista');
+    if (restrito) input.classList.add('ia-campo--lista');
+
+    // Campo preenchido pelo CADASTRO do cliente. Razão social e CNPJ são do
+    // registro e não se escolhem: mudam quando o cliente muda, e digitá-los à
+    // mão criaria um orçamento que diz uma coisa e aponta para outra.
+    const doCadastro = item.dados?._origem?.[campo.chave] === 'cadastro';
+    if (doCadastro && !restrito) {
+      input.readOnly = true;
+      input.classList.add('ia-campo--fixo');
+      input.title = 'Vem do cadastro do cliente — troque o cliente para mudar';
     }
 
-    if (!editavel) {
+    if (!editavel || (doCadastro && !restrito)) {
       input.readOnly = true;
       return input;
     }
+
+    if (restrito) ligarLista(input, `${item.id}-${campo.chave}`, opcoes);
 
     const faltando = campo.obrigatorio && !String(input.value).trim();
     if (faltando) input.classList.add('ia-campo--faltando');
@@ -690,6 +706,28 @@
     input.addEventListener('change', async () => {
       const anterior = valor === null || valor === undefined ? '' : String(valor);
       if (input.value === anterior) return;
+
+      // Campo restrito só grava o que existe no banco. Digitar é para
+      // PROCURAR: um contato escrito à mão vira um texto que o formulário do
+      // orçamento ignora — ele quer o ID, não o nome.
+      if (restrito && input.value.trim()) {
+        const achado = opcoes.find(o => normalizarOpcao(o) === normalizarOpcao(input.value));
+        if (!achado) {
+          showToast(`"${input.value}" não está cadastrado em ${campo.rotulo}`, 'error');
+          input.value = anterior;
+          return;
+        }
+        input.value = achado;
+      }
+
+      // Trocar a EMPRESA não é corrigir um texto: é re-apontar a linha inteira.
+      // O contato, a transportadora, a razão social e o CNPJ são do cadastro
+      // dela e mudam junto — quem os refaz é o backend, ao anotar de novo.
+      if (campo.chave === 'cliente') {
+        await apontarEmpresaPeloNome(item, input.value, anterior);
+        return;
+      }
+
       try {
         const salvo = await salvarItem(item.id, { dados: { [campo.chave]: input.value } });
         atualizarEmMemoria(salvo);
@@ -706,6 +744,63 @@
     });
 
     return input;
+  }
+
+  /**
+   * Liga um `<datalist>` ao campo.
+   *
+   * Um por campo, com id próprio, porque as opções podem ser da LINHA: os
+   * contatos são os do cliente que ela aponta. Uma lista só por chave, como a
+   * de `pintarSugestoes`, ofereceria a duas linhas os contatos de uma delas.
+   */
+  function ligarLista(input, sufixo, opcoes) {
+    const id = `iaDetOpcoes-${sufixo}`;
+    let lista = document.getElementById(id);
+    if (!lista) {
+      lista = document.createElement('datalist');
+      lista.id = id;
+      get('iaDetItensTabela')?.appendChild(lista);
+    }
+    lista.replaceChildren(...opcoes.map(v => {
+      const o = document.createElement('option');
+      o.value = v;
+      return o;
+    }));
+    input.setAttribute('list', id);
+  }
+
+  /**
+   * Aponta a linha para a empresa escolhida pelo NOME.
+   *
+   * O que o formulário do orçamento precisa é o id e a tabela; o nome é só
+   * como a pessoa reconhece o registro. Gravar o texto faria a linha continuar
+   * sem empresa, com a tela dizendo que tem.
+   */
+  async function apontarEmpresaPeloNome(item, nome, anterior) {
+    const escolhida = (leitura?.alvos || [])
+      .find(a => normalizarOpcao(a.nome) === normalizarOpcao(nome));
+
+    if (!escolhida) {
+      showToast('Escolha uma empresa da lista — o sistema precisa do registro', 'error');
+      desenharItens();
+      return;
+    }
+
+    try {
+      const salvo = await salvarItem(item.id, {
+        alvo_id: escolhida.id,
+        ...(escolhida.tabela ? { alvo_tabela: escolhida.tabela } : {})
+      });
+      atualizarEmMemoria(salvo);
+      absorverSituacao(salvo);
+      // A grade inteira: o bloco comercial da linha acabou de mudar de dono.
+      desenharItens();
+      showToast(`Linha apontada para ${escolhida.nome}`, 'success');
+    } catch (err) {
+      showToast(err?.message || 'Não foi possível apontar a empresa', 'error');
+      const campo = document.querySelector(`[data-campo-id="${item.id}:cliente"]`);
+      if (campo) campo.value = anterior;
+    }
   }
 
   /**
@@ -1104,6 +1199,20 @@
   /** Datalists de categoria/unidade, para o revisor encaixar no que já existe. */
   /** Chaves cujas opções são TABELA: aceita digitar para procurar, não para criar. */
   const restritos = () => new Set(leitura?.sugestoes?.__restritos || []);
+
+  /**
+   * O campo só aceita o que existe no banco?
+   *
+   * Duas fontes de verdade, e as duas contam: a leitura marca os campos que são
+   * TABELA (unidade, etapa, peça), e a linha traz os que dependem do cliente
+   * apontado (contato, transportadora). O cliente em si é sempre restrito — é
+   * ele que amarra o pedido a um registro.
+   */
+  const SEMPRE_RESTRITOS = new Set(['cliente', 'contato', 'transportadora']);
+
+  const ehRestrito = (chave, opcoes) =>
+    Boolean(Array.isArray(opcoes) && opcoes.length
+      && (restritos().has(chave) || SEMPRE_RESTRITOS.has(chave)));
 
   function pintarSugestoes() {
     const sugestoes = leitura?.sugestoes || {};

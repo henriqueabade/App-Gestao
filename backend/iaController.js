@@ -246,14 +246,22 @@ async function alvosDoDestino(api, destino) {
     const linhas = await registrosAlvo(api, destino);
     const varias = esquemas.tabelasAlvoDo(destino).length > 1;
     return linhas
-      .map(l => ({
-        id: l.id,
-        // Com duas tabelas, o nome sozinho é ambíguo: a mesma empresa pode
-        // estar nas duas, e o revisor precisa ver qual ele está escolhendo.
-        nome: varias ? `${l[esquema.campoDeExibicao]} (${l._rotulo})` : l[esquema.campoDeExibicao],
-        tabela: l._tabela
-      }))
-      .filter(l => l.id && l.nome)
+      .map(l => {
+        // Cadastro pela metade existe: registro sem nome de exibição. Montar o
+        // rótulo antes de conferir transformava o vazio no TEXTO "null", que é
+        // verdadeiro e passava pelo filtro — e a lista de escolha oferecia
+        // "null (Cliente)" para se apontar um pedido.
+        const nome = texto(l?.[esquema.campoDeExibicao]);
+        if (!nome) return null;
+        return {
+          id: l.id,
+          // Com duas tabelas, o nome sozinho é ambíguo: a mesma empresa pode
+          // estar nas duas, e o revisor precisa ver qual ele está escolhendo.
+          nome: varias ? `${nome} (${l._rotulo})` : nome,
+          tabela: l._tabela
+        };
+      })
+      .filter(l => l && l.id && l.nome)
       .sort((a, b) => String(a.nome).localeCompare(String(b.nome)));
   } catch (_) {
     return [];
@@ -739,13 +747,17 @@ router.get('/:id', exigirPermissao('ia.details.view'), async (req, res) => {
     // e a mesma anotação responde.
     let materias = [];
     let etapas = [];
+    let empresa = null;
     if (extracao.destino === 'produto_insumos') {
       [materias, etapas] = await Promise.all([
         api.get('/api/materia_prima').then(listaDe).catch(() => []),
         api.get('/api/etapas_producao').then(listaDe).catch(() => [])
       ]);
     } else if (extracao.destino === 'orcamentos') {
-      materias = await catalogoDeProdutos(api);
+      [materias, empresa] = await Promise.all([
+        catalogoDeProdutos(api),
+        contextoDeEmpresa(api, extracao.destino, alvos)
+      ]);
     }
 
     res.json({
@@ -794,7 +806,7 @@ router.get('/:id', exigirPermissao('ia.details.view'), async (req, res) => {
           return {
             id: i.id,
             linha: Number(i.linha) || 0,
-            dados: anotarCasamento(extracao.destino, valor, materias, etapas),
+            ...anotarLinha(extracao.destino, valor, i, { materias, etapas, empresa }),
             dados_corrompidos: !ok,
             acao: i.acao || 'criar',
             alvo_tabela: i.alvo_tabela || null,
@@ -900,6 +912,174 @@ function anotarProdutos(dados, produtos) {
       };
     })
   };
+}
+
+/**
+ * Tudo o que a grade precisa saber sobre uma linha: os dados anotados e as
+ * opções de cada campo.
+ *
+ * As opções são por LINHA e não por leitura porque dependem do cliente
+ * apontado: os contatos são os DAQUELE cliente, e duas linhas do mesmo pedido
+ * podem apontar clientes diferentes. As de `sugestoes` continuam valendo para
+ * o que é igual na leitura inteira.
+ */
+function anotarLinha(destino, dados, item, ctx) {
+  const anotados = anotarCasamento(destino, dados, ctx.materias, ctx.etapas);
+  const { dados: comEmpresa, opcoes } = anotarEmpresa(anotados, item, ctx.empresa);
+  return { dados: comEmpresa, opcoes };
+}
+
+/**
+ * O que `anotarEmpresa` precisa saber, montado uma vez por requisição.
+ *
+ * `alvos` já vem carregado pelas duas rotas — reusá-lo evita uma terceira
+ * varredura de clientes e prospecções por leitura aberta.
+ */
+async function contextoDeEmpresa(api, destino, alvos) {
+  const esquema = esquemas.obterEsquema(destino);
+  const [cadastroClientes, linhas] = await Promise.all([
+    cadastroDosClientes(api),
+    registrosAlvo(api, destino).catch(() => [])
+  ]);
+
+  // A chave é TABELA + ID: o id sozinho é ambíguo quando o destino procura em
+  // duas tabelas, e o cliente 50 não é a prospecção 50.
+  const porChave = new Map();
+  for (const l of linhas) {
+    const id = Number(l?.id);
+    if (!Number.isFinite(id)) continue;
+    porChave.set(`${l._tabela}:${id}`, {
+      id,
+      tabela: l._tabela,
+      // O nome LIMPO, sem o "(Cliente)" que a lista de escolha acrescenta para
+      // desambiguar: o que vai para o campo é o nome da empresa, não o rótulo
+      // da tabela em que ela mora.
+      nome: texto(l?.[esquema?.campoDeExibicao]),
+      registro: l
+    });
+  }
+
+  return {
+    cadastroClientes,
+    porChave,
+    // A lista de escolha, essa sim com o sufixo — é ela que a pessoa lê.
+    nomesDeAlvo: (Array.isArray(alvos) ? alvos : []).map(a => a.nome).filter(Boolean)
+  };
+}
+
+/**
+ * O que o cadastro do CLIENTE tem para oferecer a cada linha do pedido.
+ *
+ * Uma consulta por cliente seria uma por linha da grade; estas duas trazem
+ * tudo de uma vez e agrupam por id, que é como todo consumidor quer.
+ */
+async function cadastroDosClientes(api) {
+  const [contatos, transportadoras] = await Promise.all([
+    api.get('/api/contatos_cliente').then(listaDe).catch(() => []),
+    api.get('/api/transportadoras').then(listaDe).catch(() => [])
+  ]);
+
+  const agrupar = (linhas, campoNome) => {
+    const mapa = new Map();
+    for (const l of linhas) {
+      const id = Number(l?.id_cliente);
+      if (!Number.isFinite(id)) continue;
+      const nome = texto(l?.[campoNome]).trim();
+      if (!nome) continue;
+      if (!mapa.has(id)) mapa.set(id, []);
+      mapa.get(id).push({ id: Number(l.id), nome });
+    }
+    return mapa;
+  };
+
+  return {
+    // A coluna chama `transportadora`, não `nome` — é o nome dela na tabela.
+    contatos: agrupar(contatos, 'nome'),
+    transportadoras: agrupar(transportadoras, 'transportadora')
+  };
+}
+
+/**
+ * Preenche o bloco comercial do pedido a partir do CLIENTE apontado.
+ *
+ * O pedido nasce preso a uma empresa, e o cadastro dela já sabe a razão
+ * social, o CNPJ, quem é o contato e por quem se entrega. Deixar esses campos
+ * como o documento os escreveu significava mandar para o orçamento um texto
+ * que o formulário ignora — ele quer o ID do contato, não o nome.
+ *
+ * A regra é: o que o documento trouxe VALE, se existir no cadastro. Não
+ * existindo, e havendo uma só opção, ela entra — é o que o sistema sabe, e
+ * saber é melhor que deixar em branco. Havendo várias e nenhuma batendo, fica
+ * vazio para a pessoa escolher; a grade oferece a lista.
+ *
+ * Devolve também as OPÇÕES de cada campo, que são por LINHA e não por leitura:
+ * os contatos são os daquele cliente, e duas linhas do mesmo pedido podem
+ * apontar clientes diferentes.
+ */
+function anotarEmpresa(dados, item, ctx) {
+  if (!ctx?.porChave) return { dados, opcoes: {} };
+
+  // A lista de empresas não depende de qual delas foi apontada: ela existe
+  // JUSTAMENTE para a linha que ainda não tem uma. Sem isto, a linha travada
+  // ficava com um campo de texto livre — que é o que a pessoa não pode usar.
+  const semAlvo = { dados, opcoes: { cliente: ctx.nomesDeAlvo || [] } };
+
+  const alvo = ctx.porChave.get(`${item?.alvo_tabela}:${Number(item?.alvo_id)}`);
+  if (!alvo || !alvo.nome) return semAlvo;
+
+  const opcoes = { cliente: ctx.nomesDeAlvo || [] };
+  const saida = { ...dados };
+  const origem = {};
+  const lidos = {};
+
+  // O nome da empresa passa a ser o do CADASTRO. É ele que identifica o
+  // registro, e é contra ele que a pessoa confere na próxima vez.
+  const nomeLido = texto(dados?.cliente);
+  if (nomeLido && normalizarTexto(nomeLido) !== normalizarTexto(alvo.nome)) {
+    lidos.cliente = nomeLido;
+  }
+  saida.cliente = alvo.nome;
+  origem.cliente = 'cadastro';
+
+  // Razão social e CNPJ não se escolhem: são do registro, e mudam só quando o
+  // cliente muda.
+  if (alvo.tabela === 'clientes') {
+    for (const [chave, coluna] of [['razao_social', 'razao_social'], ['cnpj', 'cnpj']]) {
+      const doCadastro = texto(alvo.registro?.[coluna]);
+      if (!doCadastro) continue;
+      const lido = texto(dados?.[chave]);
+      if (lido && normalizarTexto(lido) !== normalizarTexto(doCadastro)) lidos[chave] = lido;
+      saida[chave] = doCadastro;
+      origem[chave] = 'cadastro';
+    }
+  }
+
+  for (const [chave, mapa] of [
+    ['contato', ctx.cadastroClientes.contatos],
+    ['transportadora', ctx.cadastroClientes.transportadoras]
+  ]) {
+    const lista = (alvo.tabela === 'clientes' ? mapa.get(Number(alvo.id)) : null) || [];
+    opcoes[chave] = lista.map(o => o.nome);
+    if (!lista.length) continue;
+
+    const lido = texto(dados?.[chave]);
+    const achado = lista.find(o => normalizarTexto(o.nome) === normalizarTexto(lido));
+
+    if (achado) { saida[chave] = achado.nome; origem[chave] = 'cadastro'; continue; }
+    // Uma opção só: é o que o sistema sabe, e saber é melhor que branco.
+    if (lista.length === 1) {
+      if (lido) lidos[chave] = lido;
+      saida[chave] = lista[0].nome;
+      origem[chave] = 'cadastro';
+      continue;
+    }
+    // Várias e nenhuma batendo: fica para a pessoa escolher da lista.
+    if (lido) { lidos[chave] = lido; saida[chave] = null; }
+  }
+
+  if (Object.keys(origem).length) saida._origem = origem;
+  if (Object.keys(lidos).length) saida._lidos = lidos;
+  return { dados: saida, opcoes };
 }
 
 /**
@@ -1415,13 +1595,18 @@ router.put('/:id/itens/:itemId', exigirPermissao('ia.review.edit'), async (req, 
     // perder os marcadores ao ser corrigida.
     let materias = [];
     let etapas = [];
+    let empresa = null;
     if (extracao.destino === 'produto_insumos') {
       [materias, etapas] = await Promise.all([
         api.get('/api/materia_prima').then(listaDe).catch(() => []),
         api.get('/api/etapas_producao').then(listaDe).catch(() => [])
       ]);
     } else if (extracao.destino === 'orcamentos') {
-      materias = await catalogoDeProdutos(api);
+      const alvos = await alvosDoDestino(api, extracao.destino);
+      [materias, empresa] = await Promise.all([
+        catalogoDeProdutos(api),
+        contextoDeEmpresa(api, extracao.destino, alvos)
+      ]);
     }
 
     // Marcar a última linha como resolvida fecha a leitura.
@@ -1434,7 +1619,7 @@ router.put('/:id/itens/:itemId', exigirPermissao('ia.review.edit'), async (req, 
       // cabeçalho continuaria dizendo "Em revisão" até alguém reabrir.
       leitura_status: situacao,
       leitura_status_rotulo: SITUACOES.find(s => s.id === situacao)?.rotulo || situacao,
-      dados: anotarCasamento(extracao.destino, lerDados(salvo.dados).valor, materias, etapas),
+      ...anotarLinha(extracao.destino, lerDados(salvo.dados).valor, salvo, { materias, etapas, empresa }),
       acao: salvo.acao,
       alvo_id: salvo.alvo_id ?? null,
       alvo_tabela: salvo.alvo_tabela || null,

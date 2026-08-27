@@ -235,7 +235,11 @@ function criarBancada({ leitura, respostaPut, respostaAplicar, respostaExtrair,
     get activeElement() { return foco.atual; },
     addEventListener() {},
     removeEventListener() {},
-    getElementById: id => elementos.get(id) || null,
+    // O mapa tem os ids do HTML; a ÁRVORE tem os que o módulo cria em tempo de
+    // execução — as listas de opções de cada linha, por exemplo. O DOM de
+    // verdade acha os dois, e um duplo que só olha o mapa faria o módulo criar
+    // um elemento novo a cada redesenho sem ninguém notar.
+    getElementById: id => elementos.get(id) || raiz.todos().find(f => f.id === id) || null,
     createElement: tag => criarElemento(tag),
     // O resumo monta a frase com nó de texto entre os números — sem isto o
     // módulo estoura e o erro vira um toast, deixando a grade vazia.
@@ -2968,4 +2972,174 @@ test('numa ficha de insumos, trocar o nome não inventa um campo código', async
   const enviado = b.chamadas.find(c => c.metodo === 'PUT').corpo.dados.insumos[0];
   assert.strictEqual('codigo' in enviado, false);
   assert.strictEqual(enviado.nome, 'MDF 15mm Branco TX');
+});
+
+// ---------------------------------------------------------------------------
+// ETAPA 39 PARTE 2 — o cliente preenche o bloco comercial
+// ---------------------------------------------------------------------------
+
+/** Uma leitura de pedido com o bloco comercial na grade. */
+function pedidoComEmpresa(dadosExtra = {}, opcoes = {}) {
+  return leituraPadrao({
+    destino: 'orcamentos', destino_rotulo: 'Orçamentos',
+    exige_alvo: true, rotulo_alvo: 'Cliente ou prospecção',
+    alvos: [
+      { id: 50, nome: 'Casa Vicenzo (Cliente)', tabela: 'clientes' },
+      { id: 30, nome: 'Marcenaria Serrana (Prospecção)', tabela: 'prospeccoes' }
+    ],
+    campos: [
+      { chave: 'cliente', rotulo: 'Cliente', tipo: 'texto', obrigatorio: true, largura: 'grande', naGrade: true },
+      { chave: 'razao_social', rotulo: 'Razão social', tipo: 'texto', largura: 'media', naGrade: true },
+      { chave: 'contato', rotulo: 'Contato', tipo: 'texto', largura: 'media', naGrade: true },
+      { chave: 'transportadora', rotulo: 'Transportadora', tipo: 'texto', largura: 'media', naGrade: true }
+    ],
+    sugestoes: {},
+    itens: [{
+      id: 1, linha: 1, acao: 'criar', alvo_id: 50, alvo_tabela: 'clientes',
+      status: 'pendente', mensagem: null,
+      opcoes: {
+        cliente: ['Casa Vicenzo (Cliente)', 'Marcenaria Serrana (Prospecção)'],
+        contato: ['Lílian', 'Rogério'],
+        transportadora: ['Rodonaves'],
+        ...opcoes
+      },
+      dados: {
+        cliente: 'Casa Vicenzo',
+        razao_social: 'Vicenzo Ltda',
+        contato: null,
+        transportadora: 'Rodonaves',
+        _origem: { cliente: 'cadastro', razao_social: 'cadastro', transportadora: 'cadastro' },
+        ...dadosExtra
+      }
+    }]
+  });
+}
+
+const campoDe = (b, chave) => camposDa(linhasDeItem(b)[0]).find(f => f.dataset.chave === chave);
+
+test('cliente, contato e transportadora são caixas de seleção', async () => {
+  const b = criarBancada({ leitura: pedidoComEmpresa() });
+  await b.pronta();
+
+  // Os três apontam REGISTROS. Digitar um nome livre num deles cria um texto
+  // que o formulário do orçamento ignora — ele quer o id.
+  for (const chave of ['cliente', 'contato', 'transportadora']) {
+    assert.ok(campoDe(b, chave).classList.contains('ia-campo--lista'),
+      `${chave} não anuncia que é uma lista`);
+    assert.ok(campoDe(b, chave).getAttribute('list'), `${chave} ficou sem lista ligada`);
+  }
+});
+
+test('as opções são as do CLIENTE daquela linha', async () => {
+  const b = criarBancada({ leitura: pedidoComEmpresa() });
+  await b.pronta();
+
+  // Duas linhas do mesmo pedido podem apontar clientes diferentes. Uma lista
+  // por chave, comum à leitura, ofereceria a uma delas os contatos da outra.
+  const lista = b.janela.document.getElementById(campoDe(b, 'contato').getAttribute('list'));
+  assert.deepEqual(lista.filhos.map(o => o.value), ['Lílian', 'Rogério']);
+});
+
+test('o que veio do cadastro não se digita', async () => {
+  const b = criarBancada({ leitura: pedidoComEmpresa() });
+  await b.pronta();
+
+  // Razão social é do registro: muda quando o cliente muda. Digitá-la à mão
+  // criaria um orçamento que diz uma coisa e aponta para outra.
+  assert.equal(campoDe(b, 'razao_social').readOnly, true);
+  assert.ok(campoDe(b, 'razao_social').classList.contains('ia-campo--fixo'));
+
+  // E travado de verdade: sem a saída antecipada, a escuta de `change` fica
+  // pendurada e um valor posto por fora — restauração de trabalho, autofill do
+  // navegador — gravaria por cima do que veio do cadastro.
+  campoDe(b, 'razao_social').value = 'Outra Coisa Ltda';
+  campoDe(b, 'razao_social').disparar('change');
+  await b.pronta();
+  assert.equal(b.chamadas.some(c => c.metodo === 'PUT'), false, 'gravou um campo travado');
+
+  // O cliente, não: é justamente por ele que se troca o resto.
+  assert.equal(campoDe(b, 'cliente').readOnly, false);
+  // E a transportadora tem alternativas no banco — escolher outra é legítimo.
+  assert.equal(campoDe(b, 'transportadora').readOnly, false);
+});
+
+test('trocar o cliente re-aponta a linha, não grava um texto', async () => {
+  const b = criarBancada({ leitura: pedidoComEmpresa() });
+  await b.pronta();
+
+  const cliente = campoDe(b, 'cliente');
+  cliente.value = 'Marcenaria Serrana (Prospecção)';
+  cliente.disparar('change');
+  await b.pronta();
+
+  // O que o formulário precisa é o id e a tabela. Gravar o texto faria a linha
+  // continuar apontando o cliente antigo, com a tela dizendo outra coisa.
+  const put = b.chamadas.find(c => c.metodo === 'PUT');
+  assert.equal(put.corpo.alvo_id, 30);
+  assert.equal(put.corpo.alvo_tabela, 'prospeccoes');
+  assert.equal(put.corpo.dados, undefined, 'gravou o nome como texto');
+});
+
+test('empresa fora da lista é recusada', async () => {
+  const b = criarBancada({ leitura: pedidoComEmpresa() });
+  await b.pronta();
+
+  const cliente = campoDe(b, 'cliente');
+  cliente.value = 'Empresa Que Não Existe';
+  cliente.disparar('change');
+  await b.pronta();
+
+  assert.equal(b.chamadas.some(c => c.metodo === 'PUT'), false);
+  assert.match(b.toasts.at(-1).msg, /não está cadastrado|da lista/);
+});
+
+test('contato fora da lista do cliente é recusado', async () => {
+  const b = criarBancada({ leitura: pedidoComEmpresa() });
+  await b.pronta();
+
+  const contato = campoDe(b, 'contato');
+  contato.value = 'Fulano de Tal';
+  contato.disparar('change');
+  await b.pronta();
+
+  // O orçamento quer o ID do contato. Um nome que não está no cadastro daquele
+  // cliente vira texto que ele ignora em silêncio.
+  assert.equal(b.chamadas.some(c => c.metodo === 'PUT'), false);
+  assert.match(b.toasts.at(-1).msg, /não está cadastrado/);
+});
+
+test('contato da lista grava normalmente', async () => {
+  const b = criarBancada({ leitura: pedidoComEmpresa() });
+  await b.pronta();
+
+  const contato = campoDe(b, 'contato');
+  contato.value = 'Rogério';
+  contato.disparar('change');
+  await b.pronta();
+
+  const put = b.chamadas.find(c => c.metodo === 'PUT');
+  assert.deepEqual(put.corpo, { dados: { contato: 'Rogério' } });
+});
+
+test('sem cliente apontado, os campos voltam a ser texto livre', async () => {
+  const leitura = pedidoComEmpresa();
+  leitura.itens[0] = {
+    ...leitura.itens[0], alvo_id: null, alvo_tabela: null,
+    // Sem empresa apontada, o backend ainda manda a lista DELAS: é justamente
+    // a linha travada que precisa escolher uma.
+    opcoes: { cliente: ['Casa Vicenzo (Cliente)', 'Marcenaria Serrana (Prospecção)'] },
+    dados: { cliente: 'Empresa Que Não Existe', razao_social: null, contato: 'Fulano', transportadora: null }
+  };
+
+  const b = criarBancada({ leitura });
+  await b.pronta();
+
+  // Sem cadastro de onde puxar, travar os campos deixaria a pessoa com uma
+  // linha vazia e sem como preenchê-la.
+  assert.equal(campoDe(b, 'razao_social').readOnly, false);
+  assert.equal(campoDe(b, 'contato').readOnly, false);
+  assert.equal(campoDe(b, 'contato').classList.contains('ia-campo--lista'), false);
+
+  // O cliente segue restrito: é ele que amarra a linha a um registro.
+  assert.ok(campoDe(b, 'cliente').classList.contains('ia-campo--lista'));
 });

@@ -69,6 +69,8 @@ const COLUNAS = {
     'cob_logradouro', 'cob_numero', 'cob_complemento', 'cob_bairro', 'cob_cidade', 'cob_uf', 'cob_pais', 'cob_cep',
     'ent_logradouro', 'ent_numero', 'ent_complemento', 'ent_bairro', 'ent_cidade', 'ent_uf', 'ent_pais', 'ent_cep'],
   contatos_cliente: ['id', 'id_cliente', 'nome', 'cargo', 'email', 'telefone_fixo', 'telefone_celular'],
+  // A coluna do nome chama `transportadora`, não `nome` — é assim na tabela.
+  transportadoras: ['id', 'id_cliente', 'transportadora'],
   orcamentos: ['id', 'numero', 'cliente_id', 'contato_id', 'prospeccao_id', 'prospeccao_contato_id',
     'data_emissao', 'situacao', 'parcelas', 'tipo_parcela', 'forma_pagamento', 'transportadora',
     'desconto_pagamento', 'desconto_especial', 'desconto_total', 'valor_final', 'observacoes',
@@ -3497,9 +3499,23 @@ function baseOrcamento() {
   const dados = baseDados();
   dados.clientes = [
     { id: 50, nome_fantasia: 'Casa Vicenzo', razao_social: 'Vicenzo Ltda', cnpj: '11.111.111/0001-11' },
-    { id: 51, nome_fantasia: 'Decor Alpina', cnpj: null }
+    { id: 51, nome_fantasia: 'Decor Alpina', cnpj: null },
+    // Cadastro pela metade: existe, tem id, e nao tem nome de exibicao.
+    { id: 52, nome_fantasia: null, razao_social: 'Sem Nome Ltda', cnpj: null }
   ];
-  dados.contatos_cliente = [];
+  // Casa Vicenzo tem DOIS contatos e UMA transportadora: com dois, nenhum se
+  // escolhe sozinho; com uma, ela é o que o sistema sabe. Decor Alpina não tem
+  // nenhum — é o caso em que não há o que preencher.
+  dados.contatos_cliente = [
+    { id: 7, id_cliente: 50, nome: 'Lílian', cargo: 'Compras' },
+    { id: 8, id_cliente: 50, nome: 'Rogério', cargo: 'Financeiro' },
+    // Este existe para provar que a busca olha a TABELA e nao so o id: 30 e o
+    // id da prospeccao Marcenaria Serrana, e tambem o de um cliente aqui.
+    { id: 9, id_cliente: 30, nome: 'Contato De Outro Cliente', cargo: 'Compras' }
+  ];
+  dados.transportadoras = [
+    { id: 3, id_cliente: 50, transportadora: 'Rodonaves' }
+  ];
   // O orçamento procura nas DUAS tabelas: a empresa lida tanto pode ser um
   // cliente quanto uma prospecção, e o documento não diz qual.
   dados.prospeccoes = [
@@ -6207,6 +6223,249 @@ test('a instrução do preço maior chega aos dois destinos que têm preço', ()
       : esquemas.ESQUEMAS[destino];
     assert.match(esquema.instrucoes, /use SEMPRE o MAIOR/,
       `${destino} não diz ao modelo qual preço usar`);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// ETAPA 39 PARTE 2 — o cliente apontado preenche o bloco comercial
+// ---------------------------------------------------------------------------
+
+const pedidoDe = (extra = {}) => ({
+  itens: [{
+    cliente: 'Casa Vicenzo', razao_social: null, cnpj: null, validade: null,
+    prazo: null, forma_pagamento: null, condicao_pagamento: null, parcelas: null,
+    transportadora: null, contato: null, observacoes: null,
+    itens: [{ codigo: 'PR-210', nome: 'Painel Ripado 2,10', quantidade: '1', valor_unitario: null }],
+    ...extra
+  }]
+});
+
+test('casou com o cliente: razao social e CNPJ vem do cadastro', async () => {
+  const ctx = await prepararOrcamento(pedidoDe());
+  try {
+    const linha = (await (await chamar(ctx.porta, '/api/ia/5')).json()).itens[0];
+
+    // O documento nao trouxe nem um nem outro, e o cadastro tem os dois. Deixar
+    // em branco mandaria para o orcamento uma empresa pela metade.
+    assert.strictEqual(linha.dados.razao_social, 'Vicenzo Ltda');
+    assert.strictEqual(linha.dados.cnpj, '11.111.111/0001-11');
+
+    // E os dois ficam marcados como do cadastro: e o que faz a tela trava-los.
+    assert.strictEqual(linha.dados._origem.razao_social, 'cadastro');
+    assert.strictEqual(linha.dados._origem.cnpj, 'cadastro');
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('uma transportadora so e a que o sistema sabe', async () => {
+  const ctx = await prepararOrcamento(pedidoDe());
+  try {
+    const linha = (await (await chamar(ctx.porta, '/api/ia/5')).json()).itens[0];
+
+    // Havendo uma opcao so, ela entra: saber e melhor que deixar em branco.
+    assert.strictEqual(linha.dados.transportadora, 'Rodonaves');
+    assert.strictEqual(linha.dados._origem.transportadora, 'cadastro');
+    assert.deepStrictEqual(linha.opcoes.transportadora, ['Rodonaves']);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('dois contatos e nenhum escrito: a pessoa escolhe', async () => {
+  const ctx = await prepararOrcamento(pedidoDe());
+  try {
+    const linha = (await (await chamar(ctx.porta, '/api/ia/5')).json()).itens[0];
+
+    // Com dois, escolher um seria sorteio — e o contato errado num orcamento
+    // manda a proposta para a pessoa errada da empresa certa.
+    assert.strictEqual(linha.dados.contato ?? null, null);
+    assert.deepStrictEqual(linha.opcoes.contato.slice().sort(), ['Lílian', 'Rogério']);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('o contato que o documento trouxe VALE, se existir no cadastro', async () => {
+  const ctx = await prepararOrcamento(pedidoDe({ contato: 'lilian' }));
+  try {
+    const linha = (await (await chamar(ctx.porta, '/api/ia/5')).json()).itens[0];
+
+    // O documento e a fonte quando o cadastro confirma. E o que volta e a
+    // grafia do CADASTRO: e ela que o formulario do orcamento reconhece.
+    assert.strictEqual(linha.dados.contato, 'Lílian');
+    assert.strictEqual(linha.dados._origem.contato, 'cadastro');
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('contato que nao existe no cadastro nao vai para o orcamento', async () => {
+  const ctx = await prepararOrcamento(pedidoDe({ contato: 'Fulano de Tal' }));
+  try {
+    const linha = (await (await chamar(ctx.porta, '/api/ia/5')).json()).itens[0];
+
+    // O formulario quer o ID do contato. Um nome que nao esta no cadastro vira
+    // texto que ele ignora em silencio — e o orcamento sai sem contato nenhum
+    // sem ninguem perceber.
+    assert.strictEqual(linha.dados.contato ?? null, null);
+
+    // Mas o que o documento dizia nao se perde: e o que a pessoa confere.
+    assert.strictEqual(linha.dados._lidos.contato, 'Fulano de Tal');
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('o nome da empresa passa a ser o do cadastro', async () => {
+  const ctx = await prepararOrcamento(pedidoDe({ cliente: 'Vicenzo Ltda' }));
+  try {
+    const linha = (await (await chamar(ctx.porta, '/api/ia/5')).json()).itens[0];
+
+    // E o nome do cadastro que identifica o registro, e e contra ele que a
+    // pessoa confere na proxima vez. Sem o sufixo "(Cliente)", que existe so
+    // para desambiguar a LISTA de escolha.
+    assert.strictEqual(linha.dados.cliente, 'Casa Vicenzo');
+    assert.strictEqual(linha.dados._lidos.cliente, 'Vicenzo Ltda');
+    assert.ok(linha.opcoes.cliente.includes('Casa Vicenzo (Cliente)'));
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('cliente sem contato nem transportadora nao inventa nada', async () => {
+  const ctx = await prepararOrcamento(pedidoDe({ cliente: 'Decor Alpina' }));
+  try {
+    const linha = (await (await chamar(ctx.porta, '/api/ia/5')).json()).itens[0];
+
+    assert.strictEqual(linha.dados.cliente, 'Decor Alpina');
+    assert.deepStrictEqual(linha.opcoes.contato, []);
+    assert.deepStrictEqual(linha.opcoes.transportadora, []);
+    // Sem cadastro para copiar, nada e travado — senao a pessoa ficaria com um
+    // campo vazio e sem como preenche-lo.
+    assert.strictEqual(linha.dados._origem?.contato, undefined);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('linha sem empresa apontada fica como o documento escreveu', async () => {
+  const ctx = await prepararOrcamento(
+    pedidoDe({ cliente: 'Empresa Que Nao Existe', contato: 'Fulano' }));
+  try {
+    const linha = (await (await chamar(ctx.porta, '/api/ia/5')).json()).itens[0];
+
+    // Sem empresa, nao ha cadastro de onde puxar. Apagar o que o documento
+    // trouxe deixaria a pessoa sem nada para conferir.
+    assert.strictEqual(linha.alvo_id, null);
+    assert.strictEqual(linha.dados.cliente, 'Empresa Que Nao Existe');
+    assert.strictEqual(linha.dados.contato, 'Fulano');
+    assert.strictEqual(linha.dados._origem, undefined);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('apontar a empresa preenche o bloco comercial na hora', async () => {
+  const ctx = await prepararOrcamento(pedidoDe({ cliente: 'Empresa Que Nao Existe' }));
+  try {
+    const item = itensDa(ctx, 5)[0];
+    const salvo = await (await chamar(ctx.porta, `/api/ia/5/itens/${item.id}`, {
+      method: 'PUT',
+      body: JSON.stringify({ alvo_id: 50, alvo_tabela: 'clientes' })
+    })).json();
+
+    // Escolher a empresa e o gesto que traz tudo junto. Sem isto a pessoa
+    // apontava o cliente e continuava com a linha vazia, tendo de preencher a
+    // mao o que o sistema ja sabia.
+    assert.strictEqual(salvo.dados.cliente, 'Casa Vicenzo');
+    assert.strictEqual(salvo.dados.razao_social, 'Vicenzo Ltda');
+    assert.strictEqual(salvo.dados.transportadora, 'Rodonaves');
+    assert.deepStrictEqual(salvo.opcoes.contato.slice().sort(), ['Lílian', 'Rogério']);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('prospeccao nao tem contato de cliente, e nao finge que tem', async () => {
+  const ctx = await prepararOrcamento(pedidoDe({ cliente: 'Marcenaria Serrana' }));
+  try {
+    const linha = (await (await chamar(ctx.porta, '/api/ia/5')).json()).itens[0];
+
+    assert.strictEqual(linha.alvo_tabela, 'prospeccoes');
+    assert.strictEqual(linha.dados.cliente, 'Marcenaria Serrana');
+    // `contatos_cliente` e do cliente. Buscar o id 30 la dentro devolveria os
+    // contatos de OUTRA empresa — a que por acaso tem o id 30 em clientes.
+    assert.deepStrictEqual(linha.opcoes.contato, []);
+    assert.strictEqual(linha.dados._origem?.razao_social, undefined);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('registro sem nome nao aparece na lista de escolha', async () => {
+  const ctx = await prepararOrcamento(pedidoDe());
+  try {
+    const detalhe = await (await chamar(ctx.porta, '/api/ia/5')).json();
+
+    // Montar o rotulo antes de conferir o nome transformava o vazio no TEXTO
+    // "null", que e verdadeiro e passava pelo filtro: a lista oferecia
+    // "null (Cliente)" para se apontar um pedido.
+    for (const alvo of detalhe.alvos) {
+      assert.doesNotMatch(alvo.nome, /^null|undefined/,
+        `a lista oferece "${alvo.nome}"`);
+    }
+    assert.strictEqual(detalhe.alvos.some(a => Number(a.id) === 52), false);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('a lista de empresas existe MESMO sem empresa apontada', async () => {
+  const ctx = await prepararOrcamento(pedidoDe({ cliente: 'Empresa Que Nao Existe' }));
+  try {
+    const linha = (await (await chamar(ctx.porta, '/api/ia/5')).json()).itens[0];
+
+    // E justamente a linha travada que precisa escolher uma. Mandar a lista so
+    // depois de ela ja ter dono deixaria o campo como texto livre exatamente
+    // quando o texto livre nao serve para nada.
+    assert.strictEqual(linha.alvo_id, null);
+    assert.ok(linha.opcoes.cliente.includes('Casa Vicenzo (Cliente)'));
+    assert.ok(linha.opcoes.cliente.includes('Marcenaria Serrana (Prospecção)'));
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('cadastro sem nome de exibicao nao apaga o que o documento escreveu', async () => {
+  const ctx = await prepararOrcamento(pedidoDe({ cliente: 'Empresa Que Nao Existe' }));
+  try {
+    const item = itensDa(ctx, 5)[0];
+    const salvo = await (await chamar(ctx.porta, `/api/ia/5/itens/${item.id}`, {
+      method: 'PUT', body: JSON.stringify({ alvo_id: 52, alvo_tabela: 'clientes' })
+    })).json();
+
+    // O cliente 52 existe e nao tem nome fantasia. Copiar o vazio por cima
+    // deixaria a linha sem nada escrito no campo obrigatorio — e a pessoa sem
+    // saber de que empresa a linha falava.
+    assert.strictEqual(salvo.dados.cliente, 'Empresa Que Nao Existe');
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('o contato vem da TABELA certa, nao so do id', async () => {
+  const ctx = await prepararOrcamento(pedidoDe({ cliente: 'Marcenaria Serrana' }));
+  try {
+    const linha = (await (await chamar(ctx.porta, '/api/ia/5')).json()).itens[0];
+
+    // A prospeccao tem id 30, e existe um contato de CLIENTE com id_cliente 30.
+    // Procurar so pelo id ofereceria a esta linha o contato de outra empresa —
+    // e o orcamento sairia endereçado a uma pessoa que nao trabalha la.
+    assert.strictEqual(linha.alvo_tabela, 'prospeccoes');
+    assert.deepStrictEqual(linha.opcoes.contato, []);
+  } finally {
+    await ctx.encerrar();
   }
 });
 
