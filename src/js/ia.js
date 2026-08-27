@@ -369,7 +369,19 @@ function renderTabela(lista) {
             <td class="px-4 py-3 whitespace-nowrap text-left">
                 <div class="flex items-center justify-start space-x-2">
                     ${acao({ perm: 'ia.details.view', icone: 'fa-eye', classe: 'acao-tabela--ver', gancho: 'acao-ver', titulo: 'Abrir a leitura' })}
-                    ${acao({ perm: 'ia.delete', icone: 'fa-trash', classe: 'acao-tabela--excluir', gancho: 'acao-excluir', titulo: 'Excluir', travada: aplicada && 'Leitura já aplicada — os registros criados por ela permanecem nos módulos' })}
+                    ${acao({
+                        perm: 'ia.delete', icone: 'fa-trash',
+                        classe: 'acao-tabela--excluir', gancho: 'acao-excluir',
+                        titulo: aplicada
+                            ? 'Excluir — os registros criados continuam nos módulos'
+                            : 'Excluir',
+                        // Leitura aplicada é registro do que aconteceu, e o
+                        // revisor comum não a apaga. O Sup Admin apaga: é o
+                        // remédio para o que não deveria estar guardado, e não
+                        // há outra forma de tirá-la.
+                        travada: aplicada && !window.Permissoes?.supAdmin
+                            && 'Leitura já aplicada — só o Sup Admin pode excluí-la'
+                    })}
                 </div>
             </td>`;
 

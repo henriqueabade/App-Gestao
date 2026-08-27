@@ -563,6 +563,20 @@
         tdStatus.style.color = COR_STATUS[item.status] || 'rgba(255,255,255,0.7)';
         tdStatus.textContent = ROTULO_STATUS[item.status] || item.status || '—';
       }
+
+      // Excluir a linha. Só o Sup Admin, e vale para QUALQUER uma — inclusive
+      // a já aplicada, que nenhuma outra ação alcança.
+      if (leitura?.pode_excluir_linha) {
+        const excluir = document.createElement('button');
+        excluir.type = 'button';
+        excluir.className = 'ia-btn-excluir-linha';
+        excluir.dataset.excluir = String(item.id);
+        excluir.title = 'Excluir esta linha da leitura (Sup Admin)';
+        excluir.innerHTML = '<i class="fas fa-trash"></i>';
+        excluir.addEventListener('click', () => excluirLinha(item));
+        tdStatus.appendChild(excluir);
+      }
+
       tr.appendChild(tdStatus);
 
       linhas.push(tr);
@@ -2265,6 +2279,50 @@
       return;
     }
     abrirAcaoDaLinha(semAlvo[0]);
+  }
+
+  /**
+   * Apaga uma linha da leitura, de vez.
+   *
+   * Descartar e aplicar MANTÊM a linha: é por elas que se reconstrói depois o
+   * que foi lido e o que se decidiu. Excluir apaga esse rastro, e por isso
+   * pede confirmação e é do Sup Admin.
+   *
+   * O aviso diz o que a exclusão NÃO faz: o cadastro que a linha já criou no
+   * módulo de destino tem vida própria, e desfazê-lo é lá. Sem dizer isso,
+   * excluir a linha parece desfazer o registro — e alguém descobriria o
+   * contrário só ao procurar o insumo que achava ter apagado.
+   */
+  async function excluirLinha(item) {
+    const jaAplicada = item.status === 'aplicado';
+
+    if (window.DialogPadrao?.confirm) {
+      const seguir = await window.DialogPadrao.confirm({
+        title: 'Excluir linha',
+        message: 'A linha sai da leitura e não dá para trazê-la de volta.'
+          + (jaAplicada
+            ? ' O cadastro que ela criou continua no módulo de destino — excluir aqui não o desfaz.'
+            : ''),
+        confirmText: 'Excluir',
+        cancelText: 'Voltar'
+      });
+      if (!seguir) return;
+    }
+
+    try {
+      const resp = await fetchApi(`/api/ia/${leitura.id}/itens/${item.id}`, { method: 'DELETE' });
+      const corpo = await resp.json().catch(() => ({}));
+      if (!resp.ok) throw new Error(corpo.error || `Erro ${resp.status}`);
+
+      leitura.itens = (leitura.itens || []).filter(i => i.id !== item.id);
+      selecionados.delete(item.id);
+      absorverSituacao(corpo);
+      mudouAlgumaCoisa = true;
+      desenharItens();
+      showToast('Linha excluída', 'success');
+    } catch (err) {
+      showToast(err?.message || 'Não foi possível excluir a linha', 'error');
+    }
   }
 
   async function descartarSelecionados() {

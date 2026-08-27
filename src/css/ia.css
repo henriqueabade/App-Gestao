@@ -1837,6 +1837,28 @@ body[data-current-module="ia"] #content.no-scroll #iaTableWrapper {
     background: rgba(0, 0, 0, 0.3);
 }
 
+/* Excluir a linha, na grade. Só o Sup Admin vê.
+   
+   Discreto até o mouse chegar: é a única ação da grade que não tem volta, e um
+   ícone vermelho e sólido ao lado de cada linha convida ao clique errado. */
+.ia-btn-excluir-linha {
+    margin-left: 8px;
+    padding: 2px 6px;
+    border-radius: 6px;
+    border: 1px solid transparent;
+    background: transparent;
+    color: rgba(255, 255, 255, 0.35);
+    font-size: 11px;
+    cursor: pointer;
+    transition: color 150ms ease, background 150ms ease, border-color 150ms ease;
+}
+
+.ia-btn-excluir-linha:hover {
+    color: var(--color-red);
+    border-color: rgba(248, 113, 113, 0.45);
+    background: rgba(248, 113, 113, 0.12);
+}
+
 /* Botão da linha travada, na grade. */
 .ia-btn-decidir {
     display: inline-flex;

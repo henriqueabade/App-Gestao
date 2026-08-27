@@ -200,7 +200,7 @@ test('os critérios se somam, não se substituem', () => {
 // Grade
 // ---------------------------------------------------------------------------
 
-function renderizarLinha(leitura) {
+function renderizarLinha(leitura, supAdmin = false) {
   let html = '';
   const linha = {
     className: '', dataset: {},
@@ -214,6 +214,9 @@ function renderizarLinha(leitura) {
   const tbody = { innerHTML: '', appendChild() {}, classList: { add() {}, remove() {} } };
 
   const s = criarSandbox({ iaTableBody: tbody });
+  // Quem está olhando. Sup Admin vê botões que o revisor comum não vê, e é
+  // isso que este parâmetro existe para medir.
+  s.window.Permissoes = { ...(s.window.Permissoes || {}), supAdmin: Boolean(supAdmin) };
   s.document.createElement = () => linha;
   definir(s, 'todasLeituras', []);
   definir(s, 'situacoesDisponiveis', [
@@ -237,11 +240,24 @@ function acoesTravadas(html) {
 
 test('a lixeira fica travada numa leitura já aplicada', () => {
   const html = renderizarLinha({ ...LEITURAS[1] });
+
+  // Leitura aplicada é registro do que aconteceu: os cadastros que ela criou
+  // continuam nos módulos, e sem ela ninguém mais sabe de onde vieram.
   assert.ok(acoesTravadas(html).includes('excluir'));
   assert.match(html, /title="Leitura já aplicada[^"]*"/);
-  // E o texto explica que os registros criados continuam lá — a dúvida óbvia
-  // de quem tentou excluir.
-  assert.match(html, /permanecem nos módulos/);
+  assert.match(html, /só o Sup Admin/i);
+});
+
+test('para o Sup Admin, a lixeira da aplicada fica livre', () => {
+  const html = renderizarLinha({ ...LEITURAS[1] }, true);
+
+  // É o remédio para o que não deveria estar guardado — uma leitura de teste,
+  // um documento que não podia ficar no sistema. Não há outra forma de tirá-la.
+  assert.equal(acoesTravadas(html).includes('excluir'), false);
+
+  // E o botão avisa o que a exclusão NÃO faz, que é a dúvida óbvia de quem vai
+  // clicar nele.
+  assert.match(html, /continuam nos módulos/);
 });
 
 test('a lixeira fica livre numa leitura em revisão', () => {

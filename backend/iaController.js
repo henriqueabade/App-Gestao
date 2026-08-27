@@ -777,6 +777,10 @@ router.get('/:id', exigirPermissao('ia.details.view'), async (req, res) => {
       // A grade oferece só as ações que fazem sentido no destino.
       acoes: esquemas.acoesDoDestino(extracao.destino),
       pode_aplicar_destino: aplicacao.DESTINOS_APLICAVEIS.includes(extracao.destino),
+      // Excluir uma linha apaga o rastro do que foi lido e decidido. É remédio
+      // para o que não deveria estar ali, não passo de revisão — e por isso não
+      // é permissão de módulo: é Sup Admin ou ninguém.
+      pode_excluir_linha: await ehSupAdmin(req),
       explicacoes: esquema
         ? { criar: esquema.explicacaoCriar || null, atualizar: esquema.explicacaoAtualizar || null }
         : null,
@@ -1782,6 +1786,54 @@ router.post('/:id/aplicar',
  * Por isso os filhos saem explicitamente, e ANTES do pai — o contrário
  * deixaria arquivos e itens apontando para uma extração que não existe mais.
  */
+/**
+ * Exclui UMA linha da leitura. Só o Sup Admin.
+ *
+ * As outras saídas de uma linha a mantêm no registro: descartar diz "esta não
+ * vira nada" e aplicar diz "esta virou". As duas ficam visíveis, e é por elas
+ * que se reconstrói depois o que foi lido e o que se decidiu.
+ *
+ * Excluir apaga o rastro, e por isso não é decisão de revisor: é o remédio
+ * para o que não deveria estar ali — uma linha que o modelo inventou, uma
+ * duplicata, um dado que não pode continuar guardado. Vale para QUALQUER
+ * linha, inclusive a já aplicada; a trava de edição não se aplica, porque
+ * excluir não é editar.
+ *
+ * O que a exclusão NÃO faz é desfazer o cadastro que a linha criou no módulo
+ * de destino — aquele registro tem vida própria, e desfazê-lo é lá.
+ */
+router.delete('/:id/itens/:itemId', exigirSupAdmin, async (req, res) => {
+  try {
+    const api = createApiClient(req);
+    const id = Number(req.params.id);
+    const itemId = Number(req.params.itemId);
+    if (!Number.isFinite(id) || !Number.isFinite(itemId)) throw erro(400, 'Linha inválida');
+
+    const extracao = await buscarExtracao(api, id);
+
+    const item = await api.get(`/api/ia_extracao_itens/${itemId}`);
+    if (!item || item.error === 'Not found') throw erro(404, 'Linha não encontrada');
+    // Sem conferir o vínculo, um id de linha qualquer seria apagável por quem
+    // só tem acesso a outra leitura.
+    if (Number(item.extracao_id) !== id) throw erro(404, 'Linha não encontrada');
+
+    await api.delete(`/api/ia_extracao_itens/${itemId}`);
+
+    // A leitura pode ter ficado sem pendência ao perder a linha — ou ter
+    // voltado a ter, se a excluída era a única aplicada.
+    const situacao = await fecharSeNadaPendente(api, id, extracao.status);
+
+    res.json({
+      sucesso: true,
+      id: itemId,
+      leitura_status: situacao,
+      leitura_status_rotulo: SITUACOES.find(s => s.id === situacao)?.rotulo || situacao
+    });
+  } catch (err) {
+    responder(res, err, 'DELETE /api/ia/:id/itens/:itemId');
+  }
+});
+
 router.delete('/:id', exigirPermissao('ia.delete'), async (req, res) => {
   try {
     const api = createApiClient(req);
@@ -1789,8 +1841,17 @@ router.delete('/:id', exigirPermissao('ia.delete'), async (req, res) => {
     if (!Number.isFinite(id)) throw erro(400, 'Leitura inválida');
 
     const extracao = await buscarExtracao(api, id);
-    if (extracao.status === 'aplicada') {
-      throw erro(409, 'Esta leitura já foi aplicada e não pode ser excluída');
+
+    // Leitura aplicada é registro do que aconteceu, e por isso o revisor comum
+    // não a apaga: os cadastros que ela criou continuam nos módulos, e sem a
+    // leitura ninguém mais sabe de onde vieram.
+    //
+    // O Sup Admin apaga. É o remédio para o que não deveria estar guardado —
+    // uma leitura de teste, um documento que não podia ficar no sistema — e
+    // não há outra forma de tirá-la. Os cadastros continuam onde estão; desfazê-
+    // los é no módulo de destino, e o modal de exclusão diz isso antes.
+    if (extracao.status === 'aplicada' && !(await ehSupAdmin(req))) {
+      throw erro(409, 'Esta leitura já foi aplicada. Só o Sup Admin pode excluí-la.');
     }
 
     const [arquivos, itens] = await Promise.all([

@@ -191,7 +191,7 @@ function leituraPadrao(extra = {}) {
 }
 
 function criarBancada({ leitura, respostaPut, respostaAplicar, respostaExtrair,
-  respostaPreenchimento, confirmar = true } = {}) {
+  respostaPreenchimento, respostaExcluir, confirmar = true } = {}) {
   const elementos = new Map();
   for (const id of idsDoModal()) {
     const el = criarElemento();
@@ -211,6 +211,7 @@ function criarBancada({ leitura, respostaPut, respostaAplicar, respostaExtrair,
   for (const [, el] of elementos) raiz.appendChild(el);
 
   const chamadas = [];
+  const excluidos = [];
   // Tudo que o modal anuncia para a janela. A tabela do módulo escuta daqui.
   const avisos = [];
   const toasts = [];
@@ -350,6 +351,22 @@ function criarBancada({ leitura, respostaPut, respostaAplicar, respostaExtrair,
         Object.assign(item, salvo);
         return { ok: true, status: 200, json: async () => salvo };
       }
+      if (metodo === 'DELETE' && /\/itens\/(\d+)$/.test(url)) {
+        const r = respostaExcluir || {};
+        if (r.status && r.status >= 400) {
+          return { ok: false, status: r.status, json: async () => r.corpo };
+        }
+        // O servidor apaga, mas NAO devolve a leitura: tirar a linha da tela é
+        // do cliente. Mexer aqui em `dadosLeitura` — que é o mesmo objeto que
+        // o módulo recebeu — faria a grade encolher sozinha, e o teste mediria
+        // o buraco do harness em vez do comportamento.
+        const id = Number(/\/itens\/(\d+)$/.exec(url)[1]);
+        excluidos.push(id);
+        return {
+          ok: true, status: 200,
+          json: async () => ({ sucesso: true, id, ...(r.corpoExtra || {}) })
+        };
+      }
       if (metodo === 'POST' && /\/estruturar$/.test(url)) {
         const r = respostaExtrair || { status: 200, corpo: { status: 'revisao', itens_qtd: 2, avisos: [] } };
         return { ok: r.status < 400, status: r.status, json: async () => r.corpo };
@@ -393,6 +410,7 @@ function criarBancada({ leitura, respostaPut, respostaAplicar, respostaExtrair,
     gradesRecarregadas,
     modaisAbertos,
     avisos,
+    excluidos,
     preenchimentos,
     copiado,
     ancorados,
@@ -3243,4 +3261,82 @@ test('o véu sai mesmo quando a gravação falha', async () => {
   // modal inutilizável, e o remédio seria pior que a doença.
   assert.strictEqual(veuAberto(b), false, 'o véu ficou preso na tela após o erro');
   assert.match(b.toasts.at(-1).msg, /servidor fora do ar/);
+});
+
+// ---------------------------------------------------------------------------
+// ETAPA 40 PARTE 2 — o Sup Admin exclui qualquer linha
+// ---------------------------------------------------------------------------
+
+const botaoExcluir = linha =>
+  linha.todos().find(f => f.classList?.contains('ia-btn-excluir-linha'));
+
+test('só o Sup Admin vê o botão de excluir', async () => {
+  const semPermissao = criarBancada({ leitura: leituraPadrao() });
+  await semPermissao.pronta();
+
+  // Um botão que sempre responde "sem permissão" ensina a ignorar aquele canto
+  // da tela.
+  assert.equal(botaoExcluir(linhasDeItem(semPermissao)[0]), undefined);
+
+  const supAdmin = criarBancada({ leitura: leituraPadrao({ pode_excluir_linha: true }) });
+  await supAdmin.pronta();
+  assert.ok(botaoExcluir(linhasDeItem(supAdmin)[0]));
+});
+
+test('excluir tira a linha da grade', async () => {
+  const b = criarBancada({ leitura: leituraPadrao({ pode_excluir_linha: true }) });
+  await b.pronta();
+  const antes = linhasDeItem(b).length;
+
+  botaoExcluir(linhasDeItem(b)[0]).disparar('click');
+  await b.pronta();
+
+  const chamada = b.chamadas.find(c => c.metodo === 'DELETE');
+  assert.ok(chamada, 'a exclusão não saiu do navegador');
+  assert.match(chamada.url, /\/api\/ia\/4\/itens\/1$/);
+  assert.equal(linhasDeItem(b).length, antes - 1);
+});
+
+test('excluir pede confirmação antes', async () => {
+  const b = criarBancada({ leitura: leituraPadrao({ pode_excluir_linha: true }), confirmar: false });
+  await b.pronta();
+
+  botaoExcluir(linhasDeItem(b)[0]).disparar('click');
+  await b.pronta();
+
+  // É a única ação da grade que não tem volta. Descartar e aplicar MANTÊM a
+  // linha; excluir apaga o rastro do que foi lido e do que se decidiu.
+  assert.equal(b.chamadas.some(c => c.metodo === 'DELETE'), false);
+  assert.equal(linhasDeItem(b).length, 2);
+});
+
+test('a linha já aplicada avisa que o cadastro fica', async () => {
+  const leitura = leituraPadrao({ pode_excluir_linha: true });
+  leitura.itens[0].status = 'aplicado';
+
+  const b = criarBancada({ leitura });
+  await b.pronta();
+
+  // Nenhuma outra ação alcança a linha aplicada — o botão precisa estar lá.
+  assert.ok(botaoExcluir(linhasDeItem(b)[0]), 'a linha aplicada ficou sem saída');
+
+  botaoExcluir(linhasDeItem(b)[0]).disparar('click');
+  await b.pronta();
+
+  // Sem dizer isto, excluir a linha parece desfazer o registro — e alguém
+  // descobriria o contrário só ao procurar o insumo que achava ter apagado.
+  assert.match(b.confirmacoes.at(-1).message, /continua no módulo de destino/);
+});
+
+test('a lista do módulo fica sabendo da exclusão', async () => {
+  const b = criarBancada({ leitura: leituraPadrao({ pode_excluir_linha: true }) });
+  await b.pronta();
+
+  botaoExcluir(linhasDeItem(b)[0]).disparar('click');
+  await b.pronta();
+  b.el('iaDetFechar').disparar('click');
+  await b.pronta();
+
+  // A contagem de itens da lista sai daqui.
+  assert.ok(b.avisos.includes('iaLeituraAlterada'));
 });

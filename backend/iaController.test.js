@@ -256,7 +256,19 @@ function baseDados() {
       { id: 2, nome: 'Vendedora Ana', perfil: 'Vendedor', modelo_permissoes_id: 10 }
     ],
     modelos_permissoes: [{ id: 10, nome: 'Vendedor' }],
-    perm_ia: [],
+    // A Vendedora tem `ia.delete` — e SÓ ele, mais o de ver.
+    //
+    // É o que torna mensurável a diferença entre "restrito ao Sup Admin" e
+    // "permissão de módulo": sem alguém que TENHA a permissão e não seja Sup
+    // Admin, os dois guardas recusam a mesma pessoa e o teste passa por vazio.
+    // As outras ficam em 0 de propósito — há testes que dependem disso.
+    perm_ia: [{
+      id: 1, modelo_id: 10, modulo_ativo: 1,
+      acao_view: 1, acao_search: 0, acao_details_view: 0, acao_delete: 1,
+      acao_upload: 0, acao_extract: 0, acao_review_edit: 0,
+      acao_apply_mp: 0, acao_apply_prod: 0, acao_apply_cli: 0, acao_apply_pros: 0,
+      acao_apply_orc: 0, acao_config: 0
+    }],
     // Vazia: sem linha gravada, tudo continua valendo pelo .env — que é
     // exatamente o comportamento de uma instalação que acabou de rodar o SQL.
     ia_configuracao: [],
@@ -520,17 +532,49 @@ test('excluir uma leitura não toca nas outras', async () => {
   }
 });
 
-test('leitura já aplicada não pode ser excluída', async () => {
+test('leitura já aplicada: o usuário comum não exclui', async () => {
   const ctx = await montar(baseDados());
   try {
-    const resp = await chamar(ctx.porta, '/api/ia/2', { method: 'DELETE' });
+    // A Vendedora TEM `ia.delete` e apaga leitura em revisão. O que ela não
+    // pode e apagar uma APLICADA: os cadastros que a leitura criou continuam
+    // nos modulos, e sem ela ninguem mais sabe de onde vieram.
+    const resp = await chamar(ctx.porta, '/api/ia/2', { method: 'DELETE', usuario: 2 });
     assert.strictEqual(resp.status, 409);
     const corpo = await resp.json();
-    assert.match(corpo.error, /já foi aplicada/);
+    assert.match(corpo.error, /Sup Admin/);
 
     // E nada saiu do banco.
     assert.strictEqual(ctx.tabelas.ia_extracoes.some(e => e.id === 2), true);
     assert.strictEqual(ctx.tabelas.ia_extracao_itens.some(i => i.extracao_id === 2), true);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('leitura já aplicada: o Sup Admin exclui', async () => {
+  const ctx = await montar(baseDados());
+  try {
+    const resp = await chamar(ctx.porta, '/api/ia/2', { method: 'DELETE' });
+    assert.strictEqual(resp.status, 200);
+
+    // E o remedio para o que nao deveria estar guardado — uma leitura de
+    // teste, um documento que nao podia ficar no sistema. Nao havia outra
+    // forma de tira-la.
+    assert.strictEqual(ctx.tabelas.ia_extracoes.some(e => e.id === 2), false);
+    assert.strictEqual(ctx.tabelas.ia_extracao_itens.some(i => i.extracao_id === 2), false);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('o usuário comum continua excluindo leitura em revisão', async () => {
+  const ctx = await montar(baseDados());
+  try {
+    // A trava é sobre a leitura APLICADA, não sobre excluir. Estendê-la a tudo
+    // tiraria da Vendedora uma permissão que ela tem.
+    const resp = await chamar(ctx.porta, '/api/ia/1', { method: 'DELETE', usuario: 2 });
+    assert.strictEqual(resp.status, 200);
+    assert.strictEqual(ctx.tabelas.ia_extracoes.some(e => e.id === 1), false);
   } finally {
     await ctx.encerrar();
   }
@@ -5616,6 +5660,152 @@ test('uma aplicada entre descartadas ainda é "Concluída"', async () => {
     // Uma linha que virou cadastro basta: a leitura rendeu.
     assert.strictEqual(salvo.leitura_status, 'aplicada');
     assert.strictEqual(Number(ctx.tabelas.ia_extracoes.find(e => e.id === 5).aplicados_qtd), 1);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+// ---------------------------------------------------------------------------
+// ETAPA 40 PARTE 2 — o Sup Admin exclui qualquer linha
+// ---------------------------------------------------------------------------
+
+test('o Sup Admin exclui uma linha da leitura', async () => {
+  const ctx = await prepararFicha({
+    itens: [
+      { codigo: 'PR-210', nome: 'Painel Ripado 2,10', insumos: [{ processo: 'MARCENARIA', nome: 'MDF 15mm Branco TX', quantidade: '1', unidade: 'CH' }] },
+      { codigo: 'ML-01', nome: 'Mesa Lateral Carvalho', insumos: [{ processo: 'MARCENARIA', nome: 'Cola PVA extra 1kg', quantidade: '1', unidade: 'UN' }] }
+    ]
+  });
+  try {
+    const [primeiro] = itensDa(ctx, 5);
+    const resp = await chamar(ctx.porta, `/api/ia/5/itens/${primeiro.id}`, { method: 'DELETE' });
+    assert.strictEqual(resp.status, 200);
+
+    // Descartar e aplicar MANTEM a linha: e por elas que se reconstroi depois
+    // o que foi lido e o que se decidiu. Excluir apaga esse rastro.
+    assert.strictEqual(
+      ctx.tabelas.ia_extracao_itens.some(i => i.id === primeiro.id), false);
+    assert.strictEqual(itensDa(ctx, 5).length, 1);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('linha JA APLICADA tambem se exclui', async () => {
+  const ctx = await prepararFicha({
+    itens: [
+      { codigo: 'PR-210', nome: 'Painel Ripado 2,10', insumos: [{ processo: 'MARCENARIA', nome: 'MDF 15mm Branco TX', quantidade: '1', unidade: 'CH' }] },
+      { codigo: 'ML-01', nome: 'Mesa Lateral Carvalho', insumos: [{ processo: 'MARCENARIA', nome: 'Cola PVA extra 1kg', quantidade: '1', unidade: 'UN' }] }
+    ]
+  });
+  try {
+    const [primeiro] = itensDa(ctx, 5);
+    await chamar(ctx.porta, `/api/ia/5/itens/${primeiro.id}`, {
+      method: 'PUT', body: JSON.stringify({ resolvido: true })
+    });
+
+    // Aplicada, ela recusa PUT — e e justamente a que nenhuma outra acao
+    // alcanca. Se a exclusao tambem parasse ali, uma linha errada gravada por
+    // engano ficaria na leitura para sempre.
+    const editar = await chamar(ctx.porta, `/api/ia/5/itens/${primeiro.id}`, {
+      method: 'PUT', body: JSON.stringify({ acao: 'ignorar' })
+    });
+    assert.strictEqual(editar.status, 409);
+
+    const resp = await chamar(ctx.porta, `/api/ia/5/itens/${primeiro.id}`, { method: 'DELETE' });
+    assert.strictEqual(resp.status, 200);
+    assert.strictEqual(
+      ctx.tabelas.ia_extracao_itens.some(i => i.id === primeiro.id), false);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('quem nao e Sup Admin nao exclui linha nenhuma', async () => {
+  const ctx = await prepararFicha({
+    itens: [{
+      codigo: 'PR-210', nome: 'Painel Ripado 2,10',
+      insumos: [{ processo: 'MARCENARIA', nome: 'MDF 15mm Branco TX', quantidade: '1', unidade: 'CH' }]
+    }]
+  });
+  try {
+    const [linha] = itensDa(ctx, 5);
+    // A Vendedora TEM `ia.delete` — apaga a leitura inteira se quiser. O que
+    // ela nao pode e apagar uma LINHA: sao coisas diferentes, e e por isso que
+    // esta rota nao usa a permissao do modulo.
+    const apagarLeitura = await chamar(ctx.porta, '/api/ia/1', { method: 'DELETE', usuario: 2 });
+    assert.strictEqual(apagarLeitura.status, 200, 'a Vendedora nao tem ia.delete no duplo');
+
+    const resp = await chamar(ctx.porta, `/api/ia/5/itens/${linha.id}`,
+      { method: 'DELETE', usuario: 2 });
+
+    // Nao e permissao de modulo: apagar o rastro do que foi lido e decidido
+    // nao e passo de revisao. E Sup Admin ou ninguem.
+    assert.ok(resp.status === 403 || resp.status === 401, `veio ${resp.status}`);
+    assert.strictEqual(ctx.tabelas.ia_extracao_itens.some(i => i.id === linha.id), true);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('nao se exclui linha de OUTRA leitura pelo id', async () => {
+  const ctx = await prepararFicha({
+    itens: [{
+      codigo: 'PR-210', nome: 'Painel Ripado 2,10',
+      insumos: [{ processo: 'MARCENARIA', nome: 'MDF 15mm Branco TX', quantidade: '1', unidade: 'CH' }]
+    }]
+  });
+  try {
+    const [linha] = itensDa(ctx, 5);
+    // A leitura 1 existe no duplo e nao e a 5.
+    const resp = await chamar(ctx.porta, `/api/ia/1/itens/${linha.id}`, { method: 'DELETE' });
+
+    // Sem conferir o vinculo, um id de linha qualquer seria apagavel por quem
+    // so tem acesso a outra leitura.
+    assert.strictEqual(resp.status, 404);
+    assert.strictEqual(ctx.tabelas.ia_extracao_itens.some(i => i.id === linha.id), true);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('excluir a ultima pendente fecha a leitura', async () => {
+  const ctx = await prepararFicha({
+    itens: [
+      { codigo: 'PR-210', nome: 'Painel Ripado 2,10', insumos: [{ processo: 'MARCENARIA', nome: 'MDF 15mm Branco TX', quantidade: '1', unidade: 'CH' }] },
+      { codigo: 'ML-01', nome: 'Mesa Lateral Carvalho', insumos: [{ processo: 'MARCENARIA', nome: 'Cola PVA extra 1kg', quantidade: '1', unidade: 'UN' }] }
+    ]
+  });
+  try {
+    const [primeiro, segundo] = itensDa(ctx, 5);
+    await chamar(ctx.porta, `/api/ia/5/itens/${primeiro.id}`, {
+      method: 'PUT', body: JSON.stringify({ resolvido: true })
+    });
+
+    const corpo = await (await chamar(ctx.porta, `/api/ia/5/itens/${segundo.id}`,
+      { method: 'DELETE' })).json();
+
+    // A leitura pode ter ficado sem pendencia ao perder a linha. Sem recontar,
+    // ela seguiria dizendo "Em revisao" com nada a revisar.
+    assert.strictEqual(corpo.leitura_status, 'aplicada');
+    assert.strictEqual(corpo.leitura_status_rotulo, 'Concluída');
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('o detalhe conta se quem abriu pode excluir linha', async () => {
+  const ctx = await prepararFicha({
+    itens: [{
+      codigo: 'PR-210', nome: 'Painel Ripado 2,10',
+      insumos: [{ processo: 'MARCENARIA', nome: 'MDF 15mm Branco TX', quantidade: '1', unidade: 'CH' }]
+    }]
+  });
+  try {
+    const detalhe = await (await chamar(ctx.porta, '/api/ia/5')).json();
+    // A grade so mostra o botao a quem pode usa-lo: um botao que sempre
+    // responde "sem permissao" ensina a ignorar aquele canto da tela.
+    assert.strictEqual(detalhe.pode_excluir_linha, true);
   } finally {
     await ctx.encerrar();
   }
