@@ -6115,6 +6115,101 @@ test('com o código junto, ele manda — e é isso que se quer quando não mudou
   }
 });
 
+// ---------------------------------------------------------------------------
+// ETAPA 39 (antes) — a linha com desconto não pode baixar o preço da peça
+// ---------------------------------------------------------------------------
+
+test('havendo mais de um preço na célula, vale o MAIOR', () => {
+  const { coagir } = require('./iaEstruturacao');
+  const campo = { chave: 'valor_unitario', tipo: 'dinheiro' };
+  const ler = v => coagir(campo, v);
+
+  // Uma planilha de pedido põe o preço cheio e o preço com desconto por
+  // quantidade lado a lado. O desconto é decidido depois, no módulo: a leitura
+  // registra o preço CHEIO.
+  assert.strictEqual(ler('1.200,00 900,00'), 1200);
+  assert.strictEqual(ler('900,00 1.200,00'), 1200);
+  assert.strictEqual(ler('R$ 1.200,00 / R$ 900,00'), 1200);
+
+  // Antes disto, dois números na mesma célula viravam null ou um número
+  // colado — "1200.00 900.00" saía como 120000900.
+  assert.strictEqual(ler('1200.00 900.00'), 1200);
+});
+
+test('um preço só continua sendo esse preço', () => {
+  const { coagir } = require('./iaEstruturacao');
+  const campo = { chave: 'valor_unitario', tipo: 'dinheiro' };
+  const ler = v => coagir(campo, v);
+
+  assert.strictEqual(ler('1.200,00'), 1200);
+  assert.strictEqual(ler('1200'), 1200);
+  assert.strictEqual(ler(1200), 1200);
+  assert.strictEqual(ler('R$ 61,62'), 61.62);
+
+  // Os centavos sobrevivem. `map(paraDecimal)` passaria o ÍNDICE como número
+  // de casas decimais, e o primeiro preço da célula sairia arredondado —
+  // "189,90" virava 190, e "2,50" virava 3.
+  assert.strictEqual(ler('189,90'), 189.9);
+  assert.strictEqual(ler('2,50'), 2.5);
+  assert.strictEqual(ler('189,90 150,00'), 189.9);
+  assert.strictEqual(ler(''), null);
+  assert.strictEqual(ler(null), null);
+});
+
+test('número sem centavos ao lado do preço é quantidade, não preço', () => {
+  const { coagir } = require('./iaEstruturacao');
+  const campo = { chave: 'valor_unitario', tipo: 'dinheiro' };
+
+  // "acima de 1200 un" é faixa de quantidade. Pegar o maior número da célula
+  // sem olhar a FORMA devolveria 1200 como preço — vinte vezes o valor certo,
+  // num campo que vai direto para o orçamento do cliente.
+  assert.strictEqual(coagir(campo, 'R$ 900,00 acima de 1200 un'), 900);
+  assert.strictEqual(coagir(campo, '61,62 (mín. 500 peças)'), 61.62);
+});
+
+test('quantidade não é dinheiro e não muda de regra', () => {
+  const { coagir } = require('./iaEstruturacao');
+  const campo = { chave: 'quantidade', tipo: 'numero' };
+
+  // Só o preço tem a história do desconto. Uma quantidade com dois números é
+  // leitura ruim, e virar o maior deles esconderia isso.
+  assert.strictEqual(coagir(campo, '3'), 3);
+  assert.strictEqual(coagir(campo, '2,50'), 2.5);
+});
+
+test('o preço cheio é o que casa com a tabela fixa', async () => {
+  const ctx = await prepararOrcamento({
+    itens: [{
+      cliente: 'Casa Vicenzo', razao_social: null, cnpj: null, validade: null,
+      prazo: null, forma_pagamento: null, condicao_pagamento: null, parcelas: null,
+      transportadora: null, contato: null, observacoes: null,
+      // Nome que não bate; a célula traz o preço cheio (450) e o com desconto.
+      itens: [{ codigo: null, nome: 'AQUELA MESINHA', quantidade: '3', valor_unitario: '450,00 380,00' }]
+    }]
+  });
+  try {
+    const [item] = (await (await chamar(ctx.porta, '/api/ia/5')).json()).itens[0].dados.itens;
+
+    // O valor com desconto não bate com a tabela fixa, e a peça ia para a
+    // grade em vermelho por causa de uma conta que o documento já tinha feito.
+    assert.strictEqual(item._casamento, 'valor');
+    assert.strictEqual(item._cadastro, 'Mesa Lateral Carvalho');
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('a instrução do preço maior chega aos dois destinos que têm preço', () => {
+  const esquemas = require('./iaEsquemas');
+  for (const destino of ['materia_prima', 'orcamentos']) {
+    const esquema = esquemas.porDestino
+      ? esquemas.porDestino(destino)
+      : esquemas.ESQUEMAS[destino];
+    assert.match(esquema.instrucoes, /use SEMPRE o MAIOR/,
+      `${destino} não diz ao modelo qual preço usar`);
+  }
+});
+
 test('a peça do pedido se escolhe da lista, não se digita', async () => {
   const ctx = await prepararOrcamento();
   try {

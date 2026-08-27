@@ -179,7 +179,7 @@ function coagir(campo, bruto) {
     // `paraDecimal` é o mesmo conversor que o resto do programa usa: aceita
     // "1.234,56" e "1,234.56" e limita a 4 casas. Reimplementar aqui criaria
     // uma segunda regra de número no mesmo sistema.
-    const n = paraDecimal(bruto);
+    const n = campo.tipo === 'dinheiro' ? maiorPreco(bruto) : paraDecimal(bruto);
     if (n === null) return undefined;
     // Quantidade e preço negativos não existem numa lista de compra; quase
     // sempre é sinal trocado de um estorno lido fora de contexto.
@@ -214,6 +214,35 @@ function coagir(campo, bruto) {
  * caiu é anunciado junto do item, para o revisor saber que o documento tinha
  * mais gente do que a tela mostra.
  */
+/**
+ * O MAIOR preço, quando a célula trouxer mais de um.
+ *
+ * Uma planilha de pedido costuma pôr o preço cheio e o preço com desconto por
+ * quantidade lado a lado. O modelo às vezes traz os dois na mesma célula e às
+ * vezes escolhe — e escolhia o menor, que é o que salta aos olhos numa tabela
+ * de faixas. O desconto é decidido depois, no módulo: a leitura registra o
+ * preço CHEIO.
+ *
+ * Isso também conserta o casamento por preço: o valor com desconto não bate
+ * com a tabela fixa, e a peça ia para a grade em vermelho por causa de uma
+ * conta que o próprio documento já tinha feito.
+ *
+ * Só entram os pedaços escritos como DINHEIRO — com centavos. Sem esse
+ * recorte, "R$ 900,00 acima de 1200 un" devolveria 1200, que é quantidade.
+ * Não havendo nenhum com centavos, vale o conversor de sempre.
+ */
+function maiorPreco(bruto) {
+  const texto_ = String(bruto ?? '');
+  const comCentavos = texto_.match(/\d[\d.]*,\d{2}(?!\d)|\d[\d,]*\.\d{2}(?!\d)/g);
+  if (!comCentavos) return paraDecimal(bruto);
+
+  // `map(paraDecimal)` passaria o ÍNDICE como segundo argumento, que em
+  // `paraDecimal` é o número de casas decimais: o primeiro preço da célula
+  // seria arredondado para inteiro, e "189,90" viraria 190.
+  const valores = comCentavos.map(t => paraDecimal(t)).filter(v => Number.isFinite(v));
+  return valores.length ? Math.max(...valores) : paraDecimal(bruto);
+}
+
 function coagirLista(campo, bruto) {
   if (bruto === null || bruto === undefined || bruto === '') return [];
   if (!Array.isArray(bruto)) return undefined;

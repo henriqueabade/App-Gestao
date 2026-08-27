@@ -54,11 +54,14 @@
           </p>
         </div>
 
+        <!-- A segunda opção depende do estado da linha: descartar uma que está
+             viva, ou trazer de volta uma que já foi descartada. É a mesma
+             decisão vista dos dois lados, e por isso ocupa o mesmo lugar. -->
         <label class="ia-acao__opcao" data-opcao="descartar">
           <input type="radio" name="iaAcaoEscolha" value="descartar" class="ia-acao__radio">
           <span class="ia-acao__texto">
-            <span class="ia-acao__titulo">Descartar esta linha</span>
-            <span class="ia-acao__ajuda">
+            <span class="ia-acao__titulo" id="iaAcaoTituloDescartar">Descartar esta linha</span>
+            <span class="ia-acao__ajuda" id="iaAcaoAjudaDescartar">
               Ela não vira orçamento nenhum. Dá para trazer de volta depois.
             </span>
           </span>

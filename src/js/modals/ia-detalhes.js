@@ -156,19 +156,31 @@
     // segundo botão ao lado dele seria só um jeito de errar.
     gravarTodos?.classList.toggle('hidden', !(emRevisao && pendentes > 1));
 
-    // "Escolher empresa" só existe quando alguma linha precisa de destino.
-    const escolher = get('iaDetEscolherAlvo');
+    // Cada botão conta O QUE LHE CABE.
+    //
+    // Enquanto "selecionado" queria dizer a mesma coisa para todos, a linha
+    // descartada não podia ser marcada — senão os contadores mentiriam. Isso
+    // deixava sem saída justamente a linha que mais precisa de uma.
+    const marcadas = (leitura.itens || []).filter(i => selecionados.has(i.id));
+    const marcadasVivas = marcadas.filter(i => i.acao !== 'ignorar' && i.status !== 'ignorado');
+
+    // "O que fazer" atende qualquer linha marcada que ainda possa mudar —
+    // inclusive a descartada, que dali volta atrás.
+    const decidir = get('iaDetEscolherAlvo');
     const semAlvo = (leitura.itens || []).filter(precisaDeAlvo);
-    escolher?.classList.toggle('hidden', !(emRevisao && semAlvo.length > 0));
-    if (escolher && semAlvo.length) {
-      const rotulo = leitura.rotulo_alvo || 'destino';
-      escolher.title = `${semAlvo.length} linha(s) sem ${rotulo.toLowerCase()}. `
-        + 'Aponte para um registro que já existe, ou cadastre-o antes.';
+    const alvoDaDecisao = marcadas[0] || semAlvo[0] || null;
+    decidir?.classList.toggle('hidden', !(emRevisao && alvoDaDecisao));
+    if (decidir && alvoDaDecisao) {
+      const rotulo = (leitura.rotulo_alvo || 'destino').toLowerCase();
+      decidir.title = marcadas.length
+        ? `Decidir o que fazer com a linha marcada${marcadas.length > 1 ? ' (a primeira)' : ''}`
+        : `${semAlvo.length} linha(s) sem ${rotulo}. Aponte um registro que já existe, ou cadastre-o antes.`;
     }
 
-    // Descartar só existe quando há o que descartar: um botão permanentemente
-    // sem efeito ensina o usuário a ignorar aquele canto da tela.
-    const marcados = selecionados.size;
+    // Descartar conta só o que ainda não foi descartado: descartar o que já
+    // está descartado não faz nada, e um botão que às vezes não funciona
+    // ensina a ignorar aquele canto da tela.
+    const marcados = marcadasVivas.length;
     descartar?.classList.toggle('hidden', !(emRevisao && marcados > 0));
     if (descartar && marcados > 0) {
       descartar.textContent = '';
@@ -331,8 +343,20 @@
    * não vai a lugar nenhum). "Marcar todas" que pegasse os dois faria a
    * contagem do rodapé mentir.
    */
-  const selecionaveis = () => (leitura?.itens || [])
-    .filter(i => i.status !== 'aplicado' && i.acao !== 'ignorar' && i.status !== 'ignorado');
+  /**
+   * O que pode ser marcado: tudo que ainda pode mudar.
+   *
+   * Aplicada não muda mais — o registro já está no módulo de destino, e marcá-la
+   * ofereceria decisões sem efeito. Descartada muda: é dali que ela volta.
+   *
+   * Uma definição só, usada pela caixa da linha E pelo "marcar todas". Enquanto
+   * eram duas, elas divergiram: a linha ganhou caixa e o "marcar todas" seguiu
+   * pulando a descartada, então marcar tudo deixava justamente a linha travada
+   * de fora.
+   */
+  const podeSerMarcado = item => item.status !== 'aplicado';
+
+  const selecionaveis = () => (leitura?.itens || []).filter(podeSerMarcado);
 
   /**
    * O (i) da linha: os campos que não viraram coluna, editáveis ali mesmo.
@@ -425,18 +449,21 @@
       // Coluna de seleção, no lugar do antigo número da linha. O número não
       // dizia nada que a ordem da tabela já não dissesse, e ocupava a largura
       // de que a primeira coluna de verdade precisava.
-      // Linha descartada não pode ser marcada.
       //
-      // Marcada, ela contaria no "Descartar N selecionadas" e no "Abrir a 1ª
-      // de N" — os dois passariam a mentir sobre quantas linhas ainda vão a
-      // algum lugar. E descartar o que já está descartado não faz nada, o que
-      // ensina que o botão às vezes não funciona.
+      // Linha descartada TAMBÉM se marca. Antes não: marcada, ela contaria no
+      // "Descartar N selecionadas" e no "Abrir a 1ª de N", e os dois passariam
+      // a mentir. Só que o remédio adoecia o paciente — a linha que mais
+      // precisa de uma decisão era justamente a que não podia ser apontada, e
+      // o rodapé inteiro sumia junto com ela.
+      //
+      // Quem conta agora são os botões, cada um contando o que lhe cabe (ver
+      // `pintarRodape`). Marcar é dizer "é desta que eu falo", e isso vale
+      // para qualquer linha que ainda possa mudar.
       const descartada = item.acao === 'ignorar' || item.status === 'ignorado';
-      if (descartada) selecionados.delete(item.id);
 
       const tdSelecao = document.createElement('td');
       tdSelecao.className = 'ia-col-selecao';
-      if (item.status !== 'aplicado' && !descartada) {
+      if (podeSerMarcado(item)) {
         const marca = document.createElement('input');
         marca.type = 'checkbox';
         marca.className = 'ia-selecao';
@@ -1983,11 +2010,16 @@
       itemId: item.id,
       lido: primeiroTextoDoItem(item),
       motivo: item.mensagem || null,
+      descartada: item.acao === 'ignorar' || item.status === 'ignorado',
       rotuloAlvo,
       alvos,
       aoDecidir: async decisao => {
         if (decisao?.tipo === 'descartar') {
           await aplicarNaLinha(item, { acao: 'ignorar' }, 'Linha descartada');
+          return;
+        }
+        if (decisao?.tipo === 'restaurar') {
+          await aplicarNaLinha(item, { acao: 'criar' }, 'Linha de volta');
           return;
         }
         const alvo = decisao?.alvo;
@@ -2074,12 +2106,22 @@
    */
   /** Abre a escolha para a linha marcada, ou para a primeira sem destino. */
   async function escolherAlvoDaPrimeira() {
-    const semAlvo = (leitura.itens || []).filter(precisaDeAlvo);
-    if (!semAlvo.length) { showToast('Nenhuma linha esperando destino', 'info'); return; }
+    // A MARCADA vem primeiro, e vem sozinha: é o gesto explícito de dizer "é
+    // desta que eu falo". Vale para qualquer linha que ainda possa mudar,
+    // inclusive a descartada — é dali que ela volta atrás.
+    const marcada = (leitura.itens || [])
+      .find(i => selecionados.has(i.id) && i.status !== 'aplicado');
+    if (marcada) { abrirAcaoDaLinha(marcada); return; }
 
-    // A marcada tem preferência: com várias travadas, o rodapé não teria como
-    // adivinhar qual a pessoa quis, e resolver a errada é pior que perguntar.
-    abrirAcaoDaLinha(semAlvo.find(i => selecionados.has(i.id)) || semAlvo[0]);
+    // Sem marcação, o rodapé resolve a primeira que está travada. Com várias,
+    // não teria como adivinhar qual a pessoa quis — e resolver a errada é pior
+    // que perguntar; por isso a marcação tem preferência.
+    const semAlvo = (leitura.itens || []).filter(precisaDeAlvo);
+    if (!semAlvo.length) {
+      showToast('Marque a linha que você quer decidir', 'info');
+      return;
+    }
+    abrirAcaoDaLinha(semAlvo[0]);
   }
 
   async function descartarSelecionados() {

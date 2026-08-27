@@ -97,6 +97,24 @@ function idsDoHtml() {
   return [...html.matchAll(/id="([^"]+)"/g)].map(m => m[1]);
 }
 
+/**
+ * O texto que cada elemento já traz escrito no HTML.
+ *
+ * Sem semear isto, o duplo nasce com tudo em branco — e um teste que espera o
+ * rótulo PADRÃO ("Descartar esta linha") estaria medindo o buraco do harness
+ * em vez do que a tela mostra. Só elementos de texto simples, que é o que o
+ * módulo lê.
+ */
+function textosDoHtml() {
+  const html = fs.readFileSync(HTML, 'utf8');
+  const saida = new Map();
+  const padrao = new RegExp('<span[^>]* id="([^"]+)"[^>]*>([^<]*)</span>', 'g');
+  for (const [, id, dentro] of html.matchAll(padrao)) {
+    saida.set(id, dentro.replace(/[ \t\r\n]+/g, ' ').trim());
+  }
+  return saida;
+}
+
 function montar({ pedido } = {}) {
   const ids = idsDoHtml();
   for (const obrigatorio of ['iaAcaoLido', 'iaAcaoMotivo', 'iaAcaoEmpresa',
@@ -104,11 +122,13 @@ function montar({ pedido } = {}) {
     assert.ok(ids.includes(obrigatorio), `acao.html perdeu #${obrigatorio}`);
   }
 
+  const textos = textosDoHtml();
   const elementos = new Map();
   const raiz = criarElemento('body');
   for (const id of ids) {
     const el = criarElemento(id === 'iaAcaoEmpresas' ? 'datalist' : 'div');
     el.id = id;
+    el.textContent = textos.get(id) || '';
     elementos.set(id, el);
     raiz.appendChild(el);
   }
@@ -324,6 +344,34 @@ test('nome inventado não decide nada, e a tela continua aberta', async () => {
   assert.deepEqual(decididas, []);
   assert.deepEqual(b.fechados, []);
   assert.match(b.toasts.at(-1).msg, /da lista/);
+});
+
+test('numa linha descartada, a opção vira "trazer de volta"', async () => {
+  const decididas = [];
+  const b = montar({ pedido: { ...PEDIDO(decididas), descartada: true } });
+
+  // Oferecer "descartar" numa linha já descartada é um botão sem efeito — e um
+  // botão que às vezes não faz nada ensina a ignorar a tela toda.
+  assert.match(b.el('iaAcaoTituloDescartar').textContent, /trazer.*de volta/i);
+  assert.match(b.el('iaAcaoAjudaDescartar').textContent, /volta a valer/i);
+
+  b.marcar('descartar');
+  b.confirmar();
+  await b.pronta();
+
+  assert.deepEqual(decididas, [{ tipo: 'restaurar' }]);
+});
+
+test('numa linha viva, a opção continua sendo descartar', async () => {
+  const decididas = [];
+  const b = montar({ pedido: PEDIDO(decididas) });
+
+  assert.match(b.el('iaAcaoTituloDescartar').textContent, /descartar/i);
+  b.marcar('descartar');
+  b.confirmar();
+  await b.pronta();
+
+  assert.deepEqual(decididas, [{ tipo: 'descartar' }]);
 });
 
 test('cancelar sai sem decidir', async () => {

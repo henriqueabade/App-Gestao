@@ -207,6 +207,9 @@ const ESQUEMAS = {
       '- Descrição do item vai em "nome", inteira, do jeito que está escrita.',
       '- "quantidade" é quantas unidades entraram, não o saldo em estoque.',
       '- "preco_unitario" é o preço de UMA unidade. Se só houver o total, divida pela quantidade.',
+      '- Se a MESMA linha trouxer mais de um preço (preço cheio e preço com',
+      '  desconto por quantidade, ou colunas de faixas), use SEMPRE o MAIOR.',
+      '  O desconto é decidido depois, no módulo; a leitura registra o preço cheio.',
       '- Ignore linhas de subtotal, total geral, frete, imposto e observação.',
       '- Ignore a linha de cabeçalho da tabela.',
       '- Não invente valor que não está no documento: deixe o campo vazio.'
@@ -243,7 +246,7 @@ const ESQUEMAS = {
         rotulo: 'Preço un.',
         tipo: 'dinheiro',
         largura: 'pequena',
-        descricao: 'Preço de uma unidade'
+        descricao: 'Preço de uma unidade; o MAIOR quando a linha trouxer mais de um'
       },
       {
         chave: 'categoria',
@@ -449,6 +452,9 @@ const ESQUEMAS = {
       '- Se trouxer um só, ponha esse em "cliente" e deixe "razao_social" null.',
       '- "quantidade" é quantas unidades do produto o cliente quer.',
       '- "valor_unitario" é o preço de UMA unidade. Se só houver o total da linha, divida pela quantidade.',
+      '- Se a MESMA linha trouxer mais de um preço (preço cheio e preço com',
+      '  desconto por quantidade, ou colunas de faixas), use SEMPRE o MAIOR.',
+      '  O desconto é decidido depois, no módulo; a leitura registra o preço cheio.',
       '- Se o documento não trouxer preço, deixe "valor_unitario" em null: o preço de tabela será usado.',
       '- Ignore linhas de subtotal, total geral, frete e imposto.',
       '- "prazo" é o prazo de entrega, como está escrito ("30 dias", "30/60/90").',
@@ -509,7 +515,7 @@ const ESQUEMAS = {
           { chave: 'codigo', rotulo: 'Código', tipo: 'texto', max: 60, descricao: 'Código do produto, se estiver no documento' },
           { chave: 'nome', rotulo: 'Produto', tipo: 'texto', obrigatorio: true, max: 200, descricao: 'Nome do produto, como está escrito' },
           { chave: 'quantidade', rotulo: 'Qtde', tipo: 'numero', obrigatorio: true },
-          { chave: 'valor_unitario', rotulo: 'Valor un.', tipo: 'dinheiro', descricao: 'Preço de uma unidade; null se o documento não disser' }
+          { chave: 'valor_unitario', rotulo: 'Valor un.', tipo: 'dinheiro', descricao: 'Preço de uma unidade, o MAIOR quando houver vários; null se o documento não disser' }
         ]
       }
     ],

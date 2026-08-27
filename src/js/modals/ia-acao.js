@@ -48,6 +48,19 @@
   const rotulo = get('iaAcaoRotuloAlvo');
   if (rotulo && pedido.rotuloAlvo) rotulo.textContent = pedido.rotuloAlvo;
 
+  // A segunda opção é a mesma decisão vista dos dois lados. Numa linha já
+  // descartada, oferecer "descartar" de novo seria um botão sem efeito — e um
+  // botão que às vezes não faz nada ensina a ignorar a tela toda.
+  if (pedido.descartada) {
+    const titulo = get('iaAcaoTituloDescartar');
+    const ajuda = get('iaAcaoAjudaDescartar');
+    if (titulo) titulo.textContent = 'Trazer esta linha de volta';
+    if (ajuda) {
+      ajuda.textContent = 'Ela volta a valer e pode ser revisada. '
+        + 'Descartar não é sentença: extrair de novo custaria crédito de API.';
+    }
+  }
+
   const campo = get('iaAcaoEmpresa');
   const listaEmpresas = get('iaAcaoEmpresas');
   if (listaEmpresas) {
@@ -128,7 +141,7 @@
   const decidir = async () => {
     const opcao = escolhida();
     if (opcao === 'descartar') {
-      await pedido.aoDecidir?.({ tipo: 'descartar' });
+      await pedido.aoDecidir?.({ tipo: pedido.descartada ? 'restaurar' : 'descartar' });
       close();
       return;
     }

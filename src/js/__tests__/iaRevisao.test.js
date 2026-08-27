@@ -1827,16 +1827,80 @@ test('fechar o modal leva o popover junto', async () => {
 // ETAPA 19 — linha descartada sai de circulação
 // ---------------------------------------------------------------------------
 
-test('linha descartada não pode ser marcada', async () => {
+test('linha descartada TAMBÉM se marca', async () => {
   const leitura = leituraPadrao();
   leitura.itens[0].acao = 'ignorar';
   const b = criarBancada({ leitura });
   await b.pronta();
 
-  // Marcada, ela contaria no "Descartar N selecionadas" e no "Abrir a 1ª de N"
-  // — os dois passariam a mentir sobre quantas linhas ainda vão a algum lugar.
+  // Antes não se marcava, para os contadores do rodapé não mentirem. Só que o
+  // remédio adoecia o paciente: a linha que mais precisa de uma decisão era
+  // justamente a que não podia ser apontada, e com ela o rodapé sumia.
+  //
+  // Marcar é dizer "é desta que eu falo". Contar é problema de cada botão.
+  assert.ok(marcaDa(linhasDeItem(b)[0]), 'a linha descartada não pode ser apontada');
+  assert.ok(marcaDa(linhasDeItem(b)[1]));
+});
+
+test('linha já aplicada continua fora da seleção', async () => {
+  const leitura = leituraPadrao();
+  leitura.itens[0].status = 'aplicado';
+  const b = criarBancada({ leitura });
+  await b.pronta();
+
+  // Aplicada não muda mais: o registro já está no módulo de destino, e marcá-la
+  // ofereceria decisões que não têm mais efeito nenhum.
   assert.equal(marcaDa(linhasDeItem(b)[0]), undefined);
-  assert.ok(marcaDa(linhasDeItem(b)[1]), 'a linha pendente perdeu a caixa junto');
+});
+
+test('marcar a descartada abre a decisão para ela', async () => {
+  const leitura = leituraPadrao({
+    destino: 'orcamentos', destino_rotulo: 'Orçamentos',
+    exige_alvo: true, rotulo_alvo: 'Cliente',
+    alvos: [{ id: 50, nome: 'Casa Vicenzo', tabela: 'clientes' }]
+  });
+  leitura.itens = [
+    { ...leitura.itens[0], acao: 'ignorar' },
+    { ...leitura.itens[1], alvo_id: null, acao: 'criar' }
+  ];
+
+  const b = criarBancada({ leitura });
+  await b.pronta();
+
+  marcaDa(linhasDeItem(b)[0]).checked = true;
+  marcaDa(linhasDeItem(b)[0]).disparar('change');
+  await b.pronta();
+
+  b.el('iaDetEscolherAlvo').disparar('click');
+  await b.pronta();
+
+  // A MARCADA vem primeiro, e vem sozinha: é o gesto explícito de dizer "é
+  // desta que eu falo". Sem isso o rodapé resolveria a outra linha travada e a
+  // pessoa mexeria na linha errada sem perceber.
+  assert.strictEqual(b.janela.iaAcaoPedido.itemId, leitura.itens[0].id);
+  assert.strictEqual(b.janela.iaAcaoPedido.descartada, true);
+});
+
+test('a decisão de uma linha descartada é trazê-la de volta', async () => {
+  const leitura = leituraPadrao({
+    destino: 'orcamentos', destino_rotulo: 'Orçamentos',
+    exige_alvo: true, rotulo_alvo: 'Cliente',
+    alvos: [{ id: 50, nome: 'Casa Vicenzo', tabela: 'clientes' }]
+  });
+  leitura.itens = leitura.itens.map(i => ({ ...i, acao: 'ignorar' }));
+
+  const b = criarBancada({ leitura });
+  await b.pronta();
+  marcaDa(linhasDeItem(b)[0]).checked = true;
+  marcaDa(linhasDeItem(b)[0]).disparar('change');
+  await b.pronta();
+  b.el('iaDetEscolherAlvo').disparar('click');
+  await b.pronta();
+
+  await b.janela.iaAcaoPedido.aoDecidir({ tipo: 'restaurar' });
+  await b.pronta();
+
+  assert.strictEqual(b.chamadas.find(c => c.metodo === 'PUT').corpo.acao, 'criar');
 });
 
 test('marcar todas ignora as descartadas', async () => {
