@@ -333,6 +333,10 @@
     <script src="../js/utils/notifications.js"></script>
     <script src="../js/utils/date-range-filter.js"></script>
     <script src="../js/utils/popover.js"></script>
+    <!-- O seletor de transportadora do orçamento. Aqui e não no HTML do modal
+         porque `menu.js` só executa `../js/{pagina}.js`: todo `<script>` dentro
+         de um módulo é ignorado, e o utilitário nunca rodaria. -->
+    <script src="../js/utils/transportadoras.js"></script>
     <script src="../js/notifications.js"></script>
     <!-- Regra de "posso restaurar este trabalho?" — precisa vir ANTES de
          estado-trabalho.js, que a consulta ao coletar e ao repor. -->

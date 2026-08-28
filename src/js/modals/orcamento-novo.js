@@ -160,20 +160,133 @@
     } catch(err){ console.error('Erro ao carregar contatos', err); }
   }
 
+  // -------------------------------------------------------------------------
+  // Cadastrar e excluir a transportadora DESTE cliente, sem sair do orçamento.
+  //
+  // Mesmo par de botões das coleções em Produtos, e o mesmo sub-modal que o
+  // cadastro de cliente usa para pedir o nome — reaproveitar os dois é o que
+  // faz esta caixa se comportar como as outras do programa.
+  // -------------------------------------------------------------------------
+  function ligarBotoesDeTransportadora() {
+    const add = document.getElementById('novoTransportadoraAdd');
+    const del = document.getElementById('novoTransportadoraDel');
+    if (!add && !del) return;
+
+    const clienteAtual = () => clienteSelect?.value || '';
+
+    const executar = (botao, acao) => {
+      if (!botao) return;
+      // `BotaoAcao` dá o carregando e trava o segundo clique. Sem ele, dois
+      // cliques cadastram a mesma transportadora duas vezes — e a segunda só é
+      // recusada depois de ir ao servidor.
+      if (window.BotaoAcao?.bind) window.BotaoAcao.bind(botao, acao);
+      else botao.addEventListener('click', acao);
+    };
+
+    executar(add, async () => {
+      if (!clienteAtual()) {
+        showToast('Escolha o cliente antes de cadastrar uma transportadora', 'error');
+        return;
+      }
+
+      // O sub-modal só COLETA o nome; quem grava é este modal, que sabe de
+      // qual cliente se trata. Um sub-modal que gravasse sozinho precisaria
+      // saber disso também, e as duas telas passariam a ter a mesma regra.
+      const nome = await pedirNomeDaTransportadora();
+      if (!nome) return;
+
+      try {
+        const r = await window.Transportadoras.cadastrar({
+          select: transportadoraSelect,
+          clienteId: clienteAtual(),
+          nome
+        });
+        showToast(`${r.nome} cadastrada para este cliente`, 'success');
+      } catch (err) {
+        showToast(err?.message || 'Não foi possível cadastrar a transportadora', 'error');
+      }
+    });
+
+    executar(del, async () => {
+      const id = window.Transportadoras.idEscolhido(transportadoraSelect);
+      if (!id) {
+        // "Não Definida" não tem cadastro para excluir, e nem deveria: ela é a
+        // resposta de quem ainda não sabe, não uma empresa.
+        showToast('Escolha uma transportadora cadastrada para excluir', 'info');
+        return;
+      }
+
+      const nome = transportadoraSelect.value;
+      if (window.DialogPadrao?.confirm) {
+        const seguir = await window.DialogPadrao.confirm({
+          title: 'Excluir transportadora',
+          message: `${nome} sai do cadastro deste cliente. `
+            + 'Os orçamentos e pedidos que já a citam continuam como estão.',
+          confirmText: 'Excluir',
+          cancelText: 'Voltar'
+        });
+        if (!seguir) return;
+      }
+
+      try {
+        await window.Transportadoras.excluir({
+          select: transportadoraSelect,
+          clienteId: clienteAtual(),
+          id
+        });
+        showToast(`${nome} excluída`, 'success');
+      } catch (err) {
+        showToast(err?.message || 'Não foi possível excluir a transportadora', 'error');
+      }
+    });
+  }
+
+  /**
+   * Abre o sub-modal que pede o nome e resolve com o que foi digitado.
+   *
+   * É o MESMO sub-modal do cadastro de cliente: mesma aparência, mesmo
+   * tratamento de Esc, mesma proteção contra o segundo envio. Uma segunda tela
+   * para pedir um nome só divergiria dela.
+   */
+  function pedirNomeDaTransportadora() {
+    return new Promise(resolve => {
+      let respondido = false;
+
+      const aoSalvar = e => {
+        respondido = true;
+        limpar();
+        resolve(String(e?.detail?.transportadora || '').trim());
+      };
+
+      // Fechar sem salvar também resolve — senão a promessa fica pendurada e o
+      // botão nunca sai do estado de carregando.
+      const aoFechar = e => {
+        if (e?.detail !== 'transportadoraCliente' || respondido) return;
+        limpar();
+        resolve('');
+      };
+
+      function limpar() {
+        window.removeEventListener('clienteTransportadoraSalva', aoSalvar);
+        window.removeEventListener('modalFechado', aoFechar);
+      }
+
+      window.addEventListener('clienteTransportadoraSalva', aoSalvar);
+      window.addEventListener('modalFechado', aoFechar);
+
+      Modal.open('modals/clientes/transportadora.html',
+        '../js/modals/cliente-transportadora.js', 'transportadoraCliente', true);
+    });
+  }
+
+  ligarBotoesDeTransportadora();
+
+  // A lista, o "Não Definida" e as duas ações vivem em
+  // `src/js/utils/transportadoras.js`: este modal e o de edição precisam
+  // exatamente das mesmas, e escritas duas vezes divergiriam na primeira
+  // mudança — como uma transportadora que existe numa tela e não na outra.
   async function carregarTransportadoras(clienteId){
-    transportadoraSelect.innerHTML = '<option value="" disabled selected hidden></option>';
-    transportadoraSelect.setAttribute('data-filled', 'false');
-    if(!clienteId) return;
-    try {
-      const resp = await fetchApi(`/api/transportadoras/${clienteId}`);
-      const data = await resp.json();
-      data.forEach(tp => {
-        const opt = document.createElement('option');
-        opt.value = tp.id;
-        opt.textContent = tp.nome;
-        transportadoraSelect.appendChild(opt);
-      });
-    } catch(err){ console.error('Erro ao carregar transportadoras', err); }
+    await window.Transportadoras?.carregar(transportadoraSelect, clienteId);
   }
 
   async function carregarProdutos(){
@@ -792,9 +905,11 @@
           parcelas,
           tipo_parcela: tipoParcela,
           forma_pagamento: formaPagamentoVal,
-          transportadora: prospeccao
-            ? ''
-            : (transportadoraSelect.options[transportadoraSelect.selectedIndex]?.textContent || ''),
+          // O valor da opção JÁ é o nome — é o nome que o orçamento grava, e
+          // o id não sobrevive à gravação. Ler o `textContent` era o mesmo
+          // resultado por um caminho mais frágil: bastava um espaço a mais na
+          // marcação para gravar um nome com espaço.
+          transportadora: prospeccao ? '' : (transportadoraSelect.value || ''),
           desconto_pagamento: descPagTot,
           desconto_especial: descEspTot,
           desconto_total: descontoTotal,

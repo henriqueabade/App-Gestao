@@ -227,6 +227,13 @@ const ModalManager = (() => {
     if (modals.size === 0) {
       document.body.classList.remove('overflow-hidden');
     }
+
+    // Fechar avisa, como abrir já avisava.
+    //
+    // Quem abre um sub-modal para colher UMA resposta precisa saber que a
+    // pessoa desistiu — senão fica esperando para sempre, e o botão que abriu
+    // o sub-modal nunca sai do estado de carregando.
+    window.dispatchEvent(new CustomEvent('modalFechado', { detail: overlayId }));
   }
 
   function closeAll() {
