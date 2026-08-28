@@ -3520,3 +3520,78 @@ test('uma gravação que falha não tranca a fila da linha', async () => {
   assert.strictEqual(puts.length, 2, 'a segunda correção não saiu');
   assert.deepEqual(puts.at(-1).corpo.dados.insumos.map(i => i.unidade), [null, 'UN']);
 });
+
+// ---------------------------------------------------------------------------
+// ETAPA 42 — o desconto por quantidade é do MÓDULO
+// ---------------------------------------------------------------------------
+
+/** O conteúdo que a IA manda ao formulário de orçamento. */
+async function conteudoDoOrcamento(itens) {
+  const leitura = leituraPadrao({
+    destino: 'orcamentos', destino_rotulo: 'Orçamentos',
+    campos: [{ chave: 'cliente', rotulo: 'Cliente', tipo: 'texto', largura: 'grande', naGrade: true }],
+    itens: [{
+      id: 1, linha: 1, acao: 'criar', alvo_id: 50, alvo_tabela: 'clientes',
+      status: 'pendente', mensagem: null, dados: { cliente: 'Casa Vicenzo' }
+    }]
+  });
+
+  const b = criarBancada({
+    leitura,
+    respostaPreenchimento: {
+      status: 200,
+      corpo: {
+        modal: { overlay: 'novoOrcamento', html: 'x', script: 'y', rotulo: 'Novo Orçamento' },
+        campos: { cliente: 'Casa Vicenzo' },
+        alvo: { id: 50, nome: 'Casa Vicenzo', tabela: 'clientes' },
+        contato: { id: 7, nome: 'Lílian' },
+        transportadora: null,
+        pagamento: { forma: null, condicao: '', prazo_vista: null, parcelas: null },
+        itens,
+        avisos: []
+      }
+    }
+  });
+  await b.pronta();
+  b.el('iaDetAplicar').disparar('click');
+  await b.pronta();
+  return { b, enviado: b.preenchimentos.at(-1) };
+}
+
+test('as linhas vão sem desconto, e o módulo aplica a regra dele', async () => {
+  const { enviado } = await conteudoDoOrcamento([
+    { produto_id: 9, nome: 'Painel Ripado 2,10', quantidade: 2, valor_unitario: 900 },
+    { produto_id: 10, nome: 'Mesa Lateral Carvalho', quantidade: 1, valor_unitario: 450 }
+  ]);
+
+  // Calcular o desconto aqui seria uma segunda regra de desconto no mesmo
+  // sistema, e as duas divergiriam na primeira mudança — divergência que
+  // ninguém vê, porque o número sai plausível.
+  assert.deepEqual(enviado.conteudo.itens.map(i => i.desc), ['0', '0']);
+
+  // E o pedido explícito para o módulo aplicar a dele: 5% acima de uma peça.
+  // Sem isto, dois vasos entravam com 0% e o desconto tinha de ser digitado à
+  // mão, linha por linha.
+  assert.strictEqual(enviado.conteudo.aplicarDescontoPadrao, true);
+});
+
+test('o contato resolvido chega ao formulário', async () => {
+  const { enviado } = await conteudoDoOrcamento([
+    { produto_id: 9, nome: 'Painel Ripado 2,10', quantidade: 1, valor_unitario: 900 }
+  ]);
+
+  // O select de contato só existe depois que o de cliente carrega — por isso a
+  // ordem importa, e por isso o id vai junto do id do cliente.
+  assert.strictEqual(enviado.conteudo.selects.novoCliente, '50');
+  assert.strictEqual(enviado.conteudo.selects.novoContato, '7');
+});
+
+test('a restauração depois de uma queda NÃO refaz os descontos', () => {
+  const fonte = fs.readFileSync(
+    path.join(__dirname, '..', 'modals', 'orcamento-novo.js'), 'utf8');
+
+  // `restaurar` serve a dois donos. Na volta de uma queda os descontos já
+  // foram calculados, e alguns foram negociados à mão: recalcular desfaria o
+  // que a pessoa combinou com o cliente.
+  assert.match(fonte, /if \(dados\.aplicarDescontoPadrao\) applyDefaultDiscounts\(\);/);
+});

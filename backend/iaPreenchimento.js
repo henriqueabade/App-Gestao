@@ -732,26 +732,70 @@ async function vincularAoCliente(api, alvo, dados) {
   const saida = { contato: null, transportadora: null, avisos: [] };
   if (!alvo || alvo.tabela !== 'clientes') return saida;
 
-  const nomeContato = texto(dados.contato).trim();
-  if (nomeContato) {
-    const contatos = await api.get('/api/contatos_cliente', { query: { id_cliente: alvo.id } })
-      .then(lista).catch(() => []);
-    const achado = indexarPor(contatos, 'nome').get(normalizar(nomeContato));
-    if (achado) saida.contato = { id: Number(achado.id), nome: achado.nome };
-    else saida.avisos.push(`Contato "${nomeContato}" não está no cadastro deste cliente`);
-  }
+  const [contatos, transportadoras] = await Promise.all([
+    api.get('/api/contatos_cliente', { query: { id_cliente: alvo.id } }).then(lista).catch(() => []),
+    api.get('/api/transportadoras', { query: { id_cliente: alvo.id } }).then(lista).catch(() => [])
+  ]);
 
-  const nomeTransp = texto(dados.transportadora).trim();
-  if (nomeTransp) {
-    const transportadoras = await api.get('/api/transportadoras', { query: { id_cliente: alvo.id } })
-      .then(lista).catch(() => []);
-    // A coluna chama `transportadora`, não `nome` — é o nome dela na tabela.
-    const achado = indexarPor(transportadoras, 'transportadora').get(normalizar(nomeTransp));
-    if (achado) saida.transportadora = { id: Number(achado.id), nome: achado.transportadora };
-    else saida.avisos.push(`Transportadora "${nomeTransp}" não está cadastrada para este cliente`);
-  }
+  saida.contato = escolherDoCadastro({
+    lido: dados.contato,
+    registros: contatos,
+    coluna: 'nome',
+    rotulo: 'Contato',
+    avisos: saida.avisos
+  });
+
+  // A coluna chama `transportadora`, não `nome` — é o nome dela na tabela.
+  saida.transportadora = escolherDoCadastro({
+    lido: dados.transportadora,
+    registros: transportadoras,
+    coluna: 'transportadora',
+    rotulo: 'Transportadora',
+    avisos: saida.avisos
+  });
 
   return saida;
+}
+
+/**
+ * Escolhe um registro do cadastro do cliente, com a MESMA regra da grade.
+ *
+ * A grade de revisão já preenche contato e transportadora a partir do cadastro
+ * (ver `anotarEmpresa`, em iaController.js): o que o documento trouxe vale se
+ * existir; não existindo e havendo uma opção só, ela entra.
+ *
+ * Aqui a regra era outra — só aceitava o que o documento escreveu. O resultado
+ * era a pior divergência possível: a tela mostrava o contato preenchido, e o
+ * orçamento abria sem contato nenhum. Quem revisou conferiu uma coisa e
+ * recebeu outra.
+ */
+function escolherDoCadastro({ lido, registros, coluna, rotulo, avisos }) {
+  const nome = texto(lido);
+
+  // Cliente SEM nenhum registro desses. Se o documento nomeou um, o aviso vale
+  // do mesmo jeito — o que falta é cadastrar, e é isso que precisa ser dito.
+  if (!registros.length) {
+    if (nome) avisos.push(`${rotulo} "${nome}" não está no cadastro deste cliente`);
+    return null;
+  }
+
+  if (nome) {
+    const achado = indexarPor(registros, coluna).get(normalizar(nome));
+    if (achado) return { id: Number(achado.id), nome: achado[coluna] };
+  }
+
+  // Documento CALADO e uma opção só: ela entra. É o que o sistema sabe, e
+  // saber é melhor que deixar em branco.
+  if (!nome && registros.length === 1) {
+    return { id: Number(registros[0].id), nome: registros[0][coluna] };
+  }
+
+  // Documento que NOMEIA alguém que não está no cadastro é outra história:
+  // trocar por quem está cadastrado põe a proposta no nome da pessoa errada, e
+  // ninguém percebe — o nome certo estava escrito no pedido. O aviso manda
+  // cadastrar, que é o que resolve.
+  if (nome) avisos.push(`${rotulo} "${nome}" não está no cadastro deste cliente`);
+  return null;
 }
 
 /**

@@ -628,6 +628,16 @@
       // `prevCondicao` precisa valer o que valia quando os descontos foram
       // calculados, senão `applyDefaultDiscounts` recalcularia tudo errado.
       prevCondicao = dados.prevCondicao ?? prevCondicao;
+
+      // Quem chega SEM desconto nenhum pede a regra do módulo — 5% acima de
+      // uma peça, mais 5% à vista. É o caso do preenchimento pela IA: as
+      // linhas vêm do documento e nenhum desconto passou por ninguém.
+      //
+      // A restauração depois de uma queda NÃO pede: ali os descontos já foram
+      // calculados, e alguns foram negociados à mão. Recalcular desfaria o que
+      // a pessoa combinou com o cliente.
+      if (dados.aplicarDescontoPadrao) applyDefaultDiscounts();
+
       recalcTotals();
 
       // 2) Selects assíncronos. Cliente antes de contato/transportadora: o

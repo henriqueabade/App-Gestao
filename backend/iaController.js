@@ -1080,14 +1080,18 @@ function anotarEmpresa(dados, item, ctx) {
     const achado = lista.find(o => normalizarTexto(o.nome) === normalizarTexto(lido));
 
     if (achado) { saida[chave] = achado.nome; origem[chave] = 'cadastro'; continue; }
-    // Uma opção só: é o que o sistema sabe, e saber é melhor que branco.
-    if (lista.length === 1) {
-      if (lido) lidos[chave] = lido;
+
+    // Documento CALADO e uma opção só: ela entra. É o que o sistema sabe.
+    if (!lido && lista.length === 1) {
       saida[chave] = lista[0].nome;
       origem[chave] = 'cadastro';
       continue;
     }
-    // Várias e nenhuma batendo: fica para a pessoa escolher da lista.
+
+    // Documento que NOMEIA alguém fora do cadastro é outra história: trocar
+    // por quem está cadastrado põe a proposta no nome da pessoa errada, e
+    // ninguém percebe — o nome certo estava escrito no pedido. Fica em branco,
+    // com o lido guardado, e a pessoa escolhe da lista.
     if (lido) { lidos[chave] = lido; saida[chave] = null; }
   }
 

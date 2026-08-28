@@ -1841,8 +1841,21 @@
           qtd: String(i.quantidade),
           valor: String(i.valor_unitario),
           valorDesc: String(i.valor_unitario),
+          // Zero, e o módulo aplica a REGRA DELE em cima: 5% acima de uma
+          // peça, mais 5% à vista. Calcular o desconto aqui seria uma segunda
+          // regra de desconto no mesmo sistema, e as duas divergiriam na
+          // primeira mudança — divergência que ninguém vê, porque o número
+          // sai plausível.
           desc: '0'
         })),
+
+        // Peça a regra de desconto do módulo depois de montar as linhas.
+        //
+        // `restaurar` serve a dois donos: a restauração depois de uma queda,
+        // em que os descontos JÁ foram calculados e recalculá-los desfaria o
+        // que a pessoa negociou; e o preenchimento pela IA, em que nenhum
+        // desconto passou por ninguém ainda. Só o segundo pede a regra.
+        aplicarDescontoPadrao: true,
 
         // O cliente é o PRIMEIRO select a ser reposto: é o `change` dele que
         // carrega as listas de contato e de transportadora. Os outros dois só

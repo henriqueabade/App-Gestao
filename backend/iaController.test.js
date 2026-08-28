@@ -4667,6 +4667,110 @@ test('contato e transportadora são casados com o cadastro do cliente', async ()
   }
 });
 
+// ---------------------------------------------------------------------------
+// ETAPA 42 — a grade e o preenchimento contam a MESMA coisa
+// ---------------------------------------------------------------------------
+
+test('documento calado: o unico contato do cadastro vai para o orcamento', async () => {
+  const dados = baseOrcamento();
+  dados.contatos_cliente = [{ id: 7, id_cliente: 50, nome: 'Lílian' }];
+  dados.transportadoras = [{ id: 3, id_cliente: 50, transportadora: 'Rodonaves' }];
+
+  const ctx = await prepararOrcamento({
+    itens: [{
+      cliente: 'Casa Vicenzo', razao_social: null, cnpj: null, validade: null,
+      prazo: null, forma_pagamento: null, condicao_pagamento: null, parcelas: null,
+      transportadora: null, contato: null, observacoes: null,
+      itens: [{ codigo: 'PR-210', nome: 'Painel Ripado 2,10', quantidade: '1', valor_unitario: null }]
+    }]
+  }, dados);
+  try {
+    const r = await carga(ctx, 5, itensDa(ctx, 5)[0].id);
+
+    // A GRADE ja mostrava o contato preenchido a partir do cadastro; o
+    // preenchimento seguia outra regra e mandava vazio. A tela dizia uma coisa
+    // e o orcamento abria com outra — quem revisou conferiu o que nao recebeu.
+    assert.strictEqual(r.contato?.id, 7);
+    assert.strictEqual(r.transportadora?.id, 3);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('a grade e o preenchimento concordam sobre o contato', async () => {
+  const dados = baseOrcamento();
+  dados.contatos_cliente = [{ id: 7, id_cliente: 50, nome: 'Lílian' }];
+  dados.transportadoras = [];
+
+  const ctx = await prepararOrcamento({
+    itens: [{
+      cliente: 'Casa Vicenzo', razao_social: null, cnpj: null, validade: null,
+      prazo: null, forma_pagamento: null, condicao_pagamento: null, parcelas: null,
+      transportadora: null, contato: null, observacoes: null,
+      itens: [{ codigo: 'PR-210', nome: 'Painel Ripado 2,10', quantidade: '1', valor_unitario: null }]
+    }]
+  }, dados);
+  try {
+    const naGrade = (await (await chamar(ctx.porta, '/api/ia/5')).json()).itens[0];
+    const noModal = await carga(ctx, 5, itensDa(ctx, 5)[0].id);
+
+    // Duas regras sobre o mesmo campo divergem na primeira mudanca — e a
+    // divergencia aparece no pior lugar: entre o que se conferiu e o que se
+    // recebeu.
+    assert.strictEqual(naGrade.dados.contato, 'Lílian');
+    assert.strictEqual(noModal.contato?.nome, 'Lílian');
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('com varios contatos e o documento calado, nenhum e escolhido', async () => {
+  const ctx = await prepararOrcamento({
+    itens: [{
+      cliente: 'Casa Vicenzo', razao_social: null, cnpj: null, validade: null,
+      prazo: null, forma_pagamento: null, condicao_pagamento: null, parcelas: null,
+      transportadora: null, contato: null, observacoes: null,
+      itens: [{ codigo: 'PR-210', nome: 'Painel Ripado 2,10', quantidade: '1', valor_unitario: null }]
+    }]
+  });
+  try {
+    // A fixture padrao tem DOIS contatos para a Casa Vicenzo. Escolher um seria
+    // sorteio, e o contato errado manda a proposta para a pessoa errada.
+    const r = await carga(ctx, 5, itensDa(ctx, 5)[0].id);
+    assert.strictEqual(r.contato, null);
+
+    // Transportadora e uma so: essa entra.
+    assert.strictEqual(r.transportadora?.nome, 'Rodonaves');
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('na GRADE também: contato nomeado fora do cadastro não é substituído', async () => {
+  const dados = baseOrcamento();
+  dados.contatos_cliente = [{ id: 7, id_cliente: 50, nome: 'Lílian' }];
+
+  const ctx = await prepararOrcamento({
+    itens: [{
+      cliente: 'Casa Vicenzo', razao_social: null, cnpj: null, validade: null,
+      prazo: null, forma_pagamento: null, condicao_pagamento: null, parcelas: null,
+      transportadora: null, contato: 'Roberta', observacoes: null,
+      itens: [{ codigo: 'PR-210', nome: 'Painel Ripado 2,10', quantidade: '1', valor_unitario: null }]
+    }]
+  }, dados);
+  try {
+    const linha = (await (await chamar(ctx.porta, '/api/ia/5')).json()).itens[0];
+
+    // O pedido nomeou Roberta. Trocar pela unica cadastrada poria o orcamento
+    // no nome da pessoa errada, e ninguem perceberia — o nome certo estava
+    // escrito no papel.
+    assert.strictEqual(linha.dados.contato ?? null, null);
+    assert.strictEqual(linha.dados._lidos.contato, 'Roberta');
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
 test('contato que não está no cadastro é dito, não inventado', async () => {
   const dados = baseOrcamento();
   dados.contatos_cliente = [{ id: 7, id_cliente: 50, nome: 'Lílian' }];
