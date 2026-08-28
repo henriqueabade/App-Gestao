@@ -21,6 +21,36 @@
     const r = total % n;
     return Array.from({length:n},(_,i)=>base+(i<r?1:0));
   }
+  /**
+   * Em quantas vezes se pode parcelar.
+   *
+   * O teto é da TELA, não do sistema: o backend grava quantas parcelas vierem,
+   * e a soma delas é conferida contra o total do documento — que é a regra que
+   * de fato protege o pedido. Aqui é só o que a lista oferece.
+   *
+   * Um número, e não a lista escrita à mão: a lista de 1 a 5 estava cravada
+   * dentro do HTML do seletor, e mudar o teto significava caçá-la no meio de
+   * uma string de marcação.
+   */
+  const MAX_PARCELAS = 10;
+
+  /**
+   * Garante que o número exista na lista antes de selecioná-lo.
+   *
+   * `select.value = 12` num seletor que só vai até 10 não erra: simplesmente
+   * não faz nada, e o campo fica em branco. Sem isto, um pedido de 12 parcelas
+   * abria o bloco de parcelamento vazio e ninguém sabia por quê.
+   */
+  function garantirOpcao(select, valor){
+    const n = parseInt(valor,10);
+    if(!Number.isFinite(n) || n <= 0) return;
+    if(Array.from(select.options).some(o=>o.value===String(n))) return;
+    const op = document.createElement('option');
+    op.value = String(n);
+    op.textContent = `${n} (do documento)`;
+    select.appendChild(op);
+  }
+
   const instances = new Map();
   function init(containerId, opts){
     const container = document.getElementById(containerId);
@@ -32,7 +62,7 @@
           <label class="block text-sm font-medium mb-2 text-white">Parcelas</label>
           <select id="${containerId}_count" class="input-glass text-white rounded-md px-4 py-3 w-full">
             <option value="">Selecione</option>
-            ${[1,2,3,4,5].map(n=>`<option value="${n}">${n}</option>`).join('')}
+            ${Array.from({length:MAX_PARCELAS},(_,i)=>i+1).map(n=>`<option value="${n}">${n}</option>`).join('')}
           </select>
         </div>
         <div class="col-span-2">
@@ -60,6 +90,11 @@
     if(opts.prefill){
       const pre = opts.prefill;
       if(pre.count){
+        // Um documento pode pedir MAIS parcelas do que a lista oferece. O
+        // backend aceita — o que ele confere é a soma bater com o total —, e
+        // recusar aqui deixaria o bloco vazio sem dizer por quê. A opção
+        // entra, marcada como veio do documento.
+        garantirOpcao(elements.count, pre.count);
         elements.count.value = pre.count;
         onCountChange(containerId);
       }
@@ -156,7 +191,7 @@
     const inst=instances.get(id); if(!inst) return null;
     return JSON.parse(JSON.stringify(inst.state));
   }
-  window.Parcelamento={init,updateTotal,getData};
+  window.Parcelamento={init,updateTotal,getData,MAX_PARCELAS};
   window.parseCurrencyToCents=parseCurrencyToCents;
   window.formatCentsBRL=formatCentsBRL;
   window.parseIntOnly=parseIntOnly;
