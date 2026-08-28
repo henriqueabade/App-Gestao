@@ -222,3 +222,111 @@ test('a escolha anterior sobrevive ao repinte', async () => {
   await T.carregar(select, 50);
   assert.strictEqual(select.value, 'Braspress');
 });
+
+// ---------------------------------------------------------------------------
+// As DUAS telas de orçamento se comportam igual
+//
+// "Novo" e "Editar" tinham cada uma a sua cópia da montagem do seletor, e as
+// duas já haviam divergido: a de lá ganhou "Não Definida" e a daqui não. A
+// mesma escolha existia numa tela e não na outra, e quem editava um orçamento
+// não conseguia fazer o que quem criava um fazia.
+// ---------------------------------------------------------------------------
+
+const MODAIS_DE_ORCAMENTO = [
+  { nome: 'Novo Orçamento', js: 'orcamento-novo.js', html: 'novo.html', prefixo: 'novo' },
+  { nome: 'Editar Orçamento', js: 'orcamento-editar.js', html: 'editar.html', prefixo: 'editar' }
+];
+
+const lerJs = arquivo =>
+  fs.readFileSync(path.join(__dirname, '..', 'modals', arquivo), 'utf8');
+const lerHtml = arquivo =>
+  fs.readFileSync(path.join(__dirname, '..', '..', 'html', 'modals', 'orcamentos', arquivo), 'utf8');
+
+test('as duas telas montam o seletor pelo MESMO utilitário', () => {
+  for (const modal of MODAIS_DE_ORCAMENTO) {
+    const js = lerJs(modal.js);
+
+    assert.match(js, /window\.Transportadoras\?\.carregar\(/,
+      `${modal.nome}: não usa o utilitário para carregar`);
+
+    // A cópia antiga montava as opções à mão. Enquanto existir, ela volta a
+    // divergir na primeira mudança — foi assim que "Não Definida" ficou só
+    // numa das telas.
+    assert.doesNotMatch(js, /opt\.value = tp\.id/,
+      `${modal.nome}: voltou a montar as opções por conta própria`);
+  }
+});
+
+test('as duas telas têm os botões de cadastrar e excluir', () => {
+  for (const modal of MODAIS_DE_ORCAMENTO) {
+    const html = lerHtml(modal.html);
+    const js = lerJs(modal.js);
+
+    for (const acao of ['Add', 'Del']) {
+      const id = `${modal.prefixo}Transportadora${acao}`;
+      assert.ok(html.includes(`id="${id}"`), `${modal.nome}: falta o botão ${id}`);
+      assert.ok(js.includes(id), `${modal.nome}: o botão ${id} não está ligado a nada`);
+    }
+  }
+});
+
+test('as duas telas gravam o NOME, não o id da opção', () => {
+  for (const modal of MODAIS_DE_ORCAMENTO) {
+    const js = lerJs(modal.js);
+
+    // O valor da opção é o nome — é o nome que o orçamento grava, e o id não
+    // sobrevive à gravação. Ler o `textContent` dava o mesmo por um caminho
+    // mais frágil: bastava um espaço a mais na marcação.
+    assert.doesNotMatch(js, /Transportadora\.options\[[^\]]+selectedIndex\]\?\.textContent/,
+      `${modal.nome}: ainda lê o texto da opção em vez do valor`);
+  }
+});
+
+test('as duas telas protegem o segundo clique e pedem confirmação', () => {
+  for (const modal of MODAIS_DE_ORCAMENTO) {
+    const js = lerJs(modal.js);
+
+    // Dois cliques cadastram a mesma transportadora duas vezes, e a segunda só
+    // é recusada depois de ir ao servidor.
+    assert.match(js, /BotaoAcao\?\.bind/,
+      `${modal.nome}: os botões não travam o segundo clique`);
+
+    // Excluir não tem volta.
+    assert.match(js, /DialogPadrao\?\.confirm/,
+      `${modal.nome}: exclui sem confirmar`);
+  }
+});
+
+test('as duas telas reaproveitam o sub-modal que pede o nome', () => {
+  for (const modal of MODAIS_DE_ORCAMENTO) {
+    const js = lerJs(modal.js);
+
+    // Uma segunda tela para pedir um nome divergiria desta na aparência, no
+    // tratamento de Esc e na proteção do segundo envio.
+    assert.match(js, /modals\/clientes\/transportadora\.html/,
+      `${modal.nome}: não usa o sub-modal do cadastro de cliente`);
+
+    // E soltam a promessa quando a pessoa desiste: sem isso o botão fica em
+    // carregando para sempre.
+    //
+    // A escuta E a remoção dela: procurar só o nome do evento passaria com a
+    // escuta apagada, porque a remoção também o menciona.
+    assert.match(js, /addEventListener\('modalFechado'/,
+      `${modal.nome}: não escuta o fechamento sem salvar`);
+    assert.match(js, /removeEventListener\('modalFechado'/,
+      `${modal.nome}: deixa a escuta pendurada depois de responder`);
+  }
+});
+
+test('o parcelamento das duas telas vem do mesmo lugar', () => {
+  for (const modal of MODAIS_DE_ORCAMENTO) {
+    const js = lerJs(modal.js);
+
+    // O teto de parcelas é do utilitário. Uma tela que montasse o próprio
+    // seletor continuaria em 5 sem ninguém notar.
+    assert.match(js, /Parcelamento\.init\(/,
+      `${modal.nome}: não usa o parcelamento compartilhado`);
+    assert.doesNotMatch(js, /<option value="5">5<\/option>/,
+      `${modal.nome}: tem uma lista de parcelas própria`);
+  }
+});

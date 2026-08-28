@@ -189,20 +189,128 @@
     } catch(err){ console.error('Erro ao carregar contatos', err); }
   }
 
-  async function carregarTransportadoras(clienteId){
-    editarTransportadora.innerHTML = '<option value="" disabled selected hidden></option>';
-    editarTransportadora.setAttribute('data-filled','false');
-    if(!clienteId) return;
-    try {
-      const resp = await fetchApi(`/api/transportadoras/${clienteId}`);
-      const data = await resp.json();
-      data.forEach(tp => {
-        const opt = document.createElement('option');
-        opt.value = tp.id;
-        opt.textContent = tp.nome;
-        editarTransportadora.appendChild(opt);
-      });
-    } catch(err){ console.error('Erro ao carregar transportadoras', err); }
+  // A lista, o "Não Definida" e as duas ações vivem em
+  // `src/js/utils/transportadoras.js` — as mesmas de "Novo Orçamento". Este
+  // modal tinha uma cópia da montagem do seletor, e as duas já divergiam: a de
+  // lá ganhou "Não Definida" e a daqui não, então a mesma escolha existia numa
+  // tela e não na outra.
+  async function carregarTransportadoras(clienteId, escolhido){
+    await window.Transportadoras?.carregar(editarTransportadora, clienteId, escolhido);
+  }
+
+  // -------------------------------------------------------------------------
+  // Cadastrar e excluir a transportadora DESTE cliente, sem sair do orçamento.
+  //
+  // Mesmo par de botões e mesmo sub-modal do "Novo Orçamento": quem edita um
+  // orçamento descobre a transportadora que falta com a mesma frequência de
+  // quem cria um, e mandá-lo ao cadastro do cliente para voltar depois perde a
+  // edição pelo caminho.
+  // -------------------------------------------------------------------------
+  function ligarBotoesDeTransportadora() {
+    const add = document.getElementById('editarTransportadoraAdd');
+    const del = document.getElementById('editarTransportadoraDel');
+    if (!add && !del) return;
+
+    // Em modo prospecção não há cliente e a transportadora é DIGITADA num
+    // campo de texto: os botões não teriam a que se aplicar.
+    if (daProspeccao) {
+      add?.remove();
+      del?.remove();
+      return;
+    }
+
+    const clienteAtual = () => editarCliente?.value || data.cliente_id || '';
+
+    const executar = (botao, acao) => {
+      if (!botao) return;
+      // `BotaoAcao` dá o carregando e trava o segundo clique — sem ele, dois
+      // cliques cadastram a mesma transportadora duas vezes.
+      if (window.BotaoAcao?.bind) window.BotaoAcao.bind(botao, acao);
+      else botao.addEventListener('click', acao);
+    };
+
+    executar(add, async () => {
+      if (!clienteAtual()) {
+        showToast('Escolha o cliente antes de cadastrar uma transportadora', 'error');
+        return;
+      }
+      const nome = await pedirNomeDaTransportadora();
+      if (!nome) return;
+      try {
+        const r = await window.Transportadoras.cadastrar({
+          select: editarTransportadora, clienteId: clienteAtual(), nome
+        });
+        showToast(`${r.nome} cadastrada para este cliente`, 'success');
+      } catch (err) {
+        showToast(err?.message || 'Não foi possível cadastrar a transportadora', 'error');
+      }
+    });
+
+    executar(del, async () => {
+      const id = window.Transportadoras.idEscolhido(editarTransportadora);
+      if (!id) {
+        // "Não Definida" não tem cadastro para excluir, e nem deveria: ela é a
+        // resposta de quem ainda não sabe, não uma empresa.
+        showToast('Escolha uma transportadora cadastrada para excluir', 'info');
+        return;
+      }
+      const nome = editarTransportadora.value;
+      if (window.DialogPadrao?.confirm) {
+        const seguir = await window.DialogPadrao.confirm({
+          title: 'Excluir transportadora',
+          message: `${nome} sai do cadastro deste cliente. `
+            + 'Os orçamentos e pedidos que já a citam continuam como estão.',
+          confirmText: 'Excluir',
+          cancelText: 'Voltar'
+        });
+        if (!seguir) return;
+      }
+      try {
+        await window.Transportadoras.excluir({
+          select: editarTransportadora, clienteId: clienteAtual(), id
+        });
+        showToast(`${nome} excluída`, 'success');
+      } catch (err) {
+        showToast(err?.message || 'Não foi possível excluir a transportadora', 'error');
+      }
+    });
+  }
+
+  /**
+   * Abre o sub-modal que pede o nome e resolve com o que foi digitado.
+   *
+   * É o MESMO sub-modal do cadastro de cliente: mesma aparência, mesmo
+   * tratamento de Esc, mesma proteção contra o segundo envio.
+   */
+  function pedirNomeDaTransportadora() {
+    return new Promise(resolve => {
+      let respondido = false;
+
+      const aoSalvar = e => {
+        respondido = true;
+        limpar();
+        resolve(String(e?.detail?.transportadora || '').trim());
+      };
+
+      // Fechar sem salvar também resolve — senão a promessa fica pendurada e o
+      // botão nunca sai do estado de carregando.
+      const aoFechar = e => {
+        if (e?.detail !== 'transportadoraCliente' || respondido) return;
+        limpar();
+        resolve('');
+      };
+
+      function limpar() {
+        window.removeEventListener('clienteTransportadoraSalva', aoSalvar);
+        window.removeEventListener('modalFechado', aoFechar);
+      }
+
+      window.addEventListener('clienteTransportadoraSalva', aoSalvar);
+      window.addEventListener('modalFechado', aoFechar);
+
+      Modal.open('modals/clientes/transportadora.html',
+        '../js/modals/cliente-transportadora.js', 'transportadoraCliente', true);
+    });
   }
 
   async function carregarProdutos(){
@@ -248,6 +356,11 @@
   // -------------------------------------------------------------------------
   const daProspeccao = Boolean(data.prospeccao_id) && !data.cliente_id;
   let transportadoraTexto = null;
+
+  // Depois de `daProspeccao`, e não antes: é ele que decide se os botões têm a
+  // que se aplicar. Chamado antes, a leitura da constante caía na zona morta e
+  // o modal inteiro morria na abertura.
+  ligarBotoesDeTransportadora();
 
   if (daProspeccao) {
     const escapar = v => String(v ?? '')
@@ -300,17 +413,13 @@
     editarCliente.value = data.cliente_id;
     editarCliente.setAttribute('data-filled', 'true');
     await carregarContatos(data.cliente_id);
-    await carregarTransportadoras(data.cliente_id);
+    // O valor da opção JÁ é o nome, que é o que o orçamento gravou. Procurar a
+    // opção pelo `textContent` era o mesmo resultado por um caminho mais
+    // frágil — e não achava "Não Definida", que não vem da lista do cliente.
+    await carregarTransportadoras(data.cliente_id, data.transportadora || '');
     if (data.contato_id) {
       editarContato.value = data.contato_id;
       editarContato.setAttribute('data-filled', 'true');
-    }
-    if (data.transportadora) {
-      const opt = Array.from(editarTransportadora.options).find(o => o.textContent === data.transportadora);
-      if (opt) {
-        editarTransportadora.value = opt.value;
-        editarTransportadora.setAttribute('data-filled','true');
-      }
     }
   }
   editarFormaPagamento.value = data.forma_pagamento || '';
@@ -899,7 +1008,10 @@
     // cadastro dela para quem ainda não é cliente.
     const transportadoraText = daProspeccao
       ? (transportadoraTexto?.value || '').trim()
-      : (editarTransportadora.options[editarTransportadora.selectedIndex]?.textContent || '');
+      // O valor da opção É o nome. Ler o `textContent` dava o mesmo por um
+      // caminho mais frágil: bastava um espaço a mais na marcação para gravar
+      // um nome com espaço.
+      : (editarTransportadora.value || '');
 
     // Segunda linha de defesa — a primeira é , antes de
     // abrir a revisão de estoque.
