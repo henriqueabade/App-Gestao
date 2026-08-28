@@ -1916,3 +1916,24 @@ body[data-current-module="ia"] #content.no-scroll #iaTableWrapper {
     background: rgba(248, 113, 113, 0.22);
     color: #fff;
 }
+
+
+/* ---------------------------------------------------------------------------
+   ETAPA 41 — QUEM FAZ CADA ETAPA
+
+   Nota abaixo do seletor. Existe porque a escolha tem consequência que não se
+   vê no nome do provedor: a Groq recebe imagem e não PDF, e descobrir isso com
+   um envio recusado no meio da leitura é descobrir tarde.
+   --------------------------------------------------------------------------- */
+
+.ia-config-nota {
+    display: block;
+    margin-top: 6px;
+    font-size: 11px;
+    line-height: 1.45;
+    color: rgba(255, 255, 255, 0.5);
+}
+
+.ia-config-nota--aviso {
+    color: #f0c94c;
+}

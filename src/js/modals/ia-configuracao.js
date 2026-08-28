@@ -117,12 +117,65 @@
    * configuração de quem opera transforma "por que só entraram 10 arquivos?"
    * numa pergunta que só o administrador consegue responder.
    */
+  /**
+   * Monta os dois seletores de etapa.
+   *
+   * As opções vêm do BACKEND, e não escritas no HTML: é ele que sabe quais
+   * provedores existem e o que cada um consegue fazer. Uma lista escrita aqui
+   * divergiria dele na primeira mudança — e a divergência apareceria como uma
+   * escolha que o servidor recusa.
+   */
+  function pintarEtapas(cfg) {
+    const etapas = cfg?.etapas || {};
+    const opcoes = Array.isArray(etapas.opcoes) ? etapas.opcoes : [];
+    if (!opcoes.length) return;
+
+    for (const [id, chave] of [['iaProvedorLeitura', 'leitura'], ['iaProvedorExtracao', 'extracao']]) {
+      const select = document.getElementById(id);
+      if (!select) continue;
+
+      select.replaceChildren(...opcoes.map(o => {
+        const op = document.createElement('option');
+        op.value = o.id;
+        op.textContent = o.rotulo;
+        return op;
+      }));
+      select.value = etapas[chave] || opcoes[0].id;
+    }
+
+    // A Groq recebe imagem e não PDF. O aviso aparece ANTES da escolha, junto
+    // do seletor: descobrir isso com um envio recusado no meio da leitura é
+    // descobrir tarde.
+    const aviso = document.getElementById('iaProvedorLeituraAviso');
+    const leitura = document.getElementById('iaProvedorLeitura');
+    const contar = () => {
+      if (!aviso || !leitura) return;
+      const escolhido = opcoes.find(o => o.id === leitura.value);
+      aviso.textContent = escolhido && !escolhido.le_pdf
+        ? `${escolhido.rotulo} lê imagem, mas não PDF. Planilhas continuam sendo lidas sem IA.`
+        : 'PDF, imagem e planilha. Planilha é lida sem IA, direto do arquivo.';
+      aviso.classList.toggle('ia-config-nota--aviso', Boolean(escolhido && !escolhido.le_pdf));
+    };
+    leitura?.addEventListener('change', contar);
+    contar();
+  }
+
   function pintarLimites(cfg) {
     const lim = cfg?.limites || {};
     const regras = cfg?.campos || {};
 
+    pintarEtapas(cfg);
+
     for (const campoEl of document.querySelectorAll('[data-config]')) {
       const chave = campoEl.getAttribute('data-config');
+      // As etapas já foram preenchidas acima, com as opções que existem: o
+      // valor delas não sai de `limites`, e sobrescrevê-lo com `''` aqui
+      // esvaziaria o select recém-montado.
+      if (campoEl.tagName === 'SELECT') {
+        campoEl.disabled = !podeEditar;
+        continue;
+      }
+
       const valor = lim[chave];
       campoEl.value = valor === null || valor === undefined ? '' : String(valor);
       campoEl.readOnly = !podeEditar;

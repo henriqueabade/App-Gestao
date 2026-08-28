@@ -188,6 +188,12 @@ const MODULOS = [
 ];
 
 async function montar(dados, env = {}, opcoes = {}) {
+  // O cache da configuração é de MÓDULO e vale 20 segundos. Num processo de
+  // teste ele vaza de um teste para o outro: quem sobe com uma configuração
+  // nova reusaria a do anterior, e o teste passaria a depender da ordem — que
+  // é o jeito mais silencioso de um teste medir a coisa errada.
+  require('./iaConfiguracao').limparCache();
+
   const upstream = criarUpstream(dados, opcoes);
   await new Promise(r => upstream.servidor.listen(0, '127.0.0.1', r));
   process.env.API_BASE_URL = `http://127.0.0.1:${upstream.servidor.address().port}`;
@@ -1534,6 +1540,13 @@ function criarGroq(responder) {
   });
   return { servidor, chamadas };
 }
+
+/**
+ * O Gemini respondendo uma EXTRAÇÃO: o JSON vem no texto do candidato, que é
+ * onde `responseMimeType: 'application/json'` o entrega.
+ */
+const respostaGeminiJson = (objeto, finishReason = 'STOP') =>
+  respostaGemini(typeof objeto === 'string' ? objeto : JSON.stringify(objeto), finishReason);
 
 const respostaGroq = (objeto, finish = 'stop') => ({
   choices: [{ message: { content: typeof objeto === 'string' ? objeto : JSON.stringify(objeto) }, finish_reason: finish }]
@@ -5806,6 +5819,242 @@ test('o detalhe conta se quem abriu pode excluir linha', async () => {
     // A grade so mostra o botao a quem pode usa-lo: um botao que sempre
     // responde "sem permissao" ensina a ignorar aquele canto da tela.
     assert.strictEqual(detalhe.pode_excluir_linha, true);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+// ---------------------------------------------------------------------------
+// ETAPA 41 — quem le e quem extrai se escolhe
+// ---------------------------------------------------------------------------
+
+/** Uma leitura com a configuracao de etapas gravada no banco. */
+function comEtapas(dados, { leitura, extracao } = {}) {
+  const base = comLeitura(dados || baseFicha(), 'produto_insumos');
+  base.ia_configuracao = [
+    ...(base.ia_configuracao || []),
+    ...(leitura ? [{ id: 90, chave: 'provedor_leitura', valor: leitura }] : []),
+    ...(extracao ? [{ id: 91, chave: 'provedor_extracao', valor: extracao }] : [])
+  ];
+  return base;
+}
+
+test('sem configuracao, Gemini le e Groq extrai — como sempre foi', async () => {
+  const ctx = await montarComIA(comEtapas(), {}, {
+    groq: () => ({ payload: respostaGroq(FICHA_LIDA) })
+  });
+  try {
+    const cfg = await (await chamar(ctx.porta, '/api/ia/config/estado')).json();
+
+    // Os padroes sao o que uma instalacao que nunca abriu a tela ja fazia.
+    // Mudar isso silenciosamente seria trocar o comportamento de quem nao
+    // pediu nada.
+    assert.strictEqual(cfg.etapas.leitura, 'gemini');
+    assert.strictEqual(cfg.etapas.extracao, 'groq');
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('escolhido o Gemini para extrair, e ele quem extrai', async () => {
+  let groqChamada = false;
+  const ctx = await montarComIA(comEtapas(null, { extracao: 'gemini' }), {}, {
+    groq: () => { groqChamada = true; return { payload: respostaGroq(FICHA_LIDA) }; },
+    gemini: () => ({ payload: respostaGeminiJson(FICHA_LIDA) })
+  });
+  try {
+    const r = await chamar(ctx.porta, '/api/ia/5/estruturar', { method: 'POST' });
+    assert.strictEqual(r.status, 200);
+
+    // O ponto inteiro da etapa: o llama vinha perdendo itens, e trocar de
+    // ETAPA nao era possivel — so de modelo, que e outra coisa.
+    assert.strictEqual(groqChamada, false, 'a Groq foi chamada mesmo com o Gemini escolhido');
+    assert.ok(itensDa(ctx, 5).length > 0, 'a extracao pelo Gemini nao produziu item nenhum');
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('o modelo gravado e o de quem extraiu', async () => {
+  const ctx = await montarComIA(comEtapas(null, { extracao: 'gemini' }), {}, {
+    gemini: () => ({ payload: respostaGeminiJson(FICHA_LIDA) })
+  });
+  try {
+    await chamar(ctx.porta, '/api/ia/5/estruturar', { method: 'POST' });
+    const leitura = ctx.tabelas.ia_extracoes.find(e => e.id === 5);
+
+    // Gravar o modelo da Groq quando quem extraiu foi o Gemini faria a lista
+    // dizer que o trabalho foi feito por quem nao o fez.
+    assert.match(String(leitura.modelo_llm), /gemini/i);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('a Groq nao le PDF, e o recado sai na hora do envio', async () => {
+  const provedores = require('./iaProvedores');
+  await assert.rejects(
+    () => provedores.lerComGroq({
+      buffer: Buffer.from('%PDF-1.4'),
+      mime: 'application/pdf'
+    }),
+    // Rasterizar o PDF antes e trabalho que este modulo nao faz. Deixar
+    // seguir devolveria texto vazio no fim da leitura, sem dizer por que.
+    /não lê application\/pdf|Troque o provedor/
+  );
+});
+
+test('a configuracao recusa provedor que nao existe', async () => {
+  const ctx = await montarComIA(comEtapas());
+  try {
+    const r = await chamar(ctx.porta, '/api/ia/config', {
+      method: 'PUT',
+      body: JSON.stringify({ provedor_extracao: 'chatgpt' })
+    });
+    assert.strictEqual(r.status, 400);
+    const corpo = await r.json();
+    assert.match(corpo.error, /provedor_extracao/);
+
+    // E nada foi gravado: meia configuracao aceita e outra meia recusada
+    // deixaria a tela mostrando uma coisa e o servidor fazendo outra.
+    assert.strictEqual(
+      ctx.tabelas.ia_configuracao.some(c => c.chave === 'provedor_extracao'), false);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('o cartao de cada provedor diz o que ele faz HOJE', async () => {
+  const ctx = await montarComIA(comEtapas(null, { leitura: 'gemini', extracao: 'gemini' }));
+  try {
+    const cfg = await (await chamar(ctx.porta, '/api/ia/config/estado')).json();
+
+    // Texto fixo passou a mentir assim que as etapas viraram escolha: um
+    // cartao dizendo que le, num provedor que so extrai, e pior que nada.
+    assert.match(cfg.gemini.papel, /Leitura/);
+    assert.match(cfg.gemini.papel, /dados/);
+    assert.match(cfg.groq.papel, /Não está sendo usado/);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('a tela recebe o que cada provedor consegue ler', async () => {
+  const ctx = await montarComIA(comEtapas());
+  try {
+    const cfg = await (await chamar(ctx.porta, '/api/ia/config/estado')).json();
+    const porId = Object.fromEntries(cfg.etapas.opcoes.map(o => [o.id, o]));
+
+    // A tela avisa ANTES da escolha. Depois seria com um envio recusado no
+    // meio da leitura.
+    assert.strictEqual(porId.gemini.le_pdf, true);
+    assert.strictEqual(porId.groq.le_pdf, false);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('escolhida a Groq para ler, e ela quem le', async () => {
+  let geminiChamado = false;
+  let corpoDaLeitura = null;
+
+  const ctx = await montarComIA(
+    comEtapas(baseFicha(), { leitura: 'groq' }), {},
+    {
+      gemini: () => { geminiChamado = true; return { payload: respostaGemini('DO GEMINI') }; },
+      groq: ({ body }) => {
+        // A chamada de LEITURA manda `content` como lista, com a imagem
+        // dentro; a de extracao manda texto. E assim que o duplo separa as
+        // duas sem inventar um endpoint que a Groq nao tem.
+        if (Array.isArray(body?.messages?.[0]?.content)) {
+          corpoDaLeitura = body;
+          return { payload: respostaGroq('TEXTO LIDO PELA GROQ') };
+        }
+        return { payload: respostaGroq(FICHA_LIDA) };
+      }
+    }
+  );
+
+  try {
+    const png = Buffer.from('89504e470d0a1a0a', 'hex');
+    const r = await enviarArquivos(ctx.porta, {
+      titulo: 'Foto pela Groq', destino: 'produto_insumos',
+      arquivos: [{ nome: 'foto.png', mime: 'image/png', conteudo: png }]
+    });
+    assert.strictEqual(r.status, 201, JSON.stringify(await r.json()));
+
+    // O ponto: quem le passou a ser escolha, e a escolha tem de valer.
+    assert.strictEqual(geminiChamado, false, 'o Gemini leu mesmo com a Groq escolhida');
+    assert.ok(corpoDaLeitura, 'a Groq nao recebeu a leitura');
+
+    // A imagem viaja como `data:` no `image_url` — mesmo formato da OpenAI.
+    const partes = corpoDaLeitura.messages[0].content;
+    assert.ok(partes.some(p => p.type === 'image_url'
+      && String(p.image_url?.url || '').startsWith('data:image/png;base64,')));
+
+    const arquivo = ctx.tabelas.ia_extracao_arquivos.at(-1);
+    assert.match(String(arquivo.texto), /GROQ/);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('o modelo gravado na leitura e o de quem leu', async () => {
+  const ctx = await montarComIA(
+    comEtapas(baseFicha(), { leitura: 'groq' }), {},
+    { groq: () => ({ payload: respostaGroq('TEXTO LIDO PELA GROQ') }) }
+  );
+  try {
+    const png = Buffer.from('89504e470d0a1a0a', 'hex');
+    await enviarArquivos(ctx.porta, {
+      titulo: 'Foto', destino: 'produto_insumos',
+      arquivos: [{ nome: 'foto.png', mime: 'image/png', conteudo: png }]
+    });
+
+    // Gravar o modelo do Gemini quando quem leu foi a Groq faria a lista dizer
+    // que o arquivo foi lido por quem nao o leu.
+    const leitura = ctx.tabelas.ia_extracoes.at(-1);
+    assert.match(String(leitura.modelo_ocr), /llama/i);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('valor invalido no .env cai no padrao, e nao no vazio', async () => {
+  const ctx = await montarComIA(comEtapas(baseFicha()), {
+    IA_PROVEDOR_EXTRACAO: 'chatgpt',
+    IA_PROVEDOR_LEITURA: ''
+  });
+  try {
+    const cfg = await (await chamar(ctx.porta, '/api/ia/config/estado')).json();
+
+    // A tela valida o que grava, mas o `.env` e escrito a mao por quem instala.
+    // Um nome errado ali nao pode virar um provedor inexistente: o trabalho
+    // pararia no meio, com uma mensagem sobre uma chave que ninguem reconhece.
+    assert.strictEqual(cfg.etapas.extracao, 'groq');
+    assert.strictEqual(cfg.etapas.leitura, 'gemini');
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('mudada a escolha, a tela passa a mostrar a nova', async () => {
+  const ctx = await montarComIA(comEtapas(baseFicha()));
+  try {
+    const antes = await (await chamar(ctx.porta, '/api/ia/config/estado')).json();
+    assert.strictEqual(antes.etapas.extracao, 'groq');
+
+    const r = await chamar(ctx.porta, '/api/ia/config', {
+      method: 'PUT',
+      body: JSON.stringify({ provedor_extracao: 'gemini' })
+    });
+    assert.strictEqual(r.status, 200, JSON.stringify(await r.json()));
+
+    // Mostrar a escolha antiga na tela que existe para fazer a escolha e o
+    // pior lugar possivel para mostrar um valor de antes.
+    const depois = await (await chamar(ctx.porta, '/api/ia/config/estado')).json();
+    assert.strictEqual(depois.etapas.extracao, 'gemini');
+    assert.strictEqual(depois.etapas.leitura, 'gemini');
   } finally {
     await ctx.encerrar();
   }

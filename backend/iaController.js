@@ -538,6 +538,11 @@ router.post('/',
     let extracaoId = null;
 
     try {
+      // Quem lê e os limites de envio podem ter mudado na tela. Sem carregar, o
+      // upload usaria o provedor do cache vencido — ou o padrão, ignorando a
+      // escolha que alguém acabou de fazer.
+      await configArmazenada.carregar(api);
+
       const destino = texto(req.body?.destino);
       if (!destino || !DESTINO_POR_ID.has(destino)) {
         throw erro(400, 'Escolha para onde os dados lidos vão.');
@@ -585,9 +590,14 @@ router.post('/',
         return { arquivo, ...r };
       });
 
-      let usouGemini = false;
+      // O MODELO que leu, e não o provedor padrão: a leitura pode ter sido
+      // feita pela Groq, e gravar o modelo do Gemini nesse caso faria a lista
+      // dizer que um arquivo foi lido por quem não o leu.
+      let modeloQueLeu = null;
       for (const item of lidos) {
-        if (item.origem && item.origem !== 'planilha' && !item.erro) usouGemini = true;
+        if (item.origem && item.origem !== 'planilha' && !item.erro) {
+          modeloQueLeu = item.modelo || null;
+        }
         await api.post('/api/ia_extracao_arquivos', {
           extracao_id: extracaoId,
           nome_arquivo: String(item.arquivo.originalname).slice(0, 255),
@@ -623,7 +633,7 @@ router.post('/',
 
       await api.put(`/api/ia_extracoes/${extracaoId}`, {
         status,
-        modelo_ocr: usouGemini ? provedores.modeloGemini() : null,
+        modelo_ocr: modeloQueLeu,
         ...(gasto.entrada ? {
           tokens_ocr_entrada: gasto.entrada,
           tokens_ocr_saida: gasto.saida,

@@ -104,6 +104,38 @@
         </div>
       </section>
 
+      <!--
+        Quem faz cada etapa.
+
+        Ler e extrair são trabalhos diferentes, e nem sempre o melhor num é o
+        melhor no outro: um modelo que transcreve bem uma foto pode perder
+        itens ao montar a lista. Antes os dois eram fixos, e trocar de etapa
+        exigia trocar de modelo — que é outra coisa.
+
+        O mesmo provedor pode fazer as duas.
+      -->
+      <section class="ia-provedor">
+        <h4 class="text-white font-medium flex items-center gap-2 mb-3">
+          <i class="fas fa-diagram-project text-[var(--color-primary)]"></i>
+          Quem faz cada etapa
+        </h4>
+        <div class="grid grid-cols-2 gap-4 text-sm">
+          <label class="ia-config-campo">
+            <span>Ler o arquivo</span>
+            <select id="iaProvedorLeitura" data-config="provedor_leitura" class="ia-campo"></select>
+            <span id="iaProvedorLeituraAviso" class="ia-config-nota"></span>
+          </label>
+          <label class="ia-config-campo">
+            <span>Extrair os dados</span>
+            <select id="iaProvedorExtracao" data-config="provedor_extracao" class="ia-campo"></select>
+            <span class="ia-config-nota">
+              É esta etapa que monta a lista. Trocar aqui é o primeiro remédio
+              quando o modelo vem perdendo itens.
+            </span>
+          </label>
+        </div>
+      </section>
+
       <!-- Limites -->
       <section class="ia-provedor">
         <h4 class="text-white font-medium flex items-center gap-2 mb-3">

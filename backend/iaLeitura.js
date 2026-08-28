@@ -313,10 +313,14 @@ async function lerArquivo({ nome, mime, buffer }, opcoes = {}) {
       };
     }
 
-    const r = await provedores.lerComGemini({
+    // Quem lê é quem estiver escolhido em Configurar. O padrão continua sendo
+    // o Gemini, então uma instalação que nunca mexeu nisso não muda de
+    // comportamento.
+    const r = await provedores.lerArquivo({
       buffer,
       mime: classificacao.mime,
-      modelo: opcoes.modelo
+      modelo: opcoes.modelo,
+      provedor: opcoes.provedor
     });
     if (r.vazio) {
       return {
@@ -337,6 +341,11 @@ async function lerArquivo({ nome, mime, buffer }, opcoes = {}) {
       // é ele quem gasta mais contexto — e era justamente ele que aparecia
       // zerado na tela de configuração.
       consumo: r.consumo || null,
+      // QUEM leu e com qual modelo. Relendo o mesmo arquivo com outro
+      // provedor o resultado muda, e sem esta marca não haveria como explicar
+      // a diferença depois.
+      provedor: r.provedor || null,
+      modelo: r.modelo || null,
       aviso: (r.truncado || cortado) ? 'A leitura foi cortada por tamanho — o final do documento pode não ter entrado.' : null
     };
   } catch (e) {

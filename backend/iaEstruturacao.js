@@ -437,7 +437,13 @@ function corpoDaChamada({ modelo, sistema, conteudo, estrito }) {
  * cortada por tamanho — o revisor precisa saber que pode faltar item do fim da
  * lista, e o dado que veio antes do corte continua valendo.
  */
-async function pedirExtracao({ chave, modelo, sistema, conteudo }) {
+async function pedirExtracao({ chave, modelo, sistema, conteudo, provedor }) {
+  // Quem extrai é quem estiver escolhido em Configurar. O padrão continua
+  // sendo a Groq, então uma instalação que nunca mexeu nisso não muda.
+  if ((provedor || provedores.provedorDe('extracao')) === 'gemini') {
+    return extrairPeloGemini({ modelo, sistema, conteudo });
+  }
+
   const chamar = estrito => pedir(`${GROQ_BASE}/chat/completions`, {
     method: 'POST',
     headers: { authorization: `Bearer ${chave}`, 'content-type': 'application/json' },
@@ -499,6 +505,36 @@ async function pedirExtracao({ chave, modelo, sistema, conteudo }) {
 }
 
 /**
+ * A mesma extração, pelo Gemini.
+ *
+ * Devolve exatamente o que a versão da Groq devolve — `{ dados, truncado,
+ * entrada, saida }` — para o resto da estruturação não precisar saber quem
+ * respondeu. O fatiamento, a contagem de itens e o acúmulo de consumo
+ * continuam iguais.
+ *
+ * Sem as três tentativas da Groq: lá elas existem porque o modo estrito
+ * REJEITA a resposta cortada e devolve o que gerou; aqui o `responseMimeType`
+ * entrega o texto do mesmo jeito, e o que estiver cortado é recuperado pelo
+ * `extrairJson`, que é o mesmo dos dois caminhos.
+ */
+async function extrairPeloGemini({ modelo, sistema, conteudo }) {
+  const r = await provedores.extrairComGemini({
+    sistema,
+    conteudo,
+    modelo: modelo || provedores.modeloGemini(),
+    maxSaida: MAX_SAIDA
+  });
+
+  const dados = extrairJson(r.texto);
+  if (!dados) {
+    throw erro(502,
+      'Gemini devolveu uma resposta que não é JSON. Tente de novo, ou troque o modelo em Configurar.');
+  }
+
+  return { dados, truncado: r.truncado, entrada: r.entrada, saida: r.saida };
+}
+
+/**
  * Parte o texto em dois, na quebra de linha mais próxima do meio.
  *
  * O corte TEM de cair entre linhas. Partir no meio de uma linha quebraria um
@@ -540,18 +576,18 @@ function listaCrua(dados) {
  * sobe verdadeiro — é a diferença entre entregar 30 dos 40 AVISANDO e entregar
  * 30 dos 40 em silêncio.
  */
-async function extrairFatiando({ chave, modelo, sistema, texto, orcamento }) {
+async function extrairFatiando({ chave, modelo, sistema, texto, orcamento, provedor }) {
   if (orcamento.restantes <= 0) return { brutos: [], truncado: true };
   orcamento.restantes -= 1;
 
   // Renomeados na desestruturação: `saida` já é o nome do acumulador de itens
   // logo abaixo, e reaproveitá-lo aqui esconderia um dos dois.
   const { dados, truncado, entrada: gastoEntrada, saida: gastoSaida } =
-    await pedirExtracao({ chave, modelo, sistema, conteudo: texto });
+    await pedirExtracao({ chave, modelo, sistema, conteudo: texto, provedor });
   orcamento.entrada += gastoEntrada || 0;
   orcamento.saida += gastoSaida || 0;
   const brutos = listaCrua(dados);
-  if (!brutos) throw erro(502, 'Groq devolveu JSON sem a lista de itens.');
+  if (!brutos) throw erro(502, 'O modelo devolveu JSON sem a lista de itens.');
   if (!truncado) return { brutos, truncado: false };
 
   const partes = dividirEmDuas(texto);
@@ -562,7 +598,7 @@ async function extrairFatiando({ chave, modelo, sistema, texto, orcamento }) {
   const saida = [];
   let faltou = false;
   for (const parte of partes) {
-    const r = await extrairFatiando({ chave, modelo, sistema, texto: parte, orcamento });
+    const r = await extrairFatiando({ chave, modelo, sistema, texto: parte, orcamento, provedor });
     saida.push(...r.brutos);
     faltou = faltou || r.truncado;
   }
@@ -590,17 +626,24 @@ async function estruturar({ texto, destino, modelo }) {
   const esquema = obterEsquema(destino);
   if (!esquema) throw erro(400, `O destino "${destino}" ainda não sabe extrair dados.`);
 
-  const chave = chaveGroq();
-  if (!chave) throw erro(400, 'GROQ_API_KEY não está preenchida no .env');
+  // A chave é a de QUEM vai extrair. Exigir a da Groq quando quem extrai é o
+  // Gemini barraria uma configuração perfeitamente válida.
+  const provedor = provedores.provedorDe('extracao');
+  const chave = provedor === 'gemini' ? provedores.chaveGemini() : chaveGroq();
+  if (!chave) {
+    throw erro(400,
+      `${provedores.PROVEDORES[provedor].rotulo === 'Gemini' ? 'GEMINI_API_KEY' : 'GROQ_API_KEY'}`
+      + ' não está preenchida no .env');
+  }
 
   const conteudo = String(texto || '').trim();
   if (!conteudo) throw erro(400, 'Não há texto lido para extrair.');
 
-  const alvo = modelo || modeloGroq();
+  const alvo = modelo || (provedor === 'gemini' ? provedores.modeloGemini() : modeloGroq());
 
   const orcamento = { restantes: MAX_CHAMADAS, entrada: 0, saida: 0 };
   const { brutos, truncado } = await extrairFatiando({
-    chave, modelo: alvo, sistema: montarPrompt(esquema), texto: conteudo, orcamento
+    chave, modelo: alvo, sistema: montarPrompt(esquema), texto: conteudo, orcamento, provedor
   });
 
   const itens = [];

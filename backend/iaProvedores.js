@@ -172,6 +172,41 @@ const chaveGroq = () => String(process.env.GROQ_API_KEY || '').trim();
 const modeloGemini = () => escolher('gemini_modelo', 'GEMINI_MODEL', PADROES.geminiModelo);
 const modeloGroq = () => escolher('groq_modelo', 'GROQ_MODEL', PADROES.groqModelo);
 
+/** Os dois provedores, e o que cada um sabe fazer. */
+const PROVEDORES = {
+  gemini: {
+    id: 'gemini',
+    rotulo: 'Gemini',
+    // PDF e imagem. É o único que lê PDF: a Groq recebe imagem, e um PDF
+    // teria de ser rasterizado antes — trabalho que este módulo não faz.
+    mimes: new Set(['application/pdf', 'image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif']),
+    modelo: () => modeloGemini(),
+    chave: () => chaveGemini()
+  },
+  groq: {
+    id: 'groq',
+    rotulo: 'Groq',
+    mimes: new Set(['image/jpeg', 'image/png', 'image/webp']),
+    modelo: () => modeloGroq(),
+    chave: () => chaveGroq()
+  }
+};
+
+const ehProvedor = v => Object.prototype.hasOwnProperty.call(PROVEDORES, String(v || '').toLowerCase());
+
+/**
+ * Quem faz cada etapa.
+ *
+ * Os padrões são os de sempre — Gemini lê, Groq extrai —, então uma instalação
+ * que nunca abriu a configuração continua funcionando exatamente igual.
+ */
+function provedorDe(etapa) {
+  const chave = etapa === 'leitura' ? 'provedor_leitura' : 'provedor_extracao';
+  const padrao = etapa === 'leitura' ? 'gemini' : 'groq';
+  const escolhido = String(escolher(chave, VARIAVEL[chave], padrao)).toLowerCase();
+  return ehProvedor(escolhido) ? escolhido : padrao;
+}
+
 /** Só o suficiente para conferir que é a chave certa. Nunca a chave. */
 function mascarar(chave) {
   if (!chave) return null;
@@ -187,6 +222,8 @@ function mascarar(chave) {
 const VARIAVEL = {
   gemini_modelo: 'GEMINI_MODEL',
   groq_modelo: 'GROQ_MODEL',
+  provedor_leitura: 'IA_PROVEDOR_LEITURA',
+  provedor_extracao: 'IA_PROVEDOR_EXTRACAO',
   arquivo_mb: 'IA_MAX_ARQUIVO_MB',
   arquivos: 'IA_MAX_ARQUIVOS',
   timeout_ms: 'IA_TIMEOUT_MS',
@@ -202,12 +239,42 @@ function origemDe(chave, variavel) {
   return 'padrao';
 }
 
+/**
+ * O que este provedor faz hoje, em palavras.
+ *
+ * Antes era texto fixo ("Leitura de PDF e imagem"), o que passou a mentir
+ * assim que as etapas viraram escolha: um cartão dizendo que lê, num provedor
+ * que só extrai, é pior do que não dizer nada.
+ */
+function papelDe(id) {
+  const faz = [];
+  if (provedorDe('leitura') === id) faz.push('Leitura de PDF e imagem');
+  if (provedorDe('extracao') === id) faz.push('Transformar o texto lido em dados');
+  return faz.join(' · ') || 'Não está sendo usado';
+}
+
 function configuracao() {
   const gemini = chaveGemini();
   const groq = chaveGroq();
   return {
+    // Que etapas cada um faz AGORA. A tela mostra isto no cartão do provedor,
+    // porque "por que este está sendo usado?" é a pergunta seguinte a
+    // "quem lê e quem extrai?".
+    etapas: {
+      leitura: provedorDe('leitura'),
+      extracao: provedorDe('extracao'),
+      // O que cada um é CAPAZ de fazer. A Groq recebe imagem e não PDF, e a
+      // tela precisa avisar isso antes da escolha — não depois, com um envio
+      // recusado no meio da leitura.
+      opcoes: Object.values(PROVEDORES).map(p => ({
+        id: p.id,
+        rotulo: p.rotulo,
+        le_pdf: p.mimes.has('application/pdf'),
+        mimes: [...p.mimes]
+      }))
+    },
     gemini: {
-      papel: 'Leitura de PDF e imagem',
+      papel: papelDe('gemini'),
       variavelChave: 'GEMINI_API_KEY',
       variavelModelo: 'GEMINI_MODEL',
       configurado: Boolean(gemini),
@@ -221,7 +288,7 @@ function configuracao() {
       modelo_origem: origemDe('gemini_modelo', 'GEMINI_MODEL')
     },
     groq: {
-      papel: 'Transformar o texto lido em dados',
+      papel: papelDe('groq'),
       variavelChave: 'GROQ_API_KEY',
       variavelModelo: 'GROQ_MODEL',
       configurado: Boolean(groq),
@@ -441,8 +508,133 @@ async function lerComGemini({ buffer, mime, modelo }) {
   return { texto, truncado, vazio: !texto, consumo };
 }
 
+/**
+ * Manda uma IMAGEM para a Groq e devolve o texto transcrito.
+ *
+ * A API é a da OpenAI, e a imagem viaja como `data:` no `image_url` — mesmo
+ * formato, mesmo endpoint da extração. PDF não entra: a Groq recebe imagem, e
+ * rasterizar um PDF antes é trabalho que este módulo não faz. Quem escolher a
+ * Groq para ler e mandar um PDF recebe o recado no lugar certo, na hora do
+ * envio, e não um texto vazio no fim da leitura.
+ */
+async function lerComGroq({ buffer, mime, modelo }) {
+  const chave = chaveGroq();
+  if (!chave) throw erro(400, 'GROQ_API_KEY não está preenchida no .env');
+  if (!PROVEDORES.groq.mimes.has(mime)) {
+    throw erro(400,
+      `A Groq não lê ${mime}. Troque o provedor de leitura para Gemini em Configurar, `
+      + 'ou envie uma imagem.');
+  }
+
+  const alvo = modelo || modeloGroq();
+  const resposta = await pedir(`${GROQ_BASE}/chat/completions`, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${chave}`, 'content-type': 'application/json' },
+    body: JSON.stringify({
+      model: alvo,
+      temperature: 0,
+      max_tokens: 8192,
+      messages: [{
+        role: 'user',
+        content: [
+          { type: 'text', text: PROMPT_LEITURA },
+          {
+            type: 'image_url',
+            image_url: { url: `data:${mime};base64,${buffer.toString('base64')}` }
+          }
+        ]
+      }]
+    })
+  }, 'Groq');
+
+  const escolha = resposta?.choices?.[0];
+  if (!escolha) throw erro(502, 'Groq não devolveu nenhuma leitura para este arquivo.');
+
+  const texto = String(escolha.message?.content || '').trim();
+  const uso = resposta?.usage || {};
+  const consumo = {
+    entrada: Number(uso.prompt_tokens) || 0,
+    saida: Number(uso.completion_tokens) || 0
+  };
+
+  const truncado = escolha.finish_reason === 'length';
+  if (texto === 'SEM TEXTO') return { texto: '', truncado, vazio: true, consumo };
+  return { texto, truncado, vazio: !texto, consumo };
+}
+
+/**
+ * Lê o arquivo com quem estiver escolhido para a etapa de leitura.
+ *
+ * O provedor entra no retorno porque quem chama precisa registrar QUEM leu:
+ * relendo o mesmo arquivo com outro provedor, o resultado muda, e sem essa
+ * marca não haveria como explicar a diferença depois.
+ */
+async function lerArquivo({ buffer, mime, modelo, provedor }) {
+  const escolhido = ehProvedor(provedor) ? String(provedor).toLowerCase() : provedorDe('leitura');
+  const ler = escolhido === 'groq' ? lerComGroq : lerComGemini;
+  const r = await ler({ buffer, mime, modelo });
+  return { ...r, provedor: escolhido, modelo: modelo || PROVEDORES[escolhido].modelo() };
+}
+
+/**
+ * Pede uma resposta em JSON ao Gemini — a etapa de EXTRAÇÃO, quando ele é o
+ * escolhido para ela.
+ *
+ * `responseMimeType` é o equivalente do modo estrito da Groq: obriga a saída a
+ * ser JSON. Devolve no mesmo formato que a extração já esperava, para o
+ * chamador não precisar saber quem respondeu.
+ */
+async function extrairComGemini({ sistema, conteudo, modelo, maxSaida }) {
+  const chave = chaveGemini();
+  if (!chave) throw erro(400, 'GEMINI_API_KEY não está preenchida no .env');
+
+  const alvo = modelo || modeloGemini();
+  const resposta = await pedir(
+    `${GEMINI_BASE}/models/${encodeURIComponent(alvo)}:generateContent?key=${encodeURIComponent(chave)}`,
+    {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        // O Gemini não tem papel de "sistema" na mesma forma: a instrução vai
+        // como `systemInstruction`, que é onde ele a trata como regra e não
+        // como mais um pedaço do documento.
+        systemInstruction: { parts: [{ text: sistema }] },
+        contents: [{ role: 'user', parts: [{ text: conteudo }] }],
+        generationConfig: {
+          temperature: 0,
+          maxOutputTokens: maxSaida,
+          responseMimeType: 'application/json'
+        }
+      })
+    },
+    'Gemini'
+  );
+
+  const bloqueio = resposta?.promptFeedback?.blockReason;
+  if (bloqueio) throw erro(422, `Gemini recusou extrair deste texto (${bloqueio}).`);
+
+  const candidato = resposta?.candidates?.[0];
+  if (!candidato) throw erro(502, 'Gemini não devolveu nenhuma extração.');
+
+  const uso = resposta?.usageMetadata || {};
+  return {
+    texto: (candidato.content?.parts || []).map(p => p?.text || '').join(''),
+    // O corte por limite de saída é o caso mais traiçoeiro: a resposta chega
+    // parecendo boa, só que incompleta.
+    truncado: candidato.finishReason === 'MAX_TOKENS',
+    entrada: Number(uso.promptTokenCount) || 0,
+    saida: Number(uso.candidatesTokenCount) || 0
+  };
+}
+
 module.exports = {
   PADROES,
+  PROVEDORES,
+  provedorDe,
+  ehProvedor,
+  lerComGroq,
+  lerArquivo,
+  extrairComGemini,
   LIMITES,
   erroDeProvedor,
   PROMPT_LEITURA,

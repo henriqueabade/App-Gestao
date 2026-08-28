@@ -37,6 +37,18 @@ const CAMPOS = {
   gemini_modelo: { tipo: 'texto', max: 120 },
   groq_modelo: { tipo: 'texto', max: 120 },
 
+  // QUEM faz cada etapa.
+  //
+  // Ler e extrair são trabalhos diferentes, e nem sempre o melhor num é o
+  // melhor no outro: um modelo que transcreve bem uma foto pode perder itens ao
+  // montar a lista, e vice-versa. Deixar os dois presos a um provedor cada
+  // obrigava a trocar de modelo quando o problema era de etapa.
+  //
+  // O mesmo provedor pode fazer as duas — não há nada que exija que sejam
+  // diferentes.
+  provedor_leitura: { tipo: 'opcao', opcoes: ['gemini', 'groq'] },
+  provedor_extracao: { tipo: 'opcao', opcoes: ['gemini', 'groq'] },
+
   // Os limites de envio. Os tetos existem porque cada um deles tem uma forma
   // própria de dar errado quando esticado demais.
   arquivo_mb: {
@@ -138,6 +150,16 @@ function validar(entrada) {
     // qual era o valor de antes.
     if (bruto === null || bruto === undefined || String(bruto).trim() === '') {
       valores[chave] = null;
+      continue;
+    }
+
+    if (campo.tipo === 'opcao') {
+      const valor = String(bruto).trim().toLowerCase();
+      if (!campo.opcoes.includes(valor)) {
+        erros.push(`${chave}: "${bruto}" não é uma opção (${campo.opcoes.join(', ')})`);
+        continue;
+      }
+      valores[chave] = valor;
       continue;
     }
 
