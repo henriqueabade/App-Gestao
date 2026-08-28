@@ -53,7 +53,8 @@
   const btnCancelar = document.getElementById('voltarConverterOrcamento');
   const btnConfirmar = document.getElementById('confirmarConverterOrcamento');
   const warning = document.getElementById('converterWarning');
-  const warningText = document.getElementById('converterWarningText');
+  const pendenciasInfo = document.getElementById('converterPendenciasInfo');
+  const pendenciasPopover = document.getElementById('converterPendenciasPopover');
 
   const pecasBody = document.getElementById('converterPecasBody');
   const insumosBody = document.getElementById('converterInsumosBody');
@@ -458,6 +459,9 @@
   window.addEventListener(substituirPecaEvent, handlePiecesReplaced);
 
   function cleanupReplaceModalIntegration() {
+    // O popover foi MOVIDO para o `<body>` e não sai junto com o modal. Sem
+    // devolvê-lo, ele fica pendurado por cima do módulo seguinte.
+    window.Popover?.descartar(pendenciasPopover);
     window.removeEventListener(substituirPecaEvent, handlePiecesReplaced);
     window.substituirPecaContext = null;
     const overlayEl = document.getElementById('substituirPecaOverlay');
@@ -671,6 +675,172 @@
     return { noRows, anyError, unapproved, needsJustification, noteFilled, canConfirm };
   }
 
+  /**
+   * As pendências, uma a uma, agrupadas por tipo.
+   *
+   * Sai de `computeValidation` — a mesma origem que habilita o botão — para
+   * que a lista mostrada e a decisão de deixar converter NUNCA discordem.
+   * Duas contas separadas sobre a mesma pergunta acabam divergindo, e a
+   * divergência apareceria do pior jeito: o botão travado sem nada na lista.
+   */
+  function listarPendencias(v) {
+    if (v.noRows) {
+      return [{
+        titulo: 'Nenhuma peça no orçamento',
+        nota: 'Um pedido precisa de ao menos uma peça. Volte ao orçamento e inclua as peças antes de converter.'
+      }];
+    }
+
+    const grupos = [];
+    const nomeDaLinha = r => (r?.nome || '').trim() || 'Peça sem nome';
+
+    const invalidas = rows.filter(r => r.error);
+    if (invalidas.length) {
+      grupos.push({
+        titulo: 'Peças com dados inválidos',
+        quantas: invalidas.length,
+        nota: 'Quantidade ou peça não reconhecida. Substitua ou remova estas peças.',
+        itens: invalidas.map(nomeDaLinha)
+      });
+    }
+
+    if (v.unapproved.length) {
+      grupos.push({
+        titulo: 'Peças sem confirmação',
+        quantas: v.unapproved.length,
+        nota: 'Confirme, na linha de cada uma, quanto sai do estoque e quanto vai para produção.',
+        itens: v.unapproved.map(nomeDaLinha)
+      });
+    }
+
+    if (v.needsJustification) {
+      grupos.push({
+        titulo: 'Justificativa da decisão',
+        nota: 'Há insumos com saldo previsto negativo. Escreva a nota de decisão no fim do modal.'
+      });
+    }
+
+    return grupos;
+  }
+
+  /** Uma linha só, para o aviso rápido do toast. */
+  function resumoPendencias(grupos) {
+    if (!grupos.length) return '';
+    return grupos
+      .map(g => (g.quantas ? g.quantas + ' ' + g.titulo.toLowerCase() : g.titulo))
+      .join(' · ');
+  }
+
+  function desenharPendencias(grupos) {
+    if (!pendenciasPopover) return;
+    pendenciasPopover.replaceChildren();
+
+    for (const grupo of grupos) {
+      const bloco = document.createElement('div');
+      bloco.className = 'conv-pendencia-grupo';
+
+      const titulo = document.createElement('div');
+      titulo.className = 'conv-pendencia-titulo';
+      const texto = document.createElement('span');
+      texto.textContent = grupo.titulo;
+      titulo.appendChild(texto);
+      if (grupo.quantas) {
+        const quantas = document.createElement('span');
+        quantas.className = 'conv-pendencia-quantas';
+        quantas.textContent = String(grupo.quantas);
+        titulo.appendChild(quantas);
+      }
+      bloco.appendChild(titulo);
+
+      if (grupo.nota) {
+        const nota = document.createElement('p');
+        nota.className = 'conv-pendencia-nota';
+        nota.textContent = grupo.nota;
+        bloco.appendChild(nota);
+      }
+
+      if (grupo.itens?.length) {
+        const lista = document.createElement('div');
+        lista.className = 'conv-pendencia-itens';
+        for (const nome of grupo.itens) {
+          const item = document.createElement('div');
+          item.className = 'conv-pendencia-item';
+          item.textContent = nome;
+          lista.appendChild(item);
+        }
+        bloco.appendChild(lista);
+      }
+
+      pendenciasPopover.appendChild(bloco);
+    }
+
+    // Aberto enquanto a pessoa resolve: a caixa encolhe a cada confirmação e
+    // precisa ser reposicionada, senão a lista de três itens fica desenhada no
+    // lugar calculado para a de dez.
+    if (pendenciasPopover.classList.contains('show')) {
+      if (grupos.length) window.Popover?.abrir(pendenciasPopover, pendenciasInfo);
+      else fecharPendencias();
+    }
+  }
+
+  function fecharPendencias() {
+    window.Popover?.fechar(pendenciasPopover);
+    pendenciasInfo?.setAttribute('aria-expanded', 'false');
+  }
+
+  /**
+   * Abre ao passar o mouse e fixa ao clicar.
+   *
+   * Passar o mouse é o gesto natural para espiar, mas quem tem oito peças
+   * pendentes precisa ROLAR a lista — e sair do ícone para alcançá-la fecharia
+   * a caixa antes de chegar nela. Daí a folga ao sair, e o clique que fixa.
+   */
+  function ligarPendencias() {
+    if (!pendenciasInfo || !pendenciasPopover) return;
+
+    let fixado = false;
+    let saindo = null;
+
+    const abrir = () => {
+      clearTimeout(saindo);
+      if (!pendenciasPopover.childElementCount) return;
+      window.Popover?.abrir(pendenciasPopover, pendenciasInfo);
+      pendenciasInfo.setAttribute('aria-expanded', 'true');
+    };
+
+    // A folga cobre o vão entre o ícone e a caixa: sem ela, o ponteiro
+    // atravessa terra de ninguém e a caixa some no meio do caminho.
+    const sair = () => {
+      clearTimeout(saindo);
+      if (fixado) return;
+      saindo = setTimeout(fecharPendencias, 150);
+    };
+
+    pendenciasInfo.addEventListener('mouseenter', abrir);
+    pendenciasInfo.addEventListener('mouseleave', sair);
+    pendenciasInfo.addEventListener('focus', abrir);
+    pendenciasPopover.addEventListener('mouseenter', () => clearTimeout(saindo));
+    pendenciasPopover.addEventListener('mouseleave', sair);
+
+    pendenciasInfo.addEventListener('click', e => {
+      e.preventDefault();
+      fixado = !fixado;
+      if (fixado) abrir();
+      else fecharPendencias();
+    });
+
+    // `Popover` já fecha por clique fora, rolagem e Esc — mas ele não sabe do
+    // nosso "fixado", e sem soltá-lo aqui o próximo clique no (i) apenas
+    // voltaria a fixar uma caixa que já não está na tela.
+    document.addEventListener('click', e => {
+      if (pendenciasInfo.contains(e.target) || pendenciasPopover.contains(e.target)) return;
+      fixado = false;
+      pendenciasInfo.setAttribute('aria-expanded', 'false');
+    }, true);
+  }
+
+  ligarPendencias();
+
   function validate() {
     const v = computeValidation();
 
@@ -689,26 +859,20 @@
     const noteLabel = document.getElementById('converterDecisionNoteRequired');
     if (noteLabel) noteLabel.classList.toggle('hidden', !state.hasNegative);
 
-    let message = '';
-    if (v.noRows) {
-      message = 'Nenhuma peça no orçamento.';
-    } else if (v.anyError) {
-      message = 'Existem peças com dados inválidos.';
-    } else if (v.unapproved.length) {
-      const nomes = v.unapproved.map(r => r.nome).filter(Boolean).join(', ');
-      const qtd = v.unapproved.length;
-      message = nomes
-        ? `Existe(m) ${qtd} peça(s) sem confirmação: ${nomes}. Confirme todas para converter.`
-        : `Existe(m) ${qtd} peça(s) sem confirmação. Confirme todas para converter.`;
-    } else if (v.needsJustification) {
-      message = 'Há insumos com saldo negativo. Escreva a justificativa da decisão para continuar.';
-    }
+    // A tarja é sempre a mesma frase; o que muda é o que o (i) mostra. Antes
+    // ela trazia UM motivo por vez, escolhido por uma escada de `else if`:
+    // resolver as peças sem confirmação revelava a justificativa que faltava,
+    // e a pessoa descobria uma pendência de cada vez, sem nunca ver quanto
+    // ainda faltava no total.
+    const pendencias = listarPendencias(v);
+    desenharPendencias(pendencias);
+    v.pendencias = pendencias;
 
-    if (message) {
-      warningText.textContent = message;
+    if (pendencias.length) {
       warning.classList.remove('hidden');
     } else {
       warning.classList.add('hidden');
+      fecharPendencias();
     }
 
     return v;
@@ -740,7 +904,11 @@
         tr?.scrollIntoView({ block: 'center', behavior: 'smooth' });
       }
       if (typeof showToast === 'function') {
-        showToast(warningText?.textContent || 'Revise os itens pendentes antes de converter.', 'error');
+        // O resumo, e não o texto da tarja: a tarja agora diz sempre a mesma
+        // coisa, e um toast repetindo "Pendências não resolvidas" não ajudaria
+        // ninguém a saber o que fazer.
+        const resumo = resumoPendencias(v.pendencias || []);
+        showToast(resumo || 'Revise os itens pendentes antes de converter.', 'error');
       }
       return;
     }

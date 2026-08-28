@@ -42,6 +42,13 @@ function carregarBotaoAcao() {
   const documento = {
     getElementById: id => noCorpo.get(id) || null,
     querySelector: seletor => elementos.get(seletor) || null,
+    // O DOM real tem as duas. Um duplo com só `querySelector` deixava passar
+    // código que varre a lista inteira — foi assim que a marcação de TODOS os
+    // botões de envio explodiu aqui em vez de no app.
+    querySelectorAll: seletor => {
+      const achado = elementos.get(seletor);
+      return achado ? [achado] : [];
+    },
     addEventListener() {},
     createElement: tag => criarElemento(tag),
     head: { appendChild() {} },
@@ -87,7 +94,8 @@ test('acha o botão de envio ligado por form="id", fora do formulário', () => {
     dataset: {},
     addEventListener() {},
     // Como no HTML real: nenhum botão de envio DENTRO do form.
-    querySelector: () => null
+    querySelector: () => null,
+    querySelectorAll: () => []
   };
 
   api.bindSubmit(form, async () => {});

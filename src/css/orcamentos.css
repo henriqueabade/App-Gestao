@@ -360,50 +360,10 @@ input[type="date"]:valid::-webkit-datetime-edit {
     z-index: 1;
 }
 
-#converterOrcamentoOverlay .table-scroll th,
-#converterOrcamentoOverlay .table-scroll td {
-    word-break: normal;
-    hyphens: manual;
-}
-
-#converterOrcamentoOverlay .table-scroll {
-    position: relative;
-}
-
-#converterOrcamentoOverlay .quote-piece-approved {
-    background: rgba(34, 197, 94, 0.16);
-}
-
-#converterOrcamentoOverlay .quote-piece-approved:hover {
-    background: rgba(34, 197, 94, 0.22);
-}
-
-/* Peça ainda não confirmada: fundo avermelhado para reforçar a pendência. */
-#converterOrcamentoOverlay .quote-piece-unapproved {
-    background: rgba(239, 68, 68, 0.12);
-}
-
-#converterOrcamentoOverlay .quote-piece-unapproved:hover {
-    background: rgba(239, 68, 68, 0.18);
-}
-
-#converterOrcamentoOverlay .table-scroll tbody[data-table-loading="true"] > tr:not(.table-loading-placeholder) {
-    display: none;
-}
-
-#converterOrcamentoOverlay .table-loading-placeholder td {
-    padding: 1rem 1.5rem;
-}
-
-#converterOrcamentoOverlay .table-loading-inline {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0.75rem;
-    color: #4b5563;
-    font-size: 0.95rem;
-    font-weight: 500;
-}
+/* A aparência do modal "Revisar conversão" mudou de casa: ela agora está em
+   `src/styles/conversao-orcamento.css`, carregada sempre. Aqui, ela valia só
+   com o módulo de Orçamentos aberto — e a conversão em lote de Pedidos abre o
+   MESMO modal, sem esta folha, portanto sem nada disto. */
 
 #orcamentoItens {
     table-layout: fixed;

@@ -11,12 +11,23 @@
       </div>
     </header>
 
+    <!-- A tarja diz que HÁ pendências; o (i) diz QUAIS. Antes ela trazia a
+         lista inteira escrita por extenso, e com oito peças por confirmar
+         virava um parágrafo de nomes ocupando três linhas no alto do modal. -->
     <div id="converterWarning" class="px-8 py-3 bg-red-500/10 border-b border-red-500/20 flex-shrink-0 hidden">
       <div class="flex items-center gap-3">
         <span class="text-red-400">⚠</span>
-        <span id="converterWarningText" class="text-red-300 font-medium text-sm"></span>
+        <span id="converterWarningText" class="text-red-300 font-medium text-sm">Pendências não resolvidas</span>
+        <button type="button" id="converterPendenciasInfo" class="info-icon"
+                aria-label="Ver as pendências que faltam resolver"
+                aria-expanded="false" aria-controls="converterPendenciasPopover"></button>
       </div>
     </div>
+
+    <!-- Fica FORA da tarja de propósito: `Popover.abrir` o muda para o
+         `<body>` (o `backdrop-filter` do modal quebra `position: fixed` lá
+         dentro) e o devolve no fechamento. -->
+    <div id="converterPendenciasPopover" role="tooltip" aria-live="polite"></div>
 
     <div class="px-8 py-4 border-b border-white/10 flex-shrink-0">
       <div class="flex flex-wrap gap-3">

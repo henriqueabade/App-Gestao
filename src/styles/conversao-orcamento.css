@@ -1,0 +1,208 @@
+/* Revisar conversão de orçamento — aparência do modal.
+ *
+ * ---------------------------------------------------------------------------
+ * POR QUE ESTAS REGRAS NÃO FICAM EM `orcamentos.css`
+ *
+ * Só UMA folha de módulo fica carregada por vez (`menu.js` troca
+ * `../css/{pagina}.css` a cada troca de módulo), e este modal é alcançado por
+ * DOIS caminhos: pela tabela de Orçamentos e pela conversão em lote de
+ * Pedidos. Em `orcamentos.css`, tudo aqui simplesmente não existia quando a
+ * conversão vinha de Pedidos — mesmo modal, duas aparências.
+ *
+ * Esta folha é carregada por `menu.html` e vale sempre. Ela vem ANTES da folha
+ * do módulo, então um módulo que precise divergir ainda consegue.
+ */
+
+#converterOrcamentoOverlay .table-scroll th,
+#converterOrcamentoOverlay .table-scroll td {
+    word-break: normal;
+    hyphens: manual;
+}
+
+#converterOrcamentoOverlay .table-scroll {
+    position: relative;
+}
+
+/* O cabeçalho acompanha a rolagem.
+ *
+ * É ele que responde "que coluna é esta?", e numa revisão de vinte peças é a
+ * primeira coisa que se perde: a pessoa rola até a peça, encontra três números
+ * lado a lado e não sabe mais qual é "Em Estoque" e qual é "Produzir Total" —
+ * justamente a decisão que o modal pede.
+ *
+ * Três detalhes que não são gosto:
+ *
+ * - Grudento na CÉLULA, não no `<thead>`. É a forma que funciona em qualquer
+ *   motor, e não custa nada a mais.
+ * - Fundo OPACO. O card do modal é translúcido e as linhas passam por baixo do
+ *   cabeçalho: com fundo transparente, os dois textos se sobrepõem.
+ * - A linha de baixo é sombra interna, não borda. A tabela é
+ *   `border-collapse: collapse` e o Chromium não leva a borda colapsada do
+ *   `<tr>` junto com a célula grudada — o cabeçalho rolava sem separador
+ *   nenhum, encostado na primeira linha. */
+#converterOrcamentoOverlay .table-scroll thead th {
+    position: sticky;
+    top: 0;
+    z-index: 3;
+    background: #2a0f1c;
+    box-shadow: inset 0 -1px 0 rgba(255, 255, 255, 0.1);
+}
+
+#converterOrcamentoOverlay .quote-piece-approved {
+    background: rgba(34, 197, 94, 0.16);
+}
+
+#converterOrcamentoOverlay .quote-piece-approved:hover {
+    background: rgba(34, 197, 94, 0.22);
+}
+
+/* Peça ainda não confirmada: fundo avermelhado para reforçar a pendência. */
+#converterOrcamentoOverlay .quote-piece-unapproved {
+    background: rgba(239, 68, 68, 0.12);
+}
+
+#converterOrcamentoOverlay .quote-piece-unapproved:hover {
+    background: rgba(239, 68, 68, 0.18);
+}
+
+#converterOrcamentoOverlay .table-scroll tbody[data-table-loading="true"] > tr:not(.table-loading-placeholder) {
+    display: none;
+}
+
+#converterOrcamentoOverlay .table-loading-placeholder td {
+    padding: 1rem 1.5rem;
+}
+
+#converterOrcamentoOverlay .table-loading-inline {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.75rem;
+    color: #4b5563;
+    font-size: 0.95rem;
+    font-weight: 500;
+}
+
+/* ---------------------------------------------------------------------------
+ * A tarja de pendências e o (i) que as lista
+ *
+ * A tarja mostrava a lista inteira escrita por extenso: com oito peças por
+ * confirmar, virava um parágrafo de nomes separados por vírgula ocupando três
+ * linhas no alto do modal — impossível de varrer com os olhos e empurrando a
+ * tabela para baixo justamente quando havia mais o que revisar.
+ *
+ * Agora a tarja diz só o que está acontecendo, e o (i) mostra o quê.
+ * ------------------------------------------------------------------------- */
+
+/* O popover é MOVIDO para o `<body>` por `Popover.abrir` (o
+ * `backdrop-filter` do modal quebra `position: fixed` lá dentro). Por isso ele
+ * é estilizado pelo PRÓPRIO id: qualquer seletor descendente de
+ * `#converterOrcamentoOverlay` deixaria de casar assim que ele se mudasse. */
+#converterPendenciasPopover {
+    position: absolute;
+    z-index: 50;
+    width: min(28rem, calc(100vw - 2rem));
+    max-height: min(60vh, 460px);
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.25) transparent;
+    padding: 1rem 1.15rem;
+    border-radius: 0.9rem;
+    border: 1px solid rgba(239, 68, 68, 0.25);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.555);
+    /* Opaco de verdade: a tabela passa por baixo, e um fundo translúcido
+       deixava os nomes das peças ilegíveis sobre as próprias linhas. */
+    background: #2a0f1c;
+
+    /* Escondido por VISIBILIDADE e não por `display`: `Popover.abrir` mede a
+       caixa para decidir se ela cabe embaixo do ícone, e uma caixa com
+       `display: none` mede zero — o popover abriria sempre para baixo e sairia
+       da tela nas listas longas. */
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(-8px);
+    transition: opacity 200ms ease, transform 200ms ease;
+    pointer-events: none;
+}
+
+#converterPendenciasPopover.show {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
+    pointer-events: auto;
+}
+
+#converterPendenciasPopover::-webkit-scrollbar {
+    width: 6px;
+}
+
+#converterPendenciasPopover::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+#converterPendenciasPopover::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.25);
+    border-radius: 3px;
+}
+
+#converterPendenciasPopover::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.4);
+}
+
+.conv-pendencia-grupo + .conv-pendencia-grupo {
+    margin-top: 0.9rem;
+    padding-top: 0.9rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.conv-pendencia-titulo {
+    display: flex;
+    align-items: baseline;
+    gap: 0.5rem;
+    font-size: 0.8rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    color: #fca5a5;
+}
+
+/* Quantas faltam, em destaque: é o número que diz se falta uma peça ou onze. */
+.conv-pendencia-quantas {
+    font-variant-numeric: tabular-nums;
+    font-size: 0.7rem;
+    padding: 0.05rem 0.4rem;
+    border-radius: 999px;
+    background: rgba(239, 68, 68, 0.18);
+    color: #fecaca;
+}
+
+.conv-pendencia-nota {
+    margin-top: 0.35rem;
+    font-size: 0.78rem;
+    line-height: 1.45;
+    color: #d1d5db;
+}
+
+/* Uma peça por linha, não uma frase de nomes separados por vírgula: é assim
+   que dá para conferir contra a tabela sem reler o parágrafo inteiro. */
+.conv-pendencia-itens {
+    margin-top: 0.45rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.conv-pendencia-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.45rem;
+    font-size: 0.82rem;
+    line-height: 1.35;
+    color: #f3f4f6;
+    overflow-wrap: anywhere;
+}
+
+.conv-pendencia-item::before {
+    content: '•';
+    color: rgba(239, 68, 68, 0.75);
+    flex-shrink: 0;
+}

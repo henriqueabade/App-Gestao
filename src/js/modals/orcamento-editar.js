@@ -1215,16 +1215,37 @@
     return true;
   }
 
-  // Captura o submit antes do handler padrão para abrir o modal de conversão quando necessário
+  // Captura o submit antes do handler padrão para abrir o modal de conversão
+  // quando necessário.
+  //
+  // Este caminho corta a propagação, então o envio NÃO chega ao `bindSubmit`
+  // lá embaixo — e a trava dele também não. A trava é remontada aqui, no
+  // formulário e não no botão, pelo mesmo motivo de sempre: "Salvar" e
+  // "Salvar e Fechar" abrem a MESMA revisão, e travar só o botão clicado
+  // deixaria o de ao lado abrir uma segunda por cima da primeira.
   if (form) {
     form.addEventListener('submit', e => {
-      if (currentStatus === 'Aprovado') {
-        e.preventDefault();
-        if (e.stopImmediatePropagation) e.stopImmediatePropagation();
-        if (exigeTransportadora()) return;
-        const closeAfter = e.submitter?.id === 'salvarFecharOrcamento' || currentStatus !== initialStatus;
-        openConverterModal(() => saveChanges(closeAfter));
-      }
+      if (currentStatus !== 'Aprovado') return;
+      e.preventDefault();
+      if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+
+      const BotaoAcao = window.BotaoAcao;
+      if (BotaoAcao?.estaOcupado?.(form)) return;
+      // A checagem da transportadora vem antes de marcar: ela é uma recusa, e
+      // um formulário marcado sem nada em curso ficaria travado para sempre.
+      if (exigeTransportadora()) return;
+
+      const closeAfter = e.submitter?.id === 'salvarFecharOrcamento' || currentStatus !== initialStatus;
+      // Abrir a revisão leva um tempo visível — ela carrega o estoque peça a
+      // peça. O carregando fica no botão clicado até o modal estar de pé.
+      const abrir = () => openConverterModal(() => saveChanges(closeAfter));
+
+      if (!BotaoAcao?.run) { abrir(); return; }
+      BotaoAcao.marcarOcupado?.(form, { visual: false });
+      Promise.resolve(BotaoAcao.run(e.submitter || null, abrir))
+        // Solta assim que a revisão está aberta: daí em diante quem manda é
+        // ela, e é ela que cobre a tela.
+        .finally(() => BotaoAcao.liberar?.(form));
     }, true);
   }
 
@@ -1245,19 +1266,30 @@
     }, true);
   }
 
-  if (form) {
-    form.addEventListener('submit', e => {
-      e.preventDefault();
-      const closeAfter = e.submitter?.id === 'salvarFecharOrcamento' || currentStatus !== initialStatus;
-      const proceed = () => saveChanges(closeAfter);
-      if (currentStatus === 'Aprovado') {
-        showActionDialog('Tem certeza que deseja converter este orçamento em pedido?', ok => {
-          if (ok) proceed();
-        });
-      } else {
-        proceed();
-      }
+  // "Salvar" e "Salvar e Fechar" mandam o MESMO formulário, e os dois ficam
+  // fora dele (ligados por `form="editarOrcamentoForm"`). A trava vive no
+  // FORMULÁRIO para valer aos dois juntos: no botão, dava para clicar num e
+  // depois no outro e gravar duas vezes.
+  //
+  // Devolve promessa em todos os caminhos — inclusive o do diálogo, que é
+  // por retorno de chamada — porque é a promessa que diz até quando o botão
+  // fica em carregando.
+  const submeterEdicao = e => {
+    const closeAfter = e.submitter?.id === 'salvarFecharOrcamento' || currentStatus !== initialStatus;
+    if (currentStatus !== 'Aprovado') return saveChanges(closeAfter);
+    return new Promise(resolve => {
+      showActionDialog('Tem certeza que deseja converter este orçamento em pedido?', ok => {
+        resolve(ok ? saveChanges(closeAfter) : undefined);
+      });
     });
+  };
+
+  if (form) {
+    if (window.BotaoAcao?.bindSubmit) {
+      window.BotaoAcao.bindSubmit(form, submeterEdicao);
+    } else {
+      form.addEventListener('submit', e => { e.preventDefault(); submeterEdicao(e); });
+    }
   }
   if (converterBtn) {
     converterBtn.addEventListener('click', () => {

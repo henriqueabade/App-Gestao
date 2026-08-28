@@ -851,8 +851,14 @@
       }
 
       const confirmMsg = status === 'Rascunho' ? 'Deseja salvar este orçamento?' : 'Deseja salvar e enviar este orçamento?';
+    // Devolve promessa: quem chamou precisa saber QUANDO terminou.
+    //
+    // O diálogo confirma e some, e só ENTÃO começa a ida ao servidor. Era essa
+    // janela — diálogo já fechado, gravação em curso, botão de novo clicável —
+    // que aceitava o segundo clique e criava dois orçamentos iguais.
+    return new Promise(resolve => {
     showActionDialog(confirmMsg, async ok => {
-      if (!ok) return;
+      if (!ok) return resolve();
       try {
         const subtotal = parseCurrencyToCents(document.getElementById('novoSubtotal').textContent) / 100;
         let descPagTot = 0;
@@ -947,15 +953,26 @@
       } catch (err) {
         console.error(err);
         showToast('Erro ao salvar orçamento', 'error');
+      } finally {
+        // Solta também quando deu erro: senão o botão fica em carregando para
+        // sempre e a pessoa não consegue nem tentar de novo.
+        resolve();
       }
-    });
+    });   // fim do showActionDialog
+    });   // fim da promessa devolvida por saveQuote
   }
 
-  form.addEventListener('submit', e => {
-    e.preventDefault();
-    const status = e.submitter?.dataset.status || 'Rascunho';
-    saveQuote(status);
-  });
+  // "Salvar" e "Salvar e Enviar" mandam o MESMO formulário, com status
+  // diferente. Os dois ficam fora dele (ligados por `form="novoOrcamentoForm"`),
+  // e por isso a trava vive no FORMULÁRIO e não no botão: ela precisa valer
+  // para os dois ao mesmo tempo, senão bastava clicar num e depois no outro
+  // para mandar o mesmo orçamento duas vezes.
+  const submeterNovo = e => saveQuote(e.submitter?.dataset.status || 'Rascunho');
+  if (window.BotaoAcao?.bindSubmit) {
+    window.BotaoAcao.bindSubmit(form, submeterNovo);
+  } else {
+    form.addEventListener('submit', e => { e.preventDefault(); submeterNovo(e); });
+  }
   /** Solta a marca de modo prospecção: sem isto o próximo "Novo Orçamento"
    *  de cliente abriria com o select de cliente mudo. */
   const fecharLimpando = () => {

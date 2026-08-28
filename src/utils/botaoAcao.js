@@ -348,6 +348,32 @@
     return form.querySelector('button:not([type="button"]):not([type="reset"])');
   }
 
+  /**
+   * TODOS os botões que enviam este formulário — inclusive os de fora dele,
+   * ligados por `form="id"`.
+   *
+   * Num formulário com dois ("Salvar" e "Salvar e Enviar") os dois precisam ser
+   * marcados como geridos. O que ficasse de fora seria travado pela rede
+   * automática no clique e chegaria ao envio JÁ ocupado — e o envio era então
+   * descartado em silêncio, sem salvar nada e sem erro nenhum na tela.
+   */
+  function botoesDeEnvio(form) {
+    const lista = Array.from(
+      form.querySelectorAll('button[type="submit"], input[type="submit"]')
+    );
+    if (form.id) {
+      const escapado = typeof CSS !== 'undefined' && typeof CSS.escape === 'function'
+        ? CSS.escape(form.id)
+        : form.id;
+      lista.push(...document.querySelectorAll(
+        `button[type="submit"][form="${escapado}"], input[type="submit"][form="${escapado}"]`
+      ));
+    }
+    const primeiro = localizarBotaoEnvio(form);
+    if (primeiro && !lista.includes(primeiro)) lista.push(primeiro);
+    return lista;
+  }
+
   function onClickCaptura(evento) {
     const alvo = evento.target;
     if (!alvo || typeof alvo.closest !== 'function') return;
@@ -509,17 +535,35 @@
     if (!form || typeof handler !== 'function') return;
     form.dataset.acaoGerida = 'true';
     const botao = opcoes.botao || localizarBotaoEnvio(form);
+    for (const b of botoesDeEnvio(form)) b.dataset.acaoGerida = 'true';
     if (botao) botao.dataset.acaoGerida = 'true';
     form.addEventListener('submit', async evento => {
       evento.preventDefault();
       if (estaOcupado(form)) return;
       marcarOcupado(form, { visual: false });
       try {
-        await run(botao, () => handler(evento), opcoes);
+        // O carregando vai no botão que DE FATO submeteu.
+        //
+        // Um formulário pode ter mais de um: "Salvar" e "Salvar e Enviar"
+        // mandam o mesmo orçamento com status diferente. Com o botão fixado na
+        // ligação, clicar no segundo acendia o primeiro — e o que a pessoa
+        // clicou ficava parado, parecendo que não respondeu.
+        //
+        // A trava do segundo envio continua no FORMULÁRIO, e é ela que impede
+        // clicar num botão e depois no outro.
+        await run(botaoQueSubmeteu(evento) || botao, () => handler(evento), opcoes);
       } finally {
         liberar(form);
       }
     });
+  }
+
+  /** O botão que disparou este `submit`, quando o navegador soube dizer. */
+  function botaoQueSubmeteu(evento) {
+    const alvo = evento?.submitter;
+    if (!alvo) return null;
+    const tipo = String(alvo.type || '').toLowerCase();
+    return tipo === 'submit' || alvo.tagName === 'BUTTON' ? alvo : null;
   }
 
   function iniciar() {
@@ -550,6 +594,11 @@
     // jeito. Duas buscas diferentes pelo mesmo botão divergem na primeira
     // mudança — foi assim que Produtos ficou sem travar o segundo clique.
     localizarBotaoEnvio,
+    // Companheiro de leitura de `marcarOcupado`/`liberar`, já exportados. Quem
+    // trata o próprio envio precisa PERGUNTAR se já há um em curso antes de
+    // marcar o seu — e a resposta tem de vir daqui, senão vira uma segunda
+    // regra sobre o mesmo estado.
+    estaOcupado,
     comCarregamento,
     liberar,
     marcarOcupado,
