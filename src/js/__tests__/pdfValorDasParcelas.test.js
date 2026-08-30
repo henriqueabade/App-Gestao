@@ -2,7 +2,7 @@
  * Linha "Valor das Parcelas" no PDF de pedido/orçamento (src/pdf/script.js).
  *
  * A linha repete o formato do campo "Prazo" — valores separados por barra, na
- * mesma ordem — para que o leitor case "30/60/90" com "61,62/1.661,62/861,62"
+ * mesma ordem — para que o leitor case "30/60/90" com "R$61,62/R$1.661,62/R$861,62"
  * sem precisar de legenda.
  *
  * Ela só aparece quando há parcelamento de verdade: num pagamento à vista o
@@ -41,9 +41,9 @@ test('formata os valores no mesmo padrão do prazo', () => {
     ]
   });
 
-  // Sem "R$" e sem espaços: o campo "Prazo" ao lado é "30/60/90", e a linha
+  // Com "R$" e sem espaços: o campo "Prazo" ao lado é "30/60/90", e a linha
   // existe para ser lida em paralelo com ele.
-  assert.strictEqual(resultado, '61,62/1.661,62/861,62');
+  assert.strictEqual(resultado, 'R$61,62/R$1.661,62/R$861,62');
 });
 
 test('respeita numero_parcela, não a ordem em que a API devolveu', () => {
@@ -58,7 +58,7 @@ test('respeita numero_parcela, não a ordem em que a API devolveu', () => {
     ]
   });
 
-  assert.strictEqual(resultado, '61,62/1.661,62/861,62');
+  assert.strictEqual(resultado, 'R$61,62/R$1.661,62/R$861,62');
 });
 
 test('à vista não gera a linha', () => {
@@ -76,8 +76,8 @@ test('documento sem parcelas gravadas não quebra nem gera linha vazia', () => {
 });
 
 test('centavos são sempre exibidos, mesmo em valor redondo', () => {
-  // "1.000/500" pareceria um total, não um valor monetário. As duas casas
-  // mantêm a coluna legível como dinheiro.
+  // "R$1.000/R$500" pareceria contagem arredondada. As duas casas mantêm a
+  // linha legível como dinheiro.
   const resultado = formatParcelasValores({
     parcelas_detalhes: [
       { numero_parcela: 1, valor: 1000 },
@@ -85,5 +85,5 @@ test('centavos são sempre exibidos, mesmo em valor redondo', () => {
     ]
   });
 
-  assert.strictEqual(resultado, '1.000,00/500,50');
+  assert.strictEqual(resultado, 'R$1.000,00/R$500,50');
 });

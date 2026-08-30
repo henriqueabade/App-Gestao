@@ -749,6 +749,18 @@
       // A restauração depois de uma queda NÃO pede: ali os descontos já foram
       // calculados, e alguns foram negociados à mão. Recalcular desfaria o que
       // a pessoa combinou com o cliente.
+      //
+      // A CONDIÇÃO vem antes da regra. Metade do desconto padrão é "5% à
+      // vista", e `applyDefaultDiscounts` lê isso do próprio select — que só
+      // era preenchido mais abaixo, no passo 3. Rodando antes, a regra via um
+      // select vazio e concluía que não era à vista: todo orçamento à vista
+      // preenchido pela IA saía com 5 pontos de desconto a menos, sem nada na
+      // tela dizendo que faltava.
+      //
+      // Só o valor, aqui: habilitar o select e montar o bloco de prazo ou de
+      // parcelas continua no passo 3, que é onde depende do total já calculado.
+      if (dados.condicao) condicaoSelect.value = dados.condicao;
+
       if (dados.aplicarDescontoPadrao) applyDefaultDiscounts();
 
       recalcTotals();

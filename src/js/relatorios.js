@@ -50,6 +50,15 @@ const COLUMN_VISIBILITY_STORAGE_PREFIX = 'relatorios-visible-columns';
 let relatoriosKpiManager = null;
 let relatoriosChartManager = null;
 let relatoriosMasterDetail = null;
+/**
+ * Visão de resultado ativa ('table' | 'charts' | 'detail').
+ *
+ * O seletor de colunas precisa saber disto: em Pedidos + Master-Detail, o
+ * documento que se exporta é o AGRUPAMENTO, e as colunas ajustáveis passam a
+ * ser as dele. Mostrar as colunas da tabela ali seria oferecer um controle
+ * que não afeta nada do que está na tela.
+ */
+let relatoriosVisaoResultado = 'table';
 let jsPdfLoaderPromise = null;
 
 function showRelatoriosToast(message, type = 'info') {
@@ -1226,6 +1235,225 @@ function openReportPrintWindow(title, headers, rows) {
         .catch(error => {
             console.error('openReportPrintWindow error', error);
             showRelatoriosToast('Não foi possível abrir a visualização de impressão.', 'error');
+        });
+}
+
+// ===========================================================================
+// AGRUPAMENTO DE PEDIDOS
+//
+// Junta vários pedidos selecionados na visão Master-Detail num documento só.
+// Responde a pergunta da produção — "quantas peças de cada modelo, e quantas
+// já estão prontas?" — que hoje é feita somando à mão pedidos repetidos.
+//
+// O documento tem duas partes, e elas servem a pessoas diferentes:
+//   consolidado  → uma linha por modelo de peça, quantidades somadas.
+//   detalhamento → uma seção por pedido, com a LOJA no cabeçalho, para a
+//                  expedição saber o que é de quem.
+//
+// A soma acontece no backend (backend/agrupamentoPedidos.js), que é onde ela
+// pode ser testada. Aqui só se desenha.
+// ===========================================================================
+
+const AGRUPAMENTO_PEDIDOS_KEY = 'pedidos-agrupamento';
+
+/** Colunas do consolidado que o usuário deixou visíveis, na ordem definida. */
+function colunasDoAgrupamento() {
+    const config = REPORT_CONFIGS[AGRUPAMENTO_PEDIDOS_KEY];
+    const visiveis = new Set(getVisibleColumnKeys(AGRUPAMENTO_PEDIDOS_KEY));
+    const escolhidas = config.columns.filter(coluna => visiveis.has(coluna.key));
+    // Nunca devolve vazio: um documento sem colunas não é um documento.
+    return escolhidas.length ? escolhidas : config.columns;
+}
+
+/** Busca o agrupamento já somado no backend. */
+async function fetchAgrupamentoPedidos(ids) {
+    const lista = (Array.isArray(ids) ? ids : []).map(id => String(id).trim()).filter(Boolean);
+    if (!lista.length) {
+        throw new Error('Selecione ao menos um pedido para agrupar.');
+    }
+    const resposta = await fetchFromApi(`/api/pedidos/agrupamento?ids=${encodeURIComponent(lista.join(','))}`);
+    let corpo = null;
+    try { corpo = await resposta.json(); } catch (_) { /* corpo vazio */ }
+    if (!resposta.ok) {
+        throw new Error(corpo?.error || 'Não foi possível montar o agrupamento.');
+    }
+    return corpo;
+}
+
+/** Célula do consolidado — contagens sem casas, dinheiro formatado. */
+function valorDaColunaAgrupamento(peca, chave) {
+    switch (chave) {
+        case 'codigo': return peca?.codigo || '—';
+        case 'nome': return peca?.nome || '—';
+        case 'quantidade': return formatNumber(peca?.quantidade, { fallback: '0' });
+        case 'pronta': return formatNumber(peca?.pronta, { fallback: '0' });
+        case 'a_fazer': return formatNumber(peca?.a_fazer, { fallback: '0' });
+        case 'valor_unitario': return formatCurrency(peca?.valor_unitario);
+        case 'valor_total': return formatCurrency(peca?.valor_total);
+        default: return '—';
+    }
+}
+
+/** Colunas de texto alinham à esquerda; quantidade e dinheiro, à direita. */
+function alinhamentoDaColuna(chave) {
+    return chave === 'codigo' || chave === 'nome' ? 'left' : 'right';
+}
+
+function totalDaColunaAgrupamento(totais, chave) {
+    switch (chave) {
+        case 'quantidade': return formatNumber(totais?.quantidade, { fallback: '0' });
+        case 'pronta': return formatNumber(totais?.pronta, { fallback: '0' });
+        case 'a_fazer': return formatNumber(totais?.a_fazer, { fallback: '0' });
+        case 'valor_total': return formatCurrency(totais?.valor_total);
+        // Unitário não se soma: média de médias não significa nada.
+        default: return '';
+    }
+}
+
+/**
+ * Documento imprimível do agrupamento.
+ *
+ * O detalhamento flui CONTINUAMENTE, sem quebra de página por pedido: com um
+ * pedido por folha, um agrupamento de dez pedidos curtos gastaria dez folhas
+ * quase vazias. Cada bloco evita se partir ao meio quando cabe inteiro, e a
+ * loja fica no cabeçalho da seção para quem separa nunca perder a referência.
+ */
+function createAgrupamentoPrintHtml(doc, { incluirDetalhe = false, titulo = 'Agrupamento Pedidos' } = {}) {
+    const colunas = colunasDoAgrupamento();
+    const pecas = Array.isArray(doc?.pecas) ? doc.pecas : [];
+    const pedidos = Array.isArray(doc?.pedidos) ? doc.pedidos : [];
+    const totais = doc?.totais || {};
+
+    const cabecalho = colunas
+        .map(c => '<th style="text-align:' + alinhamentoDaColuna(c.key) + '">' + escapeHtml(c.label) + '</th>')
+        .join('');
+
+    const corpo = pecas.length
+        ? pecas.map(peca => {
+            const celulas = colunas
+                .map(c => '<td style="text-align:' + alinhamentoDaColuna(c.key) + '">'
+                        + escapeHtml(valorDaColunaAgrupamento(peca, c.key)) + '</td>')
+                .join('');
+            return '<tr>' + celulas + '</tr>';
+        }).join('')
+        : '<tr><td colspan="' + colunas.length + '" class="vazio">Nenhuma peça nos pedidos selecionados.</td></tr>';
+
+    // O rodapé só existe se alguma coluna somável estiver visível — uma linha
+    // de totais toda vazia seria ruído.
+    const temSomavel = colunas.some(c => ['quantidade', 'pronta', 'a_fazer', 'valor_total'].includes(c.key));
+    const rodape = temSomavel && pecas.length
+        ? '<tfoot><tr>' + colunas.map((c, i) => {
+            const conteudo = i === 0 ? 'Total' : escapeHtml(totalDaColunaAgrupamento(totais, c.key));
+            const alinha = i === 0 ? 'left' : alinhamentoDaColuna(c.key);
+            return '<td style="text-align:' + alinha + '"><strong>' + conteudo + '</strong></td>';
+          }).join('') + '</tr></tfoot>'
+        : '';
+
+    const blocosDetalhe = pedidos.map(pedido => {
+        const itens = Array.isArray(pedido.itens) ? pedido.itens : [];
+        const linhas = itens.length
+            ? itens.map(item =>
+                '<tr><td>' + escapeHtml(item.codigo || '—') + '</td>'
+                + '<td>' + escapeHtml(item.nome || '—') + '</td>'
+                + '<td style="text-align:right">' + escapeHtml(formatNumber(item.quantidade, { fallback: '0' })) + '</td></tr>'
+              ).join('')
+            : '<tr><td colspan="3" class="vazio">Pedido sem peças.</td></tr>';
+        // A LOJA é o cabeçalho: é por ela que quem separa acha o pedido na
+        // bancada, não pelo número.
+        const loja = escapeHtml(pedido.cliente || 'Cliente não informado');
+        const numero = pedido.numero ? ' &middot; ' + escapeHtml(pedido.numero) : '';
+        return '<article class="pedido"><h3>' + loja + numero + '</h3>'
+             + '<table class="tabela-detalhe"><thead><tr><th>Código</th><th>Nome</th>'
+             + '<th style="text-align:right">Qtd.</th></tr></thead><tbody>'
+             + linhas + '</tbody></table></article>';
+    }).join('');
+
+    const detalhe = incluirDetalhe && pedidos.length
+        ? '<section class="detalhe"><h2>Detalhamento por pedido</h2>' + blocosDetalhe + '</section>'
+        : '';
+
+    const resumo = [
+        pedidos.length + (pedidos.length === 1 ? ' pedido' : ' pedidos'),
+        pecas.length + (pecas.length === 1 ? ' peça distinta' : ' peças distintas'),
+        formatNumber(totais?.quantidade, { fallback: '0' }) + ' no total'
+    ].join(' &middot; ');
+
+    const aviso = Number(doc?.ausentes) > 0
+        ? '<p class="aviso">' + doc.ausentes + ' pedido(s) selecionado(s) não foram encontrados e ficaram de fora.</p>'
+        : '';
+
+    const estilo = [
+        '@page { size: A4 portrait; margin: 14mm; }',
+        'html, body { margin: 0; padding: 0; background: #f8f9fb; color: #111; font-family: Arial, sans-serif; }',
+        'body { display: flex; justify-content: center; }',
+        '.pagina { width: 182mm; max-width: 100%; background: #fff; box-sizing: border-box; }',
+        'h1 { text-align: center; font-size: 16pt; margin: 0 0 4px; }',
+        '.resumo { text-align: center; font-size: 9pt; color: #555; margin: 0 0 14px; }',
+        '.aviso { text-align: center; font-size: 9pt; color: #92400e; margin: 0 0 10px; }',
+        'table { width: 100%; border-collapse: collapse; font-size: 9.5pt; }',
+        'th, td { border: 1px solid #444; padding: 4px 6px; }',
+        'th { background: #f3f4f6; }',
+        'tfoot td { background: #f8f8f8; }',
+        '.vazio { text-align: center; padding: 12px 0; }',
+        '.detalhe { margin-top: 16px; }',
+        '.detalhe h2 { font-size: 12pt; margin: 0 0 8px; border-bottom: 1px solid #444; padding-bottom: 3px; }',
+        // Fluxo contínuo: um pedido começa logo abaixo do anterior. Sem isto,
+        // dez pedidos curtos gastariam dez folhas quase vazias.
+        '.pedido { margin: 0 0 10px; break-inside: avoid; page-break-inside: avoid; }',
+        '.pedido h3 { font-size: 10pt; margin: 0 0 3px; background: #eef0f3; padding: 3px 6px; border: 1px solid #444; border-bottom: none; }',
+        '.tabela-detalhe { font-size: 9pt; }',
+        '.tabela-detalhe th, .tabela-detalhe td { padding: 2px 6px; }',
+        // Cabeçalho da tabela repete quando o consolidado atravessa páginas.
+        'thead { display: table-header-group; }'
+    ].join('\n        ');
+
+    const roteiro = 'window.addEventListener("load", function () {'
+                  + ' setTimeout(function () { window.focus(); window.print(); }, 300); });';
+
+    return '<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"><title>'
+         + escapeHtml(titulo) + '</title><style>' + estilo + '</style></head><body>'
+         + '<div class="pagina">'
+         + '<h1>' + escapeHtml(titulo) + '</h1>'
+         + '<p class="resumo">' + resumo + '</p>'
+         + aviso
+         + '<table><thead><tr>' + cabecalho + '</tr></thead><tbody>' + corpo + '</tbody>' + rodape + '</table>'
+         + detalhe
+         + '</div>'
+         + '<scr' + 'ipt>' + roteiro + '</scr' + 'ipt>'
+         + '</body></html>';
+}
+
+/** Abre o documento do agrupamento — mesmo caminho da impressão comum. */
+function abrirAgrupamentoParaImpressao(doc, opcoes) {
+    if (typeof window === 'undefined') return;
+    const html = createAgrupamentoPrintHtml(doc, opcoes);
+
+    const abrirExterno = async () => {
+        if (window.electronAPI?.openExternalHtml) {
+            try {
+                return Boolean(await window.electronAPI.openExternalHtml(html));
+            } catch (error) {
+                console.error('Falha ao abrir o agrupamento em janela externa', error);
+            }
+        }
+        return false;
+    };
+
+    abrirExterno()
+        .then(abriu => {
+            if (abriu) return;
+            const janela = window.open('', '_blank');
+            if (!janela) {
+                showRelatoriosToast('Não foi possível abrir a janela de impressão.', 'error');
+                return;
+            }
+            janela.document.open();
+            janela.document.write(html);
+            janela.document.close();
+        })
+        .catch(error => {
+            console.error('abrirAgrupamentoParaImpressao error', error);
+            showRelatoriosToast('Não foi possível abrir o agrupamento.', 'error');
         });
 }
 
@@ -4733,6 +4961,21 @@ REPORT_CONFIGS.pedidos = {
     }
 };
 
+REPORT_CONFIGS[AGRUPAMENTO_PEDIDOS_KEY] = {
+    // Sem `fetchData`/`renderRow`: este relatório não tem aba nem tabela na
+    // tela. A entrada existe para que o seletor de colunas — que é genérico e
+    // lê daqui — funcione para ele igual aos outros.
+    columns: [
+        { key: 'codigo', label: 'Código' },
+        { key: 'nome', label: 'Nome' },
+        { key: 'quantidade', label: 'Quantidade' },
+        { key: 'pronta', label: 'Pronta' },
+        { key: 'a_fazer', label: 'A Fazer' },
+        { key: 'valor_unitario', label: 'Valor Unit.' },
+        { key: 'valor_total', label: 'Valor Total' }
+    ]
+};
+
 MASTER_DETAIL_CONFIGS.usuarios = {
     getId: item => item?.id ?? item?.uuid ?? item?.email ?? null,
     getCardSummary: item => {
@@ -4896,7 +5139,9 @@ function initRelatoriosModule() {
             }
         }
     });
-    setupResultTabs(container);
+    setupResultTabs(container, {
+        onViewChange: () => columnControl?.refresh?.()
+    });
     setupDropdowns(container);
     setupExportActions(container, {
         getActiveTab: () => tabController?.getActiveTab?.() || initialTabKey
@@ -5191,7 +5436,7 @@ async function populateReportTable(key, container) {
     }
 }
 
-function setupResultTabs(root) {
+function setupResultTabs(root, { onViewChange } = {}) {
     const tabButtons = Array.from(root.querySelectorAll('[data-relatorios-result]'));
     if (!tabButtons.length) return;
 
@@ -5213,6 +5458,7 @@ function setupResultTabs(root) {
     };
 
     activateView('table');
+    relatoriosVisaoResultado = 'table';
 
     tabButtons.forEach(button => {
         button.addEventListener('click', () => {
@@ -5228,6 +5474,10 @@ function setupResultTabs(root) {
             button.classList.remove('tab-inactive');
 
             activateView(target);
+            relatoriosVisaoResultado = target;
+            if (typeof onViewChange === 'function') {
+                onViewChange(target);
+            }
         });
     });
 }
@@ -5284,8 +5534,90 @@ function setupDropdowns(root) {
     window.__relatoriosDropdownHandler = handleDocumentClick;
 }
 
+/**
+ * Gera o documento de agrupamento a partir da seleção Master-Detail.
+ *
+ * Só faz sentido em Pedidos: o consolidado soma PEÇAS, e as outras abas não
+ * têm peças para somar. Recusar aqui é mais claro do que oferecer a opção e
+ * devolver um documento vazio.
+ */
+async function handleAgrupamentoExport(key, { incluirDetalhe = false } = {}) {
+    if (key !== 'pedidos') {
+        showRelatoriosToast('O agrupamento está disponível apenas no relatório de Pedidos.', 'info');
+        return;
+    }
+
+    if (!relatoriosMasterDetail || typeof relatoriosMasterDetail.getSelectionSnapshot !== 'function') {
+        showRelatoriosToast('A visão Master-Detail está indisponível no momento.', 'warning');
+        return;
+    }
+
+    const snapshot = relatoriosMasterDetail.getSelectionSnapshot(key);
+    const itens = Array.isArray(snapshot?.items) ? snapshot.items : [];
+    if (!itens.length) {
+        showRelatoriosToast('Selecione os pedidos na visão Master-Detail para agrupar.', 'info');
+        return;
+    }
+
+    // O id da seleção é o do pedido — é ele que o backend precisa. Cair no
+    // número quebraria a busca, que é por chave primária.
+    const ids = itens
+        .map(entry => entry?.item?.id ?? entry?.id)
+        .filter(id => id !== undefined && id !== null && String(id).trim() !== '');
+
+    if (!ids.length) {
+        showRelatoriosToast('Não foi possível identificar os pedidos selecionados.', 'error');
+        return;
+    }
+
+    const mostrarCarregando = typeof window !== 'undefined' && typeof window.showLoading === 'function'
+        ? window.showLoading.bind(window)
+        : null;
+    const esconderCarregando = typeof window !== 'undefined' && typeof window.hideLoading === 'function'
+        ? window.hideLoading.bind(window)
+        : null;
+
+    if (mostrarCarregando) {
+        try {
+            mostrarCarregando('Montando o agrupamento de pedidos...');
+        } catch (error) {
+            console.warn('Não foi possível exibir o indicador de carregamento.', error);
+        }
+    }
+
+    try {
+        const doc = await fetchAgrupamentoPedidos(ids);
+        abrirAgrupamentoParaImpressao(doc, { incluirDetalhe });
+
+        if (Number(doc?.ausentes) > 0) {
+            showRelatoriosToast(`${doc.ausentes} pedido(s) não foram encontrados e ficaram de fora.`, 'warning');
+        } else {
+            showRelatoriosToast('Agrupamento pronto para impressão.', 'success');
+        }
+    } catch (error) {
+        console.error('Falha ao montar o agrupamento de pedidos', error);
+        showRelatoriosToast(error?.message || 'Não foi possível montar o agrupamento.', 'error');
+        if (error && typeof error === 'object') {
+            error.__relatoriosHandled = true;
+        }
+    } finally {
+        if (esconderCarregando) {
+            try {
+                esconderCarregando();
+            } catch (error) {
+                console.warn('Não foi possível ocultar o indicador de carregamento.', error);
+            }
+        }
+    }
+}
+
 async function handleReportExport(root, key, type) {
     const title = createReportTitle(root, key);
+
+    if (type === 'agrupamento' || type === 'agrupamento-detalhe') {
+        await handleAgrupamentoExport(key, { incluirDetalhe: type === 'agrupamento-detalhe' });
+        return;
+    }
 
     if (type === 'pdf-master') {
         if (!relatoriosMasterDetail || typeof relatoriosMasterDetail.getSelectionSnapshot !== 'function') {
@@ -5489,8 +5821,24 @@ function setupColumnVisibilityControl(root) {
         updateFeedback('');
     };
 
+    /**
+     * Qual conjunto de colunas este controle edita agora.
+     *
+     * Em Pedidos + Master-Detail o que se exporta é o AGRUPAMENTO, e são as
+     * colunas dele que fazem diferença. Oferecer as colunas da tabela ali
+     * seria um controle que não muda nada do que está na tela.
+     */
+    const resolverChaveDeColunas = key =>
+        (key === 'pedidos' && relatoriosVisaoResultado === 'detail')
+            ? AGRUPAMENTO_PEDIDOS_KEY
+            : key;
+
     const renderOptions = key => {
-        const config = REPORT_CONFIGS?.[key];
+        // `activeKey` continua sendo a ABA — é ela que `refresh` e
+        // `resetReport` conhecem. A resolução acontece a cada render, porque
+        // a visão pode ter mudado desde a última.
+        const configKey = resolverChaveDeColunas(key);
+        const config = REPORT_CONFIGS?.[configKey];
         activeKey = key;
         if (!config?.columns?.length) {
             button.disabled = true;
@@ -5500,11 +5848,13 @@ function setupColumnVisibilityControl(root) {
             return;
         }
 
-        initializeReportColumns(key, config);
-        const visibleSet = new Set(getVisibleColumnKeys(key));
+        initializeReportColumns(configKey, config);
+        const visibleSet = new Set(getVisibleColumnKeys(configKey));
+        // Deixa explícito de qual documento são estas colunas quando não é a
+        // tabela da aba — senão o usuário mexe achando que é outra coisa.
+        updateFeedback(configKey === key ? '' : 'Colunas do documento "Agrupamento Pedidos".');
         button.disabled = false;
         list.innerHTML = '';
-        updateFeedback('');
 
         config.columns.forEach(column => {
             const option = document.createElement('label');
@@ -5525,14 +5875,14 @@ function setupColumnVisibilityControl(root) {
 
             checkbox.addEventListener('change', () => {
                 const isChecked = checkbox.checked;
-                const currentVisible = new Set(getVisibleColumnKeys(key));
+                const currentVisible = new Set(getVisibleColumnKeys(configKey));
                 if (!isChecked && currentVisible.size <= 1 && currentVisible.has(column.key)) {
                     checkbox.checked = true;
                     updateFeedback('Pelo menos uma coluna deve permanecer visível.');
                     return;
                 }
 
-                const updated = setColumnVisibility(key, column.key, isChecked);
+                const updated = setColumnVisibility(configKey, column.key, isChecked);
                 if (!updated) {
                     checkbox.checked = !isChecked;
                     updateFeedback('Não foi possível atualizar as colunas exibidas.');
@@ -5540,9 +5890,11 @@ function setupColumnVisibilityControl(root) {
                 }
 
                 updateFeedback('');
-                updateCountLabel(key);
+                updateCountLabel(configKey);
 
-                if (tableContainer?.dataset.currentTab === key) {
+                // O agrupamento não tem tabela na tela para repintar: ele é
+                // montado na hora de exportar.
+                if (configKey === key && tableContainer?.dataset.currentTab === key) {
                     const renderer = reportTableRenderers.get(key);
                     if (typeof renderer === 'function') {
                         renderer();
@@ -5554,7 +5906,7 @@ function setupColumnVisibilityControl(root) {
             });
         });
 
-        updateCountLabel(key);
+        updateCountLabel(configKey);
     };
 
     disableControl();

@@ -3,6 +3,10 @@ const { createApiClient } = require('./apiHttpClient');
 const { exigirPermissao, exigirSupAdmin } = require('./permissionsController');
 const { excluirPedidoEmCascata } = require('./exclusaoEmCascata');
 const descontos = require('./descontos');
+const { montarAgrupamento } = require('./agrupamentoPedidos');
+
+/** Teto de pedidos por relatório agrupado — cada um custa 3 requisições. */
+const MAX_PEDIDOS_NO_AGRUPAMENTO = 60;
 const { getMaxId, inserirLinhaComId } = require('./idsSequenciais');
 const { estornarCancelamento, opcoesDeEstorno } = require('./cancelamentoEstorno');
 const { registrarEntrada, registrarSaida } = require('./materiaPrima');
@@ -379,6 +383,78 @@ router.put('/:id/pagamento', exigirPermissao('ped.payment.edit'), async (req, re
   } catch (err) {
     console.error('Erro ao alterar pagamento do pedido:', err);
     res.status(err.status || 500).json({ error: 'Erro ao alterar o pagamento do pedido' });
+  }
+});
+
+/**
+ * GET /pedidos/agrupamento?ids=1,2,3 — vários pedidos num relatório só.
+ *
+ * REGISTRADA ANTES DE `/:id` DE PROPÓSITO: o Express casa na ordem, e
+ * `/agrupamento` bateria em `/:id` com id="agrupamento", devolvendo 404.
+ *
+ * Devolve as duas visões do conjunto (consolidado de peças e detalhamento por
+ * pedido) — ver backend/agrupamentoPedidos.js.
+ */
+router.get('/agrupamento', exigirPermissao('ped.view.details'), async (req, res) => {
+  const ids = String(req.query?.ids || '')
+    .split(',')
+    .map(v => v.trim())
+    .filter(Boolean);
+
+  if (!ids.length) {
+    return res.status(400).json({ error: 'Informe ao menos um pedido para agrupar.' });
+  }
+  // Teto para não transformar um clique distraído em centenas de idas ao
+  // upstream — cada pedido custa três requisições.
+  if (ids.length > MAX_PEDIDOS_NO_AGRUPAMENTO) {
+    return res.status(422).json({
+      error: `Selecione no máximo ${MAX_PEDIDOS_NO_AGRUPAMENTO} pedidos por relatório.`,
+      code: 'AGRUPAMENTO_EXCEDE_LIMITE'
+    });
+  }
+
+  try {
+    const api = createApiClient(req);
+
+    const carregados = await Promise.all(ids.map(async id => {
+      const pedido = await api.get(`/api/pedidos/${id}`).catch(() => null);
+      if (!pedido || pedido.error === 'Not found') return null;
+
+      const [itens, cliente] = await Promise.all([
+        api.get('/api/pedidos_itens', { query: { pedido_id: id } }).catch(() => []),
+        pedido.cliente_id != null
+          ? api.get(`/api/clientes/${pedido.cliente_id}`).catch(() => null)
+          : Promise.resolve(null)
+      ]);
+
+      return {
+        ...pedido,
+        itens: Array.isArray(itens) ? itens : [],
+        cliente_nome: cliente
+          ? (cliente.nome_fantasia || cliente.razao_social || cliente.nome || null)
+          : null
+      };
+    }));
+
+    // Pedido que sumiu entre a seleção e o relatório não derruba o conjunto —
+    // sai do documento e é contado como ausente, para a tela poder avisar.
+    const pedidos = carregados.filter(Boolean);
+    if (!pedidos.length) {
+      return res.status(404).json({ error: 'Nenhum dos pedidos selecionados foi encontrado.' });
+    }
+
+    // A ordem pedida pelo usuário é a ordem do documento: ele montou a
+    // seleção numa sequência que faz sentido para ele.
+    const posicao = new Map(ids.map((id, i) => [String(id), i]));
+    pedidos.sort((a, b) => (posicao.get(String(a.id)) ?? 0) - (posicao.get(String(b.id)) ?? 0));
+
+    res.json({
+      ...montarAgrupamento(pedidos),
+      ausentes: ids.length - pedidos.length
+    });
+  } catch (err) {
+    console.error('Erro ao montar o agrupamento de pedidos:', err);
+    res.status(err.status || 500).json({ error: 'Erro ao montar o agrupamento de pedidos' });
   }
 });
 

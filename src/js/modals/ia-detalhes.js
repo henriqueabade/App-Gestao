@@ -2094,21 +2094,6 @@
   }
 
   /**
-   * Chave de identidade de um insumo DENTRO da peça.
-   *
-   * O par insumo + processo, e não o insumo sozinho: a mesma cola entra em
-   * Marcenaria e em Montagem, com quantidades diferentes, e são duas linhas
-   * legítimas da ficha.
-   */
-  function chaveDeInsumo(insumo) {
-    const id = insumo?.insumo_id ?? insumo?.materia_prima_id ?? insumo?.id_materia_prima;
-    const quem = id != null && id !== ''
-      ? `id:${id}`
-      : `nome:${String(insumo?.nome || '').trim().toLowerCase()}`;
-    return `${quem}|${String(insumo?.processo || '').trim().toLowerCase()}`;
-  }
-
-  /**
    * O que a leitura trouxe e a ficha ainda não tem.
    *
    * Devolve também os repetidos, para dizer à pessoa o que NÃO entrou. Somar em
@@ -2155,19 +2140,30 @@
       return { quantos: novos.length, repetidos: repetidos.length, oQue: 'contato(s)' };
     },
 
+    // Insumo NÃO é conferido contra o que a ficha já tem — o que a leitura
+    // trouxe entra inteiro, inclusive o que já está lá.
+    //
+    // Pular o repetido escondia o que o documento dizia: a peça ficava com a
+    // quantidade antiga e nada na tela contava que a leitura trouxe outra.
+    //
+    // E somar aqui seria uma SEGUNDA regra sobre duplicados. O modal de peça já
+    // tem a dele, em `normalizeItensParaSalvar`: no salvamento ele junta as
+    // linhas do mesmo insumo, soma as quantidades e avisa que juntou. Deixar a
+    // linha repetida aparecer é o que põe essa decisão na frente de quem
+    // revisa — antes de salvar, e não depois.
+    //
+    // Contato segue conferindo, porque lá não existe essa regra: dois contatos
+    // iguais viram dois registros e ficam.
     produto_insumos: carga => {
       const daLeitura = Array.isArray(carga.insumos) ? carga.insumos : [];
       if (!daLeitura.length) return { quantos: 0, repetidos: 0, oQue: 'insumo(s)' };
 
-      const jaTem = window.produtoEditarAPI?.obterItens?.() || [];
-      const { novos, repetidos } = somenteOsQueFaltam(daLeitura, jaTem, chaveDeInsumo);
-
       // `ordem` vem da leitura contando do zero; quem acrescenta continua a
       // ordem da ficha, e uma ordem herdada colidiria com as que já estão lá.
       window.produtoEditarAPI?.adicionarProcessoItens?.(
-        novos.map(({ ordem, ...resto }) => resto));
+        daLeitura.map(({ ordem, ...resto }) => resto));
 
-      return { quantos: novos.length, repetidos: repetidos.length, oQue: 'insumo(s)' };
+      return { quantos: daLeitura.length, repetidos: 0, oQue: 'insumo(s)' };
     }
   };
 

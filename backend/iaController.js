@@ -1113,37 +1113,11 @@ function anotarEmpresa(dados, item, ctx) {
  * preço praticado" — o orçamento recusa o item, como já recusa em qualquer
  * outro caminho.
  */
-async function catalogoDeProdutos(api) {
-  const [produtos, tabela] = await Promise.all([
-    api.get('/api/produtos').then(listaDe).catch(() => []),
-    api.get('/api/tabela_fixa').then(listaDe).catch(() => [])
-  ]);
-
-  const precos = new Map();
-  for (const linha of tabela) {
-    const id = Number(linha?.id_prod);
-    if (Number.isFinite(id)) precos.set(id, linha?.vlr_prod);
-  }
-
-  return produtos.map(p => ({
-    ...p,
-    preco_tabela: precos.has(Number(p?.id)) ? precos.get(Number(p?.id)) : null
-  }));
-}
-
-/**
- * Preço PRATICADO da peça — o que vai para o cliente.
- *
- * `preco_tabela` e não `preco_venda`: o segundo é custo apurado e se move
- * sozinho quando um insumo encarece. Ver src/utils/precoTabela.js.
- */
-function precoDeVenda(produto) {
-  // `paraDecimal` e não `Number`: a API devolve o valor como veio do banco, e
-  // "1.234,56" vira NaN no `Number` — a peça mais cara do catálogo é
-  // justamente a que tem separador de milhar.
-  const n = paraDecimal(produto?.preco_tabela);
-  return Number.isFinite(n) && n > 0 ? n : null;
-}
+// O catálogo com preço praticado e a leitura desse preço moram em
+// `iaPreenchimento`, junto de quem monta o item do orçamento. Estavam aqui, e
+// o preenchimento — que é lá — acabou usando outro preço: a grade mostrava um
+// número e o orçamento recebia outro.
+const { catalogoDeProdutos, precoDeVenda } = preenchimento;
 
 /** Caixa e acento não distinguem unidade nem etapa. */
 const normalizarTexto = v => String(v ?? '')

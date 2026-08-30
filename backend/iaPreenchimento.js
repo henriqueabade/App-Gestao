@@ -543,6 +543,46 @@ function raridade(termosLidos, termosDaCandidata, termosDeTodas) {
 }
 
 /** Itens de um pedido, casados com o catálogo de produtos. */
+/**
+ * O catálogo de peças com o preço PRATICADO junto.
+ *
+ * `preco_venda` é custo apurado: ele se move sozinho quando um insumo
+ * encarece. O que vai ao cliente é o da `tabela_fixa`, e são duas colunas
+ * diferentes — por isso o catálogo é montado com a junção, e não lido direto
+ * de `/api/produtos`.
+ */
+async function catalogoDeProdutos(api) {
+  const [produtos, tabela] = await Promise.all([
+    api.get('/api/produtos').then(lista).catch(() => []),
+    api.get('/api/tabela_fixa').then(lista).catch(() => [])
+  ]);
+
+  const precos = new Map();
+  for (const linha of tabela) {
+    const id = Number(linha?.id_prod);
+    if (Number.isFinite(id)) precos.set(id, linha?.vlr_prod);
+  }
+
+  return produtos.map(p => ({
+    ...p,
+    preco_tabela: precos.has(Number(p?.id)) ? precos.get(Number(p?.id)) : null
+  }));
+}
+
+/**
+ * Preço PRATICADO da peça — o que vai para o cliente.
+ *
+ * `preco_tabela` e não `preco_venda`: o segundo é custo apurado e se move
+ * sozinho quando um insumo encarece. Ver src/utils/precoTabela.js.
+ */
+function precoDeVenda(produto) {
+  // `paraDecimal` e não `Number`: a API devolve o valor como veio do banco, e
+  // "1.234,56" vira NaN no `Number` — a peça mais cara do catálogo é
+  // justamente a que tem separador de milhar.
+  const n = paraDecimal(produto?.preco_tabela);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
 function montarItensDeOrcamento(linhas, porCodigo, porNome, registros = []) {
   const itens = [];
   const semCadastro = [];
@@ -563,15 +603,25 @@ function montarItensDeOrcamento(linhas, porCodigo, porNome, registros = []) {
 
     // Preço do documento quando existe; preço de tabela quando não. Zero num
     // orçamento é um preço errado que se parece com um preço.
-    const lido = Number(linha.valor_unitario);
+    //
+    // `paraDecimal` e não `Number` nos dois: o valor vem como texto, e
+    // "1.234,56" vira NaN no `Number` — que cairia no `|| 0` e mandaria a peça
+    // mais cara do catálogo para o cliente valendo zero.
+    const lido = paraDecimal(linha.valor_unitario);
     const temPreco = Number.isFinite(lido) && lido > 0;
+
+    // `precoDeVenda` e não `produto.preco_venda`: o segundo é CUSTO apurado, e
+    // é o praticado que vai ao cliente. A grade da revisão já mostrava o
+    // praticado; aqui ia o custo, então o número conferido na tela não era o
+    // que chegava ao orçamento.
+    const daTabela = precoDeVenda(produto);
 
     itens.push({
       produto_id: Number(produto.id),
       codigo: produto.codigo || null,
       nome: produto.nome,
       quantidade,
-      valor_unitario: temPreco ? lido : (Number(produto.preco_venda) || 0),
+      valor_unitario: temPreco ? lido : (daTabela || 0),
       preco_de_tabela: !temPreco
     });
   }
@@ -864,7 +914,9 @@ async function montarPreenchimento({ api, destino, item }) {
   }
 
   if (destino === 'orcamentos') {
-    const produtos = await api.get('/api/produtos').then(lista).catch(() => []);
+    // O catálogo COM a junção da tabela fixa. Lido direto de `/api/produtos`,
+    // o preço praticado não vem — e o item saía com o custo apurado.
+    const produtos = await catalogoDeProdutos(api);
     const r = montarItensDeOrcamento(
       lista(dados.itens), indexarPor(produtos, 'codigo'), indexarPor(produtos, 'nome'), produtos);
     saida.itens = r.itens;
@@ -927,6 +979,8 @@ module.exports = {
   interpretarPagamento,
   formaDePagamento,
   vincularAoCliente,
+  catalogoDeProdutos,
+  precoDeVenda,
   montarPreenchimento,
   montarInsumos,
   montarItensDeOrcamento,

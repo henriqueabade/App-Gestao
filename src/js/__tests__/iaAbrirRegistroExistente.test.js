@@ -18,9 +18,17 @@
  *          falta ajuda; trocar o CNPJ conferido pelo que o OCR leu de um
  *          carimbo torto, calado, estraga.
  *
- * LISTAS — SOMA. Contato e insumo não se substituem: um cliente tem vários
- *          contatos, uma peça vários insumos. O que já está lá fica; o que a
- *          leitura trouxe e não está lá entra como registro NOVO.
+ * LISTAS — SOMAM. Contato e insumo não se substituem: um cliente tem vários
+ *          contatos, uma peça vários insumos. O que já está lá fica, e o que a
+ *          leitura trouxe entra como registro NOVO.
+ *
+ *          As duas listas divergem num ponto, e o motivo é o programa e não o
+ *          gosto: CONTATO é conferido contra o que a ficha já tem, porque dois
+ *          contatos iguais viram dois registros e ficam. INSUMO não é — o
+ *          modal de peça já junta as linhas do mesmo insumo no salvamento e
+ *          soma as quantidades, avisando. Conferir aqui seria uma segunda
+ *          regra sobre a mesma coisa, e esconderia do revisor que o documento
+ *          trouxe uma quantidade diferente da que a peça tinha.
  */
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -44,10 +52,10 @@ function recortar(texto, de, ate) {
 /**
  * As funções de junção, executadas de verdade.
  *
- * O recorte vai de `chaveDeContato` até `abrirNoModulo` e leva junto
- * `chaveDeInsumo`, `somenteOsQueFaltam` e `SOMAR_NO_REGISTRO`. Cada coisa
- * fingida no contexto é uma coisa que o teste NÃO mede: as duas APIs dos
- * modais de editar e o disparo de evento.
+ * O recorte vai de `chaveDeContato` até `rotuloDoDestino` e leva junto
+ * `somenteOsQueFaltam` e `SOMAR_NO_REGISTRO`. Cada coisa fingida no contexto é
+ * uma coisa que o teste NÃO mede: as duas APIs dos modais de editar e o
+ * disparo de evento.
  */
 function montar({ contatosNaFicha = [], insumosNaFicha = [] } = {}) {
   const trecho = recortar(detalhes(),
@@ -122,32 +130,6 @@ test('contatos sem nada em comum são pessoas diferentes', () => {
   assert.notEqual(
     contexto.chaveDeContato({ nome: 'Ana', email: 'ana@x.com' }),
     contexto.chaveDeContato({ nome: 'Ana', email: 'ana@y.com' })
-  );
-});
-
-// ---------------------------------------------------------------------------
-// Identidade de um insumo dentro da peça
-// ---------------------------------------------------------------------------
-
-test('o mesmo insumo em processos diferentes são duas linhas', () => {
-  const { contexto } = montar();
-
-  // A mesma cola entra em Marcenaria e em Montagem, com quantidades
-  // diferentes. Tratá-las como uma só faria a segunda sumir da ficha.
-  assert.notEqual(
-    contexto.chaveDeInsumo({ insumo_id: 7, processo: 'Marcenaria' }),
-    contexto.chaveDeInsumo({ insumo_id: 7, processo: 'Montagem' })
-  );
-});
-
-test('o insumo é identificado pelo id, não pelo nome', () => {
-  const { contexto } = montar();
-
-  // O nome vem do documento e varia; o id vem do cadastro de Matéria-prima e
-  // é o que a ficha grava.
-  assert.equal(
-    contexto.chaveDeInsumo({ insumo_id: 7, nome: 'Cola Branca', processo: 'Marcenaria' }),
-    contexto.chaveDeInsumo({ insumo_id: 7, nome: 'COLA PVA', processo: 'marcenaria' })
   );
 });
 
@@ -229,9 +211,9 @@ test('o contato somado não chega reivindicando ser o principal', () => {
   assert.equal('principal' in eventos[0].detail, false);
 });
 
-test('os insumos novos entram pela API do modal de peça', () => {
+test('o insumo que a ficha JÁ tem entra como linha nova, de novo', () => {
   const { contexto, adicionados } = montar({
-    insumosNaFicha: [{ insumo_id: 7, processo: 'Marcenaria', ordem: 3 }]
+    insumosNaFicha: [{ insumo_id: 7, processo: 'Marcenaria', quantidade: 5, ordem: 3 }]
   });
 
   const r = contexto.SOMAR_NO_REGISTRO.produto_insumos({
@@ -241,14 +223,32 @@ test('os insumos novos entram pela API do modal de peça', () => {
     ]
   });
 
-  assert.equal(r.quantos, 1);
-  assert.equal(r.repetidos, 1);
-  assert.equal(adicionados.length, 1);
-  assert.equal(adicionados[0].insumo_id, 9);
+  // Pulá-lo escondia o que o documento dizia: a peça ficava com a quantidade
+  // antiga e nada na tela contava que a leitura trouxe outra. A linha repetida
+  // é o que põe a decisão na frente de quem revisa.
+  assert.equal(r.quantos, 2);
+  assert.equal(r.repetidos, 0);
+  assert.deepEqual(Array.from(adicionados, i => i.insumo_id), [7, 9]);
 
   // A `ordem` da leitura conta do zero; quem acrescenta continua a ordem da
   // ficha. Uma ordem herdada colidiria com as que já estão lá.
   assert.equal('ordem' in adicionados[0], false);
+});
+
+test('somar duplicado é regra do modal de peça, não daqui', () => {
+  // O modal já junta as linhas do mesmo insumo no salvamento, soma as
+  // quantidades e avisa que juntou (`normalizeItensParaSalvar`). Uma segunda
+  // regra aqui somaria duas vezes, ou somaria diferente — e a diferença só
+  // apareceria numa ficha já salva.
+  const modal = ler('src', 'js', 'modals', 'produto-editar.js');
+  const normaliza = modal.slice(
+    modal.indexOf('function normalizeItensParaSalvar'),
+    modal.indexOf('function normalizeItensParaSalvar') + 1400);
+
+  assert.match(normaliza, /existente\.quantidade = \(parseFloat\(existente\.quantidade\) \|\| 0\) \+/,
+    'a soma de duplicados saiu do modal de peça — a revisão da IA conta com ela');
+  assert.match(normaliza, /hadDuplicates = true;/,
+    'e o aviso de que juntou também');
 });
 
 test('leitura sem lista não mexe em nada', () => {
