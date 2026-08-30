@@ -8,9 +8,18 @@ function mapClienteBasico(row = {}) {
   return {
     id: row.id,
     nome_fantasia: row.nome_fantasia,
+    razao_social: row.razao_social,
     cnpj: row.cnpj,
     pais: row.ent_pais || row.pais || '',
     estado: row.ent_uf || row.estado || '',
+    // Cidade, e-mail e telefones acompanham o resumo porque o detalhe do
+    // cliente nos Relatórios os exibe. Sem eles o painel abria com "—" em
+    // três linhas — não por falta de cadastro, mas porque a resposta não
+    // carregava os campos.
+    cidade: row.ent_cidade || row.cidade || '',
+    email: row.email || '',
+    telefone_fixo: row.telefone_fixo || '',
+    telefone_celular: row.telefone_celular || '',
     status_cliente: row.status_cliente,
     dono_cliente: row.dono_cliente
   };

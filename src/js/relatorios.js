@@ -1457,6 +1457,77 @@ function abrirAgrupamentoParaImpressao(doc, opcoes) {
         });
 }
 
+/**
+ * Nome do cliente de um orçamento ou pedido.
+ *
+ * O backend passou a enviar `cliente_nome` nas listas (a tabela só guarda
+ * `cliente_id`). O `cliente` solto continua aceito porque alguns fluxos
+ * internos ainda montam o objeto com esse nome.
+ */
+function nomeDoClienteDoDocumento(item) {
+    return item?.cliente_nome || item?.cliente || '';
+}
+
+/**
+ * Conexão e último acesso de um usuário.
+ *
+ * `/api/usuarios/lista` devolve as colunas cruas do banco, em snake_case. O
+ * relatório lia `online`, `ultimoLoginEm` e `ultimaAtividadeEm` — três nomes
+ * que a resposta nunca teve: todo mundo aparecia OFFLINE e sem último acesso.
+ *
+ * A regra é a mesma do módulo de Usuários (src/js/usuarios.js): a última
+ * ENTRADA contra a última SAÍDA decide; sem esse par, cai para a atividade
+ * recente dentro da janela de cinco minutos.
+ */
+const RELATORIOS_ONLINE_LIMITE_MS = 5 * 60 * 1000;
+
+function primeiroValorPreenchido(objeto, chaves) {
+    for (const chave of chaves) {
+        const valor = objeto?.[chave];
+        if (valor !== undefined && valor !== null && valor !== '') return valor;
+    }
+    return null;
+}
+
+function dataValida(valor) {
+    if (!valor) return null;
+    const data = valor instanceof Date ? valor : new Date(valor);
+    return Number.isNaN(data.getTime()) ? null : data;
+}
+
+function usuarioEstaOnline(usuario) {
+    const entrada = dataValida(primeiroValorPreenchido(usuario, [
+        'ultimaEntradaEm', 'ultima_entrada_em', 'ultimaEntrada', 'ultima_entrada'
+    ]));
+    const saida = dataValida(primeiroValorPreenchido(usuario, [
+        'ultimaSaidaEm', 'ultima_saida_em', 'ultimaSaida', 'ultima_saida'
+    ]));
+
+    if (entrada || saida) {
+        if (!saida) return Boolean(entrada);
+        if (!entrada) return false;
+        return saida.getTime() < entrada.getTime();
+    }
+
+    if (typeof usuario?.online === 'boolean') return usuario.online;
+
+    const atividade = dataValida(primeiroValorPreenchido(usuario, [
+        'ultimaAtividadeEm', 'ultima_atividade_em', 'ultimaAtividade', 'ultima_atividade',
+        'ultimaAlteracaoEm', 'ultima_alteracao_em'
+    ]));
+    return Boolean(atividade) && (Date.now() - atividade.getTime() <= RELATORIOS_ONLINE_LIMITE_MS);
+}
+
+/** Data do último acesso, já formatada — ou "—" quando não há registro. */
+function usuarioUltimoAcesso(usuario) {
+    const quando = primeiroValorPreenchido(usuario, [
+        'ultimoLoginEm', 'ultimo_login_em', 'ultimoLogin', 'ultimo_login',
+        'ultimaEntradaEm', 'ultima_entrada_em', 'ultimaEntrada', 'ultima_entrada',
+        'ultimaAtividadeEm', 'ultima_atividade_em', 'ultimaAtividade', 'ultima_atividade'
+    ]);
+    return quando ? formatDate(quando) : '—';
+}
+
 function getInitials(name) {
     const value = name && String(name).trim();
     if (!value) return '?';
@@ -1773,7 +1844,10 @@ const FILTER_OPTION_CONFIGS = {
         categoria: item => item?.categoria
     },
     produtos: {
-        colecao: item => [item?.colecao, item?.linha],
+        // A coleção da peça é gravada em `categoria`; `colecao`/`linha` são
+        // apelidos de origens antigas. Sem `categoria` aqui o seletor abria
+        // vazio — e o filtro abaixo nunca casava com nada.
+        colecao: item => [item?.categoria, item?.colecao, item?.linha],
         status: item => item?.status
     },
     clientes: {
@@ -1792,13 +1866,13 @@ const FILTER_OPTION_CONFIGS = {
     orcamentos: {
         status: item => item?.situacao,
         dono: item => [item?.dono, item?.responsavel],
-        cliente: item => item?.cliente,
+        cliente: item => nomeDoClienteDoDocumento(item),
         condicao: item => [...getPaymentConditionLabels(item), item?.condicao_pagamento, item?.condicao]
     },
     pedidos: {
         status: item => item?.situacao,
         dono: item => [item?.responsavel, item?.dono],
-        cliente: item => item?.cliente,
+        cliente: item => nomeDoClienteDoDocumento(item),
         condicao: item => getPaymentConditionLabels(item)
     },
     usuarios: {
@@ -2032,7 +2106,7 @@ const REPORT_FILTERS = {
         const precoMax = parseFilterNumber(filters.precoMax);
         const margemMin = parseFilterNumber(filters.margemMin);
         const semEstoque = Boolean(filters.semEstoque);
-        const destaque = Boolean(filters.destaque);
+        const semPrecoTabela = Boolean(filters.semPrecoTabela);
 
         return list.filter(produto => {
             const searchValues = [
@@ -2047,15 +2121,12 @@ const REPORT_FILTERS = {
                 produto?.codigo_barras,
                 produto?.sku
             ];
-            if (produto?.destaque) {
-                searchValues.push('destaque');
-            }
             searchValues.push(produto?.quantidade_total, precoDeVendaProduto(produto));
 
             if (!matchesSearchTerm(searchTerm, searchValues)) return false;
 
             if (colecao) {
-                const colecaoProduto = normalizeText(produto?.colecao ?? produto?.linha ?? '');
+                const colecaoProduto = normalizeText(produto?.categoria ?? produto?.colecao ?? produto?.linha ?? '');
                 if (!colecaoProduto.includes(colecao)) return false;
             }
 
@@ -2075,10 +2146,12 @@ const REPORT_FILTERS = {
                 if (!Number.isFinite(margem) || margem < margemMin) return false;
             }
 
-            if (destaque) {
-                const flag = Boolean(produto?.destaque || produto?.is_destaque || produto?.highlight);
-                if (!flag) return false;
-            }
+            // O filtro anterior era "Somente destaque", e `destaque` não existe
+            // em produto nenhum: marcá-lo esvaziava a tabela sempre. No lugar
+            // dele, uma pergunta que o cadastro responde de verdade — quais
+            // peças ainda não têm preço praticado e por isso não podem ser
+            // orçadas (ver src/utils/precoTabela.js).
+            if (semPrecoTabela && precoDeVendaProduto(produto) !== null) return false;
 
             return true;
         });
@@ -2324,15 +2397,16 @@ const REPORT_FILTERS = {
                 usuario?.cargo,
                 usuario?.apelido
             ];
-            searchValues.push(usuario?.online ? 'online' : 'offline');
+            searchValues.push(usuarioEstaOnline(usuario) ? 'online' : 'offline');
 
             if (!matchesSearchTerm(searchTerm, searchValues)) return false;
 
             if (perfil && !includesNormalized(usuario?.perfil, perfil)) return false;
 
             if (situacao) {
-                if (situacao === 'online' && !usuario?.online) return false;
-                if (situacao === 'offline' && usuario?.online) return false;
+                const conectado = usuarioEstaOnline(usuario);
+                if (situacao === 'online' && !conectado) return false;
+                if (situacao === 'offline' && conectado) return false;
                 if (situacao === 'aguardando') {
                     const status = normalizeText(usuario?.status);
                     if (!status.includes('aguard')) return false;
@@ -4180,7 +4254,7 @@ function computeUsuariosKpis(items = []) {
     const list = Array.isArray(items) ? items : [];
     const total = list.length;
     const active = list.filter(usuario => classifyUserStatus(usuario?.status) === 'Ativo').length;
-    const online = list.filter(usuario => Boolean(usuario?.online)).length;
+    const online = list.filter(usuario => usuarioEstaOnline(usuario)).length;
     const profiles = new Set();
     list.forEach(usuario => {
         const perfil = (usuario?.perfil || '').trim();
@@ -4708,46 +4782,44 @@ REPORT_CONFIGS.prospeccoes = {
     emptyMessage: 'Nenhuma prospecção encontrada.',
     errorMessage: 'Não foi possível carregar as prospecções.',
     computeKpis: computeProspeccoesKpis,
+    /**
+     * Lê o MÓDULO DE PROSPECÇÕES.
+     *
+     * A versão anterior não tocava em prospecções: varria os CONTATOS e
+     * chamava de "lead" todo cliente cujo `status_cliente` parecesse um
+     * estágio de funil ("prospect", "negociação"...). O resultado era um
+     * relatório que ignorava o pipeline real e ficava vazio assim que os
+     * clientes deixavam de usar aqueles rótulos.
+     *
+     * `/api/prospeccoes/lista` devolve `{ itens, funil, etapas }`; aqui só os
+     * itens interessam. Os nomes de campo são achatados para os que o resto
+     * do relatório (filtros, KPIs, gráficos, master-detail) já consome.
+     */
     async fetchData() {
-        const contatos = await loadContactsReportData();
-        const contactMap = new Map();
-        (Array.isArray(contatos) ? contatos : []).forEach(contato => {
-            const clientId = contato?.id_cliente || contato?.clienteId;
-            if (clientId && !contactMap.has(clientId)) {
-                contactMap.set(clientId, contato);
-            }
-        });
+        const resposta = await fetchJson('/api/prospeccoes/lista');
+        const itens = Array.isArray(resposta?.itens) ? resposta.itens : [];
 
-        const leadStatuses = new Set([
-            'prospect',
-            'prospeccao',
-            'prospecção',
-            'negociacao',
-            'negociação',
-            'lead',
-            'pendente',
-            'contato inicial'
-        ]);
-
-        const leads = Array.from(contactMap.values())
-            .filter(contato => leadStatuses.has(normalizeText(contato?.status_cliente)))
-            .map(contato => {
-                const clientId = contato?.id_cliente || contato?.clienteId || contato?.id;
-                const nomeFantasia = contato?.cliente || contato?.nome_fantasia || '';
+        return itens
+            .map(prospeccao => {
+                const contato = prospeccao?.contato_principal || {};
+                const empresa = prospeccao?.nome_fantasia || prospeccao?.razao_social || '';
                 return {
-                    id: clientId,
-                    nome: nomeFantasia,
+                    ...prospeccao,
+                    // O "Nome do Lead" da grade é a empresa prospectada.
+                    nome: empresa,
+                    empresa,
+                    // A ETAPA é o que se acompanha num funil; `status` cru só
+                    // diz se a prospecção está ativa ou arquivada.
+                    status: prospeccao?.etapa || prospeccao?.status || '',
+                    situacao: prospeccao?.status || '',
                     email: contato?.email || '',
-                    status: contato?.status_cliente || '',
-                    responsavel: contato?.dono || contato?.dono_cliente || '',
-                    telefone: contato?.telefone_fixo || '',
                     celular: contato?.telefone_celular || '',
-                    empresa: nomeFantasia
+                    telefone: contato?.telefone_celular || '',
+                    contato_nome: contato?.nome || '',
+                    responsavel: prospeccao?.responsavel || ''
                 };
             })
             .sort((a, b) => normalizeText(a.nome).localeCompare(normalizeText(b.nome)));
-
-        return leads;
     },
     renderRow(prospeccao) {
         const nome = formatText(prospeccao?.nome, '—');
@@ -4771,7 +4843,9 @@ MASTER_DETAIL_CONFIGS.orcamentos = {
     getId: item => item?.id ?? item?.numero ?? item?.codigo ?? null,
     getCardSummary: item => {
         const codigo = formatText(item?.numero ?? item?.codigo, '—');
-        const cliente = item?.cliente ? formatText(item.cliente, '—') : '';
+        const cliente = nomeDoClienteDoDocumento(item)
+            ? formatText(nomeDoClienteDoDocumento(item), '—')
+            : '';
         const valor = item?.valor_final !== undefined && item?.valor_final !== null
             ? escapeHtml(formatCurrency(item.valor_final))
             : '';
@@ -4799,13 +4873,15 @@ MASTER_DETAIL_CONFIGS.orcamentos = {
         const condicaoDisplay = condicoes || escapeHtml(parcelasLabel);
         return {
             title: formatText(item?.numero ?? item?.codigo, '—'),
-            subtitle: item?.cliente ? formatText(item.cliente, '—') : '',
+            subtitle: nomeDoClienteDoDocumento(item)
+                ? formatText(nomeDoClienteDoDocumento(item), '—')
+                : '',
             sections: [
                 {
                     title: 'Detalhes do Orçamento',
                     rows: [
                         { label: 'Código', value: formatText(item?.numero ?? item?.codigo, '—'), allowHtml: true },
-                        { label: 'Cliente', value: item?.cliente ? formatText(item.cliente, '—') : '—', allowHtml: true },
+                        { label: 'Cliente', value: nomeDoClienteDoDocumento(item) ? formatText(nomeDoClienteDoDocumento(item), '—') : '—', allowHtml: true },
                         { label: 'Data', value: escapeHtml(formatDate(item?.data_emissao)), allowHtml: true },
                         { label: 'Condição', value: condicaoDisplay, allowHtml: true },
                         { label: 'Parcelas', value: escapeHtml(parcelasLabel), allowHtml: true },
@@ -4847,7 +4923,7 @@ REPORT_CONFIGS.orcamentos = {
     },
     renderRow(orcamento) {
         const codigo = formatText(orcamento?.numero, '—');
-        const cliente = formatText(orcamento?.cliente, '—');
+        const cliente = formatText(nomeDoClienteDoDocumento(orcamento), '—');
         const dataEmissao = formatDate(orcamento?.data_emissao);
         const valor = formatCurrency(orcamento?.valor_final);
         const parcelas = Number.parseInt(orcamento?.parcelas, 10);
@@ -4871,7 +4947,9 @@ MASTER_DETAIL_CONFIGS.pedidos = {
     getId: item => item?.id ?? item?.numero ?? item?.codigo ?? null,
     getCardSummary: item => {
         const codigo = formatText(item?.numero ?? item?.codigo, '—');
-        const cliente = item?.cliente ? formatText(item.cliente, '—') : '';
+        const cliente = nomeDoClienteDoDocumento(item)
+            ? formatText(nomeDoClienteDoDocumento(item), '—')
+            : '';
         const valor = item?.valor_final !== undefined && item?.valor_final !== null
             ? escapeHtml(formatCurrency(item.valor_final))
             : '';
@@ -4894,13 +4972,15 @@ MASTER_DETAIL_CONFIGS.pedidos = {
         const statusLabel = item?.situacao ? String(item.situacao) : '';
         return {
             title: formatText(item?.numero ?? item?.codigo, '—'),
-            subtitle: item?.cliente ? formatText(item.cliente, '—') : '',
+            subtitle: nomeDoClienteDoDocumento(item)
+                ? formatText(nomeDoClienteDoDocumento(item), '—')
+                : '',
             sections: [
                 {
                     title: 'Detalhes do Pedido',
                     rows: [
                         { label: 'Código', value: formatText(item?.numero ?? item?.codigo, '—'), allowHtml: true },
-                        { label: 'Cliente', value: item?.cliente ? formatText(item.cliente, '—') : '—', allowHtml: true },
+                        { label: 'Cliente', value: nomeDoClienteDoDocumento(item) ? formatText(nomeDoClienteDoDocumento(item), '—') : '—', allowHtml: true },
                         { label: 'Data', value: escapeHtml(formatDate(item?.data_emissao)), allowHtml: true },
                         { label: 'Condição', value: escapeHtml(parcelasLabel), allowHtml: true },
                         { label: 'Valor Total', value: valor, allowHtml: true }
@@ -4941,7 +5021,7 @@ REPORT_CONFIGS.pedidos = {
     },
     renderRow(pedido) {
         const codigo = formatText(pedido?.numero, '—');
-        const cliente = formatText(pedido?.cliente, '—');
+        const cliente = formatText(nomeDoClienteDoDocumento(pedido), '—');
         const dataEmissao = formatDate(pedido?.data_emissao);
         const valor = formatCurrency(pedido?.valor_final);
         const parcelas = Number.parseInt(pedido?.parcelas, 10);
@@ -4990,7 +5070,9 @@ MASTER_DETAIL_CONFIGS.usuarios = {
         if (statusLabel) {
             badges.push(createBadge(statusLabel, getUserStatusVariant(item?.status), { size: 'sm' }));
         }
-        badges.push(item?.online ? createBadge('Online', 'success', { size: 'sm' }) : createBadge('Offline', 'danger', { size: 'sm' }));
+        badges.push(usuarioEstaOnline(item)
+            ? createBadge('Online', 'success', { size: 'sm' })
+            : createBadge('Offline', 'danger', { size: 'sm' }));
         return {
             title: nome,
             subtitle: email,
@@ -4999,9 +5081,7 @@ MASTER_DETAIL_CONFIGS.usuarios = {
     },
     getDetail: item => {
         const statusLabel = item?.status ? String(item.status) : '';
-        const ultimoLogin = item?.ultimoLoginEm
-            ? formatDate(item.ultimoLoginEm)
-            : (item?.ultimaAtividadeEm ? formatDate(item.ultimaAtividadeEm) : '—');
+        const ultimoLogin = usuarioUltimoAcesso(item);
         return {
             title: formatText(item?.nome, '—'),
             subtitle: item?.email ? formatText(item.email, '—') : '',
@@ -5024,7 +5104,9 @@ MASTER_DETAIL_CONFIGS.usuarios = {
                         },
                         {
                             label: 'Conexão',
-                            value: item?.online ? createBadge('Online', 'success', { size: 'sm' }) : createBadge('Offline', 'danger', { size: 'sm' }),
+                            value: usuarioEstaOnline(item)
+                                ? createBadge('Online', 'success', { size: 'sm' })
+                                : createBadge('Offline', 'danger', { size: 'sm' }),
                             allowHtml: true
                         },
                         { label: 'Último acesso', value: ultimoLogin ? escapeHtml(ultimoLogin) : '—', allowHtml: true }
@@ -5059,10 +5141,9 @@ REPORT_CONFIGS.usuarios = {
         const perfil = formatText(usuario?.perfil, '—');
         const statusLabel = usuario?.status ? usuario.status : '—';
         const statusBadge = createBadge(statusLabel, getUserStatusVariant(usuario?.status), { size: 'sm' });
-        const onlineBadge = createBadge(usuario?.online ? 'Online' : 'Offline', usuario?.online ? 'success' : 'danger', { size: 'sm' });
-        const ultimoLogin = usuario?.ultimoLoginEm
-            ? formatDate(usuario.ultimoLoginEm)
-            : (usuario?.ultimaAtividadeEm ? formatDate(usuario.ultimaAtividadeEm) : '—');
+        const online = usuarioEstaOnline(usuario);
+        const onlineBadge = createBadge(online ? 'Online' : 'Offline', online ? 'success' : 'danger', { size: 'sm' });
+        const ultimoLogin = usuarioUltimoAcesso(usuario);
         const initials = getInitials(usuario?.nome);
         const avatarColor = getAvatarColor(usuario?.nome);
         const avatarVersao = usuario?.avatar_version || usuario?.avatarVersion || null;

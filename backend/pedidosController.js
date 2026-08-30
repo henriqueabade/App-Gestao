@@ -36,6 +36,37 @@ function idDoUsuarioDaRequisicao(req) {
   }
 }
 
+/**
+ * Acopla `cliente_nome` a uma lista de documentos que só tem `cliente_id`.
+ *
+ * A tabela de pedidos/orçamentos guarda a chave, não o nome. Sem isto a coluna
+ * "Cliente" dos Relatórios ficava em "—" e o filtro por cliente abria vazio:
+ * a tela pedia um campo que a resposta nunca teve.
+ *
+ * UMA requisição para todos os clientes, não uma por documento — o custo é o
+ * mesmo para 3 ou 300 linhas.
+ */
+async function comNomeDoCliente(api, documentos = []) {
+  const lista = Array.isArray(documentos) ? documentos : [];
+  if (!lista.length) return lista;
+
+  const clientes = await api
+    .get('/api/clientes', { query: { select: 'id,nome_fantasia,razao_social' } })
+    .catch(() => []);
+
+  const nomes = new Map(
+    (Array.isArray(clientes) ? clientes : []).map(c => [
+      String(c?.id),
+      c?.nome_fantasia || c?.razao_social || null
+    ])
+  );
+
+  return lista.map(doc => ({
+    ...doc,
+    cliente_nome: doc?.cliente_id != null ? (nomes.get(String(doc.cliente_id)) || null) : null
+  }));
+}
+
 const router = express.Router();
 
 // Lista pedidos com filtro opcional por cliente
@@ -47,7 +78,8 @@ router.get('/', exigirPermissao('ped.view'), async (req, res) => {
       query: clienteId ? { cliente_id: clienteId, order: 'id.desc' } : { order: 'id.desc' }
     });
 
-    res.json(Array.isArray(pedidos) ? pedidos : []);
+    const lista = Array.isArray(pedidos) ? pedidos : [];
+    res.json(await comNomeDoCliente(api, lista));
   } catch (err) {
     console.error('Erro ao listar pedidos:', err);
     res.status(err.status || 500).json({ error: 'Erro ao listar pedidos' });

@@ -595,7 +595,25 @@ router.get('/', exigirPermissao('orc.view'), async (req, res) => {
     else if (clienteId) query = { cliente_id: clienteId, order: 'id.desc' };
 
     const orcamentos = await api.get('/api/orcamentos', { query });
-    res.json(Array.isArray(orcamentos) ? orcamentos : []);
+    const lista = Array.isArray(orcamentos) ? orcamentos : [];
+
+    // O nome do cliente não está na tabela, só a chave. Sem ele a coluna
+    // "Cliente" dos Relatórios ficava em "—" e o filtro por cliente abria
+    // vazio. Uma requisição para todos, não uma por orçamento.
+    const clientes = await api
+      .get('/api/clientes', { query: { select: 'id,nome_fantasia,razao_social' } })
+      .catch(() => []);
+    const nomes = new Map(
+      (Array.isArray(clientes) ? clientes : []).map(c => [
+        String(c?.id),
+        c?.nome_fantasia || c?.razao_social || null
+      ])
+    );
+
+    res.json(lista.map(orc => ({
+      ...orc,
+      cliente_nome: orc?.cliente_id != null ? (nomes.get(String(orc.cliente_id)) || null) : null
+    })));
   } catch (err) {
     console.error('Erro ao listar orçamentos:', err);
     res.status(err.status || 500).json({ error: 'Erro ao listar orçamentos' });

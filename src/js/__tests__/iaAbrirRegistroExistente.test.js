@@ -342,3 +342,148 @@ test('no orçamento, apontar para um cliente NÃO é editar aquele cliente', () 
   assert.doesNotMatch(bloco, /edicao: \{/,
     'orçamentos não pode declarar modal de editar: o alvo dele é vínculo');
 });
+
+// ---------------------------------------------------------------------------
+// A SEÇÃO DE PROCESSO NÃO PODE SER RECRIADA
+//
+// A tabela da ficha agrupa os insumos por texto EXATO do processo. "MONTAGEM"
+// vindo de um documento e "Montagem" vinda do cadastro viram DUAS seções com o
+// mesmo nome na tela, e o insumo acrescentado cai na de baixo em vez de entrar
+// na que já estava lá.
+//
+// Havia dois caminhos para isso, e os dois estão fechados aqui:
+//   - a grafia diferente (resolvida no modal, ao acrescentar);
+//   - o id de etapa cru virando nome de seção (resolvido no backend).
+// ---------------------------------------------------------------------------
+
+const vmSecao = require('node:vm');
+
+/** `processoJaUsado` e o normalizador, recortados do modal de peça. */
+function montarProcesso({ naFicha = [], etapas = [] } = {}) {
+  const fonte = ler('src', 'js', 'modals', 'produto-editar.js');
+
+  const normalizador = fonte.slice(
+    fonte.indexOf('    const semAcentoMinusculo ='),
+    fonte.indexOf('    const normalizarNomeColecao ='));
+  const funcao = fonte.slice(
+    fonte.indexOf('    function processoJaUsado(nome) {'),
+    fonte.indexOf('    // API para comunicação com outros modais'));
+
+  const contexto = { String, itens: naFicha, etapasOrdem: etapas };
+  vmSecao.createContext(contexto);
+  vmSecao.runInContext(`${normalizador}\n${funcao}\nglobalThis.semAcentoMinusculo = semAcentoMinusculo;`, contexto);
+  return contexto;
+}
+
+test('o processo entra com a grafia que a ficha já usa', () => {
+  const ctx = montarProcesso({
+    naFicha: [{ processo: 'Montagem', status: 'unchanged' }]
+  });
+
+  // O documento grita; o cadastro não. Sem isto, a peça ficava com duas seções
+  // "MONTAGEM"/"Montagem" e o insumo novo na de baixo.
+  assert.equal(ctx.processoJaUsado('MONTAGEM'), 'Montagem');
+  assert.equal(ctx.processoJaUsado('montagem'), 'Montagem');
+});
+
+test('acento não separa a seção', () => {
+  const ctx = montarProcesso({ naFicha: [{ processo: 'Acabamento', status: 'unchanged' }] });
+  assert.equal(ctx.processoJaUsado(' ACABAMENTO '), 'Acabamento');
+});
+
+test('a ficha manda mais que a etapa cadastrada', () => {
+  const ctx = montarProcesso({
+    naFicha: [{ processo: 'Marcenaria Fina', status: 'unchanged' }],
+    etapas: ['MARCENARIA FINA']
+  });
+
+  // O que agrupa a tabela é a grafia que está NA TELA. Preferir a do cadastro
+  // criaria a segunda seção justamente para consertar a primeira.
+  assert.equal(ctx.processoJaUsado('marcenaria fina'), 'Marcenaria Fina');
+});
+
+test('sem a ficha ter, vale a etapa cadastrada', () => {
+  const ctx = montarProcesso({ naFicha: [], etapas: ['Montagem', 'Acabamento'] });
+
+  // Resolve também a ORDEM: um processo fora de `etapasOrdem` vai para o fim
+  // da tabela, longe de onde deveria estar.
+  assert.equal(ctx.processoJaUsado('MONTAGEM'), 'Montagem');
+});
+
+test('processo que não existe em lugar nenhum cria seção nova', () => {
+  const ctx = montarProcesso({ naFicha: [{ processo: 'Montagem' }], etapas: ['Montagem'] });
+
+  // Devolver null é a resposta certa: aí a seção é criada mesmo, com o nome
+  // que veio. "Não recriar" não pode virar "nunca criar".
+  assert.equal(ctx.processoJaUsado('Serralheria'), null);
+  assert.equal(ctx.processoJaUsado(''), null);
+  assert.equal(ctx.processoJaUsado(undefined), null);
+});
+
+test('seção de insumo já apagado não conta', () => {
+  const ctx = montarProcesso({
+    naFicha: [{ processo: 'Montagem', status: 'deleted' }],
+    etapas: []
+  });
+
+  // A seção some da tela junto com o último insumo dela. Reaproveitar a grafia
+  // de uma linha que já foi apagada é reaproveitar uma seção que não existe.
+  assert.equal(ctx.processoJaUsado('montagem'), null);
+});
+
+test('acrescentar passa pela grafia da ficha', () => {
+  const modal = ler('src', 'js', 'modals', 'produto-editar.js');
+  const api = modal.slice(modal.indexOf('adicionarProcessoItens(arr){'),
+    modal.indexOf('obterItens(){'));
+
+  assert.match(api, /processo: processoJaUsado\(it\.processo\) \|\| it\.processo/,
+    'o insumo acrescentado precisa adotar a grafia que a ficha já usa');
+});
+
+test('o normalizador é um só, para coleção e processo', () => {
+  const modal = ler('src', 'js', 'modals', 'produto-editar.js');
+
+  // Mesma regra escrita duas vezes diverge na primeira mudança, e o sintoma
+  // aparece num lugar só.
+  assert.match(modal, /const normalizarNomeColecao = semAcentoMinusculo;/);
+  assert.equal((modal.match(/normalize\('NFD'\)/g) || []).length, 1,
+    'voltou a existir uma segunda cópia da normalização');
+});
+
+test('a etapa do cadastro chega como NOME, não como id', () => {
+  const backend = require(path.join(raiz, 'backend', 'iaPreenchimento.js'));
+
+  const materias = [
+    // O cadastro guarda a etapa por id.
+    { id: 5, nome: 'Cola PVA', unidade: 'ml', preco_unitario: 2, processo: '3' }
+  ];
+  const etapasPorId = new Map([['3', 'Montagem']]);
+
+  const r = backend.montarInsumos(
+    // O documento NÃO diz o processo: é o cadastro que responde.
+    [{ nome: 'Cola PVA', quantidade: 10 }],
+    backend.indexarPor(materias, 'nome'),
+    materias,
+    etapasPorId
+  );
+
+  assert.equal(r.itens.length, 1);
+  assert.equal(r.itens[0].processo, 'Montagem',
+    'o id cru viraria uma seção chamada "3", separada da seção certa');
+});
+
+test('o processo do documento continua mandando', () => {
+  const backend = require(path.join(raiz, 'backend', 'iaPreenchimento.js'));
+
+  const materias = [{ id: 5, nome: 'Cola PVA', unidade: 'ml', preco_unitario: 2, processo: '3' }];
+  const etapasPorId = new Map([['3', 'Montagem']]);
+
+  const r = backend.montarInsumos(
+    [{ nome: 'Cola PVA', quantidade: 10, processo: 'Montagem' }],
+    backend.indexarPor(materias, 'nome'),
+    materias,
+    etapasPorId
+  );
+
+  assert.equal(r.itens[0].processo, 'Montagem');
+});

@@ -228,12 +228,21 @@
       }
     });
 
-    const normalizarNomeColecao = (valor = '') =>
+    /**
+     * Caixa e acento não distinguem nome nenhum aqui dentro.
+     *
+     * Serve à coleção e ao processo. São duas comparações diferentes, mas a
+     * mesma regra — e escrita duas vezes ela divergiria na primeira mudança,
+     * com o sintoma aparecendo num lugar só.
+     */
+    const semAcentoMinusculo = (valor = '') =>
       String(valor)
         .normalize('NFD')
         .replace(/[\u0300-\u036f]/g, '')
         .trim()
         .toLowerCase();
+
+    const normalizarNomeColecao = semAcentoMinusculo;
 
     let carregamentoColecoesEmAndamento = 0;
     let carregamentoColecoesComAnimacao = 0;
@@ -746,6 +755,29 @@
       }
     });
 
+    /**
+     * Como ESTA ficha escreve este processo — ou null, se ela ainda não o tem.
+     *
+     * Procura primeiro nos insumos que a ficha já tem, e depois nas etapas
+     * cadastradas. A ordem importa: o que manda é a grafia que já está na
+     * tela, porque é ela que a tabela usa para agrupar. A etapa cadastrada é a
+     * segunda escolha, e resolve também a ordenação — um processo fora de
+     * `etapasOrdem` vai para o fim da tabela, longe de onde deveria estar.
+     *
+     * Devolver null é a resposta certa para um processo novo: aí a seção é
+     * criada mesmo, com o nome que veio.
+     */
+    function processoJaUsado(nome) {
+      const chave = semAcentoMinusculo(nome);
+      if (!chave) return null;
+
+      const daFicha = itens.find(it =>
+        it.status !== 'deleted' && semAcentoMinusculo(it.processo) === chave);
+      if (daFicha) return daFicha.processo;
+
+      return etapasOrdem.find(etapa => semAcentoMinusculo(etapa) === chave) || null;
+    }
+
     // API para comunicação com outros modais
     window.produtoEditarAPI = {
       adicionarProcessoItens(arr){
@@ -760,7 +792,18 @@
         );
         arr.forEach(it => {
           proximaOrdem += 1;
-          itens.push({ ...it, status: 'new', ordem: proximaOrdem });
+          // O processo entra com a grafia que a ficha JÁ usa.
+          //
+          // A tabela agrupa por texto exato: "MONTAGEM" vindo de um documento
+          // e "Montagem" vinda do cadastro viram DUAS seções com o mesmo nome
+          // na tela, e o insumo acrescentado cai na de baixo em vez de entrar
+          // na que já estava lá.
+          itens.push({
+            ...it,
+            processo: processoJaUsado(it.processo) || it.processo,
+            status: 'new',
+            ordem: proximaOrdem
+          });
         });
         renderItens(itens);
       },

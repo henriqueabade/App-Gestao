@@ -329,6 +329,20 @@ function frequenciaDeTermos(registros) {
  *               diverge da cadastrada: ali a divergência é erro de custo, não
  *               diferença de escrita.
  */
+/**
+ * O NOME da etapa, venha ela como nome ou como id.
+ *
+ * Matéria-prima guarda a etapa do insumo por id; a ficha da peça agrupa os
+ * insumos pelo NOME do processo. Um id cru chegando lá vira uma seção chamada
+ * "3", separada da seção certa.
+ */
+function nomeDaEtapa(bruto, etapasPorId) {
+  const cru = texto(bruto).trim();
+  if (!cru) return '';
+  const porId = etapasPorId && etapasPorId.get(cru);
+  return texto(porId).trim() || cru;
+}
+
 function montarInsumos(linhas, porNome, registros = [], etapasPorId = new Map()) {
   const itens = [];
   const semCadastro = [];
@@ -374,7 +388,11 @@ function montarInsumos(linhas, porNome, registros = [], etapasPorId = new Map())
       nome: insumo.nome,
       // A etapa vem do documento quando ele diz, e do cadastro quando não diz:
       // o insumo já nasce com um processo em Matéria-prima.
-      processo: texto(linha.processo).trim() || texto(insumo.processo).trim() || '',
+      //
+      // Do cadastro ela vem como ID, e o que a ficha da peça agrupa é o NOME:
+      // sem passar pelo mapa de etapas, a peça ganhava uma seção chamada "3".
+      // É a mesma resolução que `mesmoProcesso` faz para comparar.
+      processo: texto(linha.processo).trim() || nomeDaEtapa(insumo.processo, etapasPorId),
       quantidade,
       unidade: insumo.unidade || lida || '',
       preco_unitario: Number(insumo.preco_unitario) || 0,
