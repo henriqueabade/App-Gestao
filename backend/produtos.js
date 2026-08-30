@@ -376,7 +376,23 @@ function mesclarItensPorId(...listas) {
   return itensUnificados;
 }
 
-async function carregarInsumosBase(produtoId) {
+/**
+ * Os insumos da peça, pelas DUAS chaves que a apontam.
+ *
+ * `produtos_insumos` guarda `produto_id` E `produto_codigo`, colunas
+ * independentes da mesma linha, e elas podem discordar: a FK
+ * `produto_codigo -> produtos.codigo` é `ON UPDATE CASCADE`, então trocar o
+ * código de uma peça move as linhas pelo CÓDIGO, sem olhar para `produto_id`.
+ *
+ * Buscar só por `produto_id` deixava de fora linha que é da peça — e é a
+ * chave da restrição `UNIQUE (produto_codigo, insumo_id)` que decide isso.
+ * A ficha abria sem aquele insumo, quem revisava o incluía achando que
+ * faltava, e o salvamento batia na restrição no fim de tudo.
+ *
+ * As duas buscas, unidas por `id` da linha: buscar SÓ pelo código perderia
+ * linha antiga que nunca teve o campo preenchido.
+ */
+async function carregarInsumosBase(produtoId, produtoCodigo) {
   const produtoIdNum = Number(produtoId);
 
   if (!Number.isInteger(produtoIdNum) || produtoIdNum <= 0) {
@@ -384,17 +400,27 @@ async function carregarInsumosBase(produtoId) {
     return [];
   }
 
+  const codigo = typeof produtoCodigo === 'string' ? produtoCodigo.trim() : '';
+
   try {
-    console.log('🔎 Buscando insumos do produto:', produtoIdNum);
+    console.log('🔎 Buscando insumos do produto:', produtoIdNum, codigo || '(sem código)');
 
-    const itens = await getFiltrado('/produtos_insumos', {
-      select: '*',
-      produto_id: produtoIdNum
-    });
+    const buscas = [getFiltrado('/produtos_insumos', { select: '*', produto_id: produtoIdNum })];
+    if (codigo) {
+      buscas.push(getFiltrado('/produtos_insumos', { select: '*', produto_codigo: codigo }));
+    }
 
+    const porLinha = new Map();
+    for (const achados of await Promise.all(buscas)) {
+      for (const linha of Array.isArray(achados) ? achados : []) {
+        const chave = linha?.id != null ? String(linha.id) : null;
+        if (chave && !porLinha.has(chave)) porLinha.set(chave, linha);
+      }
+    }
+
+    const itens = Array.from(porLinha.values());
     console.log('✅ Insumos filtrados corretamente:', itens.length);
-
-    return Array.isArray(itens) ? itens : [];
+    return itens;
 
   } catch (err) {
     console.error('❌ Erro ao buscar insumos:', err);
@@ -433,7 +459,7 @@ async function montarProdutoComInsumos(produtoId) {
   }
 
   try {
-    itensBase = await carregarInsumosBase(produtoId);
+    itensBase = await carregarInsumosBase(produtoId, produto?.codigo);
   } catch (err) {
     throw criarErroDetalhesProduto({
       message: err?.message || 'Falha ao carregar insumos base do produto',
@@ -1502,7 +1528,53 @@ async function salvarProdutoDetalhado(codigoOriginal, produto, itens, produtoId)
     });
   }
 
+  // ---------------------------------------------------------------------------
+  // O QUE O BANCO JÁ TEM SOB ESTE CÓDIGO
+  //
+  // `produtos_insumos` tem `UNIQUE (produto_codigo, insumo_id)`, mas a tela
+  // carrega os insumos da peça por `produto_id` (ver `carregarInsumosBase`).
+  // São duas colunas independentes da mesma linha, e elas podem discordar: a
+  // FK `produto_codigo -> produtos.codigo` é `ON UPDATE CASCADE`, então uma
+  // troca de código move as linhas pelo CÓDIGO, sem olhar para `produto_id`.
+  //
+  // Quando discordam, existe linha que a tela não mostra e que mesmo assim
+  // impede o INSERT. O sintoma era o pior possível: a pessoa revisava a ficha
+  // inteira, mandava salvar, e recebia o erro cru de chave duplicada do
+  // Postgres — sem nada que dissesse o que fazer, e sem nada gravado.
+  //
+  // Perguntar pela MESMA chave da restrição fecha isso. A linha que já existe
+  // é ATUALIZADA — é o que o formulário quis dizer ao listar aquele insumo — e
+  // o `produto_id` dela é realinhado de passagem, desfazendo a divergência que
+  // causou o problema.
+  //
+  // Depois dos `deletados` de propósito: uma linha apagada neste mesmo
+  // salvamento não pode contar como existente.
+  // ---------------------------------------------------------------------------
+  const linhaPorInsumo = new Map();
+  if (insumosInseridos.length) {
+    const sobEsteCodigo = await getFiltrado('/produtos_insumos', {
+      select: 'id,insumo_id,produto_id',
+      produto_codigo: codigoDestino
+    });
+    for (const linha of Array.isArray(sobEsteCodigo) ? sobEsteCodigo : []) {
+      const insumoId = Number(linha?.insumo_id);
+      if (Number.isFinite(insumoId)) linhaPorInsumo.set(insumoId, linha);
+    }
+  }
+
   for (const ins of insumosInseridos) {
+    const jaExiste = linhaPorInsumo.get(Number(ins.insumo_id));
+
+    if (jaExiste) {
+      await pool.put(`/produtos_insumos/${jaExiste.id}`, {
+        produto_id: produtoIdNormalizado,
+        quantidade: ins.quantidade,
+        ordem_insumo: ins.ordem_insumo,
+        produto_codigo: codigoDestino
+      });
+      continue;
+    }
+
     await pool.post('/produtos_insumos', {
       produto_id: produtoIdNormalizado,
       insumo_id: ins.insumo_id,
