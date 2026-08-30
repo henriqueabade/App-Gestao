@@ -1647,8 +1647,11 @@ body {
     position: sticky;
     top: 0;
     z-index: 2;
-    /* Opaco: translúcido deixaria as linhas passarem por baixo do título. */
-    background: #2a0f1c;
+    /* A cor vem de `src/styles/tabelas-modais.css`, com a de todos os outros
+       cabeçalhos de modal. Aqui havia um tom próprio, e ter um tom próprio era
+       justamente o que deixava cada modal com um cabeçalho diferente. O fundo
+       que aquela folha aplica é opaco, que é o que a grudagem exige — as
+       linhas passam por baixo. */
 }
 
 /* A coluna de unidade cresce quando há o sinal de atenção ao lado: sem isso o

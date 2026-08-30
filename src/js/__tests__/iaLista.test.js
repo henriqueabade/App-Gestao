@@ -486,9 +486,18 @@ test('o cabeçalho da tabela não some ao rolar', () => {
   assert.match(th[1], /position:\s*sticky/);
   assert.match(th[1], /top:\s*0/);
 
-  // Fundo opaco: `sticky` sem fundo deixa as linhas passarem POR BAIXO do
-  // texto do cabeçalho, e os dois se misturam.
-  assert.match(th[1], /background:\s*#[0-9a-f]{3,8}/i);
+  // O fundo opaco — sem ele as linhas passam POR BAIXO do texto do cabeçalho e
+  // os dois se misturam — vem de `src/styles/tabelas-modais.css`, junto com o
+  // de todos os outros cabeçalhos de modal. Aqui havia um tom só desta grade, e
+  // era esse tom só dela que deixava cada modal com uma cara.
+  assert.doesNotMatch(th[1], /background:/,
+    'a grade da IA voltou a ter cor de cabeçalho própria');
+
+  const comum = fs.readFileSync(
+    path.join(__dirname, '..', '..', 'styles', 'tabelas-modais.css'), 'utf8');
+  assert.match(comum, /background:\s*#[0-9a-f]{3,8}/i,
+    'a folha comum precisa continuar dando um fundo OPACO — é o que a '
+    + 'grudagem desta grade exige');
 });
 
 test('a coluna de unidade abre espaço quando há aviso', () => {

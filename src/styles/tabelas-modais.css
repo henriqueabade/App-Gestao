@@ -1,0 +1,52 @@
+/* O cabeçalho das tabelas dentro dos modais — um só padrão, o de Produtos.
+ *
+ * ---------------------------------------------------------------------------
+ * O PADRÃO
+ *
+ * É o que as tabelas de item de Produto sempre tiveram: faixa clara, título da
+ * coluna em cinza médio, caixa alta e espaçado. O corpo da tabela continua
+ * escuro, sobre o vidro do modal — o claro é só a moldura, e é ele que separa
+ * "o que é título" de "o que é dado" numa lista longa.
+ *
+ * ---------------------------------------------------------------------------
+ * POR QUE ISTO É UMA FOLHA E NÃO CLASSE EM CADA `<thead>`
+ *
+ * Havia QUATRO cabeçalhos diferentes espalhados pelos modais:
+ *
+ *   - `bg-gray-50` + `text-gray-500`      (Produtos — o padrão)
+ *   - `bg-gray-50` + `font-semibold`      (Orçamentos e Pedidos: mesma faixa,
+ *                                          outra fonte)
+ *   - `glass-surface` + `text-gray-300`   (Clientes, Laminação, Prospecções)
+ *   - sem fundo + `text-gray-300`         (Conversão, Cancelar, IA)
+ *
+ * Nenhum deles era decisão de ninguém: cada modal novo copiou o vizinho mais
+ * próximo. Escrito de novo em cada arquivo, o quinto modal recomeça a lista.
+ * Aqui é uma regra só, e vale inclusive para as tabelas montadas em JS.
+ *
+ * `[id$="Overlay"]` é como o programa já identifica um modal (ver
+ * `src/js/utils/popover.js`), e não uma convenção inventada agora.
+ */
+
+/* O `table` no meio não é enfeite: ele levanta a especificidade acima das
+   regras que cada módulo escreveu para a própria tabela — sem ele, a grade da
+   IA continuaria com o cabeçalho escuro dela, e o desencontro voltaria por uma
+   porta só. */
+[id$="Overlay"] table thead,
+[id$="Overlay"] table thead th {
+    background: #f9fafb;
+}
+
+[id$="Overlay"] table thead th {
+    color: #6b7280;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    /* A divisória vai na CÉLULA, não na linha: a tabela é
+       `border-collapse: collapse` e, num cabeçalho grudento, a borda do `<tr>`
+       fica para trás enquanto a célula sobe. */
+    border-bottom: 1px solid #e5e7eb;
+}
+
+/* O tamanho da letra fica de fora de propósito. Ele vem de `.table-scroll th`
+   (src/styles/scroll.css), que o calcula pela largura da tela; fixá-lo aqui
+   tiraria essa adaptação de todas as tabelas de uma vez. */

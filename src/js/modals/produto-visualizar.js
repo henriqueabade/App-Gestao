@@ -86,7 +86,7 @@
       }
       tbody.innerHTML = groupItemsByProcess().map(group => `
       <tr class="process-row">
-        <td colspan="5" class="px-6 py-2 text-center text-xs font-medium uppercase tracking-wider">${safe(group.process)}</td>
+        <td colspan="5" class="px-6 py-2 bg-gray-50 border-t border-gray-200 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">${safe(group.process)}</td>
       </tr>
       ${group.items.map(item => `<tr class="border-b border-white/5">
         <td class="px-6 py-3 text-white">${safe(item.nome)}</td>

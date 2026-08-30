@@ -30,22 +30,17 @@
  * lado a lado e não sabe mais qual é "Em Estoque" e qual é "Produzir Total" —
  * justamente a decisão que o modal pede.
  *
- * Três detalhes que não são gosto:
+ * Só a GRUDAGEM é daqui. A cor vem de `tabelas-modais.css`, junto com a de
+ * todos os outros modais — este cabeçalho já teve um tom só dele, e ter um tom
+ * só dele é exatamente o problema que aquela folha resolve.
  *
- * - Grudento na CÉLULA, não no `<thead>`. É a forma que funciona em qualquer
- *   motor, e não custa nada a mais.
- * - Fundo OPACO. O card do modal é translúcido e as linhas passam por baixo do
- *   cabeçalho: com fundo transparente, os dois textos se sobrepõem.
- * - A linha de baixo é sombra interna, não borda. A tabela é
- *   `border-collapse: collapse` e o Chromium não leva a borda colapsada do
- *   `<tr>` junto com a célula grudada — o cabeçalho rolava sem separador
- *   nenhum, encostado na primeira linha. */
+ * Grudento na CÉLULA e não no `<thead>`: é a forma que funciona em qualquer
+ * motor, e não custa nada a mais. O fundo claro que a outra folha aplica é
+ * opaco, que é o que este uso exige — as linhas passam por baixo. */
 #converterOrcamentoOverlay .table-scroll thead th {
     position: sticky;
     top: 0;
     z-index: 3;
-    background: #2a0f1c;
-    box-shadow: inset 0 -1px 0 rgba(255, 255, 255, 0.1);
 }
 
 #converterOrcamentoOverlay .quote-piece-approved {

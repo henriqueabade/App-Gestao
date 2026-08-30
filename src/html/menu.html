@@ -23,13 +23,14 @@
          serve a mais de um módulo: o relatório de produção em Pedidos e o de
          movimentações em Produtos. -->
     <link rel="stylesheet" href="../css/folha-relatorio.css">
+    <!-- Cabeçalho das tabelas dos modais: um padrão só, para todos. Vem
+         ANTES das folhas específicas, que podem precisar ajustar detalhes. -->
+    <link rel="stylesheet" href="../styles/tabelas-modais.css">
+
     <!-- Modal de revisão da conversão: alcançado por Orçamentos E pela
          conversão em lote de Pedidos, então não pode morar na folha de um
          módulo só. -->
     <link rel="stylesheet" href="../styles/conversao-orcamento.css">
-    <!-- Tabelas dos modais de produto: o de inserir também é aberto pelo
-         módulo de IA, onde `produtos.css` não está carregado. -->
-    <link rel="stylesheet" href="../styles/tabelas-produto.css">
 </head>
 <body class="text-white">
     <!-- Topbar -->

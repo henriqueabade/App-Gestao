@@ -173,21 +173,25 @@ test('o cabeçalho das tabelas de conversão acompanha a rolagem', () => {
   assert.match(regra[0], /position:\s*sticky/);
   assert.match(regra[0], /top:\s*0/);
 
-  // Sem fundo opaco as linhas passam POR BAIXO do cabeçalho e os dois textos
-  // se sobrepõem — o card do modal é translúcido.
-  assert.match(regra[0], /background:\s*#[0-9a-fA-F]{6}/,
-    'o cabeçalho fixo precisa de fundo opaco');
+  // Só a GRUDAGEM é daqui. A cor vem de `tabelas-modais.css`, com a de todos
+  // os outros modais — este cabeçalho já teve um tom só seu, e ter um tom só
+  // seu era o que fazia a mesma tabela mudar de cara conforme o modal.
+  assert.doesNotMatch(regra[0], /background:/,
+    'a conversão voltou a pintar o próprio cabeçalho');
 });
 
 test('o cabeçalho fixo tem separador próprio', () => {
-  const css = folhaConversao();
-  const regra = css.match(/#converterOrcamentoOverlay \.table-scroll thead th \{[^}]+\}/);
+  const comum = ler('src', 'styles', 'tabelas-modais.css');
 
   // A tabela é `border-collapse: collapse`, e o Chromium não leva a borda
-  // colapsada do `<tr>` junto com a célula grudada: sem uma linha própria, o
-  // cabeçalho rola encostado na primeira peça, sem nada separando os dois.
-  assert.match(regra[0], /box-shadow:\s*inset 0 -1px 0/,
-    'o separador do cabeçalho fixo precisa ser sombra interna, não borda de <tr>');
+  // colapsada do `<tr>` junto com a célula grudada: sem uma linha na própria
+  // CÉLULA, o cabeçalho rola encostado na primeira peça, sem nada separando os
+  // dois. A folha comum põe a divisória no `th`, o que serve a este uso e a
+  // todos os outros de uma vez.
+  const regra = comum.match(/thead th \{[^}]+border-bottom[^}]*\}/);
+  assert.ok(regra, 'a divisória do cabeçalho saiu da folha comum');
+  assert.match(regra[0], /border-bottom:\s*1px solid/,
+    'a divisória tem de estar na célula, não no <tr>');
 });
 
 test('o estilo do modal vale também na conversão em lote de Pedidos', () => {
