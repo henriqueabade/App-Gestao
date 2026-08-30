@@ -2176,6 +2176,17 @@ function closeApiServer() {
       }
       resolve();
     });
+
+    // `server.close` só chama de volta quando cai a ÚLTIMA conexão, e o
+    // renderer mantém ligações keep-alive abertas com este servidor o tempo
+    // todo. Sem derrubá-las, a espera é o keep-alive inteiro — segundos, com a
+    // janela já mandada fechar e a tela parada. Era metade do motivo de
+    // "fechar só na segunda vez": a primeira ordem ficava presa aqui, e a
+    // segunda passava direto porque `apiServerInstance` já era nulo.
+    //
+    // Derrubar à força é o certo: estamos encerrando, e não há resposta em
+    // curso que vá servir para alguma coisa.
+    server.closeAllConnections?.();
   });
 }
 
@@ -3163,13 +3174,60 @@ function attachMonitorHooksToWindow(win) {
   });
 }
 
+/**
+ * Quanto o encerramento espera pelo registro da saída antes de seguir.
+ *
+ * O registro vai para a API remota e não tem tempo limite próprio: numa rede
+ * ruim, ele segurava o fechamento por tempo indefinido. Registrar a saída
+ * importa, mas não mais do que o programa obedecer a uma ordem de fechar — e
+ * numa rede tão ruim assim o registro não iria mesmo.
+ */
+const PRAZO_DE_SAIDA_MS = 1500;
+
+/** Espera a promessa, mas desiste depois de `ms`. Nunca rejeita. */
+function comPrazo(promessa, ms, oQue) {
+  return new Promise((resolve) => {
+    const relogio = setTimeout(() => {
+      console.warn(`Encerramento seguiu sem esperar ${oQue}: passou de ${ms}ms.`);
+      resolve();
+    }, ms);
+    Promise.resolve(promessa)
+      .catch((err) => console.error(`Falha em ${oQue}:`, err))
+      .finally(() => {
+        clearTimeout(relogio);
+        resolve();
+      });
+  });
+}
+
+/**
+ * Some com o que está na tela AGORA, antes de qualquer espera.
+ *
+ * É a resposta visível à ordem de fechar. O trabalho de encerrar — gravar a
+ * saída, derrubar o servidor local — continua atrás de uma tela que já não
+ * está lá, e é isso que separa "fechou" de "parece que ignorei o comando".
+ *
+ * Mesmo padrão que o logout já usa ao trocar o dashboard pelo login.
+ */
+function esconderJanelasAbertas() {
+  for (const janela of BrowserWindow.getAllWindows()) {
+    if (janela.isDestroyed() || !janela.isVisible()) continue;
+    try {
+      janela.hide();
+    } catch (err) {
+      console.error('Falha ao esconder janela no encerramento:', err);
+    }
+  }
+}
+
 async function flushAndQuit(reason) {
   if (!quittingApp) {
     quittingApp = true;
     // Para o monitor ANTES de qualquer await: enquanto persistíamos a saída,
     // o servidor local podia cair e o monitor interpretava como desconexão.
     stopConnectionMonitor();
-    await persistUserExit(reason);
+    esconderJanelasAbertas();
+    await comPrazo(persistUserExit(reason), PRAZO_DE_SAIDA_MS, 'o registro da saída');
   }
   stopConnectionMonitor();
   await closeApiServer();
@@ -3348,6 +3406,10 @@ function createDashboardWindow(show = true) {
   });
 
   dashboardWindow.on('leave-full-screen', () => {
+    // Menos durante o encerramento: esconder a janela pode passar por aqui, e
+    // devolvê-la à tela cheia nesse instante é trazer de volta o que acabou de
+    // ser mandado embora.
+    if (closingDashboardWindow || quittingApp) return;
     dashboardWindow.setFullScreen(true);
   });
 
@@ -3356,19 +3418,36 @@ function createDashboardWindow(show = true) {
     sendLastNetworkStatusToWindow(dashboardWindow);
   });
 
+  // Fechar a janela (Ctrl+W, Alt+F4, botão do sistema) grava a saída antes de
+  // sair de fato. O primeiro `close` é cancelado, o registro é gravado, e o
+  // fechamento é refeito.
+  //
+  // O que fazia isso precisar de DOIS Ctrl+W: entre o cancelamento e o
+  // refazimento havia uma ida à rede, e nada acontecia na tela. Quem apertava
+  // uma vez achava que o programa tinha ignorado; o segundo aperto caía no
+  // `closingDashboardWindow` e passava direto, fechando na hora — e a
+  // conclusão natural era "precisa apertar duas vezes".
   dashboardWindow.on('close', (event) => {
     if (!currentUserSession || closingDashboardWindow) return;
     event.preventDefault();
     closingDashboardWindow = true;
-    persistUserExit('dashboard-close')
-      .catch(err => {
-        console.error('Falha ao registrar saída ao fechar dashboard:', err);
-      })
+
+    // A janela some AGORA. O registro segue atrás dela.
+    try { dashboardWindow.hide(); } catch (err) { console.error(err); }
+
+    comPrazo(persistUserExit('dashboard-close'), PRAZO_DE_SAIDA_MS,
+      'o registro da saída ao fechar o dashboard')
       .finally(() => {
-        closingDashboardWindow = false;
+        // A trava só é solta DEPOIS do fechamento que ela existe para deixar
+        // passar. Solta antes, este `close()` caía de novo no início deste
+        // mesmo handler; ele só não repetia tudo porque `persistUserExit`
+        // tinha acabado de zerar a sessão. Um único caminho que não zerasse —
+        // um logout em curso já faz `persistUserExit` voltar sem zerar nada —
+        // e o fechamento virava um laço que nunca fechava.
         if (dashboardWindow && !dashboardWindow.isDestroyed()) {
           dashboardWindow.close();
         }
+        closingDashboardWindow = false;
       });
   });
 

@@ -1,0 +1,66 @@
+/* A tabela de itens dos modais de produto — inserir, editar e visualizar.
+ *
+ * ---------------------------------------------------------------------------
+ * O QUE ESTAVA ERRADO
+ *
+ * As três nasceram com as classes de tema CLARO do Tailwind: `bg-gray-50` no
+ * cabeçalho e nas faixas de processo, `text-gray-500` no texto delas,
+ * `border-gray-200` nas divisórias. Num programa de fundo vinho, o resultado
+ * era uma faixa quase branca atravessando o modal, com o título das colunas em
+ * cinza médio — o pedaço mais claro de toda a tela, bem no meio do que é
+ * escuro.
+ *
+ * As LINHAS de dados nunca tiveram esse problema: elas já vinham com
+ * `text-white`. Era só a moldura — cabeçalho e faixas — que estava no tema
+ * errado.
+ *
+ * ---------------------------------------------------------------------------
+ * POR QUE AQUI E NÃO EM `produtos.css`
+ *
+ * Só uma folha de módulo fica carregada por vez (`menu.js` troca
+ * `../css/{pagina}.css`). O modal de INSERIR produto também é aberto pelo
+ * módulo de IA, ao aplicar uma leitura — e ali `produtos.css` não existe. Em
+ * `produtos.css`, a correção valeria numa porta e não na outra.
+ */
+
+/* Cabeçalho: opaco porque ele é `sticky` e as linhas passam por baixo. O tom é
+   o mesmo dos outros modais com tabela do programa (revisão de conversão,
+   grade da IA), e não um cinza novo só para cá. */
+#novoProdutoOverlay #itensTabela thead th,
+#editarProdutoOverlay #itensTabela thead th,
+#visualizarProdutoOverlay #itensTabela thead th {
+    background: #2a0f1c;
+    color: #d1d5db;
+    /* A divisória é sombra interna, não borda: a tabela é
+       `border-collapse: collapse` e o Chromium não leva a borda colapsada do
+       `<tr>` junto com o cabeçalho grudado — ele rolava encostado na primeira
+       linha, sem nada separando os dois. */
+    box-shadow: inset 0 -1px 0 rgba(255, 255, 255, 0.1);
+}
+
+/* A faixa que separa MARCENARIA de ACABAMENTO e de MONTAGEM. Ela divide, não
+   compete: um realce de fundo leve e o mesmo cinza claro do cabeçalho. */
+#novoProdutoOverlay #itensTabela .process-row > td,
+#editarProdutoOverlay #itensTabela .process-row > td,
+#visualizarProdutoOverlay #itensTabela .process-row > td {
+    background: rgba(255, 255, 255, 0.06);
+    color: #d1d5db;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Divisória das linhas, igual nas três telas. Elas estavam em três valores
+   diferentes — `border-white/10` numa, `border-white/5` nas outras — e a
+   mesma tabela mudava de contraste conforme a porta por onde se entrava. */
+#novoProdutoOverlay #itensTabela tbody tr,
+#editarProdutoOverlay #itensTabela tbody tr,
+#visualizarProdutoOverlay #itensTabela tbody tr {
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* A faixa de processo abre uma seção: a divisória dela é a de cima, e a de
+   baixo encostaria no primeiro item da seção que ela acabou de anunciar. */
+#novoProdutoOverlay #itensTabela .process-row,
+#editarProdutoOverlay #itensTabela .process-row,
+#visualizarProdutoOverlay #itensTabela .process-row {
+    border-bottom: 0;
+}
