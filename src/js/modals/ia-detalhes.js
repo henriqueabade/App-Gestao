@@ -2160,10 +2160,20 @@
 
       // `ordem` vem da leitura contando do zero; quem acrescenta continua a
       // ordem da ficha, e uma ordem herdada colidiria com as que já estão lá.
-      window.produtoEditarAPI?.adicionarProcessoItens?.(
-        daLeitura.map(({ ordem, ...resto }) => resto));
+      const r = window.produtoEditarAPI?.adicionarProcessoItens?.(
+        daLeitura.map(({ ordem, ...resto }) => resto)) || {};
 
-      return { quantos: daLeitura.length, repetidos: 0, oQue: 'insumo(s)' };
+      // Quem já estava na ficha teve a quantidade SOMADA, e quem não estava
+      // entrou como linha nova. Os dois contam como "veio da leitura", mas
+      // dizer qual foi qual é o que deixa conferir a quantidade que mudou.
+      const somados = Number(r.somados) || 0;
+      const acrescentados = Number(r.acrescentados) || 0;
+      return {
+        quantos: acrescentados + somados,
+        somadosNaLinha: somados,
+        repetidos: 0,
+        oQue: 'insumo(s)'
+      };
     }
   };
 
@@ -2284,11 +2294,16 @@
     if (editando) partes.push(`Editando ${carga.alvo.nome || 'o registro escolhido'}`);
     partes.push(`${resultado.campos} campo(s) preenchido(s)`);
     if (quantos) partes.push(`${quantos} ${oQue} somado(s)`);
-    // O que não entrou por já estar lá é dito, não omitido: somar em silêncio
-    // o que já existia é tão ruim quanto duplicar em silêncio — nos dois casos
-    // a pessoa só descobre depois de salvar.
+    // O que já estava lá é dito, não omitido: mexer em silêncio no que já
+    // existia é tão ruim quanto duplicar em silêncio — nos dois casos a pessoa
+    // só descobre depois de salvar.
     if (editando && somado.repetidos) {
       partes.push(`${somado.repetidos} já estava(m) na ficha`);
+    }
+    // Insumo que a ficha já tinha teve a QUANTIDADE somada na linha dele: é a
+    // linha que já estava lá que mudou, e é ela que precisa ser conferida.
+    if (editando && somado.somadosNaLinha) {
+      partes.push(`${somado.somadosNaLinha} com quantidade somada — confira`);
     }
 
     if (!resultado.campos && !quantos) {

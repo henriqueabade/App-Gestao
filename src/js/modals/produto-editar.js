@@ -483,6 +483,23 @@
       totalInsumosTituloEl.innerHTML = parts.join(' ');
     }
 
+    /**
+     * O que identifica um insumo DENTRO desta ficha.
+     *
+     * `insumo_id` é o cadastro em Matéria-prima; `id` é a linha em
+     * `produtos_insumos`, que só existe para o que já foi gravado. O banco tem
+     * `UNIQUE (produto_codigo, insumo_id)`: a mesma peça não pode listar o
+     * mesmo insumo duas vezes, e é esta chave que diz quando duas linhas são
+     * "o mesmo insumo".
+     *
+     * O índice entra no lugar da chave quando não há nenhuma das duas — assim
+     * duas linhas sem identidade não se confundem uma com a outra.
+     */
+    function chaveDoInsumo(item, indice){
+      const bruto = item?.insumo_id ?? item?.id;
+      return bruto != null ? String(bruto) : `__sem_id_${indice}`;
+    }
+
     function normalizeItensParaSalvar(){
       const ativos = itens.filter(i => i.status !== 'deleted');
       const deletadosAtuais = itens.filter(i => i.status === 'deleted');
@@ -493,8 +510,7 @@
       let hadDuplicates = false;
 
       ordenados.forEach((it, idx) => {
-        const rawKey = it.insumo_id ?? it.id;
-        const key = rawKey != null ? String(rawKey) : `__missing_${idx}`;
+        const key = chaveDoInsumo(it, idx);
         const existente = vistos.get(key);
         if(existente){
           hadDuplicates = true;
@@ -790,8 +806,39 @@
           (maior, it) => Math.max(maior, Number(it.ordem) || 0),
           0
         );
-        arr.forEach(it => {
+        let acrescentados = 0;
+        let somados = 0;
+
+        arr.forEach((it, idx) => {
+          // Insumo que a ficha JÁ tem SOMA na linha dele, não vira uma
+          // segunda.
+          //
+          // O banco tem `UNIQUE (produto_codigo, insumo_id)`: a segunda linha
+          // não cabe lá. Ela existia até o salvamento, e morria com um erro
+          // cru do Postgres na cara de quem só queria salvar — depois de todo
+          // o trabalho de revisão.
+          //
+          // Somar já aqui é a mesma conta que `normalizeItensParaSalvar` fazia
+          // no fim, feita na hora: a quantidade nova aparece na tela, na linha
+          // certa, antes de salvar. Aquela continua no lugar, como rede para
+          // duplicados que cheguem por outro caminho.
+          const chave = chaveDoInsumo(it, idx);
+          const existente = itens.find((i, j) =>
+            i.status !== 'deleted' && chaveDoInsumo(i, `alvo_${j}`) === chave);
+
+          if(existente){
+            existente.quantidade = (parseFloat(existente.quantidade) || 0)
+              + (parseFloat(it.quantidade) || 0);
+            // A linha fica ONDE está: mudá-la de seção porque o documento
+            // escreveu outro processo moveria um insumo que alguém já
+            // posicionou na ficha.
+            if(existente.id && existente.status !== 'new') existente.status = 'updated';
+            somados += 1;
+            return;
+          }
+
           proximaOrdem += 1;
+          acrescentados += 1;
           // O processo entra com a grafia que a ficha JÁ usa.
           //
           // A tabela agrupa por texto exato: "MONTAGEM" vindo de um documento
@@ -805,7 +852,9 @@
             ordem: proximaOrdem
           });
         });
+
         renderItens(itens);
+        return { acrescentados, somados };
       },
       obterItens(){
         return itens.map(i => ({ ...i }));

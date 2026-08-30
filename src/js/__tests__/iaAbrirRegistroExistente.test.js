@@ -57,7 +57,7 @@ function recortar(texto, de, ate) {
  * uma coisa que o teste NÃO mede: as duas APIs dos modais de editar e o
  * disparo de evento.
  */
-function montar({ contatosNaFicha = [], insumosNaFicha = [] } = {}) {
+function montar({ contatosNaFicha = [], insumosNaFicha = [], resposta = {} } = {}) {
   const trecho = recortar(detalhes(),
     '  function chaveDeContato(contato) {', '  function rotuloDoDestino(item) {');
 
@@ -75,7 +75,7 @@ function montar({ contatosNaFicha = [], insumosNaFicha = [] } = {}) {
       clienteEditarAPI: { obterContatos: () => contatosNaFicha.map(c => ({ ...c })) },
       produtoEditarAPI: {
         obterItens: () => insumosNaFicha.map(i => ({ ...i })),
-        adicionarProcessoItens: arr => adicionados.push(...arr)
+        adicionarProcessoItens: arr => { adicionados.push(...arr); return resposta; }
       },
       dispatchEvent: e => eventos.push(e)
     }
@@ -211,23 +211,21 @@ test('o contato somado não chega reivindicando ser o principal', () => {
   assert.equal('principal' in eventos[0].detail, false);
 });
 
-test('o insumo que a ficha JÁ tem entra como linha nova, de novo', () => {
+test('a leitura inteira vai para o modal, sem conferência prévia', () => {
   const { contexto, adicionados } = montar({
     insumosNaFicha: [{ insumo_id: 7, processo: 'Marcenaria', quantidade: 5, ordem: 3 }]
   });
 
-  const r = contexto.SOMAR_NO_REGISTRO.produto_insumos({
+  contexto.SOMAR_NO_REGISTRO.produto_insumos({
     insumos: [
       { insumo_id: 7, nome: 'Cola', processo: 'Marcenaria', quantidade: 2, ordem: 0 },
       { insumo_id: 9, nome: 'Verniz', processo: 'Acabamento', quantidade: 1, ordem: 1 }
     ]
   });
 
-  // Pulá-lo escondia o que o documento dizia: a peça ficava com a quantidade
-  // antiga e nada na tela contava que a leitura trouxe outra. A linha repetida
-  // é o que põe a decisão na frente de quem revisa.
-  assert.equal(r.quantos, 2);
-  assert.equal(r.repetidos, 0);
+  // Quem decide o que é repetido é o modal da peça, que é quem conhece a ficha
+  // e a regra do banco. Conferir aqui também seria uma segunda regra sobre a
+  // mesma coisa, e as duas divergiriam.
   assert.deepEqual(Array.from(adicionados, i => i.insumo_id), [7, 9]);
 
   // A `ordem` da leitura conta do zero; quem acrescenta continua a ordem da
@@ -235,20 +233,138 @@ test('o insumo que a ficha JÁ tem entra como linha nova, de novo', () => {
   assert.equal('ordem' in adicionados[0], false);
 });
 
-test('somar duplicado é regra do modal de peça, não daqui', () => {
-  // O modal já junta as linhas do mesmo insumo no salvamento, soma as
-  // quantidades e avisa que juntou (`normalizeItensParaSalvar`). Uma segunda
-  // regra aqui somaria duas vezes, ou somaria diferente — e a diferença só
-  // apareceria numa ficha já salva.
-  const modal = ler('src', 'js', 'modals', 'produto-editar.js');
-  const normaliza = modal.slice(
-    modal.indexOf('function normalizeItensParaSalvar'),
-    modal.indexOf('function normalizeItensParaSalvar') + 1400);
+test('o que foi somado numa linha existente é contado à parte', () => {
+  const { contexto } = montar({ resposta: { acrescentados: 1, somados: 1 } });
 
-  assert.match(normaliza, /existente\.quantidade = \(parseFloat\(existente\.quantidade\) \|\| 0\) \+/,
-    'a soma de duplicados saiu do modal de peça — a revisão da IA conta com ela');
-  assert.match(normaliza, /hadDuplicates = true;/,
-    'e o aviso de que juntou também');
+  const r = contexto.SOMAR_NO_REGISTRO.produto_insumos({
+    insumos: [{ insumo_id: 7, quantidade: 2 }, { insumo_id: 9, quantidade: 1 }]
+  });
+
+  assert.equal(r.quantos, 2, 'os dois vieram da leitura');
+  assert.equal(r.somadosNaLinha, 1,
+    'é a linha que JÁ estava lá que mudou de quantidade, e é ela que precisa '
+    + 'ser conferida — dizer só "2 insumos" esconderia isso');
+});
+
+// ---------------------------------------------------------------------------
+// O insumo repetido, no modal da peça
+//
+// O banco tem `UNIQUE (produto_codigo, insumo_id)`: a mesma peça NÃO pode
+// listar o mesmo insumo duas vezes. Uma segunda linha existia na tela até o
+// salvamento e morria lá, com um erro cru do Postgres na cara de quem só
+// queria salvar — depois de toda a revisão.
+// ---------------------------------------------------------------------------
+
+/** `adicionarProcessoItens` e o que ela usa, recortados do modal de peça. */
+function montarAdicionar({ naFicha = [], etapas = [] } = {}) {
+  const fonte = ler('src', 'js', 'modals', 'produto-editar.js');
+
+  const partes = [
+    fonte.slice(fonte.indexOf('    const semAcentoMinusculo ='),
+      fonte.indexOf('    const normalizarNomeColecao =')),
+    fonte.slice(fonte.indexOf('    function chaveDoInsumo(item, indice){'),
+      fonte.indexOf('    function normalizeItensParaSalvar(){')),
+    fonte.slice(fonte.indexOf('    function processoJaUsado(nome) {'),
+      fonte.indexOf('    // API para comunicação com outros modais')),
+    fonte.slice(fonte.indexOf('      adicionarProcessoItens(arr){'),
+      fonte.indexOf('      obterItens(){'))
+  ];
+
+  const contexto = {
+    String, Number, parseFloat,
+    itens: naFicha,
+    etapasOrdem: etapas,
+    renderItens: () => {}
+  };
+  vmSecao.createContext(contexto);
+  // O corpo do método vira função solta: o objeto da API não cabe no recorte.
+  vmSecao.runInContext(
+    `${partes[0]}\n${partes[1]}\n${partes[2]}\nfunction adicionar${partes[3].slice(partes[3].indexOf('(arr){')).replace(/,\s*$/, '')}\nglobalThis.adicionar = adicionar;`,
+    contexto);
+  return contexto;
+}
+
+test('insumo que a ficha já tem SOMA na linha dele', () => {
+  const ficha = [
+    { id: 100, insumo_id: 7, nome: 'Cola', processo: 'Marcenaria', quantidade: 5, status: 'unchanged' }
+  ];
+  const ctx = montarAdicionar({ naFicha: ficha });
+
+  const r = ctx.adicionar([{ insumo_id: 7, nome: 'Cola', processo: 'MARCENARIA', quantidade: 3 }]);
+
+  assert.equal(ficha.length, 1, 'a segunda linha não cabe no banco');
+  assert.equal(ficha[0].quantidade, 8, '5 que estavam lá + 3 que a leitura trouxe');
+  assert.equal(ficha[0].status, 'updated', 'a linha existente é ATUALIZADA, não inserida');
+  assert.deepEqual({ ...r }, { acrescentados: 0, somados: 1 });
+});
+
+test('insumo novo entra como linha nova', () => {
+  const ficha = [
+    { id: 100, insumo_id: 7, processo: 'Marcenaria', quantidade: 5, status: 'unchanged', ordem: 3 }
+  ];
+  const ctx = montarAdicionar({ naFicha: ficha, etapas: ['Marcenaria', 'Acabamento'] });
+
+  const r = ctx.adicionar([{ insumo_id: 9, nome: 'Verniz', processo: 'ACABAMENTO', quantidade: 1 }]);
+
+  assert.equal(ficha.length, 2);
+  assert.equal(ficha[1].status, 'new');
+  assert.equal(ficha[1].ordem, 4, 'a ordem continua a da ficha');
+  assert.equal(ficha[1].processo, 'Acabamento', 'com a grafia que a ficha já usa');
+  assert.deepEqual({ ...r }, { acrescentados: 1, somados: 0 });
+});
+
+test('a linha somada NÃO muda de seção', () => {
+  const ficha = [
+    { id: 100, insumo_id: 7, processo: 'Marcenaria', quantidade: 5, status: 'unchanged' }
+  ];
+  const ctx = montarAdicionar({ naFicha: ficha, etapas: ['Marcenaria', 'Montagem'] });
+
+  ctx.adicionar([{ insumo_id: 7, processo: 'Montagem', quantidade: 1 }]);
+
+  // Mudá-la de seção porque o documento escreveu outro processo moveria um
+  // insumo que alguém já posicionou na ficha.
+  assert.equal(ficha[0].processo, 'Marcenaria');
+  assert.equal(ficha[0].quantidade, 6);
+});
+
+test('linha marcada para exclusão não recebe a soma', () => {
+  const ficha = [
+    { id: 100, insumo_id: 7, processo: 'Marcenaria', quantidade: 5, status: 'deleted' }
+  ];
+  const ctx = montarAdicionar({ naFicha: ficha });
+
+  ctx.adicionar([{ insumo_id: 7, processo: 'Marcenaria', quantidade: 3 }]);
+
+  // Somar numa linha que vai ser apagada é jogar a quantidade fora — e a peça
+  // ficaria sem o insumo que a leitura trouxe.
+  assert.equal(ficha[0].quantidade, 5, 'a linha apagada fica como está');
+  assert.equal(ficha.length, 2);
+  assert.equal(ficha[1].status, 'new');
+});
+
+test('a linha que ainda não foi gravada soma sem virar "updated"', () => {
+  const ficha = [{ insumo_id: 7, processo: 'Marcenaria', quantidade: 2, status: 'new' }];
+  const ctx = montarAdicionar({ naFicha: ficha });
+
+  ctx.adicionar([{ insumo_id: 7, processo: 'Marcenaria', quantidade: 3 }]);
+
+  assert.equal(ficha[0].quantidade, 5);
+  assert.equal(ficha[0].status, 'new',
+    'marcá-la como "updated" mandaria um PUT para uma linha que não existe '
+    + 'no banco');
+});
+
+test('a chave do insumo é a mesma na soma e na normalização', () => {
+  const modal = ler('src', 'js', 'modals', 'produto-editar.js');
+
+  // Duas leituras diferentes do que é "o mesmo insumo" divergem, e a
+  // divergência aparece como o erro de chave duplicada do banco, no
+  // salvamento, depois de toda a revisão.
+  assert.match(modal, /function chaveDoInsumo\(item, indice\)\{/);
+  assert.doesNotMatch(modal, /const rawKey = it\.insumo_id \?\? it\.id;/,
+    'a normalização voltou a ter a própria cópia da chave');
+  assert.equal((modal.match(/chaveDoInsumo\(/g) || []).length >= 3, true,
+    'a chave precisa ser usada nos dois lugares');
 });
 
 test('leitura sem lista não mexe em nada', () => {
