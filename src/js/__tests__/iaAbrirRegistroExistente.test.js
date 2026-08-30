@@ -603,3 +603,84 @@ test('o processo do documento continua mandando', () => {
 
   assert.equal(r.itens[0].processo, 'Montagem');
 });
+
+// ---------------------------------------------------------------------------
+// O QUE VEM DEPOIS DE GRAVAR
+//
+// `carregarProdutos` é global do módulo de Produtos, e este modal não é mais
+// aberto só de lá: a revisão da IA o abre para editar a peça que a leitura
+// apontou, e ali o módulo carregado é outro.
+//
+// Chamada sem guarda, ela lançava `carregarProdutos is not defined` DEPOIS de
+// a peça já ter sido gravada — o pior momento possível: o erro na tela dizia
+// que falhou algo que tinha dado certo, e o modal ficava aberto por cima de
+// uma gravação bem-sucedida.
+// ---------------------------------------------------------------------------
+
+/** `recarregarListaDePecas`, recortada do modal de peça. */
+function montarRecarga(carregarProdutos) {
+  const fonte = ler('src', 'js', 'modals', 'produto-editar.js');
+  const trecho = fonte.slice(
+    fonte.indexOf('    async function recarregarListaDePecas() {'),
+    fonte.indexOf('    // API para comunicação com outros modais'));
+
+  const erros = [];
+  const contexto = { console: { error: (...a) => erros.push(a) }, Promise };
+  contexto.erros = erros;
+  if (carregarProdutos) contexto.carregarProdutos = carregarProdutos;
+  vmSecao.createContext(contexto);
+  vmSecao.runInContext(`${trecho}\nglobalThis.recarregar = recarregarListaDePecas;`, contexto);
+  return contexto;
+}
+
+test('sem listagem de peças na tela, recarregar não é erro', async () => {
+  const ctx = montarRecarga(null);
+
+  // Abertura pela IA: não há listagem de Produtos para atualizar. Silenciar é
+  // o certo — quem abriu de outro módulo é avisado por `moduloSalvou`.
+  await ctx.recarregar();
+
+  // E silenciar de verdade: sem a guarda de existência o `catch` ainda apara
+  // o `ReferenceError`, mas cada gravação pela IA passa a registrar uma falha
+  // que não existe. Erro no console é o que se olha quando algo dá errado —
+  // enchê-lo de falha inventada é gastar a única pista que sobra.
+  assert.deepEqual(Array.from(ctx.erros), [],
+    'não há listagem para recarregar: isso não é uma falha');
+});
+
+test('havendo listagem, ela é recarregada e esperada', async () => {
+  let chamou = 0;
+  let terminou = false;
+  const ctx = montarRecarga(async () => {
+    chamou += 1;
+    await new Promise(r => setTimeout(r, 5));
+    terminou = true;
+  });
+
+  await ctx.recarregar();
+
+  assert.equal(chamou, 1, 'uma vez só — a chamada estava duplicada');
+  assert.equal(terminou, true, 'e esperada: sem isso a lista fica desatualizada');
+});
+
+test('listagem que falha não vira erro na cara de quem salvou', async () => {
+  const ctx = montarRecarga(async () => { throw new Error('rede caiu'); });
+
+  // A peça JÁ foi gravada. Uma listagem que não recarregou é um incômodo; um
+  // erro na tela aqui seria uma mentira.
+  await ctx.recarregar();
+});
+
+test('nenhuma chamada nua a carregarProdutos sobrou', () => {
+  const modal = ler('src', 'js', 'modals', 'produto-editar.js');
+
+  // Fora da função guardada, qualquer chamada volta a derrubar a tela quando o
+  // modal é aberto de um módulo que não é o de Produtos.
+  const guardada = modal.slice(
+    modal.indexOf('    async function recarregarListaDePecas() {'),
+    modal.indexOf('    // API para comunicação com outros modais'));
+  const resto = modal.replace(guardada, '');
+
+  assert.doesNotMatch(resto, /(^|[^.\w])carregarProdutos\s*\(/m,
+    'carregarProdutos só pode ser chamada de dentro de recarregarListaDePecas');
+});

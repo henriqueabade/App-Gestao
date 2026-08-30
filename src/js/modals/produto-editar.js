@@ -794,6 +794,31 @@
       return etapasOrdem.find(etapa => semAcentoMinusculo(etapa) === chave) || null;
     }
 
+    /**
+     * Recarrega a listagem de Produtos — QUANDO existe uma.
+     *
+     * `carregarProdutos` é global do módulo de Produtos, e este modal não é
+     * mais aberto só de lá: a revisão da IA o abre para editar a peça que a
+     * leitura apontou, e ali o módulo carregado é outro. Chamada sem guarda,
+     * ela lançava `carregarProdutos is not defined` DEPOIS de a peça já ter
+     * sido gravada — o pior momento possível, porque o erro na tela dizia que
+     * falhou algo que tinha dado certo, e o modal ficava aberto.
+     *
+     * Silenciar quando não existe é o certo: não há listagem de peças na tela
+     * para atualizar. Quem abriu de outro módulo é avisado pelo evento
+     * `moduloSalvou`, que é o caminho próprio para isso.
+     */
+    async function recarregarListaDePecas() {
+      if (typeof carregarProdutos !== 'function') return;
+      try {
+        await carregarProdutos();
+      } catch (err) {
+        // A peça JÁ foi gravada. Uma listagem que não recarregou é um
+        // incômodo; um erro na tela aqui seria uma mentira.
+        console.error('Falha ao recarregar a lista de peças', err);
+      }
+    }
+
     // API para comunicação com outros modais
     window.produtoEditarAPI = {
       adicionarProcessoItens(arr){
@@ -984,7 +1009,7 @@
               quantidade_total: produtoCriado?.quantidade_total ?? 0
             }, { mode: 'add' });
           }
-          await carregarProdutos();
+          await recarregarListaDePecas();
           showToast('Peça clonada com sucesso!', 'success');
           close();
           const novoProduto = {
@@ -994,8 +1019,8 @@
           };
           if (typeof window.recarregarProdutos === 'function') {
             window.recarregarProdutos({ novoProduto, origem: 'clone' });
-          } else if (typeof carregarProdutos === 'function') {
-            carregarProdutos();
+          } else {
+            await recarregarListaDePecas();
           }
         } catch (err) {
           console.error('Erro ao clonar produto', err);
@@ -1113,8 +1138,10 @@
               status: produto.status
             });
           }
-          if(typeof carregarProdutos === 'function') carregarProdutos();
-          await carregarProdutos();
+          // Uma vez só: a linha guardada e a desguardada estavam as duas
+          // aqui, então onde a função existia a listagem era recarregada duas
+          // vezes, e onde não existia a segunda derrubava tudo.
+          await recarregarListaDePecas();
           showToast('Peça alterada com sucesso!', 'success');
           // Avisa quem abriu este formulário que a gravação passou. Quem abre daqui
           // (a revisão da IA, ao apontar para um registro que já existe) não tem
