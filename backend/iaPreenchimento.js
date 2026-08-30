@@ -887,7 +887,16 @@ async function montarPreenchimento({ api, destino, item }) {
       saida.alvo = {
         tabela,
         id: alvoId,
-        nome: achado[esquema.campoDeExibicao] || achado.nome || achado.nome_fantasia || null
+        nome: achado[esquema.campoDeExibicao] || achado.nome || achado.nome_fantasia || null,
+        // O registro INTEIRO, e não só o nome: quando a leitura aponta para
+        // algo que já existe, a tela abre o modal de EDITAR daquele registro —
+        // e os modais de editar recebem o registro por variável global
+        // (`window.produtoSelecionado`, `window.clienteEditar`), não por id.
+        //
+        // Vai daqui porque a busca já foi feita logo acima. Deixar a tela
+        // buscar de novo seria uma segunda ida ao servidor para saber o que já
+        // está na mão.
+        registro: achado
       };
     }
   }

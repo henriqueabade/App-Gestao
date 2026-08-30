@@ -154,7 +154,7 @@
      * acoplamento real, e é o mesmo que a restauração já tem: são as duas
      * pontas do contrato que o modal declarou.
      */
-    async function preencher(overlayId, { campos, conteudo } = {}) {
+    async function preencher(overlayId, { campos, conteudo, somenteVazios } = {}) {
         const id = idDoOverlay({ overlayId });
         if (!id) return { campos: 0, conteudo: false };
 
@@ -164,7 +164,7 @@
         const manipuladores = await esperarConteudo(id);
 
         const raiz = document.getElementById(id);
-        const aplicados = restaurarCampos(raiz, campos);
+        const aplicados = restaurarCampos(raiz, campos, { somenteVazios });
 
         let reposto = false;
         if (manipuladores && typeof manipuladores.restaurar === 'function' && conteudo) {
@@ -382,13 +382,25 @@
     }
 
     /** Reaplica os campos guardados em uma raiz. */
-    function restaurarCampos(raiz, campos) {
+    /**
+     * `somenteVazios`: não escreve por cima do que já tem valor.
+     *
+     * A restauração de trabalho repõe TUDO — ela está devolvendo o que a
+     * própria pessoa tinha digitado, e sobrescrever é o objetivo.
+     *
+     * O preenchimento pela IA sobre um registro que JÁ EXISTE é o contrário:
+     * o que está na tela veio do banco, e o documento lido é palpite. Escrever
+     * por cima trocaria o CNPJ conferido pelo que o OCR leu de um carimbo
+     * torto, calado. Aqui a leitura só completa o que está em branco.
+     */
+    function restaurarCampos(raiz, campos, { somenteVazios = false } = {}) {
         if (!raiz || !Array.isArray(campos)) return 0;
         let aplicados = 0;
         campos.forEach(({ chave, valor }) => {
             let el = null;
             try { el = raiz.querySelector(chave); } catch (_) { el = null; }
             if (!el || ehCampoIgnorado(el)) return;
+            if (somenteVazios && String(el.value ?? '').trim() !== '') return;
             aplicarValor(el, valor);
             aplicados++;
         });

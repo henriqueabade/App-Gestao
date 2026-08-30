@@ -446,6 +446,21 @@
     renderContatos();
   });
 
+  // Espelha `window.produtoEditarAPI`: quem preenche esta ficha de fora
+  // precisa saber o que ela JÁ tem antes de acrescentar.
+  //
+  // Sem isto, o preenchimento pela IA teria de adivinhar pelas linhas da
+  // tabela — e leria o telefone já formatado para a tela, que não é o que está
+  // guardado. Comparar o formatado com o do documento marcaria como novo um
+  // contato que já existe, e a ficha ganharia o mesmo contato duas vezes.
+  window.clienteEditarAPI = {
+    obterContatos() {
+      return contatos
+        .filter(c => c.status !== 'deleted')
+        .map(({ row, ...dados }) => dados);
+    }
+  };
+
   function inicializarToggles(cli){
     const same = (a,b) => JSON.stringify(a) === JSON.stringify(b);
     const cobToggle = document.getElementById('cobrancaIgual');
@@ -580,6 +595,12 @@
         if(!res.ok) throw new Error('Erro ao salvar');
         showToast('Cliente atualizado com sucesso');
         window.dispatchEvent(new Event('clienteEditado'));
+        // Avisa quem abriu este formulário que a gravação passou. Quem abre
+        // daqui (a revisão da IA, ao apontar para um cliente que já existe) não
+        // tem como saber sozinho: ela não gravou nada e não fica olhando o
+        // banco. Sem isto a linha da leitura ficava pendente para sempre, mesmo
+        // depois de o cliente ter sido salvo. Quem não escuta, ignora.
+        window.dispatchEvent(new CustomEvent('moduloSalvou', { detail: { overlay: 'editarCliente' } }));
         close();
       }catch(err){
         console.error('Erro ao atualizar cliente', err);

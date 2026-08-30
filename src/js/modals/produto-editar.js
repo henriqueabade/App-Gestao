@@ -1024,6 +1024,12 @@
           if(typeof carregarProdutos === 'function') carregarProdutos();
           await carregarProdutos();
           showToast('Peça alterada com sucesso!', 'success');
+          // Avisa quem abriu este formulário que a gravação passou. Quem abre daqui
+          // (a revisão da IA, ao apontar para um registro que já existe) não tem
+          // como saber sozinho: ela não gravou nada e não fica olhando o banco.
+          // Sem isto a linha da leitura ficava pendente para sempre, mesmo depois
+          // de a peça ter sido salva. Quem não escuta, ignora.
+          window.dispatchEvent(new CustomEvent('moduloSalvou', { detail: { overlay: 'editarProduto' } }));
           close();
         }catch(err){
           console.error('Erro ao salvar produto', err);

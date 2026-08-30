@@ -1126,16 +1126,37 @@ test('todo id do mapa de preenchimento existe no HTML do modal', () => {
     const idsDoHtml = new Set(
       [...html.matchAll(/id="([^"]+)"/g)].map(m => m[1]));
 
-    // Ids que o mapa aponta: os de `campos` e os dos `selects`.
+    // Os ids ficam no bloco `campos`. Ler o trecho inteiro pegava junto as
+    // chaves do bloco `edicao` — que são caminho de arquivo e nome de overlay,
+    // não id de campo, e o teste passava a exigir um elemento chamado
+    // "Editar Cliente" no HTML.
+    const blocoCampos = /campos: \{([\s\S]*?)\n      \}/.exec(trecho);
     const usados = [
-      ...[...trecho.matchAll(/^\s{8}\w+: '([^']+)',?$/gm)].map(m => m[1]),
+      ...(blocoCampos ? [...blocoCampos[1].matchAll(/\w+: '([^']+)'/g)].map(m => m[1]) : []),
       ...[...trecho.matchAll(/id: '([^']+)'/g)].map(m => m[1])
     ];
     assert.ok(usados.length, `o destino ${destino} não mapeia campo nenhum`);
 
-    for (const id of usados) {
-      assert.ok(idsDoHtml.has(id),
-        `${destino}: o campo "${id}" não existe mais em ${caminhoHtml}`);
+    // O MESMO mapa serve ao modal de editar, quando o destino tem um: os ids
+    // são iguais nos dois arquivos, e é essa igualdade que o preenchimento
+    // assume ao apontar para um registro que já existe. Se um dos dois for
+    // renomeado, é aqui que se descobre — e não com o formulário na frente,
+    // pela metade.
+    const htmls = [caminhoHtml];
+    const daEdicao = /edicao: \{[\s\S]*?html: '([^']+)'/.exec(trecho);
+    if (daEdicao) htmls.push(daEdicao[1]);
+
+    for (const caminho of htmls) {
+      const ids = caminho === caminhoHtml
+        ? idsDoHtml
+        : new Set([...fs.readFileSync(
+            path.join(__dirname, '..', '..', 'html', caminho), 'utf8'
+          ).matchAll(/id="([^"]+)"/g)].map(m => m[1]));
+
+      for (const id of usados) {
+        assert.ok(ids.has(id),
+          `${destino}: o campo "${id}" não existe em ${caminho}`);
+      }
     }
   }
 });
@@ -1222,6 +1243,23 @@ test('a ficha técnica também abre o formulário de produto', async () => {
   await b.pronta();
 
   assert.equal(b.el('iaDetAplicar').classList.contains('hidden'), false);
+
+  // "Editar" e não "Novo": a primeira linha desta ficha aponta para a peça 9,
+  // que JÁ existe. O botão diz qual formulário vai abrir — prometer "Novo
+  // Produto" e abrir a ficha de uma peça existente é a surpresa que faz a
+  // pessoa fechar achando que clicou errado.
+  assert.match(b.el('iaDetAplicar').innerHTML, /Editar Produto/);
+});
+
+test('sem peça escolhida, o botão continua oferecendo cadastrar', async () => {
+  const leitura = leituraFicha();
+  // Ninguém apontou para nada: a ficha é de uma peça que não está no catálogo.
+  leitura.itens[0].alvo_id = null;
+  leitura.itens[0].acao = 'criar';
+
+  const b = criarBancada({ leitura });
+  await b.pronta();
+
   assert.match(b.el('iaDetAplicar').innerHTML, /Novo Produto/);
 });
 
@@ -2092,7 +2130,9 @@ test('o formulário só aparece depois de preenchido', async () => {
     'o formulário nunca apareceu');
 
   const fonte = fs.readFileSync(ARQUIVO, 'utf8');
-  const abrir = /function abrirPorCima\(config\) \{[\s\S]*?\n  \}/.exec(fonte)[0];
+  // A assinatura ganhou o limite de espera — maior quando o modal ainda vai
+  // BUSCAR o registro que está editando.
+  const abrir = /function abrirPorCima\(config,[\s\S]*?\n  \}/.exec(fonte)[0];
   assert.doesNotMatch(abrir, /classList\.remove\('hidden'\)/,
     'o overlay é revelado antes do preenchimento');
 });

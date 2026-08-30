@@ -196,7 +196,7 @@
     const faltas = proxima ? pendenciasDoItem(proxima) : [];
 
     if (aplicar && emRevisao && pendentes > 0 && temFormulario) {
-      const rotulo = MODULOS_DE_DESTINO[leitura.destino].rotulo;
+      const rotulo = rotuloDoDestino(proxima);
       aplicar.classList.toggle('ia-btn-pendente', faltas.length > 0);
       aplicar.innerHTML = '<i class="fas fa-up-right-from-square mr-2"></i>'
         + (pendentes > 1 ? `Abrir a 1ª de ${pendentes} em ${rotulo}` : `Abrir em ${rotulo}`);
@@ -1716,6 +1716,15 @@
       script: '../js/modals/cliente-novo.js',
       overlay: 'novoCliente',
       css: 'clientes',
+      // Os ids dos campos são os MESMOS no modal de editar — por isso o mapa
+      // abaixo serve aos dois, e `edicao` só precisa dizer o que muda.
+      edicao: {
+        rotulo: 'Editar Cliente',
+        html: 'modals/clientes/editar.html',
+        script: '../js/modals/cliente-editar.js',
+        overlay: 'editarCliente',
+        contexto: registro => { window.clienteEditar = registro; }
+      },
       campos: {
         nome_fantasia: 'empresaNomeFantasia',
         razao_social: 'empresaRazaoSocial',
@@ -1757,6 +1766,13 @@
       script: '../js/modals/produto-novo.js',
       overlay: 'novoProduto',
       css: 'produtos',
+      edicao: {
+        rotulo: 'Editar Produto',
+        html: 'modals/produtos/editar.html',
+        script: '../js/modals/produto-editar.js',
+        overlay: 'editarProduto',
+        contexto: registro => { window.produtoSelecionado = registro; }
+      },
       campos: {
         nome: 'nomeInput',
         codigo: 'codigoInput'
@@ -1949,7 +1965,7 @@
    * preencher. Revelar antes mostraria o formulário em branco enchendo-se
    * sozinho.
    */
-  function abrirPorCima(config) {
+  function abrirPorCima(config, { limiteMs = 2500 } = {}) {
     garantirEstiloDoModulo(config);
     const pronto = new Promise(resolve => {
       function aoAbrir(e) {
@@ -1958,8 +1974,11 @@
         resolve();
       }
       window.addEventListener('modalSpinnerLoaded', aoAbrir);
-      // Nem todo modal anuncia; depois de um tempo, segue assim mesmo.
-      setTimeout(() => { window.removeEventListener('modalSpinnerLoaded', aoAbrir); resolve(); }, 2500);
+      // Nem todo modal anuncia; depois de um tempo, segue assim mesmo. O limite
+      // é maior quando o modal ainda vai BUSCAR o registro que está editando:
+      // desistir cedo faria o preenchimento acontecer antes dos dados, e a
+      // resposta do banco apagaria tudo em seguida.
+      setTimeout(() => { window.removeEventListener('modalSpinnerLoaded', aoAbrir); resolve(); }, limiteMs);
     });
 
     // O modal de destino abre POR CIMA do de IA: fechar o de baixo perderia a
@@ -2028,15 +2047,165 @@
     }
   });
 
+  // ---------------------------------------------------------------------------
+  // QUANDO A LEITURA APONTA PARA ALGO QUE JÁ EXISTE
+  //
+  // Escolher, na linha, uma peça ou um cliente que JÁ está cadastrado é dizer
+  // "é este". A partir daí abrir o formulário de CADASTRO seria pedir para
+  // criar um segundo registro da mesma coisa — e o programa passaria a ter dois
+  // "Móveis Aurora", cada um com metade dos contatos.
+  //
+  // Então abre-se o de EDITAR daquele registro, e o que a leitura trouxe entra
+  // por cima do que já existe seguindo duas regras opostas, de propósito:
+  //
+  //   CAMPOS  — só os VAZIOS. O que está na tela veio do banco e foi conferido
+  //             por alguém; o documento é palpite de leitura automática.
+  //             Completar o que falta ajuda, trocar o que já existe estraga.
+  //
+  //   LISTAS  — SOMA. Contato e insumo não se substituem: um cliente tem vários
+  //             contatos, uma peça vários insumos. O que já está lá fica como
+  //             está; o que a leitura trouxe e não está lá entra como registro
+  //             NOVO (`status: 'new'`), que é o que faz o salvamento do modal
+  //             inserir em vez de atualizar.
+  //
+  // Nada disso grava: continua valendo que "Aplicar" só abre o formulário.
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Chave de identidade de um contato.
+   *
+   * E-mail primeiro, telefone depois, nome por último. Um documento raramente
+   * repete o e-mail de alguém com grafia diferente, mas repete o nome ("Maria
+   * Silva" e "MARIA SILVA") e o cargo o tempo todo.
+   *
+   * O telefone entra só com os dígitos: o cadastro guarda "(11) 99999-0000" e o
+   * documento traz "11999990000", e comparar os dois como texto marcaria como
+   * novo um contato que já está lá.
+   */
+  function chaveDeContato(contato) {
+    const email = String(contato?.email || '').trim().toLowerCase();
+    if (email) return `email:${email}`;
+
+    const digitos = String(contato?.telefone_celular || contato?.telefone_fixo || '')
+      .replace(/\D+/g, '');
+    if (digitos) return `fone:${digitos}`;
+
+    return `nome:${String(contato?.nome || '').trim().toLowerCase()}`;
+  }
+
+  /**
+   * Chave de identidade de um insumo DENTRO da peça.
+   *
+   * O par insumo + processo, e não o insumo sozinho: a mesma cola entra em
+   * Marcenaria e em Montagem, com quantidades diferentes, e são duas linhas
+   * legítimas da ficha.
+   */
+  function chaveDeInsumo(insumo) {
+    const id = insumo?.insumo_id ?? insumo?.materia_prima_id ?? insumo?.id_materia_prima;
+    const quem = id != null && id !== ''
+      ? `id:${id}`
+      : `nome:${String(insumo?.nome || '').trim().toLowerCase()}`;
+    return `${quem}|${String(insumo?.processo || '').trim().toLowerCase()}`;
+  }
+
+  /**
+   * O que a leitura trouxe e a ficha ainda não tem.
+   *
+   * Devolve também os repetidos, para dizer à pessoa o que NÃO entrou. Somar em
+   * silêncio o que já estava lá é como duplicar em silêncio: nos dois casos ela
+   * só descobre depois de salvar.
+   */
+  function somenteOsQueFaltam(daLeitura, jaExistentes, chaveDe) {
+    const tem = new Set(jaExistentes.map(chaveDe));
+    const novos = [];
+    const repetidos = [];
+    for (const registro of daLeitura) {
+      if (tem.has(chaveDe(registro))) { repetidos.push(registro); continue; }
+      // Contra o documento que lista o mesmo contato duas vezes.
+      tem.add(chaveDe(registro));
+      novos.push(registro);
+    }
+    return { novos, repetidos };
+  }
+
+  /**
+   * Soma no modal de editar o que a leitura trouxe.
+   *
+   * Cada modal já tem o próprio caminho de acrescentar, e é por ele que se
+   * entra: `produtoEditarAPI.adicionarProcessoItens` sabe continuar a ordem dos
+   * insumos, e o evento `clienteContatoAdicionado` é o mesmo que o sub-modal de
+   * contato dispara. Escrever nas listas por fora significaria redescobrir
+   * essas regras — e redescobrir errado, calado.
+   */
+  const SOMAR_NO_REGISTRO = {
+    clientes: carga => {
+      const daLeitura = Array.isArray(carga.contatos) ? carga.contatos : [];
+      if (!daLeitura.length) return { quantos: 0, repetidos: 0, oQue: 'contato(s)' };
+
+      const jaTem = window.clienteEditarAPI?.obterContatos?.() || [];
+      const { novos, repetidos } = somenteOsQueFaltam(daLeitura, jaTem, chaveDeContato);
+
+      for (const contato of novos) {
+        // `principal` é de quem CRIA a empresa. Numa ficha que já existe, o
+        // principal já foi escolhido, e chegar marcando outro trocaria por
+        // baixo quem responde pelo cliente.
+        const { principal, ...resto } = contato;
+        window.dispatchEvent(new CustomEvent('clienteContatoAdicionado', { detail: resto }));
+      }
+      return { quantos: novos.length, repetidos: repetidos.length, oQue: 'contato(s)' };
+    },
+
+    produto_insumos: carga => {
+      const daLeitura = Array.isArray(carga.insumos) ? carga.insumos : [];
+      if (!daLeitura.length) return { quantos: 0, repetidos: 0, oQue: 'insumo(s)' };
+
+      const jaTem = window.produtoEditarAPI?.obterItens?.() || [];
+      const { novos, repetidos } = somenteOsQueFaltam(daLeitura, jaTem, chaveDeInsumo);
+
+      // `ordem` vem da leitura contando do zero; quem acrescenta continua a
+      // ordem da ficha, e uma ordem herdada colidiria com as que já estão lá.
+      window.produtoEditarAPI?.adicionarProcessoItens?.(
+        novos.map(({ ordem, ...resto }) => resto));
+
+      return { quantos: novos.length, repetidos: repetidos.length, oQue: 'insumo(s)' };
+    }
+  };
+
+  /**
+   * "Novo Cliente" ou "Editar Cliente", conforme a linha.
+   *
+   * O botão diz qual formulário vai abrir. Uma linha que aponta para um
+   * registro existente abre o de EDITAR daquele registro — e prometer "Novo
+   * Cliente" para depois abrir a ficha de um cliente que já existe é o tipo de
+   * surpresa que faz a pessoa fechar achando que clicou errado.
+   */
+  function rotuloDoDestino(item) {
+    const config = MODULOS_DE_DESTINO[leitura?.destino];
+    if (!config) return '';
+    return apontaParaExistente(item) ? config.edicao.rotulo : config.rotulo;
+  }
+
+  /**
+   * A linha aponta para um registro que já existe?
+   *
+   * `alvo_id` é gravado quando alguém escolhe, na linha, a peça ou o cliente
+   * que a leitura casou. O destino precisa ter um modal de editar declarado:
+   * no orçamento, o alvo é o cliente a quem o orçamento NOVO se prende — ali
+   * apontar para um cliente existente não quer dizer editar aquele cliente.
+   */
+  function apontaParaExistente(item) {
+    const config = MODULOS_DE_DESTINO[leitura?.destino];
+    if (!config?.edicao) return false;
+    const alvo = Number(item?.alvo_id);
+    return Number.isInteger(alvo) && alvo > 0;
+  }
+
   async function abrirNoModulo(item) {
     const config = MODULOS_DE_DESTINO[leitura?.destino];
     if (!config) {
       showToast('Este destino ainda não abre o módulo preenchido', 'info');
       return;
     }
-
-    // A partir daqui, um "salvou" que chegar é desta linha.
-    esperandoSalvar = { id: item.id, overlay: config.overlay };
 
     const veu = abrirVeu();
     let carga;
@@ -2050,7 +2219,26 @@
       return;
     }
 
-    await abrirPorCima(config);
+    // A linha aponta para um registro que já existe? Então é ele que se abre,
+    // no modal de EDITAR. Abrir o de cadastro criaria um segundo registro da
+    // mesma coisa — e é justamente para não fazer isso que alguém escolheu a
+    // peça/o cliente na lista.
+    const registroExistente = carga.alvo?.registro || null;
+    const editando = Boolean(registroExistente && config.edicao);
+    const alvoAberto = editando ? { ...config, ...config.edicao } : config;
+
+    if (editando) alvoAberto.contexto?.(registroExistente);
+
+    // A partir daqui, um "salvou" que chegar é desta linha — e do modal que de
+    // fato foi aberto, que pode não ser o de cadastro.
+    esperandoSalvar = { id: item.id, overlay: alvoAberto.overlay };
+
+    // O modal de editar busca o registro no banco DEPOIS de abrir, e é o mesmo
+    // `modalSpinnerLoaded` que anuncia o fim disso. Preencher antes seria
+    // escrever em campos que a resposta vai sobrescrever, e somar numa lista
+    // que ainda vai ser trocada pela do banco — por isso a espera aqui é longa,
+    // e não a de quem só precisa do formulário desenhado.
+    await abrirPorCima(alvoAberto, { limiteMs: editando ? 15000 : 2500 });
 
     // Os campos simples, por id. `EstadoTrabalho` aplica o valor E avisa a tela
     // pelos dois eventos — sem isso o formulário fica com o valor à mostra e o
@@ -2062,26 +2250,55 @@
       campos.push({ chave: `#${id}`, valor: String(valor) });
     }
 
-    const conteudo = (CONTEUDO_DO_DESTINO[leitura.destino] || (() => null))(carga);
+    // Editando, o conteúdo NÃO é reposto pelo caminho da restauração: aquele
+    // caminho substitui a lista inteira, e substituir é o oposto de somar — a
+    // ficha perderia os contatos e os insumos que ela já tinha.
+    const conteudo = editando
+      ? null
+      : (CONTEUDO_DO_DESTINO[leitura.destino] || (() => null))(carga);
 
     let resultado = { campos: 0, conteudo: false };
+    let somado = { quantos: 0, repetidos: 0, oQue: '' };
     try {
-      resultado = await window.EstadoTrabalho.preencher(config.overlay, { campos, conteudo });
+      resultado = await window.EstadoTrabalho.preencher(alvoAberto.overlay, {
+        campos,
+        conteudo,
+        // Sobre um registro que já existe, a leitura COMPLETA o que está em
+        // branco e não troca o que já foi conferido por alguém.
+        somenteVazios: editando
+      });
+      if (editando) {
+        somado = (SOMAR_NO_REGISTRO[leitura.destino] || (() => somado))(carga);
+      }
     } catch (err) {
       console.error('Falha ao preencher o formulário', err);
     } finally {
       // Só agora o formulário aparece: cheio, de uma vez. E o véu sai no
       // `finally` para que uma falha no preenchimento não deixe a tela
       // bloqueada por um véu que ninguém consegue tirar.
-      document.getElementById(`${config.overlay}Overlay`)?.classList.remove('hidden');
+      document.getElementById(`${alvoAberto.overlay}Overlay`)?.classList.remove('hidden');
       veu.remove();
     }
 
-    const { quantos, oQue } = contarConteudo(leitura.destino, conteudo || {});
-    const partes = [`${resultado.campos} campo(s) preenchido(s)`];
-    if (quantos) partes.push(`${quantos} ${oQue}`);
+    const { quantos, oQue } = editando
+      ? { quantos: somado.quantos, oQue: somado.oQue }
+      : contarConteudo(leitura.destino, conteudo || {});
+
+    const partes = [];
+    if (editando) partes.push(`Editando ${carga.alvo.nome || 'o registro escolhido'}`);
+    partes.push(`${resultado.campos} campo(s) preenchido(s)`);
+    if (quantos) partes.push(`${quantos} ${oQue} somado(s)`);
+    // O que não entrou por já estar lá é dito, não omitido: somar em silêncio
+    // o que já existia é tão ruim quanto duplicar em silêncio — nos dois casos
+    // a pessoa só descobre depois de salvar.
+    if (editando && somado.repetidos) {
+      partes.push(`${somado.repetidos} já estava(m) na ficha`);
+    }
+
     if (!resultado.campos && !quantos) {
-      showToast('Nada do que foi lido coube neste formulário', 'info');
+      showToast(editando
+        ? `${carga.alvo.nome || 'O registro'} já tem tudo o que esta leitura trouxe`
+        : 'Nada do que foi lido coube neste formulário', 'info');
       return;
     }
 
