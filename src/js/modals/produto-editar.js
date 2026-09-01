@@ -684,6 +684,13 @@
       sincronizarOrdemComTabela();
       setupDragAndDrop();
       updateTotals();
+      // Os campos que nascem em zero — os sete percentuais da ficha e a
+      // quantidade de cada insumo — mostram o zero sem exigir que ele seja
+      // apagado para escrever. Chamado a cada desenho porque as linhas de
+      // insumo são refeitas; ligar duas vezes no mesmo campo é ignorado.
+      window.CampoZerado?.ligarTodos(
+        document.getElementById('editarProdutoOverlay'), 'input[type="number"]');
+
       console.debug('[editar-produto] renderItens ok:', { grupos: Object.keys(grupos).length, total: itens.length });
     }
 

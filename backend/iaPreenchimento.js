@@ -720,6 +720,39 @@ function numerosDe(texto_) {
     .filter(n => Number.isFinite(n) && n > 0);
 }
 
+/**
+ * "28/42/56" escrito no campo de PARCELAS são dias, não valores.
+ *
+ * É como este ramo escreve prazo de pagamento, e o modelo copia a expressão
+ * inteira para `parcelas` com frequência. Lida como valor, ela virava três
+ * parcelas de R$ 28, R$ 42 e R$ 56 num pedido de oito mil reais — e os dias
+ * caíam no padrão 30/60/90, que ninguém combinou.
+ *
+ * O sinal é ESTRUTURAL, não estatístico: dinheiro neste programa vem com `R$`
+ * ou com centavos ("1.899,90"), e nenhum dos dois passa pelo teste de CADA
+ * pedaço abaixo. É esse teste que separa uma coisa da outra — exigir que
+ * TODOS casem é o que impede "R$ 28,00/42" de entrar aqui por engano.
+ *
+ * Uma conferência de `R$` na frase inteira estava aqui e foi tirada: ela nunca
+ * chegava a decidir nada, porque o pedaço com `R$` já era recusado. Guarda que
+ * não guarda parece proteção e não é.
+ */
+function diasEscritosComoParcelas(bruto) {
+  const cru = texto(bruto).trim();
+  if (!cru) return [];
+
+  const pedacos = cru.split(/[/;|]| e /i);
+  if (pedacos.length < 2) return [];
+
+  const dias = pedacos.map(p => {
+    const achado = /^\s*(\d{1,3})\s*(?:dias?)?\s*$/i.exec(p);
+    const n = achado ? Number(achado[1]) : null;
+    return Number.isFinite(n) && n > 0 && n <= 365 ? n : null;
+  });
+
+  return dias.every(n => n !== null) ? dias : [];
+}
+
 /** Dias de vencimento de um prazo escrito como "30/60/90" ou "30 dias". */
 function diasDe(prazo) {
   return texto(prazo)
@@ -741,8 +774,14 @@ function diasDe(prazo) {
  */
 function interpretarPagamento(dados) {
   const forma = formaDePagamento(dados.forma_pagamento);
-  const valores = numerosDe(dados.parcelas);
-  const dias = diasDe(dados.prazo);
+
+  // Quando o campo de parcelas traz DIAS, ele não traz valores — e são esses
+  // dias que valem, porque o campo de prazo veio vazio justamente por eles
+  // terem sido escritos do outro lado.
+  const diasNasParcelas = diasEscritosComoParcelas(dados.parcelas);
+  const valores = diasNasParcelas.length ? [] : numerosDe(dados.parcelas);
+  const doPrazo = diasDe(dados.prazo);
+  const dias = doPrazo.length ? doPrazo : diasNasParcelas;
 
   const declarada = normalizar(dados.condicao_pagamento);
   const aVista = declarada.includes('vista')
@@ -988,6 +1027,7 @@ module.exports = {
   MODAIS,
   ESTADOS,
   casarInsumo,
+  diasEscritosComoParcelas,
   casarProduto,
   proximidadeDeInsumo,
   termosDeInsumo,

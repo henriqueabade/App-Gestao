@@ -148,8 +148,17 @@
           <label class="absolute left-4 top-1/2 -translate-y-1/2 text-base text-gray-300 pointer-events-none">Prazo (dias)</label>
         </div>`;
       rowsDiv.appendChild(row);
-      row.querySelector(`#${id}_amount_${idx}`).addEventListener('blur',e=>onAmountChange(id,idx,e.target.value));
-      row.querySelector(`#${id}_due_${idx}`).addEventListener('blur',e=>onDueChange(id,idx,e.target.value));
+      const campoValor=row.querySelector(`#${id}_amount_${idx}`);
+      const campoPrazo=row.querySelector(`#${id}_due_${idx}`);
+      campoValor.addEventListener('blur',e=>onAmountChange(id,idx,e.target.value));
+      campoPrazo.addEventListener('blur',e=>onDueChange(id,idx,e.target.value));
+
+      // O `R$ 0,00` e o formato, nao uma resposta. Sem isto, digitar sem apagar
+      // antes produzia `fgdgR$ 0,00` — e apagar tinha de ser feito uma vez por
+      // parcela. Ligado DEPOIS do `blur` acima de proposito: aquele ja repoe o
+      // formato (`parseCurrencyToCents('')` da zero), entao nao ha o que repor.
+      window.CampoZerado?.ligar(campoValor);
+      window.CampoZerado?.ligar(campoPrazo);
     });
   }
   function onAmountChange(id,index,raw){

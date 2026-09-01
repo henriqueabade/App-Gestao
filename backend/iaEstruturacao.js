@@ -70,6 +70,10 @@
 const provedores = require('./iaProvedores');
 const { paraDecimal } = require('./numeros');
 const { obterEsquema } = require('./iaEsquemas');
+// Uma leitura so do que e 'dias escritos como parcelas': a mesma que o
+// preenchimento usa para montar o parcelamento. Duas leituras divergiriam, e a
+// divergencia apareceria como a grade dizendo um prazo e o formulario outro.
+const { diasEscritosComoParcelas } = require('./iaPreenchimento');
 
 const { erro, pedir, chaveGroq, modeloGroq, GROQ_BASE } = provedores;
 
@@ -327,6 +331,18 @@ function validarItem(esquema, bruto) {
       problemas.push(`${campo.rotulo} não veio preenchido`);
     }
     dados[campo.chave] = valor;
+  }
+
+  // "28/42/56" no campo de parcelas são DIAS, e o campo de prazo ficou vazio
+  // porque eles foram escritos do outro lado. Movê-los é o que faz a coluna
+  // Prazo da grade parar de aparecer em branco num pedido que declara o prazo.
+  //
+  // Só quando o prazo está VAZIO: o que o modelo pôs no campo certo manda.
+  // E o campo de parcelas fica como está — é o que o documento diz, e é por
+  // ele que se confere se a leitura entendeu.
+  if ('prazo' in dados && !String(dados.prazo ?? '').trim()) {
+    const dias = diasEscritosComoParcelas(dados.parcelas);
+    if (dias.length) dados.prazo = dias.join('/');
   }
 
   // Campo que o modelo inventou é sinal de que ele saiu do esquema. Não entra

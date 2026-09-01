@@ -831,6 +831,10 @@
       document.body.appendChild(overlay);
 
       const input = overlay.querySelector('input');
+      // Escolher o destino de uma peca abre este dialogo com a quantidade ja
+      // preenchida. Quando ela e zero, e formato e nao resposta: a pessoa
+      // precisava apagar o `0` antes de digitar, uma vez por peca.
+      window.CampoZerado?.ligar(input);
       const errorEl = overlay.querySelector('[data-error]');
       const select = overlay.querySelector('[data-etapa]');
       const disponivelEl = overlay.querySelector('[data-disponivel]');
