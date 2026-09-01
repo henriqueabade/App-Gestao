@@ -366,6 +366,9 @@ test('os modais grandes revelam o overlay pelo evento do spinner', () => {
 // ===========================================================================
 
 const HTML_MODULO = path.join(__dirname, '..', '..', 'html', 'ia.html');
+/** O modal de detalhes da leitura, onde vive o popover da linha. */
+const ARQUIVO_JS = path.join(__dirname, '..', 'modals', 'ia-detalhes.js');
+
 const CSS_MODULO = path.join(__dirname, '..', '..', 'css', 'ia.css');
 const HTML_PRODUTOS = path.join(__dirname, '..', '..', 'html', 'produtos.html');
 
@@ -798,4 +801,79 @@ test('o (i) do casamento por preço se distingue de longe', () => {
   const vermelho = /\.ia-sublinha-item--sem-cadastro \.ia-campo \{([\s\S]*?)\}/.exec(css);
   assert.ok(vermelho, 'a linha sem cadastro perdeu a cor');
   assert.doesNotMatch(regra[1], /var\(--color-red\)|#f87171|248, 113, 113/);
+});
+
+// ---------------------------------------------------------------------------
+// O POPOVER DA LINHA MUDAVA DE COR CONFORME O QUE SE ABRIU ANTES
+//
+// `#iaDetLinhaPopover` carrega DUAS classes que disputam o fundo:
+// `resumo-popover` (vinho) e `glass-surface` (claro). Mesma especificidade —
+// quem vence é a folha carregada por último.
+//
+// E isso depende do que a pessoa abriu antes: `garantirEstiloDoModulo` injeta
+// o CSS do módulo de destino ao abrir um formulário, e aquela folha redefine
+// `.glass-surface`, passando a vencer. O mesmo popover saía vinho ao abrir a
+// leitura direto e claro depois de ter ido a um formulário e voltado.
+// ---------------------------------------------------------------------------
+
+test('o fundo do popover não depende de qual folha foi carregada por último', () => {
+  const css = fs.readFileSync(CSS_MODULO, 'utf8');
+  const regra = /#iaDetLinhaPopover \{([\s\S]*?)\}/.exec(css);
+  assert.ok(regra, 'o popover precisa de um fundo próprio, por ID');
+
+  // Por ID: id vence classe em QUALQUER ordem de carregamento. Escrito como
+  // classe, ele volta a empatar com `.glass-surface` e a perder para a folha
+  // do módulo que for injetada depois.
+  assert.match(regra[1], /background:\s*#[0-9a-fA-F]{6}\s*;/,
+    'o fundo tem de ser OPACO: translúcido, a cor volta a depender do que '
+    + 'estiver atrás — a linha, a rolagem, a faixa clara do cabeçalho');
+});
+
+test('as duas classes que disputavam continuam no elemento', () => {
+  // Elas não foram removidas: `glass-surface` traz borda e raio, e
+  // `resumo-popover` traz a animação e o teto de altura. Só o FUNDO saiu da
+  // disputa. Este teste existe para que a regra por ID não seja lida como
+  // sobra e apagada.
+  const html = fs.readFileSync(
+    path.join(__dirname, '..', '..', 'html', 'modals', 'ia', 'detalhes.html'), 'utf8');
+  assert.match(html, /id="iaDetLinhaPopover"[^>]*class="[^"]*resumo-popover[^"]*glass-surface/);
+});
+
+test('sair da área do popover fecha, com folga para alcançá-lo', () => {
+  const js = fs.readFileSync(ARQUIVO_JS, 'utf8');
+
+  // Entre o (i) e a caixa há um vão (a margem que `Popover.abrir` deixa). Sem
+  // a folga, o ponteiro atravessa terra de ninguém e a caixa some antes de ser
+  // alcançada — e ela tem campos editáveis dentro.
+  assert.match(js, /saindoDoDetalhe = setTimeout\(fecharDetalheDaLinha, \d+\)/);
+  assert.match(js, /popover\.addEventListener\('mouseleave', agendarSaidaDoDetalhe\)/);
+  assert.match(js, /popover\.addEventListener\('mouseenter', cancelarSaidaDoDetalhe\)/,
+    'entrar na caixa precisa cancelar o fechamento pendente');
+  assert.match(js, /info\.addEventListener\('mouseleave', agendarSaidaDoDetalhe\)/,
+    'sair do (i) também agenda');
+});
+
+test('a linha descartada perde a caixa, não o botão de voltar', () => {
+  const css = fs.readFileSync(CSS_MODULO, 'utf8');
+
+  // A trava era da LINHA INTEIRA, e a linha descartada tem um botão: "Trazer
+  // de volta". `pointer-events: none` no `<td>` matava o clique dele — o único
+  // caminho de saída de um descarte acidental ficava desenhado e sem resposta.
+  assert.doesNotMatch(css, /\.ia-linha-item--ignorada > td \{[^}]*pointer-events:\s*none/,
+    'a linha descartada não pode ficar inteira sem clique');
+  assert.match(css, /\.ia-linha-item--ignorada \.ia-selecao \{\s*display:\s*none/,
+    'só a caixa de seleção sai');
+});
+
+test('o rótulo e o clique escolhem a MESMA linha', () => {
+  const js = fs.readFileSync(ARQUIVO_JS, 'utf8');
+
+  // Escritas separadas, elas já discordavam: o botão dizia "Novo Produto" — da
+  // primeira linha da tabela — e abria a linha marcada, que podia ser um
+  // "Editar Produto".
+  assert.match(js, /const linhaParaAbrir = \(\) => \{/);
+  assert.match(js, /const proxima = linhaParaAbrir\(\);/, 'o rótulo usa a função');
+  assert.match(js, /const escolhida = linhaParaAbrir\(\);/, 'o clique usa a mesma');
+  assert.doesNotMatch(js, /const proxima = itensPendentes\(\)\[0\]/,
+    'o rótulo voltou a olhar só a primeira linha da tabela');
 });

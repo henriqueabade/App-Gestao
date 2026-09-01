@@ -364,6 +364,30 @@ body {
     pointer-events: auto;
 }
 
+/* O popover da linha: fundo OPACO, e definido por ID de propósito.
+ *
+ * Ele carrega DUAS classes que disputam o fundo — `resumo-popover` (vinho) e
+ * `glass-surface` (claro) — com a mesma especificidade. Quem vence é a folha
+ * carregada por último, e isso depende do que a pessoa abriu ANTES: abrir um
+ * modal de destino injeta o CSS daquele módulo, que redefine `.glass-surface`
+ * e passa a vencer. O mesmo popover saía vinho ao abrir a leitura direto e
+ * claro depois de ter ido a um formulário e voltado, sem nada na tela
+ * explicando a diferença.
+ *
+ * Por ID a disputa acaba: id vence classe em QUALQUER ordem de carregamento.
+ *
+ * E opaco porque a translucidez é a outra metade do mesmo problema — com ela,
+ * a cor passa a depender do que estiver atrás, que muda conforme a linha, a
+ * rolagem e a faixa branca do cabeçalho da tabela. */
+#iaDetLinhaPopover {
+    background: #7a6a72;
+    /* O desfoque vem de `.glass-surface` e não serve a um fundo opaco: ele só
+       criaria um bloco de contenção a mais, que é o que já obrigou o popover a
+       ser movido para o `<body>`. */
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+}
+
 
 /* Animação de entrada e toasts ------------------------------------ */
 
@@ -1549,13 +1573,13 @@ body {
 /* Linha descartada: nada nela pode ser clicado.
    
    Deixar a caixa de seleção viva convidava a marcar uma linha que já não vai a
-   lugar nenhum — e, marcada, ela contava no "Descartar N selecionadas" e no
-   "Abrir a 1ª de N", que passavam a mentir sobre quantas linhas há. */
-.ia-linha-item--ignorada,
-.ia-linha-item--ignorada > td {
-    pointer-events: none;
-}
+   lugar nenhum — e, marcada, ela contava no "Descartar N selecionadas", que
+   passava a mentir sobre quantas linhas há.
 
+   Mas a trava era da LINHA INTEIRA, e a linha descartada tem um botão:
+   "Trazer de volta". `pointer-events: none` no `<td>` matava o clique dele —
+   o único caminho de saída de um descarte acidental ficava desenhado na tela
+   e sem resposta. Agora só a caixa sai; o resto responde. */
 .ia-linha-item--ignorada .ia-selecao {
     display: none;
 }

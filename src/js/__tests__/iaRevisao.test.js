@@ -1359,15 +1359,24 @@ test('a linha pendente é a que abre, não a primeira da lista', async () => {
   assert.match(pedido.url, /\/itens\/2\/preenchimento$/);
 });
 
-test('o rótulo do botão diz para onde vai e quantas faltam', async () => {
+test('o botão mostra o símbolo e o nome do destino, e mais nada', async () => {
   const b = criarBancada();
   await b.pronta();
 
-  // Duas pendentes: o botão precisa deixar claro que abre UMA por vez, senão
-  // a pessoa clica, salva, e acha que resolveu a leitura inteira.
-  assert.match(b.el('iaDetAplicar').innerHTML, /1ª de 2/);
-  assert.match(b.el('iaDetAplicar').innerHTML, /Novo Insumo/);
-  assert.match(b.el('iaDetAplicar').title, /quem salva é você/i);
+  const botao = b.el('iaDetAplicar');
+
+  // "Abrir a 1ª de 2 em Novo Insumo" era uma frase dentro de um botão: contava
+  // a fila inteira num lugar onde só cabe o nome do que vai abrir.
+  assert.match(botao.innerHTML, /Novo Insumo/);
+  assert.doesNotMatch(botao.innerHTML, /1ª de/);
+  assert.doesNotMatch(botao.innerHTML, /Abrir/);
+  assert.match(botao.innerHTML, /fa-up-right-from-square/, 'o símbolo fica');
+
+  // O que saiu do botão vive no title, que tem espaço para uma frase — e a
+  // fila continua sendo dita, senão a pessoa clica, salva, e acha que
+  // resolveu a leitura inteira.
+  assert.match(botao.title, /1 de 2 pendentes/);
+  assert.match(botao.title, /quem salva é você/i);
 });
 
 test('gravar todos só aparece quando conferir uma a uma seria impraticável', async () => {

@@ -192,17 +192,29 @@
 
     // O botão avisa que há pendência antes do clique: descobrir depois é
     // descobrir com o formulário já na frente.
-    const proxima = itensPendentes()[0];
+    //
+    // A linha é a MESMA que o clique vai abrir (`linhaParaAbrir`): dizer "Novo
+    // Produto" e abrir um "Editar Produto" porque havia outra linha marcada é
+    // prometer uma tela e entregar outra.
+    const proxima = linhaParaAbrir();
     const faltas = proxima ? pendenciasDoItem(proxima) : [];
 
     if (aplicar && emRevisao && pendentes > 0 && temFormulario) {
       const rotulo = rotuloDoDestino(proxima);
       aplicar.classList.toggle('ia-btn-pendente', faltas.length > 0);
-      aplicar.innerHTML = '<i class="fas fa-up-right-from-square mr-2"></i>'
-        + (pendentes > 1 ? `Abrir a 1ª de ${pendentes} em ${rotulo}` : `Abrir em ${rotulo}`);
+
+      // Só o símbolo e o nome do destino. "Abrir a 1ª de 10 em Novo Orçamento"
+      // era uma frase num botão: contava a fila inteira num lugar onde só cabe
+      // o nome do que vai abrir. Quantas faltam já está no resumo da revisão, e
+      // qual vai abrir é a linha marcada — que a pessoa acabou de marcar.
+      aplicar.innerHTML = '<i class="fas fa-up-right-from-square mr-2"></i>' + rotulo;
+
+      // O que saiu do botão vive aqui, onde tem espaço para uma frase.
+      const fila = pendentes > 1 ? ` (1 de ${pendentes} pendentes)` : '';
       aplicar.title = faltas.length
         ? `Falta preencher: ${faltas.slice(0, 4).join('; ')}`
-        : `Abre ${rotulo} com os dados preenchidos. Nada é gravado aqui: quem salva é você.`;
+        : `Abre ${rotulo}${fila} com os dados preenchidos. `
+          + 'Nada é gravado aqui: quem salva é você.';
     }
 
     // O `title` e o `disabled` de "Gravar todos" pertencem a
@@ -398,6 +410,33 @@
 
   const fecharDetalheDaLinha = () => window.Popover?.fechar(get('iaDetLinhaPopover'));
 
+  /**
+   * Sair da área do popover fecha — com uma folga.
+   *
+   * Entre o (i) e a caixa há um vão (a margem que `Popover.abrir` deixa). Sem a
+   * folga, o ponteiro atravessa terra de ninguém e a caixa some antes de ser
+   * alcançada — e ela tem campos editáveis dentro, que ficariam inalcançáveis.
+   *
+   * A folga é cancelada ao ENTRAR na caixa: quem chegou lá está usando.
+   */
+  let saindoDoDetalhe = null;
+
+  const cancelarSaidaDoDetalhe = () => clearTimeout(saindoDoDetalhe);
+
+  const agendarSaidaDoDetalhe = () => {
+    clearTimeout(saindoDoDetalhe);
+    saindoDoDetalhe = setTimeout(fecharDetalheDaLinha, 150);
+  };
+
+  // Ligado uma vez só, no elemento que não é redesenhado. Ligar a cada linha
+  // empilharia um ouvinte por redesenho da tabela.
+  (() => {
+    const popover = get('iaDetLinhaPopover');
+    if (!popover) return;
+    popover.addEventListener('mouseenter', cancelarSaidaDoDetalhe);
+    popover.addEventListener('mouseleave', agendarSaidaDoDetalhe);
+  })();
+
   function desenharItens() {
     const corpo = get('iaDetItensCorpo');
     const vazio = get('iaDetItensVazio');
@@ -504,8 +543,12 @@
           // o mesmo popover, com as mesmas permissões. Dois handlers com a
           // mesma chamada escrita duas vezes é como um deles fica para trás
           // numa mudança futura.
-          const abrir = () => abrirDetalheDaLinha(info, item, noDetalhe, editavelAqui);
+          const abrir = () => {
+            cancelarSaidaDoDetalhe();
+            abrirDetalheDaLinha(info, item, noDetalhe, editavelAqui);
+          };
           info.addEventListener('mouseenter', abrir);
+          info.addEventListener('mouseleave', agendarSaidaDoDetalhe);
           info.addEventListener('click', e => { e.stopPropagation(); abrir(); });
 
           caixa.append(info, campo.tipo === 'lista'
@@ -2521,6 +2564,22 @@
     .filter(i => i.status !== 'aplicado' && i.acao !== 'ignorar');
 
   /**
+   * A linha que o botão de abrir vai levar ao módulo.
+   *
+   * A seleção manda quando existe: numa leitura de dezoito linhas, "a primeira
+   * pendente" quase nunca é a que se quer abrir agora. Sem seleção, segue a
+   * ordem da tabela.
+   *
+   * UMA função para o rótulo e para o clique. Escritas separadas, elas já
+   * discordavam: o botão dizia "Novo Produto" — da primeira linha da tabela —
+   * e abria a linha marcada, que podia ser um "Editar Produto".
+   */
+  const linhaParaAbrir = () => {
+    const pendentes = itensPendentes();
+    return pendentes.find(i => selecionados.has(i.id)) || pendentes[0] || null;
+  };
+
+  /**
    * O caminho normal: abre o formulário do módulo com a primeira linha
    * pendente. Nada é gravado daqui.
    *
@@ -2534,10 +2593,7 @@
       showToast('Nenhuma linha pendente nesta leitura', 'info');
       return;
     }
-    // A seleção manda quando existe: numa leitura de dezoito linhas, "a
-    // primeira pendente" quase nunca é a que se quer abrir agora. Sem seleção,
-    // segue a ordem da tabela.
-    const escolhida = pendentes.find(i => selecionados.has(i.id)) || pendentes[0];
+    const escolhida = linhaParaAbrir();
 
     const faltas = pendenciasDoItem(escolhida);
     if (faltas.length) {
