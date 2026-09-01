@@ -401,6 +401,10 @@ if (intro) {
       localStorage.removeItem('userRemoved');
       showUserRemovedError();
     }
+    if (localStorage.getItem('sessaoExpirada')) {
+      localStorage.removeItem('sessaoExpirada');
+      showToast('Sua sessão expirou. Entre novamente para continuar.', 'info');
+    }
     const admin = localStorage.getItem('adminDisabled');
     if (admin) {
       localStorage.removeItem('adminDisabled');

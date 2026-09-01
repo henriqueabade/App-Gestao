@@ -72,6 +72,8 @@ async function handleDisconnect(reason) {
     localStorage.setItem('offlineDisconnect', '1');
   } else if (reason === 'user-removed') {
     localStorage.setItem('userRemoved', '1');
+  } else if (reason === 'sessao-expirada') {
+    localStorage.setItem('sessaoExpirada', '1');
   } else if (reason === 'admin-disabled' || reason === 'admin-pending') {
     localStorage.setItem('adminDisabled', reason === 'admin-pending' ? 'pending' : '1');
   }
@@ -130,6 +132,8 @@ function applyStatus(status) {
     title = 'PIN inválido ou alterado';
   } else if (state === 'offline' && reason === 'user-removed') {
     title = 'Usuário removido do sistema';
+  } else if (reason === 'sessao-expirada') {
+    title = 'Sessão expirada — entre novamente';
   } else if (reason === 'admin-disabled') {
     title = 'Acesso desativado pelo administrador';
   } else if (reason === 'admin-pending') {

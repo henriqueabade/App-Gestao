@@ -2725,10 +2725,22 @@ function createConnectionMonitor() {
 
         if (statusCode === 401 || statusCode === 403) {
           applyNetState('offline');
+          // 401 pode ser duas coisas MUITO diferentes: o token expirou
+          // naturalmente (12h) ou foi invalidado/trocado. Tratar as duas como
+          // "PIN inválido ou alterado" assustava o usuário a cada expiração.
+          let motivo = 'pin';
+          let detalhe = 'token-invalido';
+          try {
+            const info = require('./backend/tokenStore').getTokenInfo();
+            if (!info.valido && info.motivo === 'expirado') {
+              motivo = 'sessao-expirada';
+              detalhe = 'token-expirado';
+            }
+          } catch (_) { /* mantém o tratamento padrão */ }
           updateStatus({
             state: 'offline',
-            reason: 'pin',
-            detail: 'token-invalido',
+            reason: motivo,
+            detail: detalhe,
             shouldLogout: true,
             failureStage: 'auth',
             lastError: formattedError,
