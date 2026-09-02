@@ -23,25 +23,10 @@
     position: relative;
 }
 
-/* O cabeçalho acompanha a rolagem.
- *
- * É ele que responde "que coluna é esta?", e numa revisão de vinte peças é a
- * primeira coisa que se perde: a pessoa rola até a peça, encontra três números
- * lado a lado e não sabe mais qual é "Em Estoque" e qual é "Produzir Total" —
- * justamente a decisão que o modal pede.
- *
- * Só a GRUDAGEM é daqui. A cor vem de `tabelas-modais.css`, junto com a de
- * todos os outros modais — este cabeçalho já teve um tom só dele, e ter um tom
- * só dele é exatamente o problema que aquela folha resolve.
- *
- * Grudento na CÉLULA e não no `<thead>`: é a forma que funciona em qualquer
- * motor, e não custa nada a mais. O fundo claro que a outra folha aplica é
- * opaco, que é o que este uso exige — as linhas passam por baixo. */
-#converterOrcamentoOverlay .table-scroll thead th {
-    position: sticky;
-    top: 0;
-    z-index: 3;
-}
+/* O cabeçalho grudento deste modal saiu daqui: ele agora vale para TODA
+   tabela de modal, em `src/styles/tabelas-modais.css`. Era a única a ter, e
+   ter sozinha era o problema — metade dos modais grudava e a outra metade
+   não, sem critério. */
 
 #converterOrcamentoOverlay .quote-piece-approved {
     background: rgba(34, 197, 94, 0.16);

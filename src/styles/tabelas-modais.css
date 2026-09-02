@@ -50,3 +50,28 @@
 /* O tamanho da letra fica de fora de propósito. Ele vem de `.table-scroll th`
    (src/styles/scroll.css), que o calcula pela largura da tela; fixá-lo aqui
    tiraria essa adaptação de todas as tabelas de uma vez. */
+
+/* O cabeçalho acompanha a rolagem, em TODA tabela de modal.
+ *
+ * É ele que responde "que coluna é esta?", e é a primeira coisa que se perde
+ * numa lista longa: a pessoa rola até a linha, encontra três números lado a
+ * lado e não sabe mais qual é qual. Metade dos modais já grudava o cabeçalho e
+ * a outra metade não, sem critério — quem escreveu cada um decidiu sozinho.
+ *
+ * Aqui isso só é possível porque a regra de cima já deu ao `th` um fundo
+ * OPACO. Grudar sem fundo opaco é pior que não grudar: as linhas passam por
+ * baixo e os dois textos se misturam.
+ *
+ * `tr:first-child` porque é o PRIMEIRO cabeçalho que orienta. Uma tabela com
+ * duas linhas de cabeçalho teria a segunda grudando no mesmo topo, uma por
+ * cima da outra.
+ *
+ * Grudento na CÉLULA e não no `<thead>`: é a forma que funciona em qualquer
+ * motor, e não custa nada a mais. */
+[id$="Overlay"] table thead tr:first-child th {
+    position: sticky;
+    top: 0;
+    /* Acima das linhas, abaixo dos popovers (que vivem no `<body>`, em 2100+
+       — ver src/js/utils/popover.js). */
+    z-index: 3;
+}

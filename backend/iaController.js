@@ -897,14 +897,34 @@ function carregarLido(coagida, anterior) {
  * leitura: o preço de venda é do cadastro, não do documento. O que o pedido
  * escreveu fica no (i), para conferência — não para uso.
  */
+/**
+ * O prazo escrito no campo de PARCELAS volta para o campo de prazo.
+ *
+ * "28/42/56" são dias, e o modelo copia a expressão para `parcelas` com
+ * frequência — deixando a coluna Prazo da grade em branco num pedido que
+ * declara o prazo.
+ *
+ * A extração já corrige isso ao ler um documento novo. Isto aqui é para as
+ * leituras que JÁ existem: refeito a cada abertura, como as outras anotações
+ * (`_casamento`, `_cadastro`), sem regravar nada. Sem ele, a única saída seria
+ * extrair tudo de novo — e extrair custa crédito de API.
+ *
+ * Só quando o prazo está vazio: o que o modelo pôs no campo certo manda.
+ */
+function anotarPrazo(dados) {
+  if (!dados || String(dados.prazo ?? '').trim()) return dados;
+  const dias = preenchimento.diasEscritosComoParcelas(dados.parcelas);
+  return dias.length ? { ...dados, prazo: dias.join('/') } : dados;
+}
+
 function anotarProdutos(dados, produtos) {
-  if (!Array.isArray(dados?.itens)) return dados;
+  if (!Array.isArray(dados?.itens)) return anotarPrazo(dados);
 
   const porCodigo = preenchimento.indexarPor(produtos, 'codigo');
   const porNome = preenchimento.indexarPor(produtos, 'nome');
 
   return {
-    ...dados,
+    ...anotarPrazo(dados),
     itens: dados.itens.map(linha => {
       const nome = String(linha?.nome ?? '').trim();
       if (!nome && !String(linha?.codigo ?? '').trim()) return linha;

@@ -149,19 +149,22 @@ test('todo modal com tabela mora num container que a regra alcança', () => {
 // Ninguém mais pinta um cabeçalho de modal
 // ---------------------------------------------------------------------------
 
-test('as folhas dos modais não têm cor de cabeçalho própria', () => {
-  for (const arquivo of ['conversao-orcamento.css']) {
-    const css = ler('src', 'styles', arquivo);
-    const regra = css.match(/thead th \{[^}]*\}/);
-    if (!regra) continue;
+test('nenhuma folha de modal tem regra de cabeçalho própria', () => {
+  // A cor e a grudagem são as duas de `tabelas-modais.css` agora. Esta
+  // conferência era escrita com um `continue` que a fazia passar sem olhar
+  // para nada assim que a regra saísse do arquivo — o tipo de teste que
+  // sobrevive à própria utilidade.
+  const conversao = ler('src', 'styles', 'conversao-orcamento.css');
 
-    // A conversão pode dizer que o cabeçalho dela GRUDA — isso é dela. A cor,
-    // não: ela já teve um tom só seu, e é esse tom só seu o problema.
-    assert.doesNotMatch(regra[0], /background:/,
-      `${arquivo}: voltou a pintar o próprio cabeçalho`);
-    assert.match(regra[0], /position:\s*sticky/,
-      `${arquivo}: a grudagem é o que continua sendo dela`);
-  }
+  assert.doesNotMatch(conversao, /thead[^{}]*\{[^}]*background/,
+    'a conversão voltou a pintar o próprio cabeçalho');
+  assert.doesNotMatch(conversao, /thead[^{}]*\{[^}]*position:\s*sticky/,
+    'a conversão voltou a grudar o próprio cabeçalho');
+
+  // E ela continua existindo: o que é dela — as cores das linhas de peça, o
+  // aviso de pendências — está lá.
+  assert.match(conversao, /#converterOrcamentoOverlay/,
+    'a folha da conversão sumiu inteira');
 });
 
 test('a grade da IA também segue o padrão', () => {
@@ -188,4 +191,74 @@ test('a folha é carregada sempre, e antes das específicas', () => {
     menu.indexOf('tabelas-modais.css') < menu.indexOf('conversao-orcamento.css'),
     'a folha comum precisa vir antes da folha da conversão'
   );
+});
+
+// ---------------------------------------------------------------------------
+// O cabeçalho acompanha a rolagem
+//
+// Metade dos modais grudava o cabeçalho e a outra metade não, sem critério —
+// quem escreveu cada um decidiu sozinho. É o cabeçalho que responde "que coluna
+// é esta?", e é a primeira coisa que se perde numa lista longa.
+// ---------------------------------------------------------------------------
+
+test('toda tabela de modal tem o primeiro cabeçalho grudento', () => {
+  const css = folha();
+  const regra = css.match(/\[id\$="Overlay"\] table thead tr:first-child th \{[^}]+\}/);
+  assert.ok(regra, 'falta a regra de cabeçalho grudento');
+
+  assert.match(regra[0], /position:\s*sticky/);
+  assert.match(regra[0], /top:\s*0/);
+});
+
+test('só o PRIMEIRO cabeçalho gruda', () => {
+  const css = folha();
+
+  // Numa tabela com duas linhas de cabeçalho, a segunda grudaria no mesmo
+  // topo, uma por cima da outra.
+  assert.match(css, /thead tr:first-child th/);
+  assert.doesNotMatch(css, /\[id\$="Overlay"\] table thead th \{[^}]*position:\s*sticky/,
+    'grudar todo <th> do cabeçalho empilharia as linhas de cabeçalho');
+});
+
+test('grudar só é possível porque o fundo é opaco', () => {
+  const css = folha();
+
+  // Grudar sem fundo opaco é PIOR que não grudar: as linhas passam por baixo e
+  // os dois textos se misturam. As duas regras vivem na mesma folha de
+  // propósito — separá-las deixaria uma sobreviver sem a outra.
+  const fundo = css.indexOf('background: #f9fafb');
+  const gruda = css.indexOf('position: sticky');
+  assert.ok(fundo >= 0 && gruda > fundo,
+    'o fundo opaco precisa vir antes, e na mesma folha, do que gruda');
+});
+
+test('a grudagem não está escrita duas vezes', () => {
+  // Ela estava só na folha da conversão, e ter sozinha era o problema.
+  const conversao = ler('src', 'styles', 'conversao-orcamento.css');
+  assert.doesNotMatch(conversao, /position:\s*sticky/);
+
+  const ia = ler('src', 'css', 'ia.css');
+  const grade = ia.match(/\.ia-grade-revisao thead th \{[^}]+\}/);
+  assert.ok(grade, 'a grade da IA tem regra própria');
+  assert.match(grade[0], /position:\s*sticky/,
+    'a grade da IA não vive dentro de `[id$="Overlay"] table` com a mesma '
+    + 'estrutura, então a dela continua sendo dela');
+});
+
+test('os módulos já grudam o cabeçalho pelo HTML', () => {
+  // Levantamento: todos declaram `sticky top-0` e `bg-gray-50` no `<thead>`.
+  // Este teste existe para que uma limpeza de classes não leve isso junto —
+  // foi exatamente o que quase aconteceu com as cores dos modais.
+  const modulos = ['clientes', 'contatos', 'materia-prima', 'orcamentos',
+    'pedidos', 'produtos', 'prospeccoes', 'usuarios',
+    'laminacao-clientes', 'laminacao-servicos'];
+
+  for (const modulo of modulos) {
+    const html = ler('src', 'html', `${modulo}.html`);
+    const thead = html.match(/<thead([^>]*)>/);
+    assert.ok(thead, `${modulo}: não achei o <thead>`);
+    assert.match(thead[1], /sticky/, `${modulo}: o cabeçalho parou de grudar`);
+    assert.match(thead[1], /bg-gray-50/,
+      `${modulo}: sem fundo opaco, grudar deixa as linhas passarem por baixo`);
+  }
 });

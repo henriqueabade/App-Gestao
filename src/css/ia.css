@@ -379,16 +379,6 @@ body {
  * E opaco porque a translucidez é a outra metade do mesmo problema — com ela,
  * a cor passa a depender do que estiver atrás, que muda conforme a linha, a
  * rolagem e a faixa branca do cabeçalho da tabela. */
-#iaDetLinhaPopover {
-    background: #7a6a72;
-    /* O desfoque vem de `.glass-surface` e não serve a um fundo opaco: ele só
-       criaria um bloco de contenção a mais, que é o que já obrigou o popover a
-       ser movido para o `<body>`. */
-    backdrop-filter: none;
-    -webkit-backdrop-filter: none;
-}
-
-
 /* Animação de entrada e toasts ------------------------------------ */
 
 .animate-fade-in-up {
@@ -1286,11 +1276,32 @@ body {
 
 /* O popover de detalhe é o único que aceita clique: os campos dentro dele são
    editáveis, então ele não pode sumir quando o mouse sai do (i). */
+/* O popover da linha. UMA regra por id, e todas as propriedades dele aqui.
+ *
+ * Havia duas com o mesmo id neste arquivo, e a segunda calava a primeira nas
+ * propriedades que ambas declarassem — o tipo de armadilha que só aparece
+ * quando alguém acrescenta uma linha na de cima e nada muda na tela.
+ *
+ * O fundo é definido AQUI, por id, porque o elemento carrega duas classes que
+ * o disputam: `resumo-popover` (vinho translúcido) e `glass-surface` (claro).
+ * Mesma especificidade — vencia a folha carregada por último, e isso dependia
+ * do que a pessoa tinha aberto antes: abrir um formulário de destino injeta o
+ * CSS daquele módulo, que redefine `.glass-surface`. Id vence classe em
+ * qualquer ordem de carregamento.
+ *
+ * E OPACO: com o vinho translúcido, as linhas da tabela apareciam através do
+ * texto do popover. */
 #iaDetLinhaPopover {
     position: fixed;
     max-width: 340px;
     max-height: 60vh;
     overflow-y: auto;
+    background-color: #310017;
+    /* O desfoque vem de `.glass-surface` e não serve a um fundo opaco: só
+       criaria mais um bloco de contenção, que é o que já obrigou este popover
+       a ser movido para o `<body>`. */
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
 }
 
 /* Botão de ação secundária: existe, mas não disputa com o caminho principal. */

@@ -229,3 +229,21 @@ test('o utilitário é carregado sempre, não por módulo', () => {
   const menu = ler('src', 'html', 'menu.html');
   assert.match(menu, /js\/utils\/campo-zerado\.js/);
 });
+
+test('leitura JÁ existente também mostra o prazo, sem extrair de novo', () => {
+  const controller = ler('backend', 'iaController.js');
+
+  // A extração corrige ao ler um documento novo. As leituras que já estão no
+  // banco não seriam alcançadas — e a única saída seria extrair tudo de novo,
+  // que custa crédito de API.
+  assert.match(controller, /function anotarPrazo\(dados\)/);
+  assert.match(controller, /\.\.\.anotarPrazo\(dados\),/,
+    'a anotação precisa entrar no caminho que a grade lê');
+  assert.match(controller, /preenchimento\.diasEscritosComoParcelas\(dados\.parcelas\)/,
+    'a mesma leitura da extração: duas divergiriam');
+
+  // Refeito a cada abertura, como as outras anotações — sem regravar.
+  assert.doesNotMatch(controller,
+    /anotarPrazo[\s\S]{0,400}api\.put/,
+    'a anotação não pode gravar nada');
+});

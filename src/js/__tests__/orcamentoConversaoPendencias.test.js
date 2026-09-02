@@ -166,18 +166,23 @@ test('o carregando acende no botão que foi clicado', () => {
 // ---------------------------------------------------------------------------
 
 test('o cabeçalho das tabelas de conversão acompanha a rolagem', () => {
-  const css = folhaConversao();
-  const regra = css.match(/#converterOrcamentoOverlay \.table-scroll thead th \{[^}]+\}/);
-  assert.ok(regra, 'falta a regra de cabeçalho fixo');
+  // A grudagem saiu daqui: ela agora vale para TODA tabela de modal. Esta
+  // conversão era a única a ter, e ter sozinha era o problema — metade dos
+  // modais grudava o cabeçalho e a outra metade não, sem critério.
+  const comum = ler('src', 'styles', 'tabelas-modais.css');
+  const regra = comum.match(/thead tr:first-child th \{[^}]+\}/);
+  assert.ok(regra, 'falta a regra de cabeçalho fixo dos modais');
 
   assert.match(regra[0], /position:\s*sticky/);
   assert.match(regra[0], /top:\s*0/);
 
-  // Só a GRUDAGEM é daqui. A cor vem de `tabelas-modais.css`, com a de todos
-  // os outros modais — este cabeçalho já teve um tom só seu, e ter um tom só
-  // seu era o que fazia a mesma tabela mudar de cara conforme o modal.
-  assert.doesNotMatch(regra[0], /background:/,
-    'a conversão voltou a pintar o próprio cabeçalho');
+  // `tr:first-child`: é o PRIMEIRO cabeçalho que orienta. Numa tabela com dois,
+  // o segundo grudaria no mesmo topo, um por cima do outro.
+  assert.match(comum, /\[id\$="Overlay"\] table thead tr:first-child th/);
+
+  // E a folha da conversão não pode ter uma segunda cópia.
+  assert.doesNotMatch(folhaConversao(), /position:\s*sticky/,
+    'a conversão voltou a grudar o próprio cabeçalho');
 });
 
 test('o cabeçalho fixo tem separador próprio', () => {

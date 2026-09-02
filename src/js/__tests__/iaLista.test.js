@@ -824,9 +824,14 @@ test('o fundo do popover não depende de qual folha foi carregada por último', 
   // Por ID: id vence classe em QUALQUER ordem de carregamento. Escrito como
   // classe, ele volta a empatar com `.glass-surface` e a perder para a folha
   // do módulo que for injetada depois.
-  assert.match(regra[1], /background:\s*#[0-9a-fA-F]{6}\s*;/,
-    'o fundo tem de ser OPACO: translúcido, a cor volta a depender do que '
-    + 'estiver atrás — a linha, a rolagem, a faixa clara do cabeçalho');
+  assert.match(regra[1], /background-color:\s*#[0-9a-fA-F]{6}\s*;/,
+    'o fundo tem de ser OPACO: com o vinho translúcido, as linhas da tabela '
+    + 'aparecem através do texto do popover');
+
+  // Uma regra por id. Duas com o mesmo id calam uma à outra nas propriedades
+  // que ambas declararem, e nada na tela diz qual venceu.
+  const quantas = (css.match(/^#iaDetLinhaPopover \{/gm) || []).length;
+  assert.equal(quantas, 1, `achei ${quantas} regras para o mesmo id`);
 });
 
 test('as duas classes que disputavam continuam no elemento', () => {
