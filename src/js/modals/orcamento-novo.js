@@ -100,7 +100,7 @@
     if(condicaoSelect.value==='vista'){
       pagamentoBox.innerHTML=`
         <div class="relative w-40">
-          <i data-perm="orc.item.edit"nput id="novoPrazoVista" name="prazo" type="number" min="0" data-numeric-decimals="0" placeholder=" " required class="peer w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-transparent focus:border-primary focus:ring-2 focus:ring-primary/50 transition" data-filled="false" />
+          <input id="novoPrazoVista" name="prazo" type="number" min="0" data-numeric-decimals="0" placeholder=" " required class="peer w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white placeholder-transparent focus:border-primary focus:ring-2 focus:ring-primary/50 transition" data-filled="false" />
           <label for="novoPrazoVista" class="absolute left-4 top-1/2 -translate-y-1/2 text-base text-gray-300 pointer-events-none transition-all duration-150 peer-placeholder-shown:top-1/2 peer-placeholder-shown:-translate-y-1/2 peer-placeholder-shown:text-base peer-focus:top-0 peer-focus:-translate-y-full peer-focus:text-xs peer-focus:text-primary peer-valid:top-0 peer-valid:-translate-y-full peer-valid:text-xs peer-data-[filled=true]:top-0 peer-data-[filled=true]:-translate-y-full peer-data-[filled=true]:text-xs">Prazo (dias)</label>
         </div>`;
       pagamentoBox.classList.remove('hidden');

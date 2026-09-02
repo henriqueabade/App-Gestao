@@ -120,6 +120,55 @@ test('item sem decisão de estoque conta como "a fazer"', () => {
   assert.strictEqual(peca.pronta, 0);
 });
 
+test('"pronta" sai do PEDIDO, não do estoque disponível', () => {
+  // O caso que motivou a correção: peça pedida 2 vezes, com 3 unidades em
+  // estoque. A conversão gravava 3 em `qtd_usar_pronta` (o estoque, não o
+  // consumo), e o relatório dizia "3 prontas" para um pedido de 2.
+  const [peca] = agruparPecas([
+    { id: 1, itens: [{ produto_id: 9, codigo: 'AV01', nome: 'Apaga Velas', quantidade: 2, qtd_usar_pronta: 3, qtd_a_produzir: 0 }] }
+  ]);
+
+  assert.strictEqual(peca.quantidade, 2);
+  assert.strictEqual(peca.pronta, 2, 'o teto é o pedido: não se usa 3 para atender 2');
+  assert.strictEqual(peca.a_fazer, 0);
+});
+
+test('"a fazer" é derivado, e ignora um qtd_a_produzir incoerente', () => {
+  // Se `a_fazer` fosse lido cru, este item somaria 2 + 5 = 7 numa linha de 6:
+  // a produção receberia um documento que não fecha com o pedido.
+  const [peca] = agruparPecas([
+    { id: 1, itens: [{ produto_id: 9, codigo: 'A', nome: 'A', quantidade: 6, qtd_usar_pronta: 2, qtd_a_produzir: 5 }] }
+  ]);
+
+  assert.strictEqual(peca.pronta, 2);
+  assert.strictEqual(peca.a_fazer, 4, '6 − 2');
+  assert.strictEqual(peca.pronta + peca.a_fazer, peca.quantidade);
+});
+
+test('o teto vale também no detalhamento por pedido', () => {
+  const [detalhe] = detalharPedidos([
+    { id: 1, numero: 'PED1', cliente_nome: 'Loja', itens: [
+      { produto_id: 9, codigo: 'AV01', nome: 'Apaga Velas', quantidade: 2, qtd_usar_pronta: 3, qtd_a_produzir: 0 }
+    ] }
+  ]);
+
+  assert.strictEqual(detalhe.itens[0].pronta, 2);
+  assert.strictEqual(detalhe.itens[0].a_fazer, 0);
+});
+
+test('somando pedidos, o que produzir é a soma do que falta em cada um', () => {
+  // Dois pedidos da mesma peça: um coberto por estoque, outro não. O total a
+  // produzir é 3 — e não seria, se o estoque do primeiro vazasse para a conta.
+  const [peca] = agruparPecas([
+    { id: 1, itens: [{ produto_id: 9, codigo: 'A', nome: 'A', quantidade: 2, qtd_usar_pronta: 5 }] },
+    { id: 2, itens: [{ produto_id: 9, codigo: 'A', nome: 'A', quantidade: 3, qtd_usar_pronta: 0 }] }
+  ]);
+
+  assert.strictEqual(peca.quantidade, 5);
+  assert.strictEqual(peca.pronta, 2);
+  assert.strictEqual(peca.a_fazer, 3);
+});
+
 test('o rótulo mais completo vence quando um pedido gravou sem código', () => {
   const [peca] = agruparPecas([
     { id: 1, itens: [{ produto_id: 9, codigo: '', nome: '', quantidade: 1, qtd_a_produzir: 1 }] },

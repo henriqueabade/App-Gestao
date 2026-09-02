@@ -29,6 +29,27 @@ function texto(valor) {
 }
 
 /**
+ * Quanto da peça já está pronta e quanto falta produzir — SEGUNDO O PEDIDO.
+ *
+ * `qtd_usar_pronta` guarda o estoque pronto que existia no momento da
+ * conversão, e esse número pode ser MAIOR que o pedido: uma peça pedida 2
+ * vezes com 3 unidades em estoque grava 3. Lido cru, o relatório dizia
+ * "3 prontas" para um pedido de 2 — e a produção não conseguia responder o
+ * que precisa fazer.
+ *
+ * O teto é a quantidade pedida, e o que sobra é produção. É a mesma regra que
+ * backend/conversaoEstoque.js já aplica ao dar baixa; aqui ela vale também
+ * para os pedidos que foram gravados antes.
+ */
+function prontaEaFazer(item) {
+  const quantidade = num(item?.quantidade);
+  const pronta = Math.max(0, Math.min(num(item?.qtd_usar_pronta), quantidade));
+  // `a_fazer` é DERIVADO, não lido: assim `pronta + a_fazer` sempre fecha com
+  // a quantidade, e um `qtd_a_produzir` incoerente não contamina o total.
+  return { quantidade, pronta, a_fazer: quantidade - pronta };
+}
+
+/**
  * Chave de agrupamento da peça.
  *
  * `produto_id` é a identidade real. O código entra só como último recurso,
@@ -47,10 +68,9 @@ function chaveDaPeca(item) {
 /**
  * Consolida as peças de vários pedidos numa linha por modelo.
  *
- * `pronta` e `a_fazer` vêm da decisão de estoque tomada na conversão do
- * orçamento (`qtd_usar_pronta` / `qtd_a_produzir`), que é NOT NULL desde lá.
- * Quando as duas vêm zeradas — item anterior a essa decisão —, tratamos tudo
- * como "a fazer": prometer peça pronta que ninguém confirmou é o erro caro.
+ * `pronta` e `a_fazer` saem do PEDIDO, com teto na quantidade pedida — ver
+ * `prontaEaFazer`. Nunca do estoque: o relatório responde o que produzir para
+ * atender estes pedidos, não o que existe na prateleira.
  */
 function agruparPecas(pedidos = []) {
   const mapa = new Map();
@@ -60,11 +80,7 @@ function agruparPecas(pedidos = []) {
       const chave = chaveDaPeca(item);
       if (!chave) continue;
 
-      const quantidade = num(item?.quantidade);
-      const pronta = num(item?.qtd_usar_pronta);
-      const aProduzir = num(item?.qtd_a_produzir);
-      // Item sem decisão de estoque gravada: assume produção integral.
-      const semDecisao = pronta === 0 && aProduzir === 0 && quantidade > 0;
+      const { quantidade, pronta, a_fazer: aFazer } = prontaEaFazer(item);
 
       const atual = mapa.get(chave) || {
         produto_id: item?.produto_id ?? null,
@@ -84,7 +100,7 @@ function agruparPecas(pedidos = []) {
 
       atual.quantidade += quantidade;
       atual.pronta += pronta;
-      atual.a_fazer += semDecisao ? quantidade : aProduzir;
+      atual.a_fazer += aFazer;
       atual.valor_total += num(item?.valor_total);
       if (pedido?.id != null) atual.pedidos.add(String(pedido.id));
 
@@ -123,9 +139,8 @@ function detalharPedidos(pedidos = []) {
       produto_id: item?.produto_id ?? null,
       codigo: texto(item?.codigo),
       nome: texto(item?.nome),
-      quantidade: num(item?.quantidade),
-      pronta: num(item?.qtd_usar_pronta),
-      a_fazer: num(item?.qtd_a_produzir),
+      // Mesma regra do consolidado: o teto é o pedido, não o estoque.
+      ...prontaEaFazer(item),
       valor_unitario: num(item?.valor_unitario_desc) || num(item?.valor_unitario),
       valor_total: num(item?.valor_total)
     }));

@@ -416,10 +416,20 @@ function buildPedidoPayload(orc = {}, { numero, conversao } = {}) {
 // vinda do modal de conversão (por produto_id) ou um padrão seguro.
 function buildPedidoItemPayload(item = {}, pedidoId, decisao = {}) {
   const quantidade = Number(item.quantidade || 0);
-  const usarPronta = Number.isFinite(Number(decisao.qtd_usar_pronta)) ? Number(decisao.qtd_usar_pronta) : 0;
-  const aProduzir = Number.isFinite(Number(decisao.qtd_a_produzir))
-    ? Number(decisao.qtd_a_produzir)
-    : Math.max(0, quantidade - usarPronta);
+
+  // TETO NA QUANTIDADE PEDIDA.
+  //
+  // A tela de conversão manda em `qtd_usar_pronta` o estoque pronto que
+  // existia naquele momento, que pode ser MAIOR que o pedido: uma peça pedida
+  // 2 vezes com 3 em estoque chegava aqui como 3, e era 3 que ficava gravado.
+  // `conversaoEstoque` já limitava isso ao dar baixa, então o estoque sempre
+  // esteve certo — quem mentia era a coluna, e com ela todo relatório que a
+  // lesse. `qtd_a_produzir` é derivado para que a soma feche com o pedido.
+  const prontaInformada = Number.isFinite(Number(decisao.qtd_usar_pronta))
+    ? Number(decisao.qtd_usar_pronta)
+    : 0;
+  const usarPronta = Math.max(0, Math.min(prontaInformada, quantidade));
+  const aProduzir = Math.max(0, quantidade - usarPronta);
   return {
     pedido_id: pedidoId,
     produto_id: item.produto_id,
