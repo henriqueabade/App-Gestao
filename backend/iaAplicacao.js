@@ -28,6 +28,10 @@ const orcamentos = require('./orcamentosController');
 const clientes = require('./clientesController');
 const { obterEsquema, soDigitos } = require('./iaEsquemas');
 const { normalizar } = require('./iaReconciliacao');
+// O catálogo com a tabela fixa junto e a regra do preço praticado vêm de lá:
+// duas contas sobre a mesma pergunta divergem, e a divergência sai como um
+// número na tela e outro no orçamento.
+const preenchimento = require('./iaPreenchimento');
 
 function erro(status, mensagem) {
   const e = new Error(mensagem);
@@ -655,8 +659,12 @@ async function aplicarOrcamentos(item, contexto) {
   // Catálogo UMA vez por lote. Dois índices porque o documento tanto pode
   // trazer o código quanto só o nome.
   if (!cache.produtos) {
-    const lista = await api.get('/api/produtos')
-      .then(r => (Array.isArray(r) ? r : [])).catch(() => []);
+    // `catalogoDeProdutos` e não `/api/produtos` cru: é ele que junta a tabela
+    // fixa, e sem essa junção o preço praticado simplesmente não vem. Lendo
+    // direto, esta rota caía no `preco_venda` — o custo apurado — enquanto a
+    // grade da revisão e o formulário do módulo mostravam o praticado. Três
+    // caminhos para o mesmo orçamento, dois preços diferentes.
+    const lista = await preenchimento.catalogoDeProdutos(api).catch(() => []);
     cache.produtos = { porNome: new Map(), porCodigo: new Map() };
     for (const p of lista) {
       const n = normalizar(p?.nome);
@@ -681,13 +689,12 @@ async function aplicarOrcamentos(item, contexto) {
       continue;
     }
 
-    // Sem preço no documento, vale o de tabela. É o comportamento útil: um
-    // pedido de compra costuma listar o que se quer, não quanto custa.
-    let valorUnitario = Number(linha.valor_unitario);
-    if (!Number.isFinite(valorUnitario) || valorUnitario <= 0) {
-      valorUnitario = Number(produto.preco_venda) || 0;
-      semPreco.push(produto.nome);
-    }
+    // O preço é o REGISTRADO no sistema, sempre — nunca o do documento. Um
+    // pedido de compra lista o que se quer, não quanto a empresa cobra. Mesma
+    // regra, e a mesma função, do formulário do módulo.
+    const registrado = preenchimento.precoDeVenda(produto);
+    const valorUnitario = registrado || 0;
+    if (registrado == null) semPreco.push(produto.nome);
 
     itens.push({
       produto_id: produto.id,
@@ -749,7 +756,8 @@ async function aplicarOrcamentos(item, contexto) {
     `Orçamento ${numero} criado (${itens.length} itens) para ${naProspeccao ? 'a prospecção' : 'o cliente'}`
   ];
   if (semPreco.length) {
-    feitos.push(`${semPreco.length} item(ns) com preço de tabela: ${semPreco.slice(0, 3).join(', ')}`);
+    feitos.push(
+      `${semPreco.length} item(ns) sem preço na tabela fixa, zerados: ${semPreco.slice(0, 3).join(', ')}`);
   }
 
   return { alvo_id: orcamentoId, mensagem: feitos.join(' · ') };

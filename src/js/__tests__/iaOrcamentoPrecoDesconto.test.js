@@ -51,14 +51,14 @@ const montar = linhas => preenchimento.montarItensDeOrcamento(
   CATALOGO
 );
 
-test('sem preço no documento, vale o PRATICADO e não o custo', () => {
+test('o preço é o PRATICADO da tabela fixa, não o custo apurado', () => {
   const { itens } = montar([{ codigo: 'P-100', nome: 'Mesa Carvalho', quantidade: 2 }]);
 
   assert.equal(itens.length, 1);
   assert.equal(itens[0].valor_unitario, 890,
     'chegou o custo apurado (410,50) no lugar do preço praticado — é este '
     + 'número que vai ao cliente, e é o que a grade da revisão mostra');
-  assert.equal(itens[0].preco_de_tabela, true, 'e a linha precisa dizer que veio da tabela');
+  assert.equal(itens[0].sem_preco_registrado, false, 'a peça tem preço registrado');
 });
 
 test('preço praticado com separador de milhar não vira zero', () => {
@@ -69,84 +69,60 @@ test('preço praticado com separador de milhar não vira zero', () => {
   assert.equal(itens[0].valor_unitario, 1234.56);
 });
 
-test('o preço do documento manda, quando existe', () => {
+// ---------------------------------------------------------------------------
+// O REGISTRO DO SISTEMA É SOBERANO
+//
+// O documento diz o que o cliente quer comprar; ele não diz por quanto a
+// empresa vende. O preço que vai ao orçamento é SEMPRE o da tabela fixa.
+//
+// A regra antiga era "o do documento quando existe, o de tabela quando não", e
+// ela abria um buraco que ninguém enxergava: o revisor trocava a peça na grade
+// e o preço lido — que descrevia a peça abandonada — seguia vencendo. A tela
+// mostrava o preço certo o tempo todo.
+// ---------------------------------------------------------------------------
+
+test('o preço do documento NÃO manda, mesmo quando existe', () => {
   const { itens } = montar([
     { codigo: 'P-100', nome: 'Mesa Carvalho', quantidade: 1, valor_unitario: 950 }
   ]);
 
-  // O documento é o que foi negociado; a tabela é o padrão de quem não disse.
-  assert.equal(itens[0].valor_unitario, 950);
-  assert.equal(itens[0].preco_de_tabela, false);
+  // 890 é o que a empresa registrou. 950 é o que o papel pediu — e quem
+  // escreve o pedido não define o preço de venda.
+  assert.equal(itens[0].valor_unitario, 890);
+  assert.equal(itens[0].sem_preco_registrado, false);
 });
 
-test('preço do documento em texto brasileiro é lido, não descartado', () => {
-  const { itens } = montar([
-    { codigo: 'P-100', nome: 'Mesa Carvalho', quantidade: 1, valor_unitario: '1.899,90' }
-  ]);
-
-  // Sob `Number`, isto virava NaN e a linha caía calada para o preço de
-  // tabela: o valor negociado com o cliente sumia do orçamento.
-  assert.equal(itens[0].valor_unitario, 1899.9);
-  assert.equal(itens[0].preco_de_tabela, false);
-});
-
-// ---------------------------------------------------------------------------
-// A PEÇA TROCADA NA GRADE
-//
-// O revisor abre a lista da coluna Peça e escolhe outra. A linha passa a
-// apontar a peça nova; o preço lido continua sendo o da anterior — e como o
-// preço do documento vence o de tabela, o orçamento saía com a peça nova pelo
-// valor da abandonada. A grade mostrava o preço certo o tempo todo, então nada
-// na tela dizia que o número que chegava ao cliente era outro.
-//
-// `_lido` é o nome que o DOCUMENTO escreveu, e é ele que responde: se o
-// documento nomeou outra peça do catálogo, quem está na linha foi escolhido à
-// mão e o preço lido não é dele.
-// ---------------------------------------------------------------------------
-
-test('peça trocada na grade não leva o preço da peça anterior', () => {
+test('peça trocada na grade sai pelo preço da peça que ficou', () => {
   const { itens } = montar([{
-    // O documento pediu o Painel (P-200) a 640; o revisor trocou pela Mesa.
+    // O documento pediu o Painel a 640; o revisor trocou pela Mesa.
     codigo: 'P-100', nome: 'Mesa Carvalho', quantidade: 1,
     valor_unitario: 640, _lido: 'Painel Ripado'
   }]);
 
-  // 890 é o praticado da Mesa. 640 era o preço do Painel — vender uma peça
+  // 890 é o registrado da Mesa. 640 era o preço do Painel — vender uma peça
   // pelo preço de outra é o erro que ninguém percebe até o pedido chegar.
   assert.equal(itens[0].valor_unitario, 890);
-  assert.equal(itens[0].preco_de_tabela, true, 'a revisão precisa avisar que usou a tabela');
 });
 
-test('corrigir outro campo da linha não apaga o preço negociado', () => {
+test('preço do documento em texto brasileiro também não entra', () => {
+  const { itens } = montar([
+    { codigo: 'P-100', nome: 'Mesa Carvalho', quantidade: 1, valor_unitario: '1.899,90' }
+  ]);
+
+  // O número do papel não vai ao cliente, esteja ele bem ou mal escrito.
+  assert.equal(itens[0].valor_unitario, 890);
+});
+
+test('peça sem preço na tabela fixa entra com zero e avisada', () => {
   const { itens } = montar([{
-    // Mesma peça de sempre: o revisor só mexeu na quantidade. O `_lido`
-    // diferente do nome do cadastro é o normal de um casamento por semelhança.
-    codigo: 'P-200', nome: 'Painel Ripado', quantidade: 4,
-    valor_unitario: 1000, _lido: 'Painel de Ripas'
+    codigo: 'P-300', nome: 'Banqueta Baixa', quantidade: 1, valor_unitario: 700
   }]);
 
-  assert.equal(itens[0].valor_unitario, 1000, 'o valor negociado com o cliente foi descartado');
-  assert.equal(itens[0].preco_de_tabela, false);
-});
-
-test('nome que o catálogo não conhece não conta como troca de peça', () => {
-  const { itens } = montar([{
-    // O documento chama a peça pelo apelido do cliente. Apontá-la ao catálogo
-    // é traduzir o nome, não trocar a peça — e o valor negociado vale.
-    codigo: 'P-100', nome: 'Mesa Carvalho', quantidade: 1,
-    valor_unitario: 640, _lido: 'Tampo Especial Obra 9x9'
-  }]);
-
-  assert.equal(itens[0].valor_unitario, 640);
-});
-
-test('peça sem preço na tabela entra com zero e avisada', () => {
-  const { itens } = montar([{ codigo: 'P-300', nome: 'Banqueta Baixa', quantidade: 1 }]);
-
-  // Zero é errado, mas é visível. O aviso `preco_de_tabela` é o que faz a
-  // revisão dizer "confira" antes de o orçamento sair.
+  // Zero é errado, mas é visível — e é o que faz a revisão dizer "cadastre o
+  // preço" antes de o orçamento sair. Cair no valor do documento esconderia
+  // uma peça sem preço registrado atrás de um número plausível.
   assert.equal(itens[0].valor_unitario, 0);
-  assert.equal(itens[0].preco_de_tabela, true);
+  assert.equal(itens[0].sem_preco_registrado, true);
 });
 
 test('o catálogo do preenchimento traz a tabela fixa junto', async () => {
@@ -228,6 +204,26 @@ test('de ponta a ponta, o milhar não vira zero', async () => {
   });
 
   assert.equal(carga.itens[0].valor_unitario, 1234.56);
+});
+
+test('a aplicação em lote não tem preço próprio', () => {
+  // Sem os comentários: explicar de onde se veio é justamente o que mantém a
+  // correção viva, e o guarda não pode punir a explicação.
+  const aplicacao = ler('backend', 'iaAplicacao.js')
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/^\s*\/\/.*$/gm, '');
+
+  // Havia TRÊS caminhos para o mesmo orçamento — a grade da revisão, o
+  // formulário do módulo e a aplicação em lote — e este terceiro lia
+  // `/api/produtos` cru, sem a junção da tabela fixa. Sem ela o preço
+  // praticado não existe, e a rota caía no custo apurado: a tela mostrava um
+  // número e o orçamento gravava outro.
+  assert.doesNotMatch(aplicacao, /preco_venda/,
+    'a aplicação em lote voltou a precificar pelo custo apurado');
+  assert.match(aplicacao, /preenchimento\.precoDeVenda\(/,
+    'ela precisa usar a mesma regra de preço do preenchimento');
+  assert.match(aplicacao, /preenchimento\.catalogoDeProdutos\(/,
+    'e o mesmo catálogo, que é quem traz a tabela fixa junto');
 });
 
 test('a regra do preço praticado vive num lugar só', () => {

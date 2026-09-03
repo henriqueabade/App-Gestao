@@ -922,20 +922,20 @@ function anotarPrazo(dados) {
  *
  * O valor lido descreve a peça que o PEDIDO nomeou. Quando o revisor abre a
  * lista da coluna Peça e escolhe outra, aquele número passa a descrever uma
- * peça que não está mais ali — e é o único campo da linha que ninguém consegue
- * corrigir à mão, porque a coluna é de leitura. Guardado, ele ainda venceria
- * três vezes: como desempate no casamento, como número mostrado na grade
- * quando a peça nova não tem preço praticado, e como preço final no orçamento,
- * que prefere o do documento a qualquer outro. O resultado era vender uma peça
- * pelo preço de outra, com a grade mostrando o preço certo o tempo todo.
+ * peça que não está mais ali.
  *
- * Apagado, a linha cai no caminho que já existe para "o documento não disse o
- * preço": vale o praticado da tabela fixa, e o orçamento avisa que foi ele.
+ * Ao orçamento ele já não vai — nenhum preço de documento vai, o registrado na
+ * tabela fixa é soberano (ver `montarItensDeOrcamento`). O que ele ainda faz é
+ * DESEMPATAR o casamento: quando o nome empata entre variantes da mesma
+ * família — as seis "Base Ao Cubo Retangular", P/M/G em dois materiais —,
+ * `casarProduto` recorre ao valor para escolher. Um preço da peça abandonada
+ * guardado ali reapontaria a linha para ela, desfazendo calado a escolha que a
+ * pessoa acabou de fazer.
  *
  * NÃO se compara o nome. A grade mostra o nome do CADASTRO, então uma linha que
  * casou por semelhança já volta com um nome diferente do gravado sem ninguém
- * ter trocado nada — e corrigir a quantidade apagaria o preço negociado. O que
- * se compara é a PEÇA a que cada versão da linha chega.
+ * ter trocado nada — e corrigir a quantidade apagaria o que o documento disse.
+ * O que se compara é a PEÇA a que cada versão da linha chega.
  *
  * Só com as duas listas do mesmo tamanho. Remover ou acrescentar linha desloca
  * as demais, e aí a comparação por posição estaria pareando linhas diferentes;

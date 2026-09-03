@@ -1599,3 +1599,25 @@ header.glass-surface {
     .module-loading-mask { transition: none; }
     .module-enter-after-loading { animation: none; }
 }
+
+/**
+ * BOTÃO NÃO QUEBRA LINHA.
+ *
+ * Quando a barra aperta, o navegador escolhe quebrar o texto do botão — e
+ * "Limpar Tudo" vira duas linhas, empurrando a altura e desalinhando a barra
+ * inteira. O que deve ceder é o espaço ao redor (um título truncado ainda se
+ * lê), nunca o rótulo do botão.
+ *
+ * `menu.css` é global: a regra vale para todos os módulos e modais, que é o
+ * que "nunca" pede. Alcança as classes de ação do app, não `<button>` solto,
+ * para não interferir em controles que legitimamente empilham conteúdo.
+ */
+.btn-primary,
+.btn-secondary,
+.btn-success,
+.btn-danger,
+.btn-warning,
+.btn-neutral,
+.btn-preco-tabela {
+    white-space: nowrap;
+}

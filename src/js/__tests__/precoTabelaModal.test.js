@@ -160,3 +160,36 @@ test('o roxo do botão é o mesmo do ícone de tabela na lista', () => {
     // rótulo — se um mudar sozinho, o par se perde.
     assert.ok(js.includes("cor: '#7300ba'"), 'o ícone da lista deve usar o mesmo roxo');
 });
+
+test('nenhum botão do app quebra o texto em duas linhas', () => {
+    const css = fs.readFileSync(path.join(RAIZ, 'css', 'menu.css'), 'utf8');
+
+    // Quando a barra aperta, o navegador prefere quebrar o rótulo do botão —
+    // "Limpar Tudo" vira duas linhas e desalinha a barra inteira. `menu.css` é
+    // global, então a regra vale para todos os módulos e modais.
+    const bloco = css.slice(css.indexOf('.btn-primary,'));
+    assert.ok(bloco, 'a regra global de nowrap sumiu de menu.css');
+    for (const classe of ['.btn-primary', '.btn-secondary', '.btn-success',
+                          '.btn-danger', '.btn-warning', '.btn-neutral',
+                          '.btn-preco-tabela']) {
+        assert.ok(bloco.includes(classe), `${classe} ficou de fora da regra de nowrap`);
+    }
+    assert.match(bloco, /white-space:\s*nowrap/);
+});
+
+test('no cabeçalho quem cede espaço é o título, não os botões', () => {
+    const html = fs.readFileSync(
+        path.join(RAIZ, 'html', 'modals', 'produtos', 'editar.html'),
+        'utf8'
+    );
+
+    // Com `flex-1` nos três blocos, o grupo de botões encolhia e o texto
+    // quebrava. Agora os botões guardam a largura natural e o título trunca.
+    const titulo = html.split('\n').find(l => l.includes('id="tituloeditar"'));
+    assert.ok(titulo.includes('truncate'), 'o título precisa truncar');
+    assert.ok(titulo.includes('min-w-0'), 'sem min-w-0 o truncate não funciona em flex');
+
+    const grupoBotoes = html.split('\n').find(l => l.includes('justify-end gap-3'));
+    assert.ok(grupoBotoes.includes('flex-shrink-0'), 'o grupo de botões não pode encolher');
+    assert.ok(!grupoBotoes.includes('flex-1'), 'flex-1 no grupo é o que causava a quebra');
+});

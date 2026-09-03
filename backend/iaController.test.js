@@ -3761,25 +3761,53 @@ test('aplicar cria o orçamento pendente com os itens', async () => {
     assert.strictEqual(itens.length, 2);
     assert.strictEqual(Number(itens[0].produto_id), 9);
     assert.strictEqual(Number(itens[0].quantidade), 3);
-    assert.strictEqual(Number(itens[0].valor_unitario), 850);
-    assert.strictEqual(Number(itens[0].valor_total), 2550);
+    // O documento pediu a 850; a tabela fixa registra 1.250. Quem escreve o
+    // pedido não define o preço de venda.
+    assert.strictEqual(Number(itens[0].valor_unitario), 1250);
+    assert.strictEqual(Number(itens[0].valor_total), 3750);
   } finally {
     await ctx.encerrar();
   }
 });
 
-test('item sem preço no documento usa o preço de tabela, e avisa', async () => {
+test('todo item sai pelo preço registrado, tenha o documento dito ou não', async () => {
   const ctx = await prepararOrcamento();
   try {
     const corpo = await (await aplicarEm(ctx, 'orcamentos')).json();
 
     const orc = ctx.tabelas.orcamentos[0];
     const mesa = itensDoOrcamento(ctx, orc.id).find(i => Number(i.produto_id) === 10);
-    // Um pedido de compra costuma listar o que se quer, não quanto custa.
+    // A Mesa veio sem preço no documento; o Painel veio com um. Os dois saem
+    // pelo que a tabela fixa registra, e por isso não há aviso nenhum: nada
+    // aqui precisa de conferência.
     assert.strictEqual(Number(mesa.valor_unitario), 450);
     assert.strictEqual(Number(mesa.valor_total), 900);
-    assert.match(corpo.itens[0].mensagem, /preço de tabela/i);
-    assert.match(corpo.itens[0].mensagem, /Mesa Lateral Carvalho/);
+    assert.doesNotMatch(corpo.itens[0].mensagem, /sem preço na tabela fixa/i);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('peça sem linha na tabela fixa sai zerada, e o aviso diz qual', async () => {
+  const ctx = await prepararOrcamento({
+    itens: [{
+      cliente: 'Casa Vicenzo', razao_social: null, cnpj: null, validade: null,
+      prazo: null, forma_pagamento: null, condicao_pagamento: null, parcelas: null,
+      transportadora: null, contato: null, observacoes: null,
+      // A Bandeja está no catálogo e não tem preço registrado. O documento
+      // traz 300 — e é justamente esse número que não pode entrar: ele
+      // esconderia a peça sem preço atrás de um valor plausível.
+      itens: [{ codigo: 'BV-01', nome: 'Bandeja Vero PP', quantidade: '2', valor_unitario: '300' }]
+    }]
+  });
+  try {
+    const corpo = await (await aplicarEm(ctx, 'orcamentos')).json();
+    const orc = ctx.tabelas.orcamentos[0];
+    const [bandeja] = itensDoOrcamento(ctx, orc.id);
+
+    assert.strictEqual(Number(bandeja.valor_unitario), 0);
+    assert.match(corpo.itens[0].mensagem, /sem preço na tabela fixa/i);
+    assert.match(corpo.itens[0].mensagem, /Bandeja Vero PP/);
   } finally {
     await ctx.encerrar();
   }
@@ -3789,8 +3817,8 @@ test('o total do orçamento é a soma dos itens', async () => {
   const ctx = await prepararOrcamento();
   try {
     await aplicarEm(ctx, 'orcamentos');
-    // 3 × 850 + 2 × 450 = 3450
-    assert.strictEqual(Number(ctx.tabelas.orcamentos[0].valor_final), 3450);
+    // 3 × 1.250 + 2 × 450 = 4650 — os dois preços vêm da tabela fixa.
+    assert.strictEqual(Number(ctx.tabelas.orcamentos[0].valor_final), 4650);
   } finally {
     await ctx.encerrar();
   }
@@ -4349,7 +4377,7 @@ test('o pedido chega com os produtos casados e o cliente apontado', async () => 
   }
 });
 
-test('item de pedido sem preço no documento usa o preço de tabela, avisando', async () => {
+test('item de pedido entra pelo preço registrado, sem aviso a dar', async () => {
   const ctx = await prepararOrcamento({
     itens: [{
       cliente: 'Casa Vicenzo', razao_social: null, cnpj: null, validade: null,
@@ -4359,11 +4387,13 @@ test('item de pedido sem preço no documento usa o preço de tabela, avisando', 
   });
   try {
     const r = await carga(ctx, 5, itensDa(ctx, 5)[0].id);
-    assert.ok(r.itens[0].valor_unitario > 0);
-    assert.strictEqual(r.itens[0].preco_de_tabela, true);
-    // Preço que não veio do documento precisa ser conferido antes de ir ao
-    // cliente — é a diferença entre uma proposta e um chute.
-    assert.ok(r.avisos.some(a => /preço de tabela/i.test(a)), r.avisos.join(' | '));
+    // 1.250 é o registrado do Painel. O documento não disse preço nenhum, e
+    // isso deixou de ser notícia: nenhum orçamento usa o preço do papel.
+    assert.strictEqual(Number(r.itens[0].valor_unitario), 1250);
+    assert.strictEqual(r.itens[0].sem_preco_registrado, false);
+    // O aviso ficou reservado ao caso que ainda precisa de gente: peça sem
+    // preço registrado, que sai zerada.
+    assert.ok(!r.avisos.some(a => /tabela fixa/i.test(a)), r.avisos.join(' | '));
   } finally {
     await ctx.encerrar();
   }
@@ -6407,10 +6437,13 @@ test('trocar por peça sem preço praticado não deixa o preço velho na grade',
 
     const linha = salvo.dados.itens[0];
     assert.strictEqual(linha.codigo, 'BV-01');
-    assert.strictEqual(linha._preco, null, 'a Bandeja não tem preço praticado');
-    // E o preço lido também não sobrou: 850 era do Painel. Guardado, a coluna
-    // de valor mostraria 850 para uma Bandeja — o número que a grade exibe é o
-    // que vai ao cliente, e ninguém consegue corrigi-lo ali.
+    assert.strictEqual(linha._preco, null, 'a Bandeja não tem preço registrado');
+    // E o preço lido também não sobrou: 850 era do Painel.
+    //
+    // Ele já não vai ao orçamento — nenhum preço de documento vai. O que ele
+    // ainda faz é DESEMPATAR o casamento: quando o nome empata entre variantes
+    // da mesma família, `casarProduto` procura pelo valor. Um preço da peça
+    // abandonada ali dentro reapontaria a linha para ela.
     assert.strictEqual(linha.valor_unitario, null, 'o preço do Painel ficou na Bandeja');
   } finally {
     await ctx.encerrar();

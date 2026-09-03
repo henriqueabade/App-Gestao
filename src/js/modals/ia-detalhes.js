@@ -1103,20 +1103,22 @@
           input.classList.add('ia-campo--fixo');
           input.title = 'Vem da peça escolhida — troque a peça para mudar';
 
-          // A coluna de preço tem TRÊS origens possíveis, e dizer sempre
-          // "preço de tabela" escondia duas delas. O que se lê aqui é o que vai
-          // para o cliente, então a célula precisa dizer de onde o número veio.
+          // A coluna de preço mostra o REGISTRADO no sistema, e só ele.
+          //
+          // Antes ela caía no valor lido quando a peça não tinha preço
+          // praticado, e o número do documento aparecia sob o rótulo "preço de
+          // tabela" — dizendo que estava registrado um valor que não estava. E
+          // como agora o orçamento nunca usa o preço do papel, mostrá-lo aqui
+          // seria exibir um número que não vai a lugar nenhum.
           if (sc.chave === 'valor_unitario') {
+            input.value = sub?._preco != null ? String(sub._preco) : '';
             if (sub?._preco != null) {
-              input.value = String(sub._preco);
-              input.title = 'Preço praticado da peça escolhida — não se digita aqui';
-            } else if (String(input.value).trim()) {
-              input.title = 'Preço que o documento escreveu — esta peça não tem preço praticado';
+              input.title = 'Preço registrado na tabela fixa — não se digita aqui';
             } else {
-              // Sem praticado e sem valor lido, o orçamento recebe zero. Melhor
-              // descobrir aqui, onde ainda dá para cadastrar o preço da peça.
+              // Sem preço registrado o orçamento sai zerado. Melhor descobrir
+              // aqui, onde ainda dá para cadastrar o preço da peça.
               input.classList.add('ia-campo--faltando');
-              input.title = 'Esta peça não tem preço praticado na tabela fixa — o orçamento sairá zerado';
+              input.title = 'Esta peça não tem preço na tabela fixa — o orçamento sairá zerado';
             }
           }
         }
