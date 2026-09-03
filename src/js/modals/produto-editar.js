@@ -154,6 +154,190 @@
       return;
     }
 
+    // ------------------------------------------------------------------
+    // EDITAR PREÇO (tabela_fixa)
+    //
+    // Atalho para mexer só no preço praticado, sem reabrir a composição da
+    // peça. Grava no MESMO lugar e com a MESMA consequência de marcar
+    // "Atualizar Tabela Fixa" ao salvar: o novo valor é repassado aos
+    // orçamentos em rascunho e pendentes (ver backend/tabelaFixa.js).
+    //
+    // O campo é uma máscara de moeda, não um <input type="number">: o valor
+    // fica sempre formatado como "R$ 1.234,56", inclusive enquanto se digita,
+    // e o usuário nunca precisa escrever nem apagar o "R$". Só dígitos contam
+    // — os dois últimos são os centavos.
+    // ------------------------------------------------------------------
+    const precoTabelaOverlay = document.getElementById('precoTabelaOverlay');
+    const precoTabelaInput = document.getElementById('precoTabelaValor');
+    const precoTabelaBtn = document.getElementById('editarPrecoTabela');
+    const precoTabelaMensagem = document.getElementById('precoTabelaMensagem');
+    const precoTabelaSalvarBtn = document.getElementById('precoTabelaSalvar');
+
+    /** Centavos → "R$ 1.234,56". */
+    function formatarMoedaBR(centavos) {
+      return (Number(centavos || 0) / 100).toLocaleString('pt-BR', {
+        style: 'currency',
+        currency: 'BRL'
+      });
+    }
+
+    /** Só os dígitos importam; os dois últimos são os centavos. */
+    function centavosDoTexto(texto) {
+      const digitos = String(texto ?? '').replace(/\D/g, '');
+      return digitos ? Number(digitos) : 0;
+    }
+
+    if (precoTabelaOverlay && precoTabelaInput && precoTabelaBtn) {
+      let precoTabelaEmAndamento = false;
+
+      const mostrarMensagemPreco = (tipo, texto) => {
+        if (!precoTabelaMensagem) return;
+        precoTabelaMensagem.textContent = texto;
+        precoTabelaMensagem.classList.remove('hidden');
+        precoTabelaMensagem.style.color =
+          tipo === 'erro' ? 'var(--color-red)' : 'var(--color-green)';
+      };
+      const limparMensagemPreco = () => precoTabelaMensagem?.classList.add('hidden');
+
+      // Reformata a cada tecla e mantém o cursor no fim: com a máscara, o
+      // texto muda de tamanho a cada dígito, e deixar o cursor onde estava o
+      // jogaria para o meio do valor.
+      precoTabelaInput.addEventListener('input', () => {
+        precoTabelaInput.value = formatarMoedaBR(centavosDoTexto(precoTabelaInput.value));
+        const fim = precoTabelaInput.value.length;
+        precoTabelaInput.setSelectionRange(fim, fim);
+        limparMensagemPreco();
+      });
+
+      // O "R$" NÃO some ao focar — o campo é sempre um valor formatado. Só
+      // levamos o cursor para o fim, que é onde a digitação faz sentido.
+      precoTabelaInput.addEventListener('focus', () => {
+        requestAnimationFrame(() => {
+          const fim = precoTabelaInput.value.length;
+          precoTabelaInput.setSelectionRange(fim, fim);
+        });
+      });
+
+      const fecharPrecoTabela = () => {
+        precoTabelaOverlay.classList.add('hidden');
+        document.removeEventListener('keydown', escPrecoTabela);
+      };
+
+      function escPrecoTabela(evento) {
+        if (evento.key === 'Escape') {
+          evento.preventDefault();
+          evento.stopPropagation();   // não fecha o modal de produto junto
+          fecharPrecoTabela();
+        }
+      }
+
+      const abrirPrecoTabela = () => {
+        limparMensagemPreco();
+
+        const peca = document.getElementById('precoTabelaPeca');
+        if (peca) {
+          const codigo = produtoSelecionado?.codigo ? `${produtoSelecionado.codigo} — ` : '';
+          peca.textContent = `${codigo}${produtoSelecionado?.nome || ''}`;
+        }
+
+        // Parte do preço praticado ATUAL, não do calculado: é ele que se está
+        // editando. Peça ainda sem linha na tabela fixa abre em zero.
+        const atual = produtoSelecionado?.preco_tabela;
+        precoTabelaInput.value = formatarMoedaBR(
+          atual == null ? 0 : Math.round(Number(atual) * 100)
+        );
+
+        precoTabelaOverlay.classList.remove('hidden');
+        document.addEventListener('keydown', escPrecoTabela);
+        precoTabelaInput.focus();
+      };
+
+      const travarBotaoPreco = travado => {
+        if (!precoTabelaSalvarBtn) return;
+        precoTabelaSalvarBtn.disabled = travado;
+        precoTabelaSalvarBtn.classList.toggle('btn-loading', travado);
+        precoTabelaSalvarBtn.setAttribute('aria-busy', travado ? 'true' : 'false');
+      };
+
+      const salvarPrecoTabela = async () => {
+        if (precoTabelaEmAndamento) return;
+
+        const centavos = centavosDoTexto(precoTabelaInput.value);
+        if (centavos <= 0) {
+          mostrarMensagemPreco('erro', 'Informe um preço maior que zero.');
+          return;
+        }
+        if (typeof window.electronAPI?.gravarPrecoTabela !== 'function') {
+          mostrarMensagemPreco('erro', 'Recurso indisponível nesta versão.');
+          return;
+        }
+
+        precoTabelaEmAndamento = true;
+        travarBotaoPreco(true);
+        try {
+          const valor = centavos / 100;
+          const executar = async () => {
+            const resultado = await window.electronAPI.gravarPrecoTabela({
+              produtoId: produtoSelecionado.id,
+              codigo: produtoSelecionado.codigo,
+              valor
+            });
+
+            // Permissão negada e erro de validação voltam como objeto, não
+            // como exceção: sem esta conferência a tela diria "salvo" para
+            // algo que o processo principal recusou.
+            if (resultado && resultado.success === false) {
+              throw new Error(resultado.message || 'Não foi possível salvar o preço.');
+            }
+
+            // O objeto em memória alimenta a lista e a próxima abertura deste
+            // mesmo diálogo; sem atualizá-lo, reabrir mostraria o valor velho.
+            produtoSelecionado.preco_tabela = valor;
+
+            const remarcados = Number(resultado?.orcamentosAtualizados) || 0;
+            showToast(
+              remarcados > 0
+                ? `Preço salvo. ${remarcados} orçamento(s) em aberto foram atualizados.`
+                : 'Preço de tabela salvo.',
+              'success'
+            );
+
+            if (typeof carregarProdutos === 'function') await carregarProdutos();
+            fecharPrecoTabela();
+          };
+
+          if (typeof window.BotaoAcao?.comCarregamento === 'function') {
+            await window.BotaoAcao.comCarregamento(executar, 'Salvando o preço...');
+          } else {
+            await executar();
+          }
+        } catch (erro) {
+          console.error('Erro ao salvar o preço de tabela', erro);
+          mostrarMensagemPreco('erro', erro?.message || 'Falha ao salvar o preço.');
+        } finally {
+          precoTabelaEmAndamento = false;
+          travarBotaoPreco(false);
+        }
+      };
+
+      precoTabelaBtn.addEventListener('click', abrirPrecoTabela);
+      document.getElementById('precoTabelaCancelar')?.addEventListener('click', fecharPrecoTabela);
+      precoTabelaSalvarBtn?.addEventListener('click', salvarPrecoTabela);
+
+      // Clique fora fecha; clique dentro do cartão não deve vazar para cá.
+      precoTabelaOverlay.addEventListener('click', evento => {
+        if (evento.target === precoTabelaOverlay) fecharPrecoTabela();
+      });
+
+      // Enter salva — o diálogo tem um campo só.
+      precoTabelaInput.addEventListener('keydown', evento => {
+        if (evento.key === 'Enter') {
+          evento.preventDefault();
+          salvarPrecoTabela();
+        }
+      });
+    }
+
     // Abre etapa seguinte sobrepondo o modal atual
     if (comecarBtn) {
       comecarBtn.addEventListener('click', () => {

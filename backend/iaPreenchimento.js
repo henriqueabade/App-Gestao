@@ -601,6 +601,36 @@ function precoDeVenda(produto) {
   return Number.isFinite(n) && n > 0 ? n : null;
 }
 
+/**
+ * O preço lido ainda descreve a peça que está na linha?
+ *
+ * O revisor pode abrir a lista da coluna Peça e escolher outra. A partir daí a
+ * linha aponta uma peça e o preço do documento descreve OUTRA — e como o preço
+ * do documento vence o de tabela, o orçamento sairia com a peça nova pelo valor
+ * da abandonada. É o defeito que ninguém enxerga: a grade da revisão mostra o
+ * preço certo o tempo todo.
+ *
+ * A pergunta é feita ao `_lido`, que é o nome que o DOCUMENTO escreveu e viaja
+ * com a linha. Se o que o documento nomeou é outra peça do catálogo, quem está
+ * ali agora foi escolhido à mão e o preço lido não é dele.
+ *
+ * Duas recusas de propósito:
+ *
+ *   sem `_lido` ........... linha que ninguém corrigiu (o `_lido` só é gravado
+ *                           quando a grade devolve a linha anotada). Nada a
+ *                           conferir: o preço é da peça que o documento pediu.
+ *   `_lido` sem peça ...... o documento chamou a peça por um nome que o
+ *                           catálogo não conhece. Aí não houve troca de peça e
+ *                           sim tradução de nome, e o valor negociado vale.
+ */
+function precoEhDeOutraPeca(linha, produto, porCodigo, porNome, registros) {
+  const lido = texto(linha && linha._lido).trim();
+  if (!lido) return false;
+  const { registro: doDocumento } = casarProduto(null, lido, porCodigo, porNome, registros, null);
+  if (!doDocumento) return false;
+  return Number(doDocumento.id) !== Number(produto.id);
+}
+
 function montarItensDeOrcamento(linhas, porCodigo, porNome, registros = []) {
   const itens = [];
   const semCadastro = [];
@@ -626,7 +656,10 @@ function montarItensDeOrcamento(linhas, porCodigo, porNome, registros = []) {
     // "1.234,56" vira NaN no `Number` — que cairia no `|| 0` e mandaria a peça
     // mais cara do catálogo para o cliente valendo zero.
     const lido = paraDecimal(linha.valor_unitario);
-    const temPreco = Number.isFinite(lido) && lido > 0;
+    // Trocada a peça, o preço lido é da anterior e não conta — a linha cai no
+    // caminho de "o documento não disse o preço", que é o praticado da tabela.
+    const temPreco = Number.isFinite(lido) && lido > 0
+      && !precoEhDeOutraPeca(linha, produto, porCodigo, porNome, registros);
 
     // `precoDeVenda` e não `produto.preco_venda`: o segundo é CUSTO apurado, e
     // é o praticado que vai ao cliente. A grade da revisão já mostrava o

@@ -4578,6 +4578,25 @@ ipcMain.handle('listar-tabela-fixa', async () => {
   return tabelaFixa.listarTabelaFixa();
 });
 
+/**
+ * Grava o preço praticado de UMA peça, direto pelo modal de edição.
+ *
+ * Mesma permissão e mesma consequência de marcar "Atualizar Tabela Fixa" ao
+ * salvar o produto: o novo preço é repassado aos orçamentos em Rascunho e
+ * Pendente. Não é um atalho para escapar dessa regra — é outro caminho até
+ * ela, para quem só quer mexer no preço sem reabrir a composição da peça.
+ */
+ipcMain.handle('gravar-preco-tabela', async (_e, { produtoId, codigo, valor } = {}) => {
+  if (!(await verificarPermissaoIpc('prod.tabela.update'))) return negadoIpc('prod.tabela.update');
+  try {
+    return await tabelaFixa.gravarPrecoTabela({ produtoId, codigo, valor });
+  } catch (err) {
+    console.error('Erro ao gravar o preço de tabela:', err);
+    // A mensagem chega até o modal: "valor inválido" é acionável, "erro" não.
+    return { success: false, code: err?.code || 'ERRO', message: err?.message || 'Não foi possível salvar o preço.' };
+  }
+});
+
 async function waitForAutoLoginDatabaseReady(user) {
   const start = Date.now();
   const hasTimeout = AUTO_LOGIN_DB_WAIT_TIMEOUT_MS > 0;

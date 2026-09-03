@@ -6305,6 +6305,118 @@ test('o preço é o PRATICADO da tabela fixa, não o do documento', async () => 
   }
 });
 
+// ---------------------------------------------------------------------------
+// TROCA DE PEÇA NA GRADE
+//
+// O revisor abre a lista da coluna Peça e escolhe outra. A partir daí a linha
+// descreve uma peça e o preço lido descreve OUTRA — e o preço é o único dado
+// da linha que ninguém consegue corrigir à mão, porque a coluna é de leitura.
+// ---------------------------------------------------------------------------
+
+test('trocar a peça puxa o preço da peça nova', async () => {
+  const ctx = await prepararOrcamento({
+    itens: [{
+      cliente: 'Casa Vicenzo', razao_social: null, cnpj: null, validade: null,
+      prazo: null, forma_pagamento: null, condicao_pagamento: null, parcelas: null,
+      transportadora: null, contato: null, observacoes: null,
+      // Casa por código com o Painel (praticado 1.250) e o documento diz 850.
+      itens: [{ codigo: 'PR-210', nome: 'Painel Ripado', quantidade: '3', valor_unitario: '850,00' }]
+    }]
+  });
+  try {
+    const detalhe = await (await chamar(ctx.porta, '/api/ia/5')).json();
+    const item = detalhe.itens[0];
+    assert.strictEqual(item.dados.itens[0]._preco, 1250);
+
+    // O que a grade manda ao trocar o NOME: os campos que vêm da peça saem
+    // junto (é o que `aoTrocarONome` monta do lado do modal).
+    const trocado = item.dados.itens.map(x => ({
+      ...x, nome: 'Mesa Lateral Carvalho', codigo: null, _cadastro: null, _preco: null
+    }));
+    const resp = await chamar(ctx.porta, `/api/ia/5/itens/${item.id}`, {
+      method: 'PUT',
+      body: JSON.stringify({ dados: { itens: trocado } })
+    });
+    const salvo = await resp.json();
+    assert.strictEqual(resp.status, 200, JSON.stringify(salvo));
+
+    const linha = salvo.dados.itens[0];
+    assert.strictEqual(linha._cadastro, 'Mesa Lateral Carvalho');
+    assert.strictEqual(linha.codigo, 'ML-01');
+    // 450 é o praticado da Mesa. 1250 seria o da peça abandonada.
+    assert.strictEqual(linha._preco, 450, 'o preço não acompanhou a troca');
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('a peça trocada chega ao orçamento pelo preço dela', async () => {
+  const ctx = await prepararOrcamento({
+    itens: [{
+      cliente: 'Casa Vicenzo', razao_social: null, cnpj: null, validade: null,
+      prazo: null, forma_pagamento: null, condicao_pagamento: null, parcelas: null,
+      transportadora: null, contato: null, observacoes: null,
+      itens: [{ codigo: 'PR-210', nome: 'Painel Ripado', quantidade: '3', valor_unitario: '850,00' }]
+    }]
+  });
+  try {
+    const detalhe = await (await chamar(ctx.porta, '/api/ia/5')).json();
+    const item = detalhe.itens[0];
+    const trocado = item.dados.itens.map(x => ({
+      ...x, nome: 'Mesa Lateral Carvalho', codigo: null, _cadastro: null, _preco: null
+    }));
+    await chamar(ctx.porta, `/api/ia/5/itens/${item.id}`, {
+      method: 'PUT',
+      body: JSON.stringify({ dados: { itens: trocado } })
+    });
+
+    await aplicarEm(ctx, 'orcamentos');
+    const orc = ctx.tabelas.orcamentos[0];
+    const [gravado] = itensDoOrcamento(ctx, orc.id);
+
+    assert.strictEqual(Number(gravado.produto_id), 10, 'foi a peça errada');
+    // 850 era o preço do PAINEL, escrito no documento. Mandá-lo junto com a
+    // Mesa é vender uma peça pelo preço de outra — e a grade mostrou 450.
+    assert.strictEqual(Number(gravado.valor_unitario), 450);
+    assert.strictEqual(Number(gravado.valor_total), 1350);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('trocar por peça sem preço praticado não deixa o preço velho na grade', async () => {
+  const ctx = await prepararOrcamento({
+    itens: [{
+      cliente: 'Casa Vicenzo', razao_social: null, cnpj: null, validade: null,
+      prazo: null, forma_pagamento: null, condicao_pagamento: null, parcelas: null,
+      transportadora: null, contato: null, observacoes: null,
+      itens: [{ codigo: 'PR-210', nome: 'Painel Ripado', quantidade: '3', valor_unitario: '850,00' }]
+    }]
+  });
+  try {
+    const item = (await (await chamar(ctx.porta, '/api/ia/5')).json()).itens[0];
+    // A Bandeja existe no catálogo e NÃO tem linha na tabela fixa: é a peça
+    // que expõe o preço velho, porque não há praticado para cobri-lo.
+    const trocado = item.dados.itens.map(x => ({
+      ...x, nome: 'Bandeja Vero PP', codigo: null, _cadastro: null, _preco: null
+    }));
+    const salvo = await (await chamar(ctx.porta, `/api/ia/5/itens/${item.id}`, {
+      method: 'PUT',
+      body: JSON.stringify({ dados: { itens: trocado } })
+    })).json();
+
+    const linha = salvo.dados.itens[0];
+    assert.strictEqual(linha.codigo, 'BV-01');
+    assert.strictEqual(linha._preco, null, 'a Bandeja não tem preço praticado');
+    // E o preço lido também não sobrou: 850 era do Painel. Guardado, a coluna
+    // de valor mostraria 850 para uma Bandeja — o número que a grade exibe é o
+    // que vai ao cliente, e ninguém consegue corrigi-lo ali.
+    assert.strictEqual(linha.valor_unitario, null, 'o preço do Painel ficou na Bandeja');
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
 test('sem código e sem nome que bata, o PREÇO ainda aponta a peça', () => {
   const { casarProduto, indexarPor } = require('./iaPreenchimento');
   const catalogo = [

@@ -7,6 +7,7 @@
       </div>
       <h2 class="text-lg font-semibold text-white flex-1 text-center" id="tituloeditar">EDITAR PRODUTO</h2>
       <div class="flex-1 flex items-center justify-end gap-3">
+        <button id="editarPrecoTabela" data-perm="prod.tabela.update" type="button" class="btn-preco-tabela px-4 py-2 rounded-lg font-medium">Editar Preço</button>
         <button id="salvarEditarProduto" type="submit" form="editarProdutoForm" class="btn-success px-4 py-2 rounded-lg text-white font-medium flex items-center gap-2">Salvar</button>
         <button id="clonarProduto" data-perm="prod.clone" type="button" class="btn-secondary px-4 py-2 rounded-lg text-white font-medium">Clonar</button>
         <button id="limparTudo" data-perm="prod.clear" type="button" class="btn-danger px-4 py-2 rounded-lg text-white font-medium">Limpar Tudo</button>
@@ -209,5 +210,34 @@
         </div>
       </div>
     </form>
+  </div>
+
+  <!-- Edição do preço praticado (tabela_fixa). Vive dentro do overlay do
+       "Editar Produto" para herdar o empilhamento dele: um overlay solto
+       ficaria atrás do modal que o abriu. -->
+  <div id="precoTabelaOverlay" class="hidden absolute inset-0 z-[10] bg-black/60 flex items-center justify-center p-4">
+    <div role="dialog" aria-modal="true" aria-labelledby="precoTabelaTitulo"
+         class="w-full max-w-md glass-surface backdrop-blur-xl rounded-2xl border border-white/10 ring-1 ring-white/5 shadow-2xl/40 animate-modalFade">
+      <div class="px-6 py-5 border-b border-white/10">
+        <h3 id="precoTabelaTitulo" class="text-lg font-semibold text-white">Editar preço</h3>
+        <p id="precoTabelaPeca" class="text-sm text-gray-400 mt-1 truncate"></p>
+      </div>
+
+      <div class="px-6 py-6 space-y-3">
+        <label for="precoTabelaValor" class="block text-sm font-medium text-gray-300">Preço de tabela</label>
+        <input id="precoTabelaValor" type="text" inputmode="decimal" autocomplete="off"
+               class="w-full bg-input border border-inputBorder rounded-lg px-4 py-3 text-white text-lg font-semibold focus:border-primary focus:ring-2 focus:ring-primary/50 transition"
+               placeholder="R$ 0,00" />
+        <p class="text-xs text-gray-400">
+          É o preço praticado nas vendas. Salvar atualiza também os orçamentos em rascunho e pendentes.
+        </p>
+        <p id="precoTabelaMensagem" class="hidden text-sm"></p>
+      </div>
+
+      <div class="px-6 py-4 border-t border-white/10 flex items-center justify-end gap-3">
+        <button id="precoTabelaCancelar" type="button" class="btn-danger px-5 py-2 rounded-lg text-white font-medium min-w-[110px]">Cancelar</button>
+        <button id="precoTabelaSalvar" type="button" class="btn-success px-5 py-2 rounded-lg text-white font-medium min-w-[110px]">Salvar</button>
+      </div>
+    </div>
   </div>
 </div>

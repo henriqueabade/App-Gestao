@@ -90,6 +90,56 @@ test('preço do documento em texto brasileiro é lido, não descartado', () => {
   assert.equal(itens[0].preco_de_tabela, false);
 });
 
+// ---------------------------------------------------------------------------
+// A PEÇA TROCADA NA GRADE
+//
+// O revisor abre a lista da coluna Peça e escolhe outra. A linha passa a
+// apontar a peça nova; o preço lido continua sendo o da anterior — e como o
+// preço do documento vence o de tabela, o orçamento saía com a peça nova pelo
+// valor da abandonada. A grade mostrava o preço certo o tempo todo, então nada
+// na tela dizia que o número que chegava ao cliente era outro.
+//
+// `_lido` é o nome que o DOCUMENTO escreveu, e é ele que responde: se o
+// documento nomeou outra peça do catálogo, quem está na linha foi escolhido à
+// mão e o preço lido não é dele.
+// ---------------------------------------------------------------------------
+
+test('peça trocada na grade não leva o preço da peça anterior', () => {
+  const { itens } = montar([{
+    // O documento pediu o Painel (P-200) a 640; o revisor trocou pela Mesa.
+    codigo: 'P-100', nome: 'Mesa Carvalho', quantidade: 1,
+    valor_unitario: 640, _lido: 'Painel Ripado'
+  }]);
+
+  // 890 é o praticado da Mesa. 640 era o preço do Painel — vender uma peça
+  // pelo preço de outra é o erro que ninguém percebe até o pedido chegar.
+  assert.equal(itens[0].valor_unitario, 890);
+  assert.equal(itens[0].preco_de_tabela, true, 'a revisão precisa avisar que usou a tabela');
+});
+
+test('corrigir outro campo da linha não apaga o preço negociado', () => {
+  const { itens } = montar([{
+    // Mesma peça de sempre: o revisor só mexeu na quantidade. O `_lido`
+    // diferente do nome do cadastro é o normal de um casamento por semelhança.
+    codigo: 'P-200', nome: 'Painel Ripado', quantidade: 4,
+    valor_unitario: 1000, _lido: 'Painel de Ripas'
+  }]);
+
+  assert.equal(itens[0].valor_unitario, 1000, 'o valor negociado com o cliente foi descartado');
+  assert.equal(itens[0].preco_de_tabela, false);
+});
+
+test('nome que o catálogo não conhece não conta como troca de peça', () => {
+  const { itens } = montar([{
+    // O documento chama a peça pelo apelido do cliente. Apontá-la ao catálogo
+    // é traduzir o nome, não trocar a peça — e o valor negociado vale.
+    codigo: 'P-100', nome: 'Mesa Carvalho', quantidade: 1,
+    valor_unitario: 640, _lido: 'Tampo Especial Obra 9x9'
+  }]);
+
+  assert.equal(itens[0].valor_unitario, 640);
+});
+
 test('peça sem preço na tabela entra com zero e avisada', () => {
   const { itens } = montar([{ codigo: 'P-300', nome: 'Banqueta Baixa', quantidade: 1 }]);
 

@@ -917,6 +917,45 @@ function anotarPrazo(dados) {
   return dias.length ? { ...dados, prazo: dias.join('/') } : dados;
 }
 
+/**
+ * Trocar a peça de uma linha invalida o preço que o documento escreveu.
+ *
+ * O valor lido descreve a peça que o PEDIDO nomeou. Quando o revisor abre a
+ * lista da coluna Peça e escolhe outra, aquele número passa a descrever uma
+ * peça que não está mais ali — e é o único campo da linha que ninguém consegue
+ * corrigir à mão, porque a coluna é de leitura. Guardado, ele ainda venceria
+ * três vezes: como desempate no casamento, como número mostrado na grade
+ * quando a peça nova não tem preço praticado, e como preço final no orçamento,
+ * que prefere o do documento a qualquer outro. O resultado era vender uma peça
+ * pelo preço de outra, com a grade mostrando o preço certo o tempo todo.
+ *
+ * Apagado, a linha cai no caminho que já existe para "o documento não disse o
+ * preço": vale o praticado da tabela fixa, e o orçamento avisa que foi ele.
+ *
+ * NÃO se compara o nome. A grade mostra o nome do CADASTRO, então uma linha que
+ * casou por semelhança já volta com um nome diferente do gravado sem ninguém
+ * ter trocado nada — e corrigir a quantidade apagaria o preço negociado. O que
+ * se compara é a PEÇA a que cada versão da linha chega.
+ *
+ * Só com as duas listas do mesmo tamanho. Remover ou acrescentar linha desloca
+ * as demais, e aí a comparação por posição estaria pareando linhas diferentes;
+ * nesses casos nenhuma peça mudou de lugar sozinha, então não há o que fazer.
+ */
+function esquecerPrecoDaPecaTrocada(antes, depois, produtos) {
+  if (!Array.isArray(depois) || !Array.isArray(antes)) return depois;
+  if (antes.length !== depois.length) return depois;
+
+  const porCodigo = preenchimento.indexarPor(produtos, 'codigo');
+  const porNome = preenchimento.indexarPor(produtos, 'nome');
+  const pecaDe = linha => preenchimento.casarProduto(
+    linha?.codigo, texto(linha?.nome), porCodigo, porNome, produtos, linha?.valor_unitario
+  ).registro?.id ?? null;
+
+  return depois.map((linha, i) => (
+    pecaDe(antes[i]) === pecaDe(linha) ? linha : { ...linha, valor_unitario: null }
+  ));
+}
+
 function anotarProdutos(dados, produtos) {
   if (!Array.isArray(dados?.itens)) return anotarPrazo(dados);
 
@@ -1537,6 +1576,32 @@ router.put('/:id/itens/:itemId', exigirPermissao('ia.review.edit'), async (req, 
       throw erro(409, 'Este item já foi gravado no sistema e não pode mais ser editado.');
     }
 
+    // O casamento é REFEITO e devolvido junto.
+    //
+    // As anotações (`_casamento`, `_cadastro`) são conta, não dado: elas não
+    // são gravadas e se refazem a cada leitura do detalhe. Devolver o item sem
+    // elas fazia toda a linha perder os marcadores assim que UM campo era
+    // corrigido — e só voltavam fechando e reabrindo o modal.
+    //
+    // Carregado ANTES da gravação porque o catálogo também decide o que se
+    // grava: é ele que diz para qual peça cada linha aponta, e daí se o preço
+    // lido ainda descreve a peça que está ali (ver `esquecerPrecoDaPecaTrocada`).
+    let materias = [];
+    let etapas = [];
+    let empresa = null;
+    if (extracao.destino === 'produto_insumos') {
+      [materias, etapas] = await Promise.all([
+        api.get('/api/materia_prima').then(listaDe).catch(() => []),
+        api.get('/api/etapas_producao').then(listaDe).catch(() => [])
+      ]);
+    } else if (extracao.destino === 'orcamentos') {
+      const alvos = await alvosDoDestino(api, extracao.destino);
+      [materias, empresa] = await Promise.all([
+        catalogoDeProdutos(api),
+        contextoDeEmpresa(api, extracao.destino, alvos)
+      ]);
+    }
+
     const payload = {};
     const problemas = [];
 
@@ -1569,6 +1634,9 @@ router.put('/:id/itens/:itemId', exigirPermissao('ia.review.edit'), async (req, 
           : valor;
       }
       if (problemas.length) throw erro(400, problemas.join('; '));
+      if (extracao.destino === 'orcamentos') {
+        novos.itens = esquecerPrecoDaPecaTrocada(atual.itens, novos.itens, materias);
+      }
       payload.dados = JSON.stringify(novos);
     }
 
@@ -1617,30 +1685,6 @@ router.put('/:id/itens/:itemId', exigirPermissao('ia.review.edit'), async (req, 
     // Correção do revisor apaga a ressalva da IA: ela falava do valor antigo.
     payload.mensagem = null;
     const salvo = await api.put(`/api/ia_extracao_itens/${itemId}`, payload);
-
-    // O casamento é REFEITO e devolvido junto.
-    //
-    // As anotações (`_casamento`, `_cadastro`) são conta, não dado: elas não
-    // são gravadas e se refazem a cada leitura do detalhe. Devolver o item sem
-    // elas fazia toda a linha perder os marcadores assim que UM campo era
-    // corrigido — e só voltavam fechando e reabrindo o modal.
-    // O mesmo catálogo do detalhe: a anotação é refeita aqui para a linha não
-    // perder os marcadores ao ser corrigida.
-    let materias = [];
-    let etapas = [];
-    let empresa = null;
-    if (extracao.destino === 'produto_insumos') {
-      [materias, etapas] = await Promise.all([
-        api.get('/api/materia_prima').then(listaDe).catch(() => []),
-        api.get('/api/etapas_producao').then(listaDe).catch(() => [])
-      ]);
-    } else if (extracao.destino === 'orcamentos') {
-      const alvos = await alvosDoDestino(api, extracao.destino);
-      [materias, empresa] = await Promise.all([
-        catalogoDeProdutos(api),
-        contextoDeEmpresa(api, extracao.destino, alvos)
-      ]);
-    }
 
     // Marcar a última linha como resolvida fecha a leitura.
     const situacao = await fecharSeNadaPendente(api, id, extracao.status);

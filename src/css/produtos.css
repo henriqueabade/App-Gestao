@@ -522,3 +522,28 @@ textarea:disabled::placeholder {
 @media (prefers-reduced-motion: reduce) {
     .preco-carregando { animation-duration: 1.8s; }
 }
+
+/**
+ * "Editar Preço" no cabeçalho do modal de produto.
+ *
+ * Mesmo roxo do ícone de calculadora na coluna de ações da tabela (#7300ba):
+ * os dois falam do preço de tabela, e a cor é o que amarra um ao outro sem
+ * precisar de rótulo. Texto branco porque o roxo é escuro demais para o preto
+ * dos outros botões de ação.
+ */
+.btn-preco-tabela {
+    background: #7300ba;
+    color: #fff;
+    transition: all 150ms ease;
+}
+
+.btn-preco-tabela:hover:not(:disabled) {
+    background: #8a1ad4;
+    transform: scale(1.05);
+}
+
+.btn-preco-tabela:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+    transform: none;
+}

@@ -920,9 +920,15 @@
    */
   function aoTrocarONome(sub) {
     const limpo = { _cadastro: null, _preco: null };
-    // `codigo` só existe onde o destino declara: numa ficha técnica de insumos
-    // não há código nenhum, e escrever a chave criaria um campo do nada.
+    // `codigo` e `valor_unitario` só existem onde o destino declara: numa ficha
+    // técnica de insumos não há nem código nem preço, e escrever as chaves
+    // criaria campos do nada.
     if (Object.prototype.hasOwnProperty.call(sub, 'codigo')) limpo.codigo = null;
+    // O preço LIDO é da peça anterior, e é o único campo que ninguém consegue
+    // corrigir aqui — a coluna é de leitura. Mantido, ele seguia para o
+    // orçamento por cima do preço da peça nova: a grade mostrava um valor e o
+    // cliente recebia outro. Sem ele, vale o praticado da peça escolhida.
+    if (Object.prototype.hasOwnProperty.call(sub, 'valor_unitario')) limpo.valor_unitario = null;
     return limpo;
   }
 
@@ -1095,11 +1101,23 @@
           // Quem trava o campo é a linha abaixo, e só ela: duas atribuições em
           // sequência escondem qual das duas está valendo.
           input.classList.add('ia-campo--fixo');
-          input.title = sc.chave === 'codigo'
-            ? 'Vem da peça escolhida — troque a peça para mudar'
-            : 'Preço de tabela da peça — não se digita aqui';
-          if (sc.chave === 'valor_unitario' && sub?._preco != null) {
-            input.value = String(sub._preco);
+          input.title = 'Vem da peça escolhida — troque a peça para mudar';
+
+          // A coluna de preço tem TRÊS origens possíveis, e dizer sempre
+          // "preço de tabela" escondia duas delas. O que se lê aqui é o que vai
+          // para o cliente, então a célula precisa dizer de onde o número veio.
+          if (sc.chave === 'valor_unitario') {
+            if (sub?._preco != null) {
+              input.value = String(sub._preco);
+              input.title = 'Preço praticado da peça escolhida — não se digita aqui';
+            } else if (String(input.value).trim()) {
+              input.title = 'Preço que o documento escreveu — esta peça não tem preço praticado';
+            } else {
+              // Sem praticado e sem valor lido, o orçamento recebe zero. Melhor
+              // descobrir aqui, onde ainda dá para cadastrar o preço da peça.
+              input.classList.add('ia-campo--faltando');
+              input.title = 'Esta peça não tem preço praticado na tabela fixa — o orçamento sairá zerado';
+            }
           }
         }
 
