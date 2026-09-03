@@ -83,3 +83,46 @@ test('updateService clears latestVersion when transitioning to up-to-date', asyn
     restore();
   }
 });
+
+// ---------------------------------------------------------------------------
+// A MENSAGEM PRECISA APONTAR A CAUSA CERTA
+//
+// O app instalado pede o feed ao GitHub sem credencial. Se a release está num
+// repositório privado, a resposta é 404 — e o cliente via "servidor de
+// atualização indisponível", como se o servidor estivesse fora. Publicar
+// funcionava (quem publica tem token) e baixar não; a mensagem mandava procurar
+// o defeito no lugar errado.
+// ---------------------------------------------------------------------------
+
+test('404 e 403 não são tratados como servidor fora do ar', () => {
+  const amb = createUpdateServiceWithMocks({ initialResult: null });
+  const servico = amb.updateService;
+  // `decorateError` é interno; o efeito aparece no status depois de um erro.
+  const casos = [
+    'HttpError: 404 Not Found',
+    'HttpError: 403 Forbidden'
+  ];
+
+  for (const mensagem of casos) {
+    const decorado = servico.__testes__.decorateError(new Error(mensagem));
+    assert.strictEqual(decorado.code, 'feed-inacessivel', mensagem);
+    assert.match(decorado.friendlyMessage, /repositório privado/);
+  }
+  amb.restore();
+});
+
+test('sem internet continua sendo sem internet', () => {
+  const amb = createUpdateServiceWithMocks({ initialResult: null });
+  const servico = amb.updateService;
+  const decorado = servico.__testes__.decorateError(new Error('ERR_INTERNET_DISCONNECTED'));
+  assert.strictEqual(decorado.code, 'offline');
+  amb.restore();
+});
+
+test('feed não configurado continua com a mensagem própria', () => {
+  const amb = createUpdateServiceWithMocks({ initialResult: null });
+  const servico = amb.updateService;
+  const decorado = servico.__testes__.decorateError(new Error('no available update'));
+  assert.strictEqual(decorado.code, 'no-feed');
+  amb.restore();
+});

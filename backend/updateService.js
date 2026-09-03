@@ -275,7 +275,16 @@ function decorateError(error) {
     err.code = 'offline';
     err.friendlyMessage = 'Sem conexão com a internet. Tente novamente quando estiver online.';
   } else if (
-    message.includes('404') ||
+    message.includes('404') || message.includes('403')
+  ) {
+    // 404/403 NÃO é servidor fora do ar: é o GitHub recusando o acesso ao feed.
+    // A causa quase sempre é a release estar num repositório PRIVADO — o app
+    // instalado pede o feed sem credencial nenhuma. Publicar funciona (quem
+    // publica tem token) e baixar não, que é exatamente o sintoma confuso.
+    // Dizer "servidor indisponível" mandava procurar defeito no lugar errado.
+    err.code = 'feed-inacessivel';
+    err.friendlyMessage = 'O servidor de atualização recusou o acesso — a release pode estar num repositório privado. Avise o administrador.';
+  } else if (
     message.includes('no available update') ||
     message.toLowerCase().includes('feed de atualização não configurado') ||
     message.toLowerCase().includes('update feed not configured')
@@ -504,5 +513,8 @@ module.exports = {
   },
   resetCachedState,
   ensureAppReady,
-  recordFeedConfiguration
+  recordFeedConfiguration,
+  // Exposto só para teste: a tradução do erro em mensagem é o que o usuário lê,
+  // e foi ela que mandou procurar o problema no lugar errado.
+  __testes__: { decorateError }
 };

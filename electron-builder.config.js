@@ -41,13 +41,24 @@ module.exports = {
     include: path.join('build', 'installer.nsh')
   },
 
-  // 🔧 ALTERE SOMENTE ESTES DOIS CAMPOS:
+  // ---------------------------------------------------------------------------
+  // ONDE O INSTALADOR É PUBLICADO — e de onde os clientes vão BAIXAR.
+  //
+  // São os mesmos valores que backend/publisher.js já lia do .env; aqui estavam
+  // fixos, então mexer no .env não surtia efeito nenhum.
+  //
+  // ATENÇÃO ao repositório escolhido: o app instalado pede o feed de atualização
+  // ao GitHub SEM CREDENCIAL. Em repositório privado a resposta é 404, e o
+  // cliente vê "servidor de atualização indisponível" — publicar funciona (quem
+  // publica tem token), baixar não. O repositório apontado aqui precisa ser
+  // PÚBLICO.
+  // ---------------------------------------------------------------------------
   publish: [
     {
       provider: 'github',
-      owner: 'henriqueabade', // ex.: "henriqueabade"
-      repo: 'App-Gestao',   // ex.: "App-Gestao"
-      releaseType: 'release'       // 'draft' para testes; use 'release' se preferir publicar final
+      owner: process.env.ELECTRON_PUBLISH_GITHUB_OWNER || 'henriqueabade',
+      repo: process.env.ELECTRON_PUBLISH_GITHUB_REPO || 'App-Gestao',
+      releaseType: process.env.ELECTRON_PUBLISH_GITHUB_RELEASE_TYPE || 'release'
     }
   ]
 };
