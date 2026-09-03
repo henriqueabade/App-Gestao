@@ -404,6 +404,14 @@
             aplicarValor(el, valor);
             aplicados++;
         });
+        // O que voltou para a tela ainda não está no banco. A guarda de
+        // saída ignora preenchimento feito por código (senão todo modal de
+        // edição perguntaria ao abrir), então avisamos na mão: aqui o
+        // conteúdo É trabalho da pessoa esperando para ser salvo.
+        if (aplicados > 0) {
+            const overlay = raiz.closest?.('[id$="Overlay"]') || raiz;
+            window.SaidaSegura?.marcarAlterado?.(overlay);
+        }
         return aplicados;
     }
 

@@ -75,8 +75,8 @@
 
     <footer class="flex justify-end items-center gap-4 px-8 py-6 border-t border-white/10 flex-shrink-0">
       <button id="cancelarPedidoFecharFooter" class="btn-danger px-6 py-3 rounded-lg text-white font-medium">Voltar Sem Cancelar</button>
-      <button id="cancelarPedidoResetDestinos" data-perm="ped.stock.restore_on_cancel" class="btn-secondary px-6 py-3 rounded-lg text-white font-medium hidden">Reiniciar Destinação</button>
-      <button id="cancelarPedidoConfirmar" data-perm="ped.cancel" class="btn-success px-6 py-3 rounded-lg text-white font-medium" disabled>
+      <button id="cancelarPedidoResetDestinos" data-sem-guarda data-perm="ped.stock.restore_on_cancel" class="btn-secondary px-6 py-3 rounded-lg text-white font-medium hidden">Reiniciar Destinação</button>
+      <button id="cancelarPedidoConfirmar" data-sem-guarda data-perm="ped.cancel" class="btn-success px-6 py-3 rounded-lg text-white font-medium" disabled>
         Confirmar Cancelamento
       </button>
     </footer>
@@ -92,7 +92,7 @@
           <h3 class="text-lg font-semibold text-white">Realocar Item</h3>
           <p id="cancelarPedidoDrawerItem" class="text-gray-300 text-sm"></p>
         </div>
-        <button id="cancelarPedidoDrawerFechar" class="btn-ghost p-2 rounded-lg text-white flex items-center justify-center" aria-label="Fechar">
+        <button id="cancelarPedidoDrawerFechar" data-sem-guarda class="btn-ghost p-2 rounded-lg text-white flex items-center justify-center" aria-label="Fechar">
           <i class="fas fa-times" aria-hidden="true"></i>
         </button>
       </header>
