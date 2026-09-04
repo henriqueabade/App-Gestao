@@ -600,6 +600,38 @@ body {
     background: rgba(255, 255, 255, 0.04);
 }
 
+/* Reenviar o arquivo para ser lido de novo. Mesma moldura discreta do botão de
+   copiar, ao lado do qual ele mora — mas classe própria: são ações diferentes,
+   e o dia em que uma mudar de aparência a outra não pode ir junto. */
+.ia-btn-reler {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: rgba(255, 255, 255, 0.04);
+    color: rgba(255, 255, 255, 0.55);
+    font-size: 12px;
+    cursor: pointer;
+    transition: color 150ms ease, background 150ms ease, border-color 150ms ease;
+}
+
+.ia-btn-reler:hover {
+    color: var(--color-primary);
+    border-color: rgba(182, 160, 62, 0.45);
+    background: var(--color-primary-opacity, rgba(182, 160, 62, 0.1));
+}
+
+/* Cartão de arquivo escolhido. O realce é na borda esquerda, como o da linha
+   marcada na grade — é o mesmo gesto, e vale a pessoa reconhecê-lo. */
+.ia-provedor--marcado {
+    border-color: rgba(182, 160, 62, 0.45);
+    box-shadow: inset 3px 0 0 var(--color-primary);
+}
+
 .ia-provedor__estado {
     display: inline-flex;
     align-items: center;

@@ -41,6 +41,8 @@ const COLUNAS = {
   ],
   ia_extracao_itens: [
     'id', 'extracao_id', 'linha', 'dados', 'acao', 'alvo_tabela', 'alvo_id',
+    // backend/scripts/ddl_ia_item_arquivo.sql
+    'arquivo_id',
     'confianca', 'status', 'mensagem', 'criado_em', 'aplicado_em'
   ],
   materia_prima: ['id', 'nome', 'quantidade', 'preco_unitario', 'categoria', 'unidade',
@@ -1637,6 +1639,305 @@ test('a extração transforma o texto guardado em itens', async () => {
 
     // O modelo usado fica registrado, como o de leitura.
     assert.strictEqual(ctx.tabelas.ia_extracoes.find(e => e.id === 4).modelo_llm, 'llama-de-teste');
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+// ---------------------------------------------------------------------------
+// LER DE NOVO UM ARQUIVO, REENVIANDO-O
+//
+// O documento original nao fica guardado: o upload le os bytes e grava so o
+// TEXTO. Reler exige o arquivo de volta — e o que muda e so a linha dele.
+// ---------------------------------------------------------------------------
+
+/** Reenvia UM arquivo para a linha que ja existe. */
+async function relerArquivo(porta, { extracao = 4, arquivo = 41, nome, conteudo, mime, usuario = 1 }) {
+  const form = new FormData();
+  form.append('arquivo', new Blob([conteudo], { type: mime || 'text/csv' }), nome);
+  return fetch(`http://127.0.0.1:${porta}/api/ia/${extracao}/arquivos/${arquivo}/conteudo`, {
+    method: 'PUT',
+    headers: { authorization: `Bearer ${tokenDe(usuario)}` },
+    body: form
+  });
+}
+
+const CSV_NOVO = Buffer.from('nome;quantidade;preco\nCola PVA extra 1kg;9;20,00\n', 'utf8');
+
+test('reler um arquivo sobrepõe o texto dele e não toca nos outros', async () => {
+  const ctx = await montarComIA(baseComDoisArquivos());
+  try {
+    const resp = await relerArquivo(ctx.porta, {
+      arquivo: 41, nome: 'bralux-corrigido.csv', conteudo: CSV_NOVO
+    });
+    assert.strictEqual(resp.status, 200, JSON.stringify(await resp.json()));
+
+    const arquivos = ctx.tabelas.ia_extracao_arquivos.filter(a => a.extracao_id === 4);
+    const relido = arquivos.find(a => a.id === 41);
+    const intocado = arquivos.find(a => a.id === 42);
+
+    // A linha é a MESMA — muda o que ela guarda.
+    assert.strictEqual(arquivos.length, 2, 'reler criou uma linha nova em vez de sobrepor');
+    assert.strictEqual(relido.nome_arquivo, 'bralux-corrigido.csv');
+    assert.match(relido.texto, /Cola PVA extra 1kg/);
+    assert.doesNotMatch(relido.texto, /MDF 15mm Branco TX/);
+
+    // E o outro documento segue com o texto que tinha.
+    assert.match(intocado.texto, /Cola PVA extra 1kg \| 9 \| 20,00/);
+    assert.strictEqual(intocado.nome_arquivo, 'segundo.xlsx');
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('o recorte cai junto com o texto que ele recortava', async () => {
+  const dados = baseComDoisArquivos();
+  dados.ia_extracao_arquivos.find(a => a.id === 41).texto_ajustado = 'MDF 15mm Branco TX | 40 | 189,90';
+
+  const ctx = await montarComIA(dados);
+  try {
+    await relerArquivo(ctx.porta, { arquivo: 41, nome: 'novo.csv', conteudo: CSV_NOVO });
+
+    // Mantido, ele mandaria para a IA um pedaço de um documento que não existe
+    // mais — e ninguém veria, porque a tela mostraria o recorte de sempre.
+    const relido = ctx.tabelas.ia_extracao_arquivos.find(a => a.id === 41);
+    assert.strictEqual(relido.texto_ajustado, null, 'o recorte antigo sobreviveu ao texto dele');
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('reler não apaga as linhas que o arquivo já tinha gerado', async () => {
+  const ctx = await montarComIA(comItensDosDois(baseComDoisArquivos()));
+  try {
+    await relerArquivo(ctx.porta, { arquivo: 41, nome: 'novo.csv', conteudo: CSV_NOVO });
+
+    // Ler e extrair são dois gestos. Apagar aqui jogaria fora correções feitas
+    // à mão sem ninguém ter pedido — quem quiser refazer, extrai de novo.
+    assert.strictEqual(itensDa(ctx, 4).length, 2);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('arquivo com linha já gravada não se relê', async () => {
+  const dados = comItensDosDois(baseComDoisArquivos());
+  dados.ia_extracao_itens.find(i => i.id === 901).status = 'aplicado';
+
+  const ctx = await montarComIA(dados);
+  try {
+    const resp = await relerArquivo(ctx.porta, { arquivo: 41, nome: 'novo.csv', conteudo: CSV_NOVO });
+    assert.strictEqual(resp.status, 409);
+    assert.match((await resp.json()).error, /já tem linha gravada/i);
+
+    // O texto continua o que era.
+    assert.match(ctx.tabelas.ia_extracao_arquivos.find(a => a.id === 41).texto, /MDF 15mm Branco TX/);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('leitura já aplicada não relê arquivo nenhum', async () => {
+  const dados = baseComDoisArquivos();
+  dados.ia_extracoes.find(e => e.id === 4).status = 'aplicada';
+
+  const ctx = await montarComIA(dados);
+  try {
+    const resp = await relerArquivo(ctx.porta, { arquivo: 41, nome: 'novo.csv', conteudo: CSV_NOVO });
+    assert.strictEqual(resp.status, 409);
+    assert.match((await resp.json()).error, /já foi aplicada/i);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('arquivo de outra leitura não se relê por aqui', async () => {
+  const ctx = await montarComIA(baseComDoisArquivos());
+  try {
+    const resp = await relerArquivo(ctx.porta, { arquivo: 99999, nome: 'novo.csv', conteudo: CSV_NOVO });
+    assert.strictEqual(resp.status, 404);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('o detalhe diz quais arquivos ainda podem ser reprocessados', async () => {
+  const dados = comItensDosDois(baseComDoisArquivos());
+  dados.ia_extracao_itens.find(i => i.id === 901).status = 'aplicado';
+
+  const ctx = await montarComIA(dados);
+  try {
+    const corpo = await (await chamar(ctx.porta, '/api/ia/4')).json();
+    const porId = new Map(corpo.arquivos.map(a => [Number(a.id), a]));
+
+    // A tela esconde as ações do arquivo travado; o servidor recusa de
+    // qualquer jeito, mas oferecer um botão que sempre falha é pior.
+    assert.strictEqual(porId.get(41).pode_reprocessar, false);
+    assert.strictEqual(porId.get(42).pode_reprocessar, true);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+// ---------------------------------------------------------------------------
+// EXTRAIR SOMENTE OS ARQUIVOS ESCOLHIDOS
+//
+// Uma leitura com tres documentos e uma revisao de tres documentos. Refazer a
+// extracao de um deles nao pode desfazer o trabalho feito nos outros — e era
+// isso que acontecia: a extracao apagava TODOS os itens nao aplicados antes de
+// inserir os novos.
+// ---------------------------------------------------------------------------
+
+/** Leitura com DOIS arquivos, cada um com o seu texto. */
+function baseComDoisArquivos() {
+  const dados = baseParaEstruturar();
+  dados.ia_extracao_arquivos.push({
+    id: 42, extracao_id: 4, nome_arquivo: 'segundo.xlsx', origem: 'planilha',
+    texto: 'ITEM | QTD | PRECO\nCola PVA extra 1kg | 9 | 20,00'
+  });
+  dados.ia_extracoes.find(e => e.id === 4).arquivos_qtd = 2;
+  return dados;
+}
+
+/** Itens ja revisados, cada um carimbado com o arquivo de onde veio. */
+function comItensDosDois(dados) {
+  dados.ia_extracao_itens.push(
+    {
+      id: 901, extracao_id: 4, linha: 1, arquivo_id: 41, acao: 'criar', status: 'pendente',
+      dados: JSON.stringify({ nome: 'Veio do primeiro', quantidade: 1, unidade: 'UN', preco_unitario: 1, categoria: 'Chapas' })
+    },
+    {
+      id: 902, extracao_id: 4, linha: 2, arquivo_id: 42, acao: 'criar', status: 'pendente',
+      dados: JSON.stringify({ nome: 'Veio do segundo', quantidade: 2, unidade: 'UN', preco_unitario: 2, categoria: 'Chapas' })
+    }
+  );
+  dados.ia_extracoes.find(e => e.id === 4).status = 'revisao';
+  return dados;
+}
+
+const extrair = (ctx, corpo) => chamar(ctx.porta, '/api/ia/4/estruturar', {
+  method: 'POST',
+  ...(corpo ? { body: JSON.stringify(corpo) } : {})
+});
+
+test('extrair um arquivo não apaga os itens dos outros', async () => {
+  const ctx = await montarComIA(comItensDosDois(baseComDoisArquivos()), {},
+    { groq: () => ({ payload: respostaGroq(ITENS_LIDOS) }) });
+  try {
+    const resp = await extrair(ctx, { arquivos: [41] });
+    assert.strictEqual(resp.status, 200, JSON.stringify(await resp.json()));
+
+    const itens = itensDa(ctx, 4);
+    // O item do SEGUNDO arquivo sobreviveu, com o conteúdo que já tinha.
+    const doSegundo = itens.find(i => Number(i.arquivo_id) === 42);
+    assert.ok(doSegundo, 'a extração de um arquivo apagou a revisão do outro');
+    assert.match(doSegundo.dados, /Veio do segundo/);
+
+    // E o do PRIMEIRO foi refeito: os dois itens que o modelo devolveu.
+    const doPrimeiro = itens.filter(i => Number(i.arquivo_id) === 41);
+    assert.strictEqual(doPrimeiro.length, 2);
+    assert.equal(doPrimeiro.some(i => /Veio do primeiro/.test(i.dados)), false,
+      'o item antigo do arquivo escolhido deveria ter sido substituído');
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('só o texto do arquivo escolhido vai para a IA', async () => {
+  const ctx = await montarComIA(comItensDosDois(baseComDoisArquivos()), {},
+    { groq: () => ({ payload: respostaGroq(ITENS_LIDOS) }) });
+  try {
+    await extrair(ctx, { arquivos: [42] });
+
+    const enviado = ctx.groq.chamadas[0].body.messages[1].content;
+    assert.match(enviado, /segundo\.xlsx/);
+    // Mandar o documento inteiro e depois trocar só os itens de um deles
+    // gastaria contexto — e crédito — com o que não se pediu.
+    assert.doesNotMatch(enviado, /bralux\.xlsx/);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('arquivo sem item nenhum apenas ACRESCENTA à tabela', async () => {
+  const dados = baseComDoisArquivos();
+  // Só o primeiro arquivo rendeu itens; o segundo nunca foi extraído.
+  dados.ia_extracao_itens.push({
+    id: 901, extracao_id: 4, linha: 1, arquivo_id: 41, acao: 'criar', status: 'pendente',
+    dados: JSON.stringify({ nome: 'Veio do primeiro', quantidade: 1, unidade: 'UN', preco_unitario: 1, categoria: 'Chapas' })
+  });
+  dados.ia_extracoes.find(e => e.id === 4).status = 'revisao';
+
+  const ctx = await montarComIA(dados, {}, { groq: () => ({ payload: respostaGroq(ITENS_LIDOS) }) });
+  try {
+    await extrair(ctx, { arquivos: [42] });
+
+    const itens = itensDa(ctx, 4);
+    assert.strictEqual(itens.length, 3, 'o que já existia devia continuar e os novos entrar');
+    assert.ok(itens.some(i => /Veio do primeiro/.test(i.dados)));
+    assert.strictEqual(itens.filter(i => Number(i.arquivo_id) === 42).length, 2);
+
+    // E a numeração não fica com buraco nem número repetido: `linha` é a
+    // posição na lista, e uma lista que pula faz procurar o que não existe.
+    assert.deepStrictEqual(itens.map(i => Number(i.linha)), [1, 2, 3]);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('extrair a leitura inteira continua refazendo tudo', async () => {
+  const ctx = await montarComIA(comItensDosDois(baseComDoisArquivos()), {},
+    { groq: () => ({ payload: respostaGroq(ITENS_LIDOS) }) });
+  try {
+    // Sem escolha nenhuma, o comportamento é o de sempre: refazer é refazer.
+    await extrair(ctx);
+
+    const itens = itensDa(ctx, 4);
+    assert.strictEqual(itens.length, 2);
+    assert.equal(itens.some(i => /Veio do/.test(i.dados)), false);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('arquivo com linha já gravada não se extrai de novo', async () => {
+  const dados = comItensDosDois(baseComDoisArquivos());
+  dados.ia_extracao_itens.find(i => i.id === 901).status = 'aplicado';
+
+  const ctx = await montarComIA(dados, {}, { groq: () => ({ payload: respostaGroq(ITENS_LIDOS) }) });
+  try {
+    const resp = await extrair(ctx, { arquivos: [41] });
+    assert.strictEqual(resp.status, 409);
+    assert.match((await resp.json()).error, /já tem linha gravada/i);
+
+    // Nada foi tocado, e nenhum crédito foi gasto.
+    assert.strictEqual(itensDa(ctx, 4).length, 2);
+    assert.strictEqual(ctx.groq.chamadas.length, 0);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('arquivo de outra leitura não entra na escolha', async () => {
+  const dados = comItensDosDois(baseComDoisArquivos());
+  const ctx = await montarComIA(dados, {}, { groq: () => ({ payload: respostaGroq(ITENS_LIDOS) }) });
+  try {
+    const resp = await extrair(ctx, { arquivos: [41, 99999] });
+    assert.strictEqual(resp.status, 400);
+    assert.match((await resp.json()).error, /não é desta leitura/i);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('escolha vazia não é o mesmo que a leitura inteira', async () => {
+  const ctx = await montarComIA(comItensDosDois(baseComDoisArquivos()), {},
+    { groq: () => ({ payload: respostaGroq(ITENS_LIDOS) }) });
+  try {
+    // Um clique perdido não pode reprocessar o lote completo.
+    const resp = await extrair(ctx, { arquivos: [] });
+    assert.strictEqual(resp.status, 400);
+    assert.strictEqual(itensDa(ctx, 4).length, 2);
   } finally {
     await ctx.encerrar();
   }

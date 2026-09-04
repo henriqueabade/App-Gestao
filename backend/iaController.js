@@ -770,6 +770,8 @@ router.get('/:id', exigirPermissao('ia.details.view'), async (req, res) => {
       ]);
     }
 
+    const travados = arquivosTravados(itens);
+
     res.json({
       ...extracao,
       // A grade de revisão é montada a partir DAQUI, não de colunas escritas
@@ -800,6 +802,12 @@ router.get('/:id', exigirPermissao('ia.details.view'), async (req, res) => {
       arquivos: ordenarPorRecente(arquivos).reverse().map(a => ({
         id: a.id,
         nome_arquivo: a.nome_arquivo,
+        // Reler e reextrair valem só enquanto NADA deste arquivo virou
+        // cadastro. Depois disso, mexer nele apagaria as linhas que sobraram
+        // de um documento que já entrou no sistema — e com elas a procedência
+        // do que foi gravado. A tela esconde as duas ações; o servidor recusa
+        // de qualquer jeito.
+        pode_reprocessar: !travados.has(Number(a.id)) && extracao.status !== 'aplicada',
         tipo_mime: a.tipo_mime || null,
         tamanho_bytes: Number(a.tamanho_bytes) || 0,
         origem: a.origem || null,
@@ -820,6 +828,10 @@ router.get('/:id', exigirPermissao('ia.details.view'), async (req, res) => {
           return {
             id: i.id,
             linha: Number(i.linha) || 0,
+            // De qual arquivo esta linha veio. É com ele que a aba de arquivos
+            // diz, ANTES do clique, quantas linhas a extração escolhida vai
+            // substituir. Nulo é linha anterior ao rastreio.
+            arquivo_id: i.arquivo_id ?? null,
             ...anotarLinha(extracao.destino, valor, i, { materias, etapas, empresa }),
             dados_corrompidos: !ok,
             acao: i.acao || 'criar',
@@ -1418,6 +1430,132 @@ router.put('/:id/arquivos/:arquivoId/texto', exigirPermissao('ia.extract'), asyn
   }
 });
 
+/**
+ * Lê de novo UM arquivo da leitura, a partir do arquivo reenviado.
+ *
+ * POR QUE REENVIAR
+ * ----------------
+ * O documento original não fica guardado: o upload lê os bytes e grava só o
+ * TEXTO (ver `multer.memoryStorage()` na rota de criação). Não há o que reler
+ * — o arquivo precisa vir de novo. Guardar os bytes de todo PDF e toda foto
+ * para o caso de alguém querer reler é um preço alto por um caso raro, e não
+ * ajudaria em nada o que já está no sistema.
+ *
+ * SOBREPÕE ESTE, NÃO TOCA NOS OUTROS
+ * ----------------------------------
+ * A linha do arquivo é a mesma — muda o que ela guarda. Os outros documentos
+ * da leitura seguem com o texto que já tinham.
+ *
+ * O RECORTE CAI JUNTO
+ * -------------------
+ * `texto_ajustado` é um pedaço escolhido a dedo DAQUELE texto. Mantido sobre
+ * uma transcrição nova, ele mandaria para a IA um recorte de um documento que
+ * não existe mais — e ninguém veria, porque a tela mostraria o recorte de
+ * sempre.
+ *
+ * AS LINHAS JÁ EXTRAÍDAS FICAM
+ * ----------------------------
+ * Reler e extrair são dois gestos, como o senhor pediu. As linhas que este
+ * arquivo gerou continuam sendo as da leitura ANTERIOR até que se extraia de
+ * novo — apagá-las aqui jogaria fora correções feitas à mão sem ninguém ter
+ * pedido.
+ */
+router.put('/:id/arquivos/:arquivoId/conteudo',
+  exigirPermissao(['ia.upload', 'ia.extract']),
+  upload.single('arquivo'),
+  async (req, res) => {
+    try {
+      const api = createApiClient(req);
+      const id = Number(req.params.id);
+      const arquivoId = Number(req.params.arquivoId);
+      if (!Number.isFinite(id) || !Number.isFinite(arquivoId)) throw erro(400, 'Arquivo inválido');
+
+      // O provedor e os limites podem ter mudado na tela desde o envio.
+      await configArmazenada.carregar(api);
+
+      const extracao = await buscarExtracao(api, id);
+      if (extracao.status === 'aplicada') {
+        throw erro(409, 'Esta leitura já foi aplicada — reler não mudaria o que já entrou no sistema.');
+      }
+
+      const arquivo = await api.get(`/api/ia_extracao_arquivos/${arquivoId}`);
+      if (!arquivo || arquivo.error === 'Not found') throw erro(404, 'Arquivo não encontrado');
+      if (Number(arquivo.extracao_id) !== id) throw erro(404, 'Arquivo não encontrado');
+
+      const travados = arquivosTravados(listaDe(
+        await api.get('/api/ia_extracao_itens', { query: { extracao_id: id } })
+      ));
+      if (travados.has(arquivoId)) {
+        throw erro(409,
+          `"${arquivo.nome_arquivo}" já tem linha gravada no sistema. Reler trocaria o texto de `
+          + 'um documento que já entrou, e a procedência do que foi gravado deixaria de bater.');
+      }
+
+      const enviado = req.file;
+      if (!enviado) throw erro(400, 'Envie o arquivo para ler de novo.');
+
+      // Falha antes de gastar crédito, como no envio: tipo não aceito é
+      // problema de escolha, não de leitura.
+      const classe = leitura.classificarArquivo(enviado.originalname, enviado.mimetype);
+      const cfg = provedores.configuracao();
+      if (classe.origem !== 'planilha' && !cfg.gemini.configurado) {
+        throw erro(400, 'PDF e foto precisam da GEMINI_API_KEY no .env. Planilhas são lidas sem ela.');
+      }
+
+      const lido = await leitura.lerArquivo({
+        nome: enviado.originalname,
+        mime: enviado.mimetype,
+        buffer: enviado.buffer
+      });
+
+      await api.put(`/api/ia_extracao_arquivos/${arquivoId}`, {
+        nome_arquivo: String(enviado.originalname).slice(0, 255),
+        tipo_mime: lido.mime || enviado.mimetype || null,
+        tamanho_bytes: enviado.size ?? null,
+        origem: lido.origem || null,
+        paginas: lido.paginas ?? null,
+        texto: lido.texto || null,
+        texto_ajustado: null,
+        erro: lido.erro || lido.aviso || null
+      });
+
+      // O que esta releitura gastou entra no total da leitura. Sem somar, o
+      // número na tela diria que o documento custou menos do que custou.
+      const entrada = Number(lido?.consumo?.entrada) || 0;
+      const saida = Number(lido?.consumo?.saida) || 0;
+      const paraLeitura = {};
+      if (entrada || saida) {
+        paraLeitura.tokens_ocr_entrada = (Number(extracao.tokens_ocr_entrada) || 0) + entrada;
+        paraLeitura.tokens_ocr_saida = (Number(extracao.tokens_ocr_saida) || 0) + saida;
+        paraLeitura.tokens_entrada = (Number(extracao.tokens_entrada) || 0) + entrada;
+        paraLeitura.tokens_saida = (Number(extracao.tokens_saida) || 0) + saida;
+      }
+      if (lido.modelo) paraLeitura.modelo_ocr = lido.modelo;
+      // Uma leitura que só tinha erro volta a ter caminho quando um arquivo
+      // enfim rende texto.
+      if (extracao.status === 'erro' && lido.texto) paraLeitura.status = 'rascunho';
+      if (Object.keys(paraLeitura).length) {
+        await api.put(`/api/ia_extracoes/${id}`, paraLeitura).catch(() => {});
+      }
+
+      res.json({
+        id: arquivoId,
+        nome_arquivo: String(enviado.originalname).slice(0, 255),
+        tipo_mime: lido.mime || enviado.mimetype || null,
+        tamanho_bytes: enviado.size ?? null,
+        origem: lido.origem || null,
+        paginas: lido.paginas ?? null,
+        texto_tamanho: lido.texto ? String(lido.texto).length : 0,
+        // O recorte foi embora com o texto antigo, e a tela precisa saber.
+        ajustado_tamanho: 0,
+        erro: lido.erro || lido.aviso || null,
+        leitura_status: paraLeitura.status || extracao.status
+      });
+    } catch (err) {
+      responder(res, err, 'PUT /api/ia/:id/arquivos/:arquivoId/conteudo');
+    }
+  });
+
 // ---------------------------------------------------------------------------
 // EXTRAÇÃO DOS DADOS
 //
@@ -1442,6 +1580,19 @@ function textoParaExtrair(arquivo) {
   return recorte || String(arquivo?.texto || '');
 }
 
+/**
+ * A escolha de arquivos que veio do corpo da requisição.
+ *
+ * `null` quer dizer "a leitura inteira", que é o comportamento de sempre —
+ * lista vazia NÃO cai nele: quem manda `[]` está pedindo nada, e tratar isso
+ * como "tudo" reprocessaria o lote completo por causa de um clique perdido.
+ */
+function escolhaDeArquivos(bruto) {
+  if (bruto === undefined || bruto === null) return null;
+  if (!Array.isArray(bruto)) return [];
+  return bruto.map(Number).filter(Number.isFinite);
+}
+
 function juntarTextos(arquivos) {
   return arquivos
     .map(a => ({ nome: a.nome_arquivo, texto: textoParaExtrair(a) }))
@@ -1457,15 +1608,37 @@ function juntarTextos(arquivos) {
  * sem isso, reprocessar dobraria a lista e o revisor aprovaria tudo duas vezes.
  * Itens já APLICADOS ficam: eles viraram estoque, e apagá-los apagaria a
  * procedência de um saldo que existe.
+ *
+ * COM `arquivos` DEFINIDO, A TROCA É SÓ DAQUELES
+ * ----------------------------------------------
+ * Refazer a leitura de UM documento não pode desfazer a revisão dos outros. Só
+ * saem os itens que vieram dos arquivos escolhidos; os demais ficam onde estão,
+ * com as correções que já receberam.
+ *
+ * Item com `arquivo_id` nulo é anterior ao rastreio (ver
+ * `backend/scripts/ddl_ia_item_arquivo.sql`). Numa troca seletiva ele NÃO sai:
+ * não há como saber se veio do arquivo escolhido, e apagar por via das dúvidas
+ * jogaria fora trabalho de outro documento. Na troca da leitura inteira ele sai
+ * como sempre saiu — e a partir daí toda linha nasce carimbada.
  */
-async function trocarItens(api, extracaoId, novos) {
+async function trocarItens(api, extracaoId, novos, arquivos = null) {
+  const seletiva = Array.isArray(arquivos);
+  const escolhidos = new Set((arquivos || []).map(Number));
+
   const atuais = listaDe(
     await api.get('/api/ia_extracao_itens', { query: { extracao_id: extracaoId } })
   );
-  const preservados = atuais.filter(i => i.status === 'aplicado');
-  const descartaveis = atuais.filter(i => i.status !== 'aplicado');
+
+  const daTroca = i => !seletiva || escolhidos.has(Number(i.arquivo_id));
+  const descartaveis = atuais.filter(i => i.status !== 'aplicado' && daTroca(i));
+  const preservados = atuais.filter(i => !descartaveis.includes(i));
 
   await Promise.all(descartaveis.map(i => api.delete(`/api/ia_extracao_itens/${i.id}`)));
+
+  // O arquivo de origem viaja com o item. Numa extração da leitura inteira ele
+  // é o único do lote quando há um só arquivo; com vários, a extração não sabe
+  // separar — e nulo é a resposta honesta.
+  const origem = seletiva && escolhidos.size === 1 ? [...escolhidos][0] : null;
 
   let linha = preservados.length;
   for (const item of novos) {
@@ -1473,6 +1646,7 @@ async function trocarItens(api, extracaoId, novos) {
     await api.post('/api/ia_extracao_itens', {
       extracao_id: extracaoId,
       linha,
+      arquivo_id: origem,
       dados: JSON.stringify(item.dados || {}),
       acao: item.acao || 'criar',
       alvo_tabela: item.alvo_tabela || null,
@@ -1483,7 +1657,42 @@ async function trocarItens(api, extracaoId, novos) {
     });
   }
 
+  // Os preservados ficaram com a numeração antiga e os novos começaram depois
+  // dela: numa troca seletiva isso abre buracos e repete números. `linha` é a
+  // posição na lista, e uma lista que pula de 3 para 7 faz quem revisa procurar
+  // o que não existe.
+  if (seletiva) await renumerar(api, extracaoId);
+
   return preservados.length + novos.length;
+}
+
+/** Renumera as linhas na ordem em que já estão, sem buracos. */
+async function renumerar(api, extracaoId) {
+  const atuais = listaDe(
+    await api.get('/api/ia_extracao_itens', { query: { extracao_id: extracaoId } })
+  ).sort((a, b) => (Number(a.linha) || 0) - (Number(b.linha) || 0) || Number(a.id) - Number(b.id));
+
+  await Promise.all(atuais.map((item, i) => (
+    Number(item.linha) === i + 1
+      ? null
+      : api.put(`/api/ia_extracao_itens/${item.id}`, { linha: i + 1 }).catch(() => {})
+  )).filter(Boolean));
+}
+
+/**
+ * Arquivos cujos itens já viraram cadastro.
+ *
+ * Reler ou reextrair um deles apagaria os itens que restaram de um documento
+ * que JÁ entrou no sistema — e com eles a procedência do que foi gravado. O
+ * senhor pediu que essas ações valessem só para o que ainda está pendente, e é
+ * aqui que isso se decide.
+ */
+function arquivosTravados(itens) {
+  const travados = new Set();
+  for (const i of itens) {
+    if (i.status === 'aplicado' && i.arquivo_id != null) travados.add(Number(i.arquivo_id));
+  }
+  return travados;
 }
 
 router.post('/:id/estruturar', exigirPermissao('ia.extract'), async (req, res) => {
@@ -1507,9 +1716,36 @@ router.post('/:id/estruturar', exigirPermissao('ia.extract'), async (req, res) =
     const arquivos = listaDe(
       await api.get('/api/ia_extracao_arquivos', { query: { extracao_id: id } })
     );
-    const texto = juntarTextos(arquivos);
+
+    // Extração de UM ou de alguns arquivos: refazer a leitura de um documento
+    // não pode desfazer a revisão dos outros.
+    const pedidos = escolhaDeArquivos(req.body?.arquivos);
+    let escolhidos = arquivos;
+    if (pedidos) {
+      const daLeitura = new Set(arquivos.map(a => Number(a.id)));
+      const forasteiro = pedidos.find(x => !daLeitura.has(x));
+      if (forasteiro) throw erro(400, 'Um dos arquivos escolhidos não é desta leitura.');
+
+      const travados = arquivosTravados(listaDe(
+        await api.get('/api/ia_extracao_itens', { query: { extracao_id: id } })
+      ));
+      const travado = pedidos.find(x => travados.has(x));
+      if (travado) {
+        const nome = arquivos.find(a => Number(a.id) === travado)?.nome_arquivo || 'este arquivo';
+        throw erro(409,
+          `"${nome}" já tem linha gravada no sistema. Extrair de novo apagaria as linhas `
+          + 'que sobraram dele, e com elas a procedência do que já entrou.');
+      }
+
+      const escolha = new Set(pedidos);
+      escolhidos = arquivos.filter(a => escolha.has(Number(a.id)));
+    }
+
+    const texto = juntarTextos(escolhidos);
     if (!texto.trim()) {
-      throw erro(400, 'Nenhum arquivo desta leitura tem texto para extrair.');
+      throw erro(400, pedidos
+        ? 'Nenhum dos arquivos escolhidos tem texto para extrair.'
+        : 'Nenhum arquivo desta leitura tem texto para extrair.');
     }
 
     await api.put(`/api/ia_extracoes/${id}`, { status: 'lendo' });
@@ -1525,7 +1761,7 @@ router.post('/:id/estruturar', exigirPermissao('ia.extract'), async (req, res) =
       existentes
     });
 
-    const total = await trocarItens(api, id, itens);
+    const total = await trocarItens(api, id, itens, pedidos);
 
     // Linha descartada e resposta cortada não são detalhe: quem revisa precisa
     // saber que o documento tinha mais do que está na tela — senão confere o

@@ -79,7 +79,20 @@
           <i class="fas fa-file-circle-question text-4xl text-white/20"></i>
           <p class="text-sm text-white/50 mt-3">Nenhum arquivo registrado nesta leitura.</p>
         </div>
+        <!-- Barra da seleção. Só aparece com algum arquivo marcado: uma barra
+             sempre visível competiria com os cartões, que é o que se veio ver. -->
+        <div id="iaDetArquivosBarra"
+             class="hidden items-center justify-between gap-4 rounded-xl border border-white/10 bg-white/5 px-4 py-3">
+          <p id="iaDetArquivosResumo" class="text-xs text-white/60"></p>
+          <button id="iaDetExtrairEscolhidos" type="button" data-perm="ia.extract"
+            class="btn-primary text-white rounded-lg px-4 py-1.5 text-xs font-medium flex-shrink-0">
+            <i class="fas fa-table-list mr-2"></i>Extrair os escolhidos
+          </button>
+        </div>
         <div id="iaDetArquivosLista" class="space-y-3"></div>
+        <!-- Um input só, reusado: o arquivo reenviado vai para o cartão que
+             pediu, guardado em `dataset.arquivo` no momento do clique. -->
+        <input id="iaDetArquivoReenvio" type="file" class="hidden" />
       </section>
 
     </div>

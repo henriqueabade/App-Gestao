@@ -54,6 +54,9 @@ function criarElemento(tag = 'div') {
     removeEventListener(evento, fn) {
       el.ouvintes[evento] = (el.ouvintes[evento] || []).filter(f => f !== fn);
     },
+    // O seletor de arquivo é aberto por código (`campo.click()`), como no
+    // navegador. Sem isto o duplo não chegaria nem a mostrar a caixa.
+    click() { return el.disparar('click'); },
     disparar(evento, detalhe = {}) {
       const e = { type: evento, preventDefault() {}, stopPropagation() {}, ...detalhe };
       for (const fn of el.ouvintes[evento] || []) fn(e);
@@ -175,14 +178,17 @@ function leituraPadrao(extra = {}) {
     explicacoes: { criar: 'Cadastra o insumo', atualizar: 'Dá entrada no que existe' },
     sugestoes: { categoria: ['Chapas', 'Ferragens'], unidade: ['CH', 'UN'] },
     alvos: [{ id: 70, nome: 'MDF 15mm Branco TX' }, { id: 71, nome: 'Cola PVA extra 1kg' }],
-    arquivos: [{ id: 41, nome_arquivo: 'bralux.xlsx', origem: 'planilha', tamanho_bytes: 900, texto_tamanho: 120 }],
+    arquivos: [
+      { id: 41, nome_arquivo: 'bralux.xlsx', origem: 'planilha', tamanho_bytes: 900, texto_tamanho: 120, pode_reprocessar: true },
+      { id: 42, nome_arquivo: 'segundo.xlsx', origem: 'planilha', tamanho_bytes: 400, texto_tamanho: 60, pode_reprocessar: true }
+    ],
     itens: [
       {
-        id: 1, linha: 1, acao: 'atualizar', alvo_id: 70, status: 'pendente', mensagem: null,
+        id: 1, linha: 1, acao: 'atualizar', alvo_id: 70, status: 'pendente', mensagem: null, arquivo_id: 41,
         dados: { nome: 'MDF 15mm Branco TX', quantidade: 40, unidade: 'CH', preco_unitario: 189.9, categoria: 'Chapas', descricao: null }
       },
       {
-        id: 2, linha: 2, acao: 'criar', alvo_id: null, status: 'pendente', mensagem: null,
+        id: 2, linha: 2, acao: 'criar', alvo_id: null, status: 'pendente', mensagem: null, arquivo_id: 42,
         dados: { nome: 'Fita de borda 22mm', quantidade: 500, unidade: 'M', preco_unitario: 1.35, categoria: 'Acabamento', descricao: null }
       }
     ],
@@ -191,7 +197,7 @@ function leituraPadrao(extra = {}) {
 }
 
 function criarBancada({ leitura, respostaPut, respostaAplicar, respostaExtrair,
-  respostaPreenchimento, respostaExcluir, respostaReabrir, confirmar = true } = {}) {
+  respostaPreenchimento, respostaExcluir, respostaReabrir, respostaReenvio, confirmar = true } = {}) {
   const elementos = new Map();
   for (const id of idsDoModal()) {
     const el = criarElemento();
@@ -212,6 +218,7 @@ function criarBancada({ leitura, respostaPut, respostaAplicar, respostaExtrair,
 
   const chamadas = [];
   const excluidos = [];
+  const reenviados = [];
   // Tudo que o modal anuncia para a janela. A tabela do módulo escuta daqui.
   const avisos = [];
   const toasts = [];
@@ -268,6 +275,8 @@ function criarBancada({ leitura, respostaPut, respostaAplicar, respostaExtrair,
     Object,
     Error,
     Date,
+    // O reenvio de arquivo monta um multipart de verdade.
+    FormData: class { constructor() { this.itens = []; } append(k, v) { this.itens.push([k, v]); } },
     CustomEvent: class { constructor(t, i) { this.type = t; this.detail = i?.detail; } },
     Event: class { constructor(t, i) { this.type = t; this.bubbles = Boolean(i?.bubbles); } },
     dispatchEvent(evento) {
@@ -324,7 +333,11 @@ function criarBancada({ leitura, respostaPut, respostaAplicar, respostaExtrair,
     iaLeituraSelecionada: { id: 4, titulo: 'Lista Bralux', status: 'revisao' },
     fetch: async (url, opcoes = {}) => {
       const metodo = opcoes.method || 'GET';
-      const corpo = opcoes.body ? JSON.parse(opcoes.body) : null;
+      // FormData não é JSON — tentar interpretá-lo derrubaria o duplo no
+      // reenvio de arquivo, que é justamente multipart.
+      let corpo = null;
+      if (opcoes.body && typeof opcoes.body === 'string') corpo = JSON.parse(opcoes.body);
+      else if (opcoes.body) corpo = { _form: true };
       chamadas.push({ url, metodo, corpo });
 
       if (metodo === 'GET' && /\/api\/ia\/4$/.test(url)) {
@@ -385,6 +398,18 @@ function criarBancada({ leitura, respostaPut, respostaAplicar, respostaExtrair,
           json: async () => ({ sucesso: true, id, ...(r.corpoExtra || {}) })
         };
       }
+      if (metodo === 'PUT' && /\/arquivos\/(\d+)\/conteudo$/.test(url)) {
+        const r = respostaReenvio || {};
+        if (r.status && r.status >= 400) {
+          return { ok: false, status: r.status, json: async () => r.corpo };
+        }
+        const id = Number(/\/arquivos\/(\d+)\/conteudo$/.exec(url)[1]);
+        reenviados.push({ id, corpo });
+        return {
+          ok: true, status: 200,
+          json: async () => ({ id, texto_tamanho: 300, ajustado_tamanho: 0, erro: null, ...(r.corpoExtra || {}) })
+        };
+      }
       if (metodo === 'POST' && /\/estruturar$/.test(url)) {
         const r = respostaExtrair || { status: 200, corpo: { status: 'revisao', itens_qtd: 2, avisos: [] } };
         return { ok: r.status < 400, status: r.status, json: async () => r.corpo };
@@ -429,6 +454,7 @@ function criarBancada({ leitura, respostaPut, respostaAplicar, respostaExtrair,
     modaisAbertos,
     avisos,
     excluidos,
+    reenviados,
     preenchimentos,
     copiado,
     ancorados,
@@ -1771,6 +1797,131 @@ test('arquivo sem texto não oferece copiar', async () => {
   const copiar = b.el('iaDetArquivosLista').todos()
     .find(f => f.classList.contains('ia-btn-copiar'));
   assert.equal(copiar.disabled, true);
+});
+
+// ---------------------------------------------------------------------------
+// Escolher arquivos: reler e extrair um a um
+//
+// Uma leitura com tres documentos e uma revisao de tres documentos. Refazer um
+// deles nao pode desfazer o trabalho feito nos outros.
+// ---------------------------------------------------------------------------
+
+const cartoesDeArquivo = b => b.el('iaDetArquivosLista').filhos;
+const marcaDoArquivo = (b, id) => b.el('iaDetArquivosLista').todos()
+  .find(f => f.dataset && f.dataset.arquivo === String(id));
+const botaoReler = (b, i = 0) => cartoesDeArquivo(b)[i].todos()
+  .find(f => f.classList.contains('ia-btn-reler'));
+
+test('cada arquivo pode ser escolhido, e a barra só aparece com escolha', async () => {
+  const b = criarBancada();
+  await b.pronta();
+
+  const barra = b.el('iaDetArquivosBarra');
+  assert.ok(barra.classList.contains('hidden'), 'a barra apareceu sem ninguém ter escolhido nada');
+
+  const marca = marcaDoArquivo(b, 41);
+  assert.ok(marca, 'não há como escolher um arquivo');
+  marca.checked = true;
+  marca.disparar('change');
+
+  assert.equal(barra.classList.contains('hidden'), false);
+  // A barra promete o que vai acontecer ANTES do clique: é a parte que
+  // assusta, e precisa estar visível antes, não depois.
+  assert.match(b.el('iaDetArquivosResumo').textContent, /1 arquivo escolhido/);
+  assert.match(b.el('iaDetArquivosResumo').textContent, /1 linha ser[áa] substitu/i);
+});
+
+test('arquivo com linha já gravada não pode ser escolhido nem relido', async () => {
+  const leitura = leituraPadrao();
+  leitura.arquivos[0].pode_reprocessar = false;
+  const b = criarBancada({ leitura });
+  await b.pronta();
+
+  // Mexer nele apagaria o que sobrou de um documento que já entrou no
+  // sistema. O servidor recusa de qualquer jeito, mas oferecer um botão que
+  // sempre falha é pior do que não oferecer.
+  assert.equal(marcaDoArquivo(b, 41), undefined);
+  assert.equal(botaoReler(b, 0), undefined);
+  // O outro segue disponível.
+  assert.ok(marcaDoArquivo(b, 42));
+});
+
+test('extrair os escolhidos manda só eles, e diz o que substitui', async () => {
+  const b = criarBancada();
+  await b.pronta();
+
+  const marca = marcaDoArquivo(b, 42);
+  marca.checked = true;
+  marca.disparar('change');
+  b.el('iaDetExtrairEscolhidos').disparar('click');
+  await b.pronta();
+
+  const caixa = b.confirmacoes.at(-1);
+  assert.match(caixa.message, /1 arquivo\(s\) v[ãa]o ser extra/i);
+  assert.match(caixa.message, /As linhas dos outros arquivos não são tocadas/);
+
+  const chamada = b.chamadas.find(c => /\/estruturar$/.test(c.url));
+  assert.ok(chamada, 'a extração não saiu do navegador');
+  assert.deepEqual(chamada.corpo, { arquivos: [42] });
+});
+
+test('extrair a leitura inteira não manda escolha nenhuma', async () => {
+  const b = criarBancada();
+  await b.pronta();
+
+  b.el('iaDetExtrair').disparar('click');
+  await b.pronta();
+
+  const chamada = b.chamadas.find(c => /\/estruturar$/.test(c.url));
+  // Sem corpo, o servidor faz o de sempre: refazer a leitura inteira. Mandar
+  // uma lista aqui limitaria a extração ao que o clique do botão trouxe.
+  assert.equal(chamada.corpo, null);
+});
+
+test('sem nada escolhido, extrair os escolhidos não chama o servidor', async () => {
+  const b = criarBancada();
+  await b.pronta();
+
+  b.el('iaDetExtrairEscolhidos').disparar('click');
+  await b.pronta();
+
+  assert.equal(b.chamadas.some(c => /\/estruturar$/.test(c.url)), false);
+  assert.match(b.toasts.at(-1).msg, /Nenhum arquivo escolhido/);
+});
+
+test('reler pergunta o que acontece e reenvia só aquele arquivo', async () => {
+  const b = criarBancada();
+  await b.pronta();
+
+  botaoReler(b, 0).disparar('click');
+  // O seletor devolve o arquivo escolhido, como o navegador faria.
+  const campo = b.el('iaDetArquivoReenvio');
+  campo.files = [{ name: 'bralux-corrigido.csv' }];
+  campo.disparar('change');
+  await b.pronta();
+
+  const caixa = b.confirmacoes.at(-1);
+  assert.ok(caixa, 'releu sem perguntar nada');
+  assert.match(caixa.message, /bralux-corrigido\.csv/);
+  assert.match(caixa.message, /Os outros arquivos desta leitura não são tocados/);
+  // O recorte apontava para a transcrição anterior: mantido, mandaria à IA um
+  // pedaço de um documento que não existe mais.
+  assert.match(caixa.message, /recorte de texto deste arquivo.*é descartado/i);
+
+  assert.strictEqual(b.reenviados.at(-1).id, 41);
+});
+
+test('recusar o reenvio não chama o servidor', async () => {
+  const b = criarBancada({ confirmar: false });
+  await b.pronta();
+
+  botaoReler(b, 0).disparar('click');
+  const campo = b.el('iaDetArquivoReenvio');
+  campo.files = [{ name: 'outro.csv' }];
+  campo.disparar('change');
+  await b.pronta();
+
+  assert.strictEqual(b.reenviados.length, 0);
 });
 
 test('"Ver o que foi lido" busca o texto e mostra na tela', async () => {

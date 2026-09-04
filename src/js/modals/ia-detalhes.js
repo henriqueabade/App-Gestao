@@ -1660,7 +1660,11 @@
 
     if (!lista) return;
     vazio?.classList.toggle('hidden', arquivos.length > 0);
-    if (!arquivos.length) { lista.replaceChildren(); return; }
+    if (!arquivos.length) {
+      lista.replaceChildren();
+      pintarBarraDeArquivos(extracaoId, arquivos);
+      return;
+    }
 
     lista.replaceChildren(...arquivos.map(a => {
       const card = document.createElement('div');
@@ -1671,6 +1675,26 @@
 
       const esquerda = document.createElement('div');
       esquerda.className = 'flex items-center gap-3 min-w-0';
+
+      // A caixa de seleção só existe onde ainda há o que refazer. Num arquivo
+      // cujas linhas já viraram cadastro, extrair de novo apagaria o que
+      // sobrou de um documento que já entrou no sistema.
+      if (a.pode_reprocessar) {
+        const marca = document.createElement('input');
+        marca.type = 'checkbox';
+        marca.className = 'ia-selecao flex-shrink-0';
+        marca.dataset.arquivo = String(a.id);
+        marca.checked = arquivosMarcados.has(a.id);
+        marca.title = 'Escolher este arquivo';
+        marca.addEventListener('change', () => {
+          if (marca.checked) arquivosMarcados.add(a.id);
+          else arquivosMarcados.delete(a.id);
+          card.classList.toggle('ia-provedor--marcado', marca.checked);
+          pintarBarraDeArquivos(extracaoId, arquivos);
+        });
+        if (marca.checked) card.classList.add('ia-provedor--marcado');
+        esquerda.appendChild(marca);
+      }
 
       const icone = document.createElement('i');
       icone.className = `fas ${ICONE_ORIGEM[a.origem] || 'fa-file'} text-[var(--color-primary)]`;
@@ -1695,6 +1719,24 @@
 
       const acoes = document.createElement('div');
       acoes.className = 'flex items-center gap-2 flex-shrink-0';
+
+      // Reenviar ESTE arquivo para ser lido de novo.
+      //
+      // O documento original não fica guardado — o envio lê os bytes e grava
+      // só o texto —, então reler é reenviar. Fica no cartão, e não numa ação
+      // em lote, porque é preciso escolher o arquivo no disco: um seletor
+      // múltiplo obrigaria a casar o que a pessoa escolheu com os cartões pelo
+      // nome, e nome de arquivo não é identidade.
+      if (a.pode_reprocessar) {
+        const reler = document.createElement('button');
+        reler.type = 'button';
+        reler.className = 'ia-btn-reler';
+        reler.dataset.reler = String(a.id);
+        reler.title = 'Reenviar este arquivo e ler de novo';
+        reler.innerHTML = '<i class="fas fa-rotate-left"></i>';
+        reler.addEventListener('click', () => pedirArquivoParaReler(extracaoId, a));
+        acoes.appendChild(reler);
+      }
 
       // Copiar o texto lido.
       //
@@ -1741,6 +1783,8 @@
 
       return card;
     }));
+
+    pintarBarraDeArquivos(extracaoId, arquivos);
   }
 
   // ---------------------------------------------------------------------------
@@ -2414,22 +2458,145 @@
     pintarArquivos(dados.id, Array.isArray(dados.arquivos) ? dados.arquivos : []);
   }
 
-  async function extrair() {
+  /** Arquivos marcados na aba de arquivos, por id. */
+  const arquivosMarcados = new Set();
+
+  /**
+   * A barra da seleção, e o que ela promete antes do clique.
+   *
+   * Diz quantos arquivos vão ser extraídos E quantas linhas da lista atual
+   * serão substituídas — que é a parte que assusta e que precisa estar visível
+   * antes, não depois.
+   */
+  function pintarBarraDeArquivos(extracaoId, arquivos) {
+    const barra = get('iaDetArquivosBarra');
+    const resumo = get('iaDetArquivosResumo');
+    if (!barra) return;
+
+    // Marca de arquivo que saiu da lista ou que travou não pode sobreviver a
+    // um recarregamento: ela extrairia o que ninguém escolheu.
+    const validos = new Set(arquivos.filter(a => a.pode_reprocessar).map(a => a.id));
+    for (const id of [...arquivosMarcados]) if (!validos.has(id)) arquivosMarcados.delete(id);
+
+    const marcados = arquivosMarcados.size;
+    barra.classList.toggle('hidden', marcados === 0);
+    barra.classList.toggle('flex', marcados > 0);
+    if (!marcados || !resumo) return;
+
+    const substituidas = (leitura?.itens || [])
+      .filter(i => arquivosMarcados.has(Number(i.arquivo_id)) && i.status !== 'aplicado').length;
+
+    resumo.textContent = `${marcados} arquivo${marcados > 1 ? 's' : ''} escolhido${marcados > 1 ? 's' : ''}`
+      + (substituidas
+        ? ` · ${substituidas} linha${substituidas > 1 ? 's' : ''} ${substituidas > 1 ? 'serão substituídas' : 'será substituída'}`
+        : ' · nenhuma linha da lista atual será mexida');
+  }
+
+  /**
+   * Abre o seletor de arquivo para reler UM cartão.
+   *
+   * O input é um só, reusado: qual cartão pediu fica guardado nele até a
+   * escolha voltar. Um input por cartão encheria a árvore de elementos que
+   * quase nunca são usados.
+   */
+  function pedirArquivoParaReler(extracaoId, arquivo) {
+    const campo = get('iaDetArquivoReenvio');
+    if (!campo) return;
+    campo.dataset.arquivo = String(arquivo.id);
+    campo.dataset.nome = arquivo.nome_arquivo || '';
+    // Zerado antes de abrir: escolher o MESMO arquivo duas vezes seguidas não
+    // dispara `change` se o valor não mudou, e o segundo clique não faria nada.
+    campo.value = '';
+    campo.click();
+  }
+
+  async function relerArquivoEscolhido() {
+    const campo = get('iaDetArquivoReenvio');
+    const enviado = campo?.files?.[0];
+    if (!enviado) return;
+
+    const arquivoId = Number(campo.dataset.arquivo);
+    const nomeAntigo = campo.dataset.nome || 'este arquivo';
+
+    if (window.DialogPadrao?.confirm) {
+      const seguir = await window.DialogPadrao.confirm({
+        title: 'Ler de novo',
+        message: `"${enviado.name}" vai ser lido no lugar de "${nomeAntigo}".\n\n`
+          + 'Os outros arquivos desta leitura não são tocados.\n'
+          + 'O recorte de texto deste arquivo, se houver, é descartado — ele apontava para a '
+          + 'transcrição anterior.\n\n'
+          + 'As linhas que este arquivo já gerou continuam como estão até você extrair de novo.',
+        confirmText: 'Ler de novo',
+        cancelText: 'Voltar'
+      });
+      if (!seguir) { campo.value = ''; return; }
+    }
+
+    try {
+      await comVeu(async () => {
+        const form = new FormData();
+        form.append('arquivo', enviado);
+        const resp = await fetchApi(`/api/ia/${leitura.id}/arquivos/${arquivoId}/conteudo`, {
+          method: 'PUT',
+          body: form
+        });
+        const dados = await resp.json().catch(() => ({}));
+        if (!resp.ok) throw new Error(dados.error || `Erro ${resp.status}`);
+        await carregar();
+        if (dados.erro) showToast(dados.erro, 'error');
+        else if (!dados.texto_tamanho) showToast('O arquivo foi lido, mas não rendeu texto', 'error');
+        else showToast(`${dados.texto_tamanho.toLocaleString('pt-BR')} caracteres lidos`, 'success');
+      });
+      avisarQueMudou();
+    } catch (err) {
+      console.error('Falha ao ler o arquivo de novo', err);
+      showToast(err?.message || 'Não foi possível ler o arquivo', 'error');
+    } finally {
+      campo.value = '';
+    }
+  }
+
+  /** Extrai só os arquivos marcados, sem tocar nas linhas dos outros. */
+  function extrairEscolhidos() {
+    if (!arquivosMarcados.size) { showToast('Nenhum arquivo escolhido', 'info'); return; }
+    return extrair([...arquivosMarcados]);
+  }
+
+  async function extrair(escolhidos = null) {
+    const seletiva = Array.isArray(escolhidos);
+
     // Refazer descarta as correções manuais dos itens pendentes. Perguntar
     // antes é mais barato do que refazer o trabalho de revisão.
     if (leitura?.status === 'revisao' && window.DialogPadrao?.confirm) {
+      const alvo = seletiva
+        ? (leitura.itens || []).filter(i =>
+          escolhidos.includes(Number(i.arquivo_id)) && i.status !== 'aplicado').length
+        : (leitura.itens || []).filter(i => i.status !== 'aplicado').length;
+
       const seguir = await window.DialogPadrao.confirm({
-        title: 'Extrair de novo',
-        message: 'A lista atual será refeita a partir do mesmo texto. '
-          + 'As correções feitas à mão nos itens ainda não aplicados serão perdidas.',
-        confirmText: 'Extrair de novo',
+        title: seletiva ? 'Extrair os escolhidos' : 'Extrair de novo',
+        message: seletiva
+          ? `${escolhidos.length} arquivo(s) vão ser extraídos de novo.\n\n`
+            + (alvo
+              ? `As ${alvo} linha(s) que vieram deles serão substituídas, com as correções feitas à mão.\n`
+              : 'Nenhuma linha da lista atual vem deles — as novas apenas se somam.\n')
+            + 'As linhas dos outros arquivos não são tocadas.'
+          : 'A lista atual será refeita a partir do mesmo texto. '
+            + 'As correções feitas à mão nos itens ainda não aplicados serão perdidas.',
+        confirmText: 'Extrair',
         cancelText: 'Voltar'
       });
       if (!seguir) return;
     }
 
     try {
-      const resp = await fetchApi(`/api/ia/${leitura.id}/estruturar`, { method: 'POST' });
+      const resp = await fetchApi(`/api/ia/${leitura.id}/estruturar`, {
+        method: 'POST',
+        ...(seletiva ? {
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ arquivos: escolhidos })
+        } : {})
+      });
       const dados = await resp.json().catch(() => ({}));
       if (!resp.ok) throw new Error(dados.error || `Erro ${resp.status}`);
 
@@ -2856,7 +3023,11 @@
   // trava de duplo clique, que segura o botão até a ação terminar. Abrir o
   // formulário entra na mesma trava para não empilhar dois modais iguais.
   for (const [id, acao] of [
-    ['iaDetExtrair', extrair],
+    // `() => extrair()` e não `extrair`: o utilitário de botão passa o evento
+    // do clique como primeiro argumento, e ele ocuparia o lugar da escolha de
+    // arquivos.
+    ['iaDetExtrair', () => extrair()],
+    ['iaDetExtrairEscolhidos', extrairEscolhidos],
     ['iaDetAplicar', abrirPrimeiroPendente],
     ['iaDetGravarTodos', gravarTodos],
     ['iaDetDescartar', descartarSelecionados],
@@ -2867,6 +3038,10 @@
     if (window.BotaoAcao?.bind) window.BotaoAcao.bind(botao, acao);
     else botao.addEventListener('click', acao);
   }
+
+  // O reenvio não passa por `BotaoAcao`: quem dispara é a escolha do arquivo,
+  // não um clique.
+  get('iaDetArquivoReenvio')?.addEventListener('change', relerArquivoEscolhido);
 
   // Pinta o que já se sabe pela grade, para o modal nunca aparecer em branco
   // caso a requisição demore.
