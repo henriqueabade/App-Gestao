@@ -751,7 +751,16 @@
         item.total = item.quantidade * (item.preco_unitario || 0);
         cell.innerHTML = `<span class="quantidade-text">${formatNumber(item.quantidade)}</span>`;
         item.totalEl.textContent = formatCurrency(item.total);
-        if(item.id) item.status = 'updated';
+        // `!== 'new'`: uma linha recém-acrescentada NÃO vira "atualizada" só
+        // porque a quantidade foi ajustada antes de salvar.
+        //
+        // Em linha nova, `id` é o id do INSUMO (é assim que ela chega do
+        // seletor, e é por isso que o payload manda `insumo_id: i.insumo_id ??
+        // i.id`). Marcada como atualizada, ela ia para `atualizados` com esse
+        // número, e o salvamento tentava `PUT /produtos_insumos/<id do insumo>`
+        // — 404, porque esse id é de matéria-prima. O insumo acrescentado não
+        // entrava, e as exclusões do mesmo salvamento já tinham sido aplicadas.
+        if(item.id && item.status !== 'new') item.status = 'updated';
         renderActionButtons(item);
         updateProcessTotal(item.processo);
         updateTotals();
@@ -1081,7 +1090,9 @@
         const atual = parseFloat(item.quantidade) || 0;
         item.quantidade = atual + quantidade;
         item.total = item.quantidade * (item.preco_unitario || 0);
-        if(item.id) item.status = 'updated';
+        // Somar sobre uma linha ainda não gravada não a torna "atualizada":
+        // ela continua sendo uma inserção, agora com outra quantidade.
+        if(item.id && item.status !== 'new') item.status = 'updated';
         if(item.row) item.row.querySelector('.quantidade-text').textContent = formatNumber(item.quantidade);
         if(item.unitEl) item.unitEl.textContent = formatCurrency(item.preco_unitario || 0);
         if(item.totalEl) item.totalEl.textContent = formatCurrency(item.total);
@@ -1096,7 +1107,8 @@
           item.preco_unitario = novo.preco_unitario;
           item.processo = novo.processo;
           item.total = item.quantidade * (item.preco_unitario || 0);
-          if(item.id) item.status = 'updated';
+          // Idem: substituir os dados de uma linha nova a mantém nova.
+          if(item.id && item.status !== 'new') item.status = 'updated';
           if(item.row) item.row.querySelector('.quantidade-text').textContent = formatNumber(item.quantidade);
           if(item.unitEl) item.unitEl.textContent = formatCurrency(item.preco_unitario || 0);
           if(item.totalEl) item.totalEl.textContent = formatCurrency(item.total);
