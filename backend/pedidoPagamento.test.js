@@ -68,11 +68,11 @@ function criarUpstream(dados) {
           if (!colunas.includes(chave)) continue;
           linhas = linhas.filter(r => String(r[chave]) === String(valor));
         }
-        if (url.searchParams.get('order') === 'id.desc') {
-          linhas = [...linhas].sort((a, b) => Number(b.id) - Number(a.id));
-        }
-        const limite = Number(url.searchParams.get('limit'));
-        if (Number.isFinite(limite) && limite > 0) linhas = linhas.slice(0, limite);
+        // `order` e `limit` NÃO são honrados, porque a Santissimo-db-API não os
+        // honra: ela devolve a tabela inteira na ordem de inserção. Este duplo
+        // os obedecia, e foi por isso que `getMaxId` pôde passar anos pedindo
+        // "o maior id" e recebendo o MENOR sem nenhum teste reclamar — até a
+        // conversão de orçamento estourar em produção com chave duplicada.
         return responder(200, linhas);
       }
       if (req.method === 'POST') {
