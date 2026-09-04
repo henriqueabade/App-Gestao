@@ -6615,6 +6615,127 @@ test('trocar por peça sem preço praticado não deixa o preço velho na grade',
   }
 });
 
+// ---------------------------------------------------------------------------
+// O CAMINHO PREÇO -> NOME, DE PONTA A PONTA
+//
+// Os testes de unidade abaixo provam `porValor` e `desempatarPorConteudo`
+// isolados. Estes provam o mesmo caminho ATRAVES da grade, da correcao e da
+// aplicacao — que e por onde as mudancas de preco passaram.
+// ---------------------------------------------------------------------------
+
+function baseComDuasVariantes(mesmoPreco) {
+  const dados = baseOrcamento();
+  dados.produtos = [
+    { id: 9, codigo: 'BACR 3060 MNM', nome: 'Base Ao Cubo Retangular G Marron', preco_venda: 1, ncm: '9403' },
+    { id: 10, codigo: 'BACR 3060 NOG', nome: 'Base Ao Cubo Retangular G Nogueira', preco_venda: 1, ncm: '9403' }
+  ];
+  dados.tabela_fixa = [
+    { id: 1, id_prod: 9, cod_prod: 'BACR 3060 MNM', vlr_prod: '2.064,29' },
+    { id: 2, id_prod: 10, cod_prod: 'BACR 3060 NOG', vlr_prod: mesmoPreco ? '2.064,29' : '1.331,04' }
+  ];
+  return dados;
+}
+
+const pedidoComNomeDeCliente = nome => ({
+  itens: [{
+    cliente: 'Casa Vicenzo', razao_social: null, cnpj: null, validade: null,
+    prazo: null, forma_pagamento: null, condicao_pagamento: null, parcelas: null,
+    transportadora: null, contato: null, observacoes: null,
+    itens: [{ codigo: null, nome, quantidade: '2', valor_unitario: '2.064,29' }]
+  }]
+});
+
+test('nome que o catálogo não conhece: o PREÇO ainda traz a peça e o nome dela', async () => {
+  const ctx = await prepararOrcamento(
+    pedidoComNomeDeCliente('ITEM 4 CONFORME PROPOSTA'), baseComDuasVariantes(false));
+  try {
+    const [linha] = (await (await chamar(ctx.porta, '/api/ia/5')).json()).itens[0].dados.itens;
+
+    // O nome do pedido não diz nada ao catálogo. O preço praticado é único, e
+    // é ele que aponta a peça — e traz o nome dela para a grade.
+    assert.strictEqual(linha._casamento, 'valor');
+    assert.strictEqual(linha._cadastro, 'Base Ao Cubo Retangular G Marron');
+    assert.strictEqual(linha.codigo, 'BACR 3060 MNM');
+    assert.strictEqual(linha._lido, 'ITEM 4 CONFORME PROPOSTA');
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('preço empatado: o casamento VOLTA ao nome para escolher a variante', async () => {
+  const ctx = await prepararOrcamento(
+    pedidoComNomeDeCliente('ITEM 4 MARRON CONFORME PROPOSTA'), baseComDuasVariantes(true));
+  try {
+    const [linha] = (await (await chamar(ctx.porta, '/api/ia/5')).json()).itens[0].dados.itens;
+
+    // As duas custam o mesmo: sozinho, o preço não separa nada. Quem decide é
+    // a palavra "Marron", que só uma das duas tem no nome. Sem essa volta ao
+    // nome seriam 50% de chance de vender a variante errada.
+    assert.strictEqual(linha._casamento, 'valor');
+    assert.strictEqual(linha._cadastro, 'Base Ao Cubo Retangular G Marron');
+    assert.strictEqual(linha.codigo, 'BACR 3060 MNM');
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('corrigir outro campo não derruba o casamento por preço', async () => {
+  const ctx = await prepararOrcamento(
+    pedidoComNomeDeCliente('ITEM 4 CONFORME PROPOSTA'), baseComDuasVariantes(false));
+  try {
+    const item = (await (await chamar(ctx.porta, '/api/ia/5')).json()).itens[0];
+
+    // O revisor mexe só na QUANTIDADE. A grade devolve a linha como está na
+    // tela, e é essa lista que passa pela regra que apaga o preço da peça
+    // trocada. Ela não pode disparar aqui: a peça é a mesma.
+    const corrigido = item.dados.itens.map(x => ({ ...x, quantidade: '5' }));
+    const salvo = await (await chamar(ctx.porta, `/api/ia/5/itens/${item.id}`, {
+      method: 'PUT',
+      body: JSON.stringify({ dados: { itens: corrigido } })
+    })).json();
+
+    const linha = salvo.dados.itens[0];
+    assert.strictEqual(linha.codigo, 'BACR 3060 MNM', 'a peça mudou ao corrigir a quantidade');
+    assert.strictEqual(linha._cadastro, 'Base Ao Cubo Retangular G Marron');
+    // E o preço lido continua na linha: é ele que sustenta este casamento a
+    // cada releitura. Apagado, a peça se perderia no próximo carregamento.
+    assert.strictEqual(linha.valor_unitario, 2064.29, 'o preço que sustenta o casamento sumiu');
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('linha reenviada com o nome do cadastro não perde o casamento por preço', async () => {
+  const ctx = await prepararOrcamento(
+    pedidoComNomeDeCliente('ITEM 4 CONFORME PROPOSTA'), baseComDuasVariantes(false));
+  try {
+    const item = (await (await chamar(ctx.porta, '/api/ia/5')).json()).itens[0];
+
+    // A grade MOSTRA o nome do cadastro na coluna Peça. Um cliente que devolva
+    // a linha como ela aparece na tela manda esse nome no lugar do lido — sem
+    // ter trocado peça nenhuma.
+    //
+    // Comparando NOMES, o servidor leria isso como troca e apagaria o preço.
+    // Perdido o preço, a peça se perde junto: é ele, e só ele, que sustenta
+    // este casamento — o nome do pedido não diz nada ao catálogo. Por isso a
+    // comparação é entre as PEÇAS a que cada versão da linha chega.
+    const comoNaTela = item.dados.itens.map(x => ({
+      ...x, nome: x._cadastro, quantidade: '5'
+    }));
+    const salvo = await (await chamar(ctx.porta, `/api/ia/5/itens/${item.id}`, {
+      method: 'PUT',
+      body: JSON.stringify({ dados: { itens: comoNaTela } })
+    })).json();
+
+    const linha = salvo.dados.itens[0];
+    assert.strictEqual(linha.valor_unitario, 2064.29, 'o preço que sustenta o casamento foi apagado');
+    assert.strictEqual(linha.codigo, 'BACR 3060 MNM');
+    assert.strictEqual(linha._cadastro, 'Base Ao Cubo Retangular G Marron');
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
 test('sem código e sem nome que bata, o PREÇO ainda aponta a peça', () => {
   const { casarProduto, indexarPor } = require('./iaPreenchimento');
   const catalogo = [

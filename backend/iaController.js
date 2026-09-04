@@ -932,9 +932,14 @@ function anotarPrazo(dados) {
  * guardado ali reapontaria a linha para ela, desfazendo calado a escolha que a
  * pessoa acabou de fazer.
  *
- * NÃO se compara o nome. A grade mostra o nome do CADASTRO, então uma linha que
- * casou por semelhança já volta com um nome diferente do gravado sem ninguém
- * ter trocado nada — e corrigir a quantidade apagaria o que o documento disse.
+ * NÃO se compara o nome, e o motivo é o casamento por PREÇO.
+ *
+ * A grade mostra na coluna Peça o nome do CADASTRO, não o que o pedido
+ * escreveu. Uma linha devolvida como aparece na tela traz esse nome sem que
+ * ninguém tenha trocado peça nenhuma — e lida como troca, ela perderia o preço.
+ * Numa linha que casou por preço isso derruba a peça junto: o nome do pedido
+ * não diz nada ao catálogo, e o preço é a única coisa que a sustenta.
+ *
  * O que se compara é a PEÇA a que cada versão da linha chega.
  *
  * Só com as duas listas do mesmo tamanho. Remover ou acrescentar linha desloca
