@@ -1589,10 +1589,26 @@ async function salvarProdutoDetalhado(codigoOriginal, produto, itens, produtoId)
   // continuariam mostrando a composição antiga.
   catalogoCache.invalidar();
 
-  // O preço praticado só se move por decisão explícita ("Atualizar Tabela
-  // Fixa"). Um insumo que encareceu muda `preco_venda` acima e para por aí:
-  // reprecificar sozinho o que já foi proposto ao cliente seria o pior dos
-  // efeitos colaterais.
+  // ---------------------------------------------------------------------------
+  // TABELA FIXA: o CÓDIGO acompanha sempre; o PREÇO só por escolha.
+  //
+  // São duas coisas diferentes na mesma linha. "Atualizar Tabela Fixa" é uma
+  // decisão sobre PREÇO — reprecificar ou não o que já foi proposto ao cliente.
+  // O código não é preço: é a identidade da peça, e ela mudou de fato.
+  //
+  // Antes, quem escrevia aqui era só `gravarPrecoTabela`, que grava as duas
+  // colunas de uma vez e só roda com a opção marcada. Editar o código sem
+  // marcá-la deixava `cod_prod` apontando para um código que não existe mais,
+  // calado.
+  // ---------------------------------------------------------------------------
+  const codigoNaTabelaFixa = await tabelaFixa.sincronizarCodigo({
+    produtoId: produtoIdNormalizado,
+    codigo: codigoDestino
+  });
+
+  // O preço praticado só se move por decisão explícita. Um insumo que encareceu
+  // muda `preco_venda` acima e para por aí: reprecificar sozinho o que já foi
+  // proposto ao cliente seria o pior dos efeitos colaterais.
   let tabelaFixaResultado = null;
   if (produto?.atualizar_tabela_fixa === true) {
     tabelaFixaResultado = await tabelaFixa.gravarPrecoTabela({
@@ -1602,7 +1618,7 @@ async function salvarProdutoDetalhado(codigoOriginal, produto, itens, produtoId)
     });
   }
 
-  return { ok: true, tabelaFixa: tabelaFixaResultado };
+  return { ok: true, tabelaFixa: tabelaFixaResultado, tabelaFixaCodigo: codigoNaTabelaFixa };
 }
 
 async function listarColecoes() {

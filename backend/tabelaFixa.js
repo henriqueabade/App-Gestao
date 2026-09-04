@@ -168,6 +168,56 @@ async function gravarPrecoTabela({ produtoId, codigo, valor }) {
   return { produtoId: id, valor: novoValor, orcamentosAtualizados };
 }
 
+/**
+ * Põe o CÓDIGO da linha em dia, sem encostar no preço.
+ *
+ * POR QUE O CÓDIGO NÃO PODE DEPENDER DA ESCOLHA
+ * ---------------------------------------------
+ * "Atualizar Tabela Fixa" é uma decisão sobre PREÇO: reprecificar ou não o que
+ * já foi proposto ao cliente. O código não é preço — é a identidade da peça, e
+ * ela mudou de fato.
+ *
+ * Só que quem gravava aqui era `gravarPrecoTabela`, que escreve as duas
+ * colunas de uma vez e só roda quando a pessoa marca a opção. Editar o código
+ * e NÃO marcar deixava `cod_prod` apontando para um código que não existe mais
+ * — e nada na tela dizia isso, porque a tabela fixa é lida por `id_prod` em
+ * todo o resto do sistema. A divergência só aparecia para quem fosse ler a
+ * tabela pelo código.
+ *
+ * NÃO CRIA LINHA
+ * --------------
+ * Peça sem linha na tabela fixa é peça SEM preço praticado, e o sistema inteiro
+ * conta com isso (ver `anexarPrecoTabela`: null, não zero). Criar uma linha
+ * aqui só para carregar o código novo inventaria um preço de zero — que não é
+ * "sem preço", é uma venda de graça que ninguém aprovou.
+ *
+ * NÃO DERRUBA O SALVAMENTO
+ * ------------------------
+ * A peça já foi gravada quando isto roda. Uma falha aqui vira log e resultado
+ * devolvido ao chamador, como em `registrarPrecoTabela` — perder a edição
+ * inteira por causa de uma coluna de código seria trocar um problema pequeno
+ * por um grande.
+ */
+async function sincronizarCodigo({ produtoId, codigo }) {
+  const id = idNumerico(produtoId);
+  if (id === null) return null;
+
+  const atual = await obterPrecoTabela(id);
+  if (!atual) return null;
+
+  const novo = codigo != null ? String(codigo) : null;
+  const gravado = atual.cod_prod != null ? String(atual.cod_prod) : null;
+  if (gravado === novo) return null;
+
+  try {
+    await pool.put(`${ENDPOINT}/${id}`, { cod_prod: novo });
+    return { produtoId: id, de: gravado, para: novo };
+  } catch (err) {
+    console.error('[tabelaFixa] Falha ao sincronizar o código do produto', id, err?.message || err);
+    return null;
+  }
+}
+
 /** Remove a linha da peça — chamado junto da exclusão do produto. */
 async function removerPrecoTabela(produtoId) {
   const id = idNumerico(produtoId);
@@ -251,6 +301,7 @@ module.exports = {
   anexarPrecoTabela,
   registrarPrecoTabela,
   gravarPrecoTabela,
+  sincronizarCodigo,
   removerPrecoTabela,
   propagarParaOrcamentosAbertos,
   recalcularItem
