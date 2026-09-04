@@ -1227,6 +1227,39 @@ body {
     vertical-align: middle;
 }
 
+/* O caminho de volta de uma linha já enviada, no lugar da caixa de seleção.
+   Discreto em repouso, como o de excluir: a linha enviada é a que menos pede
+   atenção na tabela, e um botão aceso em cada uma delas viraria ruído. */
+.ia-btn-devolver {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    border-radius: 6px;
+    border: 1px solid transparent;
+    background: transparent;
+    color: rgba(255, 255, 255, 0.4);
+    font-size: 12px;
+    cursor: pointer;
+    vertical-align: middle;
+    transition: color 150ms ease, background 150ms ease, border-color 150ms ease;
+}
+
+/* Com fallback: `--color-primary-opacity` não está no `:root` desta folha, e
+   sem ele o hover ficaria sem borda nem fundo — o botão pareceria morto. */
+.ia-btn-devolver:hover {
+    color: var(--color-primary);
+    border-color: rgba(182, 160, 62, 0.45);
+    background: var(--color-primary-opacity, rgba(182, 160, 62, 0.1));
+}
+
+.ia-btn-devolver:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 1px;
+}
+
 /* Linha marcada precisa se distinguir sem competir com os estados que já
    existem (descartada, com erro, aplicada) — daí o realce ser na borda
    esquerda, que nenhum outro estado usa. */

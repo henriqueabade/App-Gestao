@@ -996,6 +996,35 @@ function anotarProdutos(dados, produtos) {
  * podem apontar clientes diferentes. As de `sugestoes` continuam valendo para
  * o que é igual na leitura inteira.
  */
+/**
+ * O que `anotarLinha` precisa, carregado uma vez por requisição.
+ *
+ * As anotações (`_casamento`, `_cadastro`, `_preco`) são conta, não dado: não
+ * são gravadas e se refazem a cada leitura. Toda rota que devolve uma linha
+ * corrigida tem de refazê-las, senão a linha perde os marcadores assim que é
+ * tocada — e eles só voltavam fechando e reabrindo o modal.
+ */
+async function contextoDaAnotacao(api, destino) {
+  if (destino === 'produto_insumos') {
+    const [materias, etapas] = await Promise.all([
+      api.get('/api/materia_prima').then(listaDe).catch(() => []),
+      api.get('/api/etapas_producao').then(listaDe).catch(() => [])
+    ]);
+    return { materias, etapas, empresa: null };
+  }
+
+  if (destino === 'orcamentos') {
+    const alvos = await alvosDoDestino(api, destino);
+    const [materias, empresa] = await Promise.all([
+      catalogoDeProdutos(api),
+      contextoDeEmpresa(api, destino, alvos)
+    ]);
+    return { materias, etapas: [], empresa };
+  }
+
+  return { materias: [], etapas: [], empresa: null };
+}
+
 function anotarLinha(destino, dados, item, ctx) {
   const anotados = anotarCasamento(destino, dados, ctx.materias, ctx.etapas);
   const { dados: comEmpresa, opcoes } = anotarEmpresa(anotados, item, ctx.empresa);
@@ -1586,21 +1615,7 @@ router.put('/:id/itens/:itemId', exigirPermissao('ia.review.edit'), async (req, 
     // Carregado ANTES da gravação porque o catálogo também decide o que se
     // grava: é ele que diz para qual peça cada linha aponta, e daí se o preço
     // lido ainda descreve a peça que está ali (ver `esquecerPrecoDaPecaTrocada`).
-    let materias = [];
-    let etapas = [];
-    let empresa = null;
-    if (extracao.destino === 'produto_insumos') {
-      [materias, etapas] = await Promise.all([
-        api.get('/api/materia_prima').then(listaDe).catch(() => []),
-        api.get('/api/etapas_producao').then(listaDe).catch(() => [])
-      ]);
-    } else if (extracao.destino === 'orcamentos') {
-      const alvos = await alvosDoDestino(api, extracao.destino);
-      [materias, empresa] = await Promise.all([
-        catalogoDeProdutos(api),
-        contextoDeEmpresa(api, extracao.destino, alvos)
-      ]);
-    }
+    const { materias, etapas, empresa } = await contextoDaAnotacao(api, extracao.destino);
 
     const payload = {};
     const problemas = [];
@@ -1854,6 +1869,101 @@ router.post('/:id/aplicar',
  * O que a exclusão NÃO faz é desfazer o cadastro que a linha criou no módulo
  * de destino — aquele registro tem vida própria, e desfazê-lo é lá.
  */
+/**
+ * Devolve à revisão uma linha que já foi gravada.
+ *
+ * O QUE ISTO NÃO FAZ
+ * ------------------
+ * Não desfaz nada no módulo de destino. O orçamento, o insumo, o cliente que a
+ * linha criou continuam lá, com vida própria: quem os apaga é o módulo deles.
+ * Aqui só a LINHA volta a valer, para ser corrigida e aplicada de novo — e
+ * aplicar de novo cria um registro NOVO, não corrige o anterior.
+ *
+ * Rota separada, e não mais um campo no PUT, porque o PUT existe sob a regra
+ * "item gravado não se edita" e a recusa está escrita lá em cima. Abrir uma
+ * exceção dentro dela apagaria a regra para o leitor seguinte.
+ *
+ * SÓ ENQUANTO A LEITURA ESTÁ EM REVISÃO
+ * -------------------------------------
+ * Fechada a leitura — todas as linhas resolvidas —, ela virou histórico e nada
+ * mais se mexe, que é como o resto do módulo já se comporta.
+ *
+ * O DESTINO APONTADO SAI JUNTO, QUANDO A APLICAÇÃO CRIOU O REGISTRO
+ * -----------------------------------------------------------------
+ * Ao aplicar, `alvo_id` deixa de ser "onde isto vai" e passa a ser "o que isto
+ * virou" — no orçamento, o campo que apontava o CLIENTE passa a guardar o id
+ * do orçamento criado. Reaplicar com esse número lá dentro criaria um
+ * orçamento para o cliente de número igual ao do orçamento anterior: lixo
+ * gravado sem erro nenhum na tela. Limpo, a linha volta a pedir o destino,
+ * que é o caminho que o revisor já conhece.
+ *
+ * Em `atualizar` o alvo continua sendo o registro existente — ele nunca deixou
+ * de ser um destino válido, e apagá-lo só daria trabalho a quem reverteu.
+ */
+router.post('/:id/itens/:itemId/reabrir', exigirPermissao('ia.review.edit'), async (req, res) => {
+  try {
+    const api = createApiClient(req);
+    const id = Number(req.params.id);
+    const itemId = Number(req.params.itemId);
+    if (!Number.isFinite(id) || !Number.isFinite(itemId)) throw erro(400, 'Linha inválida');
+
+    const extracao = await buscarExtracao(api, id);
+    if (extracao.status !== 'revisao') {
+      throw erro(409, 'Esta leitura já foi encerrada — as linhas dela não voltam mais para a revisão.');
+    }
+
+    const item = await api.get(`/api/ia_extracao_itens/${itemId}`);
+    if (!item || item.error === 'Not found') throw erro(404, 'Linha não encontrada');
+    if (Number(item.extracao_id) !== id) throw erro(404, 'Linha não encontrada');
+    if (item.status !== 'aplicado') {
+      throw erro(409, 'Esta linha não está enviada — só quem já foi gravado volta para pendente.');
+    }
+
+    const payload = {
+      status: 'pendente',
+      aplicado_em: null,
+      // O id do registro criado é o último rastro dele nesta leitura, e vai
+      // embora junto com `alvo_id`. Guardá-lo na nota é o que permite achar
+      // depois o que esta linha já tinha gravado.
+      mensagem: item.alvo_id
+        ? `Devolvida à revisão. O registro nº ${item.alvo_id} que ela criou continua em `
+          + `${DESTINO_POR_ID.get(extracao.destino)?.rotulo || extracao.destino}.`
+        : 'Devolvida à revisão.'
+    };
+    if (item.acao === 'criar') {
+      payload.alvo_id = null;
+      payload.alvo_tabela = null;
+    }
+
+    const salvo = await api.put(`/api/ia_extracao_itens/${itemId}`, payload);
+
+    // A contagem de aplicados da leitura acabou de ficar velha: ela aparece na
+    // lista do módulo, e um número que não bate com as linhas é pior do que
+    // número nenhum.
+    const irmas = listaDe(await api.get('/api/ia_extracao_itens', { query: { extracao_id: id } }));
+    await api.put(`/api/ia_extracoes/${id}`, {
+      aplicados_qtd: irmas.filter(i => i.status === 'aplicado').length
+    }).catch(() => {});
+
+    const { materias, etapas, empresa } = await contextoDaAnotacao(api, extracao.destino);
+
+    res.json({
+      id: salvo.id,
+      linha: Number(salvo.linha) || 0,
+      leitura_status: extracao.status,
+      leitura_status_rotulo: SITUACOES.find(s => s.id === extracao.status)?.rotulo || extracao.status,
+      ...anotarLinha(extracao.destino, lerDados(salvo.dados).valor, salvo, { materias, etapas, empresa }),
+      acao: salvo.acao,
+      alvo_id: salvo.alvo_id ?? null,
+      alvo_tabela: salvo.alvo_tabela || null,
+      status: salvo.status,
+      mensagem: salvo.mensagem || null
+    });
+  } catch (err) {
+    responder(res, err, 'POST /api/ia/:id/itens/:itemId/reabrir');
+  }
+});
+
 router.delete('/:id/itens/:itemId', exigirSupAdmin, async (req, res) => {
   try {
     const api = createApiClient(req);

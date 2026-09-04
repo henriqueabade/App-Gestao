@@ -191,7 +191,7 @@ function leituraPadrao(extra = {}) {
 }
 
 function criarBancada({ leitura, respostaPut, respostaAplicar, respostaExtrair,
-  respostaPreenchimento, respostaExcluir, confirmar = true } = {}) {
+  respostaPreenchimento, respostaExcluir, respostaReabrir, confirmar = true } = {}) {
   const elementos = new Map();
   for (const id of idsDoModal()) {
     const el = criarElemento();
@@ -347,6 +347,24 @@ function criarBancada({ leitura, respostaPut, respostaAplicar, respostaExtrair,
           ...(corpo.alvo_id !== undefined ? { alvo_id: corpo.alvo_id, acao: 'atualizar' } : {}),
           dados: { ...item.dados, ...(corpo.dados || {}) },
           mensagem: null
+        };
+        Object.assign(item, salvo);
+        return { ok: true, status: 200, json: async () => salvo };
+      }
+      if (metodo === 'POST' && /\/itens\/(\d+)\/reabrir$/.test(url)) {
+        const r = respostaReabrir || {};
+        if (r.status && r.status >= 400) {
+          return { ok: false, status: r.status, json: async () => r.corpo };
+        }
+        const id = Number(/\/itens\/(\d+)\/reabrir$/.exec(url)[1]);
+        const item = dadosLeitura.itens.find(i => i.id === id);
+        // O servidor devolve a linha como ela ficou — é isso que a grade usa
+        // para se redesenhar sem ir buscar a leitura inteira.
+        const salvo = {
+          ...item,
+          status: 'pendente',
+          alvo_id: item.acao === 'criar' ? null : item.alvo_id,
+          mensagem: 'Devolvida à revisão.'
         };
         Object.assign(item, salvo);
         return { ok: true, status: 200, json: async () => salvo };
@@ -730,6 +748,105 @@ test('item já gravado não volta a ser editável', async () => {
   // E nem pode ser marcado: descartar algo que já virou cadastro não desfaz
   // nada, só dá a impressão de ter desfeito.
   assert.equal(linha.todos().some(f => f.classList.contains('ia-selecao')), false);
+});
+
+// ---------------------------------------------------------------------------
+// Devolver uma linha enviada para pendente
+//
+// Enviar por engano era um caminho sem volta dentro de uma leitura ainda
+// aberta: a linha perdia a caixa de seleção e a célula ficava vazia, sem
+// oferecer nada. O caminho de volta mora onde a caixa estaria.
+// ---------------------------------------------------------------------------
+
+const botaoDevolver = linha => linha.todos().find(f => f.classList.contains('ia-btn-devolver'));
+
+test('linha enviada ganha o símbolo de voltar no lugar da caixa de seleção', async () => {
+  const leitura = leituraPadrao();
+  leitura.itens[0].status = 'aplicado';
+  const b = criarBancada({ leitura });
+  await b.pronta();
+
+  const enviada = linhasDeItem(b)[0];
+  assert.equal(enviada.todos().some(f => f.classList.contains('ia-selecao')), false);
+  assert.ok(botaoDevolver(enviada), 'a célula da seleção ficou vazia');
+
+  // A linha pendente segue com a caixa: o botão é só de quem já foi enviado.
+  const pendente = linhasDeItem(b)[1];
+  assert.ok(pendente.todos().some(f => f.classList.contains('ia-selecao')));
+  assert.equal(botaoDevolver(pendente), undefined);
+});
+
+test('leitura encerrada não oferece o caminho de volta', async () => {
+  const leitura = leituraPadrao({ status: 'aplicada', status_rotulo: 'Aplicada' });
+  leitura.itens[0].status = 'aplicado';
+  const b = criarBancada({ leitura });
+  await b.pronta();
+
+  // Fechada a leitura, ela virou histórico — é a regra que o resto do módulo
+  // já segue, e o botão não pode ser a exceção que a fura.
+  assert.equal(botaoDevolver(linhasDeItem(b)[0]), undefined);
+});
+
+test('devolver pergunta antes, dizendo o que NÃO desfaz', async () => {
+  const leitura = leituraPadrao();
+  leitura.itens[0].status = 'aplicado';
+  const b = criarBancada({ leitura, confirmar: false });
+  await b.pronta();
+
+  botaoDevolver(linhasDeItem(b)[0]).disparar('click');
+  await b.pronta();
+
+  const caixa = b.confirmacoes.at(-1);
+  assert.ok(caixa, 'devolveu sem perguntar nada');
+  // Quem clica em "voltar" espera desfazer. Não dizer que o registro fica
+  // seria deixar a pessoa descobrir com dois cadastros iguais no sistema.
+  assert.match(caixa.message, /CONTINUA lá/);
+  assert.match(caixa.message, /Matéria-prima/);
+  assert.match(caixa.message, /cria um registro novo/i);
+
+  // Recusada, nada foi ao servidor.
+  assert.equal(b.chamadas.some(c => /reabrir$/.test(c.url)), false);
+});
+
+test('confirmado, a linha volta a pendente e a grade se redesenha', async () => {
+  const leitura = leituraPadrao();
+  leitura.itens[0].status = 'aplicado';
+  const b = criarBancada({ leitura });
+  await b.pronta();
+
+  botaoDevolver(linhasDeItem(b)[0]).disparar('click');
+  await b.pronta();
+
+  const chamada = b.chamadas.find(c => /\/itens\/1\/reabrir$/.test(c.url));
+  assert.ok(chamada, 'a devolução não chegou ao servidor');
+  assert.equal(chamada.metodo, 'POST');
+
+  // A linha volta a ser marcável, que é o sinal de que ela está pendente de
+  // novo — e o botão de voltar sai de cena.
+  const linha = linhasDeItem(b)[0];
+  assert.ok(linha.todos().some(f => f.classList.contains('ia-selecao')));
+  assert.equal(botaoDevolver(linha), undefined);
+
+  // E a tabela do módulo precisa saber: a contagem de aplicados mudou.
+  assert.ok(b.avisos.includes('iaLeituraAlterada'));
+});
+
+test('recusa do servidor não finge que devolveu', async () => {
+  const leitura = leituraPadrao();
+  leitura.itens[0].status = 'aplicado';
+  const b = criarBancada({
+    leitura,
+    respostaReabrir: { status: 409, corpo: { error: 'Esta leitura já foi encerrada' } }
+  });
+  await b.pronta();
+
+  botaoDevolver(linhasDeItem(b)[0]).disparar('click');
+  await b.pronta();
+
+  assert.match(b.toasts.at(-1).msg, /encerrada/i);
+  assert.equal(b.toasts.at(-1).tipo, 'error');
+  // A linha continua enviada na tela — dizer o contrário seria mentir.
+  assert.ok(botaoDevolver(linhasDeItem(b)[0]), 'a linha mudou apesar da recusa');
 });
 
 test('leitura aplicada abre inteira em leitura apenas', async () => {

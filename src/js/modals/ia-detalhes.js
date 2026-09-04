@@ -516,6 +516,22 @@
           pintarRodape();
         });
         tdSelecao.appendChild(marca);
+      } else if (editavel) {
+        // Linha enviada não se marca — não há ação em lote que a alcance. A
+        // célula ficava vazia, e enviar por engano virava um caminho sem volta
+        // dentro de uma leitura ainda aberta.
+        //
+        // O caminho de volta mora exatamente onde estaria a caixa de seleção:
+        // é ali que o olho procura o que se pode fazer com a linha.
+        const devolver = document.createElement('button');
+        devolver.type = 'button';
+        devolver.className = 'ia-btn-devolver';
+        devolver.dataset.devolver = String(item.id);
+        devolver.title = 'Devolver esta linha para pendente';
+        devolver.setAttribute('aria-label', 'Devolver esta linha para pendente');
+        devolver.innerHTML = '<i class="fas fa-rotate-left"></i>';
+        devolver.addEventListener('click', () => devolverLinha(item));
+        tdSelecao.appendChild(devolver);
       }
       tr.appendChild(tdSelecao);
 
@@ -2562,6 +2578,57 @@
       showToast(aviso, 'success');
     } catch (err) {
       showToast(err?.message || 'Não foi possível gravar a decisão', 'error');
+    }
+  }
+
+  /**
+   * Devolve à revisão uma linha já enviada.
+   *
+   * O aviso precisa dizer o que a devolução NÃO faz. Quem clica em "voltar"
+   * espera desfazer — e aqui não se desfaz nada: o registro criado no módulo
+   * de destino continua lá, e enviar de novo cria OUTRO. Descobrir isso depois
+   * seria descobrir com dois cadastros iguais no sistema.
+   */
+  async function devolverLinha(item) {
+    const perdeODestino = item.acao === 'criar' && item.alvo_id;
+
+    const aviso = [
+      'A linha volta a ficar pendente e poderá ser corrigida e enviada de novo.',
+      '',
+      `O que ela já gravou em ${leitura.destino_rotulo} CONTINUA lá — devolver não desfaz o registro.`,
+      'Enviar de novo cria um registro novo, não corrige o anterior.'
+    ];
+    if (perdeODestino) {
+      aviso.push('', 'O destino apontado será limpo: escolha-o de novo antes de enviar.');
+    }
+
+    if (window.DialogPadrao?.confirm) {
+      const seguir = await window.DialogPadrao.confirm({
+        title: 'Devolver para pendente',
+        message: aviso.join('\n'),
+        confirmText: 'Devolver',
+        cancelText: 'Voltar'
+      });
+      if (!seguir) return;
+    }
+
+    // Mesma fila das outras gravações da linha: ela pinta o "carregando" e
+    // impede que dois cliques seguidos virem duas chamadas.
+    try {
+      await enfileirar(item.id, async () => {
+        const resp = await fetchApi(`/api/ia/${leitura.id}/itens/${item.id}/reabrir`, { method: 'POST' });
+        const corpo = await resp.json().catch(() => ({}));
+        if (!resp.ok) throw new Error(corpo.error || `Erro ${resp.status}`);
+        atualizarEmMemoria(corpo);
+        absorverSituacao(corpo);
+        desenharItens();
+      });
+      // A contagem de aplicados da leitura mudou no servidor, e é ela que a
+      // tabela do módulo mostra.
+      avisarQueMudou();
+      showToast('Linha devolvida para pendente', 'success');
+    } catch (err) {
+      showToast(err?.message || 'Não foi possível devolver a linha', 'error');
     }
   }
 

@@ -3824,6 +3824,171 @@ test('o total do orçamento é a soma dos itens', async () => {
   }
 });
 
+// ---------------------------------------------------------------------------
+// DEVOLVER À REVISÃO UMA LINHA JÁ ENVIADA
+//
+// Enviar é uma decisão, e decisão errada acontece. Enquanto a leitura está
+// aberta, a linha volta a pendente para ser corrigida e enviada de novo.
+//
+// O que ela NÃO faz é desfazer o que já foi gravado no módulo de destino: esse
+// registro tem vida própria, e enviar de novo cria OUTRO.
+// ---------------------------------------------------------------------------
+
+const reabrir = (ctx, itemId, id = 5) =>
+  chamar(ctx.porta, `/api/ia/${id}/itens/${itemId}/reabrir`, { method: 'POST' });
+
+test('linha enviada volta para pendente enquanto a leitura está em revisão', async () => {
+  const ctx = await prepararOrcamento({
+    itens: [
+      {
+        cliente: 'Casa Vicenzo', razao_social: null, cnpj: null, validade: null,
+        prazo: null, forma_pagamento: null, condicao_pagamento: null, parcelas: null,
+        transportadora: null, contato: null, observacoes: null,
+        itens: [{ codigo: 'PR-210', nome: 'Painel Ripado', quantidade: '1', valor_unitario: null }]
+      },
+      // A segunda linha existe para a leitura NÃO fechar ao aplicar a primeira:
+      // fechada, ela vira histórico e nada mais se mexe.
+      {
+        cliente: 'Decor Alpina', razao_social: null, cnpj: null, validade: null,
+        prazo: null, forma_pagamento: null, condicao_pagamento: null, parcelas: null,
+        transportadora: null, contato: null, observacoes: null,
+        itens: [{ codigo: 'ML-01', nome: 'Mesa Lateral Carvalho', quantidade: '1', valor_unitario: null }]
+      }
+    ]
+  });
+  try {
+    const primeira = itensDa(ctx, 5)[0];
+    await chamar(ctx.porta, `/api/ia/5/itens/${primeira.id}`, {
+      method: 'PUT', body: JSON.stringify({ resolvido: true })
+    });
+    assert.strictEqual(itensDa(ctx, 5)[0].status, 'aplicado', 'não ficou enviada');
+
+    const resp = await reabrir(ctx, primeira.id);
+    const corpo = await resp.json();
+    assert.strictEqual(resp.status, 200, JSON.stringify(corpo));
+    assert.strictEqual(corpo.status, 'pendente');
+    assert.strictEqual(itensDa(ctx, 5)[0].status, 'pendente');
+    assert.strictEqual(itensDa(ctx, 5)[0].aplicado_em, null, 'a data de envio ficou para trás');
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('o destino apontado sai junto quando a aplicação criou o registro', async () => {
+  const ctx = await prepararOrcamento({
+    itens: [
+      {
+        cliente: 'Casa Vicenzo', razao_social: null, cnpj: null, validade: null,
+        prazo: null, forma_pagamento: null, condicao_pagamento: null, parcelas: null,
+        transportadora: null, contato: null, observacoes: null,
+        itens: [{ codigo: 'PR-210', nome: 'Painel Ripado', quantidade: '1', valor_unitario: null }]
+      },
+      {
+        cliente: 'Decor Alpina', razao_social: null, cnpj: null, validade: null,
+        prazo: null, forma_pagamento: null, condicao_pagamento: null, parcelas: null,
+        transportadora: null, contato: null, observacoes: null,
+        itens: [{ codigo: 'ML-01', nome: 'Mesa Lateral Carvalho', quantidade: '1', valor_unitario: null }]
+      }
+    ]
+  });
+  try {
+    const primeira = itensDa(ctx, 5)[0];
+    assert.strictEqual(primeira.acao, 'criar');
+    assert.strictEqual(Number(primeira.alvo_id), 50, 'o alvo começa sendo o CLIENTE');
+
+    // Aplicar troca o sentido de `alvo_id`: de "para onde isto vai" para "o
+    // que isto virou" — o id do orçamento criado.
+    await chamar(ctx.porta, '/api/ia/5/itens/' + primeira.id, {
+      method: 'PUT', body: JSON.stringify({ resolvido: true, alvo_id: 999 })
+    });
+
+    const corpo = await (await reabrir(ctx, primeira.id)).json();
+
+    // Reaplicar com 999 lá dentro criaria um orçamento para o cliente 999.
+    assert.strictEqual(corpo.alvo_id, null, 'o alvo da aplicação ficou apontando a linha reaberta');
+    assert.strictEqual(itensDa(ctx, 5)[0].alvo_id, null);
+    // E o número do que foi criado não se perde: fica na nota da linha.
+    assert.match(corpo.mensagem, /999/);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('leitura encerrada não devolve linha nenhuma', async () => {
+  const ctx = await prepararOrcamento({
+    itens: [{
+      cliente: 'Casa Vicenzo', razao_social: null, cnpj: null, validade: null,
+      prazo: null, forma_pagamento: null, condicao_pagamento: null, parcelas: null,
+      transportadora: null, contato: null, observacoes: null,
+      itens: [{ codigo: 'PR-210', nome: 'Painel Ripado', quantidade: '1', valor_unitario: null }]
+    }]
+  });
+  try {
+    const [unica] = itensDa(ctx, 5);
+    // Linha única: resolvê-la fecha a leitura.
+    await chamar(ctx.porta, `/api/ia/5/itens/${unica.id}`, {
+      method: 'PUT', body: JSON.stringify({ resolvido: true })
+    });
+    assert.strictEqual(ctx.tabelas.ia_extracoes.find(e => e.id === 5).status, 'aplicada');
+
+    const resp = await reabrir(ctx, unica.id);
+    assert.strictEqual(resp.status, 409);
+    assert.match((await resp.json()).error, /encerrada/i);
+    assert.strictEqual(itensDa(ctx, 5)[0].status, 'aplicado', 'a linha mexeu mesmo com a recusa');
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('linha que não está enviada não tem o que devolver', async () => {
+  const ctx = await prepararOrcamento();
+  try {
+    const [pendente] = itensDa(ctx, 5);
+    const resp = await reabrir(ctx, pendente.id);
+    assert.strictEqual(resp.status, 409);
+    assert.match((await resp.json()).error, /não está enviada/i);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('devolver não desfaz o que foi gravado no destino', async () => {
+  const ctx = await prepararOrcamento({
+    itens: [
+      {
+        cliente: 'Casa Vicenzo', razao_social: null, cnpj: null, validade: null,
+        prazo: null, forma_pagamento: null, condicao_pagamento: null, parcelas: null,
+        transportadora: null, contato: null, observacoes: null,
+        itens: [{ codigo: 'PR-210', nome: 'Painel Ripado', quantidade: '1', valor_unitario: null }]
+      },
+      {
+        cliente: 'Decor Alpina', razao_social: null, cnpj: null, validade: null,
+        prazo: null, forma_pagamento: null, condicao_pagamento: null, parcelas: null,
+        transportadora: null, contato: null, observacoes: null,
+        itens: [{ codigo: 'ML-01', nome: 'Mesa Lateral Carvalho', quantidade: '1', valor_unitario: null }]
+      }
+    ]
+  });
+  try {
+    // Aplica de verdade: um orçamento nasce no módulo de destino.
+    await aplicarEm(ctx, 'orcamentos');
+    const criados = ctx.tabelas.orcamentos.length;
+    assert.ok(criados > 0, 'nada foi criado — o teste não prova nada');
+
+    const enviada = itensDa(ctx, 5).find(i => i.status === 'aplicado');
+    // Com tudo aplicado a leitura fecha; reabrimos a leitura para poder testar
+    // a devolução da linha (é o estado em que uma aplicação parcial deixa).
+    ctx.tabelas.ia_extracoes.find(e => e.id === 5).status = 'revisao';
+
+    await reabrir(ctx, enviada.id);
+
+    assert.strictEqual(ctx.tabelas.orcamentos.length, criados,
+      'devolver a linha apagou um orçamento — ela não pode mexer no destino');
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
 test('produto fora do catálogo NÃO gera orçamento pela metade', async () => {
   // A diferença que separa este destino da ficha técnica: um orçamento
   // incompleto é um PREÇO ERRADO, e ele parece completo.
