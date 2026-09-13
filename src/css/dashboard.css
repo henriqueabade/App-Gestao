@@ -1,318 +1,1242 @@
+/*
+ * Dashboard — painel com dados reais (src/js/dashboard.js).
+ *
+ * Tema claro E escuro: só as variáveis de src/css/menu.css
+ * ([data-menu-theme="dark"|"light"]), que já trocam sozinhas com o tema. O CSS
+ * antigo escrevia branco translúcido fixo em texto e superfície e ficava
+ * branco sobre branco no tema claro. Tokens próprios do painel usam --dash-.
+ *
+ * O Tailwind do app é um build offline pré-compilado: classe utilitária nova
+ * pode simplesmente não existir. Por isso tudo aqui é classe própria com o
+ * prefixo `dash-`, que também impede o estilo de vazar para outros módulos.
+ */
+
 .dashboard-module {
+    --dash-raio: 1rem;
+    --dash-espaco: clamp(1rem, 0.5vw + 0.8rem, 1.5rem);
+    --dash-borda: var(--menu-surface-border);
+    --dash-fundo-card: linear-gradient(160deg, var(--menu-surface-strong) -35%, var(--menu-surface-soft) 55%);
+    --dash-sombra: 0 22px 44px -30px color-mix(in srgb, var(--neutral-500) 45%, transparent);
+    /* Vinho legível: o --color-bordeaux puro some sobre o fundo vinho do tema escuro. */
+    --dash-vinho: color-mix(in srgb, var(--color-bordeaux) 55%, var(--color-red));
+    /* Texto de apoio (subtítulo, detalhe, eixo, legenda, rótulo). Era o
+       --menu-text-muted/tertiary, que no tema claro dá 1,7-2,7:1 sobre o
+       cartão. No escuro é o --menu-text-secondary (mais claro que antes). */
+    --dash-texto-apoio: var(--menu-text-secondary);
     display: flex;
     flex-direction: column;
-    gap: clamp(1.25rem, 1vw + 0.75rem, 2rem);
+    gap: var(--dash-espaco);
+    min-width: 0;
+    color: var(--menu-text-primary);
 }
 
-.dashboard-card {
+/* No claro o --menu-text-secondary puro ainda fica em 4,2:1 no ponto mais
+   escuro do cartão (e 4,4:1 na página); 10% da cor forte leva a 4,7-5,5:1
+   sem virar a cor dos títulos. */
+[data-menu-theme="light"] .dashboard-module {
+    --dash-texto-apoio: color-mix(in srgb, var(--menu-text-secondary) 90%, var(--menu-text-strong));
+}
+
+/* O Tailwind define [hidden] com a mesma especificidade de uma classe: sem
+   isto `.dash-card { display: flex }` venceria e o cartão escondido (sem
+   permissão) apareceria vazio. */
+.dashboard-module [hidden] {
+    display: none !important;
+}
+
+/* Tons. `data-tom` escolhe a cor e o texto mistura o tom com a cor forte do
+   tema: clareia no escuro e escurece no claro, com contraste nos dois. */
+.dashboard-module [data-tom="ouro"] { --dash-tom: var(--color-primary); }
+.dashboard-module [data-tom="azul"] { --dash-tom: var(--color-blue); }
+.dashboard-module [data-tom="verde"] { --dash-tom: var(--color-green); }
+.dashboard-module [data-tom="vermelho"] { --dash-tom: var(--color-red); }
+.dashboard-module [data-tom="vinho"] { --dash-tom: var(--dash-vinho); }
+.dashboard-module [data-tom="violeta"] { --dash-tom: var(--color-violet); }
+.dashboard-module [data-tom="neutro"] { --dash-tom: var(--neutral-500); }
+.dashboard-module [data-tom] {
+    --dash-tom-texto: color-mix(in srgb, var(--dash-tom) 72%, var(--menu-text-strong));
+}
+
+/* Os 72% reprovam onde o tom fica perto do fundo: ouro no claro (chips a
+   2,9-3,4:1) e vinho/neutro no escuro (2,9-4,1:1). Só nesses três a mistura
+   desce a 50% (4,6:1 ou mais); os demais tons já passam e continuam vivos.
+   Seletor com o tema: a especificidade vence a regra geral acima. */
+[data-menu-theme="light"] .dashboard-module [data-tom="ouro"],
+[data-menu-theme="dark"] .dashboard-module [data-tom="vinho"],
+[data-menu-theme="dark"] .dashboard-module [data-tom="neutro"] {
+    --dash-tom-texto: color-mix(in srgb, var(--dash-tom) 50%, var(--menu-text-strong));
+}
+
+/* ------------------------------------------------------------ cabeçalho */
+
+.dash-cabecalho {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
-    gap: 1.5rem;
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    background: linear-gradient(140deg, rgba(255, 255, 255, 0.06) 0%, rgba(255, 255, 255, 0.01) 100%);
-    backdrop-filter: blur(24px);
-    transition: transform 200ms ease, border-color 200ms ease;
+    justify-content: space-between;
+    gap: 1rem 1.5rem;
 }
 
-.dashboard-card:hover {
-    transform: translateY(-4px);
-    border-color: rgba(182, 160, 62, 0.35);
+/* O .module-header__title global (menu.css) tem cor clara fixa e some no tema
+   claro. Aqui o título segue a variável do tema; no escuro fica praticamente
+   igual ao dos outros módulos. */
+.dash-cabecalho .dash-titulo {
+    color: var(--menu-text-strong);
 }
 
-.dashboard-card-icon {
-    width: 3.5rem;
-    height: 3.5rem;
-    border-radius: 1.25rem;
-    display: grid;
-    place-items: center;
-    font-size: 1.4rem;
+/* Mesma armadilha na descrição: a cor fixa de .module-header__description dá
+   2,3:1 no tema claro. A classe é própria porque o teste de CSS recusa
+   seletor global aqui. */
+.dash-cabecalho .dash-descricao {
+    color: var(--dash-texto-apoio);
 }
 
-.dashboard-card-label {
-    font-size: 0.85rem;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    color: var(--neutral-100);
-    margin-bottom: 0.35rem;
-}
-
-.dashboard-card-value {
-    font-size: 1.9rem;
-    font-weight: 700;
-    letter-spacing: -0.01em;
-}
-
-.dashboard-metric-trend {
-    display: inline-flex;
+.dash-cabecalho__acoes {
+    display: flex;
+    flex-wrap: wrap;
     align-items: center;
-    gap: 0.4rem;
-    font-size: 0.78rem;
-    font-weight: 500;
-    margin-top: 0.4rem;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
+    gap: 0.75rem;
 }
 
-.dashboard-metric-trend.positive {
-    color: var(--color-green);
-}
-
-.dashboard-metric-trend.negative {
-    color: var(--color-red);
-}
-
-.dashboard-badge-soft {
+.dash-selo {
     display: inline-flex;
     align-items: center;
     gap: 0.5rem;
-    font-size: 0.75rem;
-    padding: 0.35rem 0.75rem;
+    padding: 0.45rem 0.9rem;
     border-radius: 9999px;
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    color: rgba(255, 255, 255, 0.75);
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
+    font-size: 0.8rem;
+    font-weight: 500;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+    color: var(--dash-texto-apoio);
+    background: var(--menu-surface-soft);
+    border: 1px solid var(--menu-surface-border);
 }
 
-.dashboard-chart-wrapper {
-    width: 100%;
-    border-radius: 1.25rem;
-    background: radial-gradient(circle at top, rgba(182, 160, 62, 0.12), transparent 55%);
-    border: 1px solid rgba(255, 255, 255, 0.06);
-    padding: 1.75rem 1.5rem;
-}
-
-.dashboard-line-chart {
-    width: 100%;
-    height: 220px;
-}
-
-.dashboard-grid-lines path {
-    stroke: rgba(255, 255, 255, 0.08);
-    stroke-width: 1;
-}
-
-.dashboard-line {
-    fill: none;
-    stroke: url(#dashboardLineStroke);
-    stroke-width: 3;
-    stroke-linecap: round;
-    stroke-linejoin: round;
-}
-
-.dashboard-area {
-    fill: url(#dashboardLineFill);
-}
-
-.dashboard-points circle {
-    fill: var(--color-primary);
-    stroke: rgba(255, 255, 255, 0.9);
-    stroke-width: 1.5;
-}
-
-.dashboard-legend-dot {
-    width: 0.75rem;
-    height: 0.75rem;
-    border-radius: 9999px;
-    background: var(--legend-color, rgba(255, 255, 255, 0.35));
-    box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.05);
-}
-
-.dashboard-legend-item {
-    display: flex;
-    align-items: center;
-    gap: 1rem;
-    padding: 0.75rem 1rem;
-    border-radius: 0.9rem;
-    background: rgba(255, 255, 255, 0.03);
-    border: 1px solid rgba(255, 255, 255, 0.06);
-}
-
-.dashboard-legend-item > div {
-    flex: 1;
-}
-
-.dashboard-donut {
-    width: 14rem;
-    height: 14rem;
-    border-radius: 50%;
-    background: conic-gradient(
-        var(--color-primary) 0deg 162deg,
-        var(--color-violet) 162deg 278deg,
-        var(--color-blue) 278deg 326deg,
-        rgba(255, 255, 255, 0.08) 326deg 360deg
-    );
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    position: relative;
-    box-shadow: 0 25px 45px rgba(0, 0, 0, 0.25);
-}
-
-.dashboard-donut::before {
-    content: "";
-    position: absolute;
-    width: 8rem;
-    height: 8rem;
-    border-radius: 50%;
-    background: rgba(12, 5, 22, 0.85);
-    box-shadow: inset 0 10px 25px rgba(255, 255, 255, 0.05);
-}
-
-.dashboard-donut-inner {
-    position: relative;
-    text-align: center;
-    display: flex;
-    flex-direction: column;
-    gap: 0.35rem;
-}
-
-.dashboard-chip {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    padding: 0.25rem 0.7rem;
-    border-radius: 9999px;
-    font-size: 0.75rem;
-    font-weight: 600;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    background: rgba(255, 255, 255, 0.06);
-    color: rgba(255, 255, 255, 0.72);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-.dashboard-chip.chip-positive {
-    color: var(--color-green);
-    background: rgba(162, 255, 166, 0.12);
-    border-color: rgba(162, 255, 166, 0.25);
-}
-
-.dashboard-chip.chip-warning {
-    color: var(--color-bordeaux);
-    background: rgba(106, 21, 44, 0.12);
-    border-color: rgba(106, 21, 44, 0.25);
-}
-
-.dashboard-chip.chip-info {
-    color: var(--color-blue);
-    background: rgba(138, 167, 243, 0.12);
-    border-color: rgba(138, 167, 243, 0.25);
-}
-
-.dashboard-status {
-    display: inline-flex;
-    align-items: center;
-    padding: 0.35rem 0.85rem;
-    border-radius: 9999px;
-    font-size: 0.75rem;
-    font-weight: 600;
-    letter-spacing: 0.05em;
-    text-transform: uppercase;
-}
-
-.dashboard-status--success {
-    background: rgba(162, 255, 166, 0.12);
-    color: var(--color-green);
-}
-
-.dashboard-status--info {
-    background: rgba(138, 167, 243, 0.12);
-    color: var(--color-blue);
-}
-
-.dashboard-status--warning {
-    background: rgba(182, 160, 62, 0.12);
+.dash-selo i {
     color: var(--color-primary);
 }
 
-.dashboard-status--neutral {
-    background: rgba(255, 255, 255, 0.08);
-    color: rgba(255, 255, 255, 0.85);
+.dash-botao-atualizar {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
 }
 
-.dashboard-timeline {
-    display: grid;
-    gap: 1.25rem;
+/* Dourado puro no anel de foco dá 2,1-2,5:1 sobre a página clara (menos que os
+   3:1 de um indicador de foco). Misturado à cor forte do tema: 4,4-6,1:1. */
+.dash-botao-atualizar:focus-visible,
+.dash-botao-leve:focus-visible {
+    outline: 2px solid color-mix(in srgb, var(--color-primary) 60%, var(--menu-text-strong));
+    outline-offset: 2px;
+}
+
+/* Recarga sem botão (clique em "Dashboard" estando nele): o ícone gira. */
+.dash-atualizando .dash-botao-atualizar i {
+    animation: dash-girar 0.9s linear infinite;
+}
+
+.dash-painel {
+    display: flex;
+    flex-direction: column;
+    gap: var(--dash-espaco);
+    min-width: 0;
+}
+
+/* --------------------------------------------------------------- cartão */
+
+.dash-card {
     position: relative;
-    padding-left: 1.25rem;
-}
-
-.dashboard-timeline::before {
-    content: "";
-    position: absolute;
-    top: 0.5rem;
-    bottom: 0.5rem;
-    left: 0.35rem;
-    width: 2px;
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0));
-}
-
-.dashboard-timeline li {
-    display: grid;
-    grid-template-columns: 80px 1fr auto;
+    display: flex;
+    flex-direction: column;
     gap: 1rem;
-    align-items: start;
+    min-width: 0;
+    padding: 1.25rem 1.35rem;
+    border-radius: var(--dash-raio);
+    background: var(--dash-fundo-card);
+    border: 1px solid var(--dash-borda);
+    box-shadow: var(--dash-sombra);
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+    overflow: hidden;
+    transition: transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
 }
 
-.dashboard-timeline-time {
-    font-size: 0.75rem;
-    font-weight: 600;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: rgba(255, 255, 255, 0.65);
-    position: relative;
-    padding-top: 0.15rem;
-}
-
-.dashboard-timeline-time::before {
+/* Fio dourado no topo — o "vidro" do app com a assinatura da marca. */
+.dash-card::before {
     content: "";
     position: absolute;
-    left: -1.05rem;
-    top: 0.35rem;
-    width: 0.55rem;
-    height: 0.55rem;
-    border-radius: 50%;
-    background: var(--color-primary);
-    box-shadow: 0 0 0 6px rgba(182, 160, 62, 0.15);
+    inset: 0 0 auto 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--color-primary) 60%, transparent), transparent);
+    pointer-events: none;
 }
 
-.dashboard-next-actions {
+.dash-card:hover {
+    transform: translateY(-2px);
+    border-color: color-mix(in srgb, var(--color-primary) 40%, var(--dash-borda));
+    box-shadow: 0 26px 48px -28px color-mix(in srgb, var(--neutral-500) 60%, transparent);
+}
+
+.dash-card--alerta {
+    border-color: color-mix(in srgb, var(--color-red) 42%, var(--dash-borda));
+    background: linear-gradient(160deg, color-mix(in srgb, var(--color-red) 12%, transparent) -10%, var(--menu-surface-soft) 60%);
+}
+
+.dash-card__cabeca {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.8rem;
+    min-width: 0;
+}
+
+.dash-card__titulos {
+    min-width: 0;
+}
+
+.dash-card__titulo {
+    margin: 0;
+    font-size: 1rem;
+    line-height: 1.35;
+    font-weight: 600;
+    color: var(--menu-text-strong);
+}
+
+.dash-card__subtitulo {
+    margin: 0.2rem 0 0;
+    font-size: 0.8rem;
+    line-height: 1.4;
+    color: var(--dash-texto-apoio);
+}
+
+.dash-card__corpo {
+    display: flex;
+    flex-direction: column;
+    gap: 0.85rem;
+    min-width: 0;
+    flex: 1;
+    transition: opacity 200ms ease;
+}
+
+/* Atualizando: os números ficam na tela, esmaecidos, até a leitura nova. */
+.dash-atualizando .dash-card[data-estado="ok"] .dash-card__corpo {
+    opacity: 0.6;
+}
+
+/* Pastilha do ícone: tom em degradê suave com brilho interno. */
+.dash-pastilha {
+    flex-shrink: 0;
     display: grid;
-    gap: 1.2rem;
+    place-items: center;
+    width: 2.75rem;
+    height: 2.75rem;
+    border-radius: 0.9rem;
+    font-size: 1.1rem;
+    color: var(--dash-tom-texto);
+    background: linear-gradient(145deg,
+        color-mix(in srgb, var(--dash-tom) 30%, transparent),
+        color-mix(in srgb, var(--dash-tom) 8%, transparent));
+    border: 1px solid color-mix(in srgb, var(--dash-tom) 32%, transparent);
+    box-shadow:
+        inset 0 1px 0 color-mix(in srgb, var(--dash-tom) 25%, transparent),
+        0 10px 22px -14px var(--dash-tom);
 }
 
-.dashboard-next-actions li {
+.dash-pastilha--pequena {
+    width: 2.25rem;
+    height: 2.25rem;
+    border-radius: 0.7rem;
+    font-size: 0.92rem;
+}
+
+/* ----------------------------------------------------------------- KPIs */
+
+.dash-kpis {
+    display: grid;
+    gap: var(--dash-espaco);
+    grid-template-columns: minmax(0, 1fr);
+}
+
+@media (min-width: 768px) {
+    .dash-kpis {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .dash-kpis[data-visiveis="1"] {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}
+
+@media (min-width: 1280px) {
+    .dash-kpis {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+
+    /* KPI escondido por permissão não deixa buraco na faixa. */
+    .dash-kpis[data-visiveis="3"] {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .dash-kpis[data-visiveis="2"] {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .dash-kpis[data-visiveis="1"] {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}
+
+/* Entre 768 e 1279 px a faixa tem 2 colunas: com 3 KPIs (um escondido por
+   permissão) o 3º ficava sozinho com um buraco ao lado. Ele ganha a linha
+   inteira. Pelo 3º VISÍVEL, não por :last-of-type — o escondido pode ser
+   justamente o último cartão. `data-visiveis` vem de ajustarLinhas(). */
+@media (min-width: 768px) and (max-width: 1279px) {
+    .dash-kpis[data-visiveis="3"] > .dash-card:not([hidden]) ~ .dash-card:not([hidden]) ~ .dash-card:not([hidden]) {
+        grid-column: 1 / -1;
+    }
+}
+
+/* O número acompanha a largura do PRÓPRIO cartão (cqi), não a da janela:
+   com 4 colunas estreitas um valor de 2,2rem estourava o cartão. */
+.dash-kpi {
+    container-type: inline-size;
+    gap: 0.9rem;
+}
+
+.dash-kpi .dash-card__corpo {
+    gap: 0;
+}
+
+.dash-kpi__topo {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    gap: 1.5rem;
-    padding-bottom: 1rem;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    gap: 0.85rem;
+    min-width: 0;
 }
 
-.dashboard-next-actions li:last-child {
-    border-bottom: none;
-    padding-bottom: 0;
+.dash-kpi__rotulo {
+    margin: 0;
+    font-size: 0.78rem;
+    font-weight: 600;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    color: var(--dash-texto-apoio);
 }
 
-.dashboard-hint {
-    background: rgba(255, 255, 255, 0.02);
+.dash-kpi__valor {
+    margin: 0;
+    font-size: clamp(1.55rem, 10cqi, 2.2rem);
+    line-height: 1.1;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    color: var(--menu-text-strong);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
-@media (max-width: 767px) {
-    .dashboard-card {
-        flex-direction: row;
-        align-items: flex-start;
+.dash-kpi__sub {
+    margin: 0.4rem 0 0;
+    font-size: 0.85rem;
+    color: var(--dash-texto-apoio);
+    font-variant-numeric: tabular-nums;
+}
+
+.dash-kpi__variacao {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.4rem 0.5rem;
+    margin-top: 0.8rem;
+    font-size: 0.78rem;
+}
+
+.dash-kpi__comparacao {
+    color: var(--dash-texto-apoio);
+}
+
+/* O chip da nota não pode ter nowrap aqui: com a barra lateral fixa em
+   1280/1366 px, "1 cancelado no mês (R$ 3,2 mil)" passava da largura do KPI e
+   o overflow do cartão cortava justamente o valor. Item de flex-wrap, ele
+   encolhe até o cartão e quebra a linha. */
+.dash-kpi__notas .dash-chip {
+    white-space: normal;
+}
+
+.dash-kpi__notas {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    margin-top: 0.75rem;
+}
+
+.dash-delta {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.2rem 0.55rem;
+    border-radius: 9999px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+}
+
+.dash-delta i {
+    font-size: 0.68rem;
+}
+
+.dash-delta--alta {
+    color: color-mix(in srgb, var(--color-green) 72%, var(--menu-text-strong));
+    background: color-mix(in srgb, var(--color-green) 15%, transparent);
+}
+
+.dash-delta--baixa {
+    color: color-mix(in srgb, var(--color-red) 72%, var(--menu-text-strong));
+    background: color-mix(in srgb, var(--color-red) 15%, transparent);
+}
+
+.dash-delta--neutro {
+    color: var(--dash-texto-apoio);
+    background: var(--menu-surface-strong);
+}
+
+.dash-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.22rem 0.6rem;
+    border-radius: 9999px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    line-height: 1.3;
+    white-space: nowrap;
+    color: var(--dash-tom-texto);
+    background: color-mix(in srgb, var(--dash-tom) 14%, transparent);
+    border: 1px solid color-mix(in srgb, var(--dash-tom) 24%, transparent);
+}
+
+.dash-chip i {
+    font-size: 0.7rem;
+}
+
+.dash-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+}
+
+/* ------------------------------------------------------------ esqueleto */
+
+.dash-esqueleto {
+    display: block;
+    border-radius: 0.55rem;
+    background: linear-gradient(90deg,
+        var(--menu-surface-soft) 20%,
+        var(--menu-surface-highlight) 40%,
+        var(--menu-surface-soft) 60%);
+    background-size: 300% 100%;
+    animation: dash-brilho 1.6s ease-in-out infinite;
+}
+
+.dash-esqueleto--numero { height: 2.1rem; width: 62%; }
+.dash-esqueleto--linha { height: 0.8rem; width: 88%; }
+.dash-esqueleto--curta { width: 46%; }
+.dash-esqueleto--bloco { height: 4.2rem; width: 100%; border-radius: 0.8rem; }
+.dash-esqueleto--grafico { height: 232px; width: 100%; border-radius: 0.85rem; }
+.dash-esqueleto--circulo { width: 9.5rem; height: 9.5rem; border-radius: 50%; margin: 0.25rem auto 0.5rem; }
+
+@keyframes dash-brilho {
+    from { background-position: 100% 0; }
+    to { background-position: 0 0; }
+}
+
+@keyframes dash-girar {
+    to { transform: rotate(360deg); }
+}
+
+/* --------------------------------------------------------------- linhas */
+
+.dash-linha {
+    display: grid;
+    gap: var(--dash-espaco);
+    grid-template-columns: minmax(0, 1fr);
+}
+
+@media (min-width: 1280px) {
+    .dash-linha--graficos {
+        grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+    }
+}
+
+@media (min-width: 1024px) {
+    .dash-linha--dupla {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+/* Sobrou um cartão só (o outro sem permissão): ele fica com a linha inteira,
+   em vez de preso em 2/3 com um buraco ao lado. */
+.dash-linha.dash-linha--graficos[data-visiveis="1"],
+.dash-linha.dash-linha--dupla[data-visiveis="1"] {
+    grid-template-columns: minmax(0, 1fr);
+}
+
+/* --------------------------------------------------- gráfico de 12 meses */
+
+.dash-grafico__resumo {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem 1.75rem;
+}
+
+.dash-grafico__dado {
+    display: flex;
+    flex-direction: column;
+    gap: 0.1rem;
+    min-width: 0;
+}
+
+.dash-grafico__dado-rotulo {
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--dash-texto-apoio);
+}
+
+.dash-grafico__dado-valor {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--menu-text-strong);
+    font-variant-numeric: tabular-nums;
+}
+
+.dash-grafico {
+    position: relative;
+    width: 100%;
+    min-width: 0;
+    min-height: 240px;
+}
+
+/* width/height do SVG são os pixels medidos; se o cartão encolher antes de o
+   ResizeObserver redesenhar, o SVG escala para baixo em vez de vazar. */
+.dash-barras {
+    display: block;
+    width: 100%;
+    height: auto;
+    overflow: visible;
+}
+
+.dash-barras__grade line {
+    stroke: var(--menu-surface-border-strong);
+    stroke-width: 1;
+    stroke-dasharray: 3 5;
+}
+
+.dash-barras__base {
+    stroke: var(--menu-text-tertiary);
+    stroke-width: 1.25;
+}
+
+/* Texto de 11 px: com o tertiary o eixo e os meses ficavam a 1,7:1 no claro. */
+.dash-barras__eixo,
+.dash-barras__mes {
+    fill: var(--dash-texto-apoio);
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+}
+
+.dash-barras__alvo {
+    fill: transparent;
+    transition: fill 150ms ease;
+}
+
+.dash-barras__barra {
+    fill: color-mix(in srgb, var(--color-primary) 34%, transparent);
+    transition: fill 150ms ease;
+}
+
+.dash-barras__coluna:hover .dash-barras__alvo {
+    fill: var(--menu-surface-soft);
+}
+
+.dash-barras__coluna:hover .dash-barras__barra {
+    fill: color-mix(in srgb, var(--color-primary) 58%, transparent);
+}
+
+/* Mês atual em dourado cheio: é o que está sendo construído agora. */
+.dash-barras__coluna--atual .dash-barras__barra,
+.dash-barras__coluna--atual:hover .dash-barras__barra {
+    fill: url(#dashGradienteOuro);
+}
+
+.dash-barras__ouro-claro {
+    stop-color: var(--color-primary-light);
+}
+
+.dash-barras__ouro {
+    stop-color: var(--color-primary);
+}
+
+/* Dourado cru no rótulo dá 1,9-2,8:1 no cartão claro; misturado à cor forte
+   continua dourado e passa de 5:1 (e clareia no escuro). */
+.dash-barras__coluna--atual .dash-barras__mes {
+    fill: color-mix(in srgb, var(--color-primary) 50%, var(--menu-text-strong));
+    font-weight: 700;
+}
+
+.dash-barras__valor {
+    fill: var(--menu-text-strong);
+    font-size: 11.5px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+}
+
+/* ---------------------------------------------------------------- donut */
+
+.dash-donut-bloco {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 1.25rem 1.5rem;
+}
+
+.dash-donut {
+    position: relative;
+    width: 10.5rem;
+    height: 10.5rem;
+    flex-shrink: 0;
+}
+
+.dash-donut svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+}
+
+.dash-donut__trilha {
+    fill: none;
+    stroke: var(--menu-surface-strong);
+    stroke-width: 5;
+}
+
+.dash-donut__fatia {
+    fill: none;
+    stroke: var(--dash-tom);
+    stroke-width: 5;
+    transition: stroke-width 160ms ease, opacity 160ms ease;
+}
+
+.dash-donut:hover .dash-donut__fatia {
+    opacity: 0.55;
+}
+
+.dash-donut .dash-donut__fatia:hover {
+    opacity: 1;
+    stroke-width: 6.4;
+}
+
+.dash-donut__centro {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    pointer-events: none;
+}
+
+.dash-donut__total {
+    font-size: 1.85rem;
+    line-height: 1;
+    font-weight: 700;
+    color: var(--menu-text-strong);
+    font-variant-numeric: tabular-nums;
+}
+
+.dash-donut__rotulo {
+    margin-top: 0.3rem;
+    font-size: 0.75rem;
+    color: var(--dash-texto-apoio);
+}
+
+.dash-legenda {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 0.3rem;
+    flex: 1 1 11rem;
+    min-width: 0;
+}
+
+.dash-legenda__item {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 0.65rem;
+    padding: 0.45rem 0.6rem;
+    border-radius: 0.6rem;
+    font-size: 0.85rem;
+    transition: background 150ms ease;
+}
+
+.dash-legenda__item:hover {
+    background: var(--menu-surface-soft);
+}
+
+.dash-legenda__cor {
+    width: 0.7rem;
+    height: 0.7rem;
+    border-radius: 50%;
+    background: var(--dash-tom);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--dash-tom) 22%, transparent);
+}
+
+.dash-legenda__texto {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.dash-legenda__nome {
+    font-weight: 500;
+    color: var(--menu-text-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.dash-legenda__valor {
+    font-size: 0.75rem;
+    color: var(--dash-texto-apoio);
+    font-variant-numeric: tabular-nums;
+}
+
+.dash-legenda__numeros,
+.dash-hbarra__numeros {
+    text-align: right;
+    white-space: nowrap;
+    font-weight: 700;
+    color: var(--menu-text-strong);
+    font-variant-numeric: tabular-nums;
+}
+
+.dash-legenda__numeros small,
+.dash-hbarra__numeros small {
+    margin-left: 0.4rem;
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: var(--dash-texto-apoio);
+}
+
+/* ---------------------------------------------------- funil e produção */
+
+.dash-destaques {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 8.5rem), 1fr));
+    gap: 0.65rem;
+}
+
+.dash-destaque {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+    min-width: 0;
+    padding: 0.7rem 0.85rem;
+    border-radius: 0.8rem;
+    background: var(--menu-surface-soft);
+    border: 1px solid var(--menu-surface-border-soft);
+}
+
+.dash-destaque[data-tom] {
+    background: linear-gradient(145deg, color-mix(in srgb, var(--dash-tom) 16%, transparent), var(--menu-surface-soft));
+    border-color: color-mix(in srgb, var(--dash-tom) 28%, transparent);
+}
+
+.dash-destaque__rotulo {
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--dash-texto-apoio);
+}
+
+.dash-destaque__valor {
+    font-size: 1.3rem;
+    line-height: 1.2;
+    font-weight: 700;
+    color: var(--menu-text-strong);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.dash-destaque[data-tom] .dash-destaque__valor {
+    color: var(--dash-tom-texto);
+}
+
+.dash-hbarras {
+    display: grid;
+    gap: 0.7rem;
+}
+
+.dash-hbarra {
+    display: grid;
+    grid-template-columns: minmax(5.5rem, 8rem) minmax(0, 1fr) minmax(2.5rem, auto);
+    align-items: center;
+    gap: 0.75rem;
+    font-size: 0.85rem;
+}
+
+.dash-hbarra__rotulo {
+    color: var(--dash-texto-apoio);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.dash-hbarra__trilho {
+    position: relative;
+    height: 0.7rem;
+    border-radius: 9999px;
+    overflow: hidden;
+    background: var(--menu-surface-soft);
+    border: 1px solid var(--menu-surface-border-soft);
+}
+
+.dash-hbarra__preenchimento {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+    background: linear-gradient(90deg,
+        color-mix(in srgb, var(--dash-tom, var(--color-primary)) 55%, transparent),
+        var(--dash-tom, var(--color-primary)));
+    transition: width 500ms ease, filter 150ms ease;
+}
+
+.dash-hbarra:hover .dash-hbarra__preenchimento {
+    filter: brightness(1.1);
+}
+
+/* Funil: do dourado ao vinho conforme a prospecção avança de etapa. */
+.dash-hbarras--funil .dash-hbarra[data-nivel="0"] { --dash-tom: var(--color-primary-light); }
+.dash-hbarras--funil .dash-hbarra[data-nivel="1"] { --dash-tom: var(--color-primary); }
+.dash-hbarras--funil .dash-hbarra[data-nivel="2"] { --dash-tom: color-mix(in srgb, var(--color-primary) 65%, var(--dash-vinho)); }
+.dash-hbarras--funil .dash-hbarra[data-nivel="3"] { --dash-tom: color-mix(in srgb, var(--color-primary) 35%, var(--dash-vinho)); }
+.dash-hbarras--funil .dash-hbarra[data-nivel="4"] { --dash-tom: var(--dash-vinho); }
+
+/* Idade: tons da marca, sem o vermelho de alerta — idade não é atraso. */
+.dash-hbarras--idade .dash-hbarra[data-nivel="0"] { --dash-tom: var(--color-primary-light); }
+.dash-hbarras--idade .dash-hbarra[data-nivel="1"] { --dash-tom: var(--color-primary); }
+.dash-hbarras--idade .dash-hbarra[data-nivel="2"] { --dash-tom: var(--color-primary-dark); }
+.dash-hbarras--idade .dash-hbarra[data-nivel="3"] { --dash-tom: var(--dash-vinho); }
+
+/* -------------------------------------------------------- listas curtas */
+
+.dash-subtitulo-lista {
+    margin: 0.25rem 0 -0.35rem;
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--dash-texto-apoio);
+}
+
+/* Margem negativa DENTRO do padding do cartão: o fundo do hover alinha com a
+   borda interna sem empurrar o texto nem vazar para fora. */
+.dash-lista {
+    list-style: none;
+    margin: 0 -0.6rem;
+    padding: 0;
+    display: grid;
+    gap: 0.1rem;
+}
+
+.dash-lista__item {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 0.15rem 0.75rem;
+    padding: 0.5rem 0.6rem;
+    border-radius: 0.6rem;
+    transition: background 150ms ease;
+}
+
+.dash-lista__item + .dash-lista__item {
+    box-shadow: inset 0 1px 0 var(--menu-surface-border-soft);
+}
+
+.dash-lista__item:hover {
+    background: var(--menu-surface-soft);
+    box-shadow: none;
+}
+
+.dash-lista__titulo,
+.dash-lista__detalhe {
+    grid-column: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.dash-lista__titulo {
+    font-size: 0.86rem;
+    font-weight: 600;
+    color: var(--menu-text-strong);
+}
+
+.dash-lista__detalhe {
+    font-size: 0.78rem;
+    color: var(--dash-texto-apoio);
+}
+
+.dash-lista__lado {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 0.25rem;
+    font-size: 0.8rem;
+    font-variant-numeric: tabular-nums;
+}
+
+.dash-lista__valor {
+    font-weight: 600;
+    white-space: nowrap;
+    color: var(--menu-text-primary);
+}
+
+.dash-mais {
+    margin: 0;
+    font-size: 0.78rem;
+    color: var(--dash-texto-apoio);
+}
+
+.dash-mais strong {
+    display: inline-block;
+    margin-right: 0.15rem;
+    padding: 0.05rem 0.45rem;
+    border-radius: 9999px;
+    color: var(--menu-text-strong);
+    background: var(--menu-surface-strong);
+    font-variant-numeric: tabular-nums;
+}
+
+.dash-rodape {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.5rem;
+    margin: auto 0 0;
+    padding-top: 0.75rem;
+    border-top: 1px solid var(--menu-surface-border-soft);
+    font-size: 0.8rem;
+    line-height: 1.45;
+    color: var(--dash-texto-apoio);
+}
+
+.dash-rodape i {
+    margin-top: 0.15rem;
+    color: var(--color-primary);
+}
+
+.dash-dica {
+    margin: 0;
+    font-size: 0.8rem;
+    line-height: 1.45;
+    color: var(--dash-texto-apoio);
+}
+
+/* --------------------------------------------------- precisa de atenção */
+
+.dash-bloco-atencao {
+    display: flex;
+    flex-direction: column;
+    gap: 0.85rem;
+    min-width: 0;
+}
+
+.dash-secao-titulo {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    margin: 0.35rem 0 0;
+    font-size: 1.05rem;
+    font-weight: 600;
+    color: var(--menu-text-strong);
+}
+
+.dash-secao-titulo i {
+    font-size: 0.95rem;
+    color: var(--color-primary);
+}
+
+.dash-atencao {
+    display: grid;
+    gap: var(--dash-espaco);
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 20rem), 1fr));
+}
+
+.dash-contagem {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.25rem 0.6rem;
+}
+
+.dash-contagem__numero {
+    font-size: 2rem;
+    line-height: 1;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    color: var(--menu-text-strong);
+    font-variant-numeric: tabular-nums;
+}
+
+.dash-contagem__legenda {
+    font-size: 0.85rem;
+    color: var(--dash-texto-apoio);
+}
+
+.dash-card--alerta .dash-contagem__numero {
+    color: color-mix(in srgb, var(--color-red) 72%, var(--menu-text-strong));
+}
+
+.dash-empilhada {
+    display: flex;
+    gap: 2px;
+    height: 0.6rem;
+    border-radius: 9999px;
+    overflow: hidden;
+    background: var(--menu-surface-soft);
+    border: 1px solid var(--menu-surface-border-soft);
+}
+
+.dash-empilhada__parte {
+    display: block;
+    height: 100%;
+    background: var(--dash-tom);
+    transition: width 500ms ease;
+}
+
+.dash-empilhada__parte[data-tom="neutro"] {
+    background: color-mix(in srgb, var(--neutral-500) 45%, transparent);
+}
+
+/* -------------------------------------------------- vazio, erro e aviso */
+
+.dash-vazio {
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+    padding: 0.8rem 0.95rem;
+    border-radius: 0.75rem;
+    background: var(--menu-surface-soft);
+    border: 1px dashed var(--menu-surface-border-strong);
+}
+
+.dash-vazio i {
+    font-size: 1rem;
+    color: var(--dash-tom-texto);
+}
+
+.dash-vazio__texto {
+    margin: 0;
+    font-size: 0.85rem;
+    color: var(--dash-texto-apoio);
+}
+
+.dash-vazio--grande {
+    flex: 1;
+    flex-direction: column;
+    justify-content: center;
+    gap: 0.75rem;
+    min-height: 13rem;
+    text-align: center;
+}
+
+.dash-vazio--grande i {
+    font-size: 1.6rem;
+}
+
+.dash-erro-cartao {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.5rem;
+    padding: 0.85rem 1rem;
+    border-radius: 0.8rem;
+    background: color-mix(in srgb, var(--color-red) 8%, transparent);
+    border: 1px dashed color-mix(in srgb, var(--color-red) 38%, transparent);
+}
+
+.dash-erro-cartao__titulo {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin: 0;
+    font-size: 0.88rem;
+    font-weight: 600;
+    color: color-mix(in srgb, var(--color-red) 72%, var(--menu-text-strong));
+}
+
+.dash-erro-cartao__detalhe {
+    margin: 0;
+    font-size: 0.8rem;
+    color: var(--dash-texto-apoio);
+}
+
+.dash-botao-leve {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    padding: 0.4rem 0.85rem;
+    border-radius: 0.55rem;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--menu-text-strong);
+    background: var(--menu-surface-strong);
+    border: 1px solid var(--menu-surface-border-strong);
+    cursor: pointer;
+    transition: background 150ms ease, border-color 150ms ease;
+}
+
+.dash-botao-leve:hover {
+    background: var(--menu-surface-highlight);
+    border-color: color-mix(in srgb, var(--color-primary) 45%, transparent);
+}
+
+.dash-botao-leve i {
+    color: var(--color-primary);
+}
+
+.dash-aviso {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.6rem 1rem;
+    padding: 0.75rem 1rem;
+    border-radius: 0.85rem;
+    background: color-mix(in srgb, var(--color-red) 9%, transparent);
+    border: 1px solid color-mix(in srgb, var(--color-red) 30%, transparent);
+}
+
+.dash-aviso__icone {
+    color: color-mix(in srgb, var(--color-red) 72%, var(--menu-text-strong));
+}
+
+.dash-aviso__texto {
+    flex: 1 1 16rem;
+    margin: 0;
+    font-size: 0.85rem;
+    color: var(--menu-text-primary);
+}
+
+.dash-estado-geral {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.7rem;
+    padding: 3.5rem 1.5rem;
+    border-radius: var(--dash-raio);
+    text-align: center;
+    background: var(--dash-fundo-card);
+    border: 1px solid var(--dash-borda);
+}
+
+.dash-estado-geral__icone {
+    display: grid;
+    place-items: center;
+    width: 4.5rem;
+    height: 4.5rem;
+    margin-bottom: 0.4rem;
+    border-radius: 50%;
+    font-size: 1.75rem;
+    color: var(--dash-tom-texto);
+    background: color-mix(in srgb, var(--dash-tom) 14%, transparent);
+    box-shadow: 0 0 0 8px color-mix(in srgb, var(--dash-tom) 6%, transparent);
+}
+
+.dash-estado-geral__titulo {
+    margin: 0;
+    font-size: 1.15rem;
+    font-weight: 600;
+    color: var(--menu-text-strong);
+}
+
+.dash-estado-geral__texto,
+.dash-estado-geral__detalhe {
+    margin: 0;
+    max-width: 34rem;
+    line-height: 1.5;
+}
+
+.dash-estado-geral__texto {
+    font-size: 0.9rem;
+    color: var(--dash-texto-apoio);
+}
+
+.dash-estado-geral__detalhe {
+    font-size: 0.8rem;
+    color: var(--dash-texto-apoio);
+}
+
+.dash-estado-geral .dash-botao-leve {
+    margin-top: 0.5rem;
+}
+
+/* ------------------------------------------------------------ responsivo */
+
+@media (max-width: 479px) {
+    .dash-card {
+        padding: 1rem;
     }
 
-    .dashboard-timeline li {
-        grid-template-columns: minmax(60px, auto) 1fr;
+    /* Barra horizontal ganha linha própria: rótulo e número em cima. */
+    .dash-hbarra {
+        grid-template-columns: minmax(0, 1fr) auto;
+        row-gap: 0.35rem;
     }
 
-    .dashboard-timeline li > span:last-child {
-        grid-column: span 2;
-        justify-self: flex-start;
+    .dash-hbarra__trilho {
+        grid-column: 1 / -1;
+        grid-row: 2;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    /* menu.css zera a animação de .animate-fade-in-up, mas não o opacity: 0 de
+       partida: sem isto o corpo inteiro do painel ficava invisível (só o
+       cabeçalho sobrava, salvo pela classe de introdução do menu). A
+       especificidade 0,2,0 vence a 0,1,0 de .animate-fade-in-up. Durante a
+       máscara nada vaza: o menu esconde o módulo por visibility. */
+    .dash-painel > [data-dash-linha],
+    .dashboard-module > .dash-cabecalho {
+        opacity: 1;
+    }
+
+    .dash-esqueleto,
+    .dash-atualizando .dash-botao-atualizar i {
+        animation: none;
+    }
+
+    .dash-card,
+    .dash-card:hover {
+        transform: none;
+        transition: none;
+    }
+
+    .dash-card__corpo,
+    .dash-hbarra__preenchimento,
+    .dash-empilhada__parte,
+    .dash-donut__fatia,
+    .dash-barras__barra,
+    .dash-barras__alvo {
+        transition: none;
     }
 }

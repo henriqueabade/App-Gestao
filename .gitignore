@@ -172,3 +172,4 @@ sql/prospeccoes_seed_extra.sql
 sql/prospeccoes_seed.sql
 sql/prospeccoes.sql
 sql/tabelafixa.sql
+.claude/launch.json

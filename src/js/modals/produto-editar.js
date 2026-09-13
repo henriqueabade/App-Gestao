@@ -302,7 +302,9 @@
               'success'
             );
 
-            if (typeof carregarProdutos === 'function') await carregarProdutos();
+            // O preço JÁ foi gravado: uma falha ao recarregar a lista não pode
+            // cair no catch abaixo e anunciar "Falha ao salvar o preço".
+            await recarregarListaDePecas();
             fecharPrecoTabela();
           };
 

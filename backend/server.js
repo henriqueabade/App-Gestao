@@ -12,6 +12,7 @@ const orcamentosRouter = require('./orcamentosController');
 const pedidosRouter = require('./pedidosController');
 const prospeccoesRouter = require('./prospeccoesController');
 const iaRouter = require('./iaController');
+const dashboardRouter = require('./dashboardController');
 const notificationsRouter = require('./notificationsController');
 const db = require('./db');
 const { normalizeToken } = require('./apiHttpClient');
@@ -53,6 +54,10 @@ app.use('/api/orcamentos', orcamentosRouter);
 app.use('/api/pedidos', pedidosRouter);
 app.use('/api/prospeccoes', prospeccoesRouter);
 app.use('/api/ia', iaRouter);
+// Antes do proxy genérico `app.get('/api/:table')` lá embaixo: montado depois,
+// ele responderia /api/dashboard como se "dashboard" fosse uma tabela — sem
+// conferir permissão e com o cache que nunca expira.
+app.use('/api/dashboard', dashboardRouter);
 
 const { createApiClient } = require('./apiHttpClient');
 const apiCache = new Map();

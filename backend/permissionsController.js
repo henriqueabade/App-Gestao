@@ -79,7 +79,10 @@ function limparCache() { cacheEfetivas.clear(); cacheUsuario.clear(); }
 
 async function obterPermissoesEfetivas(req) {
   const usuario = await carregarUsuarioAtual(req);
-  if (!usuario) return permissoesRepo.emptyPermissions();
+  // Tudo negado, MAS marcado: sem a marca o Dashboard não separava "não sei
+  // quem é você" de "perfil sem nada liberado". `can()` só lê os módulos, então
+  // exigirPermissao e a IA continuam negando igual.
+  if (!usuario) return { ...permissoesRepo.emptyPermissions(), erro: true };
   const chave = usuario.id ?? 'anon';
   const emCache = lerCache(chave);
   if (emCache) return emCache;
