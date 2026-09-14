@@ -339,48 +339,108 @@ function caminhoBarra(x, y, largura, altura, raio = 5) {
 }
 
 /**
- * Geometria do gráfico de 12 meses, em pixels reais (a tela mede a largura do
- * cartão e chama de novo quando ela muda). Com viewBox fixo o SVG inteiro
- * escalava junto e, num cartão estreito, os rótulos viravam letras de 5 px.
+ * Uma coluna por mês do gráfico: a união dos meses de vendas (os 12 últimos)
+ * com os da previsão (os mesmos 12 e os futuros), em ordem. Guarda os itens
+ * crus do contrato, porque o tooltip de cada barra é montado a partir deles.
+ * Mês que não veio numa série fica `null` nela: no futuro não há venda
+ * fechada, e sem a seção de previsão não há barra verde nenhuma.
  */
-function geometriaBarras(serie, opcoes = {}) {
-    const itens = listaDe(serie);
+function colunasDoGrafico(serie, meses) {
+    const porMes = new Map();
+    const colunaDe = mes => {
+        if (!porMes.has(mes)) porMes.set(mes, { mes, vendas: null, previsao: null });
+        return porMes.get(mes);
+    };
+    listaDe(serie).forEach(item => {
+        if (partesDoMes(item?.mes)) colunaDe(String(item.mes).slice(0, 7)).vendas = item;
+    });
+    listaDe(meses).forEach(item => {
+        if (partesDoMes(item?.mes)) colunaDe(String(item.mes).slice(0, 7)).previsao = item;
+    });
+    // 'YYYY-MM' ordena como texto; o BFF já manda as duas séries sem buracos.
+    return [...porMes.values()].sort((a, b) => (a.mes < b.mes ? -1 : a.mes > b.mes ? 1 : 0));
+}
+
+/**
+ * Geometria do gráfico de vendas e previsão, em pixels reais (a tela mede a
+ * largura do cartão e chama de novo quando ela muda). Com viewBox fixo o SVG
+ * inteiro escalava junto e, num cartão estreito, os rótulos viravam letras de
+ * 5 px.
+ *
+ * Com uma série só (vendas sem previsão, ou só a previsão) é o gráfico de
+ * sempre: uma barra centrada por mês. Com as duas, cada mês ganha o par ouro
+ * (vendas) à esquerda e verde (previsão) à direita — no mesmo lugar em todos
+ * os meses, inclusive nos futuros, onde só existe a verde: o vão à esquerda já
+ * diz "ainda não há venda fechada ali". O eixo Y vai até o maior valor das
+ * DUAS séries; escalar só pelas vendas cortaria a barra verde mais alta.
+ */
+function geometriaGrafico(colunas, opcoes = {}) {
+    const lista = listaDe(colunas);
     const largura = opcoes.largura > 0 ? opcoes.largura : 640;
     const altura = opcoes.altura > 0 ? opcoes.altura : 240;
     const margem = { topo: 26, direita: 8, base: 30, esquerda: 48, ...(opcoes.margem || {}) };
     const chave = opcoes.chave || 'valor';
-    const valores = itens.map(item => Math.max(0, numeroOuNulo(item?.[chave]) ?? 0));
-    const maximo = valores.length ? Math.max(...valores) : 0;
+    // Vendas seguem o eixo (R$ ou contagem); a previsão é sempre R$ (`valor`).
+    const medir = (item, campo) => (item ? Math.max(0, numeroOuNulo(item[campo]) ?? 0) : null);
+    const medidas = lista.map(coluna => ({ vendas: medir(coluna?.vendas, chave), previsao: medir(coluna?.previsao, 'valor') }));
+    const comVendas = medidas.some(medida => medida.vendas !== null);
+    const comPrevisao = medidas.some(medida => medida.previsao !== null);
+    const agrupado = comVendas && comPrevisao;
+    const maximo = Math.max(0, ...medidas.map(medida => Math.max(medida.vendas ?? 0, medida.previsao ?? 0)));
     const escala = escalaEixo(maximo, { divisoes: opcoes.divisoes || 4, inteiro: chave === 'quantidade' });
     const areaLargura = Math.max(1, largura - margem.esquerda - margem.direita);
     const areaAltura = Math.max(1, altura - margem.topo - margem.base);
     const baseY = margem.topo + areaAltura;
-    const banda = itens.length ? areaLargura / itens.length : areaLargura;
-    const larguraBarra = Math.min(banda * 0.62, 46);
+    const banda = lista.length ? areaLargura / lista.length : areaLargura;
+    // Uma série: 62% da banda, até 46 px (a barra de antes). Duas: o par ocupa
+    // 74% da banda, até 64 px, com um vão fino entre o ouro e o verde.
+    const larguraGrupo = agrupado ? Math.min(banda * 0.74, 64) : Math.min(banda * 0.62, 46);
+    const vao = agrupado ? Math.min(3, larguraGrupo * 0.1) : 0;
+    const larguraBarra = agrupado ? (larguraGrupo - vao) / 2 : larguraGrupo;
+
+    // Mês atual: o destacado e o marco onde a previsão vira futuro. Sem
+    // `mesAtual` na resposta vale o último mês de vendas (o atual, por
+    // contrato) ou, só com a previsão, o 12º: os 12 primeiros meses dela são
+    // os mesmos da série de vendas.
+    let indiceAtual = opcoes.mesAtual ? lista.findIndex(coluna => coluna?.mes === opcoes.mesAtual) : -1;
+    if (indiceAtual < 0) {
+        const ultimoComVendas = medidas.map(medida => medida.vendas !== null).lastIndexOf(true);
+        indiceAtual = ultimoComVendas >= 0 ? ultimoComVendas : Math.min(11, lista.length - 1);
+    }
     // Cartão estreito: pula rótulos de mês na medida da banda. O mais largo
     // ("set/26" a 11 px) mede ~38 px, então cada rótulo pede 40 px; o limiar
     // fixo antigo (alternar só abaixo de 34 px) deixava os nomes se encostarem
-    // entre 34 e 40 px. Contado a partir do ÚLTIMO, para o mês atual (o
-    // destacado) nunca perder o nome.
+    // entre 34 e 40 px. Contado a partir do MÊS ATUAL, para o destacado nunca
+    // perder o nome — com a previsão ele deixou de ser o último da fila.
     const passoRotulo = Math.max(1, Math.ceil(40 / banda));
-
-    const barras = itens.map((item, indice) => {
-        const valor = valores[indice];
+    const barra = (valor, x, alvo) => {
         let alturaBarra = escala.topo > 0 ? (valor / escala.topo) * areaAltura : 0;
-        // Mês com venda pequena ainda precisa ser visto: 3 px de piso.
+        // Mês com valor pequeno ainda precisa ser visto: 3 px de piso.
         if (valor > 0) alturaBarra = Math.max(alturaBarra, 3);
+        return { valor, x, y: baseY - alturaBarra, largura: larguraBarra, altura: alturaBarra, alvo };
+    };
+
+    const colunasGeo = lista.map((coluna, indice) => {
+        const { vendas, previsao } = medidas[indice];
         const inicioBanda = margem.esquerda + indice * banda;
+        const inicioGrupo = inicioBanda + (banda - larguraGrupo) / 2;
+        // Alvo do mouse e do foco: a banda inteira (a barra de 3 px de um mês
+        // fraco era impossível de acertar); com as duas barras, meia para cada.
+        const inteira = { x: inicioBanda, largura: banda };
+        const dupla = vendas !== null && previsao !== null;
         return {
             indice,
-            mes: item?.mes,
-            valor,
-            x: inicioBanda + (banda - larguraBarra) / 2,
-            y: baseY - alturaBarra,
-            largura: larguraBarra,
-            altura: alturaBarra,
+            mes: coluna?.mes,
             centro: inicioBanda + banda / 2,
-            banda: { x: inicioBanda, largura: banda },
-            mostrarRotulo: (itens.length - 1 - indice) % passoRotulo === 0
+            banda: inteira,
+            atual: indice === indiceAtual,
+            futura: indice > indiceAtual,
+            mostrarRotulo: Math.abs(indice - indiceAtual) % passoRotulo === 0,
+            vendas: vendas === null ? null
+                : barra(vendas, inicioGrupo, dupla ? { x: inicioBanda, largura: banda / 2 } : inteira),
+            previsao: previsao === null ? null
+                : barra(previsao, agrupado ? inicioGrupo + larguraBarra + vao : inicioGrupo,
+                    dupla ? { x: inicioBanda + banda / 2, largura: banda / 2 } : inteira)
         };
     });
 
@@ -388,8 +448,13 @@ function geometriaBarras(serie, opcoes = {}) {
         valor,
         y: baseY - (escala.topo > 0 ? (valor / escala.topo) * areaAltura : 0)
     }));
+    // Linha tracejada entre o mês atual e os futuros: só com previsão e mês futuro.
+    const separadorX = comPrevisao && indiceAtual < lista.length - 1 ? margem.esquerda + (indiceAtual + 1) * banda : null;
 
-    return { largura, altura, margem, baseY, topoY: margem.topo, areaAltura, escala, barras, grade, maximo };
+    return {
+        largura, altura, margem, baseY, topoY: margem.topo, areaAltura, escala, grade, maximo,
+        banda, agrupado, indiceAtual, separadorX, colunas: colunasGeo
+    };
 }
 
 /**
@@ -433,6 +498,103 @@ function larguraPercentual(valor, maximo, minimo = 4) {
     return Math.min(100, Math.max(minimo, (v / m) * 100));
 }
 
+/** "1", "1 e 2", "1, 2 e 3": a enumeração do português, sem depender do Intl.ListFormat. */
+function juntarLista(itens) {
+    const lista = listaDe(itens).map(item => String(item ?? '').trim()).filter(Boolean);
+    if (lista.length <= 1) return lista.join('');
+    return `${lista.slice(0, -1).join(', ')} e ${lista[lista.length - 1]}`;
+}
+
+/** Pedido sem parcelas: o BFF o põe inteiro, estimado, no dia do pedido. */
+const DASH_NOTA_ESTIMADA = 'sem parcelas cadastradas — valor total na data do pedido';
+
+/**
+ * "parcelas 1, 2 e 3 de 3 · vence 02/10, 16/10 e 30/10". O vencimento é DATE
+ * e passa por formatarDataCurta, cortado como texto: com
+ * `new Date('2026-10-02')` a parcela do dia 2 apareceria dia 1 em São Paulo.
+ */
+function textoParcelasDoItem(item) {
+    const parcelas = listaDe(item?.parcelas);
+    const numeros = parcelas.map(parcela => numeroOuNulo(parcela?.numero)).filter(n => n !== null).map(n => formatarNumero(n));
+    const datas = parcelas.map(parcela => formatarDataCurta(parcela?.vencimento)).filter(Boolean);
+    const total = numeroOuNulo(item?.totalParcelas);
+    const partes = [];
+    if (numeros.length) {
+        const de = total !== null && total > 0 ? ` de ${formatarNumero(total)}` : '';
+        partes.push(`${numeros.length === 1 ? 'parcela' : 'parcelas'} ${juntarLista(numeros)}${de}`);
+    } else if (parcelas.length) {
+        partes.push(pluralizar(parcelas.length, 'parcela', 'parcelas'));
+    }
+    if (datas.length) partes.push(`vence ${juntarLista(datas)}`);
+    return partes.join(' · ');
+}
+
+/**
+ * Conteúdo do tooltip da barra verde: quais pedidos compõem a previsão do mês.
+ * Puro (só texto), para o teste conferir exatamente o que a caixa mostra.
+ * Parcela é "programada" — nunca "recebida" nem "vencida": o banco não tem
+ * baixa de pagamento. Sem o nome (perfil sem a coluna Cliente) fica só o número.
+ */
+function conteudoDicaPrevisao(mes) {
+    const valor = numeroOuNulo(mes?.valor);
+    const parcelas = quantidadeDe(mes?.parcelas);
+    const pedidos = quantidadeDe(mes?.pedidos);
+    const outros = quantidadeDe(mes?.outros);
+    const itens = listaDe(mes?.itens).map(item => {
+        const numero = item?.numero ? String(item.numero) : 'Pedido';
+        const cliente = textoInformado(item?.cliente);
+        const estimada = item?.estimada === true;
+        return {
+            nome: cliente ? `${numero} · ${cliente}` : numero,
+            detalhe: estimada ? DASH_NOTA_ESTIMADA : textoParcelasDoItem(item),
+            valor: numeroOuNulo(item?.valor) !== null ? formatarMoeda(item.valor) : '',
+            estimada
+        };
+    });
+    const vazio = parcelas === 0 && pedidos === 0 && !((valor ?? 0) > 0);
+    return {
+        serie: 'previsao',
+        mes: mes?.mes,
+        titulo: `Previsão · ${rotuloMes(mes?.mes)}`,
+        resumo: vazio
+            ? 'Nenhuma parcela neste mês'
+            : [valor !== null ? formatarMoeda(valor) : '', pluralizar(pedidos, 'pedido', 'pedidos'),
+                pluralizar(parcelas, 'parcela', 'parcelas')].filter(Boolean).join(' · '),
+        itens,
+        // O BFF lista até 8 pedidos por mês; o total do mês continua completo.
+        rodape: outros > 0 ? `+${formatarNumero(outros)} ${outros === 1 ? 'outro pedido' : 'outros pedidos'}` : ''
+    };
+}
+
+/** Tooltip da barra de ouro: o mesmo formato, só com o resumo do mês. */
+function conteudoDicaVendas(item, { emDinheiro = true } = {}) {
+    const quantidade = quantidadeDe(item?.quantidade);
+    const valor = emDinheiro ? numeroOuNulo(item?.valor) : null;
+    const vazio = quantidade === 0 && !((valor ?? 0) > 0);
+    return {
+        serie: 'vendas',
+        mes: item?.mes,
+        titulo: `Vendas fechadas · ${rotuloMes(item?.mes)}`,
+        resumo: vazio
+            ? 'Nenhuma venda fechada'
+            : [valor !== null ? formatarMoedaCompacta(valor) : '', pluralizar(quantidade, 'pedido', 'pedidos')].filter(Boolean).join(' · '),
+        itens: [],
+        rodape: ''
+    };
+}
+
+const DASH_NOMES_SERIE = { vendas: 'Vendas fechadas', previsao: 'Previsão de faturamento' };
+
+/**
+ * aria-label da barra focável: o mesmo resumo do tooltip, com a série e o mês
+ * por extenso — no leitor de tela "set/26" sai como "set barra 26".
+ */
+function rotuloAcessivelDica(conteudo) {
+    const nome = DASH_NOMES_SERIE[conteudo.serie] || conteudo.titulo;
+    const mes = partesDoMes(conteudo.mes) ? ` em ${rotuloMesLongo(conteudo.mes)}` : '';
+    return `${nome}${mes}: ${conteudo.resumo}`;
+}
+
 /**
  * Estado de uma seção no contrato:
  *  - 'ok'     → veio em `secoes`;
@@ -449,9 +611,63 @@ function estadoDaSecao(dados, secao) {
 }
 
 /**
+ * O que o gráfico de vendas desenha, a partir das DUAS seções de que depende.
+ * `mostra*` diz se a série pertence ao cartão (liberada, mesmo que tenha
+ * falhado agora): é o que escolhe o título, a legenda e a nota de falha.
+ */
+function seriesDoGrafico(dados) {
+    const estadoVendas = estadoDaSecao(dados, 'vendas');
+    const estadoPrevisao = estadoDaSecao(dados, 'previsao');
+    const serie = estadoVendas === 'ok' ? listaDe(dados.secoes.vendas?.serie12m) : [];
+    // Sem a coluna de valor todos os `valor` de vendas vêm null: o gráfico conta pedidos.
+    const emDinheiro = estadoVendas !== 'ok' || serie.some(item => numeroOuNulo(item?.valor) !== null);
+    // A previsão é R$ e exige a mesma coluna de valor: sem ela o BFF nem a
+    // manda. Se viesse ao lado de vendas em contagem, R$ e pedidos dividiriam
+    // um eixo só — fica a contagem.
+    const mostraPrevisao = estadoPrevisao !== 'oculta' && emDinheiro;
+    return {
+        estadoVendas,
+        estadoPrevisao,
+        serie,
+        emDinheiro,
+        mostraVendas: estadoVendas !== 'oculta',
+        mostraPrevisao,
+        previsao: mostraPrevisao && estadoPrevisao === 'ok' ? dados.secoes.previsao : null
+    };
+}
+
+const DASH_TITULOS_GRAFICO = {
+    ambos: {
+        titulo: 'Vendas fechadas e previsão de faturamento',
+        subtitulo: 'Pedidos gerados por mês, sem os cancelados, e parcelas pelo mês de vencimento'
+    },
+    vendas: {
+        titulo: 'Vendas fechadas — últimos 12 meses',
+        subtitulo: 'Pedidos gerados na aprovação do orçamento, sem os cancelados'
+    },
+    previsao: {
+        titulo: 'Previsão de faturamento',
+        subtitulo: 'Parcelas dos pedidos pelo mês de vencimento'
+    }
+};
+
+/**
+ * Título do cartão do gráfico. Sem a previsão no perfil volta a ser o gráfico
+ * de antes — prometer "previsão" a quem não pode vê-la seria mentira. Com a
+ * previsão em falha o título fica: ela é do cartão, só não veio agora.
+ */
+function titulosDoGrafico(dados) {
+    const { mostraVendas, mostraPrevisao } = seriesDoGrafico(dados);
+    if (mostraVendas && mostraPrevisao) return DASH_TITULOS_GRAFICO.ambos;
+    return mostraPrevisao ? DASH_TITULOS_GRAFICO.previsao : DASH_TITULOS_GRAFICO.vendas;
+}
+
+/**
  * Cada cartão da tela, a seção de que depende e quem o desenha. A chave é o
  * `data-dash-cartao` do HTML (um teste confere os dois lados). `mostrar`
  * esconde os cartões que só fazem sentido quando têm algo a dizer.
+ * `outrasSecoes`: o cartão também aparece com qualquer uma delas, e só vira
+ * erro quando nenhuma veio. `titulos` troca o título conforme o que veio.
  */
 const DASH_CARTOES = {
     'kpi-vendas': { secao: 'vendas', desenhar: desenharKpiVendas },
@@ -464,7 +680,15 @@ const DASH_CARTOES = {
     },
     'kpi-producao': { secao: 'producao', desenhar: desenharKpiProducao },
     'kpi-orcamentos': { secao: 'orcamentos', desenhar: desenharKpiOrcamentos },
-    'grafico-vendas': { secao: 'vendas', desenhar: desenharGraficoVendas },
+    // Vendas (ouro) e previsão de faturamento (verde) no mesmo eixo. A previsão
+    // tem permissão própria (valor + condição de pagamento do pedido), por isso
+    // é outra seção: quem só vê vendas continua com o gráfico de antes.
+    'grafico-vendas': {
+        secao: 'vendas',
+        outrasSecoes: ['previsao'],
+        titulos: titulosDoGrafico,
+        desenhar: desenharGraficoVendas
+    },
     'grafico-situacao': { secao: 'producao', desenhar: desenharGraficoSituacao },
     'funil': { secao: 'prospeccao', desenhar: desenharFunil },
     'idade': { secao: 'producao', desenhar: desenharIdade },
@@ -482,13 +706,20 @@ const DASH_CARTOES = {
     'clientes': { secao: 'clientes', desenhar: desenharClientes }
 };
 
-/** 'ok' | 'falha' | 'oculto' para um cartão, a partir da resposta. */
+function secoesDoCartao(cartao) {
+    return [cartao.secao, ...listaDe(cartao.outrasSecoes)];
+}
+
+/**
+ * 'ok' | 'falha' | 'oculto' para um cartão, a partir da resposta. Cartão de
+ * mais de uma seção fica de pé com qualquer uma delas: o gráfico desenha a
+ * série que veio e avisa, discreto, da que falhou.
+ */
 function estadoDoCartao(dados, chave) {
     const cartao = DASH_CARTOES[chave];
     if (!cartao) return 'oculto';
-    const estado = estadoDaSecao(dados, cartao.secao);
-    if (estado === 'falha') return 'falha';
-    if (estado === 'oculta') return 'oculto';
+    const estados = secoesDoCartao(cartao).map(secao => estadoDaSecao(dados, secao));
+    if (!estados.includes('ok')) return estados.includes('falha') ? 'falha' : 'oculto';
     if (typeof cartao.mostrar === 'function' && !cartao.mostrar(dados.secoes[cartao.secao])) return 'oculto';
     return 'ok';
 }
@@ -834,39 +1065,110 @@ function montarDadoResumo(rotulo, valor) {
     return dado;
 }
 
+/**
+ * "PROGRAMADO DE SET/26 EM DIANTE": o que as parcelas ainda vão trazer, do mês
+ * atual em diante, incluindo o que passa do último mês do gráfico — esse vem
+ * à parte ("+R$ Y depois de jan/27"), para nada sumir em silêncio.
+ */
+function montarDadoPrevisao(previsao, mesAtual, ultimoMes) {
+    const programado = numeroOuNulo(previsao?.programadoDesteMes);
+    const dado = montarDadoResumo(`Programado de ${rotuloMes(mesAtual)} em diante`,
+        programado !== null ? formatarMoedaCompacta(programado) : '—');
+    dado.classList.add('dash-grafico__dado--previsao');
+    if (programado !== null) dado.title = formatarMoeda(programado);
+    const alem = previsao?.alemDoHorizonte || {};
+    const valorAlem = numeroOuNulo(alem.valor);
+    if (valorAlem !== null && valorAlem > 0) {
+        const nota = criarEl('span', 'dash-grafico__dado-nota',
+            `+${formatarMoedaCompacta(valorAlem)} depois de ${rotuloMes(ultimoMes)}`);
+        const ate = partesDoMes(alem.ate) ? ` até ${rotuloMes(alem.ate)}` : '';
+        nota.title = `${pluralizar(alem.parcelas, 'parcela', 'parcelas')}${ate}: ${formatarMoeda(valorAlem)}`;
+        dado.append(nota);
+    }
+    return dado;
+}
+
+/** Legenda das séries desenhadas — sem a previsão no perfil, só o ouro. */
+function montarLegendaGrafico({ comVendas, comPrevisao }) {
+    const legenda = criarEl('ul', 'dash-grafico__legenda');
+    legenda.setAttribute('aria-label', 'Legenda do gráfico');
+    const item = (serie, texto) => {
+        const linha = criarEl('li', `dash-grafico__legenda-item dash-grafico__legenda-item--${serie}`);
+        const cor = criarEl('span', `dash-grafico__legenda-cor dash-grafico__legenda-cor--${serie}`);
+        cor.setAttribute('aria-hidden', 'true');
+        linha.append(cor, criarEl('span', '', texto));
+        return linha;
+    };
+    if (comVendas) legenda.append(item('vendas', 'Vendas fechadas'));
+    if (comPrevisao) legenda.append(item('previsao', 'Previsão de faturamento (parcelas pelo vencimento)'));
+    return legenda;
+}
+
+/** Nota discreta de uma série que não veio agora; o motivo do BFF vai no title. */
+function montarNotaGrafico(texto, detalhe) {
+    const nota = criarEl('p', 'dash-grafico__nota');
+    nota.setAttribute('role', 'status');
+    nota.append(criarIcone('fas fa-circle-info'), document.createTextNode(texto));
+    if (typeof detalhe === 'string' && detalhe.trim()) nota.title = detalhe;
+    return nota;
+}
+
 function desenharGraficoVendas(corpo, s, dados) {
-    const serie = listaDe(s?.serie12m);
-    // Sem a coluna de valor todos os `valor` vêm null: o gráfico conta pedidos.
-    const emDinheiro = serie.some(item => numeroOuNulo(item?.valor) !== null);
+    const { estadoVendas, estadoPrevisao, serie, emDinheiro, mostraPrevisao, previsao } = seriesDoGrafico(dados);
+    const comVendas = estadoVendas === 'ok';
+    const mesesPrevisao = previsao ? listaDe(previsao.meses) : [];
+    const mesAtual = dados?.mesAtual || serie[serie.length - 1]?.mes
+        || mesesPrevisao[Math.min(11, mesesPrevisao.length - 1)]?.mes;
+
+    // A série que falhou agora vira nota discreta; a outra continua desenhada
+    // e o "Atualizar" do cabeçalho relê as duas.
+    const notas = [];
+    if (comVendas && mostraPrevisao && estadoPrevisao === 'falha') {
+        notas.push(montarNotaGrafico('Previsão de faturamento indisponível agora.', dados.falhas.previsao));
+    }
+    if (previsao && estadoVendas === 'falha') {
+        notas.push(montarNotaGrafico('Vendas fechadas indisponíveis agora.', dados.falhas.vendas));
+    }
+
     const houveVenda = serie.some(item => quantidadeDe(item?.quantidade) > 0 || (numeroOuNulo(item?.valor) ?? 0) > 0);
-    if (!houveVenda) {
-        corpo.replaceChildren(montarVazio('Nenhuma venda fechada nos últimos 12 meses.', {
-            icone: 'fa-chart-bar', tom: 'neutro', grande: true
-        }));
+    const houvePrevisao = mesesPrevisao.some(item => (numeroOuNulo(item?.valor) ?? 0) > 0)
+        || (numeroOuNulo(previsao?.alemDoHorizonte?.valor) ?? 0) > 0;
+    if (!houveVenda && !houvePrevisao) {
+        const texto = comVendas && previsao
+            ? 'Nenhuma venda fechada nos últimos 12 meses e nenhuma parcela programada.'
+            : (previsao ? 'Nenhuma parcela de pedido programada.' : 'Nenhuma venda fechada nos últimos 12 meses.');
+        corpo.replaceChildren(montarVazio(texto, { icone: 'fa-chart-bar', tom: 'neutro', grande: true }), ...notas);
         return;
     }
-    const totalQuantidade = serie.reduce((soma, item) => soma + quantidadeDe(item?.quantidade), 0);
-    const totalValor = serie.reduce((soma, item) => soma + (numeroOuNulo(item?.valor) ?? 0), 0);
-    const anterior = s?.mesAnterior || {};
-    const valorAnterior = numeroOuNulo(anterior.valor);
-    const pedidosAnterior = pluralizar(anterior.quantidade, 'pedido', 'pedidos');
 
     const resumo = criarEl('div', 'dash-grafico__resumo');
-    resumo.append(
-        montarDadoResumo('Nos 12 meses', emDinheiro
-            ? `${formatarMoedaCompacta(totalValor)} · ${pluralizar(totalQuantidade, 'pedido', 'pedidos')}`
-            : pluralizar(totalQuantidade, 'pedido', 'pedidos')),
-        montarDadoResumo('Mês passado inteiro', valorAnterior !== null
-            ? `${formatarMoedaCompacta(valorAnterior)} · ${pedidosAnterior}`
-            : pedidosAnterior),
-        montarDadoResumo('Eixo', emDinheiro ? 'valor em R$' : 'quantidade de pedidos')
-    );
+    if (comVendas) {
+        const totalQuantidade = serie.reduce((soma, item) => soma + quantidadeDe(item?.quantidade), 0);
+        const totalValor = serie.reduce((soma, item) => soma + (numeroOuNulo(item?.valor) ?? 0), 0);
+        const anterior = s?.mesAnterior || {};
+        const valorAnterior = numeroOuNulo(anterior.valor);
+        const pedidosAnterior = pluralizar(anterior.quantidade, 'pedido', 'pedidos');
+        resumo.append(
+            montarDadoResumo('Nos 12 meses', emDinheiro
+                ? `${formatarMoedaCompacta(totalValor)} · ${pluralizar(totalQuantidade, 'pedido', 'pedidos')}`
+                : pluralizar(totalQuantidade, 'pedido', 'pedidos')),
+            montarDadoResumo('Mês passado inteiro', valorAnterior !== null
+                ? `${formatarMoedaCompacta(valorAnterior)} · ${pedidosAnterior}`
+                : pedidosAnterior)
+        );
+    }
+    if (previsao) resumo.append(montarDadoPrevisao(previsao, mesAtual, mesesPrevisao[mesesPrevisao.length - 1]?.mes));
+    resumo.append(montarDadoResumo('Eixo', emDinheiro ? 'valor em R$' : 'quantidade de pedidos'));
 
     const figura = criarEl('div', 'dash-grafico');
-    corpo.replaceChildren(resumo, figura);
+    corpo.replaceChildren(resumo, montarLegendaGrafico({ comVendas, comPrevisao: Boolean(previsao) }), ...notas, figura);
     // Guardado no elemento (não numa variável do script) porque quem redesenha
     // no redimensionamento pode ser o código de outra execução do arquivo.
-    corpo.__dashGrafico = { serie, chave: emDinheiro ? 'valor' : 'quantidade', mesAtual: dados?.mesAtual };
+    corpo.__dashGrafico = {
+        colunas: colunasDoGrafico(serie, mesesPrevisao),
+        chave: emDinheiro ? 'valor' : 'quantidade',
+        mesAtual
+    };
     desenharBarrasNoCartao(corpo);
     observarLargura(corpo, () => desenharBarrasNoCartao(corpo));
 }
@@ -879,23 +1181,40 @@ function desenharBarrasNoCartao(corpo) {
     const largura = Math.round(figura.clientWidth) || 640;
     if (figura.dataset.larguraDesenhada === String(largura)) return;
     figura.dataset.larguraDesenhada = String(largura);
-    figura.replaceChildren(montarSvgBarras(estado, largura));
+    // As barras vão ser trocadas: a caixa aberta apontaria para uma que sumiu.
+    fecharDica(corpo);
+    figura.replaceChildren(montarSvgBarras(estado, largura, corpo));
 }
 
-function montarSvgBarras({ serie, chave, mesAtual }, largura) {
+/** aria-label do gráfico inteiro, conforme as séries desenhadas. */
+function rotuloDoGrafico({ comVendas, comPrevisao, emDinheiro }) {
+    if (comVendas && comPrevisao) {
+        return 'Vendas fechadas por mês e previsão de faturamento pelo mês de vencimento das parcelas, em reais';
+    }
+    if (comPrevisao) return 'Previsão de faturamento pelo mês de vencimento das parcelas, em reais';
+    return emDinheiro
+        ? 'Vendas fechadas por mês, em reais, nos últimos 12 meses'
+        : 'Pedidos fechados por mês nos últimos 12 meses';
+}
+
+function montarSvgBarras({ colunas, chave, mesAtual }, largura, corpo) {
     const emDinheiro = chave === 'valor';
-    const geo = geometriaBarras(serie, {
-        largura, altura: 240, chave, margem: { esquerda: emDinheiro ? 52 : 34 }
+    const geo = geometriaGrafico(colunas, {
+        largura, altura: 240, chave, mesAtual, margem: { esquerda: emDinheiro ? 52 : 34 }
     });
     const svg = criarSvg('svg', {
         class: 'dash-barras',
         viewBox: `0 0 ${geo.largura} ${geo.altura}`,
         width: geo.largura,
         height: geo.altura,
-        role: 'img',
-        'aria-label': emDinheiro
-            ? 'Vendas fechadas por mês, em reais, nos últimos 12 meses'
-            : 'Pedidos fechados por mês nos últimos 12 meses'
+        // `group`, não `img`: dentro de uma imagem as barras focáveis (e o
+        // resumo de cada uma) virariam decoração para o leitor de tela.
+        role: 'group',
+        'aria-label': rotuloDoGrafico({
+            comVendas: geo.colunas.some(coluna => coluna.vendas),
+            comPrevisao: geo.colunas.some(coluna => coluna.previsao),
+            emDinheiro
+        })
     });
 
     const defs = criarSvg('defs');
@@ -923,45 +1242,83 @@ function montarSvgBarras({ serie, chave, mesAtual }, largura) {
     });
     svg.append(grade);
 
-    const ultimo = geo.barras.length - 1;
-    const colunas = criarSvg('g');
-    geo.barras.forEach(barra => {
-        const item = serie[barra.indice] || {};
-        const atual = mesAtual ? item.mes === mesAtual : barra.indice === ultimo;
-        const coluna = criarSvg('g', { class: `dash-barras__coluna${atual ? ' dash-barras__coluna--atual' : ''}` });
-        const dica = criarSvg('title');
-        const valorItem = numeroOuNulo(item.valor);
-        dica.textContent = `${rotuloMesLongo(item.mes)}\n`
-            + `${valorItem !== null ? `${formatarMoeda(valorItem)} · ` : ''}${pluralizar(item.quantidade, 'pedido', 'pedidos')}`;
-        coluna.append(dica);
-        // Alvo da coluna inteira: sem ele o tooltip de um mês fraco (barra de
-        // 3 px) era praticamente impossível de acertar com o mouse.
-        coluna.append(criarSvg('rect', {
-            class: 'dash-barras__alvo', x: barra.banda.x, y: geo.topoY, width: barra.banda.largura, height: geo.areaAltura, rx: 6
+    if (geo.separadorX !== null) {
+        svg.append(criarSvg('line', {
+            class: 'dash-barras__separador', x1: geo.separadorX, x2: geo.separadorX, y1: geo.topoY - 6, y2: geo.baseY
         }));
-        const caminho = caminhoBarra(barra.x, barra.y, barra.largura, barra.altura, 5);
-        if (caminho) coluna.append(criarSvg('path', { class: 'dash-barras__barra', d: caminho }));
-        if (atual && barra.valor > 0) {
-            const perto = barra.centro > geo.largura - 40;
-            const destaque = criarSvg('text', {
-                class: 'dash-barras__valor',
-                x: perto ? geo.largura - 2 : barra.centro,
-                y: Math.max(12, barra.y - 8),
-                'text-anchor': perto ? 'end' : 'middle'
+        const rotulo = criarSvg('text', {
+            class: 'dash-barras__previsao-rotulo', x: geo.separadorX + 5, y: geo.topoY - 10, 'text-anchor': 'start'
+        });
+        rotulo.textContent = 'previsão';
+        svg.append(rotulo);
+    }
+
+    const grupo = criarSvg('g');
+    geo.colunas.forEach(colunaGeo => {
+        const coluna = colunas[colunaGeo.indice] || {};
+        const classes = ['dash-barras__coluna'];
+        if (colunaGeo.atual) classes.push('dash-barras__coluna--atual');
+        if (colunaGeo.futura) classes.push('dash-barras__coluna--futura');
+        const g = criarSvg('g', { class: classes.join(' ') });
+        g.append(criarSvg('rect', {
+            class: 'dash-barras__faixa', x: colunaGeo.banda.x, y: geo.topoY, width: colunaGeo.banda.largura, height: geo.altura - geo.topoY
+        }));
+        const series = [
+            ['vendas', colunaGeo.vendas, () => conteudoDicaVendas(coluna.vendas, { emDinheiro })],
+            ['previsao', colunaGeo.previsao, () => conteudoDicaPrevisao(coluna.previsao)]
+        ];
+        series.forEach(([serie, barra, montarConteudo]) => {
+            if (!barra) return;
+            const conteudo = montarConteudo();
+            // Focável por teclado, com o mesmo resumo do tooltip no aria-label:
+            // o tooltip próprio substitui o <title> nativo, que só o mouse via.
+            const item = criarSvg('g', {
+                class: `dash-barras__item dash-barras__item--${serie}`,
+                tabindex: 0,
+                role: 'img',
+                'aria-label': rotuloAcessivelDica(conteudo)
             });
-            destaque.textContent = emDinheiro ? formatarMoedaCompacta(barra.valor) : formatarNumero(barra.valor);
-            coluna.append(destaque);
+            // Alvo da barra inteira: sem ele o tooltip de um mês fraco (barra de
+            // 3 px) era praticamente impossível de acertar com o mouse.
+            item.append(criarSvg('rect', {
+                class: 'dash-barras__alvo', x: barra.alvo.x, y: geo.topoY, width: barra.alvo.largura, height: geo.areaAltura, rx: 6
+            }));
+            const caminho = caminhoBarra(barra.x, barra.y, barra.largura, barra.altura, 5);
+            if (caminho) item.append(criarSvg('path', { class: 'dash-barras__barra', d: caminho }));
+            // Âncora = a coluna inteira: a caixa abre abaixo dos rótulos de mês, e
+            // o clique na outra barra do mesmo mês troca o conteúdo em vez de o
+            // Popover tratá-lo como "clique fora".
+            ligarDica(corpo, item, g, conteudo);
+            g.append(item);
+        });
+        const ouro = colunaGeo.vendas;
+        if (colunaGeo.atual && ouro && ouro.valor > 0) {
+            const topo = colunaGeo.previsao ? Math.min(ouro.y, colunaGeo.previsao.y) : ouro.y;
+            // Com meses futuros o valor encosta à esquerda da linha tracejada:
+            // centrado na coluna, ele invadia o rótulo "previsão" do outro lado.
+            let x = colunaGeo.centro;
+            let ancora = 'middle';
+            if (geo.separadorX !== null) {
+                x = geo.separadorX - 5;
+                ancora = 'end';
+            } else if (colunaGeo.centro > geo.largura - 40) {
+                x = geo.largura - 2;
+                ancora = 'end';
+            }
+            const destaque = criarSvg('text', { class: 'dash-barras__valor', x, y: Math.max(12, topo - 8), 'text-anchor': ancora });
+            destaque.textContent = emDinheiro ? formatarMoedaCompacta(ouro.valor) : formatarNumero(ouro.valor);
+            g.append(destaque);
         }
-        if (barra.mostrarRotulo || atual) {
+        if (colunaGeo.mostrarRotulo || colunaGeo.atual) {
             const mes = criarSvg('text', {
-                class: 'dash-barras__mes', x: barra.centro, y: geo.altura - 9, 'text-anchor': 'middle'
+                class: 'dash-barras__mes', x: colunaGeo.centro, y: geo.altura - 9, 'text-anchor': 'middle'
             });
-            mes.textContent = rotuloMes(item.mes);
-            coluna.append(mes);
+            mes.textContent = rotuloMes(coluna.mes);
+            g.append(mes);
         }
-        colunas.append(coluna);
+        grupo.append(g);
     });
-    svg.append(colunas);
+    svg.append(grupo);
     svg.append(criarSvg('line', {
         class: 'dash-barras__base', x1: geo.margem.esquerda, x2: geo.largura - geo.margem.direita, y1: geo.baseY, y2: geo.baseY
     }));
@@ -1312,6 +1669,129 @@ function desenharClientes(corpo, s) {
 }
 
 // ---------------------------------------------------------------------------
+// Tooltip do gráfico
+// ---------------------------------------------------------------------------
+
+// `dash-balao` e não `dash-dica`: `.dash-dica` já é o parágrafo de dica dos
+// cartões (aprovados sem pedido, IA), e com o mesmo nome as regras da caixa
+// (visibility: hidden, position: fixed) apagavam aquele texto.
+const DASH_DICA_ID = 'dash-balao-grafico';
+
+/**
+ * A caixa do tooltip: UMA por gráfico (e há um gráfico por módulo), criada na
+ * primeira abertura e reaproveitada por todas as barras e releituras. Mora no
+ * corpo do cartão, que persiste entre leituras — é o que o código de qualquer
+ * execução do script enxerga em comum.
+ */
+function obterDica(corpo) {
+    if (!corpo.__dashDica) {
+        const caixa = criarEl('div', 'dash-balao');
+        // id fixo: o Popover apaga outra caixa com o mesmo id que tenha sobrado
+        // no <body>, então nunca há duas na tela.
+        caixa.id = DASH_DICA_ID;
+        caixa.setAttribute('role', 'tooltip');
+        corpo.__dashDica = { caixa, alvo: null };
+    }
+    return corpo.__dashDica;
+}
+
+/** Aberta para ESTA barra? `.show` manda: o Popover a tira sozinho (Escape, rolagem, clique fora). */
+function dicaAbertaEm(corpo, alvo) {
+    const dica = corpo?.__dashDica;
+    return Boolean(dica && dica.alvo === alvo && dica.caixa.classList.contains('show'));
+}
+
+function montarConteudoDica(caixa, conteudo) {
+    caixa.dataset.serie = conteudo.serie;
+    const filhos = [
+        criarEl('p', 'dash-balao__titulo', conteudo.titulo),
+        criarEl('p', 'dash-balao__resumo', conteudo.resumo)
+    ];
+    if (conteudo.itens.length) {
+        const lista = criarEl('ul', 'dash-balao__lista');
+        conteudo.itens.forEach(item => {
+            const linha = criarEl('li', `dash-balao__item${item.estimada ? ' dash-balao__item--estimada' : ''}`);
+            linha.append(criarEl('span', 'dash-balao__nome', item.nome));
+            if (item.valor) linha.append(criarEl('span', 'dash-balao__valor', item.valor));
+            if (item.detalhe) linha.append(criarEl('span', 'dash-balao__detalhe', item.detalhe));
+            lista.append(linha);
+        });
+        filhos.push(lista);
+    }
+    if (conteudo.rodape) filhos.push(criarEl('p', 'dash-balao__rodape', conteudo.rodape));
+    caixa.replaceChildren(...filhos);
+}
+
+/**
+ * Abre a caixa pela barra `alvo`, ancorada na coluna. Quem posiciona é o
+ * window.Popover (src/js/utils/popover.js, carregado pelo menu.html): ele move
+ * a caixa para o <body> — o cartão tem overflow: hidden e backdrop-filter, que
+ * cortariam ou deslocariam um `position: fixed` aqui dentro —, a encaixa na
+ * janela e a fecha com Escape, rolagem, redimensionamento, clique fora e troca
+ * de módulo. Tudo com os ouvintes DELE, registrados uma vez: este script é
+ * reexecutado a cada visita e não pode pendurar nada em document/window.
+ * Sem o Popover a barra fica só com o aria-label.
+ */
+function abrirDica(corpo, alvo, ancora, conteudo) {
+    const popover = typeof window !== 'undefined' ? window.Popover : null;
+    if (!popover || typeof popover.abrir !== 'function') return;
+    const dica = obterDica(corpo);
+    if (dica.alvo && dica.alvo !== alvo) dica.alvo.removeAttribute('aria-describedby');
+    montarConteudoDica(dica.caixa, conteudo);
+    dica.alvo = alvo;
+    // A lista de pedidos chega também ao leitor de tela, não só o resumo.
+    alvo.setAttribute('aria-describedby', DASH_DICA_ID);
+    popover.abrir(dica.caixa, ancora);
+}
+
+/**
+ * Fecha a caixa. Com `alvo`, só se ela for dessa barra: o blur ou a saída do
+ * mouse de uma barra antiga não pode fechar a caixa que outra acabou de abrir.
+ */
+function fecharDica(corpo, alvo) {
+    const dica = corpo?.__dashDica;
+    if (!dica || (alvo && dica.alvo !== alvo)) return;
+    if (dica.alvo) dica.alvo.removeAttribute('aria-describedby');
+    dica.alvo = null;
+    const popover = typeof window !== 'undefined' ? window.Popover : null;
+    if (popover && typeof popover.fechar === 'function') popover.fechar(dica.caixa);
+    else dica.caixa.classList.remove('show');
+}
+
+/**
+ * Foco que veio do teclado. Toque e clique também focam a barra: se esse foco
+ * abrisse a caixa, o clique logo em seguida a fecharia e o toque não mostraria
+ * nada. `:focus-visible` é a regra do próprio navegador para foco de teclado.
+ */
+function focoPorTeclado(alvo) {
+    try {
+        return typeof alvo.matches !== 'function' || alvo.matches(':focus-visible');
+    } catch (_) {
+        return true;
+    }
+}
+
+/**
+ * Liga a barra ao tooltip, com ouvintes no PRÓPRIO elemento — que morre a cada
+ * redesenho, então nada acumula entre leituras nem entre navegações.
+ *  - mouse: entrar abre, sair fecha (o toque também "entra", mas não tem como
+ *    sair: fica de fora aqui);
+ *  - teclado: o foco abre; o blur e o Escape fecham;
+ *  - toque ou clique: alterna.
+ */
+function ligarDica(corpo, alvo, ancora, conteudo) {
+    const abrir = () => abrirDica(corpo, alvo, ancora, conteudo);
+    const fechar = () => fecharDica(corpo, alvo);
+    const doMouse = evento => !evento?.pointerType || evento.pointerType === 'mouse';
+    alvo.addEventListener('pointerenter', evento => { if (doMouse(evento)) abrir(); });
+    alvo.addEventListener('pointerleave', evento => { if (doMouse(evento)) fechar(); });
+    alvo.addEventListener('focus', () => { if (focoPorTeclado(alvo)) abrir(); });
+    alvo.addEventListener('blur', fechar);
+    alvo.addEventListener('click', () => (dicaAbertaEm(corpo, alvo) ? fechar() : abrir()));
+    alvo.addEventListener('keydown', evento => { if (evento.key === 'Escape') fechar(); });
+}
+
+// ---------------------------------------------------------------------------
 // Tamanho e animação
 // ---------------------------------------------------------------------------
 
@@ -1529,6 +2009,15 @@ function renderizarDashboard(moduleEl, dados) {
     animarContadores(moduleEl);
 }
 
+/** Troca título e subtítulo do cartão (os elementos `data-dash-titulo` e `data-dash-subtitulo`). */
+function aplicarTitulos(cartao, titulos) {
+    if (!titulos || typeof cartao.querySelector !== 'function') return;
+    const titulo = cartao.querySelector('[data-dash-titulo]');
+    if (titulo && titulos.titulo) titulo.textContent = titulos.titulo;
+    const subtitulo = cartao.querySelector('[data-dash-subtitulo]');
+    if (subtitulo && titulos.subtitulo) subtitulo.textContent = titulos.subtitulo;
+}
+
 function desenharCartao(cartao, dados) {
     const chave = cartao.dataset.dashCartao;
     const definicao = DASH_CARTOES[chave];
@@ -1538,12 +2027,19 @@ function desenharCartao(cartao, dados) {
     cartao.dataset.estado = estado;
     cartao.removeAttribute('aria-busy');
     if (!corpo) return;
+    // O conteúdo vai ser trocado: a caixa do tooltip aberta ficaria apontando
+    // para uma barra que não existe mais.
+    fecharDica(corpo);
     if (estado === 'oculto') {
         corpo.replaceChildren();
         return;
     }
+    // Também em falha: o erro sai debaixo do título certo para o perfil.
+    if (typeof definicao.titulos === 'function') aplicarTitulos(cartao, definicao.titulos(dados));
     if (estado === 'falha') {
-        const mensagem = dados.falhas[definicao.secao];
+        // Cartão de mais de uma seção: a mensagem é a da seção que falhou.
+        const secaoComFalha = secoesDoCartao(definicao).find(secao => estadoDaSecao(dados, secao) === 'falha');
+        const mensagem = dados.falhas[secaoComFalha];
         corpo.replaceChildren(montarErroDoCartao(typeof mensagem === 'string' ? mensagem : ''));
         return;
     }

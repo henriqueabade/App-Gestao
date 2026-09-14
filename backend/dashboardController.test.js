@@ -20,17 +20,20 @@ const crypto = require('node:crypto');
 const express = require('express');
 const { fromSelections } = require('./permissionsRepository');
 const { resolvePermissionKey } = require('./permissionsCatalog');
-const { contextoDeTempo, somarDias } = require('./dashboardResumo');
+const { contextoDeTempo, somarDias, resumirPrevisao } = require('./dashboardResumo');
 
 // Carregados DENTRO de `montar`, depois de apontar API_BASE_URL para o duplo:
 // `apiHttpClient` congela a URL no require, e um require no topo deixaria o
 // cliente apontando para a API de verdade — que o modo de teste bloqueia.
 const MODULOS = ['./apiHttpClient', './permissionsController', './dashboardController'];
 
+const LIMITE_DA_CHAMADA_MS = 10 * 1000;
+
 const TOKEN = 'x.eyJpZCI6MX0.assinatura-do-login-a';
 const OUTRO_TOKEN = 'x.eyJpZCI6Mn0.assinatura-do-login-b';
 
-const TODAS_AS_TABELAS = ['clientes', 'ia_extracoes', 'materia_prima', 'orcamentos', 'pedidos', 'prospeccoes'];
+// Em ordem alfabética: o teste das leituras compara com a lista ordenada.
+const TODAS_AS_TABELAS = ['clientes', 'ia_extracoes', 'materia_prima', 'orcamentos', 'pedido_parcelas', 'pedidos', 'prospeccoes'];
 
 // ---------------------------------------------------------------------------
 // Permissões de verdade (estrutura do permissionsRepository), montadas por chave
@@ -50,7 +53,7 @@ function permissoesCom(...chaves) {
 }
 
 const CHAVES_DO_PAINEL = [
-  'ped.view', 'col_ped_total', 'orc.view', 'col_orc_total', 'pros.view', 'col_pros_valor',
+  'ped.view', 'col_ped_total', 'col_ped_condicao', 'orc.view', 'col_orc_total', 'pros.view', 'col_pros_valor',
   'cli.view', 'mp.view', 'col_mp_estoque_atual', 'col_mp_custo_medio', 'ia.view',
   // Os nomes das listas e a probabilidade do ponderado: sem elas, o texto (ou
   // o ponderado) sai null — ver o teste do perfil Vendedor.
@@ -59,9 +62,11 @@ const CHAVES_DO_PAINEL = [
 ];
 const tudoMenos = (...fora) => permissoesCom(...CHAVES_DO_PAINEL.filter(c => !fora.includes(c)));
 
-const TODAS_AS_SECOES = ['vendas', 'producao', 'orcamentos', 'alertas', 'prospeccao', 'clientes', 'estoque', 'ia'];
+const TODAS_AS_SECOES = ['vendas', 'previsao', 'producao', 'orcamentos', 'alertas', 'prospeccao', 'clientes', 'estoque', 'ia'];
 
 const SEM_PERMISSOES = { error: 'Não foi possível conferir suas permissões agora.' };
+const FALHA_DOS_PEDIDOS = 'Não foi possível ler os pedidos agora.';
+const FALHA_DA_PREVISAO = 'Não foi possível ler as parcelas dos pedidos agora.';
 
 // ---------------------------------------------------------------------------
 // Duplo do upstream: tabelas inteiras, como a API genérica devolve
@@ -145,8 +150,11 @@ async function montar(dados, { permissoes = tudoMenos(), falhar, atrasarMs, temp
     controller,
     lidas: tabela => upstream.leituras.filter(l => l.tabela === tabela).length,
     async chamar(consulta = '', token = TOKEN) {
+      // Uma rota que nunca responde tem de REPROVAR o teste, não pendurar a
+      // suíte inteira — o undici só desiste por conta própria em ~300 s.
       const resposta = await fetch(`http://127.0.0.1:${porta}/api/dashboard${consulta}`, {
-        headers: { authorization: `Bearer ${token}` }
+        headers: { authorization: `Bearer ${token}` },
+        signal: AbortSignal.timeout(LIMITE_DA_CHAMADA_MS)
       });
       const texto = await resposta.text();
       return {
@@ -190,6 +198,20 @@ function cenario() {
       { id: 103, numero: 'PED103', orcamento_id: 103, cliente_id: 50, situacao: 'Entregue', data_emissao: meioDia(-40), data_aprovacao: dia(-40), valor_final: 12000 },
       { id: 104, numero: 'PED104', orcamento_id: 104, cliente_id: 52, situacao: 'Cancelado', data_emissao: meioDia(-20), data_aprovacao: dia(-20), data_cancelamento: meioDia(0), valor_final: 3200 },
       { id: 105, numero: 'PED105', orcamento_id: 105, cliente_id: 51, situacao: 'Enviado', data_emissao: meioDia(0), data_aprovacao: dia(0), valor_final: '1234.50' }
+    ],
+    // O 101 em 2x, a 2ª daqui a 400 dias — sempre além do horizonte de 12
+    // meses; o 103 em 3x, uma delas no formato em que o upstream serializa um
+    // DATE. O 104 é cancelado (some), o 105 não tem parcela (vira estimado) e
+    // a do pedido 999 é órfã.
+    pedido_parcelas: [
+      { id: 1, pedido_id: 101, numero_parcela: 1, valor: '4100.00', data_vencimento: dia(10) },
+      { id: 2, pedido_id: 101, numero_parcela: 2, valor: '4100.00', data_vencimento: dia(400) },
+      { id: 3, pedido_id: 102, numero_parcela: 1, valor: '5000.00', data_vencimento: dia(-60) },
+      { id: 4, pedido_id: 103, numero_parcela: 1, valor: '4000.00', data_vencimento: dia(-40) },
+      { id: 5, pedido_id: 103, numero_parcela: 2, valor: '4000.00', data_vencimento: `${dia(-10)}T00:00:00.000Z` },
+      { id: 6, pedido_id: 103, numero_parcela: 3, valor: '4000.00', data_vencimento: dia(20) },
+      { id: 7, pedido_id: 104, numero_parcela: 1, valor: '3200.00', data_vencimento: dia(5) },
+      { id: 8, pedido_id: 999, numero_parcela: 1, valor: '100.00', data_vencimento: dia(3) }
     ],
     orcamentos: [
       { id: 101, numero: 'ORC101', situacao: 'Aprovado', cliente_id: 50, data_aprovacao: meioDia(0), valor_final: '8.200,00', dono: 'Ana' },
@@ -239,8 +261,7 @@ test('o painel completo sai no formato do contrato, com cada tabela lida uma vez
     if (process.env.DASHBOARD_AMOSTRA) t.diagnostic(JSON.stringify(corpo));
 
     assert.deepEqual(Object.keys(corpo), ['geradoEm', 'hoje', 'mesAtual', 'secoes', 'falhas']);
-    assert.deepEqual(Object.keys(corpo.secoes),
-      ['vendas', 'producao', 'orcamentos', 'alertas', 'prospeccao', 'clientes', 'estoque', 'ia']);
+    assert.deepEqual(Object.keys(corpo.secoes), TODAS_AS_SECOES);
     assert.deepEqual(corpo.falhas, {}, '`falhas` vem sempre, vazio quando nada falhou');
     assert.match(corpo.hoje, /^\d{4}-\d{2}-\d{2}$/);
     assert.equal(corpo.mesAtual, corpo.hoje.slice(0, 7));
@@ -264,6 +285,21 @@ test('o painel completo sai no formato do contrato, com cada tabela lida uma vez
     assert.equal(secoes.estoque.negativos.quantidade, 1);
     assert.deepEqual(secoes.ia, { emRevisao: 2 });
 
+    // Previsão: o 104 (cancelado) some, o 105 (sem parcela) entra estimado, a
+    // parcela do pedido 999 é órfã e a de daqui a 400 dias passa do horizonte.
+    const itensDaPrevisao = secoes.previsao.meses.flatMap(m => m.itens);
+    assert.equal(itensDaPrevisao.some(i => i.pedidoId === 104), false);
+    assert.ok(itensDaPrevisao.some(i => i.pedidoId === 105 && i.estimada));
+    assert.deepEqual(secoes.previsao.semParcelas, { pedidos: 1, valor: 1234.5 });
+    assert.equal(secoes.previsao.orfas, 1);
+    assert.equal(secoes.previsao.alemDoHorizonte.parcelas, 1);
+    assert.equal(secoes.previsao.alemDoHorizonte.valor, 4100);
+    assert.deepEqual(secoes.previsao.meses.slice(0, 12).map(m => m.mes), secoes.vendas.serie12m.map(m => m.mes),
+      'as barras verdes dividem o eixo com as de ouro');
+    // O resto é a conta pura: a rota só a alimenta, com as tabelas que leu.
+    // Meio-dia do dia que a rota respondeu dá o mesmo mês que ela usou.
+    assert.deepEqual(secoes.previsao, resumirPrevisao(cenario(), { agora: new Date(`${corpo.hoje}T15:00:00.000Z`) }));
+
     for (const tabela of TODAS_AS_TABELAS) {
       assert.equal(ctx.lidas(tabela), 1, `${tabela} lida uma vez só, mesmo usada por várias seções`);
     }
@@ -282,6 +318,14 @@ test('o painel completo sai no formato do contrato, com cada tabela lida uma vez
  *   contagem  inteiro >= 0;   numero  número finito (dias de atraso, saldo)
  *   texto     string não vazia — nome ausente chega como "—", nunca vazio
  */
+/**
+ * Lista que pode vir vazia em PARTE dos elementos: os meses sem parcela da
+ * previsão. A forma do item continua conferida nos meses que têm; o teste do
+ * contrato exige que o cenário tenha pelo menos um.
+ */
+const PODE_VIR_VAZIA = Symbol('pode vir vazia');
+const podeVirVazia = forma => Object.assign([...forma], { [PODE_VIR_VAZIA]: true });
+
 const FORMA_SOMA = { quantidade: 'contagem', valor: 'dinheiro' };
 const FORMA_TICKET = { ...FORMA_SOMA, ticketMedio: 'dinheiro' };
 const FORMA_DO_CONTRATO = {
@@ -291,6 +335,21 @@ const FORMA_DO_CONTRATO = {
     mesAnterior: FORMA_TICKET,
     canceladosMes: FORMA_SOMA,
     serie12m: [{ mes: 'mes', quantidade: 'contagem', valor: 'dinheiro' }]
+  },
+  previsao: {
+    meses: [{
+      mes: 'mes', valor: 'dinheiro', parcelas: 'contagem', pedidos: 'contagem', outros: 'contagem',
+      itens: podeVirVazia([{
+        pedidoId: 'id', numero: 'texto|null', cliente: 'texto', totalParcelas: 'contagem',
+        valor: 'dinheiro', estimada: 'booleano',
+        parcelas: [{ numero: 'contagem', vencimento: 'dia', valor: 'dinheiro' }]
+      }])
+    }],
+    programadoDesteMes: 'dinheiro',
+    alemDoHorizonte: { valor: 'dinheiro', parcelas: 'contagem', ate: 'mes|null' },
+    semParcelas: { pedidos: 'contagem', valor: 'dinheiro' },
+    orfas: 'contagem',
+    semData: 'contagem'
   },
   producao: {
     quantidade: 'contagem',
@@ -356,7 +415,9 @@ const FOLHA_VALIDA = {
   id: v => (typeof v === 'number' && Number.isFinite(v)) || (typeof v === 'string' && v.trim() !== ''),
   dia: v => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v),
   mes: v => typeof v === 'string' && /^\d{4}-\d{2}$/.test(v),
-  'fracao|null': v => v === null || (typeof v === 'number' && v >= 0 && v <= 1)
+  'fracao|null': v => v === null || (typeof v === 'number' && v >= 0 && v <= 1),
+  'mes|null': v => v === null || (typeof v === 'string' && /^\d{4}-\d{2}$/.test(v)),
+  booleano: v => typeof v === 'boolean'
 };
 
 /**
@@ -368,7 +429,7 @@ const FOLHA_VALIDA = {
 function divergenciasDaForma(valor, forma, caminho, comValores) {
   if (Array.isArray(forma)) {
     if (!Array.isArray(valor)) return [`${caminho}: não é lista`];
-    if (!valor.length) return [`${caminho}: lista vazia no cenário`];
+    if (!valor.length) return forma[PODE_VIR_VAZIA] ? [] : [`${caminho}: lista vazia no cenário`];
     return valor.flatMap((item, i) => divergenciasDaForma(item, forma[0], `${caminho}[${i}]`, comValores));
   }
   if (typeof forma === 'object') {
@@ -390,21 +451,31 @@ function divergenciasDaForma(valor, forma, caminho, comValores) {
 
 test('cada seção sai com exatamente os campos do contrato, e o R$ é número ou null conforme a coluna', async () => {
   const perfis = [
-    { nome: 'com as colunas de valor', permissoes: tudoMenos(), comValores: true },
+    { nome: 'com as colunas de valor', permissoes: tudoMenos(), comValores: true, secoes: TODAS_AS_SECOES },
     {
       nome: 'sem nenhuma coluna de valor',
       permissoes: tudoMenos('col_ped_total', 'col_orc_total', 'col_pros_valor', 'col_mp_custo_medio'),
-      comValores: false
+      comValores: false,
+      // A previsão é só dinheiro: sem col_ped_total ela nem vem, em vez de vir com R$ null.
+      secoes: TODAS_AS_SECOES.filter(s => s !== 'previsao')
     }
   ];
+  assert.deepEqual(Object.keys(FORMA_DO_CONTRATO), TODAS_AS_SECOES);
   for (const perfil of perfis) {
     const ctx = await montar(cenario(), { permissoes: perfil.permissoes });
     try {
       const { corpo } = await ctx.chamar();
-      assert.deepEqual(Object.keys(corpo.secoes), Object.keys(FORMA_DO_CONTRATO), perfil.nome);
-      const divergencias = Object.keys(FORMA_DO_CONTRATO).flatMap(secao =>
+      assert.deepEqual(Object.keys(corpo.secoes), perfil.secoes, perfil.nome);
+      assert.deepEqual(corpo.falhas, {}, perfil.nome);
+      const divergencias = perfil.secoes.flatMap(secao =>
         divergenciasDaForma(corpo.secoes[secao], FORMA_DO_CONTRATO[secao], secao, perfil.comValores));
       assert.deepEqual(divergencias, [], perfil.nome);
+      if (corpo.secoes.previsao) {
+        // Mês sem parcela vem sem itens; algum mês tem de ter, senão a forma
+        // do item da previsão não foi conferida.
+        const itens = corpo.secoes.previsao.meses.flatMap(m => m.itens);
+        assert.ok(itens.some(i => !i.estimada) && itens.some(i => i.estimada), 'item parcelado e item estimado');
+      }
     } finally {
       await ctx.encerrar();
     }
@@ -437,16 +508,17 @@ test('só as tabelas das seções visíveis são lidas, e nada além de GET', as
 // Permissões
 // ---------------------------------------------------------------------------
 
-test('sem a view de pedidos, vendas, produção e alertas somem — e não viram falha', async () => {
+test('sem a view de pedidos, vendas, previsão, produção e alertas somem — e não viram falha', async () => {
   const ctx = await montar(cenario(), { permissoes: tudoMenos('ped.view') });
   try {
     const { corpo } = await ctx.chamar();
-    for (const secao of ['vendas', 'producao', 'alertas']) {
+    for (const secao of ['vendas', 'previsao', 'producao', 'alertas']) {
       assert.equal(secao in corpo.secoes, false, `${secao} não pode aparecer`);
       assert.equal(secao in corpo.falhas, false, `${secao} sem permissão não é falha, é ausência`);
     }
     assert.ok(corpo.secoes.orcamentos);
     assert.equal(ctx.lidas('pedidos'), 0, 'nem se lê o que não vai ser mostrado');
+    assert.equal(ctx.lidas('pedido_parcelas'), 0);
   } finally {
     await ctx.encerrar();
   }
@@ -482,6 +554,43 @@ test('estoque exige a coluna de quantidade além da view', async () => {
   }
 });
 
+test('estoque exige a view além da coluna de quantidade', async () => {
+  // O espelho do teste acima: coluna liberada sem a view também não abre o card.
+  const ctx = await montar(cenario(), { permissoes: permissoesCom('col_mp_estoque_atual', 'col_mp_custo_medio') });
+  try {
+    const { corpo } = await ctx.chamar();
+    assert.deepEqual(corpo.secoes, {});
+    assert.deepEqual(corpo.falhas, {});
+    assert.equal(ctx.lidas('materia_prima'), 0);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('cada view tira só as seções dela, e a tabela dela nem é lida', async () => {
+  const casos = [
+    // Sem cli.view a tabela de clientes continua lida: ela dá nome às listas
+    // de produção, previsão, orçamentos e alertas (o nome segue a coluna).
+    { view: 'cli.view', secoes: ['clientes'], tabela: null },
+    { view: 'orc.view', secoes: ['orcamentos', 'alertas'], tabela: 'orcamentos' },
+    { view: 'pros.view', secoes: ['prospeccao'], tabela: 'prospeccoes' },
+    { view: 'mp.view', secoes: ['estoque'], tabela: 'materia_prima' },
+    { view: 'ia.view', secoes: ['ia'], tabela: 'ia_extracoes' }
+  ];
+  for (const caso of casos) {
+    const ctx = await montar(cenario(), { permissoes: tudoMenos(caso.view) });
+    try {
+      const { corpo } = await ctx.chamar();
+      assert.deepEqual(Object.keys(corpo.secoes), TODAS_AS_SECOES.filter(s => !caso.secoes.includes(s)), caso.view);
+      assert.deepEqual(corpo.falhas, {}, `${caso.view}: sem permissão não é falha, é ausência`);
+      if (caso.tabela) assert.equal(ctx.lidas(caso.tabela), 0, `${caso.view}: ${caso.tabela} não é lida`);
+      else assert.equal(ctx.lidas('clientes'), 1, 'cli.view: clientes continua lida, só para os nomes');
+    } finally {
+      await ctx.encerrar();
+    }
+  }
+});
+
 test('alertas exige orçamentos E pedidos', async () => {
   const soOrc = await montar(cenario(), { permissoes: permissoesCom('orc.view', 'col_orc_total') });
   try {
@@ -513,44 +622,160 @@ test('alertas exige orçamentos E pedidos', async () => {
   }
 });
 
-test('o nome da prospecção no destinatário só sai com pros.view', async () => {
-  const semPros = await montar(cenario(), { permissoes: permissoesCom('orc.view', 'col_orc_total') });
+test('o R$ de alertas segue a coluna de valor de Orçamentos, não a de Pedidos', async () => {
+  // O item é um ORÇAMENTO aprovado: quem não vê o R$ dele no card de
+  // orçamentos não pode vê-lo aqui só porque vê o R$ dos pedidos.
+  const soPedidos = await montar(cenario(), { permissoes: permissoesCom('orc.view', 'ped.view', 'col_ped_total') });
   try {
-    const { corpo, texto } = await semPros.chamar();
-    const ocrp = corpo.secoes.orcamentos.vencendo7d.itens.find(i => i.numero === 'OCRP202');
-    assert.equal(ocrp.destinatario, 'Prospecção');
-    assert.equal(texto.includes('Casa Vicenzo'), false);
-    assert.equal(semPros.lidas('prospeccoes'), 0, 'o pipeline nem é lido para quem não pode vê-lo');
+    const { itens } = (await soPedidos.chamar()).corpo.secoes.alertas.aprovadosSemPedido;
+    assert.ok(itens.length > 0);
+    assert.ok(itens.every(i => i.valor === null));
   } finally {
-    await semPros.encerrar();
+    await soPedidos.encerrar();
   }
 
-  const comPros = await montar(cenario(), { permissoes: permissoesCom('orc.view', 'col_orc_total', 'pros.view') });
+  const soOrcamentos = await montar(cenario(), { permissoes: permissoesCom('orc.view', 'ped.view', 'col_orc_total') });
   try {
-    const { corpo } = await comPros.chamar();
-    const ocrp = corpo.secoes.orcamentos.vencendo7d.itens.find(i => i.numero === 'OCRP202');
-    assert.equal(ocrp.destinatario, 'Casa Vicenzo');
+    const { itens } = (await soOrcamentos.chamar()).corpo.secoes.alertas.aprovadosSemPedido;
+    assert.ok(itens.length > 0);
+    assert.ok(itens.every(i => typeof i.valor === 'number'));
   } finally {
-    await comPros.encerrar();
+    await soOrcamentos.encerrar();
   }
 });
 
-test('falha ao obter as permissões fecha o painel', async () => {
+test('sem col_pros_valor só os R$ da prospecção somem', async () => {
+  const ctx = await montar(cenario(), { permissoes: tudoMenos('col_pros_valor') });
+  try {
+    const { secoes } = (await ctx.chamar()).corpo;
+    assert.equal(secoes.prospeccao.valorEmAberto, null);
+    assert.equal(secoes.prospeccao.valorPonderado, null);
+    assert.ok(secoes.prospeccao.funil.every(e => e.valor === null));
+    assert.equal(secoes.prospeccao.abertos, 3, 'as contagens ficam');
+    assert.equal(typeof secoes.orcamentos.pendentesVigentes.valor, 'number', 'coluna de outro módulo');
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('perfil sem as colunas de nome lê as contas, mas nenhum nome de cliente, prospecção, responsável ou insumo', async () => {
+  // O perfil "Vendedor" real: vê pedidos e orçamentos, com a coluna Cliente
+  // escondida na grade. O painel não pode ser a única tela que mostra o nome.
+  const colunasDeNome = ['col_ped_cliente', 'col_orc_cliente', 'col_orc_campo_dono', 'col_pros_entidade',
+    'col_pros_proximo_passo', 'col_mp_nome', 'col_mp_unidade'];
+  const ctx = await montar(cenario(), { permissoes: tudoMenos(...colunasDeNome) });
+  try {
+    const { corpo, texto } = await ctx.chamar();
+    const { secoes } = corpo;
+    const semTexto = (linhas, ...campos) => {
+      assert.ok(linhas.length > 0, 'lista vazia não prova nada');
+      return linhas.every(linha => campos.every(c => linha[c] === null));
+    };
+    assert.ok(semTexto(secoes.producao.maisAntigos, 'cliente'));
+    assert.ok(semTexto(secoes.previsao.meses.flatMap(m => m.itens), 'cliente'));
+    assert.ok(semTexto(secoes.orcamentos.vencendo7d.itens, 'destinatario', 'dono'));
+    assert.ok(semTexto(secoes.alertas.aprovadosSemPedido.itens, 'destinatario'));
+    assert.ok(semTexto(secoes.prospeccao.followups.itens, 'nome', 'proximoPasso'));
+    assert.ok(semTexto(secoes.estoque.negativos.itens, 'nome', 'unidade'));
+    // O que não identifica ninguém continua: número, etapa, datas, contagens.
+    assert.equal(secoes.producao.maisAntigos[0].numero, 'PED102');
+    assert.equal(secoes.prospeccao.followups.itens[0].etapa, 'Proposta');
+    for (const nome of ['Móveis Aurora', 'Casa Bela', 'Casa Vicenzo', 'Marcenaria Serrana', 'Ligar para fechar', 'Cola PVA']) {
+      assert.equal(texto.includes(nome), false, `"${nome}" não pode sair`);
+    }
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('o nome da prospecção no destinatário só sai com pros.view e col_pros_entidade, e só atrás da coluna Cliente', async () => {
+  // A coluna Cliente de Orçamentos abre o TEXTO do destinatário; sem ela sai
+  // null (a tela cai no rótulo genérico). Com ela, o orçamento de prospecção
+  // mostra a categoria "Prospecção" até o perfil poder ver o NOME da
+  // prospecção — pros.view (o pipeline) E col_pros_entidade (a coluna do nome).
+  const casos = [
+    { extras: [], esperado: null },
+    { extras: ['pros.view'], esperado: null },
+    { extras: ['pros.view', 'col_pros_entidade'], esperado: null },
+    { extras: ['col_orc_cliente'], esperado: 'Prospecção' },
+    { extras: ['col_orc_cliente', 'pros.view'], esperado: 'Prospecção' },
+    { extras: ['col_orc_cliente', 'pros.view', 'col_pros_entidade'], esperado: 'Casa Vicenzo' }
+  ];
+  for (const { extras, esperado } of casos) {
+    const perfil = `orc.view + ${extras.join(' + ') || 'nada'}`;
+    const ctx = await montar(cenario(), { permissoes: permissoesCom('orc.view', 'col_orc_total', ...extras) });
+    try {
+      const { corpo, texto } = await ctx.chamar();
+      const ocrp = corpo.secoes.orcamentos.vencendo7d.itens.find(i => i.numero === 'OCRP202');
+      assert.equal(ocrp.destinatario, esperado, perfil);
+      // Quem não pode ver o nome não o recebe por campo nenhum.
+      if (!(extras.includes('pros.view') && extras.includes('col_pros_entidade'))) {
+        assert.equal(texto.includes('Casa Vicenzo'), false, perfil);
+      }
+      if (!extras.includes('pros.view')) {
+        assert.equal(ctx.lidas('prospeccoes'), 0, `${perfil}: o pipeline nem é lido para quem não pode vê-lo`);
+      }
+    } finally {
+      await ctx.encerrar();
+    }
+  }
+});
+
+test('falha ao obter as permissões fecha o painel com 503, sem ler tabela nenhuma', async () => {
+  // 503, e não 200 vazio: vazio a tela lê como "seu perfil não tem
+  // indicadores" — mentira quando a sessão venceu ou o upstream caiu.
   const ctx = await montar(cenario());
   try {
     ctx.estado.falha = new Error('upstream de usuários fora do ar');
     const lancou = await ctx.chamar();
-    assert.equal(lancou.status, 200);
-    assert.deepEqual(lancou.corpo.secoes, {});
-    assert.deepEqual(lancou.corpo.falhas, {});
+    assert.equal(lancou.status, 503);
+    assert.deepEqual(lancou.corpo, SEM_PERMISSOES);
 
     ctx.estado.falha = null;
     ctx.estado.permissoes = { ...tudoMenos(), erro: true };
     const comErro = await ctx.chamar();
-    assert.deepEqual(comErro.corpo.secoes, {});
-    assert.deepEqual(comErro.corpo.falhas, {});
+    assert.equal(comErro.status, 503);
+    assert.deepEqual(comErro.corpo, SEM_PERMISSOES);
 
     assert.equal(ctx.upstream.leituras.length, 0, 'sem permissão conhecida, nada sai do upstream');
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('identificação que não responde também vira 503, no prazo das tabelas', async () => {
+  const ctx = await montar(cenario(), { tempoLimiteMs: 100 });
+  try {
+    ctx.estado.pendurar = true;
+    const inicio = Date.now();
+    const { status, corpo } = await ctx.chamar();
+    assert.ok(Date.now() - inicio < 1000, 'não espera o tempo-limite do undici (~300 s)');
+    assert.equal(status, 503);
+    assert.deepEqual(corpo, SEM_PERMISSOES);
+    assert.equal(ctx.upstream.leituras.length, 0);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('com as permissões de verdade, usuário não identificado (401) dá 503 — e a falha não fica guardada', async () => {
+  // Sem o dublê: o permissionsController real pergunta ao upstream quem é o
+  // dono do token (GET /api/usuarios/1). O 401 ali é "não sei quem é você".
+  const falhar = { usuarios: 401 };
+  const dados = { ...cenario(), usuarios: { id: 1, perfil: 'Sup Admin' } };
+  const ctx = await montar(dados, { permissoesReais: true, falhar });
+  try {
+    const recusada = await ctx.chamar();
+    assert.equal(recusada.status, 503);
+    assert.deepEqual(recusada.corpo, SEM_PERMISSOES);
+    assert.deepEqual(ctx.upstream.leituras.map(l => l.tabela), ['usuarios'], 'nenhuma tabela do painel é lida');
+
+    // A sessão volta: a mesma instância, sem reiniciar nada, abre o painel.
+    delete falhar.usuarios;
+    const aceita = await ctx.chamar();
+    assert.equal(aceita.status, 200);
+    assert.deepEqual(Object.keys(aceita.corpo.secoes), TODAS_AS_SECOES, 'Sup Admin vê tudo');
+    assert.deepEqual(aceita.corpo.falhas, {});
   } finally {
     await ctx.encerrar();
   }
@@ -582,19 +807,20 @@ test('tabela que falha derruba só as seções que dependem dela', async () => {
     const { status, corpo } = await ctx.chamar();
     assert.equal(status, 200);
     assert.deepEqual(corpo.falhas, { estoque: 'Não foi possível ler a matéria-prima agora.' });
-    assert.deepEqual(Object.keys(corpo.secoes),
-      ['vendas', 'producao', 'orcamentos', 'alertas', 'prospeccao', 'clientes', 'ia']);
+    assert.deepEqual(Object.keys(corpo.secoes), TODAS_AS_SECOES.filter(s => s !== 'estoque'));
   } finally {
     await ctx.encerrar();
   }
 });
 
-test('pedidos fora do ar derrubam vendas, produção e alertas, e só elas', async () => {
+test('pedidos fora do ar derrubam vendas, previsão, produção e alertas, e só elas', async () => {
   const ctx = await montar(cenario(), { falhar: { pedidos: 503 } });
   try {
     const { corpo, texto } = await ctx.chamar();
-    assert.deepEqual(Object.keys(corpo.falhas), ['vendas', 'producao', 'alertas']);
-    assert.equal(corpo.falhas.vendas, 'Não foi possível ler os pedidos agora.');
+    assert.deepEqual(Object.keys(corpo.falhas), ['vendas', 'previsao', 'producao', 'alertas']);
+    assert.equal(corpo.falhas.vendas, FALHA_DOS_PEDIDOS);
+    // A previsão tem mensagem própria, qualquer que seja a fonte que caiu.
+    assert.equal(corpo.falhas.previsao, FALHA_DA_PREVISAO);
     assert.ok(corpo.secoes.orcamentos);
     // O erro cru (rota, status, detalhe do banco) não vai para a tela.
     assert.equal(texto.includes('falha simulada'), false);
@@ -603,12 +829,31 @@ test('pedidos fora do ar derrubam vendas, produção e alertas, e só elas', asy
   }
 });
 
-test('clientes fora do ar não levam produção e orçamentos: os nomes caem para travessão', async () => {
+test('pedidos que chegam fora de lista derrubam as seções deles em vez de virar zero', async () => {
+  // Zero pedido no painel seria uma afirmação — e falsa.
+  const dados = cenario();
+  dados.pedidos = { rows: dados.pedidos };
+  const ctx = await montar(dados);
+  try {
+    const { corpo } = await ctx.chamar();
+    for (const secao of ['vendas', 'producao', 'alertas']) {
+      assert.equal(secao in corpo.secoes, false, secao);
+      assert.equal(corpo.falhas[secao], FALHA_DOS_PEDIDOS, secao);
+    }
+    assert.equal(corpo.falhas.previsao, FALHA_DA_PREVISAO);
+    assert.ok(corpo.secoes.orcamentos);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('clientes fora do ar não levam produção, previsão e orçamentos: os nomes caem para travessão', async () => {
   const ctx = await montar(cenario(), { falhar: { clientes: 500 } });
   try {
     const { corpo } = await ctx.chamar();
     assert.deepEqual(corpo.falhas, { clientes: 'Não foi possível ler os clientes agora.' });
     assert.ok(corpo.secoes.producao.maisAntigos.every(p => p.cliente === '—'));
+    assert.ok(corpo.secoes.previsao.meses.flatMap(m => m.itens).every(i => i.cliente === '—'));
     assert.equal(corpo.secoes.orcamentos.vencendo7d.itens[0].destinatario, '—');
   } finally {
     await ctx.encerrar();
@@ -719,6 +964,88 @@ test('geradoEm é o instante da leitura mais antiga entre as usadas', async () =
     assert.equal(ctx.lidas('pedidos'), 1);
     assert.ok(geradoEm >= antes && geradoEm <= depois, 'é a hora da leitura guardada, a mais antiga');
     assert.ok(geradoEm < inicioDaSegunda);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Previsão de faturamento
+// ---------------------------------------------------------------------------
+
+test('a previsão exige ped.view, col_ped_total E col_ped_condicao — sem uma delas, nem as parcelas são lidas', async () => {
+  for (const chave of ['ped.view', 'col_ped_total', 'col_ped_condicao']) {
+    const ctx = await montar(cenario(), { permissoes: tudoMenos(chave) });
+    try {
+      const { corpo } = await ctx.chamar();
+      assert.equal('previsao' in corpo.secoes, false, `sem ${chave}`);
+      assert.equal('previsao' in corpo.falhas, false, `sem ${chave}: é ausência, não falha`);
+      assert.equal(ctx.lidas('pedido_parcelas'), 0, `sem ${chave}: as parcelas nem são lidas`);
+      // Vendas não depende da condição de pagamento: continua, com ou sem R$.
+      if (chave !== 'ped.view') assert.ok(corpo.secoes.vendas, `sem ${chave}: vendas fica`);
+    } finally {
+      await ctx.encerrar();
+    }
+  }
+
+  const exato = await montar(cenario(), { permissoes: permissoesCom('ped.view', 'col_ped_total', 'col_ped_condicao') });
+  try {
+    const { corpo } = await exato.chamar();
+    assert.deepEqual(Object.keys(corpo.secoes), ['vendas', 'previsao', 'producao']);
+    // Sem col_ped_cliente: o número do pedido sim, o nome do cliente não.
+    const itens = corpo.secoes.previsao.meses.flatMap(m => m.itens);
+    assert.ok(itens.length > 0);
+    assert.ok(itens.every(i => i.cliente === null && typeof i.numero === 'string'));
+  } finally {
+    await exato.encerrar();
+  }
+});
+
+test('parcelas fora do ar derrubam só a previsão; as barras de venda ficam', async () => {
+  const ctx = await montar(cenario(), { falhar: { pedido_parcelas: 500 } });
+  try {
+    const { corpo, texto } = await ctx.chamar();
+    assert.deepEqual(corpo.falhas, { previsao: FALHA_DA_PREVISAO });
+    assert.deepEqual(Object.keys(corpo.secoes), TODAS_AS_SECOES.filter(s => s !== 'previsao'));
+    assert.equal(corpo.secoes.vendas.mesAtual.valor, 9434.5);
+    assert.equal(texto.includes('falha simulada'), false);
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('parcelas que estouram o tempo dão a mensagem da previsão e não ficam guardadas', async () => {
+  const ctx = await montar(cenario(), { tempoLimiteMs: 100, atrasarMs: { pedido_parcelas: 1500 } });
+  try {
+    const { corpo } = await ctx.chamar();
+    assert.deepEqual(corpo.falhas, { previsao: FALHA_DA_PREVISAO });
+    assert.ok(corpo.secoes.vendas);
+
+    await ctx.chamar();
+    assert.equal(ctx.lidas('pedido_parcelas'), 2, 'estouro de tempo não fica em cache');
+    assert.equal(ctx.lidas('pedidos'), 1, 'o que deu certo continua em cache');
+  } finally {
+    await ctx.encerrar();
+  }
+});
+
+test('as parcelas vêm do mesmo cache das outras tabelas: parcela nova só aparece com ?atualizar=1', async () => {
+  const ctx = await montar(cenario());
+  try {
+    const primeira = (await ctx.chamar()).corpo.secoes.previsao;
+    const { hoje } = contextoDeTempo(new Date());
+    ctx.upstream.tabelas.pedido_parcelas.push({
+      id: 50, pedido_id: 102, numero_parcela: 2, valor: '777.00', data_vencimento: somarDias(hoje, 1)
+    });
+
+    const doCache = (await ctx.chamar()).corpo.secoes.previsao;
+    assert.deepEqual(doCache, primeira, 'dentro da validade, o cache vale');
+    assert.equal(ctx.lidas('pedido_parcelas'), 1);
+
+    const relida = (await ctx.chamar('?atualizar=1')).corpo.secoes.previsao;
+    assert.equal(ctx.lidas('pedido_parcelas'), 2);
+    assert.equal(Math.round((relida.programadoDesteMes - primeira.programadoDesteMes) * 100), 77700,
+      'a parcela de amanhã entra no programado');
   } finally {
     await ctx.encerrar();
   }

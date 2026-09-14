@@ -97,12 +97,17 @@
 
             <!-- Gráficos: vendas em 2/3, situação dos pedidos em 1/3 (empilham abaixo de 1280px) -->
             <div class="dash-linha dash-linha--graficos animate-fade-in-up" data-dash-linha>
+                <!--
+                  Vendas (ouro) e previsão de faturamento (verde, seção `previsao`).
+                  O título e o subtítulo são trocados pelo script conforme o que o
+                  perfil vê: sem a previsão volta a ser só "Vendas fechadas".
+                -->
                 <article class="dash-card" data-dash-cartao="grafico-vendas" data-secao="vendas" data-estado="carregando" aria-busy="true">
                     <header class="dash-card__cabeca">
                         <span class="dash-pastilha dash-pastilha--pequena" data-tom="ouro"><i class="fas fa-chart-bar" aria-hidden="true"></i></span>
                         <div class="dash-card__titulos">
-                            <h2 class="dash-card__titulo">Vendas fechadas — últimos 12 meses</h2>
-                            <p class="dash-card__subtitulo">Pedidos gerados na aprovação do orçamento, sem os cancelados</p>
+                            <h2 class="dash-card__titulo" data-dash-titulo>Vendas fechadas e previsão de faturamento</h2>
+                            <p class="dash-card__subtitulo" data-dash-subtitulo>Pedidos gerados por mês, sem os cancelados, e parcelas pelo mês de vencimento</p>
                         </div>
                     </header>
                     <div class="dash-card__corpo" data-dash-corpo>

@@ -421,6 +421,26 @@ test('prospecção aberta exclui Ganho, Perdido, convertida e arquivada', () => 
   assert.equal(pros.funil.find(e => e.etapa === 'Negociação').quantidade, 1);
 });
 
+test('Perdido com status ativa e convertida com status ativa também ficam fora do pipeline', () => {
+  // No teste acima, Perdido e convertida também estão arquivados e sairiam só
+  // pelo status. Aqui nada as tira além da etapa e do cliente_id: o POST de
+  // prospecção aceita a etapa do corpo sem tocar no status, e linha legada
+  // pode ter cliente_id com status ativa.
+  const pros = r.resumirProspeccao({
+    prospeccoes: [
+      { id: 1, etapa: 'Novo', status: 'ativa', valor_estimado: 10000, probabilidade: 10 },
+      { id: 2, etapa: 'Perdido', status: 'ativa', valor_estimado: 50000, probabilidade: 50, proximo_passo_data: dia(-40) },
+      { id: 3, etapa: 'Proposta', status: 'ativa', cliente_id: 77, valor_estimado: 80000, probabilidade: 90, proximo_passo_data: dia(-10) }
+    ]
+  }, { agora: AGORA });
+
+  assert.equal(pros.abertos, 1);
+  assert.equal(pros.valorEmAberto, 10000);
+  assert.equal(pros.valorPonderado, 1000);
+  assert.equal(pros.followups.atrasados, 0, 'nem o Perdido nem a convertida cobram próximo passo');
+  assert.equal(pros.funil.find(e => e.etapa === 'Proposta').quantidade, 0);
+});
+
 test('o funil traz as cinco etapas abertas, em ordem, mesmo vazias', () => {
   const pros = r.resumirProspeccao({
     prospeccoes: [
@@ -463,6 +483,18 @@ test('follow-ups nas bordas: ontem atrasa, hoje é hoje, +7 entra e +8 não', ()
     { id: 2, nome: 'Serrana Ltda', etapa: 'Novo', proximoPasso: 'Visitar', data: dia(-1), dias: -1 },
     { id: 3, nome: 'Vicenzo', etapa: 'Contactado', proximoPasso: 'E-mail', data: HOJE, dias: 0 }
   ]);
+});
+
+test('follow-ups atrasados: o total é o real, e a lista traz seis, do atraso maior ao menor', () => {
+  // Entrada embaralhada de propósito: só a ordem pela data dá dia −7 … dia −2.
+  const pros = r.resumirProspeccao({
+    prospeccoes: [3, 1, 7, 5, 2, 6, 4].map(n => ({
+      id: n, nome_fantasia: `Loja ${n}`, etapa: 'Novo', status: 'ativa', proximo_passo_data: dia(-n)
+    }))
+  }, { agora: AGORA });
+
+  assert.equal(pros.followups.atrasados, 7, 'a lista corta em seis; o total, não');
+  assert.deepEqual(pros.followups.itens.map(i => i.data), [dia(-7), dia(-6), dia(-5), dia(-4), dia(-3), dia(-2)]);
 });
 
 test('convertidos no mês contam pela data local da conversão', () => {
@@ -590,4 +622,334 @@ test('sem a coluna de valor os R$ viram nulo e as contagens continuam', () => {
   const estoque = r.resumirEstoque({ materia_prima: [{ id: 1, quantidade: 2, preco_unitario: 5 }] }, opcoes);
   assert.equal(estoque.valorEstoque, null);
   assert.equal(estoque.criticos, 1);
+});
+
+// --------------------------------------------------------- nomes por coluna
+
+test('sem as colunas de texto, prospecção e insumo saem sem nome, e o ponderado sem a probabilidade', () => {
+  const escondidas = new Set(['col_pros_entidade', 'col_pros_proximo_passo', 'col_pros_prob', 'col_mp_nome', 'col_mp_unidade']);
+  const pode = chave => !escondidas.has(chave);
+
+  const pros = r.resumirProspeccao({
+    prospeccoes: [{
+      id: 1, nome_fantasia: 'Casa Bela', etapa: 'Proposta', status: 'ativa',
+      valor_estimado: 10000, probabilidade: 40, proximo_passo: 'Ligar', proximo_passo_data: dia(-2)
+    }]
+  }, { agora: AGORA, pode });
+  // Etapa, data e dias não identificam ninguém — os chips de atraso são feitos deles.
+  assert.deepEqual(pros.followups.itens, [{ id: 1, nome: null, etapa: 'Proposta', proximoPasso: null, data: dia(-2), dias: -2 }]);
+  assert.equal(pros.valorEmAberto, 10000);
+  // Com uma prospecção só, o ponderado ao lado do valor É a probabilidade dela.
+  assert.equal(pros.valorPonderado, null);
+
+  const estoque = r.resumirEstoque({
+    materia_prima: [{ id: 4, nome: 'Cola PVA', quantidade: -3.5, unidade: 'L', processo: 'Montagem' }]
+  }, { pode });
+  assert.deepEqual(estoque.negativos.itens, [{ id: 4, nome: null, quantidade: -3.5, unidade: null, processo: 'Montagem' }]);
+});
+
+// ----------------------------------------------------------------- previsão
+
+/*
+ * A amostra REAL de pedido_parcelas (SPEC-previsao §2), vista em 14/09/2026.
+ * O valor chega como texto, como o upstream entrega coluna numeric. Os pedidos
+ * em volta são inventados; só o valor_final segue a regra do banco: fecha com
+ * a soma das parcelas (pedidosController recusa o contrário).
+ */
+const AGORA_PREVISAO = new Date('2026-09-14T15:00:00.000Z'); // meio-dia em São Paulo
+
+const PARCELAS_REAIS = [
+  [7, 90, 1, '3327.01', '2026-08-21'], [8, 90, 2, '3327.01', '2026-09-20'], [9, 90, 3, '3327.01', '2026-10-20'],
+  [10, 90, 4, '3327.01', '2026-11-19'], [11, 90, 5, '3327.01', '2026-12-19'], [12, 90, 6, '3327.01', '2027-01-18'],
+  [13, 91, 1, '3326.51', '2026-08-28'], [14, 91, 2, '3326.51', '2026-09-27'], [15, 91, 3, '3326.51', '2026-10-27'],
+  [16, 91, 4, '3326.51', '2026-11-26'], [17, 91, 5, '3326.51', '2026-12-26'], [18, 91, 6, '3326.51', '2027-01-25'],
+  [19, 95, 1, '12774.28', '2026-09-04'],
+  [20, 96, 1, '1731.30', '2026-10-02'], [21, 96, 2, '1731.29', '2026-10-16'], [22, 96, 3, '1731.29', '2026-10-30'],
+  [23, 99, 1, '2006.68', '2026-10-10'], [24, 99, 2, '2006.68', '2026-10-24'],
+  [25, 98, 1, '3490.55', '2026-10-10'], [26, 98, 2, '3490.55', '2026-10-24'], [27, 98, 3, '3490.54', '2026-11-07'],
+  [28, 92, 1, '1891.55', '2026-09-30'], [29, 92, 2, '1891.54', '2026-10-14'],
+  [30, 93, 1, '2700.53', '2026-09-12']
+].map(([id, pedido_id, numero_parcela, valor, data_vencimento]) => ({ id, pedido_id, numero_parcela, valor, data_vencimento }));
+
+const CLIENTES_DA_AMOSTRA = [
+  { id: 50, nome_fantasia: 'Vetri' },
+  { id: 51, nome_fantasia: 'Móveis Aurora' },
+  { id: 52, nome_fantasia: '', razao_social: 'Casa Bela Decorações ME' }
+];
+
+function pedidosDaAmostra() {
+  return [
+    { id: 90, numero: 'PED99', cliente_id: 51, situacao: 'Produção', valor_final: '19962.06', data_emissao: '2026-07-22T18:00:00.000Z' },
+    { id: 91, numero: 'PED100', cliente_id: 52, situacao: 'Produção', valor_final: '19959.06', data_emissao: '2026-07-29T18:00:00.000Z' },
+    { id: 92, numero: 'PED101', cliente_id: 50, situacao: 'Enviado', valor_final: '3783.09', data_emissao: '2026-08-31T18:00:00.000Z' },
+    { id: 93, numero: 'PED102', cliente_id: 51, situacao: 'Entregue', valor_final: '2700.53', data_emissao: '2026-09-12T13:00:00.000Z' },
+    { id: 95, numero: 'PED104', cliente_id: 52, situacao: 'Produção', valor_final: '12774.28', data_emissao: '2026-09-04T13:00:00.000Z' },
+    { id: 96, numero: 'PED105', cliente_id: 50, situacao: 'Produção', valor_final: '5193.88', data_emissao: '2026-09-02T13:00:00.000Z' },
+    { id: 98, numero: 'PED107', cliente_id: 51, situacao: 'Produção', valor_final: '10471.64', data_emissao: '2026-09-10T13:00:00.000Z' },
+    // Cliente fora do cadastro: o nome vira travessão.
+    { id: 99, numero: 'PED108', cliente_id: 77, situacao: 'Produção', valor_final: '4013.36', data_emissao: '2026-09-10T14:00:00.000Z' }
+  ];
+}
+
+/** A amostra inteira; `mudar` troca campos de pedidos pelo id ({ 99: { situacao: 'Cancelado' } }). */
+const amostra = (mudar = {}) => ({
+  pedidos: pedidosDaAmostra().map(p => ({ ...p, ...(mudar[p.id] || {}) })),
+  pedido_parcelas: PARCELAS_REAIS,
+  clientes: CLIENTES_DA_AMOSTRA
+});
+const previsaoDe = (tabelas, opcoes = {}) => r.resumirPrevisao(tabelas, { agora: AGORA_PREVISAO, ...opcoes });
+const doMes = (previsao, mes) => previsao.meses.find(m => m.mes === mes);
+
+test('previsão da amostra real: cada parcela no mês do seu vencimento, com as somas feitas à mão', () => {
+  const previsao = previsaoDe(amostra());
+
+  // [mês, valor, parcelas, pedidos] — só os meses que têm parcela.
+  assert.deepEqual(previsao.meses.filter(m => m.parcelas).map(m => [m.mes, m.valor, m.parcelas, m.pedidos]), [
+    // ago/26: 3.327,01 (90, 1 de 6) + 3.326,51 (91, 1 de 6)
+    ['2026-08', 6653.52, 2, 2],
+    // set/26: 12.774,28 (95, à vista) + 2.700,53 (93) + 3.327,01 (90) + 3.326,51 (91) + 1.891,55 (92)
+    ['2026-09', 24019.88, 5, 5],
+    // out/26: 1.731,30 + 1.731,29 + 1.731,29 (96, as três) + 2 × 3.490,55 (98) + 2 × 2.006,68 (99)
+    //         + 1.891,54 (92) + 3.327,01 (90) + 3.326,51 (91) = 24.733,40 em 10 parcelas de 6 pedidos
+    ['2026-10', 24733.4, 10, 6],
+    // nov/26: 3.490,54 (98, 3 de 3) + 3.327,01 (90) + 3.326,51 (91)
+    ['2026-11', 10144.06, 3, 3],
+    ['2026-12', 6653.52, 2, 2],
+    ['2027-01', 6653.52, 2, 2]
+  ]);
+  // Da janela de vendas (out/25) até o último vencimento (jan/27), com zero no meio.
+  assert.equal(previsao.meses.length, 16);
+  assert.equal(previsao.meses[0].mes, '2025-10');
+  assert.equal(previsao.meses.at(-1).mes, '2027-01');
+  assert.deepEqual(doMes(previsao, '2026-07'), { mes: '2026-07', valor: 0, parcelas: 0, pedidos: 0, outros: 0, itens: [] });
+
+  // De set/26 em diante: 78.857,90 (tudo) − 6.653,52 (agosto, já passou) = 72.204,38.
+  assert.equal(previsao.programadoDesteMes, 72204.38);
+  assert.deepEqual(previsao.alemDoHorizonte, { valor: 0, parcelas: 0, ate: null });
+  assert.deepEqual(previsao.semParcelas, { pedidos: 0, valor: 0 });
+  assert.equal(previsao.orfas, 0);
+  assert.equal(previsao.semData, 0);
+
+  // Nada se perde: as barras verdes somam o valor_final dos 8 pedidos.
+  const totalDasBarras = previsao.meses.reduce((s, m) => s + m.valor, 0);
+  const totalDosPedidos = pedidosDaAmostra().reduce((s, p) => s + Number(p.valor_final), 0);
+  assert.equal(Math.round(totalDasBarras * 100), Math.round(totalDosPedidos * 100));
+});
+
+test('os 12 primeiros meses da previsão são exatamente os de serie12m', () => {
+  // As barras de ouro e as verdes dividem o eixo: um mês de diferença as
+  // desencontraria na tela inteira.
+  const tabelas = amostra();
+  const vendas = r.resumirVendas(tabelas, { agora: AGORA_PREVISAO });
+  assert.deepEqual(previsaoDe(tabelas).meses.slice(0, 12).map(m => m.mes), vendas.serie12m.map(m => m.mes));
+});
+
+test('out/26 agrupa por pedido: as três parcelas do 96 num item só, na ordem do vencimento', () => {
+  // Entrada de trás para frente: a ordem tem de vir da conta, não do banco.
+  const outubro = doMes(previsaoDe({ ...amostra(), pedido_parcelas: [...PARCELAS_REAIS].reverse() }), '2026-10');
+
+  assert.equal(outubro.outros, 0);
+  // Ordem do 1º vencimento no mês; no empate do dia 10 (98 e 99), o número do pedido.
+  assert.deepEqual(outubro.itens.map(i => [i.pedidoId, i.numero, i.cliente, i.totalParcelas, i.valor]), [
+    [96, 'PED105', 'Vetri', 3, 5193.88],
+    [98, 'PED107', 'Móveis Aurora', 3, 6981.1],
+    [99, 'PED108', '—', 2, 4013.36],
+    [92, 'PED101', 'Vetri', 2, 1891.54],
+    [90, 'PED99', 'Móveis Aurora', 6, 3327.01],
+    [91, 'PED100', 'Casa Bela Decorações ME', 6, 3326.51]
+  ]);
+  assert.deepEqual(outubro.itens[0], {
+    pedidoId: 96, numero: 'PED105', cliente: 'Vetri', totalParcelas: 3, valor: 5193.88, estimada: false,
+    parcelas: [
+      { numero: 1, vencimento: '2026-10-02', valor: 1731.3 },
+      { numero: 2, vencimento: '2026-10-16', valor: 1731.29 },
+      { numero: 3, vencimento: '2026-10-30', valor: 1731.29 }
+    ]
+  });
+  // "parcela 3 de 6": o total é o do pedido, não o do mês.
+  assert.deepEqual(outubro.itens[4].parcelas, [{ numero: 3, vencimento: '2026-10-20', valor: 3327.01 }]);
+});
+
+test('pedido cancelado não será faturado: as parcelas dele somem da previsão, sem virar órfãs', () => {
+  const previsao = previsaoDe(amostra({ 99: { situacao: 'Cancelado' } }));
+  const outubro = doMes(previsao, '2026-10');
+
+  // out/26 sem as duas de 2.006,68: 24.733,40 − 4.013,36.
+  assert.deepEqual([outubro.valor, outubro.parcelas, outubro.pedidos], [20720.04, 8, 5]);
+  assert.equal(previsao.meses.some(m => m.itens.some(i => i.pedidoId === 99)), false);
+  assert.equal(previsao.programadoDesteMes, 68191.02); // 72.204,38 − 4.013,36
+  assert.equal(previsao.orfas, 0, 'o pedido existe: a parcela dele não é órfã, só não conta');
+  assert.deepEqual(previsao.semParcelas, { pedidos: 0, valor: 0 }, 'e cancelado não vira estimado');
+
+  // Qualquer grafia de "Cancelado" vale.
+  const minusculo = previsaoDe(amostra({ 93: { situacao: ' cancelado ' } }));
+  assert.equal(doMes(minusculo, '2026-09').valor, 21319.35); // 24.019,88 − 2.700,53
+});
+
+test('pedido sem parcela entra uma vez, estimado, no dia em São Paulo da emissão', () => {
+  const tabelas = {
+    pedidos: [
+      // 01:30Z do dia 1 é 22h30 do dia 31 em São Paulo: venda de agosto — e previsão de agosto.
+      { id: 200, numero: 'PED200', cliente_id: 50, situacao: 'Entregue', valor_final: '1.500,00', data_emissao: '2026-09-01T01:30:00.000Z' },
+      // Sem emissão não há dia: fica fora das barras, mas contado.
+      { id: 201, numero: 'PED201', situacao: 'Produção', valor_final: 700, data_emissao: null },
+      // Cancelado sem parcela: não será faturado, nem estimado.
+      { id: 202, numero: 'PED202', situacao: 'Cancelado', valor_final: 999, data_emissao: '2026-09-02T15:00:00.000Z' }
+    ],
+    pedido_parcelas: [],
+    clientes: CLIENTES_DA_AMOSTRA
+  };
+  const previsao = previsaoDe(tabelas);
+  const agosto = doMes(previsao, '2026-08');
+
+  assert.deepEqual(agosto.itens, [{
+    pedidoId: 200, numero: 'PED200', cliente: 'Vetri', totalParcelas: 1, valor: 1500, estimada: true,
+    parcelas: [{ numero: 1, vencimento: '2026-08-31', valor: 1500 }]
+  }]);
+  assert.deepEqual(previsao.semParcelas, { pedidos: 2, valor: 2200 });
+  assert.equal(previsao.semData, 1, 'o pedido sem emissão não some calado');
+  // Sem parcela, a barra verde é igual à de ouro, no mesmo mês.
+  const vendas = r.resumirVendas(tabelas, { agora: AGORA_PREVISAO });
+  assert.equal(vendas.serie12m.find(m => m.mes === '2026-08').valor, agosto.valor);
+});
+
+test('vencimento DATE à meia-noite UTC continua no dia e no mês dele', () => {
+  const previsao = previsaoDe({
+    pedidos: [{ id: 1, numero: 'PED1', situacao: 'Produção', valor_final: 300 }],
+    pedido_parcelas: [
+      // Pelo new Date() em São Paulo esta seria 30/09 — e iria para setembro.
+      { id: 1, pedido_id: 1, numero_parcela: 1, valor: 200, data_vencimento: '2026-10-01T00:00:00.000Z' },
+      { id: 2, pedido_id: 1, numero_parcela: 2, valor: 100, data_vencimento: '2026-10-02T00:00:00.000Z' }
+    ]
+  });
+
+  assert.equal(doMes(previsao, '2026-09').valor, 0);
+  assert.deepEqual(doMes(previsao, '2026-10').itens[0].parcelas, [
+    { numero: 1, vencimento: '2026-10-01', valor: 200 },
+    { numero: 2, vencimento: '2026-10-02', valor: 100 }
+  ]);
+});
+
+test('a janela vai até o último vencimento, no máximo 12 meses à frente; o resto vai para além do horizonte', () => {
+  const comParcelas = (...vencimentos) => previsaoDe({
+    pedidos: [{ id: 1, numero: 'PED1', situacao: 'Produção', valor_final: 0 }],
+    pedido_parcelas: vencimentos.map(([data, valor], i) => ({
+      id: i + 1, pedido_id: 1, numero_parcela: i + 1, valor, data_vencimento: data
+    }))
+  });
+  const semBuraco = meses => meses.every((m, i) => i === 0 || m.mes === r.deslocarMes(meses[i - 1].mes, 1));
+
+  // Nada no futuro: os mesmos 12 meses de vendas, e só.
+  const soPassado = comParcelas(['2026-09-20', 100]);
+  assert.equal(soPassado.meses.length, 12);
+  assert.equal(soPassado.meses.at(-1).mes, '2026-09');
+
+  // Último vencimento em mar/27: a janela para lá, com os meses do meio em zero.
+  const ateMarco = comParcelas(['2026-09-20', 100], ['2027-03-10', 50]);
+  assert.equal(ateMarco.meses.length, 18);
+  assert.equal(ateMarco.meses.at(-1).mes, '2027-03');
+  assert.ok(semBuraco(ateMarco.meses));
+  assert.equal(doMes(ateMarco, '2026-12').valor, 0);
+  assert.deepEqual(ateMarco.alemDoHorizonte, { valor: 0, parcelas: 0, ate: null });
+
+  // Parcelamento que passa de set/27 (mês atual + 12): o gráfico para em set/27
+  // e o resto aparece somado, com o último mês — nada é cortado calado.
+  const longo = comParcelas(
+    ['2025-09-30', 999], // antes da janela: histórico, fora de tudo
+    ['2026-09-20', 100],
+    ['2027-09-30', 10], // exatamente no teto: dentro
+    ['2027-10-01', 20],
+    ['2028-02-15', 30]
+  );
+  assert.equal(longo.meses.length, 24);
+  assert.equal(longo.meses[0].mes, '2025-10');
+  assert.equal(longo.meses.at(-1).mes, '2027-09');
+  assert.ok(semBuraco(longo.meses));
+  assert.equal(doMes(longo, '2027-09').valor, 10);
+  assert.deepEqual(longo.alemDoHorizonte, { valor: 50, parcelas: 2, ate: '2028-02' });
+  // Programado de set/26 em diante: 100 + 10 no gráfico + 50 além dele. O 999 é passado.
+  assert.equal(longo.programadoDesteMes, 160);
+  assert.equal(longo.meses.reduce((s, m) => s + m.parcelas, 0), 2, 'a de set/25 não entra em mês nenhum');
+});
+
+test('o mês lista até oito pedidos, em ordem natural de número; os outros viram contagem e o total fica inteiro', () => {
+  // PED1 … PED10 no mesmo dia, embaralhados. Em ordem de texto puro o PED10
+  // viria logo depois do PED1.
+  const ordem = [7, 10, 2, 5, 1, 9, 3, 8, 6, 4];
+  const outubro = doMes(previsaoDe({
+    pedidos: ordem.map(n => ({ id: 500 + n, numero: `PED${n}`, situacao: 'Produção', valor_final: n * 100 })),
+    pedido_parcelas: ordem.map(n => ({ id: n, pedido_id: 500 + n, numero_parcela: 1, valor: n * 100, data_vencimento: '2026-10-05' }))
+  }), '2026-10');
+
+  assert.deepEqual(outubro.itens.map(i => i.numero), ['PED1', 'PED2', 'PED3', 'PED4', 'PED5', 'PED6', 'PED7', 'PED8']);
+  assert.equal(outubro.outros, 2);
+  assert.equal(outubro.pedidos, 10);
+  assert.equal(outubro.parcelas, 10);
+  assert.equal(outubro.valor, 5500, 'a lista corta em oito; a soma do mês, não');
+});
+
+test('parcela órfã e parcela sem data não entram nas barras, mas são contadas', () => {
+  const previsao = previsaoDe({
+    pedidos: [
+      { id: 1, numero: 'PED1', situacao: 'Produção', valor_final: 500 },
+      { id: 2, numero: 'PED2', situacao: 'Cancelado', valor_final: 80 }
+    ],
+    pedido_parcelas: [
+      { id: 10, pedido_id: 1, numero_parcela: 1, valor: 100, data_vencimento: '2026-10-10' },
+      { id: 11, pedido_id: 1, numero_parcela: 2, valor: 100, data_vencimento: null },
+      { id: 12, pedido_id: 1, numero_parcela: 3, valor: 100, data_vencimento: '' },
+      { id: 13, pedido_id: 1, numero_parcela: 4, valor: 100, data_vencimento: 'a combinar' },
+      // Passa no corte de texto, mas o dia não existe: iria para um fevereiro inventado.
+      { id: 14, pedido_id: 1, numero_parcela: 5, valor: 100, data_vencimento: '2026-02-30' },
+      // Órfãs: pedido que não está na tabela, e parcela sem pedido.
+      { id: 15, pedido_id: 777, numero_parcela: 1, valor: 900, data_vencimento: '2026-10-10' },
+      { id: 16, pedido_id: null, numero_parcela: 1, valor: 900, data_vencimento: '2026-10-10' },
+      // De pedido cancelado: nem soma nem é órfã.
+      { id: 17, pedido_id: 2, numero_parcela: 1, valor: 80, data_vencimento: '2026-10-10' }
+    ]
+  });
+  const outubro = doMes(previsao, '2026-10');
+
+  assert.equal(previsao.orfas, 2);
+  assert.equal(previsao.semData, 4);
+  assert.deepEqual([outubro.valor, outubro.parcelas, outubro.pedidos], [100, 1, 1]);
+  // "parcela 1 de 5": as sem data continuam sendo parcelas do pedido.
+  assert.equal(outubro.itens[0].totalParcelas, 5);
+});
+
+test('parcela sem número gravado leva a posição na ordem de vencimento', () => {
+  const previsao = previsaoDe({
+    pedidos: [{ id: 1, numero: 'PED1', situacao: 'Produção', valor_final: 300 }],
+    pedido_parcelas: [
+      { id: 2, pedido_id: 1, numero_parcela: null, valor: 200, data_vencimento: '2026-11-10' },
+      { id: 1, pedido_id: 1, valor: 100, data_vencimento: '2026-10-10' }
+    ]
+  });
+
+  assert.deepEqual(doMes(previsao, '2026-10').itens[0].parcelas, [{ numero: 1, vencimento: '2026-10-10', valor: 100 }]);
+  assert.deepEqual(doMes(previsao, '2026-11').itens[0].parcelas, [{ numero: 2, vencimento: '2026-11-10', valor: 200 }]);
+});
+
+test('o cliente da previsão só sai com a coluna Cliente de Pedidos; o número do pedido sai sempre', () => {
+  const semColuna = previsaoDe(amostra(), { pode: chave => chave !== 'col_ped_cliente' }).meses.flatMap(m => m.itens);
+  assert.ok(semColuna.length > 0);
+  assert.ok(semColuna.every(i => i.cliente === null), 'null, e não "—": "—" diz que o cadastro está vazio');
+  assert.ok(semColuna.every(i => typeof i.numero === 'string' && i.numero));
+
+  // Com a coluna, mas sem a tabela de clientes (a leitura falhou): travessão.
+  const semTabela = previsaoDe({ ...amostra(), clientes: undefined }).meses.flatMap(m => m.itens);
+  assert.ok(semTabela.every(i => i.cliente === '—'));
+});
+
+test('sem pedido nenhum, a previsão traz os 12 meses zerados e nada fora deles', () => {
+  const { meses, ...resto } = previsaoDe({});
+  assert.equal(meses.length, 12);
+  assert.ok(meses.every(m => m.valor === 0 && m.parcelas === 0 && m.itens.length === 0));
+  assert.deepEqual(resto, {
+    programadoDesteMes: 0,
+    alemDoHorizonte: { valor: 0, parcelas: 0, ate: null },
+    semParcelas: { pedidos: 0, valor: 0 },
+    orfas: 0,
+    semData: 0
+  });
 });

@@ -19,6 +19,8 @@
 //    ignora order/limit/select) com `createApiClient(req)`, e só as tabelas
 //    das seções que o usuário pode ver. Tabela de itens e de movimentos não
 //    entra: são as maiores do sistema e nenhum número daqui precisa delas.
+//    `pedido_parcelas` entra, só para a previsão: de 1 a poucas linhas por
+//    pedido, e sem ela não há como saber quando o dinheiro vence.
 //
 // 3. CACHE DE TABELA CRUA, 60 s, no molde do catalogoCache: guarda a PROMESSA
 //    (a carga dupla do menu na abertura do app divide uma leitura em vez de
@@ -63,6 +65,14 @@ const TEMPO_ESGOTADO = 'TEMPO_ESGOTADO';
  *             enfeite"): se a leitura falhar, a lista sai com "—" em vez de o
  *             card inteiro sumir. `prospeccoes` como fonte de nome só é lida
  *             para quem tem `pros.view`.
+ *   `falha`   mensagem própria da seção quando QUALQUER fonte dela falha. Sem
+ *             ela, vale a mensagem da tabela (FALHAS_DE_LEITURA).
+ *
+ * Previsão pede, além da view, as colunas Valor Total E Condição de Pedidos: o
+ * cronograma de parcelas é valor + condição de pagamento, e quem não vê essas
+ * colunas na grade não pode lê-lo aqui. Sem uma delas a seção nem existe — não
+ * há "R$ null" que salve um gráfico feito só de dinheiro. É independente de
+ * `vendas`: parcela fora do ar derruba só a previsão, e as barras de ouro ficam.
  *
  * Estoque pede `col_mp_estoque_atual` além da view: o card é feito de saldos,
  * e quem não pode ver a coluna Quantidade na grade não pode lê-la aqui.
@@ -75,6 +85,14 @@ const TEMPO_ESGOTADO = 'TEMPO_ESGOTADO';
  */
 const SECOES = [
   { nome: 'vendas', exige: ['ped.view'], valores: 'col_ped_total', tabelas: ['pedidos'], montar: resumo.resumirVendas },
+  {
+    nome: 'previsao',
+    exige: ['ped.view', 'col_ped_total', 'col_ped_condicao'],
+    tabelas: ['pedidos', 'pedido_parcelas'],
+    nomes: ['clientes'],
+    falha: 'Não foi possível ler as parcelas dos pedidos agora.',
+    montar: resumo.resumirPrevisao
+  },
   { nome: 'producao', exige: ['ped.view'], valores: 'col_ped_total', tabelas: ['pedidos'], nomes: ['clientes'], montar: resumo.resumirProducao },
   { nome: 'orcamentos', exige: ['orc.view'], valores: 'col_orc_total', tabelas: ['orcamentos'], nomes: ['clientes', 'prospeccoes'], montar: resumo.resumirOrcamentos },
   { nome: 'alertas', exige: ['orc.view', 'ped.view'], valores: 'col_orc_total', tabelas: ['orcamentos', 'pedidos'], nomes: ['clientes', 'prospeccoes'], montar: resumo.resumirAlertas },
@@ -291,7 +309,7 @@ router.get('/', async (req, res) => {
     for (const secao of visiveis) {
       const tabelaQueFalhou = secao.tabelas.find(t => erros[t]);
       if (tabelaQueFalhou) {
-        falhas[secao.nome] = mensagemDeFalha(tabelaQueFalhou, erros[tabelaQueFalhou]);
+        falhas[secao.nome] = secao.falha || mensagemDeFalha(tabelaQueFalhou, erros[tabelaQueFalhou]);
         continue;
       }
       try {

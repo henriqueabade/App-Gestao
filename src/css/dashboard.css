@@ -37,6 +37,25 @@
     --dash-texto-apoio: color-mix(in srgb, var(--menu-text-secondary) 90%, var(--menu-text-strong));
 }
 
+/* Verde da previsão de faturamento, no painel e no tooltip (que o
+   window.Popover move para o <body> e por isso não herda nada do módulo).
+   A barra mistura o verde do tema com transparência, como o ouro, só que bem
+   mais cheia: a 62% passa de 6:1 sobre o cartão escuro; o verde escuro do
+   tema claro precisa de 80% para ficar acima de 3:1 sobre o cartão claro. O
+   texto verde mistura com a cor forte, como os tons (5:1 ou mais nos dois). */
+.dashboard-module,
+.dash-balao {
+    --dash-verde-barra: color-mix(in srgb, var(--color-green) 62%, transparent);
+    --dash-verde-barra-forte: color-mix(in srgb, var(--color-green) 85%, transparent);
+    --dash-verde-texto: color-mix(in srgb, var(--color-green) 72%, var(--menu-text-strong));
+}
+
+[data-menu-theme="light"] .dashboard-module,
+[data-menu-theme="light"] .dash-balao {
+    --dash-verde-barra: color-mix(in srgb, var(--color-green) 80%, transparent);
+    --dash-verde-barra-forte: var(--color-green);
+}
+
 /* O Tailwind define [hidden] com a mesma especificidade de uma classe: sem
    isto `.dash-card { display: flex }` venceria e o cartão escondido (sem
    permissão) apareceria vazio. */
@@ -556,18 +575,121 @@
     transition: fill 150ms ease;
 }
 
-.dash-barras__coluna:hover .dash-barras__alvo {
+/* Cada barra é um item focável com o próprio tooltip: o realce é por barra
+   (com ouro e verde no mesmo mês, passar na verde não acende a de ouro). Com
+   uma série só o alvo é a banda inteira — o mesmo realce de antes. */
+.dash-barras__item {
+    outline: none;
+}
+
+.dash-barras__item:hover .dash-barras__alvo,
+.dash-barras__item:focus-visible .dash-barras__alvo {
     fill: var(--menu-surface-soft);
 }
 
-.dash-barras__coluna:hover .dash-barras__barra {
+/* Foco de teclado na faixa inteira da barra: a de 3 px de um mês fraco não
+   teria onde mostrar o anel. Mesma mistura do foco dos botões (4,4:1 ou mais). */
+.dash-barras__item:focus-visible .dash-barras__alvo {
+    stroke: color-mix(in srgb, var(--color-primary) 60%, var(--menu-text-strong));
+    stroke-width: 1.5;
+}
+
+.dash-barras__item--vendas:hover .dash-barras__barra,
+.dash-barras__item--vendas:focus-visible .dash-barras__barra {
     fill: color-mix(in srgb, var(--color-primary) 58%, transparent);
 }
 
-/* Mês atual em dourado cheio: é o que está sendo construído agora. */
-.dash-barras__coluna--atual .dash-barras__barra,
-.dash-barras__coluna--atual:hover .dash-barras__barra {
+/* Mês atual em dourado cheio: é o que está sendo construído agora. Só a
+   barra de ouro — a verde do mesmo mês continua verde. */
+.dash-barras__coluna--atual .dash-barras__item--vendas .dash-barras__barra {
     fill: url(#dashGradienteOuro);
+}
+
+.dash-barras__item--previsao .dash-barras__barra {
+    fill: var(--dash-verde-barra);
+}
+
+.dash-barras__item--previsao:hover .dash-barras__barra,
+.dash-barras__item--previsao:focus-visible .dash-barras__barra {
+    fill: var(--dash-verde-barra-forte);
+}
+
+/* Faixa invisível da coluna até o pé do SVG: âncora do tooltip, que assim
+   abre sempre abaixo dos rótulos de mês, com ou sem rótulo naquela coluna. */
+.dash-barras__faixa {
+    fill: none;
+    pointer-events: none;
+}
+
+/* Divisa discreta entre o mês atual e os meses só de previsão. */
+.dash-barras__separador {
+    stroke: var(--menu-text-tertiary);
+    stroke-width: 1;
+    stroke-dasharray: 4 4;
+}
+
+.dash-barras__previsao-rotulo {
+    fill: var(--dash-verde-texto);
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+}
+
+/* Legenda das séries: o marcador tem a cor da própria barra. */
+.dash-grafico__legenda {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem 1.1rem;
+    font-size: 0.8rem;
+    color: var(--dash-texto-apoio);
+}
+
+.dash-grafico__legenda-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+}
+
+.dash-grafico__legenda-cor {
+    flex-shrink: 0;
+    width: 0.7rem;
+    height: 0.7rem;
+    border-radius: 50%;
+}
+
+.dash-grafico__legenda-cor--vendas {
+    background: linear-gradient(180deg, var(--color-primary-light), var(--color-primary));
+}
+
+.dash-grafico__legenda-cor--previsao {
+    background: var(--dash-verde-barra);
+}
+
+.dash-grafico__dado--previsao .dash-grafico__dado-valor {
+    color: var(--dash-verde-texto);
+}
+
+.dash-grafico__dado-nota {
+    font-size: 0.75rem;
+    color: var(--dash-texto-apoio);
+    font-variant-numeric: tabular-nums;
+}
+
+/* Série que falhou agora: nota discreta; o "Atualizar" do cabeçalho relê. */
+.dash-grafico__nota {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    margin: 0;
+    font-size: 0.78rem;
+    color: var(--dash-texto-apoio);
+}
+
+.dash-grafico__nota i {
+    color: var(--color-primary);
 }
 
 .dash-barras__ouro-claro {
@@ -1188,6 +1310,132 @@
 
 .dash-estado-geral .dash-botao-leve {
     margin-top: 0.5rem;
+}
+
+/* ------------------------------------------------- tooltip do gráfico */
+
+/* A caixa é aberta por window.Popover (src/js/utils/popover.js), que a MOVE
+   para o <body>: fora do cartão (overflow: hidden e backdrop-filter cortariam
+   ou deslocariam a caixa) e fora de .dashboard-module — daí não usar nenhum
+   token do módulo aqui. `.show` é a classe do contrato do Popover: é ele quem
+   a põe ao abrir e tira ao fechar (Escape, rolagem, clique fora, troca de
+   módulo). Escondida por visibilidade, não por display: o Popover mede a caixa
+   para decidir se abre abaixo ou acima da barra.
+   OPACA de propósito — o dono do negócio recusou pop-up transparente em outra
+   tela. O fundo sólido é o --color-bg-deep do tema (vinho escuro no escuro,
+   cinza claro no claro); a camada de superfície por cima é só o acabamento.
+   Nome `dash-balao`, e não `dash-dica`: `.dash-dica` é o parágrafo de dica dos
+   cartões, e estas regras (visibility: hidden) apagariam aquele texto. */
+.dash-balao {
+    --dash-balao-apoio: color-mix(in srgb, var(--menu-text-secondary) 80%, var(--menu-text-strong));
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: max-content;
+    max-width: min(22rem, calc(100vw - 16px));
+    padding: 0.75rem 0.9rem 0.7rem;
+    border-radius: 0.85rem;
+    background: linear-gradient(var(--menu-surface-soft), var(--menu-surface-soft)), var(--color-bg-deep);
+    border: 1px solid var(--menu-surface-border-strong);
+    box-shadow: 0 20px 44px -18px color-mix(in srgb, var(--neutral-500) 70%, transparent);
+    color: var(--menu-text-primary);
+    font-size: 0.8rem;
+    line-height: 1.4;
+    /* Só mostra: nunca rouba o mouse da barra (sem isso, a caixa aberta por
+       cima da barra num viewport baixo fecharia e reabriria sem parar). */
+    pointer-events: none;
+    visibility: hidden;
+    opacity: 0;
+    transition: opacity 120ms ease;
+}
+
+.dash-balao.show {
+    visibility: visible;
+    opacity: 1;
+}
+
+.dash-balao__titulo {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    margin: 0;
+    font-weight: 700;
+    color: var(--menu-text-strong);
+}
+
+/* O marcador repete a cor da barra que abriu a caixa (e da legenda). */
+.dash-balao__titulo::before {
+    content: "";
+    flex-shrink: 0;
+    width: 0.6rem;
+    height: 0.6rem;
+    border-radius: 50%;
+    background: linear-gradient(180deg, var(--color-primary-light), var(--color-primary));
+}
+
+.dash-balao[data-serie="previsao"] .dash-balao__titulo::before {
+    background: var(--dash-verde-barra);
+}
+
+.dash-balao__resumo {
+    margin: 0.15rem 0 0;
+    font-weight: 600;
+    color: var(--menu-text-primary);
+    font-variant-numeric: tabular-nums;
+}
+
+.dash-balao__lista {
+    list-style: none;
+    display: grid;
+    gap: 0.45rem;
+    margin: 0.55rem 0 0;
+    padding: 0.5rem 0 0;
+    border-top: 1px solid var(--menu-surface-border-strong);
+}
+
+.dash-balao__item {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: baseline;
+    gap: 0.05rem 0.9rem;
+}
+
+.dash-balao__nome {
+    min-width: 0;
+    font-weight: 600;
+    color: var(--menu-text-strong);
+    overflow-wrap: anywhere;
+}
+
+.dash-balao__valor {
+    font-weight: 600;
+    white-space: nowrap;
+    color: var(--menu-text-strong);
+    font-variant-numeric: tabular-nums;
+}
+
+.dash-balao__detalhe {
+    grid-column: 1 / -1;
+    font-size: 0.74rem;
+    color: var(--dash-balao-apoio);
+    font-variant-numeric: tabular-nums;
+}
+
+.dash-balao__item--estimada .dash-balao__detalhe {
+    font-style: italic;
+}
+
+.dash-balao__rodape {
+    margin: 0.5rem 0 0;
+    font-size: 0.74rem;
+    font-weight: 600;
+    color: var(--dash-balao-apoio);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .dash-balao {
+        transition: none;
+    }
 }
 
 /* ------------------------------------------------------------ responsivo */

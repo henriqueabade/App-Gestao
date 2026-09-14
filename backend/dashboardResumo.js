@@ -6,8 +6,9 @@
  *
  *   - FUSO. O pedido convertido às 23h30 do dia 31 é gravado como 02h30Z do
  *     dia 1: sem converter para São Paulo, a venda muda de mês.
- *   - DATA SEM HORA. `orcamentos.validade`, `pedidos.data_aprovacao` e
- *     `prospeccoes.proximo_passo_data` são DATE; o upstream pode entregá-las
+ *   - DATA SEM HORA. `orcamentos.validade`, `pedidos.data_aprovacao`,
+ *     `prospeccoes.proximo_passo_data` e `pedido_parcelas.data_vencimento`
+ *     são DATE; o upstream pode entregá-las
  *     como '2026-09-13T00:00:00.000Z', e passar isso por `new Date()` em São
  *     Paulo dá o dia 12. Essas colunas são cortadas como texto, nunca
  *     convertidas.
@@ -73,8 +74,17 @@ const LIMITE_LISTA = {
   vencendo7d: 8,
   aprovadosSemPedido: 5,
   followups: 6,
-  negativos: 6
+  negativos: 6,
+  // Pedidos listados por mês no tooltip da previsão; os demais viram `outros`.
+  previsao: 8
 };
+
+/**
+ * Até quantos meses à frente do atual o gráfico da previsão vai. Parcela mais
+ * longe que isso não some: vai para `alemDoHorizonte`, com valor, contagem e o
+ * último mês — um parcelamento em 18x não pode encolher calado para 12.
+ */
+const HORIZONTE_PREVISAO_MESES = 12;
 
 /**
  * A coluna da grade que libera cada texto que IDENTIFICA alguém: cliente,
@@ -652,6 +662,7 @@ function resumirProspeccao(
   const funil = new Map(ETAPAS_ABERTAS.map(e => [e, acumulador()]));
   const verNome = pode(COLUNAS_DE_TEXTO.nomeDaProspeccao);
   const verPasso = pode(COLUNAS_DE_TEXTO.proximoPasso);
+  const verProbabilidade = pode(COLUNA_PROBABILIDADE);
 
   let abertos = 0;
   let valorEmAberto = 0;
@@ -689,9 +700,9 @@ function resumirProspeccao(
     if (data <= hoje) {
       cobrar.push({
         id: p.id ?? null,
-        nome: texto(p.nome_fantasia) || texto(p.razao_social) || SEM_NOME,
+        nome: verNome ? (texto(p.nome_fantasia) || texto(p.razao_social) || SEM_NOME) : null,
         etapa,
-        proximoPasso: texto(p.proximo_passo),
+        proximoPasso: verPasso ? texto(p.proximo_passo) : null,
         data,
         dias: diferencaEmDias(data, hoje)
       });
@@ -701,7 +712,7 @@ function resumirProspeccao(
   return {
     abertos,
     valorEmAberto: saidaDeValor(valorEmAberto, comValores),
-    valorPonderado: saidaDeValor(valorPonderado, comValores),
+    valorPonderado: saidaDeValor(valorPonderado, comValores && verProbabilidade),
     funil: ETAPAS_ABERTAS.map(etapa => ({
       etapa,
       quantidade: funil.get(etapa).quantidade,
@@ -746,8 +757,16 @@ function resumirClientes({ clientes } = {}) {
  * estoque "vale menos" porque alguém esqueceu de dar entrada.
  *
  * Quantidade vazia conta como zero, como em Relatórios.
+ *
+ * `nome` e `unidade` só saem com as colunas deles (COLUNAS_DE_TEXTO). A
+ * quantidade sai sempre: a seção inteira já exige a coluna do saldo.
  */
-function resumirEstoque({ materia_prima: materias } = {}, { comValores = true } = {}) {
+function resumirEstoque(
+  { materia_prima: materias } = {},
+  { comValores = true, pode = LIBERA_TUDO } = {}
+) {
+  const verNome = pode(COLUNAS_DE_TEXTO.nomeDoInsumo);
+  const verUnidade = pode(COLUNAS_DE_TEXTO.unidadeDoInsumo);
   let zerados = 0;
   let criticos = 0;
   let valorEstoque = 0;
@@ -771,9 +790,9 @@ function resumirEstoque({ materia_prima: materias } = {}, { comValores = true } 
     .slice(0, LIMITE_LISTA.negativos)
     .map(({ m, quantidade }) => ({
       id: m.id ?? null,
-      nome: texto(m.nome) || SEM_NOME,
+      nome: verNome ? (texto(m.nome) || SEM_NOME) : null,
       quantidade,
-      unidade: texto(m.unidade),
+      unidade: verUnidade ? texto(m.unidade) : null,
       processo: texto(m.processo)
     }));
 
@@ -797,6 +816,222 @@ function resumirIa({ ia_extracoes: extracoes } = {}) {
   };
 }
 
+// ---------------------------------------------------------------------------
+// Previsão de faturamento (SPEC-previsao)
+// ---------------------------------------------------------------------------
+
+/**
+ * Vencimento de uma parcela: coluna DATE, corte de texto — e só se o dia existe
+ * no calendário. '2026-02-30' passaria no corte e iria para fevereiro; aqui ele
+ * é "sem data" e aparece em `semData`, em vez de virar um mês inventado.
+ */
+function diaDeVencimento(valor) {
+  const dia = diaDeColunaDate(valor);
+  if (!dia) return null;
+  return new Date(utcDoDia(dia)).toISOString().slice(0, 10) === dia ? dia : null;
+}
+
+/** Os meses de `inicio` a `fim`, inclusive e sem buraco ('YYYY-MM' ordena como texto). */
+function mesesEntre(inicio, fim) {
+  const meses = [];
+  for (let mes = inicio; mes <= fim; mes = deslocarMes(mes, 1)) meses.push(mes);
+  return meses;
+}
+
+/**
+ * Número do documento em ordem NATURAL: "PED99" antes de "PED100". Em ordem de
+ * texto puro o PED100 vem antes, e a lista do tooltip parece embaralhada.
+ */
+function compararNumeroDoDocumento(a, b) {
+  return String(a ?? '').localeCompare(String(b ?? ''), 'pt-BR', { numeric: true });
+}
+
+/** Sem data vai para o fim: quem tem vencimento é ordenado primeiro. */
+function compararVencimento(a, b) {
+  if (a === b) return 0;
+  if (a === null) return 1;
+  if (b === null) return -1;
+  return a.localeCompare(b);
+}
+
+/**
+ * As parcelas de UM pedido, em ordem de vencimento, cada uma com o seu número.
+ * O número é o `numero_parcela` gravado; linha sem ele (legado) leva a posição
+ * na ordem de vencimento — o "parcela 3 de 6" do tooltip tem de fechar com o
+ * total mesmo assim.
+ */
+function parcelasDoPedido(linhas) {
+  return linhas
+    .map(linha => ({ linha, vencimento: diaDeVencimento(linha?.data_vencimento) }))
+    .sort((a, b) =>
+      compararVencimento(a.vencimento, b.vencimento) ||
+      compararIds(a.linha?.numero_parcela, b.linha?.numero_parcela) ||
+      compararIds(a.linha?.id, b.linha?.id))
+    .map(({ linha, vencimento }, i) => {
+      const gravado = paraDecimal(linha?.numero_parcela);
+      return {
+        numero: Number.isInteger(gravado) && gravado > 0 ? gravado : i + 1,
+        vencimento,
+        valor: dinheiro(linha?.valor)
+      };
+    });
+}
+
+/**
+ * Previsão de faturamento: cada parcela no mês do SEU vencimento.
+ *
+ * O gráfico de vendas põe o pedido inteiro no mês em que foi gerado, mas o
+ * dinheiro entra quando cada parcela vence — à vista, a prazo ou em 6x. Não
+ * existe baixa de pagamento no banco: a parcela é só PROGRAMADA, nunca
+ * "recebida" nem "vencida", e nada aqui afirma isso.
+ *
+ *   - Pedido cancelado não será faturado: as parcelas dele somem. Elas não
+ *     são órfãs — o pedido existe —, só não contam. Órfã é a parcela cujo
+ *     pedido não está na tabela; ela é contada em `orfas`, não somada.
+ *   - `data_vencimento` é DATE: corte de texto. Pelo `new Date()` em São
+ *     Paulo, a parcela de '2026-10-01T00:00:00.000Z' cairia em setembro.
+ *   - Pedido sem nenhuma parcela (linha antiga, conversão que não copiou o
+ *     parcelamento) entra UMA vez, estimado: o valor_final no dia em São Paulo
+ *     da emissão — o mesmo dia em que ele conta como venda. Assim toda venda
+ *     fechada aparece na previsão, e no tempo as duas séries somam o mesmo (a
+ *     menos dos centavos do parcelamento).
+ *   - A janela começa nos MESMOS 12 meses de `serie12m` (as barras de ouro e
+ *     as verdes ficam lado a lado) e vai até o último mês com parcela, no
+ *     máximo HORIZONTE_PREVISAO_MESES à frente. O que passa disso vai para
+ *     `alemDoHorizonte`; o que vence antes da janela é histórico e fica fora.
+ *   - Nada é cortado calado: `semParcelas`, `orfas`, `semData` e
+ *     `alemDoHorizonte` dizem o que ficou fora das barras, e `outros` diz
+ *     quantos pedidos do mês não couberam na lista.
+ *
+ * `cliente` só sai com a coluna Cliente de Pedidos (COLUNAS_DE_TEXTO); o
+ * número do pedido sai sempre. A seção inteira já exige as colunas de valor e
+ * de condição (ver SECOES no controller), então os R$ saem sempre.
+ */
+function resumirPrevisao(
+  { pedidos, pedido_parcelas: parcelas, clientes } = {},
+  { agora = new Date(), pode = LIBERA_TUDO } = {}
+) {
+  const { mesAtual } = contextoDeTempo(agora);
+  const inicio = deslocarMes(mesAtual, -11);
+  const teto = deslocarMes(mesAtual, HORIZONTE_PREVISAO_MESES);
+  const verCliente = pode(COLUNAS_DE_TEXTO.clienteDoPedido);
+  const nomes = verCliente ? mapaDeNomes(clientes) : new Map();
+
+  const conhecidos = new Set();
+  const ativos = new Map();
+  for (const p of lista(pedidos)) {
+    if (!temValor(p?.id)) continue;
+    conhecidos.add(String(p.id));
+    if (situacaoDoPedido(p.situacao) !== 'Cancelado') ativos.set(String(p.id), p);
+  }
+
+  const linhasPorPedido = new Map();
+  let orfas = 0;
+  for (const linha of lista(parcelas)) {
+    const pedidoId = temValor(linha?.pedido_id) ? String(linha.pedido_id) : null;
+    if (pedidoId === null || !conhecidos.has(pedidoId)) {
+      orfas += 1;
+      continue;
+    }
+    if (!ativos.has(pedidoId)) continue;
+    if (!linhasPorPedido.has(pedidoId)) linhasPorPedido.set(pedidoId, []);
+    linhasPorPedido.get(pedidoId).push(linha);
+  }
+
+  // Cada parcela datada, já com o pedido dela. Um pedido estimado vira uma
+  // "parcela 1 de 1" marcada `estimada`, para a tela trocar o texto dela.
+  const lancamentos = [];
+  const semParcelas = acumulador();
+  let semData = 0;
+  for (const [pedidoId, pedido] of ativos) {
+    const linhas = linhasPorPedido.get(pedidoId);
+    if (!linhas) {
+      const valor = dinheiro(pedido.valor_final);
+      somar(semParcelas, valor);
+      const dia = diaLocal(pedido.data_emissao);
+      if (!dia) semData += 1;
+      else lancamentos.push({ pedido, totalParcelas: 1, numero: 1, vencimento: dia, valor, estimada: true });
+      continue;
+    }
+    for (const parcela of parcelasDoPedido(linhas)) {
+      if (!parcela.vencimento) {
+        semData += 1;
+        continue;
+      }
+      lancamentos.push({ pedido, totalParcelas: linhas.length, ...parcela, estimada: false });
+    }
+  }
+
+  const ultimoMes = lancamentos.reduce((maior, l) => {
+    const mes = l.vencimento.slice(0, 7);
+    return maior === null || mes > maior ? mes : maior;
+  }, null);
+  const fim = ultimoMes && ultimoMes > mesAtual ? (ultimoMes < teto ? ultimoMes : teto) : mesAtual;
+  const meses = mesesEntre(inicio, fim);
+
+  // mês -> pedido -> item. Os lançamentos já vêm em ordem de vencimento
+  // dentro de cada pedido, então as parcelas de um item nascem ordenadas.
+  const porMes = new Map(meses.map(mes => [mes, new Map()]));
+  const alem = { valor: 0, parcelas: 0, ate: null };
+  for (const l of lancamentos) {
+    const mes = l.vencimento.slice(0, 7);
+    if (mes > fim) {
+      alem.valor += l.valor;
+      alem.parcelas += 1;
+      if (alem.ate === null || mes > alem.ate) alem.ate = mes;
+      continue;
+    }
+    const doMes = porMes.get(mes);
+    if (!doMes) continue;
+    const chave = String(l.pedido.id);
+    if (!doMes.has(chave)) {
+      doMes.set(chave, { pedido: l.pedido, totalParcelas: l.totalParcelas, estimada: l.estimada, valor: 0, parcelas: [] });
+    }
+    const item = doMes.get(chave);
+    item.valor += l.valor;
+    item.parcelas.push(l);
+  }
+
+  const itemDeSaida = ({ pedido, totalParcelas, estimada, valor, parcelas: doItem }) => ({
+    pedidoId: pedido.id ?? null,
+    numero: texto(pedido.numero),
+    cliente: verCliente
+      ? ((temValor(pedido.cliente_id) && nomes.get(String(pedido.cliente_id))) || SEM_NOME)
+      : null,
+    totalParcelas,
+    valor: arredondar(valor),
+    estimada,
+    parcelas: doItem.map(p => ({ numero: p.numero, vencimento: p.vencimento, valor: arredondar(p.valor) }))
+  });
+
+  let programado = alem.valor;
+  const saida = meses.map(mes => {
+    const itens = [...porMes.get(mes).values()].sort((a, b) =>
+      a.parcelas[0].vencimento.localeCompare(b.parcelas[0].vencimento) ||
+      compararNumeroDoDocumento(a.pedido.numero, b.pedido.numero) ||
+      compararIds(a.pedido.id, b.pedido.id));
+    const valor = itens.reduce((soma, item) => soma + item.valor, 0);
+    if (mes >= mesAtual) programado += valor;
+    return {
+      mes,
+      valor: arredondar(valor),
+      parcelas: itens.reduce((soma, item) => soma + item.parcelas.length, 0),
+      pedidos: itens.length,
+      outros: Math.max(0, itens.length - LIMITE_LISTA.previsao),
+      itens: itens.slice(0, LIMITE_LISTA.previsao).map(itemDeSaida)
+    };
+  });
+
+  return {
+    meses: saida,
+    programadoDesteMes: arredondar(programado),
+    alemDoHorizonte: { valor: arredondar(alem.valor), parcelas: alem.parcelas, ate: alem.ate },
+    semParcelas: { pedidos: semParcelas.quantidade, valor: arredondar(semParcelas.valor) },
+    orfas,
+    semData
+  };
+}
+
 module.exports = {
   resumirVendas,
   resumirProducao,
@@ -806,6 +1041,7 @@ module.exports = {
   resumirClientes,
   resumirEstoque,
   resumirIa,
+  resumirPrevisao,
   contextoDeTempo,
   diaLocal,
   diaDeColunaDate,
@@ -817,5 +1053,6 @@ module.exports = {
   ETAPAS,
   FAIXAS_IDADE,
   LIMITE_CRITICO,
-  LIMITE_LISTA
+  LIMITE_LISTA,
+  HORIZONTE_PREVISAO_MESES
 };
