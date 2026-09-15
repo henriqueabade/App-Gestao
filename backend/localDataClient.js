@@ -40,6 +40,12 @@ function createLocalDataClient(queryable = database, options = {}) {
   async function send(method, path, { query = {}, body } = {}) {
     if (typeof path !== 'string' || !path.startsWith('/') || path.startsWith('//') || path.includes('#')) throw invalid();
     const [pathname, search = ''] = path.split('?');
+    // Endpoint de conectividade usado por check-pin e pelo auto-login.
+    // Não é uma tabela e deve sondar o PostgreSQL selecionado, sem HTTP.
+    if (method === 'GET' && pathname === '/status') {
+      await queryable.query('SELECT 1');
+      return { status: 'ok', db: 'connected' };
+    }
     const params = {};
     for (const [key, value] of new URLSearchParams(search)) {
       if (Object.hasOwn(params, key)) params[key] = [].concat(params[key], value);
@@ -156,6 +162,15 @@ function createLocalDataClient(queryable = database, options = {}) {
     return normalizeRow(rows[0]) || null;
   }
   return {
+    async updateUserActivity(id, fields) {
+      // A API aceita aliases de versões diferentes; o SQL precisa dos nomes
+      // realmente presentes. Esta compatibilidade é exclusiva da atividade.
+      const types = await getColumnTypes('usuarios');
+      const payload = Object.fromEntries(Object.entries(fields).filter(([key]) => types.has(key)));
+      if (!Object.keys(payload).length) return false;
+      await send('PUT', `/usuarios/${id}`, { body: payload });
+      return true;
+    },
     get: (path, opts) => send('GET', path, opts),
     post: (path, body, opts) => send('POST', path, { ...opts, body }),
     put: (path, body, opts) => send('PUT', path, { ...opts, body }),

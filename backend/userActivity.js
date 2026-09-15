@@ -25,6 +25,9 @@ async function updateUsuarioCampos(id, campos) {
   if (!Object.keys(payload).length) return false;
 
   try {
+    if (typeof pool.updateUserActivity === 'function') {
+      return await pool.updateUserActivity(id, payload);
+    }
     await pool.put(`/usuarios/${id}`, payload);
     return true;
   } catch (err) {

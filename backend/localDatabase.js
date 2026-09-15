@@ -1,5 +1,13 @@
 const { readDatabaseConfig, isDev } = require('./dataConfig');
 
+function isConnectionFailure(error) {
+  const code = String(error?.code || '');
+  // Um erro SQL respondido pelo servidor não significa perda de conexão.
+  // Classe 08 e desligamento do servidor são falhas de disponibilidade.
+  return !/^(?:[0-9][0-9A-Z]|F0|HV|P0|XX)[0-9A-Z]{3}$/.test(code) || code.startsWith('08') || code.startsWith('28') ||
+    ['57P01', '57P02', '57P03', '53300', '53400', '58030'].includes(code);
+}
+
 function safeDatabaseError(original) {
   const messages = {
     '23505': 'Registro duplicado.',
@@ -10,10 +18,13 @@ function safeDatabaseError(original) {
     '42703': 'Campo não disponível no banco DEV. Verifique o schema local.'
   };
   const code = String(original?.code || '');
-  const error = new Error(messages[code] || 'Não foi possível acessar o banco DEV. Verifique a configuração e a conexão local.');
-  error.code = Object.hasOwn(messages, code) ? code : 'db-unavailable';
-  error.status = code === '23505' || code === '23503' ? 409 : code.startsWith('22') || code === '23502' ? 400 : 503;
-  error.reason = 'db';
+  const unavailable = isConnectionFailure(original);
+  const error = new Error(messages[code] || (unavailable
+    ? 'Não foi possível acessar o banco DEV. Verifique a configuração e a conexão local.'
+    : 'Não foi possível concluir a operação no banco DEV.'));
+  error.code = Object.hasOwn(messages, code) ? code : unavailable ? 'db-unavailable' : 'db-query-failed';
+  error.status = unavailable ? 503 : code === '23505' || code === '23503' ? 409 : code.startsWith('22') || code === '23502' ? 400 : 500;
+  error.reason = unavailable ? 'db' : 'db-query';
   // Nunca anexar cause, detail, SQL, parâmetros ou o erro original.
   return error;
 }
@@ -34,6 +45,11 @@ function getPool() {
 }
 function recordFailure(err) {
   const safe = safeDatabaseError(err);
+  if (!isConnectionFailure(err)) {
+    state.ready = true;
+    state.lastError = null;
+    return safe;
+  }
   state.ready = false;
   state.lastFailureAt = Date.now();
   state.lastError = { message: safe.message, code: safe.code, reason: safe.reason };
@@ -65,7 +81,7 @@ async function healthCheck() {
   }
 }
 module.exports = {
-  query, connect, healthCheck, safeDatabaseError,
+  query, connect, healthCheck, safeDatabaseError, isConnectionFailure,
   init: () => {}, isReady: () => state.ready,
   getStatus: () => ({ ...state, connecting: false, retryInMs: state.ready ? 0 : 1000 }),
   ensureWarmup: healthCheck, ping: async () => (await healthCheck()).ok,

@@ -2218,6 +2218,9 @@ function normalizeMonitorBaseUrl(value) {
 }
 
 function resolveBackendHealthBaseUrl() {
+  // O servidor DEV escuta em IPv4/HTTP. Configurações da API PROD e a
+  // resolução de localhost para ::1 não podem desviar a sondagem local.
+  if (useLocalDatabase) return `http://127.0.0.1:${currentApiPort ?? configuredApiPort ?? DEFAULT_API_PORT}`;
   // `/healthz` é rota do NOSSO backend local (backend/server.js) — a API remota
   // (api.santissimodecor.com.br) não a expõe e respondia 404. Como 404 não é
   // "offline", o monitor caía no ramo `waiting/local-host-blocked` e ficava
@@ -3592,7 +3595,11 @@ ipcMain.handle('connection-monitor:request-check', async (_event, options) => {
   return monitor.getStatus();
 });
 
-ipcMain.handle('perfil:obter', () => requestAuthenticatedProfile('/api/perfil'));
+ipcMain.handle('perfil:obter', () => {
+  // O cartão do último usuário também pede a foto antes de haver login.
+  if (!getToken()) return null;
+  return requestAuthenticatedProfile('/api/perfil');
+});
 
 ipcMain.handle('perfil:enviar-imagem', async (_event, file) => {
   const type = String(file?.type || '').toLowerCase();
@@ -4761,6 +4768,14 @@ ipcMain.handle('auto-login', async (_event, payload) => {
     ? payload
     : { user: null };
   try {
+    if (useLocalDatabase) {
+      try {
+        const identity = require('./backend/localAuth').verifyToken(getToken());
+        if (!user?.id || String(identity.id) !== String(user.id)) throw new Error('Sessão inválida.');
+      } catch (_) {
+        return { success: false, code: 'auth-failed', message: 'Entre novamente para iniciar a sessão DEV.' };
+      }
+    }
     const warmupResult = await waitForAutoLoginDatabaseReady(user);
 
     if (!warmupResult.ready) {
